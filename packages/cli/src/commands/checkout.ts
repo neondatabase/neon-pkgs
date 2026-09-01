@@ -18,6 +18,7 @@ import { looksLikeBranchId } from "../utils/formats.js";
 import {
 	applyPolicyOnCreate,
 	createBranchFromPolicyOnCheckout,
+	envFlag,
 } from "./config.js";
 import { autoPullEnvAfterPin } from "./env.js";
 import { handler as linkHandler } from "./link.js";
@@ -27,6 +28,7 @@ type CheckoutProps = CommonProps & {
 	orgId?: string;
 	id?: string;
 	envPull: boolean;
+	env?: string;
 	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
 	color?: boolean;
 };
@@ -36,6 +38,21 @@ type CheckoutProps = CommonProps & {
 export const command = "checkout [id|name]";
 export const describe =
 	"Pin a branch in the local context (.neon) so subsequent commands target it";
+
+export const formatCheckoutPolicyFailure = (opts: {
+	branchName: string;
+	branchId: string;
+	failure: string;
+	env?: string;
+}): string => {
+	const cli = getCliName();
+	const envArg = opts.env ? ` --env ${opts.env}` : "";
+	return [
+		`Branch ${opts.branchName} (${opts.branchId}) was created and checked out, but applying neon.ts to it failed: ${opts.failure}`,
+		`The branch is usable but does not match the policy, and \`${cli} checkout\` never reconciles a branch that already exists.`,
+		`Fix the cause above, then run \`${cli} deploy --update-existing${envArg}\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${cli} branches delete ${opts.branchName}\` then \`${cli} checkout ${opts.branchName}${envArg}\`.`,
+	].join("\n");
+};
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -58,6 +75,13 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: true,
 			},
+			...envFlag,
+			env: {
+				...envFlag.env,
+				describe:
+					envFlag.env.describe +
+					" Used when this checkout creates a branch from neon.ts; ignored for an existing branch.",
+			},
 		})
 		.example([
 			[
@@ -67,6 +91,10 @@ export const builder = (argv: yargs.Argv) =>
 			[
 				"$0 checkout main",
 				'Pin the branch named "main" in the closest .neon file',
+			],
+			[
+				"$0 checkout feat --env .env.local",
+				"Create feat from neon.ts, loading Function env from .env.local first",
 			],
 			[
 				"$0 checkout br-cool-snow-12345678 --project-id project-id-123",
@@ -132,6 +160,7 @@ export const handler = async (props: CheckoutProps) => {
 					...(props.color !== undefined
 						? { color: props.color }
 						: {}),
+					...(props.env ? { env: props.env } : {}),
 				})
 			: policyFailure;
 
@@ -150,11 +179,12 @@ export const handler = async (props: CheckoutProps) => {
 	// policy, and `checkout` will not reconcile it on a second run.
 	if (failure) {
 		throw new Error(
-			[
-				`Branch ${branchName} (${branchId}) was created and checked out, but applying neon.ts to it failed: ${failure}`,
-				`The branch is usable but does not match the policy, and \`${getCliName()} checkout\` never reconciles a branch that already exists.`,
-				`Fix the cause above, then run \`${getCliName()} deploy --update-existing\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${getCliName()} branches delete ${branchName}\` then \`${getCliName()} checkout ${branchName}\`.`,
-			].join("\n"),
+			formatCheckoutPolicyFailure({
+				branchName,
+				branchId,
+				failure,
+				...(props.env ? { env: props.env } : {}),
+			}),
 		);
 	}
 };
@@ -301,6 +331,7 @@ const createCheckoutBranch = async (
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.color !== undefined ? { color: props.color } : {}),
+		...(props.env ? { env: props.env } : {}),
 	});
 	if (fromPolicy) {
 		return {

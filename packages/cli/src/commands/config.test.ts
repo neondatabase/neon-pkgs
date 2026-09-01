@@ -1083,6 +1083,57 @@ describe("applyPolicyOnCreate", () => {
 
 		expect(api.enableNeonAuthCalls).toHaveLength(0);
 	});
+
+	it("fails before applying when --env names a missing file", async () => {
+		const api = new FakeNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), "export default { auth: {} };\n");
+
+		await expect(
+			applyPolicyOnCreate({
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				runtimeApi: api,
+				cwd,
+				env: join(cwd, "missing.env"),
+			}),
+		).rejects.toThrow(/Env file not found/);
+		expect(api.enableNeonAuthCalls).toEqual([]);
+	});
+
+	it("loads --env into process.env before evaluating function env", async () => {
+		const api = new FakeNeonApi();
+		const source = join(cwd, "hello.ts");
+		writeFileSync(
+			source,
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default { preview: { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+				source,
+			)}, env: { resendApiKey: process.env.RESEND_API_KEY } } } } };\n`,
+		);
+		const envFile = join(cwd, ".env.deploy");
+		writeFileSync(envFile, "RESEND_API_KEY=re_from_file\n");
+		delete process.env.RESEND_API_KEY;
+
+		try {
+			await applyPolicyOnCreate({
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				runtimeApi: api,
+				cwd,
+				env: envFile,
+			});
+		} finally {
+			delete process.env.RESEND_API_KEY;
+		}
+
+		expect(api.deployBranchFunctionCalls).toHaveLength(1);
+		expect(api.deployBranchFunctionCalls[0].input.environment).toEqual({
+			resendApiKey: "re_from_file",
+		});
+	});
 });
 
 const NEW_BRANCH_ID = "br-fresh-dawn-98765";
@@ -1310,5 +1361,57 @@ describe("createBranchFromPolicyOnCheckout", () => {
 		});
 
 		expect(created).toBeNull();
+	});
+
+	it("fails before creating a branch when --env names a missing file", async () => {
+		const api = new CreateBranchNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		await expect(
+			createBranchFromPolicyOnCheckout({
+				projectId: PROJECT_ID,
+				branchName: NEW_BRANCH_NAME,
+				runtimeApi: api,
+				cwd,
+				env: join(cwd, "missing.env"),
+			}),
+		).rejects.toThrow(/Env file not found/);
+		expect(api.createBranchCalls).toEqual([]);
+	});
+
+	it("loads --env into process.env before evaluating function env", async () => {
+		const api = new CreateBranchNeonApi();
+		const source = join(cwd, "hello.ts");
+		writeFileSync(
+			source,
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default { preview: { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+				source,
+			)}, env: { resendApiKey: process.env.RESEND_API_KEY } } } } };\n`,
+		);
+		const envFile = join(cwd, ".env.deploy");
+		writeFileSync(envFile, "RESEND_API_KEY=re_from_file\n");
+		delete process.env.RESEND_API_KEY;
+
+		try {
+			const created = await createBranchFromPolicyOnCheckout({
+				projectId: PROJECT_ID,
+				branchName: NEW_BRANCH_NAME,
+				runtimeApi: api,
+				cwd,
+				env: envFile,
+			});
+			expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+		} finally {
+			delete process.env.RESEND_API_KEY;
+		}
+
+		expect(api.deployBranchFunctionCalls).toHaveLength(1);
+		expect(api.deployBranchFunctionCalls[0].input.environment).toEqual({
+			resendApiKey: "re_from_file",
+		});
 	});
 });

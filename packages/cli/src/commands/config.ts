@@ -167,10 +167,6 @@ export type ConfigProps = BranchScopeProps & {
 	color?: boolean;
 };
 
-/**
- * Shared `--env` flag for `config plan|apply` and `deploy`. Loads a `.env` into
- * `process.env` before the policy is evaluated.
- */
 export const envFlag = {
 	env: {
 		describe:
@@ -609,18 +605,20 @@ const liveConfigView = async (opts: {
 	return { live, view: toNeonConfigView(resolved, live.preview) };
 };
 
+const loadEnvFileIfGiven = (env?: string): void => {
+	// Function env reads process.env when neon.ts is evaluated.
+	if (!env) return;
+	const applied = loadEnvFileIntoProcess(env);
+	log.debug(
+		"Loaded %d var(s) from %s into the environment: %s",
+		applied.length,
+		env,
+		applied.join(", "),
+	);
+};
+
 const loadConfig = async (props: ConfigProps): Promise<Config> => {
-	// Load the optional --env file FIRST so a `neon.ts` whose function `env` values read
-	// `process.env.X` sees them. Must happen before the policy module is imported/evaluated.
-	if (props.env) {
-		const applied = loadEnvFileIntoProcess(props.env);
-		log.debug(
-			"Loaded %d var(s) from %s into the environment: %s",
-			applied.length,
-			props.env,
-			applied.join(", "),
-		);
-	}
+	loadEnvFileIfGiven(props.env);
 	const { config } = await loadConfigFromFile({
 		...(props.config ? { path: props.config } : {}),
 	});
@@ -925,7 +923,9 @@ export const applyPolicyOnCreate = async (props: {
 	cwd?: string;
 	/** Global `--color` flag; `false` forces the plain-text diff. */
 	color?: boolean;
+	env?: string;
 }): Promise<void> => {
+	loadEnvFileIfGiven(props.env);
 	let config: Config;
 	try {
 		({ config } = await loadConfigFromFile({
@@ -1010,7 +1010,9 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 	cwd?: string;
 	/** Global `--color` flag; `false` forces the plain-text diff. */
 	color?: boolean;
+	env?: string;
 }): Promise<{ branchId: string; policyFailure?: string } | null> => {
+	loadEnvFileIfGiven(props.env);
 	let config: Config;
 	try {
 		({ config } = await loadConfigFromFile({
