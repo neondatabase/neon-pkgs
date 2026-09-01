@@ -59,6 +59,17 @@ export async function loadConfigFromFile(
 	config: Config;
 	resolvedPath: string;
 }> {
+	// The omit reload replaces process.env. Concurrent strict loads in this
+	// process would then see "" for missing keys.
+	return await withSerializedConfigLoad(() =>
+		loadConfigFromFileUnlocked(options),
+	);
+}
+
+async function loadConfigFromFileUnlocked(options: LoadConfigOptions): Promise<{
+	config: Config;
+	resolvedPath: string;
+}> {
 	if (options.unsetFunctionEnv !== "omit") {
 		return await loadConfigOnce(options);
 	}
@@ -264,7 +275,7 @@ function safeIsFile(path: string): boolean {
 }
 
 const UNSET_FUNCTION_ENV_ISSUE =
-	/^preview\.functions\.[^.]+\.env\.([^:]+): Environment variable ".+" for function ".+" is undefined/;
+	/^preview\.functions\.[^.]+\.env\.(.+): Environment variable "\1" for function ".+" is undefined/;
 
 function unsetFunctionEnvKeys(err: unknown): string[] | null {
 	if (!isPlatformError(err) || err.code !== ErrorCode.InvalidConfig) {
@@ -317,6 +328,17 @@ async function withPlaceholderFunctionEnv<T>(
 	} finally {
 		process.env = original;
 	}
+}
+
+let configLoadChain: Promise<unknown> = Promise.resolve();
+
+async function withSerializedConfigLoad<T>(run: () => Promise<T>): Promise<T> {
+	const next = configLoadChain.then(run, run);
+	configLoadChain = next.then(
+		() => undefined,
+		() => undefined,
+	);
+	return next;
 }
 
 function withoutFunctionEnvKeys(

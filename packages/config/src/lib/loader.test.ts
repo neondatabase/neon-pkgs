@@ -274,4 +274,72 @@ export default defineConfig({
 			repo.cleanup();
 		}
 	}, 30_000);
+
+	test("unsetFunctionEnv omit drops a function env key that contains a colon", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_COLON";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { "SECRET:VERSION": process.env.${key} },
+      },
+    },
+  },
+});`,
+		});
+		try {
+			const { config } = await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			expect(config.preview?.functions?.hello?.env).toEqual({});
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("a concurrent strict load still fails while omit is reloading", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_RACE";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `import { defineConfig } from "${PLATFORM_SRC}";
+export default defineConfig({
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: "./hello.ts",
+        env: { SECRET: process.env.${key} },
+      },
+    },
+  },
+});`,
+		});
+		try {
+			const omit = loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			const strict = loadConfigFromFile({ cwd: repo.root });
+			const [omitResult, strictResult] = await Promise.allSettled([
+				omit,
+				strict,
+			]);
+			expect(omitResult.status).toBe("fulfilled");
+			expect(strictResult.status).toBe("rejected");
+			if (strictResult.status === "rejected") {
+				expect(String(strictResult.reason)).toMatch(/is undefined/);
+			}
+			expect(process.env[key]).toBeUndefined();
+		} finally {
+			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
 });
