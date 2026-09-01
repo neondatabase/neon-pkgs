@@ -1335,9 +1335,18 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 	return `${branchId}-api.ai.${connectionHostSuffix(connectionUri)}`;
 }
 
-/** Other Neon `*_BASE_URL` vars are origin-only; a trailing slash doubles when callers join a path. */
+/**
+ * The API's `invocation_url` ends with `/` so paths concatenate onto it. Neon `*_BASE_URL`
+ * vars are origin-only (`NEON_AUTH_BASE_URL`, `NEON_AI_GATEWAY_BASE_URL`).
+ */
 function asEnvBaseUrl(url: string): string {
-	return url.endsWith("/") ? url.slice(0, -1) : url;
+	try {
+		return new URL(url).origin;
+	} catch {
+		throw new Error(
+			`fetchEnv: function invocation URL is not a URL: ${JSON.stringify(url)}`,
+		);
+	}
 }
 
 /** Derived from the connection URI so undeployed functions have a cell-routed URL. */

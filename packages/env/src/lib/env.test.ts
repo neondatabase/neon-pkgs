@@ -1163,6 +1163,52 @@ describe("function invocation URLs", () => {
 		expect(env.functions?.hello?.baseUrl).toBe(helloUrl);
 	});
 
+	test("all-live writes the origin of a listed URL that has a path", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: `${helloUrl}/functions/hello`,
+		});
+
+		const env = await fetchEnvKeys(
+			defineConfig({}),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				functionUrls: "all-live",
+			},
+			null,
+		);
+
+		expect(env.functions?.hello?.baseUrl).toBe(helloUrl);
+	});
+
+	test("all-live throws when a listed invocation URL is not a URL", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: "not-a-url",
+		});
+
+		await expect(
+			fetchEnvKeys(
+				defineConfig({}),
+				{
+					api,
+					projectId,
+					branchId: "br-main",
+					functionUrls: "all-live",
+				},
+				null,
+			),
+		).rejects.toThrow(/function invocation URL is not a URL/);
+	});
+
 	test("fetchEnv selected function URL key is derived without listing", async () => {
 		const { api, projectId } = seededFake();
 

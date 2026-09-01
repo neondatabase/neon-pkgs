@@ -252,9 +252,8 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 	);
 
 	// Re-derive the units from neon.ts on demand so the config watcher can hot-add/remove
-	// functions without restarting the dev server. `searchBase` lets a freshly-added unit
-	// start probing above the ports already taken by live units (the runtime still walks
-	// upward from there, so this never fails — it just keeps startup deterministic).
+	// functions without restarting the whole set. searchBase starts pickFreePort above
+	// ports live units are already serving.
 	const replan: Replan = async (searchBase, keepPorts) => {
 		const re = await resolveFunctionsFromConfig(process.cwd());
 		if (re === null) return null;
@@ -295,7 +294,7 @@ type SupervisorOptions = {
 	envNote?: string;
 };
 
-/** Ports are claimed before spawn so every sibling receives the complete localhost URL overlay. */
+/** Ports are chosen before spawn so every sibling's localhost URL can be overlaid. */
 export const planFunctionsToUnits = async (
 	functions: PlannedFunction[],
 	neonEnv: Record<string, string>,
@@ -902,9 +901,8 @@ const keepPortsFromRunning = (running: RunningUnit[]): Map<string, number> => {
 };
 
 /**
- * Choose a port search base above every port the live units already bound, so a hot-added
- * search-mode function starts probing where there's room. The runtime still walks upward
- * from here, so it never fails even if this guess is taken — it just keeps things tidy.
+ * Start pickFreePort above every port live units already bound, so a hot-added
+ * function is not probed on a port a sibling is serving.
  */
 const nextSearchBase = (running: RunningUnit[]): number => {
 	let max = DEFAULT_PORT_BASE - 1;
