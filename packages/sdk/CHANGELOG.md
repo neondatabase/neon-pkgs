@@ -1,5 +1,49 @@
 # @neon/sdk
 
+## 3.0.0
+
+### Major Changes
+
+- 4211669: `branches.create` attaches a read-write endpoint by default; pass `noCompute: true` (tools: `no_compute`) to skip it. `createWithCompute` is now `createAndConnect`. `create` returns the resource without a connection string; `createAndConnect` returns a URI.
+
+## 2.3.0
+
+### Minor Changes
+
+- 9b322e7: Add `branches.resetFromParent` and `branches.compareSchema` to the SDK and as tools (`reset_from_parent_branches`, `compare_schema_branches`).
+
+## 2.2.0
+
+### Minor Changes
+
+- 93b93dc: `sendNeonAuthEmailProviderTest` is now on the generated raw client and in `@neon/tools`. It tests a branch's saved email provider without re-supplying the SMTP password. `sendNeonAuthTestEmail` is deprecated but still available for unsaved full SMTP configs.
+
+## 2.1.0
+
+### Minor Changes
+
+- 5c57d00: Email-server GET responses now use `StandardEmailServerResponse` / `NeonAuthEmailServerConfigResponse`. `StandardEmailServer` is the write shape and its fields are optional, so a Better Auth project can send a partial update. A Stack Auth project still needs all six fields or the API returns 400. Code that read `host` (or the other five fields) off `StandardEmailServer` should switch the annotation to `StandardEmailServerResponse`.
+
+## 2.0.0
+
+### Major Changes
+
+- 4497de8: **Breaking:** `neon.branches.recover` is removed. Neon stopped publishing `POST /projects/{project_id}/branches/{branch_id}/recover` in its OpenAPI spec, so the generated client no longer carries the operation. The endpoint still answers in production, so reach it through the low-level client until it returns to the spec and the wrapper with it:
+
+  ```ts
+  import type { BranchRecoverResponse } from "@neon/sdk";
+
+  const { data } = await neon.client.post<{ 200: BranchRecoverResponse }>({
+    url: "/projects/{project_id}/branches/{branch_id}/recover",
+    path: { project_id: projectId, branch_id: branchId },
+  });
+  const branch = data?.branch;
+  ```
+
+  That envelope carries the API's own error body rather than a `NeonError`, and the `{ 200: … }` wrapper is required — passing `BranchRecoverResponse` directly resolves to a union of its members. `neon.projects.recover` is a different endpoint and is unaffected.
+
+  The same spec refresh adds two namespaces: `neon.projects.members` (`list`, `setRole`, `removeRole`) for the per-project roles of organization members, and `neon.logs` (`query`, `fields`, `fieldValues`) for branch logs.
+
 ## 1.5.0
 
 ### Minor Changes

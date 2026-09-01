@@ -5,7 +5,10 @@
 	"description": "Internal test-only harness shared by the live Neon e2e suites. Never published.",
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./api": "./src/api.ts",
+		"./env": "./src/env.ts",
+		"./projects": "./src/projects.ts"
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",

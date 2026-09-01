@@ -36,6 +36,123 @@ export type ResolvedConnection = {
 	options: string;
 };
 
+export type InspectQueryScope = "database" | "compute";
+
+export type InspectTarget = {
+	database: string;
+	connectionUri: string;
+};
+
+export type InspectTargetSelection = {
+	databases: string[];
+	includeDatabaseColumn: boolean;
+};
+
+export type SelectInspectTargetsInput = {
+	databaseName?: string;
+	dbUrlDatabase?: string;
+	branchDatabases: readonly string[];
+	scope: InspectQueryScope;
+};
+
+/**
+ * Keep the database column on one-database branches so adding another database
+ * does not change the output schema. Compute-wide views run once because every
+ * database returns the same rows.
+ */
+export const selectInspectTargets = (
+	input: SelectInspectTargetsInput,
+): InspectTargetSelection => {
+	if (input.dbUrlDatabase !== undefined) {
+		return {
+			databases: [input.dbUrlDatabase],
+			includeDatabaseColumn: false,
+		};
+	}
+	if (input.databaseName !== undefined) {
+		if (input.databaseName === "") {
+			throw new Error(
+				"--database-name cannot be empty. Omit the flag to cover every database.",
+			);
+		}
+		return {
+			databases: [input.databaseName],
+			includeDatabaseColumn: false,
+		};
+	}
+	if (input.branchDatabases.length === 0) {
+		throw new Error("No databases found for the branch");
+	}
+	if (input.scope === "compute") {
+		return {
+			databases: [input.branchDatabases[0]],
+			includeDatabaseColumn: false,
+		};
+	}
+	const sorted = [...input.branchDatabases].sort((a, b) =>
+		a.localeCompare(b, "en"),
+	);
+	return { databases: sorted, includeDatabaseColumn: true };
+};
+
+export type FormatInspectQueryErrorInput = {
+	reason: string;
+	database: string;
+	dbUrl?: string;
+	databaseName?: string;
+	offerDatabaseNameHint: boolean;
+	scope: InspectQueryScope;
+	requiresExtension?: string;
+};
+
+export const formatInspectQueryError = (
+	input: FormatInspectQueryErrorInput,
+): string | undefined => {
+	if (input.dbUrl !== undefined || input.databaseName !== undefined) {
+		return undefined;
+	}
+	const missingExtension =
+		input.requiresExtension !== undefined &&
+		input.reason.includes(`"${input.requiresExtension}"`);
+	const hint = !input.offerDatabaseNameHint
+		? ""
+		: missingExtension
+			? `. Pass --database-name to try a database that already has the "${input.requiresExtension}" extension.`
+			: input.scope === "compute"
+				? ". Pass --database-name to connect through a different database."
+				: ". Pass --database-name to inspect one database.";
+	return `${input.reason} (database ${input.database})${hint}`;
+};
+
+export const connectionUriForDatabase = (
+	connectionUri: string,
+	database: string,
+): string => {
+	const url = new URL(connectionUri);
+	url.pathname = `/${encodeURIComponent(database)}`;
+	return url.toString();
+};
+
+const listBranchDatabases = async (
+	props: ResolveConnectionProps,
+): Promise<{ branchId: string; names: string[] }> => {
+	const projectId = props.projectId;
+	const parsedPIT = props.branch
+		? parsePITBranch(props.branch)
+		: ({ tag: "head", branch: "" } as const);
+	const branchId = await branchIdFromProps({
+		...props,
+		...(props.branch ? { branch: parsedPIT.branch } : {}),
+	});
+	const {
+		data: { databases },
+	} = await props.apiClient.listProjectBranchDatabases(projectId, branchId);
+	return {
+		branchId,
+		names: databases.map((d: Database) => d.name),
+	};
+};
+
 /**
  * Resolve a branch's live Postgres connection details via the Neon API
  * (endpoint → role → password → database → URL, honoring point-in-time,
@@ -133,7 +250,7 @@ export const resolveConnectionUri = async (
 		host = endpoint.host.replace(endpoint.id, endpoint.branch_id);
 	}
 	const connectionString = new URL(`postgresql://${host}`);
-	connectionString.pathname = database;
+	connectionString.pathname = `/${encodeURIComponent(database)}`;
 	connectionString.username = role;
 	connectionString.password = password;
 
@@ -170,6 +287,83 @@ export const resolveConnectionUri = async (
 		password,
 		database,
 		options: connectionString.searchParams.toString(),
+	};
+};
+
+export type ResolveInspectTargetsProps = ResolveConnectionProps & {
+	dbUrl?: string;
+};
+
+export type ResolvedInspectTargets = {
+	targets: InspectTarget[];
+	includeDatabaseColumn: boolean;
+	branchDatabaseCount: number;
+};
+
+export const resolveInspectTargets = async (
+	props: ResolveInspectTargetsProps,
+	scope: InspectQueryScope,
+): Promise<ResolvedInspectTargets> => {
+	if (props.dbUrl) {
+		const parsed = parseConnectionUri(props.dbUrl);
+		const selection = selectInspectTargets({
+			dbUrlDatabase: parsed.database,
+			branchDatabases: [],
+			scope,
+		});
+		return {
+			targets: [
+				{
+					database: selection.databases[0],
+					connectionUri: props.dbUrl,
+				},
+			],
+			includeDatabaseColumn: selection.includeDatabaseColumn,
+			branchDatabaseCount: 1,
+		};
+	}
+
+	if (props.databaseName !== undefined) {
+		selectInspectTargets({
+			databaseName: props.databaseName,
+			branchDatabases: [],
+			scope,
+		});
+		const resolved = await resolveConnectionUri(props);
+		return {
+			targets: [
+				{
+					database: resolved.database,
+					connectionUri: resolved.connectionUri,
+				},
+			],
+			includeDatabaseColumn: false,
+			branchDatabaseCount: 1,
+		};
+	}
+
+	const { branchId, names } = await listBranchDatabases(props);
+	if (names.length === 0) {
+		throw new Error(`No databases found for the branch: ${branchId}`);
+	}
+	const selection = selectInspectTargets({
+		branchDatabases: names,
+		scope,
+	});
+	const first = await resolveConnectionUri({
+		...props,
+		databaseName: selection.databases[0],
+	});
+	return {
+		targets: selection.databases.map((database) => ({
+			database,
+			connectionUri: connectionUriForDatabase(
+				first.connectionUri,
+				database,
+			),
+		})),
+		includeDatabaseColumn: selection.includeDatabaseColumn,
+		branchDatabaseCount: names.length,
 	};
 };
 

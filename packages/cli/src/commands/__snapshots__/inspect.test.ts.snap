@@ -4,15 +4,25 @@ exports[`inspect db > bloat --db-url bypasses the API and reports a Postgres con
 
 exports[`inspect db > calls --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
+exports[`inspect db > inspect db --help marks compute-wide subcommands 1`] = `""`;
+
+exports[`inspect db > inspect db --help says omit --database-name covers every database 1`] = `""`;
+
+exports[`inspect db > inspect db --help says one failing database fails the run 1`] = `""`;
+
 exports[`inspect db > lfc-hit-rate --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > locks --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > locks --db-url does not suffix a database the URL already named 1`] = `""`;
 
 exports[`inspect db > outliers --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > replication-slots --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > seq-scans --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
+
+exports[`inspect db > stalled-queries --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 
 exports[`inspect db > subscriptions --db-url bypasses the API and reports a Postgres connection error 1`] = `""`;
 

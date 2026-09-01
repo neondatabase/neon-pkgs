@@ -3,14 +3,16 @@ import {
 	deleteProjectBranch,
 	finalizeRestoreBranch,
 	getProjectBranch,
+	getProjectBranchSchemaComparison,
 	listProjectBranches,
-	recoverProjectBranch,
+	restoreProjectBranch,
 	setDefaultProjectBranch,
 	updateProjectBranch,
 } from "../../client/sdk.gen.js";
 import type {
 	Branch,
 	BranchCreateRequest,
+	BranchSchemaCompareResponse,
 	BranchUpdateRequest,
 	Endpoint,
 	ListProjectBranchesData,
@@ -22,36 +24,65 @@ import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 type ListQuery = Omit<NonNullable<ListProjectBranchesData["query"]>, "cursor">;
-type CreateInput = NonNullable<BranchCreateRequest["branch"]>;
+type BranchFields = NonNullable<BranchCreateRequest["branch"]>;
 type UpdateInput = BranchUpdateRequest["branch"];
 
-/** Per-call options for the connect/compute workflows. */
 interface WorkflowOptions<Throw extends boolean> extends CallOptions<Throw> {
 	/** Return a pooled connection string (default `true`). */
 	pooled?: boolean;
 }
 
-/** Input for {@link Branches.createWithCompute}. */
-export interface CreateWithComputeInput {
+export interface ComputeSettings {
+	minCu?: number;
+	maxCu?: number;
+	suspendTimeoutSeconds?: number;
+}
+
+type CreateInputBase = BranchFields & {
+	compute?: ComputeSettings;
+};
+
+export type CreateInput =
+	| (CreateInputBase & { noCompute?: false })
+	| (BranchFields & { noCompute: true; compute?: never });
+
+export interface CreateAndConnectInput {
 	name?: string;
 	/** Parent branch id. Defaults to the project's default branch. */
 	parentId?: string;
-	/** Autoscaling settings for the branch's read-write endpoint. */
-	compute?: {
-		minCu?: number;
-		maxCu?: number;
-		suspendTimeoutSeconds?: number;
-	};
+	compute?: ComputeSettings;
 }
 
 /** A branch with its read-write endpoint and a ready-to-use connection string. */
-export interface BranchWithCompute {
+export interface BranchConnection {
 	branch: Branch;
 	endpoint: Endpoint;
 	connectionString: string;
 }
 
-/** Branch resource — one API call per CRUD method, plus the `createWithCompute` workflow. */
+const NO_COMPUTE_WITH_COMPUTE = "Pass compute settings or noCompute, not both.";
+
+const readWriteEndpoint = (compute?: ComputeSettings) => ({
+	type: "read_write" as const,
+	autoscaling_limit_min_cu: compute?.minCu,
+	autoscaling_limit_max_cu: compute?.maxCu,
+	suspend_timeout_seconds: compute?.suspendTimeoutSeconds,
+});
+
+export interface ResetFromParentInput {
+	/** Required when the branch has children so they can move to the preserved branch. */
+	preserveUnderName?: string;
+}
+
+export interface CompareSchemaInput {
+	databaseName: string;
+	baseBranchId?: string;
+	lsn?: string;
+	timestamp?: string;
+	baseLsn?: string;
+	baseTimestamp?: string;
+}
+
 export class Branches<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
@@ -107,7 +138,14 @@ export class Branches<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects/{project_id}/branches */
+	/**
+	 * This method retains its branch-only result even when it provisions compute;
+	 * use {@link Branches.createAndConnect} or `postgres.connectionString` when a
+	 * connection string is needed.
+	 *
+	 * Readiness polling stays on for `noCompute` branches because a
+	 * compute-less branch still has provisioning operations.
+	 */
 	create(
 		projectId: string,
 		input?: CreateInput,
@@ -117,18 +155,36 @@ export class Branches<DThrow extends boolean> {
 		input: CreateInput | undefined,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
-	create(
+	async create(
 		projectId: string,
 		input?: CreateInput,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const parsed = parseCreateInput(input);
+		if (parsed.error) {
+			return finalize(err<Branch>(parsed.error), shouldThrow);
+		}
 		return this.#ctx.run(
-			opts,
+			{
+				...opts,
+				waitForReadiness: opts?.waitForReadiness ?? true,
+			},
 			(client, signal) =>
 				createProjectBranch({
 					client,
 					path: { project_id: projectId },
-					body: { branch: input },
+					body: {
+						branch: parsed.branch,
+						...(parsed.noCompute
+							? {}
+							: {
+									endpoints: [
+										readWriteEndpoint(parsed.compute),
+									],
+								}),
+					},
 					throwOnError: false,
 					signal,
 				}),
@@ -190,26 +246,20 @@ export class Branches<DThrow extends boolean> {
 		);
 	}
 
-	/**
-	 * Create a branch **with a read-write endpoint** and return a ready-to-use connection
-	 * string. One API call (Neon creates the endpoint inline) plus readiness polling.
-	 *
-	 * @workflow createProjectBranch (with endpoint) + waitForReadiness
-	 */
-	createWithCompute(
+	createAndConnect(
 		projectId: string,
-		input: CreateWithComputeInput,
-	): Promise<Outcome<BranchWithCompute, DThrow>>;
-	createWithCompute<Throw extends boolean = DThrow>(
+		input?: CreateAndConnectInput,
+	): Promise<Outcome<BranchConnection, DThrow>>;
+	createAndConnect<Throw extends boolean = DThrow>(
 		projectId: string,
-		input: CreateWithComputeInput,
+		input: CreateAndConnectInput | undefined,
 		opts: WorkflowOptions<Throw>,
-	): Promise<Outcome<BranchWithCompute, Throw>>;
-	async createWithCompute(
+	): Promise<Outcome<BranchConnection, Throw>>;
+	async createAndConnect(
 		projectId: string,
-		input: CreateWithComputeInput,
+		input?: CreateAndConnectInput,
 		opts?: WorkflowOptions<boolean>,
-	): Promise<BranchWithCompute | NeonResult<BranchWithCompute>> {
+	): Promise<BranchConnection | NeonResult<BranchConnection>> {
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
@@ -219,16 +269,11 @@ export class Branches<DThrow extends boolean> {
 					client,
 					path: { project_id: projectId },
 					body: {
-						branch: { name: input.name, parent_id: input.parentId },
-						endpoints: [
-							{
-								type: "read_write",
-								autoscaling_limit_min_cu: input.compute?.minCu,
-								autoscaling_limit_max_cu: input.compute?.maxCu,
-								suspend_timeout_seconds:
-									input.compute?.suspendTimeoutSeconds,
-							},
-						],
+						branch: {
+							name: input?.name,
+							parent_id: input?.parentId,
+						},
+						endpoints: [readWriteEndpoint(input?.compute)],
 					},
 					throwOnError: false,
 					signal,
@@ -320,6 +365,129 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/**
+	 * Uses the parent's current HEAD; use raw `restoreProjectBranch` for an LSN or timestamp.
+	 *
+	 * @apiCall GET /projects/{project_id}/branches/{branch_id}
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/restore
+	 */
+	resetFromParent(
+		projectId: string,
+		branchId: string,
+		input?: ResetFromParentInput,
+	): Promise<Outcome<Branch, DThrow>>;
+	resetFromParent<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: ResetFromParentInput | undefined,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<Branch, Throw>>;
+	async resetFromParent(
+		projectId: string,
+		branchId: string,
+		input?: ResetFromParentInput,
+		opts?: CallOptions,
+	): Promise<Branch | NeonResult<Branch>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const current = await this.#ctx.execute(
+			opts,
+			(client, signal) =>
+				getProjectBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.branch,
+		);
+		if (current.error) {
+			return finalize(err<Branch>(current.error), shouldThrow);
+		}
+		const parentId = current.data.parent_id;
+		if (!parentId) {
+			return finalize(
+				err<Branch>(
+					new NeonError(
+						"Branch has no parent and cannot be reset.",
+						"client",
+					),
+				),
+				shouldThrow,
+			);
+		}
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				restoreProjectBranch({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: {
+						source_branch_id: parentId,
+						...(input?.preserveUnderName === undefined
+							? {}
+							: { preserve_under_name: input.preserveUnderName }),
+					},
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.branch,
+		);
+	}
+
+	/**
+	 * Returns a unified SQL diff; omitting `baseBranchId` uses the parent branch.
+	 *
+	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/compare_schema
+	 */
+	compareSchema(
+		projectId: string,
+		branchId: string,
+		input: CompareSchemaInput,
+	): Promise<Outcome<BranchSchemaCompareResponse, DThrow>>;
+	compareSchema<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: CompareSchemaInput,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<BranchSchemaCompareResponse, Throw>>;
+	compareSchema(
+		projectId: string,
+		branchId: string,
+		input: CompareSchemaInput,
+		opts?: CallOptions,
+	): Promise<
+		BranchSchemaCompareResponse | NeonResult<BranchSchemaCompareResponse>
+	> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				getProjectBranchSchemaComparison({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					query: {
+						db_name: input.databaseName,
+						...(input.baseBranchId === undefined
+							? {}
+							: { base_branch_id: input.baseBranchId }),
+						...(input.lsn === undefined ? {} : { lsn: input.lsn }),
+						...(input.timestamp === undefined
+							? {}
+							: { timestamp: input.timestamp }),
+						...(input.baseLsn === undefined
+							? {}
+							: { base_lsn: input.baseLsn }),
+						...(input.baseTimestamp === undefined
+							? {}
+							: { base_timestamp: input.baseTimestamp }),
+					},
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
+		);
+	}
+
+	/**
 	 * Complete (commit) a restore previously started with `snapshots.restore({ finalize: false })`:
 	 * moves computes onto the restored branch and renames the replaced one. This is **only**
 	 * the second step — it does not restore anything itself.
@@ -356,36 +524,30 @@ export class Branches<DThrow extends boolean> {
 			() => undefined,
 		);
 	}
+}
 
-	/**
-	 * Recover a soft-deleted branch within the 7-day recovery window.
-	 *
-	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/recover
-	 */
-	recover(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<Branch, DThrow>>;
-	recover<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Branch, Throw>>;
-	recover(
-		projectId: string,
-		branchId: string,
-		opts?: CallOptions,
-	): Promise<Branch | NeonResult<Branch>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
-				recoverProjectBranch({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					throwOnError: false,
-					signal,
-				}),
-			(data) => data.branch,
-		);
+function parseCreateInput(input?: CreateInput):
+	| {
+			error: NeonError;
+	  }
+	| {
+			error?: undefined;
+			branch: BranchFields;
+			noCompute: boolean;
+			compute?: ComputeSettings;
+	  } {
+	if (input === undefined) {
+		return { branch: {}, noCompute: false };
 	}
+	if (input.noCompute === true) {
+		if ("compute" in input && input.compute !== undefined) {
+			return {
+				error: new NeonError(NO_COMPUTE_WITH_COMPUTE, "client"),
+			};
+		}
+		const { noCompute: _noCompute, compute: _compute, ...branch } = input;
+		return { branch, noCompute: true };
+	}
+	const { noCompute: _noCompute, compute, ...branch } = input;
+	return { branch, noCompute: false, compute };
 }

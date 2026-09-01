@@ -1,5 +1,6 @@
 import { parseBranchTtl } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
+import { normalizeExternalPackage } from "./external-packages.js";
 import {
 	branchTuningSchema,
 	configInputSchema,
@@ -26,6 +27,8 @@ import type {
 
 /** Default deploy parameters applied to functions that omit them in `neon.ts`. */
 const DEFAULT_FUNCTION_RUNTIME = "nodejs24" as const;
+
+const DEFAULT_FUNCTION_BUNDLER = "esbuild" as const;
 
 const REGION_PREFIX = /^(aws|azure|gcp)-/;
 
@@ -341,10 +344,16 @@ function resolveFunctionConfig(
 		source: def.source,
 		env: { ...(def.env ?? {}) },
 		runtime: tuning.runtime ?? DEFAULT_FUNCTION_RUNTIME,
-		// Copied only when declared, so a policy without it resolves unchanged. Both
-		// bundlers read it; `neon dev` mirrors it so a local run bundles like a deploy.
+		bundler: def.bundler ?? DEFAULT_FUNCTION_BUNDLER,
+		// Normalized only when declared, so a policy without it resolves unchanged and takes
+		// the pre-existing bundling path. Both bundlers read it; `neon dev` mirrors it so a
+		// local run leaves the same packages unbundled as a deploy.
 		...(def.externalPackages
-			? { externalPackages: [...def.externalPackages] }
+			? {
+					externalPackages: def.externalPackages.map(
+						normalizeExternalPackage,
+					),
+				}
 			: {}),
 		// Passed through untouched (no defaults); only `neon dev` reads it.
 		...(def.dev ? { dev: def.dev } : {}),

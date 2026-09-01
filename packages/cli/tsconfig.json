@@ -23,7 +23,14 @@
       // And for `@neon/functions/hono`, the Hono binding, which is a subpath
       // export so importing `@neon/functions` never reaches for `hono`.
       "@neon/functions/hono": ["node_modules/@neon/functions/dist/hono"],
-      "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"]
+      // And for `@neon/config/v1`, the versioned policy surface. `@neon-internals/env-core`
+      // imports it, and that code is bundled into this package.
+      "@neon/config/v1": ["node_modules/@neon/config/dist/v1"],
+      "@neon/e2e-harness": ["node_modules/@neon/e2e-harness/src/index"],
+      // Same reason for the private internals, which are bundled into this package:
+      // classic resolution ignores their `exports` map. tsdown resolves them itself.
+      "@neon-internals/cli-core/*": ["node_modules/@neon-internals/cli-core/dist/*"],
+      "@neon-internals/env-core/*": ["node_modules/@neon-internals/env-core/dist/*"]
     },
     "resolveJsonModule": true,
     "noImplicitAny": true,

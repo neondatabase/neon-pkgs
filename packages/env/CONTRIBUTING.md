@@ -2,91 +2,80 @@
 
 General setup, the Node floors, and how to run the live e2e suites live in the
 [repo-root `CONTRIBUTING.md`](../../CONTRIBUTING.md). This file covers the one thing about this
-package you have to get right before adding anything to it: **which of the two entry points your
-code belongs in.**
+package you have to get right before adding anything to it: **whether your code belongs on the
+published surface at all, or in the private package the CLIs bundle.**
 
-## Two entry points, and the line between them
+## One entry point, and what deliberately isn't on it
 
-| Entry point | Audience | May it read `process.env`, a file, or mutate anything remote? |
-| --- | --- | --- |
-| `@neon/env` (`src/index.ts`) | **Developers consuming the package** — an app, a build script, a Drizzle config, a `neon.ts` policy | **No** |
-| `@neon/env/runtime` (`src/runtime.ts`) | **Our own tooling** — the `neon-env` CLI in this package, the `neon` CLI in `packages/cli`, and anything else that resolves the same branch repeatedly | Yes |
+Everything `@neon/env` publishes is on `src/index.ts`, and none of it has side effects: it
+writes no files, mutates nothing, and creates or destroys nothing on a Neon project. (`parseEnv`
+reads `process.env`; that is a read, and it is the only one.) That property is what lets an app, a build
+script, or a `neon.ts` policy import this package without wondering what else it might touch.
+Keep it that way.
 
-Both are declared in `package.json` `exports` and both are checked by the `Check @neon/env
-distributed types` CI job (`attw --pack`). Adding a symbol to an existing entry point means
-editing that one `src` file; adding a *third* entry point means editing `package.json` `exports`
-and `tsdown.config.ts`'s `entry` list too, or it won't be built.
+### Why `fetchEnvReusingSecrets` is not here
 
-### Why the split exists
-
-`fetchEnv` is a pure question: *what env does this branch have?* It takes an explicit
-`projectId` and `branch`, calls the Neon API, and returns the answer. It reads no env source and
-no file. That property is what lets an app or build script call it without wondering what else it
-might touch.
-
-The awkward part is that one of the values it returns cannot actually be *fetched*. The Neon API
-issues a branch credential's `api_token` and `s3_secret_access_key` **exactly once**, at mint
-time — they are not stored server-side, and the credentials list endpoint returns metadata only.
-So "fetch me the storage secrets" means "mint a new credential", and a tool that resolves the
-same branch on every `neon dev` start, `link`, `checkout`, and `env pull` would leave a live
-credential behind each time.
+The awkward part of `fetchEnv` is that one of the values it returns cannot actually be
+*fetched*. The Neon API issues a branch credential's `api_token` and `s3_secret_access_key`
+**exactly once**, at mint time — they are not stored server-side, and the credentials list
+endpoint returns metadata only. So "fetch me the storage secrets" means "mint a new
+credential", and a tool that resolves the same branch on every `neon dev` start, `link`,
+`checkout`, and `env pull` would leave a live credential behind each time.
 
 Avoiding that requires state: you have to look at the secrets a previous run persisted, work out
 whether they are still usable, and revoke the ones you supersede. That is a genuinely different
-kind of operation, and `fetchEnvReusingSecrets` is where it lives.
+kind of operation, and `fetchEnvReusingSecrets` is where it lives — in
+[`@neon-internals/env-core`](../../internals/env-core), a private workspace package bundled
+into this package and into the `neon` CLI.
 
-Keeping the two apart by import path means a consumer cannot accidentally pick up the version
-that reads their `.env` and revokes credentials. It is the same split, for the same reason, as
-[`@neon/config`](../config) (pure policy types and diffing) versus
-[`@neon/config-runtime`](../config-runtime) (`inspect` / `plan` / `apply`, which do I/O).
+It was published as `@neon/env/runtime` until 0.16.0. That was the wrong shape: its only
+consumers are our own two CLIs, and a library that revokes your credentials because you imported
+it is a library you cannot safely embed. A subpath export was a way of moving code between two
+packages in this repo, and a private package is what that actually is.
 
-### Where does my change go?
+**So: if your change needs an env source, a file path, a previous run's output, or a decision
+about creating or destroying something remote, it belongs in `internals/env-core`, not here.** If
+you find yourself widening this package's exports so `packages/cli` can reach an internal, stop
+— that is the signal the code belongs in the internals package instead.
 
-Ask what the code needs in order to work:
+### What lives where
 
-- Only `config` plus explicit arguments, and it returns a value derived from the Neon API →
-  **`@neon/env`**.
-- An env source, a file path, a previous run's output, or a decision about creating or destroying
-  something remote → **`@neon/env/runtime`**.
+| Location | Holds | May it read an env source or mutate anything remote? |
+| --- | --- | --- |
+| `internals/env-core/src/env.ts` | `fetchEnv`, `NEON_ENV_VAR_KEYS`, the `NeonEnv` shapes, `toEntries` | No |
+| `internals/env-core/src/reuse-secrets.ts` | `fetchEnvReusingSecrets` | Yes — mints and revokes branch credentials |
+| `packages/env/src/lib/parse-env.ts` | `parseEnv` and its zod schemas | Reads `process.env`, mutates nothing |
+| `packages/env/src/index.ts` | The published surface: re-exports the pure parts of the two above | No |
 
-If a helper in `src/lib/` is used by both, leave it unexported from either entry file. Module
-exports inside `src/lib/` are invisible to consumers because `package.json` only maps `.` and
-`./runtime`, so package-internal sharing costs nothing — this is why the reuse logic stays in
-this package rather than moving into `packages/cli`. `neon-env run` needs it too, and a helper
-shared between the two entry points doesn't have to become public API to be shared.
+`parseEnv` stays in this package rather than moving to the internals package because nothing else
+needs it — the `neon` CLI resolves env from the API and injects it, and never reads it back.
+That also keeps `zod` out of the internals package, and so out of every consumer that bundles it.
 
-Two contract tests in `src/lib/env.contract.test.ts` pin this:
+One contract test in `src/lib/env.contract.test.ts` pins this: an inline snapshot of the entry
+point's exports (so removing or renaming one is a visible breaking change), an assertion that
+`fetchEnvReusingSecrets` never appears on it, and an assertion that `package.json` `exports` has
+exactly one key.
 
-- an inline snapshot of each entry point's exports, so removing or renaming one is a visible
-  breaking change, and
-- an assertion that `fetchEnvReusingSecrets` never appears on the root export.
+## Consumers of the internals package
 
-If you find yourself needing to widen the root export so that `packages/cli` can reach an
-internal, stop: that is the signal the code belongs in `runtime` instead.
-
-## Consumers of the `runtime` entry
-
-Adding to `runtime` is not free — these all have to keep working:
+Changing `internals/env-core` is not free — these all have to keep working:
 
 | Consumer | Uses it for |
 | --- | --- |
+| `@neon/env` itself | `fetchEnv` / `toEntries`, re-exported from `src/index.ts` |
 | `neon-env run` / `neon-env export` (`src/lib/cli/`) | Injecting a branch's env into a subprocess without minting a credential per invocation |
 | `neon env pull`, `neon dev`, `neon link`, `neon checkout` (`packages/cli/src/dev/env.ts`) | The shared tiered resolver behind all four |
 
-`packages/cli` is on classic `moduleResolution: node`, which **ignores package `exports`**. A new
-subpath therefore needs a `paths` entry in `packages/cli/tsconfig.json` for the type-checker;
-Node honours the real export map at runtime. `@neon/sdk/raw` has the same treatment. Because that mapping only satisfies `tsc`, verify a new subpath actually resolves
-from the built artifact rather than trusting a green test run:
+Both consumers list it in `devDependencies` and bundle it, so it is compiled into each `dist`
+and resolves nothing at runtime.
 
-```bash
-pnpm --filter @neon/env build
-node -e "import('./packages/cli/dist/dev/env.js').then(() => console.log('ok'))"
-pnpm exec attw --pack packages/env --profile esm-only
-```
+`@neon/config` is the only dependency it may take — both consumers already have it. Anything
+else becomes a runtime dependency of both.
 
 ## The branch credential, in one place
 
-Everything that knows how a branch credential works lives in `src/lib/reuse-secrets.ts`. The
+Everything that knows how a branch credential works lives in
+`internals/env-core/src/reuse-secrets.ts`. The
 facts worth knowing before you touch it:
 
 - **`AWS_ACCESS_KEY_ID` is the credential's `tokenId`.** The full id, not `tokenIdShort` — the
@@ -105,6 +94,28 @@ sidecar file. Don't add one.
   those minted under this package's own `neon-env <branch>` name. Anything else may belong to a
   teammate, another checkout, or a deployed function, and nothing observable distinguishes those
   from an orphan of our own. Widening this needs a very good argument.
+
+The call signature, since it is no longer documented anywhere a consumer can read:
+
+```ts
+const { vars, credential } = await fetchEnvReusingSecrets(config, {
+    projectId,
+    branch: "main",
+    env: { ...process.env, ...readEnvFile(".env") },
+    revokeSuperseded: false, // default: true
+});
+
+// credential.issued     — a new credential was minted
+// credential.keys       — the env vars its secrets surface under
+// credential.revoked    — ids it replaced and revoked
+// credential.superseded — ids it replaced but left live (`revokeSuperseded: false`)
+```
+
+`revokeSuperseded: false` is for a caller resolving a **subset** of a branch: object storage and
+the AI Gateway share one credential, so revoking the one your persisted secrets name can break a
+service the call is not rewriting. The cost is an orphaned credential, which is the safer of the
+two failures, and `credential.superseded` names it so the caller can report it rather than leave
+it invisible. `neon env pull --service` is why it exists.
 
 ## Testing this package
 

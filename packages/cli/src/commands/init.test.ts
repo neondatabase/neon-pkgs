@@ -1,207 +1,803 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { InitAgentSetup } from "../init/plan.js";
+import { test as cliTest } from "../test_utils/fixtures.js";
 
-// Mock dependencies that require package.json
 vi.mock("../analytics.js", () => ({
 	sendError: vi.fn(),
 	trackEvent: vi.fn(),
 	closeAnalytics: vi.fn(),
 }));
 
-vi.mock("../init/detect_agent.js", () => ({
-	detectAgent: vi.fn().mockReturnValue(null),
-}));
+const host = "https://console.neon.tech/api/v2";
 
-vi.mock("../init/interactive.js", () => ({
-	interactiveInit: vi.fn().mockResolvedValue(undefined),
-}));
+const baseProps = (overrides: Record<string, unknown> = {}) => ({
+	apiClient: {} as never,
+	apiKey: "test-key",
+	apiHost: host,
+	output: "table" as const,
+	contextFile: "/tmp/does-not-exist/.neon",
+	...overrides,
+});
 
-vi.mock("../init/orchestrate.js", () => ({
-	orchestrate: vi.fn().mockResolvedValue({ phase: "complete", status: "ok" }),
-}));
+const clearCredentialInputs = () =>
+	recordCredentialInputs({
+		apiKeyFlag: "",
+		apiKeyEnv: "",
+		profileEnv: "",
+		profileFlag: "",
+		configDir: "",
+	});
 
-vi.mock("../init/route_command.js", () => ({
-	routeDataStep: vi
-		.fn()
-		.mockResolvedValue({ phase: "complete", status: "ok" }),
-}));
+const pickSkillsMcp = async (): Promise<InitAgentSetup> => "skills-mcp";
 
-// The one piece of real I/O in the handler. `src/init/auth.test.ts` covers what actually
-// reaches a pipe by spawning the built binary; here it only needs to be observable.
-vi.mock("../utils/write_sync.js", () => ({
-	STDOUT_FD: 1,
-	STDERR_FD: 2,
-	writeAllSync: vi.fn(),
-}));
+describe("init handler", () => {
+	beforeEach(() => {
+		vi.stubEnv("CI", "true");
+	});
 
-// `enrich_output` is a pure transform and stays real, so the stdout assertions below
-// exercise the payload an agent actually receives rather than a stand-in for it.
-
-describe("init", () => {
 	afterEach(() => {
+		clearCredentialInputs();
+		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		vi.resetModules();
 	});
 
-	test("should call interactiveInit when no --agent flag", async () => {
+	test("empty directory without -y fails before bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
 
-		await handler({});
-
-		expect(interactiveInit).toHaveBeenCalledTimes(1);
-		expect(orchestrate).not.toHaveBeenCalled();
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/Pass -y to use defaults/);
+		expect(run).not.toHaveBeenCalled();
 	});
 
-	test("should fall through to interactiveInit when --agent is false and detectAgent returns null", async () => {
+	test("existing app without -y fails before children", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-ci-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
 
-		await handler({ agent: false });
-
-		expect(interactiveInit).toHaveBeenCalledTimes(1);
-		expect(orchestrate).not.toHaveBeenCalled();
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/Pass -y to use defaults/);
+		expect(run).not.toHaveBeenCalled();
 	});
 
-	test("should call orchestrate when --agent is true", async () => {
+	test("existing app with --agent skips the picker without -y", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-named-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const pickAgentSetup = vi.fn(pickSkillsMcp);
+		const detectAgent = vi.fn(() => "vscode");
 		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
 
-		await handler({ agent: true });
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "cursor",
-			skipMigrations: undefined,
-			preview: undefined,
-		});
-		expect(interactiveInit).not.toHaveBeenCalled();
-	});
-
-	test("should pass skipMigrations to orchestrate", async () => {
-		const { handler } = await import("./init.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("claude");
-
-		await handler({
-			agent: true,
-			skipMigrations: true,
-		});
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "claude",
-			skipMigrations: true,
-			preview: undefined,
-		});
-	});
-
-	test("should pass preview to interactiveInit", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-
-		await handler({ preview: true });
-
-		expect(interactiveInit).toHaveBeenCalledWith({ preview: true });
-	});
-
-	test("should pass preview to orchestrate in agent mode", async () => {
-		const { handler } = await import("./init.js");
-		const { orchestrate } = await import("../init/orchestrate.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
-
-		await handler({ agent: true, preview: true });
-
-		expect(orchestrate).toHaveBeenCalledWith({
-			agent: "cursor",
-			skipMigrations: undefined,
-			preview: true,
-		});
-	});
-
-	test("routes a --data step and writes the enriched response as bare JSON on stdout", async () => {
-		const { handler } = await import("./init.js");
-		const { routeDataStep } = await import("../init/route_command.js");
-		const { detectAgent } = await import("../init/detect_agent.js");
-		const { writeAllSync } = await import("../utils/write_sync.js");
-		vi.mocked(detectAgent).mockReturnValue("cursor");
-		vi.mocked(routeDataStep).mockResolvedValue({
-			phase: "auth",
-			status: "needs_auth",
-			nextAction: { type: "run_neon_init", args: ["auth", "--verify"] },
-		});
-
-		await handler({ agent: true, data: '{"step":"auth"}' });
-
-		expect(routeDataStep).toHaveBeenCalledWith({ step: "auth" }, "cursor");
-		expect(writeAllSync).toHaveBeenCalledTimes(1);
-		const [fd, written] = vi.mocked(writeAllSync).mock.calls[0];
-		expect(fd).toBe(1);
-		// Parseable on its own, with `args` already rewritten into the command an agent runs.
-		expect(JSON.parse(written)).toEqual({
-			phase: "auth",
-			status: "needs_auth",
-			nextAction: {
-				type: "run_shell_command",
-				command:
-					'neon init --agent --data \'{"step":"auth","verify":true}\'',
-			},
-		});
-	});
-
-	// Outside agent mode the top-level handler reports and prints, so reporting here too
-	// would file one failure as two analytics events.
-	test("rethrows the cause without reporting it a second time", async () => {
-		const { handler } = await import("./init.js");
-		const { sendError } = await import("../analytics.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-		const failure = new Error("editor CLI not on PATH");
-		vi.mocked(interactiveInit).mockRejectedValue(failure);
-
-		await expect(handler({})).rejects.toThrow("editor CLI not on PATH");
-		expect(sendError).not.toHaveBeenCalled();
-	});
-
-	test("refuses a named profile instead of silently running as the default account", async () => {
-		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
-
-		await expect(handler({ profile: "work" })).rejects.toThrow(
-			/--profile was passed.*"work".*does not support profile selection/s,
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				agent: ["cursor", "claude-code"],
+				pickAgentSetup,
+				detectAgent,
+			}),
 		);
-		expect(interactiveInit).not.toHaveBeenCalled();
+
+		expect(pickAgentSetup).not.toHaveBeenCalled();
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining([
+				"plugins",
+				"--agent",
+				"cursor",
+				"--agent",
+				"claude-code",
+			]),
+		);
+		expect(run.mock.calls[0][0]).not.toContain("-y");
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"plugins",
+			"link",
+			"config",
+		]);
 	});
 
-	// `NEON_PROFILE` reaches the handler through the credential inputs the
-	// `resolveApiKeyFromEnv` middleware records, not through `process.env` directly, so
-	// that is the seam the test has to set. See `shared/cli-core/src/auth_selection.ts`.
-	test("refuses NEON_PROFILE just as firmly as the flag", async () => {
-		const { recordCredentialInputs } = await import(
-			"../_shared/auth_selection.js"
+	test("existing app runs skills, mcp, link, config init", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-app-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: pickSkillsMcp,
+			}),
 		);
-		recordCredentialInputs({
-			apiKeyFlag: "",
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"link",
+			"config",
+		]);
+		expect(run.mock.calls[3][0].slice(0, 2)).toEqual(["config", "init"]);
+		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
+		expect(out).toContain("Configured this directory for Neon.");
+		expect(out).not.toContain("INFO:");
+		expect(out).not.toContain("██████╗");
+		expect(out).not.toContain("See the README");
+	});
+
+	test("linked app skips link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-linked-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1" })}\n`,
+		);
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({ cwd, run, contextFile, pickAgentSetup: pickSkillsMcp }),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"config",
+		]);
+	});
+
+	test("empty -y runs only bootstrap . --default", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-y-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls[0][0].slice(0, 3)).toEqual([
+			"bootstrap",
+			".",
+			"--default",
+		]);
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	test("stops on the first failed step", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fail-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi
+			.fn()
+			.mockResolvedValueOnce(false)
+			.mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					contextFile: join(cwd, ".neon"),
+					pickAgentSetup: pickSkillsMcp,
+				}),
+			),
+		).rejects.toThrow("`neon skills` failed.");
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	test("forwards profile, config-dir, context-file, and --no-analytics", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fwd-"));
+		mkdirSync(join(cwd, "src"));
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1" })}\n`,
+		);
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile,
+				configDir: "/cfg",
+				profile: "work",
+				analytics: false,
+				pickAgentSetup: pickSkillsMcp,
+			}),
+		);
+
+		expect(run.mock.calls[0][0]).toEqual([
+			"skills",
+			"--config-dir",
+			"/cfg",
+			"--profile",
+			"work",
+			"--api-host",
+			host,
+			"--context-file",
+			contextFile,
+			"--no-analytics",
+		]);
+		expect(run.mock.calls[0][1]).toBe(cwd);
+	});
+
+	test("empty -y passes NEON_API_KEY to bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-key-"));
+		const { recordCredentialInputs: record } = await import(
+			"@neon-internals/cli-core/auth_selection"
+		);
+		record({
+			apiKeyFlag: "napi_test",
 			apiKeyEnv: "",
-			profileEnv: "work",
+			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
 		});
+		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
-		const { interactiveInit } = await import("../init/interactive.js");
 
-		try {
-			await expect(handler({})).rejects.toThrow(
-				/NEON_PROFILE is set.*"work"/s,
-			);
-			expect(interactiveInit).not.toHaveBeenCalled();
-		} finally {
-			recordCredentialInputs({
-				apiKeyFlag: "",
-				apiKeyEnv: "",
-				profileEnv: "",
-			});
-		}
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
+			["bootstrap", { NEON_API_KEY: "napi_test" }],
+		]);
+	});
+
+	test("existing -y passes NEON_API_KEY only to mcp and link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-key-app-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		mkdirSync(join(cwd, ".vscode"));
+		const { recordCredentialInputs: record } = await import(
+			"@neon-internals/cli-core/auth_selection"
+		);
+		record({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
+		});
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
+			["skills", undefined],
+			["mcp", { NEON_API_KEY: "napi_test" }],
+			["link", { NEON_API_KEY: "napi_test" }],
+			["config", undefined],
+		]);
+	});
+
+	test("parent .neon with a projectId skips link", async () => {
+		const root = mkdtempSync(join(tmpdir(), "neon-init-parent-"));
+		writeFileSync(
+			join(root, ".neon"),
+			`${JSON.stringify({ projectId: "proj-parent" })}\n`,
+		);
+		const cwd = join(root, "app");
+		mkdirSync(cwd);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(root, ".neon"),
+				pickAgentSetup: pickSkillsMcp,
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"config",
+		]);
+	});
+
+	test("a .neon without projectId is not linked", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-ctx-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(contextFile, "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({ cwd, run, contextFile, pickAgentSetup: pickSkillsMcp }),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"link",
+			"config",
+		]);
+	});
+
+	test("resolves a relative context file against cwd", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-rel-ctx-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(
+			join(cwd, ".neon"),
+			`${JSON.stringify({ projectId: "proj-rel" })}\n`,
+		);
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: ".neon",
+				pickAgentSetup: pickSkillsMcp,
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"config",
+		]);
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining(["--context-file", join(cwd, ".neon")]),
+		);
+	});
+
+	test("refuses --output json and yaml", async () => {
+		const { handler } = await import("./init.js");
+		await expect(handler(baseProps({ output: "json" }))).rejects.toThrow(
+			"does not support --output",
+		);
+		await expect(handler(baseProps({ output: "yaml" }))).rejects.toThrow(
+			"does not support --output",
+		);
+	});
+
+	test("interactive plugin: plugins then link and config init", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-plugin-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: async () => "plugin",
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"plugins",
+			"link",
+			"config",
+		]);
+	});
+
+	test("interactive skip: link and config init", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-skip-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: async () => "skip",
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"link",
+			"config",
+		]);
+	});
+
+	test("-y with .cursor installs the plugin, not skills and mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-cursor-"));
+		mkdirSync(join(cwd, ".cursor"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"plugins",
+			"link",
+			"config",
+		]);
+		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["plugins", "-y"]);
+		expect(run.mock.calls[2][0].slice(0, 4)).toEqual([
+			"config",
+			"init",
+			"--services",
+			"none",
+		]);
+	});
+
+	test("-y with only .vscode keeps skills and mcp", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-vscode-"));
+		mkdirSync(join(cwd, ".vscode"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"link",
+			"config",
+		]);
+		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["skills", "-y"]);
+		expect(run.mock.calls[0][0]).not.toContain("--agent");
+		expect(run.mock.calls[1][0].slice(0, 2)).toEqual(["mcp", "-y"]);
+		expect(run.mock.calls[1][0]).not.toContain("--project");
+		expect(run.mock.calls[1][0]).not.toContain("--agent");
+	});
+
+	test("-y --agent skips detection and forwards names", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-named-"));
+		mkdirSync(join(cwd, ".cursor"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const detectProjectAgents = vi.fn(() => ["cursor"]);
+		const detectAgent = vi.fn(() => "cursor");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				agent: ["vscode"],
+				contextFile: join(cwd, ".neon"),
+				detectProjectAgents,
+				detectAgent,
+			}),
+		);
+
+		expect(detectProjectAgents).not.toHaveBeenCalled();
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+			"skills",
+			"mcp",
+			"link",
+			"config",
+		]);
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining(["skills", "-y", "--agent", "vscode"]),
+		);
+		expect(run.mock.calls[1][0]).toEqual(
+			expect.arrayContaining(["mcp", "-y", "--agent", "vscode"]),
+		);
+		expect(run.mock.calls[1][0]).not.toContain("--project");
+	});
+
+	test("empty -y forwards --agent to bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-agent-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				agent: ["cursor"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls[0][0]).toEqual(
+			expect.arrayContaining([
+				"bootstrap",
+				".",
+				"--default",
+				"--agent",
+				"cursor",
+			]),
+		);
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	test("empty dir mixed --agent fails before bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-mixed-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["cursor", "vscode"],
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(
+			/Re-run `neon init -y --agent cursor` or `neon init -y --agent vscode`/,
+		);
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	test("named --agent cursor and vscode fails instead of dropping vscode", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mixed-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["cursor", "vscode"],
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(
+			/Re-run `neon init -y --agent cursor` or `neon init -y --agent vscode`/,
+		);
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	test("unknown --agent fails before children", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-bad-agent-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["not-an-agent"],
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(/Unknown agent: "not-an-agent"/);
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	test("-y with no detected agents fails before link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-skip-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const detectProjectAgents = vi.fn(() => []);
+		const detectAgent = vi.fn(() => null);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents,
+					detectAgent,
+				}),
+			),
+		).rejects.toThrow(/No coding agents detected in this project/);
+		expect(detectProjectAgents).toHaveBeenCalled();
+		expect(detectAgent).toHaveBeenCalled();
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	test("empty -y does not detect agents in the parent", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-y-empty-detect-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const detectProjectAgents = vi.fn(() => ["cursor"]);
+		const detectAgent = vi.fn(() => "cursor");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+				detectProjectAgents,
+				detectAgent,
+			}),
+		);
+
+		expect(detectProjectAgents).not.toHaveBeenCalled();
+		expect(detectAgent).not.toHaveBeenCalled();
+		expect(run).toHaveBeenCalledTimes(1);
+		expect(run.mock.calls[0][0].slice(0, 3)).toEqual([
+			"bootstrap",
+			".",
+			"--default",
+		]);
+	});
+
+	test("strips an ambient NEON_API_KEY from skills and plugins, not bootstrap, link, or mcp", async () => {
+		const { initChildEnv } = await import("./init.js");
+		const base = { PATH: "/bin", NEON_API_KEY: "napi_env" };
+		expect(initChildEnv("bootstrap", undefined, base)).toEqual(base);
+		expect(initChildEnv("plugins", undefined, base)).toEqual({
+			PATH: "/bin",
+		});
+		expect(initChildEnv("skills", undefined, base)).toEqual({
+			PATH: "/bin",
+		});
+		expect(initChildEnv("link", undefined, base)).toEqual(base);
+		expect(
+			initChildEnv("mcp", { NEON_API_KEY: "napi_flag" }, base),
+		).toEqual({
+			PATH: "/bin",
+			NEON_API_KEY: "napi_flag",
+		});
+		expect(
+			initChildEnv("skills", undefined, {
+				PATH: "/bin",
+				neon_api_key: "napi_mixed",
+			}),
+		).toEqual({ PATH: "/bin" });
+	});
+
+	test("does not pass NEON_API_KEY to plugins", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-plugin-key-"));
+		mkdirSync(join(cwd, ".cursor"));
+		const { recordCredentialInputs: record } = await import(
+			"@neon-internals/cli-core/auth_selection"
+		);
+		record({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
+		});
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
+			["plugins", undefined],
+			["link", { NEON_API_KEY: "napi_test" }],
+			["config", undefined],
+		]);
+	});
+});
+
+describe("init CLI", () => {
+	cliTest("help describes the orchestrator", async ({ testCliCommand }) => {
+		const { stdout, stderr } = await testCliCommand(["init", "--help"], {
+			snapshot: false,
+		});
+		const help = `${stdout}\n${stderr}`;
+		expect(help).toMatch(/scaffold/i);
+		expect(help).toMatch(/plugin/i);
+		expect(help).toMatch(/skip agent setup/i);
+		expect(help).toMatch(/Cursor, Claude Code, or Codex/);
+		expect(help).toMatch(/host CLI agent/);
+		expect(help).toMatch(/exits/);
+		expect(help).toMatch(/-a, --agent/);
+		expect(help).toMatch(/Skip agent selection/);
+		expect(help.replace(/\s+/g, " ")).toMatch(
+			/forwarded to plugins, or to skills and mcp/i,
+		);
+		expect(help).toMatch(/Plugin agents/);
+		expect(help).toMatch(/Skills and MCP agents/);
+		expect(help).not.toMatch(/installed apps/);
+		expect(help).not.toMatch(/Set output format/);
+	});
+
+	cliTest("rejects --data", async ({ testCliCommand }) => {
+		await testCliCommand(["init", "--data", '{"step":"auth"}'], {
+			snapshot: false,
+			code: 1,
+			stderr: expect.stringContaining("was removed"),
+		});
+	});
+
+	cliTest("rejects --output json", async ({ testCliCommand }) => {
+		await testCliCommand(["init"], {
+			snapshot: false,
+			output: "json",
+			code: 1,
+			stderr: expect.stringContaining("does not support --output"),
+		});
+	});
+
+	cliTest("rejects --agent without a value", async ({ testCliCommand }) => {
+		const { stderr } = await testCliCommand(["init", "--agent"], {
+			snapshot: false,
+			code: 1,
+		});
+		expect(stderr).toMatch(/--agent needs a value/);
+	});
+
+	cliTest("rejects an unknown --agent", async ({ testCliCommand }) => {
+		const { stderr } = await testCliCommand(
+			["init", "-y", "--agent", "not-an-agent"],
+			{ snapshot: false, code: 1, outputTable: true },
+		);
+		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(stderr).not.toMatch(/Unknown argument: agent/);
 	});
 });

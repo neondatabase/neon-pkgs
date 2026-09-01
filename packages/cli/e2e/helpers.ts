@@ -44,6 +44,24 @@ export type CliResult = {
 };
 
 /**
+ * A run that produced no exit code because it outlived {@link RUN_TIMEOUT_MS}. Killing it and
+ * reporting beats letting a hung child stall the suite until Vitest's own timeout, which says
+ * nothing about which command hung.
+ */
+const RUN_TIMEOUT_MS = 120_000;
+
+/**
+ * Global flags belong before the caller's `--`, not after it. Yargs puts everything past `--`
+ * into the passthrough array, so appending `--api-key` to `neon psql -- -c "select 1"` hands
+ * the key to psql, which rejects it as an unknown option.
+ */
+function withGlobalFlags(args: string[], globals: string[]): string[] {
+	const separator = args.indexOf("--");
+	if (separator === -1) return [...args, ...globals];
+	return [...args.slice(0, separator), ...globals, ...args.slice(separator)];
+}
+
+/**
  * Run the real CLI the way a user would, minus the parts that would make a test
  * environment-dependent: analytics off, JSON output, isolated config and context.
  */
@@ -53,6 +71,12 @@ export function runCli(
 		json?: boolean;
 		/** Override the shared scratch config directory. Never pass `--config-dir` in `args`. */
 		configDir?: string;
+		/**
+		 * Override the shared scratch `.neon`. Needed by anything that is supposed to read a
+		 * project from context — the default points at an empty temp file precisely so a
+		 * command cannot pick one up by accident.
+		 */
+		contextFile?: string;
 		/**
 		 * Authenticate from this profile. Suppresses `--api-key`, which is the only way to
 		 * exercise a stored credential — the two together are rejected on purpose.
@@ -69,6 +93,8 @@ export function runCli(
 		apiKey?: string | null;
 		/** Extra environment for the child. `undefined` removes an inherited variable. */
 		env?: Record<string, string | undefined>;
+		/** Working directory for the child. Commands that read `.neon` from the cwd need one. */
+		cwd?: string;
 	} = {},
 ): Promise<CliResult> {
 	const key =
@@ -78,20 +104,26 @@ export function runCli(
 				(options.profile ? undefined : requireApiKey()));
 	const argv = [
 		CLI_ENTRY,
-		...args,
-		...(key !== undefined ? ["--api-key", key] : []),
-		...(options.profile ? ["--profile", options.profile] : []),
-		"--config-dir",
-		options.configDir ?? configDir,
-		// The CLI calls this `--api-host`; the harness contract calls it
-		// NEON_API_BASE_URL. Translate so one variable redirects the whole run.
-		"--api-host",
-		configuredBaseUrl(),
-		"--context-file",
-		contextFile,
-		"--no-analytics",
-		"--output",
-		options.json === false ? "table" : "json",
+		...withGlobalFlags(args, [
+			...(key !== undefined ? ["--api-key", key] : []),
+			...(options.profile ? ["--profile", options.profile] : []),
+			"--config-dir",
+			options.configDir ?? configDir,
+			// The CLI calls this `--api-host`; the harness contract calls it
+			// NEON_API_BASE_URL. Translate so one variable redirects the whole run.
+			"--api-host",
+			configuredBaseUrl(),
+			"--context-file",
+			options.contextFile ?? contextFile,
+			"--no-analytics",
+			// Only when the caller hasn't chosen one. Passing `--output` twice makes yargs
+			// hand the command an array, which it does not recognise as "json" — so the run
+			// silently prints a table and every JSON.parse downstream fails on a box-drawing
+			// character.
+			...(args.includes("--output") || args.includes("-o")
+				? []
+				: ["--output", options.json === false ? "table" : "json"]),
+		]),
 	];
 	const env: Record<string, string | undefined> = {
 		...process.env,
@@ -106,17 +138,30 @@ export function runCli(
 		const child = spawn(process.execPath, argv, {
 			stdio: ["ignore", "pipe", "pipe"],
 			env,
+			...(options.cwd ? { cwd: options.cwd } : {}),
 		});
 		let stdout = "";
 		let stderr = "";
+		const timer = setTimeout(() => {
+			child.kill("SIGKILL");
+			reject(
+				new Error(
+					`neon ${args.join(" ")} did not exit within ${RUN_TIMEOUT_MS}ms`,
+				),
+			);
+		}, RUN_TIMEOUT_MS);
 		child.stdout.on("data", (chunk) => {
 			stdout += String(chunk);
 		});
 		child.stderr.on("data", (chunk) => {
 			stderr += String(chunk);
 		});
-		child.on("error", reject);
+		child.on("error", (err) => {
+			clearTimeout(timer);
+			reject(err);
+		});
 		child.on("close", (code) => {
+			clearTimeout(timer);
 			resolvePromise({ code: code ?? -1, stdout, stderr });
 		});
 	});

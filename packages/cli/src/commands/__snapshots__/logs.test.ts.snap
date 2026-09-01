@@ -1,0 +1,466 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`logs > a sub-command is required 1`] = `""`;
+
+exports[`logs > a truncated field-values run keeps json output clean and stderr empty 1`] = `
+"{
+  "values": [
+    "api",
+    "postgres"
+  ],
+  "is_truncated": true
+}"
+`;
+
+exports[`logs > a truncated field-values run says how to narrow the lookup 1`] = `
+"values
+Value
+api
+postgres
+"
+`;
+
+exports[`logs > a truncated query keeps json output clean and stderr empty 1`] = `
+"{
+  "logs": [
+    {
+      "timestamp": "2025-01-01T00:00:03.000Z",
+      "message": "PUT /api/todos/1 204",
+      "source": "function",
+      "entity_id": "fn-api",
+      "service_name": "api",
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "attributes": {}
+    }
+  ],
+  "next_cursor": "eyJvZmZzZXQiOjEwMH0",
+  "is_truncated": true
+}"
+`;
+
+exports[`logs > a truncated query points at the next cursor in table output 1`] = `
+"logs
+Timestamp                 Source    Service Name  Severity Text  Message
+2025-01-01T00:00:03.000Z  function  api           INFO           PUT /api/todos/1 204
+"
+`;
+
+exports[`logs > an unknown query option is rejected before any request 1`] = `""`;
+
+exports[`logs > an unknown sub-command is rejected 1`] = `""`;
+
+exports[`logs > field-values (yaml) 1`] = `
+"values:
+  - api
+  - postgres
+  - worker
+is_truncated: false
+"
+`;
+
+exports[`logs > field-values does not map a server failure to an unknown field 1`] = `""`;
+
+exports[`logs > field-values forwards the field name, window, source and limit 1`] = `
+"values:
+  - api
+  - postgres
+  - worker
+is_truncated: false
+"
+`;
+
+exports[`logs > field-values neutralizes controls in truncation guidance 1`] = `
+"values
+Value
+api
+postgres
+"
+`;
+
+exports[`logs > field-values neutralizes terminal controls in table output 1`] = `
+"values
+Value
+api
+\\u001b]52;c;ZXZpbA==\\u0007service
+"
+`;
+
+exports[`logs > field-values prints an empty-state message in table output 1`] = `
+"
+No values found in the 6h window ending now.
+"
+`;
+
+exports[`logs > field-values rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > field-values rejects a malformed successful response 1`] = `""`;
+
+exports[`logs > field-values rejects an invalid limit 1`] = `""`;
+
+exports[`logs > field-values surfaces the API's rejection of an unknown field 1`] = `""`;
+
+exports[`logs > field-values with table output 1`] = `
+"values
+Value
+api
+postgres
+worker
+"
+`;
+
+exports[`logs > fields (yaml) 1`] = `
+"fields:
+  - source
+  - service_name
+  - scope_name
+  - severity_text
+"
+`;
+
+exports[`logs > fields neutralizes terminal controls in table output 1`] = `
+"fields
+Field
+service_name
+\\u001b]52;c;ZXZpbA==\\u0007field
+"
+`;
+
+exports[`logs > fields prints an empty-state message in table output 1`] = `
+"
+No log fields found.
+"
+`;
+
+exports[`logs > fields rejects a malformed successful response 1`] = `""`;
+
+exports[`logs > fields with table output 1`] = `
+"fields
+Field
+source
+service_name
+scope_name
+severity_text
+"
+`;
+
+exports[`logs > help states the default windows and seven-day cap 1`] = `""`;
+
+exports[`logs > help states the default windows and seven-day cap 2`] = `""`;
+
+exports[`logs > query (yaml) 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query accepts --minimum-severity together with --severity-text 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query cursor guidance syntax preserves leading shell metacharacters 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query cursor guidance syntax preserves leading shell metacharacters 2`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query help states the Beta and region constraint 1`] = `""`;
+
+exports[`logs > query help states the minimum-severity backend limitation 1`] = `""`;
+
+exports[`logs > query maps every structured filter onto its wire name 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query neutralizes terminal controls in table output 1`] = `
+"logs
+Timestamp                 Source    Service Name  Severity Text  Message
+2025-01-01T00:00:03.000Z  function  api           ERROR          \\u001b]52;c;ZXZpbA==\\u0007request failed\\u000d
+"
+`;
+
+exports[`logs > query prints an empty-state message in table output 1`] = `
+"
+No logs found in the 1h window ending now.
+"
+`;
+
+exports[`logs > query rejects --logql together with a structured filter 1`] = `""`;
+
+exports[`logs > query rejects --since together with --start-time 1`] = `""`;
+
+exports[`logs > query rejects a cursor that is unsafe across supported shells 1`] = `""`;
+
+exports[`logs > query rejects a malformed successful response 1`] = `""`;
+
+exports[`logs > query rejects a truncated page without a cursor 1`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 1`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 2`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 3`] = `""`;
+
+exports[`logs > query rejects an invalid or out-of-range limit 4`] = `""`;
+
+exports[`logs > query rejects repeated scalar filters 1`] = `""`;
+
+exports[`logs > query resolves the default branch when none is given 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query resolves the single project when none is given 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query sends a raw LogQL expression alongside the window and limit 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query sends an explicit start time instead of a duration 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query sends only the limit when no filters are given 1`] = `
+"logs:
+  - timestamp: 2025-01-01T00:00:02.000Z
+    message: GET /api/todos 200
+    source: function
+    entity_id: fn-api
+    service_name: api
+    scope_name: http
+    severity_number: 9
+    severity_text: INFO
+    trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+    span_id: 00f067aa0ba902b7
+    attributes:
+      http_status: 200
+  - timestamp: 2025-01-01T00:00:01.000Z
+    message: connection to database failed
+    source: pg_endpoint
+    entity_id: ep-quiet-hill-123456
+    service_name: postgres
+    severity_number: 17
+    severity_text: ERROR
+    attributes: {}
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`logs > query with table output 1`] = `
+"logs
+Timestamp                 Source       Service Name  Severity Text  Message
+2025-01-01T00:00:02.000Z  function     api           INFO           GET /api/todos 200
+2025-01-01T00:00:01.000Z  pg_endpoint  postgres      ERROR          connection to database failed
+"
+`;
+
+exports[`logs > the command group help states the Beta and region constraint 1`] = `""`;

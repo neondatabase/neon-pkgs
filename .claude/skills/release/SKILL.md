@@ -185,6 +185,16 @@ you ran a dry-run (missing/`dry-run` `package` input); re-dispatch with the real
 This requires access to that repo — if you don't have it, hand the publish backlog list to someone
 who does.
 
+After every successful publish (any package, not only `neon`), install latest and run it:
+
+```bash
+npm i -g neon@latest
+neon --version
+```
+
+Don't claim the publish is done until that install succeeds and `neon --version` prints. `npm view`
+does not catch a `neon@latest` dependency that was never published.
+
 ## Gotchas
 
 - **The publish workflow defaults to `dry-run` and publishes ONE package per run.** Always pass

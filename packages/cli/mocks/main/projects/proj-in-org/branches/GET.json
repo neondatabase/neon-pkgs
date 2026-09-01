@@ -1,0 +1,20 @@
+{
+  "annotations": {},
+  "branches": [
+    {
+      "id": "br-dev-branch-123456",
+      "name": "dev",
+      "created_at": "2021-01-01T00:00:00.000Z",
+      "updated_at": "2021-01-01T00:00:00.000Z",
+      "current_state": "ready"
+    },
+    {
+      "id": "br-main-branch-654321",
+      "name": "main",
+      "default": true,
+      "created_at": "2021-01-01T00:00:00.000Z",
+      "updated_at": "2021-01-01T00:00:00.000Z",
+      "current_state": "ready"
+    }
+  ]
+}

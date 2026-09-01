@@ -20,19 +20,13 @@ import {
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
 
-/**
- * Default function bundler (esbuild), loaded lazily so that `buildFunctionBundle`
- * — and the esbuild it pulls in — only enters the module graph when a deploy
- * actually needs it AND no custom `bundleFunction` was injected. A consumer that
- * injects its own bundler never triggers this import, so esbuild can be dropped
- * from their build entirely.
- */
-const defaultBundleFunction: FunctionBundler = async (
-	fn: ResolvedFunctionConfig,
-): Promise<Uint8Array> => {
-	const { buildFunctionBundle } = await import("./function-bundle.js");
-	return buildFunctionBundle(fn);
-};
+// Eager loading would evaluate esbuild for callers that provide their own bundler.
+const makeDefaultBundleFunction =
+	(onWarning: (message: string) => void): FunctionBundler =>
+	async (fn: ResolvedFunctionConfig): Promise<Uint8Array> => {
+		const { buildFunctionBundle } = await import("./function-bundle.js");
+		return buildFunctionBundle(fn, { onWarning });
+	};
 
 export interface PushConfigOptions {
 	/**
@@ -101,11 +95,7 @@ export interface PushConfigOptions {
 	 * Never invoked on `dryRun`.
 	 */
 	confirm?: (context: PushConfirmContext) => boolean | Promise<boolean>;
-	/**
-	 * Custom bundler for function source. Defaults to {@link buildFunctionBundle}
-	 * (esbuild). Inject your own to deploy functions without this package pulling
-	 * esbuild's native binary into your build — see {@link FunctionBundler}.
-	 */
+	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
@@ -158,6 +148,10 @@ export async function pushConfig(
 ): Promise<PushResult> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
+
+	// Collected from the built-in bundler and returned on the result. A caller that injects
+	// its own `bundleFunction` reports for itself, so this stays empty for them.
+	const warnings: string[] = [];
 
 	const dryRun = options.dryRun === true;
 	const updateExisting = options.updateExisting === true;
@@ -261,7 +255,10 @@ export async function pushConfig(
 					branchById,
 					branchByName,
 					bundleFunction:
-						options.bundleFunction ?? defaultBundleFunction,
+						options.bundleFunction ??
+						makeDefaultBundleFunction((message) => {
+							warnings.push(message);
+						}),
 				});
 		applied.push(change);
 	}
@@ -285,6 +282,7 @@ export async function pushConfig(
 		dryRun,
 		applied,
 		conflicts: diff.conflicts,
+		warnings,
 	};
 	if (remoteProject.orgId) result.orgId = remoteProject.orgId;
 	return result;

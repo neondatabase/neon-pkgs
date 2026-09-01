@@ -25,6 +25,7 @@ import {
 	NETWORK_ERROR_MESSAGE,
 } from "./errors.js";
 import { showHelp } from "./help.js";
+import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 import { getCliName } from "./utils/cli_name.js";
@@ -52,7 +53,19 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"link",
 
+	"open",
+
 	"init",
+
+	"mcp",
+
+	"plugins",
+	"plugin",
+
+	"skills",
+	"skill",
+
+	"ask",
 
 	"dev",
 
@@ -211,6 +224,20 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 		log.debug("Stack: %s", err.stack);
 	}
 
+	if (err instanceof Error) {
+		const rewritten = rewriteUnknownAgentArg({
+			message: err.message,
+			argv: process.argv,
+			cliName: getCliName(),
+		});
+		if (rewritten !== undefined) {
+			const error = new Error(rewritten);
+			sendError(error, matchErrorCode(error.message));
+			log.error(error.message);
+			return false;
+		}
+	}
+
 	// A connection-level failure (no response ever reached us) reads as a cryptic
 	// `fetch failed` from the @neon/sdk / global `fetch` path. Detect it first and
 	// swap in one clear "check your connection" hint. We deliberately do not retry
@@ -244,7 +271,8 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 			}
 			log.info("Authentication failed, deleting credentials...");
 			try {
-				deleteCredentialsAt(staleCredentials);
+				if (context === null) return false;
+				deleteCredentialsAt(staleCredentials, context.configDir);
 				return true; // Allow retry for auth failures
 			} catch (deleteErr) {
 				log.debug(
@@ -272,8 +300,12 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 	} else {
 		const error =
 			err instanceof Error ? err : new Error(msg || "Unknown error");
-		sendError(error, matchErrorCode(error.message));
-		log.error(error.message);
+		const code = matchErrorCode(error.message);
+		sendError(error, code);
+		// The completion summary already reported this failure.
+		if (code !== "NEON_INIT_FAILED") {
+			log.error(error.message);
+		}
 		return false;
 	}
 }

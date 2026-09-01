@@ -1,8 +1,25 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+	existsSync,
+	mkdirSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type {
+	FunctionBundlerInput,
+	ResolvedFunctionConfig,
+} from "@neon/config";
+import {
+	bundleAsIs,
+	describeNativeFinding,
+	findUndeclaredNativePackages,
+	resolveEsbuildEntry,
+} from "@neon/config-runtime";
+import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
 import { resolveDevEnv } from "../dev/env.js";
@@ -11,8 +28,10 @@ import {
 	resolveFunctionsFromConfig,
 } from "../dev/functions.js";
 import { resolveWatchInputs } from "../dev/inputs.js";
+import { readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
+import { getCliName } from "../utils/cli_name.js";
 import { branchIdResolve } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 
@@ -57,7 +76,84 @@ export const builder = (argv: yargs.Argv) =>
 				type: "number",
 			},
 		})
+		.epilogue(
+			[
+				"",
+				"Functions run with the linked branch's Neon env injected, the same set the",
+				"deployed runtime gives them: DATABASE_URL, plus Neon Auth, the Data API,",
+				"object storage and the AI Gateway where the branch has them. A neon.ts in",
+				"this directory decides instead, exactly as it does for `env pull`.",
+				"",
+				"`dev` reads your .env / .env.local to reuse the branch credential behind the",
+				"AI Gateway and object storage, and never writes to them. With no such file it",
+				"issues a credential on every start, so run `env pull` once if you restart often.",
+			].join("\n"),
+		)
 		.strict();
+
+/**
+ * The resolver context for a `neon dev` run.
+ *
+ * Two things here are what make local dev match the deployed runtime, which injects a
+ * branch's whole env into a function:
+ *
+ * - **The AI Gateway is asked for**, like `env pull` does, because nothing can detect it.
+ *   Without this, a function that works deployed fails locally with no `NEON_AI_GATEWAY_*`,
+ *   which is exactly the difference `dev` exists to eliminate.
+ * - **The local dotenv file is layered in**, so the branch credential behind the gateway and
+ *   object storage is *reused* rather than re-minted. `dev` writes no file of its own, so
+ *   without a source of persisted secrets every start would mint a credential and leave the
+ *   last one live — one orphan per restart. `neon-env run` already reads the file for this
+ *   reason; `dev` was the one that didn't.
+ */
+export const devEnvContext = (
+	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost">,
+	branchId: string | undefined,
+	cwd: string,
+) => {
+	const envFile = resolveEnvFilePath(cwd);
+	return {
+		cwd,
+		implyAiGateway: true,
+		env: {
+			...process.env,
+			...(existsSync(envFile) ? readEnvFile(envFile) : {}),
+		},
+		...(props.projectId ? { projectId: props.projectId } : {}),
+		...(branchId ? { branchId } : {}),
+		...(props.apiKey ? { apiKey: props.apiKey } : {}),
+		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+	};
+};
+
+/**
+ * Say when a run issued a branch credential.
+ *
+ * `dev` has nowhere to persist one — it writes no file — so on a branch with nothing to reuse
+ * it mints per start and cannot name the previous one to revoke it. Every other command that
+ * mints says so; this is the one that runs dozens of times a day, and the server banner listing
+ * `NEON_AI_GATEWAY_TOKEN` reads as "fetched", not "just created, and the last one is still
+ * live". The note names the one action that stops it, so it disappears once followed.
+ */
+export const reportDevCredential = (
+	credential: CredentialOutcome | undefined,
+) => {
+	if (!credential?.issued) return;
+	if (credential.revoked.length > 0) {
+		log.info(
+			"Issued a new branch credential — %s changed. Revoked the one it replaced (%s).",
+			credential.keys.join(", "),
+			credential.revoked.join(", "),
+		);
+		return;
+	}
+	log.warning(
+		"Issued a branch credential for this run (%s) and left any previous one live — a dev " +
+			`server has nowhere to keep it. Run \`${getCliName()} env pull\` once to write it to ` +
+			"your .env, and restarts will reuse it instead of issuing another.",
+		credential.keys.join(", "),
+	);
+};
 
 export const handler = async (props: DevProps): Promise<void> => {
 	if (props.source !== undefined) {
@@ -85,18 +181,17 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	}
 
 	const branchId = await resolveBranchId(props);
-	const { vars: neonEnv, skipped } = await resolveDevEnv({
-		cwd: process.cwd(),
-		...(props.projectId ? { projectId: props.projectId } : {}),
-		...(branchId ? { branchId } : {}),
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-	});
+	const {
+		vars: neonEnv,
+		skipped,
+		credential,
+	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	reportDevCredential(credential);
 
 	const unit: ServedUnit = {
 		slug: null,
 		source,
-		bundleDir: join(process.cwd(), "node_modules", ".neon-dev"),
+		bundleDir: devBundleDir(process.cwd()),
 		childEnv: buildChildEnv(neonEnv, portFromProps(props.port)),
 		label: null,
 		envSummary: { neon: Object.keys(neonEnv), fn: [] },
@@ -132,13 +227,12 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 		);
 	}
 
-	const { vars: neonEnv, skipped } = await resolveDevEnv({
-		cwd: process.cwd(),
-		...(props.projectId ? { projectId: props.projectId } : {}),
-		...(branchId ? { branchId } : {}),
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-	});
+	const {
+		vars: neonEnv,
+		skipped,
+		credential,
+	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	reportDevCredential(credential);
 
 	const units = planFunctionsToUnits(functions, neonEnv, DEFAULT_PORT_BASE);
 
@@ -241,6 +335,21 @@ const portFromProps = (port: number | undefined): PortSpec => {
 };
 
 /**
+ * Where a locally-served function's bundle is written.
+ *
+ * The location inside the project's own `node_modules` is load-bearing, not a tidiness
+ * choice. A function's `externalPackages` are left unbundled, and Node resolves an unbundled
+ * import by walking up from the importing file — so from here it reaches the project's real
+ * `node_modules` and finds them, at the host architecture that can actually run locally.
+ * Moving this directory anywhere outside `node_modules` breaks `neon dev` for those
+ * functions with a `Cannot find module`, so the path is pinned by a test.
+ */
+export const devBundleDir = (cwd: string, slug?: string): string =>
+	slug === undefined
+		? join(cwd, "node_modules", ".neon-dev")
+		: join(cwd, "node_modules", ".neon-dev", slug);
+
+/**
  * Translate a {@link PlannedFunction} into a {@link ServedUnit}. Port rules:
  *   - explicit `dev.port`: bind exactly, fail if taken.
  *   - no `dev.port`: search for a free port (base coordinated by the caller).
@@ -259,7 +368,7 @@ const plannedToUnit = (
 	return {
 		slug: fn.slug,
 		source: fn.source,
-		bundleDir: join(process.cwd(), "node_modules", ".neon-dev", fn.slug),
+		bundleDir: devBundleDir(process.cwd(), fn.slug),
 		childEnv,
 		label: fn.slug,
 		envSummary: { neon: Object.keys(branchEnv), fn: Object.keys(fn.env) },
@@ -270,11 +379,16 @@ const plannedToUnit = (
 		...(fn.externalPackages
 			? { externalPackages: fn.externalPackages }
 			: {}),
+		...(fn.bundler !== undefined ? { bundler: fn.bundler } : {}),
 		configKey: JSON.stringify({
 			source: fn.source,
 			port: fn.port ?? null,
 			env: fn.env,
 			externalPackages: fn.externalPackages ?? null,
+			bundler:
+				typeof fn.bundler === "function"
+					? "custom"
+					: (fn.bundler ?? null),
 		}),
 	};
 };
@@ -312,6 +426,7 @@ export type ServedUnit = {
 	 * in single-source mode (`--source` has no policy to read it from).
 	 */
 	externalPackages?: string[];
+	bundler?: FunctionBundlerInput;
 	bundleDir: string;
 	childEnv: NodeJS.ProcessEnv;
 	label: string | null;
@@ -372,6 +487,9 @@ const runSupervisor = async (
 				r.unit.source,
 				r.unit.bundleDir,
 				r.unit.externalPackages,
+				// The `neon.ts` key, so a function is named the same way here as at deploy.
+				r.unit.slug ?? undefined,
+				r.unit.bundler,
 			);
 		} catch (err) {
 			r.status = "error";
@@ -444,7 +562,7 @@ const runSupervisor = async (
 	// Bring a unit fully online: create its source watcher (before the first bundle so
 	// bundleAndStart can sync the watch set on every run) then bundle + spawn it.
 	const startUnit = async (r: RunningUnit): Promise<void> => {
-		r.watcher = await startWatcher(r.unit.source, () => {
+		r.watcher = await startWatcher(r.unit, () => {
 			restart(r);
 		});
 		await bundleAndStart(r);
@@ -680,21 +798,84 @@ const spawnChild = (
 	});
 };
 
+/**
+ * Findings already reported for a served unit, so an advisory that cannot change between
+ * saves is not reprinted on every one. A dev session on a project with a standing false
+ * positive would otherwise repeat the whole block for its lifetime.
+ */
+const reportedFindings = new Map<string, string>();
+
 const writeBundle = async (
 	source: string,
 	bundleDir: string,
 	externalPackages?: readonly string[],
+	label?: string,
+	bundler?: FunctionBundlerInput,
 ): Promise<string> => {
-	const files = await bundleEntry(source, {
+	if (bundler !== undefined && bundler !== "esbuild") {
+		const files = await bundleForDev(source, label, bundler);
+		return writeBundleFiles(bundleDir, files);
+	}
+
+	const entry = await resolveEsbuildEntry(source);
+	// Left unbundled only. `bundleDir` sits inside the project's node_modules, so an
+	// externalized package resolves from the real tree at the host architecture — no install
+	// or copy is needed or wanted locally, whatever `includeFiles` says for a deploy.
+	const { files, metafile, warnings } = await bundleEntry(entry, {
 		...(externalPackages ? { externalPackages } : {}),
 	});
-	mkdirSync(bundleDir, { recursive: true });
-	// bundleEntry emits a single `index.mjs` (no source map). The `.mjs` extension makes Node
-	// load it as ESM directly, so no `package.json` `"type": "module"` marker is needed.
-	for (const [name, contents] of Object.entries(files)) {
-		writeFileSync(join(bundleDir, name), contents);
+	for (const warning of warnings) log.warning(warning);
+
+	// Local runs resolve native packages from the real tree, so a missing declaration is
+	// invisible until deploy. Reporting it here is the only signal before then.
+	const findings = findUndeclaredNativePackages({
+		metafile,
+		declared: externalPackages ?? [],
+		projectDir: dirname(entry),
+	});
+	const signature = findings.map((f) => f.name).join(",");
+	if (reportedFindings.get(source) !== signature) {
+		reportedFindings.set(source, signature);
+		for (const finding of findings) {
+			log.warning(
+				describeNativeFinding(label ?? basename(source), finding),
+			);
+		}
 	}
-	return join(bundleDir, "index.mjs");
+
+	return writeBundleFiles(bundleDir, files);
+};
+
+const bundleForDev = async (
+	source: string,
+	label: string | undefined,
+	bundler: Exclude<FunctionBundlerInput, "esbuild">,
+): Promise<Record<string, Uint8Array>> => {
+	const fn: ResolvedFunctionConfig = {
+		slug: label ?? basename(source),
+		name: label ?? basename(source),
+		source,
+		env: {},
+		runtime: "nodejs24",
+		bundler,
+	};
+	return bundler === "none" ? bundleAsIs(fn) : bundler(fn);
+};
+
+const writeBundleFiles = (
+	bundleDir: string,
+	files: Record<string, Uint8Array>,
+): string => {
+	// Deleted prebuilt files must not remain importable after a rebuild.
+	rmSync(bundleDir, { recursive: true, force: true });
+	mkdirSync(bundleDir, { recursive: true });
+	for (const [name, contents] of Object.entries(files)) {
+		const dest = join(bundleDir, name);
+		mkdirSync(dirname(dest), { recursive: true });
+		writeFileSync(dest, contents);
+	}
+	const entry = ["index.mjs", "index.js"].find((name) => name in files);
+	return join(bundleDir, entry ?? "index.mjs");
 };
 
 const urlFor = (port: number | null): string =>
@@ -792,15 +973,33 @@ type Watcher = {
 };
 
 const startWatcher = async (
-	source: string,
+	unit: Pick<ServedUnit, "source" | "bundler">,
 	restart: () => void,
 ): Promise<Watcher> => {
 	const { default: chokidar } = await import("chokidar");
-	const initialInputs = await resolveWatchInputs(source);
-	if (initialInputs === null) {
-		return startDirectoryWatcher(chokidar, source, restart);
+	if (unit.bundler !== undefined && unit.bundler !== "esbuild") {
+		const sourceStat = statSync(unit.source, { throwIfNoEntry: false });
+		const dir =
+			sourceStat?.isDirectory() === true
+				? unit.source
+				: dirname(unit.source);
+		return startDirectoryWatcher(chokidar, dir, restart, {
+			ignoreDist: false,
+		});
 	}
-	return startInputWatcher(chokidar, source, initialInputs, restart);
+	let entry = unit.source;
+	try {
+		entry = await resolveEsbuildEntry(unit.source);
+	} catch {
+		// An invalid source may become valid after the next edit.
+	}
+	const initialInputs = await resolveWatchInputs(entry);
+	if (initialInputs === null) {
+		return startDirectoryWatcher(chokidar, entry, restart, {
+			ignoreDist: true,
+		});
+	}
+	return startInputWatcher(chokidar, entry, initialInputs, restart);
 };
 
 /**
@@ -864,15 +1063,22 @@ const startDirectoryWatcher = async (
 	chokidar: Chokidar,
 	source: string,
 	restart: () => void,
+	options: { ignoreDist: boolean },
 ): Promise<Watcher> => {
-	const watchedDir = dirname(source);
+	const watchedDir = statSync(source, {
+		throwIfNoEntry: false,
+	})?.isDirectory()
+		? source
+		: dirname(source);
 	const isIgnored = (p: string): boolean => {
-		const segments = p.split(/[/\\]/);
-		return (
-			segments.includes("node_modules") ||
-			segments.includes(".git") ||
-			segments.includes("dist")
-		);
+		const rel = relative(watchedDir, p);
+		if (rel === "" || rel === ".") return false;
+		if (rel.startsWith("..")) return false;
+		const segments = rel.split(/[/\\]/);
+		if (segments.includes("node_modules") || segments.includes(".git")) {
+			return true;
+		}
+		return options.ignoreDist && segments.includes("dist");
 	};
 	const watcher = chokidar.watch(watchedDir, {
 		ignoreInitial: true,

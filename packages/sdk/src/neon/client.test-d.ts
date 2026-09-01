@@ -12,7 +12,7 @@ import type {
 } from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
 import type { Paginated } from "./paginate.js";
-import type { BranchWithCompute } from "./resources/branches.js";
+import type { BranchConnection } from "./resources/branches.js";
 import type { ProjectConnection } from "./resources/projects.js";
 import type { NeonResult } from "./result.js";
 
@@ -50,19 +50,47 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 		NeonResult<Branch>
 	>();
 	expectTypeOf(
-		neon.branches.createWithCompute("p", { name: "x" }),
-	).resolves.toEqualTypeOf<NeonResult<BranchWithCompute>>();
+		neon.branches.create("p", { name: "x" }),
+	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+	expectTypeOf(
+		neon.branches.create("p", { name: "x", noCompute: true }),
+	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+	neon.branches.create("p", {
+		noCompute: true,
+		// @ts-expect-error compute is invalid when noCompute is true
+		compute: { minCu: 1 },
+	});
+	expectTypeOf(neon.branches.createAndConnect("p")).resolves.toEqualTypeOf<
+		NeonResult<BranchConnection>
+	>();
+	expectTypeOf(
+		neon.branches.createAndConnect("p", { name: "x" }),
+	).resolves.toEqualTypeOf<NeonResult<BranchConnection>>();
 	expectTypeOf(
 		neon.projects.createAndConnect({ name: "x" }),
 	).resolves.toEqualTypeOf<NeonResult<ProjectConnection>>();
 
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
 	expectTypeOf(
-		throwing.branches.createWithCompute("p", { name: "x" }),
-	).resolves.toEqualTypeOf<BranchWithCompute>();
+		throwing.branches.createAndConnect("p", { name: "x" }),
+	).resolves.toEqualTypeOf<BranchConnection>();
 	expectTypeOf(
 		throwing.branches.delete("p", "br"),
 	).resolves.toEqualTypeOf<void>();
+	expectTypeOf(
+		neon.branches.resetFromParent("p", "br"),
+	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+	expectTypeOf(
+		neon.branches.resetFromParent(
+			"p",
+			"br",
+			{ preserveUnderName: "old" },
+			{ throwOnError: true },
+		),
+	).resolves.toEqualTypeOf<Branch>();
+	expectTypeOf(
+		neon.branches.compareSchema("p", "br", { databaseName: "neondb" }),
+	).resolves.toEqualTypeOf<NeonResult<{ diff?: string }>>();
 });
 
 it("cancellation and deadline options are accepted on the client and per call", () => {

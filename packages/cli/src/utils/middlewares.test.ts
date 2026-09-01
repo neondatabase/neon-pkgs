@@ -1,9 +1,35 @@
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { credentialInputs } from "../_shared/auth_selection.js";
-import { resolveApiKeyFromEnv } from "./middlewares.js";
+import yargs from "yargs/yargs";
+import { fillInArgs, resolveApiKeyFromEnv } from "./middlewares.js";
 
 afterEach(() => {
 	vi.unstubAllEnvs();
+});
+
+describe("fillInArgs", () => {
+	test("leaves array-valued options intact under strict validation", async () => {
+		const parsed = await yargs(["-e", "DATABASE_URL", "-s", "postgres"])
+			.exitProcess(false)
+			.option("env", {
+				alias: "e",
+				type: "array",
+				string: true,
+			})
+			.option("service", {
+				alias: ["s", "services"],
+				type: "array",
+				string: true,
+			})
+			.middleware((args) => {
+				fillInArgs(args);
+			}, true)
+			.strict()
+			.parse();
+
+		expect(parsed.env).toEqual(["DATABASE_URL"]);
+		expect(parsed.service).toEqual(["postgres"]);
+	});
 });
 
 /**
@@ -27,6 +53,8 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyFlag: "napi_flag",
 			apiKeyEnv: "napi_ambient",
 			profileEnv: "work",
+			profileFlag: "",
+			configDir: "",
 		});
 	});
 
@@ -64,6 +92,8 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyFlag: "",
 			apiKeyEnv: "",
 			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
 		});
 	});
 
@@ -104,6 +134,47 @@ describe("resolveApiKeyFromEnv", () => {
 			apiKeyFlag: "",
 			apiKeyEnv: "napi_second",
 			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
 		});
+	});
+
+	test("records --profile separately from NEON_PROFILE", () => {
+		vi.stubEnv("NEON_PROFILE", "env");
+		resolveApiKeyFromEnv({ apiKey: "", profile: "flag" });
+
+		expect(credentialInputs().profileFlag).toBe("flag");
+		expect(credentialInputs().profileEnv).toBe("env");
+	});
+
+	test("records --config-dir only when the flag is on argv", () => {
+		const argv = process.argv;
+		process.argv = [...argv, "--config-dir", "/tmp/neon-cfg"];
+		try {
+			resolveApiKeyFromEnv({ apiKey: "", configDir: "/tmp/neon-cfg" });
+			expect(credentialInputs().configDir).toBe("/tmp/neon-cfg");
+		} finally {
+			process.argv = argv;
+		}
+	});
+
+	test("records --config-dir=value the same way", () => {
+		const argv = process.argv;
+		process.argv = [...argv, "--config-dir=/tmp/equals-cfg"];
+		try {
+			resolveApiKeyFromEnv({
+				apiKey: "",
+				configDir: "/tmp/equals-cfg",
+			});
+			expect(credentialInputs().configDir).toBe("/tmp/equals-cfg");
+		} finally {
+			process.argv = argv;
+		}
+	});
+
+	test("a yargs default for --config-dir is not recorded as a flag", () => {
+		resolveApiKeyFromEnv({ apiKey: "", configDir: "/tmp/neon-cfg" });
+
+		expect(credentialInputs().configDir).toBe("");
 	});
 });

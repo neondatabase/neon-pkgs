@@ -30,6 +30,22 @@ export default function (req, res) {
 		case "nokey":
 			return res.json({ ...base, id: 401 });
 		default:
+			if (req.body.project_id === "proj-mismatch") {
+				return res.json({
+					...base,
+					id: 401,
+					key: "napi_wrong_scope",
+					project_id: "some-other-project",
+				});
+			}
+			if (req.body.project_id === "proj-revoke-fail") {
+				return res.json({
+					...base,
+					id: 500,
+					key: "napi_org_secret",
+					project_id: "proj-revoke-fail",
+				});
+			}
 			return res.json({
 				...base,
 				id: 303,

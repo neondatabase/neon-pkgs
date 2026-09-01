@@ -5,7 +5,7 @@ import {
 } from "ai-v7";
 import { beforeAll, describe, expect, it } from "vitest";
 import { neon } from "../src/index.js";
-import { assertGatewayEnv, hasGatewayEnv } from "./helpers.js";
+import { assertGatewayEnv, withRateLimitRetry } from "./helpers.js";
 
 const PROMPT = "Reply with exactly the single word pong.";
 const CONCURRENCY = 4;
@@ -19,22 +19,26 @@ const SDK_RUNNERS = [
 	{
 		version: "6",
 		async generate(modelId) {
-			const result = await generateTextV6({
-				model: neon(modelId),
-				prompt: PROMPT,
-				maxOutputTokens: 2048,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateTextV6({
+					model: neon(modelId),
+					prompt: PROMPT,
+					maxOutputTokens: 2048,
+				}),
+			);
 			return result.text;
 		},
 	},
 	{
 		version: "7",
 		async generate(modelId) {
-			const result = await generateTextV7({
-				model: neon(modelId),
-				prompt: PROMPT,
-				maxOutputTokens: 2048,
-			});
+			const result = await withRateLimitRetry(() =>
+				generateTextV7({
+					model: neon(modelId),
+					prompt: PROMPT,
+					maxOutputTokens: 2048,
+				}),
+			);
 			return result.text;
 		},
 	},
@@ -112,26 +116,25 @@ async function verifyAllModels(
 	return failures;
 }
 
-describe.skipIf(!hasGatewayEnv())(
-	"e2e — every currently enabled model on AI SDK 6 and 7",
-	() => {
-		let modelIds: string[] = [];
+describe("e2e — every currently enabled model on AI SDK 6 and 7", () => {
+	let modelIds: string[] = [];
 
-		beforeAll(async () => {
-			modelIds = await fetchCurrentModelIds();
-		});
+	beforeAll(async () => {
+		modelIds = await fetchCurrentModelIds();
+	});
 
-		for (const runner of SDK_RUNNERS) {
-			it(`generates text with every /v1/models entry using AI SDK ${runner.version}`, async () => {
-				const failures = await verifyAllModels(modelIds, runner);
-				expect(
-					failures,
-					`AI SDK ${runner.version} failures:\n${failures.join("\n")}`,
-				).toEqual([]);
-			}, 600_000);
-		}
+	for (const runner of SDK_RUNNERS) {
+		it(`generates text with every /v1/models entry using AI SDK ${runner.version}`, async () => {
+			const failures = await verifyAllModels(modelIds, runner);
+			expect(
+				failures,
+				`AI SDK ${runner.version} failures:\n${failures.join("\n")}`,
+			).toEqual([]);
+		}, 600_000);
+	}
 
-		it("uses the Neon image-generation tool with AI SDK 7", async () => {
+	it("uses the Neon image-generation tool with AI SDK 7", async () => {
+		const gotImage = await withRateLimitRetry(async () => {
 			const result = streamTextV7({
 				model: neon("gpt-5-mini"),
 				prompt: "Generate a simple red circle on a white background.",
@@ -146,7 +149,7 @@ describe.skipIf(!hasGatewayEnv())(
 				maxOutputTokens: 2048,
 			});
 
-			let gotImage = false;
+			let found = false;
 			for await (const part of result.fullStream) {
 				if (
 					part.type === "tool-result" &&
@@ -157,10 +160,11 @@ describe.skipIf(!hasGatewayEnv())(
 					typeof part.output.result === "string" &&
 					part.output.result.length > 1000
 				) {
-					gotImage = true;
+					found = true;
 				}
 			}
-			expect(gotImage).toBe(true);
-		}, 120_000);
-	},
-);
+			return found;
+		});
+		expect(gotImage).toBe(true);
+	}, 180_000);
+});

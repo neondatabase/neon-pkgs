@@ -1,5 +1,79 @@
 # @neondatabase/env
 
+## 1.1.6
+
+### Patch Changes
+
+- Updated dependencies [59a05ea]
+  - @neon/config@1.1.0
+
+## 1.1.5
+
+### Patch Changes
+
+- @neon/config@1.0.5
+
+## 1.1.4
+
+### Patch Changes
+
+- @neon/config@1.0.4
+
+## 1.1.3
+
+### Patch Changes
+
+- Updated dependencies [512baf3]
+  - @neon/config@1.0.3
+
+## 1.1.2
+
+### Patch Changes
+
+- @neon/config@1.0.2
+
+## 1.1.1
+
+### Patch Changes
+
+- @neon/config@1.0.1
+
+## 1.1.0
+
+### Minor Changes
+
+- 0b37ad5: Opt-in OS keyring storage for a CLI profile via a `"keyring"` pointer in `profiles.json`. `neon profile create` no longer takes `--force`: creating an existing name replaces it and revokes the credential it held.
+
+## 1.0.1
+
+### Patch Changes
+
+- 7bb17a9: Add exact environment-variable selection to `neon env pull`, and scope `fetchEnv({ keys })` work to the selected variables. Literal key lists autocomplete and narrow exactly, runtime-built lists return safely optional fields, and storage credential halves must be selected together. Pre-bound untyped key arrays that previously fell through to the full-env overload now fail type checking instead of promising unselected values.
+
+## 1.0.0
+
+### Major Changes
+
+- 98c4aec: **Breaking (`@neon/env`): the `@neon/env/runtime` entry point is removed.** It held
+  `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials.
+  Its only consumers were Neon's own CLIs, and a library that revokes your credentials because you
+  imported it is one you cannot safely embed — so it is now internal shared source rather than a
+  published path. If you were importing it, use the `neon` CLI (`neon env pull`, `neon dev`), which does this for you. Rolling your own is possible but the hard part is not storing the secret — it is **verifying** it: a persisted secret is only reusable if it still names a live credential on that branch, unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder, which is the bug 0.12.0 shipped a fix for. `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces.
+
+  Everything else is unchanged: `fetchEnv`, `parseEnv`, `toEntries` and `NEON_ENV_VAR_KEYS` stay on
+  `@neon/env` with the same signatures, and the `neon-env` binary is unaffected.
+
+### Patch Changes
+
+- Updated dependencies [35299c4]
+  - @neon/config@1.0.0
+
+## 0.15.0
+
+### Minor Changes
+
+- 6f8ba4d: `fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting. The credential it then leaves live is reported as `credential.superseded`, the counterpart to the existing `credential.revoked`.
+
 ## 0.14.1
 
 ### Patch Changes

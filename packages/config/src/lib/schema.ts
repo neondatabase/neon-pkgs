@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
+import { externalPackageRoot } from "./external-packages.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
+import type { FunctionBundlerInput } from "./types.js";
 
 /**
  * Zod schema for {@link import("./types.js").ComputeSettings}.
@@ -204,12 +206,12 @@ const functionDevConfigSchema = z.strictObject({
 });
 
 /**
- * A package the bundler must leave alone. Accepts what esbuild's `external` accepts for a
- * package — a bare name, a scope, or a subpath — and rejects a relative or absolute path,
- * which names a local module rather than a dependency and is never the right thing to
- * externalize (the bundle would ship an import of a file that isn't deployed).
+ * The name of a package the bundler must leave alone. Accepts what esbuild's `external`
+ * accepts for a package — a bare name, a scope, or a subpath — and rejects a relative or
+ * absolute path, which names a local module rather than a dependency and is never the right
+ * thing to externalize (the bundle would ship an import of a file that isn't deployed).
  */
-const externalPackageSchema = z
+const externalPackageNameSchema = z
 	.string()
 	.min(1)
 	.refine((value) => !value.startsWith(".") && !value.startsWith("/"), {
@@ -217,27 +219,173 @@ const externalPackageSchema = z
 	});
 
 /**
- * Per-function list of packages esbuild leaves unresolved at deploy time. See
- * {@link FunctionDef.externalPackages} for when this is the right tool — the deployed
- * archive has no `node_modules`, so an externalized package must never be reached at
- * runtime.
+ * An entry whose files are staged has to name one installable package, because the deploy
+ * hands its root to `npm install`. esbuild's `external` additionally accepts a `*` wildcard
+ * and a bare scope, which name a set rather than a package — legal only when nothing is
+ * being installed for them.
  */
-const functionExternalPackagesSchema = z.array(externalPackageSchema);
+const stageablePackageName = (value: string): boolean => {
+	// A protocol (`node:fs`, `npm:pkg`) is a specifier, not something to install.
+	if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+	// An empty segment (`foo//bar`) or a traversal is not a subpath the deploy can act on.
+	const segments = value.split("/");
+	if (segments.some((segment) => segment === "" || segment === "..")) {
+		return false;
+	}
+	return isNpmPackageName(externalPackageRoot(value));
+};
+
+/**
+ * npm's own rules for a package name, which is what the deploy hands to `npm install`.
+ * Deliberately strict: whatever slips through here becomes a subprocess argument.
+ */
+const NPM_NAME_SEGMENT = /^[a-z0-9~][a-z0-9._~-]*$/;
+
+const isNpmPackageName = (root: string): boolean => {
+	if (root.length === 0 || root.length > 214) return false;
+	if (!root.startsWith("@")) return NPM_NAME_SEGMENT.test(root);
+	const [scope, name, ...rest] = root.slice(1).split("/");
+	// A bare scope names every package in it, not one package.
+	if (rest.length > 0 || name === undefined) return false;
+	return NPM_NAME_SEGMENT.test(scope) && NPM_NAME_SEGMENT.test(name);
+};
+
+/**
+ * One entry of `externalPackages`. A bare string is the common case and ships the package's
+ * files; the object form exists only to turn that off. See {@link FunctionDef.externalPackages}.
+ */
+const externalPackageEntrySchema = z.union([
+	externalPackageNameSchema,
+	z.strictObject({
+		name: externalPackageNameSchema,
+		includeFiles: z.boolean().optional(),
+	}),
+]);
+
+/**
+ * Per-function list of packages esbuild leaves unresolved at deploy time. See
+ * {@link FunctionDef.externalPackages}.
+ */
+const functionExternalPackagesSchema = z.array(externalPackageEntrySchema);
 
 const runtimeSchema = z.literal("nodejs24");
+
+const bundlerSchema = z.custom<FunctionBundlerInput>(
+	(value) =>
+		value === "esbuild" || value === "none" || typeof value === "function",
+	{
+		message:
+			'bundler must be "esbuild", "none", or a function (fn) => Promise<FunctionBundle>',
+	},
+);
+
+const isEsbuildBundler = (
+	bundler: z.infer<typeof bundlerSchema> | undefined,
+): boolean => bundler === undefined || bundler === "esbuild";
+
+/** The declared name of an entry, whichever form it was written in. */
+const entryName = (
+	entry: z.infer<typeof externalPackageEntrySchema>,
+): string => (typeof entry === "string" ? entry : entry.name);
+
+/** Whether an entry ships its files. Absent means yes — see `FunctionDef.externalPackages`. */
+const entryIncludesFiles = (
+	entry: z.infer<typeof externalPackageEntrySchema>,
+): boolean => (typeof entry === "string" ? true : entry.includeFiles !== false);
 
 /**
  * Static definition of a function (existence). The slug is the record key (validated by
  * {@link functionSlugSchema}), so it is not a field here. Deploy tuning (`runtime`) lives
  * in the `branch` closure, not here.
+ *
+ * `externalPackages` entries are checked for contradictions: the same package named twice,
+ * or named once bare and once through a subpath with a different `includeFiles`. Both state
+ * two intents for one package, and files are staged per package rather than per subpath, so
+ * neither can be honoured as written.
  */
-export const functionDefSchema = z.strictObject({
-	name: z.string().min(1).max(255),
-	source: z.string().min(1),
-	env: functionEnvSchema.optional(),
-	externalPackages: functionExternalPackagesSchema.optional(),
-	dev: functionDevConfigSchema.optional(),
-});
+export const functionDefSchema = z
+	.strictObject({
+		name: z.string().min(1).max(255),
+		source: z.string().min(1),
+		env: functionEnvSchema.optional(),
+		externalPackages: functionExternalPackagesSchema.optional(),
+		bundler: bundlerSchema.optional(),
+		dev: functionDevConfigSchema.optional(),
+	})
+	.check((ctx) => {
+		const entries = ctx.value.externalPackages ?? [];
+
+		// Other bundlers own their output, so `externalPackages` would be ignored.
+		if (
+			ctx.value.externalPackages !== undefined &&
+			!isEsbuildBundler(ctx.value.bundler)
+		) {
+			ctx.issues.push({
+				code: "custom",
+				input: ctx.value.externalPackages,
+				path: ["externalPackages"],
+				message: `externalPackages only applies to the "esbuild" bundler; the "${
+					typeof ctx.value.bundler === "function"
+						? "custom"
+						: ctx.value.bundler
+				}" bundler controls its own output. Remove externalPackages or switch to the esbuild bundler`,
+			});
+			return;
+		}
+
+		const seenNames = new Map<string, number>();
+		const rootIntent = new Map<
+			string,
+			{ includeFiles: boolean; at: string }
+		>();
+
+		entries.forEach((entry, index) => {
+			const name = entryName(entry);
+			const includeFiles = entryIncludesFiles(entry);
+
+			if (includeFiles && !stageablePackageName(name)) {
+				ctx.issues.push({
+					code: "custom",
+					input: entry,
+					path: ["externalPackages", index],
+					message:
+						`"${name}" does not name a single installable package, so its files cannot ` +
+						`be staged. Name one package, or set includeFiles: false to leave the ` +
+						`import unresolved without shipping anything for it`,
+				});
+				return;
+			}
+
+			const firstIndex = seenNames.get(name);
+			if (firstIndex !== undefined) {
+				ctx.issues.push({
+					code: "custom",
+					input: entry,
+					path: ["externalPackages", index],
+					message: `"${name}" is listed more than once (first at index ${firstIndex})`,
+				});
+				return;
+			}
+			seenNames.set(name, index);
+
+			// Files are installed and traced per package, so two specifiers that resolve to the
+			// same package cannot disagree about whether that package's files ship.
+			const root = externalPackageRoot(name);
+			const prior = rootIntent.get(root);
+			if (prior !== undefined && prior.includeFiles !== includeFiles) {
+				ctx.issues.push({
+					code: "custom",
+					input: entry,
+					path: ["externalPackages", index],
+					message:
+						`"${name}" and "${prior.at}" are both part of the "${root}" package but disagree ` +
+						`about includeFiles; files ship per package, so the whole package either ships or does not`,
+				});
+				return;
+			}
+			rootIntent.set(root, { includeFiles, at: name });
+		});
+	});
 
 /** Static definition of a bucket (existence). Name is the record key. */
 export const bucketDefSchema = z.strictObject({

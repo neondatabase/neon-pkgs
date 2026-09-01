@@ -1,5 +1,307 @@
 # neonctl
 
+## 4.13.1
+
+### Patch Changes
+
+- `neon ask` sends `x-neon-source: cli` on POST `/ask`.
+- Updated dependencies
+  - neon@4.13.1
+
+## 4.13.0
+
+### Minor Changes
+
+- dab4540: Add `neon ask --prompt` to ask the hosted Neon assistant about Neon, with no login. A TTY shows a spinner, then streams the reply. CLI analytics includes that prompt text.
+
+### Patch Changes
+
+- Updated dependencies [dab4540]
+  - neon@4.13.0
+
+## 4.12.0
+
+### Patch Changes
+
+- Updated dependencies [59a05ea]
+  - neon@4.12.0
+
+## 4.11.1
+
+### Patch Changes
+
+- 4ddfe65: `neon skill` and `neon plugin` are aliases of `neon skills` and `neon plugins`.
+- Updated dependencies [4ddfe65]
+  - neon@4.11.1
+
+## 4.11.0
+
+### Minor Changes
+
+- 2e7c936: `neon init -y` / `neon bootstrap --default`, `neon skills -y`, `neon plugins -y`, and `neon mcp -y` install into detected agents: project folders (or installed apps with `--global` / default `mcp -y`), else the host CLI agent. `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap` names coding agents and skips agent selection. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. If `skills` / `plugins` / `mcp` `-y` finds none, the command names `--agent`. `link` has no `--agent`.
+
+### Patch Changes
+
+- Updated dependencies [2e7c936]
+  - neon@4.11.0
+
+## 4.10.2
+
+### Patch Changes
+
+- Updated dependencies [19b64a8]
+  - neon@4.10.2
+
+## 4.10.1
+
+### Patch Changes
+
+- Updated dependencies [7c6ec56]
+  - neon@4.10.1
+
+## 4.10.0
+
+### Patch Changes
+
+- Updated dependencies [33aac59]
+  - neon@4.10.0
+
+## 4.9.0
+
+### Patch Changes
+
+- Updated dependencies [64d0333]
+  - neon@4.9.0
+
+## 4.8.0
+
+### Minor Changes
+
+- 599c69c: `neon link --project-id` pins the project's only branch. Several branches prompt in a TTY, pin the default with `-y`, or stay unpinned for `neon checkout`.
+- 53b2e72: `neon init` in an empty directory is `neon bootstrap` (scaffold, agent tooling, link). In an existing app it installs a plugin or skills+MCP, links, then writes neon.ts. `neon bootstrap` offers the same agent tooling after scaffolding; `--default` also runs `link --yes`.
+
+### Patch Changes
+
+- Updated dependencies [599c69c]
+- Updated dependencies [53b2e72]
+  - neon@4.8.0
+
+## 4.7.1
+
+### Patch Changes
+
+- neon@4.7.1
+
+## 4.7.0
+
+### Minor Changes
+
+- 9530c77: `neon link --agent` is removed. List orgs with `orgs list --output json` and projects with `projects list --org-id <org-id> --output json`. Link with `--project-id`, or create with `--org-id --project-name --region-id`.
+
+### Patch Changes
+
+- Updated dependencies [9530c77]
+  - neon@4.7.0
+
+## 4.6.0
+
+### Minor Changes
+
+- e6a4174: `neon bootstrap --agent` is removed. List templates with `--list-templates --output json` (or yaml). Scaffold with `--template` or `--default`.
+
+### Patch Changes
+
+- Updated dependencies [e6a4174]
+  - neon@4.6.0
+
+## 4.5.2
+
+### Patch Changes
+
+- e869e9e: `neon skills --help`, `neon mcp --help`, and `neon plugins --help` list supported agents and the install catalogs: skill ids with source repos, the `neon-postgres` plugin contents, and the MCP server URL plus `neon mcp -y` defaults.
+- Updated dependencies [e869e9e]
+  - neon@4.5.2
+
+## 4.5.1
+
+### Patch Changes
+
+- neon@4.5.1
+
+## 4.5.0
+
+### Patch Changes
+
+- Updated dependencies [512baf3]
+  - neon@4.5.0
+
+## 4.4.0
+
+### Minor Changes
+
+- bdb0db6: Add `neon plugins` to install the Neon agent plugin into coding agents. A TTY asks agents, then confirms. `-y` installs into detected agents at project scope. `--agent` names specific agents. `--global` is user scope.
+
+### Patch Changes
+
+- Updated dependencies [bdb0db6]
+- Updated dependencies
+  - neon@4.4.0
+
+## 4.3.1
+
+### Patch Changes
+
+- 894b427: `neon mcp` mints a project-scoped API key when `--project-id` is set or a linked project is pinned, instead of an account-wide key.
+- Updated dependencies [894b427]
+  - neon@4.3.1
+
+## 4.3.0
+
+### Minor Changes
+
+- eb52252: Add `neon skills` to install Neon agent skills into coding agents. A TTY asks agents and skills, then confirms. `-y` installs the default skills into detected agents in this directory. `--skill` names specific skills. `--global` is user-level. `neon skills update` refreshes installed skills.
+
+### Patch Changes
+
+- Updated dependencies [eb52252]
+  - neon@4.3.0
+
+## 4.2.1
+
+### Patch Changes
+
+- 9c5ecf5: List commands print every populated column at full width on one line per row. A narrow terminal wraps the line instead of dropping or truncating columns. `neon branches list` and `neon snapshots list` show Expires At before Created At, including on get and create. `neon projects list --recoverable-only` shows Recoverable Until before Deleted At.
+- Updated dependencies [9c5ecf5]
+  - neon@4.2.1
+
+## 4.2.0
+
+### Minor Changes
+
+- 55f4bf2: Add `neon mcp` to install the Neon MCP server into coding agents. A TTY asks config location (global default), agents, API key vs OAuth, then confirms. Linked project-folder installs also ask whether to pin tools to that project. `-y` is global, detected agents, minted write API key. `--project` is config location only. `--read-only`, `--project-id` and `--category` set MCP URL query params. The minted key is always account-wide.
+
+### Patch Changes
+
+- Updated dependencies [55f4bf2]
+  - neon@4.2.0
+
+## 4.1.0
+
+### Patch Changes
+
+- Updated dependencies [6ff43d7]
+  - neon@4.1.0
+
+## 4.0.0
+
+### Major Changes
+
+- d606a2e: `neon neon-auth config email-provider test` now sends through the custom SMTP provider saved on the branch. Only `--recipient-email` is accepted; `--host`, `--port`, `--username`, `--password`, `--sender-email`, and `--sender-name` are rejected. Save the provider first with `neon neon-auth config email-provider update --type standard`.
+
+### Patch Changes
+
+- Updated dependencies [d606a2e]
+  - neon@4.0.0
+
+## 3.6.1
+
+### Patch Changes
+
+- neon@3.6.1
+
+## 3.6.0
+
+### Minor Changes
+
+- 23740cd: `neon` list and get commands no longer draw box-drawing tables. Default output is space-padded columns that drop and truncate to the terminal width, or stacked `Label  value` lines for a single object. `--output json` and `--output yaml` keep the same fields; `neon profile list` reports OAuth scope as `account` in every format.
+
+### Patch Changes
+
+- Updated dependencies [23740cd]
+- Updated dependencies [e78f193]
+  - neon@3.6.0
+
+## 3.5.1
+
+### Patch Changes
+
+- neon@3.5.1
+
+## 3.5.0
+
+### Patch Changes
+
+- Updated dependencies [745c267]
+  - neon@3.5.0
+
+## 3.4.0
+
+### Patch Changes
+
+- Updated dependencies [5abe208]
+  - neon@3.4.0
+
+## 3.3.0
+
+### Patch Changes
+
+- Updated dependencies [0b37ad5]
+  - neon@3.3.0
+
+## 3.2.2
+
+### Patch Changes
+
+- Updated dependencies [e8715cd]
+  - neon@3.2.2
+
+## 3.2.1
+
+### Patch Changes
+
+- Updated dependencies [ad7cf9a]
+  - neon@3.2.1
+
+## 3.2.0
+
+### Patch Changes
+
+- Updated dependencies [998728b]
+  - neon@3.2.0
+
+## 3.1.1
+
+### Patch Changes
+
+- Updated dependencies [7bb17a9]
+  - neon@3.1.1
+
+## 3.1.0
+
+### Patch Changes
+
+- Updated dependencies [5305087]
+- Updated dependencies [9f51632]
+  - neon@3.1.0
+
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [3cb16e1]
+- Updated dependencies [98c4aec]
+- Updated dependencies [4497de8]
+- Updated dependencies [98c4aec]
+  - neon@3.0.0
+
+## 2.47.0
+
+### Patch Changes
+
+- Updated dependencies [6f8ba4d]
+- Updated dependencies [47e6728]
+  - neon@2.47.0
+
 ## 2.46.0
 
 ### Patch Changes

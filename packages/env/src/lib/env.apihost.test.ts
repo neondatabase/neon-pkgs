@@ -1,6 +1,6 @@
 import { createNeonApiFromOptions } from "@neon/config/v1";
+import { fetchEnv } from "@neon-internals/env-core/env";
 import { describe, expect, test, vi } from "vitest";
-import { fetchEnv } from "./env.js";
 
 // Throw immediately after the API client would be built: fetchEnv builds its API before
 // any other work, so this asserts the forwarded options without any network.

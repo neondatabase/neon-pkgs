@@ -87,6 +87,23 @@ exports[`neon-auth > email-provider test 1`] = `
 "
 `;
 
+exports[`neon-auth > email-provider test human output 1`] = `
+"
+Test email dispatched to user@test.com using the custom SMTP provider saved on this branch.
+
+"
+`;
+
+exports[`neon-auth > email-provider test rejected smtp flags 1`] = `""`;
+
+exports[`neon-auth > email-provider test rejects flags after -- 1`] = `""`;
+
+exports[`neon-auth > email-provider test relay refusal 1`] = `
+"success: false
+error_message: "auth failed: 535"
+"
+`;
+
 exports[`neon-auth > email-provider update 1`] = `
 "type: shared
 "

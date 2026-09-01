@@ -27,6 +27,15 @@ export const PROJECT_FIELDS = [
 	"created_at",
 ] as const;
 
+export const RECOVERABLE_PROJECT_FIELDS = [
+	"id",
+	"name",
+	"recoverable_until",
+	"deleted_at",
+	"region_id",
+	"created_at",
+] as const;
+
 export const REGIONS = [
 	"aws-us-west-2",
 	"aws-ap-southeast-1",
@@ -73,6 +82,12 @@ export const builder = (argv: yargs.Argv) => {
 			"Create a project",
 			(yargs) =>
 				yargs.options({
+					secrets: {
+						describe:
+							"Include connection credentials in command output. Use --no-secrets to omit them",
+						type: "boolean",
+						default: true,
+					},
 					"block-public-connections": {
 						describe:
 							projectCreateRequest[
@@ -276,7 +291,7 @@ const list = async (
 
 	out.write(ownedProjects, {
 		fields: props.recoverableOnly
-			? ([...PROJECT_FIELDS, "deleted_at", "recoverable_until"] as const)
+			? RECOVERABLE_PROJECT_FIELDS
 			: PROJECT_FIELDS,
 		title: "Projects",
 		emptyMessage: props.recoverableOnly
@@ -310,6 +325,7 @@ const create = async (
 		psql: boolean;
 		fallback: boolean;
 		setContext: boolean;
+		secrets: boolean;
 		hipaa?: boolean;
 		"--"?: string[];
 	},
@@ -369,11 +385,24 @@ const create = async (
 	}
 
 	const out = writer(props);
-	out.write(data.project, { fields: PROJECT_FIELDS, title: "Project" });
-	out.write(data.connection_uris, {
-		fields: ["connection_uri"],
-		title: "Connection URIs",
-	});
+	if (
+		!props.secrets &&
+		(props.output === "json" || props.output === "yaml")
+	) {
+		// The writer flattens a single JSON/YAML chunk.
+		out.write(
+			{ project: data.project },
+			{ fields: ["project"], title: "Project" },
+		);
+	} else {
+		out.write(data.project, { fields: PROJECT_FIELDS, title: "Project" });
+		if (props.secrets) {
+			out.write(data.connection_uris, {
+				fields: ["connection_uri"],
+				title: "Connection URIs",
+			});
+		}
+	}
 	out.end();
 
 	if (props.psql) {

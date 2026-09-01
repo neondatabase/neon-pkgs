@@ -13,7 +13,11 @@ import {
 	applyContext,
 	currentContextFile,
 	ensureGitignored,
+	isAskCommand,
 	isCurrentBranchProbe,
+	isMcpOauth,
+	isPluginsCommand,
+	isSkillsCommand,
 	walkContextFile,
 } from "./context.js";
 
@@ -70,6 +74,69 @@ describe("isCurrentBranchProbe", () => {
 		expect(
 			isCurrentBranchProbe({ _: ["config"], currentBranch: true }),
 		).toBe(false);
+	});
+});
+
+describe("isSkillsCommand", () => {
+	test("true for skills and skills update", () => {
+		expect(isSkillsCommand({ _: ["skills"] })).toBe(true);
+		expect(isSkillsCommand({ _: ["skills", "update"] })).toBe(true);
+		expect(isSkillsCommand({ _: ["skill"] })).toBe(true);
+		expect(isSkillsCommand({ _: ["skill", "update"] })).toBe(true);
+	});
+
+	test("false for other commands", () => {
+		expect(isSkillsCommand({ _: ["mcp"] })).toBe(false);
+		expect(isSkillsCommand({ _: ["init"] })).toBe(false);
+		expect(isSkillsCommand({ _: ["plugins"] })).toBe(false);
+	});
+});
+
+describe("isAskCommand", () => {
+	test("true for ask", () => {
+		expect(isAskCommand({ _: ["ask"] })).toBe(true);
+		expect(isAskCommand({ _: ["ask", "extra"] })).toBe(true);
+	});
+
+	test("false for other commands", () => {
+		expect(isAskCommand({ _: ["skills"] })).toBe(false);
+		expect(isAskCommand({ _: ["mcp"] })).toBe(false);
+		expect(isAskCommand({ _: ["init"] })).toBe(false);
+	});
+});
+
+describe("isPluginsCommand", () => {
+	test("true for plugins", () => {
+		expect(isPluginsCommand({ _: ["plugins"] })).toBe(true);
+		expect(isPluginsCommand({ _: ["plugin"] })).toBe(true);
+	});
+
+	test("false for other commands", () => {
+		expect(isPluginsCommand({ _: ["skills"] })).toBe(false);
+		expect(isPluginsCommand({ _: ["mcp"] })).toBe(false);
+		expect(isPluginsCommand({ _: ["init"] })).toBe(false);
+	});
+});
+
+describe("isMcpOauth", () => {
+	const originalArgv = process.argv;
+
+	afterEach(() => {
+		process.argv = originalArgv;
+	});
+
+	test("is true for --oauth and --oauth=true", () => {
+		process.argv = ["node", "neon", "mcp", "--oauth"];
+		expect(isMcpOauth({ _: ["mcp"] })).toBe(true);
+		process.argv = ["node", "neon", "mcp", "--oauth=true"];
+		expect(isMcpOauth({ _: ["mcp"] })).toBe(true);
+	});
+
+	test("is false for --oauth=false and `--oauth false`", () => {
+		process.argv = ["node", "neon", "mcp", "--oauth=false"];
+		expect(isMcpOauth({ _: ["mcp"] })).toBe(false);
+		process.argv = ["node", "neon", "mcp", "--oauth", "false"];
+		expect(isMcpOauth({ _: ["mcp"] })).toBe(false);
 	});
 });
 

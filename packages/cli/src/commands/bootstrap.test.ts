@@ -15,6 +15,7 @@ import { join } from "node:path";
 import express from "express";
 import { gzipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import YAML from "yaml";
 
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
@@ -58,6 +59,14 @@ const MANIFEST_YAML = `templates:
     services:
       - Postgres
       - Functions
+    source:
+      owner: neondatabase
+      repo: examples
+      ref: main
+      subdir: with-hono
+  - id: plain
+    title: "Plain"
+    description: "A template with no services listed."
     source:
       owner: neondatabase
       repo: examples
@@ -138,33 +147,48 @@ const startGithubFixtureServer = (): Promise<Server> => {
 	});
 };
 
+const HONO_LIST_ROW = {
+	id: "hono",
+	title: "Hono API (Drizzle, Lakebase Postgres) on Neon Functions",
+	description:
+		"A Hono API using Drizzle ORM and Lakebase Postgres, ready to deploy as a Neon Function.",
+	services: ["Postgres", "Functions"],
+};
+
+const PLAIN_LIST_ROW: typeof HONO_LIST_ROW = {
+	id: "plain",
+	title: "Plain",
+	description: "A template with no services listed.",
+	services: [],
+};
+
+const TABLE_LIST_OUTPUT = `${HONO_LIST_ROW.id} — ${HONO_LIST_ROW.description} [Postgres · Functions]\n${PLAIN_LIST_ROW.id} — ${PLAIN_LIST_ROW.description}\n`;
+
 const runBootstrap = (
 	server: Server,
 	args: string[],
 ): Promise<{ code: number; stdout: string; stderr: string }> => {
 	const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+	const argv = [
+		"bootstrap",
+		...args,
+		"--api-key",
+		"test-key",
+		"--no-analytics",
+	];
+	if (!args.includes("--output") && !args.includes("-o")) {
+		argv.push("--output", "yaml");
+	}
 	return new Promise((resolve, reject) => {
-		const cp = fork(
-			join(process.cwd(), "./dist/index.js"),
-			[
-				"bootstrap",
-				...args,
-				"--api-key",
-				"test-key",
-				"--no-analytics",
-				"--output",
-				"yaml",
-			],
-			{
-				stdio: "pipe",
-				env: {
-					...process.env,
-					CI: "true",
-					NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
-					NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
-				},
+		const cp = fork(join(process.cwd(), "./dist/index.js"), argv, {
+			stdio: "pipe",
+			env: {
+				...process.env,
+				CI: "true",
+				NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
+				NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
 			},
-		);
+		});
 		let stdout = "";
 		let stderr = "";
 		cp.stdout?.on("data", (data: Buffer) => {
@@ -180,14 +204,12 @@ const runBootstrap = (
 	});
 };
 
-// `--agent` writes a single JSON state-machine object to stdout (logs go to
-// stderr), so the structured output stays machine-parseable.
-const parseAgentOutput = (stdout: string): Record<string, unknown> => {
+const parseListedTemplates = (stdout: string): unknown[] => {
 	const parsed: unknown = JSON.parse(stdout.trim());
-	if (typeof parsed !== "object" || parsed === null) {
-		throw new Error(`Expected a JSON object, got: ${stdout}`);
+	if (!Array.isArray(parsed)) {
+		throw new Error(`Expected a JSON array, got: ${stdout}`);
 	}
-	return parsed as Record<string, unknown>;
+	return parsed;
 };
 
 describe("bootstrap", () => {
@@ -271,25 +293,130 @@ describe("bootstrap", () => {
 	});
 
 	test("--list prints available templates to stdout from the remote manifest", async () => {
-		const { code, stdout, stderr } = await runBootstrap(server, ["--list"]);
+		const { code, stdout, stderr } = await runBootstrap(server, [
+			"--list",
+			"--output",
+			"table",
+		]);
 		expect(code, stderr).toBe(0);
-		expect(stdout).toContain("hono");
-		expect(stdout).toContain(
-			"A Hono API using Drizzle ORM and Lakebase Postgres",
+		expect(stdout).toBe(TABLE_LIST_OUTPUT);
+	});
+
+	test("--list-templates --output json prints id, title, description, and services", async () => {
+		const { code, stdout, stderr } = await runBootstrap(server, [
+			"--list-templates",
+			"--output",
+			"json",
+		]);
+		expect(code, stderr).toBe(0);
+		const rows = parseListedTemplates(stdout);
+		expect(rows).toEqual([HONO_LIST_ROW, PLAIN_LIST_ROW]);
+		for (const row of rows) {
+			if (typeof row !== "object" || row === null) {
+				throw new Error(`Expected an object row, got: ${stdout}`);
+			}
+			expect(Object.keys(row).sort()).toEqual([
+				"description",
+				"id",
+				"services",
+				"title",
+			]);
+		}
+	});
+
+	test("--list-templates --output yaml prints the same rows", async () => {
+		const { code, stdout, stderr } = await runBootstrap(server, [
+			"--list-templates",
+			"--output",
+			"yaml",
+		]);
+		expect(code, stderr).toBe(0);
+		expect(YAML.parse(stdout)).toEqual([HONO_LIST_ROW, PLAIN_LIST_ROW]);
+	});
+
+	test("--agent without a value is refused", async () => {
+		const { code, stdout, stderr } = await runBootstrap(server, [
+			"--agent",
+		]);
+		expect(code).toBe(1);
+		expect(stdout.trim()).toBe("");
+		expect(stderr).toMatch(/--agent needs a value/);
+	});
+
+	test("help describes --agent forwarding", async () => {
+		const { code, stderr } = await runBootstrap(server, ["--help"]);
+		expect(code, stderr).toBe(0);
+		const flat = stderr.replace(/\s+/g, " ");
+		expect(flat).toContain("--list-templates");
+		expect(flat).toContain("--agent-setup");
+		expect(flat).toContain("host CLI agent");
+		expect(flat).toContain("omit --default in a terminal");
+		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
+		expect(flat).toMatch(/skips agent selection/i);
+		expect(stderr).toMatch(/Plugin agents/);
+		expect(stderr).toMatch(/Skills and MCP agents/);
+		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
+	});
+
+	test("mixed --agent fails before scaffold", async () => {
+		const { code, stderr } = await runBootstrap(server, [
+			dest,
+			"--agent",
+			"cursor",
+			"--agent",
+			"vscode",
+			"--default",
+			"--no-install",
+			"--force",
+			"--no-link",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/plugin and skills\/MCP/);
+		expect(stderr).toMatch(/Plugin: cursor/);
+		expect(stderr).toMatch(/Skills\/MCP: vscode/);
+		expect(stderr).toContain(
+			`neon bootstrap ${dest} --default --agent cursor`,
 		);
-		// The services from the manifest are surfaced alongside each template.
-		expect(stdout).toContain("[Postgres · Functions]");
+		expect(stderr).toContain(
+			`neon bootstrap ${dest} --default --agent vscode`,
+		);
+		expect(stderr).toMatch(/Re-run `.*` or `/);
+		expect(existsSync(join(dest, "package.json"))).toBe(false);
+	});
+
+	test("unknown --agent fails before scaffold", async () => {
+		const { code, stderr } = await runBootstrap(server, [
+			dest,
+			"--agent",
+			"not-an-agent",
+			"--default",
+			"--no-install",
+			"--force",
+			"--no-agent-setup",
+			"--no-link",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toMatch(/Unknown agent: "not-an-agent"/);
+		expect(existsSync(join(dest, "package.json"))).toBe(false);
 	});
 
 	test("--default scaffolds and inits git without prompting", async () => {
 		// --no-install keeps the test offline/fast; git init still runs.
-		const { code, stderr } = await runBootstrap(server, [
+		const { code, stdout, stderr } = await runBootstrap(server, [
 			dest,
 			"--default",
 			"--no-install",
 			"--force",
+			"--no-agent-setup",
+			"--no-link",
+			"--agent",
+			"cursor",
 		]);
 		expect(code, stderr).toBe(0);
+		expect(stdout).toContain("Project scaffolded.");
+		expect(stdout).not.toContain("INFO:");
+		expect(`${stdout}${stderr}`).not.toContain("██████");
+		expect(stderr).not.toMatch(/Done\. Scaffolded/);
 
 		// The default template was scaffolded with no template/dir prompt.
 		expect(readFileSync(join(dest, "package.json"), "utf8")).toBe(
@@ -297,106 +424,5 @@ describe("bootstrap", () => {
 		);
 		// git init ran as part of the quick start.
 		expect(existsSync(join(dest, ".git"))).toBe(true);
-	});
-
-	describe("--agent (JSON state machine)", () => {
-		test("asks for a template when none is given", async () => {
-			const { code, stdout, stderr } = await runBootstrap(server, [
-				"--agent",
-			]);
-			expect(code, stderr).toBe(0);
-			const res = parseAgentOutput(stdout);
-			expect(res.status).toBe("needs_template");
-			// Options come from the remote manifest, including the services list.
-			expect(res.options).toEqual(
-				expect.arrayContaining([
-					expect.objectContaining({
-						id: "hono",
-						services: ["Postgres", "Functions"],
-					}),
-				]),
-			);
-			expect(res.next_command_template).toContain(
-				"--template <template_id>",
-			);
-		});
-
-		test("asks for a directory when only the template is given", async () => {
-			const { code, stdout, stderr } = await runBootstrap(server, [
-				"--agent",
-				"--template",
-				"hono",
-			]);
-			expect(code, stderr).toBe(0);
-			const res = parseAgentOutput(stdout);
-			expect(res.status).toBe("needs_directory");
-			expect(res.next_command_template).toContain("<directory>");
-			expect(res.next_command_template).toContain("--template hono");
-		});
-
-		test("scaffolds and returns the install + git + link next steps", async () => {
-			const { code, stdout, stderr } = await runBootstrap(server, [
-				"--agent",
-				dest,
-				"--template",
-				"hono",
-				"--force",
-			]);
-			expect(code, stderr).toBe(0);
-			const res = parseAgentOutput(stdout);
-			expect(res.status).toBe("scaffolded");
-			expect(res.template).toEqual({
-				id: "hono",
-				title: expect.any(String),
-			});
-			expect(res.files_written).toBeGreaterThan(0);
-
-			// The files really landed on disk (end to end, no mocks).
-			expect(readFileSync(join(dest, "package.json"), "utf8")).toBe(
-				'{\n  "name": "with-hono"\n}\n',
-			);
-
-			// All follow-ups come back as structured, runnable next steps.
-			const steps = res.next_steps as Record<string, unknown>[];
-			const actions = steps.map((step) => step.action);
-			expect(actions).toEqual([
-				"install_dependencies",
-				"initialize_git",
-				"link_neon_project",
-			]);
-			expect(steps[0].command).toContain("npm install");
-			expect(steps[1].command).toContain("git init");
-			expect(steps[2].command).toContain("neon link --agent");
-		});
-
-		test("errors with UNKNOWN_TEMPLATE for a bad template id", async () => {
-			const { code, stdout } = await runBootstrap(server, [
-				"--agent",
-				dest,
-				"--template",
-				"does-not-exist",
-				"--force",
-			]);
-			expect(code).toBe(1);
-			const res = parseAgentOutput(stdout);
-			expect(res.status).toBe("error");
-			expect(res.code).toBe("UNKNOWN_TEMPLATE");
-		});
-
-		test("errors with TARGET_NOT_EMPTY when the directory is not empty", async () => {
-			writeFileSync(join(dest, "keep.txt"), "mine\n");
-			const { code, stdout } = await runBootstrap(server, [
-				"--agent",
-				dest,
-				"--template",
-				"hono",
-			]);
-			expect(code).toBe(1);
-			const res = parseAgentOutput(stdout);
-			expect(res.status).toBe("error");
-			expect(res.code).toBe("TARGET_NOT_EMPTY");
-			// Nothing was scaffolded over the existing contents.
-			expect(readFileSync(join(dest, "keep.txt"), "utf8")).toBe("mine\n");
-		});
 	});
 });

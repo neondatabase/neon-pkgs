@@ -5,7 +5,7 @@
 		"bump": "changeset",
 		"build:cli": "pnpm --filter neon-new build",
 		"build:plugin": "pnpm --filter vite-plugin-neon-new build",
-		"build": "pnpm --recursive --filter='./packages/**' build",
+		"build": "pnpm --recursive --filter='./internals/**' --filter='./packages/**' build",
 		"format": "biome check --error-on-warnings --write",
 		"lint:ci": "biome ci --error-on-warnings",
 		"test:ci": "pnpm --recursive test:ci",

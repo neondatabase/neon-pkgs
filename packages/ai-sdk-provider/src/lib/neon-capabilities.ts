@@ -7,11 +7,11 @@ import type {
 import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 const PENALTY_DETAILS =
-	"Only Gemini accepts penalties on the gateway's unified endpoint, so it was dropped rather than sent.";
+	"The request was sent without it. Check getNeonModelCapabilities('<model-id>').supportsPenalties before setting penalties.";
 const GENERIC_DETAILS =
-	"The Neon AI Gateway rejects this parameter for this model, so it was dropped rather than sent.";
+	"The request was sent without it. Call getNeonModelCapabilities('<model-id>') to see which sampling parameters this model takes, or steer it through the prompt.";
 const REASONING_EFFORT_DETAILS =
-	"This model does not take the OpenAI reasoning_effort field, so it was dropped rather than sent.";
+	"The request was sent without it. Claude takes providerOptions.anthropic.effort instead.";
 
 /**
  * Drop call options the resolved model's upstream backend does not accept and
@@ -27,11 +27,10 @@ export function applyNeonCapabilities(
 	const patch: Partial<LanguageModelV3CallOptions> = {};
 
 	// The AI SDK prints the provider, the model id and the feature name ahead of
-	// `details`, so each reason says only what those cannot: why the gateway
-	// refuses it, and what to use instead. Each carries its own "was dropped"
-	// clause rather than a shared suffix — appending one everywhere restated the
-	// penalty reason and asserted a 400 for the unrecognised case, which is the
-	// overstatement this wording exists to avoid.
+	// `details`, so each reason says only what those cannot: that the call still
+	// went out, and what to reach for instead. Restating the feature name or
+	// asserting a 400 for the unrecognised case is the overstatement this
+	// wording exists to avoid.
 	const drop = (
 		feature: string,
 		details: string,
@@ -45,10 +44,10 @@ export function applyNeonCapabilities(
 	// would contradict the hedge in the sentence that follows it.
 	const unrecognizedClaude = caps.claudeSamplingUnrecognized === true;
 	const samplingDetails = unrecognizedClaude
-		? "This Claude version was not recognised. Claude 4.7 and newer reject sampling parameters, so it was dropped as a precaution; set `providerOptions.anthropic.effort` instead."
+		? "This Claude version was not recognised. Claude 4.7 and newer reject sampling parameters, so the request was sent without it as a precaution; set `providerOptions.anthropic.effort` instead."
 		: caps.family === "anthropic"
-			? "Claude 4.7 and newer reject sampling parameters, so it was dropped rather than sent. Use `providerOptions.anthropic.effort` (low | medium | high | xhigh | max) to steer these models."
-			: "The Neon AI Gateway rejects this parameter for this model, so it was dropped rather than sent.";
+			? "The request was sent without it. Claude 4.7 and newer reject sampling parameters; use `providerOptions.anthropic.effort` (low | medium | high | xhigh | max) to steer these models."
+			: GENERIC_DETAILS;
 	const samplingType = unrecognizedClaude ? "compatibility" : "unsupported";
 
 	if (options.temperature != null && !caps.supportsTemperature) {

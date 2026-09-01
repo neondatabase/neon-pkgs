@@ -1,5 +1,5 @@
 import { cancelled, type Deadline, runBounded } from "./deadline.js";
-import { toNeonError } from "./errors.js";
+import { NeonError, toNeonError } from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
 
 export interface Page<T> {
@@ -67,6 +67,10 @@ class PaginatedList<T, D> implements Paginated<T> {
 		const cancellation = cancelled(deadline);
 		if (cancellation) return err(cancellation);
 		if (raw === undefined || raw.error || raw.data === undefined) {
+			// A fetcher that already classified the failure keeps its own error.
+			// Re-deriving one from the response would mislabel a fault the SDK
+			// found in a 200 body as an API error with a 2xx status.
+			if (raw?.error instanceof NeonError) return err(raw.error);
 			return err(toNeonError(raw?.error, raw?.response));
 		}
 		return ok(this.#mapPage(raw.data));

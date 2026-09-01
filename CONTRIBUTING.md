@@ -49,12 +49,13 @@ pnpm --filter @neon/env build
 pnpm --filter @neon/env test:ci
 ```
 
-Workspace packages import each other through their build output (`dist`), not their source, so
-a package's tests see a dependency's **last build** — not the source you just edited. `pnpm test`
-therefore builds the package and its workspace dependencies first (`pnpm --filter <pkg>... build`),
-which is what makes a single-package test run trustworthy after an edit anywhere in the graph.
-`test:ci` skips that: on CI, `pnpm install` runs each package's `prepare` (a build) on a fresh
-checkout, so everything is current already. Run `test:ci` locally only right after a build.
+## What is where
+
+| Directory | Holds |
+| --- | --- |
+| `packages/` | Everything published to npm, one directory per package |
+| `internals/` | `@neon-internals/*` — private, never published, bundled into the packages that use them. Currently the credential and env-resolution code shared by the `neon` CLI and `@neon/env`; each has its own README |
+| `tests/` | Test-only workspace packages, currently the live e2e harness |
 
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
@@ -64,7 +65,64 @@ package's file before changing it:
 
 | Package | Notes |
 | --- | --- |
-| [`@neon/env`](./packages/env/CONTRIBUTING.md) | Which of its two entry points (`@neon/env` vs `@neon/env/runtime`) a change belongs in, and the branch-credential rules |
+| [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `internals/env-core` rather than on the published surface, and the branch-credential rules |
+| [`neon` CLI](./packages/cli/CONTRIBUTING.md) | Human `-o table` output: no boxes, TTY-aware columns |
+
+## CLI for agents
+
+`--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; detection on `-y`; or omit `-y` in a terminal to pick. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. `link` has no `--agent`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
+
+## Testing
+
+The standard suite uses [Vitest](https://vitest.dev/) and does not call live Neon services:
+
+```bash
+pnpm test:ci                          # every package
+pnpm --filter @neon/config test:ci   # one package
+```
+
+Workspace packages import each other through their build output (`dist`), not their source, so a
+package's tests can see a dependency's last build instead of the source you just edited. Some
+packages build their workspace dependencies in `test`; check the package script rather than
+assuming it does. The reliable sequence is:
+
+```bash
+pnpm --filter @neon/config... build
+pnpm --filter @neon/config test:ci
+```
+
+`neonctl` is the important exception: its tests import `neon/dist/cli.js`, but its `test` script
+does not build `neon`. Build `neon` first when running that suite locally. CI handles this
+explicitly: shard 4 runs `neon test:ci`, which builds the CLI, before it runs `neonctl test:ci`.
+
+### Pull request CI
+
+The `CI` workflow splits the standard suite into five parallel jobs:
+
+- four Vitest file shards for `neon`, the CLI package
+- one job for every non-CLI package except `neonctl`
+
+`neonctl` runs after CLI shard 4 because its compatibility shim imports the built `neon` CLI.
+The four shards together select every CLI test file exactly once:
+
+```bash
+pnpm --filter neon test:ci \
+  --coverage --coverage.reporter=json --shard=1/4
+
+pnpm --recursive \
+  --filter='./packages/**' --filter='!neon' --filter='!neonctl' \
+  test:ci --coverage --coverage.reporter=json
+```
+
+Replace `1/4` with `2/4`, `3/4`, or `4/4` to reproduce another shard. Vitest shards test
+**files**, not individual tests. A large generated matrix inside one file remains on one
+runner; splitting that file is the way to distribute it further.
+
+The test runners belong to the protected runner group. They can install packages from the
+Databricks mirror but cannot reach Codecov's public verification endpoints. Each job therefore
+emits Istanbul JSON coverage, uploads the package-named reports as a GitHub artifact, and stops
+there. A dependent `Coverage` job on `ubuntu-latest` downloads all five artifacts and performs
+one OIDC-authenticated Codecov upload. Coverage upload errors fail that job.
 
 ## Live Neon e2e tests
 
@@ -123,10 +181,25 @@ Adding a **new** variable? Read it through `tests/e2e-harness`, add it to every 
 [`AGENTS.md`](./AGENTS.md), which cover the repository secret or variable and the workflow
 mapping.
 
+### The AI Gateway suite
+
+`pnpm --filter @neon/ai-sdk-provider test:e2e` is the sixth live suite and is **not** part of
+`test:e2e:live`, because a run calls well over a hundred live models — it exercises every model
+the branch serves on two major AI SDK versions.
+
+It takes the same `NEON_API_KEY` and provisions its own gateway: a throwaway project, then a
+branch credential scoped to `ai_gateway:invoke`, both removed when the run ends. The gateway
+exists on every branch and needs no setup, but **model access is granted per account**, so the
+account behind the key needs every id in `packages/ai-sdk-provider/e2e/helpers.ts`. To run
+against a branch you already have instead, set `NEON_AI_GATEWAY_BASE_URL` and
+`NEON_AI_GATEWAY_TOKEN` (both, or neither) from `neon env pull`.
+
 ### In CI
 
 These run as the `e2e (live Neon)` workflow on every pull request from this repository, using a
-maintained throwaway org. The workflow maps the repository secret `NEON_TEST_API_KEY` onto
+maintained throwaway org. The gateway suite runs as `e2e (live AI Gateway)`, path-filtered to
+changes under `packages/ai-sdk-provider/` and `tests/e2e-harness/` so its model spend tracks
+the code it covers. Both workflows map the repository secret `NEON_TEST_API_KEY` onto
 `NEON_API_KEY` and the repository variable `NEON_TEST_ORG_ID` onto `NEON_ORG_ID`, so the
 contract is identical to your local one.
 

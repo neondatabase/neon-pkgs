@@ -127,8 +127,8 @@ describe("getNeonModelCapabilities", () => {
 		}
 	});
 
-	// Every MLflow-routed family except Gemini rejects penalties with
-	// `parameter "frequency_penalty" must be equal to 0`.
+	// Every MLflow-routed family except the older Gemini models rejects
+	// penalties with `parameter "frequency_penalty" must be equal to 0`.
 	it("drops penalties for every unified-endpoint family that rejects them", () => {
 		for (const id of [
 			"gpt-oss-20b",
@@ -138,6 +138,7 @@ describe("getNeonModelCapabilities", () => {
 			"gemma-3-12b",
 			"glm-5-2",
 			"inkling",
+			"kimi-k3",
 		]) {
 			expect({
 				id,
@@ -149,10 +150,109 @@ describe("getNeonModelCapabilities", () => {
 		}
 	});
 
-	it("keeps penalties for Gemini, the one unified family that accepts them", () => {
-		expect(
-			getNeonModelCapabilities("gemini-3-flash").supportsPenalties,
-		).toBe(true);
+	it("keeps penalties for the older Gemini models that accept them", () => {
+		for (const id of [
+			"gemini-3-flash",
+			"gemini-3-5-flash",
+			"gemini-3-1-pro",
+			"gemini-3-1-flash-lite",
+		]) {
+			expect({
+				id,
+				penalties: getNeonModelCapabilities(id).supportsPenalties,
+			}).toEqual({ id, penalties: true });
+		}
+	});
+
+	it("drops penalties for the newer Gemini models that reject them", () => {
+		// Measured, not derived: gemini-3-1-flash-lite accepts penalties and
+		// gemini-3-5-flash-lite does not, so neither the version nor the -lite
+		// suffix predicts this.
+		for (const id of [
+			"gemini-3-5-flash-lite",
+			"gemini-3-6-flash",
+			"databricks-gemini-3-6-flash",
+		]) {
+			expect({
+				id,
+				penalties: getNeonModelCapabilities(id).supportsPenalties,
+			}).toEqual({ id, penalties: false });
+		}
+	});
+
+	// Substring matching would hand a measured restriction to any future id that
+	// merely starts the same way, which is exactly how the blanket Gemini rule
+	// got gemini-3-6-flash wrong.
+	it("matches the strict Gemini ids exactly, not by prefix", () => {
+		for (const id of [
+			"gemini-3-6-flash-lite",
+			"gemini-3-5-flash-lite-preview",
+		]) {
+			expect({
+				id,
+				penalties: getNeonModelCapabilities(id).supportsPenalties,
+				temperature: getNeonModelCapabilities(id).supportsTemperature,
+			}).toEqual({ id, penalties: true, temperature: true });
+		}
+	});
+
+	// The gateway maps reasoning_effort onto Gemini's thinking config, so dropping
+	// it cost callers control they were being billed for either way.
+	it("forwards reasoningEffort to Gemini", () => {
+		for (const id of ["gemini-3-flash", "gemini-3-6-flash"]) {
+			expect({
+				id,
+				effort: getNeonModelCapabilities(id).supportsReasoningEffort,
+			}).toEqual({ id, effort: true });
+		}
+	});
+
+	// gpt-5-5-pro reads as version 5.5 to the minor-version rule, so it was told
+	// it takes sampling parameters. The Responses API answers
+	// `Unsupported parameter: temperature`.
+	it("keeps gpt-5-5-pro out of the minor-version sampling rule", () => {
+		const pro = getNeonModelCapabilities("gpt-5-5-pro");
+		expect({
+			temperature: pro.supportsTemperature,
+			topP: pro.supportsTopP,
+		}).toEqual({
+			temperature: false,
+			topP: false,
+		});
+
+		// Its siblings on the same rule are unaffected.
+		expect(getNeonModelCapabilities("gpt-5-5").supportsTemperature).toBe(
+			true,
+		);
+		expect(getNeonModelCapabilities("gpt-5-1").supportsTemperature).toBe(
+			true,
+		);
+	});
+
+	it("applies the strict Gemini rules through the databricks- prefix", () => {
+		const prefixed = getNeonModelCapabilities(
+			"databricks-gemini-3-6-flash",
+		);
+
+		expect({
+			penalties: prefixed.supportsPenalties,
+			temperature: prefixed.supportsTemperature,
+			topP: prefixed.supportsTopP,
+		}).toEqual({ penalties: false, temperature: false, topP: false });
+	});
+
+	it("drops temperature and topP for gemini-3-6-flash only", () => {
+		const strict = getNeonModelCapabilities("gemini-3-6-flash");
+		expect({
+			temperature: strict.supportsTemperature,
+			topP: strict.supportsTopP,
+		}).toEqual({ temperature: false, topP: false });
+
+		const lenient = getNeonModelCapabilities("gemini-3-5-flash-lite");
+		expect({
+			temperature: lenient.supportsTemperature,
+			topP: lenient.supportsTopP,
+		}).toEqual({ temperature: true, topP: true });
 	});
 
 	it("separates seed and stop support across the unified families", () => {

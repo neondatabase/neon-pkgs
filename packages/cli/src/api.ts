@@ -127,6 +127,13 @@ export function messageFromBody(body: unknown): string | undefined {
 		const message = body.message;
 		if (typeof message === "string") return message;
 	}
+	if (body && typeof body === "object" && "error" in body) {
+		const error = body.error;
+		if (error && typeof error === "object" && "message" in error) {
+			const message = error.message;
+			if (typeof message === "string") return message;
+		}
+	}
 	return undefined;
 }
 
@@ -135,6 +142,13 @@ export function codeFromBody(body: unknown): string | undefined {
 	if (body && typeof body === "object" && "code" in body) {
 		const code = body.code;
 		if (typeof code === "string") return code;
+	}
+	if (body && typeof body === "object" && "error" in body) {
+		const error = body.error;
+		if (error && typeof error === "object" && "code" in error) {
+			const code = error.code;
+			if (typeof code === "string") return code;
+		}
 	}
 	return undefined;
 }
@@ -917,6 +931,48 @@ export const getApiClient = ({
 				}),
 			),
 
+		// ─── Logs ────────────────────────────────────────────────────────────
+		queryProjectBranchLogs: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.QueryProjectBranchLogsData["body"]>,
+		) =>
+			call(() =>
+				raw.queryProjectBranchLogs({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		listProjectBranchLogFields: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.listProjectBranchLogFields({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		listProjectBranchLogFieldValues: ({
+			projectId,
+			branchId,
+			fieldName,
+			...query
+		}: {
+			projectId: string;
+			branchId: string;
+			fieldName: string;
+		} & NonNullable<raw.ListProjectBranchLogFieldValuesData["query"]>) =>
+			call(() =>
+				raw.listProjectBranchLogFieldValues({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						field_name: fieldName,
+					},
+					query,
+				}),
+			),
+
 		// ─── Data API ────────────────────────────────────────────────────────
 		createProjectBranchDataApi: (
 			projectId: string,
@@ -1257,13 +1313,13 @@ export const getApiClient = ({
 					body: data,
 				}),
 			),
-		sendNeonAuthTestEmail: (
+		sendNeonAuthEmailProviderTest: (
 			projectId: string,
 			branchId: string,
-			data: NonNullable<raw.SendNeonAuthTestEmailData["body"]>,
+			data: NonNullable<raw.SendNeonAuthEmailProviderTestData["body"]>,
 		) =>
 			call(() =>
-				raw.sendNeonAuthTestEmail({
+				raw.sendNeonAuthEmailProviderTest({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					body: data,

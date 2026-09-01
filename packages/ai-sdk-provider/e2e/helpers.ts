@@ -42,17 +42,18 @@ export const REASONING_EFFORT_FAMILIES = new Set<MatrixFamily>([
 	"codex",
 ]);
 
-export function hasGatewayEnv(): boolean {
+/**
+ * `e2e/global-setup.ts` guarantees both values before any test file is imported — it either
+ * uses the pair you configured or provisions a throwaway branch — so this only fires if that
+ * contract is broken, never because a run was left unconfigured.
+ */
+export function assertGatewayEnv(): void {
 	const baseUrl = process.env.NEON_AI_GATEWAY_BASE_URL?.trim();
 	const token = process.env.NEON_AI_GATEWAY_TOKEN?.trim();
-	return Boolean(baseUrl && token);
-}
-
-export function assertGatewayEnv(): void {
-	if (!hasGatewayEnv()) {
+	if (!baseUrl || !token) {
 		throw new Error(
-			"NEON_AI_GATEWAY_BASE_URL and NEON_AI_GATEWAY_TOKEN are required. " +
-				"Create packages/ai-sdk-provider/.env (see .env.example) or export them before running pnpm test:e2e.",
+			"NEON_AI_GATEWAY_BASE_URL and NEON_AI_GATEWAY_TOKEN are missing even though global setup ran. " +
+				"The suite cannot reach a gateway.",
 		);
 	}
 }
@@ -71,6 +72,10 @@ export function maxTokensFor(family: MatrixFamily): number {
  * do with this provider, which is exactly the signal we want to keep clean.
  * Families whose representative id is missing are skipped instead, so the suite
  * reports "not served here" rather than a failure.
+ *
+ * One assertion guards that arrangement — see "serves every model the matrix
+ * pins" in `gateway-matrix.e2e.test.ts`. Without it, a catalog that stopped
+ * serving the pinned ids would skip the entire matrix and report success.
  */
 export async function fetchServedModelIds(): Promise<Set<string>> {
 	const baseUrl = process.env.NEON_AI_GATEWAY_BASE_URL?.trim().replace(
@@ -105,5 +110,33 @@ export function expectNoHardFailureWarnings(
 	if (!warnings?.length) return;
 	for (const warning of warnings) {
 		expect(warning.type).not.toBe("other");
+	}
+}
+
+/**
+ * FMAPI enforces TPM over a one-minute window, so the AI SDK's immediate 429
+ * retries cannot succeed. Wait for the next window before retrying once.
+ */
+const REQUEST_LIMIT_RETRY_WAIT_MS = 60_000;
+
+function isRequestLimitExceeded(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("REQUEST_LIMIT_EXCEEDED");
+}
+
+export async function withRateLimitRetry<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (!isRequestLimitExceeded(error)) {
+			throw error;
+		}
+		console.warn(
+			`REQUEST_LIMIT_EXCEEDED; waiting ${REQUEST_LIMIT_RETRY_WAIT_MS / 1000}s for the TPM window before one retry`,
+		);
+		await new Promise<void>((resolve) => {
+			setTimeout(resolve, REQUEST_LIMIT_RETRY_WAIT_MS);
+		});
+		return await run();
 	}
 }

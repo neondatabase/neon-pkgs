@@ -1,6 +1,6 @@
 # Neon CLI
 
-The `neon` package is a command-line interface that lets you manage [Neon](https://neon.tech/) — Lakebase Postgres, Object Storage, Functions, Managed Better Auth, and the AI Gateway — directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.tech/docs/reference/neon-cli).
+The `neon` package is a command-line interface that lets you manage [Neon](https://neon.com/) — Lakebase Postgres, Object Storage, Functions, Managed Better Auth, and the AI Gateway — directly from the terminal. For the complete documentation, see [Neon CLI](https://neon.com/docs/cli).
 
 The legacy `neonctl` package is a lightweight compatibility package that depends
 on this package and invokes the same CLI entry point. The implementation and
@@ -54,7 +54,7 @@ Run the following command to authenticate a connection to Neon:
 neon auth
 ```
 
-The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon auth](https://neon.tech/docs/reference/cli-auth) automatically launches the browser authentication process.
+The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon auth](https://neon.com/docs/cli/auth) automatically launches the browser authentication process.
 
 Alternatively, you can authenticate a connection with a Neon API key using the `--api-key` option when running a Neon CLI command. For example, an API key is used with the following `neon projects list` command:
 
@@ -62,7 +62,58 @@ Alternatively, you can authenticate a connection with a Neon API key using the `
 neon projects list --api-key <neon_api_key>
 ```
 
-For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
+
+## Create a project without an account
+
+`neon claim create` provisions a temporary Claimable Neon project for an agent without
+requiring a Neon account or opening a browser:
+
+```bash
+# Lakebase Postgres is always included
+neon claim create
+
+# Request Managed Better Auth and the Data API too
+neon claim create --service auth --service data-api
+```
+
+When the current directory has a `neon.ts`, `claim create` also requests every service
+declared there. Explicit `--service` values are added to that set. Object Storage, Functions,
+and the AI Gateway are sent to the service so demand is recorded, but are reported as
+unavailable until the project is claimed; the CLI does not silently remove them.
+
+The command writes:
+
+- a `.neon` context that identifies the project and Claimable Neon service;
+- an owner-only identity assertion under the CLI config directory;
+- `DATABASE_URL` and any granted Auth or Data API variables to `.env` or `.env.local`
+  (disable this with `--no-env-pull`).
+
+Subsequent project commands automatically exchange the assertion for a short-lived agent
+token and send API calls to Claimable Neon. The service decides which operations are
+allowed before claim.
+
+```bash
+neon claim status                 # lifecycle and transfer status
+neon projects get <project-id>    # regular CLI command, same agent token
+neon psql --role-name neondb_owner -- -c "select now()"
+neon config plan
+neon env pull --service postgres --service auth --service data-api
+
+neon claim accept                 # create a claim code and open the transfer URL
+neon claim delete --yes           # permanently delete an unclaimed project
+neon claim list                   # local records, including expired
+neon claim delete <project-id> --yes
+```
+
+`status`, `accept`, and `delete` take an optional project id from `claim list`, so a
+project stays manageable after its original directory is gone. `list` prints `state`
+(`unclaimed` or `expired`) from the identity assertion clock and the project
+expiry, plus `project_expires_at`. `delete` also drops a
+local record whose identity assertion has expired or been revoked.
+
+`neon claimable` is an alias for `neon claim`. For local service development, set
+`CLAIMABLE_NEON_HOST=http://localhost:8787`; non-local origins must use HTTPS.
 
 ## Project and branch creation
 
@@ -81,6 +132,18 @@ automation:
 ```bash
 neon branches create --project-id <project-id> --name production --protected
 ```
+
+Project and branch creation include connection credentials in their output by
+default for backward compatibility. When the output may be logged or passed to
+an agent, use `--no-secrets` to return only the created resource metadata:
+
+```bash
+neon projects create --name my-project --output json --no-secrets
+neon branches create --project-id <project-id> --name preview --output json --no-secrets
+```
+
+The flag omits the complete `connection_uris` block rather than redacting one
+field. Retrieve a connection string separately when it is actually needed.
 
 ### Enable logical replication
 
@@ -102,7 +165,7 @@ neon projects update <project-id> --enable-logical-replication --yes
 
 ### The `psql` command
 
-`neon psql [branch]` opens a psql session against a branch. It builds the connection string for the branch and launches psql — a shortcut for `neon connection-string --psql`. See [Neon CLI commands — psql](https://neon.com/docs/reference/cli-psql) for the full reference.
+`neon psql [branch]` opens a psql session against a branch. It builds the connection string for the branch and launches psql — a shortcut for `neon connection-string --psql`. See [Neon CLI commands — psql](https://neon.com/docs/cli/psql) for the full reference.
 
 ```bash
 neon psql                                    # default branch
@@ -196,7 +259,7 @@ regression + TAP tests.
 
 ## Configure autocompletion
 
-The Neon CLI supports autocompletion, which you can configure in a few easy steps. See [Neon CLI commands — completion](https://neon.tech/docs/reference/cli-completion) for instructions.
+The Neon CLI supports autocompletion, which you can configure in a few easy steps. See [Neon CLI commands — completion](https://neon.com/docs/cli/completion) for instructions.
 
 ## Linking a project
 
@@ -205,14 +268,14 @@ The Neon CLI supports autocompletion, which you can configure in a few easy step
 `link` resolves what it can and **verifies every identifier you pass** before writing, so a `.neon` is never left half-written or pointing at something that doesn't exist:
 
 - **org** is inferred from the project (so `--project-id` alone is enough); it's omitted only when the project has no organization (personal account).
-- **project** is taken from `--project-id` (or chosen interactively / via `--agent`).
-- **branch** is left to an explicit [`neon checkout <branch>`](#checkout) — `link` never silently pins a project's default branch (that would make later commands quietly target, say, production). It only records a branch when you pass `--branch`, when one is already pinned for the same project (preserved), when you pick one in the interactive picker, or for a freshly **created** project (whose single branch is unambiguous).
+- **project** is taken from `--project-id` (or chosen interactively).
+- **branch** is taken from `--branch`, an existing pin for the same project, or the project's branch list: one branch is pinned automatically; several prompt in a TTY, pin the default with `-y`, or stay unpinned for [`neon checkout <branch>`](#checkout). A project with no branches is linked without a pin and says so.
 
 When a branch ends up pinned, `link` also runs [`env pull`](#env-pull) so the branch's Neon env vars (`DATABASE_URL`, …) land in a local `.env`. With no branch pinned there is nothing to pull, so `link` instead nudges you to run `neon checkout`. Pass `--no-env-pull` to skip the pull (for example when injecting env at runtime with `neon-env run` or `neon dev`).
 
 > **Migrating from `set-context`?** `set-context` is **deprecated** in favor of `link` (see [below](#set-context-is-deprecated)). It still works exactly as before for now (a raw write), it just prints a deprecation warning. The `.neon` `branchId` field is also superseded by `branch` (which stores the branch **name** when known); old `branchId` files are still read and are upgraded to `branch` the next time `link`/`checkout` writes the context.
 
-There are three modes:
+There are two modes:
 
 **Interactive (default)** — guided prompts for humans:
 
@@ -231,21 +294,33 @@ Linked .neon:
 
 When you link an **existing** project that has more than one branch, the interactive flow adds a
 final step to pick which branch to pin — the same `＋ Create a new branch…` + list selector used by
-`neon checkout` (a single-branch project is pinned automatically, no prompt). Non-interactive
-`link --project-id …` does **not** prompt or default a branch; it links org + project and leaves
-branch selection to `neon checkout`:
+`neon checkout` (a single-branch project is pinned automatically, no prompt):
 
 ```bash
+$ neon link
 ? Which organization would you like to link? › Personal Org (org-abc123)
 ? Which project would you like to link? › my-app (polished-snowflake-12345678)
+? Which branch would you like to link? › [default] main (br-main-branch-87654321)
+```
+
+`link --project-id …` skips org and project. One branch is pinned with no prompt. Several branches
+in a TTY show the branch prompt; `-y` pins the default; no TTY leaves the pin empty for
+`neon checkout`:
+
+```bash
+$ neon link --project-id polished-snowflake-12345678
 ? Which branch would you like to link? › [default] main (br-main-branch-87654321)
 ```
 
 **Non-interactive (flags or `--params` JSON)** — for scripts and CI:
 
 ```bash
-# Link to an existing project (org is inferred from the project; no branch pinned)
+# Link to an existing project (org is inferred). Pins the only branch;
+# several branches prompt in a TTY, or stay unpinned without one.
 neon link --project-id polished-snowflake-12345678
+
+# Same, pin the project's default branch when several exist
+neon link --project-id polished-snowflake-12345678 -y
 
 # Same, but also pin a branch (name or id — resolved and stored as its name)
 neon link --project-id polished-snowflake-12345678 --branch main
@@ -271,64 +346,21 @@ neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-123456
 
 Every supplied identifier is checked before anything is written, with actionable errors — e.g. `Project '…' not found`, `You don't have access to project '…'`, `Organization '…' not found, or your API key doesn't have access to it`, `Project '…' belongs to organization 'A', not 'B'`, or `Branch '…' not found in project '…'. Available branches: …`.
 
-**Agent mode (`--agent`)** — a JSON state machine designed for AI coding assistants. Each invocation returns a single JSON object with a `status` discriminator describing the next step, the available options, and the exact follow-up command to run.
+**Agents and scripts (no TTY):** List, then link. `neon link --help` prints the same recipe.
 
 ```bash
-$ neon link --agent
-{
-  "status": "needs_org",
-  "instruction": "Ask the user which of these 2 organizations they want to link the current directory to. After they pick one, re-run the next_command_template with the chosen --org-id value.",
-  "options": [
-    { "id": "org-abc123", "name": "Personal Org" },
-    { "id": "org-team",   "name": "Team Org" }
-  ],
-  "next_command_template": "neon link --agent --org-id <org_id>"
-}
-
-$ neon link --agent --org-id org-abc123
-{
-  "status": "needs_project",
-  "instruction": "Ask the user whether to link to one of these 1 existing projects (use next_command_template with --project-id) or create a new project (use create_option.next_command_template).",
-  "options": [
-    { "id": "polished-snowflake-12345678", "name": "my-app" }
-  ],
-  "create_option": {
-    "instruction": "To create a new project, ask the user for a project name. The region can be omitted to receive a follow-up needs_project_details response that lists available regions.",
-    "next_command_template": "neon link --agent --org-id org-abc123 --project-name <name> --region-id <region_id>"
-  },
-  "next_command_template": "neon link --agent --org-id org-abc123 --project-id <project_id>"
-}
-
-$ neon link --agent --org-id org-abc123 --project-id polished-snowflake-12345678
-{
-  "status": "linked",
-  "context_file": "/path/to/cwd/.neon",
-  "context": {
-    "orgId": "org-abc123",
-    "projectId": "polished-snowflake-12345678"
-  },
-  "project": { "id": "polished-snowflake-12345678" },
-  "message": "Linked /path/to/cwd/.neon to project polished-snowflake-12345678 (org org-abc123). No branch pinned — run `neon checkout <branch>` (omit the branch to list options) to pin one and pull its env vars."
-}
+neon orgs list --output json
+neon projects list --org-id <org-id> --output json
+neon link --project-id <project-id> [--branch <name> | -y]
+neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2
 ```
 
-The `linked` response omits `branch` unless one was pinned (via `--branch`, an existing pin, or project creation); pass `--branch <name|id>` to include it. The agent flow also handles project creation: if the agent sends `--project-name` without `--region-id`, the next response is `needs_project_details` with the list of supported regions.
+Organization-scoped API keys cannot list user organizations (`orgs list`) or call the regions endpoint:
 
-**Organization-scoped API keys** (those created at the organization level rather than the user level) cannot list user organizations or call the regions endpoint. `link` handles this transparently:
-
-- If the API key is org-scoped and at least one project already exists in the org, the CLI auto-detects the `org_id` from the first project. In interactive mode it prints an informational message; in `--agent` mode it skips straight to `needs_project`.
-- If the API key is org-scoped and no projects exist yet, `--agent` returns a `needs_org` response with `options: []` and an instruction telling the user to find their org ID in the Neon Console. Interactive mode prints an error pointing to `--org-id`.
-- When the regions endpoint is not allowed, `link` falls back to a built-in static region list.
-
-**Agent error contract**: any unexpected failure in `--agent` mode is reported as JSON to stdout with exit code 1, so agents can always parse the response:
-
-```json
-{
-  "status": "error",
-  "code": "CLIENT_ERROR",
-  "message": "user has no access to projects"
-}
-```
+- Pass `--org-id` (Neon Console → Settings) or `--project-id` (org is inferred from the project).
+- If the key is org-scoped and at least one project already exists, interactive `link` auto-detects the org from the first project and prints an informational message.
+- If no projects exist yet, interactive `link` errors pointing at `--org-id`.
+- When the regions endpoint is not allowed, interactive create falls back to a built-in static region list. Non-interactive create already requires `--region-id`.
 
 **Offline writes (`--no-checks`)** — write the `.neon` with no API calls at all: no org inference, no existence/access verification, no env pull. Because nothing can be resolved offline, it requires both `--org-id` and `--project-id` (`--branch` optional, stored verbatim). Handy for scripted/CI setups or re-creating a `.neon` from values you already trust:
 
@@ -344,13 +376,26 @@ How today's `set-context` uses map onto `link`:
 
 | `set-context` (deprecated)              | Recommended `link` equivalent                                                 |
 | --------------------------------------- | ----------------------------------------------------------------------------- |
-| `neon set-context --project-id <id>` | `neon link --project-id <id>` (infers org + verifies; branch via checkout) |
+| `neon set-context --project-id <id>` | `neon link --project-id <id>` (infers org + verifies; pins the only branch) |
 | `neon set-context --org-id <id>`     | `neon link --org-id <id>`                                                  |
 | `neon set-context --branch-id <id>`  | `neon link --branch <name\|id>`                                            |
 | `neon set-context` (clear)           | `neon link --clear`                                                        |
 | a raw local write (no network)          | `neon link --no-checks --org-id <id> --project-id <id>`                    |
 
 The key difference: `link` resolves and **verifies** before writing (so you never get a half-written or stale `.neon`), whereas `set-context` writes whatever you give it verbatim. The closest like-for-like replacement for the old raw write is `link --no-checks`.
+
+### open
+
+`open` launches the linked project's page in the Neon Console. It reads the closest `.neon` file without authenticating or calling the Neon API, so it works from any sub-directory of a linked project.
+
+```bash
+neon open
+
+# Open a project without changing the linked context
+neon open --project-id polished-snowflake-12345678
+```
+
+A branch pinned in `.neon` does not change the destination. `.neon` stores the branch as a name, while the Console route requires its ID; resolving it would turn this local command into an authenticated API call.
 
 ### checkout
 
@@ -417,9 +462,15 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 
 ### env pull
 
-`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and the Neon Auth / Data API URLs when those services are enabled) are written; any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
+`env pull` writes the linked branch's Neon environment variables into a local dotenv file: an existing `.env` if you have one, otherwise `.env.local` (override with `--file <path>`). Only Neon-managed keys are written (see the table below); any other lines in the file are preserved. The branch comes from the closest `.neon` file, so no `--branch` is needed (pass `--branch <id|name>` to target another branch).
 
-`link` and `checkout` invoke `env pull` automatically (see above), so you usually only run it by hand to refresh vars or to pull a different branch into a specific file:
+**What gets pulled**, in precedence order:
+
+1. **`--service` and/or `--env`**, when you pass either — their union is the complete selection, ignoring `neon.ts` and unselected branch variables. `--service` adds a service's complete variable bundle; `--env` adds only the individual variables you name.
+2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`.
+3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, and object storage read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
+
+If the gateway can't be resolved, it is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left alone — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 
 ```bash
 # Refresh the linked branch's vars in place
@@ -427,9 +478,55 @@ neon env pull
 
 # Pull a specific branch into a specific file
 neon env pull --branch preview --file .env.preview
+
+# Only the AI Gateway
+neon env pull --service ai-gateway
+
+# Repeat the flag or comma-separate; -s, --service and --services are all accepted
+neon env pull -s postgres -s data-api
+neon env pull -s postgres,auth
+
+# Pull one exact variable; repeat -e or comma-separate for more
+neon env pull -e DATABASE_URL
+neon env pull -e DATABASE_URL,NEON_AUTH_BASE_URL
+
+# The selectors compose as a union: all Auth vars plus DATABASE_URL
+neon env pull -s auth -e DATABASE_URL
 ```
 
+Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).
+
+| `--service` | Variables |
+| --- | --- |
+| `postgres` | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` |
+| `auth` | `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL` |
+| `data-api` | `NEON_DATA_API_URL` |
+| `object-storage` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` |
+| `ai-gateway` | `NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL` |
+
+`-e, --env` accepts any variable in the table plus `NEON_BRANCH`. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
+
+`--env` never narrows `--service`: `neon env pull -s postgres -e DATABASE_URL` still pulls the complete Postgres bundle (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `NEON_BRANCH`). The two selectors always form a union.
+
+**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+
+**A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other variables still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
+
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` must be selected together. Neon issues them as one object-storage credential; pulling only one would pair a fresh half with whatever old half remains in the file.
+
+Naming a service the branch does not have is an error, not an empty pull:
+
+```
+--service auth: branch br-snowy-frost-12345 has no Neon Auth integration, so there are no
+auth env vars to pull. Provision it first (`neon deploy`, `neon config apply`, or the Neon
+Console), or drop auth from --service.
+```
+
+`link`, `checkout`, and `config apply` invoke `env pull` automatically (see above). Those bundled pulls follow rules 2 and 3 above **without** the implied AI Gateway: minting a credential for a service you never named isn't something a side effect of another command should do. Run `neon env pull` to get it.
+
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
+
+**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets what the deployed runtime would inject into it, which is the whole point of `dev`; a handler that reads `NEON_AI_GATEWAY_BASE_URL` should not work in production and fail on your machine. `dev` writes nothing, but it does *read* your `.env` / `.env.local` to reuse the branch credential behind the AI Gateway and object storage. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
 
 **Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`.
 
@@ -479,7 +576,10 @@ Selecting nothing is a valid answer: you get the starter policy, which is also w
 neon config init
 
 # Declare services with no prompt
-neon config init --services auth,functions,storage,ai-gateway
+neon config init --services auth,functions,object-storage,ai-gateway
+
+# Repeat the flag instead, and shorten it — every services flag takes all three spellings
+neon config init -s auth -s functions
 
 # Explicitly ask for the bare starter policy
 neon config init --services none
@@ -487,6 +587,8 @@ neon config init --services none
 # Scaffold but print the install command instead of running it
 neon config init --no-install
 ```
+
+Object storage is spelled `object-storage` here, matching [`env pull --service`](#env-pull) and the rest of the CLI. The old `storage` still works and warns; it will be removed.
 
 Choosing **Functions** also writes the handler the policy points at, since `source` is only resolved when `apply` bundles it — a declared function with no file on disk fails at deploy:
 
@@ -573,13 +675,15 @@ neon config plan --project-id polished-snowflake-12345678 --output json
 neon deploy --branch my-feature --update-existing
 ```
 
-Function deploys declared under `preview.functions` are bundled by neon's own esbuild helper and uploaded as part of `apply`, so the policy stays declarative and the packaged CLI never has to embed esbuild's native binary.
+Function deploys declared under `preview.functions` are bundled with esbuild by default. A directory `source` is discovered as `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to ship a prebuilt directory as-is. `neon function deploy --no-bundle` is the same switch without a `neon.ts`.
 
 When a package cannot be bundled — a native addon with no esbuild loader, or an optional peer dependency a library references on an untaken code path — list it in that function's `externalPackages` and the bundler leaves the import alone. `neon dev` honours the same list. It does not make the package resolvable in the deployed archive (there is no `node_modules` next to the bundle), so it only unblocks an import that is never evaluated — a dependency the handler actually calls has to be bundled, and a natively-backed one cannot be. See [`@neon/config`](../config/README.md#unbundleable-dependencies-externalpackages).
 
 ## Scaffold a project (`bootstrap`)
 
-`neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. It requires no Neon login: it just downloads files from GitHub.
+`neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
+
+After scaffolding, an interactive terminal asks about dependency install, git, agent tooling (the Neon plugin, or skills and MCP separately — never both), and `neon link` before running those steps. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so link can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -587,71 +691,161 @@ Pass a target directory (or `.` for the current one). In an interactive terminal
 # Pick a template interactively and scaffold it into ./my-app
 $ neon bootstrap my-app
 
-# Scaffold a specific template into the current directory (no prompts)
+# Scaffold a specific template into the current directory (skips the template picker)
 $ neon bootstrap . --template hono
+
+# Skip agent selection; install the plugin for those agents
+$ neon bootstrap my-app --agent cursor --agent claude-code
+
+# List templates
+$ neon bootstrap --list-templates
+
+# Machine-readable catalog
+$ neon bootstrap --list-templates --output json
 ```
 
 The target directory must be empty unless you pass `--force` (a lone `.git` is ignored, so a freshly `git init`ed folder is fine). Symlinks and executable bits in the template are preserved.
 
-## Set up a project for your coding agent (`init`)
+## Set up a project (`init`)
 
-`neon init` wires an existing project up to Neon: it signs you in, installs the Neon MCP server and agent skills into your editor, adds the Neon Local Connect extension for VS Code and Cursor, creates or picks a project, writes `DATABASE_URL` into `.env`, and offers to scaffold migrations.
+`neon init` sets up this directory for Neon.
+
+An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking. Interactive bootstrap prints a NEON banner, asks every setup question, then runs the work — dependency install last, except when a `neon.ts` needs deps before `link`.
+
+An existing app installs agent tooling, then `neon link` unless `.neon` already has a projectId, then `neon config init`. Interactive `config init` opens the services picker; `-y` uses `--services none` (starter policy).
+
+In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together.
 
 ```bash
 $ neon init
+$ neon init -y
+$ neon init --agent cursor --agent claude-code
 ```
 
-Run in a terminal it prompts you through those steps. This is what the retired `neon-init` package used to do; `npx neon init` replaces it.
+Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates.
 
-Two side effects worth knowing before you run it. It **installs or upgrades `neonctl` globally**, with whichever package manager invoked it — the flow drives Neon by shelling out to the CLI rather than calling the API in-process. And it **writes `.neon`** in the project directory, the same context file `neon link` and `neon checkout` use.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
-### Agent mode
+`--agent` / `-a` (repeatable) names coding agents and skips agent selection, interactive or with `-y`. Init forwards those names to `plugins`, or to `skills` and `mcp`, not both.
 
-`--agent` turns the same flow into a state machine an AI coding assistant drives. It prints **one JSON object on stdout** and nothing else: a phase response carrying a `status` and a `nextAction` telling the agent what to do next — usually another `neon init` invocation, spelled out as a `command`. The two read-only steps, `status` and `finalize`, return a snapshot instead.
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+
+A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
+
+`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
+
+## Install the Neon MCP server (`mcp`)
+
+`neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
 
 ```bash
-$ neon init --agent --data '{"step":"status"}'
-{
-  "auth": { "authenticated": true },
-  "tooling": { "mcpServer": { "configured": true, "scope": "global" }, "skills": { "installed": false, "scope": null } },
-  "project": { "databaseUrl": false },
-  "migrations": { "tool": "prisma", "hasMigrations": false },
-  "recommendations": [
-    { "priority": "high", "message": "No DATABASE_URL found in .env", "command": "neon init --agent --data '{\"step\":\"db\"}'" },
-    { "priority": "medium", "message": "Neon agent skills not detected in this project", "command": "neon init --agent --data '{\"step\":\"skills\",\"install\":true}'" },
-    { "priority": "medium", "message": "prisma detected but no migrations found", "command": "neon init --agent --data '{\"step\":\"migrations\"}'" }
-  ]
-}
+# Interactive: global or project, then agents, then API key or OAuth, then confirm.
+$ neon mcp
+
+# Skip prompts. Global config, installed apps else the host CLI agent, reuse or mint an API key.
+$ neon mcp -y
+
+# OAuth: no API key minted. The agent prompts for Neon sign-in on first use.
+$ neon mcp --oauth
+
+# Named agents.
+$ neon mcp --agent cursor --agent claude-code
+
+# Project-level config. A minted key is still account-wide unless a project is pinned.
+$ neon mcp --project
+
+# Hide write tools. Does not change the minted key.
+$ neon mcp --read-only
+
+# Pin MCP tools to one project. A newly minted API key is limited to that project.
+$ neon mcp --project-id <project-id>
+
+# Limit which tool categories are visible.
+$ neon mcp --category querying --category schema
 ```
 
-`--agent` is implied when stdin is not a TTY and a known agent is detected from the environment (Claude Code, Codex, Cline, Cursor, VS Code, Windsurf).
+On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
 
-`--data` takes a JSON object whose `step` selects the phase: `auth`, `db`, `setup`, `getting-started`, `mcp`, `skills`, `migrations`, `neon-auth`, `status`, or `finalize`. Remaining keys are that phase's options. Without `--data`, the orchestrator picks the next phase itself. An unrecognised `step` is refused with the full list.
+`-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for globally installed apps, else the host CLI agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--agent`, `--project`, `--oauth`, `--read-only`, `--project-id` and `--category` still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent <name>` to name them, or `--oauth` to write the URL only. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. `neon mcp --help` lists the server URL, those `-y` defaults, the supported agent names, and the `--category` values.
 
-**Failures are JSON too**, so an agent never has to distinguish "it broke" from "it returned nothing":
+Supported agents: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project installs drop `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
+
+The default mints an account-wide API key (or reuses the Bearer already configured for Neon at `https://mcp.neon.tech/mcp`) and writes it into each selected agent's config. That key reaches everything the account can, in every organization. Revoke it with `neon api-keys revoke <id>`. `--oauth` writes the URL with no `Authorization` header; the agent signs in on first use. `--project` writes into the project config (`.cursor/mcp.json` and similar). `--read-only` adds `?readonly=true`. `--project-id` adds `?projectId=` and, when a key is minted, limits that key to the named project. Accepting the linked-project pin does the same. Revoke a project-scoped key with `neon api-keys revoke <id> --org-id <org>`. A reused Bearer keeps the scope it already has. `--category` adds `?category=` (repeatable or comma-separated: `projects`, `branches`, `schema`, `querying`, `neon_auth`, `data_api`, `observability`, `docs`). `--read-only` and `--category` restrict which MCP tools the server exposes; they do not change what the minted key can do.
+
+## Install Neon agent skills (`skills`)
+
+`neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API. This command needs Node.js 22.20 or newer. The rest of the CLI supports Node.js 20.19 or newer.
 
 ```bash
-$ neon init --agent --data '{not json'
-{
-  "success": false,
-  "error": "Invalid JSON in --data flag at position 1. Expected a JSON object."
-}
-$ echo $?
-1
+# Interactive: this directory, then agents, then skills, then confirm.
+$ neon skills
+
+# Skip prompts. This directory, detected agents (project folders, else the host CLI agent), the default skills.
+$ neon skills -y
+
+# Named skills into detected agents.
+$ neon skills -y -s neon -s neon-ai-gateway
+
+# Named skills into a named agent.
+$ neon skills -s neon -s neon-ai-gateway --agent cursor
+
+# User-level skills.
+$ neon skills --global
+
+# Update installed skills in this directory.
+$ neon skills update
+$ neon skills update -y
+$ neon skills update --global -y
 ```
 
-That message reports where parsing stopped and nothing more. `--data` carries whatever you put in it, and the JSON parser's own message quotes a window of the input, so echoing either would put a connection string or an API key on stdout.
+On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
-**One exception to "JSON on stdout".** Credentials are resolved before any command runs, so a failure in that step — an unknown `--profile` or `NEON_PROFILE`, `--api-key` and `--profile` together, or a `credentials.json` that cannot be read — prints `ERROR: …` on stderr, leaves stdout empty, and exits 1. Treat a non-zero exit with empty stdout as a credential problem and read stderr.
+`-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-| Option | |
-| --- | --- |
-| `--agent`, `-a` | Emit the JSON state machine instead of prompting |
-| `--data <json>` | Route to one phase, with that phase's options |
-| `--skip-migrations` | Leave the migrations phase out of the flow |
-| `--preview` | Enable preview features (scaffolding a project from a template) |
+`--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
-`neon init` refuses `--profile`; see [Which credential an invocation uses](#which-credential-an-invocation-uses).
+Supported agents match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
+
+## Ask the Neon assistant (`ask`)
+
+`neon ask --prompt` asks the hosted Neon assistant a question about Neon. It does not log in and does not use your Neon account.
+
+```bash
+neon ask --prompt "How do schema-only branches work?"
+neon ask --prompt "How do schema-only branches work?" --output json
+```
+
+Default table output is the assistant's text. On a TTY that is a spinner, then the streamed reply. `--output json` and `--output yaml` print `{ "text": "…" }` after the full response.
+
+## Install the Neon plugin (`plugins`)
+
+`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
+
+```bash
+# Interactive: agents, then confirm.
+$ neon plugins
+
+# Skip prompts. Detected agents (project folders, else the host CLI agent).
+$ neon plugins -y
+
+# Named agents.
+$ neon plugins --agent cursor --agent claude-code
+
+# User-level install.
+$ neon plugins --global
+```
+
+On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+
+`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
+
+Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, and Grok Build only install user-level: they are skipped at the default scope with a warning, and a VS Code-only project fails if nothing else is selected. Pass `--global` for those.
+
+Supported agents with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; detecting both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
+
+The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `neon-postgres-agent-platforms`.
+
+`neon plugins --help` lists the plugin, those contents, and the supported agent names.
 
 ## Snapshots (`snapshots`)
 
@@ -697,19 +891,83 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
+## Database diagnostics (`inspect`)
+
+`neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Oldest group first. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
+
+```bash
+neon inspect db stalled-queries
+neon inspect db stalled-queries --output json
+```
+
+## Logs (`logs`)
+
+`neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, and Postgres computes. **Logs require Neon Platform Beta and are currently available only for projects in `aws-us-east-2`.**
+
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch. `logs query` searches the previous hour by default; `logs field-values` searches the previous six hours. The maximum time window is seven days.
+
+```bash
+# The last 30 minutes on the default branch
+neon logs query --since 30m
+
+# Postgres compute errors on main, oldest first
+neon logs query --branch main --source pg_endpoint --minimum-severity error --sort-order asc
+
+# An explicit window (--start-time replaces --since; --end-time works with either)
+neon logs query --start-time 2025-01-01T00:00:00Z --end-time 2025-01-01T01:00:00Z
+
+# One request trace, across every service that took part in it
+neon logs query --trace-id 4bf92f3577b34da6a3ce929d0e0e4736
+
+# What the structured filters cannot express: a raw LogQL selection. It replaces
+# them, but the window, --limit, --sort-order and --cursor still apply.
+neon logs query --since 1h --logql '{entity_type="function"} |= "timeout"'
+
+# Which fields this branch supports, and the values it has actually seen
+neon logs fields
+neon logs field-values service_name --since 6h --source function
+```
+
+A response holds at most `--limit` records (1–1000; default 100). When more matched, table output prints the `--cursor` to repeat the same query with; `--output json|yaml` returns `is_truncated` and `next_cursor` on the envelope instead, so nothing but the payload lands on stdout. Table output shows the common fields; use structured output for the complete records:
+
+```console
+$ neon logs query --since 24h --output json
+{
+  "logs": [
+    {
+      "timestamp": "2025-01-01T00:00:02.000Z",
+      "message": "GET /api/todos 200",
+      "source": "function",
+      "service_name": "api",
+      "severity_text": "INFO",
+      "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "attributes": { "http_status": 200 }
+    }
+  ],
+  "next_cursor": "eyJvZmZzZXQiOjEwMH0",
+  "is_truncated": true
+}
+```
+
+Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. If Neon reports that `--minimum-severity` is unsupported, use `--severity-text` instead; `neon logs field-values severity_text` lists the exact values present on a branch.
+
+`--body-contains` compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
+
 ## Profiles
 
-The CLI holds one Neon account by default. A profile adds another, and is nothing more than a pointer to a credentials file:
+The CLI holds one Neon account by default. A profile adds another, and is a pointer: a
+credentials file path, or the sentinel `"keyring"` when the secret is in the OS keyring.
 
 ```
 ~/.config/neon/
 ├── credentials.json          # this IS the DEFAULT profile
 ├── credentials.work.json     # created by `neon profile create work`
-└── profiles.json             # created only once a second profile exists
+└── profiles.json             # created once a second profile exists, or DEFAULT is keyring
 ```
 
 ```bash
-neon profile create work     # a browser sign-in, or an API key — see below
+neon profile create work              # a browser sign-in, or an API key — see below
+neon profile create work --keyring    # same, stored in the OS keyring
 neon profile list
 neon profile remove work
 ```
@@ -717,35 +975,36 @@ neon profile remove work
 ```console
 $ neon profile list
 Profiles
-┌────────┬─────────┬───────────────────────┬─────────┬────────────────┬──────┬────────────────────────┐
-│ Active │ Name    │ Account               │ Auth    │ Scope          │ File │ Credentials            │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│ *      │ DEFAULT │ me@example.com        │ oauth   │ -              │ ok   │ credentials.json       │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│        │ work    │ me@example.com        │ api key │ account        │ ok   │ credentials.work.json  │
-├────────┼─────────┼───────────────────────┼─────────┼────────────────┼──────┼────────────────────────┤
-│        │ ci      │ org-old-flower-827148 │ api key │ project proj-1 │ ok   │ credentials.ci.json    │
-└────────┴─────────┴───────────────────────┴─────────┴────────────────┴──────┴────────────────────────┘
+Active  Name     Account         Auth     Credentials          Scope
+*       DEFAULT  me@example.com  oauth    credentials.json     account
+        work     me@example.com  api key  keyring              account
+        ci       org-abc-123     api key  credentials.ci.json  project proj-1
 ```
 
-`Scope` is what a key can reach; an OAuth session has none of its own, so it shows `-`. `File`
-says whether the credentials file can be read and understood — `ok`, `invalid` or `missing` —
-which is not the same as the credential still working; only using it shows that. The table shows
-the file name, `--output json` the full path.
+`Scope` is what the credential can reach. An OAuth session and an unscoped user API key both
+show `account`. A project or org key names that project or org. `Credentials` is the path
+relative to the config directory, or `keyring`. A path outside the config directory is shown
+absolute. `--output json` keeps the absolute path, and also includes `file` (`ok`, `invalid`,
+`missing`, or `unreadable`) and `storage` (`file` or `keyring`). A keyring get of null is
+`unreadable`, not missing: the addon cannot tell those apart.
 
 Select one per invocation with `--profile`, or per shell with `NEON_PROFILE`. There is no `profile use` command and nothing is stored about which profile is "current", so what you type is always what runs.
 
-Entries in `profiles.json` are paths, and a path may point anywhere — which is how you adopt a directory you already have, without moving or re-authenticating anything:
+Entries in `profiles.json` are pointers — a path, or the exact string `"keyring"` — and a path may point anywhere, which is how you adopt a directory you already have without moving or re-authenticating anything:
 
 ```json
 {
   "version": 1,
   "profiles": {
-    "DEFAULT": { "credentials": "credentials.json" },
+    "DEFAULT": { "credentials": "keyring" },
     "work": { "credentials": "../neonctl-work/credentials.json" }
   }
 }
 ```
+
+An unreadable `profiles.json` fails every command that needs a profile, including a
+file-only DEFAULT. That file is the only record of where each account's credentials live,
+so the CLI will not guess past it. Fix or delete it.
 
 `neon profile remove` revokes what the profile holds — an OAuth refresh token at the
 authorization server, or an API key this CLI minted — rather than only forgetting it locally. A
@@ -753,28 +1012,61 @@ key you supplied is the exception and stays live, because nothing records its id
 says so. It asks for confirmation first, which `--yes` skips; without a terminal on stdin, in
 CI or behind a pipe, it refuses rather than prompting into the void. It deletes the credentials
 file only when the CLI created it: an adopted path like the one above is unlinked and left on
-disk, and the command says so. Removing the last named profile deletes `profiles.json`,
-returning you to the single-account layout. `neon profile remove DEFAULT` signs you out.
+disk, and the command says so. A keyring profile's OS item is deleted when the store confirms
+it is gone. If it cannot, remove still resets the profile and warns that a leftover may remain
+in the OS store; it is unused once the profile is gone. Removing the last named profile
+deletes `profiles.json` unless DEFAULT itself is keyring — that entry is the only record that
+the secret is not in `credentials.json`. `neon profile remove DEFAULT` signs you out.
+
+### Where the secret is stored
+
+The default is a credentials file. A profile uses the OS keyring (macOS Keychain, Windows
+Credential Manager, Linux Secret Service) only when its `profiles.json` pointer is `"keyring"`.
+That is per profile. Reads never migrate.
+
+```bash
+neon auth --keyring                         # sign DEFAULT into the OS keyring
+neon auth --keyring --profile work          # sign work into the OS keyring
+neon profile create work --keyring          # create a named profile in the keyring
+neon profile remove work --yes              # drop a keyring profile, then create it again as a file
+```
+
+File to keyring is `neon auth --keyring` or `neon profile create … --keyring`: a new
+sign-in, then the previous credential is revoked and the owned file is deleted.
+`create` on an existing name always revokes after a successful write. `auth` revokes
+when it writes to the keyring, including a re-login that follows an existing pointer.
+`auth` that overwrites a file does not. Keyring to file is `remove`, then create or
+auth again. `create` and `auth` without `--keyring` follow an existing `"keyring"`
+pointer, so a keyring profile cannot leave the OS store until `remove` succeeds.
+
+`--api-key` and `NEON_API_KEY` skip both stores. A GitHub-release `neon-<platform>`
+binary recognizes a `"keyring"` pointer and refuses: it cannot load the OS keyring addon.
+Use the npm-installed `neon`. Older releases treat the sentinel as a relative path.
+
+A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
+would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
+retry, or run `neon auth --profile DEFAULT`. To reset the profile: `neon profile remove DEFAULT --yes`.
+A missing `credentials.json` with no `profiles.json` is still
+signed-out, and those commands start OAuth.
 
 ### A profile holds either a sign-in or an API key
 
 `neon profile create` makes a profile, and how you call it decides which kind of credential it holds. A key-backed profile is what you want for an agent, a shared machine, or anything that must never be interrupted by a browser:
 
 ```bash
-neon profile create work                            # sign in with the browser, like `neon auth`
+neon profile create work                            # sign in; replaces work if it already exists
+neon profile create work --keyring                  # same, stored in the OS keyring
 neon profile create work --api-key "$KEY"           # store a key you already have
 echo "$KEY" | neon profile create work --api-key -  # or pipe it, keeping it out of argv
 neon profile create ci --mint                       # sign in once, keep only a minted key
 neon profile create ci --mint --org-id org-abc-123  # minted for an organization
 neon profile create ci --mint --project-id proj-1   # minted for one project only
-neon profile create work --force                    # replace it, revoking what it holds now
 neon profile rotate-key work                        # mint a replacement, revoke the old one
 ```
 
-`--force` is not only a local edit: replacing a profile revokes the credential it held, so a key
-this CLI minted stops working everywhere it was pasted, and an OAuth session is signed out.
-Without `--force`, `create` refuses and names what would be revoked. To keep a working profile
-and swap only its key, use `rotate-key`.
+Replacing a profile revokes the credential it held, so a key this CLI minted stops working
+everywhere it was pasted, and an OAuth session is signed out. To keep a working profile and
+swap only its key, use `rotate-key`.
 
 `create` and `rotate-key` print the profile they wrote, so an agent needn't follow up with
 `list`. Under `--output json` that is a record, and it never carries the secret:
@@ -803,7 +1095,7 @@ the key never leaves the CLI.
 { "type": "api_key", "api_key": "napi_…", "key_id": 123, "org_id": "org-…" }
 ```
 
-Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in that file and never goes into `profiles.json`, so listing profiles cannot leak one. Both files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
+Nothing is carried over when a profile is replaced, so one profile can never hold two credentials — or two different accounts. The secret stays in the credentials file or the OS keyring and never goes into `profiles.json`, so listing profiles cannot leak one. Files are written owner-only through a temporary file and a rename, which also repairs the permissions of a file created too permissively.
 
 `--mint` is the one to reach for. It signs you in through the browser once, mints a key with that session, stores only the key, and signs the session back out — so afterwards nothing about the profile can open a browser, and no half-forgotten login is left behind. `--org-id` and `--project-id` narrow what the minted key can reach, exactly as they do on [`neon api-keys create`](#api-keys); a project-scoped key cannot create projects, mint keys, or read any other project.
 
@@ -811,11 +1103,11 @@ Every key is verified against the API before it is stored, and the account it be
 
 `rotate-key` mints at the scope the profile already has — replacing an org key with an account key would quietly widen everything it reaches — and stores the new key before revoking the old one, so a failed write leaves the old key working.
 
-One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123 --force`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
+One thing it cannot do: **an organization key cannot mint its own replacement.** Neon only accepts a personal credential when creating organization keys, so rotating an org- or project-scoped profile means signing in again — `neon profile create ci --mint --org-id org-abc-123`. `rotate-key` checks this before minting and says so, rather than letting the API answer with a rule you had no reason to expect.
 
 Two things the CLI cannot do for a key you supplied rather than minted. It cannot revoke it, because `GET /api_keys` exposes no prefix and a stored secret cannot be matched to a listing entry, so both `rotate-key` and `profile remove` say the old key is still live and point you at `neon api-keys list`. For a key you supplied it records the organization the API reports, but cannot know whether that key was narrowed to a single project — so `rotate-key` will not suggest an organization-wide replacement without telling you to check `neon api-keys list` first.
 
-If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint --force`.
+If a stored key stops working there is nothing to refresh, so recovery is one browser sign-in: `neon profile create work --mint`.
 
 ### Which credential an invocation uses
 
@@ -836,7 +1128,21 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` does not support `--profile` yet. It runs its own auth flow, which reads the default credentials directly and re-invokes the CLI as a subprocess without passing a profile down, so passing the flag fails instead of quietly running as the default account. `--api-key` and `NEON_API_KEY` reach `neon init` no better and are **not** refused. The flow reads the stored credential and nothing else, so a supplied key is ignored: with a credential on disk `neon init` runs silently as *that* account, and with none it sends you to a browser sign-in. The silent case is the one to watch — it is the same failure `--profile` is refused for, without the refusal. Until that is fixed, sign in as the account you want first, or use another command.
+`neon init` forwards `--profile` and `--config-dir` to the commands it runs. An explicit `--api-key` is passed to those children through `NEON_API_KEY`, not argv.
+
+## API passthrough (`api`)
+
+`neon api` sends an authenticated request to any Neon API route. `neon api --list` catalogs the routes. `neon api <path> --describe` prints the OpenAPI request shape for one operation so you can fill `-F` and `-Q` without guessing. Body field names are dotted to match `-F`.
+
+```bash
+neon api --list
+neon api /projects --describe
+neon api /projects -X POST --describe -o json
+neon api /projects/{project_id}/branches -X POST --describe
+neon api /projects/foo-bar-123/branches -X POST -F branch.name=dev
+```
+
+`--describe` does not send the selected API request. It uses the same CLI authentication as `--list`. `-X` defaults to GET; if that method is missing, the error names the methods that exist.
 
 ## API keys (`api-keys`)
 
@@ -851,16 +1157,14 @@ neon api-keys create --name agent --project-id frosty-…   # can access only th
 neon api-keys revoke <id> [--org-id org-…]
 ```
 
-The key is returned once, on create, and cannot be retrieved again. It prints on its own line below the table, so it can be selected in one gesture regardless of terminal width — and `… | tail -1` on stdout yields exactly the key, since both notices go to stderr.
+The key is returned once, on create, and cannot be retrieved again. It prints on its own line below the metadata, so it can be selected in one gesture regardless of terminal width — and `… | tail -1` on stdout yields exactly the key, since both notices go to stderr.
 
 ```console
 $ neon api-keys create --name agent --project-id proj-in-org
 API key
-┌─────┬───────┬─────────────┐
-│ Id  │ Name  │ Project     │
-├─────┼───────┼─────────────┤
-│ 303 │ agent │ proj-in-org │
-└─────┴───────┴─────────────┘
+Id       303
+Name     agent
+Project  proj-in-org
 
 napi_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 WARNING: Store this key now: it is not shown again.
@@ -899,13 +1203,9 @@ NEON_API_KEY=napi_… neon deploy       # then the agent, reaching only that pro
 ```console
 $ neon api-keys list --org-id org-7
 API keys in org-7
-┌─────┬──────────┬────────────────┬──────────────────────┬──────────────────────┬─────────────────────┐
-│ Id  │ Name     │ Project        │ Created At           │ Last Used At         │ Last Used From Addr │
-├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 301 │ scoped   │ proj-in-org    │ 2026-01-02T00:00:00Z │                      │                     │
-├─────┼──────────┼────────────────┼──────────────────────┼──────────────────────┼─────────────────────┤
-│ 302 │ org-wide │ (all projects) │ 2026-01-03T00:00:00Z │ 2026-02-03T00:00:00Z │ 203.0.113.9         │
-└─────┴──────────┴────────────────┴──────────────────────┴──────────────────────┴─────────────────────┘
+Id   Name      Project         Created At            Last Used At          Last Used From Addr
+301  scoped    proj-in-org     2026-01-02T00:00:00Z
+302  org-wide  (all projects)  2026-01-03T00:00:00Z  2026-02-03T00:00:00Z  203.0.113.9
 ```
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
@@ -915,8 +1215,10 @@ API keys in org-7
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
+| claim (`claimable`)                                                        | `create`, `status`, `accept`, `list`, `delete`                                                               | Manage claimable projects          |
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
+| api                                                                        |                                                                                                              | Call any Neon API route            |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
@@ -925,6 +1227,8 @@ API keys in org-7
 | function                                                                   | `deploy`, `list`, `get`, `delete`                                                                            | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
+| logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
+| inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
@@ -933,10 +1237,15 @@ API keys in org-7
 | checkout                                                                   |                                                                                                              | Pin a branch in `.neon`            |
 | diff                                                                       |                                                                                                              | Git-style schema diff vs a branch  |
 | [link](https://neon.com/docs/reference/cli-link)                           |                                                                                                              | Link a directory to a project      |
+| open                                                                       |                                                                                                              | Open the linked project in Console |
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
-| bootstrap                                                                  |                                                                                                              | Scaffold a project from a template |
-| init                                                                       |                                                                                                              | Set up a project for a coding agent |
+| bootstrap                                                                  |                                                                                                              | Scaffold a template, then agent tooling and link |
+| init                                                                       |                                                                                                              | Empty dir: bootstrap. Existing: agents, link, neon.ts |
+| mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
+| plugins                                                                    |                                                                                                              | Install the Neon plugin             |
+| skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
+| ask                                                                        |                                                                                                              | Ask a question about Neon          |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 
@@ -964,7 +1273,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="config-dir"></a>`--config-dir`
 
-  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
+  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth` and, when a second profile exists or DEFAULT is keyring, `profiles.json`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
 
   The directory was called `neonctl` before the CLI was renamed. An existing one is still read, and is used **in place** — nothing is moved or copied, so there is never a second credentials file to go stale. A directory you pass explicitly is used exactly as given and never falls back to the legacy name, so pointing a CI run at a scratch directory cannot pick up local credentials.
 
@@ -987,7 +1296,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="api-key"></a>`--api-key`
 
-  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://api-docs.neon.tech/reference/authentication), in the _Neon API Reference_.
+  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
   ```bash
   neon <command> --api-key <neon_api_key>
@@ -995,7 +1304,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="analytics"></a>`--analytics`
 
-  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads. To opt-out of analytics data collection, specify `--no-analytics` or `--analytics false`.
+  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt`. To opt-out of analytics data collection, specify `--no-analytics` or `--analytics false`.
 
 - <a id="version"></a>`-v, --version`
 

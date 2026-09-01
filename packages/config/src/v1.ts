@@ -131,6 +131,21 @@ export {
 	PushAbortedError,
 	PushConflictError,
 } from "./lib/errors.js";
+// ─── External packages (pure; also for a custom FunctionBundler) ──────────────
+export {
+	externalPackageRoot,
+	packagesToStage,
+} from "./lib/external-packages.js";
+export type {
+	FunctionArchiveEntry,
+	FunctionSourceEntry,
+} from "./lib/function-entries.js";
+export {
+	FUNCTION_ARCHIVE_ENTRIES,
+	FUNCTION_SOURCE_ENTRIES,
+	isFunctionArchiveEntry,
+	pickFunctionSourceEntry,
+} from "./lib/function-entries.js";
 export type { LoadConfigOptions } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────
@@ -180,6 +195,11 @@ export type {
 	DataApiSettings,
 	DurationString,
 	DurationUnit,
+	ExternalPackageDef,
+	ExternalPackageEntry,
+	FunctionBundle,
+	FunctionBundler,
+	FunctionBundlerInput,
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
@@ -191,6 +211,7 @@ export type {
 	ResolvedBranchConfig,
 	ResolvedBucketConfig,
 	ResolvedDataApiConfig,
+	ResolvedExternalPackage,
 	ResolvedFunctionConfig,
 	ResolvedPreviewConfig,
 	ServiceEnabled,

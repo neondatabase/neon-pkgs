@@ -38,12 +38,21 @@ export {
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
 export type {
-	BranchWithCompute,
-	CreateWithComputeInput,
+	BranchConnection,
+	CompareSchemaInput,
+	ComputeSettings,
+	CreateAndConnectInput,
+	ResetFromParentInput,
 } from "./neon/resources/branches.js";
+export type {
+	LogFieldValuesQuery,
+	LogQueryInput,
+} from "./neon/resources/logs.js";
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
+	RemoveRoleOptions,
+	SetRoleOptions,
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
 export type {

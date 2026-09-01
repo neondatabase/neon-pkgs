@@ -56,6 +56,41 @@ export interface NeonModelCapabilities {
 	claudeSamplingUnrecognized?: boolean;
 }
 
+/**
+ * Gemini models the gateway rejects penalties on, by measurement. Their older
+ * siblings accept them, so this cannot be derived from the id.
+ *
+ * Matched exactly rather than by substring: `gemini-3-6-flash` is a prefix of
+ * any `gemini-3-6-flash-*` id Google may ship next, and inheriting a measured
+ * restriction on the strength of a shared prefix is how the Gemini rule was
+ * wrong for these two in the first place.
+ */
+const GEMINI_NO_PENALTIES = new Set([
+	"gemini-3-5-flash-lite",
+	"gemini-3-6-flash",
+]);
+
+/** Gemini models that reject `temperature` and `topP` outright. */
+const GEMINI_NO_SAMPLING = new Set(["gemini-3-6-flash"]);
+
+/**
+ * GPT-5 ids that reject `temperature` despite carrying a minor version.
+ *
+ * The version rule below reads `gpt-5-5-pro` as 5.5 and concludes it takes
+ * sampling parameters. It does not — the Responses API answers
+ * `Unsupported parameter: temperature`.
+ */
+const GPT5_NO_SAMPLING = new Set(["gpt-5-5-pro"]);
+
+/**
+ * The gateway accepts an optional `databricks-` prefix on any id, so strip it
+ * before an exact-match lookup. Prefix rules elsewhere in this file tolerate it
+ * incidentally; exact matches do not.
+ */
+function canonicalId(id: string): string {
+	return id.startsWith("databricks-") ? id.slice("databricks-".length) : id;
+}
+
 const PERMISSIVE: Omit<NeonModelCapabilities, "family"> = {
 	supportsTemperature: true,
 	supportsTopP: true,
@@ -130,13 +165,27 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	// Google (Gemini): accepts standard sampling params but rejects the OpenAI
-	// `reasoning_effort` field (not part of Gemini's generation config).
+	// Google (Gemini): accepts standard sampling params, and does take
+	// `reasoning_effort` — the gateway maps it onto Gemini's thinking config.
+	// Measured on gemini-3-6-flash: `minimal` produces 0 reasoning tokens and
+	// `high` produces 310, against 130 with the field absent.
+	//
+	// Newer Gemini models are stricter, and not in a way the id predicts: the
+	// gateway rejects penalties on `gemini-3-5-flash-lite` while accepting them
+	// on `gemini-3-1-flash-lite`, so neither the version nor the `-lite` suffix
+	// is the rule. `gemini-3-6-flash` refuses temperature and topP outright
+	// ("does not support the temperature parameter"). Both are listed by id
+	// because that is what was measured; a new Gemini model inherits the
+	// permissive default until someone measures it.
 	if (id.includes("gemini")) {
+		const canonical = canonicalId(id);
+		const acceptsSampling = !GEMINI_NO_SAMPLING.has(canonical);
 		return {
 			family: "google",
 			...PERMISSIVE,
-			supportsReasoningEffort: false,
+			supportsTemperature: acceptsSampling,
+			supportsTopP: acceptsSampling,
+			supportsPenalties: !GEMINI_NO_PENALTIES.has(canonical),
 		};
 	}
 
@@ -149,7 +198,8 @@ export function getNeonModelCapabilities(
 	// reject topP, while gpt-5.1+ (a minor version digit follows) accept them
 	// again. The regex matches both prefixed and unprefixed ids.
 	if (/gpt-5/.test(id)) {
-		const hasMinorVersion = /gpt-5[.-]\d/.test(id);
+		const hasMinorVersion =
+			/gpt-5[.-]\d/.test(id) && !GPT5_NO_SAMPLING.has(canonicalId(id));
 		return {
 			family: "openai",
 			supportsTemperature: hasMinorVersion,
@@ -177,9 +227,9 @@ export function getNeonModelCapabilities(
 	}
 
 	// Everything else on the unified endpoint rejects penalties with
-	// `parameter "frequency_penalty" must be equal to 0`. Gemini, handled above,
-	// is the only MLflow-routed family that accepts them. Seed and stop vary, so
-	// each family carries what was measured rather than inheriting a guess.
+	// `parameter "frequency_penalty" must be equal to 0`. Only the older Gemini
+	// models, handled above, accept them. Seed and stop vary, so each family
+	// carries what was measured rather than inheriting a guess.
 	if (id.includes("gpt-oss")) {
 		return {
 			family: "other",
@@ -199,7 +249,7 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	if (id.includes("glm") || id.includes("inkling")) {
+	if (id.includes("glm") || id.includes("inkling") || id.includes("kimi")) {
 		return { family: "other", ...PERMISSIVE, supportsPenalties: false };
 	}
 

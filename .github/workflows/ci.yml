@@ -13,11 +13,6 @@ jobs:
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
             - uses: ./.github/actions/prepare
             - run: pnpm build
-            # `pnpm build` compiles neon via tsconfig.build.json, which
-            # excludes *.test.ts. Type-check the full source (tsconfig.json
-            # includes src/**/*.ts, i.e. tests) so type regressions in cli test
-            # files can't slip through — no other CI job type-checks them.
-            - run: pnpm --filter neon typecheck
     lint:
         name: Lint
         runs-on:
@@ -32,8 +27,8 @@ jobs:
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
             - uses: ./.github/actions/prepare
             - run: pnpm lint:ci
-    test:
-        name: Test
+    tools-node-24:
+        name: Tools (Node 24)
         runs-on:
             group: neondatabase-protected-runner-group
             labels: linux-ubuntu-latest
@@ -45,9 +40,82 @@ jobs:
 
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
             - uses: ./.github/actions/prepare
-            - run: pnpm test:ci --coverage
-            - if: always()
-              uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+              with:
+                  node-version: 24
+            - run: pnpm --filter @neon/tools test:ci
+            - run: pnpm --filter @neon/tools build
+    test:
+        name: Test (${{ matrix.name }})
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: CLI 1/4
+                      suite: cli
+                      shard: 1
+                      upload: cli-1-of-4
+                    - name: CLI 2/4
+                      suite: cli
+                      shard: 2
+                      upload: cli-2-of-4
+                    - name: CLI 3/4
+                      suite: cli
+                      shard: 3
+                      upload: cli-3-of-4
+                    - name: CLI 4/4
+                      suite: cli
+                      shard: 4
+                      upload: cli-4-of-4
+                    - name: non-CLI packages
+                      suite: non-cli
+                      shard: 0
+                      upload: non-cli
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: ./.github/actions/prepare
+            - if: matrix.suite == 'cli'
+              run: pnpm --filter neon test:ci --coverage --coverage.reporter=json --shard=${{ matrix.shard }}/4
+            - if: matrix.suite == 'cli' && matrix.shard == 4
+              run: pnpm --filter neonctl test:ci --coverage --coverage.reporter=json
+            - if: matrix.suite == 'non-cli'
+              run: pnpm --recursive --filter='./packages/**' --filter='!neon' --filter='!neonctl' test:ci --coverage --coverage.reporter=json
+            - name: Collect coverage
+              run: |
+                  for report in packages/*/coverage/coverage-final.json; do
+                      package_dir=${report#packages/}
+                      package=${package_dir%%/*}
+                      mkdir -p "coverage-upload/$package"
+                      cp "$report" "coverage-upload/$package/coverage-final.json"
+                  done
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  if-no-files-found: error
+                  name: coverage-${{ matrix.upload }}
+                  path: coverage-upload
+    coverage:
+        name: Coverage
+        needs: test
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  path: coverage
+                  pattern: coverage-*
+            - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              with:
+                  fail_ci_if_error: true
+                  slug: neondatabase/neon-pkgs
+                  use_oidc: true
 
 name: CI
 

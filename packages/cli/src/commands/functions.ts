@@ -1,6 +1,13 @@
-import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
-
+import { statSync } from "node:fs";
+import { dirname } from "node:path";
+import { FUNCTION_SOURCE_ENTRIES } from "@neon/config";
+import {
+	bundleAsIs,
+	describeNativeFinding,
+	findUndeclaredNativePackages,
+	resolveEsbuildEntry,
+	zipFunctionBundle,
+} from "@neon/config-runtime";
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
 import {
@@ -75,9 +82,6 @@ const SLUG_PATTERN = /^[a-z0-9]{1,20}$/;
 const SLUG_HELP =
 	"Use 1-20 lowercase letters and digits (no hyphens or other characters).";
 
-// Entry-point discovery order inside --src.
-const ENTRY_CANDIDATES = ["index.ts", "index.mjs", "index.js"] as const;
-
 // Overridable so tests can poll fast; defaults to 2s in real use.
 const POLL_INTERVAL_MS =
 	Number(process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS) || 2000;
@@ -119,7 +123,7 @@ export const builder = (argv: yargs.Argv) =>
 					.options({
 						src: {
 							describe:
-								"Function source: a directory containing index.ts, index.mjs, or index.js, or a path to the entry file",
+								"Function source: a directory containing index.ts, index.js, or index.mjs (first file match is the entry), or a path to the entry file",
 							type: "string",
 						},
 						// Removed flags, kept hidden so old invocations fail loudly instead
@@ -146,6 +150,13 @@ export const builder = (argv: yargs.Argv) =>
 						wait: {
 							describe:
 								"Wait for the deployment to finish building",
+							type: "boolean",
+							default: true,
+						},
+						// Named `bundle` so yargs exposes `--no-bundle`, matching `--no-wait`.
+						bundle: {
+							describe:
+								"Bundle --src with esbuild. Use --no-bundle to zip a prebuilt directory (root must contain index.mjs or index.js) or a file of that name.",
 							type: "boolean",
 							default: true,
 						},
@@ -203,6 +214,7 @@ type DeployProps = BranchScopeProps & {
 	runtime?: string;
 	env?: string[];
 	wait: boolean;
+	bundle: boolean;
 };
 
 const parseEnv = (entries: string[] | undefined): string | undefined => {
@@ -250,19 +262,19 @@ const deploy = async (props: DeployProps) => {
 	if (props.path !== undefined || props.entry !== undefined) {
 		throw new Error(
 			"--path and --entry were removed. Use --src <dir>; the entry point " +
-				"is discovered as index.ts, index.mjs, or index.js in that directory.",
+				`is discovered as ${FUNCTION_SOURCE_ENTRIES.join(", ")} in that directory.`,
 		);
 	}
 
-	// At least one deploy option must be passed (--wait is excluded: it controls
-	// output, not what gets deployed).
+	// Defaults do not count as deploy options; explicit `--no-bundle` does.
 	const hasOption =
 		props.src !== undefined ||
 		props.env !== undefined ||
-		props.runtime !== undefined;
+		props.runtime !== undefined ||
+		props.bundle === false;
 	if (!hasOption) {
 		throw new Error(
-			"Provide at least one option to deploy, e.g. --src or --env. " +
+			"Provide at least one option to deploy, e.g. --src, --env, or --no-bundle. " +
 				`See: ${getCliName()} function deploy --help.`,
 		);
 	}
@@ -280,20 +292,37 @@ const deploy = async (props: DeployProps) => {
 	if (srcStat === undefined) {
 		throw new Error(`--src path not found: ${src}.`);
 	}
-	// A file is used as the entry point directly; a directory triggers discovery.
-	const source = srcStat.isFile()
-		? src
-		: ENTRY_CANDIDATES.map((name) => join(src, name)).find((p) =>
-				existsSync(p),
-			);
-	if (source === undefined) {
-		throw new Error(
-			`No entry file found in ${src}. Expected one of: ${ENTRY_CANDIDATES.join(", ")}.`,
-		);
-	}
 
-	// Bundle before any network round-trip so a bundling failure fails fast.
-	const zip = zipBundle(await bundleEntry(source));
+	let zip: Uint8Array;
+	if (!props.bundle) {
+		zip = await zipFunctionBundle(
+			props.slug,
+			await bundleAsIs(
+				{
+					slug: props.slug,
+					name: props.slug,
+					source: src,
+					env: {},
+					runtime: "nodejs24",
+					bundler: "none",
+				},
+				{ via: "no-bundle" },
+			),
+		);
+	} else {
+		const source = await resolveEsbuildEntry(src);
+		const bundled = await bundleEntry(source);
+		for (const warning of bundled.warnings) log.warning(warning);
+		// `--src` bypasses `neon.ts`, so native packages cannot be declared here.
+		for (const finding of findUndeclaredNativePackages({
+			metafile: bundled.metafile,
+			declared: [],
+			projectDir: dirname(source),
+		})) {
+			log.warning(describeNativeFinding(props.slug, finding));
+		}
+		zip = zipBundle(bundled.files);
+	}
 	const branchId = await branchIdFromProps(props);
 
 	// Snapshot the current version before deploy so we can detect the new one

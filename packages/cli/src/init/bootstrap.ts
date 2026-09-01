@@ -501,12 +501,7 @@ export const downloadTemplate = async (
 // Target validation + scaffolding to disk
 // ---------------------------------------------------------------------------
 
-/**
- * A bad caller-supplied input that an agent (or human) can correct: an unknown
- * template id or a non-empty target directory. Carries an `agentCode` so an
- * agent surface can report a precise error code instead of a generic
- * INTERNAL_ERROR, while a human path just surfaces the clear `message`.
- */
+/** `agentCode` lets programmatic callers branch without parsing human-readable messages. */
 export class BootstrapInputError extends Error {
 	readonly agentCode: string;
 	constructor(message: string, agentCode: string) {

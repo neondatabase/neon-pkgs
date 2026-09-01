@@ -1,5 +1,90 @@
 # @neondatabase/config
 
+## 1.1.0
+
+### Minor Changes
+
+- 59a05ea: Add a per-function `bundler` option so a function's `source` can be shipped without esbuild.
+
+  `neon.ts` functions accept `bundler`, defaulting to `"esbuild"`. A directory source is bundled from the first of `index.ts`, `index.js`, `index.mjs`. Set `"none"` to zip a prebuilt directory (or a single `index.mjs` / `index.js` file) as-is. `neon function deploy --no-bundle` is the CLI form. An inline `(fn) => Promise<FunctionBundle>` returns a file map. `externalPackages` remains esbuild-only.
+
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [4211669]
+  - @neon/sdk@3.0.0
+
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [9b322e7]
+  - @neon/sdk@2.3.0
+
+## 1.0.3
+
+### Patch Changes
+
+- 512baf3: Add `neon claim` and its `claimable` alias for creating, using, claiming, listing, and deleting temporary Claimable Neon projects without an account. `status`, `accept`, and `delete` take an optional project id from `claim list`. `list` prints `state` from the assertion clock and the project expiry, and `delete` drops a local record after the identity assertion expires. `create` prints CLI service names and `project_expires_at`.
+
+  Recognize Claimable Neon capability errors in Config-as-Code so unavailable pre-claim services keep their actionable claim guidance instead of being reported as API-key failures.
+
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [5c57d00]
+  - @neon/sdk@2.1.0
+
+## 1.0.0
+
+### Major Changes
+
+- 35299c4: **Breaking:** `externalPackages` now ships a package's real files into the deployed archive
+  by default, instead of externalizing the import and shipping nothing.
+
+  A bare string is the common form and produces a function that works:
+
+  ```ts
+  externalPackages: ["sharp"],
+  ```
+
+  The previous behaviour — externalize the import, ship nothing, throw `Cannot find module`
+  if the function reaches it — is now the opt-out, for a package that cannot be staged and is
+  never actually reached:
+
+  ```ts
+  externalPackages: ["sharp", { name: "canvas", includeFiles: false }],
+  ```
+
+  `ResolvedFunctionConfig.externalPackages` changes from `string[]` to
+  `{ name: string; includeFiles: boolean }[]`, which affects anything reading a resolved
+  config or implementing a custom `FunctionBundler`. Two pure helpers are exported for that
+  case: `packagesToStage` and `externalPackageRoot`.
+
+  A function that declares no `externalPackages`, or whose every entry sets
+  `includeFiles: false`, deploys exactly the archive it did before.
+
+  A package named here must be installed in your project: the deploy stages the version you
+  have rather than guessing one, and refuses if it cannot find it.
+
+  Validation additionally rejects the same package listed twice, a bare name and a subpath of it
+  that disagree about `includeFiles`, and an entry that does not name one installable package
+  (a wildcard or a bare scope) unless it sets `includeFiles: false`.
+
+### Patch Changes
+
+- Updated dependencies [4497de8]
+  - @neon/sdk@2.0.0
+
 ## 0.14.1
 
 ### Patch Changes

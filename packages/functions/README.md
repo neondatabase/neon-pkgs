@@ -5,6 +5,7 @@ Runtime helpers for [Neon Functions](https://neon.com):
 - **`waitUntil`** — defer background work past a response.
 - **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler, or from a
   [Hono](https://hono.dev) route via `@neon/functions/hono`.
+- **`attachDatabasePool`** — keep a module-scope `pg.Pool` from killing the isolate when Postgres drops an idle client.
 
 ## Install
 
@@ -108,6 +109,7 @@ no protocol is negotiated: the response header is absent and `socket.protocol` i
 `upgradeWebSocket` needs a Neon Functions runtime that provides the upgrade — deployed, or
 locally under `neon dev`. On an older runtime it throws the "only available inside a Neon
 Functions invocation" `TypeError` rather than misbehaving.
+
 
 ## `@neon/functions/hono`
 
@@ -278,6 +280,53 @@ Neon Function invocation:
 - `SendOptions.compress` is ignored: no extensions are negotiated.
 - Importing both helpers into one file needs an alias — the root export and this one share
   the name `upgradeWebSocket`.
+
+## `attachDatabasePool`
+
+A Neon Function reuses a `pg.Pool` across requests on the same isolate. When Postgres
+closes an idle client — compute scale-to-zero, pooler reclaim, a TCP reset — node-postgres
+emits `error` on the pool. With no listener, that is an uncaught exception and the isolate
+exits.
+
+Call this once after constructing the pool. The pool has already discarded the dead client;
+the next checkout opens a new connection.
+
+```ts
+import { attachDatabasePool } from "@neon/functions";
+import { Pool } from "pg";
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+attachDatabasePool(pool);
+```
+
+This helper does not need a Neon Functions runtime. The same call works in plain Node
+and under `neon dev`.
+
+Expected idle disconnects (`ECONNRESET`, `EPIPE`, `ETIMEDOUT`, Postgres `57P01`, and
+node-postgres's `Connection terminated unexpectedly`) are silent. Anything else is
+logged with `console.error`.
+
+To send unexpected errors to your own reporter instead of `console.error`, pass it on
+the first call, next to `new Pool`:
+
+```ts
+import * as Sentry from "@sentry/node";
+import { attachDatabasePool } from "@neon/functions";
+import { Pool } from "pg";
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+attachDatabasePool(pool, {
+	onUnexpectedError: (err) => Sentry.captureException(err),
+});
+```
+
+The first call wins. A second `attachDatabasePool(pool)` is a no-op. A second call that
+passes `onUnexpectedError` is also a no-op and logs a warning.
+
+If `onUnexpectedError` throws, or returns a promise that rejects, both the pool error and
+the reporter error are logged. Neither is rethrown from the listener, so the isolate stays up.
+
+This does not close the pool. Isolate teardown tears the connections down with the process.
 
 ## Runtime integration
 

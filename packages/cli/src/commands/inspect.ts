@@ -1,7 +1,11 @@
 import type yargs from "yargs";
 import type { BranchScopeProps, CommonProps } from "../types.js";
 import { fillSingleProject } from "../utils/enrichers.js";
-import { resolveConnectionUri, runInspectQuery } from "../utils/inspect_db.js";
+import {
+	formatInspectQueryError,
+	resolveInspectTargets,
+	runInspectQuery,
+} from "../utils/inspect_db.js";
 import {
 	INSPECT_QUERIES,
 	type InspectQuery,
@@ -10,7 +14,7 @@ import {
 import { writer } from "../writer.js";
 
 export const command = "inspect";
-export const describe = "Inspect a database's health and configuration";
+export const describe = "Inspect a branch's Postgres health and configuration";
 export const aliases = ["inspection"];
 
 type InspectProps = BranchScopeProps & {
@@ -35,16 +39,52 @@ const fillSingleProjectUnlessDbUrl = async (
 
 const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 	const query: InspectQuery = INSPECT_QUERIES[name];
+	const { targets, includeDatabaseColumn, branchDatabaseCount } =
+		await resolveInspectTargets(props, query.scope);
 
-	const connectionUri =
-		props.dbUrl ?? (await resolveConnectionUri(props)).connectionUri;
+	const rows: Record<string, unknown>[] = [];
+	for (const target of targets) {
+		let batch: Record<string, unknown>[];
+		try {
+			batch = await runInspectQuery(target.connectionUri, query.sql, {
+				requiresExtension: query.requiresExtension,
+			});
+		} catch (err) {
+			const reason = err instanceof Error ? err.message : String(err);
+			const wrapped = formatInspectQueryError({
+				reason,
+				database: target.database,
+				dbUrl: props.dbUrl,
+				databaseName: props.databaseName,
+				offerDatabaseNameHint: branchDatabaseCount > 1,
+				scope: query.scope,
+				requiresExtension: query.requiresExtension,
+			});
+			if (wrapped === undefined) {
+				throw err instanceof Error ? err : new Error(reason);
+			}
+			throw new Error(wrapped);
+		}
+		if (includeDatabaseColumn) {
+			rows.push(
+				...batch.map((row) => ({
+					database: target.database,
+					...row,
+				})),
+			);
+		} else {
+			rows.push(...batch);
+		}
+	}
 
-	const rows = await runInspectQuery(connectionUri, query.sql, {
-		requiresExtension: query.requiresExtension,
-	});
+	const fields = includeDatabaseColumn
+		? ["database", ...query.fields]
+		: query.fields;
 	writer(props).end(rows, {
-		fields: query.fields as readonly (keyof (typeof rows)[number])[],
-		emptyMessage: query.emptyMessage,
+		fields: fields as readonly (keyof (typeof rows)[number])[],
+		emptyMessage: includeDatabaseColumn
+			? (query.emptyMessageAll ?? query.emptyMessage)
+			: query.emptyMessage,
 	});
 };
 
@@ -61,7 +101,8 @@ const dbBuilder = (argv: yargs.Argv) => {
 				type: "string",
 			},
 			"database-name": {
-				describe: "Database name",
+				describe:
+					"Database to inspect. Omit to cover every database the API lists for the branch. Ranking and row limits stay per database. One failing database fails the whole run. Compute-wide checks run once against the first listed database. Ignored with --db-url.",
 				type: "string",
 			},
 			"role-name": {

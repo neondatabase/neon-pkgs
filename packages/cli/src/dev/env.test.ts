@@ -19,6 +19,7 @@ import type {
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
 } from "@neon/config";
+import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -273,6 +274,71 @@ class FakeNeonApi implements NeonApi {
 	}
 }
 
+/**
+ * A project whose credentials cannot be read at all — the shape of a region where branch
+ * credentials are not deployed. The implied gateway must not take the rest of the env down
+ * with it, or `neon dev` starts with no `DATABASE_URL` because of a service nobody named.
+ */
+class UnreadableCredentialsNeonApi extends FakeNeonApi {
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		// The error the real adapter raises, so this also exercises `pullConfig` degrading
+		// the same read — which is why the rest of the branch still resolves.
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"Branch credentials isn't available for this Neon project (HTTP 404 Not Found).",
+		);
+	}
+}
+
+/**
+ * Credentials read fine, but issuing one fails — a quota, a 500. Distinct from the above on
+ * purpose: once the endpoint has answered, a failure is a real failure and is not the
+ * gateway's to absorb.
+ */
+class BrokenMintNeonApi extends FakeNeonApi {
+	override async createCredential(): Promise<NeonCredentialSecret> {
+		throw new Error("credential quota exceeded for this account");
+	}
+}
+
+/**
+ * A branch that keeps the credentials it issues, so reuse can be verified the way the real
+ * API allows it: a persisted secret is kept only when it names a credential still live on the
+ * branch. A fake with an empty credential list makes every run look like a first run.
+ */
+class CredentialStoreNeonApi extends FakeNeonApi {
+	readonly credentials: NeonCredentialMeta[] = [];
+	createCalls = 0;
+
+	override async createCredential(
+		_projectId: string,
+		branchId: string,
+		input: CreateCredentialInput,
+	): Promise<NeonCredentialSecret> {
+		this.createCalls += 1;
+		const tokenIdShort = `credfake000${this.createCalls}`;
+		const meta = {
+			tokenId: `cred-fake-000${this.createCalls}`,
+			tokenIdShort,
+			...(input.name !== undefined ? { name: input.name } : {}),
+			scopes: input.scopes,
+			principalType: input.principalType,
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+		};
+		this.credentials.push(meta);
+		return {
+			...meta,
+			apiToken: `nt_live_${tokenIdShort}_secret`,
+			s3SecretAccessKey: `s3secret${this.createCalls}`.padEnd(64, "0"),
+		};
+	}
+
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		return this.credentials.filter((c) => c.revokedAt === undefined);
+	}
+}
+
 describe("resolveDevEnv", () => {
 	let cwd: string;
 
@@ -282,6 +348,120 @@ describe("resolveDevEnv", () => {
 
 	afterEach(() => {
 		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	it("injects the AI Gateway on a branch with no neon.ts, like the deployed runtime does", async () => {
+		// `dev` exists to make local behave like deployed. A function that reads
+		// NEON_AI_GATEWAY_* works in production and would fail locally without this.
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api: new FakeNeonApi(),
+		});
+
+		expect(result.vars.NEON_AI_GATEWAY_TOKEN).toBe(
+			"nt_live_credfake0000_secret",
+		);
+		expect(result.vars.NEON_AI_GATEWAY_BASE_URL).toBe(
+			`https://${BRANCH_ID}-api.ai.fake.neon.tech`,
+		);
+		expect(result.vars.DATABASE_URL).toBeDefined();
+	});
+
+	it("reuses a gateway token it is given rather than minting another", async () => {
+		// `dev` writes no file, so without an env source it would mint a credential per
+		// start and leave the last one live. The command layers the local dotenv file in.
+		const api = new CredentialStoreNeonApi();
+		const ctx = {
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api,
+		};
+		const first = await resolveDevEnv(ctx);
+
+		const second = await resolveDevEnv({
+			...ctx,
+			env: { NEON_AI_GATEWAY_TOKEN: first.vars.NEON_AI_GATEWAY_TOKEN },
+		});
+
+		expect(second.vars.NEON_AI_GATEWAY_TOKEN).toBe(
+			first.vars.NEON_AI_GATEWAY_TOKEN,
+		);
+		expect(second.credential?.issued).toBe(false);
+		expect(api.createCalls).toBe(1);
+	});
+
+	it("mints a credential on every start when it is given nothing to reuse", async () => {
+		// The reason the command layers the dotenv file in: without a source of persisted
+		// secrets, each start issues a credential and cannot name the last one to revoke it.
+		const api = new CredentialStoreNeonApi();
+		const ctx = {
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api,
+		};
+
+		await resolveDevEnv(ctx);
+		await resolveDevEnv(ctx);
+
+		expect(api.createCalls).toBe(2);
+		expect(api.credentials.filter((c) => c.revokedAt)).toEqual([]);
+	});
+
+	it("keeps the rest of the env when the gateway's credentials cannot be read", async () => {
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api: new UnreadableCredentialsNeonApi(),
+		});
+
+		expect(result.vars.DATABASE_URL).toBeDefined();
+		expect(result.vars.NEON_AI_GATEWAY_TOKEN).toBeUndefined();
+		expect(result.skipped).toBeUndefined();
+	});
+
+	it("surfaces a mint failure instead of absorbing it into the gateway", async () => {
+		// Once the credentials endpoint has answered, a failure is a real failure. Papering
+		// over it by resolving again without the gateway would swallow the error and strand
+		// whatever the first attempt had already issued. A branch with object storage
+		// behaves the same way, and always has.
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api: new BrokenMintNeonApi(),
+		});
+
+		expect(result.vars).toEqual({});
+		expect(result.skipped?.reason).toMatch(/credential quota exceeded/);
+	});
+
+	it("reports a failure that was never the gateway's, without blaming it", async () => {
+		const api = new FakeNeonApi({
+			listBranches: async () => {
+				throw new Error("boom: Neon API unreachable");
+			},
+		});
+
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api,
+		});
+
+		expect(result.vars).toEqual({});
+		expect(result.skipped?.reason).toMatch(/Neon API unreachable/);
 	});
 
 	it('tier 3: no neon.ts and no project/branch -> empty vars + a "link a branch" note', async () => {

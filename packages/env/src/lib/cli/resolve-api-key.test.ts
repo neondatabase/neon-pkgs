@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import * as keyring from "./keyring.js";
 import { resolveApiKey } from "./resolve-api-key.js";
 
 const cleanups: Array<() => void> = [];
@@ -153,6 +154,32 @@ describe("resolveApiKey — nothing stored", () => {
 		expect(resolveApiKey({ env: {} })).toBeUndefined();
 	});
 
+	test("a keyring pointer with no readable item is not signed-out", () => {
+		const home = makeHome(null, "neon");
+		writeFileSync(
+			resolve(home, ".config", "neon", "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { DEFAULT: { credentials: "keyring" } },
+			}),
+		);
+		const spy = vi.spyOn(keyring, "tryLoadKeyring").mockReturnValue({
+			get: () => null,
+			set: () => undefined,
+			delete: () => false,
+		});
+		try {
+			expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+				/OS keyring/,
+			);
+			expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
+				/Unlock the keyring and retry/,
+			);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
 	test("an OAuth file with no usable token is an error, not silence", () => {
 		const noToken = makeHome(JSON.stringify({ refresh_token: "rt-only" }));
 		expect(() => resolveApiKey({ env: { HOME: noToken } })).toThrow(
@@ -173,7 +200,7 @@ describe("resolveApiKey — a damaged credentials file fails loudly", () => {
 			/not valid JSON/,
 		);
 		expect(() => resolveApiKey({ env: { HOME: home } })).toThrow(
-			/neon profile create DEFAULT --force/,
+			/neon profile create DEFAULT/,
 		);
 	});
 

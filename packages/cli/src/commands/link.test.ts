@@ -1,5 +1,6 @@
 import { fork } from "node:child_process";
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -15,7 +16,7 @@ import { test as originalTest } from "../test_utils/fixtures";
 
 // All tests in this file share a single temporary directory whose path is
 // normalized in snapshots to `<TMP>` so that absolute paths in command output
-// (both human summaries and agent JSON) remain stable across runs and machines.
+// remain stable across runs and machines.
 const TEST_TMP = mkdtempSync(join(tmpdir(), "neonctl-link-"));
 
 const TMP_TOKEN = "<TMP>";
@@ -39,7 +40,6 @@ beforeAll(() => {
 const test = originalTest.extend<{
 	cleanupFile: (name: string) => void;
 	readFile: (name: string) => string;
-	removeFile: (name: string) => void;
 	tmpContext: (label: string) => string;
 	runLinkInCi: (args: string[]) => Promise<{
 		code: number;
@@ -63,15 +63,6 @@ const test = originalTest.extend<{
 			const content = readFileSync(name, "utf-8");
 			cleanupFile(name);
 			return content;
-		});
-	},
-	removeFile: async ({}, use) => {
-		await use((name) => {
-			try {
-				rmSync(name);
-			} catch {
-				// ignore
-			}
 		});
 	},
 	// Each test gets its OWN sub-directory under TEST_TMP so the
@@ -126,6 +117,19 @@ const test = originalTest.extend<{
 	},
 });
 
+const expectNonInteractiveHelp = (text: string) => {
+	const commands = [
+		"neon orgs list --output json",
+		"neon projects list --org-id <org-id> --output json",
+		"neon link --project-id <project-id> [--branch <name> | -y]",
+		"neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2",
+	];
+	for (const command of commands) {
+		expect(text.split(command)).toHaveLength(2);
+	}
+	expect(text).toContain("Organization-scoped API keys cannot list orgs");
+};
+
 describe("link", () => {
 	describe("non-interactive flag mode", () => {
 		test("link to existing project writes org+project, deferring the branch to checkout", async ({
@@ -157,6 +161,110 @@ describe("link", () => {
 				"link",
 				"--project-id",
 				"proj-in-org",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id pins the only branch", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_one_branch");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-one-branch",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id -y pins the default branch, not the first listed", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_yes_default");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-in-org",
+				"-y",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id with no branches warns and does not pin", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_no_branches");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-no-branches",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("link --project-id -y with no default branch fails without writing .neon", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_no_default");
+			await testCliCommand(
+				[
+					"link",
+					"--project-id",
+					"proj-no-default",
+					"-y",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: expect.stringContaining(
+						"Project 'proj-no-default' has no default branch. Pass --branch <name> to pin one.",
+					),
+				},
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("re-linking the same project with -y keeps the already-pinned branch", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_keep_branch_yes");
+			writeFileSync(
+				ctx,
+				JSON.stringify({
+					orgId: "org-2",
+					projectId: "test",
+					branch: "test_branch",
+				}),
+			);
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"test",
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,
@@ -325,6 +433,28 @@ describe("link", () => {
 				},
 			);
 		});
+
+		test("invalid --params JSON fails with a parse error", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			await testCliCommand(
+				[
+					"link",
+					"--params",
+					"not-valid-json",
+					"--context-file",
+					tmpContext("flag_bad_params"),
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: expect.stringContaining(
+						"Failed to parse --params JSON",
+					),
+				},
+			);
+		});
 	});
 
 	describe("input verification", () => {
@@ -395,241 +525,77 @@ describe("link", () => {
 		});
 	});
 
-	describe("--agent mode", () => {
-		test("with no flags emits needs_org JSON", async ({
+	describe("unknown --agent", () => {
+		test("is an unknown argument", async ({
 			testCliCommand,
-			removeFile,
 			tmpContext,
 		}) => {
-			const ctx = tmpContext("agent_needs_org");
-			await testCliCommand(["link", "--agent", "--context-file", ctx]);
-			removeFile(ctx);
-		});
-
-		test("with only --org-id emits needs_project JSON", async ({
-			testCliCommand,
-			removeFile,
-			tmpContext,
-		}) => {
-			const ctx = tmpContext("agent_needs_project");
-			await testCliCommand([
-				"link",
-				"--agent",
-				"--org-id",
-				"org-2",
-				"--context-file",
-				ctx,
-			]);
-			removeFile(ctx);
-		});
-
-		test("with org+project emits linked JSON (no branch) and writes .neon", async ({
-			testCliCommand,
-			readFile,
-			tmpContext,
-		}) => {
-			const ctx = tmpContext("agent_linked_existing");
-			await testCliCommand([
-				"link",
-				"--agent",
-				"--org-id",
-				"org-2",
-				"--project-id",
-				"test",
-				"--no-env-pull",
-				"--context-file",
-				ctx,
-			]);
-			expect(readFile(ctx)).toMatchSnapshot();
-		});
-
-		test("with only --project-id infers the org and emits linked JSON", async ({
-			testCliCommand,
-			readFile,
-			tmpContext,
-		}) => {
-			const ctx = tmpContext("agent_linked_infer");
-			await testCliCommand([
-				"link",
-				"--agent",
-				"--project-id",
-				"proj-in-org",
-				"--no-env-pull",
-				"--context-file",
-				ctx,
-			]);
-			expect(readFile(ctx)).toMatchSnapshot();
-		});
-
-		test("with an unknown --project-id emits an error JSON, exit 1", async ({
-			runLinkInCi,
-			tmpContext,
-		}) => {
-			const result = await runLinkInCi([
-				"link",
-				"--agent",
-				"--project-id",
-				"ghost-project",
-				"--no-env-pull",
-				"--context-file",
-				tmpContext("agent_bad_project"),
-			]);
-			expect(result.code).toBe(1);
-			const parsed = JSON.parse(result.stdout) as {
-				status: string;
-				code: string;
-				message: string;
-			};
-			expect(parsed.status).toBe("error");
-			expect(parsed.code).toBe("NOT_FOUND");
-			expect(parsed.message).toContain(
-				"Project 'ghost-project' not found",
+			const { code, stdout, stderr } = await testCliCommand(
+				[
+					"link",
+					"--agent",
+					"--context-file",
+					tmpContext("agent_refused"),
+				],
+				{ code: 1, snapshot: false },
 			);
+			expect(code).toBe(1);
+			expect(stdout.trim()).toBe("");
+			expect(stderr).toMatch(/has no --agent/);
+			expect(stderr).toMatch(/Pass --project-id/);
+			expect(stderr).not.toMatch(/Unknown argument: agent/);
 		});
 
-		test("with org+projectName but no region emits needs_project_details JSON", async ({
+		test("help omits --agent and lists the non-interactive commands", async ({
 			testCliCommand,
-			removeFile,
-			tmpContext,
 		}) => {
-			const ctx = tmpContext("agent_needs_region");
-			await testCliCommand([
-				"link",
-				"--agent",
-				"--org-id",
-				"org-2",
-				"--project-name",
-				"demo",
-				"--context-file",
-				ctx,
-			]);
-			removeFile(ctx);
-		});
-
-		test("with full project details creates project and emits linked JSON", async ({
-			testCliCommand,
-			readFile,
-			tmpContext,
-		}) => {
-			const ctx = tmpContext("agent_linked_create");
-			await testCliCommand([
-				"link",
-				"--agent",
-				"--org-id",
-				"org-2",
-				"--project-name",
-				"test_project",
-				"--region-id",
-				"aws-us-east-2",
-				"--no-env-pull",
-				"--context-file",
-				ctx,
-			]);
-			expect(readFile(ctx)).toMatchSnapshot();
+			const { stdout, stderr } = await testCliCommand(
+				["link", "--help"],
+				{ snapshot: false },
+			);
+			const text = `${stdout}\n${stderr}`;
+			expect(text).not.toContain("--agent");
+			expectNonInteractiveHelp(text);
 		});
 	});
 
 	describe("org-scoped API key behavior", () => {
-		test("agent mode with no orgs available and no projects emits orgKeyLimited needs_org", async ({
+		test("links an existing project when org listing is forbidden", async ({
 			testCliCommand,
-			removeFile,
+			readFile,
 			tmpContext,
 		}) => {
-			const ctx = tmpContext("orgkey_empty");
-			await testCliCommand(["link", "--agent", "--context-file", ctx], {
-				mockDir: "org-key-empty",
-			});
-			removeFile(ctx);
-		});
-
-		test("agent mode auto-detects org from existing projects when org listing is forbidden", async ({
-			testCliCommand,
-			removeFile,
-			tmpContext,
-		}) => {
-			const ctx = tmpContext("orgkey_autodetect");
-			await testCliCommand(["link", "--agent", "--context-file", ctx], {
-				mockDir: "org-key",
-			});
-			removeFile(ctx);
-		});
-
-		test("agent mode falls back to static regions when getActiveRegions is forbidden", async ({
-			testCliCommand,
-			removeFile,
-			tmpContext,
-		}) => {
-			const ctx = tmpContext("orgkey_regions_fallback");
+			const ctx = tmpContext("orgkey_project");
 			await testCliCommand(
 				[
 					"link",
-					"--agent",
-					"--org-id",
-					"org-detected-99887766",
-					"--project-name",
-					"whatever",
+					"--project-id",
+					"detected-project-12345",
+					"--no-env-pull",
 					"--context-file",
 					ctx,
 				],
 				{ mockDir: "org-key" },
 			);
-			removeFile(ctx);
+			expect(readFile(ctx)).toMatchSnapshot();
+		});
+
+		test("records --org-id when org listing is forbidden and no projects exist", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("orgkey_empty_org");
+			await testCliCommand(
+				["link", "--org-id", "org-from-console", "--context-file", ctx],
+				{ mockDir: "org-key-empty" },
+			);
+			expect(readFile(ctx)).toMatchSnapshot();
 		});
 	});
 
-	describe("agent error responses", () => {
-		test("invalid --params JSON yields error JSON, exit 1", async ({
-			runLinkInCi,
-			tmpContext,
-		}) => {
-			const result = await runLinkInCi([
-				"link",
-				"--agent",
-				"--params",
-				"not-valid-json",
-				"--context-file",
-				tmpContext("agent_bad_params"),
-			]);
-			expect(result.code).toBe(1);
-			const parsed = JSON.parse(result.stdout) as {
-				status: string;
-				code: string;
-				message: string;
-			};
-			expect(parsed.status).toBe("error");
-			expect(parsed.code).toBe("INTERNAL_ERROR");
-			expect(parsed.message).toContain("Failed to parse --params JSON");
-		});
-
-		test("conflicting flags in agent mode yields error JSON, exit 1", async ({
-			runLinkInCi,
-			tmpContext,
-		}) => {
-			const result = await runLinkInCi([
-				"link",
-				"--agent",
-				"--org-id",
-				"org-2",
-				"--project-id",
-				"test",
-				"--project-name",
-				"x",
-				"--context-file",
-				tmpContext("agent_conflict"),
-			]);
-			expect(result.code).toBe(1);
-			const parsed = JSON.parse(result.stdout) as {
-				status: string;
-				code: string;
-				message: string;
-			};
-			expect(parsed.status).toBe("error");
-			expect(parsed.message).toContain("Conflicting inputs");
-		});
-	});
-
-	describe("CI guard", () => {
-		test("errors out with helpful message when no inputs provided in CI", async ({
+	describe("non-interactive missing inputs", () => {
+		test("errors with the replacement commands in CI", async ({
 			runLinkInCi,
 			tmpContext,
 		}) => {
@@ -639,8 +605,24 @@ describe("link", () => {
 				tmpContext("ci_guard"),
 			]);
 			expect(result.code).toBe(1);
-			expect(result.stderr).toContain("CI environment detected");
-			expect(result.stderr).toContain("neon link --agent");
+			expect(result.stdout.trim()).toBe("");
+			expect(result.stderr).toContain("no interactive terminal");
+			expect(result.stderr).not.toContain("link --agent");
+			expectNonInteractiveHelp(result.stderr);
+		});
+
+		test("errors with the replacement commands when there is no TTY", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const { stdout, stderr } = await testCliCommand(
+				["link", "--context-file", tmpContext("no_tty_guard")],
+				{ code: 1, snapshot: false },
+			);
+			expect(stdout.trim()).toBe("");
+			expect(stderr).toContain("no interactive terminal");
+			expect(stderr).not.toContain("link --agent");
+			expectNonInteractiveHelp(stderr);
 		});
 	});
 

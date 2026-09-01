@@ -1,13 +1,11 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-
+import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import chalk from "chalk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
-import { credentialInputs } from "../_shared/auth_selection.js";
 import { isCi } from "../env.js";
 import {
-	BootstrapInputError,
 	type BootstrapTemplate,
 	ensureTargetUsable,
 	FALLBACK_TEMPLATES,
@@ -16,80 +14,73 @@ import {
 	scaffoldTemplate,
 	templateIds,
 } from "../init/bootstrap.js";
-import { log } from "../log.js";
-import type { CommonProps } from "../types.js";
-import { getCliName } from "../utils/cli_name.js";
+import { type InitRun, spawnCliChild } from "../init/child.js";
 import {
-	detectPackageManager,
+	agentSetupDoneLabel,
+	formatInitDone,
+	printInitBanner,
+	printInitDone,
+	shouldPrintInitBanner,
+} from "../init/chrome.js";
+import {
+	assertNamedAgentTooling,
+	type ChildForward,
+	chooseYesAgentTooling,
+	type InitAgentSetup,
+	initPluginAgents,
+	initSkillsMcpAgents,
+	postScaffoldActions,
+	projectContextFile,
+	resolveNamedAgents,
+} from "../init/plan.js";
+import { runAgentTooling, runInitSteps } from "../init/tooling.js";
+import { pickAgentSetupInteractively } from "../init/wizard.js";
+import { log } from "../log.js";
+import type { AgentType } from "../mcp/agents.js";
+import type { CommonProps } from "../types.js";
+import { coerceAgentFlag } from "../utils/agent_flag.js";
+import { getCliName } from "../utils/cli_name.js";
+import { helpCsv, helpEpilogue } from "../utils/help_text.js";
+import {
+	formatInstallCommand,
+	inferPackageManager,
+	installArgs,
 	installedPackageManagers,
 	type PackageManager,
+	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
+import { writer } from "../writer.js";
 
 type BootstrapProps = CommonProps & {
 	directory?: string;
 	template?: string;
 	force: boolean;
 	listTemplates: boolean;
-	agent: boolean;
+	agent?: string[];
 	default: boolean;
 	install: boolean;
 	git: boolean;
 	link: boolean;
-	/** Forwarded to the re-exec'd `link`, so the child resolves the same account. */
+	agentSetup?: boolean;
+	analytics?: boolean;
+	/** Keeps re-executed children on the same account. */
 	configDir?: string;
 	profile?: string;
+	run?: InitRun;
+	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
+	detectProjectAgents?: (
+		cwd: string,
+	) => readonly AgentType[] | Promise<readonly AgentType[]>;
+	detectAgent?: () => AgentType | null;
 };
-
-// ----------------------------------------------------------------------------
-// Agent mode (JSON state machine)
-// ----------------------------------------------------------------------------
-
-type AgentTemplateOption = {
-	id: string;
-	title: string;
-	description: string;
-	services?: string[];
-};
-
-/**
- * One follow-up the caller should offer the user after scaffolding. The agent
- * is expected to ask the user, then run `command` from the project directory
- * (the `link` step intentionally chains into `neon link --agent`'s own state
- * machine). Mirrors `link --agent`'s instruction/next_command_template style.
- */
-type AgentNextStep = {
-	action: "install_dependencies" | "initialize_git" | "link_neon_project";
-	instruction: string;
-	command: string;
-};
-
-type AgentResponse =
-	| {
-			status: "needs_template";
-			instruction: string;
-			options: AgentTemplateOption[];
-			next_command_template: string;
-	  }
-	| {
-			status: "needs_directory";
-			instruction: string;
-			next_command_template: string;
-	  }
-	| {
-			status: "scaffolded";
-			directory: string;
-			template: { id: string; title: string };
-			files_written: number;
-			next_steps: AgentNextStep[];
-			message: string;
-	  }
-	| { status: "error"; code: string; message: string };
 
 // The directory positional is optional: omitting it in an interactive terminal
 // prompts for one. In a non-interactive context a missing directory is an error.
 export const command = "bootstrap [directory]";
-export const describe = "Scaffold a new project from a Neon starter template";
+export const describe =
+	"Scaffold a new project from a Neon starter template, then install agent tooling and link a Neon project";
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -107,7 +98,8 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			"list-templates": {
 				alias: ["list", "ls"],
-				describe: "List available templates and exit.",
+				describe:
+					"List available templates and exit. --output json and --output yaml print a machine-readable catalog.",
 				type: "boolean",
 				default: false,
 			},
@@ -117,16 +109,10 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 			},
-			agent: {
-				describe:
-					"Emit a JSON state-machine response designed for AI agents instead of prompting. The output is a single JSON object with a discriminated `status` field describing the next step.",
-				type: "boolean",
-				default: false,
-			},
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template) and run the usual setup (install dependencies, git init) without prompting. Linking is left to you since it needs a project choice.",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
 				type: "boolean",
 				default: false,
 			},
@@ -143,9 +129,23 @@ export const builder = (argv: yargs.Argv) =>
 				default: true,
 			},
 			link: {
-				describe: `Run \`${getCliName()} link\` in the scaffolded directory after installing. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
+				describe: `Run \`${getCliName()} link\` after scaffolding. Templates with neon.ts link after install so env pull works; otherwise link runs before install. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
 				type: "boolean",
 				default: true,
+			},
+			"agent-setup": {
+				type: "boolean",
+				default: true,
+				describe:
+					"After scaffolding, install the Neon plugin or skills and MCP. Use --no-agent-setup to skip",
+			},
+			agent: {
+				alias: "a",
+				type: "array",
+				string: true,
+				describe:
+					"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
+				coerce: coerceAgentFlag,
 			},
 		})
 		.example(
@@ -158,17 +158,40 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --default",
-			"Quick start: scaffold the default template and run setup without prompting",
+			"Skip the pickers; link --yes still asks for a project unless one is already linked",
 		)
 		.example(
-			"$0 bootstrap my-app --template hono --agent",
-			"Scaffold without prompting and emit the JSON state machine for AI agents",
+			"$0 bootstrap --list-templates --output json",
+			"Print the template catalog as JSON",
+		)
+		.example(
+			"$0 bootstrap my-app --agent cursor --agent claude-code",
+			"Skip agent selection; install the plugin for those agents",
+		)
+		.epilogue(
+			helpEpilogue(
+				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with --default.",
+				helpCsv("Plugin agents", initPluginAgents()),
+				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),
+			),
 		)
 		.strict();
 
 export const handler = async (props: BootstrapProps): Promise<void> => {
 	if (props.listTemplates) {
 		const templates = await fetchTemplates();
+		if (props.output === "json" || props.output === "yaml") {
+			writer(props).end(
+				templates.map((t) => ({
+					id: t.id,
+					title: t.title,
+					description: t.description,
+					services: t.services ?? [],
+				})),
+				{ fields: ["id", "title", "description", "services"] },
+			);
+			return;
+		}
 		for (const t of templates) {
 			const services =
 				t.services && t.services.length > 0
@@ -179,11 +202,18 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 		return;
 	}
 
-	if (props.agent) {
-		await runAgentSafely(props);
-		return;
+	if (shouldPrintInitBanner(props.default)) {
+		printInitBanner();
 	}
-
+	const named = resolveNamedAgents(props.agent ?? []);
+	if (props.agentSetup !== false) {
+		assertNamedAgentTooling(named, "bootstrap", {
+			...(props.directory !== undefined && props.directory.length > 0
+				? { directory: props.directory }
+				: {}),
+			...(props.default ? { yes: true } : {}),
+		});
+	}
 	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
@@ -199,7 +229,7 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 	ensureTargetUsable(targetDir, props.force);
 	await scaffold(template, targetDir);
 	printScaffolded(template, targetDir);
-	await runPostScaffoldSteps(props, targetDir, interactive);
+	await runPostScaffoldSteps(props, targetDir, interactive, template, named);
 };
 
 /**
@@ -314,12 +344,6 @@ const resolveTargetDir = async (
 const defaultDirName = (template: BootstrapTemplate): string =>
 	template.source.subdir.split("/").pop() || template.id;
 
-/**
- * Download and materialize the template into `targetDir`. The actual
- * download/extract/write lives in `src/init/bootstrap.ts`, shared with `neon init`
- * (exec-bit and symlink fidelity, graceful symlink fallback); here we just
- * frame it with progress logging. Returns the number of files written.
- */
 const scaffold = async (
 	template: BootstrapTemplate,
 	targetDir: string,
@@ -338,104 +362,254 @@ const scaffold = async (
 // Post-scaffold steps (install dependencies, git init, link to a Neon project)
 // ----------------------------------------------------------------------------
 
-/**
- * After a human scaffold, offer the things you almost always do next: install
- * dependencies, initialize a git repo, and link the directory to a Neon
- * project. In an interactive terminal each is a y/n prompt (skippable up front
- * with --no-install / --no-git / --no-link); `--default` runs install + git
- * without asking; otherwise we just print the manual steps so nothing runs
- * behind the user's back. Agent mode never reaches here — it returns these as
- * structured `next_steps` instead (see {@link runAgent}).
- */
 const runPostScaffoldSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
 	interactive: boolean,
+	template: BootstrapTemplate,
+	named: readonly AgentType[],
 ): Promise<void> => {
-	const detected = detectPackageManager();
+	const inferred = inferPackageManager(targetDir);
+	const defaultPm = resolvePackageManager(targetDir);
+	const neonConfig = hasNeonConfig(targetDir);
 
 	if (props.default) {
-		await runDefaultSteps(props, targetDir, detected ?? "npm");
+		await runDefaultSteps(
+			props,
+			targetDir,
+			defaultPm,
+			neonConfig,
+			template,
+			named,
+		);
 		return;
 	}
 
 	if (!interactive) {
-		printNextSteps(targetDir, detected ?? "npm", {
+		printDoneSummary({
+			heading: "Project scaffolded.",
+			template,
+			targetDir,
+			pm: defaultPm,
 			installed: false,
+			installFailed: false,
+			gitFailed: false,
+			git: false,
+			agentSetup: "skip",
+			linked: false,
+			skippedLinkForDeps: false,
 			suggestLink: true,
+			agentsRan: false,
 		});
 		return;
 	}
 
-	// The package manager used for the install (and shown in the closing hint).
-	// When we couldn't infer it from the invocation we ask, so a globally
-	// installed `neon` doesn't silently force npm on a bun/pnpm user.
-	let pm: PackageManager = detected ?? "npm";
-	let installed = false;
-	if (props.install && (await confirm(installPrompt(detected)))) {
-		pm = detected ?? (await selectPackageManager());
-		installed = await runCommand(pm, ["install"], targetDir);
+	let pm: PackageManager = defaultPm;
+	const wantInstall =
+		props.install && (await confirm(installPrompt(inferred)));
+	if (wantInstall) {
+		pm = inferred ?? (await selectPackageManager());
 	}
 
-	if (
+	const wantGit =
 		props.git &&
 		!isGitRepo(targetDir) &&
-		(await confirm("Initialize a git repository?"))
-	) {
-		await initGitRepo(targetDir);
-	}
+		(await confirm("Initialize a git repository?"));
 
-	// `neon link` pulls env vars, which loads this project's neon.ts — and that
-	// evaluation needs the dependencies installed. So when deps weren't installed
-	// and the scaffold ships a neon.ts, skip the link prompt (it would just fail)
-	// and tell the user how to finish by hand.
-	if (props.link) {
-		if (!installed && hasNeonConfig(targetDir)) {
-			log.info(
-				`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
-					`to pull env vars, which needs its dependencies. Run \`${pm} install\`, ` +
-					`then \`${getCliName()} link\`.`,
-			);
-		} else if (
-			await confirm(
-				`Link this project to a Neon project now? (runs ${getCliName()} link)`,
-			)
-		) {
-			await runNeonLink(props, targetDir);
-			// link prints its own summary (and pulls env), so end with just the run hint.
-			printNextSteps(targetDir, pm, { installed, suggestLink: false });
-			return;
-		}
-	}
+	const agentSetup: InitAgentSetup =
+		props.agentSetup === false
+			? "skip"
+			: named.length > 0
+				? chooseYesAgentTooling(named).setup
+				: await (props.pickAgentSetup ?? pickAgentSetupInteractively)();
 
-	printNextSteps(targetDir, pm, { installed, suggestLink: true });
+	const canLink = props.link && !(neonConfig && !wantInstall);
+	if (props.link && !canLink) {
+		logSkippedLink(pm);
+	}
+	const wantLink =
+		canLink &&
+		(await confirm(
+			`Link this project to a Neon project now? (runs ${getCliName()} link)`,
+		));
+
+	const outcome = await executePostScaffold(props, targetDir, {
+		yes: false,
+		lockAgentSetup: named.length === 0,
+		pm,
+		git: wantGit,
+		agentSetup,
+		install: wantInstall,
+		link: wantLink,
+		hasNeonConfig: neonConfig,
+		named,
+	});
+	finishPostScaffold({
+		heading: "Project scaffolded.",
+		template,
+		targetDir,
+		pm,
+		...outcome,
+		suggestLink: !outcome.linked,
+	});
 };
 
-const installPrompt = (detected: PackageManager | undefined): string =>
-	detected
-		? `Install dependencies with ${detected}?`
+const installPrompt = (inferred: PackageManager | undefined): string =>
+	inferred
+		? `Install dependencies with ${inferred}?`
 		: "Install dependencies?";
 
-/**
- * `--default` quick start: run install + git init without prompting, honoring
- * --no-install / --no-git. Linking is intentionally skipped — it needs an
- * org/project choice we can't make non-interactively — so we point at it in the
- * closing hint instead.
- */
+/** `link --yes` still asks for a project unless one is already linked. */
 const runDefaultSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
 	pm: PackageManager,
+	neonConfig: boolean,
+	template: BootstrapTemplate,
+	named: readonly AgentType[],
 ): Promise<void> => {
-	log.info("Quick start (--default): running setup without prompting.");
+	log.info(
+		"Quick start (--default): skipping the template, install, git, and agent pickers. link --yes still asks for a project unless one is already linked.",
+	);
+	const wantGit = props.git && !isGitRepo(targetDir);
+	const agentSetup: InitAgentSetup =
+		props.agentSetup === false
+			? "skip"
+			: named.length > 0
+				? chooseYesAgentTooling(named).setup
+				: "skills-mcp";
+	const outcome = await executePostScaffold(props, targetDir, {
+		yes: true,
+		lockAgentSetup: false,
+		pm,
+		git: wantGit,
+		agentSetup,
+		install: props.install,
+		link: props.link,
+		hasNeonConfig: neonConfig,
+		named,
+	});
+	finishPostScaffold({
+		heading: "Project scaffolded.",
+		template,
+		targetDir,
+		pm,
+		...outcome,
+		suggestLink: !outcome.linked,
+	});
+};
+
+const executePostScaffold = async (
+	props: BootstrapProps,
+	targetDir: string,
+	choices: {
+		yes: boolean;
+		lockAgentSetup: boolean;
+		pm: PackageManager;
+		git: boolean;
+		agentSetup: InitAgentSetup;
+		install: boolean;
+		link: boolean;
+		hasNeonConfig: boolean;
+		named: readonly AgentType[];
+	},
+): Promise<{
+	installed: boolean;
+	installFailed: boolean;
+	gitFailed: boolean;
+	git: boolean;
+	linked: boolean;
+	skippedLinkForDeps: boolean;
+	agentSetup: InitAgentSetup;
+	agentsRan: boolean;
+}> => {
+	const kids = bootstrapChildren(props, targetDir);
 	let installed = false;
-	if (props.install) {
-		installed = await runCommand(pm, ["install"], targetDir);
+	let installFailed = false;
+	let gitFailed = false;
+	let git = false;
+	let linked = false;
+	let skippedLinkForDeps = false;
+	let agentSetup = choices.agentSetup;
+	let agentsRan = false;
+	const actions = postScaffoldActions({
+		git: choices.git,
+		agentSetup: choices.agentSetup,
+		install: choices.install,
+		link: choices.link,
+		hasNeonConfig: choices.hasNeonConfig,
+	});
+	for (const action of actions) {
+		if (action === "git") {
+			git = await initGitRepo(targetDir);
+			if (!git) {
+				gitFailed = true;
+				break;
+			}
+			continue;
+		}
+		if (action === "agent") {
+			agentSetup = await runAgentTooling({
+				cwd: targetDir,
+				yes: choices.yes,
+				...(choices.lockAgentSetup
+					? { agentSetup: choices.agentSetup }
+					: {}),
+				...kids,
+				...(choices.named.length > 0 ? { agents: choices.named } : {}),
+				...(props.pickAgentSetup
+					? { pickAgentSetup: props.pickAgentSetup }
+					: {}),
+				...(props.hasProjectPlugins
+					? { hasProjectPlugins: props.hasProjectPlugins }
+					: {}),
+				...(props.detectProjectAgents
+					? { detectProjectAgents: props.detectProjectAgents }
+					: {}),
+				...(props.detectAgent
+					? { detectAgent: props.detectAgent }
+					: {}),
+				command: "bootstrap",
+			});
+			agentsRan = true;
+			continue;
+		}
+		if (action === "install") {
+			installed = await runCommand(
+				choices.pm,
+				installArgs(choices.pm),
+				targetDir,
+			);
+			if (!installed) {
+				installFailed = true;
+			}
+			continue;
+		}
+		if (action !== "link") {
+			const _exhaustive: never = action;
+			throw new Error(`Unhandled post-scaffold action: ${_exhaustive}`);
+		}
+		if (choices.hasNeonConfig && !installed) {
+			skippedLinkForDeps = true;
+			logSkippedLink(choices.pm);
+			continue;
+		}
+		await runInitSteps([choices.yes ? ["link", "--yes"] : ["link"]], {
+			cwd: targetDir,
+			...kids,
+		});
+		linked = true;
 	}
-	if (props.git && !isGitRepo(targetDir)) {
-		await initGitRepo(targetDir);
-	}
-	printNextSteps(targetDir, pm, { installed, suggestLink: true });
+	return {
+		installed,
+		installFailed,
+		gitFailed,
+		git,
+		linked,
+		skippedLinkForDeps,
+		agentSetup,
+		agentsRan,
+	};
 };
 
 const isGitRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
@@ -447,14 +621,43 @@ const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 const hasNeonConfig = (dir: string): boolean =>
 	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
 
+const logSkippedLink = (pm: PackageManager): void => {
+	log.info(
+		`Skipping the Neon link step: \`${getCliName()} link\` reads this project's neon.ts ` +
+			`to pull env vars, which needs its dependencies. Run \`${formatInstallCommand(pm)}\`, ` +
+			`then \`${getCliName()} link\`.`,
+	);
+};
+
+const bootstrapChildren = (
+	props: BootstrapProps,
+	targetDir: string,
+): {
+	run: InitRun;
+	forward: ChildForward;
+	authEnv?: NodeJS.ProcessEnv;
+} => {
+	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
+	return {
+		run: props.run ?? spawnCliChild,
+		forward: {
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			apiHost: props.apiHost,
+			contextFile: projectContextFile(targetDir, props.contextFile),
+			...(props.analytics === false ? { analytics: false } : {}),
+		},
+		...(explicitKey ? { authEnv: { NEON_API_KEY: explicitKey } } : {}),
+	};
+};
+
 /**
  * Initialize a git repository in the scaffolded directory. Just `git init` — we
  * deliberately don't auto-commit, both to avoid failing on a machine with no
  * git identity configured and to leave the first commit to the user.
  */
-const initGitRepo = async (dir: string): Promise<void> => {
-	await runCommand("git", ["init"], dir);
-};
+const initGitRepo = async (dir: string): Promise<boolean> =>
+	runCommand("git", ["init"], dir);
 
 const confirm = async (message: string): Promise<boolean> => {
 	const { value } = await prompts({
@@ -492,52 +695,12 @@ const selectPackageManager = async (): Promise<PackageManager> => {
 	return pm ?? "npm";
 };
 
-/**
- * Re-invoke this same CLI as `neon link` inside the scaffolded directory, so the
- * new project's `.neon` context (and pulled `.env`) land in the right place and
- * link's own interactive picker drives org/project/branch selection. Re-execing
- * (rather than calling the handler in-process) keeps link running with `cwd` set
- * to the target dir, which is where its env pull writes.
- */
-const runNeonLink = async (
-	props: BootstrapProps,
-	targetDir: string,
-): Promise<void> => {
-	const args = [process.argv[1], "link"];
-
-	// Forward how to authenticate, never the credential itself. A key on the child's argv is
-	// visible to anything that can list processes, and `runCommand` prints the whole argument
-	// list when the command fails — so a failed link would put the key in the log too.
-	// Forwarding the selection also keeps the child on the same account: without `--profile` it
-	// would resolve its own, and `--config-dir` was never forwarded at all.
-	if (props.configDir) {
-		args.push("--config-dir", props.configDir);
-	}
-	if (props.profile) {
-		args.push("--profile", props.profile);
-	}
-
-	args.push("--api-host", props.apiHost, "--output", props.output);
-
-	// An explicit `--api-key` has nowhere else to go — the child cannot re-resolve a flag we
-	// were given — so it travels in the environment, which neither `ps` nor our own logging
-	// exposes. A profile needs none of this; the child reads the credential itself.
-	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
-	await runCommand(
-		process.execPath,
-		args,
-		targetDir,
-		explicitKey ? { NEON_API_KEY: explicitKey } : undefined,
-	);
-};
-
 const printScaffolded = (
 	template: BootstrapTemplate,
 	targetDir: string,
 ): void => {
-	log.info("");
 	log.info(
-		'Done. Scaffolded "%s" into %s.',
+		'Scaffolded "%s" into %s.',
 		template.title,
 		isCurrentDir(targetDir)
 			? "the current directory"
@@ -545,146 +708,80 @@ const printScaffolded = (
 	);
 };
 
-/**
- * The closing "Next steps" hint. Skips `cd` for the current directory, omits
- * the install line once deps are in, and only nudges `neon link` when linking
- * wasn't already offered/run — so the user never sees a step they just did.
- */
-const printNextSteps = (
-	targetDir: string,
-	pm: PackageManager,
-	opts: { installed: boolean; suggestLink: boolean },
-): void => {
-	log.info("");
-	log.info("Next steps:");
-	if (!isCurrentDir(targetDir)) {
-		log.info("  cd %s", displayDir(targetDir));
+const printDoneSummary = (input: {
+	heading: string;
+	template: BootstrapTemplate;
+	targetDir: string;
+	pm: PackageManager;
+	installed: boolean;
+	installFailed: boolean;
+	gitFailed: boolean;
+	git: boolean;
+	agentSetup: InitAgentSetup;
+	agentsRan: boolean;
+	linked: boolean;
+	skippedLinkForDeps: boolean;
+	suggestLink: boolean;
+}): void => {
+	const unfinished = input.installFailed || input.gitFailed;
+	const heading = unfinished ? "Setup did not finish." : input.heading;
+	const deps = input.installFailed
+		? "install failed"
+		: input.installed
+			? `installed with ${input.pm}`
+			: "skipped";
+	const git = input.gitFailed
+		? "init failed"
+		: input.git
+			? "initialized"
+			: "skipped";
+	const project = input.linked
+		? "linked"
+		: input.skippedLinkForDeps
+			? "skipped (needs dependencies)"
+			: "not linked";
+	const next: string[] = [];
+	if (!isCurrentDir(input.targetDir)) {
+		next.push(`cd ${displayDir(input.targetDir)}`);
 	}
-	if (!opts.installed) {
-		log.info("  %s install", pm);
+	if (!input.installed) {
+		next.push(formatInstallCommand(input.pm));
 	}
-	if (opts.suggestLink) {
-		log.info(`  ${getCliName()} link`);
+	if (input.suggestLink) {
+		next.push(`${getCliName()} link`);
 	}
-	log.info("  See the README to run it.");
-	log.info("");
-};
-
-const runAgentSafely = async (props: BootstrapProps): Promise<void> => {
-	try {
-		await runAgent(props);
-	} catch (err) {
-		emitAgent(toAgentError(err));
-		process.exit(1);
+	if (!unfinished) {
+		next.push("See the README to run it.");
 	}
-};
-
-/**
- * The `--agent` flow: resolve what the flags determine and emit one JSON object
- * describing either the next input needed (`needs_template` / `needs_directory`)
- * or the terminal result (`scaffolded`). Unlike interactive mode it never
- * prompts and never runs install/git/link itself — those come back as structured
- * `next_steps` so the agent can confirm with the user and run them (the link
- * step chains into `neon link --agent`).
- */
-const runAgent = async (props: BootstrapProps): Promise<void> => {
-	if (!props.template) {
-		const templates = await fetchTemplates();
-		emitAgent({
-			status: "needs_template",
-			instruction: `Ask the user which template to scaffold, then re-run the next_command_template with the chosen --template value${
-				props.directory ? "" : " and a target directory"
-			}.`,
-			options: templates.map((template) => ({
-				id: template.id,
-				title: template.title,
-				description: template.description,
-				...(template.services ? { services: template.services } : {}),
-			})),
-			next_command_template: `${getCliName()} bootstrap --agent ${
-				props.directory ? shellArg(props.directory) : "<directory>"
-			} --template <template_id>`,
-		});
-		return;
-	}
-
-	const templates = await resolveTemplateList(props);
-	const template = findTemplate(templates, props.template);
-	if (!template) {
-		throw new BootstrapInputError(
-			`Unknown template "${props.template}". Available templates: ${templateIds(templates)}.`,
-			"UNKNOWN_TEMPLATE",
-		);
-	}
-
-	if (props.directory === undefined) {
-		emitAgent({
-			status: "needs_directory",
-			instruction:
-				'Ask the user which directory to scaffold into (use "." for the current directory), then re-run the next_command_template with it.',
-			next_command_template: `${getCliName()} bootstrap --agent <directory> --template ${shellArg(
-				template.id,
-			)}`,
-		});
-		return;
-	}
-
-	const targetDir = resolve(
-		process.cwd(),
-		props.directory === "." ? "" : props.directory,
+	printInitDone(
+		formatInitDone({
+			heading,
+			rows: [
+				{ label: "Template", value: input.template.title },
+				{ label: "Directory", value: displayDir(input.targetDir) },
+				{ label: "Dependencies", value: deps },
+				{ label: "Git", value: git },
+				{
+					label: "Agents",
+					value: agentSetupDoneLabel({
+						setup: input.agentSetup,
+						ran: input.agentsRan,
+					}),
+				},
+				{ label: "Project", value: project },
+			],
+			next,
+		}),
 	);
-	ensureTargetUsable(targetDir, props.force);
-	const filesWritten = await scaffold(template, targetDir);
-
-	const dir = displayDir(targetDir);
-	const runIn = isCurrentDir(targetDir) ? "" : `cd ${shellArg(dir)} && `;
-	emitAgent({
-		status: "scaffolded",
-		directory: targetDir,
-		template: { id: template.id, title: template.title },
-		files_written: filesWritten,
-		next_steps: [
-			{
-				action: "install_dependencies",
-				instruction:
-					"Ask the user whether to install dependencies, then run this in the project directory.",
-				command: `${runIn}npm install`,
-			},
-			{
-				action: "initialize_git",
-				instruction:
-					"Ask the user whether to initialize a git repository in the project directory.",
-				command: `${runIn}git init`,
-			},
-			{
-				action: "link_neon_project",
-				instruction:
-					"Ask the user whether to link the project to a Neon project now. This runs the link state machine — follow its JSON output for the next step.",
-				command: `${runIn}${getCliName()} link --agent`,
-			},
-		],
-		message: `Scaffolded "${template.title}" (${filesWritten} files) into ${dir}. Offer the next_steps to the user: install dependencies, initialize git, then link a Neon project.`,
-	});
 };
 
-const emitAgent = (response: AgentResponse): void => {
-	process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
-};
-
-const toAgentError = (
-	err: unknown,
-): Extract<AgentResponse, { status: "error" }> => {
-	if (err instanceof BootstrapInputError) {
-		return { status: "error", code: err.agentCode, message: err.message };
+const finishPostScaffold = (
+	input: Parameters<typeof printDoneSummary>[0],
+): void => {
+	printDoneSummary(input);
+	if (input.installFailed || input.gitFailed) {
+		throw new Error("Setup did not finish.");
 	}
-	if (err instanceof Error) {
-		return {
-			status: "error",
-			code: "INTERNAL_ERROR",
-			message: err.message,
-		};
-	}
-	return { status: "error", code: "INTERNAL_ERROR", message: String(err) };
 };
 
 // ----------------------------------------------------------------------------
@@ -705,13 +802,6 @@ const displayDir = (targetDir: string): string => {
 		return ".";
 	}
 	return rel.startsWith("..") ? targetDir : rel;
-};
-
-const shellArg = (value: string): string => {
-	if (/^[A-Za-z0-9._:/-]+$/.test(value)) {
-		return value;
-	}
-	return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
 const onPromptState = (state: {

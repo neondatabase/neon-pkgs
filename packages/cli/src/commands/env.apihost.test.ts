@@ -10,7 +10,12 @@ vi.mock("../dev/env.js", async (importOriginal) => {
 		resolveNeonEnvVars: vi.fn(() =>
 			Promise.resolve({
 				vars: {},
-				credential: { issued: false, keys: [], revoked: [] },
+				credential: {
+					issued: false,
+					keys: [],
+					revoked: [],
+					superseded: [],
+				},
 			}),
 		),
 	};

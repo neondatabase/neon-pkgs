@@ -2,6 +2,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect } from "vitest";
+import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
 
@@ -21,6 +22,41 @@ describe("projects", () => {
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand(["projects", "create", "--name", "test_project"]);
 	});
+
+	for (const output of ["table", "json", "yaml"] as const) {
+		test(`create --no-secrets/${output}`, async ({ testCliCommand }) => {
+			const { stdout } = await testCliCommand(
+				[
+					"projects",
+					"create",
+					"--name",
+					"test_project_no_secrets",
+					"--no-secrets",
+				],
+				{ output, snapshot: false },
+			);
+
+			expect(stdout).not.toContain("never-expose-this-password");
+			expect(stdout).not.toContain("connection_uri");
+			expect(stdout).not.toContain("connection_parameters");
+
+			if (output === "table") {
+				expect(stdout).toContain("new-project-safe-output");
+				return;
+			}
+
+			const parsed: unknown =
+				output === "json" ? JSON.parse(stdout) : YAML.parse(stdout);
+			expect(parsed).toEqual(
+				expect.objectContaining({
+					project: expect.objectContaining({
+						id: "new-project-safe-output",
+					}),
+				}),
+			);
+			expect(parsed).not.toHaveProperty("connection_uris");
+		});
+	}
 
 	test("create with hipaa flag", async ({ testCliCommand }) => {
 		await testCliCommand([

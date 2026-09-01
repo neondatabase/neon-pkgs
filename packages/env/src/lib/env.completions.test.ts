@@ -41,6 +41,9 @@ const compilerOptions: ts.CompilerOptions = {
 	baseUrl: here,
 	paths: {
 		"@neon/config/v1": [resolve(here, "../../../config/src/v1.ts")],
+		"@neon-internals/env-core/env": [
+			resolve(here, "../../../../internals/env-core/src/env.ts"),
+		],
 	},
 };
 
@@ -96,7 +99,20 @@ function completionsAt(source: string): string[] {
 function fixture(configBody: string, call: string): string {
 	return [
 		'import { defineConfig } from "@neon/config/v1";',
-		'import { parseEnv } from "./env.js";',
+		'import { parseEnv } from "./parse-env.js";',
+		"",
+		`const config = defineConfig(${configBody});`,
+		"",
+		`export const env = ${call};`,
+		"",
+	].join("\n");
+}
+
+/** A fixture that reaches `fetchEnv` through the package's public entry point. */
+function fetchFixture(configBody: string, call: string): string {
+	return [
+		'import { defineConfig } from "@neon/config/v1";',
+		'import { fetchEnv } from "../index.js";',
 		"",
 		`const config = defineConfig(${configBody});`,
 		"",
@@ -140,6 +156,26 @@ describe("parseEnv autocomplete", () => {
 			),
 		);
 		// Postgres + auth only: no storage / AI Gateway keys, since the policy enables neither.
+		expect(entries).toEqual([
+			"DATABASE_URL",
+			"DATABASE_URL_UNPOOLED",
+			"NEON_AUTH_BASE_URL",
+			"NEON_AUTH_JWKS_URL",
+			"NEON_BRANCH",
+		]);
+	});
+
+	test("offers policy-scoped keys through fetchEnv's public package export", () => {
+		const entries = completionsAt(
+			fetchFixture(
+				`{ auth: true, ${TWO_FUNCTIONS.slice(1)}`,
+				`fetchEnv(config, {
+					projectId: "proj",
+					branch: "main",
+					keys: ["${CARET}"],
+				})`,
+			),
+		);
 		expect(entries).toEqual([
 			"DATABASE_URL",
 			"DATABASE_URL_UNPOOLED",

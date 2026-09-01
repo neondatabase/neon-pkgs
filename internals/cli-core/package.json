@@ -1,0 +1,25 @@
+{
+	"name": "@neon-internals/cli-core",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Credential, profile and config-path code shared by the `neon` and `@neon/env` CLIs. Never published - bundled into each consumer.",
+	"type": "module",
+	"exports": {
+		"./*": {
+			"types": "./dist/*.d.ts",
+			"import": "./dist/*.js"
+		}
+	},
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	}
+}

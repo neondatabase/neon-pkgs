@@ -1,5 +1,74 @@
 import { describe, expect, it } from "vitest";
-import { getGithubEnvVars } from "./env";
+import { getCliAgent, getGithubEnvVars } from "./env";
+
+describe("getCliAgent", () => {
+	it("attributes a Claude Code child session", () => {
+		expect(getCliAgent({ CLAUDE_CODE_CHILD_SESSION: "1" })).toBe(
+			"claude-code",
+		);
+	});
+
+	it("attributes a Codex thread", () => {
+		expect(
+			getCliAgent({
+				CODEX_CI: "1",
+				CODEX_THREAD_ID: "thread-123",
+			}),
+		).toBe("codex");
+	});
+
+	it("attributes a Codex session", () => {
+		expect(
+			getCliAgent({
+				CODEX_CI: "1",
+				CODEX_SESSION_ID: "session-123",
+			}),
+		).toBe("codex");
+	});
+
+	it("does not attribute a user-initiated Codex shell command", () => {
+		expect(
+			getCliAgent({
+				CODEX_THREAD_ID: "thread-123",
+				CODEX_SESSION_ID: "session-123",
+			}),
+		).toBeUndefined();
+	});
+
+	it("does not attribute disabled or empty direct markers", () => {
+		expect(
+			getCliAgent({
+				CLAUDE_CODE_CHILD_SESSION: "false",
+				CODEX_THREAD_ID: "",
+				CODEX_SESSION_ID: " ",
+			}),
+		).toBeUndefined();
+	});
+
+	it("does not attribute ambient or sandbox utility markers", () => {
+		expect(
+			getCliAgent({
+				CLAUDECODE: "1",
+				CLAUDE_CODE: "1",
+				CLAUDE_CLI: "1",
+				CODEX: "1",
+				CODEX_CI: "1",
+				CODEX_SANDBOX: "seatbelt",
+				CODEX_SANDBOX_NETWORK_DISABLED: "1",
+			}),
+		).toBeUndefined();
+	});
+
+	it("omits attribution when nested agent markers conflict", () => {
+		expect(
+			getCliAgent({
+				CLAUDE_CODE_CHILD_SESSION: "1",
+				CODEX_CI: "1",
+				CODEX_THREAD_ID: "thread-123",
+			}),
+		).toBeUndefined();
+	});
+});
 
 describe("getGithubEnvVars", () => {
 	it("success all keys", () => {

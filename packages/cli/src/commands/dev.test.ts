@@ -1,8 +1,12 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 import {
+	devBundleDir,
 	diffUnits,
 	formatEnvSummary,
 	type RunningUnit,
@@ -39,6 +43,67 @@ describe("dev", () => {
 	}) => {
 		const missing = join(process.cwd(), "does-not-exist.ts");
 		await testCliCommand(["dev", "--source", missing], { code: 1 });
+	});
+});
+
+/**
+ * `neon dev` leaves a function's `nativePackages` unbundled and does not copy anything, so
+ * the bundle must sit somewhere Node's resolver can reach the project's real `node_modules`
+ * from. It does today only because the bundle is written *inside* that directory. These pin
+ * the property, because moving the directory would break local dev for native dependencies
+ * with a `Cannot find module` and nothing else would catch it.
+ */
+describe("devBundleDir", () => {
+	it("puts the bundle inside the project's node_modules", () => {
+		expect(devBundleDir("/proj", "resize")).toBe(
+			join("/proj", "node_modules", ".neon-dev", "resize"),
+		);
+		expect(devBundleDir("/proj")).toBe(
+			join("/proj", "node_modules", ".neon-dev"),
+		);
+	});
+
+	it("is a location an unbundled import actually resolves from", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neonctl-dev-resolve-"));
+		try {
+			// A package only reachable by walking up into the project's node_modules — which
+			// is exactly how an unbundled nativePackages entry is reached locally.
+			const pkg = join(cwd, "node_modules", "only-in-project");
+			mkdirSync(pkg, { recursive: true });
+			writeFileSync(
+				join(pkg, "package.json"),
+				JSON.stringify({ name: "only-in-project", version: "1.0.0" }),
+			);
+			writeFileSync(
+				join(pkg, "index.js"),
+				"module.exports = 'resolved';\n",
+			);
+
+			const bundleDir = devBundleDir(cwd, "resize");
+			mkdirSync(bundleDir, { recursive: true });
+			const bundle = join(bundleDir, "index.mjs");
+			writeFileSync(
+				bundle,
+				[
+					"import { createRequire } from 'node:module';",
+					// Both forms a real bundle uses: a bare ESM import, and the createRequire
+					// shim the deploy banner installs (which is how sharp loads its binary).
+					"import viaImport from 'only-in-project';",
+					"const viaRequire = createRequire(import.meta.url)('only-in-project');",
+					"process.stdout.write(viaImport + '/' + viaRequire);",
+				].join("\n"),
+			);
+
+			// From an unrelated cwd, as the dev child is spawned: resolution is relative to the
+			// importing file, not the working directory.
+			const out = execFileSync(process.execPath, [bundle], {
+				cwd: tmpdir(),
+				encoding: "utf8",
+			});
+			expect(out).toBe("resolved/resolved");
+		} finally {
+			rmSync(cwd, { recursive: true, force: true });
+		}
 	});
 });
 

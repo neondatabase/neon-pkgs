@@ -3,20 +3,27 @@ import {
 	deleteProject,
 	getProject,
 	grantPermissionToProject,
+	listProjectMembers,
 	listProjectPermissions,
 	listProjects,
 	recoverProject,
+	removeProjectMemberRole,
 	revokePermissionFromProject,
+	setProjectMemberRole,
 	transferProjectsFromOrgToOrg,
 	transferProjectsFromUserToOrg,
 	updateProject,
 } from "../../client/sdk.gen.js";
 import type {
+	ListProjectMembersData,
 	ListProjectsData,
 	Project,
 	ProjectCreateRequest,
 	ProjectListItem,
+	ProjectMember,
+	ProjectMemberRoleResponse,
 	ProjectPermission,
+	ProjectRole,
 	ProjectUpdateRequest,
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
@@ -37,6 +44,30 @@ export interface TransferProjectsInput {
 type ListQuery = Omit<NonNullable<ListProjectsData["query"]>, "cursor">;
 type CreateInput = ProjectCreateRequest["project"];
 type UpdateInput = ProjectUpdateRequest["project"];
+type MemberListQuery = Omit<
+	NonNullable<ListProjectMembersData["query"]>,
+	"cursor"
+>;
+
+/** Per-call options for {@link Members.setRole}. */
+export interface SetRoleOptions<Throw extends boolean = boolean>
+	extends CallOptions<Throw> {
+	/**
+	 * Acknowledge that the call lowers the caller's own role. The API rejects a
+	 * self-demotion without it, so it is left off by default.
+	 */
+	confirmSelfDemotion?: boolean;
+}
+
+/** Per-call options for {@link Members.removeRole}. */
+export interface RemoveRoleOptions<Throw extends boolean = boolean>
+	extends CallOptions<Throw> {
+	/**
+	 * Acknowledge that the call can cost the caller management access. The API
+	 * rejects such a self-removal without it, so it is left off by default.
+	 */
+	confirmSelfLockout?: boolean;
+}
 
 /** Per-call options for the connect workflow. */
 interface WorkflowOptions<Throw extends boolean> extends CallOptions<Throw> {
@@ -142,15 +173,146 @@ export class Permissions<DThrow extends boolean> {
 	}
 }
 
+/**
+ * Per-project roles for members of the owning organization.
+ *
+ * Distinct from {@link Permissions}, which shares a project with an individual by
+ * email address: these act on existing org members by member id, and clearing a
+ * grant leaves the member's organization-role default in force rather than
+ * removing their access.
+ */
+export class Members<DThrow extends boolean> {
+	readonly #ctx: RequestContext;
+
+	constructor(ctx: RequestContext) {
+		this.#ctx = ctx;
+	}
+
+	/**
+	 * List org members and their project roles (cursor-paginated). Org-owned
+	 * projects only — a personal project answers `404`, as does an org with
+	 * per-project role management disabled.
+	 *
+	 * @apiCall GET /projects/{project_id}/members (cursor-paginated)
+	 */
+	list(
+		projectId: string,
+		query?: MemberListQuery,
+		opts?: CallOptions,
+	): Paginated<ProjectMember> {
+		return paginate(
+			(cursor, signal) =>
+				listProjectMembers({
+					client: this.#ctx.client,
+					path: { project_id: projectId },
+					query: { ...query, cursor },
+					throwOnError: false,
+					signal,
+				}),
+			(data) => ({
+				items: data?.project_members ?? [],
+				cursor: data?.pagination?.next,
+			}),
+			() => this.#ctx.deadlineFor(opts),
+		);
+	}
+
+	/**
+	 * Set a member's explicit project role, replacing any existing grant.
+	 * Idempotent. Check `credential_rotation_recommended` and
+	 * `org_api_key_rotation_recommended` on the result — a downgrade can leave
+	 * credentials the member still holds.
+	 *
+	 * @apiCall PUT /projects/{project_id}/members/{member_id}/role
+	 */
+	setRole(
+		projectId: string,
+		memberId: string,
+		role: ProjectRole,
+	): Promise<Outcome<ProjectMemberRoleResponse, DThrow>>;
+	setRole<Throw extends boolean = DThrow>(
+		projectId: string,
+		memberId: string,
+		role: ProjectRole,
+		opts: SetRoleOptions<Throw>,
+	): Promise<Outcome<ProjectMemberRoleResponse, Throw>>;
+	setRole(
+		projectId: string,
+		memberId: string,
+		role: ProjectRole,
+		opts?: SetRoleOptions<boolean>,
+	): Promise<
+		ProjectMemberRoleResponse | NeonResult<ProjectMemberRoleResponse>
+	> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				setProjectMemberRole({
+					client,
+					path: { project_id: projectId, member_id: memberId },
+					query: opts?.confirmSelfDemotion
+						? { confirm_self_demotion: true }
+						: undefined,
+					body: { role },
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
+		);
+	}
+
+	/**
+	 * Clear a member's explicit project grant. Idempotent, and a no-op when no
+	 * explicit grant exists. The member keeps whatever their organization role
+	 * grants by default, so this narrows access rather than removing it.
+	 *
+	 * @apiCall DELETE /projects/{project_id}/members/{member_id}/role
+	 */
+	removeRole(
+		projectId: string,
+		memberId: string,
+	): Promise<Outcome<ProjectMemberRoleResponse, DThrow>>;
+	removeRole<Throw extends boolean = DThrow>(
+		projectId: string,
+		memberId: string,
+		opts: RemoveRoleOptions<Throw>,
+	): Promise<Outcome<ProjectMemberRoleResponse, Throw>>;
+	removeRole(
+		projectId: string,
+		memberId: string,
+		opts?: RemoveRoleOptions<boolean>,
+	): Promise<
+		ProjectMemberRoleResponse | NeonResult<ProjectMemberRoleResponse>
+	> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				removeProjectMemberRole({
+					client,
+					path: { project_id: projectId, member_id: memberId },
+					query: opts?.confirmSelfLockout
+						? { confirm_self_lockout: true }
+						: undefined,
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
+		);
+	}
+}
+
 /** Project resource — one API call per method (`list` is cursor-paginated). */
 export class Projects<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 	/** Project access grants (share by email). */
 	readonly permissions: Permissions<DThrow>;
+	/** Per-project roles for members of the owning organization. */
+	readonly members: Members<DThrow>;
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
 		this.permissions = new Permissions<DThrow>(ctx);
+		this.members = new Members<DThrow>(ctx);
 	}
 
 	/**
@@ -203,7 +365,12 @@ export class Projects<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects */
+	/**
+	 * The API provides no way to skip the default branch or read-write compute.
+	 * This method retains its project-only result; use
+	 * {@link Projects.createAndConnect} or `postgres.connectionString` when a
+	 * connection string is needed.
+	 */
 	create(input?: CreateInput): Promise<Outcome<Project, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		input: CreateInput | undefined,
@@ -214,7 +381,10 @@ export class Projects<DThrow extends boolean> {
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
-			opts,
+			{
+				...opts,
+				waitForReadiness: opts?.waitForReadiness ?? true,
+			},
 			(client, signal) =>
 				createProject({
 					client,
@@ -333,8 +503,7 @@ export class Projects<DThrow extends boolean> {
 	}
 
 	/**
-	 * Recover a soft-deleted project within its retention window (beta). Mirrors
-	 * `branches.recover` at the project level.
+	 * Recover a soft-deleted project within its retention window (beta).
 	 *
 	 * @apiCall POST /projects/{project_id}/recover
 	 */

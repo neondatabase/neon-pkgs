@@ -1,4 +1,5 @@
 import type { NeonConfigView } from "./config_format.js";
+import { NEON_SERVICES, type NeonService } from "./neon_services.js";
 
 /**
  * The published npm packages a `neon.ts` project needs — the `@neon/*` org names.
@@ -14,24 +15,32 @@ export const ENV_PACKAGE = "@neon/env";
 export const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
 
 /**
- * A Neon service `config init` can declare in the `neon.ts` it scaffolds, spelled the way a
- * user types it in `--services`. Kebab-case rather than the `neon.ts` field names (`aiGateway`,
- * `buckets`) so the flag reads like a flag; {@link renderNeonConfig} owns the mapping.
+ * The services `config init` can declare in the `neon.ts` it scaffolds — the subset of
+ * {@link NEON_SERVICES} a policy has a field for. {@link renderNeonConfig} owns the mapping
+ * from these names to the `neon.ts` fields (`aiGateway`, `buckets`).
  *
- * Postgres is absent because every branch has it, and `dataApi` is absent because enabling it
- * with the default `authProvider: "neon"` requires `auth` — a pairing the picker would have to
- * enforce rather than offer.
+ * Postgres is absent because every branch has it, so there is nothing to declare. `data-api`
+ * is absent because enabling it with the default `authProvider: "neon"` requires `auth` — a
+ * pairing the picker would have to enforce rather than offer.
  */
-export const NEON_SERVICES = [
-	"auth",
-	"functions",
-	"storage",
-	"ai-gateway",
-] as const;
-export type NeonService = (typeof NEON_SERVICES)[number];
+export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
+	(service) => service !== "postgres" && service !== "data-api",
+);
 
-/** `--services none`: declare nothing, i.e. scaffold the bare starter policy. */
-export const NO_SERVICES = "none";
+/**
+ * What `config init --services none` produces. One constant because it is both the help text
+ * and what tells the parser `none` is a value here — passing the literal at each call site
+ * lets the two drift into documenting something the parser does not accept.
+ */
+export const CONFIG_INIT_NONE_MEANS = "the bare starter policy";
+
+/** Why the two a policy cannot declare are not selectable, for the refusal message. */
+export const CONFIG_INIT_UNAVAILABLE: Partial<Record<NeonService, string>> = {
+	postgres:
+		"every branch has Postgres, so a policy has nothing to declare for it",
+	"data-api":
+		"enabling it with the default provider requires auth, so declare auth here and turn the Data API on with `neon data-api create`",
+};
 
 /** Slug, display name, and source path of the function scaffolded for `functions`. */
 export const FUNCTION_SLUG = "hello";
@@ -40,43 +49,6 @@ export const FUNCTION_FILENAME = "hello.ts";
 
 /** Name of the bucket scaffolded for `storage`. */
 export const BUCKET_NAME = "assets";
-
-/**
- * Parse a `--services` value into a canonical service list: comma-separated
- * {@link NEON_SERVICES} names, or {@link NO_SERVICES} on its own for none.
- *
- * Unknown names are rejected here rather than silently dropped — a typo'd service would
- * otherwise scaffold a policy missing exactly the service the user asked for. The result is
- * deduplicated and ordered by {@link NEON_SERVICES} so the rendered file doesn't depend on the
- * order they were typed in.
- */
-export const parseServices = (raw: string): NeonService[] => {
-	const names = raw
-		.split(",")
-		.map((name) => name.trim())
-		.filter((name) => name !== "");
-
-	if (names.includes(NO_SERVICES)) {
-		if (names.length > 1) {
-			throw new Error(
-				`--services ${NO_SERVICES} cannot be combined with other services.`,
-			);
-		}
-		return [];
-	}
-
-	const unknown = names.filter(
-		(name) => !NEON_SERVICES.includes(name as NeonService),
-	);
-	if (unknown.length > 0) {
-		throw new Error(
-			`Unknown service${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}. ` +
-				`Supported values: ${NEON_SERVICES.join(", ")}, ${NO_SERVICES}.`,
-		);
-	}
-
-	return NEON_SERVICES.filter((service) => names.includes(service));
-};
 
 /**
  * One indentation level in the emitted `neon.ts`. Two spaces, which is what every renderer
@@ -116,7 +88,7 @@ const renderPreview = (services: readonly NeonService[]): string => {
 			]),
 		);
 	}
-	if (services.includes("storage")) {
+	if (services.includes("object-storage")) {
 		lines.push(
 			...block(2, "buckets", [
 				...at(

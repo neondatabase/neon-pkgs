@@ -1,13 +1,30 @@
 import { existsSync } from "node:fs";
 import type { NeonApi } from "@neon/config";
-import { NEON_ENV_VAR_KEYS } from "@neon/env";
-import type { CredentialOutcome } from "@neon/env/runtime";
+import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
+import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
 import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
+import {
+	ENV_PULL_KEYS,
+	ENV_PULL_SERVICES,
+	ENV_PULL_UNAVAILABLE,
+	type EnvPullKey,
+	envKeysForSelection,
+	envPullFlagValue,
+	ownedEnvServiceKeys,
+	parseEnvPullKeys,
+} from "../env_services.js";
 import { log } from "../log.js";
+import {
+	deprecatedServiceMessage,
+	type NeonService,
+	parseServices,
+	servicesFlagValue,
+	servicesOption,
+} from "../neon_services.js";
 import type { BranchScopeProps } from "../types.js";
 import { warnAiGateway } from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
@@ -21,6 +38,17 @@ export type EnvPullProps = BranchScopeProps & {
 	cwd?: string;
 	/** Injected NeonApi adapter (tests). Production builds it from credentials. */
 	runtimeApi?: NeonApi;
+	/**
+	 * Pull only these services' env vars, ignoring any `neon.ts` (`--service`). The pull is
+	 * then scoped in both directions: it writes only these services' vars, and prunes only
+	 * within them.
+	 */
+	services?: readonly NeonService[];
+	/**
+	 * Pull exactly these OS-level env vars (`--env`). Combined with `services` as a union:
+	 * complete service bundles plus these individual keys.
+	 */
+	envKeys?: readonly EnvPullKey[];
 };
 
 export const command = "env";
@@ -56,7 +84,38 @@ export const builder = (argv: yargs.Argv) =>
 								"lines are preserved.",
 							type: "string",
 						},
+						service: servicesOption({
+							key: "service",
+							allowed: ENV_PULL_SERVICES,
+							describe: "Pull only these services' variables",
+							also:
+								"Overrides neon.ts, and prunes only within the services you name. " +
+								"Combines with --env as a union.",
+						}),
+						env: {
+							alias: "e",
+							describe:
+								`Pull only these individual variables: ${ENV_PULL_KEYS.join(", ")}. ` +
+								"Repeat the flag or comma-separate. Overrides neon.ts. Combines " +
+								"with --service as a union; it never narrows a service bundle.",
+							type: "array",
+							string: true,
+						},
 					})
+					.epilogue(
+						[
+							"",
+							"What gets pulled, in precedence order:",
+							"  1. --service / --env, when given — their union, ignoring neon.ts.",
+							"  2. neon.ts, when this directory has one.",
+							"  3. Otherwise everything the branch has, plus the AI Gateway —",
+							"     which mints a branch credential for it.",
+							"",
+							"The pull bundled into link / checkout / config apply follows 2 and 3",
+							"without the AI Gateway, so it never mints a credential you did not ask",
+							"for. Run `env pull` to add it.",
+						].join("\n"),
+					)
 					.example(
 						"$0 env pull",
 						"Write the linked branch's Neon vars into .env.local (or .env if present)",
@@ -64,13 +123,59 @@ export const builder = (argv: yargs.Argv) =>
 					.example(
 						"$0 env pull --branch preview --file .env.preview",
 						"Pull a specific branch into a specific file",
-					),
+					)
+					.example(
+						"$0 env pull -s ai-gateway -s postgres",
+						"Pull only the AI Gateway and Postgres variables",
+					)
+					.example(
+						"$0 env pull -e DATABASE_URL",
+						"Pull only the pooled Postgres connection string",
+					)
+					.example(
+						"$0 env pull -s auth -e DATABASE_URL",
+						"Pull all Auth variables plus DATABASE_URL",
+					)
+					.strict(),
 			async (args) => {
+				const rawServices = servicesFlagValue(args.service);
+				const rawEnvKeys = envPullFlagValue(args.env);
+				const services = rawServices
+					? parseServices(rawServices, {
+							allowed: ENV_PULL_SERVICES,
+							whyUnavailable: ENV_PULL_UNAVAILABLE,
+							flag: "--service",
+							onDeprecated: (used, canonical) =>
+								log.warning(
+									deprecatedServiceMessage(used, canonical),
+								),
+						})
+					: undefined;
+				const envKeys = rawEnvKeys
+					? parseEnvPullKeys(rawEnvKeys, "--env")
+					: undefined;
 				// Explicit `env pull` announces the branch it's reading from up front so the user
 				// can catch "pulled env from the wrong branch" before it overwrites their .env. The
 				// bundled auto-pull (link / checkout / apply) stays quiet — those already report the
 				// branch they pinned/applied to.
-				await pull(args as any, { announce: true });
+				//
+				// It also implies the AI Gateway when there is no neon.ts, so a bare `env pull`
+				// really does write everything the branch can give you. The bundled auto-pull does
+				// not: minting a credential for a service the user never named is not something a
+				// side effect of `link` / `checkout` / `apply` should do.
+				await pull(
+					{
+						...(args as any),
+						...(services ? { services } : {}),
+						...(envKeys ? { envKeys } : {}),
+					},
+					{
+						announce: true,
+						implyAiGateway:
+							rawServices === undefined &&
+							rawEnvKeys === undefined,
+					},
+				);
 			},
 		)
 		.demandCommand(1);
@@ -95,18 +200,13 @@ const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
  * writes them, never prunes them. The AI Gateway is emitted solely under its Neon-branded
  * vars (`NEON_AI_GATEWAY_*`), which are owned and pruned.
  */
-const NEON_OWNED_ENV_KEYS: readonly string[] = [
+const NEON_OWNED_ENV_KEYS: readonly EnvPullKey[] = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
 	...Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 ];
 
-/**
- * What an env pull actually did, so callers (notably `link --agent`) can report it precisely
- * instead of guessing. `written` lists the keys merged into `file`; `empty` means the branch
- * has no Neon vars to pull yet (no DATABASE_URL / Auth / Data API).
- */
 export type PullOutcome =
 	| {
 			status: "written";
@@ -117,14 +217,24 @@ export type PullOutcome =
 			 * AI Gateway. Absent otherwise — nothing else is credential-backed.
 			 */
 			credential?: CredentialOutcome;
+			/**
+			 * Services that were part of the pull but could not be reached, so the result is
+			 * not the complete set. Only the implied AI Gateway can land here — see
+			 * `resolveWithImpliedGateway`.
+			 */
+			skipped?: readonly NeonService[];
 	  }
 	| { status: "empty" };
 
 export const pull = async (
 	props: EnvPullProps,
-	opts: { announce?: boolean } = {},
+	opts: { announce?: boolean; implyAiGateway?: boolean } = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
+	const selectedKeys =
+		props.services !== undefined || props.envKeys !== undefined
+			? envKeysForSelection(props.services ?? [], props.envKeys ?? [])
+			: undefined;
 	const branch = await resolveBranchRef(props);
 	if (opts.announce) {
 		announceTargetBranch(props, branch, "Pulling env from branch");
@@ -142,17 +252,20 @@ export const pull = async (
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
-	const { vars, credential } = await resolveNeonEnvVars({
+	const { vars, credential, skipped } = await resolveNeonEnvVars({
 		cwd,
 		projectId: props.projectId,
 		branchId,
 		env: { ...process.env, ...existingEnv },
+		...(props.services ? { services: props.services } : {}),
+		...(props.envKeys ? { envKeys: props.envKeys } : {}),
+		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
-	const neonVars = pickNeonVars(vars);
+	const neonVars = pickSelectedVars(pickNeonVars(vars), selectedKeys);
 	if (Object.keys(neonVars).length === 0) {
 		log.info(
 			"No Neon env variables to pull for this branch (no DATABASE_URL or " +
@@ -165,7 +278,10 @@ export const pull = async (
 	// Neon-owned vars the branch no longer has (e.g. NEON_AUTH_* / NEON_DATA_API_* carried over
 	// from a previous project/branch). Non-Neon lines are always preserved.
 	const { written, removed } = mergeEnvFile(targetPath, neonVars, {
-		managedKeys: NEON_OWNED_ENV_KEYS,
+		managedKeys: managedKeysFor(
+			selectedKeys,
+			unreachedButCurrent(skipped, existingEnv, branchId),
+		),
 	});
 	log.info(
 		"Pulled %d Neon variable%s into %s: %s",
@@ -194,6 +310,19 @@ export const pull = async (
 			log.info(
 				"Revoked the credential it replaced (%s).",
 				credential.revoked.join(", "),
+			);
+		} else if (credential.superseded.length > 0) {
+			// An unscoped pull revokes what it supersedes and says so above. A scoped one
+			// cannot — it may not be the only service on that credential — so it leaves the
+			// old one live. Say that too, rather than letting the identical-looking output
+			// imply the branch is not accumulating credentials. Driven by what the resolver
+			// actually declined to revoke, so a first pull (which supersedes nothing) does
+			// not send the user hunting for a credential that was never there.
+			log.info(
+				"Left the credential it replaced live (%s): an explicitly scoped pull " +
+					"can't tell which other variables still use it. Revoke it in the Neon " +
+					"Console if nothing does.",
+				credential.superseded.join(", "),
 			);
 		}
 	}
@@ -226,7 +355,87 @@ export const pull = async (
 		written,
 		file: targetPath,
 		...(credential && credential.keys.length > 0 ? { credential } : {}),
+		...(skipped && skipped.length > 0 ? { skipped } : {}),
 	};
+};
+
+/**
+ * The keys this pull is allowed to prune, i.e. the ones it is authoritative for.
+ *
+ * An explicit selection narrows that to the service bundles and individual keys it named:
+ * `env pull -s ai-gateway` and `env pull -e NEON_AI_GATEWAY_TOKEN` both say nothing about
+ * `DATABASE_URL`. `unreached` is subtracted for the same reason — see
+ * {@link unreachedButCurrent}.
+ */
+const managedKeysFor = (
+	selectedKeys: readonly EnvPullKey[] | undefined,
+	unreached: readonly NeonService[],
+): string[] => {
+	const owned = selectedKeys
+		? NEON_OWNED_ENV_KEYS.filter((key) => selectedKeys.includes(key))
+		: [...NEON_OWNED_ENV_KEYS];
+	if (unreached.length === 0) return owned;
+	const keep = new Set(ownedEnvServiceKeys(unreached));
+	return owned.filter((key) => !keep.has(key));
+};
+
+/**
+ * Of the services this pull could not reach, the ones whose variables already on disk belong
+ * to the branch being pulled — the only ones worth keeping.
+ *
+ * Failing to reach a service is not evidence that the branch stopped having it:
+ * `PLATFORM_FEATURE_UNAVAILABLE` covers a transient incident as well as a project that
+ * genuinely lacks the feature, and pruning would delete a token whose secret exists nowhere
+ * else and strand the live credential behind it. But that only argues for keeping *this
+ * branch's* values. Variables left over from another branch are stale by definition, and
+ * keeping those would leave an app pointed at the wrong branch's gateway — a worse failure
+ * than losing a token, because it is silent.
+ *
+ * The gateway is the only service that can be unreached (only it is implied rather than
+ * observed), and its base URL is branch-scoped, so the persisted URL is what tells the two
+ * cases apart. Anything that does not resolve to this branch's gateway host is pruned, which
+ * is the safe direction: a stale entry costs a re-pull, a wrongly-kept one silently misroutes
+ * traffic.
+ */
+const unreachedButCurrent = (
+	skipped: readonly NeonService[] | undefined,
+	existingEnv: Record<string, string>,
+	branchId: string,
+): NeonService[] => {
+	if (!skipped?.includes("ai-gateway")) return [];
+	const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
+	return baseUrl !== undefined && isBranchGatewayUrl(baseUrl, branchId)
+		? ["ai-gateway"]
+		: [];
+};
+
+/**
+ * Whether a persisted `NEON_AI_GATEWAY_BASE_URL` addresses `branchId`'s gateway.
+ *
+ * Checks the parsed **hostname** against the shape `@neon/env` builds
+ * (`<branchId>-api.ai.<host suffix>`), not the raw string: a prefix comparison is satisfied
+ * by a URL whose userinfo carries the branch id (`https://<branchId>-api.ai.@other-host/`)
+ * while the request actually goes elsewhere. An unparseable value is not this branch's
+ * gateway either, which is an answer rather than a swallowed failure.
+ */
+const isBranchGatewayUrl = (baseUrl: string, branchId: string): boolean =>
+	URL.canParse(baseUrl) &&
+	new URL(baseUrl).hostname.startsWith(`${branchId}-api.ai.`);
+
+/**
+ * Narrow the resolved vars to the explicit service/key union. `fetchEnv` may resolve
+ * supporting values that were not selected (the direct connection URI derives the AI Gateway
+ * host, for example); those must not land in the target file.
+ */
+const pickSelectedVars = (
+	vars: Record<string, string>,
+	selectedKeys: readonly EnvPullKey[] | undefined,
+): Record<string, string> => {
+	if (!selectedKeys) return vars;
+	const wanted = new Set<string>(selectedKeys);
+	return Object.fromEntries(
+		Object.entries(vars).filter(([key]) => wanted.has(key)),
+	);
 };
 
 /**
@@ -246,8 +455,7 @@ export type AutoPullResult =
  * On by default; `--no-env-pull` opts out (e.g. when env is injected at runtime via
  * `neon-env run` / `neon dev`, or to keep secrets out of the working tree). The pin is the
  * command's primary effect and has already succeeded by the time this runs, so a pull failure
- * degrades to a warning rather than failing the command. Returns what happened so
- * `link --agent` can fold an accurate note into its JSON message.
+ * degrades to a warning rather than failing the command.
  */
 export const autoPullEnvAfterPin = async (
 	props: EnvPullProps & { envPull: boolean },
@@ -267,34 +475,6 @@ export const autoPullEnvAfterPin = async (
 			message,
 		);
 		return { status: "failed", message };
-	}
-};
-
-/**
- * Render the one-line env-pull note appended to `link --agent`'s JSON `message`, so an agent
- * reading the structured output knows whether its branch env is already on disk.
- */
-export const renderAgentPullNote = (result: AutoPullResult): string => {
-	switch (result.status) {
-		case "written": {
-			// Call out a re-issued credential: an agent that already wrote the old storage /
-			// gateway values somewhere else has to update them.
-			const credential = result.credential?.issued
-				? ` Issued a new branch credential, so ${result.credential.keys.join(", ")} changed.`
-				: "";
-			return ` Pulled ${result.written.length} Neon env var${
-				result.written.length === 1 ? "" : "s"
-			} into ${result.file}.${credential}`;
-		}
-		case "empty":
-			return " No Neon env vars to pull for this branch yet.";
-		case "skipped":
-			return (
-				` Skipped env pull (--no-env-pull); run \`${getCliName()} env pull\` later, ` +
-				"or inject env at runtime with `neon-env run -- <your dev command>`."
-			);
-		case "failed":
-			return ` Could not pull env vars (${result.message}); run \`${getCliName()} env pull\` once resolved.`;
 	}
 };
 

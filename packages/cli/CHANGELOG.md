@@ -1,5 +1,329 @@
 # neon
 
+## 4.13.1
+
+### Patch Changes
+
+- `neon ask` sends `x-neon-source: cli` on POST `/ask`.
+
+## 4.13.0
+
+### Minor Changes
+
+- dab4540: Add `neon ask --prompt` to ask the hosted Neon assistant about Neon, with no login. A TTY shows a spinner, then streams the reply. CLI analytics includes that prompt text.
+
+## 4.12.0
+
+### Minor Changes
+
+- 59a05ea: Add a per-function `bundler` option so a function's `source` can be shipped without esbuild.
+
+  `neon.ts` functions accept `bundler`, defaulting to `"esbuild"`. A directory source is bundled from the first of `index.ts`, `index.js`, `index.mjs`. Set `"none"` to zip a prebuilt directory (or a single `index.mjs` / `index.js` file) as-is. `neon function deploy --no-bundle` is the CLI form. An inline `(fn) => Promise<FunctionBundle>` returns a file map. `externalPackages` remains esbuild-only.
+
+### Patch Changes
+
+- Updated dependencies [59a05ea]
+  - @neon/config@1.1.0
+  - @neon/config-runtime@1.1.0
+
+## 4.11.1
+
+### Patch Changes
+
+- 4ddfe65: `neon skill` and `neon plugin` are aliases of `neon skills` and `neon plugins`.
+
+## 4.11.0
+
+### Minor Changes
+
+- 2e7c936: `neon init -y` / `neon bootstrap --default`, `neon skills -y`, `neon plugins -y`, and `neon mcp -y` install into detected agents: project folders (or installed apps with `--global` / default `mcp -y`), else the host CLI agent. `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap` names coding agents and skips agent selection. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. If `skills` / `plugins` / `mcp` `-y` finds none, the command names `--agent`. `link` has no `--agent`.
+
+## 4.10.2
+
+### Patch Changes
+
+- 19b64a8: Group the top-level `neon init` and `neon bootstrap` setup questions before running the selected steps. Install dependencies last unless `neon.ts` must be evaluated for linking. Restore the NEON banner, remove `claimable-postgres` from skill selection, and print a completion summary.
+
+## 4.10.1
+
+### Patch Changes
+
+- 7c6ec56: Rank `inspect db stalled-queries` by the oldest query group first.
+
+## 4.10.0
+
+### Minor Changes
+
+- 33aac59: `neon api <path> --describe` prints the OpenAPI request shape for a route. Body field names are dotted for `-F`.
+
+## 4.9.0
+
+### Minor Changes
+
+- 64d0333: `projects create` and `branches create` accept `--no-secrets` to omit connection URIs from command output.
+
+## 4.8.0
+
+### Minor Changes
+
+- 599c69c: `neon link --project-id` pins the project's only branch. Several branches prompt in a TTY, pin the default with `-y`, or stay unpinned for `neon checkout`.
+- 53b2e72: `neon init` in an empty directory is `neon bootstrap` (scaffold, agent tooling, link). In an existing app it installs a plugin or skills+MCP, links, then writes neon.ts. `neon bootstrap` offers the same agent tooling after scaffolding; `--default` also runs `link --yes`.
+
+## 4.7.1
+
+### Patch Changes
+
+- Updated dependencies [4211669]
+  - @neon/sdk@3.0.0
+  - @neon/config@1.0.5
+  - @neon/config-runtime@1.0.5
+
+## 4.7.0
+
+### Minor Changes
+
+- 9530c77: `neon link --agent` is removed. List orgs with `orgs list --output json` and projects with `projects list --org-id <org-id> --output json`. Link with `--project-id`, or create with `--org-id --project-name --region-id`.
+
+## 4.6.0
+
+### Minor Changes
+
+- e6a4174: `neon bootstrap --agent` is removed. List templates with `--list-templates --output json` (or yaml). Scaffold with `--template` or `--default`.
+
+## 4.5.2
+
+### Patch Changes
+
+- e869e9e: `neon skills --help`, `neon mcp --help`, and `neon plugins --help` list supported agents and the install catalogs: skill ids with source repos, the `neon-postgres` plugin contents, and the MCP server URL plus `neon mcp -y` defaults.
+
+## 4.5.1
+
+### Patch Changes
+
+- Updated dependencies [9b322e7]
+  - @neon/sdk@2.3.0
+  - @neon/config@1.0.4
+  - @neon/config-runtime@1.0.4
+
+## 4.5.0
+
+### Minor Changes
+
+- 512baf3: Add `neon claim` and its `claimable` alias for creating, using, claiming, listing, and deleting temporary Claimable Neon projects without an account. `status`, `accept`, and `delete` take an optional project id from `claim list`. `list` prints `state` from the assertion clock and the project expiry, and `delete` drops a local record after the identity assertion expires. `create` prints CLI service names and `project_expires_at`.
+
+  Recognize Claimable Neon capability errors in Config-as-Code so unavailable pre-claim services keep their actionable claim guidance instead of being reported as API-key failures.
+
+### Patch Changes
+
+- Updated dependencies [512baf3]
+  - @neon/config@1.0.3
+  - @neon/config-runtime@1.0.3
+
+## 4.4.0
+
+### Minor Changes
+
+- bdb0db6: Add `neon plugins` to install the Neon agent plugin into coding agents. A TTY asks agents, then confirms. `-y` installs into detected agents at project scope. `--agent` names specific agents. `--global` is user scope.
+
+### Patch Changes
+
+- Attribute CLI telemetry to Claude Code and Codex command trees.
+
+## 4.3.1
+
+### Patch Changes
+
+- 894b427: `neon mcp` mints a project-scoped API key when `--project-id` is set or a linked project is pinned, instead of an account-wide key.
+
+## 4.3.0
+
+### Minor Changes
+
+- eb52252: Add `neon skills` to install Neon agent skills into coding agents. A TTY asks agents and skills, then confirms. `-y` installs the default skills into detected agents in this directory. `--skill` names specific skills. `--global` is user-level. `neon skills update` refreshes installed skills.
+
+## 4.2.1
+
+### Patch Changes
+
+- 9c5ecf5: List commands print every populated column at full width on one line per row. A narrow terminal wraps the line instead of dropping or truncating columns. `neon branches list` and `neon snapshots list` show Expires At before Created At, including on get and create. `neon projects list --recoverable-only` shows Recoverable Until before Deleted At.
+
+## 4.2.0
+
+### Minor Changes
+
+- 55f4bf2: Add `neon mcp` to install the Neon MCP server into coding agents. A TTY asks config location (global default), agents, API key vs OAuth, then confirms. Linked project-folder installs also ask whether to pin tools to that project. `-y` is global, detected agents, minted write API key. `--project` is config location only. `--read-only`, `--project-id` and `--category` set MCP URL query params. The minted key is always account-wide.
+
+## 4.1.0
+
+### Minor Changes
+
+- 6ff43d7: Add `neon inspect db stalled-queries`, a read-only snapshot of active queries running longer than 30 seconds. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` includes the full row.
+
+## 4.0.0
+
+### Major Changes
+
+- d606a2e: `neon neon-auth config email-provider test` now sends through the custom SMTP provider saved on the branch. Only `--recipient-email` is accepted; `--host`, `--port`, `--username`, `--password`, `--sender-email`, and `--sender-name` are rejected. Save the provider first with `neon neon-auth config email-provider update --type standard`.
+
+## 3.6.1
+
+### Patch Changes
+
+- Updated dependencies [93b93dc]
+  - @neon/sdk@2.2.0
+  - @neon/config@1.0.2
+  - @neon/config-runtime@1.0.2
+
+## 3.6.0
+
+### Minor Changes
+
+- 23740cd: `neon` list and get commands no longer draw box-drawing tables. Default output is space-padded columns that drop and truncate to the terminal width, or stacked `Label  value` lines for a single object. `--output json` and `--output yaml` keep the same fields; `neon profile list` reports OAuth scope as `account` in every format.
+- e78f193: `neon init` honors `--profile` and `NEON_PROFILE`. `npx neon` subprocesses and agent-emitted commands include `--profile <name>` when a profile was named, and `--config-dir` when you passed it.
+
+## 3.5.1
+
+### Patch Changes
+
+- Updated dependencies [5c57d00]
+  - @neon/sdk@2.1.0
+  - @neon/config@1.0.1
+  - @neon/config-runtime@1.0.1
+
+## 3.5.0
+
+### Minor Changes
+
+- 745c267: `neon init` installs the Neon MCP server through add-mcp's library and offers every agent add-mcp supports. Skills still use a fixed map from those agent ids; agents with no skills CLI id are skipped instead of falling back to Cursor.
+
+## 3.4.0
+
+### Minor Changes
+
+- 5abe208: `neon inspect db` without `--database-name` now runs each database-scoped check against every database the API lists for the branch and adds a `database` column, including on a branch that has only one database. That column is new on the default invocation. Compute-wide checks still run once and keep their previous columns. Pass `--database-name` to keep the previous columns on a database-scoped check. `locks` and `long-running-queries` also report only the database you name with the flag; they previously listed sessions from every database, and `locks` printed an empty or wrong relation name for those foreign rows.
+
+## 3.3.0
+
+### Minor Changes
+
+- 0b37ad5: Opt-in OS keyring storage for a CLI profile via a `"keyring"` pointer in `profiles.json`. `neon profile create` no longer takes `--force`: creating an existing name replaces it and revokes the credential it held.
+
+## 3.2.2
+
+### Patch Changes
+
+- e8715cd: `neon init --agent` labels the CLI install step `neon`, and the README says init installs `neon` globally. `npm i -g neon` only puts `neon` on PATH.
+
+## 3.2.1
+
+### Patch Changes
+
+- ad7cf9a: `neon init` now detects and installs the `neon` CLI instead of the retired `neonctl` alias. Version probing checks `neon` first (falling back to `neonctl` so an existing global install still counts as installed), the update check reads `npm view neon`, and auth/context lookups shell out to `neon`.
+
+## 3.2.0
+
+### Minor Changes
+
+- 998728b: Add `neon open` to open the project linked in `.neon` in the Neon Console.
+
+## 3.1.1
+
+### Patch Changes
+
+- 7bb17a9: Add exact environment-variable selection to `neon env pull`, and scope `fetchEnv({ keys })` work to the selected variables. Literal key lists autocomplete and narrow exactly, runtime-built lists return safely optional fields, and storage credential halves must be selected together. Pre-bound untyped key arrays that previously fell through to the full-env overload now fail type checking instead of promising unselected values.
+
+## 3.1.0
+
+### Minor Changes
+
+- 5305087: Add `neon logs query`, `neon logs fields` and `neon logs field-values <field>` for reading the logs a branch's functions, object storage and Postgres computes emit. Requires Neon Platform Beta, and is currently available only for projects in `aws-us-east-2`.
+
+### Patch Changes
+
+- 9f51632: Install and tool commands now use your project's package manager everywhere, not just in `neon config init`
+
+  `neon bootstrap` and the `neon init` getting-started and migration steps told agents to run `npm install`, `npm install @neondatabase/serverless`, and `npm install -D prisma` regardless of the project's lockfile — which fails outright in a pnpm project, where npm's resolver chokes on the symlinked `node_modules`. They now emit the command for the manager the project actually uses (`pnpm add -D prisma`, `bun add -D drizzle-kit`, and so on).
+
+  The tools those steps then run follow the project too: `pnpm exec drizzle-kit migrate` and `bun run prisma generate` rather than `npx`. These are local-only forms, so a step that runs before its dependencies are installed now fails instead of silently downloading an unpinned copy of the tool.
+
+  The global `neonctl` and `skills` installs follow the package manager that invoked the CLI instead of always using npm, and report clearly when the machine has no way to install a CLI globally.
+
+## 3.0.0
+
+### Major Changes
+
+- 3cb16e1: Stage the real files of a function's `externalPackages` into the deployed archive, so a
+  package backed by a native binary works on Functions instead of failing at invoke. Each
+  declared package is installed for the runtime target (linux-arm64, glibc) into a throwaway
+  directory, traced for the files it actually reaches, and copied under `node_modules/` with
+  its directory layout preserved. The user's own `node_modules` is never read for those files
+  or modified.
+
+  An entry with `includeFiles: false` is externalized and nothing is staged for it, which is
+  the pre-existing behaviour. A function whose entries all opt out — or which declares none —
+  produces a byte-identical archive to before.
+
+  Deploys and `neon dev` now report a package that was bundled in, carries native code, and
+  was never declared. The report is advisory and never fails a deploy: the evidence shows the
+  package contains compiled code, not that this function reaches it, and a package with a
+  working JavaScript fallback looks identical.
+
+  Fixes version pinning for packages whose `exports` map does not list `./package.json`.
+  `sharp` is one, so the version the user had installed was never read and the registry's
+  latest was staged instead. Versions are now read from the package directory rather than
+  through the resolver, and a package whose version still cannot be determined is reported
+  instead of being staged silently.
+
+- 98c4aec: Deep imports under `neon/dist/_shared/` no longer resolve. That directory holds source compiled in
+  from the repo's shared trees — credential reading, and the branch-credential mint/revoke logic —
+  which the `./dist/*` wildcard made importable by accident. `neon/dist/_shared/credentials.js` was
+  reachable before this change. Everything else under `neon/dist/` is unaffected, and none of it was
+  ever a supported surface: the CLI's entry points are the `neon` binary, `neon` and `neon/cli`.
+
+### Patch Changes
+
+- 98c4aec: **Breaking (`@neon/env`): the `@neon/env/runtime` entry point is removed.** It held
+  `fetchEnvReusingSecrets`, which reads an env source and can mint and revoke branch credentials.
+  Its only consumers were Neon's own CLIs, and a library that revokes your credentials because you
+  imported it is one you cannot safely embed — so it is now internal shared source rather than a
+  published path. If you were importing it, use the `neon` CLI (`neon env pull`, `neon dev`), which does this for you. Rolling your own is possible but the hard part is not storing the secret — it is **verifying** it: a persisted secret is only reusable if it still names a live credential on that branch, unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder, which is the bug 0.12.0 shipped a fix for. `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces.
+
+  Everything else is unchanged: `fetchEnv`, `parseEnv`, `toEntries` and `NEON_ENV_VAR_KEYS` stay on
+  `@neon/env` with the same signatures, and the `neon-env` binary is unaffected.
+
+- 4497de8: Refreshed `--help` text for project, branch, endpoint, and database flags from the current Neon OpenAPI spec. Several descriptions that rendered as empty now have text, and the scale-to-zero, history-retention, and provisioner flags describe their plan limits.
+- Updated dependencies [3cb16e1]
+- Updated dependencies [4497de8]
+- Updated dependencies [35299c4]
+  - @neon/config-runtime@1.0.0
+  - @neon/sdk@2.0.0
+  - @neon/config@1.0.0
+
+## 2.47.0
+
+### Minor Changes
+
+- 6f8ba4d: `neon env pull` now pulls the AI Gateway variables (`NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL`) when the working directory has no `neon.ts`, so a bare pull writes everything the branch can give you. A `neon.ts` still decides on its own, and the pull bundled into `link` / `checkout` / `config apply` is unchanged.
+
+  New `--service` flag scopes a pull to `postgres`, `auth`, `data-api`, `object-storage`, and/or `ai-gateway`, overriding `neon.ts`. A scoped pull writes and prunes only within the services you name, so `neon env pull -s ai-gateway` leaves your `DATABASE_URL` alone.
+
+  `neon dev` resolves the same set by the same rules, so a function running locally gets what the deployed runtime would inject — including the AI Gateway on a branch with no `neon.ts`. It also reads your `.env` / `.env.local` now to reuse the branch credential behind the AI Gateway and object storage, instead of minting one on every start.
+
+  Every services flag in the CLI now shares one vocabulary and one syntax: `-s`, `--service` and `--services` are interchangeable, values can be repeated or comma-separated, and a service is spelled the same way on every command. That renames `neon config init --services storage` to `object-storage`; the old spelling still works and warns.
+
+  `fetchEnvReusingSecrets` (`@neon/env/runtime`) takes a new `revokeSuperseded` option. It defaults to `true`, the existing behaviour. Pass `false` when the call resolves only part of what a branch has: object storage and the AI Gateway share one credential, so revoking the one your persisted secrets name can break a service the call is not rewriting. The credential it then leaves live is reported as `credential.superseded`, the counterpart to the existing `credential.revoked`.
+
+### Patch Changes
+
+- 47e6728: Install the config packages with the package manager the project actually uses
+
+  `neon config init` (and the `neon link` prompt that runs it) picked a package manager from `npm_config_user_agent` alone, which is empty for a globally installed `neon`. It then fell back to the first manager on `PATH`, effectively always npm — so setting up a pnpm, yarn, or bun project shelled out to `npm install`. In a pnpm project that fails outright: npm's dependency resolver chokes on pnpm's symlinked `node_modules` with `Cannot read properties of null (reading 'matches')`. The install leaves a `neon.ts` whose `@neon/config/v1` import can't resolve, so the env pull that follows fails too.
+
+  `resolvePackageManager` now reads the project's lockfile first, from the target directory and its parents up to the repo root — so a package in a monorepo finds the root lockfile, while a stray lockfile above the repository is ignored. A project with no lockfile falls back to the previous behaviour unchanged.
+
+- Updated dependencies [6f8ba4d]
+  - @neon/env@0.15.0
+
 ## 2.46.0
 
 ### Minor Changes

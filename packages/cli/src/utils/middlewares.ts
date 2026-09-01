@@ -1,4 +1,17 @@
-import { recordCredentialInputs } from "../_shared/auth_selection.js";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
+
+/**
+ * Forwarding Yargs's default would turn ambient configuration into an explicit child override.
+ */
+function configDirFromArgv(parsed: unknown): string {
+	const passed = process.argv.some(
+		(arg) => arg === "--config-dir" || arg.startsWith("--config-dir="),
+	);
+	if (!passed || typeof parsed !== "string") {
+		return "";
+	}
+	return parsed;
+}
 
 /**
  * Resolves `--api-key` from `NEON_API_KEY` when the flag is absent, leaving it an
@@ -21,6 +34,8 @@ export const resolveApiKeyFromEnv = (args: Record<string, unknown>) => {
 		apiKeyFlag: fromFlag,
 		apiKeyEnv: fromEnv,
 		profileEnv: process.env.NEON_PROFILE ?? "",
+		profileFlag: typeof args.profile === "string" ? args.profile : "",
+		configDir: configDirFromArgv(args.configDir),
 	});
 	if (fromFlag !== "") {
 		return;
@@ -41,6 +56,9 @@ export const fillInArgs = (
 ) => {
 	Object.entries(currentArgs).forEach(([k, v]) => {
 		if (k === "_" || k === "--") {
+			return;
+		}
+		if (Array.isArray(v)) {
 			return;
 		}
 		// check if the value is an Object

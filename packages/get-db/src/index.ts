@@ -1,6 +1,5 @@
 /**
- * @deprecated This package has been renamed to "neon-new".
- * Please update your imports: import { instantPostgres } from 'neon-new/sdk'
+ * @deprecated Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`.
  */
 
 // Re-export everything from the lib module

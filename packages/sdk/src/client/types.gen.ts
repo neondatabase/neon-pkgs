@@ -6,18 +6,6 @@ export type ClientOptions = {
 
 export type ComputeUnit = number;
 
-/**
- * The Neon compute provisioner.
- * Specify the `k8s-neonvm` provisioner to create a compute endpoint that supports Autoscaling.
- *
- * Provisioner can be one of the following values:
- * * k8s-pod
- * * k8s-neonvm
- * * serverless-platform
- *
- * Clients must expect, that any string value that is not documented in the description above should be treated as a error. UNKNOWN value if safe to treat as an error too.
- *
- */
 export type Provisioner = string;
 
 export type PaginationResponse = {
@@ -25,12 +13,12 @@ export type PaginationResponse = {
 };
 
 /**
- * Cursor based pagination is used. The user must pass the cursor as is to the backend.
- * For more information about cursor based pagination, see
- * https://learn.microsoft.com/en-us/ef/core/querying/pagination#keyset-pagination
- *
+ * Cursor-based pagination. The `cursor` value reflects the endpoint's sort field (for example, an ID or timestamp), so pass it back unchanged.
  */
 export type Pagination = {
+    /**
+     * Cursor marking the last item in this response. Pass it unchanged as the `cursor` query parameter to fetch the next page.
+     */
     cursor: string;
 };
 
@@ -42,6 +30,9 @@ export type EmptyResponse = {
 };
 
 export type PlanDetails = {
+    /**
+     * Plan name, for example `free`, `launch`, or `scale`.
+     */
     name: string;
     version?: PlanVersion;
 };
@@ -56,7 +47,7 @@ export type PlanVersion = {
  */
 export type AddProjectJwksRequest = {
     /**
-     * The URL that lists the JWKS
+     * URL of the provider's JWKS endpoint used to verify JWTs.
      */
     jwks_url: string;
     /**
@@ -64,40 +55,40 @@ export type AddProjectJwksRequest = {
      */
     provider_name: string;
     /**
-     * Branch ID
+     * The Neon branch ID. Returned as `id` from `GET /projects/{project_id}/branches`.
      */
     branch_id?: string;
     /**
-     * The name of the required JWT Audience to be used
+     * Expected `aud` claim in incoming JWTs. When set, tokens with a different audience are rejected; tokens with no audience are still accepted. Omit to skip audience validation.
      */
     jwt_audience?: string;
     /**
-     * DEPRECATED. This field should only be used when using Neon RLS. The roles the JWKS should be mapped to. By default, the JWKS is mapped to the `authenticator`, `authenticated` and `anonymous` roles.
+     * Deprecated. The roles the JWKS should be mapped to. By default, the JWKS is mapped to the `authenticator`, `authenticated`, and `anonymous` roles.
      *
      * @deprecated
      */
     role_names?: Array<string>;
     /**
-     * DEPRECATED. This field should only be used when using Neon RLS. If true, the role creation will be skipped.
+     * Deprecated. Only used with Neon RLS. If true, role creation is skipped.
      */
     skip_role_creation?: boolean;
 };
 
 export type Jwks = {
     /**
-     * JWKS ID
+     * The JWKS configuration's ID.
      */
     id: string;
     /**
-     * Project ID
+     * The Neon project ID. Returned as `id` from `GET /projects`.
      */
     project_id: string;
     /**
-     * Branch ID
+     * The Neon branch ID. Returned as `id` from `GET /projects/{project_id}/branches`.
      */
     branch_id?: string;
     /**
-     * The URL that lists the JWKS
+     * URL of the provider's JWKS endpoint used to verify JWTs.
      */
     jwks_url: string;
     /**
@@ -113,9 +104,12 @@ export type Jwks = {
      */
     updated_at: string;
     /**
-     * The name of the required JWT Audience to be used
+     * Expected JWT `aud` claim value configured for this JWKS.
      */
     jwt_audience?: string;
+    /**
+     * Database role names that are permitted to authenticate using this JWKS configuration.
+     */
     role_names?: Array<string>;
 };
 
@@ -123,6 +117,9 @@ export type Jwks = {
  * The list of configured JWKS definitions for a project
  */
 export type ProjectJwksResponse = {
+    /**
+     * JWKS configurations associated with the project.
+     */
     jwks: Array<Jwks>;
 };
 
@@ -192,7 +189,7 @@ export type OrgApiKeyCreateRequest = ApiKeyCreateRequest & {
 
 export type ApiKeyCreateResponse = {
     /**
-     * The API key ID
+     * The API key's unique numeric ID. Distinct from the API key token (`key`).
      */
     id: number;
     /**
@@ -222,7 +219,7 @@ export type OrgApiKeyCreateResponse = ApiKeyCreateResponse & {
 
 export type ApiKeyRevokeResponse = {
     /**
-     * The API key ID
+     * The API key's unique numeric ID. Distinct from the API key token (`key`).
      */
     id: number;
     /**
@@ -260,7 +257,7 @@ export type OrgApiKeyRevokeResponse = ApiKeyRevokeResponse & {
 
 export type ApiKeysListResponseItem = {
     /**
-     * The API key ID
+     * The API key's unique numeric ID. Distinct from the API key token (`key`).
      */
     id: number;
     /**
@@ -298,7 +295,7 @@ export type ApiKeyCreatorData = {
      */
     id: string;
     /**
-     * The name of the user.
+     * Display name of the user who created the API key.
      */
     name: string;
     /**
@@ -307,27 +304,30 @@ export type ApiKeyCreatorData = {
     image: string;
 };
 
+/**
+ * An asynchronous action Neon performs on your resources (for example, starting a compute or creating a branch). Fields such as `action`, `status`, and `total_duration_ms` describe the operation and its progress.
+ */
 export type Operation = {
     /**
      * The operation ID
      */
     id: string;
     /**
-     * The Neon project ID
+     * The ID of the project this operation ran on.
      */
     project_id: string;
     /**
-     * The branch ID
+     * The ID of the branch this operation ran on.
      */
     branch_id?: string;
     /**
-     * The endpoint ID
+     * The ID of the compute endpoint this operation ran on.
      */
     endpoint_id?: string;
     action: OperationAction;
     status: OperationStatus;
     /**
-     * The error that occurred
+     * Human-readable message describing why the operation failed.
      */
     error?: string;
     /**
@@ -366,17 +366,17 @@ export type OperationsResponse = {
 export type OperationAction = 'create_compute' | 'create_timeline' | 'start_compute' | 'suspend_compute' | 'apply_config' | 'check_availability' | 'delete_timeline' | 'create_branch' | 'import_data' | 'tenant_ignore' | 'tenant_attach' | 'tenant_detach' | 'tenant_detach_safekeepers' | 'tenant_attach_safekeepers' | 'tenant_reattach' | 'replace_safekeeper' | 'disable_maintenance' | 'apply_storage_config' | 'prepare_secondary_pageserver' | 'switch_pageserver' | 'detach_parent_branch' | 'timeline_archive' | 'timeline_unarchive' | 'start_reserved_compute' | 'sync_dbs_and_roles_from_compute' | 'apply_schema_from_branch' | 'timeline_mark_invisible' | 'timeline_update_protected_config' | 'prewarm_replica' | 'promote_replica' | 'set_storage_non_dirty' | 'swap_binding_id' | 'finalize_migration' | 'mark_migration_prepared' | 'update_catalog' | 'epc_sync';
 
 /**
- * The status of the operation
+ * Lifecycle state of the operation. `scheduling`: queued, not yet started. `running`: actively executing. `finished`: completed successfully. `failed`: ended with a failure. `error`: ended with a terminal error. `cancelling`: cancellation requested but not yet complete. `cancelled`: stopped before completion. `skipped`: bypassed without executing.
  */
 export type OperationStatus = 'scheduling' | 'running' | 'finished' | 'failed' | 'error' | 'cancelling' | 'cancelled' | 'skipped';
 
 /**
- * Essential data about the project. Full data is available at the getProject endpoint.
+ * Essential data about the project. Full data is available at `GET /projects/{project_id}`.
  *
  */
 export type ProjectListItem = {
     /**
-     * The project ID
+     * The Neon project ID. Use as the `project_id` path parameter in other endpoints.
      */
     id: string;
     /**
@@ -385,7 +385,7 @@ export type ProjectListItem = {
      */
     platform_id: string;
     /**
-     * The region identifier
+     * Cloud region where the project's Postgres compute and storage reside (for example, `aws-us-east-2`). Valid values are returned by `GET /regions`.
      *
      */
     region_id: string;
@@ -424,7 +424,7 @@ export type ProjectListItem = {
      */
     active_time: number;
     /**
-     * DEPRECATED. Use data from the getProject endpoint instead.
+     * Deprecated. Use `compute_time_seconds` from `GET /projects/{project_id}` instead.
      *
      *
      * @deprecated
@@ -451,18 +451,20 @@ export type ProjectListItem = {
      */
     updated_at: string;
     /**
-     * The current space occupied by the project in storage, in bytes. Synthetic storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.
+     * The current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.
      *
      */
     synthetic_storage_size?: number;
     /**
-     * DEPRECATED. Use `consumption_period_end` from the getProject endpoint instead.
-     * A timestamp indicating when the project quota resets
+     * Deprecated. Use `consumption_period_end` from `GET /projects/{project_id}` instead. A timestamp indicating when the project quota resets.
      *
      *
      * @deprecated
      */
     quota_reset_at?: string;
+    /**
+     * ID of the organization that owns the project.
+     */
     owner_id: string;
     /**
      * The most recent time when any endpoint of this project was active.
@@ -472,14 +474,12 @@ export type ProjectListItem = {
      */
     compute_last_active_at?: string;
     /**
-     * Organization id if the project belongs to an organization.
-     * Permissions for the project will be given to organization members as defined by the organization admins.
-     * The permissions of the project do not depend on the user that created the project if a project belongs to an organization.
+     * ID of the organization that owns the project. Project permissions are granted to organization members as configured by the organization's admins, independent of which member created the project.
      *
      */
     org_id?: string;
     /**
-     * Organization name if the project belongs to an organization.
+     * Name of the organization that owns the project.
      *
      */
     org_name?: string;
@@ -505,7 +505,7 @@ export type ProjectListItem = {
 
 export type Project = {
     /**
-     * Bytes-Hour. Project consumed that much storage hourly during the billing period. The value has some lag.
+     * Bytes-Hour. Project consumed that much Postgres storage hourly during the billing period. The value has some lag.
      * The value is reset at the beginning of each billing period.
      *
      */
@@ -517,7 +517,7 @@ export type Project = {
      */
     data_transfer_bytes: number;
     /**
-     * Bytes. Amount of WAL that travelled through storage for given project across all branches.
+     * Bytes. Amount of WAL that travelled through Postgres storage for given project across all branches.
      * The value has some lag. The value is reset at the beginning of each billing period.
      *
      */
@@ -539,14 +539,14 @@ export type Project = {
      */
     active_time_seconds: number;
     /**
-     * DEPRECATED, use compute_time instead.
+     * Deprecated. Use `compute_time_seconds` instead.
      *
      *
      * @deprecated
      */
     cpu_used_sec: number;
     /**
-     * The project ID
+     * The Neon project ID. Use as the `project_id` path parameter in other endpoints.
      */
     id: string;
     /**
@@ -555,7 +555,7 @@ export type Project = {
      */
     platform_id: string;
     /**
-     * The region identifier
+     * Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`). Valid values are returned by `GET /regions`.
      *
      */
     region_id: string;
@@ -614,7 +614,7 @@ export type Project = {
      */
     updated_at: string;
     /**
-     * The current space occupied by the project in storage, in bytes. Synthetic storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.
+     * The current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.
      *
      */
     synthetic_storage_size?: number;
@@ -629,13 +629,15 @@ export type Project = {
      */
     consumption_period_end: string;
     /**
-     * DEPRECATED. Use `consumption_period_end` from the getProject endpoint instead.
-     * A timestamp indicating when the project quota resets.
+     * Deprecated. Use the `consumption_period_end` field instead. A timestamp indicating when the project quota resets.
      *
      *
      * @deprecated
      */
     quota_reset_at?: string;
+    /**
+     * ID of the organization that owns the project.
+     */
     owner_id: string;
     owner?: ProjectOwnerData;
     /**
@@ -645,6 +647,9 @@ export type Project = {
      *
      */
     compute_last_active_at?: string;
+    /**
+     * The Neon organization ID. Returned as `id` from `GET /users/me/organizations`.
+     */
     org_id?: string;
     /**
      * A timestamp indicating when project update begins. If set, computes might experience a brief restart around this time.
@@ -659,12 +664,18 @@ export type Project = {
 };
 
 export type ProjectCreateRequest = {
+    /**
+     * Configuration for the new project, including name, region, and Postgres compute and storage settings.
+     */
     project: {
         settings?: ProjectSettingsData;
         /**
          * The project name. If not specified, the name will be identical to the generated project ID
          */
         name?: string;
+        /**
+         * Configuration for the initial branch created with the project.
+         */
         branch?: {
             /**
              * The default branch name. If not specified, the default branch name, `main`, will be used.
@@ -699,14 +710,12 @@ export type ProjectCreateRequest = {
          */
         store_passwords?: boolean;
         /**
-         * The number of seconds to retain the shared history for all branches in this project.
-         * The default is 1 day (86400 seconds).
+         * History window (point-in-time restore range) for all branches, in seconds. `0` disables it. Default 1 day (Free: 6 hours). Maximum depends on plan: Free 6 hours (21600), Launch 7 days (604800), Scale 30 days (2592000).
          *
          */
         history_retention_seconds?: number;
         /**
-         * Organization id in case the project created belongs to an organization.
-         * If not present, project is owned by a user and not by org.
+         * ID of the organization that will own the project. If omitted when using an organization API key, it is inferred from the key.
          *
          */
         org_id?: string;
@@ -722,8 +731,7 @@ export type ProjectUpdateRequest = {
         name?: string;
         default_endpoint_settings?: DefaultEndpointSettings;
         /**
-         * The number of seconds to retain the shared history for all branches in this project.
-         * The default is 1 day (604800 seconds).
+         * History window (point-in-time restore range) for all branches, in seconds. `0` disables it. Default 1 day (Free: 6 hours). Maximum depends on plan: Free 6 hours (21600), Launch 7 days (604800), Scale 30 days (2592000).
          *
          */
         history_retention_seconds?: number;
@@ -750,6 +758,9 @@ export type ProjectTransferRequestResponse = {
 };
 
 export type AcceptProjectTransferRequestSatisfiesPlanError = {
+    /**
+     * List of reasons why the target account's plan cannot satisfy the transfer requirements. Each item contains a `code` identifying the constraint and a `message` with a human-readable explanation.
+     */
     reasons: Array<{
         /**
          * Description of why the plan is not satisfied
@@ -787,6 +798,9 @@ export type ProjectSettingsData = {
      */
     block_vpc_connections?: boolean;
     audit_log_level?: ProjectAuditLogLevel;
+    /**
+     * Enables HIPAA compliance mode for the project, including audit logging.
+     */
     hipaa?: boolean;
     preload_libraries?: PreloadLibraries;
 };
@@ -798,6 +812,9 @@ export type ProjectResponse = {
 export type ProjectRecoverResponse = ProjectResponse & BranchesResponse;
 
 export type ProjectsResponse = {
+    /**
+     * List of projects accessible to the caller. Projects that exist but could not be retrieved are identified in `unavailable_project_ids`.
+     */
     projects: Array<ProjectListItem>;
     /**
      * A list of project IDs indicating which projects are known to exist, but whose details could not
@@ -808,9 +825,21 @@ export type ProjectsResponse = {
 };
 
 export type ProjectPermission = {
+    /**
+     * The project permission's ID.
+     */
     id: string;
+    /**
+     * Email address of the user who has been granted access to the project.
+     */
     granted_to_email: string;
+    /**
+     * Timestamp when the permission was granted.
+     */
     granted_at: string;
+    /**
+     * Timestamp when the permission was revoked. Null if the permission is still active.
+     */
     revoked_at?: string;
 };
 
@@ -819,8 +848,18 @@ export type ProjectPermissions = {
 };
 
 export type GrantPermissionToProjectRequest = {
+    /**
+     * Email address of the user to grant project access to.
+     */
     email: string;
 };
+
+/**
+ * Per-project role. `viewer` maps to `VIEWER`, `editor` maps to `EDITOR`,
+ * and `admin` maps to `ADMIN`.
+ *
+ */
+export type ProjectRole = 'viewer' | 'editor' | 'admin';
 
 /**
  * The caller's effective permission for a project when
@@ -832,43 +871,136 @@ export type GrantPermissionToProjectRequest = {
  */
 export type ProjectPermissionLevel = 'VIEWER' | 'EDITOR' | 'ADMIN';
 
+/**
+ * How a member's project access is granted.
+ *
+ */
+export type ProjectMemberGrantSource = 'explicit' | 'org_role_default' | 'org_admin_override' | 'unassigned';
+
+/**
+ * Organization-level role used by project member role management.
+ *
+ */
+export type ProjectMemberOrgRole = 'admin' | 'member' | 'editor' | 'viewer' | 'collaborator';
+
+export type ProjectMember = {
+    /**
+     * The organization member ID.
+     */
+    member_id: string;
+    /**
+     * The user ID for the organization member.
+     */
+    user_id: string;
+    /**
+     * Email address of the user who has been granted access to the project.
+     */
+    email?: string;
+    /**
+     * The user's display name.
+     */
+    name?: string;
+    org_role: ProjectMemberOrgRole;
+    project_role?: ProjectRole;
+    org_default_project_permission?: ProjectPermissionLevel;
+    explicit_project_permission?: ProjectPermissionLevel;
+    effective_project_permission?: ProjectPermissionLevel;
+    grant_source?: ProjectMemberGrantSource;
+};
+
+export type ProjectMembers = {
+    project_members: Array<ProjectMember>;
+    pagination?: CursorPagination;
+};
+
+export type SetProjectMemberRoleRequest = {
+    role: ProjectRole;
+};
+
+export type ProjectMemberRoleResponse = {
+    project_id: string;
+    member_id: string;
+    user_id: string;
+    /**
+     * Email address of the user who has been granted access to the project.
+     */
+    email?: string;
+    /**
+     * The user's display name.
+     */
+    name?: string;
+    org_role: ProjectMemberOrgRole;
+    project_role?: ProjectRole;
+    org_default_project_permission?: ProjectPermissionLevel;
+    explicit_project_permission?: ProjectPermissionLevel;
+    effective_project_permission?: ProjectPermissionLevel;
+    /**
+     * Hint that database credentials may need rotation after the role change.
+     *
+     */
+    credential_rotation_recommended?: boolean;
+    /**
+     * Hint that project-scoped org API keys created by the target user may need rotation.
+     *
+     */
+    org_api_key_rotation_recommended?: boolean;
+};
+
 export type ConsumptionHistoryPerProjectResponse = {
+    /**
+     * Per-project consumption history records included in the response.
+     */
     projects: Array<ConsumptionHistoryPerProject>;
 };
 
 export type ConsumptionHistoryPerProjectV2Response = {
+    /**
+     * Per-project consumption history entries for the requested time range.
+     */
     projects: Array<ConsumptionHistoryPerProjectV2>;
 };
 
 export type ConsumptionHistoryPerProject = {
     /**
-     * The project ID
+     * The Neon project ID. Returned as `id` from `GET /projects`.
      */
     project_id: string;
+    /**
+     * Consumption periods for the project, each covering a discrete billing interval.
+     */
     periods: Array<ConsumptionHistoryPerPeriod>;
 };
 
 export type ConsumptionHistoryPerProjectV2 = {
     /**
-     * The project ID
+     * The Neon project ID. Returned as `id` from `GET /projects`.
      */
     project_id: string;
+    /**
+     * Consumption periods recorded for this project.
+     */
     periods: Array<ConsumptionHistoryPerPeriodV2>;
 };
 
 export type ConsumptionHistoryPerBranchV2Response = {
+    /**
+     * Per-branch consumption history records returned for the requested time range.
+     */
     branches: Array<ConsumptionHistoryPerBranchV2>;
 };
 
 export type ConsumptionHistoryPerBranchV2 = {
     /**
-     * The project that owns the branch
+     * The ID of the project that owns this branch.
      */
     project_id: string;
     /**
-     * The branch ID
+     * The Neon branch ID. Returned as `id` from `GET /projects/{project_id}/branches`.
      */
     branch_id: string;
+    /**
+     * Consumption history records for the branch, grouped by billing period.
+     */
     periods: Array<ConsumptionHistoryPerPeriodV2>;
 };
 
@@ -891,6 +1023,9 @@ export type ConsumptionHistoryPerPeriod = {
      *
      */
     period_end?: string;
+    /**
+     * Consumption metric records for the billing period.
+     */
     consumption: Array<ConsumptionHistoryPerTimeframe>;
 };
 
@@ -913,6 +1048,9 @@ export type ConsumptionHistoryPerPeriodV2 = {
      *
      */
     period_end?: string;
+    /**
+     * Consumption metric records for the billing period.
+     */
     consumption: Array<ConsumptionHistoryPerTimeframeV2>;
 };
 
@@ -943,12 +1081,12 @@ export type ConsumptionHistoryPerTimeframe = {
      */
     written_data_bytes: number;
     /**
-     * Bytes. The space occupied in storage. Synthetic storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches.
+     * Bytes. The space occupied in Postgres storage. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches.
      *
      */
     synthetic_storage_size_bytes: number;
     /**
-     * Bytes-Hour. The amount of storage consumed hourly.
+     * Bytes-Hour. The amount of Postgres storage consumed hourly.
      *
      */
     data_storage_bytes_hour?: number;
@@ -975,11 +1113,20 @@ export type ConsumptionHistoryPerTimeframeV2 = {
      *
      */
     timeframe_end?: string;
+    /**
+     * Consumption metric values recorded for the timeframe.
+     */
     metrics?: Array<ConsumptionMetricValue>;
 };
 
 export type ConsumptionMetricValue = {
+    /**
+     * Name of the consumption metric, such as compute_time or data_storage_bytes_hour.
+     */
     metric_name: string;
+    /**
+     * Measured quantity for the metric named by `metric_name`.
+     */
     value: number;
 };
 
@@ -990,14 +1137,32 @@ export type ConsumptionHistoryQueryMetrics = Array<string>;
 export type ProjectAuditLogLevel = 'base' | 'extended' | 'full';
 
 export type AvailablePreloadLibrary = {
+    /**
+     * Name of the Postgres shared preload library as it appears in the `shared_preload_libraries` parameter (for example, `pg_stat_statements`).
+     */
     library_name: string;
+    /**
+     * Human-readable explanation of the library's purpose and behavior.
+     */
     description: string;
+    /**
+     * Whether this library is loaded by default in the `shared_preload_libraries` configuration for new compute endpoints.
+     */
     is_default: boolean;
+    /**
+     * Marks the library as experimental. Experimental libraries may be unstable, subject to breaking changes, or not recommended for production use.
+     */
     is_experimental: boolean;
+    /**
+     * Version of the preload library.
+     */
     version: string;
 };
 
 export type AvailablePreloadLibraries = {
+    /**
+     * Preload libraries available for the project's Postgres version. Each entry includes `library_name`, `description`, `is_default`, `is_experimental`, and `version`.
+     */
     libraries?: Array<AvailablePreloadLibrary>;
 };
 
@@ -1008,8 +1173,7 @@ export type Branch = {
      */
     id: string;
     /**
-     * The ID of the project to which the branch belongs
-     *
+     * The ID of the project this branch belongs to.
      */
     project_id: string;
     /**
@@ -1055,8 +1219,7 @@ export type Branch = {
      */
     creation_source: string;
     /**
-     * DEPRECATED. Use `default` field.
-     * Whether the branch is the project's primary branch
+     * Deprecated. Use the `default` field. Whether the branch is the project's primary branch.
      *
      *
      * @deprecated
@@ -1068,24 +1231,32 @@ export type Branch = {
      */
     default: boolean;
     /**
-     * Whether the branch is protected
+     * Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project.
      *
      */
     protected: boolean;
     /**
-     * CPU seconds used by all of the branch's compute endpoints, including deleted ones.
-     * This value is reset at the beginning of each billing period.
-     * Examples:
-     * 1. A branch that uses 1 CPU for 1 second is equal to `cpu_used_sec=1`.
-     * 2. A branch that uses 2 CPUs simultaneously for 1 second is equal to `cpu_used_sec=2`.
+     * Deprecated. Use `compute_time_seconds` instead. CPU seconds used by all of the branch's compute endpoints, including deleted ones. This value is reset at the beginning of each billing period.
      *
      *
      * @deprecated
      */
     cpu_used_sec: number;
+    /**
+     * Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size). Divide by 3600 for CU-hours.
+     */
     compute_time_seconds: number;
+    /**
+     * Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size). Distinct from `compute_time_seconds`, which is CU-weighted.
+     */
     active_time_seconds: number;
+    /**
+     * Data written by this branch during the current billing period, in bytes.
+     */
     written_data_bytes: number;
+    /**
+     * Total data transferred out of the branch, in bytes. Used as a consumption metric.
+     */
     data_transfer_bytes: number;
     /**
      * A timestamp indicating when the branch was created
@@ -1122,7 +1293,7 @@ export type Branch = {
      */
     created_by?: {
         /**
-         * The name of the user.
+         * Display name of the user who created the branch.
          */
         name?: string;
         /**
@@ -1131,9 +1302,7 @@ export type Branch = {
         image?: string;
     };
     /**
-     * The source of initialization for the branch. Valid values are `schema-only` and `parent-data` (default).
-     * * `schema-only` - creates a new root branch containing only the schema. Use `parent_id` to specify the source branch. Optionally, you can provide `parent_lsn` or `parent_timestamp` to branch from a specific point in time or LSN. These fields define which branch to copy the schema from and at what point—they do not establish a parent-child relationship between the `parent_id` branch and the new schema-only branch.
-     * * `parent-data` - creates the branch with both schema and data from the parent.
+     * Source of initialization for the branch. `parent-data` (default) copies schema and data from the parent. `parent-schema` copies schema only from the parent. `schema-only` creates a root branch with schema only. `import` initializes from an external import.
      *
      */
     init_source?: string;
@@ -1161,7 +1330,7 @@ export type Branch = {
  * * 'init' - the branch is being created but is not available for querying.
  * * 'resetting' - the branch is being reset to a specific point in time or LSN and is not yet available for querying.
  * * 'ready' - the branch is fully operational and ready for querying. Expect normal query response times.
- * * 'archived' - the branch is stored in cost-effective archival storage. Expect slow query response times.
+ * * 'archived' - the branch is stored in cost-effective archival Postgres storage. Expect slow query response times.
  *
  */
 export type BranchState = string;
@@ -1180,7 +1349,7 @@ export type BranchRestoreStatus = string;
  */
 export type BranchRestrictedAction = {
     /**
-     * The name of a restricted action. Possible values include `restore`, `delete-rw-endpoint`.
+     * The name of a restricted action on a branch. `restore`: the branch cannot be used as a restore target. `delete-rw-endpoint`: the read-write endpoint for the branch cannot be deleted.
      *
      */
     name: string;
@@ -1241,7 +1410,13 @@ export type BranchAnonymizedCreateRequest = AnnotationCreateValueRequest & {
 };
 
 export type BranchCreateRequest = {
+    /**
+     * Compute endpoints to create together with the branch. If omitted, the branch is created without any compute endpoint. Endpoints can be added to the branch separately after creation.
+     */
     endpoints?: Array<BranchCreateRequestEndpointOptions>;
+    /**
+     * Optional configuration for the new branch, for example `name`, `parent_id` (fork from a branch), `parent_lsn` or `parent_timestamp` (point-in-time branching), and `protected`.
+     */
     branch?: {
         /**
          * The `branch_id` of the parent branch. If omitted or empty, the branch will be created from the project's default branch.
@@ -1259,26 +1434,22 @@ export type BranchCreateRequest = {
          */
         parent_lsn?: string;
         /**
-         * A timestamp identifying a point in time on the parent branch. The branch will be created with data starting from this point in time.
-         * The timestamp must be provided in ISO 8601 format; for example: `2024-02-26T12:00:00Z`.
+         * A timestamp identifying a point in time on the parent branch. The branch will be created with data starting from this point in time. RFC 3339 format.
          *
          */
         parent_timestamp?: string;
         /**
-         * Whether the branch is protected
+         * Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project. Can be gated by `protected_branches_only` in the IP allowlist. Paid plans only.
          *
          */
         protected?: boolean;
         /**
-         * Whether to create the branch as archived
+         * Whether to create the branch in the archived state. When omitted, the branch is created as a normal (non-archived) branch.
          *
          */
         archived?: boolean;
         /**
-         * The source of initialization for the branch. Valid values are `schema-only` and `parent-data` (default).
-         * * `schema-only` - creates a new root branch containing only the schema. Use `parent_id` to specify the source branch. Optionally, you can provide `parent_lsn` or `parent_timestamp` to branch from a specific point in time or LSN. These fields define which branch to copy the schema from and at what point—they do not establish a parent-child relationship between the `parent_id` branch and the new schema-only branch.
-         * * `parent-data` - creates the branch with both schema and data from the parent.
-         *
+         * Source of initialization for the branch. `parent-data` copies schema and data from the parent branch. `parent-schema` copies schema only from the parent branch. `schema-only` creates a new root branch containing schema only, using `parent_id` as the source; optionally, `parent_lsn` or `parent_timestamp` can narrow the source point. `import` initializes the branch from an external import.
          */
         init_source?: string;
         /**
@@ -1292,8 +1463,18 @@ export type BranchCreateRequest = {
 };
 
 export type BranchUpdateRequest = {
+    /**
+     * Branch attributes to update. Supply only the fields you want to change, for example `name` or `protected`.
+     */
     branch: {
+        /**
+         * New display name for the branch.
+         */
         name?: string;
+        /**
+         * Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project. Can be gated by `protected_branches_only` in the IP allowlist. Paid plans only.
+         *
+         */
         protected?: boolean;
         /**
          * The timestamp when the branch is scheduled to expire and be automatically deleted. Must be set by the client following the [RFC 3339, section 5.6](https://tools.ietf.org/html/rfc3339#section-5.6) format with precision up to seconds (such as 2025-06-09T18:02:16Z). Deletion is performed by a background job and may not occur exactly at the specified time. If this field is set to null, the expiration timestamp is removed.
@@ -1314,19 +1495,18 @@ export type BranchRestoreRequest = {
      */
     source_branch_id: string;
     /**
-     * A Log Sequence Number (LSN) on the source branch. The branch will be restored with data from this LSN.
+     * A Postgres LSN (for example, `0/1A2B3C4`) on the source branch to restore from.
+     * Mutually exclusive with `source_timestamp`. Omit both to restore to head.
      *
      */
     source_lsn?: string;
     /**
-     * A timestamp identifying a point in time on the source branch. The branch will be restored with data starting from this point in time.
-     * The timestamp must be provided in ISO 8601 format; for example: `2024-02-26T12:00:00Z`.
+     * A point in time on the source branch to restore from, in RFC 3339 format. When omitted alongside `source_lsn`, the branch is restored to the latest available state of the source branch.
      *
      */
     source_timestamp?: string;
     /**
-     * If not empty, the previous state of the branch will be saved to a branch with this name.
-     * If the branch has children or the `source_branch_id` is equal to the branch id, this field is required. All existing child branches will be moved to the newly created branch under the name `preserve_under_name`.
+     * Name under which to save the current branch state before restoring. Required when the branch has children or when `source_branch_id` equals the branch being restored; in those cases all existing child branches are moved to the newly created branch. If omitted and not required, the previous state is not preserved.
      *
      */
     preserve_under_name?: string;
@@ -1337,19 +1517,31 @@ export type BranchResponse = {
 };
 
 export type BranchSchemaResponse = {
+    /**
+     * Branch schema expressed as SQL DDL statements.
+     */
     sql?: string;
     json?: BranchSchemaJson;
 };
 
 export type BranchSchemaCompareResponse = {
+    /**
+     * Unified diff of the SQL schema changes between the compared branches.
+     */
     diff?: string;
 };
 
 export type BranchesResponse = {
+    /**
+     * Branches in the project. Each includes `id`, `name`, `current_state`, and `created_at`.
+     */
     branches: Array<Branch>;
 };
 
 export type BranchesCountResponse = {
+    /**
+     * Total number of branches in the project.
+     */
     count: number;
 };
 
@@ -1407,17 +1599,15 @@ export type MaskingRulesUpdateRequest = {
 
 export type AnonymizedBranchStatusResponse = {
     /**
-     * The ID of the project
-     *
+     * The ID of the project this branch belongs to.
      */
     project_id: string;
     /**
-     * The ID of the anonymized branch
-     *
+     * The ID of the anonymized branch.
      */
     branch_id: string;
     /**
-     * The current state of the anonymized branch. Possible values: created, initialized, initialization_error, anonymizing, anonymized, error
+     * The current state of the anonymized branch. `created`: branch record exists but setup has not started. `initialized`: setup is complete and the branch is ready for anonymization. `initialization_error`: an error occurred during setup. `anonymizing`: the anonymization process is currently running. `anonymized`: anonymization completed successfully. `error`: an error occurred during anonymization.
      *
      */
     state: string;
@@ -1478,27 +1668,27 @@ export type AnonymizationRunMetadata = {
 
 export type ConnectionParameters = {
     /**
-     * Database name
+     * Name of the Postgres database used in the connection URI.
      *
      */
     database: string;
     /**
-     * Password for the role
+     * Authentication password for the role, used in the connection URI.
      *
      */
     password: string;
     /**
-     * Role name
+     * Postgres role used to authenticate the database connection.
      *
      */
     role: string;
     /**
-     * Hostname
+     * Hostname of the compute endpoint. Use `pooler_host` for the pooled connection hostname.
      *
      */
     host: string;
     /**
-     * Pooler hostname
+     * PgBouncer (transaction mode) pooled host, the `-pooler` variant of `host`. Connect through it to work around the Postgres `max_connections` limit for serverless or connection-per-request workloads.
      *
      */
     pooler_host: string;
@@ -1540,19 +1730,17 @@ export type Endpoint = {
      */
     name?: string;
     /**
-     * The ID of the project to which the compute endpoint belongs
-     *
+     * The ID of the project this compute endpoint belongs to.
      */
     project_id: string;
     /**
-     * The ID of the branch that the compute endpoint is associated with
-     *
+     * The ID of the branch this compute endpoint belongs to.
      */
     branch_id: string;
     autoscaling_limit_min_cu: ComputeUnit;
     autoscaling_limit_max_cu: ComputeUnit;
     /**
-     * The region identifier
+     * Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`). Valid values are returned by `GET /regions`.
      *
      */
     region_id: string;
@@ -1561,9 +1749,7 @@ export type Endpoint = {
     pending_state?: EndpointState;
     settings: EndpointSettingsData;
     /**
-     * DEPRECATED. Whether to enable connection pooling for the compute endpoint.
-     * The recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.
-     * See [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)
+     * Deprecated. To use connection pooling, append `-pooler` to the endpoint ID in the connection string.
      *
      *
      * @deprecated
@@ -1614,7 +1800,7 @@ export type Endpoint = {
      */
     suspended_at?: string;
     /**
-     * DEPRECATED. Use the "host" property instead.
+     * Deprecated. Use the `host` property instead.
      *
      */
     proxy_host: string;
@@ -1628,19 +1814,17 @@ export type Endpoint = {
 };
 
 /**
- * The state of the compute endpoint
- *
+ * Lifecycle state of the compute endpoint. `init`: being initialized. `active`: running and accepting connections. `idle`: suspended (scaled to zero).
  */
 export type EndpointState = 'init' | 'active' | 'idle';
 
 /**
- * The compute endpoint type. Either `read_write` or `read_only`.
- *
+ * Compute endpoint type. `read_write`: the primary read-write endpoint (one per branch). `read_only`: a read replica endpoint (multiple allowed per branch).
  */
 export type EndpointType = 'read_only' | 'read_write';
 
 /**
- * DEPRECATED. The connection pooler mode. Neon supports PgBouncer in `transaction` mode only. This schema is deprecated and will be removed after 2026-06-20.
+ * Deprecated. The connection pooler mode. Neon supports PgBouncer in `transaction` mode only. Removal scheduled for June 20, 2026.
  *
  *
  * @deprecated
@@ -1705,11 +1889,20 @@ export type MaintenanceWindow = {
  *
  */
 export type PreloadLibraries = {
+    /**
+     * When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.
+     */
     use_defaults?: boolean;
+    /**
+     * Names of shared preload libraries to enable for the project.
+     */
     enabled_libraries?: Array<string>;
 };
 
 export type EndpointCreateRequest = {
+    /**
+     * Configuration for the compute endpoint to create.
+     */
     endpoint: {
         /**
          * The ID of the branch the compute endpoint will be associated with
@@ -1727,8 +1920,7 @@ export type EndpointCreateRequest = {
         autoscaling_limit_max_cu?: ComputeUnit;
         provisioner?: Provisioner;
         /**
-         * DEPRECATED. Whether to enable connection pooling for the compute endpoint.
-         * The recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.
+         * Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.
          * See [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)
          *
          *
@@ -1760,10 +1952,12 @@ export type EndpointCreateRequest = {
 };
 
 export type EndpointUpdateRequest = {
+    /**
+     * Parameters for the compute endpoint update.
+     */
     endpoint: {
         /**
-         * DEPRECATED: This field will be removed in a future release.
-         * The destination branch ID. The destination branch must not have an existing read-write endpoint.
+         * Deprecated. The destination branch ID; must not have an existing read-write endpoint.
          *
          *
          * @deprecated
@@ -1774,8 +1968,7 @@ export type EndpointUpdateRequest = {
         provisioner?: Provisioner;
         settings?: EndpointSettingsData;
         /**
-         * DEPRECATED. Whether to enable connection pooling for the compute endpoint.
-         * The recommended way to enable connection pooling is to append `-pooler` to the endpoint ID in the connection string.
+         * Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.
          * See [How to use connection pooling](https://neon.com/docs/connect/connection-pooling#how-to-use-connection-pooling)
          *
          *
@@ -1811,24 +2004,36 @@ export type EndpointResponse = {
 };
 
 export type ConnectionUrisResponse = {
+    /**
+     * Connection URIs for the project. Each entry contains credentials and should be treated as sensitive.
+     */
     connection_uris: Array<ConnectionDetails>;
 };
 
 export type ConnectionUrisOptionalResponse = {
+    /**
+     * Connection URIs for the compute endpoint, including credentials.
+     */
     connection_uris?: Array<ConnectionDetails>;
 };
 
 export type VpcEndpointsResponse = {
+    /**
+     * List of VPC endpoints returned by the request.
+     */
     endpoints: Array<VpcEndpoint>;
 };
 
 export type VpcEndpointsWithRegionResponse = {
+    /**
+     * VPC endpoints associated with the region.
+     */
     endpoints: Array<VpcEndpointWithRegion>;
 };
 
 export type VpcEndpoint = {
     /**
-     * The VPC endpoint ID
+     * Cloud provider identifier for the VPC endpoint.
      */
     vpc_endpoint_id: string;
     /**
@@ -1846,7 +2051,7 @@ export type VpcEndpointWithRegion = VpcEndpoint & {
 
 export type VpcEndpointDetails = {
     /**
-     * The VPC endpoint ID
+     * Cloud provider identifier for the VPC endpoint.
      */
     vpc_endpoint_id: string;
     /**
@@ -1854,9 +2059,7 @@ export type VpcEndpointDetails = {
      */
     label: string;
     /**
-     * The current state of the VPC endpoint. Possible values are
-     * `new` (just configured, pending acceptance) or `accepted`
-     * (VPC connection was accepted by Neon).
+     * The current state of the VPC endpoint. `new` means the endpoint has just been configured and is pending acceptance by Neon. `accepted` means the VPC connection has been accepted by Neon.
      *
      */
     state: string;
@@ -1874,25 +2077,33 @@ export type VpcEndpointDetails = {
 };
 
 export type VpcEndpointAssignment = {
+    /**
+     * Human-readable name for the VPC endpoint assignment, used to identify it within the organization.
+     */
     label: string;
 };
 
 export type EndpointsResponse = {
+    /**
+     * Compute endpoints in the project. Each includes `id`, `branch_id`, `host`, and `type`.
+     */
     endpoints: Array<Endpoint>;
 };
 
 export type EndpointsOptionalResponse = {
+    /**
+     * Compute endpoints associated with the project.
+     */
     endpoints?: Array<Endpoint>;
 };
 
 export type Role = {
     /**
-     * The ID of the branch to which the role belongs
-     *
+     * The ID of the branch this role belongs to.
      */
     branch_id: string;
     /**
-     * The role name
+     * Postgres role name within the branch.
      *
      */
     name: string;
@@ -1907,7 +2118,7 @@ export type Role = {
      */
     protected?: boolean;
     /**
-     * Authentication method configured for this role. Valid options: `password`, `oauth`, `no_login`
+     * Authentication method configured for this role: `password`, `oauth`, or `no_login`.
      *
      */
     authentication_method?: string;
@@ -1924,6 +2135,9 @@ export type Role = {
 };
 
 export type RoleCreateRequest = {
+    /**
+     * Properties of the role to create.
+     */
     role: {
         /**
          * The role name. Cannot exceed 63 bytes in length.
@@ -1947,6 +2161,10 @@ export type JwksResponse = {
 };
 
 export type RolesResponse = {
+    /**
+     * Roles belonging to the branch. Each role includes fields such as `branch_id`, `name`, `protected`, `created_at`, and `updated_at`.
+     *
+     */
     roles: Array<Role>;
 };
 
@@ -1965,7 +2183,7 @@ export type PaymentSourceBankCard = {
      */
     last4: string;
     /**
-     * Brand of credit card.
+     * Card network reported by the payment processor. Set to `unknown` when the network cannot be determined.
      *
      */
     brand?: 'amex' | 'diners' | 'discover' | 'jcb' | 'mastercard' | 'unionpay' | 'unknown' | 'visa';
@@ -1996,7 +2214,7 @@ export type BillingAccount = {
     subscription_type: BillingSubscriptionType;
     payment_method: BillingPaymentMethod;
     /**
-     * The last time the quota was reset. Defaults to the date-time the account is created.
+     * Timestamp of the last quota reset. Set to the account creation time when the account is first created.
      *
      */
     quota_reset_at_last: string;
@@ -2118,8 +2336,7 @@ export type Database = {
      */
     id: number;
     /**
-     * The ID of the branch to which the database belongs
-     *
+     * The ID of the branch this database belongs to.
      */
     branch_id: string;
     /**
@@ -2145,9 +2362,12 @@ export type Database = {
 };
 
 export type DatabaseCreateRequest = {
+    /**
+     * Configuration for the new Postgres database.
+     */
     database: {
         /**
-         * The name of the database
+         * Name of the database to create.
          *
          */
         name: string;
@@ -2160,9 +2380,12 @@ export type DatabaseCreateRequest = {
 };
 
 export type DatabaseUpdateRequest = {
+    /**
+     * Properties to update on the database.
+     */
     database: {
         /**
-         * The name of the database
+         * Name of the database to update.
          *
          */
         name?: string;
@@ -2179,10 +2402,16 @@ export type DatabaseResponse = {
 };
 
 export type DatabasesResponse = {
+    /**
+     * Databases on the branch. Each includes `id`, `name`, `owner_name`, and `created_at`.
+     */
     databases: Array<Database>;
 };
 
 export type Invitation = {
+    /**
+     * The invitation ID.
+     */
     id: string;
     /**
      * Email of the invited user
@@ -2204,21 +2433,34 @@ export type Invitation = {
 };
 
 /**
- * The role of the organization member. Some role values may not be
- * available for all organizations.
- *
+ * Organization member's role. `admin`: full administrative access. `editor` (and its legacy alias `member`): standard access governed by project permissions. `viewer` and `collaborator`: additional scoped project roles. Some values may not be available for all organizations.
  */
 export type MemberRole = 'admin' | 'member' | 'editor' | 'viewer' | 'collaborator';
 
 export type Member = {
+    /**
+     * The organization member's ID.
+     */
     id: string;
+    /**
+     * The Neon user ID.
+     */
     user_id: string;
+    /**
+     * The Neon organization ID. Returned as `id` from `GET /users/me/organizations`.
+     */
     org_id: string;
     role: MemberRole;
+    /**
+     * Timestamp when the user joined the organization.
+     */
     joined_at?: string;
 };
 
 export type MemberUserInfo = {
+    /**
+     * Email address of the organization member's user account.
+     */
     email: string;
     /**
      * Whether the member has MFA (TOTP) enabled
@@ -2239,9 +2481,21 @@ export type MemberWithUser = {
 };
 
 export type Organization = {
+    /**
+     * The Neon organization ID. Use as the `org_id` path parameter in other endpoints.
+     */
     id: string;
+    /**
+     * Human-readable display name of the organization.
+     */
     name: string;
+    /**
+     * URL-safe identifier for the organization, used in API paths. Distinct from the display name.
+     */
     handle: string;
+    /**
+     * Billing plan for the organization, for example `free`, `launch`, or `scale`.
+     */
     plan: string;
     /**
      * A timestamp indicting when the organization was created
@@ -2270,19 +2524,31 @@ export type Organization = {
 };
 
 export type OrganizationsResponse = {
+    /**
+     * Organizations returned by the request. Each includes `id`, `name`, `handle`, and `plan`.
+     */
     organizations: Array<Organization>;
 };
 
 export type OrganizationInvitationsResponse = {
+    /**
+     * List of pending invitations for the organization.
+     */
     invitations: Array<Invitation>;
 };
 
 export type OrganizationInviteCreateRequest = {
+    /**
+     * Email address of the person to invite to the organization.
+     */
     email: string;
     role: MemberRole;
 };
 
 export type OrganizationInvitesCreateRequest = {
+    /**
+     * Invitations to create for the organization.
+     */
     invitations: Array<OrganizationInviteCreateRequest>;
 };
 
@@ -2291,6 +2557,9 @@ export type OrganizationMemberUpdateRequest = {
 };
 
 export type OrganizationMembersResponse = {
+    /**
+     * Members of the organization, each combining membership details (role, status) with the associated user's identity.
+     */
     members: Array<MemberWithUser>;
 };
 
@@ -2303,7 +2572,7 @@ export type ActiveRegionsResponse = {
 
 export type RegionResponse = {
     /**
-     * The region ID as used in other API endpoints
+     * Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`). Valid values are returned by `GET /regions`.
      */
     region_id: string;
     /**
@@ -2311,7 +2580,7 @@ export type RegionResponse = {
      */
     name: string;
     /**
-     * Whether this region is used by default in new projects.
+     * True if this region is selected by default when no region is specified during project creation.
      */
     default: boolean;
     /**
@@ -2325,15 +2594,24 @@ export type RegionResponse = {
 };
 
 export type CurrentUserAuthAccount = {
+    /**
+     * Email address associated with this auth account.
+     */
     email: string;
+    /**
+     * URL of the user's profile picture as provided by the identity provider.
+     */
     image: string;
     /**
-     * DEPRECATED. Use `email` field.
+     * Deprecated. Use the `email` field.
      *
      *
      * @deprecated
      */
     login: string;
+    /**
+     * Display name of the account as provided by the identity provider.
+     */
     name: string;
     provider: IdentityProviderId;
 };
@@ -2345,20 +2623,44 @@ export type CurrentUserInfoResponse = {
      */
     active_seconds_limit: number;
     billing_account?: BillingAccount;
+    /**
+     * Authentication provider accounts linked to the current user.
+     */
     auth_accounts: Array<CurrentUserAuthAccount>;
+    /**
+     * Email address of the authenticated user.
+     */
     email: string;
+    /**
+     * The Neon user ID.
+     */
     id: string;
+    /**
+     * URL of the user's profile avatar image.
+     */
     image: string;
     /**
-     * DEPRECATED. Use `email` field.
+     * Deprecated. Use the `email` field.
      *
      *
      * @deprecated
      */
     login: string;
+    /**
+     * First name of the current user.
+     */
     name: string;
+    /**
+     * Last name of the current user.
+     */
     last_name: string;
+    /**
+     * Maximum number of projects the account is allowed to create under the current plan.
+     */
     projects_limit: number;
+    /**
+     * Maximum number of branches allowed for the account under the current plan.
+     */
     branches_limit: number;
     /**
      * The maximum autoscaling limit in Compute Units.
@@ -2366,12 +2668,30 @@ export type CurrentUserInfoResponse = {
      *
      */
     max_autoscaling_limit: number;
+    /**
+     * Maximum Postgres compute time, in seconds, allowed under the account's current plan.
+     */
     compute_seconds_limit?: number;
+    /**
+     * Current billing plan for the user's account.
+     */
     plan: string;
 };
 
 export type AuthDetailsResponse = {
+    /**
+     * The ID of the account associated with this authentication record.
+     */
     account_id: string;
+    /**
+     * Authentication method used for the request:
+     * - `keycloak`: Keycloak identity provider authentication.
+     * - `session_cookie`: Browser session cookie authentication.
+     * - `api_key_user`: API key scoped to a user account.
+     * - `api_key_org`: API key scoped to an organization.
+     * - `oauth`: OAuth-based authentication.
+     *
+     */
     auth_method: 'keycloak' | 'session_cookie' | 'api_key_user' | 'api_key_org' | 'oauth';
     auth_data?: string;
 };
@@ -2472,7 +2792,7 @@ export type PgSettingsData = {
 };
 
 /**
- * DEPRECATED. A raw representation of PgBouncer settings. This schema is deprecated and will be removed after 2026-06-20.
+ * Deprecated. A raw representation of PgBouncer settings. Removal scheduled for June 20, 2026.
  *
  *
  * @deprecated
@@ -2482,18 +2802,30 @@ export type PgbouncerSettingsData = {
 };
 
 /**
- * The major Postgres version number. Generally available versions are `14`, `15`, `16`, `17`, and `18`. `19` is being rolled out and is only accepted in regions where it has been enabled; requesting it in a region where it is not yet available returns an error.
+ * The major Postgres version number. Supported versions are `14`, `15`, `16`, `17`, and `18`. `19` is rolling out and is accepted only in regions where it is enabled; requesting it elsewhere returns an error.
  */
 export type PgVersion = number;
 
 export type ProjectOwnerData = {
+    /**
+     * Email address of the project owner.
+     */
     email: string;
+    /**
+     * Display name of the project owner.
+     */
     name: string;
+    /**
+     * Maximum number of branches the owner is allowed to create across their projects.
+     */
     branches_limit: number;
     subscription_type: BillingSubscriptionType;
 };
 
 export type LimitsUnsatisfiedResponse = {
+    /**
+     * Plan limits that were not satisfied by the request.
+     */
     limits: Array<{
         /**
          * Identifier of the unsatisfied limit. Possible values are:
@@ -2503,14 +2835,29 @@ export type LimitsUnsatisfiedResponse = {
          *
          */
         name: string;
+        /**
+         * Required value for the limit named by `name`. Compare with `actual` to determine the shortfall.
+         */
         expected: string;
+        /**
+         * Current value of the named limit, which does not satisfy the required `expected` value.
+         */
         actual: string;
     }>;
 };
 
 export type ProjectsWithIntegrationResponse = {
+    /**
+     * Projects that have the requested integration, each including the project details and associated integration metadata.
+     */
     projects: Array<{
+        /**
+         * The Neon project ID. Use as the `project_id` path parameter in other endpoints.
+         */
         id: string;
+        /**
+         * Name of the external integration associated with the project.
+         */
         integration: string;
     }>;
 };
@@ -2532,7 +2879,7 @@ export type DataApiSettings = {
      */
     db_extra_search_path?: string;
     /**
-     * Maximum number of rows that can be returned in a single request
+     * Hard limit on the number of rows returned in a single Data API response. No limit when unset.
      */
     db_max_rows?: number;
     /**
@@ -2544,7 +2891,7 @@ export type DataApiSettings = {
      */
     jwt_role_claim_key?: string;
     /**
-     * Maximum lifetime for JWT cache in seconds
+     * Maximum lifetime of the Data API's JWT cache, in seconds.
      */
     jwt_cache_max_lifetime?: number;
     /**
@@ -2556,7 +2903,7 @@ export type DataApiSettings = {
      */
     server_cors_allowed_origins?: string;
     /**
-     * Enable server timing headers
+     * When enabled, the Data API adds `Server-Timing` headers to each response showing database execution and internal processing time. Default: disabled.
      */
     server_timing_enabled?: boolean;
 };
@@ -2566,21 +2913,19 @@ export type DataApiSettings = {
  */
 export type DataApiCreateRequest = {
     /**
-     * The authentication provider to use for the Neon Data API
+     * Authentication provider for the Neon Data API. `neon_auth`: use Neon's built-in managed authentication (no JWKS configuration required). `external`: use an external JWT provider, which requires `jwks_url`. When omitted, no auth provider is configured (existing setup is kept).
      */
     auth_provider?: 'neon_auth' | 'external';
     /**
-     * The URL that lists the JWKS
+     * URL of the JWKS endpoint used to verify JWTs for this Data API. Required when configuring JWT-based authentication; omit when using a non-JWT auth provider.
      */
     jwks_url?: string;
     /**
-     * The name of the authentication provider (e.g., Clerk, Stytch, Auth0)
+     * Display name for the authentication provider. Accepted values include "Clerk", "Stytch", and "Auth0", but any non-empty string is valid. Optional field.
      */
     provider_name?: string;
     /**
-     * WARNING - using this setting will only reject tokens with a
-     * different audience claim. Tokens without audience claim will still
-     * be accepted.
+     * Expected `aud` claim in incoming JWTs. When set, tokens with a different audience are rejected; tokens with no audience are still accepted. Omit to skip audience validation.
      *
      */
     jwt_audience?: string;
@@ -2599,6 +2944,9 @@ export type DataApiCreateRequest = {
  * Neon Data API created successfully
  */
 export type DataApiCreateResponse = {
+    /**
+     * URL of the created Data API endpoint.
+     */
     url: string;
 };
 
@@ -2631,6 +2979,9 @@ export type DataApiUpdateRequest = {
     settings?: DataApiSettings;
 };
 
+/**
+ * Authentication provider integrated with this Neon Auth configuration. `better_auth` integrates with Better Auth (the current, recommended provider). `stack` integrates with Stack Auth (deprecated). `mock` is a simulated provider for local development and testing only.
+ */
 export type NeonAuthSupportedAuthProvider = 'mock' | 'stack' | 'better_auth';
 
 export type NeonAuthProviderProjectOwnedBy = 'user' | 'neon';
@@ -2638,34 +2989,60 @@ export type NeonAuthProviderProjectOwnedBy = 'user' | 'neon';
 export type NeonAuthProviderProjectTransferStatus = 'initiated' | 'finished';
 
 export type NeonAuthRedirectUriWhitelistDomain = {
+    /**
+     * Allowed redirect URI domain for the auth provider.
+     */
     domain: string;
     auth_provider: NeonAuthSupportedAuthProvider;
 };
 
 export type NeonAuthRedirectUriWhitelistResponse = {
+    /**
+     * Domains permitted as redirect URI targets in the whitelist.
+     */
     domains: Array<NeonAuthRedirectUriWhitelistDomain>;
 };
 
 export type NeonAuthAddDomainToRedirectUriWhitelistRequest = {
+    /**
+     * URI to add to the redirect URI allowlist for the auth provider.
+     */
     domain: string;
     auth_provider: NeonAuthSupportedAuthProvider;
 };
 
 export type NeonAuthDeleteDomainFromRedirectUriWhitelistRequest = {
     auth_provider: NeonAuthSupportedAuthProvider;
+    /**
+     * Domain names to remove from the redirect URI whitelist for the specified auth provider.
+     */
     domains: Array<NeonAuthDeleteDomainFromRedirectUriWhitelistItem>;
 };
 
 export type NeonAuthDeleteDomainFromRedirectUriWhitelistItem = {
+    /**
+     * URI to remove from the redirect URI whitelist.
+     */
     domain: string;
 };
 
 export type NeonAuthCreateIntegrationRequest = {
     auth_provider: NeonAuthSupportedAuthProvider;
+    /**
+     * The Neon project ID. Returned as `id` from `GET /projects`.
+     */
     project_id: string;
+    /**
+     * The Neon branch ID. Returned as `id` from `GET /projects/{project_id}/branches`.
+     */
     branch_id: string;
+    /**
+     * Name of the database to associate with the Neon Auth integration. When omitted, the integration uses the project's default database.
+     */
     database_name?: string;
     /**
+     * Deprecated. The database role for the auth integration. Omit this field; it is ignored.
+     *
      * @deprecated
      */
     role_name?: string;
@@ -2673,34 +3050,76 @@ export type NeonAuthCreateIntegrationRequest = {
 
 export type EnableNeonAuthIntegrationRequest = {
     auth_provider: NeonAuthSupportedAuthProvider;
+    /**
+     * Name of the database to enable Neon Auth on. When omitted, the integration uses the project's default database.
+     */
     database_name?: string;
 };
 
 export type NeonAuthCreateIntegrationResponse = {
     auth_provider: NeonAuthSupportedAuthProvider;
+    /**
+     * Project ID assigned by the auth provider for this integration.
+     */
     auth_provider_project_id: string;
+    /**
+     * Publishable SDK key from the auth provider. Populated only for Stack Auth (deprecated); empty for Better Auth.
+     */
     pub_client_key: string;
+    /**
+     * Secret server-side SDK key from the auth provider. Populated only for Stack Auth (deprecated); empty for Better Auth. Treat as a credential.
+     */
     secret_server_key: string;
+    /**
+     * URL of the provider's JWKS endpoint used to verify JWTs.
+     */
     jwks_url: string;
+    /**
+     * Postgres schema containing the auth integration tables. Defaults to `neon_auth`.
+     */
     schema_name: string;
+    /**
+     * Postgres table in the integration schema where synced user records are stored.
+     */
     table_name: string;
+    /**
+     * Base URL of the Neon Auth service for this integration. Set as the NEON_AUTH_BASE_URL environment variable in your application.
+     */
     base_url?: string;
 };
 
 export type NeonAuthCreateAuthProviderSdkKeysRequest = {
+    /**
+     * The Neon project ID. Returned as `id` from `GET /projects`.
+     */
     project_id: string;
     auth_provider: NeonAuthSupportedAuthProvider;
 };
 
 export type NeonAuthCreateNewUserRequest = {
+    /**
+     * The Neon project ID. Returned as `id` from `GET /projects`.
+     */
     project_id: string;
     auth_provider: NeonAuthSupportedAuthProvider;
+    /**
+     * Email address of the new user.
+     */
     email: string;
+    /**
+     * Display name for the new user. When omitted, the created user has no display name.
+     */
     name?: string;
 };
 
 export type CreateBranchNeonAuthNewUserRequest = {
+    /**
+     * Email address of the new Neon Auth user to create.
+     */
     email: string;
+    /**
+     * Display name for the new user. Optional. Pair with the required email field when creating a new user.
+     */
     name?: string;
 };
 
@@ -2713,7 +3132,7 @@ export type NeonAuthCreateNewUserResponse = {
 
 export type UpdateNeonAuthUserRoleRequest = {
     /**
-     * Array of roles to assign to the user
+     * Roles to assign to the user in the Neon Auth (Better Auth) directory. `user` and `admin` are the built-in roles; custom role strings are also supported.
      */
     roles: Array<string>;
 };
@@ -2741,83 +3160,83 @@ export type UpdateNeonAuthAllowLocalhostRequest = {
 
 export type NeonAuthOrganizationConfig = {
     /**
-     * Whether the organization plugin is enabled
+     * Whether the organization plugin is enabled.
      */
     enabled: boolean;
     /**
-     * Maximum number of organizations a user can create
+     * Maximum organizations a user can belong to (created or joined). At the limit, the user cannot create or join more.
      */
     organization_limit: number;
     /**
-     * Maximum number of members per organization
+     * Maximum number of members per organization.
      */
     membership_limit: number;
     /**
-     * The role assigned to the user who creates an organization
+     * Role of the organization's creator. `owner`: full control, including deleting the org and transferring ownership. `admin`: manage members and settings only.
      */
     creator_role: 'admin' | 'owner';
     /**
-     * Whether to send invitation emails when inviting members to an organization
+     * Whether to send invitation emails when inviting members to an organization.
      */
     send_invitation_email: boolean;
 };
 
 export type NeonAuthOrganizationConfigUpdate = {
     /**
-     * Whether the organization plugin is enabled
+     * Controls whether the organization plugin is active for the organization.
      */
     enabled?: boolean;
     /**
-     * Maximum number of organizations a user can create
+     * Maximum organizations a user can belong to (created or joined). At the limit, the user cannot create or join more.
      */
     organization_limit?: number;
     /**
-     * Maximum number of members per organization
+     * Maximum members per organization.
      */
     membership_limit?: number;
     /**
-     * The role assigned to the user who creates an organization
+     * Role of the organization's creator. `owner`: full control, including deleting the org and transferring ownership. `admin`: manage members and settings only.
      */
     creator_role?: 'admin' | 'owner';
     /**
-     * Whether to send invitation emails when inviting members to an organization
+     * When true, invited users receive an email containing an accept link. Requires that the invited user has a verified email address.
      */
     send_invitation_email?: boolean;
 };
 
 export type NeonAuthMagicLinkConfig = {
     /**
-     * Whether the magic link plugin is enabled
+     * Whether the magic link plugin is enabled.
      */
     enabled: boolean;
     /**
-     * Time in minutes before the magic link expires
+     * Minutes until the magic link expires.
      */
     expires_in: number;
     /**
-     * Whether to disable sign-up via magic link
+     * Whether to disable sign-up via magic link.
      */
     disable_sign_up: boolean;
 };
 
 export type NeonAuthMagicLinkConfigUpdate = {
     /**
-     * Whether the magic link plugin is enabled
+     * Whether to enable the magic link plugin.
      */
     enabled?: boolean;
     /**
-     * Time in minutes before the magic link expires
+     * Minutes until the magic link expires.
      */
     expires_in?: number;
     /**
-     * Whether to disable sign-up via magic link
+     * When true, sign-up via magic link is disabled.
      */
     disable_sign_up?: boolean;
 };
 
 export type NeonAuthPhoneNumberConfig = {
     /**
-     * Whether the phone number plugin is enabled
+     * Whether the phone number plugin is enabled.
      */
     enabled: boolean;
     /**
@@ -2828,7 +3247,7 @@ export type NeonAuthPhoneNumberConfig = {
 
 export type NeonAuthPhoneNumberConfigUpdate = {
     /**
-     * Whether the phone number plugin is enabled
+     * Whether the phone number plugin is enabled.
      */
     enabled?: boolean;
     /**
@@ -2838,6 +3257,9 @@ export type NeonAuthPhoneNumberConfigUpdate = {
 };
 
 export type NeonAuthTransferAuthProviderProjectRequest = {
+    /**
+     * The Neon project ID. Returned as `id` from `GET /projects`.
+     */
     project_id: string;
     auth_provider: NeonAuthSupportedAuthProvider;
 };
@@ -2850,10 +3272,16 @@ export type NeonAuthTransferAuthProviderProjectResponse = {
 };
 
 export type ListNeonAuthIntegrationsResponse = {
+    /**
+     * Neon Auth integrations configured for the project.
+     */
     data: Array<NeonAuthIntegration>;
 };
 
 export type ListNeonAuthOauthProvidersResponse = {
+    /**
+     * OAuth providers configured for Neon Auth on the project.
+     */
     providers: Array<NeonAuthOauthProvider>;
 };
 
@@ -2864,23 +3292,47 @@ export type NeonAuthPluginConfigs = {
     organization?: NeonAuthOrganizationConfig;
     magic_link?: NeonAuthMagicLinkConfig;
     phone_number?: NeonAuthPhoneNumberConfig;
-    email_provider?: NeonAuthEmailServerConfig;
+    email_provider?: NeonAuthEmailServerConfigResponse;
     email_and_password?: NeonAuthEmailAndPasswordConfig;
+    /**
+     * OAuth provider configurations enabled for this auth setup.
+     */
     oauth_providers?: Array<NeonAuthOauthProvider>;
+    /**
+     * Permits authentication requests from localhost origins when true. Intended for local development; disable in production environments.
+     */
     allow_localhost?: boolean;
 };
 
 export type NeonAuthWebhookConfig = {
+    /**
+     * Whether the webhook is active.
+     */
     enabled: boolean;
+    /**
+     * Destination URL that receives webhook event payloads.
+     */
     webhook_url?: string;
+    /**
+     * Event types that trigger this webhook. Covers user lifecycle, email/OTP delivery, organization invitations, and phone verification events; see the enum for exact values.
+     */
     enabled_events?: Array<'user.before_create' | 'user.created' | 'send.otp' | 'send.magic_link' | 'organization.invitation.created' | 'organization.invitation.accepted' | 'phone_number.verified'>;
+    /**
+     * Maximum time, in seconds, to wait for a response from the webhook endpoint.
+     */
     timeout_seconds?: number;
 };
 
 export type NeonAuthOauthProvider = {
     id: NeonAuthOauthProviderId;
     type: NeonAuthOauthProviderType;
+    /**
+     * Public identifier for the OAuth application, issued by the provider when the application is registered.
+     */
     client_id?: string;
+    /**
+     * OAuth client secret for the provider.
+     */
     client_secret?: string;
 };
 
@@ -2890,28 +3342,97 @@ export type NeonAuthOauthProviderType = 'standard' | 'shared';
 
 export type NeonAuthAddOAuthProviderRequest = {
     id: NeonAuthOauthProviderId;
+    /**
+     * The client ID issued by the OAuth provider for your application. Used to identify the application during the OAuth flow.
+     */
     client_id?: string;
+    /**
+     * OAuth client secret for the provider.
+     */
     client_secret?: string;
+    /**
+     * Tenant ID for the Microsoft OAuth provider. Only relevant when the OAuth provider is Microsoft; omit or leave blank for other providers.
+     */
     microsoft_tenant_id?: string;
 };
 
 export type NeonAuthUpdateOAuthProviderRequest = {
+    /**
+     * The OAuth client ID registered with the provider. Omit to keep the currently configured value.
+     */
     client_id?: string;
+    /**
+     * OAuth client secret for the provider. Omit to leave the existing secret unchanged.
+     */
     client_secret?: string;
+    /**
+     * The tenant ID scoping the Microsoft OAuth provider. Supply this field when the provider type is microsoft; it has no effect for other provider types.
+     */
     microsoft_tenant_id?: string;
 };
 
 export type SharedEmailServer = {
+    /**
+     * Email address used as the sender for outgoing messages from this shared email server.
+     */
     sender_email?: string;
+    /**
+     * Display name shown as the sender in outgoing emails.
+     */
     sender_name?: string;
 };
 
 export type StandardEmailServer = {
+    /**
+     * Hostname of the email server.
+     */
+    host?: string;
+    /**
+     * TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).
+     */
+    port?: number;
+    /**
+     * Username for authenticating with the SMTP server.
+     */
+    username?: string;
+    /**
+     * Password for authenticating with the SMTP server.
+     */
+    password?: string;
+    /**
+     * Email address used as the From address on outgoing auth emails.
+     */
+    sender_email?: string;
+    /**
+     * Display name shown as the sender in outgoing emails.
+     */
+    sender_name?: string;
+};
+
+export type StandardEmailServerResponse = {
+    /**
+     * Hostname of the email server.
+     */
     host: string;
+    /**
+     * TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).
+     */
     port: number;
+    /**
+     * Username for authenticating with the SMTP server.
+     */
     username: string;
+    /**
+     * On GET, returned redacted (empty) for ordinary callers, while callers with project-credential read permission receive the stored password — do not assume this field is empty. Update (PATCH) responses always return it redacted (empty) regardless of permission. Provide a value on update to set or rotate the password.
+     */
     password: string;
+    /**
+     * Email address used as the From address on outgoing auth emails.
+     */
     sender_email: string;
+    /**
+     * Display name shown as the sender in outgoing emails.
+     */
     sender_name: string;
 };
 
@@ -2921,7 +3442,49 @@ export type NeonAuthEmailServerConfig = ({
     type: 'shared';
 } & SharedEmailServer);
 
-export type SendNeonAuthTestEmailRequest = StandardEmailServer & {
+export type NeonAuthEmailServerConfigResponse = ({
+    type: 'standard';
+} & StandardEmailServerResponse) | ({
+    type: 'shared';
+} & SharedEmailServer);
+
+export type SendNeonAuthTestEmailRequest = {
+    /**
+     * Hostname of the email server.
+     */
+    host: string;
+    /**
+     * TCP port of the SMTP server. Common values: 25 (SMTP), 465 (SMTPS), 587 (submission).
+     */
+    port: number;
+    /**
+     * Username for authenticating with the SMTP server.
+     */
+    username: string;
+    /**
+     * Password for authenticating with the SMTP server.
+     */
+    password: string;
+    /**
+     * Email address used as the From address on outgoing auth emails.
+     */
+    sender_email: string;
+    /**
+     * Display name shown as the sender in outgoing emails.
+     */
+    sender_name: string;
+    /**
+     * The email address to send the test email to.
+     */
+    recipient_email: string;
+};
+
+/**
+ * Request to test the branch's saved email provider. Only the recipient is supplied; the stored
+ * SMTP settings and password are used server-side.
+ *
+ */
+export type SendNeonAuthEmailProviderTestRequest = {
     /**
      * The email address to send the test email to.
      */
@@ -2977,12 +3540,12 @@ export type NeonAuthEmailAndPasswordConfig = {
 
 export type NeonAuthEmailAndPasswordConfigUpdate = {
     /**
-     * Whether email and password authentication is enabled
+     * Controls whether email and password authentication is enabled for this project. When omitted from an update request, the current value is unchanged.
      */
     enabled?: boolean;
     email_verification_method?: NeonAuthEmailVerificationMethod;
     /**
-     * Whether email verification is required before users can sign in
+     * When true, users must verify their email address before they can sign in. Omitting this field from an update request leaves the current value unchanged.
      */
     require_email_verification?: boolean;
     /**
@@ -2990,31 +3553,49 @@ export type NeonAuthEmailAndPasswordConfigUpdate = {
      */
     auto_sign_in_after_verification?: boolean;
     /**
-     * Whether to send a verification email when users sign up
+     * Whether to send a verification email when users sign up.
      */
     send_verification_email_on_sign_up?: boolean;
     /**
-     * Whether to send a verification email when users sign in
+     * Whether to send a verification email when a user with an unverified email signs in.
      */
     send_verification_email_on_sign_in?: boolean;
     /**
-     * Whether to disable new user sign ups
+     * Whether to disable new user sign ups. When omitted, the current setting is not changed.
      */
     disable_sign_up?: boolean;
 };
 
 export type NeonAuthIntegration = {
     auth_provider: NeonAuthSupportedAuthProvider;
+    /**
+     * Project identifier assigned by the auth provider for this integration.
+     */
     auth_provider_project_id: string;
+    /**
+     * The Neon branch ID. Returned as `id` from `GET /projects/{project_id}/branches`.
+     */
     branch_id: string;
+    /**
+     * Name of the database used by the Neon Auth integration.
+     */
     db_name: string;
+    /**
+     * Timestamp when the Neon Auth integration was created, in RFC 3339 format (UTC).
+     */
     created_at: string;
     owned_by: NeonAuthProviderProjectOwnedBy;
     transfer_status?: NeonAuthProviderProjectTransferStatus;
+    /**
+     * URL of the provider's JWKS endpoint used to verify JWTs.
+     */
     jwks_url: string;
+    /**
+     * Base URL of the Neon Auth service endpoint for this integration. Injected into the project environment as `NEON_AUTH_BASE_URL`.
+     */
     base_url?: string;
     /**
-     * The application name used in auth emails and communications. Defaults to the Neon project name.
+     * Application name shown in auth emails and communications. Defaults to the project name.
      */
     name?: string;
 };
@@ -3064,19 +3645,31 @@ export type JwksCreationOperation = JwksResponse & OperationsResponse;
 export type AnnotationData = {
     object: AnnotationObjectData;
     value: AnnotationValueData;
+    /**
+     * Timestamp when the annotation was created, in RFC 3339 format (UTC).
+     */
     created_at?: string;
+    /**
+     * Timestamp of the most recent update to the annotation, in RFC 3339 format (UTC).
+     */
     updated_at?: string;
 };
 
 /**
- * Annotation properties.
+ * A free-form map of string key-value pairs for attaching metadata to a resource (for example, a git commit reference). Maximum 50 entries.
  */
 export type AnnotationValueData = {
     [key: string]: string;
 };
 
 export type AnnotationObjectData = {
+    /**
+     * Kind of resource the annotation is attached to, for example "branch" or "endpoint".
+     */
     type: string;
+    /**
+     * The annotated object's ID.
+     */
     id: string;
 };
 
@@ -3089,6 +3682,9 @@ export type AnnotationResponse = {
 };
 
 export type AnnotationsMapResponse = {
+    /**
+     * Map of annotations keyed by resource identifier, where each value contains the annotation data for that resource.
+     */
     annotations: {
         [key: string]: AnnotationData;
     };
@@ -3104,6 +3700,9 @@ export type ApplicationType = 'vercel' | 'github' | 'datadog' | 'opentelemetry';
  *
  */
 export type ProjectsApplicationsMapResponse = {
+    /**
+     * Map of project IDs to their installed applications. Each key is a project ID; each value is an array of application types (for example, `vercel`, `github`).
+     */
     applications: {
         [key: string]: Array<ApplicationType>;
     };
@@ -3114,6 +3713,9 @@ export type ProjectsApplicationsMapResponse = {
  *
  */
 export type ProjectsIntegrationsMapResponse = {
+    /**
+     * Map of project IDs to their associated integration details.
+     */
     integrations: {
         [key: string]: Array<ApplicationType>;
     };
@@ -3127,19 +3729,52 @@ export type CursorPaginationResponse = {
  * To paginate the response, issue an initial request with `limit` value. Then, add the value returned in the response `.pagination.next` attribute into the request under the `cursor` query parameter to the subsequent request to retrieve next page in pagination. The contents on cursor `next` are opaque, clients are not expected to make any assumptions on the format of the data inside the cursor.
  */
 export type CursorPagination = {
+    /**
+     * Cursor for the next page of results. Pass it as the `cursor` query parameter on the next request. Absent on the last page.
+     */
     next?: string;
+    /**
+     * Field by which the results were sorted, echoing the request's sort_by parameter.
+     */
     sort_by?: string;
+    /**
+     * Sort order active for this page. Pass back as `sort_order` in the next request to maintain consistent ordering. Valid values are `asc` and `desc`.
+     */
     sort_order?: string;
 };
 
 export type Snapshot = {
+    /**
+     * The snapshot ID.
+     */
     id: string;
+    /**
+     * Human-readable label for the snapshot.
+     */
     name: string;
+    /**
+     * WAL position (Log Sequence Number) at which the snapshot was captured, in Postgres LSN format (for example, `0/3000000`).
+     */
     lsn?: string;
+    /**
+     * Point in time captured by the snapshot, in RFC 3339 format (UTC).
+     */
     timestamp?: string;
+    /**
+     * Branch from which this snapshot was created.
+     */
     source_branch_id?: string;
+    /**
+     * Timestamp when the snapshot was created, in RFC 3339 format (UTC).
+     */
     created_at: string;
+    /**
+     * RFC 3339 timestamp when the snapshot expires and is eligible for deletion. Null if the snapshot does not have an expiry.
+     */
     expires_at?: string;
+    /**
+     * True if the snapshot was created manually rather than by a schedule.
+     */
     manual?: boolean;
     /**
      * Full logical size of the snapshot in bytes at the time it was taken.
@@ -3151,7 +3786,7 @@ export type Snapshot = {
      */
     full_size?: number;
     /**
-     * Incremental storage size in bytes since the previous scheduled snapshot, when the snapshot is billed on incremental (diff) usage.
+     * Incremental Postgres storage size in bytes since the previous scheduled snapshot, when the snapshot is billed on incremental (diff) usage.
      *
      * When absent, either the incremental size has not been calculated yet and the snapshot is not being charged, or the snapshot is charged at full logical size (in that case `full_size` is set).
      *
@@ -3160,7 +3795,13 @@ export type Snapshot = {
 };
 
 export type SnapshotUpdateRequest = {
+    /**
+     * Fields to update on the snapshot. Updatable fields include `name` and `expires_at`.
+     */
     snapshot: {
+        /**
+         * Human-readable label for the snapshot.
+         */
         name?: string;
         /**
          * The date and time when the snapshot will expire.
@@ -3176,10 +3817,7 @@ export type SnapshotUpdateRequest = {
 
 export type BackupScheduleItem = {
     /**
-     * How often to take snapshots. Must be one of the following values:
-     * - `daily`
-     * - `weekly`
-     * - `monthly`
+     * How often to take snapshots. Known values: `daily`, `weekly`, `monthly`.
      *
      */
     frequency: string;
@@ -3199,23 +3837,45 @@ export type BackupScheduleItem = {
      */
     month?: number;
     /**
-     * How long to keep a snapshot (in seconds) before it's automatically deleted.
-     * If not set, the snapshot is kept indefinitely.
+     * How long to keep a scheduled snapshot (in seconds) before it's automatically deleted.
+     * The default is 3024000 seconds (35 days), which is also the maximum.
+     * Manually created snapshots have no maximum retention: set their `expires_at` instead.
      *
      */
     retention_seconds?: number;
 };
 
 export type BackupSchedule = {
+    /**
+     * List of schedule entries defining the backup frequency. At least one entry is required.
+     */
     schedule: Array<BackupScheduleItem>;
 };
 
 export type BranchSchemaJson = {
+    /**
+     * Tables present in the branch schema.
+     */
     tables: Array<{
+        /**
+         * Postgres schema (namespace) that contains the table, for example `public`.
+         */
         schema: string;
+        /**
+         * Name of the table within the schema.
+         */
         name: string;
+        /**
+         * Columns belonging to this table, each describing a column's name and attributes.
+         */
         columns: Array<{
+            /**
+             * Name of the column.
+             */
             name: string;
+            /**
+             * Postgres data type of the column, for example "integer" or "text".
+             */
             type: string;
             /**
              * Whether the column allows NULL values
@@ -3226,6 +3886,9 @@ export type BranchSchemaJson = {
              */
             generated?: boolean;
         }>;
+        /**
+         * Table constraints defined in the branch schema, such as primary key, foreign key, unique, and check constraints.
+         */
         constraints?: Array<{
             /**
              * Type of constraint. Possible values: `primary_key`, `unique`, `foreign_key`
@@ -3310,7 +3973,7 @@ export type BranchStorage = {
     /**
      * Always `true` in 200 responses. Present for forward compatibility: a
      * future version may add intermediate states; callers should treat `true`
-     * as "storage is usable for this branch right now."
+     * as "object storage is usable for this branch right now."
      *
      */
     enabled: boolean;
@@ -3319,7 +3982,7 @@ export type BranchStorage = {
      */
     s3_endpoint: string;
     /**
-     * The AWS region for this branch's storage. The platform normalizes
+     * The AWS region for this branch's object storage. The platform normalizes
      * the us-east-1 convention server-side: a non-empty region string is
      * always returned in 200 responses (e.g. `"us-east-1"` for the S3
      * default region).
@@ -3343,15 +4006,249 @@ export type BranchStorageNotEnabled = {
     code: string;
     message: string;
     /**
-     * Machine-readable reason why storage is unavailable:
+     * Machine-readable reason why object storage is unavailable:
      * - `org_not_entitled`: the org's `PlatformBranchableStorage` feature flag is off.
-     * - `region_unavailable`: the project's region has no storage admin service wired.
-     * - `branch_directory_missing`: the branch is not registered in the storage service.
+     * - `region_unavailable`: the project's region has no object storage admin service wired.
+     * - `branch_directory_missing`: the branch is not registered in the object storage service.
      * - `branch_not_found`: the project or branch does not exist, or the caller does not
      * have access to it.
      *
      */
     reason: 'org_not_entitled' | 'region_unavailable' | 'branch_directory_missing' | 'branch_not_found';
+};
+
+/**
+ * The Neon service that emitted the log record.
+ */
+export type ProjectBranchLogSource = 'function' | 'storage' | 'pg_endpoint';
+
+/**
+ * An OpenTelemetry severity level. A minimum severity includes every
+ * higher level in this order: `trace`, `debug`, `info`, `warn`, `error`,
+ * `fatal`.
+ *
+ */
+export type ProjectBranchLogSeverity = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+/**
+ * A length of time as a count and a unit, for example `30m`, `6h`, or
+ * `7d`. Valid units are `ms`, `s`, `m`, `h`, and `d`.
+ *
+ */
+export type ProjectBranchLogDuration = string;
+
+export type ProjectBranchLogsNotAvailable = {
+    code: string;
+    message: string;
+    /**
+     * Machine-readable reason why logs cannot be read:
+     * - `branch_not_found`: the project or branch does not exist, or the caller does not
+     * have access to it.
+     * - `telemetry_not_enabled`: the branch exists but is not collecting telemetry, so it
+     * has no logs to serve.
+     *
+     */
+    reason: 'branch_not_found' | 'telemetry_not_enabled';
+};
+
+export type ProjectBranchLogsInvalidQuery = {
+    code: string;
+    message: string;
+    /**
+     * Machine-readable reason why the request was rejected:
+     * - `time_range_too_large`: the requested window spans more than seven days.
+     * - `invalid_time_range`: `end_time` is not after `start_time`.
+     * - `conflicting_time_range`: both `since` and `start_time` were supplied.
+     * - `invalid_cursor`: the supplied `cursor` is malformed, expired, or was issued for a
+     * different query.
+     * - `unknown_field`: the requested `field_name` is not one of the fields the log fields
+     * endpoint reports for this branch.
+     * - `invalid_logql`: the supplied `logql` expression does not parse, or uses a
+     * construct this endpoint does not accept.
+     * - `conflicting_filters`: `logql` was supplied alongside one or more structured
+     * filters. Use one or the other.
+     *
+     */
+    reason: 'time_range_too_large' | 'invalid_time_range' | 'conflicting_time_range' | 'invalid_cursor' | 'unknown_field' | 'invalid_logql' | 'conflicting_filters';
+};
+
+export type ProjectBranchLogsQueryRequest = {
+    /**
+     * Length of the query window, ending at `end_time` or at the current
+     * time when `end_time` is omitted. Mutually exclusive with
+     * `start_time`. Prefer this over computing absolute bounds when the
+     * caller only means "the last hour".
+     *
+     */
+    since?: ProjectBranchLogDuration;
+    /**
+     * Inclusive beginning of the query window. Mutually exclusive with
+     * `since`. Defaults to one hour before `end_time`, or one hour before
+     * the current time when both bounds are omitted.
+     *
+     */
+    start_time?: string;
+    /**
+     * Exclusive end of the query window. Defaults to the current time.
+     */
+    end_time?: string;
+    /**
+     * Maximum number of log records to return per page.
+     */
+    limit?: number;
+    /**
+     * Opaque pagination cursor returned as `next_cursor` by a previous
+     * call. Resume the query after the last record of the previous page,
+     * repeating the time range and every filter unchanged.
+     *
+     */
+    cursor?: string;
+    /**
+     * Order matching records by timestamp. `desc`, the default, returns
+     * the newest records first.
+     *
+     */
+    sort_order?: 'asc' | 'desc';
+    source?: ProjectBranchLogSource;
+    /**
+     * Match the OpenTelemetry `service.name` resource attribute exactly.
+     */
+    service_name?: string;
+    /**
+     * Match the OpenTelemetry instrumentation scope name exactly.
+     */
+    scope_name?: string;
+    minimum_severity?: ProjectBranchLogSeverity;
+    /**
+     * Match the OpenTelemetry severity text exactly.
+     */
+    severity_text?: string;
+    /**
+     * Match records whose rendered `message` contains this case-sensitive
+     * substring.
+     *
+     * Records with a structured body are matched against their JSON
+     * rendering, so the substring meets JSON syntax rather than prose: a
+     * bare key name such as `operation` matches every record carrying that
+     * key, and `http_status: 200` matches none, because the rendering
+     * contains `"http_status":200` with no space.
+     *
+     */
+    body_contains?: string;
+    /**
+     * Match records associated with this OpenTelemetry trace ID. W3C Trace
+     * Context defines a trace ID as 32 lowercase hex digits, and that is
+     * what is stored, so an uppercase value is rejected rather than
+     * silently matching nothing.
+     *
+     */
+    trace_id?: string;
+    /**
+     * Escape hatch for selections the structured filters cannot express: a
+     * raw LogQL expression, evaluated against this branch's log stream.
+     *
+     * Only stream selectors and line filters are accepted — no
+     * aggregations and no parser stages. Supplying this alongside any
+     * structured filter is rejected with `conflicting_filters` rather than
+     * silently ignoring one of them. `limit`, `sort_order`, and the time
+     * window still apply.
+     *
+     * This field passes the underlying query language through to the
+     * caller, so unlike the rest of this contract it may change as that
+     * backend changes. Prefer the structured filters where they suffice.
+     *
+     */
+    logql?: string;
+};
+
+export type ProjectBranchLogRecord = {
+    /**
+     * The OpenTelemetry record timestamp in UTC.
+     */
+    timestamp: string;
+    /**
+     * The OpenTelemetry log body rendered as text. A body that is already a
+     * string is returned verbatim. Any other OpenTelemetry `AnyValue` body
+     * — notably the structured key/value body that `storage` records always
+     * carry — is rendered as compact JSON with its keys sorted
+     * alphabetically, for example
+     * `{"bytes":1024,"operation":"GET","object_key":"a/b.png"}`.
+     *
+     */
+    message: string;
+    source?: ProjectBranchLogSource;
+    /**
+     * The Neon identifier of the service instance that emitted the record.
+     */
+    entity_id?: string;
+    /**
+     * The OpenTelemetry `service.name` resource attribute.
+     */
+    service_name?: string;
+    /**
+     * The OpenTelemetry instrumentation scope name.
+     */
+    scope_name?: string;
+    /**
+     * The numeric OpenTelemetry severity.
+     */
+    severity_number?: number;
+    /**
+     * The original OpenTelemetry severity text.
+     */
+    severity_text?: string;
+    /**
+     * The OpenTelemetry trace ID, when the record belongs to a trace.
+     */
+    trace_id?: string;
+    /**
+     * The OpenTelemetry span ID, when the record belongs to a span.
+     */
+    span_id?: string;
+    /**
+     * Customer-defined OpenTelemetry log and resource attributes.
+     */
+    attributes: {
+        [key: string]: unknown;
+    };
+};
+
+export type ProjectBranchLogsQueryResponse = {
+    logs: Array<ProjectBranchLogRecord>;
+    /**
+     * Pagination cursor to pass as `cursor` on the next request. Empty
+     * when the response is not truncated.
+     *
+     */
+    next_cursor?: string;
+    /**
+     * True when more records matched than were returned.
+     */
+    is_truncated: boolean;
+};
+
+export type ProjectBranchLogFieldsResponse = {
+    /**
+     * Log field names observed on this branch, each usable as `field_name`
+     * on the log field-values endpoint. Computed per branch rather than
+     * fixed by this specification, so clients should not assume a
+     * particular set.
+     *
+     */
+    fields: Array<string>;
+};
+
+export type ProjectBranchLogFieldValuesResponse = {
+    values: Array<string>;
+    /**
+     * True when more distinct values exist than were returned, because
+     * either the requested `limit` or the server's own scan cap was
+     * reached. A caller that filters on a partial list is choosing from an
+     * arbitrary subset, so narrow `since` or `source` and ask again when
+     * this is `true`.
+     *
+     */
+    is_truncated: boolean;
 };
 
 export type BranchAiGateway = {
@@ -4426,6 +5323,144 @@ export type GrantPermissionToProjectResponses = {
 
 export type GrantPermissionToProjectResponse = GrantPermissionToProjectResponses[keyof GrantPermissionToProjectResponses];
 
+export type ListProjectMembersData = {
+    body?: never;
+    path: {
+        project_id: string;
+    };
+    query?: {
+        /**
+         * A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.
+         */
+        cursor?: string;
+        /**
+         * The maximum number of members to return in the response
+         */
+        limit?: number;
+    };
+    url: '/projects/{project_id}/members';
+};
+
+export type ListProjectMembersErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectMembersError = ListProjectMembersErrors[keyof ListProjectMembersErrors];
+
+export type ListProjectMembersResponses = {
+    /**
+     * Returned the org members and their project roles
+     */
+    200: ProjectMembers;
+};
+
+export type ListProjectMembersResponse = ListProjectMembersResponses[keyof ListProjectMembersResponses];
+
+export type RemoveProjectMemberRoleData = {
+    body?: never;
+    path: {
+        project_id: string;
+        member_id: string;
+    };
+    query?: {
+        confirm_self_lockout?: boolean;
+    };
+    url: '/projects/{project_id}/members/{member_id}/role';
+};
+
+export type RemoveProjectMemberRoleErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RemoveProjectMemberRoleError = RemoveProjectMemberRoleErrors[keyof RemoveProjectMemberRoleErrors];
+
+export type RemoveProjectMemberRoleResponses = {
+    /**
+     * Role removed, or no-op if no explicit row existed
+     */
+    200: ProjectMemberRoleResponse;
+};
+
+export type RemoveProjectMemberRoleResponse = RemoveProjectMemberRoleResponses[keyof RemoveProjectMemberRoleResponses];
+
+export type SetProjectMemberRoleData = {
+    body: SetProjectMemberRoleRequest;
+    path: {
+        project_id: string;
+        member_id: string;
+    };
+    query?: {
+        confirm_self_demotion?: boolean;
+    };
+    url: '/projects/{project_id}/members/{member_id}/role';
+};
+
+export type SetProjectMemberRoleErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type SetProjectMemberRoleError = SetProjectMemberRoleErrors[keyof SetProjectMemberRoleErrors];
+
+export type SetProjectMemberRoleResponses = {
+    /**
+     * Role set or updated
+     */
+    200: ProjectMemberRoleResponse;
+};
+
+export type SetProjectMemberRoleResponse = SetProjectMemberRoleResponses[keyof SetProjectMemberRoleResponses];
+
 export type RevokePermissionFromProjectData = {
     body?: never;
     path: {
@@ -4512,8 +5547,7 @@ export type GetAvailablePreloadLibrariesResponse = GetAvailablePreloadLibrariesR
 export type CreateProjectTransferRequestData = {
     body?: {
         /**
-         * Specifies the validity duration of the transfer request in seconds. If not provided,
-         * the request will expire after 24 hours (86,400 seconds).
+         * Number of seconds the transfer request stays valid before it expires. Defaults to 86400 (24 hours).
          *
          */
         ttl_seconds?: number;
@@ -6197,7 +7231,7 @@ export type GetNeonAuthEmailServerResponses = {
     /**
      * Returns the email server configuration for the Neon Auth
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type GetNeonAuthEmailServerResponse = GetNeonAuthEmailServerResponses[keyof GetNeonAuthEmailServerResponses];
@@ -6241,7 +7275,7 @@ export type UpdateNeonAuthEmailServerResponses = {
     /**
      * The OAuth provider has been added to the project
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type UpdateNeonAuthEmailServerResponse = UpdateNeonAuthEmailServerResponses[keyof UpdateNeonAuthEmailServerResponses];
@@ -6293,6 +7327,54 @@ export type SendNeonAuthTestEmailResponses = {
 };
 
 export type SendNeonAuthTestEmailResponse2 = SendNeonAuthTestEmailResponses[keyof SendNeonAuthTestEmailResponses];
+
+export type SendNeonAuthEmailProviderTestData = {
+    body: SendNeonAuthEmailProviderTestRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/email_provider/test';
+};
+
+export type SendNeonAuthEmailProviderTestErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type SendNeonAuthEmailProviderTestError = SendNeonAuthEmailProviderTestErrors[keyof SendNeonAuthEmailProviderTestErrors];
+
+export type SendNeonAuthEmailProviderTestResponses = {
+    /**
+     * Response with the result of the test email send
+     */
+    200: SendNeonAuthTestEmailResponse;
+};
+
+export type SendNeonAuthEmailProviderTestResponse = SendNeonAuthEmailProviderTestResponses[keyof SendNeonAuthEmailProviderTestResponses];
 
 export type GetNeonAuthEmailAndPasswordConfigData = {
     body?: never;
@@ -6433,7 +7515,7 @@ export type GetNeonAuthEmailProviderResponses = {
     /**
      * Returns the email provider configuration for the Neon Auth
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type GetNeonAuthEmailProviderResponse = GetNeonAuthEmailProviderResponses[keyof GetNeonAuthEmailProviderResponses];
@@ -6481,7 +7563,7 @@ export type UpdateNeonAuthEmailProviderResponses = {
     /**
      * The email provider configuration has been updated
      */
-    200: NeonAuthEmailServerConfig;
+    200: NeonAuthEmailServerConfigResponse;
 };
 
 export type UpdateNeonAuthEmailProviderResponse = UpdateNeonAuthEmailProviderResponses[keyof UpdateNeonAuthEmailProviderResponses];
@@ -7884,58 +8966,10 @@ export type SetDefaultProjectBranchResponses = {
 
 export type SetDefaultProjectBranchResponse = SetDefaultProjectBranchResponses[keyof SetDefaultProjectBranchResponses];
 
-export type RecoverProjectBranchData = {
-    body?: never;
-    path: {
-        /**
-         * The Neon project ID
-         */
-        project_id: string;
-        /**
-         * The branch ID
-         */
-        branch_id: string;
-    };
-    query?: never;
-    url: '/projects/{project_id}/branches/{branch_id}/recover';
-};
-
-export type RecoverProjectBranchErrors = {
-    /**
-     * General Error.
-     *
-     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
-     * and whether a response was received.
-     *
-     * - If no response is returned from the API, a network error or timeout likely occurred.
-     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
-     *
-     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
-     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
-     *
-     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
-     *
-     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
-     *
-     */
-    '4XX': GeneralError;
-};
-
-export type RecoverProjectBranchError = RecoverProjectBranchErrors[keyof RecoverProjectBranchErrors];
-
-export type RecoverProjectBranchResponses = {
-    /**
-     * Recovered the specified branch
-     */
-    200: BranchRecoverResponse;
-};
-
-export type RecoverProjectBranchResponse = RecoverProjectBranchResponses[keyof RecoverProjectBranchResponses];
-
 export type FinalizeRestoreBranchData = {
     body?: {
         /**
-         * used to rename the existing branch when it is replaced. if omitted, a default name is generated and used
+         * Name for the replaced branch. If omitted, a unique name is generated.
          */
         name?: string;
     };
@@ -10163,11 +11197,11 @@ export type TransferProjectsFromOrgToOrgData = {
 
 export type TransferProjectsFromOrgToOrgErrors = {
     /**
-     * Transfer failed - the target organization has too many projects or its plan is incompatible with the source organization. Reduce projects or upgrade the organization.
+     * Transfer failed. The target organization has too many projects or an incompatible plan. Reduce projects or upgrade the target organization.
      */
     406: LimitsUnsatisfiedResponse;
     /**
-     * One or more of the provided project IDs have GitHub or Vercel integrations installed. Transferring integration projects is currently not supported
+     * Transfer failed. Projects with active integrations (for example, GitHub or Vercel) cannot be transferred.
      */
     422: ProjectsWithIntegrationResponse;
     /**
@@ -10586,11 +11620,11 @@ export type TransferProjectsFromUserToOrgData = {
 
 export type TransferProjectsFromUserToOrgErrors = {
     /**
-     * Transfer failed - the target organization has too many projects or its plan is incompatible with the source account. Reduce the number of projects or upgrade the target organization to increase its capacity.
+     * Transfer failed. The target organization has too many projects or an incompatible plan. Reduce projects or upgrade the target organization.
      */
     406: LimitsUnsatisfiedResponse;
     /**
-     * One or more of the provided project IDs have GitHub or Vercel integrations installed. Transferring integration projects is currently not supported
+     * Transfer failed. Projects with active integrations (for example, GitHub or Vercel) cannot be transferred.
      */
     422: ProjectsWithIntegrationResponse;
     /**
@@ -10684,8 +11718,7 @@ export type CreateSnapshotData = {
          */
         lsn?: string;
         /**
-         * The target timestamp for the snapshot. Must fall within the restore window.
-         * Use ISO 8601 format (e.g. 2025-08-05T22:00:00Z). Cannot be used with `lsn`.
+         * The target timestamp for the snapshot. Must fall within the restore window. RFC 3339 format. Cannot be used with `lsn`.
          *
          */
         timestamp?: string;
@@ -10694,8 +11727,7 @@ export type CreateSnapshotData = {
          */
         name?: string;
         /**
-         * The time at which the snapshot will be automatically deleted.
-         * Use ISO 8601 format (e.g. 2025-08-05T22:00:00Z).
+         * The time at which the snapshot will be automatically deleted. RFC 3339 format.
          *
          */
         expires_at?: string;
@@ -10885,15 +11917,12 @@ export type UpdateSnapshotResponse = UpdateSnapshotResponses[keyof UpdateSnapsho
 export type RestoreSnapshotData = {
     body?: {
         /**
-         * A name for the newly restored branch.
-         * If omitted, a default name will be generated.
+         * A name for the newly restored branch. If not provided, the server generates a unique name for the branch automatically.
          *
          */
         name?: string;
         /**
-         * The ID of the branch to restore the snapshot into.
-         * If not specified, the branch from which the snapshot was originally
-         * created (`snapshot.source_branch_id`) will be used.
+         * ID of the branch to restore the snapshot into. Defaults to the snapshot's source branch (`snapshot.source_branch_id`); fails if that cannot be determined.
          *
          */
         target_branch_id?: string;
@@ -10918,7 +11947,7 @@ export type RestoreSnapshotData = {
     };
     query?: {
         /**
-         * DEPRECATED. Use the `name` field in the request body instead.
+         * Deprecated. Use the `name` field in the request body instead. Removal scheduled for November 29, 2025.
          * A name for the newly restored branch. If omitted, a default name will be generated.
          *
          *
@@ -11231,7 +12260,7 @@ export type GetProjectBranchStorageData = {
 
 export type GetProjectBranchStorageErrors = {
     /**
-     * Storage is not enabled for this branch, or the project/branch was not
+     * Object storage is not enabled for this branch, or the project/branch was not
      * found. The body is always `BranchStorageNotEnabled` — see `reason` for
      * the exact cause.
      *
@@ -11261,7 +12290,7 @@ export type GetProjectBranchStorageError = GetProjectBranchStorageErrors[keyof G
 
 export type GetProjectBranchStorageResponses = {
     /**
-     * Storage is enabled for this branch
+     * Object storage is enabled for this branch
      */
     200: BranchStorage;
 };
@@ -11322,6 +12351,218 @@ export type GetProjectBranchAiGatewayResponses = {
 };
 
 export type GetProjectBranchAiGatewayResponse = GetProjectBranchAiGatewayResponses[keyof GetProjectBranchAiGatewayResponses];
+
+export type QueryProjectBranchLogsData = {
+    body: ProjectBranchLogsQueryRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/logs/query';
+};
+
+export type QueryProjectBranchLogsErrors = {
+    /**
+     * The query could not be served as written. The body is always
+     * `ProjectBranchLogsInvalidQuery` — see `reason` for the exact cause.
+     *
+     */
+    400: ProjectBranchLogsInvalidQuery;
+    /**
+     * Logs are not available for this branch, or the project/branch was
+     * not found. The body is always `ProjectBranchLogsNotAvailable` — see
+     * `reason` for the exact cause.
+     *
+     */
+    404: ProjectBranchLogsNotAvailable;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type QueryProjectBranchLogsError = QueryProjectBranchLogsErrors[keyof QueryProjectBranchLogsErrors];
+
+export type QueryProjectBranchLogsResponses = {
+    /**
+     * Logs matching the supplied filters
+     */
+    200: ProjectBranchLogsQueryResponse;
+};
+
+export type QueryProjectBranchLogsResponse = QueryProjectBranchLogsResponses[keyof QueryProjectBranchLogsResponses];
+
+export type ListProjectBranchLogFieldsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/logs/fields';
+};
+
+export type ListProjectBranchLogFieldsErrors = {
+    /**
+     * Logs are not available for this branch, or the project/branch was
+     * not found. The body is always `ProjectBranchLogsNotAvailable` — see
+     * `reason` for the exact cause.
+     *
+     */
+    404: ProjectBranchLogsNotAvailable;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchLogFieldsError = ListProjectBranchLogFieldsErrors[keyof ListProjectBranchLogFieldsErrors];
+
+export type ListProjectBranchLogFieldsResponses = {
+    /**
+     * Log fields available for value discovery on this branch
+     */
+    200: ProjectBranchLogFieldsResponse;
+};
+
+export type ListProjectBranchLogFieldsResponse = ListProjectBranchLogFieldsResponses[keyof ListProjectBranchLogFieldsResponses];
+
+export type ListProjectBranchLogFieldValuesData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The log field whose distinct values should be returned. Must be one of
+         * the names returned by the log fields endpoint for this branch.
+         *
+         */
+        field_name: string;
+    };
+    query?: {
+        /**
+         * Length of the lookup window, ending at `end_time` or at the current
+         * time when `end_time` is omitted. Mutually exclusive with
+         * `start_time`. Defaults to six hours.
+         *
+         */
+        since?: ProjectBranchLogDuration;
+        /**
+         * Inclusive beginning of the lookup window. Mutually exclusive with
+         * `since`.
+         *
+         */
+        start_time?: string;
+        /**
+         * Exclusive end of the lookup window. Defaults to the current time.
+         */
+        end_time?: string;
+        /**
+         * Only consider records emitted by this Neon service.
+         */
+        source?: ProjectBranchLogSource;
+        /**
+         * Maximum number of distinct values to return. The response sets
+         * `is_truncated` when this bound, or the server's own scan cap, cut the
+         * list short.
+         *
+         */
+        limit?: number;
+    };
+    url: '/projects/{project_id}/branches/{branch_id}/logs/fields/{field_name}/values';
+};
+
+export type ListProjectBranchLogFieldValuesErrors = {
+    /**
+     * The lookup could not be served as written. The body is always
+     * `ProjectBranchLogsInvalidQuery` — see `reason` for the exact cause.
+     *
+     */
+    400: ProjectBranchLogsInvalidQuery;
+    /**
+     * Logs are not available for this branch, or the project/branch was
+     * not found. The body is always `ProjectBranchLogsNotAvailable` — see
+     * `reason` for the exact cause.
+     *
+     */
+    404: ProjectBranchLogsNotAvailable;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchLogFieldValuesError = ListProjectBranchLogFieldValuesErrors[keyof ListProjectBranchLogFieldValuesErrors];
+
+export type ListProjectBranchLogFieldValuesResponses = {
+    /**
+     * Distinct values for the requested log field
+     */
+    200: ProjectBranchLogFieldValuesResponse;
+};
+
+export type ListProjectBranchLogFieldValuesResponse = ListProjectBranchLogFieldValuesResponses[keyof ListProjectBranchLogFieldValuesResponses];
 
 export type ListProjectBranchBucketObjectsData = {
     body?: never;

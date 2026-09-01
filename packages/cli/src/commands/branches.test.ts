@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
+import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
 
@@ -60,6 +61,75 @@ describe("branches", () => {
 			"test_branch",
 		]);
 	});
+
+	for (const output of ["table", "json", "yaml"] as const) {
+		test(`create --no-secrets/${output}`, async ({ testCliCommand }) => {
+			const { stdout } = await testCliCommand(
+				[
+					"branches",
+					"create",
+					"--project-id",
+					"test",
+					"--name",
+					"test_branch_no_secrets",
+					"--no-secrets",
+				],
+				{ output, snapshot: false },
+			);
+
+			expect(stdout).not.toContain("never-expose-this-password");
+			expect(stdout).not.toContain("connection_uri");
+			expect(stdout).not.toContain("connection_parameters");
+
+			if (output === "table") {
+				expect(stdout).toContain("br-safe-output");
+				return;
+			}
+
+			const parsed: unknown =
+				output === "json" ? JSON.parse(stdout) : YAML.parse(stdout);
+			expect(parsed).toEqual(
+				expect.objectContaining({
+					branch: expect.objectContaining({
+						id: "br-safe-output",
+					}),
+				}),
+			);
+			expect(parsed).not.toHaveProperty("connection_uris");
+		});
+	}
+
+	for (const output of ["json", "yaml"] as const) {
+		test(`create --no-compute --no-secrets/${output}`, async ({
+			testCliCommand,
+		}) => {
+			const { stdout } = await testCliCommand(
+				[
+					"branches",
+					"create",
+					"--project-id",
+					"test",
+					"--name",
+					"test_branch_no_secrets_no_compute",
+					"--no-compute",
+					"--no-secrets",
+				],
+				{ output, snapshot: false },
+			);
+
+			const parsed: unknown =
+				output === "json" ? JSON.parse(stdout) : YAML.parse(stdout);
+			expect(parsed).toEqual(
+				expect.objectContaining({
+					branch: expect.objectContaining({
+						id: "br-safe-no-compute",
+					}),
+				}),
+			);
+			expect(parsed).not.toHaveProperty("connection_uris");
+			expect(parsed).not.toHaveProperty("endpoints");
+		});
+	}
 
 	test("create branch and connect with psql", async ({ testCliCommand }) => {
 		await testCliCommand([

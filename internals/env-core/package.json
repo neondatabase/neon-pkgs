@@ -1,0 +1,28 @@
+{
+	"name": "@neon-internals/env-core",
+	"version": "0.0.6",
+	"private": true,
+	"description": "Branch env resolution and credential reuse shared by the `neon` and `@neon/env` CLIs. Never published - bundled into each consumer.",
+	"type": "module",
+	"exports": {
+		"./*": {
+			"types": "./dist/*.d.ts",
+			"import": "./dist/*.js"
+		}
+	},
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build"
+	},
+	"dependencies": {
+		"@neon/config": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	}
+}

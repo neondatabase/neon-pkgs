@@ -123,6 +123,7 @@ describe("resolveConfig", () => {
 					source: "./functions/hello-world.ts",
 					env: { RESEND_API_KEY: "re_abc" },
 					runtime: "nodejs24",
+					bundler: "esbuild",
 				},
 			],
 			buckets: [{ name: "uploads", access: "private" }],
@@ -130,14 +131,14 @@ describe("resolveConfig", () => {
 		});
 	});
 
-	test("passes externalPackages through to the resolved function", () => {
+	test("resolves a bare externalPackages string to includeFiles: true", () => {
 		const config = defineConfig({
 			preview: {
 				functions: {
 					fn1: {
 						name: "Hello World",
 						source: "./functions/hello-world.ts",
-						externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+						externalPackages: ["sharp", "@mongodb-js/zstd"],
 					},
 				},
 			},
@@ -149,9 +150,55 @@ describe("resolveConfig", () => {
 				name: "Hello World",
 				source: "./functions/hello-world.ts",
 				env: {},
-				externalPackages: ["microsandbox", "@mongodb-js/zstd"],
+				externalPackages: [
+					{ name: "sharp", includeFiles: true },
+					{ name: "@mongodb-js/zstd", includeFiles: true },
+				],
 				runtime: "nodejs24",
+				bundler: "esbuild",
 			},
+		]);
+	});
+
+	test("carries includeFiles: false through from the object form", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello",
+						source: "./hello.ts",
+						externalPackages: [
+							"sharp",
+							{ name: "canvas", includeFiles: false },
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
+			{ name: "sharp", includeFiles: true },
+			{ name: "canvas", includeFiles: false },
+		]);
+	});
+
+	test("treats an explicit includeFiles: true the same as the bare string", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello",
+						source: "./hello.ts",
+						externalPackages: [
+							{ name: "sharp", includeFiles: true },
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
+			{ name: "sharp", includeFiles: true },
 		]);
 	});
 
@@ -162,10 +209,103 @@ describe("resolveConfig", () => {
 			},
 		});
 		const resolved = resolveConfig(config, { name: "main", exists: true });
-		// Absent rather than `[]`, so an existing policy resolves to the shape it always did.
+		// Absent rather than `[]`. The bundler keys the stage-files path off there being a
+		// shipping entry, and an undeclared policy must produce the archive it always did.
 		expect(resolved.preview?.functions[0]).not.toHaveProperty(
 			"externalPackages",
 		);
+	});
+
+	test("defaults bundler to esbuild when the policy omits it", () => {
+		const config = defineConfig({
+			preview: {
+				functions: { fn1: { name: "Hello", source: "./hello.ts" } },
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.bundler).toBe("esbuild");
+	});
+
+	test("carries a none bundler through with a directory source", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Mastra",
+						source: "./.mastra/output",
+						bundler: "none",
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]).toMatchObject({
+			source: "./.mastra/output",
+			bundler: "none",
+		});
+	});
+
+	test("carries an inline function bundler through untouched", () => {
+		const bundler = async () => ({ "index.mjs": new Uint8Array() });
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: { name: "Custom", source: "./build", bundler },
+				},
+			},
+		});
+		const resolved = resolveConfig(config, { name: "main", exists: true });
+		expect(resolved.preview?.functions[0]?.bundler).toBe(bundler);
+	});
+
+	test("rejects externalPackages together with a non-esbuild bundler", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					functions: {
+						fn1: {
+							name: "Mastra",
+							source: "./.mastra/output",
+							bundler: "none",
+							externalPackages: ["sharp"],
+						},
+					},
+				},
+			}),
+		).toThrow(/externalPackages only applies to the "esbuild" bundler/);
+	});
+
+	test("rejects an empty externalPackages list with bundler none", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					functions: {
+						fn1: {
+							name: "Mastra",
+							source: "./.mastra/output",
+							bundler: "none",
+							externalPackages: [],
+						},
+					},
+				},
+			}),
+		).toThrow(/externalPackages only applies to the "esbuild" bundler/);
+	});
+
+	test("rejects the retired zip-directory bundler name", () => {
+		expect(() =>
+			defineConfig({
+				preview: {
+					functions: {
+						fn1: {
+							name: "Mastra",
+							source: "./.mastra/output",
+							bundler: "zip-directory" as never,
+						},
+					},
+				},
+			}),
+		).toThrow(/bundler must be "esbuild", "none"/);
 	});
 
 	test("copies externalPackages so mutating the policy array cannot reach the resolved config", () => {
@@ -184,7 +324,7 @@ describe("resolveConfig", () => {
 		const resolved = resolveConfig(config, { name: "main", exists: true });
 		externalPackages.push("mutated-after-resolve");
 		expect(resolved.preview?.functions[0]?.externalPackages).toEqual([
-			"microsandbox",
+			{ name: "microsandbox", includeFiles: true },
 		]);
 	});
 

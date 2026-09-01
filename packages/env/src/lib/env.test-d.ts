@@ -1,19 +1,25 @@
 import { type Config, defineConfig } from "@neon/config/v1";
-import { describe, expectTypeOf, test } from "vitest";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
-	FunctionSlugOf,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
-	NeonFunctionEnv,
+	NeonEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
+	SelectableEnvKey,
+	SelectedNeonEnv,
+} from "@neon-internals/env-core/env";
+import { fetchEnv } from "@neon-internals/env-core/env";
+import { describe, expectTypeOf, test } from "vitest";
+import type {
+	FunctionSlugOf,
+	NeonFunctionEnv,
 	NoFunctionScopeHint,
-} from "./env.js";
-import { type NeonEnv, parseEnv, type SelectableEnvKey } from "./env.js";
+} from "./parse-env.js";
+import { parseEnv } from "./parse-env.js";
 
 // Type-level tests for `parseEnv`. Run via `pnpm --filter @neon/env test:types`
 // (Vitest typecheck mode) and additionally enforced by `tsc --noEmit` during the build,
@@ -68,6 +74,266 @@ describe("parseEnv key filter (types)", () => {
 		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
 			"DATABASE_URL" | "DATABASE_URL_UNPOOLED" | "NEON_BRANCH"
 		>();
+	});
+});
+
+describe("fetchEnv key filter (types)", () => {
+	test("keeps an inline literal selection exact", () => {
+		const config = defineConfig({});
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["DATABASE_URL"],
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{ postgres: { databaseUrl: string } }>
+		>();
+	});
+
+	test("makes a dynamic selection safely optional", () => {
+		const config = defineConfig({});
+		const keys: Array<"DATABASE_URL" | "NEON_BRANCH"> =
+			Math.random() > 0.5 ? ["DATABASE_URL"] : ["NEON_BRANCH"];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				postgres?: { databaseUrl?: string };
+				branch?: { name?: string };
+			}>
+		>();
+	});
+
+	test("an empty dynamic selection does not claim its element type is present", () => {
+		const config = defineConfig({});
+		const keys: "DATABASE_URL"[] = [];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{ postgres?: { databaseUrl?: string } }>
+		>();
+	});
+
+	test("a tuple containing a union-valued key stays conservative", () => {
+		const config = defineConfig({});
+		const key =
+			Math.random() > 0.5
+				? ("DATABASE_URL" as const)
+				: ("NEON_BRANCH" as const);
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: [key],
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				postgres?: { databaseUrl?: string };
+				branch?: { name?: string };
+			}>
+		>();
+	});
+
+	test("a rest tuple never overstates which repeated keys are present", () => {
+		const config = defineConfig({});
+		const keys: readonly ["DATABASE_URL", ..."NEON_BRANCH"[]] = [
+			"DATABASE_URL",
+		];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				postgres?: { databaseUrl?: string };
+				branch?: { name?: string };
+			}>
+		>();
+	});
+
+	test("a union of whole literal tuples preserves its exact alternatives", () => {
+		const config = defineConfig({});
+		const keys =
+			Math.random() > 0.5
+				? (["DATABASE_URL"] as const)
+				: (["NEON_BRANCH"] as const);
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<
+				| { postgres: { databaseUrl: string } }
+				| { branch: { name: string } }
+			>
+		>();
+	});
+
+	test("keeps existing explicit generic calls exact", () => {
+		const config = defineConfig({});
+		const env = fetchEnv<typeof config, "DATABASE_URL">(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["DATABASE_URL"],
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{ postgres: { databaseUrl: string } }>
+		>();
+	});
+
+	test("requires both storage credential halves in a literal selection", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+		});
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				storage: { accessKeyId: string; secretAccessKey: string };
+			}>
+		>();
+
+		// @ts-expect-error storage credential halves must be selected together
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["AWS_ACCESS_KEY_ID"],
+		});
+	});
+
+	test("requires both storage credential halves in every tuple alternative", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const keys =
+			Math.random() > 0.5
+				? (["AWS_ACCESS_KEY_ID"] as const)
+				: (["AWS_SECRET_ACCESS_KEY"] as const);
+
+		const options = {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		};
+		// @ts-expect-error every tuple alternative must contain both credential halves
+		fetchEnv(config, options);
+	});
+
+	test("requires both storage credential halves in every tuple-position alternative", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const eitherCredential =
+			Math.random() > 0.5
+				? ("AWS_ACCESS_KEY_ID" as const)
+				: ("AWS_SECRET_ACCESS_KEY" as const);
+		const secretOrRegion =
+			Math.random() > 0.5
+				? ("AWS_SECRET_ACCESS_KEY" as const)
+				: ("AWS_REGION" as const);
+
+		// @ts-expect-error each runtime alternative contains only one credential half
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: [eitherCredential],
+		});
+		// @ts-expect-error the secret key is not guaranteed to accompany the access key
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys: ["AWS_ACCESS_KEY_ID", secretOrRegion],
+		});
+	});
+
+	test("preserves valid storage tuple alternatives exactly", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const keys =
+			Math.random() > 0.5
+				? (["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] as const)
+				: (["AWS_ENDPOINT_URL_S3"] as const);
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<
+				| {
+						storage: {
+							accessKeyId: string;
+							secretAccessKey: string;
+						};
+				  }
+				| { storage: { endpoint: string } }
+			>
+		>();
+	});
+
+	test("does not infer the explicit-generic overload from a contextual return", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		// @ts-expect-error an invalid selection cannot produce a complete storage credential
+		const completeStorage: Promise<{
+			storage: { accessKeyId: string; secretAccessKey: string };
+		}> =
+			// @ts-expect-error inferred callers cannot bypass the storage pair rule
+			fetchEnv(config, {
+				projectId: "proj",
+				branch: "main",
+				keys: ["AWS_ACCESS_KEY_ID"],
+			});
+		void completeStorage;
+	});
+
+	test("accepts a dynamic storage selection for runtime validation", () => {
+		const config = defineConfig({
+			preview: { buckets: { uploads: {} } },
+		});
+		const keys: Array<"AWS_ACCESS_KEY_ID" | "AWS_SECRET_ACCESS_KEY"> = [];
+		const env = fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			keys,
+		});
+		expectTypeOf(env).toEqualTypeOf<
+			Promise<{
+				storage?: { accessKeyId?: string; secretAccessKey?: string };
+			}>
+		>();
+	});
+
+	test("rejects unknown and policy-disabled keys", () => {
+		const config = defineConfig({});
+		// @ts-expect-error not a real Neon env var
+		fetchEnv(config, { projectId: "proj", branch: "main", keys: ["NOPE"] });
+		fetchEnv(config, {
+			projectId: "proj",
+			branch: "main",
+			// @ts-expect-error auth is not enabled by this policy
+			keys: ["NEON_AUTH_BASE_URL"],
+		});
 	});
 });
 
@@ -420,6 +686,9 @@ describe("env type-export surface", () => {
 		expectTypeOf<NeonFunctionEnv<typeof sample, "hello">>().not.toBeAny();
 		expectTypeOf<NeonPostgresEnv>().not.toBeAny();
 		expectTypeOf<NeonStorageEnv>().not.toBeAny();
+		expectTypeOf<
+			SelectedNeonEnv<readonly ["DATABASE_URL"]>
+		>().not.toBeAny();
 		expectTypeOf<SelectableEnvKey<typeof sample>>().not.toBeAny();
 	});
 });

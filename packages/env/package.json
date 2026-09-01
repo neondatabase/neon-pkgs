@@ -1,6 +1,6 @@
 {
 	"name": "@neon/env",
-	"version": "0.14.1",
+	"version": "1.1.6",
 	"description": "Resolve and inject Neon connection strings for the branch selected by your neon.ts policy. fetchEnv / parseEnv plus a `neon-env` CLI with `run` and `export`.",
 	"keywords": [
 		"neon",
@@ -30,11 +30,6 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"default": "./dist/index.js"
-		},
-		"./runtime": {
-			"types": "./dist/runtime.d.ts",
-			"import": "./dist/runtime.js",
-			"default": "./dist/runtime.js"
 		}
 	},
 	"files": [
@@ -43,15 +38,17 @@
 		"package.json"
 	],
 	"scripts": {
-		"build": "node ../../scripts/sync-shared.mjs . && tsc --noEmit && tsdown",
+		"build": "tsc --noEmit && tsdown",
 		"prepare": "npm run build",
-		"test": "node ../../scripts/sync-shared.mjs . && pnpm --filter @neon/env... build && vitest --passWithNoTests",
-		"test:ci": "node ../../scripts/sync-shared.mjs . && vitest run --passWithNoTests",
-		"test:types": "node ../../scripts/sync-shared.mjs . && vitest run --typecheck.enabled --typecheck.only",
-		"test:e2e": "node ../../scripts/sync-shared.mjs . && vitest run --config vitest.e2e.config.ts",
+		"test": "pnpm --filter @neon/env... build && vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:types": "vitest run --typecheck.enabled --typecheck.only",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
 	"devDependencies": {
+		"@neon-internals/cli-core": "workspace:*",
+		"@neon-internals/env-core": "workspace:*",
 		"@neon/e2e-harness": "workspace:*",
 		"@neon/sdk": "workspace:*",
 		"@types/node": "catalog:",
@@ -66,6 +63,9 @@
 		"@neon/config": "workspace:*",
 		"zod": "^4.4.3",
 		"yargs": "^18.0.0"
+	},
+	"optionalDependencies": {
+		"@napi-rs/keyring": "1.3.0"
 	},
 	"engines": {
 		"node": ">=20.19.0"

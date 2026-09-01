@@ -52,6 +52,65 @@ describe("applyNeonCapabilities warnings", () => {
 		}
 	});
 
+	it("does not tell a Gemini caller that only Gemini accepts penalties", () => {
+		// gemini-3-6-flash and gemini-3-5-flash-lite reject penalties while their
+		// older siblings accept them, so a rule phrased around the family reads as
+		// a contradiction to exactly the users who now hit it.
+		for (const id of ["gemini-3-6-flash", "gemini-3-5-flash-lite"]) {
+			const [warning] = detailsFor(id, { frequencyPenalty: 0.5 });
+			expect({ id, details: warning.details }).toEqual({
+				id,
+				details: expect.not.stringContaining("Only Gemini"),
+			});
+			// The sentence has to add something the SDK's own prefix did not; it
+			// already prints provider, model, feature and "is not supported".
+			expect(warning.details).toContain("getNeonModelCapabilities");
+		}
+	});
+
+	// Claude routes through /anthropic/v1, not the unified chat endpoint, so a
+	// penalty warning phrased around "the unified endpoint" would be false for
+	// every Claude model that receives it.
+	it("keeps the penalty warning true on routes other than unified chat", () => {
+		for (const id of ["claude-opus-5", "kimi-k3", "gemini-3-6-flash"]) {
+			const warning = detailsFor(id, { frequencyPenalty: 0.5 }).find(
+				(w) => w.feature === "frequencyPenalty",
+			);
+			expect({ id, details: warning?.details }).toEqual({
+				id,
+				details: expect.not.stringContaining("unified endpoint"),
+			});
+		}
+	});
+
+	// temperature and topP read `samplingDetails`, not GENERIC_DETAILS, so the
+	// penalty assertions above did not cover them and the old wording survived
+	// one round of review on exactly the parameter the finding was about.
+	it("gives temperature and topP the same actionable wording as everything else", () => {
+		const warnings = detailsFor("gemini-3-6-flash", {
+			temperature: 0.2,
+			topP: 0.9,
+		});
+
+		expect(warnings.map((w) => w.feature)).toEqual(["temperature", "topP"]);
+		for (const warning of warnings) {
+			expect(warning.details).toContain(
+				"The request was sent without it",
+			);
+			expect(warning.details).toContain("getNeonModelCapabilities");
+		}
+	});
+
+	it("points a Claude caller at the effort option when reasoningEffort is dropped", () => {
+		const [warning] = detailsFor("claude-opus-5", {
+			providerOptions: { neon: { reasoningEffort: "high" } },
+		});
+
+		expect(warning.feature).toBe("reasoningEffort");
+		expect(warning.details).toContain("The request was sent without it");
+		expect(warning.details).toContain("providerOptions.anthropic.effort");
+	});
+
 	it("hedges rather than asserting a 400 for an unrecognised Claude id", () => {
 		const [warning] = detailsFor("claude-3-5-sonnet-20241022", {
 			temperature: 0.2,
@@ -68,6 +127,7 @@ describe("applyNeonCapabilities warnings", () => {
 
 		expect(warning.type).toBe("unsupported");
 		expect(warning.details).toContain("Claude 4.7 and newer");
+		expect(warning.details).toContain("The request was sent without it");
 	});
 
 	it("keeps temperature and drops topP when a Claude call sets both", () => {
