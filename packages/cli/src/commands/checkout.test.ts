@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { describe, expect } from "vitest";
 
 import { test as originalTest } from "../test_utils/fixtures";
+import { formatCheckoutPolicyFailure } from "./checkout";
 import { ENV_PULL_SKIPPED_HINT } from "./env";
 
 // All tests in this file share a single temporary directory whose path is
@@ -283,5 +284,55 @@ describe("checkout", () => {
 			},
 		);
 		removeFile(ctx);
+	});
+});
+
+describe("checkout --env", () => {
+	test("help describes --env as a .env file path", async ({
+		testCliCommand,
+	}) => {
+		const { stdout, stderr } = await testCliCommand(
+			["checkout", "--help"],
+			{
+				snapshot: false,
+			},
+		);
+		expect(`${stdout}\n${stderr}`).toContain("Path to a .env file");
+	});
+
+	test("checking out an existing branch does not load --env", async ({
+		testCliCommand,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("existing_skips_env");
+		await testCliCommand(
+			[
+				"checkout",
+				"main",
+				"--project-id",
+				"test",
+				"--no-env-pull",
+				"--env",
+				"/no/such/neon-checkout.env",
+				"--context-file",
+				ctx,
+			],
+			{ snapshot: false },
+		);
+	});
+});
+
+describe("formatCheckoutPolicyFailure", () => {
+	test("includes --env on the deploy and checkout retries when checkout had one", () => {
+		const message = formatCheckoutPolicyFailure({
+			branchName: "feat",
+			branchId: "br-x",
+			failure: "unset RESEND_API_KEY",
+			env: ".env.local",
+		});
+		expect(message).toContain(
+			"neon deploy --update-existing --env .env.local",
+		);
+		expect(message).toContain("neon checkout feat --env .env.local");
 	});
 });
