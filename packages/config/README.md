@@ -21,7 +21,7 @@ import { defineConfig } from "@neon/config/v1";
 export default defineConfig({
   // Static: what *exists* on every branch. GA service toggles drive the typed env.
   auth: true,
-  dataApi: false,
+  dataApi: true,
   // Beta (Preview) features, keyed by slug / name.
   preview: {
     functions: {
@@ -219,7 +219,7 @@ import {
 ## Safety Rules
 
 - `apply` / `pushConfig` never creates projects or branches.
-- `auth: {}` and `dataApi: {}` enable those integrations with Neon defaults. `auth.enabled: false`, `dataApi.enabled: false`, or absence leaves existing integrations alone. Disabling is destructive and remains explicit/manual.
+- `auth: {}` and `dataApi: {}` enable those integrations with Neon defaults. Absence of `dataApi` leaves an existing Data API alone. `dataApi: false` / `dataApi.enabled: false` disables it (an override: `updateExisting` or `confirm`). `auth.enabled: false` still leaves Auth alone.
 - Mutable branch drift (`protected`, `ttl`, `postgres.computeSettings`) is reported as a conflict unless `updateExisting` is passed (or a `confirm` callback is supplied to `pushConfig`).
 - Applying to a branch with the `protected` flag set on Neon requires `allowProtectedBranch` (or a `confirm` callback).
 

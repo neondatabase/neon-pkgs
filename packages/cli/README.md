@@ -78,9 +78,36 @@ neon claim create --service auth --service data-api
 ```
 
 When the current directory has a `neon.ts`, `claim create` also requests every service
-declared there. Explicit `--service` values are added to that set. Object Storage, Functions,
-and the AI Gateway are sent to the service so demand is recorded, but are reported as
-unavailable until the project is claimed; the CLI does not silently remove them.
+declared there. Explicit `--service` values are added to that set. If that policy enables
+the Data API, identity includes a snake_case `data_api` object. A neon.ts with
+`dataApi: { authProvider: "external", jwksUrl: "https://idp.example.com/jwks.json" }`
+sends:
+
+```json
+{
+  "type": "anonymous",
+  "capabilities": ["postgres", "data_api"],
+  "source": "neon_cli",
+  "data_api": {
+    "auth_provider": "external",
+    "jwks_url": "https://idp.example.com/jwks.json"
+  }
+}
+```
+
+`neon claim create --service data-api` with no neon.ts Data API block omits `data_api`:
+
+```json
+{
+  "type": "anonymous",
+  "capabilities": ["postgres", "data_api"],
+  "source": "neon_cli"
+}
+```
+
+Object Storage, Functions, and the AI Gateway are sent to the service so demand is
+recorded, but are reported as unavailable until the project is claimed; the CLI does
+not silently remove them.
 
 The command writes:
 

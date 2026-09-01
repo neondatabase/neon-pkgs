@@ -167,18 +167,6 @@ const appliedBranchFields = (change: AppliedChange): FieldChange[] => {
 	}
 };
 
-/**
- * Render the applied (or planned) changes as a `git diff`-style list:
- *
- * - **Service changes** (auth / Data API / buckets / functions) are additions
- *   with no meaningful "before", so they list as green `+ <label>` lines
- *   (`~ <label>` for the lone Data API settings *update*).
- * - **Branch setting changes** group per branch and render as sorted
- *   `field → value` lines under a `~ <branch>` header.
- *
- * Returns "" when there is nothing to show. Pure — callers own the heading
- * spacing and any surrounding summary.
- */
 export const renderAppliedChanges = (
 	changes: AppliedChange[],
 	title: string,
@@ -193,10 +181,20 @@ export const renderAppliedChanges = (
 		.sort((a, b) => a.identifier.localeCompare(b.identifier));
 	for (const service of services) {
 		const label = serviceLabel(service.identifier);
-		lines.push(
+		const line =
 			service.action === "create"
-				? `  ${paint.added(`+ ${label}`)}`
-				: `  ${paint.arrow(`~ ${label}`)}`,
+				? `+ ${label}`
+				: service.action === "delete"
+					? `- ${label}`
+					: `~ ${label}`;
+		lines.push(
+			`  ${
+				service.action === "create"
+					? paint.added(line)
+					: service.action === "delete"
+						? paint.removed(line)
+						: paint.arrow(line)
+			}`,
 		);
 	}
 

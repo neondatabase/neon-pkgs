@@ -527,6 +527,20 @@ export class FakeNeonApi implements NeonApi {
 		return clone(updated);
 	}
 
+	async deleteProjectBranchDataApi(
+		projectId: string,
+		branchId: string,
+		databaseName: string,
+	): Promise<void> {
+		this.history.push({
+			method: "deleteProjectBranchDataApi",
+			args: [projectId, branchId, databaseName],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		this.neonDataApi.delete(`${projectId}:${branchId}:${databaseName}`);
+	}
+
 	/** Test helper: attach a Neon Auth integration to a branch. */
 	seedNeonAuth(
 		projectId: string,

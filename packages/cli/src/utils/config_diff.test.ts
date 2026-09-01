@@ -202,4 +202,14 @@ describe("renderAppliedChanges", () => {
 		expect(text).not.toContain("invocationUrl");
 		expect(text).not.toContain("https://");
 	});
+
+	it("renders a Data API disable as a - line", () => {
+		const changes: AppliedChange[] = [
+			{ kind: "service", action: "delete", identifier: "dataApi" },
+		];
+		const text = renderAppliedChanges(changes, "Applied changes", {
+			color: false,
+		});
+		expect(text.split("\n")[1]).toBe("  - Data API");
+	});
 });

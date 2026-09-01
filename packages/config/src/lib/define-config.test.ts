@@ -79,6 +79,17 @@ describe("resolveConfig", () => {
 		});
 		expect(resolved.authEnabled).toBe(false);
 		expect(resolved.dataApiEnabled).toBe(false);
+		expect(resolved.dataApiPolicy).toBe("disabled");
+	});
+
+	test("omits Data API when the policy does not mention it", () => {
+		const config = defineConfig({});
+		const resolved = resolveConfig(config, {
+			name: "dev-a",
+			exists: false,
+		});
+		expect(resolved.dataApiEnabled).toBe(false);
+		expect(resolved.dataApiPolicy).toBe("omitted");
 	});
 
 	test("treats `auth: true` as enabled", () => {

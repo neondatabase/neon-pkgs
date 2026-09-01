@@ -365,6 +365,13 @@ export class ClaimableClient {
 	async register(input: {
 		capabilities: readonly ClaimableCapability[];
 		source: string;
+		dataApi?: {
+			auth_provider: "neon_auth" | "external";
+			jwks_url?: string;
+			provider_name?: string;
+			jwt_audience?: string;
+			settings?: Record<string, unknown>;
+		};
 	}): Promise<Registration> {
 		return parseRegistrationResponse(
 			await this.request("/v1/agent/identity", {
@@ -373,6 +380,9 @@ export class ClaimableClient {
 					type: "anonymous",
 					capabilities: input.capabilities,
 					source: input.source,
+					...(input.dataApi !== undefined
+						? { data_api: input.dataApi }
+						: {}),
 				},
 			}),
 		);

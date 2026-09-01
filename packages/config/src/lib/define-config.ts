@@ -200,6 +200,12 @@ export function resolveConfig(
 	const resolved: ResolvedBranchConfig = {
 		authEnabled: isServiceEnabled(config.auth),
 		dataApiEnabled: isDataApiEnabled(config.dataApi),
+		dataApiPolicy:
+			config.dataApi === undefined
+				? "omitted"
+				: isDataApiEnabled(config.dataApi)
+					? "enabled"
+					: "disabled",
 	};
 	const dataApi = resolveDataApi(config.dataApi);
 	if (dataApi) resolved.dataApi = dataApi;
