@@ -8,6 +8,7 @@ import {
 	createApiFromOptions,
 	credentialEnvKeys,
 	credentialName,
+	type FetchEnvKeysOptions,
 	type FetchEnvOptions,
 	type FunctionUrlMode,
 	fetchEnvKeysState,
@@ -125,6 +126,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		revokeSuperseded?: boolean;
 		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
 		functionUrls?: FunctionUrlMode;
+		listedFunctions?: FetchEnvKeysOptions["listedFunctions"];
 	},
 ): Promise<ReusedBranchEnv> {
 	const {

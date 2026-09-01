@@ -764,6 +764,12 @@ export type FetchEnvKeysOptions = FetchEnvOptions & {
 	 * list cannot name `NEON_FUNCTION_*_BASE_URL`, so it would drop function URLs.
 	 */
 	omitKeys?: readonly string[];
+	/**
+	 * Skip a second `listBranchFunctions` when the caller already listed. Explicit
+	 * `--service` / `--env` validate against this same result, so a later
+	 * `FeatureUnavailable` cannot be swallowed as `skipped`.
+	 */
+	listedFunctions?: ReadonlyArray<{ slug: string; invocationUrl: string }>;
 };
 
 export async function fetchEnvKeysState(
@@ -1009,20 +1015,24 @@ export async function fetchEnvKeysState(
 	const declaredSlugs = (desired.preview?.functions ?? []).map(
 		(fn) => fn.slug,
 	);
+	const selectedFunctionKeys =
+		selection === null ? [] : [...selection].filter(isFunctionBaseUrlKey);
 	const wantsAnyFunctionUrl =
-		selection === null || [...selection].some(isFunctionBaseUrlKey);
+		selection === null || selectedFunctionKeys.length > 0;
 	const shouldList =
 		wantsAnyFunctionUrl &&
 		(functionUrlMode === "all-live" || declaredSlugs.length > 0);
 
 	let functionUrlsUnavailable = false;
 	if (shouldList) {
-		const listed = await listFunctionInvocationUrls(
-			api,
-			projectId,
-			branch.id,
-		);
+		const listed =
+			options.listedFunctions === undefined
+				? await listFunctionInvocationUrls(api, projectId, branch.id)
+				: listedFromSnapshots(options.listedFunctions);
 		if (listed.status === "unavailable") {
+			if (selectedFunctionKeys.length > 0) {
+				throw listed.error;
+			}
 			functionUrlsUnavailable = true;
 			if (
 				functionUrlMode === "policy" &&
@@ -1040,19 +1050,51 @@ export async function fetchEnvKeysState(
 				if (!wants(functionBaseUrlKey(fn.slug))) continue;
 				functions[fn.slug] = { baseUrl: fn.invocationUrl };
 			}
+			assertSelectedFunctionUrls(selectedFunctionKeys, functions);
 			if (
-				functionUrlMode === "policy" &&
-				declaredSlugs.length > 0 &&
-				selection === null
+				selectedFunctionKeys.length > 0 ||
+				(functionUrlMode === "policy" &&
+					declaredSlugs.length > 0 &&
+					selection === null)
 			) {
 				result.functions = functions;
 			} else if (Object.keys(functions).length > 0) {
 				result.functions = functions;
 			}
 		}
+	} else {
+		assertSelectedFunctionUrls(selectedFunctionKeys, {});
 	}
 
 	return { env: result, functionUrlsUnavailable };
+}
+
+function listedFromSnapshots(
+	snapshots: ReadonlyArray<{ slug: string; invocationUrl: string }>,
+): {
+	status: "ok";
+	functions: Array<{ slug: string; invocationUrl: string }>;
+} {
+	const functions = snapshots
+		.filter((fn) => fn.invocationUrl !== "")
+		.map((fn) => ({
+			slug: fn.slug,
+			invocationUrl: fn.invocationUrl,
+		}))
+		.sort((left, right) => left.slug.localeCompare(right.slug));
+	return { status: "ok", functions };
+}
+
+function assertSelectedFunctionUrls(
+	keys: readonly string[],
+	functions: Record<string, NeonFunctionUrlEnv>,
+): void {
+	for (const key of keys) {
+		const slug = parseFunctionBaseUrlKey(key);
+		if (slug === null || functions[slug] === undefined) {
+			throw new Error(`fetchEnv: missing ${key}.`);
+		}
+	}
 }
 
 async function listFunctionInvocationUrls(
@@ -1064,24 +1106,17 @@ async function listFunctionInvocationUrls(
 			status: "ok";
 			functions: Array<{ slug: string; invocationUrl: string }>;
 	  }
-	| { status: "unavailable" }
+	| { status: "unavailable"; error: PlatformError }
 > {
 	try {
 		const snapshots = await api.listBranchFunctions(projectId, branchId);
-		const functions = snapshots
-			.filter((fn) => fn.invocationUrl !== "")
-			.map((fn) => ({
-				slug: fn.slug,
-				invocationUrl: fn.invocationUrl,
-			}))
-			.sort((left, right) => left.slug.localeCompare(right.slug));
-		return { status: "ok", functions };
+		return listedFromSnapshots(snapshots);
 	} catch (error) {
 		if (
 			isPlatformError(error) &&
 			error.code === ErrorCode.FeatureUnavailable
 		) {
-			return { status: "unavailable" };
+			return { status: "unavailable", error };
 		}
 		throw error;
 	}

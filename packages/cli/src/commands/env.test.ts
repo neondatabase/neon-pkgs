@@ -971,6 +971,35 @@ describe("env pull function invocation URLs", () => {
 		).rejects.toThrow(/isn't available for this Neon project/);
 	});
 
+	it("does not list functions twice for --service functions", async () => {
+		const api = new ListFunctionsThenUnavailableApi([
+			functionSnapshot("hello"),
+		]);
+		await pull({
+			...baseProps(api, cwd),
+			services: ["functions"],
+		});
+		expect(api.listCalls).toBe(1);
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			NEON_BRANCH: BRANCH_NAME,
+			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
+		});
+	});
+
+	it("does not list functions twice for --env function URL keys", async () => {
+		const api = new ListFunctionsThenUnavailableApi([
+			functionSnapshot("hello"),
+		]);
+		await pull({
+			...baseProps(api, cwd),
+			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+		});
+		expect(api.listCalls).toBe(1);
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
+		});
+	});
+
 	it("pulls one function URL named via --env", async () => {
 		await pull({
 			...baseProps(withFunctions("hello", "world"), cwd),
@@ -1036,6 +1065,30 @@ class NoFunctionsFeatureNeonApi extends FakeNeonApi {
 			"Functions isn't available for this Neon project (HTTP 404 Not Found).",
 			{ details: { status: 404 } },
 		);
+	}
+}
+
+class ListFunctionsThenUnavailableApi extends FakeNeonApi {
+	listCalls = 0;
+
+	constructor(functions: NeonFunctionSnapshot[]) {
+		super();
+		this.functions = functions;
+	}
+
+	override async listBranchFunctions(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonFunctionSnapshot[]> {
+		this.listCalls += 1;
+		if (this.listCalls > 1) {
+			throw new PlatformError(
+				ErrorCode.FeatureUnavailable,
+				"Functions isn't available for this Neon project (HTTP 404 Not Found).",
+				{ details: { status: 404 } },
+			);
+		}
+		return super.listBranchFunctions(projectId, branchId);
 	}
 }
 

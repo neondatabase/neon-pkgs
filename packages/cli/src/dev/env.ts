@@ -380,7 +380,12 @@ const resolveSelectedServices = async (
 	return await fetchAndProject(config, ctx, {
 		keys: fetchKeys,
 		revokeSuperseded: false,
-		...(has("functions") ? { functionUrls: "all-live" as const } : {}),
+		...(has("functions")
+			? {
+					functionUrls: "all-live" as const,
+					listedFunctions: callableFunctions,
+				}
+			: {}),
 	});
 };
 
@@ -681,6 +686,10 @@ const fetchAndProject = async (
 		keys?: readonly string[];
 		revokeSuperseded?: boolean;
 		functionUrls?: FunctionUrlMode;
+		listedFunctions?: ReadonlyArray<{
+			slug: string;
+			invocationUrl: string;
+		}>;
 	} = {},
 ): Promise<ResolvedNeonEnvVars> => {
 	const result = await fetchEnvReusingSecrets(config, {
@@ -691,6 +700,9 @@ const fetchAndProject = async (
 		...(opts.keys ? { keys: opts.keys } : {}),
 		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
 		...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
+		...(opts.listedFunctions
+			? { listedFunctions: opts.listedFunctions }
+			: {}),
 	});
 	return {
 		vars: result.vars,

@@ -1079,6 +1079,80 @@ describe("function invocation URLs", () => {
 		expect(env.functions).toEqual({});
 	});
 
+	test("fetchEnv selected function URL key returns it", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: helloUrl,
+		});
+
+		const env = await fetchEnv(helloPolicy, {
+			api,
+			projectId,
+			branchId: "br-main",
+			keys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+		});
+
+		expect(env.functions.hello.baseUrl).toBe(helloUrl);
+		expect(env).not.toHaveProperty("postgres");
+	});
+
+	test("fetchEnv selected function URL key throws when the function is undeployed", async () => {
+		const { api, projectId } = seededFake();
+
+		await expect(
+			fetchEnv(helloPolicy, {
+				api,
+				projectId,
+				branchId: "br-main",
+				keys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			}),
+		).rejects.toThrow(/fetchEnv: missing NEON_FUNCTION_HELLO_BASE_URL/);
+	});
+
+	test("fetchEnv selected function URL key throws when the invocation URL is empty", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: "",
+		});
+
+		await expect(
+			fetchEnv(helloPolicy, {
+				api,
+				projectId,
+				branchId: "br-main",
+				keys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			}),
+		).rejects.toThrow(/fetchEnv: missing NEON_FUNCTION_HELLO_BASE_URL/);
+	});
+
+	test("fetchEnv selected function URL key throws when listing is FeatureUnavailable", async () => {
+		class NoFunctionsFeatureApi extends FakeNeonApi {
+			override async listBranchFunctions(): Promise<never> {
+				throw new PlatformError(
+					ErrorCode.FeatureUnavailable,
+					"Functions isn't available for this Neon project",
+					{ details: { status: 404 } },
+				);
+			}
+		}
+		const { api, projectId } = seededFake(new NoFunctionsFeatureApi());
+
+		await expect(
+			fetchEnv(helloPolicy, {
+				api,
+				projectId,
+				branchId: "br-main",
+				keys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			}),
+		).rejects.toThrow(/isn't available for this Neon project/);
+	});
+
 	test("toEntries projects functions to NEON_FUNCTION_<SLUG>_BASE_URL", () => {
 		const env: NeonEnv<typeof helloPolicy> = {
 			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
