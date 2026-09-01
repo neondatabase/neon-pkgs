@@ -21,7 +21,7 @@ import { defineConfig } from "@neon/config/v1";
 export default defineConfig({
   // Static: what *exists* on every branch. GA service toggles drive the typed env.
   auth: true,
-  dataApi: false,
+  dataApi: true,
   // Beta (Preview) features, keyed by slug / name.
   preview: {
     functions: {

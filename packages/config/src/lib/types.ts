@@ -224,7 +224,7 @@ export interface DataApiSettings {
 
 /** Fields shared by every {@link DataApiConfig} variant. */
 interface DataApiConfigBase {
-	/** Defaults to `true` when the `dataApi` namespace is present. Set `false` to opt out. */
+	/** Defaults to `true` when the `dataApi` namespace is present. `false` disables and apply deletes. */
 	enabled?: boolean;
 	/** Reusable runtime settings. Drift here is reconciled as an update. */
 	settings?: DataApiSettings;
@@ -271,7 +271,8 @@ export type DataApiConfig = DataApiNeonAuthConfig | DataApiExternalAuthConfig;
 /**
  * How the Data API is toggled in a policy: a bare boolean (like the other service toggles)
  * or the richer {@link DataApiConfig} object. `true` / `{}` / `{ enabled: true }` enable it
- * with Neon defaults; `false` / `{ enabled: false }` opt out.
+ * with Neon defaults. `false` / `{ enabled: false }` disable it; apply deletes an existing
+ * Data API. Omit the field to leave an existing integration alone.
  */
 export type DataApiInput = boolean | DataApiConfig;
 
