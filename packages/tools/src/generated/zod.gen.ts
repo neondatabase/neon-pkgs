@@ -2106,6 +2106,23 @@ export const zNeonFunctionsListResponse = z.strictObject({
     functions: z.array(zNeonFunction)
 });
 
+export const zCustomDomain = z.strictObject({
+    domain: z.string(),
+    entity_type: z.string(),
+    entity_id: z.string(),
+    cname_target: z.string()
+});
+
+export const zCustomDomainRegisterRequest = z.strictObject({
+    domain: z.string().min(3).max(254),
+    entity_type: z.string().min(1).max(32),
+    entity_id: z.string().min(1).max(255)
+});
+
+export const zCustomDomainsListResponse = z.strictObject({
+    custom_domains: z.array(zCustomDomain)
+});
+
 export const zNeonFunctionUpdateRequest = z.strictObject({
     name: z.string().min(1).max(256).nullable()
 });
@@ -3214,4 +3231,27 @@ export const zCreateProjectBranchFunctionDeploymentPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     slug: z.string().regex(/^[a-z0-9]{1,20}$/)
+});
+
+export const zListProjectBranchCustomDomainsPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zListProjectBranchCustomDomainsQuery = z.strictObject({
+    cursor: z.string().optional(),
+    limit: z.int().gte(1).lte(1000).optional()
+});
+
+export const zRegisterProjectBranchCustomDomainBody = zCustomDomainRegisterRequest;
+
+export const zRegisterProjectBranchCustomDomainPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zDeleteProjectBranchCustomDomainPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    domain: z.string().min(3).max(254).regex(/^[A-Za-z0-9.-]+$/)
 });

@@ -18,6 +18,15 @@ describe("publishedId", () => {
 		expect(publishedId("logs.query")).toBe("query_logs");
 		expect(publishedId("user.me")).toBe("me_user");
 		expect(publishedId("regions.list")).toBe("list_regions");
+		expect(publishedId("functions.customDomains.list")).toBe(
+			"list_functions_custom_domains",
+		);
+		expect(publishedId("functions.customDomains.register")).toBe(
+			"register_functions_custom_domains",
+		);
+		expect(publishedId("functions.customDomains.delete")).toBe(
+			"delete_functions_custom_domains",
+		);
 	});
 
 	test("every catalog tool publishes publishedId(selector)", () => {

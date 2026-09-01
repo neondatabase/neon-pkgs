@@ -52,6 +52,7 @@ export const operationIds = [
 	"deleteProjectBranchBucket",
 	"deleteProjectBranchBucketObject",
 	"deleteProjectBranchBucketObjectsByPrefix",
+	"deleteProjectBranchCustomDomain",
 	"deleteProjectBranchDataAPI",
 	"deleteProjectBranchDatabase",
 	"deleteProjectBranchFunction",
@@ -117,6 +118,7 @@ export const operationIds = [
 	"listOrgApiKeys",
 	"listProjectBranchBucketObjects",
 	"listProjectBranchBuckets",
+	"listProjectBranchCustomDomains",
 	"listProjectBranchDatabases",
 	"listProjectBranchEndpoints",
 	"listProjectBranches",
@@ -135,6 +137,7 @@ export const operationIds = [
 	"presignProjectBranchBucketObject",
 	"queryProjectBranchLogs",
 	"recoverProject",
+	"registerProjectBranchCustomDomain",
 	"removeOrganizationMember",
 	"removeProjectMemberRole",
 	"resetProjectBranchRolePassword",
@@ -1586,6 +1589,37 @@ export const operationFactories = {
 					raw.deleteProjectBranchBucketObjectsByPrefix({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "bucket_name": input["bucket_name"] }, true),
 			query: optionalGroup({ "prefix": input["prefix"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"deleteProjectBranchCustomDomain": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "deleteProjectBranchCustomDomain",
+				id: "delete_project_branch_custom_domain",
+				title: "Delete a custom domain from a branch",
+				description: "Removes a custom domain registered on the branch and stops routing it.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zDeleteProjectBranchCustomDomainPath.shape["project_id"],
+	"branch_id": zod.zDeleteProjectBranchCustomDomainPath.shape["branch_id"],
+	"domain": zod.zDeleteProjectBranchCustomDomainPath.shape["domain"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "DELETE",
+					path: "/projects/{project_id}/branches/{branch_id}/custom-domains/{domain}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.deleteProjectBranchCustomDomain({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "domain": input["domain"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -3590,6 +3624,39 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"listProjectBranchCustomDomains": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "listProjectBranchCustomDomains",
+				id: "list_project_branch_custom_domains",
+				title: "List the custom domains on a branch",
+				description: "Lists all custom domains registered on the branch, across every target entity.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zListProjectBranchCustomDomainsPath.shape["project_id"],
+	"branch_id": zod.zListProjectBranchCustomDomainsPath.shape["branch_id"],
+	"cursor": zod.zListProjectBranchCustomDomainsQuery.shape["cursor"].optional(),
+	"limit": zod.zListProjectBranchCustomDomainsQuery.shape["limit"].optional(),
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/custom-domains",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.listProjectBranchCustomDomains({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			query: optionalGroup({ "cursor": input["cursor"], "limit": input["limit"] }, false),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"listProjectBranchDatabases": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -4165,6 +4232,40 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.recoverProject({
 			path: optionalGroup({ "project_id": input["project_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"registerProjectBranchCustomDomain": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "registerProjectBranchCustomDomain",
+				id: "register_project_branch_custom_domain",
+				title: "Register a custom domain on a branch",
+				description: "Registers a customer-owned domain (for example `dashboard.acme.com`) on the branch and points it at a target entity, chosen by `entity_type` + `entity_id`.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zRegisterProjectBranchCustomDomainPath.shape["project_id"],
+	"branch_id": zod.zRegisterProjectBranchCustomDomainPath.shape["branch_id"],
+	"domain": zod.zRegisterProjectBranchCustomDomainBody.shape["domain"],
+	"entity_type": zod.zRegisterProjectBranchCustomDomainBody.shape["entity_type"],
+	"entity_id": zod.zRegisterProjectBranchCustomDomainBody.shape["entity_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/custom-domains",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.registerProjectBranchCustomDomain({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: optionalGroup({ "domain": input["domain"], "entity_type": input["entity_type"], "entity_id": input["entity_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,

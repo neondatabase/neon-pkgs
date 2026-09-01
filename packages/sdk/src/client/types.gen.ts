@@ -4544,6 +4544,63 @@ export type NeonFunctionsListResponse = {
     functions: Array<NeonFunction>;
 };
 
+export type CustomDomain = {
+    /**
+     * The registered custom domain (normalized, lowercase).
+     */
+    domain: string;
+    /**
+     * The kind of branch entity the domain targets. Possible values:
+     * `function` (v1 supports only `function`). Not an `enum`: new values may
+     * ship in later spec versions — treat any undocumented value as unknown.
+     *
+     */
+    entity_type: string;
+    /**
+     * The target entity's identifier within the branch. For `function` this
+     * is the function slug.
+     *
+     */
+    entity_id: string;
+    /**
+     * The hostname the customer must point their custom domain at with a
+     * CNAME record. Empty when the serving region has no custom-domains
+     * front door configured. This is the only activation input: point DNS
+     * here and the domain goes live once a certificate is issued on the first
+     * request. (v1 has no status/lifecycle field.)
+     *
+     */
+    cname_target: string;
+};
+
+export type CustomDomainRegisterRequest = {
+    /**
+     * The custom domain to register (for example `dashboard.acme.com`).
+     * Case-insensitive; normalized to lowercase (a trailing root dot is
+     * stripped, so the 254-char bound admits a fully-qualified name whose
+     * normalized form is 253 chars). Neon-managed and internal hostnames are
+     * rejected.
+     *
+     */
+    domain: string;
+    /**
+     * The kind of branch entity to point the domain at. v1 supports only
+     * `function`; any other value is rejected with `invalid_entity_type`.
+     *
+     */
+    entity_type: string;
+    /**
+     * The target entity's identifier within the branch. For `function` this
+     * is the function slug (which must already exist on the branch).
+     *
+     */
+    entity_id: string;
+};
+
+export type CustomDomainsListResponse = {
+    custom_domains: Array<CustomDomain>;
+};
+
 export type NeonFunctionUpdateRequest = {
     /**
      * New display name for the function. `null` clears the display
@@ -13311,3 +13368,160 @@ export type CreateProjectBranchFunctionDeploymentResponses = {
 };
 
 export type CreateProjectBranchFunctionDeploymentResponse = CreateProjectBranchFunctionDeploymentResponses[keyof CreateProjectBranchFunctionDeploymentResponses];
+
+export type ListProjectBranchCustomDomainsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: {
+        /**
+         * A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.
+         */
+        cursor?: string;
+        /**
+         * Specify a value from 1 to 1000 to limit number of domains in the response
+         */
+        limit?: number;
+    };
+    url: '/projects/{project_id}/branches/{branch_id}/custom-domains';
+};
+
+export type ListProjectBranchCustomDomainsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchCustomDomainsError = ListProjectBranchCustomDomainsErrors[keyof ListProjectBranchCustomDomainsErrors];
+
+export type ListProjectBranchCustomDomainsResponses = {
+    /**
+     * The list of custom domains
+     */
+    200: CustomDomainsListResponse & CursorPaginationResponse;
+};
+
+export type ListProjectBranchCustomDomainsResponse = ListProjectBranchCustomDomainsResponses[keyof ListProjectBranchCustomDomainsResponses];
+
+export type RegisterProjectBranchCustomDomainData = {
+    body: CustomDomainRegisterRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/custom-domains';
+};
+
+export type RegisterProjectBranchCustomDomainErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RegisterProjectBranchCustomDomainError = RegisterProjectBranchCustomDomainErrors[keyof RegisterProjectBranchCustomDomainErrors];
+
+export type RegisterProjectBranchCustomDomainResponses = {
+    /**
+     * The registered custom domain
+     */
+    201: CustomDomain;
+};
+
+export type RegisterProjectBranchCustomDomainResponse = RegisterProjectBranchCustomDomainResponses[keyof RegisterProjectBranchCustomDomainResponses];
+
+export type DeleteProjectBranchCustomDomainData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The registered custom domain (case-insensitive).
+         */
+        domain: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/custom-domains/{domain}';
+};
+
+export type DeleteProjectBranchCustomDomainErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteProjectBranchCustomDomainError = DeleteProjectBranchCustomDomainErrors[keyof DeleteProjectBranchCustomDomainErrors];
+
+export type DeleteProjectBranchCustomDomainResponses = {
+    /**
+     * Custom domain deleted
+     */
+    204: void;
+};
+
+export type DeleteProjectBranchCustomDomainResponse = DeleteProjectBranchCustomDomainResponses[keyof DeleteProjectBranchCustomDomainResponses];

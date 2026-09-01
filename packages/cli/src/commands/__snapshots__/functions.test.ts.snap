@@ -179,6 +179,49 @@ exports[`functions > deploy rejects the removed --path flag 1`] = `""`;
 
 exports[`functions > deploy requires at least one option 1`] = `""`;
 
+exports[`functions > domain alias lists custom domains 1`] = `
+"- domain: docs.example.com
+  entity_type: function
+  entity_id: api
+  cname_target: abc.custom.neon.tech
+- domain: app.example.com
+  entity_type: function
+  entity_id: app
+  cname_target: abc.custom.neon.tech
+"
+`;
+
+exports[`functions > domains delete 1`] = `""`;
+
+exports[`functions > domains delete reports a friendly error when the domain is missing 1`] = `""`;
+
+exports[`functions > domains list (table) 1`] = `
+"Domain            Entity Type  Entity Id  Cname Target
+docs.example.com  function     api        abc.custom.neon.tech
+app.example.com   function     app        abc.custom.neon.tech
+"
+`;
+
+exports[`functions > domains list (yaml) 1`] = `
+"- domain: docs.example.com
+  entity_type: function
+  entity_id: api
+  cname_target: abc.custom.neon.tech
+- domain: app.example.com
+  entity_type: function
+  entity_id: app
+  cname_target: abc.custom.neon.tech
+"
+`;
+
+exports[`functions > domains register (yaml) 1`] = `
+"domain: docs.example.com
+entity_type: function
+entity_id: api
+cname_target: abc.custom.neon.tech
+"
+`;
+
 exports[`functions > get (table) 1`] = `
 "function
 Slug            my-func
