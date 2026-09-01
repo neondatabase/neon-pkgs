@@ -293,25 +293,36 @@ export const planFunctionsToUnits = async (
 	searchBase: number,
 	keepPorts: ReadonlyMap<string, number> = new Map(),
 ): Promise<ServedUnit[]> => {
-	let searchOffset = 0;
-	const reserved = new Set<number>(keepPorts.values());
-	const assigned: Array<{ fn: PlannedFunction; port: number }> = [];
+	const reserved = new Set<number>();
+	const portBySlug = new Map<string, number>();
 	for (const fn of functions) {
-		if (fn.port !== undefined) {
-			assigned.push({ fn, port: fn.port });
-			reserved.add(fn.port);
-			continue;
-		}
+		if (fn.port === undefined) continue;
+		portBySlug.set(fn.slug, fn.port);
+		reserved.add(fn.port);
+	}
+	for (const fn of functions) {
+		if (portBySlug.has(fn.slug)) continue;
 		const kept = keepPorts.get(fn.slug);
-		if (kept !== undefined) {
-			assigned.push({ fn, port: kept });
-			continue;
+		if (kept !== undefined && !reserved.has(kept)) {
+			portBySlug.set(fn.slug, kept);
+			reserved.add(kept);
 		}
+	}
+	let searchOffset = 0;
+	for (const fn of functions) {
+		if (portBySlug.has(fn.slug)) continue;
 		const port = await pickFreePort(searchBase + searchOffset, reserved);
-		assigned.push({ fn, port });
+		portBySlug.set(fn.slug, port);
 		reserved.add(port);
 		searchOffset = port - searchBase + 1;
 	}
+	const assigned = functions.map((fn) => {
+		const port = portBySlug.get(fn.slug);
+		if (port === undefined) {
+			throw new Error(`planFunctionsToUnits: no port for ${fn.slug}`);
+		}
+		return { fn, port };
+	});
 	const overlay = localFunctionUrlEnv(
 		assigned.map(({ fn, port }) => ({ slug: fn.slug, port })),
 	);
