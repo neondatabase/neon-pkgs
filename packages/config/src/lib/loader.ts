@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig } from "./define-config.js";
-import { ConfigLoadError, isPlatformError } from "./errors.js";
-import type { Config } from "./types.js";
+import { ConfigLoadError, ErrorCode, isPlatformError } from "./errors.js";
+import type { Config, FunctionDef } from "./types.js";
 
 /**
  * Default file names tried (in order) when {@link loadConfigFromFile} is called without an
@@ -29,6 +29,13 @@ export interface LoadConfigOptions {
 	 * stray runs from outside any repo never leak into the user's `~` files.
 	 */
 	stopAt?: string;
+	/**
+	 * `"error"` (default) prevents deploy and dev from proceeding without
+	 * function secrets.
+	 * `"omit"` is for metadata-only reads because apply or deploy would lose the
+	 * omitted keys.
+	 */
+	unsetFunctionEnv?: "error" | "omit";
 }
 
 /**
@@ -52,6 +59,42 @@ export async function loadConfigFromFile(
 	config: Config;
 	resolvedPath: string;
 }> {
+	// The omit reload replaces process.env, which is process-global, including
+	// across duplicate @neon/config copies. Queue loads on globalThis.
+	return await withSerializedConfigLoad(() =>
+		loadConfigFromFileUnlocked(options),
+	);
+}
+
+async function loadConfigFromFileUnlocked(options: LoadConfigOptions): Promise<{
+	config: Config;
+	resolvedPath: string;
+}> {
+	if (options.unsetFunctionEnv !== "omit") {
+		return await loadConfigOnce(options);
+	}
+
+	try {
+		return await loadConfigOnce(options);
+	} catch (err) {
+		const keys = unsetFunctionEnvKeys(err);
+		if (keys === null) throw err;
+		// The user's neon.ts may resolve another @neon/config copy, so the reload
+		// input must satisfy its validation.
+		return await withPlaceholderFunctionEnv(async () => {
+			const loaded = await loadConfigOnce(options);
+			return {
+				...loaded,
+				config: withoutFunctionEnvKeys(loaded.config, new Set(keys)),
+			};
+		});
+	}
+}
+
+async function loadConfigOnce(options: LoadConfigOptions): Promise<{
+	config: Config;
+	resolvedPath: string;
+}> {
 	const resolvedPath = options.path
 		? resolveExplicitPath(options.path, options.cwd)
 		: findDefaultConfig(options.cwd, options.stopAt);
@@ -68,7 +111,10 @@ export async function loadConfigFromFile(
 
 	let mod: unknown;
 	try {
-		mod = await importModule(resolvedPath);
+		mod = await importModule(
+			resolvedPath,
+			options.unsetFunctionEnv === "omit",
+		);
 	} catch (cause) {
 		// `defineConfig()` runs at module-eval time, so a config the user got *wrong*
 		// (a bad function slug, an unknown key, an invalid duration, …) throws a
@@ -149,9 +195,13 @@ function findDefaultConfig(
 	}
 }
 
-async function importModule(absPath: string): Promise<unknown> {
+async function importModule(
+	absPath: string,
+	forceJiti = false,
+): Promise<unknown> {
 	const lower = absPath.toLowerCase();
 	const needsJiti =
+		forceJiti ||
 		lower.endsWith(".ts") ||
 		lower.endsWith(".mts") ||
 		lower.endsWith(".cts");
@@ -222,4 +272,106 @@ function safeIsFile(path: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+const UNSET_FUNCTION_ENV_ISSUE =
+	/^preview\.functions\.[^.]+\.env\.(.+): Environment variable "\1" for function ".+" is undefined/;
+
+function unsetFunctionEnvKeys(err: unknown): string[] | null {
+	if (!isPlatformError(err) || err.code !== ErrorCode.InvalidConfig) {
+		return null;
+	}
+	const issues = platformErrorIssues(err);
+	if (issues === null || issues.length === 0) return null;
+	const keys: string[] = [];
+	for (const issue of issues) {
+		const match = UNSET_FUNCTION_ENV_ISSUE.exec(issue);
+		const key = match?.[1];
+		if (key === undefined) return null;
+		keys.push(key);
+	}
+	return keys;
+}
+
+function platformErrorIssues(err: unknown): readonly string[] | null {
+	if (typeof err !== "object" || err === null || !("issues" in err)) {
+		return null;
+	}
+	const { issues } = err;
+	if (
+		!Array.isArray(issues) ||
+		issues.some((issue) => typeof issue !== "string")
+	) {
+		return null;
+	}
+	return issues;
+}
+
+async function withPlaceholderFunctionEnv<T>(
+	run: () => Promise<T>,
+): Promise<T> {
+	// Validation reports config keys, not source process.env names, so the reload
+	// must cover every unset lookup.
+	const original = process.env;
+	const proxy = new Proxy(original, {
+		get(target, prop, receiver) {
+			if (typeof prop === "symbol") {
+				return Reflect.get(target, prop, receiver);
+			}
+			const value = Reflect.get(target, prop, receiver);
+			return value === undefined ? "" : value;
+		},
+	});
+	process.env = proxy;
+	try {
+		return await run();
+	} finally {
+		process.env = original;
+	}
+}
+
+const CONFIG_LOAD_LOCK = Symbol.for("@neon/config loadConfigFromFile lock");
+
+type ConfigLoadLock = { chain: Promise<unknown> };
+
+function configLoadLock(): ConfigLoadLock {
+	const g = globalThis as typeof globalThis & {
+		[CONFIG_LOAD_LOCK]?: ConfigLoadLock;
+	};
+	const lock = g[CONFIG_LOAD_LOCK] ?? { chain: Promise.resolve() };
+	g[CONFIG_LOAD_LOCK] = lock;
+	return lock;
+}
+
+async function withSerializedConfigLoad<T>(run: () => Promise<T>): Promise<T> {
+	const lock = configLoadLock();
+	const next = lock.chain.then(run, run);
+	lock.chain = next.then(
+		() => undefined,
+		() => undefined,
+	);
+	return next;
+}
+
+function withoutFunctionEnvKeys(
+	config: Config,
+	keys: ReadonlySet<string>,
+): Config {
+	const functions = config.preview?.functions;
+	if (!functions) return config;
+	const nextFunctions: Record<string, FunctionDef> = {};
+	for (const [slug, fn] of Object.entries(functions)) {
+		if (!fn.env) {
+			nextFunctions[slug] = fn;
+			continue;
+		}
+		const env = Object.fromEntries(
+			Object.entries(fn.env).filter(([key]) => !keys.has(key)),
+		);
+		nextFunctions[slug] = { ...fn, env };
+	}
+	return Object.freeze({
+		...config,
+		preview: { ...config.preview, functions: nextFunctions },
+	});
 }

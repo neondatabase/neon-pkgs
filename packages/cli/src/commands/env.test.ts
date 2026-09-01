@@ -871,6 +871,27 @@ describe("env pull function invocation URLs", () => {
 		).toBe(helloUrl);
 	});
 
+	it("writes a neon.ts function URL when function env vars are unset", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_PULL_TEST";
+		delete process.env[key];
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				`{ name: 'Hello', source: './hello.ts', env: { SECRET: process.env.${key} } } } } };\n`,
+		);
+
+		try {
+			await pull(baseProps(new FakeNeonApi(), cwd));
+			const env = readEnvFile(join(cwd, ".env.local"));
+			expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+			expect(env.DATABASE_URL).toBeDefined();
+			expect(env.SECRET).toBeUndefined();
+			expect(process.env[key]).toBeUndefined();
+		} finally {
+			delete process.env[key];
+		}
+	});
+
 	it("writes a neon.ts function URL when the listed invocation URL is empty", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
@@ -1355,6 +1376,32 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 		expect(result.status).toBe("written");
 		const content = readFileSync(join(cwd, ".env.local"), "utf8");
 		expect(content).toMatch(/^DATABASE_URL=/m);
+	});
+
+	it("pulls when neon.ts function env vars are unset", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_AUTOPULL_TEST";
+		delete process.env[key];
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				`{ name: 'Hello', source: './hello.ts', env: { SECRET: process.env.${key} } } } } };\n`,
+		);
+
+		try {
+			const result = await autoPullEnvAfterPin({
+				...baseProps(new FakeNeonApi(), cwd),
+				envPull: true,
+			});
+
+			expect(result.status).toBe("written");
+			const env = readEnvFile(join(cwd, ".env.local"));
+			expect(env.DATABASE_URL).toBeDefined();
+			expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+				`https://${BRANCH_ID}-hello.compute.fake.neon.tech`,
+			);
+		} finally {
+			delete process.env[key];
+		}
 	});
 
 	it("skips the pull (writing nothing) when --no-env-pull is passed", async () => {

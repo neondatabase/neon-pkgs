@@ -73,6 +73,8 @@ export type DevEnvContext = {
 	 * Ignored when {@link DevEnvContext.services} is set, since that selection already says.
 	 */
 	implyAiGateway?: boolean;
+	/** Env pull needs function slugs even when their runtime secrets are unset. */
+	omitUnsetFunctionEnv?: boolean;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -153,7 +155,7 @@ export const resolveNeonEnvVars = async (
 		);
 	}
 
-	const config = await loadNeonConfig(ctx.cwd);
+	const config = await loadNeonConfig(ctx);
 
 	if (config) {
 		if (!ctx.projectId || !ctx.branchId) {
@@ -709,9 +711,14 @@ const looksLikeMissingDependency = (err: unknown): boolean => {
 	return MISSING_DEPENDENCY_HINTS.some((hint) => text.includes(hint));
 };
 
-const loadNeonConfig = async (cwd: string): Promise<Config | null> => {
+const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
-		const { config } = await loadConfigFromFile({ cwd });
+		const { config } = await loadConfigFromFile({
+			cwd: ctx.cwd,
+			...(ctx.omitUnsetFunctionEnv
+				? { unsetFunctionEnv: "omit" as const }
+				: {}),
+		});
 		return config;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -723,7 +730,7 @@ const loadNeonConfig = async (cwd: string): Promise<Config | null> => {
 		if (looksLikeMissingDependency(err)) {
 			throw new Error(
 				"Could not load neon.ts: a package it imports is not installed. " +
-					`Run \`${formatInstallCommand(resolvePackageManager(cwd))}\`, then try again.\n` +
+					`Run \`${formatInstallCommand(resolvePackageManager(ctx.cwd))}\`, then try again.\n` +
 					`Original error: ${message}`,
 			);
 		}
