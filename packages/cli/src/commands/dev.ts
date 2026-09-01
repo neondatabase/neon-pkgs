@@ -294,10 +294,12 @@ export const planFunctionsToUnits = async (
 	keepPorts: ReadonlyMap<string, number> = new Map(),
 ): Promise<ServedUnit[]> => {
 	let searchOffset = 0;
+	const reserved = new Set<number>(keepPorts.values());
 	const assigned: Array<{ fn: PlannedFunction; port: number }> = [];
 	for (const fn of functions) {
 		if (fn.port !== undefined) {
 			assigned.push({ fn, port: fn.port });
+			reserved.add(fn.port);
 			continue;
 		}
 		const kept = keepPorts.get(fn.slug);
@@ -305,8 +307,9 @@ export const planFunctionsToUnits = async (
 			assigned.push({ fn, port: kept });
 			continue;
 		}
-		const port = await pickFreePort(searchBase + searchOffset);
+		const port = await pickFreePort(searchBase + searchOffset, reserved);
 		assigned.push({ fn, port });
+		reserved.add(port);
 		searchOffset = port - searchBase + 1;
 	}
 	const overlay = localFunctionUrlEnv(
@@ -332,11 +335,18 @@ export const localFunctionUrlEnv = (
 	return out;
 };
 
-const pickFreePort = (from: number): Promise<number> =>
+const pickFreePort = (
+	from: number,
+	reserved: ReadonlySet<number> = new Set(),
+): Promise<number> =>
 	new Promise((resolvePort, reject) => {
 		const tryPort = (port: number): void => {
 			if (port > 65535) {
 				reject(new Error(`No free port at or above ${from}`));
+				return;
+			}
+			if (reserved.has(port)) {
+				tryPort(port + 1);
 				return;
 			}
 			const server = createServer();

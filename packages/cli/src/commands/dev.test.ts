@@ -340,4 +340,30 @@ describe("local function URLs", () => {
 			"http://localhost:8788",
 		);
 	});
+
+	it("does not give a new sibling a port reserved for a kept function", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const world = {
+			slug: "world",
+			name: "World",
+			source: "/fns/world.ts",
+			env: {},
+		};
+		const units = await planFunctionsToUnits(
+			[hello, world],
+			{},
+			8787,
+			new Map([["hello", 8787]]),
+		);
+		expect(units[0]?.childEnv.NEON_DEV_PORT).toBe("8787");
+		expect(units[1]?.childEnv.NEON_DEV_PORT).not.toBe("8787");
+		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+	});
 });
