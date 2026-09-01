@@ -162,7 +162,6 @@ export const resolveNeonEnvVars = async (
 					"--project-id / --branch.",
 			);
 		}
-		// Fetch uses the full config; missing URLs are DevEnvMismatchError.
 		await assertPolicyMatchesBranch(withoutPreviewFunctions(config), ctx);
 		return await fetchAndProject(config, ctx);
 	}
