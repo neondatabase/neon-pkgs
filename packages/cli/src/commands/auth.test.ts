@@ -29,6 +29,7 @@ import {
 } from "vitest";
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
+import { AuthRefreshError } from "../auth";
 import * as credentialIo from "../credential_io.js";
 import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
@@ -629,19 +630,11 @@ describe("ensureAuth", () => {
 		allowUnsafeTls: true,
 	});
 
-	test("should start new auth flow when refresh token fails", async ({
+	test("does not start a new auth flow when refresh fails", async ({
 		runMockServer,
 	}) => {
 		refreshTokenSpy.mockImplementationOnce(() =>
 			Promise.reject(new Error("AUTH_REFRESH_FAILED")),
-		);
-
-		authSpy.mockImplementationOnce(() =>
-			Promise.resolve({
-				access_token: "new-auth-token",
-				refresh_token: "new-refresh-token",
-				expires_at: Math.floor(Date.now() / 1000) + 3600,
-			}),
 		);
 
 		const server = await runMockServer("main");
@@ -658,11 +651,12 @@ describe("ensureAuth", () => {
 		);
 
 		const props = setupTestProps(server);
-		await ensureAuth(props);
+		await expect(ensureAuth(props)).rejects.toBeInstanceOf(
+			AuthRefreshError,
+		);
 
 		expect(refreshTokenSpy).toHaveBeenCalledTimes(1);
-		expect(authSpy).toHaveBeenCalledTimes(1);
-		expect(props.apiKey).toBe("new-auth-token");
+		expect(authSpy).not.toHaveBeenCalled();
 	});
 
 	test("does not start OAuth when a keyring pointer's get returns null", async ({

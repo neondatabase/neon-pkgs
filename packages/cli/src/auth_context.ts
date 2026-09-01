@@ -1,9 +1,8 @@
 import type { CredentialLocation } from "@neon-internals/cli-core/credentials";
-import { isOwnedCredentialPath } from "./config.js";
 
 /**
- * The 401 handler runs outside yargs, so it needs the exact authentication source
- * to avoid clearing DEFAULT after a named-profile failure.
+ * The 401 handler runs outside yargs and cannot reconstruct the authentication
+ * source or selected profile.
  */
 export type AuthSource =
 	| "api-key"
@@ -18,6 +17,10 @@ export type AuthContext = {
 	profile?: string;
 	storage?: "file" | "keyring";
 	credentialsPath?: string;
+	accessToken?: string;
+	refreshed?: boolean;
+	oauthHost?: string;
+	clientId?: string;
 };
 
 export const locationFromContext = (
@@ -48,24 +51,6 @@ export const clearAuthContext = (): void => {
 	current = null;
 };
 
-export const credentialsToClearOn401 = (
-	context: AuthContext | null,
-): CredentialLocation | null => {
-	if (context?.source !== "stored-credentials") return null;
-	const at = locationFromContext(context);
-	if (at === null) return null;
-	if (at.storage === "keyring") return null;
-
-	// Only a file the CLI created. A profile entry may point anywhere, and a credentials file
-	// we merely adopted is not ours to delete — `neon profile remove` already refuses to touch
-	// one, so a 401 must not quietly do what an explicit removal declines to.
-	//
-	// The legacy `neonctl` directory counts as ours: default resolution deliberately still
-	// reads it in place, so an install predating the rename would otherwise have its own
-	// credentials called "adopted" and never cleared.
-	return isOwnedCredentialPath(context.configDir, at.path) ? at : null;
-};
-
 /**
  * What to tell the user when the API rejects their credential, naming the profile and file
  * when one is involved so they know which of several accounts failed and what to re-run.
@@ -88,13 +73,11 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 		return `Authentication failed: Claimable Neon rejected the linked project's short-lived access token${where}. Retry the command to exchange the saved identity assertion again; if it still fails, run \`neon claim status\`.`;
 	}
 
-	// Reached only when the session was not ours to clear, i.e. an adopted credentials file.
-	// Saying "check --api-key" there would be nonsense; the fix is to sign in again.
 	if (context?.source === "stored-credentials") {
 		if (context.storage === "keyring") {
 			return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session (OS keyring). Sign in again with \`neon auth --profile ${profile}\`.`;
 		}
-		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. That file was not created by neon, so it was left alone — sign in again with \`neon auth --profile ${profile}\`.`;
+		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. Sign in again with \`neon auth --profile ${profile}\`.`;
 	}
 
 	return "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";

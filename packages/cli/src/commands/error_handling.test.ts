@@ -115,11 +115,7 @@ describe("top-level error handling", () => {
 	});
 });
 
-// A 401 makes the CLI clear the OAuth token it stored, so that the next run logs in again.
-// Which credentials it may clear, and from where, depends entirely on how the failing
-// request was authorized — these guard both halves of that.
 describe("401 credential handling", () => {
-	// Serves 401 to everything and hands the test a real port.
 	const unauthorizedServer = async (): Promise<{
 		port: number;
 		close: () => Promise<void>;
@@ -223,24 +219,22 @@ describe("401 credential handling", () => {
 		}
 	});
 
-	// The complement: when the stored token itself is what got rejected, it must be cleared —
-	// and from the --config-dir actually in use, not from the default location.
-	it("clears the stored credentials in --config-dir when they are what was rejected", async () => {
+	it("keeps the stored credentials in --config-dir when they are what was rejected", async () => {
 		const server = await unauthorizedServer();
 		const home = mkdtempSync(join(tmpdir(), "neon-401-stored-"));
-		// Deliberately not $XDG_CONFIG_HOME/neonctl: if the handler falls back to the default
-		// directory instead of honoring --config-dir, this file survives and the test fails.
 		const configDir = join(home, "explicit-config-dir");
 		const credentials = writeCredentials(configDir);
 		const defaultCredentials = writeCredentials(join(home, "neonctl"));
 
 		try {
-			const { code } = await runCli(
+			const { code, output } = await runCli(
 				[
 					"--api-host",
 					`http://localhost:${server.port}`,
 					"--config-dir",
 					configDir,
+					"--oauth-host",
+					"http://127.0.0.1:1",
 					"--no-analytics",
 					"projects",
 					"list",
@@ -248,9 +242,10 @@ describe("401 credential handling", () => {
 				{ XDG_CONFIG_HOME: home },
 			);
 
-			expect(existsSync(credentials)).toBe(false);
+			expect(existsSync(credentials)).toBe(true);
 			expect(existsSync(defaultCredentials)).toBe(true);
 			expect(code).toBe(1);
+			expect(output).not.toContain("deleting credentials");
 		} finally {
 			await server.close();
 			rmSync(home, { recursive: true, force: true });
