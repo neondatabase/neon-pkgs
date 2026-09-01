@@ -222,6 +222,8 @@ cname_target: abc.custom.neon.tech
 "
 `;
 
+exports[`functions > domains register rejects an invalid slug 1`] = `""`;
+
 exports[`functions > get (table) 1`] = `
 "function
 Slug            my-func

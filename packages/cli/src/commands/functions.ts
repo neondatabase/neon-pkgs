@@ -229,25 +229,19 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.command(
 						"register <domain>",
-						"Register a custom domain on the branch",
+						"Point a domain you already own at a function on the branch",
 						(yargs) =>
 							yargs
 								.positional("domain", {
 									describe:
-										"Custom domain (for example docs.example.com)",
+										"Domain you already own (for example docs.example.com)",
 									type: "string",
 									demandOption: true,
 								})
 								.options({
-									"entity-type": {
+									slug: {
 										describe:
-											'Target entity kind. v1 supports only "function"',
-										type: "string",
-										demandOption: true,
-									},
-									"entity-id": {
-										describe:
-											"Target entity id. For function this is the slug",
+											"Function slug this domain should point at",
 										type: "string",
 										demandOption: true,
 									},
@@ -653,19 +647,28 @@ const listDomains = async (props: BranchScopeProps) => {
 const registerDomain = async (
 	props: BranchScopeProps & {
 		domain: string;
-		entityType: string;
-		entityId: string;
+		slug: string;
 	},
 ) => {
+	if (!SLUG_PATTERN.test(props.slug)) {
+		throw new Error(`Invalid function slug "${props.slug}". ${SLUG_HELP}`);
+	}
 	const branchId = await branchIdFromProps(props);
 	const registered = await retryOnLock(() =>
 		registerCustomDomain(props.apiClient, props.projectId, branchId, {
 			domain: props.domain,
-			entity_type: props.entityType,
-			entity_id: props.entityId,
+			entity_type: "function",
+			entity_id: props.slug,
 		}),
 	);
 	writer(props).end(registered, { fields: CUSTOM_DOMAIN_FIELDS });
+	if (registered.cname_target) {
+		log.info(`CNAME ${registered.domain} to ${registered.cname_target}`);
+	} else {
+		log.info(
+			`No CNAME target for ${registered.domain}; this region has no custom-domains front door.`,
+		);
+	}
 };
 
 const deleteDomain = async (props: BranchScopeProps & { domain: string }) => {

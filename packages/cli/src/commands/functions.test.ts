@@ -627,16 +627,41 @@ describe("functions", () => {
 				"domains",
 				"register",
 				"docs.example.com",
-				"--entity-type",
-				"function",
-				"--entity-id",
+				"--slug",
 				"api",
 				"--project-id",
 				"test-project-123456",
 				"--branch",
 				"main",
 			],
-			{ mockDir: "single_org" },
+			{
+				mockDir: "single_org",
+				stderr: "INFO: CNAME docs.example.com to abc.custom.neon.tech",
+			},
+		);
+	});
+
+	test("domains register rejects an invalid slug", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"functions",
+				"domains",
+				"register",
+				"docs.example.com",
+				"--slug",
+				"Bad_Slug",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: 'ERROR: Invalid function slug "Bad_Slug". Use 1-20 lowercase letters and digits (no hyphens or other characters).',
+			},
 		);
 	});
 
