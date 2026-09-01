@@ -59,8 +59,8 @@ export async function loadConfigFromFile(
 	config: Config;
 	resolvedPath: string;
 }> {
-	// The omit reload replaces process.env. Concurrent strict loads in this
-	// process would then see "" for missing keys.
+	// The omit reload replaces process.env, which is process-global, including
+	// across duplicate @neon/config copies. Queue loads on globalThis.
 	return await withSerializedConfigLoad(() =>
 		loadConfigFromFileUnlocked(options),
 	);
@@ -330,11 +330,23 @@ async function withPlaceholderFunctionEnv<T>(
 	}
 }
 
-let configLoadChain: Promise<unknown> = Promise.resolve();
+const CONFIG_LOAD_LOCK = Symbol.for("@neon/config loadConfigFromFile lock");
+
+type ConfigLoadLock = { chain: Promise<unknown> };
+
+function configLoadLock(): ConfigLoadLock {
+	const g = globalThis as typeof globalThis & {
+		[CONFIG_LOAD_LOCK]?: ConfigLoadLock;
+	};
+	const lock = g[CONFIG_LOAD_LOCK] ?? { chain: Promise.resolve() };
+	g[CONFIG_LOAD_LOCK] = lock;
+	return lock;
+}
 
 async function withSerializedConfigLoad<T>(run: () => Promise<T>): Promise<T> {
-	const next = configLoadChain.then(run, run);
-	configLoadChain = next.then(
+	const lock = configLoadLock();
+	const next = lock.chain.then(run, run);
+	lock.chain = next.then(
 		() => undefined,
 		() => undefined,
 	);
