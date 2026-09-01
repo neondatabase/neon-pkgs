@@ -5,6 +5,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
@@ -29,6 +30,7 @@ import {
 } from "vitest";
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
+import { AuthRefreshError, refreshToken } from "../auth";
 import * as credentialIo from "../credential_io.js";
 import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
@@ -629,19 +631,11 @@ describe("ensureAuth", () => {
 		allowUnsafeTls: true,
 	});
 
-	test("should start new auth flow when refresh token fails", async ({
+	test("does not start a new auth flow when refresh fails", async ({
 		runMockServer,
 	}) => {
 		refreshTokenSpy.mockImplementationOnce(() =>
 			Promise.reject(new Error("AUTH_REFRESH_FAILED")),
-		);
-
-		authSpy.mockImplementationOnce(() =>
-			Promise.resolve({
-				access_token: "new-auth-token",
-				refresh_token: "new-refresh-token",
-				expires_at: Math.floor(Date.now() / 1000) + 3600,
-			}),
 		);
 
 		const server = await runMockServer("main");
@@ -658,11 +652,12 @@ describe("ensureAuth", () => {
 		);
 
 		const props = setupTestProps(server);
-		await ensureAuth(props);
+		await expect(ensureAuth(props)).rejects.toBeInstanceOf(
+			AuthRefreshError,
+		);
 
 		expect(refreshTokenSpy).toHaveBeenCalledTimes(1);
-		expect(authSpy).toHaveBeenCalledTimes(1);
-		expect(props.apiKey).toBe("new-auth-token");
+		expect(authSpy).not.toHaveBeenCalled();
 	});
 
 	test("does not start OAuth when a keyring pointer's get returns null", async ({
@@ -1044,5 +1039,54 @@ describe("deleteCredentialsAt", () => {
 		}).not.toThrow();
 
 		rmSync(nonExistentDir, { recursive: true });
+	});
+});
+
+describe("refreshToken", () => {
+	test("refuses a remote HTTP authorization server", async () => {
+		await expect(
+			refreshToken(
+				{ oauthHost: "http://example.com", clientId: "neonctl" },
+				{ refresh_token: "refresh-token" },
+			),
+		).rejects.toThrow(/only requests to HTTPS are allowed/);
+	});
+
+	test("refuses a loopback issuer that advertises a remote HTTP token endpoint", async () => {
+		let port = 0;
+		const server = createServer((req, res) => {
+			const url = new URL(req.url ?? "/", "http://127.0.0.1");
+			if (url.pathname !== "/.well-known/openid-configuration") {
+				res.writeHead(404);
+				res.end();
+				return;
+			}
+			const body = JSON.stringify({
+				issuer: `http://127.0.0.1:${port}`,
+				token_endpoint: "http://example.com/oauth2/token",
+				authorization_endpoint: `http://127.0.0.1:${port}/authorize`,
+			});
+			res.writeHead(200, { "content-type": "application/json" });
+			res.end(body);
+		});
+		await new Promise<void>((resolve) => {
+			server.listen(0, "127.0.0.1", resolve);
+		});
+		port = (server.address() as AddressInfo).port;
+		try {
+			await expect(
+				refreshToken(
+					{
+						oauthHost: `http://127.0.0.1:${port}`,
+						clientId: "neonctl",
+					},
+					{ refresh_token: "refresh-token" },
+				),
+			).rejects.toThrow(/not HTTPS or loopback HTTP/);
+		} finally {
+			await new Promise<void>((resolve, reject) => {
+				server.close((err) => (err ? reject(err) : resolve()));
+			});
+		}
 	});
 });

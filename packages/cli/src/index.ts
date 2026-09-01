@@ -9,16 +9,21 @@ import {
 	trackEvent,
 } from "./analytics.js";
 import { isNeonApiError, messageFromBody, type NeonApiClient } from "./api.js";
-import { defaultClientID } from "./auth.js";
+import { AuthRefreshError, defaultClientID } from "./auth.js";
 import {
 	authFailureMessage,
-	credentialsToClearOn401,
 	getAuthContext,
+	locationFromContext,
 } from "./auth_context.js";
-import { deleteCredentialsAt, ensureAuth } from "./commands/auth.js";
+import {
+	ensureAuth,
+	isAccessTokenUsable,
+	refreshStoredCredentials,
+} from "./commands/auth.js";
 import commands from "./commands/index.js";
 import { defaultDir, ensureConfigDir } from "./config.js";
 import { currentContextFile, enrichFromContext } from "./context.js";
+import { storeFor } from "./credential_io.js";
 import {
 	isNetworkError,
 	matchErrorCode,
@@ -213,7 +218,95 @@ builder = builder
 	.wrap(null)
 	.fail(false);
 
-async function handleError(msg: string, err: unknown): Promise<boolean> {
+function supersededOnDisk(rejectedToken: string | undefined): boolean {
+	if (rejectedToken === undefined) return false;
+	const context = getAuthContext();
+	if (context === null) return false;
+	const at = locationFromContext(context);
+	if (at === null) return false;
+	try {
+		const loaded = storeFor(context.configDir).read(at);
+		return (
+			loaded !== null &&
+			loaded.credentials.access_token !== rejectedToken &&
+			isAccessTokenUsable(loaded.credentials, Date.now())
+		);
+	} catch {
+		return false;
+	}
+}
+
+async function recoverFrom401(canRetry: boolean): Promise<boolean> {
+	const context = getAuthContext();
+	if (context === null || context.source !== "stored-credentials") {
+		log.error(authFailureMessage(context));
+		return false;
+	}
+
+	if (context.refreshed === true) {
+		log.error(authFailureMessage(context));
+		return false;
+	}
+
+	if (!canRetry) {
+		log.error(authFailureMessage(context));
+		return false;
+	}
+
+	if (supersededOnDisk(context.accessToken)) {
+		log.debug(
+			"The rejected token has already been replaced on disk; retrying with the current one",
+		);
+		return true;
+	}
+
+	const at = locationFromContext(context);
+	if (
+		at === null ||
+		context.oauthHost === undefined ||
+		context.clientId === undefined
+	) {
+		log.error(authFailureMessage(context));
+		return false;
+	}
+
+	try {
+		if (
+			await refreshStoredCredentials(at, {
+				apiHost: "",
+				oauthHost: context.oauthHost,
+				clientId: context.clientId,
+				configDir: context.configDir,
+			})
+		) {
+			log.debug("Refreshed the stored session after a 401; retrying");
+			return true;
+		}
+	} catch (err) {
+		if (err instanceof AuthRefreshError) {
+			log.error(err.message);
+			if (err.terminal) {
+				log.error(
+					`Run \`neon auth --profile ${context.profile ?? "DEFAULT"}\` to sign in again.`,
+				);
+			}
+			return false;
+		}
+		log.debug(
+			"Refresh after 401 failed: %s",
+			err instanceof Error ? err.message : "unknown error",
+		);
+	}
+
+	log.error(authFailureMessage(context));
+	return false;
+}
+
+async function handleError(
+	msg: string,
+	err: unknown,
+	canRetry: boolean,
+): Promise<boolean> {
 	if (process.argv.some((arg) => arg === "--help" || arg === "-h")) {
 		await showHelp(builder);
 		process.exit(0);
@@ -238,6 +331,18 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 		}
 	}
 
+	if (err instanceof AuthRefreshError) {
+		log.error(err.message);
+		if (err.terminal) {
+			const context = getAuthContext();
+			log.error(
+				`Run \`neon auth --profile ${context?.profile ?? "DEFAULT"}\` to sign in again.`,
+			);
+		}
+		sendError(err, "AUTH_FAILED");
+		return false;
+	}
+
 	// A connection-level failure (no response ever reached us) reads as a cryptic
 	// `fetch failed` from the @neon/sdk / global `fetch` path. Detect it first and
 	// swap in one clear "check your connection" hint. We deliberately do not retry
@@ -258,31 +363,7 @@ async function handleError(msg: string, err: unknown): Promise<boolean> {
 			return false;
 		} else if (err.status === 401) {
 			sendError(err, "AUTH_FAILED");
-			const context = getAuthContext();
-			const staleCredentials = credentialsToClearOn401(context);
-			// The request was authorized with a key rather than a refreshable token — one the
-			// user supplied, or one stored in a profile. Either way there is nothing to clear
-			// and nothing to retry, since the same key would just be rejected again. Deleting
-			// a profile's key would destroy the only copy of a credential that cannot be
-			// refreshed, so the message says what to re-run instead.
-			if (staleCredentials === null) {
-				log.error(authFailureMessage(context));
-				return false;
-			}
-			log.info("Authentication failed, deleting credentials...");
-			try {
-				if (context === null) return false;
-				deleteCredentialsAt(staleCredentials, context.configDir);
-				return true; // Allow retry for auth failures
-			} catch (deleteErr) {
-				log.debug(
-					"Failed to delete credentials: %s",
-					deleteErr instanceof Error
-						? deleteErr.message
-						: "unknown error",
-				);
-				return false;
-			}
+			return await recoverFrom401(canRetry);
 		} else {
 			const serverMessage = messageFromBody(err.data);
 			if (serverMessage) {
@@ -337,7 +418,11 @@ void (async () => {
 			break;
 		} catch (err) {
 			attempts++;
-			const shouldRetry = await handleError("", err);
+			const shouldRetry = await handleError(
+				"",
+				err,
+				attempts < MAX_ATTEMPTS,
+			);
 			if (!shouldRetry || attempts >= MAX_ATTEMPTS) {
 				await closeAnalytics();
 				process.exit(1);

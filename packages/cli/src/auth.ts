@@ -45,11 +45,137 @@ export type AuthProps = {
 	allowUnsafeTls?: boolean;
 };
 
-export const refreshToken = async (
-	{ oauthHost, clientId, allowUnsafeTls }: AuthProps,
-	tokenSet: ExtendedTokenSet,
-) => {
-	log.debug("Discovering oauth server");
+/** `terminal` is a dead grant. A network failure is not. */
+export class AuthRefreshError extends Error {
+	readonly terminal: boolean;
+	readonly oauthError: string | undefined;
+	readonly cause: unknown;
+
+	constructor(
+		message: string,
+		options: { terminal: boolean; oauthError?: string; cause?: unknown },
+	) {
+		super(message);
+		this.name = "AuthRefreshError";
+		this.terminal = options.terminal;
+		this.oauthError = options.oauthError;
+		this.cause = options.cause;
+	}
+}
+
+const DEAD_GRANT_ERRORS = new Set([
+	"invalid_grant",
+	"token_inactive",
+	"invalid_token",
+]);
+
+export const classifyRefreshFailure = (err: unknown): AuthRefreshError => {
+	const rejection = oauthRejection(err);
+	if (rejection) {
+		return new AuthRefreshError(
+			`The Neon authorization server rejected the stored session: ${rejection.error}${
+				rejection.description ? `: ${rejection.description}` : ""
+			}`,
+			{
+				terminal: DEAD_GRANT_ERRORS.has(rejection.error),
+				oauthError: rejection.error,
+				cause: err,
+			},
+		);
+	}
+
+	return new AuthRefreshError(
+		`Could not reach the Neon authorization server to refresh the stored session: ${
+			err instanceof Error ? err.message : String(err)
+		}`,
+		{ terminal: false, cause: err },
+	);
+};
+
+const oauthRejection = (
+	err: unknown,
+): { error: string; description?: string } | null => {
+	if (err instanceof client.ResponseBodyError) {
+		return {
+			error: err.error,
+			...(err.error_description
+				? { description: err.error_description }
+				: {}),
+		};
+	}
+
+	if (err instanceof client.WWWAuthenticateChallengeError) {
+		const challenge = err.cause.find(({ parameters }) => parameters.error);
+		const error = challenge?.parameters.error;
+		if (typeof error !== "string") return null;
+		const description = challenge?.parameters.error_description;
+		return {
+			error,
+			...(typeof description === "string" ? { description } : {}),
+		};
+	}
+
+	return null;
+};
+
+const isLoopbackHostname = (hostname: string): boolean =>
+	hostname === "127.0.0.1" ||
+	hostname === "localhost" ||
+	hostname === "::1" ||
+	hostname === "[::1]";
+
+/** Remote HTTP would send the refresh token in the clear. Loopback is for local test servers. */
+const oauthExecute = (
+	oauthHost: string,
+	allowUnsafeTls?: boolean,
+): (typeof client.allowInsecureRequests)[] | undefined => {
+	if (allowUnsafeTls === true) {
+		return [client.allowInsecureRequests];
+	}
+	try {
+		const url = new URL(oauthHost);
+		if (url.protocol === "http:" && isLoopbackHostname(url.hostname)) {
+			return [client.allowInsecureRequests];
+		}
+	} catch {
+		return undefined;
+	}
+	return undefined;
+};
+
+const isSafeOAuthUrl = (value: string): boolean => {
+	try {
+		const url = new URL(value);
+		if (url.protocol === "https:") return true;
+		return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+	} catch {
+		return false;
+	}
+};
+
+const assertSafeOAuthEndpoints = (
+	configuration: client.Configuration,
+	allowUnsafeTls?: boolean,
+): void => {
+	if (allowUnsafeTls === true) return;
+	const metadata = configuration.serverMetadata();
+	for (const endpoint of [
+		metadata.token_endpoint,
+		metadata.revocation_endpoint,
+		metadata.authorization_endpoint,
+		metadata.jwks_uri,
+	]) {
+		if (typeof endpoint !== "string" || endpoint === "") continue;
+		if (!isSafeOAuthUrl(endpoint)) {
+			throw new AuthRefreshError(
+				`The authorization server advertised ${endpoint}, which is not HTTPS or loopback HTTP.`,
+				{ terminal: false },
+			);
+		}
+	}
+};
+
+const discover = async ({ oauthHost, clientId, allowUnsafeTls }: AuthProps) => {
 	const configuration = await client.discovery(
 		new URL(oauthHost),
 		clientId,
@@ -57,16 +183,33 @@ export const refreshToken = async (
 		client.None(),
 		{
 			timeout: SERVER_TIMEOUT,
-			execute: allowUnsafeTls
-				? [client.allowInsecureRequests]
-				: undefined,
+			execute: oauthExecute(oauthHost, allowUnsafeTls),
 		},
 	);
+	assertSafeOAuthEndpoints(configuration, allowUnsafeTls);
+	return configuration;
+};
 
-	return await client.refreshTokenGrant(
-		configuration,
-		tokenSet.refresh_token as string,
-	);
+export const refreshToken = async (
+	{ oauthHost, clientId, allowUnsafeTls }: AuthProps,
+	tokenSet: Pick<ExtendedTokenSet, "refresh_token">,
+) => {
+	const refresh = tokenSet.refresh_token;
+	if (typeof refresh !== "string" || refresh === "") {
+		throw new AuthRefreshError(
+			"The stored credentials hold no refresh token.",
+			{ terminal: true },
+		);
+	}
+
+	log.debug("Discovering oauth server");
+	const configuration = await discover({
+		oauthHost,
+		clientId,
+		allowUnsafeTls,
+	});
+
+	return await client.refreshTokenGrant(configuration, refresh);
 };
 
 /**
@@ -84,18 +227,11 @@ export const revokeToken = async (
 	const token = tokenSet.refresh_token;
 	if (typeof token !== "string" || token === "") return false;
 	try {
-		const configuration = await client.discovery(
-			new URL(oauthHost),
+		const configuration = await discover({
+			oauthHost,
 			clientId,
-			{ token_endpoint_auth_method: "none" },
-			client.None(),
-			{
-				timeout: SERVER_TIMEOUT,
-				execute: allowUnsafeTls
-					? [client.allowInsecureRequests]
-					: undefined,
-			},
-		);
+			allowUnsafeTls,
+		});
 		await client.tokenRevocation(configuration, token, {
 			token_type_hint: "refresh_token",
 		});
@@ -115,18 +251,11 @@ export const auth = async ({
 	allowUnsafeTls,
 }: AuthProps) => {
 	log.debug("Discovering oauth server");
-	const configuration = await client.discovery(
-		new URL(oauthHost),
+	const configuration = await discover({
+		oauthHost,
 		clientId,
-		{ token_endpoint_auth_method: "none" },
-		client.None(),
-		{
-			timeout: SERVER_TIMEOUT,
-			execute: allowUnsafeTls
-				? [client.allowInsecureRequests]
-				: undefined,
-		},
-	);
+		allowUnsafeTls,
+	});
 
 	//
 	// Start HTTP server and wait till /callback is hit

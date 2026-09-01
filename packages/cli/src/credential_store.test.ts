@@ -386,6 +386,96 @@ describe("createCredentialStore — keyring", () => {
 		expect(items.size).toBe(1);
 	});
 
+	test("write restores the previous secret when read-back fails", () => {
+		const dir = makeDir();
+		const previous = {
+			type: "api_key",
+			api_key: "napi_previous",
+			user_id: "u1",
+		};
+		const next = {
+			type: "api_key",
+			api_key: "napi_rotated",
+			user_id: "u1",
+		};
+		let failNextConfirm = false;
+		let nullifyNextGet = false;
+		const items = new Map<string, string>();
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend = {
+			get: (service, account) => {
+				if (nullifyNextGet) {
+					nullifyNextGet = false;
+					return null;
+				}
+				return items.get(id(service, account)) ?? null;
+			},
+			set: (service, account, password) => {
+				items.set(id(service, account), password);
+				if (failNextConfirm) {
+					nullifyNextGet = true;
+					failNextConfirm = false;
+				}
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const store = createCredentialStore(dir, { keyring });
+		store.write(keyringAt(), previous);
+		failNextConfirm = true;
+		expect(() => store.write(keyringAt(), next)).toThrow(
+			/could not read them back/,
+		);
+		expect(JSON.parse([...items.values()][0] ?? "{}").api_key).toBe(
+			"napi_previous",
+		);
+	});
+
+	test("write restorePrevious false keeps the new secret when read-back fails", () => {
+		const dir = makeDir();
+		const previous = {
+			type: "api_key",
+			api_key: "napi_previous",
+			user_id: "u1",
+		};
+		const next = {
+			type: "api_key",
+			api_key: "napi_rotated",
+			user_id: "u1",
+		};
+		let failNextConfirm = false;
+		let nullifyNextGet = false;
+		const items = new Map<string, string>();
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend = {
+			get: (service, account) => {
+				if (nullifyNextGet) {
+					nullifyNextGet = false;
+					return null;
+				}
+				return items.get(id(service, account)) ?? null;
+			},
+			set: (service, account, password) => {
+				items.set(id(service, account), password);
+				if (failNextConfirm) {
+					nullifyNextGet = true;
+					failNextConfirm = false;
+				}
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const store = createCredentialStore(dir, { keyring });
+		store.write(keyringAt(), previous);
+		failNextConfirm = true;
+		expect(() =>
+			store.write(keyringAt(), next, { restorePrevious: false }),
+		).toThrow(/could not read them back/);
+		expect(JSON.parse([...items.values()][0] ?? "{}").api_key).toBe(
+			"napi_rotated",
+		);
+	});
+
 	test("write rollback does not delete when the previous item was unread", () => {
 		const dir = makeDir();
 		let deleted = false;

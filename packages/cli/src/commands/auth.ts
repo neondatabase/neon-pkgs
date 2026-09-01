@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
 	credentialInputs,
 	displacedProfileWarning,
@@ -32,8 +33,13 @@ import {
 } from "@neon-internals/cli-core/profiles";
 import type yargs from "yargs";
 import type { NeonApiClient } from "../api.js";
-import { getApiClient } from "../api.js";
-import { auth, refreshToken } from "../auth.js";
+import { getApiClient, isNeonApiError } from "../api.js";
+import {
+	AuthRefreshError,
+	auth,
+	classifyRefreshFailure,
+	refreshToken,
+} from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
@@ -59,6 +65,7 @@ import {
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
+import { withExclusiveLock } from "../refresh_lock.js";
 import {
 	type OutgoingCredential,
 	readOutgoingCredential,
@@ -179,7 +186,7 @@ export const authFlow = async ({
 
 	let identity: { id?: string; email?: string } = {};
 	try {
-		identity = await preserveCredentials(
+		identity = await persistNewSession(
 			at,
 			tokenSet,
 			getApiClient({
@@ -262,32 +269,53 @@ export const authFlow = async ({
 };
 
 /**
- * Persist the token set and return the account it belongs to, so a named profile can be
- * labelled with an email. The credentials file records only `user_id` — a UUID with no
- * email — which is why identifying a stored profile offline is otherwise impossible.
+ * Persist before identity lookup so a lookup failure cannot discard the new session.
+ * Merge the identity only while that session remains current on disk.
  */
-const preserveCredentials = async (
+const persistNewSession = async (
 	at: CredentialLocation,
 	credentials: ExtendedTokenSet,
 	apiClient: NeonApiClient,
 	configDir: string,
 ): Promise<{ id?: string; email?: string }> => {
-	const {
-		data: { id, email },
-	} = await apiClient.getCurrentUserInfo();
-	// Replace rather than merge, and declare the kind. Signing in makes this an OAuth
-	// credential and nothing of a previous one is carried over: a retained API key would leave
-	// the file holding two credentials, possibly for two different accounts, with a single
-	// field deciding which one is live.
-	const stored: StoredCredentials = {
-		...(credentials as Record<string, unknown>),
-		type: OAUTH,
-		...(id !== undefined ? { user_id: id } : {}),
-	};
-	storeFor(configDir).write(at, stored);
-	log.debug("Saved credentials to %s", credentialLabel(at));
-	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(stored)));
-	return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
+	const stored = oauthCredentialsFromTokenSet(credentials, null);
+	writeOAuthCredentials(configDir, at, stored);
+	const identity = await fetchIdentity(apiClient);
+	if (identity.id) {
+		const current = storeFor(configDir).read(at);
+		if (
+			current !== null &&
+			current.credentials.access_token === stored.access_token
+		) {
+			writeOAuthCredentials(configDir, at, {
+				...current.credentials,
+				user_id: identity.id,
+			});
+		}
+	}
+	return identity;
+};
+
+const fetchIdentity = async (
+	apiClient: NeonApiClient,
+): Promise<{ id?: string; email?: string }> => {
+	try {
+		const {
+			data: { id, email },
+		} = await apiClient.getCurrentUserInfo();
+		return { ...(id ? { id } : {}), ...(email ? { email } : {}) };
+	} catch (err) {
+		if (isNeonApiError(err) && err.status === 401) {
+			throw new Error(
+				"Signed in, but the Neon API rejected the new access token. Try `neon auth` again.",
+			);
+		}
+		log.warning(
+			"Signed in, but could not look up the account: %s",
+			err instanceof Error ? err.message : String(err),
+		);
+		return {};
+	}
 };
 
 /** Everything needed to use or refresh a stored credential. A subset of {@link AuthProps}. */
@@ -298,68 +326,189 @@ export type CredentialProps = {
 	allowUnsafeTls?: boolean;
 };
 
+export const isAccessTokenUsable = (
+	credentials: StoredCredentials,
+	now: number,
+): boolean => {
+	const token = credentials.access_token;
+	if (typeof token !== "string" || token === "") return false;
+	const expiresAt = credentials.expires_at;
+	if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) {
+		return false;
+	}
+	return expiresAt > now;
+};
+
+type ResolvedAuth = {
+	apiKey: string;
+	apiClient: NeonApiClient;
+	refreshed: boolean;
+};
+
 const handleExistingToken = async (
-	tokenSet: ExtendedTokenSet,
+	tokenSet: StoredCredentials,
 	props: CredentialProps & { configDir: string },
 	at: CredentialLocation,
-): Promise<{ apiKey: string; apiClient: NeonApiClient } | null> => {
-	// Use existing access_token, if present and valid
-	if (tokenSet.access_token && tokenSet.expires_at > Date.now()) {
+): Promise<ResolvedAuth | null> => {
+	if (isAccessTokenUsable(tokenSet, Date.now())) {
 		log.debug("Using existing valid access_token");
-		const apiClient = getApiClient({
-			apiKey: tokenSet.access_token,
-			apiHost: props.apiHost,
-		});
-
-		return { apiKey: tokenSet.access_token, apiClient };
+		const apiKey = tokenSet.access_token ?? "";
+		return {
+			apiKey,
+			apiClient: getApiClient({
+				apiKey,
+				apiHost: props.apiHost,
+			}),
+			refreshed: false,
+		};
 	}
 
-	// Either access_token is missing or its expired. Refresh the token
-	log.debug(
-		tokenSet.expires_at < Date.now()
-			? "Token is expired, attempting refresh"
-			: "Token is missing access_token, attempting refresh",
-	);
-
-	if (!tokenSet.refresh_token) {
-		log.debug("TokenSet is missing refresh_token, starting authentication");
+	if (
+		typeof tokenSet.refresh_token !== "string" ||
+		tokenSet.refresh_token === ""
+	) {
+		log.debug("Stored credentials hold no refresh_token");
 		return null;
 	}
 
-	let refreshedTokenSet: ExtendedTokenSet;
-	try {
-		refreshedTokenSet = extendTokenSet(
-			await refreshToken(
-				{
-					oauthHost: props.oauthHost,
-					clientId: props.clientId,
-					allowUnsafeTls: props.allowUnsafeTls,
-				},
-				tokenSet,
-			),
-		);
-	} catch (err: unknown) {
-		const typedErr =
-			err instanceof Error ? err : new Error("Unknown error");
-		log.debug("Failed to refresh token: %s", typedErr.message);
-		throw new Error("AUTH_REFRESH_FAILED");
-	}
-
-	const apiKey = refreshedTokenSet.access_token;
-	const apiClient = getApiClient({
+	log.debug("Access token is missing or expired, attempting refresh");
+	const next = await performRefresh(tokenSet, props, at);
+	const apiKey = next.credentials.access_token ?? "";
+	return {
 		apiKey,
-		apiHost: props.apiHost,
-	});
+		apiClient: getApiClient({
+			apiKey,
+			apiHost: props.apiHost,
+		}),
+		refreshed: next.rotated,
+	};
+};
 
-	await preserveCredentials(
-		at,
-		refreshedTokenSet,
-		apiClient,
-		props.configDir,
+/**
+ * Serialize exchanges because presenting a one-time refresh token twice can revoke
+ * the newly issued token family. Persist immediately because the presented token is
+ * invalid once the server answers.
+ */
+const performRefresh = async (
+	credentials: StoredCredentials,
+	props: CredentialProps & { configDir: string },
+	at: CredentialLocation,
+): Promise<{ credentials: StoredCredentials; rotated: boolean }> => {
+	return await withExclusiveLock(
+		refreshLockPath(props.configDir, at),
+		async () => {
+			const loaded = storeFor(props.configDir).read(at);
+			const current = loaded?.credentials ?? credentials;
+			// A later expiry is not a live session: the API may already have
+			// rejected this access token. Only a different usable token means
+			// another process finished the rotation.
+			if (
+				loaded !== null &&
+				isAccessTokenUsable(current, Date.now()) &&
+				current.access_token !== credentials.access_token
+			) {
+				log.debug(
+					"Refresh lost a race; adopting the credentials another command wrote",
+				);
+				return { credentials: current, rotated: false };
+			}
+
+			let refreshed: ExtendedTokenSet;
+			try {
+				refreshed = extendTokenSet(
+					await refreshToken(
+						{
+							oauthHost: props.oauthHost,
+							clientId: props.clientId,
+							allowUnsafeTls: props.allowUnsafeTls,
+						},
+						current,
+					),
+				);
+			} catch (err) {
+				throw err instanceof AuthRefreshError
+					? err
+					: classifyRefreshFailure(err);
+			}
+
+			const next = oauthCredentialsFromTokenSet(
+				refreshed,
+				loaded?.credentials ?? credentials,
+			);
+			writeOAuthCredentials(props.configDir, at, next, {
+				// The presented refresh token is already invalid at the
+				// authorization server. Putting it back would discard the live one.
+				restorePrevious: false,
+			});
+			log.debug("Token refresh successful");
+			return { credentials: next, rotated: true };
+		},
 	);
-	log.debug("Token refresh successful");
+};
 
-	return { apiKey, apiClient };
+/** A 401 proves the access token is stale even before `expires_at`. */
+export const refreshStoredCredentials = async (
+	at: CredentialLocation,
+	props: CredentialProps & { configDir: string },
+): Promise<boolean> => {
+	const loaded = storeFor(props.configDir).read(at);
+	if (loaded === null) return false;
+	const credential = interpretCredentials(
+		loaded.credentials,
+		at,
+		loaded.backend,
+	);
+	if (credential.kind === API_KEY) return false;
+	if (
+		typeof loaded.credentials.refresh_token !== "string" ||
+		loaded.credentials.refresh_token === ""
+	) {
+		return false;
+	}
+	await performRefresh(loaded.credentials, props, at);
+	return true;
+};
+
+const oauthCredentialsFromTokenSet = (
+	tokenSet: ExtendedTokenSet,
+	previous: StoredCredentials | null,
+): StoredCredentials => {
+	const refreshTokenValue =
+		typeof tokenSet.refresh_token === "string" &&
+		tokenSet.refresh_token !== ""
+			? tokenSet.refresh_token
+			: previous?.refresh_token;
+	const stored: StoredCredentials = {
+		...tokenSet,
+		type: OAUTH,
+		expires_at: tokenSet.expires_at,
+		...(typeof refreshTokenValue === "string" && refreshTokenValue !== ""
+			? { refresh_token: refreshTokenValue }
+			: {}),
+	};
+	if (previous?.user_id !== undefined) {
+		stored.user_id = previous.user_id;
+	}
+	return stored;
+};
+
+const writeOAuthCredentials = (
+	configDir: string,
+	at: CredentialLocation,
+	credentials: StoredCredentials,
+	options?: { restorePrevious?: boolean },
+): void => {
+	storeFor(configDir).write(at, credentials, options);
+	log.debug("Saved credentials to %s", credentialLabel(at));
+	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(credentials)));
+};
+
+const refreshLockPath = (configDir: string, at: CredentialLocation): string => {
+	const id = createHash("sha256")
+		.update(credentialLabel(at))
+		.digest("hex")
+		.slice(0, 16);
+	return join(configDir, `.refresh-${id}.lock`);
 };
 
 /**
@@ -389,11 +538,7 @@ export const usableCredential = async (
 	}
 
 	try {
-		const result = await handleExistingToken(
-			loaded.credentials as ExtendedTokenSet,
-			props,
-			at,
-		);
+		const result = await handleExistingToken(loaded.credentials, props, at);
 		return result ? { apiKey: result.apiKey, kind: OAUTH } : null;
 	} catch (err) {
 		log.debug(
@@ -633,8 +778,19 @@ export const ensureAuth = async (
 		}
 
 		try {
+			setAuthContext({
+				source: "stored-credentials",
+				configDir: props.configDir,
+				profile: selection.profile,
+				storage: at.storage,
+				accessToken: loaded.credentials.access_token,
+				refreshed: false,
+				oauthHost: props.oauthHost,
+				clientId: props.clientId,
+				...(at.storage === "file" ? { credentialsPath: at.path } : {}),
+			});
 			const result = await handleExistingToken(
-				loaded.credentials as ExtendedTokenSet,
+				loaded.credentials,
 				props,
 				at,
 			);
@@ -646,6 +802,10 @@ export const ensureAuth = async (
 					configDir: props.configDir,
 					profile: selection.profile,
 					storage: at.storage,
+					accessToken: result.apiKey,
+					refreshed: result.refreshed,
+					oauthHost: props.oauthHost,
+					clientId: props.clientId,
 					...(at.storage === "file"
 						? { credentialsPath: at.path }
 						: {}),
@@ -653,13 +813,17 @@ export const ensureAuth = async (
 				return;
 			}
 		} catch (err) {
-			if (
-				!(err instanceof Error && err.message === "AUTH_REFRESH_FAILED")
-			) {
+			if (err instanceof AuthRefreshError) {
+				if (isLocalDev || isBootstrap || isMcp) {
+					log.warning(
+						"%s Continuing without credentials.",
+						err.message,
+					);
+					return;
+				}
 				throw err;
 			}
-			// A refresh that failed is recoverable by logging in again.
-			log.debug("Ensure auth failed, starting authentication", err);
+			throw err;
 		}
 	} else {
 		log.debug(
@@ -688,9 +852,7 @@ export const ensureAuth = async (
 		return;
 	}
 
-	// Start new auth flow if no valid token exists or refresh failed. Pass the resolved
-	// profile rather than the raw flag, so a name that came from `NEON_PROFILE` is written to
-	// its own file instead of overwriting `DEFAULT`'s.
+	// Use the resolved profile so `NEON_PROFILE` cannot overwrite `DEFAULT`.
 	const apiKey = await authFlow({ ...props, profile: selection.profile });
 	props.apiKey = apiKey;
 	props.apiClient = getApiClient({
@@ -702,19 +864,17 @@ export const ensureAuth = async (
 		configDir: props.configDir,
 		profile: selection.profile,
 		storage: at.storage,
+		accessToken: apiKey,
+		refreshed: true,
+		oauthHost: props.oauthHost,
+		clientId: props.clientId,
 		...(at.storage === "file" ? { credentialsPath: at.path } : {}),
 	});
 };
 
 /**
- * Delete one credentials file — used by the 401 handler to clear an OAuth token set the API
- * has rejected, so the next command logs in again instead of failing the same way.
- *
- * It takes the exact path rather than a directory and an optional profile. Deriving the path
- * here meant re-running selection from partial state, and the 401 handler has no parsed
- * arguments: it passed only the config directory, so a rejected token on a
- * `--profile`-selected account deleted whatever `DEFAULT` pointed at — signing the user out
- * of an account whose credentials the failed request had never touched.
+ * Accept an exact location because deriving it from a config directory used to
+ * delete DEFAULT when a named profile failed.
  */
 export const deleteCredentialsAt = (
 	at: CredentialLocation,
