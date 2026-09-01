@@ -648,7 +648,7 @@ describe("resolveDevEnv", () => {
 		expect(result.skipped?.reason).toMatch(/network down/);
 	});
 
-	it("tier 1 functions-only: lists invocation URLs and still injects DATABASE_URL", async () => {
+	it("tier 1 functions-only: derives invocation URLs without listing and still injects DATABASE_URL", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
@@ -656,14 +656,9 @@ describe("resolveDevEnv", () => {
 		);
 		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech/`;
 		const api = new FakeNeonApi({
-			listBranchFunctions: async () => [
-				{
-					id: "fn-hello",
-					slug: "hello",
-					name: "Hello",
-					invocationUrl: helloUrl,
-				},
-			],
+			listBranchFunctions: async () => {
+				throw new Error("listBranchFunctions should not run");
+			},
 		});
 
 		const result = await resolveDevEnv({
@@ -676,38 +671,7 @@ describe("resolveDevEnv", () => {
 		expect(result.vars.DATABASE_URL).toBeDefined();
 		expect(result.vars.DATABASE_URL_UNPOOLED).toBeDefined();
 		expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-		expect(api.listBranchFunctionsCalled).toBe(true);
-	});
-
-	it("tier 1 functions-only: FeatureUnavailable hard-stops instead of dropping DATABASE_URL", async () => {
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			"export default { preview: { functions: { hello: " +
-				"{ name: 'Hello', source: './hello.ts' } } } };\n",
-		);
-		const api = new FakeNeonApi({
-			listBranchFunctions: async () => {
-				throw new PlatformError(
-					ErrorCode.FeatureUnavailable,
-					"Functions isn't available for this Neon project",
-					{ details: { status: 404 } },
-				);
-			},
-		});
-
-		await expect(
-			resolveDevEnv({
-				cwd,
-				projectId: PROJECT_ID,
-				branchId: BRANCH_ID,
-				api,
-			}),
-		).rejects.toSatisfy(
-			(err: unknown) =>
-				err instanceof DevEnvMismatchError &&
-				/isn't available for this Neon project/.test(err.message) &&
-				!/Deploy (it|them) first/.test(err.message),
-		);
+		expect(api.listBranchFunctionsCalled).toBe(false);
 	});
 
 	it('neon.ts importing an uninstalled package -> a clear "did you run npm install" error', async () => {

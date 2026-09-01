@@ -856,19 +856,21 @@ describe("env pull function invocation URLs", () => {
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBeDefined();
 	});
 
-	it("fails when neon.ts declares a function that is not deployed", async () => {
+	it("writes a neon.ts function URL without requiring the function to be deployed", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
 				"{ name: 'Hello', source: './hello.ts' } } } };\n",
 		);
 
-		await expect(pull(baseProps(new FakeNeonApi(), cwd))).rejects.toThrow(
-			/function "hello".*no live invocation URL[\s\S]*NEON_FUNCTION_HELLO_BASE_URL/,
-		);
+		await pull(baseProps(new FakeNeonApi(), cwd));
+
+		expect(
+			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
+		).toBe(helloUrl);
 	});
 
-	it("fails when neon.ts declares a function whose invocation URL is empty", async () => {
+	it("writes a neon.ts function URL when the listed invocation URL is empty", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
@@ -877,26 +879,25 @@ describe("env pull function invocation URLs", () => {
 		const api = new FakeNeonApi();
 		api.functions = [functionSnapshot("hello", "")];
 
-		await expect(pull(baseProps(api, cwd))).rejects.toThrow(
-			/function "hello".*no live invocation URL[\s\S]*NEON_FUNCTION_HELLO_BASE_URL/,
-		);
+		await pull(baseProps(api, cwd));
+
+		expect(
+			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
+		).toBe(helloUrl);
 	});
 
-	it("fails when neon.ts declares functions and listing is FeatureUnavailable", async () => {
+	it("writes a neon.ts function URL when listing is FeatureUnavailable", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
 				"{ name: 'Hello', source: './hello.ts' } } } };\n",
 		);
 
-		await expect(
-			pull(baseProps(new NoFunctionsFeatureNeonApi(), cwd)),
-		).rejects.toSatisfy(
-			(err: unknown) =>
-				err instanceof Error &&
-				/isn't available for this Neon project/.test(err.message) &&
-				!/Deploy (it|them) first/.test(err.message),
-		);
+		await pull(baseProps(new NoFunctionsFeatureNeonApi(), cwd));
+
+		expect(
+			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
+		).toBe(helloUrl);
 	});
 
 	it("intersects neon.ts declared slugs with live URLs", async () => {
@@ -1029,7 +1030,7 @@ describe("env pull function invocation URLs", () => {
 		});
 	});
 
-	it("does not list functions twice for --env function URL keys", async () => {
+	it("does not list functions for --env function URL keys", async () => {
 		const api = new ListFunctionsThenUnavailableApi([
 			functionSnapshot("hello"),
 		]);
@@ -1037,7 +1038,7 @@ describe("env pull function invocation URLs", () => {
 			...baseProps(api, cwd),
 			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
 		});
-		expect(api.listCalls).toBe(1);
+		expect(api.listCalls).toBe(0);
 		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
 			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
 		});
@@ -1054,15 +1055,15 @@ describe("env pull function invocation URLs", () => {
 		});
 	});
 
-	it("fails by name when --env names a function the branch does not have", async () => {
-		await expect(
-			pull({
-				...baseProps(withFunctions("world"), cwd),
-				envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
-			}),
-		).rejects.toThrow(
-			/--env NEON_FUNCTION_HELLO_BASE_URL: branch .* no deployed function "hello"/,
-		);
+	it("writes a function URL named via --env even when it is not deployed", async () => {
+		await pull({
+			...baseProps(withFunctions("world"), cwd),
+			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+		});
+
+		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
+		});
 	});
 });
 

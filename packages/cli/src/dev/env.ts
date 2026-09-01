@@ -7,14 +7,12 @@ import {
 	type NeonApi,
 	type NeonBucketSnapshot,
 	type NeonDataApiSnapshot,
-	type NeonFunctionSnapshot,
 } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
 import {
 	type FunctionUrlMode,
 	functionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
-	parseFunctionBaseUrlKey,
 } from "@neon-internals/env-core/env";
 import {
 	type CredentialOutcome,
@@ -127,7 +125,10 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
  *   1. a `neon.ts` policy is found -> the policy is the source of truth. We first
  *      check it against the branch's live state (`plan`); if it declares a resource
  *      the branch is missing, we stop with a {@link DevEnvMismatchError} pointing at
- *      `neonctl deploy`. Otherwise `fetchEnv` evaluates the policy.
+ *      `neonctl deploy`. Function declarations are excluded from that check: their
+ *      invocation URLs are derived from the branch connection host, so an undeployed
+ *      function still gets `NEON_FUNCTION_*_BASE_URL`. Otherwise `fetchEnv` evaluates
+ *      the policy.
  *   2. no `neon.ts`, but a project + branch are known -> `pullConfig` reads the
  *      branch's live state (Auth / Data API enablement plus any object-storage
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
@@ -328,7 +329,7 @@ const resolveSelectedServices = async (
 			checkAiGateway
 				? readAiGatewayAvailable(api, projectId, branchId)
 				: null,
-			has("functions")
+			directServices.includes("functions")
 				? api.listBranchFunctions(projectId, branchId)
 				: null,
 		]);
@@ -336,13 +337,15 @@ const resolveSelectedServices = async (
 	const callableFunctions = (functions ?? []).filter(
 		(fn) => fn.invocationUrl !== "",
 	);
-	if (has("functions")) {
-		assertSelectedFunctionsOnBranch({
-			branchId,
-			directServices,
-			envKeys,
-			callable: callableFunctions,
-		});
+	if (
+		directServices.includes("functions") &&
+		callableFunctions.length === 0
+	) {
+		throw new ServiceNotOnBranchError(
+			`--service functions: branch ${branchId} has no deployed functions, so there ` +
+				"are no NEON_FUNCTION_*_BASE_URL vars to pull. Deploy a function first " +
+				`(\`${getCliName()} deploy\`, or in the Neon Console), or drop functions from --service.`,
+		);
 	}
 
 	const functionKeys = directServices.includes("functions")
@@ -371,42 +374,13 @@ const resolveSelectedServices = async (
 	return await fetchAndProject(config, ctx, {
 		keys: fetchKeys,
 		revokeSuperseded: false,
-		...(has("functions")
+		...(directServices.includes("functions")
 			? {
 					functionUrls: "all-live" as const,
 					listedFunctions: callableFunctions,
 				}
 			: {}),
 	});
-};
-
-const assertSelectedFunctionsOnBranch = (args: {
-	branchId: string;
-	directServices: readonly NeonService[];
-	envKeys: readonly EnvPullKey[];
-	callable: NeonFunctionSnapshot[];
-}): void => {
-	if (
-		args.directServices.includes("functions") &&
-		args.callable.length === 0
-	) {
-		throw new ServiceNotOnBranchError(
-			`--service functions: branch ${args.branchId} has no deployed functions, so there ` +
-				"are no NEON_FUNCTION_*_BASE_URL vars to pull. Deploy a function first " +
-				`(\`${getCliName()} deploy\`, or in the Neon Console), or drop functions from --service.`,
-		);
-	}
-	for (const key of args.envKeys) {
-		const slug = parseFunctionBaseUrlKey(key);
-		if (slug === null) continue;
-		if (!args.callable.some((fn) => fn.slug === slug)) {
-			throw new ServiceNotOnBranchError(
-				`--env ${key}: branch ${args.branchId} has no deployed function "${slug}", so ` +
-					`${key} cannot be pulled. Deploy it first (\`${getCliName()} deploy\`, or in ` +
-					`the Neon Console), or drop ${key} from --env.`,
-			);
-		}
-	}
 };
 
 /**
@@ -679,90 +653,23 @@ const fetchAndProject = async (
 		}>;
 	} = {},
 ): Promise<ResolvedNeonEnvVars> => {
-	try {
-		const result = await fetchEnvReusingSecrets(config, {
-			projectId: ctx.projectId as string,
-			branch: ctx.branchId as string,
-			...apiOptions(ctx),
-			...(ctx.env ? { env: ctx.env } : {}),
-			...(opts.keys ? { keys: opts.keys } : {}),
-			...(opts.revokeSuperseded === false
-				? { revokeSuperseded: false }
-				: {}),
-			...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
-			...(opts.listedFunctions
-				? { listedFunctions: opts.listedFunctions }
-				: {}),
-		});
-		return {
-			vars: result.vars,
-			credential: result.credential,
-			...(result.functionUrlsUnavailable
-				? { skipped: ["functions"] }
-				: {}),
-		};
-	} catch (err) {
-		if (
-			opts.keys === undefined &&
-			policyDeclaresFunctions(config) &&
-			isDeclaredFunctionUrlFailure(err)
-		) {
-			throw new DevEnvMismatchError(
-				declaredFunctionUrlMismatch(ctx, err),
-			);
-		}
-		throw err;
-	}
-};
-
-const policyDeclaresFunctions = (config: Config): boolean =>
-	Object.keys(config.preview?.functions ?? {}).length > 0;
-
-const isDeclaredFunctionUrlFailure = (err: unknown): boolean => {
-	if (
-		isPlatformError(err) &&
-		err.code === ErrorCode.FeatureUnavailable &&
-		err.message.includes("Functions isn't available")
-	) {
-		return true;
-	}
-	return (
-		err instanceof Error &&
-		err.message.startsWith("fetchEnv: missing NEON_FUNCTION_")
-	);
-};
-
-const declaredFunctionUrlMismatch = (
-	ctx: DevEnvContext,
-	err: unknown,
-): string => {
-	if (isPlatformError(err) && err.code === ErrorCode.FeatureUnavailable) {
-		const reason = err.message.replace(/\.$/, "");
-		return (
-			`Your neon.ts declares functions for branch ${ctx.branchId}, but ${reason}, ` +
-			"so NEON_FUNCTION_*_BASE_URL cannot be injected."
-		);
-	}
-	const key =
-		err instanceof Error
-			? /missing (NEON_FUNCTION_[A-Z0-9]+_BASE_URL)/.exec(
-					err.message,
-				)?.[1]
-			: undefined;
-	const slug = key === undefined ? null : parseFunctionBaseUrlKey(key);
-	if (key !== undefined && slug !== null) {
-		return (
-			`Your neon.ts declares function "${slug}" for branch ${ctx.branchId}, but the ` +
-			`branch has no live invocation URL, so ${key} cannot be injected. Deploy it first ` +
-			`(\`${getCliName()} deploy\`, or in the Neon Console), then re-run.`
-		);
-	}
-	return (
-		`Your neon.ts declares functions for branch ${ctx.branchId}, but their ` +
-		"invocation URLs could not be resolved, so NEON_FUNCTION_*_BASE_URL cannot " +
-		`be injected. Deploy them first (\`${getCliName()} deploy\`, or in the Neon ` +
-		`Console), then re-run.`
-	);
+	const result = await fetchEnvReusingSecrets(config, {
+		projectId: ctx.projectId as string,
+		branch: ctx.branchId as string,
+		...apiOptions(ctx),
+		...(ctx.env ? { env: ctx.env } : {}),
+		...(opts.keys ? { keys: opts.keys } : {}),
+		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
+		...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
+		...(opts.listedFunctions
+			? { listedFunctions: opts.listedFunctions }
+			: {}),
+	});
+	return {
+		vars: result.vars,
+		credential: result.credential,
+		...(result.functionUrlsUnavailable ? { skipped: ["functions"] } : {}),
+	};
 };
 
 /**

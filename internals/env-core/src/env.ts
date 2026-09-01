@@ -133,7 +133,7 @@ export function isFunctionBaseUrlKey(key: string): key is FunctionBaseUrlKey {
 	return parseFunctionBaseUrlKey(key) !== null;
 }
 
-/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
+/** `all-live` lists deployed functions. Policy mode derives declared slugs from the connection host. */
 export type FunctionUrlMode = "policy" | "all-live";
 
 /**
@@ -770,9 +770,9 @@ export type FetchEnvKeysOptions = FetchEnvOptions & {
 	 */
 	omitKeys?: readonly string[];
 	/**
-	 * Skip a second `listBranchFunctions` when the caller already listed. Explicit
-	 * `--service` / `--env` validate against this same result, so a later
-	 * `FeatureUnavailable` cannot be swallowed as `skipped`.
+	 * Skip a second `listBranchFunctions` when the caller already listed.
+	 * `--service functions` uses this so a later `FeatureUnavailable` cannot be
+	 * swallowed as `skipped`.
 	 */
 	listedFunctions?: ReadonlyArray<{ slug: string; invocationUrl: string }>;
 };
@@ -799,8 +799,23 @@ export async function fetchEnvKeysState(
 		desired.authEnabled && (wants(K.auth.baseUrl) || wants(K.auth.jwksUrl));
 	const wantsDataApi = desired.dataApiEnabled && wants(K.dataApi.url);
 	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
+	const functionUrlMode = options.functionUrls ?? "policy";
+	const declaredSlugs = (desired.preview?.functions ?? []).map(
+		(fn) => fn.slug,
+	);
+	const selectedFunctionKeys =
+		selection === null ? [] : [...selection].filter(isFunctionBaseUrlKey);
+	const constructSlugs = functionUrlSlugsToConstruct({
+		functionUrlMode,
+		selection,
+		declaredSlugs,
+		selectedFunctionKeys,
+		wants,
+	});
 	const needsUnpooled =
-		wantsUnpooled || (gatewayEnabled && wants(K.aiGateway.baseUrl));
+		wantsUnpooled ||
+		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
+		constructSlugs.length > 0;
 	const needsConnectionTarget = wantsPooled || needsUnpooled;
 	const needsDatabase = needsConnectionTarget || wantsDataApi;
 	const [roles, databases] = await Promise.all([
@@ -1016,70 +1031,66 @@ export async function fetchEnvKeysState(
 		}
 	}
 
-	const functionUrlMode = options.functionUrls ?? "policy";
-	const declaredSlugs = (desired.preview?.functions ?? []).map(
-		(fn) => fn.slug,
-	);
-	const selectedFunctionKeys =
-		selection === null ? [] : [...selection].filter(isFunctionBaseUrlKey);
 	const wantsAnyFunctionUrl =
 		selection === null || selectedFunctionKeys.length > 0;
-	const shouldList =
-		wantsAnyFunctionUrl &&
-		(functionUrlMode === "all-live" || declaredSlugs.length > 0);
-
+	const functions: Record<string, NeonFunctionUrlEnv> = {};
 	let functionUrlsUnavailable = false;
-	if (shouldList) {
+
+	if (functionUrlMode === "all-live" && wantsAnyFunctionUrl) {
 		const listed =
 			options.listedFunctions === undefined
 				? await listFunctionInvocationUrls(api, projectId, branch.id)
 				: listedFromSnapshots(options.listedFunctions);
 		if (listed.status === "unavailable") {
-			if (
-				selectedFunctionKeys.length > 0 ||
-				(functionUrlMode === "policy" &&
-					declaredSlugs.length > 0 &&
-					selection === null)
-			) {
-				throw listed.error;
-			}
-			functionUrlsUnavailable = true;
+			if (selection === null) functionUrlsUnavailable = true;
 		} else {
-			const allowed =
-				functionUrlMode === "all-live" ? null : new Set(declaredSlugs);
-			const functions: Record<string, NeonFunctionUrlEnv> = {};
 			for (const fn of listed.functions) {
-				if (allowed !== null && !allowed.has(fn.slug)) continue;
 				if (!wants(functionBaseUrlKey(fn.slug))) continue;
 				functions[fn.slug] = { baseUrl: fn.invocationUrl };
 			}
-			assertSelectedFunctionUrls(
-				[
-					...selectedFunctionKeys,
-					...(functionUrlMode === "policy" && selection === null
-						? declaredSlugs
-								.map((slug) => functionBaseUrlKey(slug))
-								.filter(wants)
-						: []),
-				],
-				functions,
-			);
-			if (
-				selectedFunctionKeys.length > 0 ||
-				(functionUrlMode === "policy" &&
-					declaredSlugs.length > 0 &&
-					selection === null)
-			) {
-				result.functions = functions;
-			} else if (Object.keys(functions).length > 0) {
-				result.functions = functions;
-			}
 		}
-	} else {
-		assertSelectedFunctionUrls(selectedFunctionKeys, {});
 	}
 
+	const missingConstructSlugs = constructSlugs.filter(
+		(slug) => functions[slug] === undefined,
+	);
+	if (missingConstructSlugs.length > 0) {
+		const uri = requiredValue(
+			unpooled,
+			"direct connection URI for function invocation URLs",
+		).uri;
+		for (const slug of missingConstructSlugs) {
+			functions[slug] = {
+				baseUrl: functionInvocationUrl(branch.id, slug, uri),
+			};
+		}
+	}
+
+	assertSelectedFunctionUrls(selectedFunctionKeys, functions);
+	if (Object.keys(functions).length > 0) result.functions = functions;
+
 	return { env: result, functionUrlsUnavailable };
+}
+
+function functionUrlSlugsToConstruct(args: {
+	functionUrlMode: FunctionUrlMode;
+	selection: Set<string> | null;
+	declaredSlugs: readonly string[];
+	selectedFunctionKeys: readonly string[];
+	wants: (key: string) => boolean;
+}): string[] {
+	const slugs: string[] = [];
+	if (args.functionUrlMode === "policy" && args.selection === null) {
+		for (const slug of args.declaredSlugs) {
+			if (args.wants(functionBaseUrlKey(slug))) slugs.push(slug);
+		}
+		return slugs;
+	}
+	for (const key of args.selectedFunctionKeys) {
+		const slug = parseFunctionBaseUrlKey(key);
+		if (slug !== null) slugs.push(slug);
+	}
+	return slugs;
 }
 
 function listedFromSnapshots(
@@ -1302,8 +1313,10 @@ async function mintBranchCredential(args: {
  * `ep-x.c-3.us-east-2.aws.neon.tech` yields the gateway host
  * `<branchId>-api.ai.c-3.us-east-2.aws.neon.tech`. The cell prefix is **load-bearing** —
  * the gateway is cell-routed, so dropping `c-N.` resolves to the wrong (or no) host.
+ *
+ * Function invocation URLs use the same suffix: `<branchId>-<slug>.compute.<suffix>`.
  */
-function aiGatewayHost(branchId: string, connectionUri: string): string {
+function connectionHostSuffix(connectionUri: string): string {
 	let connectionHost = "";
 	try {
 		connectionHost = new URL(connectionUri).hostname;
@@ -1311,10 +1324,29 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 		connectionHost = "";
 	}
 	// Drop the endpoint label (first segment, e.g. `ep-x` / `ep-x-pooler`), keeping the rest
-	// of the host verbatim — including any infra cell prefix (`c-N.`) the gateway routes on:
+	// of the host verbatim — including any infra cell prefix (`c-N.`) cell-routed hosts use:
 	// `[c-N.]<region>.<cloud>.neon.<tld>`.
-	const suffix = connectionHost.split(".").slice(1).join(".");
-	return `${branchId}-api.ai.${suffix}`;
+	return connectionHost.split(".").slice(1).join(".");
+}
+
+function aiGatewayHost(branchId: string, connectionUri: string): string {
+	return `${branchId}-api.ai.${connectionHostSuffix(connectionUri)}`;
+}
+
+/** Derived from the connection URI so undeployed functions have a cell-routed URL. */
+function functionInvocationUrl(
+	branchId: string,
+	slug: string,
+	connectionUri: string,
+): string {
+	const suffix = connectionHostSuffix(connectionUri);
+	if (suffix === "") {
+		throw new Error(
+			`fetchEnv: cannot derive the invocation URL for function "${slug}": ` +
+				"the direct connection URI has no host suffix.",
+		);
+	}
+	return `https://${branchId}-${slug}.compute.${suffix}/`;
 }
 
 /** The AI Gateway's bare base URL (`NEON_AI_GATEWAY_BASE_URL`) on the branch gateway host. */

@@ -344,13 +344,11 @@ export function parseEnv(
 		const functions: Record<string, NeonFunctionUrlEnv> = {};
 		for (const slug of declaredFunctionSlugs) {
 			const key = functionBaseUrlKey(slug);
-			const value = source[key];
-			if (value === undefined) {
-				issues.push(`${key} is missing`);
-			} else if (value === "") {
-				issues.push(`${key} must not be empty`);
+			const parsed = readFunctionBaseUrl(key, source[key]);
+			if (parsed.ok) {
+				functions[slug] = { baseUrl: parsed.value };
 			} else {
-				functions[slug] = { baseUrl: value };
+				issues.push(parsed.issue);
 			}
 		}
 		if (Object.keys(functions).length === declaredFunctionSlugs.length) {
@@ -402,15 +400,33 @@ export function parseEnv(
 }
 
 function isFunctionBaseUrlIssue(issue: string): boolean {
-	return /^NEON_FUNCTION_[A-Z0-9]+_BASE_URL (is missing|must not be empty)$/.test(
+	return /^NEON_FUNCTION_[A-Z0-9]+_BASE_URL (is missing|must not be empty|must be a URL)$/.test(
 		issue,
 	);
+}
+
+function readFunctionBaseUrl(
+	key: string,
+	value: string | undefined,
+): { ok: true; value: string } | { ok: false; issue: string } {
+	if (value === undefined) {
+		return { ok: false, issue: `${key} is missing` };
+	}
+	if (value === "") {
+		return { ok: false, issue: `${key} must not be empty` };
+	}
+	try {
+		new URL(value);
+	} catch {
+		return { ok: false, issue: `${key} must be a URL` };
+	}
+	return { ok: true, value };
 }
 
 function parseEnvInjectHint(issues: readonly string[]): string[] {
 	if (issues.length > 0 && issues.every(isFunctionBaseUrlIssue)) {
 		return [
-			"Inject them via `neon env pull`, `neon-env run -- <your dev command>`, or `neon dev` after the function is deployed (`neon deploy`, or in the Neon Console).",
+			"Inject them via `neon env pull`, `neon-env run -- <your dev command>`, or `neon dev`.",
 		];
 	}
 	const lines = [
@@ -425,7 +441,7 @@ function parseEnvInjectHint(issues: readonly string[]): string[] {
 	}
 	if (issues.some(isFunctionBaseUrlIssue)) {
 		lines.push(
-			"  - for NEON_FUNCTION_*_BASE_URL: `neon env pull` after the function is deployed.",
+			"  - for NEON_FUNCTION_*_BASE_URL: `neon env pull` or `neon dev`.",
 		);
 	}
 	return lines;
@@ -470,16 +486,12 @@ function parseFilteredEnv(
 		if (isFunctionBaseUrlKey(key)) {
 			const slug = parseFunctionBaseUrlKey(key);
 			if (slug === null) continue;
-			const value = source[key];
-			if (value === undefined) {
-				issues.push(`${key} is missing`);
+			const parsed = readFunctionBaseUrl(key, source[key]);
+			if (!parsed.ok) {
+				issues.push(parsed.issue);
 				continue;
 			}
-			if (value === "") {
-				issues.push(`${key} must not be empty`);
-				continue;
-			}
-			functionUrls[slug] = { baseUrl: value };
+			functionUrls[slug] = { baseUrl: parsed.value };
 			continue;
 		}
 		// Unknown keys are blocked at the type level; a runtime caller bypassing the types

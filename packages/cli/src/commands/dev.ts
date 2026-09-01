@@ -7,6 +7,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -19,6 +20,7 @@ import {
 	findUndeclaredNativePackages,
 	resolveEsbuildEntry,
 } from "@neon/config-runtime";
+import { functionBaseUrlKey } from "@neon-internals/env-core/env";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -234,7 +236,11 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
 	reportDevCredential(credential);
 
-	const units = planFunctionsToUnits(functions, neonEnv, DEFAULT_PORT_BASE);
+	const units = await planFunctionsToUnits(
+		functions,
+		neonEnv,
+		DEFAULT_PORT_BASE,
+	);
 
 	// Re-derive the units from neon.ts on demand so the config watcher can hot-add/remove
 	// functions without restarting the dev server. `searchBase` lets a freshly-added unit
@@ -272,26 +278,75 @@ type SupervisorOptions = {
 	envNote?: string;
 };
 
-/**
- * Map a list of {@link PlannedFunction}s to {@link ServedUnit}s, coordinating the search
- * base across them so search-mode functions don't all probe the same starting port.
- *
- * Each search-mode (no `dev.port`) function gets a distinct base starting at
- * `searchBase`; the runtime still walks upward from its base, so an occupied base
- * self-resolves and this never fails — the offset just makes startup deterministic.
- */
-const planFunctionsToUnits = (
+/** Ports are claimed before spawn so every sibling receives the complete localhost URL overlay. */
+export const planFunctionsToUnits = async (
 	functions: PlannedFunction[],
 	neonEnv: Record<string, string>,
 	searchBase: number,
-): ServedUnit[] => {
+): Promise<ServedUnit[]> => {
 	let searchOffset = 0;
-	return functions.map((fn) => {
-		const base = searchBase + searchOffset;
-		if (fn.port === undefined) searchOffset += 1;
-		return plannedToUnit(fn, neonEnv, base);
-	});
+	const assigned: Array<{ fn: PlannedFunction; port: number }> = [];
+	for (const fn of functions) {
+		if (fn.port !== undefined) {
+			assigned.push({ fn, port: fn.port });
+			continue;
+		}
+		const port = await pickFreePort(searchBase + searchOffset);
+		assigned.push({ fn, port });
+		searchOffset = port - searchBase + 1;
+	}
+	const overlay = localFunctionUrlEnv(
+		assigned.map(({ fn, port }) => ({ slug: fn.slug, port })),
+	);
+	const branchEnv = { ...neonEnv, ...overlay };
+	return assigned.map(({ fn, port }) =>
+		plannedToUnit({ ...fn, port }, branchEnv, searchBase),
+	);
 };
+
+/**
+ * Local invocation URLs for functions `neon dev` is serving, so siblings call each
+ * other on localhost instead of the production compute host.
+ */
+export const localFunctionUrlEnv = (
+	functions: ReadonlyArray<{ slug: string; port: number }>,
+): Record<string, string> => {
+	const out: Record<string, string> = {};
+	for (const fn of functions) {
+		out[functionBaseUrlKey(fn.slug)] = `http://localhost:${fn.port}`;
+	}
+	return out;
+};
+
+const pickFreePort = (from: number): Promise<number> =>
+	new Promise((resolvePort, reject) => {
+		const tryPort = (port: number): void => {
+			if (port > 65535) {
+				reject(new Error(`No free port at or above ${from}`));
+				return;
+			}
+			const server = createServer();
+			server.once("error", (err: NodeJS.ErrnoException) => {
+				if (err.code === "EADDRINUSE") {
+					tryPort(port + 1);
+					return;
+				}
+				reject(err);
+			});
+			server.listen(port, "127.0.0.1", () => {
+				const addr = server.address();
+				const bound =
+					typeof addr === "object" && addr !== null
+						? addr.port
+						: port;
+				server.close((closeErr) => {
+					if (closeErr) reject(closeErr);
+					else resolvePort(bound);
+				});
+			});
+		};
+		tryPort(from);
+	});
 
 /**
  * Resolve the selected branch id from props, if any. Best-effort: a failure here only

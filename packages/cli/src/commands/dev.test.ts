@@ -9,6 +9,8 @@ import {
 	devBundleDir,
 	diffUnits,
 	formatEnvSummary,
+	localFunctionUrlEnv,
+	planFunctionsToUnits,
 	type RunningUnit,
 	type ServedUnit,
 } from "./dev.js";
@@ -241,5 +243,55 @@ describe("formatEnvSummary", () => {
 	it("returns an empty string when nothing is injected (caller skips the line)", () => {
 		expect(formatEnvSummary({ neon: [], fn: [] })).toBe("");
 		expect(formatEnvSummary(undefined)).toBe("");
+	});
+});
+
+describe("local function URLs", () => {
+	it("maps each slug to http://localhost:<port>", () => {
+		expect(
+			localFunctionUrlEnv([
+				{ slug: "hello", port: 8787 },
+				{ slug: "world", port: 8788 },
+			]),
+		).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:8787",
+			NEON_FUNCTION_WORLD_BASE_URL: "http://localhost:8788",
+		});
+	});
+
+	it("overlays sibling localhost URLs onto every unit", async () => {
+		const units = await planFunctionsToUnits(
+			[
+				{
+					slug: "hello",
+					name: "Hello",
+					source: "/fns/hello.ts",
+					port: 8787,
+					env: {},
+				},
+				{
+					slug: "world",
+					name: "World",
+					source: "/fns/world.ts",
+					port: 8788,
+					env: {},
+				},
+			],
+			{ DATABASE_URL: "postgres://prod" },
+			8787,
+		);
+
+		expect(units[0]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+		expect(units[0]?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
+			"http://localhost:8788",
+		);
+		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+		expect(units[0]?.childEnv.NEON_DEV_PORT).toBe("8787");
+		expect(units[1]?.childEnv.NEON_DEV_PORT).toBe("8788");
+		expect(units[0]?.childEnv.DATABASE_URL).toBe("postgres://prod");
 	});
 });
