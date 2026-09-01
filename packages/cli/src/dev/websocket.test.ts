@@ -1,5 +1,9 @@
 import { createServer, type Server } from "node:http";
 import { type AddressInfo, connect, type Socket } from "node:net";
+import { upgradeWebSocket as honoUpgradeWebSocket } from "@neon/functions/hono";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -214,11 +218,15 @@ const CLIENT_KEY = "dGhlIHNhbXBsZSBub25jZQ==";
 /** The accept value for CLIENT_KEY, from the RFC's own worked example. */
 const EXPECTED_ACCEPT = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
-const handshakeRequest = (path: string, extraHeaders: string): string =>
+const handshakeRequest = (
+	path: string,
+	extraHeaders: string,
+	upgradeValue = "websocket",
+): string =>
 	`GET ${path} HTTP/1.1\r\n` +
 	"host: localhost\r\n" +
 	"connection: Upgrade\r\n" +
-	"upgrade: websocket\r\n" +
+	`upgrade: ${upgradeValue}\r\n` +
 	"sec-websocket-version: 13\r\n" +
 	`sec-websocket-key: ${CLIENT_KEY}\r\n` +
 	extraHeaders +
@@ -229,10 +237,11 @@ const wsHandshake = (
 	port: number,
 	path = "/ws",
 	extraHeaders = "",
+	upgradeValue = "websocket",
 ): Promise<{ client: WsClient; raw: string; sock: Socket }> =>
 	new Promise((resolveHandshake, reject) => {
 		const sock = connect(port, "127.0.0.1", () => {
-			sock.write(handshakeRequest(path, extraHeaders));
+			sock.write(handshakeRequest(path, extraHeaders, upgradeValue));
 		});
 		let head = Buffer.alloc(0);
 		const onData = (chunk: Buffer): void => {
@@ -931,5 +940,310 @@ describe("upgradeWebSocket under neon dev", () => {
 		expect(() =>
 			upgradeWebSocket(new Request("http://localhost/ws")),
 		).toThrow(/only available inside a Neon Functions invocation/);
+	});
+});
+
+/**
+ * The Hono binding, exercised the way a customer gets it: the published
+ * `@neon/functions/hono` subpath, a real Hono app, and the same dev runtime
+ * over real sockets.
+ */
+describe("@neon/functions/hono under neon dev", () => {
+	it("serves the documented route: welcome, echo, and a client close", async () => {
+		const closed: { code: number; reason: string }[] = [];
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({
+				onOpen: (_event, ws) => ws.send("welcome"),
+				onMessage: (event, ws) => ws.send(`echo: ${event.data}`),
+				onClose: (event) =>
+					closed.push({ code: event.code, reason: event.reason }),
+			})),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client, raw } = await wsHandshake(port);
+		expect(raw.startsWith("HTTP/1.1 101 Switching Protocols")).toBe(true);
+
+		expect((await client.next()).payload.toString("utf8")).toBe("welcome");
+
+		client.send("hi");
+		expect((await client.next()).payload.toString("utf8")).toBe("echo: hi");
+
+		client.sendClose(1000, "bye");
+		await new Promise((r) => setTimeout(r, 50));
+		expect(closed).toEqual([{ code: 1000, reason: "bye" }]);
+		client.destroy();
+	});
+
+	it("passes an ordinary request to the next handler instead of throwing", async () => {
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({})),
+			(c) => c.text("plain get"),
+		);
+
+		// No bridge, no upgrade record: the guard must return before the
+		// primitive is ever reached, or this is a 500 on every normal GET.
+		delete (globalThis as unknown as Record<symbol, unknown>)[
+			WS_BRIDGE_KEY
+		];
+		const response = await app.fetch(new Request("http://localhost/ws"));
+
+		expect(response.status).toBe(200);
+		expect(await response.text()).toBe("plain get");
+	});
+
+	it("upgrades on a mixed-case Upgrade header", async () => {
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({
+				onOpen: (_event, ws) => ws.send("upgraded"),
+			})),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client, raw } = await wsHandshake(port, "/ws", "", "WebSocket");
+
+		expect(raw.startsWith("HTTP/1.1 101 Switching Protocols")).toBe(true);
+		expect((await client.next()).payload.toString("utf8")).toBe("upgraded");
+		client.destroy();
+	});
+
+	it("negotiates an offered subprotocol and reports it on the context", async () => {
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(
+				() => ({
+					onOpen: (_event, ws) => ws.send(`protocol:${ws.protocol}`),
+				}),
+				{ protocol: "chat.v2" },
+			),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client, raw } = await wsHandshake(
+			port,
+			"/ws",
+			"sec-websocket-protocol: chat.v1, chat.v2\r\n",
+		);
+
+		const echoed = raw
+			.split("\r\n")
+			.filter((line) =>
+				line.toLowerCase().startsWith("sec-websocket-protocol:"),
+			);
+		expect(echoed).toEqual(["sec-websocket-protocol: chat.v2"]);
+		expect((await client.next()).payload.toString("utf8")).toBe(
+			"protocol:chat.v2",
+		);
+		client.destroy();
+	});
+
+	it("refuses a subprotocol the client never offered, rather than upgrading", async () => {
+		let captured: unknown;
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({}), { protocol: "not-offered" }),
+		);
+		app.onError((error, c) => {
+			captured = error;
+			return c.text("boom", 500);
+		});
+		const port = await start({ fetch: app.fetch });
+
+		const response = await wsHandshakeFull(port);
+
+		expect(response.split("\r\n")[0]).toBe(
+			"HTTP/1.1 500 Internal Server Error",
+		);
+		if (!(captured instanceof TypeError)) {
+			throw new Error(
+				`expected the refusal to reach onError as a TypeError, got ${String(captured)}`,
+			);
+		}
+		expect(captured.message).toMatch(
+			/did not offer the subprotocol "not-offered"/,
+		);
+	});
+
+	it("fails loudly when response-rewriting middleware discards the 101", async () => {
+		// Documented in the README as the one middleware shape that cannot run on
+		// an upgrade route. Pinned here because the failure a user sees first is a
+		// RangeError from inside Hono that names nothing about WebSockets.
+		let logged = "";
+		const app = new Hono();
+		app.use("*", cors());
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({})),
+		);
+		const port = await start({
+			fetch: app.fetch,
+			log: (message) => {
+				logged += message;
+			},
+		});
+
+		const response = await wsHandshakeFull(port);
+
+		expect(response.startsWith("HTTP/1.1 101")).toBe(false);
+		expect(logged).toContain("websocket_upgrade_response_lost");
+		// The message has to reach a Hono user, who never touches the response.
+		expect(logged).toContain("@neon/functions/hono");
+		expect(logged).toContain("cors()");
+	});
+
+	it("upgrades under middleware that sets response headers after next()", async () => {
+		const app = new Hono();
+		app.use("*", secureHeaders());
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({
+				onOpen: (_event, ws) => ws.send("still upgraded"),
+			})),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client, raw } = await wsHandshake(port);
+
+		expect(raw.startsWith("HTTP/1.1 101")).toBe(true);
+		expect((await client.next()).payload.toString("utf8")).toBe(
+			"still upgraded",
+		);
+		client.destroy();
+	});
+
+	it("runs the event factory even for an ordinary GET, as Hono's wrapper does", async () => {
+		// Hono awaits createEvents before calling the adapter, so the guard cannot
+		// run first. Pinned rather than worked around: every Hono adapter shares
+		// this, and the factory is expected to be a plain object literal. A future
+		// Hono release that reorders it should show up here.
+		let built = 0;
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => {
+				built += 1;
+				return {};
+			}),
+			(c) => c.text("plain get"),
+		);
+
+		delete (globalThis as unknown as Record<symbol, unknown>)[
+			WS_BRIDGE_KEY
+		];
+		const response = await app.fetch(new Request("http://localhost/ws"));
+
+		expect(await response.text()).toBe("plain get");
+		expect(built).toBe(1);
+	});
+
+	it("lets auth middleware refuse the handshake before any socket exists", async () => {
+		let eventsBuilt = 0;
+		const app = new Hono();
+		app.use("/ws", async (c, next) => {
+			if (c.req.query("token") !== "letmein") return c.text("nope", 401);
+			await next();
+		});
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => {
+				eventsBuilt += 1;
+				return {};
+			}),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const rejected = await wsHandshakeFull(port, "/ws");
+		expect(rejected.startsWith("HTTP/1.1 401")).toBe(true);
+		expect(rejected).toContain("nope");
+		expect(eventsBuilt).toBe(0);
+
+		const { client, raw } = await wsHandshake(port, "/ws?token=letmein");
+		expect(raw.startsWith("HTTP/1.1 101")).toBe(true);
+		expect(eventsBuilt).toBe(1);
+		client.destroy();
+	});
+
+	it("exposes the raw socket, the ws:// url, and a live readyState", async () => {
+		const seen: { url: string | null; raw: boolean; states: number[] } = {
+			url: null,
+			raw: false,
+			states: [],
+		};
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({
+				onOpen: (_event, ws) => {
+					seen.url = ws.url?.toString() ?? null;
+					seen.raw = ws.raw instanceof Object && "send" in ws.raw;
+					seen.states.push(ws.readyState);
+					ws.close(1000, "done");
+					seen.states.push(ws.readyState);
+				},
+			})),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client } = await wsHandshake(port, "/ws");
+		const frame = await client.next();
+
+		expect(frame.opcode).toBe(0x8);
+		expect(seen.url).toBe("ws://localhost/ws");
+		expect(seen.raw).toBe(true);
+		// OPEN then CLOSING: a snapshotted readyState would report 1 twice.
+		expect(seen.states).toEqual([1, 2]);
+		client.destroy();
+	});
+
+	it("delivers binary as an ArrayBuffer and sends a Uint8Array back", async () => {
+		const kinds: string[] = [];
+		const app = new Hono();
+		app.get(
+			"/ws",
+			honoUpgradeWebSocket(() => ({
+				onMessage: (event, ws) => {
+					kinds.push(
+						event.data instanceof ArrayBuffer
+							? "arraybuffer"
+							: typeof event.data,
+					);
+					ws.send(new Uint8Array([7, 8, 9]));
+				},
+			})),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client } = await wsHandshake(port);
+		client.send(Buffer.from([1, 2, 3]), 0x2);
+		const frame = await client.next();
+
+		expect(kinds).toEqual(["arraybuffer"]);
+		expect(frame.opcode).toBe(0x2);
+		expect([...frame.payload]).toEqual([7, 8, 9]);
+		client.destroy();
+	});
+
+	it("works in the direct form, called with a context", async () => {
+		const app = new Hono();
+		app.get("/ws", (c) =>
+			honoUpgradeWebSocket(c, {
+				onOpen: (_event, ws) => ws.send("direct"),
+			}),
+		);
+		const port = await start({ fetch: app.fetch });
+
+		const { client, raw } = await wsHandshake(port);
+
+		expect(raw.startsWith("HTTP/1.1 101")).toBe(true);
+		expect((await client.next()).payload.toString("utf8")).toBe("direct");
+		client.destroy();
 	});
 });

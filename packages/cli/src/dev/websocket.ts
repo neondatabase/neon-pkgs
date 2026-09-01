@@ -609,7 +609,13 @@ const handleUpgrade = async (
 				"produced. `Response.clone()` and rebuilding a response " +
 				"(`new Response(res.body, res)`, as response-rewriting middleware does) " +
 				"both discard the upgrade. Return the `response` from upgradeWebSocket() " +
-				"unchanged.",
+				"unchanged.\n" +
+				"With @neon/functions/hono the helper returns the response for you, so " +
+				"this is a middleware on the upgrade route rebuilding it: `cors()` always " +
+				"does, and so does any middleware that reads `c.res` before `await next()` " +
+				"or calls `c.header()` after it. Take it off this route. It usually " +
+				'surfaces first as `RangeError: init["status"] must be in the range of ' +
+				"200 to 599` from inside Hono, which names none of this.",
 		);
 		abortClaimedUpgrade(record);
 		writeUpgradeRejection(socket, 500, "websocket_upgrade_response_lost");

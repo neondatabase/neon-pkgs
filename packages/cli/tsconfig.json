@@ -16,6 +16,13 @@
       // the export map at runtime (the emitted JS keeps the bare specifiers).
       "@neon/sdk": ["node_modules/@neon/sdk/dist/index"],
       "@neon/sdk/raw": ["node_modules/@neon/sdk/dist/raw"],
+      // And for `@neon/env/runtime`, the stateful half of `@neon/env` (credential
+      // reuse / revocation), which is a subpath export so an app importing
+      // `@neon/env` is never offered it.
+      "@neon/env/runtime": ["node_modules/@neon/env/dist/runtime"],
+      // And for `@neon/functions/hono`, the Hono binding, which is a subpath
+      // export so importing `@neon/functions` never reaches for `hono`.
+      "@neon/functions/hono": ["node_modules/@neon/functions/dist/hono"],
       // And for `@neon/config/v1`, the versioned policy surface. `@neon-internals/env-core`
       // imports it, and that code is bundled into this package.
       "@neon/config/v1": ["node_modules/@neon/config/dist/v1"],

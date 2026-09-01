@@ -221,6 +221,9 @@ importers:
       '@neon/e2e-harness':
         specifier: workspace:*
         version: link:../../tests/e2e-harness
+      '@neon/functions':
+        specifier: workspace:*
+        version: link:../functions
       '@rollup/plugin-commonjs':
         specifier: 25.0.8
         version: 25.0.8(rollup@3.29.4)
@@ -263,6 +266,9 @@ importers:
       express:
         specifier: 4.19.2
         version: 4.19.2
+      hono:
+        specifier: ^4.12.25
+        version: 4.12.25
       node-pty:
         specifier: 1.1.0
         version: 1.1.0
@@ -433,6 +439,9 @@ importers:
       console-fail-test:
         specifier: 'catalog:'
         version: 0.5.0
+      hono:
+        specifier: ^4.12.25
+        version: 4.12.25
       tsdown:
         specifier: 'catalog:'
         version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
