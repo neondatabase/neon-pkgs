@@ -2,11 +2,14 @@ import { type Config, defineConfig } from "@neon/config/v1";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
+	FunctionBaseUrlKey,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
 	NeonEnv,
+	NeonFunctionsEnv,
+	NeonFunctionUrlEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
 	SelectableEnvKey,
@@ -74,6 +77,24 @@ describe("parseEnv key filter (types)", () => {
 		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
 			"DATABASE_URL" | "DATABASE_URL_UNPOOLED" | "NEON_BRANCH"
 		>();
+	});
+
+	test("function URL keys are selectable when the policy declares the slug", () => {
+		const config = defineConfig({
+			preview: {
+				functions: { hello: { name: "H", source: "./h.ts" } },
+			},
+		});
+		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
+			| "DATABASE_URL"
+			| "DATABASE_URL_UNPOOLED"
+			| "NEON_BRANCH"
+			| "NEON_FUNCTION_HELLO_BASE_URL"
+		>();
+		const env = parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"]);
+		expectTypeOf(env.functions.hello.baseUrl).toEqualTypeOf<string>();
+		// @ts-expect-error postgres was not selected
+		env.postgres;
 	});
 });
 
@@ -529,6 +550,7 @@ type NamespacePresence<C extends Config> = {
 	dataApi: "dataApi" extends keyof NeonEnv<C> ? true : false;
 	storage: "storage" extends keyof NeonEnv<C> ? true : false;
 	aiGateway: "aiGateway" extends keyof NeonEnv<C> ? true : false;
+	functions: "functions" extends keyof NeonEnv<C> ? true : false;
 };
 
 /** The presence record of a postgres-only policy (no secret namespaces). */
@@ -539,6 +561,7 @@ type PostgresOnly = {
 	dataApi: false;
 	storage: false;
 	aiGateway: false;
+	functions: false;
 };
 
 describe("NeonEnv namespace presence (types)", () => {
@@ -630,22 +653,29 @@ describe("NeonEnv namespace presence (types)", () => {
 		>().toEqualTypeOf<false>();
 	});
 
-	test("preview.functions alone adds no env namespace (functions are not secrets here)", () => {
+	test("preview.functions adds the functions namespace", () => {
 		const fnOnly = defineConfig({
 			preview: {
 				functions: { hello: { name: "H", source: "./h.ts" } },
 			},
 		});
 		expectTypeOf<
-			NamespacePresence<typeof fnOnly>
-		>().toEqualTypeOf<PostgresOnly>();
+			NamespacePresence<typeof fnOnly>["functions"]
+		>().toEqualTypeOf<true>();
+		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<
+			NeonFunctionsEnv<typeof fnOnly>
+		>();
 	});
 
 	test("a fully-enabled policy yields every namespace", () => {
 		const everything = defineConfig({
 			auth: true,
 			dataApi: true,
-			preview: { buckets: { uploads: {} }, aiGateway: true },
+			preview: {
+				buckets: { uploads: {} },
+				aiGateway: true,
+				functions: { hello: { name: "H", source: "./h.ts" } },
+			},
 		});
 		expectTypeOf<NamespacePresence<typeof everything>>().toEqualTypeOf<{
 			postgres: true;
@@ -654,6 +684,7 @@ describe("NeonEnv namespace presence (types)", () => {
 			dataApi: true;
 			storage: true;
 			aiGateway: true;
+			functions: true;
 		}>();
 	});
 
@@ -684,6 +715,9 @@ describe("env type-export surface", () => {
 		expectTypeOf<NeonDataApiEnv>().not.toBeAny();
 		expectTypeOf<NeonEnv>().not.toBeAny();
 		expectTypeOf<NeonFunctionEnv<typeof sample, "hello">>().not.toBeAny();
+		expectTypeOf<NeonFunctionUrlEnv>().not.toBeAny();
+		expectTypeOf<NeonFunctionsEnv<typeof sample>>().not.toBeAny();
+		expectTypeOf<FunctionBaseUrlKey<"hello">>().not.toBeAny();
 		expectTypeOf<NeonPostgresEnv>().not.toBeAny();
 		expectTypeOf<NeonStorageEnv>().not.toBeAny();
 		expectTypeOf<

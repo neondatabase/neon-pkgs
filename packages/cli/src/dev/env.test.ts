@@ -38,11 +38,6 @@ type FakeOverrides = {
 	getNeonDataApi?: NeonApi["getNeonDataApi"];
 	/** Override `listBranches` (e.g. to make it throw for the graceful-degrade case). */
 	listBranches?: NeonApi["listBranches"];
-	/**
-	 * Override `listBranchFunctions` (e.g. to make it throw, simulating an undeployed
-	 * function / Functions Preview disabled). Defaults to returning `[]`. When the env path
-	 * is correct this is never called, since functions carry no branch env.
-	 */
 	listBranchFunctions?: NeonApi["listBranchFunctions"];
 	/**
 	 * Override `listBranchBuckets` (e.g. to simulate a branch that has an object-storage
@@ -207,7 +202,6 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	/** Set true the first time `listBranchFunctions` is called, so tests can assert it isn't. */
 	listBranchFunctionsCalled = false;
 
 	async listBranchFunctions(
@@ -654,16 +648,23 @@ describe("resolveDevEnv", () => {
 		expect(result.skipped?.reason).toMatch(/network down/);
 	});
 
-	it("tier 1 functions-only: never calls the functions API, still injects DATABASE_URL", async () => {
-		// A functions-only policy. Functions carry no branch env (their env is the local
-		// `functions.<slug>.env`, layered by the dev server), so env resolution must not
-		// enumerate the functions API at all.
+	it("tier 1 functions-only: lists invocation URLs and still injects DATABASE_URL", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
 				"{ name: 'Hello', source: './hello.ts' } } } };\n",
 		);
-		const api = new FakeNeonApi();
+		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech/`;
+		const api = new FakeNeonApi({
+			listBranchFunctions: async () => [
+				{
+					id: "fn-hello",
+					slug: "hello",
+					name: "Hello",
+					invocationUrl: helloUrl,
+				},
+			],
+		});
 
 		const result = await resolveDevEnv({
 			cwd,
@@ -674,13 +675,11 @@ describe("resolveDevEnv", () => {
 
 		expect(result.vars.DATABASE_URL).toBeDefined();
 		expect(result.vars.DATABASE_URL_UNPOOLED).toBeDefined();
-		expect(api.listBranchFunctionsCalled).toBe(false);
+		expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(api.listBranchFunctionsCalled).toBe(true);
 	});
 
-	it("tier 1 functions-only: an undeployed/unavailable function does not sink env injection", async () => {
-		// Simulate the real-world failure: the Functions Preview is not enabled for the project,
-		// so listBranchFunctions errors. Because the env path strips functions, that API is never
-		// hit and DATABASE_URL is still injected (instead of dropping ALL env, as it used to).
+	it("tier 1 functions-only: FeatureUnavailable does not sink env injection", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
@@ -688,8 +687,10 @@ describe("resolveDevEnv", () => {
 		);
 		const api = new FakeNeonApi({
 			listBranchFunctions: async () => {
-				throw new Error(
-					"platform functions not available for this project",
+				throw new PlatformError(
+					ErrorCode.FeatureUnavailable,
+					"Functions isn't available for this Neon project",
+					{ details: { status: 404 } },
 				);
 			},
 		});
@@ -702,7 +703,8 @@ describe("resolveDevEnv", () => {
 		});
 
 		expect(result.vars.DATABASE_URL).toBeDefined();
-		expect(api.listBranchFunctionsCalled).toBe(false);
+		expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBeUndefined();
+		expect(api.listBranchFunctionsCalled).toBe(true);
 	});
 
 	it('neon.ts importing an uninstalled package -> a clear "did you run npm install" error', async () => {

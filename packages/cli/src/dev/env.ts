@@ -7,9 +7,15 @@ import {
 	type NeonApi,
 	type NeonBucketSnapshot,
 	type NeonDataApiSnapshot,
+	type NeonFunctionSnapshot,
 } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
-import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
+import {
+	type FunctionUrlMode,
+	functionBaseUrlKey,
+	NEON_ENV_VAR_KEYS,
+	parseFunctionBaseUrlKey,
+} from "@neon-internals/env-core/env";
 import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
@@ -111,12 +117,7 @@ export class ServiceNotOnBranchError extends Error {
 
 /** What {@link resolveNeonEnvVars} produced, and what it could not. */
 export type ResolvedNeonEnvVars = ReusedBranchEnv & {
-	/**
-	 * Services that were asked for but yielded nothing, so a caller can say so rather than
-	 * report a complete pull. Only the *implied* AI Gateway can land here (see
-	 * {@link DevEnvContext.implyAiGateway}); a service the user named explicitly raises
-	 * instead of being skipped.
-	 */
+	/** Keeps implicit resolution failures visible while explicit selections fail directly. */
 	skipped?: readonly NeonService[];
 };
 
@@ -138,7 +139,9 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
  *      branch's live state (Auth / Data API enablement plus any object-storage
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
  *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy.
- *      With {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
+ *      Function invocation URLs are listed live (`functionUrls: "all-live"`) because
+ *      `pullConfig` cannot round-trip them into `preview.functions`. With
+ *      {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
  *      `pullConfig` cannot read it back.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
@@ -166,17 +169,10 @@ export const resolveNeonEnvVars = async (
 					"--project-id / --branch.",
 			);
 		}
-		// Resolve env from the policy with its `preview.functions` removed. Functions carry no
-		// branch-level secrets — their env comes from the local `neon.ts` `functions.<slug>.env`,
-		// layered per-function by the dev server — so env resolution never needs the functions
-		// API. Probing it (via `plan`/`fetchEnv`) only adds a failure mode: an undeployed
-		// function, or a project where the Functions Preview isn't enabled, would error and sink
-		// ALL injection (including DATABASE_URL). Stripping functions keeps env resolution honest
-		// while leaving buckets / AI Gateway / Auth / Data API fully checked — those DO carry
-		// secrets, so a declared-but-missing one still hard-stops (see assertPolicyMatchesBranch).
-		const envConfig = withoutPreviewFunctions(config);
-		await assertPolicyMatchesBranch(envConfig, ctx);
-		return await fetchAndProject(envConfig, ctx);
+		// Undeployed functions must not block unrelated env resolution. Fetch still uses the
+		// full config so deployed URLs remain policy-scoped.
+		await assertPolicyMatchesBranch(withoutPreviewFunctions(config), ctx);
+		return await fetchAndProject(config, ctx);
 	}
 
 	if (ctx.projectId && ctx.branchId) {
@@ -185,13 +181,12 @@ export const resolveNeonEnvVars = async (
 			branchId: ctx.branchId,
 			...apiOptions(ctx),
 		});
-		// `pulled.config` is already a `Config` (static auth/dataApi toggles, any
-		// object-storage `preview.buckets`, and a branch tuning closure), so it feeds
-		// straight into fetchEnv — no wrapping needed. pullConfig excludes functions and
-		// the AI Gateway (neither can be faithfully read back), so fetchEnv never probes
-		// the functions API here and only mints a storage credential when a bucket exists.
+		// pullConfig cannot represent function declarations, so branch read-back must list all
+		// live URLs. The AI Gateway remains separate because it has no read-back state.
 		if (!ctx.implyAiGateway) {
-			return await fetchAndProject(pulled.config, ctx);
+			return await fetchAndProject(pulled.config, ctx, {
+				functionUrls: "all-live",
+			});
 		}
 		return await resolveWithImpliedGateway(pulled.config, ctx, {
 			projectId: ctx.projectId,
@@ -240,7 +235,9 @@ const resolveWithImpliedGateway = async (
 ): Promise<ResolvedNeonEnvVars> => {
 	const unreachable = await credentialsUnreachable(ctx, branch);
 	if (unreachable === null) {
-		return await fetchAndProject(withAiGateway(config), ctx);
+		return await fetchAndProject(withAiGateway(config), ctx, {
+			functionUrls: "all-live",
+		});
 	}
 	// Deliberately does not assert that the project lacks the gateway: a read can also fail
 	// for a reason that has nothing to do with the feature, and this is not the place to
@@ -255,9 +252,12 @@ const resolveWithImpliedGateway = async (
 		].join(" and "),
 		unreachable,
 	);
+	const pulled = await fetchAndProject(config, ctx, {
+		functionUrls: "all-live",
+	});
 	return {
-		...(await fetchAndProject(config, ctx)),
-		skipped: ["ai-gateway"],
+		...pulled,
+		skipped: [...(pulled.skipped ?? []), "ai-gateway"],
 	};
 };
 
@@ -325,7 +325,7 @@ const resolveSelectedServices = async (
 	const checkAiGateway =
 		has("ai-gateway") &&
 		!selectedKeys.includes(NEON_ENV_VAR_KEYS.aiGateway.apiKey);
-	const [auth, dataApiEnabled, buckets, aiGatewayAvailable] =
+	const [auth, dataApiEnabled, buckets, aiGatewayAvailable, functions] =
 		await Promise.all([
 			has("auth") ? api.getNeonAuth(projectId, branchId) : null,
 			has("data-api")
@@ -337,7 +337,29 @@ const resolveSelectedServices = async (
 			checkAiGateway
 				? readAiGatewayAvailable(api, projectId, branchId)
 				: null,
+			has("functions")
+				? api.listBranchFunctions(projectId, branchId)
+				: null,
 		]);
+
+	const callableFunctions = (functions ?? []).filter(
+		(fn) => fn.invocationUrl !== "",
+	);
+	if (has("functions")) {
+		assertSelectedFunctionsOnBranch({
+			branchId,
+			directServices,
+			envKeys,
+			callable: callableFunctions,
+		});
+	}
+
+	const functionKeys = directServices.includes("functions")
+		? callableFunctions
+				.map((fn) => functionBaseUrlKey(fn.slug))
+				.sort((left, right) => left.localeCompare(right))
+		: [];
+	const fetchKeys = [...new Set([...selectedKeys, ...functionKeys])];
 
 	const config = configForServices(
 		services,
@@ -356,9 +378,39 @@ const resolveSelectedServices = async (
 	// persisted secrets name may also back a service it is not resolving. See
 	// `fetchEnvReusingSecrets`'s `revokeSuperseded`.
 	return await fetchAndProject(config, ctx, {
-		keys: selectedKeys,
+		keys: fetchKeys,
 		revokeSuperseded: false,
+		...(has("functions") ? { functionUrls: "all-live" as const } : {}),
 	});
+};
+
+const assertSelectedFunctionsOnBranch = (args: {
+	branchId: string;
+	directServices: readonly NeonService[];
+	envKeys: readonly EnvPullKey[];
+	callable: NeonFunctionSnapshot[];
+}): void => {
+	if (
+		args.directServices.includes("functions") &&
+		args.callable.length === 0
+	) {
+		throw new ServiceNotOnBranchError(
+			`--service functions: branch ${args.branchId} has no deployed functions, so there ` +
+				"are no functions env vars to pull. Provision it first " +
+				`(\`${getCliName()} deploy\`, or in the Neon Console), or drop functions from --service.`,
+		);
+	}
+	for (const key of args.envKeys) {
+		const slug = parseFunctionBaseUrlKey(key);
+		if (slug === null) continue;
+		if (!args.callable.some((fn) => fn.slug === slug)) {
+			throw new ServiceNotOnBranchError(
+				`--env ${key}: branch ${args.branchId} has no deployed function "${slug}", so ` +
+					`${key} cannot be pulled. Deploy it first (\`${getCliName()} deploy\`, or in ` +
+					`the Neon Console), or drop ${key} from --env.`,
+			);
+		}
+	}
 };
 
 /**
@@ -570,15 +622,7 @@ export const resolveDevEnv = async (
 	}
 };
 
-/**
- * Return the policy with its `preview.functions` removed, so the env path never enumerates
- * functions against the Neon API. Functions are local-source-bundled and produce no
- * branch-level secrets, so they are irrelevant to env resolution; probing them only risks
- * failing the whole resolve (undeployed function, or Functions Preview disabled on the
- * project). Buckets / AI Gateway and the top-level Auth / Data API toggles are preserved —
- * they DO carry env, so they must still be checked and resolved. Returns the config
- * unchanged when it declares no functions.
- */
+/** Prevents undeployed functions from blocking unrelated env resolution during planning. */
 const withoutPreviewFunctions = (config: Config): Config => {
 	const preview = config.preview;
 	if (!preview?.functions) return config;
@@ -633,16 +677,27 @@ const isMissingResource = (change: AppliedChange): boolean =>
 const fetchAndProject = async (
 	config: Config,
 	ctx: DevEnvContext,
-	opts: { keys?: readonly string[]; revokeSuperseded?: boolean } = {},
-): Promise<ReusedBranchEnv> =>
-	fetchEnvReusingSecrets(config, {
+	opts: {
+		keys?: readonly string[];
+		revokeSuperseded?: boolean;
+		functionUrls?: FunctionUrlMode;
+	} = {},
+): Promise<ResolvedNeonEnvVars> => {
+	const result = await fetchEnvReusingSecrets(config, {
 		projectId: ctx.projectId as string,
 		branch: ctx.branchId as string,
 		...apiOptions(ctx),
 		...(ctx.env ? { env: ctx.env } : {}),
 		...(opts.keys ? { keys: opts.keys } : {}),
 		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
+		...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
 	});
+	return {
+		vars: result.vars,
+		credential: result.credential,
+		...(result.functionUrlsUnavailable ? { skipped: ["functions"] } : {}),
+	};
+};
 
 /**
  * Load a `neon.ts` policy if one exists on the path from `cwd` up to the repo

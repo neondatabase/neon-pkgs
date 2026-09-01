@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-	ENV_PULL_KEYS,
+	ENV_PULL_KEY_HELP,
 	envKeysForSelection,
 	parseEnvPullKeys,
 	servicesForEnvKeys,
@@ -19,7 +19,7 @@ describe("env pull key selection", () => {
 
 	it("rejects unknown keys instead of silently widening the pull", () => {
 		expect(() => parseEnvPullKeys(["DATABSE_URL"], "--env")).toThrow(
-			`Unknown env variable <redacted invalid value>. Did you mean DATABASE_URL? Supported values: ${ENV_PULL_KEYS.join(", ")}.`,
+			`Unknown env variable <redacted invalid value>. Did you mean DATABASE_URL? Supported values: ${ENV_PULL_KEY_HELP}.`,
 		);
 	});
 
@@ -61,6 +61,34 @@ describe("env pull key selection", () => {
 		expect(envKeysForSelection([], ["DATABASE_URL"])).toEqual([
 			"DATABASE_URL",
 		]);
+	});
+
+	it("parses a function URL key", () => {
+		expect(
+			parseEnvPullKeys(["NEON_FUNCTION_HELLO_BASE_URL"], "--env"),
+		).toEqual(["NEON_FUNCTION_HELLO_BASE_URL"]);
+	});
+
+	it("rejects a function URL key that is not the BASE_URL pattern", () => {
+		expect(() =>
+			parseEnvPullKeys(["NEON_FUNCTION_HELLO_HOST"], "--env"),
+		).toThrow(/Unknown env variable/);
+	});
+
+	it("maps a function URL key to the functions service", () => {
+		expect(servicesForEnvKeys(["NEON_FUNCTION_HELLO_BASE_URL"])).toEqual([
+			"functions",
+		]);
+	});
+
+	it("includes a named function URL key in the selection", () => {
+		expect(
+			envKeysForSelection([], ["NEON_FUNCTION_HELLO_BASE_URL"]),
+		).toEqual(["NEON_FUNCTION_HELLO_BASE_URL"]);
+	});
+
+	it("does not invent live function URL keys for --service functions", () => {
+		expect(envKeysForSelection(["functions"], [])).toEqual(["NEON_BRANCH"]);
 	});
 
 	it("requires the two object-storage credential variables together", () => {

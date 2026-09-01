@@ -83,8 +83,8 @@ export type ParseServicesOptions = {
  *
  * An unrecognized name is rejected rather than dropped: a typo would otherwise act on
  * everything *except* the service that was asked for, and report success. A name that is a
- * real service but not one this command supports says so specifically — "functions has no env
- * variables" is a different problem from a typo, and has a different fix.
+ * real service but not one this command supports says so specifically — "postgres is on
+ * every branch" is a different problem from a typo, and has a different fix.
  */
 export const parseServices = (
 	raw: readonly string[],

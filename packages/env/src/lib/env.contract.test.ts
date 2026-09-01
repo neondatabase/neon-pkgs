@@ -163,7 +163,11 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 		const config = defineConfig({
 			auth: true,
 			dataApi: true,
-			preview: { buckets: { uploads: {} }, aiGateway: true },
+			preview: {
+				buckets: { uploads: {} },
+				aiGateway: true,
+				functions: { hello: { name: "Hello", source: "./hello.ts" } },
+			},
 		});
 		const env: NeonEnv<typeof config> = {
 			postgres: {
@@ -186,6 +190,11 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 				apiKey: "nt_live_abc_def",
 				baseUrl: "https://x.neon.build",
 			},
+			functions: {
+				hello: {
+					baseUrl: "https://br-foo-hello.compute.neon.tech/",
+				},
+			},
 		};
 
 		// Project to OS env-vars and inject them, exactly as `neon-env run` does.
@@ -205,7 +214,10 @@ describe("@neon/env public surface", () => {
 			[
 			  "NEON_ENV_VAR_KEYS",
 			  "fetchEnv",
+			  "functionBaseUrlKey",
+			  "isFunctionBaseUrlKey",
 			  "parseEnv",
+			  "parseFunctionBaseUrlKey",
 			  "toEntries",
 			]
 		`);

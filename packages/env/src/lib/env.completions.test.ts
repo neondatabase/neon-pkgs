@@ -155,13 +155,14 @@ describe("parseEnv autocomplete", () => {
 				`parseEnv(config, ["${CARET}"])`,
 			),
 		);
-		// Postgres + auth only: no storage / AI Gateway keys, since the policy enables neither.
 		expect(entries).toEqual([
 			"DATABASE_URL",
 			"DATABASE_URL_UNPOOLED",
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 			"NEON_BRANCH",
+			"NEON_FUNCTION_HELLO_BASE_URL",
+			"NEON_FUNCTION_WORLD_BASE_URL",
 		]);
 	});
 
@@ -182,6 +183,8 @@ describe("parseEnv autocomplete", () => {
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 			"NEON_BRANCH",
+			"NEON_FUNCTION_HELLO_BASE_URL",
+			"NEON_FUNCTION_WORLD_BASE_URL",
 		]);
 	});
 

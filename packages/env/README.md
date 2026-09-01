@@ -136,6 +136,20 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
+**Functions** (Preview — when `preview.functions` declares at least one slug). Each live invocation URL is optional: undeployed functions and empty `invocation_url` values are omitted rather than required. These are the invocation URLs, not the function's declared `env` secrets (those are uploaded at deploy).
+
+| Key | From |
+| --- | --- |
+| `NEON_FUNCTION_<SLUG>_BASE_URL` | the function's `invocation_url` (`https://<branchId>-<slug>.compute.…/`). `<SLUG>` is the slug uppercased. |
+
+```ts
+const env = parseEnv(config);
+env.functions.hello?.baseUrl; // string | undefined
+
+const { functions } = await fetchEnv(config, { projectId, branch: "main" });
+functions.hello?.baseUrl;
+```
+
 ### The branch credential
 
 Object storage and the AI Gateway are backed by one branch credential, and the Neon API returns its secrets (`s3_secret_access_key`, `api_token`) **once**, at mint time — they aren't stored server-side, and the list endpoint returns metadata only. So there is nothing to *fetch*: `fetchEnv` mints. Call it on every `neon dev` start and you leave a live credential behind each time.

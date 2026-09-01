@@ -9,7 +9,9 @@ import {
 	credentialEnvKeys,
 	credentialName,
 	type FetchEnvOptions,
-	fetchEnvKeys,
+	type FunctionUrlMode,
+	fetchEnvKeysState,
+	isFunctionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
 	policyEnvKeys,
 	previewCredentialScopes,
@@ -52,6 +54,8 @@ export interface ReusedBranchEnv {
 	vars: Record<string, string>;
 	/** What happened to the branch credential. */
 	credential: CredentialOutcome;
+	/** Prevents callers from pruning URLs when their absence reflects endpoint failure. */
+	functionUrlsUnavailable?: true;
 }
 
 /** The branch credential's secrets as persisted in an env source. Empty string means absent. */
@@ -119,6 +123,8 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 * (`--service` or `--env`) is the caller that needs this.
 		 */
 		revokeSuperseded?: boolean;
+		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
+		functionUrls?: FunctionUrlMode;
 	},
 ): Promise<ReusedBranchEnv> {
 	const {
@@ -135,7 +141,10 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	const selectedPolicyKeys =
 		requested === null
 			? allPolicyKeys
-			: allPolicyKeys.filter((key) => requested.has(key));
+			: [
+					...allPolicyKeys.filter((key) => requested.has(key)),
+					...[...requested].filter(isFunctionBaseUrlKey).sort(),
+				];
 	const selected = new Set(selectedPolicyKeys);
 	const K = NEON_ENV_VAR_KEYS;
 	const storageCredentialSelected =
@@ -153,19 +162,22 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	// Nothing credential-backed was selected, so there is nothing to preserve and no
 	// credential to spend: fetch the selected values and skip the credentials endpoint.
 	if (secretKeys.length === 0) {
-		const fetched = await fetchEnvKeys(
+		const fetched = await fetchEnvKeysState(
 			config,
 			fetchOptions,
 			requested === null ? null : selectedPolicyKeys,
 		);
 		return {
-			vars: preferPersisted(toEntries(fetched), source),
+			vars: preferPersisted(toEntries(fetched.env), source),
 			credential: {
 				issued: false,
 				keys: [],
 				revoked: [],
 				superseded: [],
 			},
+			...(fetched.functionUrlsUnavailable
+				? { functionUrlsUnavailable: true as const }
+				: {}),
 		};
 	}
 
@@ -205,19 +217,31 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		reusable !== null && credentialScopesSatisfied(reusable.scopes, scopes);
 
 	// Ask for the selected policy values, minus the secrets we're keeping — which is what
-	// stops `fetchEnv` from minting a credential it doesn't need.
-	const fetchKeys = keep
-		? selectedPolicyKeys.filter((key) => !secretKeys.includes(key))
-		: selectedPolicyKeys;
-	const fetched = await fetchEnvKeys(
+	// stops `fetchEnv` from minting a credential it doesn't need. An unscoped call stays
+	// `keys: null`: rewriting it as `policyEnvKeys` would drop `NEON_FUNCTION_*_BASE_URL`.
+	const fetchKeys =
+		requested === null
+			? null
+			: keep
+				? selectedPolicyKeys.filter((key) => !secretKeys.includes(key))
+				: selectedPolicyKeys;
+	const fetched = await fetchEnvKeysState(
 		config,
 		// Pass the resolved id so `fetchEnv` targets the same branch this call verified against,
 		// even if `options.branch` was a name that has since been reused.
-		{ ...fetchOptions, branchId: branch.id, api },
+		{
+			...fetchOptions,
+			branchId: branch.id,
+			api,
+			...(keep && requested === null ? { omitKeys: secretKeys } : {}),
+		},
 		fetchKeys,
 	);
 
-	const vars = preferPersisted(toEntries(fetched), source);
+	const vars = preferPersisted(toEntries(fetched.env), source);
+	const unavailable = fetched.functionUrlsUnavailable
+		? { functionUrlsUnavailable: true as const }
+		: {};
 	if (keep) {
 		for (const key of secretKeys) {
 			const value = source[key];
@@ -231,6 +255,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 				revoked: [],
 				superseded: [],
 			},
+			...unavailable,
 		};
 	}
 
@@ -269,6 +294,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			revoked: revokeSuperseded ? [...ours] : [],
 			superseded: revokeSuperseded ? [] : [...ours],
 		},
+		...unavailable,
 	};
 }
 

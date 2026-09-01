@@ -457,4 +457,53 @@ describe("fetchEnvReusingSecrets", () => {
 		// jwks_url is always returned by the snapshot, so it comes from there.
 		expect(vars.NEON_AUTH_JWKS_URL).toBe("https://example.com/jwks.json");
 	});
+
+	test("unscoped all-live still emits function URLs when a credential is minted", async () => {
+		const helloUrl = "https://br-main-hello.compute.fake.neon.tech/";
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: helloUrl,
+		});
+
+		const { vars } = await fetchEnvReusingSecrets(gatewayPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			functionUrls: "all-live",
+		});
+
+		expect(vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(vars.NEON_AI_GATEWAY_TOKEN).toMatch(/^nt_live_/);
+	});
+
+	test("reusing a gateway token does not drop unscoped function URLs", async () => {
+		const helloUrl = "https://br-main-hello.compute.fake.neon.tech/";
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: helloUrl,
+		});
+
+		const first = await fetchEnvReusingSecrets(gatewayPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			functionUrls: "all-live",
+		});
+		const second = await fetchEnvReusingSecrets(gatewayPolicy, {
+			api,
+			projectId,
+			branch: "main",
+			functionUrls: "all-live",
+			env: { ...process.env, ...first.vars },
+		});
+
+		expect(second.credential.issued).toBe(false);
+		expect(second.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+	});
 });

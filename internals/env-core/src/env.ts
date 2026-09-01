@@ -16,6 +16,7 @@ import {
 	createNeonApiFromOptions,
 	deriveCredentialScopes,
 	ErrorCode,
+	isPlatformError,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonBranchStorageSnapshot,
@@ -106,6 +107,35 @@ export const NEON_ENV_VAR_KEYS = {
 	},
 } as const;
 
+export type FunctionBaseUrlKey<Slug extends string = string> =
+	`NEON_FUNCTION_${Uppercase<Slug>}_BASE_URL`;
+
+const FUNCTION_SLUG = /^[a-z0-9]{1,20}$/;
+const FUNCTION_BASE_URL_KEY = /^NEON_FUNCTION_([A-Z0-9]{1,20})_BASE_URL$/;
+
+export function functionBaseUrlKey<S extends string>(
+	slug: S,
+): FunctionBaseUrlKey<S> {
+	if (!FUNCTION_SLUG.test(slug)) {
+		throw new Error(
+			`functionBaseUrlKey: ${JSON.stringify(slug)} is not a function slug ([a-z0-9]{1,20}).`,
+		);
+	}
+	return `NEON_FUNCTION_${slug.toUpperCase()}_BASE_URL` as FunctionBaseUrlKey<S>;
+}
+
+export function parseFunctionBaseUrlKey(key: string): string | null {
+	const match = FUNCTION_BASE_URL_KEY.exec(key);
+	return match ? match[1].toLowerCase() : null;
+}
+
+export function isFunctionBaseUrlKey(key: string): key is FunctionBaseUrlKey {
+	return parseFunctionBaseUrlKey(key) !== null;
+}
+
+/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
+export type FunctionUrlMode = "policy" | "all-live";
+
 /**
  * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
  * name is always known); on a `parseEnv` result it's present only when `NEON_BRANCH` was
@@ -184,6 +214,10 @@ export interface NeonAiGatewayEnv {
 	baseUrl: string;
 }
 
+export interface NeonFunctionUrlEnv {
+	baseUrl: string;
+}
+
 /**
  * Empty record alias used as the "false" branch of the conditional namespace adds below.
  * `Record<never, never>` is the no-op for intersection — the cleaner alternative to `{}`,
@@ -249,6 +283,35 @@ type AiGatewayOn<C extends Config> = [NonNullable<C["preview"]>] extends [never]
 		? ServiceOn<NonNullable<A>>
 		: false;
 
+/** The tuple guard prevents a missing preview block from enabling functions. */
+type HasFunctions<C extends Config> = [NonNullable<C["preview"]>] extends [
+	never,
+]
+	? false
+	: NonNullable<C["preview"]> extends { functions: infer F }
+		? HasKeys<NonNullable<F>>
+		: false;
+
+type FunctionSlugOfConfig<C extends Config> = [
+	NonNullable<C["preview"]>,
+] extends [never]
+	? never
+	: NonNullable<C["preview"]> extends { functions: infer F }
+		? Extract<keyof NonNullable<F>, string>
+		: never;
+
+/** Entries stay optional because a declared function may not be deployed. */
+export type NeonFunctionsEnv<C extends Config> = {
+	[S in FunctionSlugOfConfig<C>]?: NeonFunctionUrlEnv;
+};
+
+type FunctionBaseUrlKeyOf<C extends Config> =
+	FunctionSlugOfConfig<C> extends infer S
+		? S extends string
+			? FunctionBaseUrlKey<S>
+			: never
+		: never;
+
 /**
  * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
  * {@link Config} so the type system knows which optional namespaces are present.
@@ -279,6 +342,9 @@ export type NeonEnv<C extends Config = Config> = {
 	(HasBuckets<C> extends true ? { storage: NeonStorageEnv } : NoNamespace) &
 	(AiGatewayOn<C> extends true
 		? { aiGateway: NeonAiGatewayEnv }
+		: NoNamespace) &
+	(HasFunctions<C> extends true
+		? { functions: NeonFunctionsEnv<C> }
 		: NoNamespace);
 
 // ───────────────────────── env-var key filtering ─────────────────────────
@@ -336,7 +402,8 @@ interface EnvKeyToProp {
  * (e.g. `NEON_AUTH_BASE_URL` is only offered once the policy turns on `auth`).
  */
 export type SelectableEnvKey<C extends Config> =
-	EnvKeysByNamespace[keyof NeonEnv<C> & keyof EnvKeysByNamespace];
+	| EnvKeysByNamespace[keyof NeonEnv<C> & keyof EnvKeysByNamespace]
+	| FunctionBaseUrlKeyOf<C>;
 
 /**
  * The result shape of a **filtered** `parseEnv(config, keys)` call: the namespaced
@@ -353,6 +420,31 @@ export type SelectableEnvKey<C extends Config> =
  * camelCase property and looks the value type up on the canonical namespace interface, so it
  * stays correct if a field ever stops being a plain `string`.
  */
+type SelectedFunctionKeys<K extends string> = Extract<K, FunctionBaseUrlKey>;
+
+type FunctionSlugFromKey<K extends string> =
+	K extends `NEON_FUNCTION_${infer S}_BASE_URL` ? Lowercase<S> : never;
+
+type FunctionsFilteredEnv<K extends string> = [
+	SelectedFunctionKeys<K>,
+] extends [never]
+	? unknown
+	: {
+			functions: {
+				[P in SelectedFunctionKeys<K> as FunctionSlugFromKey<P>]: NeonFunctionUrlEnv;
+			};
+		};
+
+type OptionalFunctionsFilteredEnv<K extends string> = [
+	SelectedFunctionKeys<K>,
+] extends [never]
+	? unknown
+	: {
+			functions?: {
+				[P in SelectedFunctionKeys<K> as FunctionSlugFromKey<P>]?: NeonFunctionUrlEnv;
+			};
+		};
+
 export type FilteredNeonEnv<K extends string> = {
 	[N in keyof EnvKeysByNamespace as [
 		Extract<K, EnvKeysByNamespace[N]>,
@@ -364,7 +456,7 @@ export type FilteredNeonEnv<K extends string> = {
 			keyof EnvKeyToProp] &
 			keyof NamespaceEnv[N]];
 	};
-};
+} & FunctionsFilteredEnv<K>;
 
 /**
  * A filtered result when the exact runtime contents of a key array are unknown. Both the
@@ -382,7 +474,7 @@ type OptionalFilteredNeonEnv<K extends string> = {
 			keyof EnvKeyToProp] &
 			keyof NamespaceEnv[N]];
 	};
-};
+} & OptionalFunctionsFilteredEnv<K>;
 
 /** Whether `T` is a union rather than one concrete type. */
 type IsUnion<T, Whole = T> = T extends Whole
@@ -651,16 +743,42 @@ function requiredValue<T>(value: T | null, description: string): T {
  */
 export async function fetchEnvKeys(
 	config: Config,
-	options: FetchEnvOptions,
+	options: FetchEnvKeysOptions,
 	keys: readonly string[] | null,
 ): Promise<ResolvedNeonEnv> {
+	return (await fetchEnvKeysState(config, options, keys)).env;
+}
+
+export type FetchEnvKeysState = {
+	env: ResolvedNeonEnv;
+	/** Prevents endpoint failure from being mistaken for a confirmed empty function list. */
+	functionUrlsUnavailable: boolean;
+};
+
+export type FetchEnvKeysOptions = FetchEnvOptions & {
+	functionUrls?: FunctionUrlMode;
+	/**
+	 * Keys to skip even when {@link fetchEnvKeys} is unscoped (`keys === null`).
+	 * {@link fetchEnvReusingSecrets} uses this to keep already-verified secrets
+	 * without converting an unscoped fetch into a static policy-key list — that
+	 * list cannot name `NEON_FUNCTION_*_BASE_URL`, so it would drop function URLs.
+	 */
+	omitKeys?: readonly string[];
+};
+
+export async function fetchEnvKeysState(
+	config: Config,
+	options: FetchEnvKeysOptions,
+	keys: readonly string[] | null,
+): Promise<FetchEnvKeysState> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 	const { branch, desired } = await resolveBranchPolicy(config, options, api);
 
 	const selection = keys ? new Set<string>(keys) : null;
+	const omitted = new Set(options.omitKeys ?? []);
 	const wants = (key: string): boolean =>
-		selection === null || selection.has(key);
+		!omitted.has(key) && (selection === null || selection.has(key));
 
 	const result: ResolvedNeonEnv = {};
 	const K = NEON_ENV_VAR_KEYS;
@@ -887,7 +1005,86 @@ export async function fetchEnvKeys(
 		}
 	}
 
-	return result;
+	const functionUrlMode = options.functionUrls ?? "policy";
+	const declaredSlugs = (desired.preview?.functions ?? []).map(
+		(fn) => fn.slug,
+	);
+	const wantsAnyFunctionUrl =
+		selection === null || [...selection].some(isFunctionBaseUrlKey);
+	const shouldList =
+		wantsAnyFunctionUrl &&
+		(functionUrlMode === "all-live" || declaredSlugs.length > 0);
+
+	let functionUrlsUnavailable = false;
+	if (shouldList) {
+		const listed = await listFunctionInvocationUrls(
+			api,
+			projectId,
+			branch.id,
+		);
+		if (listed.status === "unavailable") {
+			functionUrlsUnavailable = true;
+			if (
+				functionUrlMode === "policy" &&
+				declaredSlugs.length > 0 &&
+				selection === null
+			) {
+				result.functions = {};
+			}
+		} else {
+			const allowed =
+				functionUrlMode === "all-live" ? null : new Set(declaredSlugs);
+			const functions: Record<string, NeonFunctionUrlEnv> = {};
+			for (const fn of listed.functions) {
+				if (allowed !== null && !allowed.has(fn.slug)) continue;
+				if (!wants(functionBaseUrlKey(fn.slug))) continue;
+				functions[fn.slug] = { baseUrl: fn.invocationUrl };
+			}
+			if (
+				functionUrlMode === "policy" &&
+				declaredSlugs.length > 0 &&
+				selection === null
+			) {
+				result.functions = functions;
+			} else if (Object.keys(functions).length > 0) {
+				result.functions = functions;
+			}
+		}
+	}
+
+	return { env: result, functionUrlsUnavailable };
+}
+
+async function listFunctionInvocationUrls(
+	api: NeonApi,
+	projectId: string,
+	branchId: string,
+): Promise<
+	| {
+			status: "ok";
+			functions: Array<{ slug: string; invocationUrl: string }>;
+	  }
+	| { status: "unavailable" }
+> {
+	try {
+		const snapshots = await api.listBranchFunctions(projectId, branchId);
+		const functions = snapshots
+			.filter((fn) => fn.invocationUrl !== "")
+			.map((fn) => ({
+				slug: fn.slug,
+				invocationUrl: fn.invocationUrl,
+			}))
+			.sort((left, right) => left.slug.localeCompare(right.slug));
+		return { status: "ok", functions };
+	} catch (error) {
+		if (
+			isPlatformError(error) &&
+			error.code === ErrorCode.FeatureUnavailable
+		) {
+			return { status: "unavailable" };
+		}
+		throw error;
+	}
 }
 
 /**
@@ -1269,6 +1466,11 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
 	// (/v1, /openai/v1, /anthropic/v1) itself (https://github.com/vercel/ai/pull/15997).
 	put(K.aiGateway.apiKey, env.aiGateway?.apiKey);
 	put(K.aiGateway.baseUrl, env.aiGateway?.baseUrl);
+	if (env.functions) {
+		for (const slug of Object.keys(env.functions).sort()) {
+			put(functionBaseUrlKey(slug), env.functions[slug]?.baseUrl);
+		}
+	}
 	return out;
 }
 
@@ -1280,4 +1482,6 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
  */
 export type ResolvedNeonEnv = {
 	[N in keyof NamespaceEnv]?: Partial<NamespaceEnv[N]>;
+} & {
+	functions?: Record<string, NeonFunctionUrlEnv>;
 };

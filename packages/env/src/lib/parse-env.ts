@@ -16,14 +16,18 @@ import {
 } from "@neon/config/v1";
 import {
 	type FilteredNeonEnv,
+	functionBaseUrlKey,
+	isFunctionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
 	type NeonAiGatewayEnv,
 	type NeonAuthEnv,
 	type NeonBranchEnv,
 	type NeonDataApiEnv,
 	type NeonEnv,
+	type NeonFunctionUrlEnv,
 	type NeonPostgresEnv,
 	type NeonStorageEnv,
+	parseFunctionBaseUrlKey,
 	type SelectableEnvKey,
 } from "@neon-internals/env-core/env";
 import { z } from "zod";
@@ -333,6 +337,20 @@ export function parseEnv(
 		}
 	}
 
+	const declaredFunctionSlugs = Object.keys(
+		config.preview?.functions ?? {},
+	).sort();
+	if (declaredFunctionSlugs.length > 0) {
+		const functions: Record<string, NeonFunctionUrlEnv> = {};
+		for (const slug of declaredFunctionSlugs) {
+			const value = source[functionBaseUrlKey(slug)];
+			if (value !== undefined && value !== "") {
+				functions[slug] = { baseUrl: value };
+			}
+		}
+		result.functions = functions;
+	}
+
 	if (scope !== undefined) {
 		const fn = config.preview?.functions?.[scope];
 		if (!fn) {
@@ -410,10 +428,26 @@ const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 function parseFilteredEnv(
 	source: NodeJS.ProcessEnv,
 	keys: readonly string[],
-): Record<string, Record<string, string>> {
+): Record<string, unknown> {
 	const issues: string[] = [];
-	const result: Record<string, Record<string, string>> = {};
+	const result: Record<string, Record<string, unknown>> = {};
+	const functionUrls: Record<string, NeonFunctionUrlEnv> = {};
 	for (const key of keys) {
+		if (isFunctionBaseUrlKey(key)) {
+			const slug = parseFunctionBaseUrlKey(key);
+			if (slug === null) continue;
+			const value = source[key];
+			if (value === undefined) {
+				issues.push(`${key} is missing`);
+				continue;
+			}
+			if (value === "") {
+				issues.push(`${key} must not be empty`);
+				continue;
+			}
+			functionUrls[slug] = { baseUrl: value };
+			continue;
+		}
 		// Unknown keys are blocked at the type level; a runtime caller bypassing the types
 		// gets a clear error rather than a silently-dropped selection.
 		if (!Object.hasOwn(FILTERABLE_ENV_KEYS, key)) {
@@ -433,6 +467,9 @@ function parseFilteredEnv(
 		const bucket = result[namespace] ?? {};
 		bucket[property] = value;
 		result[namespace] = bucket;
+	}
+	if (Object.keys(functionUrls).length > 0) {
+		result.functions = functionUrls;
 	}
 	if (issues.length > 0) {
 		throw new PlatformError(

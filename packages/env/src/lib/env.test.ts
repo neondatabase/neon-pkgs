@@ -2,9 +2,12 @@ import {
 	defineConfig,
 	ErrorCode,
 	type GetConnectionUriInput,
+	PlatformError,
 } from "@neon/config/v1";
 import {
 	fetchEnv,
+	fetchEnvKeys,
+	functionBaseUrlKey,
 	type NeonAuthEnv,
 	type NeonEnv,
 	toEntries,
@@ -20,8 +23,7 @@ function expectType<T>(_value: T): void {
 	// Compile-time assertion only.
 }
 
-function seededFake() {
-	const api = new FakeNeonApi();
+function seededFake(api: FakeNeonApi = new FakeNeonApi()) {
 	const projectId = "proj-env";
 	api.seedProject({
 		project: {
@@ -523,6 +525,26 @@ describe("parseEnv", () => {
 			expect(env.function).toEqual({});
 		});
 
+		test("adds an optional functions namespace for invocation URLs without requiring them", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			const env = parseEnv(config);
+			expect(env.functions).toEqual({});
+		});
+
+		test("reads a present function invocation URL into functions.<slug>", () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv(
+				"NEON_FUNCTION_HELLO_BASE_URL",
+				"https://br-main-hello.compute.fake.neon.tech/",
+			);
+			const env = parseEnv(config);
+			expect(env.functions.hello?.baseUrl).toBe(
+				"https://br-main-hello.compute.fake.neon.tech/",
+			);
+		});
+
 		test("function scope still includes branch secrets (auth) when enabled", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
@@ -788,6 +810,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		);
 		expect("storage" in fnOnly).toBe(false);
 		expect("aiGateway" in fnOnly).toBe(false);
+		expect(fnOnly.functions).toEqual({});
 		expect(callsTo(api, "createCredential")).toBe(0);
 
 		// buckets + functions: one credential carrying storage + functions:invoke.
@@ -946,5 +969,127 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		// The OpenAI SDK vars are no longer emitted.
 		expect(pairs.OPENAI_API_KEY).toBeUndefined();
 		expect(pairs.OPENAI_BASE_URL).toBeUndefined();
+	});
+});
+
+describe("function invocation URLs", () => {
+	const helloUrl = "https://br-main-hello.compute.fake.neon.tech/";
+	const worldUrl = "https://br-main-world.compute.fake.neon.tech/";
+	const helloPolicy = defineConfig({
+		preview: {
+			functions: {
+				hello: { name: "Hello", source: "./hello.ts" },
+			},
+		},
+	});
+
+	test("functionBaseUrlKey encodes the slug", () => {
+		expect(functionBaseUrlKey("hello")).toBe(
+			"NEON_FUNCTION_HELLO_BASE_URL",
+		);
+	});
+
+	test("fetchEnv emits declared slugs that have a live invocation URL", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: helloUrl,
+		});
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-world",
+			slug: "world",
+			name: "World",
+			invocationUrl: worldUrl,
+		});
+
+		const env = await fetchEnv(helloPolicy, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(env.functions.hello?.baseUrl).toBe(helloUrl);
+		expect(env.functions).not.toHaveProperty("world");
+		expect(toEntries(env)[functionBaseUrlKey("hello")]).toBe(helloUrl);
+		expect(toEntries(env)[functionBaseUrlKey("world")]).toBeUndefined();
+	});
+
+	test("all-live emits every live URL even when the policy declares none", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: helloUrl,
+		});
+
+		const env = await fetchEnvKeys(
+			defineConfig({}),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				functionUrls: "all-live",
+			},
+			null,
+		);
+
+		expect(env.functions?.hello?.baseUrl).toBe(helloUrl);
+	});
+
+	test("fetchEnv skips an empty invocation URL", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: "",
+		});
+
+		const env = await fetchEnv(helloPolicy, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(env.functions).toEqual({});
+	});
+
+	test("fetchEnv does not fail when the functions list is FeatureUnavailable", async () => {
+		class NoFunctionsFeatureApi extends FakeNeonApi {
+			override async listBranchFunctions(): Promise<never> {
+				throw new PlatformError(
+					ErrorCode.FeatureUnavailable,
+					"Functions isn't available for this Neon project",
+					{ details: { status: 404 } },
+				);
+			}
+		}
+		const { api, projectId } = seededFake(new NoFunctionsFeatureApi());
+
+		const env = await fetchEnv(helloPolicy, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(env.postgres.databaseUrl).toBeDefined();
+		expect(env.functions).toEqual({});
+	});
+
+	test("toEntries projects functions to NEON_FUNCTION_<SLUG>_BASE_URL", () => {
+		const env: NeonEnv<typeof helloPolicy> = {
+			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
+			functions: { hello: { baseUrl: helloUrl } },
+		};
+		expect(toEntries(env).NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+	});
+
+	test("parseEnv filtered on a function URL key requires it", () => {
+		expect(() =>
+			parseEnv(helloPolicy, ["NEON_FUNCTION_HELLO_BASE_URL"]),
+		).toThrowError(/NEON_FUNCTION_HELLO_BASE_URL is missing/);
 	});
 });

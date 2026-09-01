@@ -1,6 +1,9 @@
 import { existsSync } from "node:fs";
 import type { NeonApi } from "@neon/config";
-import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
+import {
+	isFunctionBaseUrlKey,
+	NEON_ENV_VAR_KEYS,
+} from "@neon-internals/env-core/env";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -8,9 +11,8 @@ import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
-	ENV_PULL_KEYS,
+	ENV_PULL_KEY_HELP,
 	ENV_PULL_SERVICES,
-	ENV_PULL_UNAVAILABLE,
 	type EnvPullKey,
 	envKeysForSelection,
 	envPullFlagValue,
@@ -95,7 +97,7 @@ export const builder = (argv: yargs.Argv) =>
 						env: {
 							alias: "e",
 							describe:
-								`Pull only these individual variables: ${ENV_PULL_KEYS.join(", ")}. ` +
+								`Pull only these individual variables: ${ENV_PULL_KEY_HELP}. ` +
 								"Repeat the flag or comma-separate. Overrides neon.ts. Combines " +
 								"with --service as a union; it never narrows a service bundle.",
 							type: "array",
@@ -136,6 +138,14 @@ export const builder = (argv: yargs.Argv) =>
 						"$0 env pull -s auth -e DATABASE_URL",
 						"Pull all Auth variables plus DATABASE_URL",
 					)
+					.example(
+						"$0 env pull -s functions",
+						"Pull NEON_FUNCTION_<SLUG>_BASE_URL for every deployed function",
+					)
+					.example(
+						"$0 env pull -e NEON_FUNCTION_HELLO_BASE_URL",
+						"Pull only that function's invocation URL",
+					)
 					.strict(),
 			async (args) => {
 				const rawServices = servicesFlagValue(args.service);
@@ -143,7 +153,6 @@ export const builder = (argv: yargs.Argv) =>
 				const services = rawServices
 					? parseServices(rawServices, {
 							allowed: ENV_PULL_SERVICES,
-							whyUnavailable: ENV_PULL_UNAVAILABLE,
 							flag: "--service",
 							onDeprecated: (used, canonical) =>
 								log.warning(
@@ -217,11 +226,7 @@ export type PullOutcome =
 			 * AI Gateway. Absent otherwise — nothing else is credential-backed.
 			 */
 			credential?: CredentialOutcome;
-			/**
-			 * Services that were part of the pull but could not be reached, so the result is
-			 * not the complete set. Only the implied AI Gateway can land here — see
-			 * `resolveWithImpliedGateway`.
-			 */
+			/** Marks an incomplete implicit resolve without hiding an explicit selection failure. */
 			skipped?: readonly NeonService[];
 	  }
 	| { status: "empty" };
@@ -265,7 +270,11 @@ export const pull = async (
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
-	const neonVars = pickSelectedVars(pickNeonVars(vars), selectedKeys);
+	const neonVars = pickSelectedVars(
+		pickNeonVars(vars),
+		selectedKeys,
+		props.services,
+	);
 	if (Object.keys(neonVars).length === 0) {
 		log.info(
 			"No Neon env variables to pull for this branch (no DATABASE_URL or " +
@@ -281,6 +290,9 @@ export const pull = async (
 		managedKeys: managedKeysFor(
 			selectedKeys,
 			unreachedButCurrent(skipped, existingEnv, branchId),
+			existingEnv,
+			props.services,
+			props.envKeys,
 		),
 	});
 	log.info(
@@ -359,54 +371,60 @@ export const pull = async (
 	};
 };
 
-/**
- * The keys this pull is allowed to prune, i.e. the ones it is authoritative for.
- *
- * An explicit selection narrows that to the service bundles and individual keys it named:
- * `env pull -s ai-gateway` and `env pull -e NEON_AI_GATEWAY_TOKEN` both say nothing about
- * `DATABASE_URL`. `unreached` is subtracted for the same reason — see
- * {@link unreachedButCurrent}.
- */
+/** Prevents scoped or unavailable services from pruning values they did not resolve. */
 const managedKeysFor = (
 	selectedKeys: readonly EnvPullKey[] | undefined,
 	unreached: readonly NeonService[],
+	existingEnv: Record<string, string>,
+	services: readonly NeonService[] | undefined,
+	envKeys: readonly EnvPullKey[] | undefined,
 ): string[] => {
+	const existingFunctionKeys =
+		Object.keys(existingEnv).filter(isFunctionBaseUrlKey);
+	const namedFunctionKeys = (envKeys ?? []).filter(isFunctionBaseUrlKey);
+	const functionsInScope =
+		selectedKeys === undefined ||
+		(services?.includes("functions") ?? false);
+	const ownedFunctionKeys = functionsInScope
+		? existingFunctionKeys
+		: namedFunctionKeys;
 	const owned = selectedKeys
-		? NEON_OWNED_ENV_KEYS.filter((key) => selectedKeys.includes(key))
-		: [...NEON_OWNED_ENV_KEYS];
+		? [
+				...NEON_OWNED_ENV_KEYS.filter((key) =>
+					selectedKeys.includes(key),
+				),
+				...ownedFunctionKeys,
+			]
+		: [...NEON_OWNED_ENV_KEYS, ...ownedFunctionKeys];
 	if (unreached.length === 0) return owned;
 	const keep = new Set(ownedEnvServiceKeys(unreached));
-	return owned.filter((key) => !keep.has(key));
+	return owned.filter((key) => {
+		if (unreached.includes("functions") && isFunctionBaseUrlKey(key)) {
+			return false;
+		}
+		return !keep.has(key);
+	});
 };
 
 /**
- * Of the services this pull could not reach, the ones whose variables already on disk belong
- * to the branch being pulled — the only ones worth keeping.
- *
- * Failing to reach a service is not evidence that the branch stopped having it:
- * `PLATFORM_FEATURE_UNAVAILABLE` covers a transient incident as well as a project that
- * genuinely lacks the feature, and pruning would delete a token whose secret exists nowhere
- * else and strand the live credential behind it. But that only argues for keeping *this
- * branch's* values. Variables left over from another branch are stale by definition, and
- * keeping those would leave an app pointed at the wrong branch's gateway — a worse failure
- * than losing a token, because it is silent.
- *
- * The gateway is the only service that can be unreached (only it is implied rather than
- * observed), and its base URL is branch-scoped, so the persisted URL is what tells the two
- * cases apart. Anything that does not resolve to this branch's gateway host is pruned, which
- * is the safe direction: a stale entry costs a re-pull, a wrongly-kept one silently misroutes
- * traffic.
+ * Endpoint failure is not evidence that existing values are stale; the gateway host check
+ * avoids preserving credentials for a different branch.
  */
 const unreachedButCurrent = (
 	skipped: readonly NeonService[] | undefined,
 	existingEnv: Record<string, string>,
 	branchId: string,
 ): NeonService[] => {
-	if (!skipped?.includes("ai-gateway")) return [];
-	const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
-	return baseUrl !== undefined && isBranchGatewayUrl(baseUrl, branchId)
-		? ["ai-gateway"]
-		: [];
+	if (!skipped) return [];
+	const keep: NeonService[] = [];
+	if (skipped.includes("ai-gateway")) {
+		const baseUrl = existingEnv[NEON_ENV_VAR_KEYS.aiGateway.baseUrl];
+		if (baseUrl !== undefined && isBranchGatewayUrl(baseUrl, branchId)) {
+			keep.push("ai-gateway");
+		}
+	}
+	if (skipped.includes("functions")) keep.push("functions");
+	return keep;
 };
 
 /**
@@ -430,11 +448,17 @@ const isBranchGatewayUrl = (baseUrl: string, branchId: string): boolean =>
 const pickSelectedVars = (
 	vars: Record<string, string>,
 	selectedKeys: readonly EnvPullKey[] | undefined,
+	services: readonly NeonService[] | undefined,
 ): Record<string, string> => {
 	if (!selectedKeys) return vars;
 	const wanted = new Set<string>(selectedKeys);
+	const keepFunctionUrls = services?.includes("functions") ?? false;
 	return Object.fromEntries(
-		Object.entries(vars).filter(([key]) => wanted.has(key)),
+		Object.entries(vars).filter(
+			([key]) =>
+				wanted.has(key) ||
+				(keepFunctionUrls && isFunctionBaseUrlKey(key)),
+		),
 	);
 };
 
@@ -485,9 +509,13 @@ export const autoPullEnvAfterPin = async (
  */
 const pickNeonVars = (vars: Record<string, string>): Record<string, string> => {
 	const out: Record<string, string> = {};
-	for (const name of NEON_VAR_NAMES) {
-		const value = vars[name];
-		if (value !== undefined) out[name] = value;
+	for (const [name, value] of Object.entries(vars)) {
+		if (
+			NEON_VAR_NAMES.some((key) => key === name) ||
+			isFunctionBaseUrlKey(name)
+		) {
+			out[name] = value;
+		}
 	}
 	return out;
 };

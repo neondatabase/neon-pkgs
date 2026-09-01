@@ -1,23 +1,14 @@
-import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
+import {
+	type FunctionBaseUrlKey,
+	isFunctionBaseUrlKey,
+	NEON_ENV_VAR_KEYS,
+	parseFunctionBaseUrlKey,
+} from "@neon-internals/env-core/env";
 
 import { NEON_SERVICES, type NeonService } from "./neon_services.js";
 
-/**
- * The services `env pull --service` can select: every Neon service that produces branch env
- * vars. `functions` is the one left out — a function's env comes from the local `neon.ts`,
- * never from the branch, so there is nothing to pull.
- */
-export const ENV_PULL_SERVICES = NEON_SERVICES.filter(
-	(service) => service !== "functions",
-);
+export const ENV_PULL_SERVICES = NEON_SERVICES;
 
-/** Why the services `env pull` leaves out are not selectable, for the refusal message. */
-export const ENV_PULL_UNAVAILABLE: Partial<Record<NeonService, string>> = {
-	functions:
-		"a function's env comes from your neon.ts, not from the branch, so there is nothing to pull",
-};
-
-/** Every OS-level env var `env pull` can write, in stable emit order. */
 export const ENV_PULL_KEYS = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
 	NEON_ENV_VAR_KEYS.branch.name,
@@ -26,7 +17,9 @@ export const ENV_PULL_KEYS = [
 	...Object.values(NEON_ENV_VAR_KEYS.storage),
 	...Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 ] as const;
-export type EnvPullKey = (typeof ENV_PULL_KEYS)[number];
+export type EnvPullKey = (typeof ENV_PULL_KEYS)[number] | FunctionBaseUrlKey;
+
+export const ENV_PULL_KEY_HELP = `${ENV_PULL_KEYS.join(", ")}, or NEON_FUNCTION_<SLUG>_BASE_URL`;
 
 /** The OS-level env vars each service contributes to a pulled `.env`. */
 const SERVICE_ENV_KEYS: Record<NeonService, readonly EnvPullKey[]> = {
@@ -35,6 +28,7 @@ const SERVICE_ENV_KEYS: Record<NeonService, readonly EnvPullKey[]> = {
 	"data-api": Object.values(NEON_ENV_VAR_KEYS.dataApi),
 	"object-storage": Object.values(NEON_ENV_VAR_KEYS.storage),
 	"ai-gateway": Object.values(NEON_ENV_VAR_KEYS.aiGateway),
+	// Live slugs are not known until the branch is listed.
 	functions: [],
 };
 
@@ -42,11 +36,13 @@ const SERVICE_ENV_KEYS: Record<NeonService, readonly EnvPullKey[]> = {
  * The subset of {@link SERVICE_ENV_KEYS} a pull *owns*, and so may prune from the target file
  * when the branch no longer has it. Object storage is deliberately absent: it is emitted under
  * the third-party `AWS_*` names, which collide with credentials a user may set by hand, so
- * `env pull` only ever writes them.
+ * `env pull` only ever writes them. Function URL keys cannot live here because slugs are
+ * discovered at runtime.
  */
 const SERVICE_OWNED_ENV_KEYS: Record<NeonService, readonly string[]> = {
 	...SERVICE_ENV_KEYS,
 	"object-storage": [],
+	functions: [],
 };
 
 /**
@@ -55,8 +51,10 @@ const SERVICE_OWNED_ENV_KEYS: Record<NeonService, readonly string[]> = {
  */
 export const BRANCH_ENV_KEY = NEON_ENV_VAR_KEYS.branch.name;
 
-/** The service that produces a key, or `null` for branch identity. */
-const ENV_KEY_SERVICE: Record<EnvPullKey, NeonService | null> = {
+const ENV_KEY_SERVICE: Record<
+	(typeof ENV_PULL_KEYS)[number],
+	NeonService | null
+> = {
 	DATABASE_URL: "postgres",
 	DATABASE_URL_UNPOOLED: "postgres",
 	NEON_BRANCH: null,
@@ -72,14 +70,14 @@ const ENV_KEY_SERVICE: Record<EnvPullKey, NeonService | null> = {
 };
 
 export const serviceForEnvKey = (key: EnvPullKey): NeonService | null =>
-	ENV_KEY_SERVICE[key];
+	isFunctionBaseUrlKey(key) ? "functions" : ENV_KEY_SERVICE[key];
 
 /** Services that must be resolved to produce the selected env keys. */
 export const servicesForEnvKeys = (
 	keys: readonly EnvPullKey[],
 ): NeonService[] =>
 	ENV_PULL_SERVICES.filter((service) =>
-		keys.some((key) => ENV_KEY_SERVICE[key] === service),
+		keys.some((key) => serviceForEnvKey(key) === service),
 	);
 
 /** Every env var the selected services contribute, plus branch identity. */
@@ -97,16 +95,12 @@ export const envServiceKeys = (
  * The env vars a pull scoped to `services` may prune. Narrower than the unscoped set on
  * purpose: `env pull -s ai-gateway` says nothing about `DATABASE_URL`, so it must leave it
  * alone rather than treat its absence from this pull as "the branch no longer has it".
+ * Function URL keys cannot live here because slugs are discovered at runtime.
  */
 export const ownedEnvServiceKeys = (
 	services: readonly NeonService[],
 ): string[] => services.flatMap((service) => SERVICE_OWNED_ENV_KEYS[service]);
 
-/**
- * The exact env vars an explicit selection writes. Services contribute their complete
- * bundles plus branch identity; `--env` contributes only the named keys. The two selectors
- * compose as a union.
- */
 export const envKeysForSelection = (
 	services: readonly NeonService[],
 	envKeys: readonly EnvPullKey[],
@@ -129,7 +123,11 @@ export const envKeysForSelection = (
 		);
 	}
 
-	return ENV_PULL_KEYS.filter((key) => selected.has(key));
+	const staticKeys = ENV_PULL_KEYS.filter((key) => selected.has(key));
+	const functionKeys = [...selected]
+		.filter(isFunctionBaseUrlKey)
+		.sort((left, right) => left.localeCompare(right));
+	return [...staticKeys, ...functionKeys];
 };
 
 /** Parse repeated or comma-separated `--env` values into canonical env-key order. */
@@ -141,7 +139,7 @@ export const parseEnvPullKeys = (
 		.flatMap((value) => value.split(","))
 		.map((name) => name.trim())
 		.filter((name) => name !== "");
-	const supported = `Supported values: ${ENV_PULL_KEYS.join(", ")}.`;
+	const supported = `Supported values: ${ENV_PULL_KEY_HELP}.`;
 	if (names.length === 0) {
 		throw new Error(
 			`${flag} needs at least one env variable. ${supported}`,
@@ -149,7 +147,9 @@ export const parseEnvPullKeys = (
 	}
 
 	const unknown = names.filter(
-		(name) => !ENV_PULL_KEYS.some((key) => key === name),
+		(name) =>
+			!ENV_PULL_KEYS.some((key) => key === name) &&
+			!isFunctionBaseUrlKey(name),
 	);
 	if (unknown.length > 0) {
 		const displayNames = unknown.map(redactUnknownEnvValue);
@@ -169,14 +169,22 @@ export const parseEnvPullKeys = (
 		);
 	}
 
-	return ENV_PULL_KEYS.filter((key) => names.includes(key));
+	const staticKeys = ENV_PULL_KEYS.filter((key) => names.includes(key));
+	const functionKeys = [...new Set(names.filter(isFunctionBaseUrlKey))].sort(
+		(left, right) => left.localeCompare(right),
+	);
+	return [...staticKeys, ...functionKeys];
 };
+
+const isKnownEnvPullKey = (key: string): boolean =>
+	ENV_PULL_KEYS.some((supportedKey) => supportedKey === key) ||
+	isFunctionBaseUrlKey(key);
 
 const redactUnknownEnvValue = (value: string): string => {
 	const separator = value.indexOf("=");
 	if (separator !== -1) {
 		const key = value.slice(0, separator);
-		return ENV_PULL_KEYS.some((supportedKey) => supportedKey === key)
+		return isKnownEnvPullKey(key)
 			? `${key}=<redacted>`
 			: "<redacted invalid value>";
 	}
@@ -185,6 +193,7 @@ const redactUnknownEnvValue = (value: string): string => {
 
 const suggestEnvPullKey = (value: string): EnvPullKey | null => {
 	if (value.includes("=")) return null;
+	if (parseFunctionBaseUrlKey(value) !== null) return null;
 	const closest = ENV_PULL_KEYS.map(
 		(key) => [key, editDistance(value, key)] as const,
 	).sort((a, b) => a[1] - b[1])[0];
