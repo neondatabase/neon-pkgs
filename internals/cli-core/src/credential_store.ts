@@ -101,6 +101,7 @@ export type CredentialStore = {
 	write(
 		at: CredentialLocation,
 		credentials: StoredCredentials,
+		options?: { restorePrevious?: boolean },
 	): LoadedCredential;
 	delete(
 		at: CredentialLocation,
@@ -148,6 +149,7 @@ export const createCredentialStore = (
 	const setKeyringOrRollback = (
 		profile: string,
 		credentials: StoredCredentials,
+		restorePrevious: boolean,
 	): void => {
 		assertKeyringWritable(profile);
 		const kr = keyring;
@@ -172,7 +174,7 @@ export const createCredentialStore = (
 				);
 			}
 		} catch (err) {
-			if (previous !== null) {
+			if (restorePrevious && previous !== null) {
 				try {
 					kr.set(KEYRING_SERVICE, account, previous);
 				} catch {
@@ -326,9 +328,14 @@ export const createCredentialStore = (
 	const write = (
 		at: CredentialLocation,
 		credentials: StoredCredentials,
+		options?: { restorePrevious?: boolean },
 	): LoadedCredential => {
 		if (at.storage === CRED_STORAGE_KEYRING) {
-			setKeyringOrRollback(at.profile, credentials);
+			setKeyringOrRollback(
+				at.profile,
+				credentials,
+				options?.restorePrevious !== false,
+			);
 			return {
 				credentials,
 				backend: CRED_STORAGE_KEYRING,

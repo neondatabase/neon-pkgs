@@ -435,7 +435,11 @@ const performRefresh = async (
 				refreshed,
 				loaded?.credentials ?? credentials,
 			);
-			writeOAuthCredentials(props.configDir, at, next);
+			writeOAuthCredentials(props.configDir, at, next, {
+				// The presented refresh token is already invalid at the
+				// authorization server. Putting it back would discard the live one.
+				restorePrevious: false,
+			});
 			log.debug("Token refresh successful");
 			return { credentials: next, rotated: true };
 		},
@@ -492,8 +496,9 @@ const writeOAuthCredentials = (
 	configDir: string,
 	at: CredentialLocation,
 	credentials: StoredCredentials,
+	options?: { restorePrevious?: boolean },
 ): void => {
-	storeFor(configDir).write(at, credentials);
+	storeFor(configDir).write(at, credentials, options);
 	log.debug("Saved credentials to %s", credentialLabel(at));
 	log.debug("Credentials MD5 hash: %s", md5hash(JSON.stringify(credentials)));
 };
