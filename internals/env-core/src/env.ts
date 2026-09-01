@@ -1340,13 +1340,20 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
  * vars are origin-only (`NEON_AUTH_BASE_URL`, `NEON_AI_GATEWAY_BASE_URL`).
  */
 function asEnvBaseUrl(url: string): string {
+	let parsed: URL;
 	try {
-		return new URL(url).origin;
+		parsed = new URL(url);
 	} catch {
 		throw new Error(
 			`fetchEnv: function invocation URL is not a URL: ${JSON.stringify(url)}`,
 		);
 	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		throw new Error(
+			`fetchEnv: function invocation URL must be http(s): ${JSON.stringify(url)}`,
+		);
+	}
+	return parsed.origin;
 }
 
 /** Derived from the connection URI so undeployed functions have a cell-routed URL. */

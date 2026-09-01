@@ -1209,6 +1209,29 @@ describe("function invocation URLs", () => {
 		).rejects.toThrow(/function invocation URL is not a URL/);
 	});
 
+	test("all-live throws when a listed invocation URL is not http(s)", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-hello",
+			slug: "hello",
+			name: "Hello",
+			invocationUrl: "data:text/plain,hello",
+		});
+
+		await expect(
+			fetchEnvKeys(
+				defineConfig({}),
+				{
+					api,
+					projectId,
+					branchId: "br-main",
+					functionUrls: "all-live",
+				},
+				null,
+			),
+		).rejects.toThrow(/function invocation URL must be http\(s\)/);
+	});
+
 	test("fetchEnv selected function URL key is derived without listing", async () => {
 		const { api, projectId } = seededFake();
 
