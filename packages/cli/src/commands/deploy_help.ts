@@ -1,7 +1,3 @@
-/**
- * Shared --help footer for `neon deploy` and `neon functions deploy`. The two
- * commands overlap in name and both take `--env`, with different meanings.
- */
 export const DEPLOY_COMMANDS_EPILOGUE = [
 	"",
 	"Use neon deploy with a neon.ts file for a full deployment (declared services and functions).",
