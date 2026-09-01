@@ -7,7 +7,6 @@ import {
 } from "./config_template.js";
 import {
 	ENV_PULL_SERVICES,
-	ENV_PULL_UNAVAILABLE,
 	envServiceKeys,
 	ownedEnvServiceKeys,
 } from "./env_services.js";
@@ -21,7 +20,6 @@ import {
 /** The env-pull selection, which is the larger of the two allowed subsets. */
 const envPull = {
 	allowed: ENV_PULL_SERVICES,
-	whyUnavailable: ENV_PULL_UNAVAILABLE,
 	flag: "--service",
 };
 /** The config-init selection, which is the one that accepts `none`. */
@@ -46,8 +44,7 @@ describe("the service vocabulary", () => {
 	});
 
 	it("offers each command only what it can act on", () => {
-		// A function's env comes from the local neon.ts, so there is nothing to pull.
-		expect(ENV_PULL_SERVICES).not.toContain("functions");
+		expect(ENV_PULL_SERVICES).toContain("functions");
 		// Every branch has Postgres, and the Data API needs auth — neither is declarable.
 		expect(CONFIG_INIT_SERVICES).not.toContain("postgres");
 		expect(CONFIG_INIT_SERVICES).not.toContain("data-api");
@@ -88,7 +85,7 @@ describe("parseServices", () => {
 
 	it("rejects an unknown service rather than acting on everything but it", () => {
 		expect(() => parseServices(["postgres", "nope"], envPull)).toThrow(
-			/Unknown service nope\..*Supported values: postgres, auth, data-api, object-storage, ai-gateway\./s,
+			/Unknown service nope\..*Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway\./s,
 		);
 	});
 
@@ -105,19 +102,14 @@ describe("parseServices", () => {
 	});
 
 	it("says a real service is not selectable here, rather than calling it unknown", () => {
-		// `functions` is a Neon service; it just has no branch env. That is a different
-		// mistake from a typo, and pointing at the supported list alone would not say so.
-		expect(() => parseServices(["functions"], envPull)).toThrow(
-			/functions is not something --service can select: a function's env comes from your neon\.ts/,
-		);
 		expect(() => parseServices(["postgres"], configInit)).toThrow(
 			/postgres is not something --services can select: every branch has Postgres/,
 		);
 	});
 
 	it("reports a typo and an unselectable service separately in one message", () => {
-		expect(() => parseServices(["nope", "functions"], envPull)).toThrow(
-			/Unknown service nope\. functions is not something --service can select:/,
+		expect(() => parseServices(["nope", "postgres"], configInit)).toThrow(
+			/Unknown service nope\. postgres is not something --services can select:/,
 		);
 	});
 
@@ -247,7 +239,7 @@ describe("servicesOption", () => {
 				describe: "Pull these",
 			}).describe,
 		).toBe(
-			"Pull these: postgres, auth, data-api, object-storage, ai-gateway. " +
+			"Pull these: postgres, auth, data-api, functions, object-storage, ai-gateway. " +
 				"Repeat the flag or comma-separate.",
 		);
 		expect(

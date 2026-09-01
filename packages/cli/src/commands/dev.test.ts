@@ -2,15 +2,18 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
+import { findConfigFunctionBySource } from "../dev/functions.js";
 import { test } from "../test_utils/fixtures";
 import {
 	devBundleDir,
 	diffUnits,
 	formatEnvSummary,
+	localFunctionUrlEnv,
+	planFunctionsToUnits,
 	type RunningUnit,
 	type ServedUnit,
+	sourceFunctionUrlOverlay,
 } from "./dev.js";
 
 describe("dev", () => {
@@ -241,5 +244,222 @@ describe("formatEnvSummary", () => {
 	it("returns an empty string when nothing is injected (caller skips the line)", () => {
 		expect(formatEnvSummary({ neon: [], fn: [] })).toBe("");
 		expect(formatEnvSummary(undefined)).toBe("");
+	});
+});
+
+describe("local function URLs", () => {
+	it("maps each slug to http://localhost:<port>", () => {
+		expect(
+			localFunctionUrlEnv([
+				{ slug: "hello", port: 8787 },
+				{ slug: "world", port: 8788 },
+			]),
+		).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:8787",
+			NEON_FUNCTION_WORLD_BASE_URL: "http://localhost:8788",
+		});
+	});
+
+	it("overlays sibling localhost URLs onto every unit", async () => {
+		const units = await planFunctionsToUnits(
+			[
+				{
+					slug: "hello",
+					name: "Hello",
+					source: "/fns/hello.ts",
+					port: 8787,
+					env: {},
+				},
+				{
+					slug: "world",
+					name: "World",
+					source: "/fns/world.ts",
+					port: 8788,
+					env: {},
+				},
+			],
+			{ DATABASE_URL: "postgres://prod" },
+			8787,
+		);
+
+		expect(units[0]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+		expect(units[0]?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
+			"http://localhost:8788",
+		);
+		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+		expect(units[0]?.childEnv.NEON_DEV_PORT).toBe("8787");
+		expect(units[1]?.childEnv.NEON_DEV_PORT).toBe("8788");
+		expect(units[0]?.childEnv.DATABASE_URL).toBe("postgres://prod");
+	});
+
+	it("keeps a search-mode port and configKey when replanned with keepPorts", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const [first] = await planFunctionsToUnits([hello], {}, 8787);
+		const port = Number(first?.childEnv.NEON_DEV_PORT);
+		const [second] = await planFunctionsToUnits(
+			[hello],
+			{},
+			9000,
+			new Map([["hello", port]]),
+		);
+		expect(second?.childEnv.NEON_DEV_PORT).toBe(String(port));
+		expect(second?.configKey).toBe(first?.configKey);
+	});
+
+	it("changes configKey when a sibling is added so reconcile restarts callers", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			port: 8787,
+			env: {},
+		};
+		const world = {
+			slug: "world",
+			name: "World",
+			source: "/fns/world.ts",
+			port: 8788,
+			env: {},
+		};
+		const [alone] = await planFunctionsToUnits([hello], {}, 8787);
+		const [withSibling] = await planFunctionsToUnits(
+			[hello, world],
+			{},
+			8787,
+		);
+		expect(alone?.configKey).not.toBe(withSibling?.configKey);
+		expect(withSibling?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
+			"http://localhost:8788",
+		);
+	});
+
+	it("does not give a new sibling a port reserved for a kept function", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const world = {
+			slug: "world",
+			name: "World",
+			source: "/fns/world.ts",
+			env: {},
+		};
+		const units = await planFunctionsToUnits(
+			[hello, world],
+			{},
+			8787,
+			new Map([["hello", 8787]]),
+		);
+		expect(units[0]?.childEnv.NEON_DEV_PORT).toBe("8787");
+		expect(units[1]?.childEnv.NEON_DEV_PORT).not.toBe("8787");
+		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+	});
+
+	it("moves a kept search-mode port when a sibling claims it as dev.port", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const world = {
+			slug: "world",
+			name: "World",
+			source: "/fns/world.ts",
+			port: 8787,
+			env: {},
+		};
+		const units = await planFunctionsToUnits(
+			[hello, world],
+			{},
+			8787,
+			new Map([["hello", 8787]]),
+		);
+		expect(units[1]?.childEnv.NEON_DEV_PORT).toBe("8787");
+		expect(units[0]?.childEnv.NEON_DEV_PORT).not.toBe("8787");
+		expect(units[0]?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
+			"http://localhost:8787",
+		);
+		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			`http://localhost:${units[0]?.childEnv.NEON_DEV_PORT}`,
+		);
+	});
+
+	it("overlays localhost for a matching --source slug only", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			env: {},
+		};
+		const { overlay, port } = await sourceFunctionUrlOverlay(hello, 3000);
+		expect(overlay).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:3000",
+		});
+		expect(port).toEqual({ mode: "explicit", port: 3000 });
+	});
+
+	it("leaves production URLs when --source does not match a neon.ts function", async () => {
+		vi.stubEnv("PORT", "");
+		const { overlay, port } = await sourceFunctionUrlOverlay(
+			undefined,
+			undefined,
+		);
+		expect(overlay).toEqual({});
+		expect(port.mode).toBe("search");
+	});
+
+	it("uses neon.ts dev.port when --source matches and --port is omitted", async () => {
+		vi.stubEnv("PORT", "");
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			port: 4000,
+			env: {},
+		};
+		const { overlay, port } = await sourceFunctionUrlOverlay(
+			hello,
+			undefined,
+		);
+		expect(overlay).toEqual({
+			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:4000",
+		});
+		expect(port).toEqual({ mode: "explicit", port: 4000 });
+	});
+});
+
+describe("findConfigFunctionBySource", () => {
+	it("matches --source without requiring sibling function files", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neonctl-dev-source-"));
+		try {
+			writeFileSync(join(cwd, "hello.ts"), "export default {}\n");
+			writeFileSync(
+				join(cwd, "neon.ts"),
+				"export default { preview: { functions: {\n" +
+					"  hello: { name: 'Hello', source: './hello.ts' },\n" +
+					"  world: { name: 'World', source: './missing.ts' }\n" +
+					"} } };\n",
+			);
+			const hello = join(cwd, "hello.ts");
+			const found = await findConfigFunctionBySource(cwd, hello);
+			expect(found?.slug).toBe("hello");
+			expect(found?.source).toBe(hello);
+		} finally {
+			rmSync(cwd, { recursive: true, force: true });
+		}
 	});
 });

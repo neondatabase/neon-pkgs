@@ -18,11 +18,14 @@
 export type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
+	FunctionBaseUrlKey,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
 	NeonEnv,
+	NeonFunctionsEnv,
+	NeonFunctionUrlEnv,
 	NeonPostgresEnv,
 	NeonStorageEnv,
 	ResolvedNeonEnv,
@@ -31,7 +34,10 @@ export type {
 } from "@neon-internals/env-core/env";
 export {
 	fetchEnv,
+	functionBaseUrlKey,
+	isFunctionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
+	parseFunctionBaseUrlKey,
 	toEntries,
 } from "@neon-internals/env-core/env";
 export type { FunctionSlugOf, NeonFunctionEnv } from "./lib/parse-env.js";

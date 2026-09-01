@@ -16,14 +16,18 @@ import {
 } from "@neon/config/v1";
 import {
 	type FilteredNeonEnv,
+	functionBaseUrlKey,
+	isFunctionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
 	type NeonAiGatewayEnv,
 	type NeonAuthEnv,
 	type NeonBranchEnv,
 	type NeonDataApiEnv,
 	type NeonEnv,
+	type NeonFunctionUrlEnv,
 	type NeonPostgresEnv,
 	type NeonStorageEnv,
+	parseFunctionBaseUrlKey,
 	type SelectableEnvKey,
 } from "@neon-internals/env-core/env";
 import { z } from "zod";
@@ -333,6 +337,25 @@ export function parseEnv(
 		}
 	}
 
+	const declaredFunctionSlugs = Object.keys(
+		config.preview?.functions ?? {},
+	).sort();
+	if (declaredFunctionSlugs.length > 0) {
+		const functions: Record<string, NeonFunctionUrlEnv> = {};
+		for (const slug of declaredFunctionSlugs) {
+			const key = functionBaseUrlKey(slug);
+			const parsed = readFunctionBaseUrl(key, source[key]);
+			if (parsed.ok) {
+				functions[slug] = { baseUrl: parsed.value };
+			} else {
+				issues.push(parsed.issue);
+			}
+		}
+		if (Object.keys(functions).length === declaredFunctionSlugs.length) {
+			result.functions = functions;
+		}
+	}
+
 	if (scope !== undefined) {
 		const fn = config.preview?.functions?.[scope];
 		if (!fn) {
@@ -366,10 +389,7 @@ export function parseEnv(
 			[
 				"parseEnv: the required Neon env variables are not present in process.env.",
 				...issues.map((i) => `  - ${i}`),
-				"Inject them via one of:",
-				"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
-				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
-				"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
+				...parseEnvInjectHint(issues),
 				"Or switch the call to `await fetchEnv(config, …)` if you're in a context that can do async I/O.",
 			].join("\n"),
 			{ details: { missing: issues } },
@@ -377,6 +397,54 @@ export function parseEnv(
 	}
 
 	return result;
+}
+
+function isFunctionBaseUrlIssue(issue: string): boolean {
+	return /^NEON_FUNCTION_[A-Z0-9]+_BASE_URL (is missing|must not be empty|must be a URL)$/.test(
+		issue,
+	);
+}
+
+function readFunctionBaseUrl(
+	key: string,
+	value: string | undefined,
+): { ok: true; value: string } | { ok: false; issue: string } {
+	if (value === undefined) {
+		return { ok: false, issue: `${key} is missing` };
+	}
+	if (value === "") {
+		return { ok: false, issue: `${key} must not be empty` };
+	}
+	try {
+		new URL(value);
+	} catch {
+		return { ok: false, issue: `${key} must be a URL` };
+	}
+	return { ok: true, value };
+}
+
+function parseEnvInjectHint(issues: readonly string[]): string[] {
+	if (issues.length > 0 && issues.every(isFunctionBaseUrlIssue)) {
+		return [
+			"Inject them via `neon env pull` or `neon-env run` (production URL), or `neon dev` (`http://localhost:<port>`).",
+		];
+	}
+	const lines = [
+		"Inject them via one of:",
+		"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
+		"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
+	];
+	if (issues.some((issue) => issue.includes('(function "'))) {
+		lines.push(
+			"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
+		);
+	}
+	if (issues.some(isFunctionBaseUrlIssue)) {
+		lines.push(
+			"  - for NEON_FUNCTION_*_BASE_URL: `neon env pull` or `neon dev`.",
+		);
+	}
+	return lines;
 }
 
 /**
@@ -410,10 +478,22 @@ const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 function parseFilteredEnv(
 	source: NodeJS.ProcessEnv,
 	keys: readonly string[],
-): Record<string, Record<string, string>> {
+): Record<string, unknown> {
 	const issues: string[] = [];
-	const result: Record<string, Record<string, string>> = {};
+	const result: Record<string, Record<string, unknown>> = {};
+	const functionUrls: Record<string, NeonFunctionUrlEnv> = {};
 	for (const key of keys) {
+		if (isFunctionBaseUrlKey(key)) {
+			const slug = parseFunctionBaseUrlKey(key);
+			if (slug === null) continue;
+			const parsed = readFunctionBaseUrl(key, source[key]);
+			if (!parsed.ok) {
+				issues.push(parsed.issue);
+				continue;
+			}
+			functionUrls[slug] = { baseUrl: parsed.value };
+			continue;
+		}
 		// Unknown keys are blocked at the type level; a runtime caller bypassing the types
 		// gets a clear error rather than a silently-dropped selection.
 		if (!Object.hasOwn(FILTERABLE_ENV_KEYS, key)) {
@@ -434,15 +514,16 @@ function parseFilteredEnv(
 		bucket[property] = value;
 		result[namespace] = bucket;
 	}
+	if (Object.keys(functionUrls).length > 0) {
+		result.functions = functionUrls;
+	}
 	if (issues.length > 0) {
 		throw new PlatformError(
 			ErrorCode.EnvNotInjected,
 			[
 				"parseEnv: the required Neon env variables are not present in process.env.",
 				...issues.map((i) => `  - ${i}`),
-				"Inject them via one of:",
-				"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
-				"  - your hosting platform's Neon integration (Vercel, Fly, Railway, …)",
+				...parseEnvInjectHint(issues),
 				"Or switch the call to `await fetchEnv(config, …)` if you're in a context that can do async I/O.",
 			].join("\n"),
 			{ details: { missing: issues } },
