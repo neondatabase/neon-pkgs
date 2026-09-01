@@ -8,6 +8,7 @@ import {
 	envFlag,
 	envPullFlag,
 } from "./config.js";
+import { DEPLOY_COMMANDS_EPILOGUE } from "./deploy_help.js";
 
 export const command = "deploy";
 export const describe =
@@ -34,6 +35,7 @@ export const builder = (argv: yargs.Argv) =>
 			...envPullFlag,
 		})
 		.middleware(fillSingleProject as any)
+		.epilogue(DEPLOY_COMMANDS_EPILOGUE)
 		.strict();
 
 export const handler = (props: ConfigProps) => applyCmd(props);

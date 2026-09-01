@@ -16,6 +16,25 @@ afterAll(() => {
 });
 
 describe("functions", () => {
+	test("deploy --help distinguishes neon deploy from neon functions deploy", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["functions", "deploy", "--help"], {
+			mockDir: "single_org",
+			snapshot: false,
+			stderr: expect.stringContaining(
+				"Use neon functions deploy to deploy one function manually",
+			),
+		});
+		await testCliCommand(["functions", "deploy", "--help"], {
+			mockDir: "single_org",
+			snapshot: false,
+			stderr: expect.stringContaining(
+				"neon functions deploy --env is KEY=VALUE",
+			),
+		});
+	});
+
 	test("deploy --no-wait", async ({ testCliCommand }) => {
 		await testCliCommand(
 			[

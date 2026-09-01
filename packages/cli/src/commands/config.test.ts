@@ -684,7 +684,7 @@ describe("config commands", () => {
 		const config = writeConfig(
 			`export default { preview: { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
 				source,
-			)}, env: { resendApiKey: process.env.RESEND_API_KEY ?? '' } } } } };\n`,
+			)}, env: { resendApiKey: process.env.RESEND_API_KEY } } } } };\n`,
 		);
 		const envFile = join(cwd, ".env.deploy");
 		writeFileSync(envFile, "RESEND_API_KEY=re_from_file\n");

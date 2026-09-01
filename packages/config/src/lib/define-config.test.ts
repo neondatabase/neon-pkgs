@@ -432,6 +432,8 @@ describe("resolveConfig", () => {
 		expect(issue).toContain('function "hello"');
 		// …explains the likely cause + a fix…
 		expect(issue).toContain("process.env");
+		expect(issue).toContain("omit the key from neon.ts");
+		expect(issue).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(issue).not.toContain(
 			"Invalid input: expected string, received undefined",

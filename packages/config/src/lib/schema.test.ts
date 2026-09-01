@@ -404,6 +404,8 @@ describe("configInputSchema", () => {
 		expect(formatted).toContain('function "hello"');
 		// …explains the likely cause and the fix…
 		expect(formatted).toContain("process.env");
+		expect(formatted).toContain("omit the key from neon.ts");
+		expect(formatted).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(formatted).not.toContain(
 			"Invalid input: expected string, received undefined",

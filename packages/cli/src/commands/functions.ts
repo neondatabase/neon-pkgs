@@ -31,6 +31,7 @@ import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
 import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
+import { DEPLOY_COMMANDS_EPILOGUE } from "./deploy_help.js";
 
 const FUNCTION_FIELDS = [
 	"slug",
@@ -174,7 +175,8 @@ export const builder = (argv: yargs.Argv) =>
 							type: "boolean",
 							default: true,
 						},
-					}),
+					})
+					.epilogue(DEPLOY_COMMANDS_EPILOGUE),
 			(args) => deploy(args as any),
 		)
 		.command(
