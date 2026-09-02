@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 3.1.0
+
+### Minor Changes
+
+- ba16d4d: List, register, and delete branch custom domains on the SDK, tools, and CLI. v1 points a domain at a function.
+
 ## 3.0.0
 
 ### Major Changes

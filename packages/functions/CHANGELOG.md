@@ -1,5 +1,14 @@
 # @neondatabase/functions
 
+## 0.9.0
+
+### Minor Changes
+
+- f31a3f3: Add `@neon/functions/hono` — `upgradeWebSocket` as a Hono route helper.
+
+  `hono` is an optional peer (`^4.7.8`). Installing `@neon/functions` without it
+  pulls in nothing extra and warns about nothing.
+
 ## 0.8.0
 
 ### Minor Changes

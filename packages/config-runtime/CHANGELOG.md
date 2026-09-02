@@ -1,5 +1,18 @@
 # @neondatabase/config-runtime
 
+## 1.2.0
+
+### Minor Changes
+
+- fac2226: `neon.ts` `dataApi: false` disables the Data API on deploy. `neon claim create` sends the Data API create body from neon.ts, including an external JWKS.
+
+### Patch Changes
+
+- Updated dependencies [fac2226]
+- Updated dependencies [c2030a5]
+- Updated dependencies [09f01b9]
+  - @neon/config@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes

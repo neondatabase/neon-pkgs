@@ -1,5 +1,26 @@
 # neonctl
 
+## 4.14.0
+
+### Minor Changes
+
+- 1ac60bd: `neon checkout --env <file>` loads that .env file before applying neon.ts when checkout creates a branch, the same as `neon deploy --env`. Checking out an existing branch ignores `--env`.
+- 915f429: `neon env pull` writes `NEON_FUNCTION_<SLUG>_BASE_URL` from the branch connection host for each `neon.ts` function (deployed or not). `--service functions` still lists live functions. `neon dev` injects `http://localhost:<port>`. `parseEnv` requires a URL; `fetchEnv` types `env.functions.<slug>.baseUrl` as `string`.
+
+### Patch Changes
+
+- 0a39157: Keep the OAuth session across a token refresh, a concurrent command, and a 401 from an expired access token. A dead session is reported instead of opening a browser.
+- c2030a5: `neon deploy --help` and `neon functions deploy --help` now say which command is the neon.ts full deploy and which is the manual/targeted path, and that `neon deploy --env` is a .env file. An unset Function env value in neon.ts tells you to set it or omit the key, not to coerce with `?? ""`.
+- 09f01b9: `neon env pull` (and the pull bundled into `link` / `checkout`) loads neon.ts even when function env vars are unset, so it can still write `NEON_FUNCTION_*_BASE_URL`. `neon dev`, `neon-env run`, and `defineConfig` still reject those missing values.
+- Updated dependencies [1ac60bd]
+- Updated dependencies [0a39157]
+- Updated dependencies [fac2226]
+- Updated dependencies [c2030a5]
+- Updated dependencies [915f429]
+- Updated dependencies [09f01b9]
+- Updated dependencies [ba16d4d]
+  - neon@4.14.0
+
 ## 4.13.1
 
 ### Patch Changes
