@@ -1,5 +1,18 @@
 # @neondatabase/env
 
+## 1.2.0
+
+### Minor Changes
+
+- 915f429: `neon env pull` writes `NEON_FUNCTION_<SLUG>_BASE_URL` from the branch connection host for each `neon.ts` function (deployed or not). `--service functions` still lists live functions. `neon dev` injects `http://localhost:<port>`. `parseEnv` requires a URL; `fetchEnv` types `env.functions.<slug>.baseUrl` as `string`.
+
+### Patch Changes
+
+- Updated dependencies [fac2226]
+- Updated dependencies [c2030a5]
+- Updated dependencies [09f01b9]
+  - @neon/config@1.2.0
+
 ## 1.1.6
 
 ### Patch Changes

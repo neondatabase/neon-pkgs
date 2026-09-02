@@ -1,5 +1,18 @@
 # @neondatabase/config
 
+## 1.2.0
+
+### Minor Changes
+
+- fac2226: `neon.ts` `dataApi: false` disables the Data API on deploy. `neon claim create` sends the Data API create body from neon.ts, including an external JWKS.
+
+### Patch Changes
+
+- c2030a5: `neon deploy --help` and `neon functions deploy --help` now say which command is the neon.ts full deploy and which is the manual/targeted path, and that `neon deploy --env` is a .env file. An unset Function env value in neon.ts tells you to set it or omit the key, not to coerce with `?? ""`.
+- 09f01b9: `neon env pull` (and the pull bundled into `link` / `checkout`) loads neon.ts even when function env vars are unset, so it can still write `NEON_FUNCTION_*_BASE_URL`. `neon dev`, `neon-env run`, and `defineConfig` still reject those missing values.
+- Updated dependencies [ba16d4d]
+  - @neon/sdk@3.1.0
+
 ## 1.1.0
 
 ### Minor Changes
