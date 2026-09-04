@@ -1,8 +1,14 @@
 /**
- * Valid Neon Compute Unit values.
- * Most plans support 0.25, 0.5, 1, 2, 4, 8. Higher values may be available on Business plans.
+ * Every compute size in the Console size table
+ * (https://neon.com/docs/manage/endpoints#compute-size-and-autoscaling-configuration).
+ * Plan availability is enforced by the API, not this list.
  */
-export type ComputeUnit = 0.25 | 0.5 | 1 | 2 | 4 | 8;
+export const COMPUTE_UNITS = [
+	0.25, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20,
+	22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56,
+] as const;
+
+export type ComputeUnit = (typeof COMPUTE_UNITS)[number];
 
 /** Time units accepted in a {@link DurationString}: seconds, minutes, hours, days, weeks. */
 export type DurationUnit = "s" | "m" | "h" | "d" | "w";
@@ -68,14 +74,25 @@ type DurationField<Suggestions extends DurationString> =
 export interface ComputeSettings {
 	/**
 	 * Minimum number of Compute Units. Set to 0.25 for true scale-to-zero.
+	 *
+	 * Sizes above 16 CU are fixed-size only: if this is set with a different
+	 * {@link ComputeSettings.autoscalingLimitMaxCu}, both bounds must be ≤ 16 and
+	 * `max - min` cannot exceed 8 CU. A single bound is checked against the catalog
+	 * only — the other bound comes from the project's default endpoint settings, so
+	 * the API is the arbiter of the resolved pair.
+	 *
 	 * @example 0.25  // scale-to-zero
 	 * @example 1     // always-on with 1 CU minimum
+	 * @example 4
 	 */
 	autoscalingLimitMinCu?: ComputeUnit;
 	/**
-	 * Maximum number of Compute Units for autoscaling.
+	 * Maximum number of Compute Units for autoscaling, or the fixed size when equal
+	 * to {@link ComputeSettings.autoscalingLimitMinCu}.
+	 *
 	 * @example 2
-	 * @example 8
+	 * @example 12
+	 * @example 56  // fixed-size; pair with the same min
 	 */
 	autoscalingLimitMaxCu?: ComputeUnit;
 	/**

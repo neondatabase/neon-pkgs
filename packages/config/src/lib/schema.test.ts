@@ -6,8 +6,29 @@ import {
 	dataApiConfigSchema,
 	formatZodIssues,
 } from "./schema.js";
+import { COMPUTE_UNITS } from "./types.js";
+
+/**
+ * Size table at
+ * https://neon.com/docs/manage/endpoints#compute-size-and-autoscaling-configuration.
+ * Independent of {@link COMPUTE_UNITS} so a mistyped catalog entry fails this file.
+ */
+const DOCUMENTED_COMPUTE_UNITS = [
+	0.25, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20,
+	22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56,
+] as const;
+
+function parseIssues(input: unknown): string[] {
+	const result = computeSettingsSchema.safeParse(input);
+	if (result.success) throw new Error("expected failure");
+	return formatZodIssues(result.error);
+}
 
 describe("computeSettingsSchema", () => {
+	test("the catalog matches the documented size table", () => {
+		expect(COMPUTE_UNITS).toEqual(DOCUMENTED_COMPUTE_UNITS);
+	});
+
 	test("accepts valid compute settings", () => {
 		expect(
 			computeSettingsSchema.parse({
@@ -20,12 +41,105 @@ describe("computeSettingsSchema", () => {
 		});
 	});
 
-	test("rejects min greater than max", () => {
-		const result = computeSettingsSchema.safeParse({
+	test("accepts every documented size as a fixed compute", () => {
+		for (const cu of DOCUMENTED_COMPUTE_UNITS) {
+			expect(
+				computeSettingsSchema.parse({
+					autoscalingLimitMinCu: cu,
+					autoscalingLimitMaxCu: cu,
+				}),
+			).toEqual({
+				autoscalingLimitMinCu: cu,
+				autoscalingLimitMaxCu: cu,
+			});
+		}
+	});
+
+	test("accepts documented autoscaling ranges and a single bound", () => {
+		expect(
+			computeSettingsSchema.parse({
+				autoscalingLimitMinCu: 4,
+				autoscalingLimitMaxCu: 12,
+			}),
+		).toEqual({
 			autoscalingLimitMinCu: 4,
-			autoscalingLimitMaxCu: 1,
+			autoscalingLimitMaxCu: 12,
 		});
-		expect(result.success).toBe(false);
+		expect(
+			computeSettingsSchema.parse({
+				autoscalingLimitMinCu: 0.5,
+				autoscalingLimitMaxCu: 3,
+			}),
+		).toEqual({
+			autoscalingLimitMinCu: 0.5,
+			autoscalingLimitMaxCu: 3,
+		});
+		expect(
+			computeSettingsSchema.parse({
+				autoscalingLimitMinCu: 8,
+				autoscalingLimitMaxCu: 16,
+			}),
+		).toEqual({
+			autoscalingLimitMinCu: 8,
+			autoscalingLimitMaxCu: 16,
+		});
+		expect(
+			computeSettingsSchema.parse({ autoscalingLimitMinCu: 12 }),
+		).toEqual({ autoscalingLimitMinCu: 12 });
+		expect(
+			computeSettingsSchema.parse({ autoscalingLimitMaxCu: 12 }),
+		).toEqual({ autoscalingLimitMaxCu: 12 });
+	});
+
+	test("rejects min greater than max with only that issue", () => {
+		expect(
+			parseIssues({
+				autoscalingLimitMinCu: 4,
+				autoscalingLimitMaxCu: 1,
+			}),
+		).toEqual([
+			"autoscalingLimitMinCu: autoscalingLimitMinCu (4) must be <= autoscalingLimitMaxCu (1)",
+		]);
+	});
+
+	test("rejects an autoscaling range wider than 8 CU", () => {
+		expect(
+			parseIssues({
+				autoscalingLimitMinCu: 4,
+				autoscalingLimitMaxCu: 16,
+			}),
+		).toEqual([
+			"autoscalingLimitMaxCu: autoscaling range cannot exceed 8 CU: min 4 to max 16 is a range of 12",
+		]);
+	});
+
+	test("rejects autoscaling when a bound is above 16 CU", () => {
+		expect(
+			parseIssues({
+				autoscalingLimitMinCu: 16,
+				autoscalingLimitMaxCu: 18,
+			}),
+		).toEqual([
+			"autoscalingLimitMaxCu: autoscalingLimitMaxCu (18) exceeds the autoscaling maximum of 16 CU — sizes above 16 are fixed-size only (set autoscalingLimitMinCu = autoscalingLimitMaxCu)",
+		]);
+		expect(
+			parseIssues({
+				autoscalingLimitMinCu: 18,
+				autoscalingLimitMaxCu: 20,
+			}),
+		).toEqual([
+			"autoscalingLimitMinCu: autoscalingLimitMinCu (18) exceeds the autoscaling maximum of 16 CU — sizes above 16 are fixed-size only (set autoscalingLimitMinCu = autoscalingLimitMaxCu)",
+			"autoscalingLimitMaxCu: autoscalingLimitMaxCu (20) exceeds the autoscaling maximum of 16 CU — sizes above 16 are fixed-size only (set autoscalingLimitMinCu = autoscalingLimitMaxCu)",
+		]);
+	});
+
+	test("rejects a size that is not in the catalog", () => {
+		expect(
+			parseIssues({ autoscalingLimitMaxCu: 7.5 }).join("\n"),
+		).toContain("must be a compute size Neon offers");
+		expect(parseIssues({ autoscalingLimitMaxCu: 17 }).join("\n")).toContain(
+			"must be a compute size Neon offers",
+		);
 	});
 });
 
@@ -564,6 +678,21 @@ describe("formatZodIssues", () => {
 		if (result.success) throw new Error("expected failure");
 		expect(formatZodIssues(result.error).join("\n")).toContain(
 			"postgres.computeSettings.autoscalingLimitMinCu",
+		);
+	});
+
+	test("renders autoscaling-range paths through branch tuning", () => {
+		const result = branchTuningSchema.safeParse({
+			postgres: {
+				computeSettings: {
+					autoscalingLimitMinCu: 4,
+					autoscalingLimitMaxCu: 16,
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toContain(
+			"postgres.computeSettings.autoscalingLimitMaxCu",
 		);
 	});
 });
