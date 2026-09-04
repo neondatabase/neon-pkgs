@@ -10,8 +10,8 @@ const AUTOSCALING_MAX_CU = 16;
 const AUTOSCALING_MAX_RANGE_CU = 8;
 
 const computeUnitSchema = z.literal(COMPUTE_UNITS, {
-	error: () =>
-		"must be a compute size Neon offers: 0.25, 0.5, an integer 1-16, or an even integer 18-56",
+	error: (issue) =>
+		`must be a compute size Neon offers: 0.25, 0.5, an integer 1-16, or an even integer 18-56 (got ${String(issue.input)})`,
 });
 
 /**
