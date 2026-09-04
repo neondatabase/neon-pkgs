@@ -1,5 +1,13 @@
 # neon
 
+## 4.14.1
+
+### Patch Changes
+
+- Updated dependencies [676b559]
+  - @neon/config@1.3.0
+  - @neon/config-runtime@1.2.1
+
 ## 4.14.0
 
 ### Minor Changes
