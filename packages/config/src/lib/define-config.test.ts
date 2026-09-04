@@ -43,6 +43,29 @@ describe("defineConfig", () => {
 });
 
 describe("resolveConfig", () => {
+	test("records a 4-12 CU always-on compute on the branch", () => {
+		const config = defineConfig({
+			branch: () => ({
+				postgres: {
+					computeSettings: {
+						autoscalingLimitMinCu: 4,
+						autoscalingLimitMaxCu: 12,
+						suspendTimeout: false,
+					},
+				},
+			}),
+		});
+		expect(
+			resolveConfig(config, { name: "main", exists: true }).postgres,
+		).toEqual({
+			computeSettings: {
+				autoscalingLimitMinCu: 4,
+				autoscalingLimitMaxCu: 12,
+				suspendTimeout: false,
+			},
+		});
+	});
+
 	test("normalizes static services and branch tuning", () => {
 		const config = defineConfig({
 			auth: {},

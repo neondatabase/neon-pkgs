@@ -2,42 +2,36 @@ import { z } from "zod";
 import { parseBranchTtl, parseSuspendTimeout } from "./duration.js";
 import { externalPackageRoot } from "./external-packages.js";
 import { isWildcardPattern, validatePattern } from "./patterns.js";
-import type { FunctionBundlerInput } from "./types.js";
+import { COMPUTE_UNITS, type FunctionBundlerInput } from "./types.js";
+
+/** Autoscaling max from the compute size table; larger sizes are fixed-size only. */
+const AUTOSCALING_MAX_CU = 16;
+/** Documented ceiling on `max - min` when both bounds are set and differ. */
+const AUTOSCALING_MAX_RANGE_CU = 8;
+
+const computeUnitSchema = z.literal(COMPUTE_UNITS, {
+	error: (issue) =>
+		`must be a compute size Neon offers: 0.25, 0.5, an integer 1-16, or an even integer 18-56 (got ${JSON.stringify(issue.input)})`,
+});
 
 /**
  * Zod schema for {@link import("./types.js").ComputeSettings}.
  *
- * - CU values must be one of: 0.25, 0.5, 1, 2, 4, 8
- * - `suspendTimeout` can be:
+ * CU values come from {@link COMPUTE_UNITS} (the Console size table). Plan limits are
+ * the API's job. Cross-field autoscaling rules apply only when both bounds are set:
+ * `min <= max`; if they differ, each bound is ≤ 16 and `max - min` ≤ 8. A single bound
+ * cannot be checked against those rules because the other end is the project's default.
+ *
+ * `suspendTimeout` can be:
  *   - `false` (never suspend)
  *   - duration string like "5m", "1h" (must be 60s-604800s when parsed)
  *   - number in seconds (60-604800, or -1/0 for special values)
  *   - `undefined` (use platform default)
- *
- * Cross-field invariants (min <= max) are enforced via `superRefine`.
  */
 export const computeSettingsSchema = z
 	.strictObject({
-		autoscalingLimitMinCu: z
-			.union([
-				z.literal(0.25),
-				z.literal(0.5),
-				z.literal(1),
-				z.literal(2),
-				z.literal(4),
-				z.literal(8),
-			])
-			.optional(),
-		autoscalingLimitMaxCu: z
-			.union([
-				z.literal(0.25),
-				z.literal(0.5),
-				z.literal(1),
-				z.literal(2),
-				z.literal(4),
-				z.literal(8),
-			])
-			.optional(),
+		autoscalingLimitMinCu: computeUnitSchema.optional(),
+		autoscalingLimitMaxCu: computeUnitSchema.optional(),
 		suspendTimeout: z
 			.union([z.literal(false), z.string(), z.number()])
 			.optional()
@@ -55,11 +49,37 @@ export const computeSettingsSchema = z
 	.superRefine((settings, ctx) => {
 		const { autoscalingLimitMinCu: min, autoscalingLimitMaxCu: max } =
 			settings;
-		if (min !== undefined && max !== undefined && min > max) {
+		if (min === undefined || max === undefined) return;
+		if (min > max) {
 			ctx.addIssue({
 				code: "custom",
 				path: ["autoscalingLimitMinCu"],
 				message: `autoscalingLimitMinCu (${min}) must be <= autoscalingLimitMaxCu (${max})`,
+			});
+			return;
+		}
+		if (min === max) return;
+		const overMaxMessage = (field: string, value: number) =>
+			`${field} (${value}) exceeds the autoscaling maximum of ${AUTOSCALING_MAX_CU} CU — sizes above ${AUTOSCALING_MAX_CU} are fixed-size only (set autoscalingLimitMinCu = autoscalingLimitMaxCu)`;
+		if (min > AUTOSCALING_MAX_CU) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["autoscalingLimitMinCu"],
+				message: overMaxMessage("autoscalingLimitMinCu", min),
+			});
+		}
+		if (max > AUTOSCALING_MAX_CU) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["autoscalingLimitMaxCu"],
+				message: overMaxMessage("autoscalingLimitMaxCu", max),
+			});
+		}
+		if (max - min > AUTOSCALING_MAX_RANGE_CU) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["autoscalingLimitMaxCu"],
+				message: `autoscaling range cannot exceed ${AUTOSCALING_MAX_RANGE_CU} CU: min ${min} to max ${max} is a range of ${max - min}`,
 			});
 		}
 	});

@@ -11,7 +11,7 @@ import {
 
 describe("e2e — branch policy lifecycle", () => {
 	e2eTest(
-		"creates a dev branch and pushes main policy",
+		"protects main and applies 0.25-3 CU on a new dev branch",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
@@ -29,7 +29,16 @@ describe("e2e — branch policy lifecycle", () => {
 				branch: (b) =>
 					b.name === main.name
 						? { protected: true }
-						: { parent: main.name, ttl: "1h" },
+						: {
+								parent: main.name,
+								ttl: "1h",
+								postgres: {
+									computeSettings: {
+										autoscalingLimitMinCu: 0.25,
+										autoscalingLimitMaxCu: 3,
+									},
+								},
+							},
 			});
 			const created = await api.createBranch(projectId, {
 				name: "dev",
@@ -42,10 +51,22 @@ describe("e2e — branch policy lifecycle", () => {
 				branchId: main.id,
 				updateExisting: true,
 			});
+			await pushConfig(config, {
+				api,
+				projectId,
+				branchId: created.branch.id,
+				updateExisting: true,
+			});
 			const reread = (await api.listBranches(projectId)).find(
 				(b) => b.id === main.id,
 			);
 			expect(reread?.protected).toBe(true);
+			const endpoint = (await api.listEndpoints(projectId)).find(
+				(e) =>
+					e.branchId === created.branch.id && e.type === "read_write",
+			);
+			expect(endpoint?.autoscalingLimitMinCu).toBe(0.25);
+			expect(endpoint?.autoscalingLimitMaxCu).toBe(3);
 		},
 	);
 });
