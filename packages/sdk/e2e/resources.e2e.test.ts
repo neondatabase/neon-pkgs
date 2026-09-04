@@ -10,9 +10,13 @@ import { expectOk, makeClient } from "./helpers.js";
 
 /**
  * The resource CRUD spine, exercised against one shared project. Creating a project per
- * test would triple the runtime for no extra signal — these methods are independent of
- * each other, and the fixtures they need (a default branch, its endpoint, its role) come
- * with any project.
+ * test would triple the runtime for no extra signal — the fixtures they need (a default
+ * branch, its endpoint, its role) come with any project.
+ *
+ * Mutations still serialize at the project. A call that returns before its operations
+ * finish rejects the next one with "project already has running conflicting operations",
+ * so every mutating call here waits (`waitForReadiness: true`, or a method default that
+ * already waits).
  *
  * The project is created through the harness rather than the SDK so that a regression in
  * `projects.create` fails its own test in `workflows.e2e.test.ts` instead of taking the
@@ -50,9 +54,12 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(fetched.id).toBe(created.id);
 
 		const renamed = expectOk(
-			await neon.branches.update(projectId, created.id, {
-				name: "crud-renamed",
-			}),
+			await neon.branches.update(
+				projectId,
+				created.id,
+				{ name: "crud-renamed" },
+				{ waitForReadiness: true },
+			),
 		);
 		expect(renamed.name).toBe("crud-renamed");
 
@@ -121,7 +128,11 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(matchingAgain.diff ?? "").toBe("");
 
-		expectOk(await neon.branches.delete(projectId, branchId));
+		expectOk(
+			await neon.branches.delete(projectId, branchId, {
+				waitForReadiness: true,
+			}),
+		);
 	});
 
 	it("creates a branch with its compute and a connection string in one call", async () => {
@@ -147,7 +158,11 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			created.endpoint.id,
 		);
 
-		expectOk(await neon.branches.delete(projectId, created.branch.id));
+		expectOk(
+			await neon.branches.delete(projectId, created.branch.id, {
+				waitForReadiness: true,
+			}),
+		);
 	});
 
 	it("attaches a read-write endpoint unless noCompute is true", async () => {
@@ -179,8 +194,16 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(none).toEqual([]);
 
-		expectOk(await neon.branches.delete(projectId, withCompute.id));
-		expectOk(await neon.branches.delete(projectId, bare.id));
+		expectOk(
+			await neon.branches.delete(projectId, withCompute.id, {
+				waitForReadiness: true,
+			}),
+		);
+		expectOk(
+			await neon.branches.delete(projectId, bare.id, {
+				waitForReadiness: true,
+			}),
+		);
 	});
 
 	it("manages roles, including the two different password shapes", async () => {
@@ -190,9 +213,12 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(before.length).toBeGreaterThan(0);
 
 		const created = expectOk(
-			await neon.postgres.roles.create(projectId, defaultBranchId, {
-				name: "e2e_role",
-			}),
+			await neon.postgres.roles.create(
+				projectId,
+				defaultBranchId,
+				{ name: "e2e_role" },
+				{ waitForReadiness: true },
+			),
 		);
 		expect(created.name).toBe("e2e_role");
 
@@ -213,6 +239,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				projectId,
 				defaultBranchId,
 				"e2e_role",
+				{ waitForReadiness: true },
 			),
 		);
 		expect(reset.name).toBe("e2e_role");
@@ -240,10 +267,12 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		if (!owner) throw new Error("project has no role to own a database");
 
 		const created = expectOk(
-			await neon.postgres.databases.create(projectId, defaultBranchId, {
-				name: "e2e_db",
-				owner_name: owner.name,
-			}),
+			await neon.postgres.databases.create(
+				projectId,
+				defaultBranchId,
+				{ name: "e2e_db", owner_name: owner.name },
+				{ waitForReadiness: true },
+			),
 		);
 		expect(created.name).toBe("e2e_db");
 
