@@ -8,6 +8,7 @@ import {
 	fillSingleProject,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
+import { reportMissingDelete } from "../utils/missing_delete.js";
 import { writer } from "../writer.js";
 
 export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
@@ -136,12 +137,5 @@ export const deleteDb = async (
 		return;
 	}
 	const message = `Database "${props.database}" not found on branch ${branchName}; nothing to delete.`;
-	if (props.output === "json" || props.output === "yaml") {
-		writer(props).end(
-			{ deleted: false, message },
-			{ fields: ["deleted", "message"] },
-		);
-		return;
-	}
-	writer(props).text(`${message}\n`);
+	reportMissingDelete(props, message);
 };

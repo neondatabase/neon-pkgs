@@ -6,6 +6,7 @@ import {
 	fillSingleProject,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
+import { reportMissingDelete } from "../utils/missing_delete.js";
 import { writer } from "../writer.js";
 
 const ROLES_FIELDS = ["name", "created_at"] as const;
@@ -112,14 +113,5 @@ export const deleteRole = async (
 		return;
 	}
 	const message = `Role "${props.role}" not found on branch ${branchName}; nothing to delete.`;
-	if (props.output === "json" || props.output === "yaml") {
-		writer(props).end(
-			{ deleted: false, message },
-			{ fields: ["deleted", "message"] },
-		);
-	} else {
-		writer(props).text(`${message}\n`);
-	}
-	// throw would log ERROR to stderr and leave stdout empty, so JSON would still look like a silent success
-	process.exitCode = 1;
+	reportMissingDelete(props, message, 1);
 };

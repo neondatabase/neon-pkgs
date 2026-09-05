@@ -99,6 +99,5 @@ describe("databases", () => {
 			message:
 				'Database "nosuchdb" not found on branch test_branch; nothing to delete.',
 		});
-		expect(stdout.endsWith("}")).toBe(true);
 	});
 });

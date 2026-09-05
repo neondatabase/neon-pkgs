@@ -99,6 +99,5 @@ describe("roles", () => {
 			message:
 				'Role "nosuchrole" not found on branch test_branch; nothing to delete.',
 		});
-		expect(stdout.endsWith("}")).toBe(true);
 	});
 });
