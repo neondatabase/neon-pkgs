@@ -41,10 +41,14 @@ const PARENT_COMMANDS = [
 describe("parent commands print help with no subcommand", () => {
 	for (const verb of PARENT_COMMANDS) {
 		test(verb, async ({ testCliCommand }) => {
-			const { stderr } = await testCliCommand([verb], {
+			const { stderr: bare } = await testCliCommand([verb], {
 				snapshot: false,
 			});
-			const text = strip(stderr);
+			const { stderr: flagged } = await testCliCommand([verb, "--help"], {
+				snapshot: false,
+			});
+			const text = strip(bare);
+			expect(text).toBe(strip(flagged));
 			expect(text).toContain("Commands:");
 			expect(text).not.toMatch(/ERROR:/);
 		});
