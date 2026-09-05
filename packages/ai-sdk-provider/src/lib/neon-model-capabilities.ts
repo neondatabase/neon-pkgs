@@ -213,8 +213,8 @@ export function getNeonModelCapabilities(
 	}
 
 	// Catalog `temperature: false` on gpt-6-astra; the gpt-5 minor-version rule
-	// does not match gpt-6.
-	if (/gpt-6/.test(id)) {
+	// does not match gpt-6. Exact id: a future gpt-6-* is unmeasured.
+	if (canonicalId(id) === "gpt-6-astra") {
 		return {
 			family: "openai",
 			supportsTemperature: false,
