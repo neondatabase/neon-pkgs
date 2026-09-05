@@ -292,11 +292,10 @@ await neon.branches.resetFromParent(projectId, data!.branch.id, undefined, {
 
 ### `neon.postgres`
 
-The Postgres data plane of a branch. `neon.postgres.connectionString(params, options?)` resolves a URI, **auto-selecting** the default branch and the sole role/database when omitted:
+The Postgres data plane of a branch. `neon.postgres.connectionString(projectId, selectors?, options?)` resolves a URI, **auto-selecting** the default branch and the sole role/database when omitted:
 
 ```ts
-const { data: uri } = await neon.postgres.connectionString({
-  projectId,
+const { data: uri } = await neon.postgres.connectionString(projectId, {
   branchId?, endpointId?, databaseName?, roleName?, pooled?,  // all optional; pooled default true
 });
 ```

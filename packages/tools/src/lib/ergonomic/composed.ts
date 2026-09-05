@@ -406,8 +406,8 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.postgres.connectionString(
+				input.project_id,
 				{
-					projectId: input.project_id,
 					...(input.branch_id === undefined
 						? {}
 						: { branchId: input.branch_id }),
