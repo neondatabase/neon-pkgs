@@ -53,7 +53,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"delete <role>",
-			"Delete a role",
+			"Delete a role. A missing name is reported and the command exits 1.",
 			(yargs) => yargs,
 			(args) => deleteRole(args as any),
 		);
@@ -113,7 +113,10 @@ export const deleteRole = async (
 	}
 	const message = `Role "${props.role}" not found on branch ${branchName}; nothing to delete.`;
 	if (props.output === "json" || props.output === "yaml") {
-		writer(props).end({ message }, { fields: ["message"] });
+		writer(props).end(
+			{ deleted: false, message },
+			{ fields: ["deleted", "message"] },
+		);
 	} else {
 		writer(props).text(`${message}\n`);
 	}

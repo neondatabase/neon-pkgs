@@ -54,7 +54,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"delete <database>",
-			"Delete a database",
+			"Delete a database. A missing name is reported and the command exits 0.",
 			(yargs) => yargs,
 			(args) => deleteDb(args as any),
 		);
@@ -137,7 +137,10 @@ export const deleteDb = async (
 	}
 	const message = `Database "${props.database}" not found on branch ${branchName}; nothing to delete.`;
 	if (props.output === "json" || props.output === "yaml") {
-		writer(props).end({ message }, { fields: ["message"] });
+		writer(props).end(
+			{ deleted: false, message },
+			{ fields: ["deleted", "message"] },
+		);
 		return;
 	}
 	writer(props).text(`${message}\n`);

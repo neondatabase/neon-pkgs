@@ -95,6 +95,7 @@ describe("roles", () => {
 			{ code: 1, output: "json", snapshot: false, stderr: "" },
 		);
 		expect(JSON.parse(stdout)).toEqual({
+			deleted: false,
 			message:
 				'Role "nosuchrole" not found on branch test_branch; nothing to delete.',
 		});
