@@ -14,6 +14,7 @@ import type {
 import { createNeonClient } from "./client.js";
 import type { Paginated } from "./paginate.js";
 import type { BranchConnection } from "./resources/branches.js";
+import type { EndpointCreateInput } from "./resources/endpoints.js";
 import type { ProjectConnection } from "./resources/projects.js";
 import type { NeonResult } from "./result.js";
 
@@ -137,6 +138,26 @@ it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
 	expectTypeOf(neon.postgres.endpoints.list("p")).resolves.toEqualTypeOf<
 		NeonResult<Endpoint[]>
 	>();
+	expectTypeOf(
+		neon.postgres.endpoints.create("p", {
+			branchId: "br",
+			type: "read_write",
+			compute: { minCu: 0.25 },
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Endpoint>>();
+	neon.postgres.endpoints.create("p", {
+		// @ts-expect-error generated snake_case is not an input field
+		branch_id: "br",
+		type: "read_write",
+	});
+	expectTypeOf<EndpointCreateInput>().not.toHaveProperty("branch_id");
+	expectTypeOf(
+		neon.projects.create({ regionId: "aws-us-east-1" }),
+	).resolves.toEqualTypeOf<NeonResult<Project>>();
+	neon.projects.create({
+		// @ts-expect-error generated snake_case is not an input field
+		region_id: "aws-us-east-1",
+	});
 	expectTypeOf(
 		neon.postgres.roles.password("p", "br", "neondb_owner"),
 	).resolves.toEqualTypeOf<NeonResult<string>>();

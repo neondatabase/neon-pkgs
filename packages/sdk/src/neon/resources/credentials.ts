@@ -4,14 +4,25 @@ import {
 	revokeCredential,
 } from "../../client/sdk.gen.js";
 import type {
-	CreateCredentialRequest,
 	CreateCredentialResponse,
 	CredentialMeta,
+	CredentialScope,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import type { NeonResult, Outcome } from "../result.js";
 
-type CreateInput = CreateCredentialRequest;
+export interface CredentialCreateInput {
+	name?: string;
+	scopes: Array<CredentialScope>;
+}
+
+function mapCredentialCreate(input: CredentialCreateInput) {
+	return {
+		...(input.name !== undefined ? { name: input.name } : {}),
+		scopes: input.scopes,
+		principal_type: "user" as const,
+	};
+}
 
 /** Branch-scoped scoped credentials. */
 export class Credentials<DThrow extends boolean> {
@@ -49,22 +60,26 @@ export class Credentials<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials */
+	/**
+	 * The API only issues customer credentials as `principal_type: "user"`.
+	 *
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials
+	 */
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: CredentialCreateInput,
 	): Promise<Outcome<CreateCredentialResponse, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: CredentialCreateInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<CreateCredentialResponse, Throw>>;
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: CredentialCreateInput,
 		opts?: CallOptions,
 	): Promise<
 		CreateCredentialResponse | NeonResult<CreateCredentialResponse>
@@ -75,7 +90,7 @@ export class Credentials<DThrow extends boolean> {
 				createCredential({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: input,
+					body: mapCredentialCreate(input),
 					throwOnError: false,
 					signal,
 				}),

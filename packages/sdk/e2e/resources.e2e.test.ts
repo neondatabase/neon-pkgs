@@ -99,7 +99,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			await neon.postgres.databases.create(
 				projectId,
 				branchId,
-				{ name: "child_only", owner_name: owner.name },
+				{ name: "child_only", ownerName: owner.name },
 				{ waitForReadiness: true },
 			),
 		);
@@ -270,7 +270,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			await neon.postgres.databases.create(
 				projectId,
 				defaultBranchId,
-				{ name: "e2e_db", owner_name: owner.name },
+				{ name: "e2e_db", ownerName: owner.name },
 				{ waitForReadiness: true },
 			),
 		);

@@ -6,11 +6,21 @@ import {
 	listProjectBranchRoles,
 	resetProjectBranchRolePassword,
 } from "../../client/sdk.gen.js";
-import type { Role, RoleCreateRequest } from "../../client/types.gen.js";
+import type { Role } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import type { NeonResult, Outcome } from "../result.js";
 
-type CreateInput = RoleCreateRequest["role"];
+export interface RoleCreateInput {
+	name: string;
+	noLogin?: boolean;
+}
+
+function mapRoleCreate(input: RoleCreateInput) {
+	return {
+		name: input.name,
+		...(input.noLogin !== undefined ? { no_login: input.noLogin } : {}),
+	};
+}
 
 /** Role resource (branch-scoped). */
 export class Roles<DThrow extends boolean> {
@@ -84,18 +94,18 @@ export class Roles<DThrow extends boolean> {
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: RoleCreateInput,
 	): Promise<Outcome<Role, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: RoleCreateInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Role, Throw>>;
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: RoleCreateInput,
 		opts?: CallOptions,
 	): Promise<Role | NeonResult<Role>> {
 		return this.#ctx.run(
@@ -104,7 +114,7 @@ export class Roles<DThrow extends boolean> {
 				createProjectBranchRole({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: { role: input },
+					body: { role: mapRoleCreate(input) },
 					throwOnError: false,
 					signal,
 				}),

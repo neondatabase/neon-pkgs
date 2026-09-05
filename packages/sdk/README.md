@@ -195,7 +195,7 @@ Neon mutations are asynchronous (they return `operations`). `waitForReadiness` b
 
 ## API reference
 
-Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`).
+Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`). Create/update inputs for projects, endpoints, databases, roles, buckets, and credentials are camelCase. Returned resource objects keep API field names forever (`endpoint.branch_id`, `database.owner_name`); do not spread a resource into an update input.
 
 ### `neon.projects`
 
@@ -203,9 +203,9 @@ Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→
 | --- | --- | --- |
 | `list(query?)` | **[P]** `ProjectListItem` | `query`: `{ search?, org_id?, limit? }` (cursor managed for you) |
 | `get(id)` | `Project` | |
-| `create(input?)` | `Project` | API always provisions default-branch compute. No connection string. Readiness polling on by default. `input`: `{ name?, region_id?, pg_version?, org_id?, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, settings? }` |
+| `create(input?)` | `Project` | API always provisions default-branch compute. No connection string. Readiness polling on by default. `input`: `{ name?, regionId?, pgVersion?, orgId?, compute?: { minCu?, maxCu? }, settings? }` |
 | `createAndConnect(input?, { pooled? })` | **[W]** `{ project, connectionString }` | one call + readiness; `pooled` default `true` |
-| `update(id, input)` | `Project` | `input`: `{ name?, settings? }` |
+| `update(id, input)` | `Project` | `input`: `{ name?, settings?, defaultEndpointSettings?, historyRetentionSeconds? }` |
 | `delete(id)` | `Project` | |
 | `transfer({ fromOrgId?, toOrgId, projectIds })` | **→void** | `fromOrgId` defaults to client `orgId` |
 | `transferFromUser({ toOrgId, projectIds })` | **→void** | personal account → org |
@@ -213,7 +213,7 @@ Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→
 ```ts
 // Provision a project and get a pooled connection string in one call
 const { data } = await neon.projects.createAndConnect(
-  { name: "tenant-42", region_id: "aws-us-east-1" },
+  { name: "tenant-42", regionId: "aws-us-east-1" },
   { pooled: true },
 );
 // data: { project, connectionString }
@@ -307,7 +307,7 @@ const { data: uri } = await neon.postgres.connectionString({
 | --- | --- |
 | `list(projectId)` | `Endpoint[]` |
 | `get(projectId, endpointId)` | `Endpoint` |
-| `create(projectId, input)` | `Endpoint` — `input`: `{ branch_id, type, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, suspend_timeout_seconds?, provisioner? }` |
+| `create(projectId, input)` | `Endpoint` — `input`: `{ branchId, type, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, provisioner? }` |
 | `update(projectId, endpointId, input)` | `Endpoint` |
 | `delete(projectId, endpointId)` | **→void** |
 | `start` / `suspend` / `restart(projectId, endpointId)` | `Endpoint` |
@@ -318,7 +318,7 @@ const { data: uri } = await neon.postgres.connectionString({
 | --- | --- |
 | `list(projectId, branchId)` | `Role[]` |
 | `get(projectId, branchId, name)` | `Role` |
-| `create(projectId, branchId, { name, no_login? })` | `Role` |
+| `create(projectId, branchId, { name, noLogin? })` | `Role` |
 | `delete(projectId, branchId, name)` | **→void** |
 | `password(projectId, branchId, name)` | `string` (reveals the password) |
 | `resetPassword(projectId, branchId, name)` | `Role` (carries the new password) |
@@ -336,8 +336,8 @@ const { data: role } = await neon.postgres.roles.resetPassword(projectId, branch
 | --- | --- |
 | `list(projectId, branchId)` | `Database[]` |
 | `get(projectId, branchId, name)` | `Database` |
-| `create(projectId, branchId, { name, owner_name })` | `Database` |
-| `update(projectId, branchId, name, { name?, owner_name? })` | `Database` |
+| `create(projectId, branchId, { name, ownerName })` | `Database` |
+| `update(projectId, branchId, name, { name?, ownerName? })` | `Database` |
 | `delete(projectId, branchId, name)` | **→void** |
 
 #### `neon.postgres.dataApi`
@@ -365,7 +365,7 @@ enabled and the branch S3 endpoint metadata; buckets and objects are nested unde
 | Method | Returns |
 | --- | --- |
 | `list(projectId, branchId)` | `Bucket[]` |
-| `create(projectId, branchId, { name, access_level? })` | `Bucket` — `access_level`: `"private"` \| `"public_read"` |
+| `create(projectId, branchId, { name, accessLevel? })` | `Bucket` — `accessLevel`: `"private"` \| `"public_read"` |
 | `delete(projectId, branchId, bucketName)` | **→void** |
 
 #### `neon.storage.objects`
@@ -445,7 +445,7 @@ are returned **once** on `create`.
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list(projectId, branchId)` | `CredentialMeta[]` | |
-| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke` |
+| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke`. `principal_type` is always `user`. |
 | `revoke(projectId, branchId, tokenId)` | **→void** | |
 
 ### `neon.aiGateway`

@@ -44,6 +44,16 @@ export type {
 	CreateAndConnectInput,
 	ResetFromParentInput,
 } from "./neon/resources/branches.js";
+export type { BucketCreateInput } from "./neon/resources/buckets.js";
+export type { CredentialCreateInput } from "./neon/resources/credentials.js";
+export type {
+	DatabaseCreateInput,
+	DatabaseUpdateInput,
+} from "./neon/resources/databases.js";
+export type {
+	EndpointCreateInput,
+	EndpointUpdateInput,
+} from "./neon/resources/endpoints.js";
 export type {
 	LogFieldValuesQuery,
 	LogQueryInput,
@@ -51,10 +61,13 @@ export type {
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
+	ProjectCreateInput,
+	ProjectUpdateInput,
 	RemoveRoleOptions,
 	SetRoleOptions,
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
+export type { RoleCreateInput } from "./neon/resources/roles.js";
 export type {
 	BackupScheduleItemInput,
 	CreateSnapshotInput,

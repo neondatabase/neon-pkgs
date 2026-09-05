@@ -29,6 +29,25 @@ const logReadAnnotations = {
 	openWorldHint: false,
 } as const;
 
+function toComputeSettings(input: {
+	autoscaling_limit_min_cu?: number;
+	autoscaling_limit_max_cu?: number;
+	suspend_timeout_seconds?: number;
+}) {
+	if (
+		input.autoscaling_limit_min_cu === undefined &&
+		input.autoscaling_limit_max_cu === undefined &&
+		input.suspend_timeout_seconds === undefined
+	) {
+		return undefined;
+	}
+	return {
+		minCu: input.autoscaling_limit_min_cu,
+		maxCu: input.autoscaling_limit_max_cu,
+		suspendTimeoutSeconds: input.suspend_timeout_seconds,
+	};
+}
+
 export type ToolFactory = (typeof toolFactories)[NeonToolId];
 
 export const toolFactories = {
@@ -72,9 +91,9 @@ export const toolFactories = {
 					{
 						settings: input.settings,
 						name: input.name,
-						default_endpoint_settings:
+						defaultEndpointSettings:
 							input.default_endpoint_settings,
-						history_retention_seconds:
+						historyRetentionSeconds:
 							input.history_retention_seconds,
 					},
 					{ signal },
@@ -318,20 +337,16 @@ export const toolFactories = {
 				neon.postgres.endpoints.create(
 					input.project_id,
 					{
-						branch_id: input.branch_id,
-						region_id: input.region_id,
+						branchId: input.branch_id,
+						regionId: input.region_id,
 						type: input.type,
 						settings: input.settings,
-						autoscaling_limit_min_cu:
-							input.autoscaling_limit_min_cu,
-						autoscaling_limit_max_cu:
-							input.autoscaling_limit_max_cu,
+						compute: toComputeSettings(input),
 						provisioner: input.provisioner,
-						pooler_enabled: input.pooler_enabled,
-						pooler_mode: input.pooler_mode,
+						poolerEnabled: input.pooler_enabled,
+						poolerMode: input.pooler_mode,
 						disabled: input.disabled,
-						passwordless_access: input.passwordless_access,
-						suspend_timeout_seconds: input.suspend_timeout_seconds,
+						passwordlessAccess: input.passwordless_access,
 						name: input.name,
 					},
 					{ signal },
@@ -346,18 +361,14 @@ export const toolFactories = {
 					input.project_id,
 					input.endpoint_id,
 					{
-						branch_id: input.branch_id,
-						autoscaling_limit_min_cu:
-							input.autoscaling_limit_min_cu,
-						autoscaling_limit_max_cu:
-							input.autoscaling_limit_max_cu,
+						branchId: input.branch_id,
+						compute: toComputeSettings(input),
 						provisioner: input.provisioner,
 						settings: input.settings,
-						pooler_enabled: input.pooler_enabled,
-						pooler_mode: input.pooler_mode,
+						poolerEnabled: input.pooler_enabled,
+						poolerMode: input.pooler_mode,
 						disabled: input.disabled,
-						passwordless_access: input.passwordless_access,
-						suspend_timeout_seconds: input.suspend_timeout_seconds,
+						passwordlessAccess: input.passwordless_access,
 						name: input.name,
 					},
 					{ signal },
@@ -436,7 +447,7 @@ export const toolFactories = {
 				neon.postgres.roles.create(
 					input.project_id,
 					input.branch_id,
-					{ name: input.name, no_login: input.no_login },
+					{ name: input.name, noLogin: input.no_login },
 					{ signal },
 				),
 		}),
@@ -497,7 +508,7 @@ export const toolFactories = {
 				neon.postgres.databases.create(
 					input.project_id,
 					input.branch_id,
-					{ name: input.name, owner_name: input.owner_name },
+					{ name: input.name, ownerName: input.owner_name },
 					{ signal },
 				),
 		}),
@@ -510,7 +521,7 @@ export const toolFactories = {
 					input.project_id,
 					input.branch_id,
 					input.database_name,
-					{ name: input.name, owner_name: input.owner_name },
+					{ name: input.name, ownerName: input.owner_name },
 					{ signal },
 				),
 		}),
@@ -623,7 +634,7 @@ export const toolFactories = {
 				neon.storage.buckets.create(
 					input.project_id,
 					input.branch_id,
-					{ name: input.name, access_level: input.access_level },
+					{ name: input.name, accessLevel: input.access_level },
 					{ signal },
 				),
 		}),
@@ -842,7 +853,6 @@ export const toolFactories = {
 					{
 						name: input.name,
 						scopes: input.scopes,
-						principal_type: input.principal_type,
 					},
 					{ signal },
 				),
