@@ -66,8 +66,19 @@ export class Logs<DThrow extends boolean> {
 		projectId: string,
 		branchId: string,
 		input?: LogQueryInput,
+	): Paginated<ProjectBranchLogRecord, DThrow>;
+	query<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: LogQueryInput | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<ProjectBranchLogRecord, Throw>;
+	query(
+		projectId: string,
+		branchId: string,
+		input?: LogQueryInput,
 		opts?: CallOptions,
-	): Paginated<ProjectBranchLogRecord> {
+	): Paginated<ProjectBranchLogRecord, boolean> {
 		// Snapshot the filters. The endpoint returns wrong results unless every page
 		// repeats them unchanged, and a `Paginated` is lazy — reading `input` per page
 		// would let a caller mutating it afterwards change the query mid-walk.
@@ -102,6 +113,7 @@ export class Logs<DThrow extends boolean> {
 				cursor: data?.is_truncated ? data.next_cursor : undefined,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

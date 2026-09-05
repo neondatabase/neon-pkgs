@@ -95,14 +95,21 @@ export class RequestContext {
 		return createDeadline(timeoutMs, opts?.signal);
 	}
 
+	/** The `throwOnError` policy for one call: the per-call override if given, else the client's. */
+	shouldThrow(opts: CallOptions | undefined): boolean {
+		return opts?.throwOnError ?? this.#config.throwOnError;
+	}
+
 	/** Run a raw call and map its body; applies the resolved `throwOnError` policy. */
 	async run<D, T>(
 		opts: CallOptions | undefined,
 		exec: Exec<D>,
 		map: (data: D) => T,
 	): Promise<T | NeonResult<T>> {
-		const shouldThrow = opts?.throwOnError ?? this.#config.throwOnError;
-		return finalize(await this.execute(opts, exec, map), shouldThrow);
+		return finalize(
+			await this.execute(opts, exec, map),
+			this.shouldThrow(opts),
+		);
 	}
 
 	/** Like {@link run} but for endpoints that may return an empty (204) body. */
@@ -110,7 +117,7 @@ export class RequestContext {
 		opts: CallOptions | undefined,
 		exec: Exec<D>,
 	): Promise<void | NeonResult<void>> {
-		const shouldThrow = opts?.throwOnError ?? this.#config.throwOnError;
+		const shouldThrow = this.shouldThrow(opts);
 		const requested = await this.#request(opts, exec);
 		if (!requested.ok)
 			return finalize(err<void>(requested.error), shouldThrow);

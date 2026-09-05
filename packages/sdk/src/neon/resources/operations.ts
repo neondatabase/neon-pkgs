@@ -27,7 +27,12 @@ export class Operations<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/operations (cursor-paginated) */
-	list(projectId: string, opts?: CallOptions): Paginated<Operation> {
+	list(projectId: string): Paginated<Operation, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		opts: CallOptions<Throw>,
+	): Paginated<Operation, Throw>;
+	list(projectId: string, opts?: CallOptions): Paginated<Operation, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectOperations({
@@ -42,6 +47,7 @@ export class Operations<DThrow extends boolean> {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
