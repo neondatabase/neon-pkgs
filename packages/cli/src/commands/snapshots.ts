@@ -292,8 +292,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.demandCommand(1, "Specify `get` or `set`."),
 			() => {},
-		)
-		.demandCommand(1, "Specify a snapshots sub-command.");
+		);
 
 export const handler = (args: yargs.Argv) => {
 	return args;

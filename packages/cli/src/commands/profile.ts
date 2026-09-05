@@ -239,8 +239,7 @@ export const builder = (argv: yargs.Argv) =>
 						yes: boolean;
 					},
 				),
-		)
-		.demandCommand(1, "Run `neon profile --help` to see the subcommands.");
+		);
 
 export const handler = (_args: yargs.Arguments) => {
 	/* subcommands only */
