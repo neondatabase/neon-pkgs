@@ -39,6 +39,7 @@ export {
 export type { Page, Paginated } from "./neon/paginate.js";
 export type {
 	BranchConnection,
+	BranchCreateResult,
 	CompareSchemaInput,
 	ComputeSettings,
 	CreateAndConnectInput,
