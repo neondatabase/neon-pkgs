@@ -6,7 +6,7 @@ import {
 	resolveTimeoutMs,
 	runBounded,
 } from "./deadline.js";
-import { type NeonError, toNeonError } from "./errors.js";
+import { type NeonErrorUnion, toNeonError } from "./errors.js";
 import { err, finalize, type NeonResult, ok } from "./result.js";
 import { withRetries } from "./retry.js";
 import {
@@ -57,7 +57,7 @@ type Exec<D> = (
 /** The request phase's outcome, before readiness polling is considered. */
 type Requested<D> =
 	| { ok: true; data: D | undefined; response: Response | undefined }
-	| { ok: false; error: NeonError };
+	| { ok: false; error: NeonErrorUnion };
 
 /**
  * Shared execution core: runs a raw client call under a deadline and with retries, maps

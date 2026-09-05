@@ -28,7 +28,7 @@ import type {
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonError } from "../errors.js";
+import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome } from "../result.js";
 
@@ -550,9 +550,8 @@ export class Projects<DThrow extends boolean> {
 		if (!fromOrgId) {
 			return finalize(
 				err<void>(
-					new NeonError(
+					new NeonClientError(
 						"Pass fromOrgId or set orgId on the client.",
-						"client",
 					),
 				),
 				shouldThrow,

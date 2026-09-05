@@ -6,7 +6,7 @@
  *
  * Every operation speaks the **same result contract as the ergonomic client**: it resolves
  * to a `{ data, error }` {@link NeonResult} by default, or the bare resource when you pass
- * `throwOnError: true` (throwing the typed `NeonError`). There is no `responseStyle` switch —
+ * `throwOnError: true` (throwing a `NeonErrorUnion` member). There is no `responseStyle` switch —
  * `throwOnError` is the only one, and the return type always tracks it.
  */
 

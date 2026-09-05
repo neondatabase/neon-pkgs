@@ -27,9 +27,12 @@ export type { CallOptions } from "./neon/context.js";
 export {
 	NeonAbortError,
 	NeonApiError,
+	type NeonApiErrorKind,
 	NeonAuthError,
+	NeonClientError,
 	NeonError,
 	type NeonErrorKind,
+	type NeonErrorUnion,
 	NeonNetworkError,
 	NeonNotFoundError,
 	NeonOperationError,

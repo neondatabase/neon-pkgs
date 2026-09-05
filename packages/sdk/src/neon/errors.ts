@@ -1,8 +1,9 @@
 /**
  * Typed error hierarchy surfaced on the `error` channel of every ergonomic call (and
- * thrown when `throwOnError` is set). All are `Error` subclasses with a `kind`
- * discriminant, so the same value works whether you read it from `{ error }` or `catch`
- * it.
+ * thrown when `throwOnError` is set). All are `Error` subclasses. Each concrete class
+ * carries a literal `kind`, so {@link NeonErrorUnion} is a discriminated union: a
+ * `kind` check narrows to that class. Every member extends {@link NeonError}, so
+ * `instanceof NeonError` still matches all of them.
  */
 
 /** Used when a transport failure carries neither an `errno` code nor any message. */
@@ -19,6 +20,17 @@ export type NeonErrorKind =
 	| "network"
 	| "client";
 
+/** The `kind`s an HTTP-response error can carry. */
+export type NeonApiErrorKind = "api" | "not_found" | "auth" | "rate_limit";
+
+interface NeonApiErrorInit {
+	status: number;
+	code?: string;
+	requestId?: string;
+	response?: Response;
+	body?: unknown;
+}
+
 /**
  * Base class for every error the ergonomic layer produces.
  *
@@ -26,6 +38,8 @@ export type NeonErrorKind =
  * constructor. Bundlers rename classes, so deriving the name at runtime leaves consumers
  * of a minified build with errors called `s` and `r` — unreadable in logs and impossible
  * to group on in an error tracker.
+ *
+ * The SDK does not construct this class directly; it emits {@link NeonErrorUnion} members.
  */
 export class NeonError extends Error {
 	readonly kind: NeonErrorKind;
@@ -42,7 +56,10 @@ export class NeonError extends Error {
 }
 
 /** A non-2xx HTTP response from the Neon API. */
-export class NeonApiError extends NeonError {
+export class NeonApiError<
+	K extends NeonApiErrorKind = "api",
+> extends NeonError {
+	declare readonly kind: K;
 	/** HTTP status code. */
 	readonly status: number;
 	/** Machine-readable Neon error code (`GeneralError.code`), when present. */
@@ -54,18 +71,8 @@ export class NeonApiError extends NeonError {
 	/** The parsed error body, as returned by the API. */
 	readonly body: unknown;
 
-	constructor(
-		message: string,
-		init: {
-			kind?: NeonErrorKind;
-			status: number;
-			code?: string;
-			requestId?: string;
-			response?: Response;
-			body?: unknown;
-		},
-	) {
-		super(message, init.kind ?? "api");
+	constructor(message: string, init: NeonApiErrorInit) {
+		super(message, "api");
 		this.name = "NeonApiError";
 		this.status = init.status;
 		this.code = init.code;
@@ -76,40 +83,36 @@ export class NeonApiError extends NeonError {
 }
 
 /** 404 — the resource does not exist. */
-export class NeonNotFoundError extends NeonApiError {
-	constructor(
-		message: string,
-		init: ConstructorParameters<typeof NeonApiError>[1],
-	) {
-		super(message, { ...init, kind: "not_found" });
+export class NeonNotFoundError extends NeonApiError<"not_found"> {
+	// Assigned after super() so the runtime kind matches the generic, not "api".
+	override readonly kind: "not_found" = "not_found";
+	constructor(message: string, init: NeonApiErrorInit) {
+		super(message, init);
 		this.name = "NeonNotFoundError";
 	}
 }
 
 /** 401/403 — the API key is missing, invalid, or lacks permission. */
-export class NeonAuthError extends NeonApiError {
-	constructor(
-		message: string,
-		init: ConstructorParameters<typeof NeonApiError>[1],
-	) {
-		super(message, { ...init, kind: "auth" });
+export class NeonAuthError extends NeonApiError<"auth"> {
+	override readonly kind: "auth" = "auth";
+	constructor(message: string, init: NeonApiErrorInit) {
+		super(message, init);
 		this.name = "NeonAuthError";
 	}
 }
 
 /** 429 — rate limited (after retries, if enabled, were exhausted). */
-export class NeonRateLimitError extends NeonApiError {
-	constructor(
-		message: string,
-		init: ConstructorParameters<typeof NeonApiError>[1],
-	) {
-		super(message, { ...init, kind: "rate_limit" });
+export class NeonRateLimitError extends NeonApiError<"rate_limit"> {
+	override readonly kind: "rate_limit" = "rate_limit";
+	constructor(message: string, init: NeonApiErrorInit) {
+		super(message, init);
 		this.name = "NeonRateLimitError";
 	}
 }
 
 /** An awaited Neon operation ended in a non-success terminal state. */
 export class NeonOperationError extends NeonError {
+	declare readonly kind: "operation";
 	/** The id of the operation that failed. */
 	readonly operationId: string;
 	/** The terminal status reported by the API (`failed` / `error` / `cancelled`). */
@@ -131,6 +134,7 @@ export class NeonOperationError extends NeonError {
  * the `wait` budget while polling operations for readiness.
  */
 export class NeonTimeoutError extends NeonError {
+	declare readonly kind: "timeout";
 	constructor(message: string) {
 		super(message, "timeout");
 		this.name = "NeonTimeoutError";
@@ -149,6 +153,7 @@ export class NeonTimeoutError extends NeonError {
  * name is not evidence about which one occurred.
  */
 export class NeonAbortError extends NeonError {
+	declare readonly kind: "aborted";
 	constructor(message: string, options?: { cause?: unknown }) {
 		super(message, "aborted", options);
 		this.name = "NeonAbortError";
@@ -157,6 +162,7 @@ export class NeonAbortError extends NeonError {
 
 /** A transport-level failure (DNS, connection, abort) — no HTTP response received. */
 export class NeonNetworkError extends NeonError {
+	declare readonly kind: "network";
 	/**
 	 * The most specific reason the platform gave for the failure — an `errno` code such as
 	 * `ECONNRESET` when one is available, otherwise the innermost non-empty message. Read
@@ -172,6 +178,52 @@ export class NeonNetworkError extends NeonError {
 		this.name = "NeonNetworkError";
 		this.reason = options?.reason ?? UNKNOWN_TRANSPORT_REASON;
 	}
+}
+
+/**
+ * A failure the SDK detected itself, before or after talking to the API — an ambiguous
+ * connection-string selection, an invalid `requestTimeoutMs`, a `noCompute` branch with
+ * compute settings, a response missing a field the wrapper needs. Nothing was wrong on
+ * the wire; the call could not be completed as asked.
+ */
+export class NeonClientError extends NeonError {
+	declare readonly kind: "client";
+	constructor(message: string, options?: { cause?: unknown }) {
+		super(message, "client", options);
+		this.name = "NeonClientError";
+	}
+}
+
+/**
+ * Every error the SDK emits, as a discriminated union on `kind`. This is the type of
+ * `NeonResult`/`RawResult`'s `error` and of what `throwOnError` throws. Every member
+ * extends {@link NeonError}, so `instanceof NeonError` still matches all of them.
+ */
+export type NeonErrorUnion =
+	| NeonApiError
+	| NeonNotFoundError
+	| NeonAuthError
+	| NeonRateLimitError
+	| NeonOperationError
+	| NeonTimeoutError
+	| NeonAbortError
+	| NeonNetworkError
+	| NeonClientError;
+
+/**
+ * Whether `error` is one of the classes {@link NeonErrorUnion} names. Used where a value
+ * arrives as `unknown` or as the base {@link NeonError} (for example a page fetcher that
+ * already classified a failure) and must be handed to `err()`.
+ */
+export function isNeonErrorUnion(error: unknown): error is NeonErrorUnion {
+	return (
+		error instanceof NeonApiError ||
+		error instanceof NeonOperationError ||
+		error instanceof NeonTimeoutError ||
+		error instanceof NeonAbortError ||
+		error instanceof NeonNetworkError ||
+		error instanceof NeonClientError
+	);
 }
 
 interface ApiErrorBody {
@@ -225,7 +277,7 @@ export function describeTransportFailure(error: unknown): string {
 export function toNeonError(
 	error: unknown,
 	response: Response | undefined,
-): NeonError {
+): NeonErrorUnion {
 	if (!response) {
 		const reason = describeTransportFailure(error);
 		return new NeonNetworkError(

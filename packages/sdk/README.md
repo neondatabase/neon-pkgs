@@ -57,7 +57,7 @@ By default every method resolves to a discriminated `{ data, error }` envelope �
 ```ts
 const { data, error } = await neon.projects.get("late-frost-12345");
 if (error) {
-  // error is a typed NeonError union
+  // error is NeonErrorUnion — discriminate on error.kind
   return;
 }
 data; // narrowed to Project
@@ -86,19 +86,28 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonTimeoutError` | `"timeout"` | a deadline was exceeded — `requestTimeoutMs`, or the readiness/wait budget |
 | `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
-| `NeonError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection) |
+| `NeonClientError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection, invalid `requestTimeoutMs`) |
+
+The error channel is typed as `NeonErrorUnion`, the union of every row below the base.
 
 ```ts
 const { error } = await neon.branches.get(pid, "nope");
-if (error?.kind === "not_found") { /* … */ }
+if (error?.kind === "not_found") {
+  error.status;    // 404
+  error.requestId; // string | undefined
+}
+if (error?.kind === "network") {
+  error.reason;    // "ECONNRESET"
+}
 ```
 
 Branch on `kind` rather than `name` or `message`. `name` is a stable string literal on every
 class, so it survives bundling, but `message` is not a contract.
 
-`kind` tells you what happened. To reach a subclass's **own** fields — `NeonNetworkError.reason`,
-`NeonApiError.body` — narrow with `instanceof`: the result envelope types `error` as the base
-`NeonError`, so a `kind` check alone does not make those properties visible.
+A `kind` check narrows to the class, so subclass fields are visible without `instanceof`.
+`instanceof` still works — every class extends `NeonError`, and `instanceof NeonApiError`
+matches the 404/401/429 subclasses too — and is the right tool in a `catch (e: unknown)`
+block where there is no union to narrow.
 
 `NeonNetworkError.reason` carries the most specific reason the platform gave — an `errno`
 code such as `ECONNRESET` when one is available, otherwise the innermost non-empty message.
@@ -124,7 +133,7 @@ rather than anything that names the argument.
 
 Pass a `signal` to cancel a call, or `requestTimeoutMs` to bound it. Both arrive on the
 `error` channel as typed errors — a cancelled call never rejects with a raw `DOMException`,
-and a `throwOnError` client throws the same `NeonError` subclass it would have returned:
+and a `throwOnError` client throws the same `NeonErrorUnion` member it would have returned:
 
 ```ts
 const controller = new AbortController();
@@ -150,7 +159,7 @@ cancellation is not.
 
 `requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
 `Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is
-rejected with a `client`-kind error when the client is created or the call is made, rather
+rejected with a `NeonClientError` when the client is created or the call is made, rather
 than silently becoming an instant timeout or no timeout at all.
 
 Cancellation reaches everything the SDK controls: the request and its retries, readiness
@@ -519,7 +528,7 @@ value discovered by one is not guaranteed to appear in the other.
 
 `query` pages for you, replaying the filters unchanged as the endpoint requires. If a
 page reports more records than it returned but no cursor to reach them, the walk fails
-with a `client`-kind `NeonError` rather than handing back a partial result as if it
+with a `NeonClientError` rather than handing back a partial result as if it
 were complete.
 
 ```ts
@@ -737,12 +746,12 @@ const { data, error } = await raw.getProjectBranchSchema({
 ```
 
 **The raw layer speaks the exact same result contract as the ergonomic client.** By default a
-raw call resolves to a `{ data, error }` `NeonResult` with the typed `NeonError` on the error
+raw call resolves to a `{ data, error }` `NeonResult` with the typed `NeonErrorUnion` on the error
 channel; pass `throwOnError: true` to get the bare resource and throw instead — and the
 return type narrows accordingly:
 
 ```ts
-// bare resource, throws the typed NeonError on failure
+// bare resource, throws a NeonErrorUnion member on failure
 const { project } = await raw.getProject({
   client: neon.client,
   path: { project_id },

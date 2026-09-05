@@ -9,7 +9,6 @@ import {
 } from "./deadline.js";
 import {
 	NeonAbortError,
-	type NeonError,
 	NeonOperationError,
 	NeonTimeoutError,
 	toNeonError,
@@ -39,7 +38,7 @@ function readinessEnded(
 	deadline: Deadline,
 	timeoutMs: number,
 	pending: number,
-): NeonError | undefined {
+): NeonAbortError | NeonTimeoutError | undefined {
 	const source = deadline.source();
 	if (source === "caller") {
 		return new NeonAbortError(
