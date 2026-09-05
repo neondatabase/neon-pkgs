@@ -11,8 +11,6 @@ describe("help", () => {
 	});
 });
 
-// Command groups with no action of their own: a bare invocation must print that
-// group's help (the same output as `--help`), not "run --help" / demandCommand.
 const PARENT_COMMANDS = [
 	"profile",
 	"api-keys",
