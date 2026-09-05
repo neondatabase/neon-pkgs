@@ -8,19 +8,22 @@ exports[`writer > outputs json > outputs multiple data 1`] = `
   "t2": {
     "baz": "xyz"
   }
-}"
+}
+"
 `;
 
 exports[`writer > outputs json > outputs single data 1`] = `
 "{
   "foo": "bar"
-}"
+}
+"
 `;
 
 exports[`writer > outputs json > outputs single data with title 1`] = `
 "{
   "foo": "bar"
-}"
+}
+"
 `;
 
 exports[`writer > outputs yaml > outputs multiple data 1`] = `

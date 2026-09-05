@@ -86,7 +86,8 @@ exports[`bucket > object list --output json includes folders (prefixes) and keys
   "cursor": "",
   "next_cursor": "",
   "is_truncated": false
-}"
+}
+"
 `;
 
 exports[`bucket > object list --recursive sends no delimiter (flat listing) 1`] = `

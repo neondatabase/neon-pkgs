@@ -104,7 +104,8 @@ exports[`api-keys list > json output keeps the raw API shape 1`] = `
     "last_used_at": "2026-02-03T00:00:00Z",
     "last_used_from_addr": "203.0.113.9"
   }
-]"
+]
+"
 `;
 
 exports[`api-keys list > org keys carry the project each is scoped to 1`] = `

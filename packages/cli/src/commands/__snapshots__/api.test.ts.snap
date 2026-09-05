@@ -29,7 +29,8 @@ exports[`api --describe > prints GET query fields as JSON without calling the AP
       ]
     }
   ]
-}"
+}
+"
 `;
 
 exports[`api --describe > prints GET query fields as a table 1`] = `
@@ -88,7 +89,8 @@ exports[`api --describe > prints POST body fields dotted for -F 1`] = `
       }
     }
   ]
-}"
+}
+"
 `;
 
 exports[`api --describe > rejects --describe without a path 1`] = `""`;
