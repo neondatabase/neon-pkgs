@@ -44,11 +44,11 @@ const { project, connectionString } = data;
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
 | `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
 | `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
-| `orgId` | `string` | — | Default organization, applied to project create/list and as the transfer source org. Overridable per call. |
+| `orgId` | `string` | — | Default organization for project create/list and as the transfer source org. Client-wide — not a `CallOptions` key. Override via method input (`org_id` on list/create, `fromOrgId` on transfer). |
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
+`CallOptions` — `{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }` — is accepted **per call** as the last `options` argument, overriding the client default where one exists (`signal` is call-only). `retries`, `wait`, `orgId`, `baseUrl`, and `fetch` are client-wide. Paginated methods take `CallOptions` after their query.
 
 ## The result model
 

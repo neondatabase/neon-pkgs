@@ -46,7 +46,8 @@ export interface NeonConfig<Throw extends boolean = false> {
 	fetch?: typeof fetch;
 	/**
 	 * Default organization id. Applied to project creation/listing and as the source org
-	 * for transfers when not given explicitly; overridable on every call.
+	 * for transfers when not given explicitly. Not a `CallOptions` key — pass `org_id`
+	 * on list/create, or `fromOrgId` on transfer.
 	 */
 	orgId?: string;
 }
