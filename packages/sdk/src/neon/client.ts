@@ -23,8 +23,11 @@ import { Storage } from "./resources/storage.js";
  * `projects` and `branches` are top-level; the Postgres data plane (compute endpoints,
  * roles, databases, the Data API, connection strings) is grouped under `postgres` so
  * future top-level namespaces (e.g. functions, object storage) stay unambiguous.
+ *
+ * `DThrow` defaults to `false`, matching `createNeonClient`. Use `NeonClient<true>` for a
+ * client created with `throwOnError: true`.
  */
-export interface NeonClient<DThrow extends boolean> {
+export interface NeonClient<DThrow extends boolean = false> {
 	readonly projects: Projects<DThrow>;
 	readonly branches: Branches<DThrow>;
 	readonly postgres: Postgres<DThrow>;

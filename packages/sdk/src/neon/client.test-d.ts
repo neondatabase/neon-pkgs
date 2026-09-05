@@ -11,7 +11,7 @@ import type {
 	ProjectPermission,
 	Snapshot,
 } from "../client/types.gen.js";
-import { createNeonClient } from "./client.js";
+import { createNeonClient, type NeonClient } from "./client.js";
 import type { Paginated } from "./paginate.js";
 import type { BranchConnection } from "./resources/branches.js";
 import type { ProjectConnection } from "./resources/projects.js";
@@ -261,4 +261,21 @@ it("functions.customDomains is typed", () => {
 	expectTypeOf(
 		throwing.functions.customDomains.delete("p", "br", "docs.example.com"),
 	).resolves.toEqualTypeOf<void>();
+});
+
+it("NeonClient without a type argument is the non-throwing client", () => {
+	function seed(neon: NeonClient) {
+		return neon.projects.get("p");
+	}
+	expectTypeOf(seed).returns.toEqualTypeOf<Promise<NeonResult<Project>>>();
+	const neon: NeonClient = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon).toEqualTypeOf<NeonClient<false>>();
+});
+
+it("NeonClient<true> still returns the bare resource", () => {
+	const throwing: NeonClient<true> = createNeonClient({
+		apiKey: "x",
+		throwOnError: true,
+	});
+	expectTypeOf(throwing.projects.get("p")).resolves.toEqualTypeOf<Project>();
 });
