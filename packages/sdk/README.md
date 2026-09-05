@@ -83,7 +83,7 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonAuthError` | `"auth"` | (401/403) |
 | `NeonRateLimitError` | `"rate_limit"` | (429, after retries) |
 | `NeonOperationError` | `"operation"` | `operationId`, `status` — an awaited operation failed |
-| `NeonTimeoutError` | `"timeout"` | a deadline was exceeded — `requestTimeoutMs`, or the readiness/wait budget |
+| `NeonTimeoutError` | `"timeout"` | `source` (`"request"` \| `"wait"`), `timeoutMs` — `"request"` is `requestTimeoutMs`; `"wait"` is the readiness budget after the resource was created |
 | `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
 | `NeonError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection) |
@@ -146,7 +146,15 @@ await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
 ```
 
 `"aborted"` and `"timeout"` are deliberately distinct: a timeout is worth retrying, a
-cancellation is not.
+cancellation is not. `"timeout"` still covers both budgets; `source` says which one fired:
+
+```ts
+import { NeonTimeoutError } from "@neon/sdk";
+
+if (error instanceof NeonTimeoutError && error.source === "wait") {
+  // the resource was created; readiness polling ran out — keep polling
+}
+```
 
 `requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
 `Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is

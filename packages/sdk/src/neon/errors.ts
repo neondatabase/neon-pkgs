@@ -131,9 +131,17 @@ export class NeonOperationError extends NeonError {
  * the `wait` budget while polling operations for readiness.
  */
 export class NeonTimeoutError extends NeonError {
-	constructor(message: string) {
+	readonly source: "request" | "wait";
+	readonly timeoutMs: number;
+
+	constructor(
+		message: string,
+		init: { source: "request" | "wait"; timeoutMs: number },
+	) {
 		super(message, "timeout");
 		this.name = "NeonTimeoutError";
+		this.source = init.source;
+		this.timeoutMs = init.timeoutMs;
 	}
 }
 
