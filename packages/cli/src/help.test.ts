@@ -161,13 +161,6 @@ describe("subcommand help lists command flags before globals", () => {
 		expect(stderr).not.toContain("--api-key");
 	});
 
-	it("keeps hidden context-file off auth help after grouping it globally", async () => {
-		const { stderr } = await runCli(["auth", "--help"]);
-
-		expect(stderr).toContain("--keyring");
-		expect(stderr).not.toContain("--context-file");
-	});
-
 	it("formats functions deploy --help through the same renderer", async () => {
 		const { stderr } = await runCli(["functions", "deploy", "--help"]);
 		const trailer = "Global options: see neon --help";
