@@ -16,6 +16,21 @@ alignment is gone. Do not add `cli-table` or any other box drawer.
 All list and get commands go through `writer` in `src/writer.ts`. Change the
 layout there, not in a command.
 
+## Parent commands
+
+When a command only groups subcommands, running it without a subcommand prints
+that command's help and exits 0:
+
+```console
+$ neon projects
+neon projects <sub-command> [options]
+
+Commands:
+...
+```
+
+Commands that perform an action of their own keep that behavior.
+
 ## Layout
 
 | Input | Format |
