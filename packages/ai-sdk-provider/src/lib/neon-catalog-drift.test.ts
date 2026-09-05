@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NEON_MODELS_DEV_IDS } from "./neon-chat-options.js";
+import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 /**
  * Maintainer-only guard against catalog drift. https://neon.com/models.json is
@@ -18,7 +19,7 @@ interface NeonModelsJson {
 	neon?: { models?: Record<string, unknown> };
 }
 
-async function fetchNeonCatalogIds(): Promise<Set<string>> {
+async function fetchNeonCatalogModels(): Promise<Record<string, unknown>> {
 	const response = await fetch(NEON_MODELS_JSON);
 	if (!response.ok) {
 		throw new Error(
@@ -30,12 +31,22 @@ async function fetchNeonCatalogIds(): Promise<Set<string>> {
 	if (models == null) {
 		throw new Error("neon.com/models.json has no neon.models");
 	}
-	return new Set(Object.keys(models));
+	return models;
+}
+
+function catalogTemperature(entry: unknown): boolean {
+	if (entry === null || typeof entry !== "object") {
+		throw new Error("neon.com/models.json model entry is not an object");
+	}
+	if (!("temperature" in entry) || typeof entry.temperature !== "boolean") {
+		throw new Error("neon.com/models.json temperature is not a boolean");
+	}
+	return entry.temperature;
 }
 
 describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
 	it("keeps NEON_MODELS_DEV_IDS in sync with the published catalog", async () => {
-		const live = await fetchNeonCatalogIds();
+		const live = new Set(Object.keys(await fetchNeonCatalogModels()));
 		expect(live.size).toBeGreaterThan(0);
 
 		const declared = new Set<string>(NEON_MODELS_DEV_IDS);
@@ -51,6 +62,17 @@ describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
 		expect({ missingFromProvider, removedUpstream }).toEqual({
 			missingFromProvider: [],
 			removedUpstream: [],
+		});
+	});
+
+	it("keeps gpt-6-astra temperature aligned with the catalog", async () => {
+		const models = await fetchNeonCatalogModels();
+		const catalog = catalogTemperature(models["gpt-6-astra"]);
+		const reported =
+			getNeonModelCapabilities("gpt-6-astra").supportsTemperature;
+		expect({ catalog, reported }).toEqual({
+			catalog: false,
+			reported: false,
 		});
 	});
 });
