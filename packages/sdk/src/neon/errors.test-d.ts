@@ -2,6 +2,7 @@ import { expectTypeOf, it } from "vitest";
 import type { Project } from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
 import {
+	isNeonError,
 	type NeonAbortError,
 	NeonApiError,
 	type NeonApiErrorKind,
@@ -133,4 +134,20 @@ it("HTTP subclasses remain assignable to NeonApiError", () => {
 it("NeonApiError is not a generic that can advertise a false kind", () => {
 	// @ts-expect-error NeonApiError takes no type arguments
 	new NeonApiError<"not_found">("x", { status: 500 });
+});
+
+it("new NeonApiError is assignable to NeonErrorUnion", () => {
+	const error: NeonErrorUnion = new NeonApiError("x", { status: 500 });
+	expectTypeOf(error).toEqualTypeOf<NeonErrorUnion>();
+});
+
+it("isNeonError narrows unknown to NeonErrorUnion", () => {
+	const e: unknown = new NeonNotFoundError("x", { status: 404 });
+	if (isNeonError(e)) {
+		expectTypeOf(e).toEqualTypeOf<NeonErrorUnion>();
+		if (e.kind === "not_found") {
+			expectTypeOf(e).toEqualTypeOf<NeonNotFoundError>();
+			expectTypeOf(e.status).toEqualTypeOf<number>();
+		}
+	}
 });

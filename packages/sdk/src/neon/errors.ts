@@ -179,10 +179,9 @@ export class NeonNetworkError extends NeonError {
 }
 
 /**
- * A failure the SDK detected itself, before or after talking to the API — an ambiguous
- * connection-string selection, an invalid `requestTimeoutMs`, a `noCompute` branch with
- * compute settings, a response missing a field the wrapper needs. Nothing was wrong on
- * the wire; the call could not be completed as asked.
+ * A failure the SDK detected itself — an ambiguous connection-string selection, an
+ * invalid `requestTimeoutMs`, a `noCompute` branch with compute settings, a response
+ * missing a field the wrapper needs. `cause` is set when a lower-level error triggered it.
  */
 export class NeonClientError extends NeonError {
 	declare readonly kind: "client";
@@ -209,11 +208,11 @@ export type NeonErrorUnion =
 	| NeonClientError;
 
 /**
- * Whether `error` is one of the classes {@link NeonErrorUnion} names. Used where a value
- * arrives as `unknown` or as the base {@link NeonError} (for example a page fetcher that
- * already classified a failure) and must be handed to `err()`.
+ * Whether `error` is a member of {@link NeonErrorUnion}. Use this in a `catch` after
+ * `throwOnError`: `instanceof NeonError` only yields the base class, whose `kind` does
+ * not narrow.
  */
-export function isNeonErrorUnion(error: unknown): error is NeonErrorUnion {
+export function isNeonError(error: unknown): error is NeonErrorUnion {
 	return (
 		error instanceof NeonApiError ||
 		error instanceof NeonOperationError ||
@@ -303,10 +302,5 @@ export function toNeonError(
 	if (status === 401 || status === 403)
 		return new NeonAuthError(message, init);
 	if (status === 429) return new NeonRateLimitError(message, init);
-	const apiError = new NeonApiError(message, init);
-	// Constructor always sets kind "api"; the check is what makes that a type fact.
-	if (apiError.kind !== "api") {
-		throw new Error(`NeonApiError produced kind ${apiError.kind}`);
-	}
-	return apiError;
+	return new NeonApiError(message, init);
 }

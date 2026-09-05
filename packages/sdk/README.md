@@ -106,8 +106,23 @@ class, so it survives bundling, but `message` is not a contract.
 
 A `kind` check narrows to the class, so subclass fields are visible without `instanceof`.
 `instanceof` still works — every class extends `NeonError`, and `instanceof NeonApiError`
-matches the 404/401/429 subclasses too — and is the right tool in a `catch (e: unknown)`
-block where there is no union to narrow.
+matches the 404/401/429 subclasses too.
+
+With `throwOnError`, the thrown value is a `NeonErrorUnion` member at runtime, but
+`catch (e)` types it as `unknown`. `instanceof NeonError` only yields the base class
+(whose `kind` does not narrow). Use `isNeonError`:
+
+```ts
+import { isNeonError } from "@neon/sdk";
+
+try {
+  await neon.projects.get(pid, { throwOnError: true });
+} catch (e: unknown) {
+  if (!isNeonError(e)) throw e;
+  if (e.kind === "not_found") e.status;   // number
+  if (e.kind === "network")   e.reason;   // string
+}
+```
 
 `NeonNetworkError.reason` carries the most specific reason the platform gave — an `errno`
 code such as `ECONNRESET` when one is available, otherwise the innermost non-empty message.

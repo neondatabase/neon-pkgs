@@ -3,6 +3,7 @@ import { getProject } from "../client/raw.gen.js";
 import { createNeonClient } from "./client.js";
 import {
 	describeTransportFailure,
+	isNeonError,
 	NeonAbortError,
 	NeonApiError,
 	NeonAuthError,
@@ -144,6 +145,17 @@ describe("describeTransportFailure", () => {
 		const b = new Error("", { cause: a });
 		a.cause = b;
 		expect(describeTransportFailure(a)).toBe("cause unavailable");
+	});
+});
+
+describe("isNeonError", () => {
+	it("accepts every NeonErrorUnion member and rejects the base class", () => {
+		expect(isNeonError(new NeonApiError("x", apiInit))).toBe(true);
+		expect(isNeonError(new NeonNotFoundError("x", apiInit))).toBe(true);
+		expect(isNeonError(new NeonClientError("x"))).toBe(true);
+		expect(isNeonError(new NeonError("x", "client"))).toBe(false);
+		expect(isNeonError(new Error("x"))).toBe(false);
+		expect(isNeonError(undefined)).toBe(false);
 	});
 });
 
