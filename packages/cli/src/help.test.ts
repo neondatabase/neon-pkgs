@@ -167,4 +167,14 @@ describe("subcommand help lists command flags before globals", () => {
 		expect(stderr).toContain("--keyring");
 		expect(stderr).not.toContain("--context-file");
 	});
+
+	it("formats functions deploy --help through the same renderer", async () => {
+		const { stderr } = await runCli(["functions", "deploy", "--help"]);
+		const trailer = "Global options: see neon --help";
+
+		expect(stderr).toContain("--src");
+		expect(stderr).toContain(trailer);
+		expect(stderr.indexOf("--src")).toBeLessThan(stderr.indexOf(trailer));
+		expect(stderr).not.toContain("--api-key");
+	});
 });

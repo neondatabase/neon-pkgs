@@ -128,11 +128,15 @@ const formatHelp = (help: string) => {
 		result.push("");
 	}
 
-	// positional args block
-	// example command to see: neonctl branches rename
-	const positionalsBlock = consumeBlockIfMatches(lines, /Positionals:/);
-	if (positionalsBlock.length > 0) {
-		const header = positionalsBlock.shift() as string;
+	const consumePositionals = () => {
+		const positionalsBlock = consumeBlockIfMatches(lines, /Positionals:/);
+		if (positionalsBlock.length === 0) {
+			return;
+		}
+		const header = positionalsBlock.shift();
+		if (header === undefined) {
+			return;
+		}
 		result.push(header);
 		const ui = cliui({
 			width: 0,
@@ -153,7 +157,9 @@ const formatHelp = (help: string) => {
 		});
 		result.push(ui.toString());
 		result.push("");
-	}
+	};
+
+	consumePositionals();
 
 	// command description
 	// example command to see: neonctl projects list
@@ -162,6 +168,10 @@ const formatHelp = (help: string) => {
 		result.push(...descriptionBlock);
 		result.push("");
 	}
+
+	// `functions deploy` puts Positionals after the description; `branches rename`
+	// puts them before it.
+	consumePositionals();
 
 	const optionBlocks: string[][] = [];
 	while (true) {
