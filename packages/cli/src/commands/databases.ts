@@ -3,12 +3,11 @@ import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 
 import type { BranchScopeProps } from "../types.js";
+import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import {
-	branchIdFromProps,
-	fillSingleProject,
-	resolveBranchRef,
-} from "../utils/enrichers.js";
-import { reportMissingDelete } from "../utils/missing_delete.js";
+	branchNameForMissingDelete,
+	reportMissingDelete,
+} from "../utils/missing_delete.js";
 import { writer } from "../writer.js";
 
 export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
@@ -120,7 +119,7 @@ export const create = async (
 export const deleteDb = async (
 	props: BranchScopeProps & { database: string },
 ) => {
-	const { branchId, branchName } = await resolveBranchRef(props);
+	const branchId = await branchIdFromProps(props);
 	const { data, status } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchDatabase(
 			props.projectId,
@@ -136,6 +135,7 @@ export const deleteDb = async (
 		});
 		return;
 	}
+	const branchName = await branchNameForMissingDelete(props, branchId);
 	const message = `Database "${props.database}" not found on branch ${branchName}; nothing to delete.`;
 	reportMissingDelete(props, message);
 };
