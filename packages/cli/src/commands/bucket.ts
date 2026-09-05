@@ -251,8 +251,7 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.demandCommand(1, "")
 					.strictCommands(),
-		)
-		.demandCommand(1, "");
+		);
 
 export const handler = (args: yargs.Argv) => {
 	return args;
