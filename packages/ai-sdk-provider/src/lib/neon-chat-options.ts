@@ -2,27 +2,22 @@
 // to their provider-native endpoints; everything else uses the unified MLflow
 // (OpenAI-compatible) endpoint.
 //
-// Ids use the canonical Neon (unprefixed) form, matching the `neon` provider on
-// models.dev. The gateway also accepts the legacy `databricks-` prefixed form
-// (the `databricks` provider on models.dev), which still resolves via the
-// `(string & {})` fallback on `NeonChatModelId`.
+// Ids use the canonical Neon (unprefixed) form, matching
+// https://neon.com/models.json. The gateway also accepts the legacy
+// `databricks-` prefixed form, which still resolves via the `(string & {})`
+// fallback on `NeonChatModelId`.
 //
-// `NEON_MODELS_DEV_IDS` mirrors the models.dev `neon` catalog exactly — the
-// `neon-catalog-drift.test.ts` maintainer check fails if the two diverge. The
-// authoritative, always-current catalog is shown in the Neon Console under the
-// branch's "AI Gateway" tab.
-//
-// There is deliberately no second list for ids the gateway serves ahead of
-// models.dev. Such an id already works — `NeonChatModelId` accepts any string —
-// so a hand-maintained list would buy autocomplete for a few days at the cost of
-// a surface that silently rots, which is what happened last time. The fix for a
-// gateway model missing here is to add it to models.dev; Orbit's catalog-parity
-// job reports that gap daily.
+// `NEON_MODELS_DEV_IDS` mirrors neon.com/models.json `neon.models` exactly —
+// `neon-catalog-drift.test.ts` fails if the two diverge. A branch's live list
+// is `GET $NEON_AI_GATEWAY_BASE_URL/v1/models`. There is deliberately no second
+// list for ids the gateway serves ahead of the published catalog: such an id
+// already works because `NeonChatModelId` accepts any string.
 
-/** The models.dev `neon` catalog (canonical, unprefixed ids). */
+/** Published catalog ids from https://neon.com/models.json (canonical, unprefixed). */
 export const NEON_MODELS_DEV_IDS = [
 	// Anthropic (native Messages API)
 	"claude-fable-5",
+	"claude-fable-5-1",
 	"claude-haiku-4-5",
 	"claude-opus-4-1",
 	"claude-opus-4-5",
@@ -48,6 +43,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"gpt-5-6-terra",
 	"gpt-5-mini",
 	"gpt-5-nano",
+	"gpt-6-astra",
 	// OpenAI open-weight (unified MLflow endpoint)
 	"gpt-oss-120b",
 	"gpt-oss-20b",
@@ -68,6 +64,9 @@ export const NEON_MODELS_DEV_IDS = [
 	"qwen35-122b-a10b",
 	// Zhipu (unified MLflow endpoint)
 	"glm-5-2",
+	"glm-5-3-flash",
+	// xAI (unified MLflow endpoint)
+	"grok-4-6",
 	// Thinking Machines (unified MLflow endpoint)
 	"inkling",
 	// Moonshot (unified MLflow endpoint)
