@@ -10,7 +10,7 @@ import {
 	NeonError,
 	type NeonErrorUnion,
 	type NeonNetworkError,
-	type NeonNotFoundError,
+	NeonNotFoundError,
 	type NeonOperationError,
 	type NeonRateLimitError,
 	type NeonTimeoutError,
@@ -42,8 +42,11 @@ it("kind narrows NeonResult.error to the matching subclass", async () => {
 	}
 
 	if (error?.kind === "api") {
-		expectTypeOf(error).toEqualTypeOf<NeonApiError>();
+		expectTypeOf(error.kind).toEqualTypeOf<"api">();
 		expectTypeOf(error.status).toEqualTypeOf<number>();
+		expectTypeOf(error).toEqualTypeOf<
+			NeonApiError & { readonly kind: "api" }
+		>();
 	}
 
 	if (error?.kind === "aborted") {
@@ -113,10 +116,21 @@ it("toNeonError returns the union", () => {
 it("NeonApiError construction cannot claim a subclass kind", () => {
 	expectTypeOf(
 		new NeonApiError("x", { status: 500 }).kind,
-	).toEqualTypeOf<"api">();
+	).toEqualTypeOf<NeonApiErrorKind>();
 	new NeonApiError("x", {
 		status: 404,
 		// @ts-expect-error a 404 must be NeonNotFoundError, not NeonApiError with kind not_found
 		kind: "not_found",
 	});
+});
+
+it("HTTP subclasses remain assignable to NeonApiError", () => {
+	const error: NeonApiError = new NeonNotFoundError("x", { status: 404 });
+	expectTypeOf(error.status).toEqualTypeOf<number>();
+	expectTypeOf(error.kind).toEqualTypeOf<NeonApiErrorKind>();
+});
+
+it("NeonApiError is not a generic that can advertise a false kind", () => {
+	// @ts-expect-error NeonApiError takes no type arguments
+	new NeonApiError<"not_found">("x", { status: 500 });
 });

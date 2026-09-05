@@ -56,10 +56,8 @@ export class NeonError extends Error {
 }
 
 /** A non-2xx HTTP response from the Neon API. */
-export class NeonApiError<
-	K extends NeonApiErrorKind = "api",
-> extends NeonError {
-	declare readonly kind: K;
+export class NeonApiError extends NeonError {
+	declare readonly kind: NeonApiErrorKind;
 	/** HTTP status code. */
 	readonly status: number;
 	/** Machine-readable Neon error code (`GeneralError.code`), when present. */
@@ -83,8 +81,8 @@ export class NeonApiError<
 }
 
 /** 404 — the resource does not exist. */
-export class NeonNotFoundError extends NeonApiError<"not_found"> {
-	// Assigned after super() so the runtime kind matches the generic, not "api".
+export class NeonNotFoundError extends NeonApiError {
+	// Assigned after super() so the runtime kind is not the parent's `"api"`.
 	override readonly kind: "not_found" = "not_found";
 	constructor(message: string, init: NeonApiErrorInit) {
 		super(message, init);
@@ -93,7 +91,7 @@ export class NeonNotFoundError extends NeonApiError<"not_found"> {
 }
 
 /** 401/403 — the API key is missing, invalid, or lacks permission. */
-export class NeonAuthError extends NeonApiError<"auth"> {
+export class NeonAuthError extends NeonApiError {
 	override readonly kind: "auth" = "auth";
 	constructor(message: string, init: NeonApiErrorInit) {
 		super(message, init);
@@ -102,7 +100,7 @@ export class NeonAuthError extends NeonApiError<"auth"> {
 }
 
 /** 429 — rate limited (after retries, if enabled, were exhausted). */
-export class NeonRateLimitError extends NeonApiError<"rate_limit"> {
+export class NeonRateLimitError extends NeonApiError {
 	override readonly kind: "rate_limit" = "rate_limit";
 	constructor(message: string, init: NeonApiErrorInit) {
 		super(message, init);
@@ -200,7 +198,7 @@ export class NeonClientError extends NeonError {
  * extends {@link NeonError}, so `instanceof NeonError` still matches all of them.
  */
 export type NeonErrorUnion =
-	| NeonApiError
+	| (NeonApiError & { readonly kind: "api" })
 	| NeonNotFoundError
 	| NeonAuthError
 	| NeonRateLimitError
@@ -305,5 +303,10 @@ export function toNeonError(
 	if (status === 401 || status === 403)
 		return new NeonAuthError(message, init);
 	if (status === 429) return new NeonRateLimitError(message, init);
-	return new NeonApiError(message, init);
+	const apiError = new NeonApiError(message, init);
+	// Constructor always sets kind "api"; the check is what makes that a type fact.
+	if (apiError.kind !== "api") {
+		throw new Error(`NeonApiError produced kind ${apiError.kind}`);
+	}
+	return apiError;
 }
