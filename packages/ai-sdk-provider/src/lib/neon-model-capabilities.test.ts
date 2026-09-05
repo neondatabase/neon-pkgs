@@ -63,6 +63,12 @@ describe("getNeonModelCapabilities", () => {
 		expect(caps.supportsTopP).toBe(true);
 	});
 
+	it("marks gpt-6-astra without temperature support", () => {
+		const caps = getNeonModelCapabilities("gpt-6-astra");
+		expect(caps.family).toBe("openai");
+		expect(caps.supportsTemperature).toBe(false);
+	});
+
 	it("marks Meta models without penalties/seed support", () => {
 		const caps = getNeonModelCapabilities("llama-4-maverick");
 		expect(caps.family).toBe("meta");
@@ -300,6 +306,7 @@ describe("getNeonModelCapabilities", () => {
 			"claude-haiku-4-5",
 			"gpt-5-mini",
 			"gpt-5-1",
+			"gpt-6-astra",
 			"gemini-3-flash",
 			"llama-4-maverick",
 			"qwen35-122b-a10b",

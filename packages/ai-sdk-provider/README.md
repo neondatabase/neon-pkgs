@@ -100,6 +100,7 @@ Query the rules directly rather than hardcoding them:
 import { getNeonModelCapabilities } from '@neon/ai-sdk-provider';
 
 getNeonModelCapabilities('claude-opus-5').supportsTemperature; // false
+getNeonModelCapabilities('gpt-6-astra').supportsTemperature; // false
 getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 ```
 
