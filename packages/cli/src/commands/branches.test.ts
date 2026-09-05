@@ -361,6 +361,7 @@ describe("branches", () => {
 			{
 				code: 1,
 				snapshot: false,
+				output: "table",
 				stderr: "ERROR: Deleting a branch requires confirmation. Re-run interactively or pass --yes.",
 			},
 		);

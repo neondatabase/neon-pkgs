@@ -59,14 +59,19 @@ export const confirmDestructive = async (
 		yes: boolean;
 		noun: string;
 		message: string;
-		forceYes?: boolean;
+		output: "yaml" | "json" | "table";
 	},
 	deps: ConfirmDestructiveDeps = defaultDeps,
 ): Promise<void> => {
 	if (options.yes) {
 		return;
 	}
-	if (options.forceYes || deps.isCi() || !deps.stdinIsTty()) {
+	if (isMachineOutput(options.output)) {
+		throw new Error(
+			`Confirmation prompts are disabled with --output ${options.output}; pass --yes.`,
+		);
+	}
+	if (deps.isCi() || !deps.stdinIsTty()) {
 		throw new Error(
 			`Deleting a ${options.noun} requires confirmation. Re-run interactively or pass --yes.`,
 		);

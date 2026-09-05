@@ -127,7 +127,7 @@ export const deleteDb = async (
 		yes: props.yes,
 		noun: "database",
 		message: `Delete database ${props.database}?`,
-		forceYes: isMachineOutput(props.output),
+		output: props.output,
 	});
 	const branchId = await branchIdFromProps(props);
 	const { data } = await retryOnLock(() =>

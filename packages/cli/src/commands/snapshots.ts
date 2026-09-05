@@ -483,7 +483,7 @@ const deleteSnapshot = async (
 		yes: props.yes,
 		noun: "snapshot",
 		message: `Delete snapshot ${props.id}?`,
-		forceYes: isMachineOutput(props.output),
+		output: props.output,
 	});
 	const snapshot = await resolveSnapshot(props);
 	await retryOnLock(() =>

@@ -29,7 +29,12 @@ describe("confirmDestructive", () => {
 	test("returns immediately when --yes is set", async () => {
 		let prompted = false;
 		await confirmDestructive(
-			{ yes: true, noun: "project", message: "Delete project x?" },
+			{
+				yes: true,
+				noun: "project",
+				message: "Delete project x?",
+				output: "table",
+			},
 			{
 				isCi: () => true,
 				stdinIsTty: () => false,
@@ -45,7 +50,12 @@ describe("confirmDestructive", () => {
 	test("refuses when stdin is not a TTY", async () => {
 		await expect(
 			confirmDestructive(
-				{ yes: false, noun: "project", message: "Delete project x?" },
+				{
+					yes: false,
+					noun: "project",
+					message: "Delete project x?",
+					output: "table",
+				},
 				{
 					isCi: () => false,
 					stdinIsTty: () => false,
@@ -60,7 +70,12 @@ describe("confirmDestructive", () => {
 	test("refuses in CI even when stdin is a TTY", async () => {
 		await expect(
 			confirmDestructive(
-				{ yes: false, noun: "branch", message: "Delete branch x?" },
+				{
+					yes: false,
+					noun: "branch",
+					message: "Delete branch x?",
+					output: "table",
+				},
 				{
 					isCi: () => true,
 					stdinIsTty: () => true,
@@ -79,7 +94,7 @@ describe("confirmDestructive", () => {
 					yes: false,
 					noun: "project",
 					message: "Delete project x?",
-					forceYes: true,
+					output: "json",
 				},
 				{
 					isCi: () => false,
@@ -88,14 +103,19 @@ describe("confirmDestructive", () => {
 				},
 			),
 		).rejects.toThrow(
-			"Deleting a project requires confirmation. Re-run interactively or pass --yes.",
+			"Confirmation prompts are disabled with --output json; pass --yes.",
 		);
 	});
 
 	test("prompts on a TTY and throws when the answer is no", async () => {
 		await expect(
 			confirmDestructive(
-				{ yes: false, noun: "project", message: "Delete project x?" },
+				{
+					yes: false,
+					noun: "project",
+					message: "Delete project x?",
+					output: "table",
+				},
 				{
 					isCi: () => false,
 					stdinIsTty: () => true,
@@ -110,7 +130,12 @@ describe("confirmDestructive", () => {
 
 	test("prompts on a TTY and returns when the answer is yes", async () => {
 		await confirmDestructive(
-			{ yes: false, noun: "bucket", message: 'Delete bucket "logs"?' },
+			{
+				yes: false,
+				noun: "bucket",
+				message: 'Delete bucket "logs"?',
+				output: "table",
+			},
 			{
 				isCi: () => false,
 				stdinIsTty: () => true,

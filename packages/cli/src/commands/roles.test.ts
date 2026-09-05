@@ -43,6 +43,7 @@ describe("roles", () => {
 			{
 				code: 1,
 				snapshot: false,
+				output: "table",
 				stderr: "ERROR: Deleting a role requires confirmation. Re-run interactively or pass --yes.",
 			},
 		);

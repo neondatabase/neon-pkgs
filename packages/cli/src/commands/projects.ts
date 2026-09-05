@@ -430,7 +430,7 @@ const deleteProject = async (
 		yes: props.yes,
 		noun: "project",
 		message: `Delete project ${props.id}?`,
-		forceYes: isMachineOutput(props.output),
+		output: props.output,
 	});
 	const { data } = await props.apiClient.deleteProject(props.id);
 	const project = data.project;
@@ -441,7 +441,7 @@ const deleteProject = async (
 		return;
 	}
 	writer(props).text(
-		`Deleted project ${namedResource(project.id, project.name)}.\nRecoverable during the deletion grace period:  ${getCliName()} projects recover ${project.id}\n`,
+		`Deleted project ${namedResource(project.id, project.name)}.\nRecoverable during the deletion grace period: ${getCliName()} projects recover ${project.id}\n`,
 	);
 };
 

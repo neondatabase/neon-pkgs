@@ -182,6 +182,7 @@ describe("projects", () => {
 		await testCliCommand(["projects", "delete", "test"], {
 			code: 1,
 			snapshot: false,
+			output: "table",
 			stderr: "ERROR: Deleting a project requires confirmation. Re-run interactively or pass --yes.",
 		});
 	});
@@ -198,8 +199,19 @@ describe("projects", () => {
 			{ output: "table", snapshot: false, stderr: "" },
 		);
 		expect(stdout).toBe(
-			"Deleted project test (test).\nRecoverable during the deletion grace period:  neon projects recover test\n",
+			"Deleted project test (test).\nRecoverable during the deletion grace period: neon projects recover test\n",
 		);
+	});
+
+	test("delete --output json without --yes names the flag", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "delete", "test"], {
+			code: 1,
+			snapshot: false,
+			output: "json",
+			stderr: "ERROR: Confirmation prompts are disabled with --output json; pass --yes.",
+		});
 	});
 
 	test("delete --yes keeps the record in json", async ({

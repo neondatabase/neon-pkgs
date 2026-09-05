@@ -92,6 +92,7 @@ describe("bucket", () => {
 			mockDir: "single_org",
 			code: 1,
 			snapshot: false,
+			output: "table",
 			stderr: "ERROR: Deleting a bucket requires confirmation. Re-run interactively or pass --yes.",
 		});
 	});

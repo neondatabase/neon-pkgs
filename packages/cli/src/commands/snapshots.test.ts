@@ -222,6 +222,7 @@ describe("snapshots", () => {
 			{
 				code: 1,
 				snapshot: false,
+				output: "table",
 				stderr: "ERROR: Deleting a snapshot requires confirmation. Re-run interactively or pass --yes.",
 			},
 		);

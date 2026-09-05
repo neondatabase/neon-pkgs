@@ -104,7 +104,7 @@ export const deleteRole = async (
 		yes: props.yes,
 		noun: "role",
 		message: `Delete role ${props.role}?`,
-		forceYes: isMachineOutput(props.output),
+		output: props.output,
 	});
 	const branchId = await branchIdFromProps(props);
 	const { data } = await retryOnLock(() =>

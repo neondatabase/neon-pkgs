@@ -309,7 +309,7 @@ const deleteBucket = async (
 		yes: props.yes,
 		noun: "bucket",
 		message: `Delete bucket "${props.name}"?`,
-		forceYes: isMachineOutput(props.output),
+		output: props.output,
 	});
 	const branchId = await branchIdFromProps(props);
 	try {

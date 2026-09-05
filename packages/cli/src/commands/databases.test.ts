@@ -45,6 +45,7 @@ describe("databases", () => {
 			{
 				code: 1,
 				snapshot: false,
+				output: "table",
 				stderr: "ERROR: Deleting a database requires confirmation. Re-run interactively or pass --yes.",
 			},
 		);
