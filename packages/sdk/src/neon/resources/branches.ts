@@ -14,10 +14,11 @@ import type {
 	BranchCreateRequest,
 	BranchSchemaCompareResponse,
 	BranchUpdateRequest,
+	CreateProjectBranchResponse,
 	Endpoint,
 	ListProjectBranchesData,
 } from "../../client/types.gen.js";
-import { withConnectionString } from "../connection.js";
+import { pickConnectionString, withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
@@ -58,6 +59,27 @@ export interface BranchConnection {
 	branch: Branch;
 	endpoint: Endpoint;
 	connectionString: string;
+}
+
+/**
+ * `create` result. `endpoint` and `connectionString` are absent when `noCompute` is
+ * true, or when the API omitted a URI (multiple roles/databases).
+ */
+export interface BranchCreateResult {
+	branch: Branch;
+	endpoint?: Endpoint;
+	connectionString?: string;
+}
+
+function mapCreatedBranch(
+	data: CreateProjectBranchResponse,
+	pooled: boolean,
+): BranchCreateResult {
+	return {
+		branch: data.branch,
+		endpoint: data.endpoints?.[0],
+		connectionString: pickConnectionString(data.connection_uris, pooled),
+	};
 }
 
 const NO_COMPUTE_WITH_COMPUTE = "Pass compute settings or noCompute, not both.";
@@ -139,32 +161,34 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/**
-	 * This method retains its branch-only result even when it provisions compute;
-	 * use {@link Branches.createAndConnect} or `postgres.connectionString` when a
-	 * connection string is needed.
+	 * Create a branch. Posts a read-write endpoint unless `noCompute: true`.
+	 * The create response already carries that endpoint and (when present) a
+	 * pooled connection URI; those stay on the result as optional fields.
 	 *
-	 * Readiness polling stays on for `noCompute` branches because a
-	 * compute-less branch still has provisioning operations.
+	 * {@link Branches.createAndConnect} is the same create plus a required URI —
+	 * it errors when the response has none. Readiness polling stays on for
+	 * `noCompute` branches because a compute-less branch still has provisioning
+	 * operations.
 	 */
 	create(
 		projectId: string,
 		input?: CreateInput,
-	): Promise<Outcome<Branch, DThrow>>;
+	): Promise<Outcome<BranchCreateResult, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		projectId: string,
 		input: CreateInput | undefined,
 		opts: CallOptions<Throw>,
-	): Promise<Outcome<Branch, Throw>>;
+	): Promise<Outcome<BranchCreateResult, Throw>>;
 	async create(
 		projectId: string,
 		input?: CreateInput,
 		opts?: CallOptions,
-	): Promise<Branch | NeonResult<Branch>> {
+	): Promise<BranchCreateResult | NeonResult<BranchCreateResult>> {
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const parsed = parseCreateInput(input);
 		if (parsed.error) {
-			return finalize(err<Branch>(parsed.error), shouldThrow);
+			return finalize(err<BranchCreateResult>(parsed.error), shouldThrow);
 		}
 		return this.#ctx.run(
 			{
@@ -188,7 +212,7 @@ export class Branches<DThrow extends boolean> {
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.branch,
+			(data) => mapCreatedBranch(data, true),
 		);
 	}
 

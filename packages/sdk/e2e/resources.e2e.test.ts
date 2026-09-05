@@ -46,17 +46,17 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				noCompute: true,
 			}),
 		);
-		expect(created.name).toBe("crud");
+		expect(created.branch.name).toBe("crud");
 
 		const fetched = expectOk(
-			await neon.branches.get(projectId, created.id),
+			await neon.branches.get(projectId, created.branch.id),
 		);
-		expect(fetched.id).toBe(created.id);
+		expect(fetched.id).toBe(created.branch.id);
 
 		const renamed = expectOk(
 			await neon.branches.update(
 				projectId,
-				created.id,
+				created.branch.id,
 				{ name: "crud-renamed" },
 				{ waitForReadiness: true },
 			),
@@ -64,12 +64,12 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(renamed.name).toBe("crud-renamed");
 
 		expectOk(
-			await neon.branches.delete(projectId, created.id, {
+			await neon.branches.delete(projectId, created.branch.id, {
 				waitForReadiness: true,
 			}),
 		);
 
-		const { error } = await neon.branches.get(projectId, created.id);
+		const { error } = await neon.branches.get(projectId, created.branch.id);
 		expect(error).toBeInstanceOf(NeonNotFoundError);
 	});
 
@@ -172,10 +172,12 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				parent_id: defaultBranchId,
 			}),
 		);
+		expect(withCompute.endpoint?.type).toBe("read_write");
+		expect(withCompute.connectionString).toMatch(/^postgres(ql)?:\/\//);
 		const attached = expectOk(
 			await neon.postgres.endpoints.listByBranch(
 				projectId,
-				withCompute.id,
+				withCompute.branch.id,
 			),
 		);
 		expect(
@@ -189,18 +191,23 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				noCompute: true,
 			}),
 		);
+		expect(bare.endpoint).toBeUndefined();
+		expect(bare.connectionString).toBeUndefined();
 		const none = expectOk(
-			await neon.postgres.endpoints.listByBranch(projectId, bare.id),
+			await neon.postgres.endpoints.listByBranch(
+				projectId,
+				bare.branch.id,
+			),
 		);
 		expect(none).toEqual([]);
 
 		expectOk(
-			await neon.branches.delete(projectId, withCompute.id, {
+			await neon.branches.delete(projectId, withCompute.branch.id, {
 				waitForReadiness: true,
 			}),
 		);
 		expectOk(
-			await neon.branches.delete(projectId, bare.id, {
+			await neon.branches.delete(projectId, bare.branch.id, {
 				waitForReadiness: true,
 			}),
 		);

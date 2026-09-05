@@ -68,7 +68,7 @@ const createBranchTools = (options: NeonToolsClientOptions = {}) => {
 };
 
 describe("branches.create", () => {
-	test("posts a read-write endpoint and returns the branch without a connection string", async () => {
+	test("posts a read-write endpoint and returns the branch, endpoint, and pooled URI", async () => {
 		const { requests, tools } = createBranchOnlyTools();
 
 		const result = await tools["branches.create"].execute({
@@ -95,9 +95,13 @@ describe("branches.create", () => {
 			],
 		});
 		expect(result).toEqual({
-			data: { id: "br-id", name: "feature-x" },
+			data: {
+				branch: { id: "br-id", name: "feature-x" },
+				endpoint: { id: "ep-id", type: "read_write" },
+				connectionString:
+					"postgresql://user:pass@ep-pooler-host/neondb",
+			},
 		});
-		expect(result.data).not.toHaveProperty("connectionString");
 	});
 
 	test("omits endpoints when no_compute is true", async () => {

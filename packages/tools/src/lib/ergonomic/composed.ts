@@ -160,7 +160,7 @@ export const createBranchTool = (options: ToolClientOptions) =>
 			id: publishedId("branches.create"),
 			title: "Create branch",
 			description:
-				"Create a branch with a read-write endpoint by default. Pass no_compute to skip the endpoint. The call waits until operation-backed provisioning finishes, up to five minutes by default. Does not return a connection string; use branches.createAndConnect or postgres.connectionString for that.",
+				"Create a branch with a read-write endpoint by default. Pass no_compute to skip the endpoint. The call waits until operation-backed provisioning finishes, up to five minutes by default. Returns branch plus optional endpoint and pooled connectionString when a compute is created. Use branches.createAndConnect when a URI is required.",
 			inputSchema: createBranchInputSchema,
 			annotations: writeAnnotations,
 			requiresApproval: true,

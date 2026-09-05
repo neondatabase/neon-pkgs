@@ -40,7 +40,7 @@ function neonRouting(
 }
 
 describe("branches.create", () => {
-	it("posts a read-write endpoint by default and unwraps the branch", async () => {
+	it("posts a read-write endpoint by default and keeps the endpoint on the result", async () => {
 		const { neon, calls } = neonRouting(() => ({
 			status: 201,
 			body: {
@@ -56,7 +56,11 @@ describe("branches.create", () => {
 		});
 
 		expect(error).toBeUndefined();
-		expect(data).toEqual({ id: "br-1", name: "feature" });
+		expect(data).toEqual({
+			branch: { id: "br-1", name: "feature" },
+			endpoint: { id: "ep-1", type: "read_write" },
+			connectionString: undefined,
+		});
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.body).toEqual({
 			branch: { name: "feature", parent_id: "br-parent" },
@@ -97,7 +101,11 @@ describe("branches.create", () => {
 		});
 
 		expect(error).toBeUndefined();
-		expect(data).toEqual({ id: "br-1", name: "bare" });
+		expect(data).toEqual({
+			branch: { id: "br-1", name: "bare" },
+			endpoint: undefined,
+			connectionString: undefined,
+		});
 		expect(calls[0]?.body).toEqual({ branch: { name: "bare" } });
 	});
 
@@ -139,6 +147,36 @@ describe("branches.create", () => {
 			message: "Pass compute settings or noCompute, not both.",
 		});
 	});
+
+	it("keeps a pooled connection string when the API returns one", async () => {
+		const { neon } = neonRouting(() => ({
+			status: 201,
+			body: {
+				branch: { id: "br-1", name: "feature" },
+				endpoints: [{ id: "ep-1", type: "read_write" }],
+				connection_uris: [
+					{
+						connection_uri: "postgresql://user:pass@ep-host/neondb",
+						connection_parameters: {
+							host: "ep-host",
+							pooler_host: "ep-pooler-host",
+						},
+					},
+				],
+			},
+		}));
+
+		const { data, error } = await neon.branches.create("p-1", {
+			name: "feature",
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual({
+			branch: { id: "br-1", name: "feature" },
+			endpoint: { id: "ep-1", type: "read_write" },
+			connectionString: "postgresql://user:pass@ep-pooler-host/neondb",
+		});
+	});
 });
 
 describe("branches.createAndConnect", () => {
@@ -175,6 +213,24 @@ describe("branches.createAndConnect", () => {
 			branch: { name: "feature", parent_id: "br-parent" },
 			endpoints: [{ type: "read_write" }],
 		});
+	});
+
+	it("errors when the create response has no connection URI", async () => {
+		const { neon } = neonRouting(() => ({
+			status: 201,
+			body: {
+				branch: { id: "br-1", name: "feature" },
+				endpoints: [{ id: "ep-1", type: "read_write" }],
+			},
+		}));
+
+		const { data, error } = await neon.branches.createAndConnect("p-1", {
+			name: "feature",
+		});
+
+		expect(data).toBeUndefined();
+		expect(error?.kind).toBe("client");
+		expect(error?.message).toMatch(/did not include a connection URI/);
 	});
 });
 

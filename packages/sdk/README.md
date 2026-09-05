@@ -232,10 +232,10 @@ await neon.projects.transfer({
 | --- | --- | --- |
 | `list(projectId, query?)` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order?, include_deleted? }` |
 | `get(projectId, branchId)` | `Branch` | |
-| `create(projectId, input?)` | `Branch` | RW compute on by default. `noCompute: true` skips the endpoint. No connection string. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
+| `create(projectId, input?)` | `{ branch, endpoint?, connectionString? }` | RW compute on by default. `noCompute: true` skips the endpoint. Includes the endpoint and a pooled `connectionString` when a compute is created. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
 | `update(projectId, branchId, input)` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
 | `delete(projectId, branchId)` | **→void** | |
-| `createAndConnect(projectId, input?, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
+| `createAndConnect(projectId, input?, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | Same create, but errors if there is no URI. `pooled` default `true`. `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
 | `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
 | `setDefault(projectId, branchId)` | `Branch` | |
 | `resetFromParent(projectId, branchId, { preserveUnderName? }?)` | `Branch` | parent HEAD only; discards writes since the branch diverged. `preserveUnderName` is required when the branch has children. Pass `{ waitForReadiness: true }` before using the branch |
@@ -271,13 +271,19 @@ await neon.branches.create(projectId, {
   noCompute: true,
 });
 
-// Branch off it with its own compute — returns a ready connection string
-const { data } = await neon.branches.createAndConnect(projectId, {
+const { data } = await neon.branches.create(projectId, {
+  name: "preview/pr-123",
+  parent_id: prod?.id,
+  compute: { minCu: 0.25, maxCu: 2 },
+});
+// data: { branch, endpoint?, connectionString? }
+
+const { data: connected } = await neon.branches.createAndConnect(projectId, {
   name: "preview/pr-123",
   parentId: prod?.id,
   compute: { minCu: 0.25, maxCu: 2 },
 });
-// data: { branch, endpoint, connectionString }
+// connected: { branch, endpoint, connectionString } — errors if the API omitted a URI
 
 const { data: schema } = await neon.branches.compareSchema(
   projectId,

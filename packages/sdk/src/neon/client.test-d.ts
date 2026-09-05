@@ -13,7 +13,10 @@ import type {
 } from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
 import type { Paginated } from "./paginate.js";
-import type { BranchConnection } from "./resources/branches.js";
+import type {
+	BranchConnection,
+	BranchCreateResult,
+} from "./resources/branches.js";
 import type { ProjectConnection } from "./resources/projects.js";
 import type { NeonResult } from "./result.js";
 
@@ -52,10 +55,10 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 	>();
 	expectTypeOf(
 		neon.branches.create("p", { name: "x" }),
-	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+	).resolves.toEqualTypeOf<NeonResult<BranchCreateResult>>();
 	expectTypeOf(
 		neon.branches.create("p", { name: "x", noCompute: true }),
-	).resolves.toEqualTypeOf<NeonResult<Branch>>();
+	).resolves.toEqualTypeOf<NeonResult<BranchCreateResult>>();
 	neon.branches.create("p", {
 		noCompute: true,
 		// @ts-expect-error compute is invalid when noCompute is true
@@ -72,6 +75,9 @@ it("branches + workflows carry the envelope and narrow under throwOnError", () =
 	).resolves.toEqualTypeOf<NeonResult<ProjectConnection>>();
 
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.branches.create("p", { name: "x" }),
+	).resolves.toEqualTypeOf<BranchCreateResult>();
 	expectTypeOf(
 		throwing.branches.createAndConnect("p", { name: "x" }),
 	).resolves.toEqualTypeOf<BranchConnection>();
