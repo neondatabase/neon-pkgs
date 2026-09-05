@@ -53,7 +53,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"delete <role>",
-			"Delete a role. A missing name is reported and the command exits 1.",
+			"Delete a role",
 			(yargs) => yargs,
 			(args) => deleteRole(args as any),
 		);

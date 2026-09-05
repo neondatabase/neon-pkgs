@@ -54,7 +54,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"delete <database>",
-			"Delete a database. A missing name is reported and the command exits 1.",
+			"Delete a database",
 			(yargs) => yargs,
 			(args) => deleteDb(args as any),
 		);
