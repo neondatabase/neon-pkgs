@@ -262,3 +262,40 @@ it("functions.customDomains is typed", () => {
 		throwing.functions.customDomains.delete("p", "br", "docs.example.com"),
 	).resolves.toEqualTypeOf<void>();
 });
+
+it("README cancellation snippets typecheck", async () => {
+	const apiKey = "x";
+	const id = "p";
+	const projectId = "p";
+	const branchId = "br";
+	const neon = createNeonClient({ apiKey });
+
+	const controller = new AbortController();
+	const { error } = await neon.projects
+		.list({}, { signal: controller.signal })
+		.all();
+	if (error?.kind === "aborted") {
+		expectTypeOf(error.kind).toEqualTypeOf<"aborted">();
+	}
+
+	const result = await neon.projects.get(id, { signal: controller.signal });
+	if (result.error?.kind === "aborted") {
+		expectTypeOf(result.error.kind).toEqualTypeOf<"aborted">();
+	}
+
+	const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
+	const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
+	if (slow.error?.kind === "timeout") {
+		expectTypeOf(slow.error.kind).toEqualTypeOf<"timeout">();
+	}
+
+	await bounded.storage.objects.get(
+		projectId,
+		branchId,
+		"bucket",
+		"big.tar",
+		{
+			requestTimeoutMs: Number.POSITIVE_INFINITY,
+		},
+	);
+});

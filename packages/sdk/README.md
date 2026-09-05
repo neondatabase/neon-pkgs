@@ -128,19 +128,19 @@ and a `throwOnError` client throws the same `NeonError` subclass it would have r
 
 ```ts
 const controller = new AbortController();
-const { error } = await neon.projects.list().all();
+const { error } = await neon.projects.list({}, { signal: controller.signal }).all();
+if (error?.kind === "aborted") { /* the caller stopped it */ }
 
-// cancel in-flight work (a user navigating away, a request handler aborting)
 const result = await neon.projects.get(id, { signal: controller.signal });
 if (result.error?.kind === "aborted") { /* the caller stopped it */ }
+```
 
-// bound a call, on the client or per call
-const neon = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
-const slow = await neon.projects.get(id, { requestTimeoutMs: 5_000 });
+```ts
+const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
+const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
 if (slow.error?.kind === "timeout") { /* the deadline was exceeded */ }
 
-// opt a single call back out of a client-wide deadline
-await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
+await bounded.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
   requestTimeoutMs: Number.POSITIVE_INFINITY,
 });
 ```
