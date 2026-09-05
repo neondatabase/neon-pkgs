@@ -9,6 +9,7 @@
  */
 
 import { type Deadline, delay } from "./deadline.js";
+import { NeonError } from "./errors.js";
 
 export interface RawOutcome {
 	error?: unknown;
@@ -22,6 +23,27 @@ const RETRYABLE_STATUS = new Set([423, 429, 503]);
 
 /** Ceiling on generated backoff, and on how long a `Retry-After` is worth honouring. */
 export const MAX_RETRY_WAIT_MS = 10_000;
+
+const DEFAULT_RETRIES = 2;
+
+/**
+ * Client-wide `retries`. `NaN` and `Infinity` make `attempt >= retries` always false,
+ * so a 429 would poll forever; reject them here the way `requestTimeoutMs` is rejected.
+ */
+export function resolveRetries(retries: number | undefined): number {
+	if (retries === undefined) return DEFAULT_RETRIES;
+	if (
+		typeof retries !== "number" ||
+		!Number.isInteger(retries) ||
+		retries < 0
+	) {
+		throw new NeonError(
+			`retries must be a non-negative integer; received ${String(retries)}.`,
+			"client",
+		);
+	}
+	return retries;
+}
 
 /**
  * `Retry-After` in milliseconds, or `undefined` when absent or unparseable.
