@@ -91,11 +91,17 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches (cursor-paginated) */
+	list(projectId: string, query?: ListQuery): Paginated<Branch, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		query: ListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<Branch, Throw>;
 	list(
 		projectId: string,
 		query?: ListQuery,
 		opts?: CallOptions,
-	): Paginated<Branch> {
+	): Paginated<Branch, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectBranches({
@@ -110,6 +116,7 @@ export class Branches<DThrow extends boolean> {
 				cursor: data?.pagination?.next,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

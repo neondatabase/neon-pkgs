@@ -30,7 +30,7 @@ export class Functions<DThrow extends boolean> {
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
-		this.customDomains = new CustomDomains(ctx);
+		this.customDomains = new CustomDomains<DThrow>(ctx);
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/functions (cursor-paginated) */
@@ -38,8 +38,19 @@ export class Functions<DThrow extends boolean> {
 		projectId: string,
 		branchId: string,
 		query?: ListQuery,
+	): Paginated<NeonFunction, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		query: ListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<NeonFunction, Throw>;
+	list(
+		projectId: string,
+		branchId: string,
+		query?: ListQuery,
 		opts?: CallOptions,
-	): Paginated<NeonFunction> {
+	): Paginated<NeonFunction, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectBranchFunctions({
@@ -54,6 +65,7 @@ export class Functions<DThrow extends boolean> {
 				cursor: data?.pagination?.next,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

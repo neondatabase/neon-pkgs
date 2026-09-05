@@ -198,8 +198,17 @@ export class Members<DThrow extends boolean> {
 	list(
 		projectId: string,
 		query?: MemberListQuery,
+	): Paginated<ProjectMember, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		query: MemberListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<ProjectMember, Throw>;
+	list(
+		projectId: string,
+		query?: MemberListQuery,
 		opts?: CallOptions,
-	): Paginated<ProjectMember> {
+	): Paginated<ProjectMember, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectMembers({
@@ -214,6 +223,7 @@ export class Members<DThrow extends boolean> {
 				cursor: data?.pagination?.next,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -321,7 +331,15 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects
 	 */
-	list(query?: ListQuery, opts?: CallOptions): Paginated<ProjectListItem> {
+	list(query?: ListQuery): Paginated<ProjectListItem, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		query: ListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<ProjectListItem, Throw>;
+	list(
+		query?: ListQuery,
+		opts?: CallOptions,
+	): Paginated<ProjectListItem, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjects({
@@ -339,6 +357,7 @@ export class Projects<DThrow extends boolean> {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

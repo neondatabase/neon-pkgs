@@ -28,7 +28,7 @@ type PerBranchV2Query = Omit<
 >;
 
 /** Consumption history (cursor-paginated). */
-export class Consumption {
+export class Consumption<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
@@ -38,8 +38,15 @@ export class Consumption {
 	/** @apiCall GET /consumption_history/projects */
 	perProject(
 		query: PerProjectQuery,
+	): Paginated<ConsumptionHistoryPerProject, DThrow>;
+	perProject<Throw extends boolean = DThrow>(
+		query: PerProjectQuery,
+		opts: CallOptions<Throw>,
+	): Paginated<ConsumptionHistoryPerProject, Throw>;
+	perProject(
+		query: PerProjectQuery,
 		opts?: CallOptions,
-	): Paginated<ConsumptionHistoryPerProject> {
+	): Paginated<ConsumptionHistoryPerProject, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				getConsumptionHistoryPerProject({
@@ -53,14 +60,22 @@ export class Consumption {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
 	/** @apiCall GET /consumption_history/v2/projects */
 	perProjectV2(
 		query: PerProjectV2Query,
+	): Paginated<ConsumptionHistoryPerProjectV2, DThrow>;
+	perProjectV2<Throw extends boolean = DThrow>(
+		query: PerProjectV2Query,
+		opts: CallOptions<Throw>,
+	): Paginated<ConsumptionHistoryPerProjectV2, Throw>;
+	perProjectV2(
+		query: PerProjectV2Query,
 		opts?: CallOptions,
-	): Paginated<ConsumptionHistoryPerProjectV2> {
+	): Paginated<ConsumptionHistoryPerProjectV2, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				getConsumptionHistoryPerProjectV2({
@@ -74,14 +89,22 @@ export class Consumption {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
 	/** @apiCall GET /consumption_history/v2/branches */
 	perBranchV2(
 		query: PerBranchV2Query,
+	): Paginated<ConsumptionHistoryPerBranchV2, DThrow>;
+	perBranchV2<Throw extends boolean = DThrow>(
+		query: PerBranchV2Query,
+		opts: CallOptions<Throw>,
+	): Paginated<ConsumptionHistoryPerBranchV2, Throw>;
+	perBranchV2(
+		query: PerBranchV2Query,
 		opts?: CallOptions,
-	): Paginated<ConsumptionHistoryPerBranchV2> {
+	): Paginated<ConsumptionHistoryPerBranchV2, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				getConsumptionHistoryPerBranchV2({
@@ -95,6 +118,7 @@ export class Consumption {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 }

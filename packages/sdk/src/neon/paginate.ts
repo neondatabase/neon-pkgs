@@ -1,6 +1,6 @@
 import { cancelled, type Deadline, runBounded } from "./deadline.js";
 import { NeonError, toNeonError } from "./errors.js";
-import { err, type NeonResult, ok } from "./result.js";
+import { err, finalize, type NeonResult, type Outcome, ok } from "./result.js";
 
 export interface Page<T> {
 	items: T[];
@@ -15,26 +15,29 @@ interface RawResult<D> {
 }
 
 /**
- * A lazy, cursor-paginated list. `all()` / `page()` return the `{ data, error }` envelope;
- * the async iterator streams items lazily and throws on a page-fetch error.
+ * A lazy, cursor-paginated list. `page()` / `all()` follow the resolved `throwOnError`
+ * policy exactly like every other method: bare value (throwing on failure) when it is on,
+ * `{ data, error }` envelope when it is off. The async iterator always throws on a
+ * page-fetch error — a stream has no envelope form.
  *
- * Note: pagination helpers always use the result envelope (the iterator is the throwing
- * form) regardless of the client's `throwOnError` setting.
+ * `waitForReadiness` is not applied: list responses carry no `operations`.
  */
-export interface Paginated<T> extends AsyncIterable<T> {
+export interface Paginated<T, Throw extends boolean = false>
+	extends AsyncIterable<T> {
 	/** Fetch a single page (optionally from a cursor). */
-	page(cursor?: string): Promise<NeonResult<Page<T>>>;
+	page(cursor?: string): Promise<Outcome<Page<T>, Throw>>;
 	/** Fetch and concatenate every page. */
-	all(): Promise<NeonResult<T[]>>;
+	all(): Promise<Outcome<T[], Throw>>;
 }
 
-class PaginatedList<T, D> implements Paginated<T> {
+class PaginatedList<T, D> implements Paginated<T, boolean> {
 	readonly #fetchPage: (
 		cursor: string | undefined,
 		signal?: AbortSignal,
 	) => Promise<RawResult<D>>;
 	readonly #mapPage: (data: D) => Page<T>;
 	readonly #newDeadline: () => Deadline;
+	readonly #shouldThrow: boolean;
 
 	constructor(
 		fetchPage: (
@@ -43,10 +46,12 @@ class PaginatedList<T, D> implements Paginated<T> {
 		) => Promise<RawResult<D>>,
 		mapPage: (data: D) => Page<T>,
 		newDeadline: () => Deadline,
+		shouldThrow: boolean,
 	) {
 		this.#fetchPage = fetchPage;
 		this.#mapPage = mapPage;
 		this.#newDeadline = newDeadline;
+		this.#shouldThrow = shouldThrow;
 	}
 
 	async #page(
@@ -76,10 +81,13 @@ class PaginatedList<T, D> implements Paginated<T> {
 		return ok(this.#mapPage(raw.data));
 	}
 
-	async page(cursor?: string): Promise<NeonResult<Page<T>>> {
+	async page(cursor?: string): Promise<Page<T> | NeonResult<Page<T>>> {
 		const deadline = this.#newDeadline();
 		try {
-			return await this.#page(cursor, deadline);
+			return finalize<Page<T>>(
+				await this.#page(cursor, deadline),
+				this.#shouldThrow,
+			);
 		} finally {
 			deadline.dispose();
 		}
@@ -90,20 +98,21 @@ class PaginatedList<T, D> implements Paginated<T> {
 	 * from the caller's side, and a per-page budget would leave an unbounded number of
 	 * pages unbounded in total.
 	 */
-	async all(): Promise<NeonResult<T[]>> {
+	async all(): Promise<T[] | NeonResult<T[]>> {
 		const deadline = this.#newDeadline();
 		try {
 			const items: T[] = [];
 			let cursor: string | undefined;
 			while (true) {
 				const result = await this.#page(cursor, deadline);
-				if (result.error) return err(result.error);
+				if (result.error)
+					return finalize<T[]>(err(result.error), this.#shouldThrow);
 				items.push(...result.data.items);
 				if (!result.data.cursor || result.data.items.length === 0)
 					break;
 				cursor = result.data.cursor;
 			}
-			return ok(items);
+			return finalize<T[]>(ok(items), this.#shouldThrow);
 		} finally {
 			deadline.dispose();
 		}
@@ -134,6 +143,9 @@ class PaginatedList<T, D> implements Paginated<T> {
  * `newDeadline` is called once per consumption — each `page()`, each `all()`, each
  * iteration — because a `Paginated` is lazy and may be consumed more than once, so a
  * deadline created when the list was built would already be spent.
+ *
+ * `shouldThrow` is the policy resolved when the list is built (per-call override, else
+ * the client default), the same rule the execution core uses for every other method.
  */
 export function paginate<T, D>(
 	fetchPage: (
@@ -142,6 +154,7 @@ export function paginate<T, D>(
 	) => Promise<RawResult<D>>,
 	mapPage: (data: D) => Page<T>,
 	newDeadline: () => Deadline,
-): Paginated<T> {
-	return new PaginatedList(fetchPage, mapPage, newDeadline);
+	shouldThrow: boolean,
+): Paginated<T, boolean> {
+	return new PaginatedList(fetchPage, mapPage, newDeadline, shouldThrow);
 }

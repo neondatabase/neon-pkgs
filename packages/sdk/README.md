@@ -181,7 +181,16 @@ for await (const project of neon.projects.list()) { … }      // stream; throws
 const { data } = await neon.projects
   .list({ search: "prod" }, { signal, requestTimeoutMs: 10_000 })
   .all();
+
+// throwOnError applies here too — client-wide or per call
+const throwing = createNeonClient({ apiKey, throwOnError: true });
+const projects = await throwing.projects.list().all(); // ProjectListItem[]; throws on failure
+const { data: again } = await throwing.projects
+  .list(undefined, { throwOnError: false })
+  .all();
 ```
+
+`page()` and `all()` follow `throwOnError` like every other method. The `for await` stream always throws on a page error.
 
 A deadline covers **one consumption** — a whole `all()`, or a whole iteration — rather than
 each page, since that is the unit a caller waits on. A `Paginated` is lazy and reusable, so
@@ -195,7 +204,7 @@ Neon mutations are asynchronous (they return `operations`). `waitForReadiness` b
 
 ## API reference
 
-Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`).
+Legend: **[P]** returns `Paginated<T>` — `page()`/`all()` resolve to the resource (or `{ data, error }`) per `throwOnError` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`).
 
 ### `neon.projects`
 
