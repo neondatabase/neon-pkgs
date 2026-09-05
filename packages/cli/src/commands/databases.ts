@@ -3,7 +3,11 @@ import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 
 import type { BranchScopeProps } from "../types.js";
-import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import {
+	branchIdFromProps,
+	fillSingleProject,
+	resolveBranchRef,
+} from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
 export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
@@ -115,8 +119,8 @@ export const create = async (
 export const deleteDb = async (
 	props: BranchScopeProps & { database: string },
 ) => {
-	const branchId = await branchIdFromProps(props);
-	const { data } = await retryOnLock(() =>
+	const { branchId, branchName } = await resolveBranchRef(props);
+	const { data, status } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchDatabase(
 			props.projectId,
 			branchId,
@@ -124,10 +128,17 @@ export const deleteDb = async (
 		),
 	);
 
-	// A 204 (database already gone) carries no body; only a 200 returns it.
-	if (data) {
+	// 204 is empty; some clients still parse that as `{}`, so require the record.
+	if (status === 200 && data?.database) {
 		writer(props).end(data.database, {
 			fields: DATABASE_FIELDS,
 		});
+		return;
 	}
+	const message = `Database "${props.database}" not found on branch ${branchName}; nothing to delete.`;
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end({ message }, { fields: ["message"] });
+		return;
+	}
+	writer(props).text(`${message}\n`);
 };

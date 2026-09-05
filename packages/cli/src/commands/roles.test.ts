@@ -1,4 +1,4 @@
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
@@ -37,5 +37,67 @@ describe("roles", () => {
 			"--branch",
 			"test_branch",
 		]);
+	});
+
+	test("delete of a missing name reports not found and exits 1", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"delete",
+				"nosuchrole",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ code: 1, snapshot: false, stderr: "" },
+		);
+		expect(stdout).toContain(
+			'Role "nosuchrole" not found on branch test_branch; nothing to delete.',
+		);
+	});
+
+	test("delete of a missing name prints the line in table mode", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"delete",
+				"nosuchrole",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ code: 1, output: "table", snapshot: false, stderr: "" },
+		);
+		expect(stdout).toBe(
+			'Role "nosuchrole" not found on branch test_branch; nothing to delete.\n',
+		);
+	});
+
+	test("delete of a missing name emits json and exits 1", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"delete",
+				"nosuchrole",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ code: 1, output: "json", snapshot: false, stderr: "" },
+		);
+		expect(JSON.parse(stdout)).toEqual({
+			message:
+				'Role "nosuchrole" not found on branch test_branch; nothing to delete.',
+		});
+		expect(stdout.endsWith("}")).toBe(true);
 	});
 });

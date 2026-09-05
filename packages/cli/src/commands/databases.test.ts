@@ -1,4 +1,4 @@
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
@@ -39,5 +39,65 @@ describe("databases", () => {
 			"--branch",
 			"test_branch",
 		]);
+	});
+
+	test("delete of a missing name reports not found", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"databases",
+				"delete",
+				"nosuchdb",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ snapshot: false, stderr: "" },
+		);
+		expect(stdout).toContain(
+			'Database "nosuchdb" not found on branch test_branch; nothing to delete.',
+		);
+	});
+
+	test("delete of a missing name prints the line in table mode", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"databases",
+				"delete",
+				"nosuchdb",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ output: "table", snapshot: false, stderr: "" },
+		);
+		expect(stdout).toBe(
+			'Database "nosuchdb" not found on branch test_branch; nothing to delete.\n',
+		);
+	});
+
+	test("delete of a missing name emits json", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(
+			[
+				"databases",
+				"delete",
+				"nosuchdb",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ output: "json", snapshot: false, stderr: "" },
+		);
+		expect(JSON.parse(stdout)).toEqual({
+			message:
+				'Database "nosuchdb" not found on branch test_branch; nothing to delete.',
+		});
+		expect(stdout.endsWith("}")).toBe(true);
 	});
 });

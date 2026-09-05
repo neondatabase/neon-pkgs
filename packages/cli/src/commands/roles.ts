@@ -1,7 +1,11 @@
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 import type { BranchScopeProps } from "../types.js";
-import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import {
+	branchIdFromProps,
+	fillSingleProject,
+	resolveBranchRef,
+} from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
 const ROLES_FIELDS = ["name", "created_at"] as const;
@@ -92,18 +96,27 @@ export const create = async (
 export const deleteRole = async (
 	props: BranchScopeProps & { role: string },
 ) => {
-	const branchId = await branchIdFromProps(props);
-	const { data } = await retryOnLock(() =>
+	const { branchId, branchName } = await resolveBranchRef(props);
+	const { data, status } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchRole(
 			props.projectId,
 			branchId,
 			props.role,
 		),
 	);
-	// A 204 (role already gone) carries no body; only a 200 returns the role.
-	if (data) {
+	// 204 is empty; some clients still parse that as `{}`, so require the record.
+	if (status === 200 && data?.role) {
 		writer(props).end(data.role, {
 			fields: ROLES_FIELDS,
 		});
+		return;
 	}
+	const message = `Role "${props.role}" not found on branch ${branchName}; nothing to delete.`;
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end({ message }, { fields: ["message"] });
+	} else {
+		writer(props).text(`${message}\n`);
+	}
+	// throw would log ERROR to stderr and leave stdout empty, so JSON would still look like a silent success
+	process.exitCode = 1;
 };
