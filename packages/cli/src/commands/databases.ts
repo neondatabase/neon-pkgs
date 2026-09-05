@@ -3,6 +3,11 @@ import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 
 import type { BranchScopeProps } from "../types.js";
+import {
+	confirmDestructive,
+	isMachineOutput,
+	yesOption,
+} from "../utils/confirm_destructive.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
@@ -51,7 +56,10 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"delete <database>",
 			"Delete a database",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					yes: yesOption,
+				}),
 			(args) => deleteDb(args as any),
 		);
 
@@ -113,8 +121,14 @@ export const create = async (
 };
 
 export const deleteDb = async (
-	props: BranchScopeProps & { database: string },
+	props: BranchScopeProps & { database: string; yes: boolean },
 ) => {
+	await confirmDestructive({
+		yes: props.yes,
+		noun: "database",
+		message: `Delete database ${props.database}?`,
+		forceYes: isMachineOutput(props.output),
+	});
 	const branchId = await branchIdFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchDatabase(
@@ -125,9 +139,14 @@ export const deleteDb = async (
 	);
 
 	// A 204 (database already gone) carries no body; only a 200 returns it.
-	if (data) {
+	if (!data) {
+		return;
+	}
+	if (isMachineOutput(props.output)) {
 		writer(props).end(data.database, {
 			fields: DATABASE_FIELDS,
 		});
+		return;
 	}
+	writer(props).text(`Deleted database ${data.database.name}.\n`);
 };

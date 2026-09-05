@@ -208,6 +208,25 @@ describe("snapshots", () => {
 
 	/* delete */
 
+	test("delete by id requires confirmation without --yes", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"snapshots",
+				"delete",
+				"snap-first-snapshot-123456",
+				"--project-id",
+				"test",
+			],
+			{
+				code: 1,
+				snapshot: false,
+				stderr: "ERROR: Deleting a snapshot requires confirmation. Re-run interactively or pass --yes.",
+			},
+		);
+	});
+
 	test("delete by id", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"snapshots",
@@ -215,6 +234,7 @@ describe("snapshots", () => {
 			"snap-first-snapshot-123456",
 			"--project-id",
 			"test",
+			"--yes",
 		]);
 	});
 
@@ -225,7 +245,27 @@ describe("snapshots", () => {
 			"nightly",
 			"--project-id",
 			"test",
+			"--yes",
 		]);
+	});
+
+	test("delete --yes prints Deleted in table mode", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"snapshots",
+				"delete",
+				"snap-first-snapshot-123456",
+				"--project-id",
+				"test",
+				"--yes",
+			],
+			{ output: "table", snapshot: false, stderr: "" },
+		);
+		expect(stdout).toBe(
+			"Deleted snapshot snap-first-snapshot-123456 (nightly).\n",
+		);
 	});
 
 	/* restore */

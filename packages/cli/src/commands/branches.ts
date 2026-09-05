@@ -9,6 +9,12 @@ import type { IdOrNameProps, ProjectScopeProps } from "../types.js";
 import { EndpointType } from "../utils/api_enums.js";
 import { getComputeUnits } from "../utils/compute_units.js";
 import {
+	confirmDestructive,
+	isMachineOutput,
+	namedResource,
+	yesOption,
+} from "../utils/confirm_destructive.js";
+import {
 	branchIdFromProps,
 	branchIdResolve,
 	fillSingleProject,
@@ -254,7 +260,10 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"delete <id|name>",
 			"Delete a branch",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					yes: yesOption,
+				}),
 			(args) => deleteBranch(args as any),
 		)
 		.command(
@@ -542,17 +551,32 @@ const setDefault = async (props: ProjectScopeProps & IdOrNameProps) => {
 	});
 };
 
-const deleteBranch = async (props: ProjectScopeProps & IdOrNameProps) => {
+const deleteBranch = async (
+	props: ProjectScopeProps & IdOrNameProps & { yes: boolean },
+) => {
+	await confirmDestructive({
+		yes: props.yes,
+		noun: "branch",
+		message: `Delete branch ${props.id}?`,
+		forceYes: isMachineOutput(props.output),
+	});
 	const branchId = await branchIdFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranch(props.projectId, branchId),
 	);
 	// A 204 (branch already gone) carries no body; only a 200 returns it.
-	if (data) {
+	if (!data) {
+		return;
+	}
+	if (isMachineOutput(props.output)) {
 		writer(props).end(data.branch, {
 			fields: BRANCH_FIELDS,
 		});
+		return;
 	}
+	writer(props).text(
+		`Deleted branch ${namedResource(data.branch.id, data.branch.name)}.\n`,
+	);
 };
 
 const get = async (props: ProjectScopeProps & IdOrNameProps) => {

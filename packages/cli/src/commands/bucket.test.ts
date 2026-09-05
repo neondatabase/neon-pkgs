@@ -85,28 +85,58 @@ describe("bucket", () => {
 		});
 	});
 
-	test("delete", async ({ testCliCommand }) => {
+	test("delete requires confirmation without --yes", async ({
+		testCliCommand,
+	}) => {
 		await testCliCommand(["bucket", "delete", "my-bucket", ...SCOPE], {
 			mockDir: "single_org",
-			stderr: 'INFO: Bucket "my-bucket" deleted from branch br-main-branch-123456',
+			code: 1,
+			snapshot: false,
+			stderr: "ERROR: Deleting a bucket requires confirmation. Re-run interactively or pass --yes.",
 		});
 	});
 
+	test("delete", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(
+			["bucket", "delete", "my-bucket", "--yes", ...SCOPE],
+			{
+				mockDir: "single_org",
+				output: "table",
+				snapshot: false,
+				stderr: "",
+			},
+		);
+		expect(stdout).toBe(
+			'Deleted bucket "my-bucket" from branch br-main-branch-123456.\n',
+		);
+	});
+
 	test("rm alias deletes a bucket", async ({ testCliCommand }) => {
-		await testCliCommand(["bucket", "rm", "my-bucket", ...SCOPE], {
-			mockDir: "single_org",
-			stderr: 'INFO: Bucket "my-bucket" deleted from branch br-main-branch-123456',
-		});
+		const { stdout } = await testCliCommand(
+			["bucket", "rm", "my-bucket", "--yes", ...SCOPE],
+			{
+				mockDir: "single_org",
+				output: "table",
+				snapshot: false,
+				stderr: "",
+			},
+		);
+		expect(stdout).toBe(
+			'Deleted bucket "my-bucket" from branch br-main-branch-123456.\n',
+		);
 	});
 
 	test("delete reports a helpful error when the bucket is missing", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand(["bucket", "delete", "no-such-bucket", ...SCOPE], {
-			mockDir: "single_org",
-			code: 1,
-			stderr: 'ERROR: Bucket "no-such-bucket" not found on branch br-main-branch-123456.',
-		});
+		await testCliCommand(
+			["bucket", "delete", "no-such-bucket", "--yes", ...SCOPE],
+			{
+				mockDir: "single_org",
+				code: 1,
+				stderr: 'ERROR: Bucket "no-such-bucket" not found on branch br-main-branch-123456.',
+			},
+		);
 	});
 
 	test("object list", async ({ testCliCommand }) => {

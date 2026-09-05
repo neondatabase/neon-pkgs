@@ -1,6 +1,11 @@
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 import type { BranchScopeProps } from "../types.js";
+import {
+	confirmDestructive,
+	isMachineOutput,
+	yesOption,
+} from "../utils/confirm_destructive.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
@@ -50,7 +55,10 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"delete <role>",
 			"Delete a role",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					yes: yesOption,
+				}),
 			(args) => deleteRole(args as any),
 		);
 
@@ -90,8 +98,14 @@ export const create = async (
 };
 
 export const deleteRole = async (
-	props: BranchScopeProps & { role: string },
+	props: BranchScopeProps & { role: string; yes: boolean },
 ) => {
+	await confirmDestructive({
+		yes: props.yes,
+		noun: "role",
+		message: `Delete role ${props.role}?`,
+		forceYes: isMachineOutput(props.output),
+	});
 	const branchId = await branchIdFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchRole(
@@ -101,9 +115,14 @@ export const deleteRole = async (
 		),
 	);
 	// A 204 (role already gone) carries no body; only a 200 returns the role.
-	if (data) {
+	if (!data) {
+		return;
+	}
+	if (isMachineOutput(props.output)) {
 		writer(props).end(data.role, {
 			fields: ROLES_FIELDS,
 		});
+		return;
 	}
+	writer(props).text(`Deleted role ${data.role.name}.\n`);
 };

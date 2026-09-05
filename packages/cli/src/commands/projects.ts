@@ -17,6 +17,12 @@ import {
 import type { CommonProps, IdOrNameProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import { getComputeUnits } from "../utils/compute_units.js";
+import {
+	confirmDestructive,
+	isMachineOutput,
+	namedResource,
+	yesOption,
+} from "../utils/confirm_destructive.js";
 import { psql } from "../utils/psql.js";
 import { writer } from "../writer.js";
 
@@ -222,7 +228,10 @@ export const builder = (argv: yargs.Argv) => {
 		.command(
 			"delete <id>",
 			"Delete a project",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					yes: yesOption,
+				}),
 			async (args) => {
 				await deleteProject(args as any);
 			},
@@ -414,11 +423,26 @@ const create = async (
 	}
 };
 
-const deleteProject = async (props: CommonProps & IdOrNameProps) => {
-	const { data } = await props.apiClient.deleteProject(props.id);
-	writer(props).end(data.project, {
-		fields: PROJECT_FIELDS,
+const deleteProject = async (
+	props: CommonProps & IdOrNameProps & { yes: boolean },
+) => {
+	await confirmDestructive({
+		yes: props.yes,
+		noun: "project",
+		message: `Delete project ${props.id}?`,
+		forceYes: isMachineOutput(props.output),
 	});
+	const { data } = await props.apiClient.deleteProject(props.id);
+	const project = data.project;
+	if (isMachineOutput(props.output)) {
+		writer(props).end(project, {
+			fields: PROJECT_FIELDS,
+		});
+		return;
+	}
+	writer(props).text(
+		`Deleted project ${namedResource(project.id, project.name)}.\nRecoverable during the deletion grace period:  ${getCliName()} projects recover ${project.id}\n`,
+	);
 };
 
 const update = async (
