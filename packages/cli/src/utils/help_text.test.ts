@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { helpCsv, helpEpilogue } from "./help_text.js";
+import { helpCsv, helpEpilogue, wrapHelpText } from "./help_text.js";
 
 describe("helpCsv", () => {
 	test("keeps a short list on one line", () => {
@@ -27,6 +27,24 @@ describe("helpCsv", () => {
 
 	test("omits an empty list", () => {
 		expect(helpCsv("Supported agents", [])).toBe("");
+	});
+});
+
+describe("wrapHelpText", () => {
+	test("keeps a short string on one line", () => {
+		expect(wrapHelpText("authenticated passthrough", 80)).toBe(
+			"authenticated passthrough",
+		);
+	});
+
+	test("wraps on word boundaries", () => {
+		expect(wrapHelpText("authenticated passthrough", 14)).toBe(
+			"authenticated\npassthrough",
+		);
+	});
+
+	test("does not split a word longer than the width", () => {
+		expect(wrapHelpText("passthrough", 4)).toBe("passthrough");
 	});
 });
 

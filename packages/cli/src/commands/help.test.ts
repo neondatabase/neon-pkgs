@@ -5,7 +5,9 @@ import { test } from "../test_utils/fixtures";
 describe("help", () => {
 	test("without args", async ({ testCliCommand }) => {
 		await testCliCommand([], {
-			stderr: expect.stringContaining(`neon <command> [options]`),
+			snapshot: false,
+			stdout: expect.stringContaining(`neon <command> [options]`),
+			stderr: "",
 		});
 	});
 });

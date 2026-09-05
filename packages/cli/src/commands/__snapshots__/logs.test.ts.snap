@@ -144,10 +144,6 @@ severity_text
 "
 `;
 
-exports[`logs > help states the default windows and seven-day cap 1`] = `""`;
-
-exports[`logs > help states the default windows and seven-day cap 2`] = `""`;
-
 exports[`logs > query (yaml) 1`] = `
 "logs:
   - timestamp: 2025-01-01T00:00:02.000Z
@@ -255,10 +251,6 @@ next_cursor: ""
 is_truncated: false
 "
 `;
-
-exports[`logs > query help states the Beta and region constraint 1`] = `""`;
-
-exports[`logs > query help states the minimum-severity backend limitation 1`] = `""`;
 
 exports[`logs > query maps every structured filter onto its wire name 1`] = `
 "logs:
@@ -462,5 +454,3 @@ Timestamp                 Source       Service Name  Severity Text  Message
 2025-01-01T00:00:01.000Z  pg_endpoint  postgres      ERROR          connection to database failed
 "
 `;
-
-exports[`logs > the command group help states the Beta and region constraint 1`] = `""`;

@@ -86,7 +86,8 @@ describe("logs", () => {
 	}) => {
 		await testCliCommand(["logs", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.",
 			),
 		});
@@ -97,7 +98,8 @@ describe("logs", () => {
 	}) => {
 		await testCliCommand(["logs", "query", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.",
 			),
 		});
@@ -108,7 +110,8 @@ describe("logs", () => {
 	}) => {
 		await testCliCommand(["logs", "query", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"If Neon reports that this filter is unsupported",
 			),
 		});
@@ -119,13 +122,15 @@ describe("logs", () => {
 	}) => {
 		await testCliCommand(["logs", "query", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"Defaults to 1h; the maximum window is 7d.",
 			),
 		});
 		await testCliCommand(["logs", "field-values", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"Defaults to 6h; the maximum window is 7d.",
 			),
 		});
