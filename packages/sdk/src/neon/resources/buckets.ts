@@ -3,15 +3,23 @@ import {
 	deleteProjectBranchBucket,
 	listProjectBranchBuckets,
 } from "../../client/sdk.gen.js";
-import type {
-	Bucket,
-	BucketAccessLevel,
-	BucketCreateRequest,
-} from "../../client/types.gen.js";
+import type { Bucket, BucketAccessLevel } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import type { NeonResult, Outcome } from "../result.js";
 
-type CreateInput = BucketCreateRequest;
+export interface BucketCreateInput {
+	name: string;
+	accessLevel?: BucketAccessLevel;
+}
+
+function mapBucketCreate(input: BucketCreateInput) {
+	return {
+		name: input.name,
+		...(input.accessLevel !== undefined
+			? { access_level: input.accessLevel }
+			: {}),
+	};
+}
 
 /** Branch-scoped object-storage buckets. */
 export class Buckets<DThrow extends boolean> {
@@ -53,18 +61,18 @@ export class Buckets<DThrow extends boolean> {
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: BucketCreateInput,
 	): Promise<Outcome<Bucket, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: BucketCreateInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Bucket, Throw>>;
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: BucketCreateInput,
 		opts?: CallOptions,
 	): Promise<Bucket | NeonResult<Bucket>> {
 		return this.#ctx.run(
@@ -73,7 +81,7 @@ export class Buckets<DThrow extends boolean> {
 				createProjectBranchBucket({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: input,
+					body: mapBucketCreate(input),
 					throwOnError: false,
 					signal,
 				}),

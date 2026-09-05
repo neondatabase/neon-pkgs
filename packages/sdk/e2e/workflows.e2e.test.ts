@@ -25,7 +25,7 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			const created = expectOk(
 				await neon.projects.createAndConnect({
 					name: uniqueProjectName("sdk"),
-					region_id: DEFAULT_REGION,
+					regionId: DEFAULT_REGION,
 				}),
 			);
 			track(created.project.id);
@@ -54,7 +54,7 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			const project = expectOk(
 				await neon.projects.create({
 					name: uniqueProjectName("sdk-org"),
-					region_id: DEFAULT_REGION,
+					regionId: DEFAULT_REGION,
 				}),
 			);
 			track(project.id);
@@ -75,7 +75,7 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			const project = expectOk(
 				await neon.projects.create({
 					name: uniqueProjectName("sdk-page"),
-					region_id: DEFAULT_REGION,
+					regionId: DEFAULT_REGION,
 				}),
 			);
 			track(project.id);
@@ -121,7 +121,7 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			const project = expectOk(
 				await neon.projects.create({
 					name: uniqueProjectName("sdk-conn"),
-					region_id: DEFAULT_REGION,
+					regionId: DEFAULT_REGION,
 				}),
 			);
 			track(project.id);

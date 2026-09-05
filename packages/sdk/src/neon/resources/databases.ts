@@ -5,16 +5,32 @@ import {
 	listProjectBranchDatabases,
 	updateProjectBranchDatabase,
 } from "../../client/sdk.gen.js";
-import type {
-	Database,
-	DatabaseCreateRequest,
-	DatabaseUpdateRequest,
-} from "../../client/types.gen.js";
+import type { Database } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import type { NeonResult, Outcome } from "../result.js";
 
-type CreateInput = DatabaseCreateRequest["database"];
-type UpdateInput = DatabaseUpdateRequest["database"];
+export interface DatabaseCreateInput {
+	name: string;
+	ownerName: string;
+}
+
+export interface DatabaseUpdateInput {
+	name?: string;
+	ownerName?: string;
+}
+
+function mapDatabaseCreate(input: DatabaseCreateInput) {
+	return { name: input.name, owner_name: input.ownerName };
+}
+
+function mapDatabaseUpdate(input: DatabaseUpdateInput) {
+	return {
+		...(input.name !== undefined ? { name: input.name } : {}),
+		...(input.ownerName !== undefined
+			? { owner_name: input.ownerName }
+			: {}),
+	};
+}
 
 /** Database resource (branch-scoped). */
 export class Databases<DThrow extends boolean> {
@@ -91,18 +107,18 @@ export class Databases<DThrow extends boolean> {
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: DatabaseCreateInput,
 	): Promise<Outcome<Database, DThrow>>;
 	create<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: DatabaseCreateInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Database, Throw>>;
 	create(
 		projectId: string,
 		branchId: string,
-		input: CreateInput,
+		input: DatabaseCreateInput,
 		opts?: CallOptions,
 	): Promise<Database | NeonResult<Database>> {
 		return this.#ctx.run(
@@ -111,7 +127,7 @@ export class Databases<DThrow extends boolean> {
 				createProjectBranchDatabase({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: { database: input },
+					body: { database: mapDatabaseCreate(input) },
 					throwOnError: false,
 					signal,
 				}),
@@ -124,20 +140,20 @@ export class Databases<DThrow extends boolean> {
 		projectId: string,
 		branchId: string,
 		name: string,
-		input: UpdateInput,
+		input: DatabaseUpdateInput,
 	): Promise<Outcome<Database, DThrow>>;
 	update<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
 		name: string,
-		input: UpdateInput,
+		input: DatabaseUpdateInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Database, Throw>>;
 	update(
 		projectId: string,
 		branchId: string,
 		name: string,
-		input: UpdateInput,
+		input: DatabaseUpdateInput,
 		opts?: CallOptions,
 	): Promise<Database | NeonResult<Database>> {
 		return this.#ctx.run(
@@ -150,7 +166,7 @@ export class Databases<DThrow extends boolean> {
 						branch_id: branchId,
 						database_name: name,
 					},
-					body: { database: input },
+					body: { database: mapDatabaseUpdate(input) },
 					throwOnError: false,
 					signal,
 				}),

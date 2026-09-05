@@ -91,6 +91,39 @@ export const createProjectAndConnectInputSchema = z.strictObject({
 	pooled: pooledField,
 });
 
+function mapProjectCreateInput(
+	input: z.infer<typeof createProjectInputSchema>,
+) {
+	return {
+		name: input.name,
+		settings: input.settings,
+		regionId: input.region_id,
+		pgVersion: input.pg_version,
+		provisioner: input.provisioner,
+		orgId: input.org_id,
+		compute:
+			input.autoscaling_limit_min_cu === undefined &&
+			input.autoscaling_limit_max_cu === undefined
+				? undefined
+				: {
+						minCu: input.autoscaling_limit_min_cu,
+						maxCu: input.autoscaling_limit_max_cu,
+					},
+		branch:
+			input.branch === undefined
+				? undefined
+				: {
+						name: input.branch.name,
+						roleName: input.branch.role_name,
+						databaseName: input.branch.database_name,
+						annotations: input.branch.annotations,
+					},
+		defaultEndpointSettings: input.default_endpoint_settings,
+		storePasswords: input.store_passwords,
+		historyRetentionSeconds: input.history_retention_seconds,
+	};
+}
+
 export const getDefaultInputSchema = z.strictObject({
 	project_id: zod.zListProjectBranchesPath.shape.project_id,
 });
@@ -253,7 +286,8 @@ export const createProjectTool = (options: ToolClientOptions) =>
 				tags: ["Project"],
 			},
 		},
-		(neon, input, signal) => neon.projects.create(input, { signal }),
+		(neon, input, signal) =>
+			neon.projects.create(mapProjectCreateInput(input), { signal }),
 	);
 
 export const createProjectAndConnectTool = (options: ToolClientOptions) =>
@@ -278,10 +312,13 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) => {
 			const { pooled, ...project } = input;
-			return neon.projects.createAndConnect(project, {
-				signal,
-				...(pooled === undefined ? {} : { pooled }),
-			});
+			return neon.projects.createAndConnect(
+				mapProjectCreateInput(project),
+				{
+					signal,
+					...(pooled === undefined ? {} : { pooled }),
+				},
+			);
 		},
 	);
 

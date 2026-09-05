@@ -15,22 +15,26 @@ import {
 	updateProject,
 } from "../../client/sdk.gen.js";
 import type {
+	AnnotationValueData,
+	DefaultEndpointSettings,
 	ListProjectMembersData,
 	ListProjectsData,
+	PgVersion,
 	Project,
-	ProjectCreateRequest,
 	ProjectListItem,
 	ProjectMember,
 	ProjectMemberRoleResponse,
 	ProjectPermission,
 	ProjectRole,
-	ProjectUpdateRequest,
+	ProjectSettingsData,
+	Provisioner,
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome } from "../result.js";
+import type { ComputeSettings } from "./branches.js";
 
 /** Input for {@link Projects.transfer} (org → org). */
 export interface TransferProjectsInput {
@@ -42,12 +46,102 @@ export interface TransferProjectsInput {
 }
 
 type ListQuery = Omit<NonNullable<ListProjectsData["query"]>, "cursor">;
-type CreateInput = ProjectCreateRequest["project"];
-type UpdateInput = ProjectUpdateRequest["project"];
 type MemberListQuery = Omit<
 	NonNullable<ListProjectMembersData["query"]>,
 	"cursor"
 >;
+
+export interface ProjectCreateInput {
+	name?: string;
+	regionId?: string;
+	pgVersion?: PgVersion;
+	provisioner?: Provisioner;
+	orgId?: string;
+	compute?: Pick<ComputeSettings, "minCu" | "maxCu">;
+	branch?: {
+		name?: string;
+		roleName?: string;
+		databaseName?: string;
+		annotations?: AnnotationValueData;
+	};
+	defaultEndpointSettings?: DefaultEndpointSettings;
+	settings?: ProjectSettingsData;
+	storePasswords?: boolean;
+	historyRetentionSeconds?: number;
+}
+
+export interface ProjectUpdateInput {
+	name?: string;
+	settings?: ProjectSettingsData;
+	defaultEndpointSettings?: DefaultEndpointSettings;
+	historyRetentionSeconds?: number;
+}
+
+function mapProjectCreate(
+	input: ProjectCreateInput | undefined,
+	defaultOrgId: string | undefined,
+) {
+	const orgId = input?.orgId ?? defaultOrgId;
+	const branch = input?.branch;
+	return {
+		...(input?.name !== undefined ? { name: input.name } : {}),
+		...(input?.settings !== undefined ? { settings: input.settings } : {}),
+		...(branch !== undefined
+			? {
+					branch: {
+						...(branch.name !== undefined
+							? { name: branch.name }
+							: {}),
+						...(branch.roleName !== undefined
+							? { role_name: branch.roleName }
+							: {}),
+						...(branch.databaseName !== undefined
+							? { database_name: branch.databaseName }
+							: {}),
+						...(branch.annotations !== undefined
+							? { annotations: branch.annotations }
+							: {}),
+					},
+				}
+			: {}),
+		...(input?.compute?.minCu !== undefined
+			? { autoscaling_limit_min_cu: input.compute.minCu }
+			: {}),
+		...(input?.compute?.maxCu !== undefined
+			? { autoscaling_limit_max_cu: input.compute.maxCu }
+			: {}),
+		...(input?.provisioner !== undefined
+			? { provisioner: input.provisioner }
+			: {}),
+		...(input?.regionId !== undefined ? { region_id: input.regionId } : {}),
+		...(input?.defaultEndpointSettings !== undefined
+			? { default_endpoint_settings: input.defaultEndpointSettings }
+			: {}),
+		...(input?.pgVersion !== undefined
+			? { pg_version: input.pgVersion }
+			: {}),
+		...(input?.storePasswords !== undefined
+			? { store_passwords: input.storePasswords }
+			: {}),
+		...(input?.historyRetentionSeconds !== undefined
+			? { history_retention_seconds: input.historyRetentionSeconds }
+			: {}),
+		...(orgId !== undefined ? { org_id: orgId } : {}),
+	};
+}
+
+function mapProjectUpdate(input: ProjectUpdateInput) {
+	return {
+		...(input.name !== undefined ? { name: input.name } : {}),
+		...(input.settings !== undefined ? { settings: input.settings } : {}),
+		...(input.defaultEndpointSettings !== undefined
+			? { default_endpoint_settings: input.defaultEndpointSettings }
+			: {}),
+		...(input.historyRetentionSeconds !== undefined
+			? { history_retention_seconds: input.historyRetentionSeconds }
+			: {}),
+	};
+}
 
 /** Per-call options for {@link Members.setRole}. */
 export interface SetRoleOptions<Throw extends boolean = boolean>
@@ -371,13 +465,13 @@ export class Projects<DThrow extends boolean> {
 	 * {@link Projects.createAndConnect} or `postgres.connectionString` when a
 	 * connection string is needed.
 	 */
-	create(input?: CreateInput): Promise<Outcome<Project, DThrow>>;
+	create(input?: ProjectCreateInput): Promise<Outcome<Project, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		input: CreateInput | undefined,
+		input: ProjectCreateInput | undefined,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	create(
-		input?: CreateInput,
+		input?: ProjectCreateInput,
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
@@ -389,12 +483,10 @@ export class Projects<DThrow extends boolean> {
 				createProject({
 					client,
 					body: {
-						project: {
-							...(this.#ctx.defaults.orgId
-								? { org_id: this.#ctx.defaults.orgId }
-								: {}),
-							...input,
-						},
+						project: mapProjectCreate(
+							input,
+							this.#ctx.defaults.orgId,
+						),
 					},
 					throwOnError: false,
 					signal,
@@ -411,14 +503,14 @@ export class Projects<DThrow extends boolean> {
 	 * @workflow createProject + waitForReadiness
 	 */
 	createAndConnect(
-		input?: CreateInput,
+		input?: ProjectCreateInput,
 	): Promise<Outcome<ProjectConnection, DThrow>>;
 	createAndConnect<Throw extends boolean = DThrow>(
-		input: CreateInput | undefined,
+		input: ProjectCreateInput | undefined,
 		opts: WorkflowOptions<Throw>,
 	): Promise<Outcome<ProjectConnection, Throw>>;
 	async createAndConnect(
-		input?: CreateInput,
+		input?: ProjectCreateInput,
 		opts?: WorkflowOptions<boolean>,
 	): Promise<ProjectConnection | NeonResult<ProjectConnection>> {
 		const shouldThrow =
@@ -429,12 +521,10 @@ export class Projects<DThrow extends boolean> {
 				createProject({
 					client,
 					body: {
-						project: {
-							...(this.#ctx.defaults.orgId
-								? { org_id: this.#ctx.defaults.orgId }
-								: {}),
-							...input,
-						},
+						project: mapProjectCreate(
+							input,
+							this.#ctx.defaults.orgId,
+						),
 					},
 					throwOnError: false,
 					signal,
@@ -454,15 +544,18 @@ export class Projects<DThrow extends boolean> {
 	}
 
 	/** @apiCall PATCH /projects/{project_id} */
-	update(id: string, input: UpdateInput): Promise<Outcome<Project, DThrow>>;
+	update(
+		id: string,
+		input: ProjectUpdateInput,
+	): Promise<Outcome<Project, DThrow>>;
 	update<Throw extends boolean = DThrow>(
 		id: string,
-		input: UpdateInput,
+		input: ProjectUpdateInput,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	update(
 		id: string,
-		input: UpdateInput,
+		input: ProjectUpdateInput,
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
@@ -471,7 +564,7 @@ export class Projects<DThrow extends boolean> {
 				updateProject({
 					client,
 					path: { project_id: id },
-					body: { project: input },
+					body: { project: mapProjectUpdate(input) },
 					throwOnError: false,
 					signal,
 				}),
