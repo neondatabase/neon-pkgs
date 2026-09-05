@@ -9,11 +9,7 @@ import {
 import { type NeonError, toNeonError } from "./errors.js";
 import { err, finalize, type NeonResult, ok } from "./result.js";
 import { withRetries } from "./retry.js";
-import {
-	hasOperations,
-	type WaitForOptions,
-	waitForOperations,
-} from "./wait.js";
+import { hasOperations, type WaitBudget, waitForOperations } from "./wait.js";
 
 /** Fully-resolved runtime configuration shared by every resource namespace. */
 export interface ResolvedConfig {
@@ -23,7 +19,7 @@ export interface ResolvedConfig {
 	/** `Infinity` when calls are unbounded, which is the default. */
 	requestTimeoutMs: number;
 	waitForReadiness: boolean;
-	waitOptions: WaitForOptions;
+	waitOptions: WaitBudget;
 	orgId?: string;
 }
 
@@ -38,6 +34,12 @@ export interface CallOptions<Throw extends boolean = boolean> {
 	 * value; readiness polling keeps its own `wait` budget either way.
 	 */
 	requestTimeoutMs?: number;
+	/**
+	 * Override the client's `wait` budget for this call's readiness polling.
+	 * Does not turn polling on; pair it with `waitForReadiness` when the method
+	 * would not wait otherwise.
+	 */
+	wait?: WaitBudget;
 	/** Cancel the call. Surfaces as a `NeonAbortError` (`kind: "aborted"`). */
 	signal?: AbortSignal;
 }
@@ -188,8 +190,12 @@ export class RequestContext {
 		const wait = opts?.waitForReadiness ?? this.#config.waitForReadiness;
 		if (!wait || !hasOperations(data)) return undefined;
 		return waitForOperations(this.#config.client, data.operations, {
-			...this.#config.waitOptions,
-			signal: opts?.signal ?? this.#config.waitOptions.signal,
+			pollIntervalMs:
+				opts?.wait?.pollIntervalMs ??
+				this.#config.waitOptions.pollIntervalMs,
+			timeoutMs:
+				opts?.wait?.timeoutMs ?? this.#config.waitOptions.timeoutMs,
+			signal: opts?.signal,
 		});
 	}
 }

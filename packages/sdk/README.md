@@ -48,7 +48,7 @@ const { project, connectionString } = data;
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
+Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, wait?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
 
 ## The result model
 
@@ -189,7 +189,14 @@ consuming it twice gets a fresh deadline each time.
 
 ## Readiness & workflows
 
-Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call. The primitive is `neon.operations.waitFor(operations)`.
+
+```ts
+await neon.projects.create(
+  { name: "app" },
+  { wait: { timeoutMs: 600_000 } },
+);
+```
 
 ---
 

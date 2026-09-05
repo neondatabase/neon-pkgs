@@ -23,11 +23,14 @@ const FAILURE: ReadonlySet<OperationStatus> = new Set([
 	"cancelled",
 ]);
 
-export interface WaitForOptions {
+export interface WaitBudget {
 	/** How often to poll each pending operation. Default 1000ms. */
 	pollIntervalMs?: number;
 	/** Overall deadline before giving up. Default 300000ms (5 min). */
 	timeoutMs?: number;
+}
+
+export interface WaitForOptions extends WaitBudget {
 	signal?: AbortSignal;
 }
 

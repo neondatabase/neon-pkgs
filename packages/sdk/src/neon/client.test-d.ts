@@ -130,6 +130,41 @@ it("cancellation and deadline options are accepted on the client and per call", 
 		// @ts-expect-error — a deadline is a number of milliseconds
 		requestTimeoutMs: "30s",
 	});
+
+	createNeonClient({
+		apiKey: "x",
+		wait: { timeoutMs: 5_000 },
+	});
+	createNeonClient({
+		apiKey: "x",
+		wait: {
+			pollIntervalMs: 500,
+			timeoutMs: 5_000,
+			// @ts-expect-error — abort is per-call, not client wait
+			signal: controller.signal,
+		},
+	});
+	expectTypeOf(
+		neon.projects.create({ name: "x" }, { wait: { timeoutMs: 600_000 } }),
+	).resolves.toEqualTypeOf<NeonResult<Project>>();
+	neon.projects.create(
+		{ name: "x" },
+		{
+			wait: {
+				timeoutMs: 600_000,
+				// @ts-expect-error — abort is CallOptions.signal, not wait.signal
+				signal: controller.signal,
+			},
+		},
+	);
+	neon.operations.waitFor([], {
+		timeoutMs: 120_000,
+		signal: controller.signal,
+	});
+	neon.operations.waitFor([], {
+		// @ts-expect-error — waitFor takes top-level timeoutMs, not nested wait
+		wait: { timeoutMs: 120_000 },
+	});
 });
 
 it("postgres namespace + tier-2/3 resources are reachable and typed", () => {

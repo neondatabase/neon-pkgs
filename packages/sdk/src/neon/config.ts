@@ -1,7 +1,7 @@
 import { createClient, createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
 import { resolveTimeoutMs } from "./deadline.js";
-import type { WaitForOptions } from "./wait.js";
+import type { WaitBudget } from "./wait.js";
 
 const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
 
@@ -23,8 +23,8 @@ export interface NeonConfig<Throw extends boolean = false> {
 	 * Default `false`. Overridable per call.
 	 */
 	waitForReadiness?: boolean;
-	/** Tuning for the readiness poller (interval / timeout). */
-	wait?: WaitForOptions;
+	/** Tuning for the readiness poller (interval / timeout). Not a per-call abort. */
+	wait?: WaitBudget;
 	/** Number of automatic retries on always-safe statuses (423/429/503). Default 2. */
 	retries?: number;
 	/**
