@@ -1,6 +1,10 @@
 import { describe, expect } from "vitest";
+import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
+
+const missingDbMessage =
+	'Database "nosuchdb" not found on branch test_branch; nothing to delete.';
 
 describe("databases", () => {
 	test("list", async ({ testCliCommand }) => {
@@ -41,7 +45,7 @@ describe("databases", () => {
 		]);
 	});
 
-	test("delete of a missing name reports not found", async ({
+	test("delete of a missing name reports not found and exits 1", async ({
 		testCliCommand,
 	}) => {
 		const { stdout } = await testCliCommand(
@@ -54,14 +58,15 @@ describe("databases", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ snapshot: false, stderr: "" },
+			{ code: 1, snapshot: false, stderr: "" },
 		);
-		expect(stdout).toContain(
-			'Database "nosuchdb" not found on branch test_branch; nothing to delete.',
-		);
+		expect(YAML.parse(stdout)).toEqual({
+			deleted: false,
+			message: missingDbMessage,
+		});
 	});
 
-	test("delete of a missing name prints the line in table mode", async ({
+	test("delete of a missing name prints ERROR in table mode", async ({
 		testCliCommand,
 	}) => {
 		const { stdout } = await testCliCommand(
@@ -74,14 +79,19 @@ describe("databases", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ output: "table", snapshot: false, stderr: "" },
+			{
+				code: 1,
+				output: "table",
+				snapshot: false,
+				stderr: `ERROR: ${missingDbMessage}`,
+			},
 		);
-		expect(stdout).toBe(
-			'Database "nosuchdb" not found on branch test_branch; nothing to delete.\n',
-		);
+		expect(stdout).toBe("");
 	});
 
-	test("delete of a missing name emits json", async ({ testCliCommand }) => {
+	test("delete of a missing name emits json and exits 1", async ({
+		testCliCommand,
+	}) => {
 		const { stdout } = await testCliCommand(
 			[
 				"databases",
@@ -92,12 +102,11 @@ describe("databases", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ output: "json", snapshot: false, stderr: "" },
+			{ code: 1, output: "json", snapshot: false, stderr: "" },
 		);
 		expect(JSON.parse(stdout)).toEqual({
 			deleted: false,
-			message:
-				'Database "nosuchdb" not found on branch test_branch; nothing to delete.',
+			message: missingDbMessage,
 		});
 	});
 });

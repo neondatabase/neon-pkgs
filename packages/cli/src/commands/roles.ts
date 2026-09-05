@@ -113,5 +113,5 @@ export const deleteRole = async (
 		return;
 	}
 	const message = `Role "${props.role}" not found on branch ${branchName}; nothing to delete.`;
-	reportMissingDelete(props, message, 1);
+	reportMissingDelete(props, message);
 };

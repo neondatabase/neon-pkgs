@@ -1,6 +1,10 @@
 import { describe, expect } from "vitest";
+import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
+
+const missingRoleMessage =
+	'Role "nosuchrole" not found on branch test_branch; nothing to delete.';
 
 describe("roles", () => {
 	test("list", async ({ testCliCommand }) => {
@@ -54,12 +58,13 @@ describe("roles", () => {
 			],
 			{ code: 1, snapshot: false, stderr: "" },
 		);
-		expect(stdout).toContain(
-			'Role "nosuchrole" not found on branch test_branch; nothing to delete.',
-		);
+		expect(YAML.parse(stdout)).toEqual({
+			deleted: false,
+			message: missingRoleMessage,
+		});
 	});
 
-	test("delete of a missing name prints the line in table mode", async ({
+	test("delete of a missing name prints ERROR in table mode", async ({
 		testCliCommand,
 	}) => {
 		const { stdout } = await testCliCommand(
@@ -72,11 +77,14 @@ describe("roles", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ code: 1, output: "table", snapshot: false, stderr: "" },
+			{
+				code: 1,
+				output: "table",
+				snapshot: false,
+				stderr: `ERROR: ${missingRoleMessage}`,
+			},
 		);
-		expect(stdout).toBe(
-			'Role "nosuchrole" not found on branch test_branch; nothing to delete.\n',
-		);
+		expect(stdout).toBe("");
 	});
 
 	test("delete of a missing name emits json and exits 1", async ({
@@ -96,8 +104,7 @@ describe("roles", () => {
 		);
 		expect(JSON.parse(stdout)).toEqual({
 			deleted: false,
-			message:
-				'Role "nosuchrole" not found on branch test_branch; nothing to delete.',
+			message: missingRoleMessage,
 		});
 	});
 });
