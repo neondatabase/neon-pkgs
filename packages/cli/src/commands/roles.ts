@@ -111,7 +111,7 @@ export const deleteRole = async (
 		});
 		return;
 	}
-	const branchName = await branchNameForMissingDelete(props, branchId);
+	const branchName = branchNameForMissingDelete(props, branchId);
 	const message = `Role "${props.role}" not found on branch ${branchName}; nothing to delete.`;
 	reportMissingDelete(props, message);
 };

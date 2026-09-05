@@ -1,4 +1,3 @@
-import type { Branch } from "@neon/sdk";
 import type { BranchScopeProps, CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 import { looksLikeBranchId } from "./formats.js";
@@ -24,13 +23,13 @@ export const reportMissingDelete = (
 };
 
 /**
- * Friendly branch label for a missing-delete message. A name the user
- * already passed is enough; listing is only for a `br-…` id or the default.
+ * Label for a missing-delete message from values already in hand. A second
+ * list after 204 would be able to replace the not-found result.
  */
-export const branchNameForMissingDelete = async (
+export const branchNameForMissingDelete = (
 	props: BranchScopeProps,
 	branchId: string,
-): Promise<string> => {
+): string => {
 	const ref =
 		"branch" in props && typeof props.branch === "string"
 			? props.branch
@@ -38,9 +37,5 @@ export const branchNameForMissingDelete = async (
 	if (ref !== undefined && !looksLikeBranchId(ref)) {
 		return ref;
 	}
-	const { data } = await props.apiClient.listProjectBranches({
-		projectId: props.projectId,
-	});
-	const found = data.branches.find((b: Branch) => b.id === branchId);
-	return found?.name ?? branchId;
+	return ref ?? branchId;
 };
