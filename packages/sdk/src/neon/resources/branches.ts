@@ -169,7 +169,7 @@ export class Branches<DThrow extends boolean> {
 		return this.#ctx.run(
 			{
 				...opts,
-				waitForReadiness: opts?.waitForReadiness ?? true,
+				waitForReadiness: this.#ctx.resolveWait(opts, true),
 			},
 			(client, signal) =>
 				createProjectBranch({
@@ -263,7 +263,7 @@ export class Branches<DThrow extends boolean> {
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
-			{ ...opts, waitForReadiness: opts?.waitForReadiness ?? true },
+			{ ...opts, waitForReadiness: this.#ctx.resolveWait(opts, true) },
 			(client, signal) =>
 				createProjectBranch({
 					client,

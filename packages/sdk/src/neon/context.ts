@@ -22,7 +22,11 @@ export interface ResolvedConfig {
 	retries: number;
 	/** `Infinity` when calls are unbounded, which is the default. */
 	requestTimeoutMs: number;
-	waitForReadiness: boolean;
+	/**
+	 * Unset and `false` stay distinct. Create-family methods default polling on when
+	 * this is unset; collapsing them in `resolveConfig` made a client `false` a no-op.
+	 */
+	waitForReadiness: boolean | undefined;
 	waitOptions: WaitForOptions;
 	orgId?: string;
 }
@@ -93,6 +97,18 @@ export class RequestContext {
 				? this.#config.requestTimeoutMs
 				: resolveTimeoutMs(opts.requestTimeoutMs);
 		return createDeadline(timeoutMs, opts?.signal);
+	}
+
+	/** Per-call, then client, then the method's own default. */
+	resolveWait(
+		opts: CallOptions | undefined,
+		methodDefault: boolean,
+	): boolean {
+		return (
+			opts?.waitForReadiness ??
+			this.#config.waitForReadiness ??
+			methodDefault
+		);
 	}
 
 	/** Run a raw call and map its body; applies the resolved `throwOnError` policy. */
