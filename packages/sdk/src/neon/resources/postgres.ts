@@ -6,7 +6,7 @@ import {
 } from "../../client/sdk.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { cancelled, runBounded } from "../deadline.js";
-import { NeonError, toNeonError } from "../errors.js";
+import { NeonClientError, toNeonError } from "../errors.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 import { DataApi } from "./dataapi.js";
 import { Databases } from "./databases.js";
@@ -51,7 +51,7 @@ export class Postgres<DThrow extends boolean> {
 	/**
 	 * Resolve a Postgres connection string. Auto-selects the default branch and the sole
 	 * role/database when not specified (mirrors `@neon/config`'s `fetchEnv`); returns
-	 * a `client`-kind {@link NeonError} when the selection is ambiguous.
+	 * a {@link NeonClientError} when the selection is ambiguous.
 	 */
 	connectionString(
 		params: ConnectionStringParams,
@@ -81,9 +81,8 @@ export class Postgres<DThrow extends boolean> {
 					? err(cancellation)
 					: (resolved ??
 						err(
-							new NeonError(
+							new NeonClientError(
 								"The connection-string resolver ended without a result.",
-								"client",
 							),
 						));
 			return finalize(result, shouldThrow);
@@ -117,9 +116,8 @@ export class Postgres<DThrow extends boolean> {
 			)?.id;
 			if (!branchId) {
 				return err(
-					new NeonError(
+					new NeonClientError(
 						"Could not determine the default branch; pass branchId.",
-						"client",
 					),
 				);
 			}
@@ -185,16 +183,18 @@ export class Postgres<DThrow extends boolean> {
 	}
 }
 
-function branchRequired(param: string): NeonError {
-	return new NeonError(
+function branchRequired(param: string): NeonClientError {
+	return new NeonClientError(
 		`Pass branchId or ${param} to resolve a connection string.`,
-		"client",
 	);
 }
 
-function ambiguous(kind: string, count: number, param: string): NeonError {
-	return new NeonError(
+function ambiguous(
+	kind: string,
+	count: number,
+	param: string,
+): NeonClientError {
+	return new NeonClientError(
 		`Expected exactly one ${kind} to auto-select for the connection string; found ${count}. Pass ${param}.`,
-		"client",
 	);
 }

@@ -25,11 +25,15 @@ export { createNeonClient } from "./neon/client.js";
 export type { NeonConfig } from "./neon/config.js";
 export type { CallOptions } from "./neon/context.js";
 export {
+	isNeonError,
 	NeonAbortError,
 	NeonApiError,
+	type NeonApiErrorKind,
 	NeonAuthError,
+	NeonClientError,
 	NeonError,
 	type NeonErrorKind,
+	type NeonErrorUnion,
 	NeonNetworkError,
 	NeonNotFoundError,
 	NeonOperationError,

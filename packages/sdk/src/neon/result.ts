@@ -1,13 +1,13 @@
-import type { NeonError } from "./errors.js";
+import type { NeonErrorUnion } from "./errors.js";
 
 /**
  * The uniform result envelope returned by every ergonomic call when `throwOnError` is
  * off (the default). A discriminated union: when `error` is set, `data` is `undefined`,
- * and vice versa.
+ * and vice versa. `error` is {@link NeonErrorUnion} — discriminate on `error.kind`.
  */
 export type NeonResult<T> =
 	| { data: T; error: undefined }
-	| { data: undefined; error: NeonError };
+	| { data: undefined; error: NeonErrorUnion };
 
 /**
  * The return type of a method, conditioned on whether errors are thrown. With
@@ -22,7 +22,7 @@ export function ok<T>(data: T): NeonResult<T> {
 	return { data, error: undefined };
 }
 
-export function err<T>(error: NeonError): NeonResult<T> {
+export function err<T>(error: NeonErrorUnion): NeonResult<T> {
 	return { data: undefined, error };
 }
 

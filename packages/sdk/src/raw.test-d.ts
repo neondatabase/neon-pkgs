@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, test } from "vitest";
 import type { ProjectResponse, ProjectsResponse } from "./client/types.gen.js";
 import { createNeonClient } from "./neon/client.js";
-import type { NeonError } from "./neon/errors.js";
+import type { NeonErrorUnion } from "./neon/errors.js";
 import type { RawResult } from "./neon/raw-wrap.js";
 import { getProject, listProjects } from "./raw.js";
 
@@ -43,11 +43,14 @@ describe("raw result contract (types)", () => {
 		>();
 	});
 
-	test("the error channel is the typed NeonError; success exposes data + response", async () => {
+	test("the error channel is NeonErrorUnion; success exposes data + response", async () => {
 		const res = await getProject({ client, path: { project_id: "p" } });
 		if (res.error) {
-			expectTypeOf(res.error).toEqualTypeOf<NeonError>();
+			expectTypeOf(res.error).toEqualTypeOf<NeonErrorUnion>();
 			expectTypeOf(res.error.kind).toBeString();
+			if (res.error.kind === "not_found") {
+				expectTypeOf(res.error.status).toBeNumber();
+			}
 		} else {
 			expectTypeOf(res.data).toEqualTypeOf<ProjectResponse>();
 		}
