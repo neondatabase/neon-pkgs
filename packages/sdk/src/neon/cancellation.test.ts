@@ -115,10 +115,9 @@ describe("a caller's signal reaches the request", () => {
 		const controller = new AbortController();
 		setTimeout(() => controller.abort(), 20);
 
-		const { error } = await neon.postgres.connectionString(
-			{ projectId: "p" },
-			{ signal: controller.signal },
-		);
+		const { error } = await neon.postgres.connectionString("p", undefined, {
+			signal: controller.signal,
+		});
 		expect(error?.kind).toBe("aborted");
 	});
 });

@@ -13,9 +13,8 @@ import { Databases } from "./databases.js";
 import { Endpoints } from "./endpoints.js";
 import { Roles } from "./roles.js";
 
-/** Parameters for {@link Postgres.connectionString}. */
-export interface ConnectionStringParams {
-	projectId: string;
+/** Optional selectors for {@link Postgres.connectionString}. */
+export interface ConnectionStringSelectors {
 	/** Defaults to the project's default branch. */
 	branchId?: string;
 	/** Defaults to the branch's read-write endpoint. */
@@ -27,6 +26,8 @@ export interface ConnectionStringParams {
 	/** Pooled connection string (default `true`). */
 	pooled?: boolean;
 }
+
+type ResolveInput = { projectId: string } & ConnectionStringSelectors;
 
 /**
  * The Postgres data plane of a branch: compute endpoints, roles, databases, the Data API,
@@ -54,14 +55,17 @@ export class Postgres<DThrow extends boolean> {
 	 * a `client`-kind {@link NeonError} when the selection is ambiguous.
 	 */
 	connectionString(
-		params: ConnectionStringParams,
+		projectId: string,
+		selectors?: ConnectionStringSelectors,
 	): Promise<Outcome<string, DThrow>>;
 	connectionString<Throw extends boolean = DThrow>(
-		params: ConnectionStringParams,
+		projectId: string,
+		selectors: ConnectionStringSelectors | undefined,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<string, Throw>>;
 	async connectionString(
-		params: ConnectionStringParams,
+		projectId: string,
+		selectors?: ConnectionStringSelectors,
 		opts?: CallOptions,
 	): Promise<string | NeonResult<string>> {
 		const shouldThrow =
@@ -71,7 +75,7 @@ export class Postgres<DThrow extends boolean> {
 		const deadline = this.#ctx.deadlineFor(opts);
 		try {
 			const resolved = await runBounded(deadline, () =>
-				this.#resolve(params, deadline.signal),
+				this.#resolve({ projectId, ...selectors }, deadline.signal),
 			);
 			const cancellation = cancelled(deadline);
 			// `runBounded` resolves undefined only when the deadline won the race, which
@@ -93,7 +97,7 @@ export class Postgres<DThrow extends boolean> {
 	}
 
 	async #resolve(
-		params: ConnectionStringParams,
+		params: ResolveInput,
 		signal?: AbortSignal,
 	): Promise<NeonResult<string>> {
 		const client = this.#ctx.client;

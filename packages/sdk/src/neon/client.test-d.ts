@@ -140,16 +140,24 @@ it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
 	expectTypeOf(
 		neon.postgres.roles.password("p", "br", "neondb_owner"),
 	).resolves.toEqualTypeOf<NeonResult<string>>();
+	expectTypeOf(neon.postgres.connectionString("p")).resolves.toEqualTypeOf<
+		NeonResult<string>
+	>();
 	expectTypeOf(
-		neon.postgres.connectionString({ projectId: "p" }),
+		neon.postgres.connectionString("p", { pooled: false }),
 	).resolves.toEqualTypeOf<NeonResult<string>>();
+	neon.postgres.connectionString(
+		"p",
+		// @ts-expect-error projectId is positional
+		{ projectId: "p" },
+	);
 	expectTypeOf(neon.snapshots.list("p")).resolves.toEqualTypeOf<
 		NeonResult<Snapshot[]>
 	>();
 
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
 	expectTypeOf(
-		throwing.postgres.connectionString({ projectId: "p" }),
+		throwing.postgres.connectionString("p"),
 	).resolves.toEqualTypeOf<string>();
 	expectTypeOf(
 		throwing.postgres.dataApi.delete("p", "br", "neondb"),
