@@ -2,6 +2,7 @@ import chalk from "chalk";
 import cliui from "cliui";
 import type yargs from "yargs";
 
+import { globalOptionsTrailer } from "./utils/help_text.js";
 import {
 	consumeBlockIfMatches,
 	consumeNextMatching,
@@ -11,6 +12,59 @@ import {
 
 // target width for the leftmost column
 const SPACE_WIDTH = 20;
+
+const isGlobalOptionsHeader = (header: string) =>
+	/global options:/i.test(header);
+
+const isTopLevelUsage = (usage: string) => /^\S+ <command>/.test(usage);
+
+const renderOptionBlock = (optionsBlock: string[]): string[] => {
+	const result: string[] = [];
+	const [header, ...body] = optionsBlock;
+	if (header === undefined) {
+		return result;
+	}
+	result.push(header);
+	body.forEach((line) => {
+		const [option, description] = splitColumns(line);
+		const ui = cliui({
+			width: 0,
+		});
+		if (option.startsWith("-")) {
+			ui.div({
+				text: chalk.green(option),
+				padding: [0, 0, 0, 0],
+			});
+			ui.div(
+				{
+					text: chalk.gray(drawPointer(SPACE_WIDTH)),
+					width: SPACE_WIDTH,
+					padding: [0, 2, 0, 0],
+				},
+				{
+					text: chalk.rgb(210, 210, 210)(description ?? ""),
+					padding: [0, 0, 0, 0],
+				},
+			);
+		} else {
+			ui.div(
+				{
+					padding: [0, 0, 0, 0],
+					text: "",
+					width: SPACE_WIDTH,
+				},
+				{
+					text: chalk.rgb(210, 210, 210)(option),
+					padding: [0, 0, 0, 0],
+				},
+			);
+		}
+
+		result.push(ui.toString());
+	});
+	result.push("");
+	return result;
+};
 
 const formatHelp = (help: string) => {
 	const lines = help.split("\n");
@@ -109,51 +163,32 @@ const formatHelp = (help: string) => {
 		result.push("");
 	}
 
+	const optionBlocks: string[][] = [];
 	while (true) {
-		// there are two options blocks: global and specific
-		// example to see both: neonctl projects create
 		const optionsBlock = consumeBlockIfMatches(lines, /.*options:/i);
 		if (optionsBlock.length === 0) {
 			break;
 		}
-		result.push(optionsBlock.shift() as string);
-		optionsBlock.forEach((line) => {
-			const [option, description] = splitColumns(line);
-			const ui = cliui({
-				width: 0,
-			});
-			if (option.startsWith("-")) {
-				ui.div({
-					text: chalk.green(option),
-					padding: [0, 0, 0, 0],
-				});
-				ui.div(
-					{
-						text: chalk.gray(drawPointer(SPACE_WIDTH)),
-						width: SPACE_WIDTH,
-						padding: [0, 2, 0, 0],
-					},
-					{
-						text: chalk.rgb(210, 210, 210)(description ?? ""),
-						padding: [0, 0, 0, 0],
-					},
-				);
-			} else {
-				ui.div(
-					{
-						padding: [0, 0, 0, 0],
-						text: "",
-						width: SPACE_WIDTH,
-					},
-					{
-						text: chalk.rgb(210, 210, 210)(option),
-						padding: [0, 0, 0, 0],
-					},
-				);
-			}
+		optionBlocks.push(optionsBlock);
+	}
 
-			result.push(ui.toString());
-		});
+	for (const block of optionBlocks) {
+		const header = block[0];
+		if (header !== undefined && !isGlobalOptionsHeader(header)) {
+			result.push(...renderOptionBlock(block));
+		}
+	}
+
+	const globalBlocks = optionBlocks.filter((block) => {
+		const header = block[0];
+		return header !== undefined && isGlobalOptionsHeader(header);
+	});
+	if (topLevelCommand !== null && isTopLevelUsage(topLevelCommand)) {
+		for (const block of globalBlocks) {
+			result.push(...renderOptionBlock(block));
+		}
+	} else if (globalBlocks.length > 0 && topLevelCommand !== null) {
+		result.push(globalOptionsTrailer(topLevelCommand));
 		result.push("");
 	}
 

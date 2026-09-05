@@ -59,7 +59,8 @@ describe("help output never prints secrets", () => {
 		);
 
 		expect(stderr + stdout).not.toContain(API_KEY);
-		expect(stderr).toContain("--api-key");
+		expect(stderr).not.toContain("--api-key");
+		expect(stderr).toContain("Global options: see neon --help");
 	});
 
 	it("does not print an explicit --api-key value in help", async () => {
@@ -117,5 +118,53 @@ describe("NEON_API_KEY still authorizes requests", () => {
 				server.close((err) => (err ? reject(err) : resolve()));
 			});
 		}
+	});
+});
+
+describe("subcommand help lists command flags before globals", () => {
+	it("puts projects list flags first and points at neon --help for globals", async () => {
+		const { stderr } = await runCli(["projects", "list", "--help"]);
+		const trailer = "Global options: see neon --help";
+
+		expect(stderr).toContain("--org-id");
+		expect(stderr).toContain("--recoverable-only");
+		expect(stderr).toContain(trailer);
+		expect(stderr.indexOf("--org-id")).toBeLessThan(
+			stderr.indexOf(trailer),
+		);
+		expect(stderr).not.toContain("--api-key");
+		expect(stderr).not.toContain("--context-file");
+	});
+
+	it("still lists every global on top-level --help", async () => {
+		const { stderr } = await runCli(["--help"]);
+
+		expect(stderr).toContain("--api-key");
+		expect(stderr).toContain("--output");
+		expect(stderr).toContain("--context-file");
+		expect(stderr).not.toContain("Global options: see");
+	});
+
+	it("treats empty argv as top-level help", async () => {
+		const { stderr } = await runCli([]);
+
+		expect(stderr).toContain("--api-key");
+		expect(stderr).toContain("--context-file");
+		expect(stderr).not.toContain("Global options: see");
+	});
+
+	it("collapses globals on a parent command that only lists subcommands", async () => {
+		const { stderr } = await runCli(["projects", "--help"]);
+
+		expect(stderr).toContain("Commands:");
+		expect(stderr).toContain("Global options: see neon --help");
+		expect(stderr).not.toContain("--api-key");
+	});
+
+	it("keeps hidden context-file off auth help after grouping it globally", async () => {
+		const { stderr } = await runCli(["auth", "--help"]);
+
+		expect(stderr).toContain("--keyring");
+		expect(stderr).not.toContain("--context-file");
 	});
 });
