@@ -40,7 +40,7 @@ const { project, connectionString } = data;
 | --- | --- | --- | --- |
 | `apiKey` | `string \| (() => string \| Promise<string>)` | — (required) | Neon API key, or a function returning it (sync/async). Sent as a Bearer token. |
 | `throwOnError` | `boolean` | `false` | When `true`, methods return the resource directly and **throw** on error. When `false`, they return `{ data, error }`. **Narrows return types** at the type level. |
-| `waitForReadiness` | `boolean` | `false` | When `true`, mutations block until their provisioning `operations` finish, so the returned resource is ready to use. |
+| `waitForReadiness` | `boolean` | `false` | When `true`, mutations block until their provisioning `operations` finish, so the returned resource is ready to use. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on when this option is unset; pass `false` here to turn those off too. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
 | `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
 | `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
@@ -189,7 +189,16 @@ consuming it twice gets a fresh deadline each time.
 
 ## Readiness & workflows
 
-Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on when the client option is unset; `createNeonClient({ waitForReadiness: false })` turns them off. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+
+```ts
+const neon = createNeonClient({ apiKey });
+await neon.projects.create({ name: "app" }); // polls (method default)
+
+const fireAndForget = createNeonClient({ apiKey, waitForReadiness: false });
+await fireAndForget.projects.create({ name: "app" }); // returns while operations still run
+await fireAndForget.projects.create({ name: "app" }, { waitForReadiness: true }); // polls anyway
+```
 
 ---
 
