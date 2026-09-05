@@ -195,7 +195,7 @@ Neon mutations are asynchronous (they return `operations`). `waitForReadiness` b
 
 ## API reference
 
-Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`). Create/update inputs for projects, endpoints, databases, roles, buckets, and credentials are camelCase; returned resource objects keep API field names (`endpoint.branch_id`, `database.owner_name`).
+Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`). Create/update inputs for projects, endpoints, databases, roles, buckets, and credentials are camelCase. Returned resource objects keep API field names forever (`endpoint.branch_id`, `database.owner_name`); do not spread a resource into an update input.
 
 ### `neon.projects`
 

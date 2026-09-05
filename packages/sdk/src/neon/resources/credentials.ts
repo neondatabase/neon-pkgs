@@ -60,7 +60,11 @@ export class Credentials<DThrow extends boolean> {
 		);
 	}
 
-	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials */
+	/**
+	 * The API only issues customer credentials as `principal_type: "user"`.
+	 *
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials
+	 */
 	create(
 		projectId: string,
 		branchId: string,
