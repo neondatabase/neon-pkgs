@@ -189,7 +189,7 @@ consuming it twice gets a fresh deadline each time.
 
 ## Readiness & workflows
 
-Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call. The primitive is `neon.operations.waitFor(operations)`.
+Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor(operations)`.
 
 ```ts
 await neon.projects.create(
