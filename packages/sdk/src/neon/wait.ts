@@ -49,6 +49,7 @@ function readinessEnded(
 	if (source === "timeout") {
 		return new NeonTimeoutError(
 			`Timed out after ${timeoutMs}ms waiting for ${pending} operation(s) to finish.`,
+			{ source: "wait", timeoutMs },
 		);
 	}
 	return undefined;

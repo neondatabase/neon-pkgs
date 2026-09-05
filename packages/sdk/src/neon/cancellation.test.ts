@@ -137,6 +137,7 @@ describe("requestTimeoutMs bounds a call", () => {
 
 		expect(Date.now() - startedAt).toBeLessThan(1_000);
 		expect(error?.kind).toBe("timeout");
+		expect(error).toMatchObject({ source: "request", timeoutMs: 20 });
 	});
 
 	it("bounds a slow auth phase, which the request signal cannot reach", async () => {

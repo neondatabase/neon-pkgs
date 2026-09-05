@@ -259,6 +259,7 @@ describe("readiness polling", () => {
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(behaviour.operationPolls).toBeGreaterThan(0);
 		expect(error?.kind).toBe("timeout");
+		expect(error).toMatchObject({ source: "wait", timeoutMs: 80 });
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
 		resetBehaviour();
 	});
@@ -275,6 +276,7 @@ describe("readiness polling", () => {
 
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(error?.kind).toBe("timeout");
+		expect(error).toMatchObject({ source: "wait", timeoutMs: 80 });
 	});
 
 	it("resolves once the operations finish", async () => {

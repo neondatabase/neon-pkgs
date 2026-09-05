@@ -61,7 +61,15 @@ describe("error names survive minification", () => {
 				}),
 			NeonOperationError,
 		],
-		["NeonTimeoutError", () => new NeonTimeoutError("x"), NeonTimeoutError],
+		[
+			"NeonTimeoutError",
+			() =>
+				new NeonTimeoutError("x", {
+					source: "request",
+					timeoutMs: 1,
+				}),
+			NeonTimeoutError,
+		],
 		["NeonNetworkError", () => new NeonNetworkError("x"), NeonNetworkError],
 	];
 
@@ -71,6 +79,26 @@ describe("error names survive minification", () => {
 			expect(nameAfterMinification(construct, cls)).toBe(expected);
 		});
 	}
+});
+
+describe("NeonTimeoutError", () => {
+	it("records which deadline fired and the budget that was exceeded", () => {
+		const request = new NeonTimeoutError("x", {
+			source: "request",
+			timeoutMs: 20,
+		});
+		expect(request.kind).toBe("timeout");
+		expect(request.source).toBe("request");
+		expect(request.timeoutMs).toBe(20);
+		expect(request).toBeInstanceOf(NeonError);
+
+		const wait = new NeonTimeoutError("x", {
+			source: "wait",
+			timeoutMs: 80,
+		});
+		expect(wait.source).toBe("wait");
+		expect(wait.timeoutMs).toBe(80);
+	});
 });
 
 describe("describeTransportFailure", () => {
