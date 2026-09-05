@@ -97,7 +97,17 @@ describe("branches.create", () => {
 		expect(result).toEqual({
 			data: {
 				branch: { id: "br-id", name: "feature-x" },
+				endpoints: [{ id: "ep-id", type: "read_write" }],
 				endpoint: { id: "ep-id", type: "read_write" },
+				connectionUris: [
+					{
+						connection_uri: "postgresql://user:pass@ep-host/neondb",
+						connection_parameters: {
+							host: "ep-host",
+							pooler_host: "ep-pooler-host",
+						},
+					},
+				],
 				connectionString:
 					"postgresql://user:pass@ep-pooler-host/neondb",
 			},

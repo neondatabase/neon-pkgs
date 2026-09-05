@@ -58,7 +58,9 @@ describe("branches.create", () => {
 		expect(error).toBeUndefined();
 		expect(data).toEqual({
 			branch: { id: "br-1", name: "feature" },
+			endpoints: [{ id: "ep-1", type: "read_write" }],
 			endpoint: { id: "ep-1", type: "read_write" },
+			connectionUris: undefined,
 			connectionString: undefined,
 		});
 		expect(calls).toHaveLength(1);
@@ -104,6 +106,8 @@ describe("branches.create", () => {
 		expect(data).toEqual({
 			branch: { id: "br-1", name: "bare" },
 			endpoint: undefined,
+			endpoints: undefined,
+			connectionUris: undefined,
 			connectionString: undefined,
 		});
 		expect(calls[0]?.body).toEqual({ branch: { name: "bare" } });
@@ -173,9 +177,63 @@ describe("branches.create", () => {
 		expect(error).toBeUndefined();
 		expect(data).toEqual({
 			branch: { id: "br-1", name: "feature" },
+			endpoints: [{ id: "ep-1", type: "read_write" }],
 			endpoint: { id: "ep-1", type: "read_write" },
+			connectionUris: [
+				{
+					connection_uri: "postgresql://user:pass@ep-host/neondb",
+					connection_parameters: {
+						host: "ep-host",
+						pooler_host: "ep-pooler-host",
+					},
+				},
+			],
 			connectionString: "postgresql://user:pass@ep-pooler-host/neondb",
 		});
+	});
+
+	it("keeps every endpoint and URI the API returned", async () => {
+		const { neon } = neonRouting(() => ({
+			status: 201,
+			body: {
+				branch: { id: "br-1", name: "feature" },
+				endpoints: [
+					{ id: "ep-rw", type: "read_write" },
+					{ id: "ep-ro", type: "read_only" },
+				],
+				connection_uris: [
+					{
+						connection_uri: "postgresql://a@ep-a/neondb",
+						connection_parameters: {
+							host: "ep-a",
+							pooler_host: "ep-a-pooler",
+						},
+					},
+					{
+						connection_uri: "postgresql://b@ep-b/neondb",
+						connection_parameters: {
+							host: "ep-b",
+							pooler_host: "ep-b-pooler",
+						},
+					},
+				],
+			},
+		}));
+
+		const { data, error } = await neon.branches.create("p-1", {
+			name: "feature",
+		});
+
+		expect(error).toBeUndefined();
+		expect(data?.endpoints?.map((endpoint) => endpoint.id)).toEqual([
+			"ep-rw",
+			"ep-ro",
+		]);
+		expect(data?.endpoint?.id).toBe("ep-rw");
+		expect(data?.connectionUris).toHaveLength(2);
+		expect(data?.connectionString).toBe(
+			"postgresql://a@ep-a-pooler/neondb",
+		);
 	});
 });
 

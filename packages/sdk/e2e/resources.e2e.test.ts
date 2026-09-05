@@ -172,7 +172,10 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				parent_id: defaultBranchId,
 			}),
 		);
+		expect(withCompute.endpoints).toHaveLength(1);
+		expect(withCompute.endpoint?.id).toBe(withCompute.endpoints?.[0]?.id);
 		expect(withCompute.endpoint?.type).toBe("read_write");
+		expect(withCompute.connectionUris?.length).toBeGreaterThan(0);
 		expect(withCompute.connectionString).toMatch(/^postgres(ql)?:\/\//);
 		const attached = expectOk(
 			await neon.postgres.endpoints.listByBranch(
@@ -192,6 +195,8 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			}),
 		);
 		expect(bare.endpoint).toBeUndefined();
+		expect(bare.endpoints).toBeUndefined();
+		expect(bare.connectionUris).toBeUndefined();
 		expect(bare.connectionString).toBeUndefined();
 		const none = expectOk(
 			await neon.postgres.endpoints.listByBranch(

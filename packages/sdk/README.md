@@ -232,7 +232,7 @@ await neon.projects.transfer({
 | --- | --- | --- |
 | `list(projectId, query?)` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order?, include_deleted? }` |
 | `get(projectId, branchId)` | `Branch` | |
-| `create(projectId, input?)` | `{ branch, endpoint?, connectionString? }` | RW compute on by default. `noCompute: true` skips the endpoint. Includes the endpoint and a pooled `connectionString` when a compute is created. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
+| `create(projectId, input?)` | `{ branch, endpoints?, endpoint?, connectionUris?, connectionString? }` | RW compute on by default. `noCompute: true` skips the endpoint. Keeps the API's `endpoints` and `connectionUris`; `endpoint` is the first endpoint and `connectionString` is the pooled form of the first URI. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
 | `update(projectId, branchId, input)` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
 | `delete(projectId, branchId)` | **→void** | |
 | `createAndConnect(projectId, input?, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | Same create, but errors if there is no URI. `pooled` default `true`. `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
@@ -276,7 +276,7 @@ const { data } = await neon.branches.create(projectId, {
   parent_id: prod?.id,
   compute: { minCu: 0.25, maxCu: 2 },
 });
-// data: { branch, endpoint?, connectionString? }
+// data: { branch, endpoints?, endpoint?, connectionUris?, connectionString? }
 
 const { data: connected } = await neon.branches.createAndConnect(projectId, {
   name: "preview/pr-123",

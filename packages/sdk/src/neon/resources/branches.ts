@@ -14,6 +14,7 @@ import type {
 	BranchCreateRequest,
 	BranchSchemaCompareResponse,
 	BranchUpdateRequest,
+	ConnectionDetails,
 	CreateProjectBranchResponse,
 	Endpoint,
 	ListProjectBranchesData,
@@ -62,12 +63,14 @@ export interface BranchConnection {
 }
 
 /**
- * `create` result. `endpoint` and `connectionString` are absent when `noCompute` is
- * true, or when the API omitted a URI (multiple roles/databases).
+ * `create` result. `endpoint` is `endpoints[0]`; `connectionString` is the pooled
+ * form of `connectionUris[0]`.
  */
 export interface BranchCreateResult {
 	branch: Branch;
+	endpoints?: Endpoint[];
 	endpoint?: Endpoint;
+	connectionUris?: ConnectionDetails[];
 	connectionString?: string;
 }
 
@@ -75,10 +78,14 @@ function mapCreatedBranch(
 	data: CreateProjectBranchResponse,
 	pooled: boolean,
 ): BranchCreateResult {
+	const endpoints = data.endpoints;
+	const connectionUris = data.connection_uris;
 	return {
 		branch: data.branch,
-		endpoint: data.endpoints?.[0],
-		connectionString: pickConnectionString(data.connection_uris, pooled),
+		endpoints,
+		endpoint: endpoints?.[0],
+		connectionUris,
+		connectionString: pickConnectionString(connectionUris, pooled),
 	};
 }
 
