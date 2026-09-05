@@ -176,8 +176,61 @@ describe("projects", () => {
 		]);
 	});
 
+	test("delete requires confirmation without --yes", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "delete", "test"], {
+			code: 1,
+			snapshot: false,
+			output: "table",
+			stderr: "ERROR: Deleting a project requires confirmation. Re-run interactively or pass --yes.",
+		});
+	});
+
 	test("delete", async ({ testCliCommand }) => {
-		await testCliCommand(["projects", "delete", "test"]);
+		await testCliCommand(["projects", "delete", "test", "--yes"]);
+	});
+
+	test("delete --yes prints Deleted in table mode", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			["projects", "delete", "test", "--yes"],
+			{ output: "table", snapshot: false, stderr: "" },
+		);
+		expect(stdout).toBe(
+			"Deleted project test (test).\nRecoverable during the deletion grace period: neon projects recover test\n",
+		);
+	});
+
+	test("delete --output json without --yes names the flag", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "delete", "test"], {
+			code: 1,
+			snapshot: false,
+			output: "json",
+			stderr: "ERROR: Confirmation prompts are disabled with --output json; pass --yes.",
+		});
+	});
+
+	test("delete --yes keeps the record in json", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			["projects", "delete", "test", "--yes"],
+			{ output: "json", snapshot: false, stderr: "" },
+		);
+		expect(JSON.parse(stdout)).toMatchObject({
+			id: "test",
+			name: "test",
+		});
+	});
+
+	test("delete -y is an alias of --yes", async ({ testCliCommand }) => {
+		await testCliCommand(["projects", "delete", "test", "-y"], {
+			snapshot: false,
+		});
 	});
 
 	test("recover deleted project", async ({ testCliCommand }) => {

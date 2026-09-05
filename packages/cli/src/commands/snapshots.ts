@@ -9,6 +9,12 @@ import { retryOnLock } from "../api.js";
 import { log } from "../log.js";
 import type { ProjectScopeProps } from "../types.js";
 import {
+	confirmDestructive,
+	isMachineOutput,
+	namedResource,
+	yesOption,
+} from "../utils/confirm_destructive.js";
+import {
 	branchIdResolve,
 	fillSingleProject,
 	resolveBranchRef,
@@ -159,7 +165,10 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"delete <id>",
 			"Delete a snapshot by id or name",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.options({
+					yes: yesOption,
+				}),
 			(args) => deleteSnapshot(args as any),
 		)
 		.command(
@@ -467,19 +476,33 @@ const update = async (
 	});
 };
 
-const deleteSnapshot = async (props: ProjectScopeProps & { id: string }) => {
+const deleteSnapshot = async (
+	props: ProjectScopeProps & { id: string; yes: boolean },
+) => {
+	await confirmDestructive({
+		yes: props.yes,
+		noun: "snapshot",
+		message: `Delete snapshot ${props.id}?`,
+		output: props.output,
+	});
 	const snapshot = await resolveSnapshot(props);
 	await retryOnLock(() =>
 		props.apiClient.deleteSnapshot(props.projectId, snapshot.id),
 	);
 	// The delete endpoint returns the tracking operations (202), not the snapshot
 	// body, so echo the snapshot we just deleted for confirmation.
-	writer(props).end(snapshot, {
-		fields: SNAPSHOT_FIELDS,
-		renderColumns: {
-			expires_at: (s) => s.expires_at || "never",
-		},
-	});
+	if (isMachineOutput(props.output)) {
+		writer(props).end(snapshot, {
+			fields: SNAPSHOT_FIELDS,
+			renderColumns: {
+				expires_at: (s) => s.expires_at || "never",
+			},
+		});
+		return;
+	}
+	writer(props).text(
+		`Deleted snapshot ${namedResource(snapshot.id, snapshot.name)}.\n`,
+	);
 };
 
 const restore = async (

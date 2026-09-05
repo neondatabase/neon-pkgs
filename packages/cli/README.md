@@ -923,7 +923,7 @@ neon snapshots finalize br-restored-1234                # commit the swap
 neon snapshots restore snap-1234 --target-branch main --finalize
 
 # Delete
-neon snapshots delete snap-1234
+neon snapshots delete snap-1234 --yes
 
 # Automatic snapshot (backup) schedule of a branch
 neon snapshots schedule get --branch main

@@ -18,6 +18,11 @@ import {
 	presignUpload,
 } from "../storage_api.js";
 import type { BranchScopeProps } from "../types.js";
+import {
+	confirmDestructive,
+	isMachineOutput,
+	yesOption,
+} from "../utils/confirm_destructive.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
@@ -117,7 +122,10 @@ export const builder = (argv: yargs.Argv) =>
 						type: "string",
 						demandOption: true,
 					})
-					.options(scopeOptions),
+					.options({
+						...scopeOptions,
+						yes: yesOption,
+					}),
 			handler: (args) => deleteBucket(args as any),
 		})
 		.command(
@@ -295,8 +303,14 @@ const listBuckets = async (props: BranchScopeProps): Promise<void> => {
 };
 
 const deleteBucket = async (
-	props: BranchScopeProps & { name: string },
+	props: BranchScopeProps & { name: string; yes: boolean },
 ): Promise<void> => {
+	await confirmDestructive({
+		yes: props.yes,
+		noun: "bucket",
+		message: `Delete bucket "${props.name}"?`,
+		output: props.output,
+	});
 	const branchId = await branchIdFromProps(props);
 	try {
 		await retryOnLock(() =>
@@ -314,7 +328,12 @@ const deleteBucket = async (
 		}
 		throw err;
 	}
-	log.info(`Bucket "${props.name}" deleted from branch ${branchId}`);
+	if (isMachineOutput(props.output)) {
+		return;
+	}
+	writer(props).text(
+		`Deleted bucket "${props.name}" from branch ${branchId}.\n`,
+	);
 };
 
 // Resolve the delimiter to send to the backend, mirroring `aws s3 ls`:

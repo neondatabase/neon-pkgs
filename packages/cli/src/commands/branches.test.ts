@@ -347,6 +347,26 @@ describe("branches", () => {
 
 	/* delete */
 
+	test("delete by id requires confirmation without --yes", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"branches",
+				"delete",
+				"br-sunny-branch-123456",
+				"--project-id",
+				"test",
+			],
+			{
+				code: 1,
+				snapshot: false,
+				output: "table",
+				stderr: "ERROR: Deleting a branch requires confirmation. Re-run interactively or pass --yes.",
+			},
+		);
+	});
+
 	test("delete by id", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"branches",
@@ -354,7 +374,27 @@ describe("branches", () => {
 			"br-sunny-branch-123456",
 			"--project-id",
 			"test",
+			"--yes",
 		]);
+	});
+
+	test("delete --yes prints Deleted in table mode", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"branches",
+				"delete",
+				"br-sunny-branch-123456",
+				"--project-id",
+				"test",
+				"--yes",
+			],
+			{ output: "table", snapshot: false, stderr: "" },
+		);
+		expect(stdout).toBe(
+			"Deleted branch br-sunny-branch-123456 (sunny-branch).\n",
+		);
 	});
 
 	/* rename */
