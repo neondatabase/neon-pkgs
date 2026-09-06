@@ -59,15 +59,31 @@ export const withCreated = (error: NeonError, created: unknown): NeonError => {
 
 export const createdId = (error: NeonError): string | undefined => {
 	const created = error.created;
-	if (
-		typeof created !== "object" ||
-		created === null ||
-		!("id" in created) ||
-		typeof created.id !== "string"
-	) {
+	if (typeof created !== "object" || created === null) {
 		return undefined;
 	}
-	return created.id;
+	if ("id" in created && typeof created.id === "string") {
+		return created.id;
+	}
+	if (
+		"project" in created &&
+		typeof created.project === "object" &&
+		created.project !== null &&
+		"id" in created.project &&
+		typeof created.project.id === "string"
+	) {
+		return created.project.id;
+	}
+	if (
+		"branch" in created &&
+		typeof created.branch === "object" &&
+		created.branch !== null &&
+		"id" in created.branch &&
+		typeof created.branch.id === "string"
+	) {
+		return created.branch.id;
+	}
+	return undefined;
 };
 
 /** A non-2xx HTTP response from the Neon API. */

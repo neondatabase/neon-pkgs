@@ -182,9 +182,15 @@ describe("createdId", () => {
 		expect(createdId(error)).toBe("p-1");
 	});
 
-	it("returns undefined when the id is nested", () => {
+	it("returns a nested project id from createAndConnect", () => {
 		const error = new NeonTimeoutError("wait timed out");
 		error.created = { project: { id: "p-1" } };
-		expect(createdId(error)).toBeUndefined();
+		expect(createdId(error)).toBe("p-1");
+	});
+
+	it("returns a nested branch id from createAndConnect", () => {
+		const error = new NeonTimeoutError("wait timed out");
+		error.created = { branch: { id: "br-1" } };
+		expect(createdId(error)).toBe("br-1");
 	});
 });

@@ -150,8 +150,8 @@ cancellation is not.
 
 When a mutation has already returned a body and readiness polling then aborts, times out,
 or sees a failed operation, `error.created` is that mapped resource (the project, branch,
-or full create response). `createdId(error)` is the resource `id` when that body has a
-top-level `id`. The poll stopped; the create did not.
+or full create response). `createdId(error)` is the resource id: a top-level `id`, or
+`created.project.id` / `created.branch.id` on createAndConnect responses. The poll stopped; the create did not.
 
 `requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
 `Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is
@@ -196,7 +196,7 @@ consuming it twice gets a fresh deadline each time.
 
 Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
 
-If that wait is aborted or times out, the error keeps the created resource on `created`. `createdId(error)` is the id when the body has a top-level `id`. Do not create again from the same input without reading it.
+If that wait is aborted or times out, the error keeps the created resource on `created`. `createdId(error)` is the resource id, including `createAndConnect` nested `project.id` / `branch.id`. Do not create again from the same input without reading it.
 
 ---
 
