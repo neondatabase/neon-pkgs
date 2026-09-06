@@ -33,6 +33,9 @@ export class NeonError extends Error {
 	 * The mapped resource from a mutation that succeeded before readiness polling
 	 * failed. Set on abort, timeout, and failed-operation errors after create and
 	 * other writes that already returned a body.
+	 *
+	 * On createAndConnect this is the full 201 body, including `connection_uris`
+	 * and role passwords. Read `createdId(error)` rather than logging the error whole.
 	 */
 	created?: unknown;
 
