@@ -96,17 +96,20 @@ describe("MCP v2 compatibility", () => {
 	});
 
 	test("throws on duplicate adapter names before registerTool", () => {
-		const server = new McpServerV2({
-			name: "test-server",
-			version: "1.0.0",
-		});
+		let registered = 0;
+		const server = {
+			registerTool() {
+				registered += 1;
+			},
+		};
 		const catalog = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.list", "projects.get"],
 		});
 		expect(() =>
 			registerNeonToolsV2(server, catalog, { name: () => "same" }),
-		).toThrow(/Duplicate Neon tool id "same"/);
+		).toThrow(/Duplicate published tool name "same"/);
+		expect(registered).toBe(0);
 	});
 
 	test("publishes compact JSON Schema without OpenAPI field essays", async () => {

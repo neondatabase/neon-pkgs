@@ -30,6 +30,14 @@ export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> = {
 	[Tool in Tools[keyof Tools] as Tool["id"]]: MastraToolConfig<Tool>;
 };
 
+export type NamedMastraToolConfig<Tool extends NeonTool> = Omit<
+	MastraToolConfig<Tool>,
+	"id"
+> & { id: string };
+
+export type NamedMastraTools<Tools extends Readonly<Record<string, NeonTool>>> =
+	Record<string, NamedMastraToolConfig<Tools[keyof Tools]>>;
+
 type MastraToolSource = {
 	id: string;
 	description: string;
@@ -71,12 +79,21 @@ function assertMastraTools(
 	}
 }
 
-export const toMastraTools = <
+export function toMastraTools<
+	const Tools extends Readonly<Record<string, NeonTool>>,
+>(tools: Tools): MastraTools<Tools>;
+export function toMastraTools<
+	const Tools extends Readonly<Record<string, NeonTool>>,
+>(
+	tools: Tools,
+	options: { name: (tool: NeonTool) => string },
+): NamedMastraTools<Tools>;
+export function toMastraTools<
 	const Tools extends Readonly<Record<string, NeonTool>>,
 >(
 	tools: Tools,
 	options?: NeonAdapterNameOptions,
-): MastraTools<Tools> => {
+): MastraTools<Tools> | NamedMastraTools<Tools> {
 	const named = namedNeonTools(tools, options);
 	const adapted: unknown = Object.fromEntries(
 		named.map(({ tool, name }) => [
@@ -88,5 +105,8 @@ export const toMastraTools = <
 		adapted,
 		named.map(({ name }) => name),
 	);
-	return adapted as MastraTools<Tools>;
-};
+	if (options?.name === undefined) {
+		return adapted as MastraTools<Tools>;
+	}
+	return adapted as NamedMastraTools<Tools>;
+}

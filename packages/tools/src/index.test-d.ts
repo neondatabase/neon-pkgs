@@ -61,6 +61,11 @@ expectTypeOf(mastraTools).toHaveProperty("create_and_connect_projects");
 // @ts-expect-error unselected tools are absent from the Mastra tool record
 mastraTools.delete_projects;
 
+const renamedMastra = toMastraTools(tools, {
+	name: (tool) => `neon_${tool.id}`,
+});
+expectTypeOf(renamedMastra.neon_list_projects.id).toEqualTypeOf<string>();
+
 // @ts-expect-error Mastra configs preserve tool-specific request types
 mastraTools.list_projects.execute({ limit: "one" }, {});
 

@@ -91,7 +91,7 @@ describe("Mastra compatibility", () => {
 			tools: ["projects.list", "projects.get"],
 		});
 		expect(() => toMastraTools(tools, { name: () => "same" })).toThrow(
-			/Duplicate Neon tool id "same"/,
+			/Duplicate published tool name "same"/,
 		);
 	});
 

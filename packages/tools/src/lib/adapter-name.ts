@@ -17,7 +17,7 @@ export const namedNeonTools = (
 		const previous = seen.get(name);
 		if (previous !== undefined) {
 			throw new Error(
-				`Duplicate Neon tool id "${name}" for ${previous}, ${tool.operationId}`,
+				`Duplicate published tool name "${name}" for ${previous}, ${tool.operationId}`,
 			);
 		}
 		seen.set(name, tool.operationId);
