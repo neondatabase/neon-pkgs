@@ -169,6 +169,9 @@ describe("MCP v2 compatibility", () => {
 			structuredContent: {
 				error: {
 					message: expect.stringContaining("Authentication failed"),
+					name: "NeonAuthError",
+					kind: "auth",
+					status: 401,
 				},
 			},
 		});
