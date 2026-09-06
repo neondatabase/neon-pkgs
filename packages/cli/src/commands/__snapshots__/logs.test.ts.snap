@@ -9,7 +9,8 @@ exports[`logs > a truncated field-values run keeps json output clean and stderr 
     "postgres"
   ],
   "is_truncated": true
-}"
+}
+"
 `;
 
 exports[`logs > a truncated field-values run says how to narrow the lookup 1`] = `
@@ -36,7 +37,8 @@ exports[`logs > a truncated query keeps json output clean and stderr empty 1`] =
   ],
   "next_cursor": "eyJvZmZzZXQiOjEwMH0",
   "is_truncated": true
-}"
+}
+"
 `;
 
 exports[`logs > a truncated query points at the next cursor in table output 1`] = `
