@@ -62,7 +62,7 @@ type SnakeDots<Id extends string> = Id extends `${infer Head}.${infer Rest}`
 	: Snake<Id>;
 
 export type PublishedId<Id extends string> = Id extends `${string}.${string}`
-	? `${Snake<LastSegment<Id>>}_${SnakeDots<ResourcePath<Id>>}`
+	? `${SnakeDots<ResourcePath<Id>>}_${Snake<LastSegment<Id>>}`
 	: Snake<Id>;
 
 const snakeSegment = (segment: string) =>
@@ -75,7 +75,7 @@ export const publishedId = <Id extends string>(id: Id): PublishedId<Id> => {
 	}
 	const verb = snakeSegment(id.slice(dot + 1));
 	const resource = id.slice(0, dot).split(".").map(snakeSegment).join("_");
-	return `${verb}_${resource}` as PublishedId<Id>;
+	return `${resource}_${verb}` as PublishedId<Id>;
 };
 
 const resolveApiKey = (
@@ -345,7 +345,7 @@ export function fromGenerated(
 			? schema
 			: omitObjectKeys(schema, spec.omit);
 	return {
-		operationId: spec.id,
+		selector: spec.id,
 		id: publishedId(spec.id),
 		title: generated.title,
 		description: spec.list

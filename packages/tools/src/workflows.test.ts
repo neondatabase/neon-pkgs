@@ -186,9 +186,9 @@ describe("branches.createAndConnect", () => {
 
 		expect(Object.keys(tools)).toEqual(["branches.createAndConnect"]);
 		expect(tools["branches.createAndConnect"].id).toBe(
-			"create_and_connect_branches",
+			"branches_create_and_connect",
 		);
-		expect(tools["branches.createAndConnect"].operationId).toBe(
+		expect(tools["branches.createAndConnect"].selector).toBe(
 			"branches.createAndConnect",
 		);
 		expect(tools["branches.createAndConnect"].requiresApproval).toBe(true);
@@ -410,7 +410,7 @@ describe("createNeonTool", () => {
 
 		await tool.execute({ project_id: "project-id", name: "feature-x" });
 
-		expect(tool.id).toBe("create_and_connect_branches");
+		expect(tool.id).toBe("branches_create_and_connect");
 		expect(requests[0].url).toBe(
 			"https://console.neon.tech/api/v2/projects/project-id/branches",
 		);

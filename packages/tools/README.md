@@ -8,13 +8,13 @@ npm install @neon/tools
 
 ## Create tools
 
-Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.roles.resetPassword` → `reset_password_postgres_roles`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
+Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the resource, then the last path segment, in snake_case (`projects.list` → `projects_list`, `postgres.roles.resetPassword` → `postgres_roles_reset_password`, `postgres.connectionString` → `postgres_connection_string`). `tool.selector` is that SDK path. `publishedId` derives the published `id`. `toolIds` lists every published selector.
 
 ```ts
 import { createNeonTools, publishedId } from "@neon/tools";
 
-publishedId("projects.list"); // "list_projects"
-publishedId("postgres.roles.resetPassword"); // "reset_password_postgres_roles"
+publishedId("projects.list"); // "projects_list"
+publishedId("postgres.roles.resetPassword"); // "postgres_roles_reset_password"
 
 const apiKey = process.env.NEON_API_KEY;
 if (!apiKey) throw new Error("NEON_API_KEY is required");
@@ -49,7 +49,7 @@ const compared = await tools["branches.compareSchema"].execute({
 
 `limit` on a list tool caps how many items come back.
 
-MCP and Mastra publish `tool.id` (`list_projects`), not the record key.
+MCP and Mastra publish `tool.id` (`projects_list`), not the record key.
 
 `apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
 
@@ -100,7 +100,7 @@ const tools = createNeonTools({
 	descriptions: {
 		"projects.list":
 			"List Neon projects in your account. Do not use for projects shared with you.",
-		delete_projects:
+		projects_delete:
 			"Delete a Neon project and all its data. NEVER run autonomously; always ask the user first.",
 	},
 });
@@ -135,7 +135,7 @@ const tools = createNeonTools({
 });
 ```
 
-Those tools publish as `neon_create_branch` and `neon_list_projects`. The record is still keyed by SDK path (`tools["branches.createAndConnect"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
+Those tools publish as `neon_create_branch` and `neon_projects_list`. The record is still keyed by SDK path (`tools["branches.createAndConnect"]`). MCP and Mastra publish `tool.id`. Eve uses the filename as the model-facing name, so name the file after the published `id`. Duplicate or non-snake-case ids throw, and a `names` key that matches no selected tool throws.
 
 ### Project and branch injection
 
@@ -262,7 +262,7 @@ MCP annotations are advisory; the protocol does not enforce approval. Tools expo
 
 Eve requires Node.js 24 or later.
 
-`create_and_connect_projects.ts`:
+`projects_create_and_connect.ts`:
 
 ```ts
 import { defineTool } from "eve/tools";
@@ -301,8 +301,8 @@ const neonTools = createNeonTools({
 });
 const configs = toMastraTools(neonTools);
 
-const listProjects = createTool(configs.list_projects);
-const createProject = createTool(configs.create_and_connect_projects);
+const listProjects = createTool(configs.projects_list);
+const createProject = createTool(configs.projects_create_and_connect);
 ```
 
 The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal.

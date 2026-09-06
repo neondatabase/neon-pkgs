@@ -4,28 +4,28 @@ import { publishedId } from "./lib/ergonomic/bind.js";
 import { toolIds } from "./lib/ergonomic/ids.js";
 
 describe("publishedId", () => {
-	test("moves the last path segment in front", () => {
-		expect(publishedId("projects.list")).toBe("list_projects");
+	test("resource first, then the last path segment", () => {
+		expect(publishedId("projects.list")).toBe("projects_list");
 		expect(publishedId("projects.createAndConnect")).toBe(
-			"create_and_connect_projects",
+			"projects_create_and_connect",
 		);
 		expect(publishedId("branches.createAndConnect")).toBe(
-			"create_and_connect_branches",
+			"branches_create_and_connect",
 		);
 		expect(publishedId("postgres.roles.resetPassword")).toBe(
-			"reset_password_postgres_roles",
+			"postgres_roles_reset_password",
 		);
-		expect(publishedId("logs.query")).toBe("query_logs");
-		expect(publishedId("user.me")).toBe("me_user");
-		expect(publishedId("regions.list")).toBe("list_regions");
+		expect(publishedId("logs.query")).toBe("logs_query");
+		expect(publishedId("user.me")).toBe("user_me");
+		expect(publishedId("regions.list")).toBe("regions_list");
 		expect(publishedId("functions.customDomains.list")).toBe(
-			"list_functions_custom_domains",
+			"functions_custom_domains_list",
 		);
 		expect(publishedId("functions.customDomains.register")).toBe(
-			"register_functions_custom_domains",
+			"functions_custom_domains_register",
 		);
 		expect(publishedId("functions.customDomains.delete")).toBe(
-			"delete_functions_custom_domains",
+			"functions_custom_domains_delete",
 		);
 	});
 
