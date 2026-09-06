@@ -315,17 +315,24 @@ describe("MCP request credentials", () => {
 		});
 
 		const result = await handler()({}, {});
-		expect(result).toMatchObject({
-			isError: true,
-			structuredContent: {
-				error: {
-					message: "branch limit",
-					name: "ConflictError",
-					kind: "conflict",
-					status: 409,
-					code: "branch_limit",
-				},
+		const structuredContent = {
+			error: {
+				message: "branch limit",
+				name: "ConflictError",
+				kind: "conflict",
+				status: 409,
+				code: "branch_limit",
 			},
+		};
+		expect(result).toEqual({
+			isError: true,
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(structuredContent),
+				},
+			],
+			structuredContent,
 		});
 	});
 });
