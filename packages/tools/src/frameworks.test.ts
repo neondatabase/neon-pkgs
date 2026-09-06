@@ -95,6 +95,18 @@ describe("Mastra compatibility", () => {
 		);
 	});
 
+	test("throws when the adapter name callback does not return a string", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+		});
+		expect(() =>
+			toMastraTools(tools, {
+				name: () => undefined as unknown as string,
+			}),
+		).toThrow("Adapter tool name must be a string for projects.list");
+	});
+
 	test("forwards omitted path schemas from inject", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",

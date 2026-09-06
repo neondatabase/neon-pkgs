@@ -8,10 +8,18 @@ export const namedNeonTools = (
 	tools: Readonly<Record<string, NeonTool>>,
 	options?: NeonAdapterNameOptions,
 ): Array<{ tool: NeonTool; name: string }> => {
-	const named = Object.values(tools).map((tool) => ({
-		tool,
-		name: options?.name?.(tool) ?? tool.id,
-	}));
+	const named = Object.values(tools).map((tool) => {
+		if (options?.name === undefined) {
+			return { tool, name: tool.id };
+		}
+		const name = options.name(tool);
+		if (typeof name !== "string") {
+			throw new TypeError(
+				`Adapter tool name must be a string for ${tool.operationId}`,
+			);
+		}
+		return { tool, name };
+	});
 	const seen = new Map<string, string>();
 	for (const { tool, name } of named) {
 		const previous = seen.get(name);
