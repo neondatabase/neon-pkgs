@@ -163,6 +163,7 @@ builder = builder
 		},
 		"context-file": {
 			describe: "Context file",
+			group: "Global options:",
 			type: "string",
 			default: currentContextFile,
 		},
