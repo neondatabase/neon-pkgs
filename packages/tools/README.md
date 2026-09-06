@@ -225,14 +225,11 @@ registerNeonTools(server, tools);
 Hosts that convert Zod themselves:
 
 ```ts
-import { compactJsonSchema } from "@neon/tools/mcp";
-import * as z from "zod";
+import { toMcpJsonSchema } from "@neon/tools/mcp";
 import { createNeonTool } from "@neon/tools";
 
 const tool = createNeonTool("projects.update", { apiKey });
-const inputSchema = compactJsonSchema(
-	z.toJSONSchema(tool.inputSchema, { io: "input" }),
-);
+const inputSchema = toMcpJsonSchema(tool.inputSchema);
 ```
 
 For a remote MCP server that already authenticated the client, omit `apiKey` at construction. `registerNeonTools` sends `authInfo.token` as the Bearer credential: MCP 2.x `http.authInfo.token`, MCP 1.x `authInfo.token`. The host must put a Neon API key or Neon OAuth access token there. A present `authInfo` with an empty token is an error, not a fall back to a constructor key.
@@ -252,7 +249,7 @@ Existing MCP 1.x servers can use the version-specific entry point:
 import { registerNeonTools } from "@neon/tools/mcp-v1";
 ```
 
-MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
+MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `toMcpJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
 The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with structured error data.
 
