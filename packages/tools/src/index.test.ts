@@ -143,6 +143,47 @@ describe("createNeonTools", () => {
 		expect(tools["projects.update"].annotations.readOnlyHint).toBe(false);
 	});
 
+	test("keeps the created project on the error when wait times out", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.create"] as const,
+			wait: { pollIntervalMs: 1, timeoutMs: 50 },
+			fetch: async (input, init) => {
+				const request =
+					input instanceof Request ? input : new Request(input, init);
+				const url = new URL(request.url);
+				if (url.pathname.endsWith("/operations/op-1")) {
+					return jsonResponse({
+						operation: {
+							id: "op-1",
+							project_id: "project-id",
+							action: "create_project",
+							status: "running",
+						},
+					});
+				}
+				return jsonResponse({
+					project: { id: "project-id", name: "agent-project" },
+					operations: [
+						{
+							id: "op-1",
+							project_id: "project-id",
+							action: "create_project",
+							status: "running",
+						},
+					],
+				});
+			},
+		});
+
+		await expect(
+			tools["projects.create"].execute({ name: "agent-project" }),
+		).rejects.toMatchObject({
+			kind: "timeout",
+			created: { id: "project-id", name: "agent-project" },
+		});
+	});
+
 	test("does not poll functions.deploy because the response has no operations", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

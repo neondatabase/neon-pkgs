@@ -12,6 +12,7 @@ import {
 	NeonRateLimitError,
 	NeonTimeoutError,
 	toNeonError,
+	withCreated,
 } from "./errors.js";
 
 /**
@@ -147,5 +148,28 @@ describe("transport failures end to end", () => {
 		expect(res.error).toBeInstanceOf(NeonNetworkError);
 		expect(res.error?.message).toContain("(ECONNRESET)");
 		expect((res.error as NeonNetworkError).reason).toBe("ECONNRESET");
+	});
+});
+
+describe("withCreated", () => {
+	it("keeps the wait error's subclass and kind", () => {
+		const error = new NeonTimeoutError(
+			"Timed out after 80ms waiting for 1 operation(s) to finish.",
+		);
+		const created = { id: "p-1", name: "test" };
+		const attached = withCreated(error, created);
+		expect(attached).toBe(error);
+		expect(attached).toBeInstanceOf(NeonTimeoutError);
+		expect(attached.kind).toBe("timeout");
+		expect(attached.created).toEqual(created);
+	});
+
+	it("does not replace a created resource already on the error", () => {
+		const error = new NeonError("x", "timeout", {
+			created: { id: "first" },
+		});
+		expect(withCreated(error, { id: "second" }).created).toEqual({
+			id: "first",
+		});
 	});
 });
