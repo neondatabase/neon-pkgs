@@ -277,12 +277,14 @@ describe("MCP request credentials", () => {
 			isError: true,
 			structuredContent: {
 				error: {
+					name: "TypeError",
 					message: expect.stringContaining(
 						"A Neon API key or OAuth access token is required",
 					),
 				},
 			},
 		});
+		expect(result.structuredContent.error).not.toHaveProperty("kind");
 		expect(requests).toHaveLength(0);
 	});
 });
