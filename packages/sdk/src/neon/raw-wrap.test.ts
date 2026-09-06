@@ -77,8 +77,10 @@ describe("wrapRaw result contract", () => {
 describe("wrapRaw requires client", () => {
 	it("throws a client NeonError and does not call the generated function", async () => {
 		let calls = 0;
-		const fn = async (_options: { client?: unknown }) => {
+		let received: unknown;
+		const fn = async (passed: { client?: unknown }) => {
 			calls += 1;
+			received = passed.client;
 			return { data: { ok: true } };
 		};
 		const wrapped = wrapRaw(fn);
@@ -99,6 +101,7 @@ describe("wrapRaw requires client", () => {
 		const client = clientReturning(200, { project: { id: "p-1" } });
 		await wrapped({ client });
 		expect(calls).toBe(1);
+		expect(received).toBe(client);
 	});
 });
 

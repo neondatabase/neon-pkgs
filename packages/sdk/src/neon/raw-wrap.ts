@@ -107,15 +107,22 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 	async function call(
 		options: RawOptions<F> & { throwOnError?: boolean },
 	): Promise<RawData<F> | RawResult<RawData<F>>> {
-		if (options == null || Reflect.get(options, "client") == null) {
-			throw new NeonError(
+		const missingClient = () =>
+			new NeonError(
 				"raw functions require options.client — pass neon.client from createNeonClient().",
 				"client",
 			);
+		if (options == null) {
+			throw missingClient();
+		}
+		const client = Reflect.get(options, "client");
+		if (client == null) {
+			throw missingClient();
 		}
 		const shouldThrow = options.throwOnError === true;
 		const raw: RawFieldsResult<RawData<F>> = await fn({
 			...options,
+			client,
 			throwOnError: false,
 			responseStyle: "fields",
 		});
