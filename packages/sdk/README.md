@@ -615,7 +615,7 @@ const { error } = await neon.operations.waitFor(data!.operations, { timeoutMs: 1
 
 ### `neon.consumption`
 
-Cursor-paginated billing metrics. Each takes `{ from, to, granularity, project_ids?, org_id? }` (`perBranchV2` requires `project_ids`).
+Cursor-paginated billing metrics. Each takes `{ from, to, granularity, project_ids?, orgId? }` (`perBranchV2` requires `project_ids`; v2 also requires `metrics`). `orgId` defaults to the client's `orgId`. Snake_case `org_id` is still accepted; `orgId` wins when both are set. v2 methods error if no org is set.
 
 | Method | Returns |
 | --- | --- |
@@ -624,15 +624,25 @@ Cursor-paginated billing metrics. Each takes `{ from, to, granularity, project_i
 | `perBranchV2(query)` | **[P]** `ConsumptionHistoryPerBranchV2` |
 
 ```ts
-// Paginated consumption metrics — stream every project across the range
+const neon = createNeonClient({
+  apiKey: process.env.NEON_API_KEY!,
+  orgId: "org-...",
+});
+
 for await (const project of neon.consumption.perProject({
   from: "2026-06-01T00:00:00Z",
   to: "2026-06-30T00:00:00Z",
   granularity: "daily",
-  org_id: "org-...", // the org to report on; consumption requires a Scale plan or above
 })) {
   console.log(project);
 }
+
+await neon.consumption.perProject({
+  from: "2026-06-01T00:00:00Z",
+  to: "2026-06-30T00:00:00Z",
+  granularity: "daily",
+  orgId: "org-other",
+}).all();
 ```
 
 ### `neon.apiKeys`
