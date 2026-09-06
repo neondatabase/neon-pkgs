@@ -750,10 +750,9 @@ const { project } = await raw.getProject({
 });
 ```
 
-There is no `responseStyle` switch — `throwOnError` is the only one. `neon.client` is the
-underlying configured Fetch client; `raw.*` are the wrapped generated functions, and all
-request/response/error **types** are re-exported flat from `@neon/sdk` for
-`import type { Project, Branch, … }`.
+All request/response schema types are re-exported flat from `@neon/sdk` for
+`import type { Project, Branch, … }`. Raw plumbing types (`RawResult`, `Config`,
+`RawOptions`) are on `@neon/sdk/raw`.
 
 ## Regenerating the client
 
