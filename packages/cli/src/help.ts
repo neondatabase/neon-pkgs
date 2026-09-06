@@ -2,6 +2,7 @@ import chalk from "chalk";
 import cliui from "cliui";
 import type yargs from "yargs";
 
+import { helpWidth, wrapHelpText } from "./utils/help_text.js";
 import {
 	consumeBlockIfMatches,
 	consumeNextMatching,
@@ -11,6 +12,13 @@ import {
 
 // target width for the leftmost column
 const SPACE_WIDTH = 20;
+const DESCRIPTION_GUTTER = 4;
+
+const wrapDescription = (text: string) =>
+	wrapHelpText(
+		text,
+		Math.max(1, helpWidth() - SPACE_WIDTH - DESCRIPTION_GUTTER),
+	);
 
 const formatHelp = (help: string) => {
 	const lines = help.split("\n");
@@ -37,7 +45,8 @@ const formatHelp = (help: string) => {
 		const header = commandsBlock.shift() as string;
 		result.push(header);
 		const ui = cliui({
-			width: 0,
+			width: helpWidth(),
+			wrap: false,
 		});
 		commandsBlock.forEach((line) => {
 			if (/^\s{3,}/.exec(line)) {
@@ -47,7 +56,10 @@ const formatHelp = (help: string) => {
 						width: SPACE_WIDTH,
 						padding: [0, 0, 0, 0],
 					},
-					{ text: line.trim(), padding: [0, 0, 0, 0] },
+					{
+						text: wrapDescription(line.trim()),
+						padding: [0, 0, 0, 0],
+					},
 				);
 				return;
 			}
@@ -67,7 +79,7 @@ const formatHelp = (help: string) => {
 					width: SPACE_WIDTH,
 					padding: [0, 0, 0, 0],
 				},
-				{ text: description, padding: [0, 0, 0, 2] },
+				{ text: wrapDescription(description), padding: [0, 0, 0, 2] },
 			);
 		});
 		result.push(ui.toString());
@@ -81,7 +93,8 @@ const formatHelp = (help: string) => {
 		const header = positionalsBlock.shift() as string;
 		result.push(header);
 		const ui = cliui({
-			width: 0,
+			width: helpWidth(),
+			wrap: false,
 		});
 		positionalsBlock.forEach((line) => {
 			const [positional, description] = splitColumns(line);
@@ -92,7 +105,7 @@ const formatHelp = (help: string) => {
 					padding: [0, 2, 0, 0],
 				},
 				{
-					text: description,
+					text: wrapDescription(description),
 					padding: [0, 0, 0, 0],
 				},
 			);
@@ -120,7 +133,8 @@ const formatHelp = (help: string) => {
 		optionsBlock.forEach((line) => {
 			const [option, description] = splitColumns(line);
 			const ui = cliui({
-				width: 0,
+				width: helpWidth(),
+				wrap: false,
 			});
 			if (option.startsWith("-")) {
 				ui.div({
@@ -134,7 +148,11 @@ const formatHelp = (help: string) => {
 						padding: [0, 2, 0, 0],
 					},
 					{
-						text: chalk.rgb(210, 210, 210)(description ?? ""),
+						text: chalk.rgb(
+							210,
+							210,
+							210,
+						)(wrapDescription(description ?? "")),
 						padding: [0, 0, 0, 0],
 					},
 				);
@@ -146,7 +164,7 @@ const formatHelp = (help: string) => {
 						width: SPACE_WIDTH,
 					},
 					{
-						text: chalk.rgb(210, 210, 210)(option),
+						text: chalk.rgb(210, 210, 210)(wrapDescription(option)),
 						padding: [0, 0, 0, 0],
 					},
 				);
@@ -161,7 +179,8 @@ const formatHelp = (help: string) => {
 	if (exampleBlock.length > 0) {
 		result.push(exampleBlock.shift() as string);
 		const ui = cliui({
-			width: 0,
+			width: helpWidth(),
+			wrap: false,
 		});
 		for (const line of exampleBlock) {
 			const [command, description] = splitColumns(line);
@@ -170,7 +189,7 @@ const formatHelp = (help: string) => {
 				padding: [0, 0, 0, 0],
 			});
 			ui.div({
-				text: chalk.reset(description),
+				text: chalk.reset(wrapDescription(description)),
 				padding: [0, 0, 0, 2],
 			});
 		}
@@ -181,8 +200,16 @@ const formatHelp = (help: string) => {
 };
 
 export const showHelp = async (argv: yargs.Argv) => {
-	// add wrap to ensure that there are no line breaks
 	const help = await argv.getHelp();
-	process.stderr.write(formatHelp(help).join("\n") + "\n");
+	const text = `${formatHelp(help).join("\n")}\n`;
+	await new Promise<void>((resolve, reject) => {
+		process.stdout.write(text, (err) => {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve();
+		});
+	});
 	process.exit(0);
 };

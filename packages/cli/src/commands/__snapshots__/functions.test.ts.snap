@@ -14,10 +14,6 @@ invocation_url: https://envfunc.functions.neon.tech
 "
 `;
 
-exports[`functions > deploy --help documents --no-bundle and discovery order 1`] = `""`;
-
-exports[`functions > deploy --help documents --no-bundle and discovery order 2`] = `""`;
-
 exports[`functions > deploy --no-bundle rejects TypeScript 1`] = `""`;
 
 exports[`functions > deploy --no-bundle rejects a directory with no root index.mjs or index.js 1`] = `""`;

@@ -16,6 +16,7 @@ type Fixtures = {
 		options?: {
 			mockDir?: string;
 			stderr?: string;
+			stdout?: string;
 			code?: number;
 			outputTable?: boolean;
 			output?: "json" | "yaml" | "table";
@@ -169,6 +170,17 @@ export const test = originalTest.extend<Fixtures>({
 											.toString()
 											.replace(/\s+/g, " ")
 									: options.stderr,
+							);
+						}
+						if (options.stdout !== undefined) {
+							expect(
+								strip(output).replace(/\s+/g, " ").trim(),
+							).toEqual(
+								typeof options.stdout === "string"
+									? options.stdout
+											.toString()
+											.replace(/\s+/g, " ")
+									: options.stdout,
 							);
 						}
 						resolve({ stdout: output, stderr: error, code });

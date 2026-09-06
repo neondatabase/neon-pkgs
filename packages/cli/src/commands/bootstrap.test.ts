@@ -344,18 +344,18 @@ describe("bootstrap", () => {
 	});
 
 	test("help describes --agent forwarding", async () => {
-		const { code, stderr } = await runBootstrap(server, ["--help"]);
+		const { code, stdout, stderr } = await runBootstrap(server, ["--help"]);
 		expect(code, stderr).toBe(0);
-		const flat = stderr.replace(/\s+/g, " ");
+		const flat = stdout.replace(/\s+/g, " ");
 		expect(flat).toContain("--list-templates");
 		expect(flat).toContain("--agent-setup");
 		expect(flat).toContain("host CLI agent");
 		expect(flat).toContain("omit --default in a terminal");
 		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
 		expect(flat).toMatch(/skips agent selection/i);
-		expect(stderr).toMatch(/Plugin agents/);
-		expect(stderr).toMatch(/Skills and MCP agents/);
-		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
+		expect(stdout).toMatch(/Plugin agents/);
+		expect(stdout).toMatch(/Skills and MCP agents/);
+		expect(stdout).toMatch(/(?<![-\w])--agent(?![-\w])/);
 	});
 
 	test("mixed --agent fails before scaffold", async () => {
