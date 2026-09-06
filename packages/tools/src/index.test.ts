@@ -288,7 +288,9 @@ describe("createNeonTools", () => {
 });
 
 describe("Bearer credentials", () => {
-	const listProjects = (options: NeonToolsClientOptions) => {
+	const listProjects = (
+		options: Omit<NeonToolsClientOptions, "throwOnError">,
+	) => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			...options,

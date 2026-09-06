@@ -37,6 +37,7 @@ export type {
 export type {
 	JsonSafe,
 	JsonSafeBlob,
+	NeonExecutableTool,
 	NeonTool,
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
@@ -52,7 +53,7 @@ type ThrowsFrom<T> = T extends { throwOnError: false }
 	? false
 	: T extends { throwOnError: true }
 		? true
-		: T extends { throwOnError: boolean }
+		: "throwOnError" extends keyof T
 			? boolean
 			: true;
 

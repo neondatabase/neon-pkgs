@@ -76,6 +76,13 @@ export interface NeonTool<
 	): Promise<NeonToolResult<Output>>;
 }
 
+export type NeonExecutableTool = Omit<NeonTool, "execute"> & {
+	execute(
+		input: never,
+		context?: NeonToolExecutionContext,
+	): Promise<NeonToolResult<unknown, boolean>>;
+};
+
 export interface NeonOperation<
 	InputSchema extends z.ZodType,
 	Id extends string = string,

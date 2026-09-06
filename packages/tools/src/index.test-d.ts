@@ -323,3 +323,21 @@ envelopedOne.execute({ project_id: "p" }).then((result) => {
 		expectTypeOf(result.data.id).toEqualTypeOf<string>();
 	}
 });
+
+const annotatedEnvelope: CreateNeonToolsOptions<["projects.get"]> = {
+	apiKey: "test-key",
+	tools: ["projects.get"],
+	throwOnError: false,
+};
+createNeonTools(annotatedEnvelope)
+	["projects.get"].execute({ project_id: "p" })
+	.then((result) => {
+		if ("error" in result && result.error) {
+			expectTypeOf(result.error).toEqualTypeOf<NeonError>();
+		} else {
+			expectTypeOf(result.data.id).toEqualTypeOf<string>();
+		}
+	});
+
+toEveTool(enveloped["projects.get"]);
+toMastraTools(enveloped);
