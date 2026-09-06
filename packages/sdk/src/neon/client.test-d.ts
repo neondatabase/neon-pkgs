@@ -134,18 +134,28 @@ it("cancellation and deadline options are accepted on the client and per call", 
 
 it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
 	const neon = createNeonClient({ apiKey: "x" });
-	expectTypeOf(neon.postgres.endpoints.list("p")).resolves.toEqualTypeOf<
-		NeonResult<Endpoint[]>
+	expectTypeOf(neon.postgres.endpoints.list("p")).toEqualTypeOf<
+		Paginated<Endpoint>
 	>();
+	expectTypeOf(
+		neon.postgres.endpoints.list("p", { branchId: "br" }),
+	).toEqualTypeOf<Paginated<Endpoint>>();
+	expectTypeOf(
+		neon.postgres.endpoints.list("p", undefined, {
+			signal: new AbortController().signal,
+		}),
+	).toEqualTypeOf<Paginated<Endpoint>>();
+	neon.postgres.endpoints.list("p", {
+		// @ts-expect-error — CallOptions is the third argument
+		signal: new AbortController().signal,
+	});
 	expectTypeOf(
 		neon.postgres.roles.password("p", "br", "neondb_owner"),
 	).resolves.toEqualTypeOf<NeonResult<string>>();
 	expectTypeOf(
 		neon.postgres.connectionString({ projectId: "p" }),
 	).resolves.toEqualTypeOf<NeonResult<string>>();
-	expectTypeOf(neon.snapshots.list("p")).resolves.toEqualTypeOf<
-		NeonResult<Snapshot[]>
-	>();
+	expectTypeOf(neon.snapshots.list("p")).toEqualTypeOf<Paginated<Snapshot>>();
 
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
 	expectTypeOf(
@@ -203,14 +213,14 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	expectTypeOf(neon.auth.get("p", "br")).resolves.toEqualTypeOf<
 		NeonResult<NeonAuthIntegration>
 	>();
-	expectTypeOf(
-		neon.auth.oauthProviders.list("p", "br"),
-	).resolves.toEqualTypeOf<NeonResult<NeonAuthOauthProvider[]>>();
+	expectTypeOf(neon.auth.oauthProviders.list("p", "br")).toEqualTypeOf<
+		Paginated<NeonAuthOauthProvider>
+	>();
 	expectTypeOf(
 		neon.auth.oauthProviders.add("p", "br", { id: "google" }),
 	).resolves.toEqualTypeOf<NeonResult<NeonAuthOauthProvider>>();
-	expectTypeOf(neon.projects.permissions.list("p")).resolves.toEqualTypeOf<
-		NeonResult<ProjectPermission[]>
+	expectTypeOf(neon.projects.permissions.list("p")).toEqualTypeOf<
+		Paginated<ProjectPermission>
 	>();
 	expectTypeOf(
 		neon.projects.permissions.grant("p", "user@example.com"),
@@ -218,9 +228,8 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	expectTypeOf(neon.projects.recover("p")).resolves.toEqualTypeOf<
 		NeonResult<Project>
 	>();
-	expectTypeOf(
-		neon.postgres.endpoints.listByBranch("p", "br"),
-	).resolves.toEqualTypeOf<NeonResult<Endpoint[]>>();
+	// @ts-expect-error — listByBranch folded into list(projectId, { branchId })
+	neon.postgres.endpoints.listByBranch("p", "br");
 
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
 	expectTypeOf(
@@ -229,9 +238,9 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	expectTypeOf(
 		throwing.auth.oauthProviders.delete("p", "br", "google"),
 	).resolves.toEqualTypeOf<void>();
-	expectTypeOf(
-		throwing.projects.permissions.list("p"),
-	).resolves.toEqualTypeOf<ProjectPermission[]>();
+	expectTypeOf(throwing.projects.permissions.list("p")).toEqualTypeOf<
+		Paginated<ProjectPermission>
+	>();
 });
 
 it("functions.customDomains is typed", () => {

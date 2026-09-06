@@ -11,6 +11,7 @@ import type {
 	DatabaseUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = DatabaseCreateRequest["database"];
@@ -28,27 +29,18 @@ export class Databases<DThrow extends boolean> {
 	list(
 		projectId: string,
 		branchId: string,
-	): Promise<Outcome<Database[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Database[], Throw>>;
-	list(
-		projectId: string,
-		branchId: string,
 		opts?: CallOptions,
-	): Promise<Database[] | NeonResult<Database[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
+	): Paginated<Database> {
+		return paginate(
+			(_cursor, signal) =>
 				listProjectBranchDatabases({
-					client,
+					client: this.#ctx.client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.databases,
+			(data) => ({ items: data?.databases ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 

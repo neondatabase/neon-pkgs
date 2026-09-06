@@ -170,7 +170,7 @@ than the server asked is worse than not retrying. If honouring it would take lon
 
 ## Pagination
 
-Cursor-paginated `list()` methods return a lazy `Paginated<T>`:
+Cursor-paginated and single-page `list()` methods both return a lazy `Paginated<T>`:
 
 ```ts
 const { data: all } = await neon.projects.list().all();      // every page → { data, error }
@@ -305,7 +305,7 @@ const { data: uri } = await neon.postgres.connectionString({
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId)` | `Endpoint[]` |
+| `list(projectId, query?)` | **[P]** `Endpoint` — `query`: `{ branchId? }` |
 | `get(projectId, endpointId)` | `Endpoint` |
 | `create(projectId, input)` | `Endpoint` — `input`: `{ branch_id, type, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, suspend_timeout_seconds?, provisioner? }` |
 | `update(projectId, endpointId, input)` | `Endpoint` |
@@ -316,7 +316,7 @@ const { data: uri } = await neon.postgres.connectionString({
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId, branchId)` | `Role[]` |
+| `list(projectId, branchId)` | **[P]** `Role` |
 | `get(projectId, branchId, name)` | `Role` |
 | `create(projectId, branchId, { name, no_login? })` | `Role` |
 | `delete(projectId, branchId, name)` | **→void** |
@@ -334,7 +334,7 @@ const { data: role } = await neon.postgres.roles.resetPassword(projectId, branch
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId, branchId)` | `Database[]` |
+| `list(projectId, branchId)` | **[P]** `Database` |
 | `get(projectId, branchId, name)` | `Database` |
 | `create(projectId, branchId, { name, owner_name })` | `Database` |
 | `update(projectId, branchId, name, { name?, owner_name? })` | `Database` |
@@ -364,7 +364,7 @@ enabled and the branch S3 endpoint metadata; buckets and objects are nested unde
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId, branchId)` | `Bucket[]` |
+| `list(projectId, branchId)` | **[P]** `Bucket` |
 | `create(projectId, branchId, { name, access_level? })` | `Bucket` — `access_level`: `"private"` \| `"public_read"` |
 | `delete(projectId, branchId, bucketName)` | **→void** |
 
@@ -444,7 +444,7 @@ are returned **once** on `create`.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, branchId)` | `CredentialMeta[]` | |
+| `list(projectId, branchId)` | **[P]** `CredentialMeta` | |
 | `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke` |
 | `revoke(projectId, branchId, tokenId)` | **→void** | |
 
@@ -564,7 +564,7 @@ the values can be trusted and unwrapping would hide it.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId)` | `Snapshot[]` | |
+| `list(projectId)` | **[P]** `Snapshot` | |
 | `create(projectId, branchId, input?)` | `Snapshot` | `input`: `{ name?, timestamp?, lsn?, expiresAt? }` (point-in-time) |
 | `update(projectId, snapshotId, input)` | `Snapshot` | `input`: `{ name?, expiresAt? }` — pass `expiresAt: null` to clear the expiration |
 | `delete(projectId, snapshotId)` | **→void** | |
@@ -639,7 +639,7 @@ for await (const project of neon.consumption.perProject({
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list()` | `ApiKeysListResponseItem[]` | |
+| `list()` | **[P]** `ApiKeysListResponseItem` | |
 | `create(keyName)` | `ApiKeyCreateResponse` | the `key` token is shown **once** |
 | `revoke(keyId)` | `ApiKeyRevokeResponse` | |
 
@@ -647,7 +647,7 @@ for await (const project of neon.consumption.perProject({
 
 | Method | Returns |
 | --- | --- |
-| `regions.list()` | `RegionResponse[]` |
+| `regions.list()` | **[P]** `RegionResponse` |
 | `user.me()` | `CurrentUserInfoResponse` |
 | `user.organizations()` | `Organization[]` |
 
@@ -661,15 +661,15 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
 | `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
 | `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
-| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
-| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
+| `oauthProviders.list / add / update / delete` | **[P]** `NeonAuthOauthProvider` / `NeonAuthOauthProvider` / **→void** | |
+| `trustedDomains.list / add / delete` | **[P]** `NeonAuthRedirectUriWhitelistDomain` / **→void** | redirect-URI whitelist |
 | `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
 
 ### `neon.projects.permissions`
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId)` | `ProjectPermission[]` |
+| `list(projectId)` | **[P]** `ProjectPermission` |
 | `grant(projectId, email)` | `ProjectPermission` |
 | `revoke(projectId, permissionId)` | `ProjectPermission` |
 
@@ -716,8 +716,7 @@ if (grant?.credential_rotation_recommended) { /* rotate database credentials */ 
 if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
 ```
 
-Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
-`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
+Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project).
 
 ---
 

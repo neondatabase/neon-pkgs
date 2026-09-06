@@ -8,6 +8,7 @@ import {
 } from "../../client/sdk.gen.js";
 import type { Role, RoleCreateRequest } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = RoleCreateRequest["role"];
@@ -21,27 +22,21 @@ export class Roles<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/roles */
-	list(projectId: string, branchId: string): Promise<Outcome<Role[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Role[], Throw>>;
 	list(
 		projectId: string,
 		branchId: string,
 		opts?: CallOptions,
-	): Promise<Role[] | NeonResult<Role[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
+	): Paginated<Role> {
+		return paginate(
+			(_cursor, signal) =>
 				listProjectBranchRoles({
-					client,
+					client: this.#ctx.client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.roles,
+			(data) => ({ items: data?.roles ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 

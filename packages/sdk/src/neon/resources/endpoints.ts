@@ -15,6 +15,7 @@ import type {
 	EndpointUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = EndpointCreateRequest["endpoint"];
@@ -29,53 +30,32 @@ export class Endpoints<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/endpoints */
-	list(projectId: string): Promise<Outcome<Endpoint[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Endpoint[], Throw>>;
 	list(
 		projectId: string,
+		query?: { branchId?: string },
 		opts?: CallOptions,
-	): Promise<Endpoint[] | NeonResult<Endpoint[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
-				listProjectEndpoints({
-					client,
-					path: { project_id: projectId },
-					throwOnError: false,
-					signal,
-				}),
-			(data) => data.endpoints,
-		);
-	}
-
-	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/endpoints */
-	listByBranch(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<Endpoint[], DThrow>>;
-	listByBranch<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Endpoint[], Throw>>;
-	listByBranch(
-		projectId: string,
-		branchId: string,
-		opts?: CallOptions,
-	): Promise<Endpoint[] | NeonResult<Endpoint[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
-				listProjectBranchEndpoints({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					throwOnError: false,
-					signal,
-				}),
-			(data) => data.endpoints,
+	): Paginated<Endpoint> {
+		const branchId = query?.branchId;
+		return paginate(
+			(_cursor, signal) =>
+				branchId === undefined
+					? listProjectEndpoints({
+							client: this.#ctx.client,
+							path: { project_id: projectId },
+							throwOnError: false,
+							signal,
+						})
+					: listProjectBranchEndpoints({
+							client: this.#ctx.client,
+							path: {
+								project_id: projectId,
+								branch_id: branchId,
+							},
+							throwOnError: false,
+							signal,
+						}),
+			(data) => ({ items: data?.endpoints ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
