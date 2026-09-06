@@ -222,10 +222,8 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		expect(created.name).toBe("e2e_role");
 
-		// `password` unwraps to a bare string, `resetPassword` returns the whole Role —
-		// an asymmetry that's easy to break when the response mapping is touched.
 		const password = expectOk(
-			await neon.postgres.roles.password(
+			await neon.postgres.roles.revealPassword(
 				projectId,
 				defaultBranchId,
 				"e2e_role",
@@ -242,8 +240,9 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 				{ waitForReadiness: true },
 			),
 		);
-		expect(reset.name).toBe("e2e_role");
-		expect(reset.password).not.toBe(password);
+		expect(typeof reset).toBe("string");
+		expect(reset.length).toBeGreaterThan(0);
+		expect(reset).not.toBe(password);
 
 		expectOk(
 			await neon.postgres.roles.delete(

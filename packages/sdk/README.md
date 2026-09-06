@@ -320,14 +320,12 @@ const { data: uri } = await neon.postgres.connectionString({
 | `get(projectId, branchId, name)` | `Role` |
 | `create(projectId, branchId, { name, no_login? })` | `Role` |
 | `delete(projectId, branchId, name)` | **→void** |
-| `password(projectId, branchId, name)` | `string` (reveals the password) |
-| `resetPassword(projectId, branchId, name)` | `Role` (carries the new password) |
+| `revealPassword(projectId, branchId, name)` | `string` |
+| `resetPassword(projectId, branchId, name)` | `string` |
 
 ```ts
-// Reveal a role's password, or rotate it
-const { data: password } = await neon.postgres.roles.password(projectId, branchId, "neondb_owner");
-const { data: role } = await neon.postgres.roles.resetPassword(projectId, branchId, "neondb_owner");
-// role.password holds the new secret
+const { data: password } = await neon.postgres.roles.revealPassword(projectId, branchId, "neondb_owner");
+const { data: rotated } = await neon.postgres.roles.resetPassword(projectId, branchId, "neondb_owner");
 ```
 
 #### `neon.postgres.databases`
