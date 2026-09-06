@@ -281,7 +281,13 @@ export default defineTool(
 );
 ```
 
-Eve uses the filename as the model-facing tool name, so name the file after the published `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal.
+Eve uses the filename as the model-facing tool name, so name the file after the published `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal. `abortSignal` is optional. Pass `{ apiKey }` when the host supplies a per-call credential:
+
+```ts
+toEveTool(createNeonTool("projects.list"), {
+	apiKey: () => session.getAccessToken(),
+});
+```
 
 ## Mastra
 
@@ -305,7 +311,7 @@ const listProjects = createTool(configs.list_projects);
 const createProject = createTool(configs.create_and_connect_projects);
 ```
 
-The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal.
+The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal. Pass `{ apiKey }` on `toMastraTool` / `toMastraTools` for a per-call credential.
 
 ## Safety and binary data
 
