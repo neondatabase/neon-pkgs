@@ -6,7 +6,12 @@ import {
 	createNeonTools,
 	publishedId,
 } from "./index.js";
-import { toMastraTools } from "./mastra.js";
+import {
+	type MastraTools,
+	type NamedMastraTools,
+	type NeonAdapterNameOptions,
+	toMastraTools,
+} from "./mastra.js";
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
 expectTypeOf(
@@ -60,6 +65,16 @@ expectTypeOf(mastraTools).toHaveProperty("create_and_connect_projects");
 
 // @ts-expect-error unselected tools are absent from the Mastra tool record
 mastraTools.delete_projects;
+
+const renamedMastra = toMastraTools(tools, {
+	name: (tool) => `neon_${tool.id}`,
+});
+expectTypeOf(renamedMastra.neon_list_projects.id).toEqualTypeOf<string>();
+
+declare const maybeName: NeonAdapterNameOptions;
+expectTypeOf(toMastraTools(tools, maybeName)).toEqualTypeOf<
+	MastraTools<typeof tools> | NamedMastraTools<typeof tools>
+>();
 
 // @ts-expect-error Mastra configs preserve tool-specific request types
 mastraTools.list_projects.execute({ limit: "one" }, {});
