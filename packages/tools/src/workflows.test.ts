@@ -291,9 +291,10 @@ describe("branches.createAndConnect", () => {
 
 	test("injects project_id from a grant", async () => {
 		const { requests, tools } = createBranchTools({
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
+		// @ts-expect-error createBranchTools widens inject
 		await tools["branches.createAndConnect"].execute({
 			name: "feature-x",
 		});
