@@ -14,8 +14,8 @@
  * and headers without dropping to the low-level client.
  */
 
-import type { NeonError } from "./errors.js";
-import { NeonAbortError, toNeonError } from "./errors.js";
+import type { Client } from "../client/client/index.js";
+import { NeonAbortError, NeonError, toNeonError } from "./errors.js";
 
 /**
  * Did the caller's own signal end this call?
@@ -66,8 +66,8 @@ export type RawData<F extends AnyRawFn> =
 /** The call options for a wrapped raw function, minus the removed hey-api switches. */
 export type RawOptions<F extends AnyRawFn> = Omit<
 	NonNullable<Parameters<F>[0]>,
-	"throwOnError" | "responseStyle"
->;
+	"throwOnError" | "responseStyle" | "client"
+> & { client: Client };
 
 /**
  * The non-throwing result of a wrapped raw call: the ergonomic `{ data, error }` union
@@ -85,6 +85,8 @@ export type RawResult<T> =
 
 /**
  * Wrap a generated raw function so it speaks the ergonomic result contract.
+ * `options.client` is required; omitting it is a type error and throws
+ * {@link NeonError} with `kind: "client"` before any request is sent.
  *
  * @example
  * ```ts
@@ -105,9 +107,22 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 	async function call(
 		options: RawOptions<F> & { throwOnError?: boolean },
 	): Promise<RawData<F> | RawResult<RawData<F>>> {
+		const missingClient = () =>
+			new NeonError(
+				"raw functions require options.client — pass neon.client from createNeonClient().",
+				"client",
+			);
+		if (options == null) {
+			throw missingClient();
+		}
+		const client = Reflect.get(options, "client");
+		if (client == null) {
+			throw missingClient();
+		}
 		const shouldThrow = options.throwOnError === true;
 		const raw: RawFieldsResult<RawData<F>> = await fn({
 			...options,
+			client,
 			throwOnError: false,
 			responseStyle: "fields",
 		});
