@@ -82,7 +82,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		);
 		const branchId = child.branch.id;
 		const roles = expectOk(
-			await neon.postgres.roles.list(projectId, branchId),
+			await neon.postgres.roles.list(projectId, branchId).all(),
 		);
 		const owner = roles[0];
 		if (!owner) throw new Error("child branch has no role");
@@ -115,7 +115,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			),
 		);
 		const after = expectOk(
-			await neon.postgres.databases.list(projectId, branchId),
+			await neon.postgres.databases.list(projectId, branchId).all(),
 		);
 		expect(after.map((database) => database.name)).not.toContain(
 			"child_only",
@@ -149,10 +149,9 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 		// The endpoint the workflow reports must be the one the API actually attached.
 		const endpoints = expectOk(
-			await neon.postgres.endpoints.listByBranch(
-				projectId,
-				created.branch.id,
-			),
+			await neon.postgres.endpoints
+				.list(projectId, { branchId: created.branch.id })
+				.all(),
 		);
 		expect(endpoints.map((endpoint) => endpoint.id)).toContain(
 			created.endpoint.id,
@@ -173,10 +172,9 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			}),
 		);
 		const attached = expectOk(
-			await neon.postgres.endpoints.listByBranch(
-				projectId,
-				withCompute.id,
-			),
+			await neon.postgres.endpoints
+				.list(projectId, { branchId: withCompute.id })
+				.all(),
 		);
 		expect(
 			attached.filter((endpoint) => endpoint.type === "read_write"),
@@ -190,7 +188,9 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			}),
 		);
 		const none = expectOk(
-			await neon.postgres.endpoints.listByBranch(projectId, bare.id),
+			await neon.postgres.endpoints
+				.list(projectId, { branchId: bare.id })
+				.all(),
 		);
 		expect(none).toEqual([]);
 
@@ -208,7 +208,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("manages roles, including the two different password shapes", async () => {
 		const before = expectOk(
-			await neon.postgres.roles.list(projectId, defaultBranchId),
+			await neon.postgres.roles.list(projectId, defaultBranchId).all(),
 		);
 		expect(before.length).toBeGreaterThan(0);
 
@@ -254,14 +254,14 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			),
 		);
 		const after = expectOk(
-			await neon.postgres.roles.list(projectId, defaultBranchId),
+			await neon.postgres.roles.list(projectId, defaultBranchId).all(),
 		);
 		expect(after.map((role) => role.name)).not.toContain("e2e_role");
 	});
 
 	it("round-trips a database", async () => {
 		const roles = expectOk(
-			await neon.postgres.roles.list(projectId, defaultBranchId),
+			await neon.postgres.roles.list(projectId, defaultBranchId).all(),
 		);
 		const owner = roles[0];
 		if (!owner) throw new Error("project has no role to own a database");
@@ -294,18 +294,21 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			),
 		);
 		const after = expectOk(
-			await neon.postgres.databases.list(projectId, defaultBranchId),
+			await neon.postgres.databases
+				.list(projectId, defaultBranchId)
+				.all(),
 		);
 		expect(after.map((db) => db.name)).not.toContain("e2e_db");
 	});
 
 	it("lists and fetches the default branch's endpoint", async () => {
-		const all = expectOk(await neon.postgres.endpoints.list(projectId));
+		const all = expectOk(
+			await neon.postgres.endpoints.list(projectId).all(),
+		);
 		const byBranch = expectOk(
-			await neon.postgres.endpoints.listByBranch(
-				projectId,
-				defaultBranchId,
-			),
+			await neon.postgres.endpoints
+				.list(projectId, { branchId: defaultBranchId })
+				.all(),
 		);
 		expect(byBranch.length).toBeGreaterThan(0);
 		expect(all.map((endpoint) => endpoint.id)).toEqual(

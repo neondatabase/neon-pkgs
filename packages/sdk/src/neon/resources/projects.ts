@@ -90,25 +90,17 @@ export class Permissions<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/permissions */
-	list(projectId: string): Promise<Outcome<ProjectPermission[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<ProjectPermission[], Throw>>;
-	list(
-		projectId: string,
-		opts?: CallOptions,
-	): Promise<ProjectPermission[] | NeonResult<ProjectPermission[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
+	list(projectId: string, opts?: CallOptions): Paginated<ProjectPermission> {
+		return paginate(
+			(_cursor, signal) =>
 				listProjectPermissions({
-					client,
+					client: this.#ctx.client,
 					path: { project_id: projectId },
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.project_permissions,
+			(data) => ({ items: data?.project_permissions ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 

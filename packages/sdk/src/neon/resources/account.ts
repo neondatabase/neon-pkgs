@@ -15,6 +15,7 @@ import type {
 	RegionResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 /** Current user / account resource. */
@@ -63,7 +64,7 @@ export class User<DThrow extends boolean> {
 }
 
 /** Active regions. */
-export class Regions<DThrow extends boolean> {
+export class Regions {
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
@@ -71,18 +72,16 @@ export class Regions<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /regions */
-	list(): Promise<Outcome<RegionResponse[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<RegionResponse[], Throw>>;
-	list(
-		opts?: CallOptions,
-	): Promise<RegionResponse[] | NeonResult<RegionResponse[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
-				getActiveRegions({ client, throwOnError: false, signal }),
-			(data) => data.regions,
+	list(opts?: CallOptions): Paginated<RegionResponse> {
+		return paginate(
+			(_cursor, signal) =>
+				getActiveRegions({
+					client: this.#ctx.client,
+					throwOnError: false,
+					signal,
+				}),
+			(data) => ({ items: data?.regions ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 }
@@ -96,20 +95,16 @@ export class ApiKeys<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /api_keys */
-	list(): Promise<Outcome<ApiKeysListResponseItem[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<ApiKeysListResponseItem[], Throw>>;
-	list(
-		opts?: CallOptions,
-	): Promise<
-		ApiKeysListResponseItem[] | NeonResult<ApiKeysListResponseItem[]>
-	> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
-				listApiKeys({ client, throwOnError: false, signal }),
-			(data) => data,
+	list(opts?: CallOptions): Paginated<ApiKeysListResponseItem> {
+		return paginate(
+			(_cursor, signal) =>
+				listApiKeys({
+					client: this.#ctx.client,
+					throwOnError: false,
+					signal,
+				}),
+			(data) => ({ items: data ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 

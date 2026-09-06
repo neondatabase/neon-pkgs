@@ -32,6 +32,7 @@ import type {
 	UpdateNeonAuthUserRoleResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 /** Branch-scoped Neon Auth OAuth providers (Google, GitHub, …). */
@@ -46,27 +47,18 @@ export class AuthOauthProviders<DThrow extends boolean> {
 	list(
 		projectId: string,
 		branchId: string,
-	): Promise<Outcome<NeonAuthOauthProvider[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<NeonAuthOauthProvider[], Throw>>;
-	list(
-		projectId: string,
-		branchId: string,
 		opts?: CallOptions,
-	): Promise<NeonAuthOauthProvider[] | NeonResult<NeonAuthOauthProvider[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
+	): Paginated<NeonAuthOauthProvider> {
+		return paginate(
+			(_cursor, signal) =>
 				listBranchNeonAuthOauthProviders({
-					client,
+					client: this.#ctx.client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.providers,
+			(data) => ({ items: data?.providers ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
@@ -186,30 +178,18 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 	list(
 		projectId: string,
 		branchId: string,
-	): Promise<Outcome<NeonAuthRedirectUriWhitelistDomain[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<NeonAuthRedirectUriWhitelistDomain[], Throw>>;
-	list(
-		projectId: string,
-		branchId: string,
 		opts?: CallOptions,
-	): Promise<
-		| NeonAuthRedirectUriWhitelistDomain[]
-		| NeonResult<NeonAuthRedirectUriWhitelistDomain[]>
-	> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
+	): Paginated<NeonAuthRedirectUriWhitelistDomain> {
+		return paginate(
+			(_cursor, signal) =>
 				listBranchNeonAuthTrustedDomains({
-					client,
+					client: this.#ctx.client,
 					path: { project_id: projectId, branch_id: branchId },
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.domains,
+			(data) => ({ items: data?.domains ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 

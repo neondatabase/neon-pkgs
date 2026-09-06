@@ -17,6 +17,7 @@ import type {
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonAbortError, NeonError } from "../errors.js";
+import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 /**
@@ -115,25 +116,17 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/snapshots */
-	list(projectId: string): Promise<Outcome<Snapshot[], DThrow>>;
-	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		opts: CallOptions<Throw>,
-	): Promise<Outcome<Snapshot[], Throw>>;
-	list(
-		projectId: string,
-		opts?: CallOptions,
-	): Promise<Snapshot[] | NeonResult<Snapshot[]>> {
-		return this.#ctx.run(
-			opts,
-			(client, signal) =>
+	list(projectId: string, opts?: CallOptions): Paginated<Snapshot> {
+		return paginate(
+			(_cursor, signal) =>
 				listSnapshots({
-					client,
+					client: this.#ctx.client,
 					path: { project_id: projectId },
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.snapshots,
+			(data) => ({ items: data?.snapshots ?? [] }),
+			() => this.#ctx.deadlineFor(opts),
 		);
 	}
 
