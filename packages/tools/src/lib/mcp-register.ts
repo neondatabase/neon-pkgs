@@ -1,3 +1,4 @@
+import { NeonError } from "@neon/sdk";
 import type { NeonTool } from "./operation.js";
 
 export interface McpToolResult {
@@ -15,6 +16,28 @@ const errorMessage = (error: unknown): string =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
+
+const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
+	const payload: Record<string, unknown> = {
+		message: errorMessage(error),
+	};
+	if (error instanceof NeonError) {
+		payload.name = error.name;
+		payload.kind = error.kind;
+	}
+	if (isRecord(error)) {
+		if (
+			typeof error.status === "number" ||
+			typeof error.status === "string"
+		) {
+			payload.status = error.status;
+		}
+		if (typeof error.code === "string") {
+			payload.code = error.code;
+		}
+	}
+	return payload;
+};
 
 const authInfoFrom = (context: unknown): unknown => {
 	if (!isRecord(context)) {
@@ -83,7 +106,7 @@ const createToolHandler =
 			};
 		} catch (error) {
 			const structuredContent = {
-				error: { message: errorMessage(error) },
+				error: mcpErrorPayload(error),
 			};
 			return {
 				content: [
