@@ -57,6 +57,19 @@ export const withCreated = (error: NeonError, created: unknown): NeonError => {
 	return error;
 };
 
+export const createdId = (error: NeonError): string | undefined => {
+	const created = error.created;
+	if (
+		typeof created !== "object" ||
+		created === null ||
+		!("id" in created) ||
+		typeof created.id !== "string"
+	) {
+		return undefined;
+	}
+	return created.id;
+};
+
 /** A non-2xx HTTP response from the Neon API. */
 export class NeonApiError extends NeonError {
 	/** HTTP status code. */

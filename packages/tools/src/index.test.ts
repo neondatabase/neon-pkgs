@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
+	createdId,
 	createNeonTool,
 	createNeonTools,
+	NeonError,
 	type NeonToolsClientOptions,
 } from "./index.js";
 
@@ -176,12 +178,22 @@ describe("createNeonTools", () => {
 			},
 		});
 
-		await expect(
-			tools["projects.create"].execute({ name: "agent-project" }),
-		).rejects.toMatchObject({
-			kind: "timeout",
-			created: { id: "project-id", name: "agent-project" },
+		let caught: unknown;
+		try {
+			await tools["projects.create"].execute({ name: "agent-project" });
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(NeonError);
+		if (!(caught instanceof NeonError)) {
+			throw new Error("expected NeonError");
+		}
+		expect(caught.kind).toBe("timeout");
+		expect(caught.created).toEqual({
+			id: "project-id",
+			name: "agent-project",
 		});
+		expect(createdId(caught)).toBe("project-id");
 	});
 
 	test("does not poll functions.deploy because the response has no operations", async () => {

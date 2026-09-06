@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getProject } from "../client/raw.gen.js";
 import { createNeonClient } from "./client.js";
 import {
+	createdId,
 	describeTransportFailure,
 	NeonApiError,
 	NeonAuthError,
@@ -171,5 +172,19 @@ describe("withCreated", () => {
 		expect(withCreated(error, { id: "second" }).created).toEqual({
 			id: "first",
 		});
+	});
+});
+
+describe("createdId", () => {
+	it("returns the top-level id on a created resource", () => {
+		const error = new NeonTimeoutError("wait timed out");
+		error.created = { id: "p-1", name: "test" };
+		expect(createdId(error)).toBe("p-1");
+	});
+
+	it("returns undefined when the id is nested", () => {
+		const error = new NeonTimeoutError("wait timed out");
+		error.created = { project: { id: "p-1" } };
+		expect(createdId(error)).toBeUndefined();
 	});
 });
