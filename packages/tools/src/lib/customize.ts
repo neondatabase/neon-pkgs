@@ -10,9 +10,10 @@ export type NeonToolInjectValue =
 	| (() => string | undefined | Promise<string | undefined>);
 
 export interface NeonToolInjectOptions {
-	projectId?: NeonToolInjectValue;
-	branchId?: NeonToolInjectValue;
-	omitFromSchema?: boolean;
+	project_id?: NeonToolInjectValue;
+	branch_id?: NeonToolInjectValue;
+	/** `pin` (default) removes the field from the schema. `default` keeps it optional. */
+	mode?: "pin" | "default";
 }
 
 export interface NeonToolDescriptionSource {
@@ -55,16 +56,10 @@ export interface NeonToolCustomizeOptions {
 }
 
 type InjectedPathKey<Inject> =
-	| ("projectId" extends keyof Inject
-			? Inject["projectId"] extends undefined
-				? never
-				: "project_id"
+	| (Inject extends { project_id: NeonToolInjectValue }
+			? "project_id"
 			: never)
-	| ("branchId" extends keyof Inject
-			? Inject["branchId"] extends undefined
-				? never
-				: "branch_id"
-			: never);
+	| (Inject extends { branch_id: NeonToolInjectValue } ? "branch_id" : never);
 
 type RequiredKeys<Input> = {
 	[Key in keyof Input]-?: object extends Pick<Input, Key> ? never : Key;
@@ -79,15 +74,15 @@ type ApplyInjectToInput<Input, Inject> = [
 	InjectedRequiredKey<Input, Inject>,
 ] extends [never]
 	? Input
-	: Inject extends { omitFromSchema: true }
-		? Omit<Input, InjectedRequiredKey<Input, Inject>>
-		: Omit<Input, InjectedRequiredKey<Input, Inject>> &
+	: Inject extends { mode: "default" }
+		? Omit<Input, InjectedRequiredKey<Input, Inject>> &
 				Partial<
 					Pick<
 						Input,
 						Extract<InjectedRequiredKey<Input, Inject>, keyof Input>
 					>
-				>;
+				>
+		: Omit<Input, InjectedRequiredKey<Input, Inject>>;
 
 export type InjectedNeonTool<Tool, Inject> =
 	Tool extends NeonTool<infer Schema, string, infer Output>
@@ -100,20 +95,17 @@ export type InjectedNeonTool<Tool, Inject> =
 		: Tool;
 
 interface ResolvedInject {
-	projectId?: NeonToolInjectValue;
-	branchId?: NeonToolInjectValue;
-	omitFromSchema: boolean;
+	project_id?: NeonToolInjectValue;
+	branch_id?: NeonToolInjectValue;
+	mode: "pin" | "default";
 	hasAny: boolean;
 }
 
-const PATH_INJECT = [
-	["projectId", "project_id"],
-	["branchId", "branch_id"],
-] as const;
+const PATH_INJECT = ["project_id", "branch_id"] as const;
 
 const PUBLISHED_ID = /^[a-z][a-z0-9_]*$/;
 
-const missingInjectMessage = (name: "projectId" | "branchId") =>
+const missingInjectMessage = (name: "project_id" | "branch_id") =>
 	`A ${name} inject value is required`;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -215,24 +207,28 @@ function resolveInject(
 	inject: NeonToolInjectOptions | undefined,
 ): ResolvedInject {
 	if (inject === undefined) {
-		return { omitFromSchema: false, hasAny: false };
+		return { mode: "pin", hasAny: false };
 	}
 
-	const projectId = requireInjectValue("projectId", inject.projectId);
-	const branchId = requireInjectValue("branchId", inject.branchId);
-	const hasAny = projectId !== undefined || branchId !== undefined;
-	const omitFromSchema = inject.omitFromSchema === true;
-	if (omitFromSchema && !hasAny) {
+	const project_id = requireInjectValue("project_id", inject.project_id);
+	const branch_id = requireInjectValue("branch_id", inject.branch_id);
+	const hasAny = project_id !== undefined || branch_id !== undefined;
+	if (inject.mode !== undefined && !hasAny) {
 		throw new TypeError(
-			"omitFromSchema requires inject.projectId or inject.branchId",
+			"inject.mode requires inject.project_id or inject.branch_id",
 		);
 	}
 
-	return { projectId, branchId, omitFromSchema, hasAny };
+	return {
+		project_id,
+		branch_id,
+		mode: inject.mode ?? "pin",
+		hasAny,
+	};
 }
 
 function requireInjectValue(
-	name: "projectId" | "branchId",
+	name: "project_id" | "branch_id",
 	value: NeonToolInjectValue | undefined,
 ): NeonToolInjectValue | undefined {
 	if (value === undefined) {
@@ -290,7 +286,7 @@ function wrapToolExecute(
 ): NeonTool["execute"] {
 	const originalExecute = tool.execute.bind(tool);
 	const availableKeys = pathTemplateParams(tool.metadata.path);
-	const mode = inject.omitFromSchema ? "override" : "fill";
+	const mode = inject.mode === "pin" ? "override" : "fill";
 
 	return async (input, context) => {
 		const run = async () =>
@@ -330,11 +326,11 @@ async function resolveInjectedFields(
 	const present = isPlainObject(input) ? input : undefined;
 	const patch: Record<string, string> = {};
 
-	for (const [name, pathKey] of PATH_INJECT) {
+	for (const pathKey of PATH_INJECT) {
 		if (!availableKeys.has(pathKey)) {
 			continue;
 		}
-		const injector = inject[name];
+		const injector = inject[pathKey];
 		if (injector === undefined) {
 			continue;
 		}
@@ -346,12 +342,12 @@ async function resolveInjectedFields(
 			typeof injector === "function" ? await injector() : injector;
 		if (value === undefined) {
 			if (mode === "override") {
-				throw new TypeError(missingInjectMessage(name));
+				throw new TypeError(missingInjectMessage(pathKey));
 			}
 			continue;
 		}
 		if (typeof value !== "string" || value.length === 0) {
-			throw new TypeError(missingInjectMessage(name));
+			throw new TypeError(missingInjectMessage(pathKey));
 		}
 		patch[pathKey] = value;
 	}
@@ -416,15 +412,15 @@ function publishInputSchema(
 
 	const nextShape: Record<string, z.ZodType> = { ...shape };
 	let changed = false;
-	for (const [name, pathKey] of PATH_INJECT) {
-		if (inject[name] === undefined || !pathKeys.has(pathKey)) {
+	for (const pathKey of PATH_INJECT) {
+		if (inject[pathKey] === undefined || !pathKeys.has(pathKey)) {
 			continue;
 		}
 		if (nextShape[pathKey] === undefined) {
 			continue;
 		}
 		changed = true;
-		if (inject.omitFromSchema) {
+		if (inject.mode === "pin") {
 			delete nextShape[pathKey];
 		} else {
 			nextShape[pathKey] = nextShape[pathKey].optional();

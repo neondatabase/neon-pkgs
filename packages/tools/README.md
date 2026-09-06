@@ -139,15 +139,14 @@ Those tools publish as `neon_create_branch` and `neon_list_projects`. The record
 
 ### Project and branch injection
 
-Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createAndConnect`. Without `omitFromSchema`, the published field becomes optional and a caller-supplied value wins. With `omitFromSchema: true`, the field is removed from the published schema and the injector is the only source:
+Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createAndConnect`. Default `mode` is `"pin"`: the field is removed from the published schema and the injector is the only source. Pass `mode: "default"` to keep the field optional and let a caller-supplied value win.
 
 ```ts
 const tools = createNeonTools({
 	apiKey,
 	tools: ["projects.get", "branches.delete"] as const,
 	inject: {
-		projectId: "project-id",
-		omitFromSchema: true,
+		project_id: "project-id",
 	},
 });
 
@@ -165,8 +164,7 @@ const grant = new AsyncLocalStorage<{ projectId: string }>();
 const tools = createNeonTools({
 	tools: ["projects.get"] as const,
 	inject: {
-		projectId: () => grant.getStore()?.projectId,
-		omitFromSchema: true,
+		project_id: () => grant.getStore()?.projectId,
 	},
 });
 
@@ -177,7 +175,7 @@ await grant.run({ projectId: "project-id" }, () =>
 
 Injectors only apply to tools that have that path key. `projects.list` is unchanged. Empty inject values fail closed. Invalid ids still fail the original path schema before fetch.
 
-Injection reads the URL template, so it fills path `project_id` and `branch_id` only. Query and body fields with those names stay caller-supplied, including `postgres.connectionString`'s `branch_id`. `omitFromSchema: true` does not hide those fields.
+Injection reads the URL template, so it fills path `project_id` and `branch_id` only. Query and body fields with those names stay caller-supplied, including `postgres.connectionString`'s `branch_id`. Pinning a path key does not hide those fields.
 
 ## Request schemas
 

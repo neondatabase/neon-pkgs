@@ -106,16 +106,25 @@ revokeCredential
 const omittedProject = createNeonTools({
 	apiKey: "test-key",
 	tools: ["projects.get"] as const,
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedProject["projects.get"].execute({}).then((result) => {
 	expectTypeOf(result.data.id).toEqualTypeOf<string>();
 });
 
+createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	inject: {
+		// @ts-expect-error inject keys are the field names
+		projectId: "granted-project",
+	},
+});
+
 const filledProject = createNeonTools({
 	apiKey: "test-key",
 	tools: ["projects.get"] as const,
-	inject: { projectId: "granted-project" },
+	inject: { project_id: "granted-project", mode: "default" },
 });
 filledProject["projects.get"].execute({});
 filledProject["projects.get"].execute({ project_id: "caller-project" });
@@ -123,7 +132,7 @@ filledProject["projects.get"].execute({ project_id: "caller-project" });
 const omittedBranch = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.delete"] as const,
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedBranch["branches.delete"].execute({ branch_id: "br-id" });
 
@@ -146,16 +155,15 @@ const omittedBoth = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.delete"] as const,
 	inject: {
-		projectId: "granted-project",
-		branchId: "granted-branch",
-		omitFromSchema: true,
+		project_id: "granted-project",
+		branch_id: "granted-branch",
 	},
 });
 omittedBoth["branches.delete"].execute({});
 
 const omittedCreateNeonTool = createNeonTool("projects.get", {
 	apiKey: "test-key",
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedCreateNeonTool.execute({});
 
@@ -260,7 +268,7 @@ createBranchAndConnect.execute({
 const omittedWorkflow = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.createAndConnect"] as const,
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedWorkflow["branches.createAndConnect"].execute({ name: "feature-x" });
 

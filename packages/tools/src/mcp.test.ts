@@ -317,8 +317,7 @@ describe("MCP path injection", () => {
 			apiKey: "test-key",
 			tools: ["projects.get"],
 			inject: {
-				projectId: "granted-project",
-				omitFromSchema: true,
+				project_id: "granted-project",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -368,7 +367,7 @@ describe("MCP path injection", () => {
 			descriptions: {
 				"projects.get": "Get details of the granted Neon project.",
 			},
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project", mode: "default" },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return new Response(
@@ -418,8 +417,7 @@ describe("MCP path injection", () => {
 			apiKey: "test-key",
 			tools: ["projects.get"],
 			inject: {
-				projectId: "granted-project",
-				omitFromSchema: true,
+				project_id: "granted-project",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
