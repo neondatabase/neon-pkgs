@@ -1,7 +1,7 @@
 name: Catalog Drift
 
 # Maintainer guard: fails when @neon/ai-sdk-provider's pinned model
-# catalog (NEON_MODELS_DEV_IDS) drifts from the live models.dev `neon` provider.
+# catalog (NEON_MODELS_DEV_IDS) drifts from https://neon.com/models.json.
 
 on:
     schedule:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
     drift:
-        name: models.dev catalog drift
+        name: neon.com/models.json catalog drift
         runs-on:
             group: neondatabase-protected-runner-group
             labels: linux-ubuntu-latest

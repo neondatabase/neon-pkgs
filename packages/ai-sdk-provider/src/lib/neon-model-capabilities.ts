@@ -212,6 +212,21 @@ export function getNeonModelCapabilities(
 		};
 	}
 
+	// Catalog `temperature: false` on gpt-6-astra; the gpt-5 minor-version rule
+	// does not match gpt-6. Exact id: a future gpt-6-* is unmeasured.
+	if (canonicalId(id) === "gpt-6-astra") {
+		return {
+			family: "openai",
+			supportsTemperature: false,
+			supportsTopP: true,
+			temperatureTopPMutuallyExclusive: false,
+			supportsPenalties: true,
+			supportsSeed: true,
+			supportsStopSequences: true,
+			supportsReasoningEffort: true,
+		};
+	}
+
 	// Meta (Llama): rejects penalties and seed; accepts sampling params and stop.
 	if (id.includes("llama")) {
 		return {
