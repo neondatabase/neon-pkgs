@@ -12,6 +12,7 @@ import type {
 	Snapshot,
 } from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
+import type { CallOptions } from "./context.js";
 import type { Paginated } from "./paginate.js";
 import type { BranchConnection } from "./resources/branches.js";
 import type { ProjectConnection } from "./resources/projects.js";
@@ -30,6 +31,25 @@ it("default client returns the { data, error } envelope", () => {
 it("throwOnError on the client narrows methods to the bare resource", () => {
 	const neon = createNeonClient({ apiKey: "x", throwOnError: true });
 	expectTypeOf(neon.projects.get("p")).resolves.toEqualTypeOf<Project>();
+});
+
+it("a CallOptions variable keeps the envelope; CallOptions<true> throws", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	const opts: CallOptions = { signal: new AbortController().signal };
+	expectTypeOf(neon.projects.get("p", opts)).resolves.toEqualTypeOf<
+		NeonResult<Project>
+	>();
+
+	const throwing: CallOptions<true> = { throwOnError: true };
+	expectTypeOf(
+		neon.projects.get("p", throwing),
+	).resolves.toEqualTypeOf<Project>();
+
+	const invalid: CallOptions = {
+		// @ts-expect-error bare CallOptions is the envelope, not throwOnError: true
+		throwOnError: true,
+	};
+	void invalid;
 });
 
 it("per-call throwOnError overrides the client default and narrows", () => {
