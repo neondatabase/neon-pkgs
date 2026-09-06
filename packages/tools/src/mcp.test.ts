@@ -12,7 +12,7 @@ import {
 	type McpToolResult,
 	registerNeonTools as registerNeonToolsV2,
 } from "./mcp.js";
-import { registerNeonTools as registerNeonToolsV1 } from "./mcp-v1.js";
+import { registerNeonTools, registerNeonToolsV1 } from "./mcp-v1.js";
 
 const closeables: Array<{ close(): Promise<void> }> = [];
 
@@ -285,6 +285,10 @@ describe("MCP request credentials", () => {
 });
 
 describe("MCP v1 compatibility", () => {
+	test("registerNeonTools is the deprecated alias of registerNeonToolsV1", () => {
+		expect(registerNeonTools).toBe(registerNeonToolsV1);
+	});
+
 	test("registers and calls the same Zod 4 tool schema", async () => {
 		const server = new McpServerV1({
 			name: "test-server",
