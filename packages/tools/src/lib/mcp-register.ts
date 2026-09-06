@@ -1,4 +1,3 @@
-import { NeonError } from "@neon/sdk";
 import type { NeonTool } from "./operation.js";
 
 export interface McpToolResult {
@@ -21,11 +20,13 @@ const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
 	const payload: Record<string, unknown> = {
 		message: errorMessage(error),
 	};
-	if (error instanceof NeonError) {
-		payload.name = error.name;
-		payload.kind = error.kind;
-	}
 	if (isRecord(error)) {
+		if (typeof error.name === "string") {
+			payload.name = error.name;
+		}
+		if (typeof error.kind === "string") {
+			payload.kind = error.kind;
+		}
 		if (
 			typeof error.status === "number" ||
 			typeof error.status === "string"
