@@ -723,7 +723,7 @@ Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project)
 
 ## Raw layer (every endpoint, 1:1)
 
-Anything not wrapped above is available raw. Pass `neon.client` to reuse the client's auth:
+Anything not wrapped above is available raw. Pass `neon.client` on every call; it is required.
 
 ```ts
 import { raw } from "@neon/sdk";
@@ -735,6 +735,8 @@ const { data, error } = await raw.getProjectBranchSchema({
   query: { db_name: "neondb" }, // db_name is required
 });
 ```
+
+Omitting `client` is a type error. At runtime it throws `NeonError` with `kind: "client"` before any request is sent.
 
 **The raw layer speaks the exact same result contract as the ergonomic client.** By default a
 raw call resolves to a `{ data, error }` `NeonResult` with the typed `NeonError` on the error
