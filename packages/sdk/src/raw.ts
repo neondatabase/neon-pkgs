@@ -4,10 +4,11 @@
  * guaranteed per-function tree-shaking, via this subpath:
  * `import { listProjects } from "@neon/sdk/raw"`.
  *
- * Every operation speaks the **same result contract as the ergonomic client**: it resolves
- * to a `{ data, error }` {@link NeonResult} by default, or the bare resource when you pass
- * `throwOnError: true` (throwing the typed `NeonError`). There is no `responseStyle` switch —
- * `throwOnError` is the only one, and the return type always tracks it.
+ * Every operation speaks the **same `{ data, error }` contract as the ergonomic client**, plus
+ * HTTP status and headers: it resolves to a {@link RawResult} by default, or the bare
+ * resource when you pass `throwOnError: true` (throwing the typed `NeonError`). There is no
+ * `responseStyle` switch — `throwOnError` is the only one, and the return type always tracks
+ * it.
  */
 
 // `ClientOptions` / `Options` are intentionally not re-exported from the client
