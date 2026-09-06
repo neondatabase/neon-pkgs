@@ -138,8 +138,13 @@ it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
 		NeonResult<Endpoint[]>
 	>();
 	expectTypeOf(
-		neon.postgres.roles.password("p", "br", "neondb_owner"),
+		neon.postgres.roles.revealPassword("p", "br", "neondb_owner"),
 	).resolves.toEqualTypeOf<NeonResult<string>>();
+	expectTypeOf(
+		neon.postgres.roles.resetPassword("p", "br", "neondb_owner"),
+	).resolves.toEqualTypeOf<NeonResult<string>>();
+	// @ts-expect-error — password was renamed to revealPassword
+	neon.postgres.roles.password("p", "br", "neondb_owner");
 	expectTypeOf(
 		neon.postgres.connectionString({ projectId: "p" }),
 	).resolves.toEqualTypeOf<NeonResult<string>>();
@@ -150,6 +155,12 @@ it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
 	expectTypeOf(
 		throwing.postgres.connectionString({ projectId: "p" }),
+	).resolves.toEqualTypeOf<string>();
+	expectTypeOf(
+		throwing.postgres.roles.revealPassword("p", "br", "neondb_owner"),
+	).resolves.toEqualTypeOf<string>();
+	expectTypeOf(
+		throwing.postgres.roles.resetPassword("p", "br", "neondb_owner"),
 	).resolves.toEqualTypeOf<string>();
 	expectTypeOf(
 		throwing.postgres.dataApi.delete("p", "br", "neondb"),

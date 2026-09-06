@@ -8,7 +8,8 @@ import {
 } from "../../client/sdk.gen.js";
 import type { Role, RoleCreateRequest } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import type { NeonResult, Outcome } from "../result.js";
+import { NeonError } from "../errors.js";
+import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 type CreateInput = RoleCreateRequest["role"];
 
@@ -149,18 +150,18 @@ export class Roles<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/roles/{role_name}/reveal_password
 	 */
-	password(
+	revealPassword(
 		projectId: string,
 		branchId: string,
 		name: string,
 	): Promise<Outcome<string, DThrow>>;
-	password<Throw extends boolean = DThrow>(
+	revealPassword<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
 		name: string,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<string, Throw>>;
-	password(
+	revealPassword(
 		projectId: string,
 		branchId: string,
 		name: string,
@@ -183,29 +184,27 @@ export class Roles<DThrow extends boolean> {
 		);
 	}
 
-	/**
-	 * Reset the role's password; the returned `Role` carries the new `password`.
-	 *
-	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password
-	 */
+	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password */
 	resetPassword(
 		projectId: string,
 		branchId: string,
 		name: string,
-	): Promise<Outcome<Role, DThrow>>;
+	): Promise<Outcome<string, DThrow>>;
 	resetPassword<Throw extends boolean = DThrow>(
 		projectId: string,
 		branchId: string,
 		name: string,
 		opts: CallOptions<Throw>,
-	): Promise<Outcome<Role, Throw>>;
-	resetPassword(
+	): Promise<Outcome<string, Throw>>;
+	async resetPassword(
 		projectId: string,
 		branchId: string,
 		name: string,
 		opts?: CallOptions,
-	): Promise<Role | NeonResult<Role>> {
-		return this.#ctx.run(
+	): Promise<string | NeonResult<string>> {
+		const shouldThrow =
+			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
+		const result = await this.#ctx.execute(
 			opts,
 			(client, signal) =>
 				resetProjectBranchRolePassword({
@@ -218,7 +217,22 @@ export class Roles<DThrow extends boolean> {
 					throwOnError: false,
 					signal,
 				}),
-			(data) => data.role,
+			(data) => data.role?.password,
 		);
+		if (result.error) {
+			return finalize(err<string>(result.error), shouldThrow);
+		}
+		if (!result.data) {
+			return finalize(
+				err<string>(
+					new NeonError(
+						"Reset returned a role without a password.",
+						"client",
+					),
+				),
+				shouldThrow,
+			);
+		}
+		return finalize(ok(result.data), shouldThrow);
 	}
 }
