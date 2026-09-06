@@ -1,4 +1,5 @@
 import type * as z from "zod";
+import type { NeonBearerCredential } from "./lib/auth.js";
 import type {
 	NeonTool,
 	NeonToolExecutionContext,
@@ -7,6 +8,10 @@ import type {
 
 export interface MastraToolContext {
 	abortSignal?: AbortSignal;
+}
+
+export interface MastraToolOptions {
+	apiKey?: (context: MastraToolContext) => NeonBearerCredential | undefined;
 }
 
 export type MastraToolConfig<Tool extends NeonTool> = {
@@ -35,8 +40,22 @@ type MastraToolSource = {
 	) => Promise<NeonToolResult<unknown>>;
 };
 
+const executionContext = (
+	signal: AbortSignal | undefined,
+	apiKey: NeonBearerCredential | undefined,
+): NeonToolExecutionContext | undefined => {
+	if (signal === undefined && apiKey === undefined) {
+		return undefined;
+	}
+	return {
+		...(signal === undefined ? {} : { signal }),
+		...(apiKey === undefined ? {} : { apiKey }),
+	};
+};
+
 export const toMastraTool = <const Tool extends MastraToolSource>(
 	tool: Tool,
+	options?: MastraToolOptions,
 ) => ({
 	id: tool.id,
 	description: tool.description,
@@ -46,9 +65,10 @@ export const toMastraTool = <const Tool extends MastraToolSource>(
 		input: Parameters<Tool["execute"]>[0],
 		context: MastraToolContext,
 	): ReturnType<Tool["execute"]> =>
-		tool.execute(input, { signal: context.abortSignal }) as ReturnType<
-			Tool["execute"]
-		>,
+		tool.execute(
+			input,
+			executionContext(context.abortSignal, options?.apiKey?.(context)),
+		) as ReturnType<Tool["execute"]>,
 });
 
 function assertMastraTools<Tools extends Readonly<Record<string, NeonTool>>>(
@@ -69,9 +89,13 @@ export const toMastraTools = <
 	const Tools extends Readonly<Record<string, NeonTool>>,
 >(
 	tools: Tools,
+	options?: MastraToolOptions,
 ): MastraTools<Tools> => {
 	const adapted: unknown = Object.fromEntries(
-		Object.values(tools).map((tool) => [tool.id, toMastraTool(tool)]),
+		Object.values(tools).map((tool) => [
+			tool.id,
+			toMastraTool(tool, options),
+		]),
 	);
 	assertMastraTools(adapted, tools);
 	return adapted;

@@ -53,6 +53,49 @@ describe("Eve compatibility", () => {
 
 		expect(toEveTool(tools["projects.list"]).approval).toBeUndefined();
 	});
+
+	test("forwards a per-call Eve credential", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			tools: ["projects.list"],
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				});
+			},
+		});
+		const eve = toEveTool(tools["projects.list"], {
+			apiKey: () => "eve-token",
+		});
+		await eve.execute({}, {});
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer eve-token",
+		);
+	});
+
+	test("omits an undefined Eve resolver so the constructor key is used", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "constructor-key",
+			tools: ["projects.list"],
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				});
+			},
+		});
+		const eve = toEveTool(tools["projects.list"], {
+			apiKey: () => undefined,
+		});
+		await eve.execute({}, {});
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer constructor-key",
+		);
+	});
 });
 
 describe("Mastra compatibility", () => {
@@ -70,6 +113,27 @@ describe("Mastra compatibility", () => {
 		expect(listProjects.requireApproval).toBe(false);
 		expect(createProject.id).toBe("create_and_connect_projects");
 		expect(createProject.requireApproval).toBe(true);
+	});
+
+	test("forwards a per-call Mastra credential", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			tools: ["projects.list"],
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				});
+			},
+		});
+		const mastra = toMastraTools(tools, {
+			apiKey: () => "mastra-token",
+		}).list_projects;
+		await mastra.execute({}, {});
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer mastra-token",
+		);
 	});
 
 	test("forwards omitted path schemas from inject", () => {
