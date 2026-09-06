@@ -3,7 +3,7 @@ import { defineTool } from "eve/tools";
 import { describe, expect, test } from "vitest";
 import { toEveTool } from "./eve.js";
 import { createNeonTools } from "./index.js";
-import { toMastraTools } from "./mastra.js";
+import { toMastraTool, toMastraTools } from "./mastra.js";
 
 const jsonResponse = (body: unknown) =>
 	new Response(JSON.stringify(body), {
@@ -133,6 +133,28 @@ describe("Mastra compatibility", () => {
 		await mastra.execute({}, {});
 		expect(requests[0].headers.get("authorization")).toBe(
 			"Bearer mastra-token",
+		);
+	});
+
+	test("omits an undefined Mastra resolver so the constructor key is used", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "constructor-key",
+			tools: ["projects.list"],
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				});
+			},
+		});
+		const mastra = toMastraTool(tools["projects.list"], {
+			apiKey: () => undefined,
+		});
+		await mastra.execute({}, {});
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer constructor-key",
 		);
 	});
 
