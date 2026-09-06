@@ -63,12 +63,12 @@ describe("Mastra compatibility", () => {
 		});
 
 		const configs = toMastraTools(tools);
-		const listProjects = createTool(configs.list_projects);
-		const createProject = createTool(configs.create_and_connect_projects);
+		const listProjects = createTool(configs.projects_list);
+		const createProject = createTool(configs.projects_create_and_connect);
 
-		expect(listProjects.id).toBe("list_projects");
+		expect(listProjects.id).toBe("projects_list");
 		expect(listProjects.requireApproval).toBe(false);
-		expect(createProject.id).toBe("create_and_connect_projects");
+		expect(createProject.id).toBe("projects_create_and_connect");
 		expect(createProject.requireApproval).toBe(true);
 	});
 
@@ -79,7 +79,7 @@ describe("Mastra compatibility", () => {
 			inject: { projectId: "granted-project", omitFromSchema: true },
 		});
 
-		expect(toMastraTools(tools).get_projects.inputSchema).toBe(
+		expect(toMastraTools(tools).projects_get.inputSchema).toBe(
 			tools["projects.get"].inputSchema,
 		);
 		expect(toEveTool(tools["projects.get"]).inputSchema).toBe(
@@ -92,7 +92,7 @@ describe("Mastra compatibility", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.get"],
-			descriptions: { get_projects: "Granted project details." },
+			descriptions: { projects_get: "Granted project details." },
 			inject: { projectId: "granted-project", omitFromSchema: true },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -101,7 +101,7 @@ describe("Mastra compatibility", () => {
 		});
 
 		const eve = toEveTool(tools["projects.get"]);
-		const mastra = toMastraTools(tools).get_projects;
+		const mastra = toMastraTools(tools).projects_get;
 		expect(eve.description).toBe("Granted project details.");
 		expect(mastra.description).toBe("Granted project details.");
 

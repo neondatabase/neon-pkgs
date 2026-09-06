@@ -16,7 +16,7 @@ export interface NeonToolInjectOptions {
 }
 
 export interface NeonToolDescriptionSource {
-	operationId: string;
+	selector: string;
 	id: string;
 	title: string;
 	description: string;
@@ -28,7 +28,7 @@ export type NeonToolDescriptionOverrides =
 
 export type NeonToolNameSource = Pick<
 	NeonToolDescriptionSource,
-	"operationId" | "id"
+	"selector" | "id"
 >;
 
 export type NeonToolNameOverrides =
@@ -36,7 +36,7 @@ export type NeonToolNameOverrides =
 	| ((tool: NeonToolNameSource) => string);
 
 export interface NeonToolOnExecuteEvent<Output = unknown> {
-	operationId: string;
+	selector: string;
 	id: string;
 	input: unknown;
 	execute: () => Promise<NeonToolResult<Output>>;
@@ -184,17 +184,17 @@ function publishedId(
 	if (options.names !== undefined) {
 		if (typeof options.names === "function") {
 			id = options.names({
-				operationId: tool.operationId,
+				selector: tool.selector,
 				id: tool.id,
 			});
 			if (typeof id !== "string") {
 				throw new TypeError(
-					`Neon tool name overrides must return a string for ${tool.operationId}`,
+					`Neon tool name overrides must return a string for ${tool.selector}`,
 				);
 			}
 		} else {
 			const override =
-				options.names[tool.operationId] ?? options.names[tool.id];
+				options.names[tool.selector] ?? options.names[tool.id];
 			if (override !== undefined) {
 				id = override;
 			}
@@ -205,7 +205,7 @@ function publishedId(
 	}
 	if (typeof id !== "string" || !PUBLISHED_ID.test(id)) {
 		throw new TypeError(
-			`Neon tool id must match ${PUBLISHED_ID} for ${tool.operationId}: received ${JSON.stringify(id)}`,
+			`Neon tool id must match ${PUBLISHED_ID} for ${tool.selector}: received ${JSON.stringify(id)}`,
 		);
 	}
 	return id;
@@ -260,7 +260,7 @@ function applyDescription(
 
 	if (typeof descriptions === "function") {
 		const description = descriptions({
-			operationId: tool.operationId,
+			selector: tool.selector,
 			id: tool.id,
 			title: tool.title,
 			description: tool.description,
@@ -273,7 +273,7 @@ function applyDescription(
 		return description;
 	}
 
-	const description = descriptions[tool.operationId] ?? descriptions[tool.id];
+	const description = descriptions[tool.selector] ?? descriptions[tool.id];
 	if (description === undefined) {
 		return tool.description;
 	}
@@ -313,7 +313,7 @@ function wrapToolExecute(
 		}
 
 		return onExecute({
-			operationId: tool.operationId,
+			selector: tool.selector,
 			id: tool.id,
 			input: cloneInput(input),
 			execute: run,
