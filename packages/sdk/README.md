@@ -739,8 +739,8 @@ const { data, error } = await raw.getProjectBranchSchema({
 **The raw layer uses the same `{ data, error }` contract as the ergonomic client, plus HTTP
 status and headers.** The ergonomic client returns `NeonResult`. A raw call returns
 `RawResult` (`import type { RawResult } from "@neon/sdk/raw"`): the same envelope plus
-optional `response`/`request`. `response` is unset only when the request never reached the
-server. Pass `throwOnError: true` to get the bare resource and throw instead — and the
+optional `response?: Response` and `request?: Request`. `response` is `undefined` only when
+no HTTP response was received (network error, timeout, abort). Pass `throwOnError: true` to get the bare resource and throw instead — and the
 return type narrows accordingly:
 
 ```ts
