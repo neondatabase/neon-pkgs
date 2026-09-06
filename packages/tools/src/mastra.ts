@@ -92,6 +92,12 @@ export function toMastraTools<
 	const Tools extends Readonly<Record<string, NeonTool>>,
 >(
 	tools: Tools,
+	options: NeonAdapterNameOptions,
+): MastraTools<Tools> | NamedMastraTools<Tools>;
+export function toMastraTools<
+	const Tools extends Readonly<Record<string, NeonTool>>,
+>(
+	tools: Tools,
 	options?: NeonAdapterNameOptions,
 ): MastraTools<Tools> | NamedMastraTools<Tools> {
 	const named = namedNeonTools(tools, options);

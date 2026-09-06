@@ -6,7 +6,7 @@ import {
 	createNeonTools,
 	publishedId,
 } from "./index.js";
-import { toMastraTools } from "./mastra.js";
+import { type NeonAdapterNameOptions, toMastraTools } from "./mastra.js";
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
 expectTypeOf(
@@ -65,6 +65,9 @@ const renamedMastra = toMastraTools(tools, {
 	name: (tool) => `neon_${tool.id}`,
 });
 expectTypeOf(renamedMastra.neon_list_projects.id).toEqualTypeOf<string>();
+
+declare const maybeName: NeonAdapterNameOptions;
+toMastraTools(tools, maybeName);
 
 // @ts-expect-error Mastra configs preserve tool-specific request types
 mastraTools.list_projects.execute({ limit: "one" }, {});
