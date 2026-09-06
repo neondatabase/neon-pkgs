@@ -1,3 +1,4 @@
+import { NeonError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import {
 	createNeonTool,
@@ -166,6 +167,40 @@ describe("createNeonTools", () => {
 			data: { id: "deployment-id", status: "pending" },
 		});
 		expect(requests).toHaveLength(1);
+	});
+
+	test("returns { error } when throwOnError is false", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			throwOnError: false,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+		});
+
+		const result = await tools["projects.get"].execute({
+			project_id: "missing",
+		});
+
+		expect("error" in result && result.error !== undefined).toBe(true);
+		if (!("error" in result) || result.error === undefined) {
+			throw new Error("expected error envelope");
+		}
+		expect(result.error).toBeInstanceOf(NeonError);
+		expect(result.error.kind).toBe("not_found");
+	});
+
+	test("throws when throwOnError is omitted", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+		});
+
+		await expect(
+			tools["projects.get"].execute({ project_id: "missing" }),
+		).rejects.toBeInstanceOf(NeonError);
 	});
 
 	test("rejects a call with no tools", () => {

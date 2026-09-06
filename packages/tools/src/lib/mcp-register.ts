@@ -71,6 +71,9 @@ const createToolHandler =
 				signal: signalFrom(context),
 				...(apiKey === undefined ? {} : { apiKey }),
 			});
+			if ("error" in result && result.error !== undefined) {
+				throw result.error;
+			}
 			const structuredContent = { data: result.data };
 			return {
 				content: [

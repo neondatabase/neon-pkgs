@@ -19,6 +19,7 @@ import {
 	toolIds,
 	unpublishedToolError,
 } from "./lib/ergonomic/index.js";
+import type { NeonToolResult } from "./lib/operation.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
 export type {
@@ -46,6 +47,26 @@ export type { NeonToolId, PublishedId };
 export { NeonError, publishedId, toolIds };
 
 type ToolFactories = typeof toolFactories;
+
+type ThrowsFrom<T> = T extends { throwOnError: false } ? false : true;
+
+type WithThrowMode<Tool, Throws extends boolean> = Tool extends {
+	execute: (
+		input: infer Input,
+		context?: infer Context,
+	) => Promise<{ data: infer Data }>;
+}
+	? Omit<Tool, "execute"> & {
+			execute(
+				input: Input,
+				context?: Context,
+			): Promise<NeonToolResult<Data, Throws>>;
+		}
+	: Tool;
+
+type ToolsWithThrow<Tools, Throws extends boolean> = {
+	[Key in keyof Tools]: WithThrowMode<Tools[Key], Throws>;
+};
 
 export type NeonTools<Tools extends readonly NeonToolId[] = []> = {
 	[Tool in Tools[number]]: ReturnType<ToolFactories[Tool]>;
@@ -81,9 +102,12 @@ type SelectedTools<T> = T extends {
 	: [];
 
 type NeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
-	? Inject extends NeonToolInjectOptions
-		? InjectedNeonTools<SelectedTools<T>, Inject>
-		: NeonTools<SelectedTools<T>>
+	? ToolsWithThrow<
+			Inject extends NeonToolInjectOptions
+				? InjectedNeonTools<SelectedTools<T>, Inject>
+				: NeonTools<SelectedTools<T>>,
+			ThrowsFrom<T>
+		>
 	: never;
 
 type ToolForId<Id extends NeonToolId> = ReturnType<ToolFactories[Id]>;
@@ -176,22 +200,36 @@ const bindTools = <T extends CreateNeonToolsInput>(
 	return tools as NeonTools<SelectedTools<T>>;
 };
 
-type NamedNeonTools<Tools extends readonly NeonToolId[], Inject> = {
+type NamedNeonTools<
+	Tools extends readonly NeonToolId[],
+	Inject,
+	Throws extends boolean,
+> = {
 	[Tool in Tools[number]]: WithPublishedId<
-		Inject extends NeonToolInjectOptions
-			? InjectedNeonTool<ReturnType<ToolFactories[Tool]>, Inject>
-			: ReturnType<ToolFactories[Tool]>
+		WithThrowMode<
+			Inject extends NeonToolInjectOptions
+				? InjectedNeonTool<ReturnType<ToolFactories[Tool]>, Inject>
+				: ReturnType<ToolFactories[Tool]>,
+			Throws
+		>
 	>;
 };
 
-type NamedNeonTool<Id extends NeonToolId, Inject> = WithPublishedId<
-	Inject extends NeonToolInjectOptions
-		? InjectedNeonTool<ToolForId<Id>, Inject>
-		: ToolForId<Id>
+type NamedNeonTool<
+	Id extends NeonToolId,
+	Inject,
+	Throws extends boolean,
+> = WithPublishedId<
+	WithThrowMode<
+		Inject extends NeonToolInjectOptions
+			? InjectedNeonTool<ToolForId<Id>, Inject>
+			: ToolForId<Id>,
+		Throws
+	>
 >;
 
 type NamedNeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
-	? NamedNeonTools<SelectedTools<T>, Inject>
+	? NamedNeonTools<SelectedTools<T>, Inject, ThrowsFrom<T>>
 	: never;
 
 export function createNeonTools<
@@ -221,24 +259,33 @@ export function createNeonTools<
 export function createNeonTool<
 	const Id extends NeonToolId,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
+	const Throws extends boolean = true,
 >(
 	id: Id,
 	options: NeonToolsClientOptions & {
 		inject?: Inject;
+		throwOnError?: Throws;
 	} & (
 			| { name: (id: string) => string; names?: NeonToolNameOverrides }
 			| { names: NeonToolNameOverrides; name?: (id: string) => string }
 		),
-): NamedNeonTool<Id, Inject>;
+): NamedNeonTool<Id, Inject, Throws>;
 export function createNeonTool<
 	const Id extends NeonToolId,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
+	const Throws extends boolean = true,
 >(
 	id: Id,
-	options: NeonToolsClientOptions & { inject?: Inject },
-): Inject extends NeonToolInjectOptions
-	? InjectedNeonTool<ToolForId<Id>, Inject>
-	: ToolForId<Id>;
+	options: NeonToolsClientOptions & {
+		inject?: Inject;
+		throwOnError?: Throws;
+	},
+): WithThrowMode<
+	Inject extends NeonToolInjectOptions
+		? InjectedNeonTool<ToolForId<Id>, Inject>
+		: ToolForId<Id>,
+	Throws
+>;
 export function createNeonTool<
 	const Id extends NeonToolId,
 	const Inject extends NeonToolInjectOptions | undefined = undefined,
@@ -250,7 +297,7 @@ export function createNeonTool<
 		names?: NeonToolNameOverrides;
 	},
 ):
-	| NamedNeonTool<Id, Inject>
+	| NamedNeonTool<Id, Inject, boolean>
 	| InjectedNeonTool<ToolForId<Id>, Inject>
 	| ToolForId<Id> {
 	if (!isNeonToolId(id)) {
@@ -263,7 +310,7 @@ export function createNeonTool<
 		? applyToolCustomization(tool, options)
 		: tool;
 	return customized as
-		| NamedNeonTool<Id, Inject>
+		| NamedNeonTool<Id, Inject, boolean>
 		| InjectedNeonTool<ToolForId<Id>, Inject>
 		| ToolForId<Id>;
 }
