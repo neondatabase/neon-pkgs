@@ -6,9 +6,9 @@ export interface McpToolResult {
 	isError?: boolean;
 }
 
-export interface McpToolServer {
-	registerTool: object;
-}
+type McpToolRegistrar = {
+	registerTool: unknown;
+};
 
 const errorMessage = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
@@ -99,7 +99,7 @@ const createToolHandler =
 	};
 
 export const registerNeonToolsWithSchema = (
-	server: McpToolServer,
+	server: McpToolRegistrar,
 	tools: Readonly<Record<string, NeonTool>>,
 	inputSchema: (tool: NeonTool) => unknown,
 ): void => {
