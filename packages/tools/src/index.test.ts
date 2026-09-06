@@ -190,6 +190,55 @@ describe("createNeonTools", () => {
 		expect(result.error.kind).toBe("not_found");
 	});
 
+	test("returns { error } from createNeonTool when throwOnError is false", async () => {
+		const tool = createNeonTool("projects.get", {
+			apiKey: "test-key",
+			throwOnError: false,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+		});
+
+		const result = await tool.execute({ project_id: "missing" });
+		expect("error" in result && result.error !== undefined).toBe(true);
+	});
+
+	test("still throws Zod failures when throwOnError is false", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			throwOnError: false,
+		});
+
+		await expect(
+			tools["projects.get"].execute({ project_id: 1 as never }),
+		).rejects.toThrow();
+	});
+
+	test("onExecute still sees a thrown NeonError when throwOnError is false", async () => {
+		let thrown: unknown;
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			throwOnError: false,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+			onExecute: async ({ execute }) => {
+				try {
+					return await execute();
+				} catch (error) {
+					thrown = error;
+					throw error;
+				}
+			},
+		});
+
+		const result = await tools["projects.get"].execute({
+			project_id: "missing",
+		});
+		expect(thrown).toBeInstanceOf(NeonError);
+		expect("error" in result && result.error !== undefined).toBe(true);
+	});
+
 	test("throws when throwOnError is omitted", async () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",

@@ -8,6 +8,7 @@ import {
 	publishedId,
 } from "./index.js";
 import { toMastraTools } from "./mastra.js";
+import { registerNeonTools } from "./mcp.js";
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
 expectTypeOf(
@@ -302,6 +303,20 @@ const enveloped = createNeonTools({
 	throwOnError: false,
 });
 enveloped["projects.get"].execute({ project_id: "p" }).then((result) => {
+	if (result.error) {
+		expectTypeOf(result.error).toEqualTypeOf<NeonError>();
+	} else {
+		expectTypeOf(result.data.id).toEqualTypeOf<string>();
+	}
+});
+
+registerNeonTools({ registerTool() {} }, enveloped);
+
+const envelopedOne = createNeonTool("projects.get", {
+	apiKey: "test-key",
+	throwOnError: false,
+});
+envelopedOne.execute({ project_id: "p" }).then((result) => {
 	if (result.error) {
 		expectTypeOf(result.error).toEqualTypeOf<NeonError>();
 	} else {

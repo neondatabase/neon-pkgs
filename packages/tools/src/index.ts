@@ -19,7 +19,7 @@ import {
 	toolIds,
 	unpublishedToolError,
 } from "./lib/ergonomic/index.js";
-import type { NeonToolResult } from "./lib/operation.js";
+import type { NeonTool, NeonToolResult } from "./lib/operation.js";
 
 export type { NeonBearerCredential } from "./lib/auth.js";
 export type {
@@ -48,7 +48,13 @@ export { NeonError, publishedId, toolIds };
 
 type ToolFactories = typeof toolFactories;
 
-type ThrowsFrom<T> = T extends { throwOnError: false } ? false : true;
+type ThrowsFrom<T> = T extends { throwOnError: false }
+	? false
+	: T extends { throwOnError: true }
+		? true
+		: T extends { throwOnError: boolean }
+			? boolean
+			: true;
 
 type WithThrowMode<Tool, Throws extends boolean> = Tool extends {
 	execute: (
@@ -197,8 +203,35 @@ const bindTools = <T extends CreateNeonToolsInput>(
 	}
 	const tools: unknown = Object.fromEntries(entries);
 	assertNeonTools(tools, selected);
+	if (options.throwOnError === false) {
+		const enveloped = Object.fromEntries(
+			Object.entries(tools as Record<string, NeonTool>).map(
+				([id, tool]) => [
+					id,
+					{
+						...tool,
+						execute: envelopeExecute(tool.execute.bind(tool)),
+					},
+				],
+			),
+		);
+		assertNeonTools(enveloped, selected);
+		return enveloped as NeonTools<SelectedTools<T>>;
+	}
 	return tools as NeonTools<SelectedTools<T>>;
 };
+
+const envelopeExecute = (execute: NeonTool["execute"]): NeonTool["execute"] =>
+	(async (input, context) => {
+		try {
+			return await execute(input, context);
+		} catch (error) {
+			if (!(error instanceof NeonError)) {
+				throw error;
+			}
+			return { error };
+		}
+	}) as NeonTool["execute"];
 
 type NamedNeonTools<
 	Tools extends readonly NeonToolId[],
@@ -309,7 +342,16 @@ export function createNeonTool<
 	const customized = hasToolCustomization(options)
 		? applyToolCustomization(tool, options)
 		: tool;
-	return customized as
+	const executed =
+		options.throwOnError === false
+			? {
+					...customized,
+					execute: envelopeExecute(
+						customized.execute.bind(customized),
+					),
+				}
+			: customized;
+	return executed as
 		| NamedNeonTool<Id, Inject, boolean>
 		| InjectedNeonTool<ToolForId<Id>, Inject>
 		| ToolForId<Id>;

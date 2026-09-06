@@ -21,7 +21,6 @@ import type {
 	NeonTool,
 	NeonToolAnnotations,
 	NeonToolExecutionContext,
-	NeonToolResult,
 } from "../operation.js";
 import { toToolResult } from "../result.js";
 import type { NeonToolId } from "./ids.js";
@@ -241,20 +240,6 @@ export const collectPages = async <T>(
 	return items;
 };
 
-const runToolExecute = async <Output>(
-	options: ToolClientOptions,
-	run: () => Promise<Output>,
-): Promise<{ data: JsonSafe<Awaited<Output>> } | { error: NeonError }> => {
-	try {
-		return await toToolResult(await run());
-	} catch (error) {
-		if (options.throwOnError !== false || !(error instanceof NeonError)) {
-			throw error;
-		}
-		return { error };
-	}
-};
-
 export const bindTool = <
 	const InputSchema extends z.ZodType,
 	const Id extends string,
@@ -271,9 +256,12 @@ export const bindTool = <
 	...tool,
 	async execute(input, context) {
 		const parsed = await tool.inputSchema.parseAsync(input);
-		return runToolExecute(options, () =>
-			run(toolClient(options, context), parsed, context?.signal),
-		) as Promise<NeonToolResult<JsonSafe<Awaited<Output>>>>;
+		const result = await run(
+			toolClient(options, context),
+			parsed,
+			context?.signal,
+		);
+		return toToolResult(result);
 	},
 });
 
@@ -370,13 +358,12 @@ export function fromGenerated(
 		metadata: generated.metadata,
 		async execute(input, context) {
 			const parsed = await inputSchema.parseAsync(input);
-			return runToolExecute(options, () =>
-				spec.run(
-					toolClient(options, context),
-					parsed as never,
-					context?.signal,
-				),
-			) as Promise<NeonToolResult>;
+			const result = await spec.run(
+				toolClient(options, context),
+				parsed as never,
+				context?.signal,
+			);
+			return toToolResult(result);
 		},
 	};
 }
