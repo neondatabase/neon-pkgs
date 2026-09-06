@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getProject } from "../client/raw.gen.js";
 import { createNeonClient } from "./client.js";
 import {
+	createdId,
 	describeTransportFailure,
 	NeonApiError,
 	NeonAuthError,
@@ -12,6 +13,7 @@ import {
 	NeonRateLimitError,
 	NeonTimeoutError,
 	toNeonError,
+	withCreated,
 } from "./errors.js";
 
 /**
@@ -147,5 +149,48 @@ describe("transport failures end to end", () => {
 		expect(res.error).toBeInstanceOf(NeonNetworkError);
 		expect(res.error?.message).toContain("(ECONNRESET)");
 		expect((res.error as NeonNetworkError).reason).toBe("ECONNRESET");
+	});
+});
+
+describe("withCreated", () => {
+	it("keeps the wait error's subclass and kind", () => {
+		const error = new NeonTimeoutError(
+			"Timed out after 80ms waiting for 1 operation(s) to finish.",
+		);
+		const created = { id: "p-1", name: "test" };
+		const attached = withCreated(error, created);
+		expect(attached).toBe(error);
+		expect(attached).toBeInstanceOf(NeonTimeoutError);
+		expect(attached.kind).toBe("timeout");
+		expect(attached.created).toEqual(created);
+	});
+
+	it("does not replace a created resource already on the error", () => {
+		const error = new NeonError("x", "timeout", {
+			created: { id: "first" },
+		});
+		expect(withCreated(error, { id: "second" }).created).toEqual({
+			id: "first",
+		});
+	});
+});
+
+describe("createdId", () => {
+	it("returns the top-level id on a created resource", () => {
+		const error = new NeonTimeoutError("wait timed out");
+		error.created = { id: "p-1", name: "test" };
+		expect(createdId(error)).toBe("p-1");
+	});
+
+	it("returns a nested project id from createAndConnect", () => {
+		const error = new NeonTimeoutError("wait timed out");
+		error.created = { project: { id: "p-1" } };
+		expect(createdId(error)).toBe("p-1");
+	});
+
+	it("returns a nested branch id from createAndConnect", () => {
+		const error = new NeonTimeoutError("wait timed out");
+		error.created = { branch: { id: "br-1" } };
+		expect(createdId(error)).toBe("br-1");
 	});
 });

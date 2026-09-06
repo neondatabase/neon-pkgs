@@ -29,17 +29,65 @@ export type NeonErrorKind =
  */
 export class NeonError extends Error {
 	readonly kind: NeonErrorKind;
+	/**
+	 * The mapped resource from a mutation that succeeded before readiness polling
+	 * failed. Set on abort, timeout, and failed-operation errors after create and
+	 * other writes that already returned a body.
+	 *
+	 * On createAndConnect this is the full 201 body, including `connection_uris`
+	 * and role passwords. Read `createdId(error)` rather than logging the error whole.
+	 */
+	created?: unknown;
 
 	constructor(
 		message: string,
 		kind: NeonErrorKind,
-		options?: { cause?: unknown },
+		options?: { cause?: unknown; created?: unknown },
 	) {
 		super(message, options);
 		this.name = "NeonError";
 		this.kind = kind;
+		this.created = options?.created;
 	}
 }
+
+/** Attach a created resource to a wait error without changing its subclass or kind. */
+export const withCreated = (error: NeonError, created: unknown): NeonError => {
+	if (error.created !== undefined) {
+		return error;
+	}
+	error.created = created;
+	return error;
+};
+
+export const createdId = (error: NeonError): string | undefined => {
+	const created = error.created;
+	if (typeof created !== "object" || created === null) {
+		return undefined;
+	}
+	if ("id" in created && typeof created.id === "string") {
+		return created.id;
+	}
+	if (
+		"project" in created &&
+		typeof created.project === "object" &&
+		created.project !== null &&
+		"id" in created.project &&
+		typeof created.project.id === "string"
+	) {
+		return created.project.id;
+	}
+	if (
+		"branch" in created &&
+		typeof created.branch === "object" &&
+		created.branch !== null &&
+		"id" in created.branch &&
+		typeof created.branch.id === "string"
+	) {
+		return created.branch.id;
+	}
+	return undefined;
+};
 
 /** A non-2xx HTTP response from the Neon API. */
 export class NeonApiError extends NeonError {

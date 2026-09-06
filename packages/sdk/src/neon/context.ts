@@ -6,7 +6,7 @@ import {
 	resolveTimeoutMs,
 	runBounded,
 } from "./deadline.js";
-import { type NeonError, toNeonError } from "./errors.js";
+import { type NeonError, toNeonError, withCreated } from "./errors.js";
 import { err, finalize, type NeonResult, ok } from "./result.js";
 import { withRetries } from "./retry.js";
 import {
@@ -135,9 +135,10 @@ export class RequestContext {
 		if (requested.data === undefined) {
 			return err(toNeonError(undefined, requested.response));
 		}
+		const mapped = map(requested.data);
 		const readiness = await this.#maybeWait(opts, requested.data);
-		if (readiness?.error) return err(readiness.error);
-		return ok(map(requested.data));
+		if (readiness?.error) return err(withCreated(readiness.error, mapped));
+		return ok(mapped);
 	}
 
 	/**
