@@ -107,6 +107,46 @@ describe("consumption.perProject orgId", () => {
 			hasOrgId: false,
 		});
 	});
+
+	it("treats orgId: undefined as unset", async () => {
+		const { neon, calls } = neonRouting(() => ({ status: 200, body }), {
+			orgId: "org-client",
+		});
+		const { error } = await neon.consumption
+			.perProject({ ...window, orgId: undefined })
+			.page();
+		expect(error).toBeUndefined();
+		expect(orgSearch(calls[0]?.url ?? "")).toEqual({
+			org_id: "org-client",
+			hasOrgId: false,
+		});
+	});
+
+	it("keeps the resolved org_id on every page of all()", async () => {
+		let pages = 0;
+		const { neon, calls } = neonRouting(
+			() => {
+				pages += 1;
+				return {
+					status: 200,
+					body: {
+						projects: [{ id: `p-${pages}` }],
+						pagination: pages === 1 ? { cursor: "next" } : {},
+					},
+				};
+			},
+			{ orgId: "org-client" },
+		);
+		const { error } = await neon.consumption.perProject(window).all();
+		expect(error).toBeUndefined();
+		expect(calls).toHaveLength(2);
+		for (const call of calls) {
+			expect(orgSearch(call.url)).toEqual({
+				org_id: "org-client",
+				hasOrgId: false,
+			});
+		}
+	});
 });
 
 describe.each([
@@ -189,7 +229,9 @@ describe.each([
 		const { data, error } = await page(neon, {});
 		expect(data).toBeUndefined();
 		expect(error?.kind).toBe("client");
-		expect(error?.message).toBe("Pass orgId or set orgId on the client.");
+		expect(error?.message).toBe(
+			"Pass orgId on the call or set orgId on the client.",
+		);
 		expect(calls).toHaveLength(0);
 	});
 });

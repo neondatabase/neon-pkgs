@@ -30,7 +30,7 @@ type PerBranchV2Query = Omit<
 	"cursor" | "org_id"
 > & { orgId?: string; org_id?: string };
 
-const MISSING_ORG = "Pass orgId or set orgId on the client.";
+const MISSING_ORG = "Pass orgId on the call or set orgId on the client.";
 
 function resolvedOrgId(
 	query: { orgId?: string; org_id?: string },
