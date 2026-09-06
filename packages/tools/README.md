@@ -51,7 +51,7 @@ const compared = await tools["branches.compareSchema"].execute({
 
 MCP and Mastra publish `tool.id` (`list_projects`), not the record key.
 
-`apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
+`apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo`. A provided empty string is rejected at construction. `{ apiKey: undefined }` on `execute` is treated as absent and keeps the constructor credential.
 
 ```ts
 const tools = createNeonTools({
