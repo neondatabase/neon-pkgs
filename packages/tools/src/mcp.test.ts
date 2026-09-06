@@ -287,6 +287,47 @@ describe("MCP request credentials", () => {
 		expect(result.structuredContent.error).not.toHaveProperty("kind");
 		expect(requests).toHaveLength(0);
 	});
+
+	test("copies name, kind, status, and code from a thrown non-NeonError", async () => {
+		const { server, handler } = captureHandler();
+		const catalog = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+			fetch: async () =>
+				new Response(JSON.stringify({ projects: [], pagination: {} }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		});
+		const thrown = Object.assign(new Error("branch limit"), {
+			name: "ConflictError",
+			kind: "conflict",
+			status: 409,
+			code: "branch_limit",
+		});
+		registerNeonToolsV2(server, {
+			"projects.list": {
+				...catalog["projects.list"],
+				execute: async () => {
+					throw thrown;
+				},
+			},
+		});
+
+		const result = await handler()({}, {});
+		expect(result).toMatchObject({
+			isError: true,
+			structuredContent: {
+				error: {
+					message: "branch limit",
+					name: "ConflictError",
+					kind: "conflict",
+					status: 409,
+					code: "branch_limit",
+				},
+			},
+		});
+	});
 });
 
 describe("MCP v1 compatibility", () => {
