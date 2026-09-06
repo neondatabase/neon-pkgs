@@ -222,9 +222,19 @@ function resolveInject(
 	return {
 		project_id,
 		branch_id,
-		mode: inject.mode ?? "pin",
+		mode: requireInjectMode(inject.mode),
 		hasAny,
 	};
+}
+
+function requireInjectMode(mode: unknown): "pin" | "default" {
+	if (mode === undefined) {
+		return "pin";
+	}
+	if (mode === "pin" || mode === "default") {
+		return mode;
+	}
+	throw new TypeError('inject.mode must be "pin" or "default"');
 }
 
 function requireInjectValue(

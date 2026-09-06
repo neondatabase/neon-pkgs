@@ -370,6 +370,20 @@ describe("path injection", () => {
 		).toThrow("inject.mode requires inject.project_id or inject.branch_id");
 	});
 
+	test("rejects an unknown inject mode at construction", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.get"] as const,
+				inject: {
+					project_id: "granted-project",
+					// @ts-expect-error only "pin" and "default" are valid
+					mode: "pni",
+				},
+			}),
+		).toThrow('inject.mode must be "pin" or "default"');
+	});
+
 	test("fails closed when an omitted injector returns nothing", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
