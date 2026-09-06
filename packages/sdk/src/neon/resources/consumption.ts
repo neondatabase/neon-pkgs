@@ -12,20 +12,32 @@ import type {
 	GetConsumptionHistoryPerProjectV2Data,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { NeonError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 
 type PerProjectQuery = Omit<
 	GetConsumptionHistoryPerProjectData["query"],
 	"cursor"
->;
+> & { orgId?: string };
+
 type PerProjectV2Query = Omit<
 	GetConsumptionHistoryPerProjectV2Data["query"],
-	"cursor"
->;
+	"cursor" | "org_id"
+> & { orgId?: string; org_id?: string };
+
 type PerBranchV2Query = Omit<
 	GetConsumptionHistoryPerBranchV2Data["query"],
-	"cursor"
->;
+	"cursor" | "org_id"
+> & { orgId?: string; org_id?: string };
+
+const MISSING_ORG = "Pass orgId on the call or set orgId on the client.";
+
+function resolvedOrgId(
+	query: { orgId?: string; org_id?: string },
+	defaultOrgId: string | undefined,
+): string | undefined {
+	return query.orgId ?? query.org_id ?? defaultOrgId;
+}
 
 /** Consumption history (cursor-paginated). */
 export class Consumption {
@@ -40,11 +52,20 @@ export class Consumption {
 		query: PerProjectQuery,
 		opts?: CallOptions,
 	): Paginated<ConsumptionHistoryPerProject> {
+		const { orgId, org_id, ...rest } = query;
+		const resolved = resolvedOrgId(
+			{ orgId, org_id },
+			this.#ctx.defaults.orgId,
+		);
 		return paginate(
 			(cursor, signal) =>
 				getConsumptionHistoryPerProject({
 					client: this.#ctx.client,
-					query: { ...query, cursor },
+					query: {
+						...rest,
+						...(resolved === undefined ? {} : { org_id: resolved }),
+						cursor,
+					},
 					throwOnError: false,
 					signal,
 				}),
@@ -61,14 +82,25 @@ export class Consumption {
 		query: PerProjectV2Query,
 		opts?: CallOptions,
 	): Paginated<ConsumptionHistoryPerProjectV2> {
+		const { orgId, org_id, ...rest } = query;
+		const resolved = resolvedOrgId(
+			{ orgId, org_id },
+			this.#ctx.defaults.orgId,
+		);
 		return paginate(
-			(cursor, signal) =>
-				getConsumptionHistoryPerProjectV2({
+			(cursor, signal) => {
+				if (resolved === undefined) {
+					return Promise.resolve({
+						error: new NeonError(MISSING_ORG, "client"),
+					});
+				}
+				return getConsumptionHistoryPerProjectV2({
 					client: this.#ctx.client,
-					query: { ...query, cursor },
+					query: { ...rest, org_id: resolved, cursor },
 					throwOnError: false,
 					signal,
-				}),
+				});
+			},
 			(data) => ({
 				items: data?.projects ?? [],
 				cursor: data?.pagination?.cursor,
@@ -82,14 +114,25 @@ export class Consumption {
 		query: PerBranchV2Query,
 		opts?: CallOptions,
 	): Paginated<ConsumptionHistoryPerBranchV2> {
+		const { orgId, org_id, ...rest } = query;
+		const resolved = resolvedOrgId(
+			{ orgId, org_id },
+			this.#ctx.defaults.orgId,
+		);
 		return paginate(
-			(cursor, signal) =>
-				getConsumptionHistoryPerBranchV2({
+			(cursor, signal) => {
+				if (resolved === undefined) {
+					return Promise.resolve({
+						error: new NeonError(MISSING_ORG, "client"),
+					});
+				}
+				return getConsumptionHistoryPerBranchV2({
 					client: this.#ctx.client,
-					query: { ...query, cursor },
+					query: { ...rest, org_id: resolved, cursor },
 					throwOnError: false,
 					signal,
-				}),
+				});
+			},
 			(data) => ({
 				items: data?.branches ?? [],
 				cursor: data?.pagination?.cursor,
