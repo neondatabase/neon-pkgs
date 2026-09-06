@@ -45,6 +45,11 @@ it("a CallOptions variable keeps the envelope; CallOptions<true> throws", () => 
 		neon.projects.get("p", throwing),
 	).resolves.toEqualTypeOf<Project>();
 
+	const mixed: CallOptions<boolean> = {};
+	expectTypeOf(neon.projects.get("p", mixed)).resolves.toEqualTypeOf<
+		Project | NeonResult<Project>
+	>();
+
 	const invalid: CallOptions = {
 		// @ts-expect-error bare CallOptions is the envelope, not throwOnError: true
 		throwOnError: true,

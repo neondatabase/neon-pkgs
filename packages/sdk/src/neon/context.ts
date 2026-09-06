@@ -27,10 +27,20 @@ export interface ResolvedConfig {
 	orgId?: string;
 }
 
-/** Per-call overrides accepted by every ergonomic method.
+/**
+ * Per-call overrides accepted by every ergonomic method.
  *
- * `Throw` defaults to `false` so a `CallOptions` variable keeps the `{ data, error }`
- * envelope. Use `CallOptions<true>` when the object sets `throwOnError: true`.
+ * `Throw` defaults to `false` to match `NeonConfig.throwOnError`. A `CallOptions`
+ * variable keeps the `{ data, error }` envelope. For throwing behaviour, write
+ * `CallOptions<true>`:
+ *
+ * ```ts
+ * const opts: CallOptions = { signal };
+ * await neon.projects.get(id, opts); // NeonResult<Project>
+ *
+ * const throwing: CallOptions<true> = { throwOnError: true };
+ * await neon.projects.get(id, throwing); // Project
+ * ```
  */
 export interface CallOptions<Throw extends boolean = false> {
 	/** Override the client's `throwOnError` for this call. */
