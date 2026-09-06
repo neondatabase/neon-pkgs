@@ -65,7 +65,18 @@ await tools["projects.list"].execute(
 );
 ```
 
-Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller. Pass `throwOnError: false` on `createNeonTools` or `createNeonTool` to get `{ data } | { error }` instead of a throw. Zod parse failures still throw. MCP, Eve, and Mastra adapters accept those tools. When the options object is typed as `CreateNeonToolsOptions`, `throwOnError` is optional, so `execute` types both outcomes.
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	tools: ["projects.get"] as const,
+	throwOnError: false,
+});
+const { data, error } = await tools["projects.get"].execute({
+	project_id: "project-id",
+});
+```
 
 Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
 

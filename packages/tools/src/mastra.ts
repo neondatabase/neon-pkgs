@@ -1,15 +1,10 @@
-import type * as z from "zod";
-import type {
-	NeonTool,
-	NeonToolExecutionContext,
-	NeonToolResult,
-} from "./lib/operation.js";
+import type { NeonExecutableTool } from "./lib/operation.js";
 
 export interface MastraToolContext {
 	abortSignal?: AbortSignal;
 }
 
-export type MastraToolConfig<Tool extends NeonTool> = {
+export type MastraToolConfig<Tool extends NeonExecutableTool> = {
 	id: Tool["id"];
 	description: string;
 	inputSchema: Tool["inputSchema"];
@@ -20,20 +15,16 @@ export type MastraToolConfig<Tool extends NeonTool> = {
 	): ReturnType<Tool["execute"]>;
 };
 
-export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> = {
+export type MastraTools<
+	Tools extends Readonly<Record<string, NeonExecutableTool>>,
+> = {
 	[Tool in Tools[keyof Tools] as Tool["id"]]: MastraToolConfig<Tool>;
 };
 
-type MastraToolSource = {
-	id: string;
-	description: string;
-	inputSchema: z.ZodType;
-	requiresApproval: boolean;
-	execute: (
-		input: never,
-		context?: NeonToolExecutionContext,
-	) => Promise<NeonToolResult<unknown>>;
-};
+type MastraToolSource = Pick<
+	NeonExecutableTool,
+	"id" | "description" | "inputSchema" | "requiresApproval" | "execute"
+>;
 
 export const toMastraTool = <const Tool extends MastraToolSource>(
 	tool: Tool,
@@ -51,10 +42,9 @@ export const toMastraTool = <const Tool extends MastraToolSource>(
 		>,
 });
 
-function assertMastraTools<Tools extends Readonly<Record<string, NeonTool>>>(
-	value: unknown,
-	tools: Tools,
-): asserts value is MastraTools<Tools> {
+function assertMastraTools<
+	Tools extends Readonly<Record<string, NeonExecutableTool>>,
+>(value: unknown, tools: Tools): asserts value is MastraTools<Tools> {
 	if (typeof value !== "object" || value === null) {
 		throw new TypeError("Expected Mastra tools to be an object.");
 	}
@@ -66,7 +56,7 @@ function assertMastraTools<Tools extends Readonly<Record<string, NeonTool>>>(
 }
 
 export const toMastraTools = <
-	const Tools extends Readonly<Record<string, NeonTool>>,
+	const Tools extends Readonly<Record<string, NeonExecutableTool>>,
 >(
 	tools: Tools,
 ): MastraTools<Tools> => {

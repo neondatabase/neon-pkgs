@@ -1,3 +1,4 @@
+import type { NeonError } from "@neon/sdk";
 import { type Client, createClient } from "@neon/sdk/raw";
 import type * as z from "zod";
 import { type NeonBearerCredential, requireBearerCredential } from "./auth.js";
@@ -47,9 +48,14 @@ export type JsonSafe<Value> = unknown extends Value
 								? { [Key in keyof Value]: JsonSafe<Value[Key]> }
 								: unknown;
 
-export interface NeonToolResult<Data = unknown> {
-	data: Data;
-}
+export type NeonToolResult<
+	Data = unknown,
+	Throws extends boolean = true,
+> = Throws extends true
+	? { data: Data }
+	:
+			| { data: Data; error?: undefined }
+			| { data?: undefined; error: NeonError };
 
 export interface NeonTool<
 	InputSchema extends z.ZodType = z.ZodType,
@@ -69,6 +75,13 @@ export interface NeonTool<
 		context?: NeonToolExecutionContext,
 	): Promise<NeonToolResult<Output>>;
 }
+
+export type NeonExecutableTool = Omit<NeonTool, "execute"> & {
+	execute(
+		input: never,
+		context?: NeonToolExecutionContext,
+	): Promise<NeonToolResult<unknown, boolean>>;
+};
 
 export interface NeonOperation<
 	InputSchema extends z.ZodType,

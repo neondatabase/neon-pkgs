@@ -1,10 +1,18 @@
-import type { NeonTool } from "./operation.js";
+import type { NeonError } from "@neon/sdk";
+import type { NeonTool, NeonToolExecutionContext } from "./operation.js";
 
 export interface McpToolResult {
 	content: Array<{ type: "text"; text: string }>;
 	structuredContent: Record<string, unknown>;
 	isError?: boolean;
 }
+
+export type McpRegistrableTool = Omit<NeonTool, "execute"> & {
+	execute(
+		input: unknown,
+		context?: NeonToolExecutionContext,
+	): Promise<{ data: unknown } | { data?: undefined; error: NeonError }>;
+};
 
 export interface McpToolServer {
 	registerTool: object;
@@ -63,7 +71,7 @@ const signalFrom = (context: unknown): AbortSignal | undefined => {
 };
 
 const createToolHandler =
-	(tool: NeonTool) =>
+	(tool: McpRegistrableTool) =>
 	async (input: unknown, context: unknown): Promise<McpToolResult> => {
 		try {
 			const apiKey = bearerCredentialFromMcpContext(context);
@@ -71,6 +79,9 @@ const createToolHandler =
 				signal: signalFrom(context),
 				...(apiKey === undefined ? {} : { apiKey }),
 			});
+			if ("error" in result && result.error !== undefined) {
+				throw result.error;
+			}
 			const structuredContent = { data: result.data };
 			return {
 				content: [
@@ -100,8 +111,8 @@ const createToolHandler =
 
 export const registerNeonToolsWithSchema = (
 	server: McpToolServer,
-	tools: Readonly<Record<string, NeonTool>>,
-	inputSchema: (tool: NeonTool) => unknown,
+	tools: Readonly<Record<string, McpRegistrableTool>>,
+	inputSchema: (tool: McpRegistrableTool) => unknown,
 ): void => {
 	if (typeof server.registerTool !== "function") {
 		throw new TypeError("Expected an MCP server with registerTool().");

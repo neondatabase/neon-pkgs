@@ -1,3 +1,4 @@
+import { NeonError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import {
 	createNeonTool,
@@ -168,6 +169,89 @@ describe("createNeonTools", () => {
 		expect(requests).toHaveLength(1);
 	});
 
+	test("returns { error } when throwOnError is false", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			throwOnError: false,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+		});
+
+		const result = await tools["projects.get"].execute({
+			project_id: "missing",
+		});
+
+		expect("error" in result && result.error !== undefined).toBe(true);
+		if (!("error" in result) || result.error === undefined) {
+			throw new Error("expected error envelope");
+		}
+		expect(result.error).toBeInstanceOf(NeonError);
+		expect(result.error.kind).toBe("not_found");
+	});
+
+	test("returns { error } from createNeonTool when throwOnError is false", async () => {
+		const tool = createNeonTool("projects.get", {
+			apiKey: "test-key",
+			throwOnError: false,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+		});
+
+		const result = await tool.execute({ project_id: "missing" });
+		expect("error" in result && result.error !== undefined).toBe(true);
+	});
+
+	test("still throws Zod failures when throwOnError is false", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			throwOnError: false,
+		});
+
+		await expect(
+			tools["projects.get"].execute({ project_id: 1 as never }),
+		).rejects.toThrow();
+	});
+
+	test("onExecute still sees a thrown NeonError when throwOnError is false", async () => {
+		let thrown: unknown;
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			throwOnError: false,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+			onExecute: async ({ execute }) => {
+				try {
+					return await execute();
+				} catch (error) {
+					thrown = error;
+					throw error;
+				}
+			},
+		});
+
+		const result = await tools["projects.get"].execute({
+			project_id: "missing",
+		});
+		expect(thrown).toBeInstanceOf(NeonError);
+		expect("error" in result && result.error !== undefined).toBe(true);
+	});
+
+	test("throws when throwOnError is omitted", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.get"] as const,
+			fetch: async () =>
+				jsonResponse({ message: "Project not found" }, 404),
+		});
+
+		await expect(
+			tools["projects.get"].execute({ project_id: "missing" }),
+		).rejects.toBeInstanceOf(NeonError);
+	});
+
 	test("rejects a call with no tools", () => {
 		expect(() =>
 			Reflect.apply(createNeonTools, undefined, [{ apiKey: "test-key" }]),
@@ -204,7 +288,9 @@ describe("createNeonTools", () => {
 });
 
 describe("Bearer credentials", () => {
-	const listProjects = (options: NeonToolsClientOptions) => {
+	const listProjects = (
+		options: Omit<NeonToolsClientOptions, "throwOnError">,
+	) => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			...options,
