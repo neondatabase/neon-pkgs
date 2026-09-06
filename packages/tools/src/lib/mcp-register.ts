@@ -1,3 +1,4 @@
+import { type NeonAdapterNameOptions, namedNeonTools } from "./adapter-name.js";
 import type { NeonTool } from "./operation.js";
 
 export interface McpToolResult {
@@ -102,14 +103,15 @@ export const registerNeonToolsWithSchema = (
 	server: McpToolServer,
 	tools: Readonly<Record<string, NeonTool>>,
 	inputSchema: (tool: NeonTool) => unknown,
+	options?: NeonAdapterNameOptions,
 ): void => {
 	if (typeof server.registerTool !== "function") {
 		throw new TypeError("Expected an MCP server with registerTool().");
 	}
 
-	for (const tool of Object.values(tools)) {
+	for (const { tool, name } of namedNeonTools(tools, options)) {
 		Reflect.apply(server.registerTool, server, [
-			tool.id,
+			name,
 			{
 				title: tool.title,
 				description: tool.description,

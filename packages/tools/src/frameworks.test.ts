@@ -72,6 +72,29 @@ describe("Mastra compatibility", () => {
 		expect(createProject.requireApproval).toBe(true);
 	});
 
+	test("publishes an adapter name as the Mastra id", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+		});
+		const configs = toMastraTools(tools, {
+			name: (tool) => `neon_${tool.id}`,
+		});
+		expect(Object.values(configs).map((tool) => tool.id)).toEqual([
+			"neon_list_projects",
+		]);
+	});
+
+	test("throws on duplicate Mastra adapter names", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list", "projects.get"],
+		});
+		expect(() => toMastraTools(tools, { name: () => "same" })).toThrow(
+			/Duplicate Neon tool id "same"/,
+		);
+	});
+
 	test("forwards omitted path schemas from inject", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
