@@ -82,17 +82,16 @@ const resolveApiKey = (
 	options: ToolClientOptions,
 	context?: NeonToolExecutionContext,
 ): NeonBearerCredential => {
-	if (context !== undefined && "apiKey" in context) {
-		if (context.apiKey === undefined) {
-			throw new TypeError(
-				"A Neon API key or OAuth access token is required",
-			);
-		}
-		return requireBearerCredential(context.apiKey);
+	const credential = context?.apiKey ?? options.apiKey;
+	return credential === undefined
+		? missingBearerCredential()
+		: requireBearerCredential(credential);
+};
+
+export const assertProvidedApiKey = (options: ToolClientOptions): void => {
+	if (options.apiKey !== undefined) {
+		requireBearerCredential(options.apiKey);
 	}
-	return options.apiKey === undefined
-		? missingBearerCredential
-		: requireBearerCredential(options.apiKey);
 };
 
 export const toolClient = (
