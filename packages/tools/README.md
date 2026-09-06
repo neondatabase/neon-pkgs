@@ -49,7 +49,14 @@ const compared = await tools["branches.compareSchema"].execute({
 
 `limit` on a list tool caps how many items come back.
 
-MCP and Mastra publish `tool.id` (`projects_list`), not the record key.
+MCP and Mastra publish `tool.id` (`projects_list`), not the record key. Hosts pinned to 1.x verb-first ids can keep them with `names`:
+
+| selector | 1.x `tool.id` | now |
+| --- | --- | --- |
+| `projects.list` | `list_projects` | `projects_list` |
+| `projects.createAndConnect` | `create_and_connect_projects` | `projects_create_and_connect` |
+| `postgres.connectionString` | `connection_string_postgres` | `postgres_connection_string` |
+| `postgres.roles.resetPassword` | `reset_password_postgres_roles` | `postgres_roles_reset_password` |
 
 `apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
 

@@ -29,11 +29,20 @@ describe("publishedId", () => {
 		);
 	});
 
-	test("every catalog tool publishes publishedId(selector)", () => {
+	test("every catalog tool publishes a unique wire id that maps back to one selector", () => {
+		const wire = new Map<string, string>();
 		for (const id of toolIds) {
+			const published = publishedId(id);
+			expect(published).toMatch(/^[a-z0-9_]{1,64}$/);
+			expect(wire.get(published)).toBeUndefined();
+			wire.set(published, id);
 			expect(createNeonTool(id, { apiKey: "test-key" }).id).toBe(
-				publishedId(id),
+				published,
+			);
+			expect(createNeonTool(id, { apiKey: "test-key" }).selector).toBe(
+				id,
 			);
 		}
+		expect(wire.size).toBe(toolIds.length);
 	});
 });
