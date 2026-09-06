@@ -139,7 +139,7 @@ Those tools publish as `neon_create_branch` and `neon_list_projects`. The record
 
 ### Project and branch injection
 
-Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createAndConnect`. Default `mode` is `"pin"`: the field is removed from the published schema and the injector is the only source. Pass `mode: "default"` to keep the field optional and let a caller-supplied value win.
+Tools take path parameters as `project_id` and `branch_id`. A host that already knows those values can inject them, including on `branches.createAndConnect`. Omit `mode`, or pass `mode: "pin"`: the field is removed from the published schema and the injector is the only source. Pass `mode: "fallback"` to keep the field optional and let a caller-supplied value win.
 
 ```ts
 const tools = createNeonTools({
@@ -152,6 +152,15 @@ const tools = createNeonTools({
 
 await tools["projects.get"].execute({});
 await tools["branches.delete"].execute({ branch_id: "br-id" });
+```
+
+`mode: "fallback"` keeps `project_id` on the schema and prefers a caller-supplied value:
+
+```ts
+inject: {
+	project_id: "project-id",
+	mode: "fallback",
+},
 ```
 
 Use a getter when the value is request-scoped. The getter can read the host's own `AsyncLocalStorage` (this package does not export one):

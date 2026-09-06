@@ -213,7 +213,7 @@ describe("onExecute", () => {
 describe("path injection", () => {
 	test("fills a missing project_id and optionalizes it on the published schema", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { project_id: "granted-project", mode: "default" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
 		// @ts-expect-error getProjectTools widens inject
@@ -240,7 +240,7 @@ describe("path injection", () => {
 					getterCalls += 1;
 					return "granted-project";
 				},
-				mode: "default",
+				mode: "fallback",
 			},
 		});
 
@@ -377,11 +377,11 @@ describe("path injection", () => {
 				tools: ["projects.get"] as const,
 				inject: {
 					project_id: "granted-project",
-					// @ts-expect-error only "pin" and "default" are valid
+					// @ts-expect-error only "pin" and "fallback" are valid
 					mode: "pni",
 				},
 			}),
-		).toThrow('inject.mode must be "pin" or "default"');
+		).toThrow('inject.mode must be "pin" or "fallback"');
 	});
 
 	test("fails closed when an omitted injector returns nothing", async () => {
@@ -587,7 +587,7 @@ describe("onExecute failure and isolation", () => {
 
 	test("does not let a mutated clone change a caller-supplied fill-mode id", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { project_id: "granted-project", mode: "default" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 			onExecute: async ({ input, execute }) => {
 				(input as { project_id: string }).project_id =
 					"mutated-project";
@@ -662,7 +662,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("in fill mode, a missing getter leaves original schema validation", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { project_id: () => undefined, mode: "default" },
+			inject: { project_id: () => undefined, mode: "fallback" },
 		});
 
 		// @ts-expect-error getProjectTools widens inject
@@ -714,7 +714,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("fills path: {} in fill mode", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { project_id: "granted-project", mode: "default" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
 		// @ts-expect-error getProjectTools widens inject
@@ -856,7 +856,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 					branchGetterCalls += 1;
 					return "granted-branch";
 				},
-				mode: "default",
+				mode: "fallback",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -891,7 +891,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("published fill schema accepts omitted and supplied project_id", () => {
 		const { tools } = getProjectTools({
-			inject: { project_id: "granted-project", mode: "default" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
 		expect(tools["projects.get"].inputSchema.safeParse({}).success).toBe(

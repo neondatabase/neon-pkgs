@@ -124,7 +124,7 @@ createNeonTools({
 const filledProject = createNeonTools({
 	apiKey: "test-key",
 	tools: ["projects.get"] as const,
-	inject: { project_id: "granted-project", mode: "default" },
+	inject: { project_id: "granted-project", mode: "fallback" },
 });
 filledProject["projects.get"].execute({});
 filledProject["projects.get"].execute({ project_id: "caller-project" });

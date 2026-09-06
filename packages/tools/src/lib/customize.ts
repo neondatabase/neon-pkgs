@@ -12,8 +12,8 @@ export type NeonToolInjectValue =
 export interface NeonToolInjectOptions {
 	project_id?: NeonToolInjectValue;
 	branch_id?: NeonToolInjectValue;
-	/** `pin` (default) removes the field from the schema. `default` keeps it optional. */
-	mode?: "pin" | "default";
+	/** When omitted, `"pin"`: field removed from the schema. `"fallback"`: field stays optional, caller value wins. */
+	mode?: "pin" | "fallback";
 }
 
 export interface NeonToolDescriptionSource {
@@ -74,7 +74,7 @@ type ApplyInjectToInput<Input, Inject> = [
 	InjectedRequiredKey<Input, Inject>,
 ] extends [never]
 	? Input
-	: Inject extends { mode: "default" }
+	: Inject extends { mode: "fallback" }
 		? Omit<Input, InjectedRequiredKey<Input, Inject>> &
 				Partial<
 					Pick<
@@ -97,7 +97,7 @@ export type InjectedNeonTool<Tool, Inject> =
 interface ResolvedInject {
 	project_id?: NeonToolInjectValue;
 	branch_id?: NeonToolInjectValue;
-	mode: "pin" | "default";
+	mode: "pin" | "fallback";
 	hasAny: boolean;
 }
 
@@ -227,14 +227,14 @@ function resolveInject(
 	};
 }
 
-function requireInjectMode(mode: unknown): "pin" | "default" {
+function requireInjectMode(mode: unknown): "pin" | "fallback" {
 	if (mode === undefined) {
 		return "pin";
 	}
-	if (mode === "pin" || mode === "default") {
+	if (mode === "pin" || mode === "fallback") {
 		return mode;
 	}
-	throw new TypeError('inject.mode must be "pin" or "default"');
+	throw new TypeError('inject.mode must be "pin" or "fallback"');
 }
 
 function requireInjectValue(

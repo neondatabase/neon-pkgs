@@ -367,7 +367,7 @@ describe("MCP path injection", () => {
 			descriptions: {
 				"projects.get": "Get details of the granted Neon project.",
 			},
-			inject: { project_id: "granted-project", mode: "default" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return new Response(
