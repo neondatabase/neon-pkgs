@@ -40,6 +40,11 @@ it("a CallOptions variable keeps the envelope; CallOptions<true> throws", () => 
 		NeonResult<Project>
 	>();
 
+	const envelope: CallOptions = { throwOnError: false };
+	expectTypeOf(neon.projects.get("p", envelope)).resolves.toEqualTypeOf<
+		NeonResult<Project>
+	>();
+
 	const throwing: CallOptions<true> = { throwOnError: true };
 	expectTypeOf(
 		neon.projects.get("p", throwing),
