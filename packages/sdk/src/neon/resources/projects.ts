@@ -28,7 +28,7 @@ import type {
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonError } from "../errors.js";
+import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome } from "../result.js";
 
@@ -198,8 +198,17 @@ export class Members<DThrow extends boolean> {
 	list(
 		projectId: string,
 		query?: MemberListQuery,
+	): Paginated<ProjectMember, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		query: MemberListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<ProjectMember, Throw>;
+	list(
+		projectId: string,
+		query?: MemberListQuery,
 		opts?: CallOptions,
-	): Paginated<ProjectMember> {
+	): Paginated<ProjectMember, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectMembers({
@@ -214,6 +223,7 @@ export class Members<DThrow extends boolean> {
 				cursor: data?.pagination?.next,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -321,7 +331,15 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects
 	 */
-	list(query?: ListQuery, opts?: CallOptions): Paginated<ProjectListItem> {
+	list(query?: ListQuery): Paginated<ProjectListItem, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		query: ListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<ProjectListItem, Throw>;
+	list(
+		query?: ListQuery,
+		opts?: CallOptions,
+	): Paginated<ProjectListItem, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjects({
@@ -339,6 +357,7 @@ export class Projects<DThrow extends boolean> {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -550,9 +569,8 @@ export class Projects<DThrow extends boolean> {
 		if (!fromOrgId) {
 			return finalize(
 				err<void>(
-					new NeonError(
+					new NeonClientError(
 						"Pass fromOrgId or set orgId on the client.",
-						"client",
 					),
 				),
 				shouldThrow,
