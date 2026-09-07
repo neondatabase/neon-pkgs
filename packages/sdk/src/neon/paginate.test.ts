@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createNeonClient } from "./client.js";
 import { createDeadline } from "./deadline.js";
-import { NeonApiError, NeonError } from "./errors.js";
+import { NeonApiError, NeonClientError } from "./errors.js";
 import { paginate } from "./paginate.js";
 
 function unboundedDeadline() {
@@ -10,7 +10,7 @@ function unboundedDeadline() {
 
 describe("paginate throwOnError", () => {
 	it("returns the envelope when shouldThrow is false", async () => {
-		const error = new NeonError("classified", "client");
+		const error = new NeonClientError("classified");
 		const list = paginate<string, { items: string[]; cursor?: string }>(
 			async () => ({ error }),
 			() => ({ items: [] }),
@@ -55,7 +55,7 @@ describe("paginate throwOnError", () => {
 	});
 
 	it("rejects with the fetcher's NeonError when shouldThrow is true", async () => {
-		const error = new NeonError("classified", "client");
+		const error = new NeonClientError("classified");
 		let calls = 0;
 		const list = paginate<string, { items: string[]; cursor?: string }>(
 			async (cursor) => {
