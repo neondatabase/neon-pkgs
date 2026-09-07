@@ -375,6 +375,17 @@ describe("path injection", () => {
 		).toThrow("inject.mode requires inject.project_id or inject.branch_id");
 	});
 
+	test("rejects a defined inject with no project_id or branch_id", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.get"] as const,
+				// @ts-expect-error inject keys are the field names
+				inject: { projectId: "granted-project" },
+			}),
+		).toThrow("inject requires inject.project_id or inject.branch_id");
+	});
+
 	test("rejects an unknown inject mode at construction", () => {
 		expect(() =>
 			createNeonTools({
@@ -628,18 +639,13 @@ describe("onExecute failure and isolation", () => {
 });
 
 describe("path injection (fill, omit, and non-path fields)", () => {
-	test("treats inject.project_id: undefined as no injector", async () => {
-		const { requests, tools } = getProjectTools({
-			// @ts-expect-error undefined is not an inject value
-			inject: { project_id: undefined },
-		});
-
-		// @ts-expect-error no injector, project_id still required
-		await expect(tools["projects.get"].execute({})).rejects.toThrow();
-		expect(requests).toHaveLength(0);
-		expect(
-			z.toJSONSchema(tools["projects.get"].inputSchema).required,
-		).toEqual(["project_id"]);
+	test("rejects inject.project_id: undefined at construction", () => {
+		expect(() =>
+			getProjectTools({
+				// @ts-expect-error undefined is not an inject value
+				inject: { project_id: undefined },
+			}),
+		).toThrow("inject requires inject.project_id or inject.branch_id");
 	});
 
 	test("rejects a non-string static inject value at construction", () => {

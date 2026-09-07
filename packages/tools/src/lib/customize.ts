@@ -223,9 +223,11 @@ function resolveInject(
 	const project_id = requireInjectValue("project_id", inject.project_id);
 	const branch_id = requireInjectValue("branch_id", inject.branch_id);
 	const hasAny = project_id !== undefined || branch_id !== undefined;
-	if (inject.mode !== undefined && !hasAny) {
+	if (!hasAny) {
 		throw new TypeError(
-			"inject.mode requires inject.project_id or inject.branch_id",
+			inject.mode !== undefined
+				? "inject.mode requires inject.project_id or inject.branch_id"
+				: "inject requires inject.project_id or inject.branch_id",
 		);
 	}
 

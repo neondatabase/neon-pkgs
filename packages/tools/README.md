@@ -154,7 +154,7 @@ await tools["projects.get"].execute({});
 await tools["branches.delete"].execute({ branch_id: "br-id" });
 ```
 
-`execute` omits a path key only when that key is required on the inject object. Pass `inject` inline, or name it with `satisfies NeonToolInjectOptions`. A `NeonToolInjectOptions` parameter is the union of both arms, so neither key is guaranteed and `execute` still requires them. Runtime still injects whatever was set. At least one of `project_id` or `branch_id` is required on that type.
+`execute` omits a path key only when that key is required on the inject object. Pass `inject` inline, or name it with `satisfies NeonToolInjectOptions`. A `NeonToolInjectOptions` parameter is the union of both arms, so neither key is guaranteed and `execute` still requires them. Runtime still injects whatever was set. A defined `inject` with neither `project_id` nor `branch_id` throws, including a leftover `{ projectId }`.
 
 ```ts
 import { createNeonTools, type NeonToolInjectOptions } from "@neon/tools";
