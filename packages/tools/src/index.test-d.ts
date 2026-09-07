@@ -141,6 +141,13 @@ const fromBag = createNeonTools({
 });
 fromBag["projects.get"].execute({});
 
+createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	// @ts-expect-error undefined is not an inject value
+	inject: { project_id: undefined },
+});
+
 const omittedBranch = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.delete"] as const,

@@ -369,6 +369,7 @@ describe("path injection", () => {
 			createNeonTools({
 				apiKey: "test-key",
 				tools: ["projects.get"] as const,
+				// @ts-expect-error mode requires project_id or branch_id
 				inject: { mode: "pin" },
 			}),
 		).toThrow("inject.mode requires inject.project_id or inject.branch_id");
@@ -629,9 +630,11 @@ describe("onExecute failure and isolation", () => {
 describe("path injection (fill, omit, and non-path fields)", () => {
 	test("treats inject.project_id: undefined as no injector", async () => {
 		const { requests, tools } = getProjectTools({
+			// @ts-expect-error undefined is not an inject value
 			inject: { project_id: undefined },
 		});
 
+		// @ts-expect-error no injector, project_id still required
 		await expect(tools["projects.get"].execute({})).rejects.toThrow();
 		expect(requests).toHaveLength(0);
 		expect(

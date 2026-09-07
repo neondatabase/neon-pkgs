@@ -154,7 +154,7 @@ await tools["projects.get"].execute({});
 await tools["branches.delete"].execute({ branch_id: "br-id" });
 ```
 
-A value typed as `NeonToolInjectOptions` still injects: `execute` omits every path key that type lists (`project_id` and `branch_id`), not only the ones set on the object.
+A value typed as `NeonToolInjectOptions` still injects: `execute` omits every path key that type lists (`project_id` and `branch_id`), not only the ones set on the object. At least one of `project_id` or `branch_id` is required on that type.
 
 ```ts
 const inject: NeonToolInjectOptions = { project_id: "project-id" };

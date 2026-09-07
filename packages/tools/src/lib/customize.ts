@@ -9,12 +9,19 @@ export type NeonToolInjectValue =
 	| string
 	| (() => string | undefined | Promise<string | undefined>);
 
-export interface NeonToolInjectOptions {
-	project_id?: NeonToolInjectValue;
-	branch_id?: NeonToolInjectValue;
-	/** When omitted, `"pin"`: field removed from the schema. `"fallback"`: field stays optional, caller value wins. */
-	mode?: "pin" | "fallback";
-}
+export type NeonToolInjectOptions =
+	| {
+			project_id: NeonToolInjectValue;
+			branch_id?: NeonToolInjectValue;
+			/** When omitted, `"pin"`: field removed from the schema. `"fallback"`: field stays optional, caller value wins. */
+			mode?: "pin" | "fallback";
+	  }
+	| {
+			branch_id: NeonToolInjectValue;
+			project_id?: NeonToolInjectValue;
+			/** When omitted, `"pin"`: field removed from the schema. `"fallback"`: field stays optional, caller value wins. */
+			mode?: "pin" | "fallback";
+	  };
 
 export interface NeonToolDescriptionSource {
 	operationId: string;
