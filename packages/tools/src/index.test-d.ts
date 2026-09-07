@@ -4,6 +4,7 @@ import {
 	type CreateNeonToolsOptions,
 	createNeonTool,
 	createNeonTools,
+	type NeonToolInjectOptions,
 	publishedId,
 } from "./index.js";
 import { toMastraTools } from "./mastra.js";
@@ -128,6 +129,17 @@ const filledProject = createNeonTools({
 });
 filledProject["projects.get"].execute({});
 filledProject["projects.get"].execute({ project_id: "caller-project" });
+
+const injectBag: NeonToolInjectOptions = {
+	project_id: "granted-project",
+	mode: "fallback",
+};
+const fromBag = createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	inject: injectBag,
+});
+fromBag["projects.get"].execute({});
 
 const omittedBranch = createNeonTools({
 	apiKey: "test-key",

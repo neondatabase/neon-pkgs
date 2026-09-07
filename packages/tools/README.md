@@ -154,6 +154,18 @@ await tools["projects.get"].execute({});
 await tools["branches.delete"].execute({ branch_id: "br-id" });
 ```
 
+A value typed as `NeonToolInjectOptions` still injects: `execute` omits every path key that type lists (`project_id` and `branch_id`), not only the ones set on the object.
+
+```ts
+const inject: NeonToolInjectOptions = { project_id: "project-id" };
+const tools = createNeonTools({
+	apiKey,
+	tools: ["projects.get"] as const,
+	inject,
+});
+await tools["projects.get"].execute({});
+```
+
 `mode: "fallback"` keeps `project_id` on the schema and prefers a caller-supplied value:
 
 ```ts

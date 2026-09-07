@@ -3,6 +3,7 @@ import * as z from "zod";
 import {
 	createNeonTool,
 	createNeonTools,
+	type NeonToolInjectOptions,
 	type NeonToolsClientOptions,
 } from "./index.js";
 
@@ -26,7 +27,13 @@ const branchWithComputeBody = {
 	],
 };
 
-const getProjectTools = (options: NeonToolsClientOptions = {}) => {
+const getProjectTools = <
+	const I extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: Omit<NeonToolsClientOptions, "inject"> & {
+		inject?: I;
+	} = {} as Omit<NeonToolsClientOptions, "inject"> & { inject?: I },
+) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
@@ -150,7 +157,6 @@ describe("onExecute", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow();
 		expect(seen[0]).toBe("start");
 		expect(seen[1]).toEqual(expect.stringMatching(/Invalid|project_id/i));
@@ -169,7 +175,6 @@ describe("onExecute", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await tools["projects.get"].execute({});
 
 		expect(requests[0].url).toBe(
@@ -216,7 +221,6 @@ describe("path injection", () => {
 			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await tools["projects.get"].execute({});
 
 		expect(requests[0].url).toBe(
@@ -391,7 +395,6 @@ describe("path injection", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
 			"A project_id inject value is required",
 		);
@@ -403,7 +406,6 @@ describe("path injection", () => {
 			inject: { project_id: "NOT VALID" },
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow();
 		expect(requests).toHaveLength(0);
 	});
@@ -426,7 +428,6 @@ describe("path injection", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await tools["projects.get"].execute({});
 
 		expect(requests[0].url).toBe(
@@ -579,7 +580,6 @@ describe("onExecute failure and isolation", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await tools["projects.get"].execute({});
 
 		expect(seen).toEqual([{}]);
@@ -632,7 +632,6 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			inject: { project_id: undefined },
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow();
 		expect(requests).toHaveLength(0);
 		expect(
@@ -665,7 +664,6 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			inject: { project_id: () => undefined, mode: "fallback" },
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
 			/invalid_type|required|project_id/i,
 		);
@@ -677,7 +675,6 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			inject: { project_id: () => "" },
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
 			"A project_id inject value is required",
 		);
@@ -691,7 +688,6 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
 			"A project_id inject value is required",
 		);
@@ -705,7 +701,6 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			},
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
 			"A project_id inject value is required",
 		);
@@ -717,7 +712,6 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
-		// @ts-expect-error getProjectTools widens inject
 		await tools["projects.get"].execute({});
 
 		expect(requests[0].url).toBe(

@@ -55,11 +55,11 @@ export interface NeonToolCustomizeOptions {
 	inject?: NeonToolInjectOptions;
 }
 
-type InjectedPathKey<Inject> =
-	| (Inject extends { project_id: NeonToolInjectValue }
-			? "project_id"
-			: never)
-	| (Inject extends { branch_id: NeonToolInjectValue } ? "branch_id" : never);
+type InjectedPathKey<Inject> = Inject extends NeonToolInjectOptions
+	?
+			| ("project_id" extends keyof Inject ? "project_id" : never)
+			| ("branch_id" extends keyof Inject ? "branch_id" : never)
+	: never;
 
 type RequiredKeys<Input> = {
 	[Key in keyof Input]-?: object extends Pick<Input, Key> ? never : Key;
