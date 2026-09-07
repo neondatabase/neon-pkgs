@@ -130,16 +130,67 @@ const filledProject = createNeonTools({
 filledProject["projects.get"].execute({});
 filledProject["projects.get"].execute({ project_id: "caller-project" });
 
-const injectBag: NeonToolInjectOptions = {
-	project_id: "granted-project",
-	mode: "fallback",
-};
-const fromBag = createNeonTools({
+declare const wideInject: NeonToolInjectOptions;
+const fromWideGet = createNeonTools({
 	apiKey: "test-key",
 	tools: ["projects.get"] as const,
-	inject: injectBag,
+	inject: wideInject,
 });
-fromBag["projects.get"].execute({});
+// @ts-expect-error union inject does not guarantee project_id
+fromWideGet["projects.get"].execute({});
+fromWideGet["projects.get"].execute({ project_id: "project-id" });
+
+const fromWideDelete = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: wideInject,
+});
+fromWideDelete["branches.delete"].execute({
+	project_id: "project-id",
+	branch_id: "br-id",
+});
+// @ts-expect-error union inject does not guarantee project_id
+fromWideDelete["branches.delete"].execute({ branch_id: "br-id" });
+// @ts-expect-error union inject does not guarantee branch_id
+fromWideDelete["branches.delete"].execute({ project_id: "project-id" });
+
+const injectProject: NeonToolInjectOptions = {
+	project_id: "granted-project",
+};
+const fromProjectDelete = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: injectProject,
+});
+fromProjectDelete["branches.delete"].execute({ branch_id: "br-id" });
+// @ts-expect-error project-only inject still requires branch_id
+fromProjectDelete["branches.delete"].execute({});
+
+const injectBranch: NeonToolInjectOptions = {
+	branch_id: "granted-branch",
+};
+const fromBranchDelete = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: injectBranch,
+});
+fromBranchDelete["branches.delete"].execute({ project_id: "project-id" });
+// @ts-expect-error branch-only inject still requires project_id
+fromBranchDelete["branches.delete"].execute({});
+// @ts-expect-error branch-only inject still requires project_id
+fromBranchDelete["branches.delete"].execute({ branch_id: "br-id" });
+
+const injectSatisfies = {
+	project_id: "granted-project",
+} satisfies NeonToolInjectOptions;
+const fromSatisfies = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: injectSatisfies,
+});
+fromSatisfies["branches.delete"].execute({ branch_id: "br-id" });
+// @ts-expect-error project_id is injected
+fromSatisfies["branches.delete"].execute({});
 
 createNeonTools({
 	apiKey: "test-key",
