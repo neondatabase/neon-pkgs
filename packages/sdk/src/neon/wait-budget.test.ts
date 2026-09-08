@@ -57,6 +57,11 @@ describe("per-call wait budget", () => {
 			{ wait: { timeoutMs: 80 } },
 		);
 		expect(error?.kind).toBe("timeout");
+		if (error?.kind !== "timeout" || error.source !== "wait") {
+			throw new Error("expected wait timeout");
+		}
+		expect(error.timeoutMs).toBe(80);
+		expect(error.operations.map((op) => op.id)).toEqual(["op-1"]);
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
 	});
 

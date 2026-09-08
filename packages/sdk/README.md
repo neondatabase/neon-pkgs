@@ -175,7 +175,10 @@ await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
 cancellation is not. `"timeout"` still covers both budgets; `source` says which one fired:
 
 ```ts
-const { data, error } = await neon.projects.create({ name: "app" });
+const { data, error } = await neon.projects.create(
+  { name: "app" },
+  { wait: { timeoutMs: 30_000 } },
+);
 
 if (error?.kind === "timeout" && error.source === "wait") {
   // The project exists and is still provisioning. Poll again with a fresh budget

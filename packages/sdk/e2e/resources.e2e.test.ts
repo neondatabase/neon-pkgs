@@ -1,17 +1,10 @@
 import {
-	configuredBaseUrl,
-	configuredOrgId,
 	createProject,
 	deleteProject,
-	requireApiKey,
 	uniqueProjectName,
 } from "@neon/e2e-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-	createNeonClient,
-	type NeonClient,
-	NeonNotFoundError,
-} from "../src/index.js";
+import { type NeonClient, NeonNotFoundError } from "../src/index.js";
 import { expectOk, makeClient } from "./helpers.js";
 
 /**
@@ -346,19 +339,18 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 	});
 
 	it("a wait timeout carries outstanding operations so waitFor can resume", async () => {
-		const impatient = createNeonClient({
-			apiKey: requireApiKey(),
-			orgId: configuredOrgId(),
-			baseUrl: configuredBaseUrl(),
-			waitForReadiness: true,
-			wait: { timeoutMs: 1, pollIntervalMs: 1 },
-		});
-
-		const { data, error } = await impatient.branches.create(projectId, {
-			name: "wait-timeout-resume",
-			parent_id: defaultBranchId,
-			noCompute: true,
-		});
+		const { data, error } = await neon.branches.create(
+			projectId,
+			{
+				name: "wait-timeout-resume",
+				parent_id: defaultBranchId,
+				noCompute: true,
+			},
+			{
+				waitForReadiness: true,
+				wait: { timeoutMs: 1, pollIntervalMs: 1 },
+			},
+		);
 
 		let branchId: string | undefined = data?.id;
 		try {
