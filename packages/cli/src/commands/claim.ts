@@ -331,8 +331,7 @@ export const builder = (argv: yargs.Argv) =>
 					.strict()
 					.check(noPassthrough("claim delete")),
 			async (args) => await deleteProject(args as unknown as DeleteProps),
-		)
-		.demandCommand(1, "Run `neon claim --help` to see the subcommands.");
+		);
 
 export const handler = (_args: yargs.Arguments) => {
 	/* Yargs requires a handler for command groups. */
