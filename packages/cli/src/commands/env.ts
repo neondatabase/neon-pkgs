@@ -116,10 +116,10 @@ export const builder = (argv: yargs.Argv) =>
 							"     which mints a branch credential for it.",
 							"",
 							"On an unclaimed Claimable Neon project, a bare pull writes only",
-							"provisioned Postgres, Auth, and Data API variables. It does not mint a",
-							"credential. AI Gateway, Functions, and Object Storage are skipped until",
-							"the project is claimed. Naming those with --service / --env warns and",
-							"writes nothing for them.",
+							"provisioned Postgres, Auth, and Data API variables. AI Gateway,",
+							"Functions, and Object Storage are skipped until the project is",
+							"claimed. Naming those with --service / --env warns and writes",
+							"nothing for them.",
 							"",
 							"The pull bundled into link / checkout / config apply follows 2 and 3",
 							"without the AI Gateway, so it never mints a credential you did not ask",
@@ -298,10 +298,17 @@ export const pull = async (
 		props.services !== undefined ? selectionServices : undefined,
 	);
 	if (Object.keys(neonVars).length === 0) {
-		log.info(
-			"No Neon env variables to pull for this branch (no DATABASE_URL or " +
-				"enabled Auth / Data API).",
-		);
+		const skippedUnsupportedOnly =
+			dropped !== null &&
+			dropped.services.length === 0 &&
+			dropped.envKeys.length === 0 &&
+			dropped.skipped.length > 0;
+		if (!skippedUnsupportedOnly) {
+			log.info(
+				"No Neon env variables to pull for this branch (no DATABASE_URL or " +
+					"enabled Auth / Data API).",
+			);
+		}
 		return { status: "empty" };
 	}
 

@@ -113,7 +113,7 @@ The command writes:
 
 - a `.neon` context that identifies the project and Claimable Neon service;
 - an owner-only identity assertion under the CLI config directory;
-- `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH`, and any granted Auth or Data API
+- `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH`, and any provisioned Auth or Data API
   variables to `.env` or `.env.local` (disable this with `--no-env-pull`). The write is the
   same `env pull` used after create, so a later `neon env pull` refreshes the same keys.
 
@@ -498,7 +498,7 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`. Declared function URLs are derived from the branch connection host; the function does not have to be deployed.
 3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, object storage, and function invocation URLs read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
 
-On an unclaimed Claimable Neon project, a bare pull writes only provisioned Postgres, Auth, and Data API variables. It does not mint a branch credential. AI Gateway, Functions, and Object Storage are skipped until the project is claimed. Naming those with `--service` / `--env` warns and writes nothing for them.
+On an unclaimed Claimable Neon project, a bare pull writes only provisioned Postgres, Auth, and Data API variables. AI Gateway, Functions, and Object Storage are skipped until the project is claimed. Naming those with `--service` / `--env` warns and writes nothing for them.
 
 If the gateway can't be resolved, it is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left alone — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 

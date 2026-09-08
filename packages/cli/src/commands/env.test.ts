@@ -1503,6 +1503,7 @@ describe("env pull on a claimable project", () => {
 
 		expect(result?.status).toBe("empty");
 		expect(logged).toMatch(/Skipped ai-gateway/);
+		expect(logged).not.toMatch(/no DATABASE_URL or enabled Auth/);
 		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toBe(
 			"DATABASE_URL=postgres://keep\n",
 		);
@@ -1571,6 +1572,7 @@ describe("env pull on a claimable project", () => {
 
 		expect(result?.status).toBe("empty");
 		expect(logged).toMatch(/Skipped object-storage/);
+		expect(logged).not.toMatch(/no DATABASE_URL or enabled Auth/);
 		expect(api.credentialCreateCalls).toBe(0);
 	});
 
