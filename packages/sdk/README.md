@@ -42,13 +42,13 @@ const { project, connectionString } = data;
 | `throwOnError` | `boolean` | `false` | When `true`, methods return the resource directly and **throw** on error. When `false`, they return `{ data, error }`. **Narrows return types** at the type level. |
 | `waitForReadiness` | `boolean` | — (unset) | Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll until `operations` finish; other mutations do not. Set `false` to disable polling on those four. Set `true` to poll on every mutation that returns operations. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
-| `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
+| `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. Must be a non-negative integer (`0` disables retries). `NaN`, `Infinity`, a fraction, or a negative throws a `client`-kind error at construction. |
 | `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
 | `orgId` | `string` | — | Default organization, applied to project create/list and as the transfer source org. Overridable per call. |
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
+Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, wait?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
 
 ## The result model
 
@@ -239,7 +239,7 @@ consuming it twice gets a fresh deadline each time.
 
 Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle.
 
-Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor(operations)`.
 
 ```ts
 const neon = createNeonClient({ apiKey });
@@ -252,6 +252,11 @@ await skipWait.projects.create({ name: "app" }, { waitForReadiness: true }); // 
 
 const alwaysWait = createNeonClient({ apiKey, waitForReadiness: true });
 await alwaysWait.projects.update(id, { name: "renamed" }); // polls
+
+await neon.projects.create(
+  { name: "app" },
+  { wait: { timeoutMs: 600_000 } },
+);
 ```
 
 ---
