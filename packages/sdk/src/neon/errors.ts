@@ -6,6 +6,8 @@
  * `instanceof NeonError` still matches all of them.
  */
 
+import type { Operation } from "../client/types.gen.js";
+
 /** Used when a transport failure carries neither an `errno` code nor any message. */
 const UNKNOWN_TRANSPORT_REASON = "cause unavailable";
 
@@ -129,13 +131,45 @@ export class NeonOperationError extends NeonError {
 
 /**
  * A deadline was exceeded — either `requestTimeoutMs` for a request and its retries, or
- * the `wait` budget while polling operations for readiness.
+ * the `wait` budget while polling operations for readiness. Not constructible: use
+ * {@link NeonRequestTimeoutError} or {@link NeonWaitTimeoutError}.
  */
-export class NeonTimeoutError extends NeonError {
+export abstract class NeonTimeoutError extends NeonError {
 	declare readonly kind: "timeout";
-	constructor(message: string) {
+	abstract readonly source: "request" | "wait";
+	/** The budget that was exceeded, in ms. */
+	readonly timeoutMs: number;
+
+	constructor(message: string, init: { timeoutMs: number }) {
 		super(message, "timeout");
 		this.name = "NeonTimeoutError";
+		this.timeoutMs = init.timeoutMs;
+	}
+}
+
+/** `requestTimeoutMs` ran out. The call may never have reached the API. */
+export class NeonRequestTimeoutError extends NeonTimeoutError {
+	override readonly source: "request" = "request";
+
+	constructor(message: string, init: { timeoutMs: number }) {
+		super(message, init);
+		this.name = "NeonRequestTimeoutError";
+	}
+}
+
+/** `wait.timeoutMs` ran out. The mutation was accepted; these operations were still running. */
+export class NeonWaitTimeoutError extends NeonTimeoutError {
+	override readonly source: "wait" = "wait";
+	/** Pass to `neon.operations.waitFor` to resume. Each carries `project_id`. */
+	readonly operations: readonly Operation[];
+
+	constructor(
+		message: string,
+		init: { timeoutMs: number; operations: readonly Operation[] },
+	) {
+		super(message, init);
+		this.name = "NeonWaitTimeoutError";
+		this.operations = init.operations;
 	}
 }
 
@@ -202,7 +236,8 @@ export type NeonErrorUnion =
 	| NeonAuthError
 	| NeonRateLimitError
 	| NeonOperationError
-	| NeonTimeoutError
+	| NeonRequestTimeoutError
+	| NeonWaitTimeoutError
 	| NeonAbortError
 	| NeonNetworkError
 	| NeonClientError;

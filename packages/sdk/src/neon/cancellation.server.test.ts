@@ -12,6 +12,10 @@ import { createNeonClient } from "./client.js";
  * covers were invisible to the stubbed suite.
  */
 
+interface CreateOp {
+	id: string;
+}
+
 interface Behaviour {
 	/** Never respond, leaving the socket open until the client gives up. */
 	hang: boolean;
@@ -22,7 +26,15 @@ interface Behaviour {
 	operationPolls: number;
 	/** Resolves the first time an operation poll is received. */
 	onOperationPoll?: () => void;
+	/** Operations returned on create. Defaults to one running `op-1`. */
+	createOperations: CreateOp[];
+	/** Operation ids whose poll never responds. */
+	hangOperationIds: string[];
+	/** Operation ids that report `finished` when polled, even if others stay running. */
+	finishOperationIds: string[];
 }
+
+const DEFAULT_CREATE_OPS: CreateOp[] = [{ id: "op-1" }];
 
 let server: Server;
 let baseUrl: string;
@@ -31,6 +43,9 @@ const behaviour: Behaviour = {
 	operationRunning: true,
 	hangOperations: false,
 	operationPolls: 0,
+	createOperations: DEFAULT_CREATE_OPS,
+	hangOperationIds: [],
+	finishOperationIds: [],
 };
 
 /** Reset between tests so one test's server behaviour cannot leak into the next. */
@@ -40,6 +55,9 @@ function resetBehaviour(overrides: Partial<Behaviour> = {}) {
 	behaviour.hangOperations = false;
 	behaviour.operationPolls = 0;
 	behaviour.onOperationPoll = undefined;
+	behaviour.createOperations = DEFAULT_CREATE_OPS;
+	behaviour.hangOperationIds = [];
+	behaviour.finishOperationIds = [];
 	Object.assign(behaviour, overrides);
 }
 
@@ -56,19 +74,28 @@ beforeAll(async () => {
 		if (url.pathname.includes("/operations/")) {
 			behaviour.operationPolls += 1;
 			behaviour.onOperationPoll?.();
+			const operationId = url.pathname.slice(
+				url.pathname.lastIndexOf("/") + 1,
+			);
 			// Leaves the poll in flight, so an abort or a deadline lands during the
 			// request rather than in the gap between polls.
-			if (behaviour.hangOperations) return;
+			if (
+				behaviour.hangOperations ||
+				behaviour.hangOperationIds.includes(operationId)
+			) {
+				return;
+			}
+			const finished =
+				behaviour.finishOperationIds.includes(operationId) ||
+				!behaviour.operationRunning;
 			res.writeHead(200, { "content-type": "application/json" });
 			res.end(
 				json({
 					operation: {
-						id: "op-1",
+						id: operationId,
 						project_id: "p-1",
 						action: "create_timeline",
-						status: behaviour.operationRunning
-							? "running"
-							: "finished",
+						status: finished ? "finished" : "running",
 					},
 				}),
 			);
@@ -80,14 +107,12 @@ beforeAll(async () => {
 			res.end(
 				json({
 					project: { id: "p-1", name: "test" },
-					operations: [
-						{
-							id: "op-1",
-							project_id: "p-1",
-							action: "create_timeline",
-							status: "running",
-						},
-					],
+					operations: behaviour.createOperations.map((op) => ({
+						id: op.id,
+						project_id: "p-1",
+						action: "create_timeline",
+						status: "running",
+					})),
 					connection_uris: [
 						{
 							connection_uri: "postgresql://u:p@host/db",
@@ -259,6 +284,11 @@ describe("readiness polling", () => {
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(behaviour.operationPolls).toBeGreaterThan(0);
 		expect(error?.kind).toBe("timeout");
+		expect(error).toMatchObject({ source: "wait", timeoutMs: 80 });
+		if (error?.kind !== "timeout" || error.source !== "wait") {
+			throw new Error("expected wait timeout");
+		}
+		expect(error.operations.map((op) => op.id)).toEqual(["op-1"]);
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
 		resetBehaviour();
 	});
@@ -275,6 +305,82 @@ describe("readiness polling", () => {
 
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(error?.kind).toBe("timeout");
+		expect(error).toMatchObject({ source: "wait", timeoutMs: 80 });
+		if (error?.kind !== "timeout" || error.source !== "wait") {
+			throw new Error("expected wait timeout");
+		}
+		expect(error.operations.map((op) => op.id)).toEqual(["op-1"]);
+	});
+
+	it("on a mid-round timeout, operations is the still-outstanding subset", async () => {
+		resetBehaviour({
+			createOperations: [{ id: "op-a" }, { id: "op-b" }],
+			finishOperationIds: ["op-a"],
+			hangOperationIds: ["op-b"],
+		});
+		const neon = createNeonClient({
+			apiKey: "k",
+			baseUrl,
+			retries: 0,
+			waitForReadiness: true,
+			wait: { pollIntervalMs: 5, timeoutMs: 80 },
+		});
+
+		const { error } = await neon.projects.create({ name: "test" });
+		expect(error?.kind).toBe("timeout");
+		if (error?.kind !== "timeout" || error.source !== "wait") {
+			throw new Error("expected wait timeout");
+		}
+		expect(error.operations.map((op) => op.id)).toEqual(["op-b"]);
+		resetBehaviour();
+	});
+
+	it("resumes polling from a wait timeout via operations.waitFor", async () => {
+		resetBehaviour({ hangOperations: true });
+		const neon = createNeonClient({
+			apiKey: "k",
+			baseUrl,
+			retries: 0,
+			waitForReadiness: true,
+			wait: { pollIntervalMs: 5, timeoutMs: 80 },
+		});
+
+		const { error } = await neon.projects.create({ name: "test" });
+		if (error?.kind !== "timeout" || error.source !== "wait") {
+			throw new Error("expected wait timeout");
+		}
+		resetBehaviour({ operationRunning: false, hangOperations: false });
+		const resumed = await neon.operations.waitFor(error.operations);
+		expect(resumed.error).toBeUndefined();
+	});
+
+	it("waitFor itself returns the still-pending operations on timeout", async () => {
+		resetBehaviour({ hangOperations: true });
+		const neon = createNeonClient({
+			apiKey: "k",
+			baseUrl,
+			retries: 0,
+		});
+		const { error } = await neon.operations.waitFor(
+			[
+				{
+					id: "op-1",
+					project_id: "p-1",
+					action: "create_timeline",
+					status: "running",
+					failures_count: 0,
+					created_at: "2026-01-01T00:00:00Z",
+					updated_at: "2026-01-01T00:00:00Z",
+					total_duration_ms: 0,
+				},
+			],
+			{ pollIntervalMs: 5, timeoutMs: 80 },
+		);
+		if (error?.kind !== "timeout" || error.source !== "wait") {
+			throw new Error("expected wait timeout");
+		}
+		expect(error.operations.map((op) => op.id)).toEqual(["op-1"]);
+		resetBehaviour();
 	});
 
 	it("resolves once the operations finish", async () => {
