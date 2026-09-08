@@ -300,6 +300,60 @@ it("functions.customDomains is typed", () => {
 	).resolves.toEqualTypeOf<void>();
 });
 
+it("README cancellation snippets typecheck", async () => {
+	const apiKey = "x";
+	const id = "p";
+	const projectId = "p";
+	const branchId = "br";
+	const neon = createNeonClient({ apiKey });
+
+	const controller = new AbortController();
+	const { error } = await neon.projects
+		.list({}, { signal: controller.signal })
+		.all();
+	if (error?.kind === "aborted") {
+		expectTypeOf(error.kind).toEqualTypeOf<"aborted">();
+	}
+
+	const result = await neon.projects.get(id, { signal: controller.signal });
+	if (result.error?.kind === "aborted") {
+		expectTypeOf(result.error.kind).toEqualTypeOf<"aborted">();
+	}
+
+	const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
+	const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
+	if (slow.error?.kind === "timeout" && slow.error.source === "request") {
+		expectTypeOf(slow.error.source).toEqualTypeOf<"request">();
+		// @ts-expect-error operations is a wait-timeout field
+		slow.error.operations;
+	}
+
+	await bounded.storage.objects.get(
+		projectId,
+		branchId,
+		"bucket",
+		"big.tar",
+		{
+			requestTimeoutMs: Number.POSITIVE_INFINITY,
+		},
+	);
+
+	const created = await neon.projects.create(
+		{ name: "app" },
+		{ wait: { timeoutMs: 30_000 } },
+	);
+	if (created.error?.kind === "timeout" && created.error.source === "wait") {
+		expectTypeOf(created.error.operations).toEqualTypeOf<
+			readonly Operation[]
+		>();
+		const resumed = await neon.operations.waitFor(
+			created.error.operations,
+			{ timeoutMs: 120_000 },
+		);
+		if (resumed.error) throw resumed.error;
+	}
+});
+
 it("NeonClient without a type argument is the non-throwing client", () => {
 	function seed(neon: NeonClient) {
 		return neon.projects.get("p");
