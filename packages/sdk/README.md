@@ -164,7 +164,9 @@ if (result.error?.kind === "aborted") { /* the caller stopped it */ }
 ```ts
 const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
 const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
-if (slow.error?.kind === "timeout") { /* the deadline was exceeded */ }
+if (slow.error?.kind === "timeout" && slow.error.source === "request") {
+  /* the request deadline was exceeded */
+}
 
 await bounded.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
   requestTimeoutMs: Number.POSITIVE_INFINITY,

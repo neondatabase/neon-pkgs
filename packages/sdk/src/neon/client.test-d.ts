@@ -322,8 +322,10 @@ it("README cancellation snippets typecheck", async () => {
 
 	const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
 	const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
-	if (slow.error?.kind === "timeout") {
-		expectTypeOf(slow.error.kind).toEqualTypeOf<"timeout">();
+	if (slow.error?.kind === "timeout" && slow.error.source === "request") {
+		expectTypeOf(slow.error.source).toEqualTypeOf<"request">();
+		// @ts-expect-error operations is a wait-timeout field
+		slow.error.operations;
 	}
 
 	await bounded.storage.objects.get(
@@ -335,6 +337,21 @@ it("README cancellation snippets typecheck", async () => {
 			requestTimeoutMs: Number.POSITIVE_INFINITY,
 		},
 	);
+
+	const created = await neon.projects.create(
+		{ name: "app" },
+		{ wait: { timeoutMs: 30_000 } },
+	);
+	if (created.error?.kind === "timeout" && created.error.source === "wait") {
+		expectTypeOf(created.error.operations).toEqualTypeOf<
+			readonly Operation[]
+		>();
+		const resumed = await neon.operations.waitFor(
+			created.error.operations,
+			{ timeoutMs: 120_000 },
+		);
+		if (resumed.error) throw resumed.error;
+	}
 });
 
 it("NeonClient without a type argument is the non-throwing client", () => {
