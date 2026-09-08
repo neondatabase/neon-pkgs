@@ -115,7 +115,7 @@ export class RequestContext {
 
 	/** Per-call, then client, then the method's own default. */
 	resolveWait(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		methodDefault: boolean,
 	): boolean {
 		return (
@@ -126,7 +126,7 @@ export class RequestContext {
 	}
 
 	/** The `throwOnError` policy for one call: the per-call override if given, else the client's. */
-	shouldThrow(opts: CallOptions | undefined): boolean {
+	shouldThrow(opts: CallOptions<boolean> | undefined): boolean {
 		return opts?.throwOnError ?? this.#config.throwOnError;
 	}
 
