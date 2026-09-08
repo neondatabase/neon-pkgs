@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 0.10.0
+
+### Minor Changes
+
+- e46659b: Typed model autocomplete now follows [neon.com/models](https://neon.com/models), including `claude-fable-5-1`, `glm-5-3-flash`, `grok-4-6`, and `gpt-6-astra`. `getNeonModelCapabilities("gpt-6-astra").supportsTemperature` is `false`.
+
 ## 0.9.0
 
 ### Minor Changes
