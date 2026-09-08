@@ -38,7 +38,7 @@ const { project, connectionString } = data;
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `apiKey` | `string \| (() => string \| Promise<string>)` | — (required) | Neon API key, or a function returning it (sync/async). Sent as a Bearer token. |
+| `apiKey` | `string \| (() => string \| Promise<string>)` | — (required) | Neon API key, or a function returning it (sync/async). Sent as a Bearer token. Missing or `""` throws a `"client"`-kind error when the client is created, not a 401 on the first call. |
 | `throwOnError` | `boolean` | `false` | When `true`, methods return the resource directly and **throw** on error. When `false`, they return `{ data, error }`. **Narrows return types** at the type level. |
 | `waitForReadiness` | `boolean` | — (unset) | Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll until `operations` finish; other mutations do not. Set `false` to disable polling on those four. Set `true` to poll on every mutation that returns operations. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
