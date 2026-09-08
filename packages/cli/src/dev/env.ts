@@ -138,7 +138,7 @@ const emptyClaimableCredential = (): CredentialOutcome => ({
 const isClaimableUnsupportedService = (service: NeonService): boolean =>
 	CLAIMABLE_UNSUPPORTED_SERVICES.has(service);
 
-const dropClaimableUnsupported = (
+export const dropClaimableUnsupported = (
 	services: readonly NeonService[],
 	envKeys: readonly EnvPullKey[],
 ): {
@@ -177,24 +177,22 @@ const warnClaimableSkipped = (skipped: readonly NeonService[]): void => {
 };
 
 /**
- * Live Postgres + Auth + Data API only. Does not list buckets, functions, or
- * credentials — those routes are refused or require claim.
- *
- * Claimable Neon does not complete concurrent Management API reads: an unscoped
- * pull that Promise.all'd Auth with connection URIs hung until killed. Resolve
- * one service at a time.
+ * Claimable Neon does not complete concurrent Management API reads.
+ * Resolve one allowed service at a time.
  */
 const resolveClaimableServicesSequentially = async (
 	ctx: DevEnvContext,
 	services: readonly NeonService[],
 	envKeys: readonly EnvPullKey[],
 ): Promise<ResolvedNeonEnvVars> => {
+	const leftover = envKeys.filter((key) => serviceForEnvKey(key) === null);
 	const parts: ResolvedNeonEnvVars[] = [];
 	for (const service of CLAIMABLE_RESOLVE_ORDER) {
 		const named = services.includes(service);
-		const keysForService = envKeys.filter(
-			(key) => serviceForEnvKey(key) === service,
-		);
+		const keysForService = [
+			...envKeys.filter((key) => serviceForEnvKey(key) === service),
+			...(service === "postgres" ? leftover : []),
+		];
 		if (!named && keysForService.length === 0) continue;
 		parts.push(
 			await resolveSelectedServices(
@@ -204,11 +202,10 @@ const resolveClaimableServicesSequentially = async (
 			),
 		);
 	}
-	const leftover = envKeys.filter((key) => serviceForEnvKey(key) === null);
-	const resolvedPostgres =
+	const resolvedPostgresPartition =
 		services.includes("postgres") ||
 		envKeys.some((key) => serviceForEnvKey(key) === "postgres");
-	if (leftover.length > 0 && !resolvedPostgres) {
+	if (leftover.length > 0 && !resolvedPostgresPartition) {
 		parts.push(await resolveSelectedServices(ctx, [], leftover));
 	}
 	if (parts.length === 0) {
@@ -252,13 +249,24 @@ const resolveClaimableNeonEnvVars = async (
 		);
 		warnClaimableSkipped(dropped.skipped);
 		if (dropped.services.length === 0 && dropped.envKeys.length === 0) {
-			return { vars: {}, credential: emptyClaimableCredential() };
+			return {
+				vars: {},
+				credential: emptyClaimableCredential(),
+				...(dropped.skipped.length > 0
+					? { skipped: dropped.skipped }
+					: {}),
+			};
 		}
-		return await resolveClaimableServicesSequentially(
+		const resolved = await resolveClaimableServicesSequentially(
 			ctx,
 			dropped.services,
 			dropped.envKeys,
 		);
+		const skipped = [...(resolved.skipped ?? []), ...dropped.skipped];
+		return {
+			...resolved,
+			...(skipped.length > 0 ? { skipped } : {}),
+		};
 	}
 	return await resolveClaimableLiveEnv(ctx);
 };

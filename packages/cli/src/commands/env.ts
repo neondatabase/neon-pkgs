@@ -9,7 +9,7 @@ import chalk from "chalk";
 import type yargs from "yargs";
 import { isClaimableEnvTarget } from "../claimable/state.js";
 import { ensureGitignored } from "../context.js";
-import { resolveNeonEnvVars } from "../dev/env.js";
+import { dropClaimableUnsupported, resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
 	ENV_PULL_KEY_HELP,
@@ -243,9 +243,22 @@ export const pull = async (
 	opts: { announce?: boolean; implyAiGateway?: boolean } = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
+	const claimable = isClaimableEnvTarget(props);
+	const dropped =
+		claimable &&
+		(props.services !== undefined || props.envKeys !== undefined)
+			? dropClaimableUnsupported(
+					props.services ?? [],
+					props.envKeys ?? [],
+				)
+			: null;
+	const selectionServices = dropped
+		? dropped.services
+		: (props.services ?? []);
+	const selectionEnvKeys = dropped ? dropped.envKeys : (props.envKeys ?? []);
 	const selectedKeys =
 		props.services !== undefined || props.envKeys !== undefined
-			? envKeysForSelection(props.services ?? [], props.envKeys ?? [])
+			? envKeysForSelection(selectionServices, selectionEnvKeys)
 			: undefined;
 	const branch = await resolveBranchRef(props);
 	if (opts.announce) {
@@ -264,14 +277,13 @@ export const pull = async (
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
-	const claimable = isClaimableEnvTarget(props);
 	const { vars, credential, skipped } = await resolveNeonEnvVars({
 		cwd,
 		projectId: props.projectId,
 		branchId,
 		env: { ...process.env, ...existingEnv },
-		...(props.services ? { services: props.services } : {}),
-		...(props.envKeys ? { envKeys: props.envKeys } : {}),
+		...(props.services !== undefined ? { services: props.services } : {}),
+		...(props.envKeys !== undefined ? { envKeys: props.envKeys } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		omitUnsetFunctionEnv: true,
 		...(claimable ? { claimable: true } : {}),
@@ -283,7 +295,7 @@ export const pull = async (
 	const neonVars = pickSelectedVars(
 		pickNeonVars(vars),
 		selectedKeys,
-		props.services,
+		props.services !== undefined ? selectionServices : undefined,
 	);
 	if (Object.keys(neonVars).length === 0) {
 		log.info(
@@ -301,8 +313,8 @@ export const pull = async (
 			selectedKeys,
 			unreachedButCurrent(skipped, existingEnv, branchId),
 			existingEnv,
-			props.services,
-			props.envKeys,
+			props.services !== undefined ? selectionServices : undefined,
+			props.envKeys !== undefined ? selectionEnvKeys : undefined,
 		),
 	});
 	log.info(

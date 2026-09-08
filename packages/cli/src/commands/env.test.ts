@@ -1525,6 +1525,55 @@ describe("env pull on a claimable project", () => {
 		expect(api.credentialCreateCalls).toBe(0);
 	});
 
+	it("refreshes NEON_BRANCH when it is selected with a Postgres key", async () => {
+		writeFileSync(join(cwd, ".env.local"), "NEON_BRANCH=stale\n");
+		const api = new FakeNeonApi();
+		await pull({
+			...claimableProps(api, cwd),
+			envKeys: ["DATABASE_URL", "NEON_BRANCH"],
+		});
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env.DATABASE_URL).toBeDefined();
+		expect(env.NEON_BRANCH).toBe(BRANCH_NAME);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("does not prune persisted function URLs when functions is skipped", async () => {
+		writeFileSync(
+			join(cwd, ".env.local"),
+			"NEON_FUNCTION_HELLO_BASE_URL=https://keep.example\n",
+		);
+		const api = new FakeNeonApi();
+		const logged = await captureLog(async () => {
+			await pull({
+				...claimableProps(api, cwd),
+				services: ["postgres", "functions"],
+			});
+		});
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env.DATABASE_URL).toBeDefined();
+		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe("https://keep.example");
+		expect(logged).toMatch(/Skipped functions/);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("warns and skips an unpaired storage key instead of throwing", async () => {
+		const api = new FakeNeonApi();
+		let result: PullOutcome | undefined;
+		const logged = await captureLog(async () => {
+			result = await pull({
+				...claimableProps(api, cwd),
+				envKeys: ["AWS_ACCESS_KEY_ID"],
+			});
+		});
+
+		expect(result?.status).toBe("empty");
+		expect(logged).toMatch(/Skipped object-storage/);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
 	it("still fails by name when Auth is selected but not enabled", async () => {
 		await expect(
 			pull({
