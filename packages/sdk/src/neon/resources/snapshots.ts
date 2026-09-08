@@ -16,7 +16,7 @@ import type {
 	Snapshot,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonAbortError, NeonError } from "../errors.js";
+import { NeonAbortError, NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
@@ -116,7 +116,12 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/snapshots */
-	list(projectId: string, opts?: CallOptions): Paginated<Snapshot> {
+	list(projectId: string): Paginated<Snapshot, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		opts: CallOptions<Throw>,
+	): Paginated<Snapshot, Throw>;
+	list(projectId: string, opts?: CallOptions): Paginated<Snapshot, boolean> {
 		return paginate(
 			(_cursor, signal) =>
 				listSnapshots({
@@ -127,6 +132,7 @@ export class Snapshots<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.snapshots ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -328,9 +334,8 @@ export class Snapshots<DThrow extends boolean> {
 								"The restore was aborted while its preview callback ran; the restored branch is left un-finalized.",
 								{ cause: error },
 							)
-						: new NeonError(
+						: new NeonClientError(
 								`The restore's preview callback threw; the restored branch is left un-finalized: ${error instanceof Error ? error.message : String(error)}`,
-								"client",
 								{ cause: error },
 							),
 				),

@@ -23,8 +23,11 @@ import { Storage } from "./resources/storage.js";
  * `projects` and `branches` are top-level; the Postgres data plane (compute endpoints,
  * roles, databases, the Data API, connection strings) is grouped under `postgres` so
  * future top-level namespaces (e.g. functions, object storage) stay unambiguous.
+ *
+ * `DThrow` defaults to `false`, matching `createNeonClient`. Use `NeonClient<true>` for a
+ * client created with `throwOnError: true`.
  */
-export interface NeonClient<DThrow extends boolean> {
+export interface NeonClient<DThrow extends boolean = false> {
 	readonly projects: Projects<DThrow>;
 	readonly branches: Branches<DThrow>;
 	readonly postgres: Postgres<DThrow>;
@@ -36,7 +39,7 @@ export interface NeonClient<DThrow extends boolean> {
 	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
 	readonly auth: Auth<DThrow>;
-	readonly consumption: Consumption;
+	readonly consumption: Consumption<DThrow>;
 	readonly apiKeys: ApiKeys<DThrow>;
 	readonly regions: Regions;
 	readonly user: User<DThrow>;
@@ -74,7 +77,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
 		auth: new Auth<Throw>(ctx),
-		consumption: new Consumption(ctx),
+		consumption: new Consumption<Throw>(ctx),
 		apiKeys: new ApiKeys<Throw>(ctx),
 		regions: new Regions(ctx),
 		user: new User<Throw>(ctx),

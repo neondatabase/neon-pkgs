@@ -38,6 +38,7 @@ export class Buckets<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.buckets ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

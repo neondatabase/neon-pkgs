@@ -41,6 +41,7 @@ export class Databases<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.databases ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

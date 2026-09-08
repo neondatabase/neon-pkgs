@@ -56,6 +56,7 @@ export class Endpoints<DThrow extends boolean> {
 						}),
 			(data) => ({ items: data?.endpoints ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

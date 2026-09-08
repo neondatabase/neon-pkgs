@@ -38,6 +38,7 @@ export class Credentials<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.credentials ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

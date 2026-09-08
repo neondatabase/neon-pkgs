@@ -37,6 +37,7 @@ export class Roles<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.roles ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

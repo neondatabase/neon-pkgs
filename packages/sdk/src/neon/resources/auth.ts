@@ -59,6 +59,7 @@ export class AuthOauthProviders<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.providers ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -190,6 +191,7 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data?.domains ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

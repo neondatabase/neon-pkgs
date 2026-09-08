@@ -82,6 +82,7 @@ export class Regions {
 				}),
 			(data) => ({ items: data?.regions ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 }
@@ -105,6 +106,7 @@ export class ApiKeys<DThrow extends boolean> {
 				}),
 			(data) => ({ items: data ?? [] }),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

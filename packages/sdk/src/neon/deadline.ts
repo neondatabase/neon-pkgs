@@ -12,7 +12,7 @@
  * to a caller who was promised `{ data, error }`.
  */
 
-import { NeonAbortError, NeonError, NeonTimeoutError } from "./errors.js";
+import { NeonAbortError, NeonClientError, NeonTimeoutError } from "./errors.js";
 
 /**
  * The largest delay `setTimeout` can represent. Beyond it Node warns
@@ -78,15 +78,13 @@ export function resolveTimeoutMs(value: number | undefined): number {
 		return Number.POSITIVE_INFINITY;
 	}
 	if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
-		throw new NeonError(
+		throw new NeonClientError(
 			`requestTimeoutMs must be a positive number of milliseconds, or Infinity to disable; received ${String(value)}.`,
-			"client",
 		);
 	}
 	if (value > MAX_TIMER_MS) {
-		throw new NeonError(
+		throw new NeonClientError(
 			`requestTimeoutMs must be at most ${MAX_TIMER_MS}ms (about 24.8 days); received ${value}. Pass Infinity for no deadline.`,
-			"client",
 		);
 	}
 	return value;
@@ -100,7 +98,9 @@ export function resolveTimeoutMs(value: number | undefined): number {
  * interceptor, transport and parsing faults through one channel, so an error merely named
  * `AbortError` is not evidence that the caller cancelled.
  */
-export function cancelled(deadline: Deadline): NeonError | undefined {
+export function cancelled(
+	deadline: Deadline,
+): NeonAbortError | NeonTimeoutError | undefined {
 	const source = deadline.source();
 	if (source === "caller") {
 		return new NeonAbortError("The request was aborted by its signal.");
