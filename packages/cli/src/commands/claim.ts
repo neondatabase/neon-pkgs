@@ -242,7 +242,7 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.option("env-pull", {
 						describe:
-							"Write the same Neon env vars `env pull` would (DATABASE_URL, DATABASE_URL_UNPOOLED, NEON_BRANCH, plus Auth / Data API when provisioned)",
+							"Write the same Neon env vars `env pull` would",
 						type: "boolean",
 						default: true,
 					})

@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import {
 	createServer,
 	type IncomingMessage,
@@ -411,6 +417,49 @@ describe("claim create env pull", () => {
 		expect(
 			service.seen.some((entry) => entry.includes("/credentials")),
 		).toBe(false);
+	});
+
+	it("deletes the project and rolls back when neon.ts declares the AI Gateway", async () => {
+		const service = await startService();
+		const api = new FakeNeonApi();
+		const { cwd, configDir, contextFile } = workspace();
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { aiGateway: true } };\n",
+		);
+		const stdout = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation(() => true);
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation(() => true);
+		cleanups.push(() => {
+			stdout.mockRestore();
+			stderr.mockRestore();
+		});
+
+		await expect(
+			create({
+				_: ["claim", "create"],
+				output: "json",
+				configDir,
+				contextFile,
+				claimableHost: service.origin,
+				apiKey: "",
+				envPull: true,
+				cwd,
+				runtimeApi: api,
+				apiClient: fakeApiClient as never,
+			}),
+		).rejects.toThrow(
+			/ai-gateway.*cannot be used on an unclaimed Claimable Neon project/s,
+		);
+
+		expect(service.wasDeleted()).toBe(true);
+		expect(existsSync(contextFile)).toBe(false);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+		expect(readClaimableCredentials(configDir, PROJECT_ID)).toBeNull();
+		expect(api.credentialCreateCalls).toBe(0);
 	});
 
 	it("deletes the project and rolls back local files when pull fails", async () => {

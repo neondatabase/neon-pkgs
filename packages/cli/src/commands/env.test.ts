@@ -1459,31 +1459,85 @@ describe("env pull on a claimable project", () => {
 		);
 	});
 
-	it("ignores neon.ts that declares the AI Gateway", async () => {
+	it("fails when neon.ts declares the AI Gateway", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { aiGateway: true } };\n",
 		);
 		const api = new FakeNeonApi();
-		await pull(claimableProps(api, cwd), { implyAiGateway: true });
-
+		await expect(
+			pull(claimableProps(api, cwd), { implyAiGateway: true }),
+		).rejects.toThrow(
+			/ai-gateway.*cannot be used on an unclaimed Claimable Neon project/s,
+		);
 		expect(api.credentialCreateCalls).toBe(0);
-		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toMatch(
-			/^DATABASE_URL=/m,
-		);
-		expect(readFileSync(join(cwd, ".env.local"), "utf8")).not.toContain(
-			"NEON_AI_GATEWAY",
-		);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 	});
 
-	it("does not fail when neon.ts declares Auth that is not on the branch", async () => {
+	it("fails when neon.ts declares Auth that is not on the branch", async () => {
 		writeFileSync(join(cwd, "neon.ts"), "export default { auth: {} };\n");
 		const api = new FakeNeonApi();
+		await expect(pull(claimableProps(api, cwd))).rejects.toThrow(
+			/auth.*neon deploy/s,
+		);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("pulls Auth and Data API from neon.ts when those GETs show them enabled", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { auth: {}, dataApi: true };\n",
+		);
+		const api = new FakeNeonApi({
+			getNeonAuth: async () => ({
+				projectId: "auth-project",
+				jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
+				baseUrl: "https://auth.fake.neon.tech",
+			}),
+			getNeonDataApi: async () => ({
+				url: "https://data.fake.neon.tech/rest/v1",
+			}),
+		});
+
+		await pull(claimableProps(api, cwd));
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env.DATABASE_URL).toBeDefined();
+		expect(env.NEON_AUTH_BASE_URL).toBe("https://auth.fake.neon.tech");
+		expect(env.NEON_DATA_API_URL).toBe(
+			"https://data.fake.neon.tech/rest/v1",
+		);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("does not pull live Auth when neon.ts does not declare it", async () => {
+		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
+		const api = new FakeNeonApi({
+			getNeonAuth: async () => ({
+				projectId: "auth-project",
+				jwksUrl: "https://auth.fake.neon.tech/.well-known/jwks.json",
+				baseUrl: "https://auth.fake.neon.tech",
+			}),
+		});
+
 		await pull(claimableProps(api, cwd));
 
 		const env = readEnvFile(join(cwd, ".env.local"));
 		expect(env.DATABASE_URL).toBeDefined();
 		expect(env.NEON_AUTH_BASE_URL).toBeUndefined();
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("fails when neon.ts declares functions", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { functions: { hello: " +
+				"{ name: 'Hello', source: './hello.ts' } } } };\n",
+		);
+		const api = new FakeNeonApi();
+		await expect(pull(claimableProps(api, cwd))).rejects.toThrow(
+			/functions.*cannot be used on an unclaimed Claimable Neon project/s,
+		);
 		expect(api.credentialCreateCalls).toBe(0);
 	});
 
