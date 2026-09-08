@@ -16,7 +16,7 @@ import type {
 	Snapshot,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonAbortError, NeonError } from "../errors.js";
+import { NeonAbortError, NeonClientError } from "../errors.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 /**
@@ -335,9 +335,8 @@ export class Snapshots<DThrow extends boolean> {
 								"The restore was aborted while its preview callback ran; the restored branch is left un-finalized.",
 								{ cause: error },
 							)
-						: new NeonError(
+						: new NeonClientError(
 								`The restore's preview callback threw; the restored branch is left un-finalized: ${error instanceof Error ? error.message : String(error)}`,
-								"client",
 								{ cause: error },
 							),
 				),
