@@ -38,7 +38,9 @@ export {
 	NeonNotFoundError,
 	NeonOperationError,
 	NeonRateLimitError,
+	NeonRequestTimeoutError,
 	NeonTimeoutError,
+	NeonWaitTimeoutError,
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
 export type {
