@@ -7,6 +7,7 @@ import {
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
+import { isClaimableEnvTarget } from "../claimable/state.js";
 import { ensureGitignored } from "../context.js";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
@@ -113,6 +114,12 @@ export const builder = (argv: yargs.Argv) =>
 							"     URLs (the function does not have to be deployed).",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
 							"     which mints a branch credential for it.",
+							"",
+							"On an unclaimed Claimable Neon project, a bare pull writes only",
+							"provisioned Postgres, Auth, and Data API variables. It does not mint a",
+							"credential. AI Gateway, Functions, and Object Storage are skipped until",
+							"the project is claimed. Naming those with --service / --env warns and",
+							"writes nothing for them.",
 							"",
 							"The pull bundled into link / checkout / config apply follows 2 and 3",
 							"without the AI Gateway, so it never mints a credential you did not ask",
@@ -257,6 +264,7 @@ export const pull = async (
 	// Reuse `neon dev`'s tiered resolver (neon.ts policy -> plan gate -> fetchEnv, else
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
+	const claimable = isClaimableEnvTarget(props);
 	const { vars, credential, skipped } = await resolveNeonEnvVars({
 		cwd,
 		projectId: props.projectId,
@@ -266,6 +274,7 @@ export const pull = async (
 		...(props.envKeys ? { envKeys: props.envKeys } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		omitUnsetFunctionEnv: true,
+		...(claimable ? { claimable: true } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),

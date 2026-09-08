@@ -9,9 +9,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { clearAuthContext, setAuthContext } from "../auth_context.js";
 import {
 	assertionHasExpired,
+	claimableApiHost,
 	claimableCredentialsPath,
+	isClaimableEnvTarget,
 	listClaimableCredentials,
 	readClaimableCredentials,
 	removeClaimableCredentials,
@@ -29,6 +32,7 @@ const temporaryDirectory = (): string => {
 };
 
 afterEach(() => {
+	clearAuthContext();
 	for (const directory of temporaryDirectories.splice(0)) {
 		rmSync(directory, { recursive: true, force: true });
 	}
@@ -242,5 +246,43 @@ describe("claimable credential selection", () => {
 		expect(shouldUseClaimableCredentials(noInputs, "work", context)).toBe(
 			false,
 		);
+	});
+});
+
+describe("claimable env target", () => {
+	it("matches a claimable marker only when the API host is that origin's /v1", () => {
+		const contextFile = join(temporaryDirectory(), ".neon");
+		writeFileSync(
+			contextFile,
+			JSON.stringify({
+				projectId: "project-test",
+				claimable: {
+					version: 1,
+					origin: "https://claimable.neon.tech",
+				},
+			}),
+		);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: claimableApiHost("https://claimable.neon.tech"),
+				contextFile,
+			}),
+		).toBe(true);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: "https://console.neon.tech/api/v2",
+				contextFile,
+			}),
+		).toBe(false);
+	});
+
+	it("treats a claimable auth source as claimable even without a marker", () => {
+		setAuthContext({ source: "claimable", configDir: "/tmp" });
+		expect(
+			isClaimableEnvTarget({
+				apiHost: "https://console.neon.tech/api/v2",
+				contextFile: join(temporaryDirectory(), "missing.neon"),
+			}),
+		).toBe(true);
 	});
 });

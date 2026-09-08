@@ -75,6 +75,12 @@ export type DevEnvContext = {
 	implyAiGateway?: boolean;
 	/** Env pull needs function slugs even when their runtime secrets are unset. */
 	omitUnsetFunctionEnv?: boolean;
+	/**
+	 * This request is talking to Claimable Neon. Skip credential minting and
+	 * services that require claim; resolve only provisioned Postgres / Auth /
+	 * Data API, ignoring neon.ts.
+	 */
+	claimable?: boolean;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -114,6 +120,149 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
 	skipped?: readonly NeonService[];
 };
 
+const CLAIMABLE_UNSUPPORTED_SERVICES: ReadonlySet<NeonService> = new Set([
+	"ai-gateway",
+	"functions",
+	"object-storage",
+]);
+
+const CLAIMABLE_RESOLVE_ORDER = ["postgres", "auth", "data-api"] as const;
+
+const emptyClaimableCredential = (): CredentialOutcome => ({
+	issued: false,
+	keys: [],
+	revoked: [],
+	superseded: [],
+});
+
+const isClaimableUnsupportedService = (service: NeonService): boolean =>
+	CLAIMABLE_UNSUPPORTED_SERVICES.has(service);
+
+const dropClaimableUnsupported = (
+	services: readonly NeonService[],
+	envKeys: readonly EnvPullKey[],
+): {
+	services: NeonService[];
+	envKeys: EnvPullKey[];
+	skipped: NeonService[];
+} => {
+	const skipped: NeonService[] = [];
+	const keptServices: NeonService[] = [];
+	for (const service of services) {
+		if (isClaimableUnsupportedService(service)) {
+			if (!skipped.includes(service)) skipped.push(service);
+			continue;
+		}
+		keptServices.push(service);
+	}
+	const keptKeys: EnvPullKey[] = [];
+	for (const key of envKeys) {
+		const service = serviceForEnvKey(key);
+		if (service !== null && isClaimableUnsupportedService(service)) {
+			if (!skipped.includes(service)) skipped.push(service);
+			continue;
+		}
+		keptKeys.push(key);
+	}
+	return { services: keptServices, envKeys: keptKeys, skipped };
+};
+
+const warnClaimableSkipped = (skipped: readonly NeonService[]): void => {
+	if (skipped.length === 0) return;
+	log.warning(
+		"Skipped %s: not available on an unclaimed Claimable Neon project. " +
+			"Postgres, Auth, and the Data API can be pulled when they are provisioned.",
+		skipped.join(", "),
+	);
+};
+
+/**
+ * Live Postgres + Auth + Data API only. Does not list buckets, functions, or
+ * credentials — those routes are refused or require claim.
+ *
+ * Claimable Neon does not complete concurrent Management API reads: an unscoped
+ * pull that Promise.all'd Auth with connection URIs hung until killed. Resolve
+ * one service at a time.
+ */
+const resolveClaimableServicesSequentially = async (
+	ctx: DevEnvContext,
+	services: readonly NeonService[],
+	envKeys: readonly EnvPullKey[],
+): Promise<ResolvedNeonEnvVars> => {
+	const parts: ResolvedNeonEnvVars[] = [];
+	for (const service of CLAIMABLE_RESOLVE_ORDER) {
+		const named = services.includes(service);
+		const keysForService = envKeys.filter(
+			(key) => serviceForEnvKey(key) === service,
+		);
+		if (!named && keysForService.length === 0) continue;
+		parts.push(
+			await resolveSelectedServices(
+				ctx,
+				named ? [service] : [],
+				keysForService,
+			),
+		);
+	}
+	const leftover = envKeys.filter((key) => serviceForEnvKey(key) === null);
+	const resolvedPostgres =
+		services.includes("postgres") ||
+		envKeys.some((key) => serviceForEnvKey(key) === "postgres");
+	if (leftover.length > 0 && !resolvedPostgres) {
+		parts.push(await resolveSelectedServices(ctx, [], leftover));
+	}
+	if (parts.length === 0) {
+		return { vars: {}, credential: emptyClaimableCredential() };
+	}
+	const vars = Object.assign({}, ...parts.map((part) => part.vars));
+	const skipped = parts.flatMap((part) => part.skipped ?? []);
+	return {
+		vars,
+		credential: emptyClaimableCredential(),
+		...(skipped.length > 0 ? { skipped } : {}),
+	};
+};
+
+const resolveClaimableLiveEnv = async (
+	ctx: DevEnvContext,
+): Promise<ResolvedNeonEnvVars> => {
+	const { projectId, branchId } = ctx;
+	if (!projectId || !branchId) {
+		throw new MissingBranchContextError(
+			`No project/branch context found. Link a branch (\`${getCliName()} link\` / ` +
+				`\`${getCliName()} checkout\`) or pass --project-id and --branch.`,
+		);
+	}
+	const api = apiFor(ctx);
+	const auth = await api.getNeonAuth(projectId, branchId);
+	const dataApiEnabled = await readDataApiEnabled(api, projectId, branchId);
+	const services: NeonService[] = ["postgres"];
+	if (auth !== null) services.push("auth");
+	if (dataApiEnabled !== false) services.push("data-api");
+	return await resolveClaimableServicesSequentially(ctx, services, []);
+};
+
+const resolveClaimableNeonEnvVars = async (
+	ctx: DevEnvContext,
+): Promise<ResolvedNeonEnvVars> => {
+	if (ctx.services !== undefined || ctx.envKeys !== undefined) {
+		const dropped = dropClaimableUnsupported(
+			ctx.services ?? [],
+			ctx.envKeys ?? [],
+		);
+		warnClaimableSkipped(dropped.skipped);
+		if (dropped.services.length === 0 && dropped.envKeys.length === 0) {
+			return { vars: {}, credential: emptyClaimableCredential() };
+		}
+		return await resolveClaimableServicesSequentially(
+			ctx,
+			dropped.services,
+			dropped.envKeys,
+		);
+	}
+	return await resolveClaimableLiveEnv(ctx);
+};
+
 /**
  * Resolve the branch's Neon env vars (pooled / direct `DATABASE_URL`, plus Auth /
  * Data API when enabled) into a `{ KEY: value }` map. Shared by `neon dev` (which
@@ -141,12 +290,18 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
  *      `pullConfig` cannot read it back.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
+ * {@link DevEnvContext.claimable} skips those tiers: neon.ts is ignored, credentials
+ * are not minted, and only provisioned Postgres / Auth / Data API are resolved.
+ *
  * Unlike {@link resolveDevEnv}, this never swallows errors — callers decide how to
  * handle them.
  */
 export const resolveNeonEnvVars = async (
 	ctx: DevEnvContext,
 ): Promise<ResolvedNeonEnvVars> => {
+	if (ctx.claimable) {
+		return await resolveClaimableNeonEnvVars(ctx);
+	}
 	if (ctx.services !== undefined || ctx.envKeys !== undefined) {
 		return await resolveSelectedServices(
 			ctx,

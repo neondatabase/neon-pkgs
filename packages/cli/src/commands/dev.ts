@@ -24,6 +24,7 @@ import { functionBaseUrlKey } from "@neon-internals/env-core/env";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
+import { isClaimableEnvTarget } from "../claimable/state.js";
 import { resolveDevEnv } from "../dev/env.js";
 import {
 	findConfigFunctionBySource,
@@ -115,7 +116,9 @@ export const builder = (argv: yargs.Argv) =>
  *   reason; `dev` was the one that didn't.
  */
 export const devEnvContext = (
-	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost">,
+	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost"> & {
+		contextFile?: string;
+	},
 	branchId: string | undefined,
 	cwd: string,
 ) => {
@@ -131,6 +134,12 @@ export const devEnvContext = (
 		...(branchId ? { branchId } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		...(isClaimableEnvTarget({
+			apiHost: props.apiHost,
+			contextFile: props.contextFile ?? "",
+		})
+			? { claimable: true }
+			: {}),
 	};
 };
 
