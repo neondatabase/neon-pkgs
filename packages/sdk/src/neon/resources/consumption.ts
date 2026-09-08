@@ -12,7 +12,7 @@ import type {
 	GetConsumptionHistoryPerProjectV2Data,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonError } from "../errors.js";
+import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 
 type PerProjectQuery = Omit<
@@ -40,7 +40,7 @@ function resolvedOrgId(
 }
 
 /** Consumption history (cursor-paginated). */
-export class Consumption {
+export class Consumption<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
@@ -50,8 +50,15 @@ export class Consumption {
 	/** @apiCall GET /consumption_history/projects */
 	perProject(
 		query: PerProjectQuery,
+	): Paginated<ConsumptionHistoryPerProject, DThrow>;
+	perProject<Throw extends boolean = DThrow>(
+		query: PerProjectQuery,
+		opts: CallOptions<Throw>,
+	): Paginated<ConsumptionHistoryPerProject, Throw>;
+	perProject(
+		query: PerProjectQuery,
 		opts?: CallOptions,
-	): Paginated<ConsumptionHistoryPerProject> {
+	): Paginated<ConsumptionHistoryPerProject, boolean> {
 		const { orgId, org_id, ...rest } = query;
 		const resolved = resolvedOrgId(
 			{ orgId, org_id },
@@ -74,14 +81,22 @@ export class Consumption {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
 	/** @apiCall GET /consumption_history/v2/projects */
 	perProjectV2(
 		query: PerProjectV2Query,
+	): Paginated<ConsumptionHistoryPerProjectV2, DThrow>;
+	perProjectV2<Throw extends boolean = DThrow>(
+		query: PerProjectV2Query,
+		opts: CallOptions<Throw>,
+	): Paginated<ConsumptionHistoryPerProjectV2, Throw>;
+	perProjectV2(
+		query: PerProjectV2Query,
 		opts?: CallOptions,
-	): Paginated<ConsumptionHistoryPerProjectV2> {
+	): Paginated<ConsumptionHistoryPerProjectV2, boolean> {
 		const { orgId, org_id, ...rest } = query;
 		const resolved = resolvedOrgId(
 			{ orgId, org_id },
@@ -91,7 +106,7 @@ export class Consumption {
 			(cursor, signal) => {
 				if (resolved === undefined) {
 					return Promise.resolve({
-						error: new NeonError(MISSING_ORG, "client"),
+						error: new NeonClientError(MISSING_ORG),
 					});
 				}
 				return getConsumptionHistoryPerProjectV2({
@@ -106,14 +121,22 @@ export class Consumption {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
 	/** @apiCall GET /consumption_history/v2/branches */
 	perBranchV2(
 		query: PerBranchV2Query,
+	): Paginated<ConsumptionHistoryPerBranchV2, DThrow>;
+	perBranchV2<Throw extends boolean = DThrow>(
+		query: PerBranchV2Query,
+		opts: CallOptions<Throw>,
+	): Paginated<ConsumptionHistoryPerBranchV2, Throw>;
+	perBranchV2(
+		query: PerBranchV2Query,
 		opts?: CallOptions,
-	): Paginated<ConsumptionHistoryPerBranchV2> {
+	): Paginated<ConsumptionHistoryPerBranchV2, boolean> {
 		const { orgId, org_id, ...rest } = query;
 		const resolved = resolvedOrgId(
 			{ orgId, org_id },
@@ -123,7 +146,7 @@ export class Consumption {
 			(cursor, signal) => {
 				if (resolved === undefined) {
 					return Promise.resolve({
-						error: new NeonError(MISSING_ORG, "client"),
+						error: new NeonClientError(MISSING_ORG),
 					});
 				}
 				return getConsumptionHistoryPerBranchV2({
@@ -138,6 +161,7 @@ export class Consumption {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 }

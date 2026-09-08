@@ -3,8 +3,11 @@ import { getProject } from "../client/raw.gen.js";
 import { createNeonClient } from "./client.js";
 import {
 	describeTransportFailure,
+	isNeonError,
+	NeonAbortError,
 	NeonApiError,
 	NeonAuthError,
+	NeonClientError,
 	NeonError,
 	NeonNetworkError,
 	NeonNotFoundError,
@@ -62,7 +65,9 @@ describe("error names survive minification", () => {
 			NeonOperationError,
 		],
 		["NeonTimeoutError", () => new NeonTimeoutError("x"), NeonTimeoutError],
+		["NeonAbortError", () => new NeonAbortError("x"), NeonAbortError],
 		["NeonNetworkError", () => new NeonNetworkError("x"), NeonNetworkError],
+		["NeonClientError", () => new NeonClientError("x"), NeonClientError],
 	];
 
 	for (const [expected, construct, cls] of cases) {
@@ -71,6 +76,37 @@ describe("error names survive minification", () => {
 			expect(nameAfterMinification(construct, cls)).toBe(expected);
 		});
 	}
+});
+
+describe("NeonClientError", () => {
+	it("is a client-kind NeonError with optional cause", () => {
+		const cause = new Error("inner");
+		const error = new NeonClientError("ambiguous selection", { cause });
+		expect(error).toBeInstanceOf(NeonClientError);
+		expect(error).toBeInstanceOf(NeonError);
+		expect(error.kind).toBe("client");
+		expect(error.name).toBe("NeonClientError");
+		expect(error.cause).toBe(cause);
+	});
+});
+
+describe("each class reports its literal kind", () => {
+	it("matches the discriminant the type system advertises", () => {
+		expect(new NeonApiError("x", apiInit).kind).toBe("api");
+		expect(new NeonNotFoundError("x", apiInit).kind).toBe("not_found");
+		expect(new NeonAuthError("x", apiInit).kind).toBe("auth");
+		expect(new NeonRateLimitError("x", apiInit).kind).toBe("rate_limit");
+		expect(
+			new NeonOperationError("x", {
+				operationId: "op-1",
+				status: "failed",
+			}).kind,
+		).toBe("operation");
+		expect(new NeonTimeoutError("x").kind).toBe("timeout");
+		expect(new NeonAbortError("x").kind).toBe("aborted");
+		expect(new NeonNetworkError("x").kind).toBe("network");
+		expect(new NeonClientError("x").kind).toBe("client");
+	});
 });
 
 describe("describeTransportFailure", () => {
@@ -109,6 +145,17 @@ describe("describeTransportFailure", () => {
 		const b = new Error("", { cause: a });
 		a.cause = b;
 		expect(describeTransportFailure(a)).toBe("cause unavailable");
+	});
+});
+
+describe("isNeonError", () => {
+	it("accepts every NeonErrorUnion member and rejects the base class", () => {
+		expect(isNeonError(new NeonApiError("x", apiInit))).toBe(true);
+		expect(isNeonError(new NeonNotFoundError("x", apiInit))).toBe(true);
+		expect(isNeonError(new NeonClientError("x"))).toBe(true);
+		expect(isNeonError(new NeonError("x", "client"))).toBe(false);
+		expect(isNeonError(new Error("x"))).toBe(false);
+		expect(isNeonError(undefined)).toBe(false);
 	});
 });
 

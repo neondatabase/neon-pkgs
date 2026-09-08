@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createNeonClient } from "../client.js";
+import { NeonClientError } from "../errors.js";
 
 function neonRouting(
 	respond: (request: { url: string; method: string; body: unknown }) => {
@@ -114,6 +115,7 @@ describe("branches.create", () => {
 		});
 
 		expect(data).toBeUndefined();
+		expect(error).toBeInstanceOf(NeonClientError);
 		expect(error?.kind).toBe("client");
 		expect(error?.message).toBe(
 			"Pass compute settings or noCompute, not both.",

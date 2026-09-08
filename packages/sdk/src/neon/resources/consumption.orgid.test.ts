@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createNeonClient } from "../client.js";
+import { createNeonClient, type NeonClient } from "../client.js";
 import type { NeonConfig } from "../config.js";
 
 const window = {
@@ -159,7 +159,7 @@ describe.each([
 			: { branches: [], pagination: {} };
 
 	function page(
-		neon: ReturnType<typeof createNeonClient>,
+		neon: NeonClient,
 		query: { orgId?: string; org_id?: string },
 	) {
 		if (method === "perProjectV2") {
