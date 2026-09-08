@@ -156,8 +156,7 @@ export const builder = (argv: yargs.Argv) =>
 					.strict()
 					.check(noPassthrough("api-keys")),
 			async (args) => await revoke(args as unknown as RevokeProps),
-		)
-		.demandCommand(1, "Run `neon api-keys --help` to see the subcommands.");
+		);
 
 export const handler = (args: yargs.Argv) => args;
 

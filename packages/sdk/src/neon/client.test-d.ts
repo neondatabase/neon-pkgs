@@ -1,19 +1,21 @@
 import { expectTypeOf, it } from "vitest";
 import type {
 	Branch,
+	ConsumptionHistoryPerProject,
 	CustomDomain,
 	Endpoint,
 	NeonAuthIntegration,
 	NeonAuthOauthProvider,
 	Operation,
 	Project,
+	ProjectBranchLogRecord,
 	ProjectListItem,
 	ProjectPermission,
 	Snapshot,
 } from "../client/types.gen.js";
-import { createNeonClient } from "./client.js";
+import { createNeonClient, type NeonClient } from "./client.js";
 import type { CallOptions } from "./context.js";
-import type { Paginated } from "./paginate.js";
+import type { Page, Paginated } from "./paginate.js";
 import type { BranchConnection } from "./resources/branches.js";
 import type { ProjectConnection } from "./resources/projects.js";
 import type { NeonResult } from "./result.js";
@@ -291,4 +293,74 @@ it("functions.customDomains is typed", () => {
 	expectTypeOf(
 		throwing.functions.customDomains.delete("p", "br", "docs.example.com"),
 	).resolves.toEqualTypeOf<void>();
+});
+
+it("NeonClient without a type argument is the non-throwing client", () => {
+	function seed(neon: NeonClient) {
+		return neon.projects.get("p");
+	}
+	expectTypeOf(seed).returns.toEqualTypeOf<Promise<NeonResult<Project>>>();
+	const neon: NeonClient = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon).toEqualTypeOf<NeonClient<false>>();
+});
+
+it("NeonClient<true> still returns the bare resource", () => {
+	const throwing: NeonClient<true> = createNeonClient({
+		apiKey: "x",
+		throwOnError: true,
+	});
+	expectTypeOf(throwing.projects.get("p")).resolves.toEqualTypeOf<Project>();
+});
+
+it("paginated lists honour throwOnError on page() and all()", async () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.projects.list().all()).resolves.toEqualTypeOf<
+		NeonResult<ProjectListItem[]>
+	>();
+	expectTypeOf(neon.projects.list().page()).resolves.toEqualTypeOf<
+		NeonResult<Page<ProjectListItem>>
+	>();
+	expectTypeOf(
+		neon.projects.list(undefined, { throwOnError: true }),
+	).toEqualTypeOf<Paginated<ProjectListItem, true>>();
+	expectTypeOf(
+		neon.projects.list(undefined, { throwOnError: true }).all(),
+	).resolves.toEqualTypeOf<ProjectListItem[]>();
+
+	const consumptionQuery = {
+		from: "2024-03-01T00:00:00Z",
+		to: "2024-03-02T00:00:00Z",
+		granularity: "daily" as const,
+	};
+	expectTypeOf(neon.consumption.perProject(consumptionQuery)).toEqualTypeOf<
+		Paginated<ConsumptionHistoryPerProject>
+	>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(throwing.branches.list("p")).toEqualTypeOf<
+		Paginated<Branch, true>
+	>();
+	expectTypeOf(throwing.branches.list("p").all()).resolves.toEqualTypeOf<
+		Branch[]
+	>();
+	expectTypeOf(throwing.branches.list("p").page()).resolves.toEqualTypeOf<
+		Page<Branch>
+	>();
+	expectTypeOf(
+		throwing.branches.list("p", undefined, { throwOnError: false }).all(),
+	).resolves.toEqualTypeOf<NeonResult<Branch[]>>();
+	expectTypeOf(throwing.operations.list("p")).toEqualTypeOf<
+		Paginated<Operation, true>
+	>();
+	expectTypeOf(throwing.logs.query("p", "br")).toEqualTypeOf<
+		Paginated<ProjectBranchLogRecord, true>
+	>();
+	expectTypeOf(
+		throwing.consumption.perProject(consumptionQuery),
+	).toEqualTypeOf<Paginated<ConsumptionHistoryPerProject, true>>();
+
+	for await (const branch of throwing.branches.list("p")) {
+		expectTypeOf(branch).toEqualTypeOf<Branch>();
+		break;
+	}
 });
