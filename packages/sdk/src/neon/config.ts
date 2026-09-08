@@ -1,6 +1,7 @@
 import { createClient, createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
 import { resolveTimeoutMs } from "./deadline.js";
+import { resolveRetries } from "./retry.js";
 import type { WaitForOptions } from "./wait.js";
 
 const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
@@ -27,7 +28,11 @@ export interface NeonConfig<Throw extends boolean = false> {
 	waitForReadiness?: boolean;
 	/** Tuning for the readiness poller (interval / timeout). */
 	wait?: WaitForOptions;
-	/** Number of automatic retries on always-safe statuses (423/429/503). Default 2. */
+	/**
+	 * Number of automatic retries on always-safe statuses (423/429/503). Default 2.
+	 * `0` disables retries. Non-integer, negative, `NaN`, or `Infinity` throws a
+	 * `"client"`-kind error at construction.
+	 */
 	retries?: number;
 	/**
 	 * Deadline in milliseconds for a single request **and** its retries, after which the
@@ -68,7 +73,7 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 	return {
 		client,
 		throwOnError: config.throwOnError ?? false,
-		retries: config.retries ?? 2,
+		retries: resolveRetries(config.retries),
 		requestTimeoutMs: resolveTimeoutMs(config.requestTimeoutMs),
 		waitForReadiness: config.waitForReadiness,
 		waitOptions: config.wait ?? {},

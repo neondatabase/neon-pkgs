@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { NeonError } from "./errors.js";
 import {
 	backoffMs,
 	MAX_RETRY_WAIT_MS,
 	nextRetryDelayMs,
 	parseRetryAfterMs,
+	resolveRetries,
 } from "./retry.js";
 
 const NOW = Date.parse("2026-08-03T00:00:00Z");
@@ -87,5 +89,36 @@ describe("nextRetryDelayMs", () => {
 
 	it("declines when even generated backoff would outlast the budget", () => {
 		expect(nextRetryDelayMs(4, undefined, 10, () => 1)).toBeUndefined();
+	});
+});
+
+describe("resolveRetries", () => {
+	it("defaults unset to 2 and keeps 0 and other non-negative integers", () => {
+		expect(resolveRetries(undefined)).toBe(2);
+		expect(resolveRetries(0)).toBe(0);
+		expect(resolveRetries(3)).toBe(3);
+	});
+
+	it("rejects NaN, Infinity, fractions, negatives, and null", () => {
+		const cases: unknown[] = [
+			Number.NaN,
+			Number.POSITIVE_INFINITY,
+			Number.NEGATIVE_INFINITY,
+			1.5,
+			-1,
+			null,
+		];
+		for (const value of cases) {
+			try {
+				Reflect.apply(resolveRetries, undefined, [value]);
+				throw new Error(`expected reject ${String(value)}`);
+			} catch (error) {
+				expect(error).toBeInstanceOf(NeonError);
+				expect(error).toMatchObject({
+					kind: "client",
+					message: `retries must be a non-negative integer; received ${String(value)}.`,
+				});
+			}
+		}
 	});
 });
