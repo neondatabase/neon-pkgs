@@ -304,7 +304,6 @@ export const builder = (argv: yargs.Argv) =>
 					.check(noPassthrough("logs field-values")),
 			(args) => fieldValues(args as any),
 		)
-		.demandCommand(1, "Run `neon logs --help` to see the subcommands.")
 		.epilogue(LOGS_EPILOG);
 
 export const handler = (args: yargs.Argv) => {
