@@ -1,6 +1,7 @@
 import { getEventListeners } from "node:events";
 import { describe, expect, it } from "vitest";
 import { cancelled, createDeadline, delay, runBounded } from "./deadline.js";
+import { NeonRequestTimeoutError } from "./errors.js";
 
 describe("delay", () => {
 	it("reports elapsed when it runs to completion", async () => {
@@ -121,8 +122,10 @@ describe("cancelled", () => {
 		const deadline = createDeadline(1);
 		await deadline.fired();
 		const error = cancelled(deadline);
+		expect(error).toBeInstanceOf(NeonRequestTimeoutError);
 		expect(error?.kind).toBe("timeout");
 		expect(error).toMatchObject({ source: "request", timeoutMs: 1 });
+		expect(error && "operations" in error).toBe(false);
 		deadline.dispose();
 	});
 

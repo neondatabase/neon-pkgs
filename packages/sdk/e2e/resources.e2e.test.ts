@@ -1,11 +1,17 @@
 import {
+	configuredBaseUrl,
+	configuredOrgId,
 	createProject,
 	deleteProject,
+	requireApiKey,
 	uniqueProjectName,
 } from "@neon/e2e-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { NeonClient } from "../src/index.js";
-import { NeonNotFoundError } from "../src/index.js";
+import {
+	createNeonClient,
+	type NeonClient,
+	NeonNotFoundError,
+} from "../src/index.js";
 import { expectOk, makeClient } from "./helpers.js";
 
 /**
@@ -337,5 +343,54 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			await neon.operations.get(projectId, single.id),
 		);
 		expect(fetched.id).toBe(single.id);
+	});
+
+	it("a wait timeout carries outstanding operations so waitFor can resume", async () => {
+		const impatient = createNeonClient({
+			apiKey: requireApiKey(),
+			orgId: configuredOrgId(),
+			baseUrl: configuredBaseUrl(),
+			waitForReadiness: true,
+			wait: { timeoutMs: 1, pollIntervalMs: 1 },
+		});
+
+		const { data, error } = await impatient.branches.create(projectId, {
+			name: "wait-timeout-resume",
+			parent_id: defaultBranchId,
+			noCompute: true,
+		});
+
+		let branchId: string | undefined = data?.id;
+		try {
+			if (error === undefined) {
+				throw new Error(
+					`expected a wait timeout: the API finished the create in under 1ms (branch ${data?.id})`,
+				);
+			}
+			expect(error.kind).toBe("timeout");
+			if (error.kind !== "timeout" || error.source !== "wait") {
+				throw new Error(`unexpected error: ${error.kind}`);
+			}
+			expect(error.operations.length).toBeGreaterThan(0);
+			for (const op of error.operations) {
+				expect(op.project_id).toBe(projectId);
+			}
+			branchId =
+				error.operations.find((op) => op.branch_id)?.branch_id ??
+				branchId;
+			expectOk(await neon.operations.waitFor(error.operations));
+			if (branchId) {
+				const branch = expectOk(
+					await neon.branches.get(projectId, branchId),
+				);
+				expect(branch.id).toBe(branchId);
+			}
+		} finally {
+			if (branchId) {
+				await neon.branches.delete(projectId, branchId, {
+					waitForReadiness: true,
+				});
+			}
+		}
 	});
 });

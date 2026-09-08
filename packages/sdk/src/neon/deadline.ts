@@ -12,7 +12,11 @@
  * to a caller who was promised `{ data, error }`.
  */
 
-import { NeonAbortError, NeonClientError, NeonTimeoutError } from "./errors.js";
+import {
+	NeonAbortError,
+	NeonClientError,
+	NeonRequestTimeoutError,
+} from "./errors.js";
 
 /**
  * The largest delay `setTimeout` can represent. Beyond it Node warns
@@ -103,7 +107,7 @@ export function resolveTimeoutMs(value: number | undefined): number {
  */
 export function cancelled(
 	deadline: Deadline,
-): NeonAbortError | NeonTimeoutError | undefined {
+): NeonAbortError | NeonRequestTimeoutError | undefined {
 	const source = deadline.source();
 	if (source === "caller") {
 		return new NeonAbortError("The request was aborted by its signal.");
@@ -115,9 +119,9 @@ export function cancelled(
 				"Internal: a request timeout fired without a requestTimeoutMs budget.",
 			);
 		}
-		return new NeonTimeoutError(
+		return new NeonRequestTimeoutError(
 			"Timed out waiting for the Neon API to respond (requestTimeoutMs).",
-			{ source: "request", timeoutMs },
+			{ timeoutMs },
 		);
 	}
 	return undefined;

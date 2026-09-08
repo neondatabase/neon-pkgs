@@ -83,7 +83,9 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonAuthError` | `"auth"` | (401/403) |
 | `NeonRateLimitError` | `"rate_limit"` | (429, after retries) |
 | `NeonOperationError` | `"operation"` | `operationId`, `status` — an awaited operation failed |
-| `NeonTimeoutError` | `"timeout"` | `source` (`"request"` \| `"wait"`), `timeoutMs` — `"request"` is `requestTimeoutMs`; `"wait"` is the readiness budget after the resource was created |
+| `NeonTimeoutError` | `"timeout"` | abstract base of the two rows below; `instanceof` still matches both |
+| `NeonRequestTimeoutError` | `"timeout"` | `source: "request"`, `timeoutMs` — `requestTimeoutMs` ran out |
+| `NeonWaitTimeoutError` | `"timeout"` | `source: "wait"`, `timeoutMs`, `operations` — readiness budget ran out; pass `operations` to `neon.operations.waitFor` |
 | `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
 | `NeonClientError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection, invalid `requestTimeoutMs`) |
@@ -173,10 +175,15 @@ await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
 cancellation is not. `"timeout"` still covers both budgets; `source` says which one fired:
 
 ```ts
-import { NeonTimeoutError } from "@neon/sdk";
+const { data, error } = await neon.projects.create({ name: "app" });
 
-if (error instanceof NeonTimeoutError && error.source === "wait") {
-  // the resource was created; readiness polling ran out — keep polling
+if (error?.kind === "timeout" && error.source === "wait") {
+  // The project exists and is still provisioning. Poll again with a fresh budget
+  // instead of calling create a second time.
+  const resumed = await neon.operations.waitFor(error.operations, {
+    timeoutMs: 120_000,
+  });
+  if (resumed.error) throw resumed.error;
 }
 ```
 
@@ -657,7 +664,7 @@ await neon.snapshots.restore(projectId, snapshotId, {
 | --- | --- | --- |
 | `list(projectId)` | **[P]** `Operation` | |
 | `get(projectId, operationId)` | `Operation` | |
-| `waitFor(operations, options?)` | **→void** | `options`: `{ pollIntervalMs?, timeoutMs?, signal? }` — the readiness primitive |
+| `waitFor(operations, options?)` | **→void** | `options`: `{ pollIntervalMs?, timeoutMs?, signal? }` — the readiness primitive. A wait timeout's `error.operations` is the still-outstanding subset; pass it here to resume. |
 
 ```ts
 // Wait on operations from a raw call (or when waitForReadiness is off)

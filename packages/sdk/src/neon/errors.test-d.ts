@@ -1,5 +1,5 @@
 import { expectTypeOf, it } from "vitest";
-import type { Project } from "../client/types.gen.js";
+import type { Operation, Project } from "../client/types.gen.js";
 import { createNeonClient } from "./client.js";
 import {
 	isNeonError,
@@ -14,24 +14,37 @@ import {
 	NeonNotFoundError,
 	type NeonOperationError,
 	type NeonRateLimitError,
+	NeonRequestTimeoutError,
 	NeonTimeoutError,
+	NeonWaitTimeoutError,
 	toNeonError,
 } from "./errors.js";
 import type { NeonResult } from "./result.js";
 
-it("NeonTimeoutError requires source and timeoutMs", () => {
-	const error = new NeonTimeoutError("x", {
-		source: "wait",
-		timeoutMs: 80,
-	});
-	expectTypeOf(error.source).toEqualTypeOf<"request" | "wait">();
-	expectTypeOf(error.timeoutMs).toEqualTypeOf<number>();
+it("NeonTimeoutError is abstract; subclasses take the matching init", () => {
+	// @ts-expect-error NeonTimeoutError is abstract
+	new NeonTimeoutError("x", { timeoutMs: 1 });
+
+	const request = new NeonRequestTimeoutError("x", { timeoutMs: 20 });
+	expectTypeOf(request.source).toEqualTypeOf<"request">();
+	expectTypeOf(request.timeoutMs).toEqualTypeOf<number>();
 	// @ts-expect-error source is readonly
-	error.source = "request";
+	request.source = "wait";
 	// @ts-expect-error timeoutMs is readonly
-	error.timeoutMs = 1;
-	// @ts-expect-error init is required
-	new NeonTimeoutError("x");
+	request.timeoutMs = 1;
+	// @ts-expect-error operations is a wait-timeout field
+	request.operations;
+
+	const wait = new NeonWaitTimeoutError("x", {
+		timeoutMs: 80,
+		operations: [],
+	});
+	expectTypeOf(wait.source).toEqualTypeOf<"wait">();
+	expectTypeOf(wait.operations).toEqualTypeOf<readonly Operation[]>();
+	// @ts-expect-error operations is readonly
+	wait.operations = [];
+	// @ts-expect-error operations is required
+	new NeonWaitTimeoutError("x", { timeoutMs: 1 });
 });
 
 it("kind narrows NeonResult.error to the matching subclass", async () => {
@@ -70,9 +83,22 @@ it("kind narrows NeonResult.error to the matching subclass", async () => {
 	}
 
 	if (error?.kind === "timeout") {
-		expectTypeOf(error).toEqualTypeOf<NeonTimeoutError>();
+		expectTypeOf(error).toEqualTypeOf<
+			NeonRequestTimeoutError | NeonWaitTimeoutError
+		>();
 		expectTypeOf(error.source).toEqualTypeOf<"request" | "wait">();
 		expectTypeOf(error.timeoutMs).toEqualTypeOf<number>();
+		if (error.source === "wait") {
+			expectTypeOf(error).toEqualTypeOf<NeonWaitTimeoutError>();
+			expectTypeOf(error.operations).toEqualTypeOf<
+				readonly Operation[]
+			>();
+		}
+		if (error.source === "request") {
+			expectTypeOf(error).toEqualTypeOf<NeonRequestTimeoutError>();
+			// @ts-expect-error operations is a wait-timeout field
+			error.operations;
+		}
 	}
 
 	if (error?.kind === "operation") {
@@ -153,9 +179,13 @@ it("NeonApiError is not a generic that can advertise a false kind", () => {
 	new NeonApiError<"not_found">("x", { status: 500 });
 });
 
-it("new NeonApiError is assignable to NeonErrorUnion", () => {
-	const error: NeonErrorUnion = new NeonApiError("x", { status: 500 });
-	expectTypeOf(error).toEqualTypeOf<NeonErrorUnion>();
+it("timeout subclasses are assignable to NeonErrorUnion", () => {
+	expectTypeOf(
+		new NeonRequestTimeoutError("x", { timeoutMs: 1 }),
+	).toMatchTypeOf<NeonErrorUnion>();
+	expectTypeOf(
+		new NeonWaitTimeoutError("x", { timeoutMs: 1, operations: [] }),
+	).toMatchTypeOf<NeonErrorUnion>();
 });
 
 it("isNeonError narrows unknown to NeonErrorUnion", () => {

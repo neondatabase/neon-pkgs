@@ -2,4 +2,4 @@
 "@neon/sdk": minor
 ---
 
-`NeonTimeoutError` now has `source` (`"request"` when the API call exceeded `requestTimeoutMs`, `"wait"` when readiness polling exceeded `timeoutMs`) and `timeoutMs` (the budget that was exceeded). `kind` remains `"timeout"`. Direct construction requires `{ source, timeoutMs }`.
+`NeonTimeoutError` is now the abstract base of `NeonRequestTimeoutError` (`source: "request"`) and `NeonWaitTimeoutError` (`source: "wait"`, plus `operations` for `neon.operations.waitFor`). `kind` remains `"timeout"`. Direct construction uses the subclasses.

@@ -13,7 +13,9 @@ import {
 	NeonNotFoundError,
 	NeonOperationError,
 	NeonRateLimitError,
+	NeonRequestTimeoutError,
 	NeonTimeoutError,
+	NeonWaitTimeoutError,
 	toNeonError,
 } from "./errors.js";
 
@@ -65,13 +67,21 @@ describe("error names survive minification", () => {
 			NeonOperationError,
 		],
 		[
-			"NeonTimeoutError",
+			"NeonRequestTimeoutError",
 			() =>
-				new NeonTimeoutError("x", {
-					source: "request",
+				new NeonRequestTimeoutError("x", {
 					timeoutMs: 1,
 				}),
-			NeonTimeoutError,
+			NeonRequestTimeoutError,
+		],
+		[
+			"NeonWaitTimeoutError",
+			() =>
+				new NeonWaitTimeoutError("x", {
+					timeoutMs: 1,
+					operations: [],
+				}),
+			NeonWaitTimeoutError,
 		],
 		["NeonAbortError", () => new NeonAbortError("x"), NeonAbortError],
 		["NeonNetworkError", () => new NeonNetworkError("x"), NeonNetworkError],
@@ -88,21 +98,36 @@ describe("error names survive minification", () => {
 
 describe("NeonTimeoutError", () => {
 	it("records which deadline fired and the budget that was exceeded", () => {
-		const request = new NeonTimeoutError("x", {
-			source: "request",
+		const request = new NeonRequestTimeoutError("x", {
 			timeoutMs: 20,
 		});
 		expect(request.kind).toBe("timeout");
 		expect(request.source).toBe("request");
 		expect(request.timeoutMs).toBe(20);
+		expect(request).toBeInstanceOf(NeonTimeoutError);
 		expect(request).toBeInstanceOf(NeonError);
+		expect("operations" in request).toBe(false);
 
-		const wait = new NeonTimeoutError("x", {
-			source: "wait",
+		const operations = [
+			{
+				id: "op-1",
+				project_id: "p-1",
+				action: "create_timeline" as const,
+				status: "running" as const,
+				failures_count: 0,
+				created_at: "2026-01-01T00:00:00Z",
+				updated_at: "2026-01-01T00:00:00Z",
+				total_duration_ms: 0,
+			},
+		];
+		const wait = new NeonWaitTimeoutError("x", {
 			timeoutMs: 80,
+			operations,
 		});
 		expect(wait.source).toBe("wait");
 		expect(wait.timeoutMs).toBe(80);
+		expect(wait).toBeInstanceOf(NeonTimeoutError);
+		expect(wait.operations).toBe(operations);
 	});
 });
 
@@ -131,9 +156,14 @@ describe("each class reports its literal kind", () => {
 			}).kind,
 		).toBe("operation");
 		expect(
-			new NeonTimeoutError("x", {
-				source: "request",
+			new NeonRequestTimeoutError("x", {
 				timeoutMs: 1,
+			}).kind,
+		).toBe("timeout");
+		expect(
+			new NeonWaitTimeoutError("x", {
+				timeoutMs: 1,
+				operations: [],
 			}).kind,
 		).toBe("timeout");
 		expect(new NeonAbortError("x").kind).toBe("aborted");
@@ -186,6 +216,17 @@ describe("isNeonError", () => {
 		expect(isNeonError(new NeonApiError("x", apiInit))).toBe(true);
 		expect(isNeonError(new NeonNotFoundError("x", apiInit))).toBe(true);
 		expect(isNeonError(new NeonClientError("x"))).toBe(true);
+		expect(
+			isNeonError(new NeonRequestTimeoutError("x", { timeoutMs: 1 })),
+		).toBe(true);
+		expect(
+			isNeonError(
+				new NeonWaitTimeoutError("x", {
+					timeoutMs: 1,
+					operations: [],
+				}),
+			),
+		).toBe(true);
 		expect(isNeonError(new NeonError("x", "client"))).toBe(false);
 		expect(isNeonError(new Error("x"))).toBe(false);
 		expect(isNeonError(undefined)).toBe(false);
