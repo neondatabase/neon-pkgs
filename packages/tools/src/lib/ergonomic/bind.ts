@@ -202,38 +202,25 @@ export const collectObjectList = async (
 };
 
 export const collectPages = async <T>(
-	list: Paginated<T>,
+	list: Paginated<T, true>,
 	maxItems?: number,
 ): Promise<T[]> => {
 	if (maxItems === undefined) {
-		const result = await list.all();
-		if (result.error) {
-			throw result.error;
-		}
-		if (result.data === undefined) {
-			throw new NeonError("List returned no data.", "client");
-		}
-		return result.data;
+		return list.all();
 	}
 
 	const items: T[] = [];
 	let cursor: string | undefined;
 	for (;;) {
-		const result = await list.page(cursor);
-		if (result.error) {
-			throw result.error;
-		}
-		if (result.data === undefined) {
-			throw new NeonError("List returned no data.", "client");
-		}
-		items.push(...result.data.items);
+		const page = await list.page(cursor);
+		items.push(...page.items);
 		if (items.length >= maxItems) {
 			return items.slice(0, maxItems);
 		}
-		if (!result.data.cursor || result.data.items.length === 0) {
+		if (!page.cursor || page.items.length === 0) {
 			break;
 		}
-		cursor = result.data.cursor;
+		cursor = page.cursor;
 	}
 	return items;
 };
