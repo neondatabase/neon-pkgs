@@ -6,7 +6,7 @@
  *
  * Every operation speaks the **same `{ data, error }` contract as the ergonomic client**, plus
  * HTTP status and headers: it resolves to a {@link RawResult} by default, or the bare
- * resource when you pass `throwOnError: true` (throwing the typed `NeonError`). There is no
+ * resource when you pass `throwOnError: true` (throwing a `NeonErrorUnion` member). There is no
  * `responseStyle` switch — `throwOnError` is the only one, and the return type always tracks
  * it.
  */

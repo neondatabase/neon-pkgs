@@ -1,5 +1,17 @@
 # @neon/sdk
 
+## 3.2.0
+
+### Minor Changes
+
+- 9ac65e5: `Paginated.page()` and `Paginated.all()` now honour `throwOnError` (client-wide and per call), matching every other method. With `throwOnError: true` they resolve to the bare page / item array and reject on failure instead of always returning `{ data, error }`. `Paginated<T>` gained a second type parameter `Throw` (default `false`), and `Consumption` is now generic over the client's `throwOnError` like the other resources. Default (`throwOnError: false`) clients are unaffected; the async iterator still throws on a page error.
+- ed53d40: `error.kind` now narrows. `NeonResult` and `RawResult` type `error` as `NeonErrorUnion`, and every error class carries a literal `kind`, so `if (error?.kind === "not_found") error.status` compiles without `instanceof`. New `NeonClientError` (`kind: "client"`) replaces the bare `NeonError` the SDK used for SDK-side failures. `isNeonError` is the type guard for `catch` after `throwOnError`. `instanceof NeonError` still matches; `instanceof NeonApiError` still matches 404/401/429 subclasses.
+
+### Patch Changes
+
+- 0474691: `NeonClient` now defaults its type parameter to `false`, so `NeonClient` can be used without a type argument to describe the client returned by `createNeonClient({ apiKey })`. `NeonClient<true>` continues to describe a `throwOnError: true` client.
+- 79494fe: `createNeonClient({ waitForReadiness: false })` now turns off readiness polling on `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect`. Those methods still default polling on when the client option is unset. Per-call `{ waitForReadiness }` still wins.
+
 ## 3.1.0
 
 ### Minor Changes
