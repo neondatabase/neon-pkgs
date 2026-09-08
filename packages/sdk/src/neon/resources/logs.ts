@@ -11,7 +11,7 @@ import type {
 	ProjectBranchLogsQueryResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonError } from "../errors.js";
+import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import type { NeonResult, Outcome } from "../result.js";
 
@@ -66,8 +66,19 @@ export class Logs<DThrow extends boolean> {
 		projectId: string,
 		branchId: string,
 		input?: LogQueryInput,
+	): Paginated<ProjectBranchLogRecord, DThrow>;
+	query<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		input: LogQueryInput | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<ProjectBranchLogRecord, Throw>;
+	query(
+		projectId: string,
+		branchId: string,
+		input?: LogQueryInput,
 		opts?: CallOptions,
-	): Paginated<ProjectBranchLogRecord> {
+	): Paginated<ProjectBranchLogRecord, boolean> {
 		// Snapshot the filters. The endpoint returns wrong results unless every page
 		// repeats them unchanged, and a `Paginated` is lazy — reading `input` per page
 		// would let a caller mutating it afterwards change the query mid-walk.
@@ -87,9 +98,8 @@ export class Logs<DThrow extends boolean> {
 				if (page.data?.is_truncated && !page.data.next_cursor) {
 					return {
 						response: page.response,
-						error: new NeonError(
+						error: new NeonClientError(
 							"Neon reported more log records than it returned but gave no cursor to reach them.",
-							"client",
 						),
 					};
 				}
@@ -102,6 +112,7 @@ export class Logs<DThrow extends boolean> {
 				cursor: data?.is_truncated ? data.next_cursor : undefined,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

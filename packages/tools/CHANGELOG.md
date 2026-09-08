@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 1.2.1
+
+### Patch Changes
+
+- `collectPages` now consumes the bare page / item array that a throwing SDK client returns from `Paginated.page()` and `.all()`, instead of unwrapping a `{ data, error }` envelope.
+- Updated dependencies [9ac65e5]
+- Updated dependencies [ed53d40]
+- Updated dependencies [0474691]
+- Updated dependencies [79494fe]
+  - @neon/sdk@3.2.0
+
 ## 1.2.0
 
 ### Minor Changes
