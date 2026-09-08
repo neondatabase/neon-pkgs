@@ -19,9 +19,11 @@ export interface NeonConfig<Throw extends boolean = false> {
 	 */
 	throwOnError?: Throw;
 	/**
-	 * When `true`, mutations that kick off provisioning operations poll until those
-	 * operations finish before resolving, so the returned resource is ready to use.
-	 * Default `false`. Overridable per call.
+	 * Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`,
+	 * `branches.create`, and `branches.createAndConnect` poll until provisioning
+	 * operations finish; other mutations do not. Set `false` to disable polling on
+	 * those four. Set `true` to poll on every mutation that returns operations.
+	 * Overridable per call.
 	 */
 	waitForReadiness?: boolean;
 	/** Tuning for the readiness poller (interval / timeout). */
@@ -73,7 +75,7 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 		throwOnError: config.throwOnError ?? false,
 		retries: resolveRetries(config.retries),
 		requestTimeoutMs: resolveTimeoutMs(config.requestTimeoutMs),
-		waitForReadiness: config.waitForReadiness ?? false,
+		waitForReadiness: config.waitForReadiness,
 		waitOptions: config.wait ?? {},
 		orgId: config.orgId,
 	};

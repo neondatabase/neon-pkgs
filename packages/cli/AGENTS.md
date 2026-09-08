@@ -10,6 +10,14 @@ Coding-agent targeting is `--agent <name>` (repeatable) on `skills`, `plugins`, 
 
 Human output (`-o table`, the default) is for a terminal. `-o json` and `-o yaml` are for scripts. Never parse the human format in a script, a test that is checking a machine contract, or an agent workflow that needs a field.
 
+## Parent commands
+
+A command that only groups subcommands prints its own help and exits 0 when run
+without a subcommand. Do not add a top-level `demandCommand` to these command
+modules; the help middleware in `src/index.ts` handles the bare invocation.
+Commands that perform an action of their own belong in `NO_SUBCOMMANDS_VERBS`
+and keep that action.
+
 ## `-o table`
 
 Implemented in `src/writer.ts` and `src/human_table.ts`. Every list and get goes through `writer`. Do not draw a table in a command.

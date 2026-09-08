@@ -131,14 +131,6 @@ describe("logs", () => {
 		});
 	});
 
-	test("a sub-command is required", async ({ testCliCommand }) => {
-		await testCliCommand(["logs"], {
-			mockDir: "single_org",
-			code: 1,
-			stderr: "ERROR: Run `neon logs --help` to see the subcommands.",
-		});
-	});
-
 	test("an unknown sub-command is rejected", async ({ testCliCommand }) => {
 		await testCliCommand(["logs", "definitely-not-a-subcommand"], {
 			mockDir: "single_org",
