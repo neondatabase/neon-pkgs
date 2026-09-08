@@ -77,7 +77,7 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 
 | Class | `kind` | Notable fields |
 | --- | --- | --- |
-| `NeonError` | (base) | `message`, `kind` |
+| `NeonError` | (base) | `message`, `kind`, `created?` |
 | `NeonApiError` | `"api"` | `status`, `code`, `requestId`, `response`, `body` |
 | `NeonNotFoundError` | `"not_found"` | (404) — extends `NeonApiError` |
 | `NeonAuthError` | `"auth"` | (401/403) |
@@ -172,6 +172,13 @@ await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
 `"aborted"` and `"timeout"` are deliberately distinct: a timeout is worth retrying, a
 cancellation is not.
 
+When a mutation has already returned a body and readiness polling then aborts, times out,
+or sees a failed operation, `error.created` is that mapped resource (the project, branch,
+or full create response). On `createAndConnect` that full response includes `connection_uris`
+and role passwords; read `createdId(error)` rather than logging the error whole.
+`createdId(error)` is the resource id: a top-level `id`, or `created.project.id` /
+`created.branch.id` on createAndConnect responses. The poll stopped; the create did not.
+
 `requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
 `Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is
 rejected with a `NeonClientError` when the client is created or the call is made, rather
@@ -238,6 +245,8 @@ await skipWait.projects.create({ name: "app" }, { waitForReadiness: true }); // 
 const alwaysWait = createNeonClient({ apiKey, waitForReadiness: true });
 await alwaysWait.projects.update(id, { name: "renamed" }); // polls
 ```
+
+If that wait is aborted or times out, the error keeps the created resource on `created`. On `createAndConnect` that value includes `connection_uris` and role passwords; read `createdId(error)` rather than logging the error whole. `createdId(error)` is the resource id, including `createAndConnect` nested `project.id` / `branch.id`. Do not create again from the same input without reading it.
 
 ---
 

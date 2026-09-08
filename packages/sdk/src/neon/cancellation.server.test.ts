@@ -240,6 +240,7 @@ describe("readiness polling", () => {
 		);
 		expect(behaviour.operationPolls).toBeGreaterThan(0);
 		expect(error?.kind).toBe("aborted");
+		expect(error?.created).toEqual({ id: "p-1", name: "test" });
 		resetBehaviour();
 	});
 
@@ -259,6 +260,7 @@ describe("readiness polling", () => {
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(behaviour.operationPolls).toBeGreaterThan(0);
 		expect(error?.kind).toBe("timeout");
+		expect(error?.created).toEqual({ id: "p-1", name: "test" });
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
 		resetBehaviour();
 	});
@@ -275,6 +277,7 @@ describe("readiness polling", () => {
 
 		const { error } = await neon.projects.create({ name: "test" });
 		expect(error?.kind).toBe("timeout");
+		expect(error?.created).toEqual({ id: "p-1", name: "test" });
 	});
 
 	it("resolves once the operations finish", async () => {

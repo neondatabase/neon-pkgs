@@ -1,4 +1,4 @@
-import { NeonError } from "@neon/sdk";
+import { createdId, NeonError } from "@neon/sdk";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
@@ -43,7 +43,7 @@ export type {
 	NeonToolResult,
 } from "./lib/operation.js";
 export type { NeonToolId, PublishedId };
-export { NeonError, publishedId, toolIds };
+export { createdId, NeonError, publishedId, toolIds };
 
 type ToolFactories = typeof toolFactories;
 

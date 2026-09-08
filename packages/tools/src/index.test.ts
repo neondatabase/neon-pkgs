@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
+	createdId,
 	createNeonTool,
 	createNeonTools,
+	NeonError,
 	type NeonToolsClientOptions,
 } from "./index.js";
 
@@ -141,6 +143,57 @@ describe("createNeonTools", () => {
 		});
 		expect(tools["projects.update"].requiresApproval).toBe(true);
 		expect(tools["projects.update"].annotations.readOnlyHint).toBe(false);
+	});
+
+	test("keeps the created project on the error when wait times out", async () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.create"] as const,
+			wait: { pollIntervalMs: 1, timeoutMs: 50 },
+			fetch: async (input, init) => {
+				const request =
+					input instanceof Request ? input : new Request(input, init);
+				const url = new URL(request.url);
+				if (url.pathname.endsWith("/operations/op-1")) {
+					return jsonResponse({
+						operation: {
+							id: "op-1",
+							project_id: "project-id",
+							action: "create_project",
+							status: "running",
+						},
+					});
+				}
+				return jsonResponse({
+					project: { id: "project-id", name: "agent-project" },
+					operations: [
+						{
+							id: "op-1",
+							project_id: "project-id",
+							action: "create_project",
+							status: "running",
+						},
+					],
+				});
+			},
+		});
+
+		let caught: unknown;
+		try {
+			await tools["projects.create"].execute({ name: "agent-project" });
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(NeonError);
+		if (!(caught instanceof NeonError)) {
+			throw new Error("expected NeonError");
+		}
+		expect(caught.kind).toBe("timeout");
+		expect(caught.created).toEqual({
+			id: "project-id",
+			name: "agent-project",
+		});
+		expect(createdId(caught)).toBe("project-id");
 	});
 
 	test("does not poll functions.deploy because the response has no operations", async () => {
