@@ -31,8 +31,19 @@ export class CustomDomains<DThrow extends boolean> {
 		projectId: string,
 		branchId: string,
 		query?: ListQuery,
+	): Paginated<CustomDomain, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		query: ListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<CustomDomain, Throw>;
+	list(
+		projectId: string,
+		branchId: string,
+		query?: ListQuery,
 		opts?: CallOptions,
-	): Paginated<CustomDomain> {
+	): Paginated<CustomDomain, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectBranchCustomDomains({
@@ -47,6 +58,7 @@ export class CustomDomains<DThrow extends boolean> {
 				cursor: data?.pagination?.next,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 

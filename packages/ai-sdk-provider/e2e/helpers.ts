@@ -1,5 +1,5 @@
 /**
- * Representative models from the models.dev `neon` provider — one per gateway route
+ * Representative models from the published catalog — one per gateway route
  * family. See `NEON_MODELS_DEV_IDS` in neon-chat-options.ts.
  */
 import { expect } from "vitest";
