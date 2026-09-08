@@ -111,9 +111,8 @@ export function cancelled(
 	if (source === "timeout") {
 		const timeoutMs = deadline.timeoutMs;
 		if (timeoutMs === undefined) {
-			throw new NeonError(
+			throw new NeonClientError(
 				"Internal: a request timeout fired without a requestTimeoutMs budget.",
-				"client",
 			);
 		}
 		return new NeonTimeoutError(
