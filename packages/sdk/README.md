@@ -40,7 +40,7 @@ const { project, connectionString } = data;
 | --- | --- | --- | --- |
 | `apiKey` | `string \| (() => string \| Promise<string>)` | — (required) | Neon API key, or a function returning it (sync/async). Sent as a Bearer token. |
 | `throwOnError` | `boolean` | `false` | When `true`, methods return the resource directly and **throw** on error. When `false`, they return `{ data, error }`. **Narrows return types** at the type level. |
-| `waitForReadiness` | `boolean` | `false` | When `true`, mutations block until their provisioning `operations` finish, so the returned resource is ready to use. |
+| `waitForReadiness` | `boolean` | — (unset) | Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll until `operations` finish; other mutations do not. Set `false` to disable polling on those four. Set `true` to poll on every mutation that returns operations. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
 | `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
 | `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
@@ -57,7 +57,7 @@ By default every method resolves to a discriminated `{ data, error }` envelope �
 ```ts
 const { data, error } = await neon.projects.get("late-frost-12345");
 if (error) {
-  // error is a typed NeonError union
+  // error is NeonErrorUnion — discriminate on error.kind
   return;
 }
 data; // narrowed to Project
@@ -86,19 +86,43 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonTimeoutError` | `"timeout"` | a deadline was exceeded — `requestTimeoutMs`, or the readiness/wait budget |
 | `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
-| `NeonError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection) |
+| `NeonClientError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection, invalid `requestTimeoutMs`) |
+
+The error channel is typed as `NeonErrorUnion`, the union of every row below the base.
 
 ```ts
 const { error } = await neon.branches.get(pid, "nope");
-if (error?.kind === "not_found") { /* … */ }
+if (error?.kind === "not_found") {
+  error.status;    // 404
+  error.requestId; // string | undefined
+}
+if (error?.kind === "network") {
+  error.reason;    // "ECONNRESET"
+}
 ```
 
 Branch on `kind` rather than `name` or `message`. `name` is a stable string literal on every
 class, so it survives bundling, but `message` is not a contract.
 
-`kind` tells you what happened. To reach a subclass's **own** fields — `NeonNetworkError.reason`,
-`NeonApiError.body` — narrow with `instanceof`: the result envelope types `error` as the base
-`NeonError`, so a `kind` check alone does not make those properties visible.
+A `kind` check narrows to the class, so subclass fields are visible without `instanceof`.
+`instanceof` still works — every class extends `NeonError`, and `instanceof NeonApiError`
+matches the 404/401/429 subclasses too.
+
+With `throwOnError`, the thrown value is a `NeonErrorUnion` member at runtime, but
+`catch (e)` types it as `unknown`. `instanceof NeonError` only yields the base class
+(whose `kind` does not narrow). Use `isNeonError`:
+
+```ts
+import { isNeonError } from "@neon/sdk";
+
+try {
+  await neon.projects.get(pid, { throwOnError: true });
+} catch (e: unknown) {
+  if (!isNeonError(e)) throw e;
+  if (e.kind === "not_found") e.status;   // number
+  if (e.kind === "network")   e.reason;   // string
+}
+```
 
 `NeonNetworkError.reason` carries the most specific reason the platform gave — an `errno`
 code such as `ECONNRESET` when one is available, otherwise the innermost non-empty message.
@@ -124,7 +148,7 @@ rather than anything that names the argument.
 
 Pass a `signal` to cancel a call, or `requestTimeoutMs` to bound it. Both arrive on the
 `error` channel as typed errors — a cancelled call never rejects with a raw `DOMException`,
-and a `throwOnError` client throws the same `NeonError` subclass it would have returned:
+and a `throwOnError` client throws the same `NeonErrorUnion` member it would have returned:
 
 ```ts
 const controller = new AbortController();
@@ -150,7 +174,7 @@ cancellation is not.
 
 `requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
 `Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is
-rejected with a `client`-kind error when the client is created or the call is made, rather
+rejected with a `NeonClientError` when the client is created or the call is made, rather
 than silently becoming an instant timeout or no timeout at all.
 
 Cancellation reaches everything the SDK controls: the request and its retries, readiness
@@ -181,7 +205,16 @@ for await (const project of neon.projects.list()) { … }      // stream; throws
 const { data } = await neon.projects
   .list({ search: "prod" }, { signal, requestTimeoutMs: 10_000 })
   .all();
+
+// throwOnError applies here too — client-wide or per call
+const throwing = createNeonClient({ apiKey, throwOnError: true });
+const projects = await throwing.projects.list().all(); // ProjectListItem[]; throws on failure
+const { data: again } = await throwing.projects
+  .list(undefined, { throwOnError: false })
+  .all();
 ```
+
+`page()` and `all()` follow `throwOnError` like every other method. The `for await` stream always throws on a page error.
 
 A deadline covers **one consumption** — a whole `all()`, or a whole iteration — rather than
 each page, since that is the unit a caller waits on. A `Paginated` is lazy and reusable, so
@@ -189,13 +222,28 @@ consuming it twice gets a fresh deadline each time.
 
 ## Readiness & workflows
 
-Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle. `projects.create`, `branches.create`, and the `createAndConnect` workflows default it on. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle.
+
+Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+
+```ts
+const neon = createNeonClient({ apiKey });
+await neon.projects.create({ name: "app" }); // polls (method default)
+await neon.projects.update(id, { name: "renamed" }); // does not poll
+
+const skipWait = createNeonClient({ apiKey, waitForReadiness: false });
+await skipWait.projects.create({ name: "app" }); // returns before operations finish
+await skipWait.projects.create({ name: "app" }, { waitForReadiness: true }); // polls anyway
+
+const alwaysWait = createNeonClient({ apiKey, waitForReadiness: true });
+await alwaysWait.projects.update(id, { name: "renamed" }); // polls
+```
 
 ---
 
 ## API reference
 
-Legend: **[P]** returns `Paginated<T>` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`).
+Legend: **[P]** returns `Paginated<T>` — `page()`/`all()` resolve to the resource (or `{ data, error }`) per `throwOnError` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`).
 
 ### `neon.projects`
 
@@ -519,7 +567,7 @@ value discovered by one is not guaranteed to appear in the other.
 
 `query` pages for you, replaying the filters unchanged as the endpoint requires. If a
 page reports more records than it returned but no cursor to reach them, the walk fails
-with a `client`-kind `NeonError` rather than handing back a partial result as if it
+with a `NeonClientError` rather than handing back a partial result as if it
 were complete.
 
 ```ts
@@ -739,12 +787,12 @@ const { data, error } = await raw.getProjectBranchSchema({
 Omitting `client` is a type error. At runtime it throws `NeonError` with `kind: "client"` before any request is sent.
 
 **The raw layer speaks the exact same result contract as the ergonomic client.** By default a
-raw call resolves to a `{ data, error }` `NeonResult` with the typed `NeonError` on the error
+raw call resolves to a `{ data, error }` `NeonResult` with the typed `NeonErrorUnion` on the error
 channel; pass `throwOnError: true` to get the bare resource and throw instead — and the
 return type narrows accordingly:
 
 ```ts
-// bare resource, throws the typed NeonError on failure
+// bare resource, throws a NeonErrorUnion member on failure
 const { project } = await raw.getProject({
   client: neon.client,
   path: { project_id },

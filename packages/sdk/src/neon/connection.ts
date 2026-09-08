@@ -1,5 +1,5 @@
 import type { ConnectionDetails } from "../client/types.gen.js";
-import { NeonError } from "./errors.js";
+import { NeonClientError } from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
 
 /**
@@ -23,8 +23,8 @@ export function pickConnectionString(
 }
 
 /**
- * Attach a derived connection string to a create result, returning a `client`-kind
- * {@link NeonError} when the response carries no connection URI.
+ * Attach a derived connection string to a create result, returning a
+ * {@link NeonClientError} when the response carries no connection URI.
  */
 export function withConnectionString<D, T>(
 	result: NeonResult<D>,
@@ -36,9 +36,8 @@ export function withConnectionString<D, T>(
 	const connectionString = pickConnectionString(uris(result.data), pooled);
 	if (!connectionString) {
 		return err(
-			new NeonError(
+			new NeonClientError(
 				"The response did not include a connection URI (the branch or project may have multiple roles or databases). Use `raw.getConnectionUri` with an explicit role and database.",
-				"client",
 			),
 		);
 	}

@@ -4,7 +4,7 @@
  * The generated `client/sdk.gen.ts` functions return hey-api's `{ data, error, request,
  * response }` envelope and are driven by two orthogonal switches (`throwOnError` and
  * `responseStyle`). {@link wrapRaw} collapses that onto the ergonomic client's contract: a
- * `{ data, error }` result by default (with the typed {@link NeonError} on the error
+ * `{ data, error }` result by default (with {@link NeonErrorUnion} on the error
  * channel), or the bare resource when you pass `throwOnError: true`. `responseStyle` is
  * removed from the public raw surface — `throwOnError` is the only switch and the return
  * type always tracks it.
@@ -15,7 +15,12 @@
  */
 
 import type { Client } from "../client/client/index.js";
-import { NeonAbortError, NeonError, toNeonError } from "./errors.js";
+import {
+	NeonAbortError,
+	NeonClientError,
+	type NeonErrorUnion,
+	toNeonError,
+} from "./errors.js";
 
 /**
  * Did the caller's own signal end this call?
@@ -71,14 +76,14 @@ export type RawOptions<F extends AnyRawFn> = Omit<
 
 /**
  * The non-throwing result of a wrapped raw call: the ergonomic `{ data, error }` union
- * (typed {@link NeonError}), plus the underlying `response`/`request` for HTTP status and
- * headers.
+ * ({@link NeonErrorUnion} on the error channel), plus the underlying `response`/`request`
+ * for HTTP status and headers.
  */
 export type RawResult<T> =
 	| { data: T; error: undefined; response?: Response; request?: Request }
 	| {
 			data: undefined;
-			error: NeonError;
+			error: NeonErrorUnion;
 			response?: Response;
 			request?: Request;
 	  };
@@ -86,7 +91,7 @@ export type RawResult<T> =
 /**
  * Wrap a generated raw function so it speaks the ergonomic result contract.
  * `options.client` is required; omitting it is a type error and throws
- * {@link NeonError} with `kind: "client"` before any request is sent.
+ * {@link NeonClientError} (`kind: "client"`) before any request is sent.
  *
  * @example
  * ```ts
@@ -108,9 +113,8 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 		options: RawOptions<F> & { throwOnError?: boolean },
 	): Promise<RawData<F> | RawResult<RawData<F>>> {
 		const missingClient = () =>
-			new NeonError(
+			new NeonClientError(
 				"raw functions require options.client — pass neon.client from createNeonClient().",
-				"client",
 			);
 		if (options == null) {
 			throw missingClient();
