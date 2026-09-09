@@ -15,6 +15,7 @@ import {
 	ensureGitignored,
 	isAskCommand,
 	isCurrentBranchProbe,
+	isInspectDbUrl,
 	isMcpOauth,
 	isPluginsCommand,
 	isSkillsCommand,
@@ -102,6 +103,41 @@ describe("isAskCommand", () => {
 		expect(isAskCommand({ _: ["skills"] })).toBe(false);
 		expect(isAskCommand({ _: ["mcp"] })).toBe(false);
 		expect(isAskCommand({ _: ["init"] })).toBe(false);
+	});
+});
+
+describe("isInspectDbUrl", () => {
+	test("is true for inspect and inspection with a nonempty --db-url", () => {
+		expect(
+			isInspectDbUrl({
+				_: ["inspect", "db", "table-sizes"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
+		expect(
+			isInspectDbUrl({
+				_: ["inspection", "db", "locks"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
+	});
+
+	test("is false without a nonempty --db-url or on another command", () => {
+		expect(isInspectDbUrl({ _: ["inspect", "db", "table-sizes"] })).toBe(
+			false,
+		);
+		expect(
+			isInspectDbUrl({
+				_: ["inspect", "db", "table-sizes"],
+				dbUrl: "",
+			}),
+		).toBe(false);
+		expect(
+			isInspectDbUrl({
+				_: ["projects", "list"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(false);
 	});
 });
 

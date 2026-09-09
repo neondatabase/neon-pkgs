@@ -112,6 +112,19 @@ export const isPluginsCommand = (args: { _: (string | number)[] }): boolean =>
 export const isAskCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "ask";
 
+/**
+ * `inspect db --db-url` talks to Postgres with that URI. Skip only when the
+ * parsed value is nonempty: empty `--db-url` still goes through project
+ * resolution and needs an API client.
+ */
+export const isInspectDbUrl = (args: {
+	_: (string | number)[];
+	dbUrl?: string;
+}): boolean =>
+	(args._[0] === "inspect" || args._[0] === "inspection") &&
+	typeof args.dbUrl === "string" &&
+	args.dbUrl.length > 0;
+
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
 	isMcpCommand(args) && argvEnablesMcpOauth(process.argv);

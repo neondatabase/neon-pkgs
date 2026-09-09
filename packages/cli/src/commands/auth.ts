@@ -55,6 +55,7 @@ import {
 	isClaimCommand,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isInspectDbUrl,
 	isMcpCommand,
 	isMcpOauth,
 	isPluginsCommand,
@@ -86,6 +87,7 @@ type AuthProps = {
 	profile?: string;
 	keyring?: boolean;
 	contextFile?: string | ((cwd?: string) => string);
+	dbUrl?: string;
 };
 
 export const locationForAuth = (
@@ -582,6 +584,11 @@ export const ensureAuth = async (
 	}
 
 	if (isMcpOauth(props)) {
+		return;
+	}
+
+	// `--db-url` is a Postgres URI; project/branch resolution is skipped.
+	if (isInspectDbUrl(props)) {
 		return;
 	}
 
