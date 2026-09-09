@@ -178,10 +178,6 @@ export const removeClaimableCredentials = (
 	}
 };
 
-/**
- * The linked directory is Claimable Neon when this project's assertion file
- * exists. `.neon` is identifiers only; leftover `claimable` keys are ignored.
- */
 export const readLinkedClaimableCredentials = (
 	configDir: string,
 	context: Context,
@@ -190,6 +186,14 @@ export const readLinkedClaimableCredentials = (
 	// A regular `.neon` project id that this regex would reject never had an assertion file.
 	if (!PROJECT_ID.test(context.projectId)) return null;
 	return readClaimableCredentials(configDir, context.projectId);
+};
+
+export const claimableCredentialsExist = (
+	configDir: string,
+	projectId: string,
+): boolean => {
+	if (!PROJECT_ID.test(projectId)) return false;
+	return existsSync(claimableCredentialsPath(configDir, projectId));
 };
 
 export const shouldUseClaimableCredentials = (
@@ -221,7 +225,9 @@ export const isClaimableEnvTarget = (props: {
 	contextFile: string;
 	configDir: string;
 }): boolean => {
-	if (getAuthContext()?.source === "claimable") return true;
+	const source = getAuthContext()?.source;
+	if (source === "claimable") return true;
+	if (source !== undefined) return false;
 	if (props.configDir.trim() === "") return false;
 	const stored = readLinkedClaimableCredentials(
 		props.configDir,

@@ -363,4 +363,41 @@ describe("claimable env target", () => {
 			}),
 		).toBe(true);
 	});
+
+	it("does not parse an unused assertion when account auth is already selected", () => {
+		const root = temporaryDirectory();
+		const configDir = join(root, "config");
+		const contextFile = join(root, ".neon");
+		writeClaimableCredentials(configDir, credentials);
+		writeFileSync(
+			claimableCredentialsPath(configDir, credentials.projectId),
+			"{",
+		);
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: credentials.projectId }),
+		);
+		setAuthContext({ source: "api-key", configDir });
+		expect(
+			isClaimableEnvTarget({
+				apiHost: "https://console.neon.tech/api/v2",
+				contextFile,
+				configDir,
+			}),
+		).toBe(false);
+		expect(
+			shouldUseClaimableCredentials(
+				{
+					apiKeyFlag: "napi_test",
+					apiKeyEnv: "",
+					profileEnv: "",
+					profileFlag: "",
+					configDir,
+				},
+				undefined,
+				{ projectId: credentials.projectId },
+				configDir,
+			),
+		).toBe(false);
+	});
 });

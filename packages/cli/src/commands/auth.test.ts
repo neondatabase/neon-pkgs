@@ -31,6 +31,7 @@ import {
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
 import { AuthRefreshError, refreshToken } from "../auth";
+import { claimableCredentialsPath } from "../claimable/state.js";
 import * as credentialIo from "../credential_io.js";
 import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
@@ -770,6 +771,50 @@ describe("ensureAuth", () => {
 		const props = setupTestProps(server);
 		await expect(ensureAuth(props)).rejects.toThrow(/not valid JSON/);
 		expect(authSpy).not.toHaveBeenCalled();
+	});
+
+	test("does not parse a leftover Claimable assertion when --api-key is set", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const contextFile = join(configDir, ".neon");
+		const projectId = "patient-art-12345";
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId, branch: "main" }),
+		);
+		writeFileSync(claimableCredentialsPath(configDir, projectId), "{", {
+			mode: 0o600,
+		});
+		recordCredentialInputs({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir,
+		});
+		try {
+			const props = {
+				...setupTestProps(server),
+				apiKey: "napi_test",
+				contextFile,
+			};
+			await ensureAuth(props);
+			expect(props.apiKey).toBe("napi_test");
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			recordCredentialInputs({
+				apiKeyFlag: "",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir,
+			});
+			rmSync(contextFile, { force: true });
+			rmSync(claimableCredentialsPath(configDir, projectId), {
+				force: true,
+			});
+		}
 	});
 
 	test("should try refresh when token is missing access_token but has refresh_token", async ({

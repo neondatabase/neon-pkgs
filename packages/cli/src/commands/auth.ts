@@ -44,6 +44,7 @@ import { setAuthContext } from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
+	claimableCredentialsExist,
 	claimableCredentialsPath,
 	readLinkedClaimableCredentials,
 	shouldUseClaimableCredentials,
@@ -704,7 +705,8 @@ export const ensureAuth = async (
 	}
 
 	if (
-		readLinkedClaimableCredentials(props.configDir, localContext) !== null
+		localContext.projectId !== undefined &&
+		claimableCredentialsExist(props.configDir, localContext.projectId)
 	) {
 		log.warning(
 			"This directory is linked to a claimable project, but NEON_API_KEY or NEON_PROFILE is set. This command will use that account credential instead of the unclaimed project. Unset them to keep using the unclaimed project.",
