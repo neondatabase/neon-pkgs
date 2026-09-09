@@ -1,5 +1,12 @@
 # neon
 
+## 4.14.6
+
+### Patch Changes
+
+- ae5d526: `.neon` from `neon claim create` is the project id and branch only. Later commands use the identity assertion file, so `neon checkout` no longer drops Claimable auth.
+- f991894: `neon inspect db --db-url` connects with the connection string and no longer opens a browser login.
+
 ## 4.14.5
 
 ### Patch Changes
