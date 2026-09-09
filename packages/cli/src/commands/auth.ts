@@ -87,6 +87,7 @@ type AuthProps = {
 	profile?: string;
 	keyring?: boolean;
 	contextFile?: string | ((cwd?: string) => string);
+	dbUrl?: string;
 };
 
 export const locationForAuth = (

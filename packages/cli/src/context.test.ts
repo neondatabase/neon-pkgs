@@ -107,50 +107,37 @@ describe("isAskCommand", () => {
 });
 
 describe("isInspectDbUrl", () => {
-	const originalArgv = process.argv;
-
-	afterEach(() => {
-		process.argv = originalArgv;
+	test("is true for inspect and inspection with a nonempty --db-url", () => {
+		expect(
+			isInspectDbUrl({
+				_: ["inspect", "db", "table-sizes"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
+		expect(
+			isInspectDbUrl({
+				_: ["inspection", "db", "locks"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
 	});
 
-	test("is true for inspect and inspection with --db-url", () => {
-		process.argv = [
-			"node",
-			"neon",
-			"inspect",
-			"db",
-			"table-sizes",
-			"--db-url",
-			"postgresql://localhost/postgres",
-		];
-		expect(isInspectDbUrl({ _: ["inspect", "db", "table-sizes"] })).toBe(
-			true,
-		);
-		process.argv = [
-			"node",
-			"neon",
-			"inspection",
-			"db",
-			"locks",
-			"--db-url=postgresql://localhost/postgres",
-		];
-		expect(isInspectDbUrl({ _: ["inspection", "db", "locks"] })).toBe(true);
-	});
-
-	test("is false without --db-url or on another command", () => {
-		process.argv = ["node", "neon", "inspect", "db", "table-sizes"];
+	test("is false without a nonempty --db-url or on another command", () => {
 		expect(isInspectDbUrl({ _: ["inspect", "db", "table-sizes"] })).toBe(
 			false,
 		);
-		process.argv = [
-			"node",
-			"neon",
-			"projects",
-			"list",
-			"--db-url",
-			"postgresql://localhost/postgres",
-		];
-		expect(isInspectDbUrl({ _: ["projects", "list"] })).toBe(false);
+		expect(
+			isInspectDbUrl({
+				_: ["inspect", "db", "table-sizes"],
+				dbUrl: "",
+			}),
+		).toBe(false);
+		expect(
+			isInspectDbUrl({
+				_: ["projects", "list"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(false);
 	});
 });
 

@@ -828,29 +828,16 @@ describe("ensureAuth", () => {
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
-		const originalArgv = process.argv;
 		const credentialsPath = join(configDir, "credentials.json");
 		if (existsSync(credentialsPath)) {
 			rmSync(credentialsPath);
 		}
 
-		process.argv = [
-			"node",
-			"neon",
-			"inspect",
-			"db",
-			"table-sizes",
-			"--db-url",
-			"postgresql://127.0.0.1:1/postgres",
-		];
-		try {
-			await ensureAuth({
-				...setupTestProps(server),
-				_: ["inspect", "db", "table-sizes"],
-			});
-		} finally {
-			process.argv = originalArgv;
-		}
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["inspect", "db", "table-sizes"],
+			dbUrl: "postgresql://127.0.0.1:1/postgres",
+		});
 
 		expect(authSpy).not.toHaveBeenCalled();
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
@@ -860,27 +847,15 @@ describe("ensureAuth", () => {
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
-		const originalArgv = process.argv;
 		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
 			mode: 0o700,
 		});
 
-		process.argv = [
-			"node",
-			"neon",
-			"inspect",
-			"db",
-			"locks",
-			"--db-url=postgresql://127.0.0.1:1/postgres",
-		];
-		try {
-			await ensureAuth({
-				...setupTestProps(server),
-				_: ["inspect", "db", "locks"],
-			});
-		} finally {
-			process.argv = originalArgv;
-		}
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["inspect", "db", "locks"],
+			dbUrl: "postgresql://127.0.0.1:1/postgres",
+		});
 
 		expect(authSpy).not.toHaveBeenCalled();
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
@@ -890,7 +865,6 @@ describe("ensureAuth", () => {
 		runMockServer,
 	}) => {
 		const server = await runMockServer("main");
-		const originalArgv = process.argv;
 		writeFileSync(
 			join(configDir, "credentials.json"),
 			JSON.stringify({
@@ -901,23 +875,11 @@ describe("ensureAuth", () => {
 			{ mode: 0o700 },
 		);
 
-		process.argv = [
-			"node",
-			"neon",
-			"inspect",
-			"db",
-			"table-sizes",
-			"--db-url",
-			"postgresql://127.0.0.1:1/postgres",
-		];
-		try {
-			await ensureAuth({
-				...setupTestProps(server),
-				_: ["inspect", "db", "table-sizes"],
-			});
-		} finally {
-			process.argv = originalArgv;
-		}
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["inspect", "db", "table-sizes"],
+			dbUrl: "postgresql://127.0.0.1:1/postgres",
+		});
 
 		expect(authSpy).not.toHaveBeenCalled();
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
