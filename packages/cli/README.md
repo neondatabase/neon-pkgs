@@ -132,6 +132,7 @@ neon claim status                 # lifecycle and transfer status
 neon projects get <project-id>    # regular CLI command, same agent token
 neon psql --role-name neondb_owner -- -c "select now()"
 neon config plan
+neon checkout main
 neon env pull
 
 neon claim accept                 # create a claim code and open the transfer URL
