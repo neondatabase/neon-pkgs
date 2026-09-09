@@ -112,6 +112,20 @@ export const isPluginsCommand = (args: { _: (string | number)[] }): boolean =>
 export const isAskCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "ask";
 
+/**
+ * `inspect db --db-url` talks to Postgres with the connection string. Auth
+ * middleware runs before inspect flags are parsed, so this reads raw argv.
+ */
+export const isInspectDbUrl = (args: { _: (string | number)[] }): boolean =>
+	(args._[0] === "inspect" || args._[0] === "inspection") &&
+	argvHasDbUrl(process.argv);
+
+function argvHasDbUrl(argv: readonly string[]): boolean {
+	return argv.some(
+		(arg) => arg === "--db-url" || arg.startsWith("--db-url="),
+	);
+}
+
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
 	isMcpCommand(args) && argvEnablesMcpOauth(process.argv);

@@ -55,6 +55,7 @@ import {
 	isClaimCommand,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isInspectDbUrl,
 	isMcpCommand,
 	isMcpOauth,
 	isPluginsCommand,
@@ -582,6 +583,11 @@ export const ensureAuth = async (
 	}
 
 	if (isMcpOauth(props)) {
+		return;
+	}
+
+	// `--db-url` is a Postgres URI; project/branch resolution is skipped.
+	if (isInspectDbUrl(props)) {
 		return;
 	}
 

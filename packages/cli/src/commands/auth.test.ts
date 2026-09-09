@@ -824,6 +824,105 @@ describe("ensureAuth", () => {
 		expect(props.apiKey).toBe("valid-token");
 	});
 
+	test("should skip global auth for inspect db --db-url", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const originalArgv = process.argv;
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+
+		process.argv = [
+			"node",
+			"neon",
+			"inspect",
+			"db",
+			"table-sizes",
+			"--db-url",
+			"postgresql://127.0.0.1:1/postgres",
+		];
+		try {
+			await ensureAuth({
+				...setupTestProps(server),
+				_: ["inspect", "db", "table-sizes"],
+			});
+		} finally {
+			process.argv = originalArgv;
+		}
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("inspect db --db-url does not refresh or refuse broken stored credentials", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const originalArgv = process.argv;
+		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
+			mode: 0o700,
+		});
+
+		process.argv = [
+			"node",
+			"neon",
+			"inspect",
+			"db",
+			"locks",
+			"--db-url=postgresql://127.0.0.1:1/postgres",
+		];
+		try {
+			await ensureAuth({
+				...setupTestProps(server),
+				_: ["inspect", "db", "locks"],
+			});
+		} finally {
+			process.argv = originalArgv;
+		}
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("inspect db --db-url does not refresh an expired stored token", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const originalArgv = process.argv;
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				access_token: "expired-token",
+				refresh_token: "refresh-token",
+				expires_at: Date.now() - 3600 * 1000,
+			}),
+			{ mode: 0o700 },
+		);
+
+		process.argv = [
+			"node",
+			"neon",
+			"inspect",
+			"db",
+			"table-sizes",
+			"--db-url",
+			"postgresql://127.0.0.1:1/postgres",
+		];
+		try {
+			await ensureAuth({
+				...setupTestProps(server),
+				_: ["inspect", "db", "table-sizes"],
+			});
+		} finally {
+			process.argv = originalArgv;
+		}
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
 	test("should skip global auth for ask command", async ({
 		runMockServer,
 	}) => {

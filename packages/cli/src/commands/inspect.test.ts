@@ -65,6 +65,24 @@ describe("inspect db", () => {
 		);
 	});
 
+	test("table-sizes --db-url does not require Neon credentials", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(
+			["inspect", "db", "table-sizes", "--db-url", UNREACHABLE_DB_URL],
+			{
+				apiKey: false,
+				code: 1,
+				snapshot: false,
+				env: { CI: "true" },
+				stderr: expect.stringMatching(
+					/Could not connect to Postgres at 127\.0\.0\.1:1/,
+				),
+			},
+		);
+		expect(stderr).not.toMatch(/Cannot run interactive auth in CI/);
+	});
+
 	test("locks --db-url bypasses the API and reports a Postgres connection error", async ({
 		testCliCommand,
 	}) => {
