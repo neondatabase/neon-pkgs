@@ -1,5 +1,11 @@
 # neon
 
+## 4.14.6
+
+### Patch Changes
+
+- f991894: `neon inspect db --db-url` connects with the connection string and no longer opens a browser login.
+
 ## 4.14.5
 
 ### Patch Changes
