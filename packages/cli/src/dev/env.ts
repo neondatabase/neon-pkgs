@@ -270,8 +270,7 @@ const resolveClaimablePolicyEnv = async (
 	if (unsupported.length > 0) {
 		throw new DevEnvMismatchError(
 			`Your neon.ts declares ${unsupported.join(", ")}, which cannot be used ` +
-				"on an unclaimed Claimable Neon project. Claim the project, or remove " +
-				"those services from neon.ts.",
+				"on an unclaimed Claimable Neon project. Remove those services from neon.ts.",
 		);
 	}
 	const { projectId, branchId } = ctx;

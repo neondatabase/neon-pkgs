@@ -110,6 +110,11 @@ export const builder = (argv: yargs.Argv) =>
 							type: "array",
 							string: true,
 						},
+						config: {
+							describe:
+								"Path to a neon.ts policy (defaults to walking up from cwd)",
+							type: "string",
+						},
 					})
 					.epilogue(
 						[

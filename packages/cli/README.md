@@ -105,9 +105,14 @@ sends:
 }
 ```
 
-Object Storage, Functions, and the AI Gateway are sent to the service so demand is
-recorded, but are reported as unavailable until the project is claimed; the CLI does
-not silently remove them.
+Object Storage, Functions, and the AI Gateway passed with `--service` are sent so
+demand is recorded, then reported as unavailable until the project is claimed. The CLI
+does not drop them from the request.
+
+The bundled env pull still follows `neon.ts`. A `neon.ts` that names AI Gateway,
+Functions, or Object Storage fails the pull, and the create is rolled back. Use
+`--config` for a different policy file (registration and that pull), or `--no-env-pull`
+to skip the dotenv write.
 
 The command writes:
 
@@ -116,8 +121,7 @@ The command writes:
 - `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH`, and Auth / Data API variables
   when `neon.ts` declares them (or, with no `neon.ts`, when they are provisioned) to `.env`
   or `.env.local` (disable this with `--no-env-pull`). The write is the same `env pull` used
-  after create. A `neon.ts` that names AI Gateway, Functions, or Object Storage fails the
-  pull, and the create is rolled back.
+  after create.
 
 Subsequent project commands automatically exchange the assertion for a short-lived agent
 token and send API calls to Claimable Neon. The service decides which operations are
@@ -500,7 +504,7 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`. Declared function URLs are derived from the branch connection host; the function does not have to be deployed.
 3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, object storage, and function invocation URLs read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
 
-On an unclaimed Claimable Neon project, `neon.ts` is still the source of truth when it only declares Postgres, Auth, and the Data API. A `neon.ts` that declares AI Gateway, Functions, or Object Storage fails: those cannot be used until the project is claimed. Without a `neon.ts`, a bare pull writes provisioned Postgres, Auth, and Data API. Naming those with `--service` / `--env` warns and writes nothing for them.
+On an unclaimed Claimable Neon project, `neon.ts` is still the source of truth when it only declares Postgres, Auth, and the Data API. A `neon.ts` that declares AI Gateway, Functions, or Object Storage fails: those cannot be used until the project is claimed. Without a `neon.ts`, a bare pull writes provisioned Postgres, Auth, and Data API. Naming those with `--service` / `--env` warns and writes nothing for them. `--config` selects the policy file, the same flag as `claim create` and `config plan`.
 
 If the gateway can't be resolved, it is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left alone — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 
@@ -510,6 +514,9 @@ neon env pull
 
 # Pull a specific branch into a specific file
 neon env pull --branch preview --file .env.preview
+
+# Use a specific neon.ts
+neon env pull --config ./claimable.ts
 
 # Only the AI Gateway
 neon env pull --service ai-gateway

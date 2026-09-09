@@ -1474,6 +1474,20 @@ describe("env pull on a claimable project", () => {
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 	});
 
+	it("uses --config even when cwd neon.ts names an unsupported service", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { aiGateway: true } };\n",
+		);
+		const selected = join(cwd, "claimable.ts");
+		writeFileSync(selected, "export default {};\n");
+		const api = new FakeNeonApi();
+		await pull({ ...claimableProps(api, cwd), config: selected });
+
+		expect(readEnvFile(join(cwd, ".env.local")).DATABASE_URL).toBeDefined();
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
 	it("fails when neon.ts declares Auth that is not on the branch", async () => {
 		writeFileSync(join(cwd, "neon.ts"), "export default { auth: {} };\n");
 		const api = new FakeNeonApi();
