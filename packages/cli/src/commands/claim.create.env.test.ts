@@ -2,6 +2,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -366,7 +367,7 @@ describe("claim create env pull", () => {
 	it("writes DATABASE_URL, DATABASE_URL_UNPOOLED, and NEON_BRANCH", async () => {
 		const service = await startService();
 		const api = new FakeNeonApi();
-		const { cwd } = await runCreate(service.origin, api);
+		const { cwd, contextFile } = await runCreate(service.origin, api);
 
 		const env = readEnvFile(join(cwd, ".env.local"));
 		expect(env.DATABASE_URL).toContain("-pooler.fake.neon.tech");
@@ -374,6 +375,10 @@ describe("claim create env pull", () => {
 			`${BRANCH_ID}.fake.neon.tech`,
 		);
 		expect(env.NEON_BRANCH).toBe(BRANCH_NAME);
+		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toEqual({
+			projectId: PROJECT_ID,
+			branch: BRANCH_ID,
+		});
 		expect(api.credentialCreateCalls).toBe(0);
 		expect(
 			service.seen.some((entry) => entry.includes("/credentials")),
@@ -410,6 +415,10 @@ describe("claim create env pull", () => {
 
 		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 		expect(existsSync(contextFile)).toBe(true);
+		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toEqual({
+			projectId: PROJECT_ID,
+			branch: BRANCH_ID,
+		});
 		expect(readClaimableCredentials(configDir, PROJECT_ID)).not.toBeNull();
 		expect(
 			service.seen.some((entry) => entry.includes("/oauth2/token")),

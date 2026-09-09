@@ -18,8 +18,8 @@ import {
 	assertionHasExpired,
 	listClaimableCredentials,
 	readClaimableCredentials,
+	readLinkedClaimableCredentials,
 	removeClaimableCredentials,
-	resolveClaimableContext,
 	type StoredClaimableCredentials,
 	writeClaimableCredentials,
 } from "../claimable/state.js";
@@ -365,8 +365,9 @@ const resolveTarget = (
 	rejectExplicitAccountCredential(props);
 	const requested = props.projectId?.trim();
 	const context = readContextFile(props.contextFile);
-	const linked = resolveClaimableContext(context);
-	const projectId = requested || linked?.projectId;
+	const linked = readLinkedClaimableCredentials(props.configDir, context);
+	const projectId =
+		requested || (linked !== null ? context.projectId : undefined);
 	if (projectId === undefined) {
 		throw new Error(
 			"This directory is not linked to a claimable project. Pass a project id from `neon claim list`, or run `neon claim create` first.",
@@ -379,16 +380,7 @@ const resolveTarget = (
 		);
 	}
 	const client = new ClaimableClient(credentials.origin);
-	const contextMatches = linked?.projectId === projectId;
-	if (
-		contextMatches &&
-		linked !== null &&
-		client.origin !== new ClaimableClient(linked.origin).origin
-	) {
-		throw new Error(
-			"The .neon context and saved identity assertion name different Claimable Neon services. Delete .neon or the assertion file and run `neon claim create` in a new directory.",
-		);
-	}
+	const contextMatches = context.projectId === projectId;
 	return { projectId, credentials, client, contextMatches };
 };
 
@@ -420,7 +412,7 @@ const clearLocalRecord = (
 export const create = async (props: CreateProps): Promise<void> => {
 	rejectExplicitAccountCredential(props);
 	const existing = readContextFile(props.contextFile);
-	if (existing.projectId || existing.orgId || existing.claimable) {
+	if (existing.projectId || existing.orgId) {
 		throw new Error(
 			`${props.contextFile} already links this directory to a Neon project. Run \`neon claim create\` from an unlinked directory.`,
 		);
@@ -461,7 +453,6 @@ export const create = async (props: CreateProps): Promise<void> => {
 		applyContext(props.contextFile, {
 			projectId: registration.project.id,
 			branch: registration.project.branchId,
-			claimable: { version: 1, origin: client.origin },
 		});
 		contextWritten = true;
 
@@ -481,6 +472,7 @@ export const create = async (props: CreateProps): Promise<void> => {
 				apiClient,
 				apiKey: token.accessToken,
 				apiHost,
+				configDir: props.configDir,
 				contextFile: props.contextFile,
 				output: props.output,
 				projectId: registration.project.id,

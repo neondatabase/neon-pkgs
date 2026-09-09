@@ -5,12 +5,6 @@ import type yargs from "yargs";
 
 import { log } from "./log.js";
 
-export type ClaimableContext = {
-	version: 1;
-	/** Omits the `/v1` API prefix. */
-	origin: string;
-};
-
 export type Context = {
 	orgId?: string;
 	projectId?: string;
@@ -26,7 +20,6 @@ export type Context = {
 	 * dropped the next time the context is written.
 	 */
 	branchId?: string;
-	claimable?: ClaimableContext;
 };
 
 /**

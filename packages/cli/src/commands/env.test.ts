@@ -1,5 +1,6 @@
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -30,6 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yargs from "yargs/yargs";
 
 import { clearAuthContext, setAuthContext } from "../auth_context.js";
+import { writeClaimableCredentials } from "../claimable/state.js";
 import { readEnvFile } from "../env_file.js";
 import {
 	autoPullEnvAfterPin,
@@ -1363,24 +1365,40 @@ describe("env pull with the AI Gateway implied (no neon.ts)", () => {
 const CLAIMABLE_ORIGIN = "https://claimable.neon.tech";
 const CLAIMABLE_API_HOST = `${CLAIMABLE_ORIGIN}/v1`;
 
-const writeClaimableContext = (cwd: string): string => {
+const writeClaimableLink = (
+	cwd: string,
+): { contextFile: string; configDir: string } => {
 	const contextFile = join(cwd, ".neon");
+	const configDir = join(cwd, "config");
+	mkdirSync(configDir, { recursive: true });
 	writeFileSync(
 		contextFile,
 		JSON.stringify({
 			projectId: PROJECT_ID,
 			branch: BRANCH_NAME,
-			claimable: { version: 1, origin: CLAIMABLE_ORIGIN },
 		}),
 	);
-	return contextFile;
+	writeClaimableCredentials(configDir, {
+		version: 1,
+		origin: CLAIMABLE_ORIGIN,
+		registrationId: "reg_test",
+		projectId: PROJECT_ID,
+		branchId: BRANCH_ID,
+		identityAssertion: "signed-identity-assertion",
+		expiresAt: "2027-01-01T00:00:00.000Z",
+	});
+	return { contextFile, configDir };
 };
 
-const claimableProps = (api: FakeNeonApi, cwd: string): EnvPullProps => ({
-	...baseProps(api, cwd),
-	contextFile: writeClaimableContext(cwd),
-	apiHost: CLAIMABLE_API_HOST,
-});
+const claimableProps = (api: FakeNeonApi, cwd: string): EnvPullProps => {
+	const { contextFile, configDir } = writeClaimableLink(cwd);
+	return {
+		...baseProps(api, cwd),
+		contextFile,
+		configDir,
+		apiHost: CLAIMABLE_API_HOST,
+	};
+};
 
 describe("env pull on a claimable project", () => {
 	let cwd: string;
@@ -1431,13 +1449,14 @@ describe("env pull on a claimable project", () => {
 		expect(api.credentialCreateCalls).toBe(0);
 	});
 
-	it("still implies the AI Gateway when a claimable marker is overridden by the Neon API host", async () => {
+	it("still implies the AI Gateway when a credential file is overridden by the Neon API host", async () => {
 		const api = new FakeNeonApi();
-		writeClaimableContext(cwd);
+		const { contextFile, configDir } = writeClaimableLink(cwd);
 		await pull(
 			{
 				...baseProps(api, cwd),
-				contextFile: join(cwd, ".neon"),
+				contextFile,
+				configDir,
 			},
 			{ implyAiGateway: true },
 		);
@@ -1448,7 +1467,30 @@ describe("env pull on a claimable project", () => {
 		);
 	});
 
-	it("still skips minting when checkout dropped the marker but auth is claimable", async () => {
+	it("still skips minting after checkout rewrote .neon without a claimable field", async () => {
+		const api = new FakeNeonApi();
+		const { contextFile, configDir } = writeClaimableLink(cwd);
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: PROJECT_ID, branch: BRANCH_NAME }),
+		);
+		await pull(
+			{
+				...baseProps(api, cwd),
+				contextFile,
+				configDir,
+				apiHost: CLAIMABLE_API_HOST,
+			},
+			{ implyAiGateway: true },
+		);
+
+		expect(api.credentialCreateCalls).toBe(0);
+		expect(readFileSync(join(cwd, ".env.local"), "utf8")).not.toContain(
+			"NEON_AI_GATEWAY",
+		);
+	});
+
+	it("still skips minting when auth is claimable even without a credential file", async () => {
 		const api = new FakeNeonApi();
 		setAuthContext({ source: "claimable", configDir: cwd });
 		await pull(baseProps(api, cwd), { implyAiGateway: true });

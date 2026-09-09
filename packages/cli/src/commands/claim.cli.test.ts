@@ -204,6 +204,51 @@ describe("claim status and delete after the assertion expires", () => {
 		).toBeNull();
 	});
 
+	test("status with a regular .neon and no assertion is not a missing identity", async () => {
+		const { code, stderr } = await runCli(
+			["claim", "status"],
+			{},
+			({ contextFile }) => {
+				writeFileSync(
+					contextFile,
+					JSON.stringify({
+						projectId: "patient-art-12345",
+						branch: "main",
+					}),
+				);
+			},
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("not linked to a claimable project");
+		expect(stderr).not.toContain("identity assertion is missing");
+		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+
+	test("status with a leftover claimable field and no assertion is not a missing identity", async () => {
+		const { code, stderr } = await runCli(
+			["claim", "status"],
+			{},
+			({ contextFile }) => {
+				writeFileSync(
+					contextFile,
+					JSON.stringify({
+						projectId: "patient-art-12345",
+						claimable: {
+							version: 1,
+							origin: "https://claimable.neon.tech",
+						},
+					}),
+				);
+			},
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("not linked to a claimable project");
+		expect(stderr).not.toContain("identity assertion is missing");
+		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+
 	test("accept refuses an expired assertion without contacting the service", async () => {
 		const { code, stderr } = await runCli(
 			["claim", "accept", expiredCredentials.projectId, "--no-open"],

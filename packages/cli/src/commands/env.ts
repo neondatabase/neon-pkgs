@@ -58,6 +58,11 @@ export type EnvPullProps = BranchScopeProps & {
 	 * by walking cwd.
 	 */
 	config?: string;
+	/**
+	 * CLI config directory. Claimable env resolve looks up the assertion file
+	 * here; `.neon` is identifiers only.
+	 */
+	configDir?: string;
 };
 
 export const command = "env";
@@ -256,7 +261,11 @@ export const pull = async (
 	opts: { announce?: boolean; implyAiGateway?: boolean } = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
-	const claimable = isClaimableEnvTarget(props);
+	const claimable = isClaimableEnvTarget({
+		apiHost: props.apiHost,
+		contextFile: props.contextFile,
+		configDir: props.configDir ?? "",
+	});
 	const dropped =
 		claimable &&
 		(props.services !== undefined || props.envKeys !== undefined)
