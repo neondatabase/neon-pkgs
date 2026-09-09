@@ -365,23 +365,35 @@ const resolveTarget = (
 	rejectExplicitAccountCredential(props);
 	const requested = props.projectId?.trim();
 	const context = readContextFile(props.contextFile);
+	if (requested) {
+		const credentials = readClaimableCredentials(
+			props.configDir,
+			requested,
+		);
+		if (credentials === null) {
+			throw new Error(
+				`The identity assertion for ${requested} is missing. The project cannot be managed from this machine; claim it through its existing verification URL or run \`neon link\` after it is claimed.`,
+			);
+		}
+		return {
+			projectId: requested,
+			credentials,
+			client: new ClaimableClient(credentials.origin),
+			contextMatches: context.projectId === requested,
+		};
+	}
 	const linked = readLinkedClaimableCredentials(props.configDir, context);
-	const projectId =
-		requested || (linked !== null ? context.projectId : undefined);
-	if (projectId === undefined) {
+	if (linked === null) {
 		throw new Error(
 			"This directory is not linked to a claimable project. Pass a project id from `neon claim list`, or run `neon claim create` first.",
 		);
 	}
-	const credentials = readClaimableCredentials(props.configDir, projectId);
-	if (credentials === null) {
-		throw new Error(
-			`The identity assertion for ${projectId} is missing. The project cannot be managed from this machine; claim it through its existing verification URL or run \`neon link\` after it is claimed.`,
-		);
-	}
-	const client = new ClaimableClient(credentials.origin);
-	const contextMatches = context.projectId === projectId;
-	return { projectId, credentials, client, contextMatches };
+	return {
+		projectId: linked.projectId,
+		credentials: linked,
+		client: new ClaimableClient(linked.origin),
+		contextMatches: true,
+	};
 };
 
 const requireLiveIdentity = (credentials: StoredClaimableCredentials): void => {
