@@ -1,11 +1,13 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import type { Config, NeonApi } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import open from "open";
 import prompts from "prompts";
 import type yargs from "yargs";
+import { getApiClient } from "../api.js";
 import {
 	type ClaimableCapability,
 	ClaimableClient,
@@ -26,14 +28,9 @@ import {
 	claimableDataApiCreateBody,
 	declaredNeonServices,
 } from "../config_services.js";
-import {
-	applyContext,
-	contextBranch,
-	ensureGitignored,
-	readContextFile,
-} from "../context.js";
+import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
-import { mergeEnvFile, resolveEnvFilePath } from "../env_file.js";
+import { resolveEnvFilePath } from "../env_file.js";
 import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
@@ -43,8 +40,10 @@ import {
 	servicesFlagValue,
 	servicesOption,
 } from "../neon_services.js";
+import type { CommonProps } from "../types.js";
 import { noPassthrough } from "../utils/flags.js";
 import { writer } from "../writer.js";
+import { pull } from "./env.js";
 
 type ClaimProps = {
 	_: (string | number)[];
@@ -63,6 +62,12 @@ type CreateProps = ClaimProps & {
 	file?: string;
 	envPull: boolean;
 	dataApi?: ClaimableDataApiCreateBody;
+	/** Working directory for the dotenv file and `env pull`. Defaults to cwd. */
+	cwd?: string;
+	/** Injected NeonApi adapter (tests). */
+	runtimeApi?: NeonApi;
+	/** Injected Management API client (tests). */
+	apiClient?: CommonProps["apiClient"];
 };
 
 type AcceptProps = ClaimProps & {
@@ -145,11 +150,13 @@ export const findNeonConfig = (cwd = process.cwd()): string | undefined => {
 	}
 };
 
-const loadCreatePolicy = async (explicitPath: string | undefined) => {
+const loadCreatePolicy = async (
+	explicitPath: string | undefined,
+): Promise<{ path: string; config: Config } | undefined> => {
 	const path = explicitPath ?? findNeonConfig();
 	if (!path) return undefined;
 	const { config } = await loadConfigFromFile({ path });
-	return config;
+	return { path, config };
 };
 
 const removeFileIfPresent = (path: string): void => {
@@ -232,12 +239,12 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.option("config", {
 						describe:
-							"Path to neon.ts. Defaults to walking up from the current directory",
+							"Path to neon.ts for registration and the bundled env pull. Defaults to walking up from the current directory",
 						type: "string",
 					})
 					.option("env-pull", {
 						describe:
-							"Write the provisioned DATABASE_URL and service URLs to a dotenv file",
+							"Write the same Neon env vars `env pull` would",
 						type: "boolean",
 						default: true,
 					})
@@ -259,16 +266,17 @@ export const builder = (argv: yargs.Argv) =>
 					typeof args.config === "string" ? args.config : undefined,
 				);
 				const configuredServices = policy
-					? declaredNeonServices(policy)
+					? declaredNeonServices(policy.config)
 					: [];
 				const dataApi = policy
-					? claimableDataApiCreateBody(policy)
+					? claimableDataApiCreateBody(policy.config)
 					: undefined;
 				await create({
 					...(args as unknown as CreateProps),
 					services: [
 						...new Set([...services, ...configuredServices]),
 					],
+					...(policy ? { config: policy.path } : {}),
 					...(dataApi ? { dataApi } : {}),
 				});
 			},
@@ -409,7 +417,7 @@ const clearLocalRecord = (
 	}
 };
 
-const create = async (props: CreateProps): Promise<void> => {
+export const create = async (props: CreateProps): Promise<void> => {
 	rejectExplicitAccountCredential(props);
 	const existing = readContextFile(props.contextFile);
 	if (existing.projectId || existing.orgId || existing.claimable) {
@@ -418,8 +426,9 @@ const create = async (props: CreateProps): Promise<void> => {
 		);
 	}
 	const contextFileExisted = existsSync(props.contextFile);
+	const cwd = props.cwd ?? process.cwd();
 	const envFile = props.envPull
-		? resolveEnvFilePath(process.cwd(), props.file)
+		? resolveEnvFilePath(cwd, props.file)
 		: undefined;
 	const envFileExisted = envFile ? existsSync(envFile) : false;
 	const previousEnv =
@@ -458,37 +467,34 @@ const create = async (props: CreateProps): Promise<void> => {
 
 		const token = await client.exchange(registration.identityAssertion);
 		accessToken = token.accessToken;
-		const credentials = await client.credentials(
-			registration.project.id,
-			token.accessToken,
-		);
-		if (
-			credentials.projectId !== registration.project.id ||
-			credentials.branchId !== registration.project.branchId
-		) {
-			throw new Error(
-				"Claimable Neon returned credentials for a different project. The project was not kept.",
-			);
-		}
 
 		if (envFile) {
-			const env = {
-				DATABASE_URL: credentials.databaseUrl,
-				...(credentials.services.dataApi
-					? { NEON_DATA_API_URL: credentials.services.dataApi.url }
-					: {}),
-				...(credentials.services.auth
-					? {
-							NEON_AUTH_BASE_URL:
-								credentials.services.auth.baseUrl,
-							NEON_AUTH_JWKS_URL:
-								credentials.services.auth.jwksUrl,
-						}
-					: {}),
-			};
+			const apiHost = `${client.origin}/v1`;
+			const apiClient =
+				props.apiClient ??
+				getApiClient({
+					apiKey: token.accessToken,
+					apiHost,
+				});
 			envWriteAttempted = true;
-			mergeEnvFile(envFile, env);
-			ensureGitignored(envFile);
+			const outcome = await pull({
+				apiClient,
+				apiKey: token.accessToken,
+				apiHost,
+				contextFile: props.contextFile,
+				output: props.output,
+				projectId: registration.project.id,
+				branch: registration.project.branchId,
+				cwd,
+				file: props.file,
+				...(props.config ? { config: props.config } : {}),
+				...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+			});
+			if (outcome.status === "empty") {
+				throw new Error(
+					"No Neon env variables were pulled for this claimable project.",
+				);
+			}
 		}
 
 		const granted = registration.capabilities

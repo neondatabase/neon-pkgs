@@ -7,8 +7,9 @@ import {
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
+import { isClaimableEnvTarget } from "../claimable/state.js";
 import { ensureGitignored } from "../context.js";
-import { resolveNeonEnvVars } from "../dev/env.js";
+import { dropClaimableUnsupported, resolveNeonEnvVars } from "../dev/env.js";
 import { mergeEnvFile, readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
 	ENV_PULL_KEY_HELP,
@@ -51,6 +52,12 @@ export type EnvPullProps = BranchScopeProps & {
 	 * complete service bundles plus these individual keys.
 	 */
 	envKeys?: readonly EnvPullKey[];
+	/**
+	 * Explicit neon.ts path. `claim create --config` forwards this so the bundled
+	 * pull uses the same policy that was registered, not a different file found
+	 * by walking cwd.
+	 */
+	config?: string;
 };
 
 export const command = "env";
@@ -103,6 +110,11 @@ export const builder = (argv: yargs.Argv) =>
 							type: "array",
 							string: true,
 						},
+						config: {
+							describe:
+								"Path to a neon.ts policy (defaults to walking up from cwd)",
+							type: "string",
+						},
 					})
 					.epilogue(
 						[
@@ -113,6 +125,14 @@ export const builder = (argv: yargs.Argv) =>
 							"     URLs (the function does not have to be deployed).",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
 							"     which mints a branch credential for it.",
+							"",
+							"On an unclaimed Claimable Neon project, neon.ts is still the source",
+							"of truth when it only declares Postgres, Auth, and the Data API.",
+							"A neon.ts that declares AI Gateway, Functions, or Object Storage",
+							"fails: those cannot be used until the project is claimed. Without",
+							"a neon.ts, a bare pull writes provisioned Postgres, Auth, and Data",
+							"API. Naming unsupported services with --service / --env warns",
+							"and writes nothing for them.",
 							"",
 							"The pull bundled into link / checkout / config apply follows 2 and 3",
 							"without the AI Gateway, so it never mints a credential you did not ask",
@@ -236,9 +256,22 @@ export const pull = async (
 	opts: { announce?: boolean; implyAiGateway?: boolean } = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
+	const claimable = isClaimableEnvTarget(props);
+	const dropped =
+		claimable &&
+		(props.services !== undefined || props.envKeys !== undefined)
+			? dropClaimableUnsupported(
+					props.services ?? [],
+					props.envKeys ?? [],
+				)
+			: null;
+	const selectionServices = dropped
+		? dropped.services
+		: (props.services ?? []);
+	const selectionEnvKeys = dropped ? dropped.envKeys : (props.envKeys ?? []);
 	const selectedKeys =
 		props.services !== undefined || props.envKeys !== undefined
-			? envKeysForSelection(props.services ?? [], props.envKeys ?? [])
+			? envKeysForSelection(selectionServices, selectionEnvKeys)
 			: undefined;
 	const branch = await resolveBranchRef(props);
 	if (opts.announce) {
@@ -262,10 +295,12 @@ export const pull = async (
 		projectId: props.projectId,
 		branchId,
 		env: { ...process.env, ...existingEnv },
-		...(props.services ? { services: props.services } : {}),
-		...(props.envKeys ? { envKeys: props.envKeys } : {}),
+		...(props.services !== undefined ? { services: props.services } : {}),
+		...(props.envKeys !== undefined ? { envKeys: props.envKeys } : {}),
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		omitUnsetFunctionEnv: true,
+		...(claimable ? { claimable: true } : {}),
+		...(props.config ? { config: props.config } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
@@ -274,13 +309,20 @@ export const pull = async (
 	const neonVars = pickSelectedVars(
 		pickNeonVars(vars),
 		selectedKeys,
-		props.services,
+		props.services !== undefined ? selectionServices : undefined,
 	);
 	if (Object.keys(neonVars).length === 0) {
-		log.info(
-			"No Neon env variables to pull for this branch (no DATABASE_URL or " +
-				"enabled Auth / Data API).",
-		);
+		const skippedUnsupportedOnly =
+			dropped !== null &&
+			dropped.services.length === 0 &&
+			dropped.envKeys.length === 0 &&
+			dropped.skipped.length > 0;
+		if (!skippedUnsupportedOnly) {
+			log.info(
+				"No Neon env variables to pull for this branch (no DATABASE_URL or " +
+					"enabled Auth / Data API).",
+			);
+		}
 		return { status: "empty" };
 	}
 
@@ -292,8 +334,8 @@ export const pull = async (
 			selectedKeys,
 			unreachedButCurrent(skipped, existingEnv, branchId),
 			existingEnv,
-			props.services,
-			props.envKeys,
+			props.services !== undefined ? selectionServices : undefined,
+			props.envKeys !== undefined ? selectionEnvKeys : undefined,
 		),
 	});
 	log.info(

@@ -8,7 +8,9 @@ import {
 import { join } from "node:path";
 import type { CredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { writeSecretFile } from "@neon-internals/cli-core/secure_file";
-import type { Context } from "../context.js";
+import { getAuthContext } from "../auth_context.js";
+import { type Context, readContextFile } from "../context.js";
+import { ClaimableClient } from "./api.js";
 
 const FILE_PREFIX = "claimable-credential.";
 const FILE_SUFFIX = ".json";
@@ -220,3 +222,28 @@ export const shouldUseClaimableCredentials = (
 	inputs.profileEnv.trim() === "" &&
 	(profileFlag === undefined || profileFlag.trim() === "") &&
 	resolveClaimableContext(context) !== null;
+
+/** Management API base URL the CLI uses for a Claimable Neon origin. */
+export const claimableApiHost = (origin: string): string =>
+	`${new ClaimableClient(origin).origin}/v1`;
+
+/**
+ * Whether this invocation is talking to Claimable Neon, so env resolve must not
+ * mint credentials or pull services that require claim.
+ *
+ * Auth source wins so a same-process checkout that rewrote `.neon` without the
+ * marker still skips minting. A `.neon` marker plus a production API host is an
+ * account override and is not claimable.
+ */
+export const isClaimableEnvTarget = (props: {
+	apiHost: string;
+	contextFile: string;
+}): boolean => {
+	if (getAuthContext()?.source === "claimable") return true;
+	const linked = resolveClaimableContext(readContextFile(props.contextFile));
+	if (linked === null) return false;
+	return (
+		props.apiHost.trim().replace(/\/+$/, "") ===
+		claimableApiHost(linked.origin)
+	);
+};
