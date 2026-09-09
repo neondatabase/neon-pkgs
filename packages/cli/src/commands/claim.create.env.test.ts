@@ -462,6 +462,91 @@ describe("claim create env pull", () => {
 		expect(api.credentialCreateCalls).toBe(0);
 	});
 
+	it("uses --config for the env pull, not a different neon.ts in cwd", async () => {
+		const service = await startService();
+		const api = new FakeNeonApi();
+		const { cwd, configDir, contextFile } = workspace();
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { aiGateway: true } };\n",
+		);
+		const selected = join(cwd, "claimable.ts");
+		writeFileSync(selected, "export default {};\n");
+		const stdout = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation(() => true);
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation(() => true);
+		cleanups.push(() => {
+			stdout.mockRestore();
+			stderr.mockRestore();
+		});
+
+		await create({
+			_: ["claim", "create"],
+			output: "json",
+			configDir,
+			contextFile,
+			claimableHost: service.origin,
+			apiKey: "",
+			envPull: true,
+			cwd,
+			config: selected,
+			runtimeApi: api,
+			apiClient: fakeApiClient as never,
+		});
+
+		expect(existsSync(join(cwd, ".env.local"))).toBe(true);
+		expect(readEnvFile(join(cwd, ".env.local")).DATABASE_URL).toBeDefined();
+		expect(service.wasDeleted()).toBe(false);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
+	it("rolls back when --config names AI Gateway even if cwd neon.ts does not", async () => {
+		const service = await startService();
+		const api = new FakeNeonApi();
+		const { cwd, configDir, contextFile } = workspace();
+		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
+		const selected = join(cwd, "claimable.ts");
+		writeFileSync(
+			selected,
+			"export default { preview: { aiGateway: true } };\n",
+		);
+		const stdout = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation(() => true);
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation(() => true);
+		cleanups.push(() => {
+			stdout.mockRestore();
+			stderr.mockRestore();
+		});
+
+		await expect(
+			create({
+				_: ["claim", "create"],
+				output: "json",
+				configDir,
+				contextFile,
+				claimableHost: service.origin,
+				apiKey: "",
+				envPull: true,
+				cwd,
+				config: selected,
+				runtimeApi: api,
+				apiClient: fakeApiClient as never,
+			}),
+		).rejects.toThrow(
+			/ai-gateway.*cannot be used on an unclaimed Claimable Neon project/s,
+		);
+
+		expect(service.wasDeleted()).toBe(true);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
+		expect(api.credentialCreateCalls).toBe(0);
+	});
+
 	it("deletes the project and rolls back local files when pull fails", async () => {
 		const service = await startService();
 		const api = new FakeNeonApi();

@@ -52,6 +52,12 @@ export type EnvPullProps = BranchScopeProps & {
 	 * complete service bundles plus these individual keys.
 	 */
 	envKeys?: readonly EnvPullKey[];
+	/**
+	 * Explicit neon.ts path. `claim create --config` forwards this so the bundled
+	 * pull uses the same policy that was registered, not a different file found
+	 * by walking cwd.
+	 */
+	config?: string;
 };
 
 export const command = "env";
@@ -289,6 +295,7 @@ export const pull = async (
 		...(opts.implyAiGateway ? { implyAiGateway: true } : {}),
 		omitUnsetFunctionEnv: true,
 		...(claimable ? { claimable: true } : {}),
+		...(props.config ? { config: props.config } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),

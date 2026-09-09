@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import type { NeonApi } from "@neon/config";
+import type { Config, NeonApi } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import open from "open";
@@ -150,11 +150,13 @@ export const findNeonConfig = (cwd = process.cwd()): string | undefined => {
 	}
 };
 
-const loadCreatePolicy = async (explicitPath: string | undefined) => {
+const loadCreatePolicy = async (
+	explicitPath: string | undefined,
+): Promise<{ path: string; config: Config } | undefined> => {
 	const path = explicitPath ?? findNeonConfig();
 	if (!path) return undefined;
 	const { config } = await loadConfigFromFile({ path });
-	return config;
+	return { path, config };
 };
 
 const removeFileIfPresent = (path: string): void => {
@@ -264,16 +266,17 @@ export const builder = (argv: yargs.Argv) =>
 					typeof args.config === "string" ? args.config : undefined,
 				);
 				const configuredServices = policy
-					? declaredNeonServices(policy)
+					? declaredNeonServices(policy.config)
 					: [];
 				const dataApi = policy
-					? claimableDataApiCreateBody(policy)
+					? claimableDataApiCreateBody(policy.config)
 					: undefined;
 				await create({
 					...(args as unknown as CreateProps),
 					services: [
 						...new Set([...services, ...configuredServices]),
 					],
+					...(policy ? { config: policy.path } : {}),
 					...(dataApi ? { dataApi } : {}),
 				});
 			},
@@ -484,6 +487,7 @@ export const create = async (props: CreateProps): Promise<void> => {
 				branch: registration.project.branchId,
 				cwd,
 				file: props.file,
+				...(props.config ? { config: props.config } : {}),
 				...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
 			});
 			if (outcome.status === "empty") {

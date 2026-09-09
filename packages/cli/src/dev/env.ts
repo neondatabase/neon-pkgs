@@ -77,6 +77,12 @@ export type DevEnvContext = {
 	/** Env pull needs function slugs even when their runtime secrets are unset. */
 	omitUnsetFunctionEnv?: boolean;
 	/**
+	 * Explicit neon.ts path. When set, this file is the policy instead of the
+	 * upward search from {@link DevEnvContext.cwd}. `claim create --config`
+	 * uses the same file for registration and the bundled env pull.
+	 */
+	config?: string;
+	/**
 	 * This request is talking to Claimable Neon. Skip credential minting.
 	 * neon.ts is still the source of truth when it only declares Postgres, Auth,
 	 * and the Data API; a policy that names AI Gateway, Functions, or Object
@@ -942,6 +948,7 @@ const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
 		const { config } = await loadConfigFromFile({
 			cwd: ctx.cwd,
+			...(ctx.config ? { path: ctx.config } : {}),
 			...(ctx.omitUnsetFunctionEnv
 				? { unsetFunctionEnv: "omit" as const }
 				: {}),
