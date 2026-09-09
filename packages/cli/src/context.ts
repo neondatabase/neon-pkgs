@@ -340,10 +340,24 @@ export const setContext = (file: string, context: ResolvedContext) => {
  * must not be blocked by a `.gitignore` write error.
  */
 export const ensureGitignored = (file: string): void => {
+	ensureGitignoreEntry(file, basenameOf(file));
+};
+
+/**
+ * Make sure a directory is ignored by the `.gitignore` in its parent. The written entry keeps
+ * the conventional trailing slash, while coverage checks also recognize an existing entry
+ * without one.
+ */
+export const ensureDirectoryGitignored = (directory: string): void => {
+	const normalized = directory.replace(/[\\/]+$/, "");
+	ensureGitignoreEntry(directory, `${basenameOf(normalized)}/`);
+};
+
+const ensureGitignoreEntry = (path: string, entry: string): void => {
 	try {
-		const dir = dirname(file);
-		const entry = basenameOf(file);
+		const dir = dirname(path);
 		const gitignorePath = resolve(dir, GITIGNORE_FILE);
+		const coveredEntry = entry.replace(/\/$/, "");
 
 		if (!existsSync(gitignorePath)) {
 			writeFileSync(gitignorePath, `${entry}\n`);
@@ -351,7 +365,7 @@ export const ensureGitignored = (file: string): void => {
 		}
 
 		const current = readFileSync(gitignorePath, "utf-8");
-		if (hasGitignoreEntry(current, entry)) {
+		if (hasGitignoreEntry(current, coveredEntry)) {
 			return;
 		}
 
@@ -361,7 +375,7 @@ export const ensureGitignored = (file: string): void => {
 		writeFileSync(gitignorePath, current + addition);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		log.debug("Failed to update .gitignore next to %s: %s", file, message);
+		log.debug("Failed to update .gitignore next to %s: %s", path, message);
 	}
 };
 
