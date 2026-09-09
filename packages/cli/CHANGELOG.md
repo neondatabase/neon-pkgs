@@ -1,5 +1,20 @@
 # neon
 
+## 4.14.4
+
+### Patch Changes
+
+- 9434724: `neon env pull` works on unclaimed Claimable Neon projects. A `neon.ts` that only declares Postgres, Auth, and the Data API is honored; one that names AI Gateway, Functions, or Object Storage fails until the project is claimed. `neon claim create` writes the same vars as that pull.
+- Updated dependencies [bb909d2]
+- Updated dependencies [640adad]
+- Updated dependencies [86baf96]
+- Updated dependencies [fae6ba7]
+- Updated dependencies [df4dfc2]
+- Updated dependencies [780119e]
+  - @neon/sdk@4.0.0
+  - @neon/config@1.3.2
+  - @neon/config-runtime@1.2.3
+
 ## 4.14.3
 
 ### Patch Changes
