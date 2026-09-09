@@ -44,9 +44,9 @@ import { setAuthContext } from "../auth_context.js";
 import { ClaimableClient, ClaimableServiceError } from "../claimable/api.js";
 import {
 	assertionHasExpired,
+	claimableCredentialsExist,
 	claimableCredentialsPath,
-	readClaimableCredentials,
-	resolveClaimableContext,
+	readLinkedClaimableCredentials,
 	shouldUseClaimableCredentials,
 } from "../claimable/state.js";
 import {
@@ -653,37 +653,33 @@ export const ensureAuth = async (
 			? props.contextFile()
 			: (props.contextFile ?? currentContextFile());
 	const localContext = readContextFile(contextFile);
-	if (shouldUseClaimableCredentials(inputs, props.profile, localContext)) {
-		const linked = resolveClaimableContext(localContext);
-		if (linked === null) {
+	if (
+		shouldUseClaimableCredentials(
+			inputs,
+			props.profile,
+			localContext,
+			props.configDir,
+		)
+	) {
+		const stored = readLinkedClaimableCredentials(
+			props.configDir,
+			localContext,
+		);
+		if (stored === null || localContext.projectId === undefined) {
 			throw new Error(
-				"The linked Claimable Neon context could not be resolved.",
+				"The linked Claimable Neon identity assertion could not be read.",
 			);
 		}
-		const stored = readClaimableCredentials(
-			props.configDir,
-			linked.projectId,
-		);
 		const path = claimableCredentialsPath(
 			props.configDir,
-			linked.projectId,
+			localContext.projectId,
 		);
-		if (stored === null) {
-			throw new Error(
-				`The linked project is claimable, but its identity assertion is missing from ${path}. Run \`neon claim create\` in a new directory, or \`neon link\` after claiming the project.`,
-			);
-		}
 		if (assertionHasExpired(stored)) {
 			throw new Error(
-				`The identity assertion for ${linked.projectId} has expired. Run \`neon claim delete ${linked.projectId} --yes\` to drop the local record.`,
+				`The identity assertion for ${localContext.projectId} has expired. Run \`neon claim delete ${localContext.projectId} --yes\` to drop the local record.`,
 			);
 		}
 		const client = new ClaimableClient(stored.origin);
-		if (client.origin !== new ClaimableClient(linked.origin).origin) {
-			throw new Error(
-				`The linked .neon file and ${path} name different Claimable Neon services. Delete .neon or the assertion file and run \`neon claim create\` in a new directory.`,
-			);
-		}
 		let token;
 		try {
 			token = await client.exchange(stored.identityAssertion);
@@ -715,7 +711,10 @@ export const ensureAuth = async (
 		return;
 	}
 
-	if (localContext.claimable !== undefined) {
+	if (
+		localContext.projectId !== undefined &&
+		claimableCredentialsExist(props.configDir, localContext.projectId)
+	) {
 		log.warning(
 			"This directory is linked to a claimable project, but NEON_API_KEY or NEON_PROFILE is set. This command will use that account credential instead of the unclaimed project. Unset them to keep using the unclaimed project.",
 		);

@@ -18,8 +18,8 @@ import {
 	assertionHasExpired,
 	listClaimableCredentials,
 	readClaimableCredentials,
+	readLinkedClaimableCredentials,
 	removeClaimableCredentials,
-	resolveClaimableContext,
 	type StoredClaimableCredentials,
 	writeClaimableCredentials,
 } from "../claimable/state.js";
@@ -365,31 +365,35 @@ const resolveTarget = (
 	rejectExplicitAccountCredential(props);
 	const requested = props.projectId?.trim();
 	const context = readContextFile(props.contextFile);
-	const linked = resolveClaimableContext(context);
-	const projectId = requested || linked?.projectId;
-	if (projectId === undefined) {
+	if (requested) {
+		const credentials = readClaimableCredentials(
+			props.configDir,
+			requested,
+		);
+		if (credentials === null) {
+			throw new Error(
+				`The identity assertion for ${requested} is missing. The project cannot be managed from this machine; claim it through its existing verification URL or run \`neon link\` after it is claimed.`,
+			);
+		}
+		return {
+			projectId: requested,
+			credentials,
+			client: new ClaimableClient(credentials.origin),
+			contextMatches: context.projectId === requested,
+		};
+	}
+	const linked = readLinkedClaimableCredentials(props.configDir, context);
+	if (linked === null) {
 		throw new Error(
 			"This directory is not linked to a claimable project. Pass a project id from `neon claim list`, or run `neon claim create` first.",
 		);
 	}
-	const credentials = readClaimableCredentials(props.configDir, projectId);
-	if (credentials === null) {
-		throw new Error(
-			`The identity assertion for ${projectId} is missing. The project cannot be managed from this machine; claim it through its existing verification URL or run \`neon link\` after it is claimed.`,
-		);
-	}
-	const client = new ClaimableClient(credentials.origin);
-	const contextMatches = linked?.projectId === projectId;
-	if (
-		contextMatches &&
-		linked !== null &&
-		client.origin !== new ClaimableClient(linked.origin).origin
-	) {
-		throw new Error(
-			"The .neon context and saved identity assertion name different Claimable Neon services. Delete .neon or the assertion file and run `neon claim create` in a new directory.",
-		);
-	}
-	return { projectId, credentials, client, contextMatches };
+	return {
+		projectId: linked.projectId,
+		credentials: linked,
+		client: new ClaimableClient(linked.origin),
+		contextMatches: true,
+	};
 };
 
 const requireLiveIdentity = (credentials: StoredClaimableCredentials): void => {
@@ -420,7 +424,7 @@ const clearLocalRecord = (
 export const create = async (props: CreateProps): Promise<void> => {
 	rejectExplicitAccountCredential(props);
 	const existing = readContextFile(props.contextFile);
-	if (existing.projectId || existing.orgId || existing.claimable) {
+	if (existing.projectId || existing.orgId) {
 		throw new Error(
 			`${props.contextFile} already links this directory to a Neon project. Run \`neon claim create\` from an unlinked directory.`,
 		);
@@ -461,7 +465,6 @@ export const create = async (props: CreateProps): Promise<void> => {
 		applyContext(props.contextFile, {
 			projectId: registration.project.id,
 			branch: registration.project.branchId,
-			claimable: { version: 1, origin: client.origin },
 		});
 		contextWritten = true;
 
@@ -481,6 +484,7 @@ export const create = async (props: CreateProps): Promise<void> => {
 				apiClient,
 				apiKey: token.accessToken,
 				apiHost,
+				configDir: props.configDir,
 				contextFile: props.contextFile,
 				output: props.output,
 				projectId: registration.project.id,

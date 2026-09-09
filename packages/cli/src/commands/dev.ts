@@ -45,6 +45,7 @@ type DevProps = CommonProps & {
 	projectId?: string;
 	branch?: string;
 	id?: string;
+	configDir?: string;
 };
 
 export const command = "dev";
@@ -116,7 +117,7 @@ export const builder = (argv: yargs.Argv) =>
  *   reason; `dev` was the one that didn't.
  */
 export const devEnvContext = (
-	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost"> & {
+	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost" | "configDir"> & {
 		contextFile?: string;
 	},
 	branchId: string | undefined,
@@ -137,6 +138,7 @@ export const devEnvContext = (
 		...(isClaimableEnvTarget({
 			apiHost: props.apiHost,
 			contextFile: props.contextFile ?? "",
+			configDir: props.configDir ?? "",
 		})
 			? { claimable: true }
 			: {}),

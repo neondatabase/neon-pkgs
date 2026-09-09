@@ -27,12 +27,6 @@ export type StoredClaimableCredentials = {
 	assertionExpires?: number;
 };
 
-export type ResolvedClaimableContext = {
-	origin: string;
-	projectId: string;
-	branch?: string;
-};
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -184,44 +178,35 @@ export const removeClaimableCredentials = (
 	}
 };
 
-export const resolveClaimableContext = (
+export const readLinkedClaimableCredentials = (
+	configDir: string,
 	context: Context,
-): ResolvedClaimableContext | null => {
-	const marker: unknown = context.claimable;
-	if (marker === undefined) return null;
-	if (!isRecord(marker)) {
-		throw new Error(
-			'The linked .neon file has an invalid "claimable" marker. Delete the claimable field from .neon, or delete .neon.',
-		);
-	}
-	if (marker.version !== 1) {
-		throw new Error(
-			`Unsupported Claimable Neon context version in .neon. Update the Neon CLI before using this project.`,
-		);
-	}
-	if (!nonEmptyString(marker.origin) || !nonEmptyString(context.projectId)) {
-		throw new Error(
-			'The linked .neon file has an incomplete "claimable" marker. Delete the claimable field from .neon, or delete .neon.',
-		);
-	}
-	assertProjectId(context.projectId);
-	return {
-		origin: marker.origin,
-		projectId: context.projectId,
-		...(nonEmptyString(context.branch) ? { branch: context.branch } : {}),
-	};
+): StoredClaimableCredentials | null => {
+	if (!nonEmptyString(context.projectId)) return null;
+	// A regular `.neon` project id that this regex would reject never had an assertion file.
+	if (!PROJECT_ID.test(context.projectId)) return null;
+	return readClaimableCredentials(configDir, context.projectId);
+};
+
+export const claimableCredentialsExist = (
+	configDir: string,
+	projectId: string,
+): boolean => {
+	if (!PROJECT_ID.test(projectId)) return false;
+	return existsSync(claimableCredentialsPath(configDir, projectId));
 };
 
 export const shouldUseClaimableCredentials = (
 	inputs: CredentialInputs,
 	profileFlag: string | undefined,
 	context: Context,
+	configDir: string,
 ): boolean =>
 	inputs.apiKeyFlag.trim() === "" &&
 	inputs.apiKeyEnv.trim() === "" &&
 	inputs.profileEnv.trim() === "" &&
 	(profileFlag === undefined || profileFlag.trim() === "") &&
-	resolveClaimableContext(context) !== null;
+	readLinkedClaimableCredentials(configDir, context) !== null;
 
 /** Management API base URL the CLI uses for a Claimable Neon origin. */
 export const claimableApiHost = (origin: string): string =>
@@ -231,19 +216,26 @@ export const claimableApiHost = (origin: string): string =>
  * Whether this invocation is talking to Claimable Neon, so env resolve must not
  * mint credentials or pull services that require claim.
  *
- * Auth source wins so a same-process checkout that rewrote `.neon` without the
- * marker still skips minting. A `.neon` marker plus a production API host is an
- * account override and is not claimable.
+ * Auth source wins so a same-process checkout that rewrote `.neon` still skips
+ * minting. A credential file plus a production API host is an account override
+ * and is not claimable.
  */
 export const isClaimableEnvTarget = (props: {
 	apiHost: string;
 	contextFile: string;
+	configDir: string;
 }): boolean => {
-	if (getAuthContext()?.source === "claimable") return true;
-	const linked = resolveClaimableContext(readContextFile(props.contextFile));
-	if (linked === null) return false;
+	const source = getAuthContext()?.source;
+	if (source === "claimable") return true;
+	if (source !== undefined) return false;
+	if (props.configDir.trim() === "") return false;
+	const stored = readLinkedClaimableCredentials(
+		props.configDir,
+		readContextFile(props.contextFile),
+	);
+	if (stored === null) return false;
 	return (
 		props.apiHost.trim().replace(/\/+$/, "") ===
-		claimableApiHost(linked.origin)
+		claimableApiHost(stored.origin)
 	);
 };

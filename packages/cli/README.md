@@ -116,22 +116,23 @@ to skip the dotenv write.
 
 The command writes:
 
-- a `.neon` context that identifies the project and Claimable Neon service;
+- a `.neon` context with the project id and pinned branch;
 - an owner-only identity assertion under the CLI config directory;
 - `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH`, and Auth / Data API variables
   when `neon.ts` declares them (or, with no `neon.ts`, when they are provisioned) to `.env`
   or `.env.local` (disable this with `--no-env-pull`). The write is the same `env pull` used
   after create.
 
-Subsequent project commands automatically exchange the assertion for a short-lived agent
-token and send API calls to Claimable Neon. The service decides which operations are
-allowed before claim.
+Subsequent project commands find that assertion by the linked project id, exchange it for a
+short-lived agent token, and send API calls to Claimable Neon. The service decides which
+operations are allowed before claim.
 
 ```bash
 neon claim status                 # lifecycle and transfer status
 neon projects get <project-id>    # regular CLI command, same agent token
 neon psql --role-name neondb_owner -- -c "select now()"
 neon config plan
+neon checkout main
 neon env pull
 
 neon claim accept                 # create a claim code and open the transfer URL
