@@ -1,5 +1,12 @@
 # neonctl
 
+## 4.14.4
+
+### Patch Changes
+
+- Updated dependencies [9434724]
+  - neon@4.14.4
+
 ## 4.14.3
 
 ### Patch Changes

@@ -1,5 +1,22 @@
 # @neon/sdk
 
+## 4.0.0
+
+### Major Changes
+
+- 640adad: `CallOptions` now accepts `wait: { pollIntervalMs?, timeoutMs? }`, so a single client can use a longer readiness budget on one `projects.create` without changing the rest. Client `wait` no longer accepts `signal`; pass `signal` on the call. `operations.waitFor` still takes top-level `pollIntervalMs`, `timeoutMs`, and `signal`.
+
+### Minor Changes
+
+- bb909d2: `createNeonClient` now throws a `"client"`-kind error when `apiKey` is missing or `""`, instead of sending an unauthenticated request and surfacing a 401 on the first call. A function that later returns empty is still accepted at construction.
+- 780119e: `NeonTimeoutError` is now the abstract base of `NeonRequestTimeoutError` (`source: "request"`) and `NeonWaitTimeoutError` (`source: "wait"`, plus `operations` for `neon.operations.waitFor`). `kind` remains `"timeout"`. Direct construction uses the subclasses.
+
+### Patch Changes
+
+- 86baf96: README Cancellation & deadlines examples now compile. Abort uses `list({}, { signal })`; a request timeout is `source === "request"`.
+- fae6ba7: Docs: `CallOptions` is `throwOnError`, `waitForReadiness`, `requestTimeoutMs`, `wait`, and `signal`. `retries`, `orgId`, `baseUrl`, and `fetch` are client-wide; per-request org selection uses method input (`org_id` / `fromOrgId`).
+- df4dfc2: `retries` is validated at `createNeonClient`. `NaN`, `Infinity`, fractions, and negatives throw a `"client"`-kind error instead of retrying forever (`NaN`/`Infinity`) or being accepted silently. `0` and the default `2` are unchanged.
+
 ## 3.2.0
 
 ### Minor Changes
