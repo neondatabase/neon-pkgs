@@ -1,4 +1,5 @@
 import * as z from "zod";
+import * as zod from "../../generated/zod.gen.js";
 import { decodeBase64 } from "../binary.js";
 import {
 	bindTool,
@@ -126,7 +127,11 @@ export const toolFactories = {
 			id: "projects.permissions.list",
 			generated: "listProjectPermissions",
 			run: (neon, input, signal) =>
-				neon.projects.permissions.list(input.project_id, { signal }),
+				collectPages(
+					neon.projects.permissions.list(input.project_id, {
+						signal,
+					}),
+				),
 		}),
 	"projects.permissions.grant": (options) =>
 		fromGenerated(options, {
@@ -282,23 +287,43 @@ export const toolFactories = {
 		}),
 	"postgres.connectionString": connectionStringTool,
 	"postgres.endpoints.list": (options) =>
-		fromGenerated(options, {
-			id: "postgres.endpoints.list",
-			generated: "listProjectEndpoints",
-			run: (neon, input, signal) =>
-				neon.postgres.endpoints.list(input.project_id, { signal }),
-		}),
-	"postgres.endpoints.listByBranch": (options) =>
-		fromGenerated(options, {
-			id: "postgres.endpoints.listByBranch",
-			generated: "listProjectBranchEndpoints",
-			run: (neon, input, signal) =>
-				neon.postgres.endpoints.listByBranch(
-					input.project_id,
-					input.branch_id,
-					{ signal },
+		bindTool(
+			options,
+			{
+				operationId: "postgres.endpoints.list",
+				id: publishedId("postgres.endpoints.list"),
+				title: "List compute endpoints",
+				description:
+					"Retrieves a list of compute endpoints for the specified project. Pass branch_id to list that branch only.",
+				inputSchema: z.strictObject({
+					project_id: zod.zListProjectEndpointsPath.shape.project_id,
+					branch_id:
+						zod.zListProjectBranchEndpointsPath.shape.branch_id.optional(),
+				}),
+				annotations: {
+					readOnlyHint: true,
+					openWorldHint: false,
+				},
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/endpoints",
+					stability: "stable",
+					deprecated: false,
+					tags: ["Endpoint"],
+				},
+			},
+			(neon, input, signal) =>
+				collectPages(
+					neon.postgres.endpoints.list(
+						input.project_id,
+						input.branch_id === undefined
+							? undefined
+							: { branchId: input.branch_id },
+						{ signal },
+					),
 				),
-		}),
+		),
 	"postgres.endpoints.get": (options) =>
 		fromGenerated(options, {
 			id: "postgres.endpoints.get",
@@ -412,9 +437,15 @@ export const toolFactories = {
 			id: "postgres.roles.list",
 			generated: "listProjectBranchRoles",
 			run: (neon, input, signal) =>
-				neon.postgres.roles.list(input.project_id, input.branch_id, {
-					signal,
-				}),
+				collectPages(
+					neon.postgres.roles.list(
+						input.project_id,
+						input.branch_id,
+						{
+							signal,
+						},
+					),
+				),
 		}),
 	"postgres.roles.get": (options) =>
 		fromGenerated(options, {
@@ -469,12 +500,12 @@ export const toolFactories = {
 			id: "postgres.databases.list",
 			generated: "listProjectBranchDatabases",
 			run: (neon, input, signal) =>
-				neon.postgres.databases.list(
-					input.project_id,
-					input.branch_id,
-					{
-						signal,
-					},
+				collectPages(
+					neon.postgres.databases.list(
+						input.project_id,
+						input.branch_id,
+						{ signal },
+					),
 				),
 		}),
 	"postgres.databases.get": (options) =>
@@ -611,9 +642,15 @@ export const toolFactories = {
 			id: "storage.buckets.list",
 			generated: "listProjectBranchBuckets",
 			run: (neon, input, signal) =>
-				neon.storage.buckets.list(input.project_id, input.branch_id, {
-					signal,
-				}),
+				collectPages(
+					neon.storage.buckets.list(
+						input.project_id,
+						input.branch_id,
+						{
+							signal,
+						},
+					),
+				),
 		}),
 	"storage.buckets.create": (options) =>
 		fromGenerated(options, {
@@ -827,9 +864,11 @@ export const toolFactories = {
 			id: "credentials.list",
 			generated: "listCredentials",
 			run: (neon, input, signal) =>
-				neon.credentials.list(input.project_id, input.branch_id, {
-					signal,
-				}),
+				collectPages(
+					neon.credentials.list(input.project_id, input.branch_id, {
+						signal,
+					}),
+				),
 		}),
 	"credentials.create": (options) =>
 		fromGenerated(options, {
@@ -932,7 +971,7 @@ export const toolFactories = {
 			id: "snapshots.list",
 			generated: "listSnapshots",
 			run: (neon, input, signal) =>
-				neon.snapshots.list(input.project_id, { signal }),
+				collectPages(neon.snapshots.list(input.project_id, { signal })),
 		}),
 	"snapshots.create": (options) =>
 		fromGenerated(options, {
@@ -1058,12 +1097,12 @@ export const toolFactories = {
 			id: "auth.oauthProviders.list",
 			generated: "listBranchNeonAuthOauthProviders",
 			run: (neon, input, signal) =>
-				neon.auth.oauthProviders.list(
-					input.project_id,
-					input.branch_id,
-					{
-						signal,
-					},
+				collectPages(
+					neon.auth.oauthProviders.list(
+						input.project_id,
+						input.branch_id,
+						{ signal },
+					),
 				),
 		}),
 	"auth.oauthProviders.add": (options) =>
@@ -1117,12 +1156,12 @@ export const toolFactories = {
 			id: "auth.trustedDomains.list",
 			generated: "listBranchNeonAuthTrustedDomains",
 			run: (neon, input, signal) =>
-				neon.auth.trustedDomains.list(
-					input.project_id,
-					input.branch_id,
-					{
-						signal,
-					},
+				collectPages(
+					neon.auth.trustedDomains.list(
+						input.project_id,
+						input.branch_id,
+						{ signal },
+					),
 				),
 		}),
 	"auth.trustedDomains.add": (options) =>
@@ -1267,7 +1306,8 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "apiKeys.list",
 			generated: "listApiKeys",
-			run: (neon, _input, signal) => neon.apiKeys.list({ signal }),
+			run: (neon, _input, signal) =>
+				collectPages(neon.apiKeys.list({ signal })),
 		}),
 	"apiKeys.create": (options) =>
 		fromGenerated(options, {
@@ -1303,7 +1343,8 @@ export const toolFactories = {
 					tags: ["Region"],
 				},
 			},
-			(neon, _input, signal) => neon.regions.list({ signal }),
+			(neon, _input, signal) =>
+				collectPages(neon.regions.list({ signal })),
 		),
 	"user.me": (options) =>
 		fromGenerated(options, {

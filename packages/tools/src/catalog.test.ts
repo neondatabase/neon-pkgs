@@ -256,6 +256,36 @@ describe("special mappings", () => {
 		expect(tool.inputSchema.safeParse({}).success).toBe(true);
 	});
 
+	test("endpoints.list accepts optional branch_id", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["postgres.endpoints.list"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ endpoints: [] });
+			},
+		});
+		const list = tools["postgres.endpoints.list"];
+		expect(list.inputSchema.safeParse({ project_id: "p-1" }).success).toBe(
+			true,
+		);
+		expect(
+			list.inputSchema.safeParse({
+				project_id: "p-1",
+				branch_id: "br-1",
+			}).success,
+		).toBe(true);
+
+		await list.execute({ project_id: "p-1" });
+		await list.execute({ project_id: "p-1", branch_id: "br-1" });
+		expect(requests[0]?.url).toContain("/projects/p-1/endpoints");
+		expect(requests[0]?.url).not.toContain("/branches/");
+		expect(requests[1]?.url).toContain(
+			"/projects/p-1/branches/br-1/endpoints",
+		);
+	});
+
 	test("resetFromParent is destructive; compareSchema is read-only", () => {
 		const reset = createNeonTool("branches.resetFromParent", {
 			apiKey: "test-key",

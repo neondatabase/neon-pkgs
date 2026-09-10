@@ -35,7 +35,6 @@ export const toolIds = [
 	"branches.finalizeRestore",
 	"postgres.connectionString",
 	"postgres.endpoints.list",
-	"postgres.endpoints.listByBranch",
 	"postgres.endpoints.get",
 	"postgres.endpoints.create",
 	"postgres.endpoints.update",

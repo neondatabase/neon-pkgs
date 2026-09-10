@@ -41,7 +41,7 @@ export interface NeonClient<DThrow extends boolean = false> {
 	readonly auth: Auth<DThrow>;
 	readonly consumption: Consumption<DThrow>;
 	readonly apiKeys: ApiKeys<DThrow>;
-	readonly regions: Regions<DThrow>;
+	readonly regions: Regions;
 	readonly user: User<DThrow>;
 	/**
 	 * The underlying configured raw client. Pass it to any raw function
@@ -79,7 +79,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		auth: new Auth<Throw>(ctx),
 		consumption: new Consumption<Throw>(ctx),
 		apiKeys: new ApiKeys<Throw>(ctx),
-		regions: new Regions<Throw>(ctx),
+		regions: new Regions(ctx),
 		user: new User<Throw>(ctx),
 		client: ctx.client,
 	};
