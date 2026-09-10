@@ -52,9 +52,9 @@ Trigger create keeps the discriminator nested as `body`:
 ```ts
 const triggerTools = createNeonTools({
 	apiKey,
-	tools: ["functions.triggers.create"],
+	tools: ["triggers.create"],
 });
-const createdTrigger = await triggerTools["functions.triggers.create"].execute({
+const createdTrigger = await triggerTools["triggers.create"].execute({
 	project_id: "project-id",
 	branch_id: "br-feature",
 	body: {
@@ -102,7 +102,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, and `credentials.reveal`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `functions.triggers.create` and `functions.triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, and `credentials.reveal`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
 
 ## Optional host add-ons
 

@@ -341,7 +341,7 @@ describe("special mappings", () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			tools: ["functions.triggers.create"] as const,
+			tools: ["triggers.create"] as const,
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return jsonResponse(
@@ -371,7 +371,7 @@ describe("special mappings", () => {
 			name: "daily-refresh",
 			schedule: { cron: "0 9 * * *" },
 		};
-		await tools["functions.triggers.create"].execute({
+		await tools["triggers.create"].execute({
 			project_id: "project-id",
 			branch_id: "branch-id",
 			body,
@@ -388,14 +388,14 @@ describe("special mappings", () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",
-			tools: ["functions.triggers.list"] as const,
+			tools: ["triggers.list"] as const,
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return jsonResponse({ triggers: [] });
 			},
 		});
 
-		const listed = await tools["functions.triggers.list"].execute({
+		const listed = await tools["triggers.list"].execute({
 			project_id: "project-id",
 			branch_id: "branch-id",
 		});
@@ -403,11 +403,9 @@ describe("special mappings", () => {
 		expect(requests).toHaveLength(1);
 		expect(requests[0].url).not.toContain("cursor=");
 		expect(listed.data).toEqual([]);
-		const schema = z.toJSONSchema(
-			tools["functions.triggers.list"].inputSchema,
-		);
+		const schema = z.toJSONSchema(tools["triggers.list"].inputSchema);
 		expect(schema.properties).not.toHaveProperty("cursor");
-		expect(tools["functions.triggers.list"].description).not.toContain(
+		expect(tools["triggers.list"].description).not.toContain(
 			"Returns every page",
 		);
 	});

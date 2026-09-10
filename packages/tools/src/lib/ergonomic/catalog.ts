@@ -821,49 +821,45 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
-	"functions.triggers.list": (options) =>
+	"triggers.list": (options) =>
 		fromGenerated(options, {
-			id: "functions.triggers.list",
+			id: "triggers.list",
 			generated: "listProjectBranchTriggers",
 			run: (neon, input, signal) =>
-				neon.functions.triggers.list(
-					input.project_id,
-					input.branch_id,
-					{
-						signal,
-					},
-				),
+				neon.triggers.list(input.project_id, input.branch_id, {
+					signal,
+				}),
 		}),
-	"functions.triggers.get": (options) =>
+	"triggers.get": (options) =>
 		fromGenerated(options, {
-			id: "functions.triggers.get",
+			id: "triggers.get",
 			generated: "getProjectBranchTrigger",
 			run: (neon, input, signal) =>
-				neon.functions.triggers.get(
+				neon.triggers.get(
 					input.project_id,
 					input.branch_id,
 					input.trigger_id,
 					{ signal },
 				),
 		}),
-	"functions.triggers.create": (options) =>
+	"triggers.create": (options) =>
 		fromGenerated(options, {
-			id: "functions.triggers.create",
+			id: "triggers.create",
 			generated: "createProjectBranchTrigger",
 			run: (neon, input, signal) =>
-				neon.functions.triggers.create(
+				neon.triggers.create(
 					input.project_id,
 					input.branch_id,
 					input.body,
 					{ signal },
 				),
 		}),
-	"functions.triggers.update": (options) =>
+	"triggers.update": (options) =>
 		fromGenerated(options, {
-			id: "functions.triggers.update",
+			id: "triggers.update",
 			generated: "updateProjectBranchTrigger",
 			run: (neon, input, signal) =>
-				neon.functions.triggers.update(
+				neon.triggers.update(
 					input.project_id,
 					input.branch_id,
 					input.trigger_id,
@@ -871,12 +867,12 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
-	"functions.triggers.delete": (options) =>
+	"triggers.delete": (options) =>
 		fromGenerated(options, {
-			id: "functions.triggers.delete",
+			id: "triggers.delete",
 			generated: "deleteProjectBranchTrigger",
 			run: (neon, input, signal) =>
-				neon.functions.triggers.delete(
+				neon.triggers.delete(
 					input.project_id,
 					input.branch_id,
 					input.trigger_id,

@@ -277,41 +277,41 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	).resolves.toEqualTypeOf<ProjectPermission[]>();
 });
 
-it("functions.triggers is typed", () => {
+it("triggers is typed", () => {
 	const neon = createNeonClient({ apiKey: "x" });
-	expectTypeOf(
-		neon.functions.triggers.list("p", "br"),
-	).resolves.toEqualTypeOf<NeonResult<Trigger[]>>();
-	expectTypeOf(neon.functions.triggers.list("p", "br")).not.toEqualTypeOf<
+	expectTypeOf(neon.triggers.list("p", "br")).resolves.toEqualTypeOf<
+		NeonResult<Trigger[]>
+	>();
+	expectTypeOf(neon.triggers.list("p", "br")).not.toEqualTypeOf<
 		Paginated<Trigger>
 	>();
 	expectTypeOf(
-		neon.functions.triggers.create("p", "br", {
+		neon.triggers.create("p", "br", {
 			type: "schedule",
 			function_slug: "worker",
 			name: "daily-refresh",
 			schedule: { cron: "0 9 * * *" },
 		}),
 	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	expectTypeOf(neon.triggers.get("p", "br", "trg")).resolves.toEqualTypeOf<
+		NeonResult<Trigger>
+	>();
 	expectTypeOf(
-		neon.functions.triggers.get("p", "br", "trg"),
-	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
-	expectTypeOf(
-		neon.functions.triggers.update("p", "br", "trg", {
+		neon.triggers.update("p", "br", "trg", {
 			type: "schedule",
 			enabled: true,
 		}),
 	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
-	expectTypeOf(
-		neon.functions.triggers.delete("p", "br", "trg"),
-	).resolves.toEqualTypeOf<NeonResult<void>>();
+	expectTypeOf(neon.triggers.delete("p", "br", "trg")).resolves.toEqualTypeOf<
+		NeonResult<void>
+	>();
 
 	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(throwing.triggers.list("p", "br")).resolves.toEqualTypeOf<
+		Trigger[]
+	>();
 	expectTypeOf(
-		throwing.functions.triggers.list("p", "br"),
-	).resolves.toEqualTypeOf<Trigger[]>();
-	expectTypeOf(
-		throwing.functions.triggers.create("p", "br", {
+		throwing.triggers.create("p", "br", {
 			type: "schedule",
 			function_slug: "worker",
 			name: "daily-refresh",

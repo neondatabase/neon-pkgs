@@ -513,14 +513,9 @@ const { data: registered } = await neon.functions.customDomains.register(
 // Point a CNAME for docs.example.com at registered.cname_target
 ```
 
-#### `neon.functions.triggers`
+### `neon.triggers`
 
-Branch Function triggers (beta). v1 only supports `type: "schedule"`. Cron
-is a numeric five-field expression in UTC. List is the full set visible on
-the branch (not cursor-paginated). An inherited trigger keeps its
-project-wide id and stays disabled on the child until enabled there.
-Editing an inherited trigger writes a child-local shadow. Deleting an
-inherited trigger writes a tombstone so it does not reappear.
+Branch-scoped triggers (beta). v1 only supports `type: "schedule"`, which invokes a Function. Cron is a numeric five-field expression in UTC. List is the full set visible on the branch (not cursor-paginated). An inherited trigger keeps its project-wide id and stays disabled on the child until enabled there. Editing an inherited trigger writes a child-local shadow. Deleting an inherited trigger writes a tombstone so it does not reappear.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
@@ -532,7 +527,7 @@ inherited trigger writes a tombstone so it does not reappear.
 
 ```ts
 const { data: trigger, error: createError } =
-  await neon.functions.triggers.create(projectId, branchId, {
+  await neon.triggers.create(projectId, branchId, {
     type: "schedule",
     function_slug: "worker",
     name: "daily-refresh",
@@ -541,11 +536,11 @@ const { data: trigger, error: createError } =
   });
 if (createError) throw createError;
 
-await neon.functions.triggers.update(projectId, branchId, trigger.trigger_id, {
+await neon.triggers.update(projectId, branchId, trigger.trigger_id, {
   type: "schedule",
   enabled: true,
 });
-await neon.functions.triggers.delete(projectId, branchId, trigger.trigger_id);
+await neon.triggers.delete(projectId, branchId, trigger.trigger_id);
 ```
 
 ### `neon.credentials`

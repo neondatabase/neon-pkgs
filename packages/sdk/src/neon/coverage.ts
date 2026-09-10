@@ -90,6 +90,7 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"listProjectBranchCustomDomains",
 	"registerProjectBranchCustomDomain",
 	"deleteProjectBranchCustomDomain",
+	// triggers
 	"listProjectBranchTriggers",
 	"createProjectBranchTrigger",
 	"getProjectBranchTrigger",

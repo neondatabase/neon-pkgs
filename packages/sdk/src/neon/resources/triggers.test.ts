@@ -58,17 +58,14 @@ const trigger = {
 	inherited: false,
 };
 
-describe("functions.triggers", () => {
+describe("triggers", () => {
 	it("lists the triggers array in one request", async () => {
 		const { neon, calls } = neonRouting(() => ({
 			status: 200,
 			body: { triggers: [trigger] },
 		}));
 
-		const { data, error } = await neon.functions.triggers.list(
-			"p-1",
-			"br-1",
-		);
+		const { data, error } = await neon.triggers.list("p-1", "br-1");
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual([trigger]);
@@ -84,10 +81,7 @@ describe("functions.triggers", () => {
 			body: { triggers: [] },
 		}));
 
-		const { data, error } = await neon.functions.triggers.list(
-			"p-1",
-			"br-1",
-		);
+		const { data, error } = await neon.triggers.list("p-1", "br-1");
 		expect(error).toBeUndefined();
 		expect(data).toEqual([]);
 	});
@@ -105,7 +99,7 @@ describe("functions.triggers", () => {
 			schedule: { cron: "0 9 * * *" },
 			enabled: false,
 		};
-		const { data, error } = await neon.functions.triggers.create(
+		const { data, error } = await neon.triggers.create(
 			"p-1",
 			"br-1",
 			input,
@@ -130,11 +124,7 @@ describe("functions.triggers", () => {
 			body: { trigger: inherited },
 		}));
 
-		const { data, error } = await neon.functions.triggers.get(
-			"p-1",
-			"br-1",
-			"trg-1",
-		);
+		const { data, error } = await neon.triggers.get("p-1", "br-1", "trg-1");
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual(inherited);
@@ -151,7 +141,7 @@ describe("functions.triggers", () => {
 			body: { trigger: enabled },
 		}));
 
-		const { data, error } = await neon.functions.triggers.update(
+		const { data, error } = await neon.triggers.update(
 			"p-1",
 			"br-1",
 			"trg-1",
@@ -167,11 +157,7 @@ describe("functions.triggers", () => {
 	it("deletes with a 204", async () => {
 		const { neon, calls } = neonRouting(() => ({ status: 204 }));
 
-		const { error } = await neon.functions.triggers.delete(
-			"p-1",
-			"br-1",
-			"trg-1",
-		);
+		const { error } = await neon.triggers.delete("p-1", "br-1", "trg-1");
 
 		expect(error).toBeUndefined();
 		expect(calls).toHaveLength(1);
@@ -187,11 +173,7 @@ describe("functions.triggers", () => {
 			body: { message: "missing" },
 		}));
 
-		const { error } = await neon.functions.triggers.get(
-			"p-1",
-			"br-1",
-			"missing",
-		);
+		const { error } = await neon.triggers.get("p-1", "br-1", "missing");
 		expect(error).toBeInstanceOf(NeonNotFoundError);
 	});
 });
