@@ -440,8 +440,8 @@ The branch argument is **optional**: run `neon checkout` with no branch in an in
 
 Branch **id vs name** is detected automatically (a `br-…` value is treated as an id):
 
-- **id** — matched strictly by id. A non-existent id is a hard "not found" error (ids are server-assigned, so checkout never creates one).
-- **name** — matched by name. If the name doesn't exist, in an interactive terminal `checkout` offers to **create** it (equivalent to `neon branch create --name <name>`: branched from the project's default branch with a read-write compute), then checks it out. In a non-interactive context a missing name is the usual "not found" error.
+- **id** — matched strictly by id. A non-existent id is a hard "not found" error (ids are server-assigned, so checkout never creates one, including with `--create`).
+- **name** — matched by name. If the name doesn't exist, pass `--create` to create it (equivalent to `neon branch create --name <name>`: branched from the project's default branch with a read-write compute, or from `neon.ts` when that file is present), then check it out. `--create` is a no-op when the name already exists. Without `--create`, an interactive terminal offers to create the branch; in CI or with no TTY the error names `--create`.
 
 The project is resolved through the standard neon chain, each entry winning over the next:
 
@@ -457,11 +457,15 @@ The resolved branch is then written (by name) to the same `.neon` file `link` us
 $ neon checkout main --project-id polished-snowflake-12345678
 INFO: Checked out branch br-main-branch-87654321 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
 
+$ neon checkout dev --create --project-id polished-snowflake-12345678
+INFO: Created branch dev (br-dev-branch-12345678).
+INFO: Checked out branch br-dev-branch-12345678 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
+
 $ cat .neon
 {
   "orgId": "org-abc123",
   "projectId": "polished-snowflake-12345678",
-  "branch": "main"
+  "branch": "dev"
 }
 ```
 

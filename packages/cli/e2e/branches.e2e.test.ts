@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { apiRequest } from "@neon/e2e-harness";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -233,5 +236,76 @@ describe.sequential("e2e — neon CLI branch commands against the real API", () 
 			projectId,
 		]);
 		expect(databases.length).toBeGreaterThan(0);
+	});
+
+	it("checkout --create creates a missing branch, then is a no-op", async () => {
+		const contextFile = join(
+			mkdtempSync(join(tmpdir(), "neon-checkout-e2e-")),
+			".neon",
+		);
+
+		const missing = await runCli(
+			["checkout", "dev", "--project-id", projectId, "--no-env-pull"],
+			{ contextFile, json: false },
+		);
+		expect(missing.code).toBe(1);
+		expect(missing.stderr).toContain("Pass --create to create it");
+
+		const created = await runCli(
+			[
+				"checkout",
+				"dev",
+				"--create",
+				"--project-id",
+				projectId,
+				"--no-env-pull",
+			],
+			{ contextFile, json: false },
+		);
+		expect(created.code, created.stderr).toBe(0);
+		await waitForProjectReady(projectId);
+
+		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toMatchObject({
+			projectId,
+			branch: "dev",
+		});
+
+		const listed = await runCliJson<{ id: string; name: string }[]>([
+			"branches",
+			"list",
+			"--project-id",
+			projectId,
+		]);
+		const dev = listed.find((branch) => branch.name === "dev");
+		expect(dev).toBeDefined();
+		const countAfterCreate = listed.length;
+
+		const again = await runCli(
+			[
+				"checkout",
+				"dev",
+				"--create",
+				"--project-id",
+				projectId,
+				"--no-env-pull",
+			],
+			{ contextFile, json: false },
+		);
+		expect(again.code, again.stderr).toBe(0);
+		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toMatchObject({
+			projectId,
+			branch: "dev",
+		});
+
+		const listedAgain = await runCliJson<{ id: string; name: string }[]>([
+			"branches",
+			"list",
+			"--project-id",
+			projectId,
+		]);
+		expect(listedAgain.length).toBe(countAfterCreate);
+		expect(listedAgain.find((branch) => branch.name === "dev")?.id).toBe(
+			dev?.id,
+		);
 	});
 });
