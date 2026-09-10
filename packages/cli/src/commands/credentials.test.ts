@@ -33,12 +33,14 @@ describe("credentials", () => {
 	});
 
 	test("rotate", async ({ testCliCommand }) => {
-		await testCliCommand([
-			"credentials",
-			"rotate",
-			"cred-test-123",
-			...PROJECT,
-		]);
+		await testCliCommand(
+			["credentials", "rotate", "cred-test-123", ...PROJECT],
+			{
+				stderr: expect.stringContaining(
+					"A replica may briefly accept the previous secret",
+				),
+			},
+		);
 	});
 
 	test("revoke", async ({ testCliCommand }) => {

@@ -193,6 +193,7 @@ export const list = async (props: BranchScopeProps) => {
 	writer(props).end(data.credentials, {
 		fields: LIST_FIELDS,
 		renderColumns,
+		emptyMessage: "No credentials found on this branch.",
 	});
 };
 
@@ -252,7 +253,7 @@ export const rotate = async (props: TokenProps) => {
 	reportSecrets(
 		props,
 		data,
-		"The previous secret stops working as soon as rotation commits. Store the new secrets now: a retry mints another pair and does not recover a lost response.",
+		"Store the new secrets now: a retry mints another pair and does not recover a lost response. A replica may briefly accept the previous secret.",
 	);
 };
 

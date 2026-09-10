@@ -41,6 +41,7 @@ export const TRIGGER_FIELDS = [
 	"trigger_id",
 	"name",
 	"function_slug",
+	"function_path",
 	"schedule",
 	"enabled",
 	"inherited",
@@ -211,6 +212,7 @@ export const list = async (props: BranchScopeProps) => {
 	writer(props).end(data.triggers, {
 		fields: TRIGGER_FIELDS,
 		renderColumns,
+		emptyMessage: "No triggers found on this branch.",
 	});
 };
 

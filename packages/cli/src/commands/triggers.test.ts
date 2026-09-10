@@ -18,6 +18,15 @@ describe("triggers", () => {
 		]);
 	});
 
+	test("get table shows function_path", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(
+			["triggers", "get", "trigger-test-123", ...BRANCH],
+			{ outputTable: true, snapshot: false },
+		);
+		expect(stdout).toContain("Function Path");
+		expect(stdout).toContain("/");
+	});
+
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"triggers",
