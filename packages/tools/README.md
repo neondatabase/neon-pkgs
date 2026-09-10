@@ -249,8 +249,10 @@ This package does not implement an OAuth authorization server. That is [mcp-serv
 Existing MCP 1.x servers can use the version-specific entry point:
 
 ```ts
-import { registerNeonTools } from "@neon/tools/mcp-v1";
+import { registerNeonToolsV1 } from "@neon/tools/mcp-v1";
 ```
+
+`registerNeonTools` on this subpath is a deprecated alias of `registerNeonToolsV1`.
 
 MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
