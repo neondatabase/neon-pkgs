@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 4.1.0
+
+### Minor Changes
+
+- 0d4dd06: Wrap Function triggers (`neon.triggers`) and credential reveal/rotate. Create input scopes stay `CredentialScope`; responses now type `GrantedCredentialScope[]`. Branch delete no longer accepts `hard_delete`. `@neon/tools/schemas` no longer exports `zDeleteProjectBranchQuery`.
+
 ## 4.0.0
 
 ### Major Changes
