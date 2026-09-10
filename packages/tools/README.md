@@ -47,6 +47,25 @@ const compared = await tools["branches.compareSchema"].execute({
 });
 ```
 
+Trigger create keeps the discriminator nested as `body`:
+
+```ts
+const triggerTools = createNeonTools({
+	apiKey,
+	tools: ["triggers.create"],
+});
+const createdTrigger = await triggerTools["triggers.create"].execute({
+	project_id: "project-id",
+	branch_id: "br-feature",
+	body: {
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	},
+});
+```
+
 `limit` on a list tool caps how many items come back.
 
 MCP and Mastra publish `tool.id` (`list_projects`), not the record key.
@@ -83,7 +102,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, and `storage.objects.get`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, and `credentials.reveal`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
 
 ## Optional host add-ons
 

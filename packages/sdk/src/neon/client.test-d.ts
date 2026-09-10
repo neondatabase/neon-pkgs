@@ -2,8 +2,12 @@ import { expectTypeOf, it } from "vitest";
 import type {
 	Branch,
 	ConsumptionHistoryPerProject,
+	CreateCredentialResponse,
+	CredentialScope,
+	CredentialSecret,
 	CustomDomain,
 	Endpoint,
+	GrantedCredentialScope,
 	NeonAuthIntegration,
 	NeonAuthOauthProvider,
 	Operation,
@@ -11,7 +15,9 @@ import type {
 	ProjectBranchLogRecord,
 	ProjectListItem,
 	ProjectPermission,
+	RotateCredentialResponse,
 	Snapshot,
+	Trigger,
 } from "../client/types.gen.js";
 import { createNeonClient, type NeonClient } from "./client.js";
 import type { Page, Paginated } from "./paginate.js";
@@ -269,6 +275,154 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	expectTypeOf(
 		throwing.projects.permissions.list("p"),
 	).resolves.toEqualTypeOf<ProjectPermission[]>();
+});
+
+it("triggers is typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.triggers.list("p", "br")).resolves.toEqualTypeOf<
+		NeonResult<Trigger[]>
+	>();
+	expectTypeOf(neon.triggers.list("p", "br")).not.toEqualTypeOf<
+		Paginated<Trigger>
+	>();
+	expectTypeOf(
+		neon.triggers.create("p", "br", {
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	expectTypeOf(neon.triggers.get("p", "br", "trg")).resolves.toEqualTypeOf<
+		NeonResult<Trigger>
+	>();
+	expectTypeOf(
+		neon.triggers.update("p", "br", "trg", {
+			type: "schedule",
+			enabled: true,
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	expectTypeOf(neon.triggers.delete("p", "br", "trg")).resolves.toEqualTypeOf<
+		NeonResult<void>
+	>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(throwing.triggers.list("p", "br")).resolves.toEqualTypeOf<
+		Trigger[]
+	>();
+	expectTypeOf(
+		throwing.triggers.create("p", "br", {
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		}),
+	).resolves.toEqualTypeOf<Trigger>();
+
+	neon.triggers.create("p", "br", {
+		// @ts-expect-error v1 only accepts type: "schedule"
+		type: "webhook",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	});
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error function_slug is required
+		{
+			type: "schedule",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		},
+	);
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error name is required
+		{
+			type: "schedule",
+			function_slug: "worker",
+			schedule: { cron: "0 9 * * *" },
+		},
+	);
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error schedule is required
+		{
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+		},
+	);
+	neon.triggers.create("p", "br", {
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		// @ts-expect-error cron is required
+		schedule: {},
+	});
+	neon.triggers.update(
+		"p",
+		"br",
+		"trg",
+		// @ts-expect-error update keeps the type discriminant
+		{ enabled: true },
+	);
+	neon.triggers.update("p", "br", "trg", {
+		// @ts-expect-error v1 only accepts type: "schedule"
+		type: "webhook",
+		enabled: true,
+	});
+});
+
+it("credentials reveal and rotate are typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(
+		neon.credentials.reveal("p", "br", "tok"),
+	).resolves.toEqualTypeOf<NeonResult<CredentialSecret>>();
+	expectTypeOf(
+		neon.credentials.rotate("p", "br", "tok"),
+	).resolves.toEqualTypeOf<NeonResult<RotateCredentialResponse>>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.credentials.reveal("p", "br", "tok"),
+	).resolves.toEqualTypeOf<CredentialSecret>();
+	expectTypeOf(
+		throwing.credentials.rotate("p", "br", "tok"),
+	).resolves.toEqualTypeOf<RotateCredentialResponse>();
+});
+
+it("credential create input stays requestable scopes", () => {
+	const neon = createNeonClient({ apiKey: "x", throwOnError: true });
+	const requestable: CredentialScope[] = [
+		"storage:read",
+		"storage:write",
+		"ai_gateway:invoke",
+		"functions:invoke",
+	];
+	expectTypeOf(neon.credentials.create).toBeCallableWith("p", "br", {
+		scopes: requestable,
+		principal_type: "user",
+	});
+
+	const created = {} as CreateCredentialResponse;
+	expectTypeOf(created.scopes).toEqualTypeOf<GrantedCredentialScope[]>();
+	const echoed = {
+		scopes: created.scopes,
+		principal_type: "user" as const,
+	};
+	// @ts-expect-error GrantedCredentialScope is not assignable to CredentialScope
+	neon.credentials.create("p", "br", echoed);
+	const telemetry: Array<"telemetry:write"> = ["telemetry:write"];
+	const telemetryInput = {
+		scopes: telemetry,
+		principal_type: "user" as const,
+	};
+	// @ts-expect-error telemetry:write is granted-only
+	neon.credentials.create("p", "br", telemetryInput);
 });
 
 it("functions.customDomains is typed", () => {

@@ -497,6 +497,6 @@ describe("MCP catalog size", () => {
 			(sum, tool) => sum + JSON.stringify(tool).length,
 			0,
 		);
-		expect(chars / 4).toBeLessThan(20_000);
+		expect(chars / 4).toBeLessThan(21_000);
 	});
 });
