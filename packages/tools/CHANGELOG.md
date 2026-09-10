@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 1.3.1
+
+### Patch Changes
+
+- 1c632b8: MCP tool failures include `name`, `kind`, `status`/`code`, `source`, `timeoutMs`, `requestId`, `reason`, and `operationId` when the thrown error has them.
+
 ## 1.3.0
 
 ### Minor Changes
