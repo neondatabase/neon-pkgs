@@ -1,9 +1,15 @@
 import type * as z from "zod";
+import {
+	type NeonAdapterNameOptions,
+	namedNeonTools,
+} from "./lib/adapter-name.js";
 import type {
 	NeonTool,
 	NeonToolExecutionContext,
 	NeonToolResult,
 } from "./lib/operation.js";
+
+export type { NeonAdapterNameOptions } from "./lib/adapter-name.js";
 
 export interface MastraToolContext {
 	abortSignal?: AbortSignal;
@@ -23,6 +29,14 @@ export type MastraToolConfig<Tool extends NeonTool> = {
 export type MastraTools<Tools extends Readonly<Record<string, NeonTool>>> = {
 	[Tool in Tools[keyof Tools] as Tool["id"]]: MastraToolConfig<Tool>;
 };
+
+export type NamedMastraToolConfig<Tool extends NeonTool> = Omit<
+	MastraToolConfig<Tool>,
+	"id"
+> & { id: string };
+
+export type NamedMastraTools<Tools extends Readonly<Record<string, NeonTool>>> =
+	Record<string, NamedMastraToolConfig<Tools[keyof Tools]>>;
 
 type MastraToolSource = {
 	id: string;
@@ -51,28 +65,54 @@ export const toMastraTool = <const Tool extends MastraToolSource>(
 		>,
 });
 
-function assertMastraTools<Tools extends Readonly<Record<string, NeonTool>>>(
+function assertMastraTools(
 	value: unknown,
-	tools: Tools,
-): asserts value is MastraTools<Tools> {
+	names: readonly string[],
+): asserts value is Record<string, unknown> {
 	if (typeof value !== "object" || value === null) {
 		throw new TypeError("Expected Mastra tools to be an object.");
 	}
-	for (const tool of Object.values(tools)) {
-		if (!(tool.id in value)) {
-			throw new TypeError(`Missing Mastra tool "${tool.id}".`);
+	for (const name of names) {
+		if (!(name in value)) {
+			throw new TypeError(`Missing Mastra tool "${name}".`);
 		}
 	}
 }
 
-export const toMastraTools = <
+export function toMastraTools<
+	const Tools extends Readonly<Record<string, NeonTool>>,
+>(tools: Tools): MastraTools<Tools>;
+export function toMastraTools<
 	const Tools extends Readonly<Record<string, NeonTool>>,
 >(
 	tools: Tools,
-): MastraTools<Tools> => {
+	options: { name: (tool: NeonTool) => string },
+): NamedMastraTools<Tools>;
+export function toMastraTools<
+	const Tools extends Readonly<Record<string, NeonTool>>,
+>(
+	tools: Tools,
+	options: NeonAdapterNameOptions,
+): MastraTools<Tools> | NamedMastraTools<Tools>;
+export function toMastraTools<
+	const Tools extends Readonly<Record<string, NeonTool>>,
+>(
+	tools: Tools,
+	options?: NeonAdapterNameOptions,
+): MastraTools<Tools> | NamedMastraTools<Tools> {
+	const named = namedNeonTools(tools, options);
 	const adapted: unknown = Object.fromEntries(
-		Object.values(tools).map((tool) => [tool.id, toMastraTool(tool)]),
+		named.map(({ tool, name }) => [
+			name,
+			{ ...toMastraTool(tool), id: name },
+		]),
 	);
-	assertMastraTools(adapted, tools);
-	return adapted;
-};
+	assertMastraTools(
+		adapted,
+		named.map(({ name }) => name),
+	);
+	if (options?.name === undefined) {
+		return adapted as MastraTools<Tools>;
+	}
+	return adapted as NamedMastraTools<Tools>;
+}

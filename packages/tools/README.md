@@ -49,7 +49,7 @@ const compared = await tools["branches.compareSchema"].execute({
 
 `limit` on a list tool caps how many items come back.
 
-MCP and Mastra publish `tool.id` (`list_projects`), not the record key.
+MCP and Mastra publish `tool.id` (`list_projects`), not the record key. Pass `{ name: (tool) => string }` to `registerNeonTools` or `toMastraTools` to publish a different name. Duplicate names throw.
 
 `apiKey` is a Bearer credential: a Neon API key or a Neon OAuth access token. A function is called on every request, which is how short-lived OAuth tokens get refreshed. A credential is required when a tool executes — at construction, on `execute()`, or from MCP `authInfo` — and an empty value is rejected rather than ignored.
 
@@ -220,6 +220,12 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
+Pass `{ name }` to publish a different MCP name. Duplicate names throw before `registerTool`.
+
+```ts
+registerNeonTools(server, tools, { name: (tool) => `neon_${tool.id}` });
+```
+
 `registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
 
 Hosts that convert Zod themselves:
@@ -303,6 +309,10 @@ const configs = toMastraTools(neonTools);
 
 const listProjects = createTool(configs.list_projects);
 const createProject = createTool(configs.create_and_connect_projects);
+```
+
+```ts
+toMastraTools(neonTools, { name: (tool) => `neon_${tool.id}` });
 ```
 
 The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal.

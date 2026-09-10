@@ -72,6 +72,46 @@ describe("MCP v2 compatibility", () => {
 		expect(invalid.isError).toBe(true);
 	});
 
+	test("publishes an adapter name instead of tool.id", async () => {
+		const server = new McpServerV2({
+			name: "test-server",
+			version: "1.0.0",
+		});
+		registerNeonToolsV2(server, tools(), {
+			name: (tool) => `neon_${tool.id}`,
+		});
+		const client = new ClientV2({ name: "test-client", version: "1.0.0" });
+		const [clientTransport, serverTransport] =
+			InMemoryTransportV2.createLinkedPair();
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		closeables.push(client, server);
+
+		const listed = await client.listTools();
+		expect(listed.tools.map((tool) => tool.name)).toEqual([
+			"neon_list_projects",
+		]);
+	});
+
+	test("throws on duplicate adapter names before registerTool", () => {
+		let registered = 0;
+		const server = {
+			registerTool() {
+				registered += 1;
+			},
+		};
+		const catalog = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list", "projects.get"],
+		});
+		expect(() =>
+			registerNeonToolsV2(server, catalog, { name: () => "same" }),
+		).toThrow(/Duplicate published tool name "same"/);
+		expect(registered).toBe(0);
+	});
+
 	test("publishes compact JSON Schema without OpenAPI field essays", async () => {
 		const server = new McpServerV2({
 			name: "test-server",
