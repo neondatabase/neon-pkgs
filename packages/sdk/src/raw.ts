@@ -20,7 +20,6 @@ export {
 	createClient,
 	createConfig,
 } from "./client/client/index.js";
-export { client } from "./client/client.gen.js";
 // Every operation, wrapped to the ergonomic result contract.
 export * from "./client/raw.gen.js";
 // Every generated request/response/schema type, flat.

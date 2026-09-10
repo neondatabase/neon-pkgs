@@ -4,6 +4,7 @@ import { deleteProjectBranchDatabase, getProject } from "../client/raw.gen.js";
 import * as gen from "../client/sdk.gen.js";
 import { createNeonClient } from "./client.js";
 import { NeonNotFoundError } from "./errors.js";
+import { wrapRaw } from "./raw-wrap.js";
 
 /**
  * Build a real configured client whose only stubbed boundary is the network: `fetch`
@@ -70,6 +71,37 @@ describe("wrapRaw result contract", () => {
 			path: { project_id: "p-1", branch_id: "br-1", database_name: "db" },
 		});
 		expect(res.error).toBeUndefined();
+	});
+});
+
+describe("wrapRaw requires client", () => {
+	it("throws a client NeonError and does not call the generated function", async () => {
+		let calls = 0;
+		let received: unknown;
+		const fn = async (passed: { client?: unknown }) => {
+			calls += 1;
+			received = passed.client;
+			return { data: { ok: true } };
+		};
+		const wrapped = wrapRaw(fn);
+		await expect(
+			wrapped({ path: { project_id: "p-1" } } as never),
+		).rejects.toMatchObject({ kind: "client" });
+		await expect(
+			wrapped({
+				client: undefined,
+				path: { project_id: "p-1" },
+			} as never),
+		).rejects.toMatchObject({ kind: "client" });
+		await expect(
+			wrapped({ client: null, path: { project_id: "p-1" } } as never),
+		).rejects.toMatchObject({ kind: "client" });
+		expect(calls).toBe(0);
+
+		const client = clientReturning(200, { project: { id: "p-1" } });
+		await wrapped({ client });
+		expect(calls).toBe(1);
+		expect(received).toBe(client);
 	});
 });
 
