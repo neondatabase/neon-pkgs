@@ -318,6 +318,39 @@ it("triggers is typed", () => {
 			schedule: { cron: "0 9 * * *" },
 		}),
 	).resolves.toEqualTypeOf<Trigger>();
+
+	neon.triggers.create("p", "br", {
+		// @ts-expect-error v1 only accepts type: "schedule"
+		type: "webhook",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	});
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error create requires function_slug, name, and schedule
+		{ type: "schedule" },
+	);
+	neon.triggers.create("p", "br", {
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		// @ts-expect-error cron is required
+		schedule: {},
+	});
+	neon.triggers.update(
+		"p",
+		"br",
+		"trg",
+		// @ts-expect-error update keeps the type discriminant
+		{ enabled: true },
+	);
+	neon.triggers.update("p", "br", "trg", {
+		// @ts-expect-error v1 only accepts type: "schedule"
+		type: "webhook",
+		enabled: true,
+	});
 });
 
 it("credentials reveal and rotate are typed", () => {
