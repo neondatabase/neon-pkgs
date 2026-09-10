@@ -329,8 +329,32 @@ it("triggers is typed", () => {
 	neon.triggers.create(
 		"p",
 		"br",
-		// @ts-expect-error create requires function_slug, name, and schedule
-		{ type: "schedule" },
+		// @ts-expect-error function_slug is required
+		{
+			type: "schedule",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		},
+	);
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error name is required
+		{
+			type: "schedule",
+			function_slug: "worker",
+			schedule: { cron: "0 9 * * *" },
+		},
+	);
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error schedule is required
+		{
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+		},
 	);
 	neon.triggers.create("p", "br", {
 		type: "schedule",
