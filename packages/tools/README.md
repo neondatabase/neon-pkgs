@@ -77,6 +77,7 @@ try {
 	if (error.kind === "timeout" && error.source === "wait") {
 		// The project may already exist. List before retrying.
 	}
+	throw error;
 }
 ```
 
