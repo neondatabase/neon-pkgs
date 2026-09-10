@@ -3,12 +3,14 @@ import * as z from "zod";
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const compactJsonSchema = (node: unknown): unknown => {
-	if (!isPlainObject(node)) {
-		return node;
+export const toMcpJsonSchema = (schema: z.ZodType): Record<string, unknown> => {
+	const json = z.toJSONSchema(schema, { io: "input" });
+	if (!isPlainObject(json)) {
+		throw new TypeError(
+			"MCP tool input schemas must be JSON Schema objects",
+		);
 	}
-	const rest = { ...node };
-	delete rest.$schema;
+	const { $schema: _, ...rest } = json;
 	return rest;
 };
 
@@ -29,13 +31,7 @@ export interface McpStandardSchema {
 }
 
 export const toMcpInputSchema = (schema: z.ZodType): McpStandardSchema => {
-	const json = compactJsonSchema(z.toJSONSchema(schema, { io: "input" }));
-	if (!isPlainObject(json)) {
-		throw new TypeError(
-			"MCP tool input schemas must be JSON Schema objects",
-		);
-	}
-
+	const json = toMcpJsonSchema(schema);
 	const standard =
 		"~standard" in schema && isPlainObject(schema["~standard"])
 			? schema["~standard"]
