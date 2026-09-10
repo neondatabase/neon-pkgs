@@ -50,7 +50,11 @@ const compared = await tools["branches.compareSchema"].execute({
 Trigger create keeps the discriminator nested as `body`:
 
 ```ts
-const createdTrigger = await tools["functions.triggers.create"].execute({
+const triggerTools = createNeonTools({
+	apiKey,
+	tools: ["functions.triggers.create"],
+});
+const createdTrigger = await triggerTools["functions.triggers.create"].execute({
 	project_id: "project-id",
 	branch_id: "br-feature",
 	body: {

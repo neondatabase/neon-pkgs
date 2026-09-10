@@ -531,13 +531,16 @@ inherited trigger writes a tombstone so it does not reappear.
 | `delete(projectId, branchId, triggerId)` | **→void** | |
 
 ```ts
-const { data: trigger } = await neon.functions.triggers.create(projectId, branchId, {
-  type: "schedule",
-  function_slug: "worker",
-  name: "daily-refresh",
-  schedule: { cron: "0 9 * * *" },
-  enabled: false,
-});
+const { data: trigger, error: createError } =
+  await neon.functions.triggers.create(projectId, branchId, {
+    type: "schedule",
+    function_slug: "worker",
+    name: "daily-refresh",
+    schedule: { cron: "0 9 * * *" },
+    enabled: false,
+  });
+if (createError) throw createError;
+
 await neon.functions.triggers.update(projectId, branchId, trigger.trigger_id, {
   type: "schedule",
   enabled: true,
@@ -569,20 +572,29 @@ scopes.
 | `rotate(projectId, branchId, tokenId)` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret |
 
 ```ts
-const { data: created } = await neon.credentials.create(projectId, branchId, {
-  scopes: ["storage:read"],
-  principal_type: "user",
-});
-const { data: revealed } = await neon.credentials.reveal(
+const { data: created, error: createError } = await neon.credentials.create(
+  projectId,
+  branchId,
+  {
+    scopes: ["storage:read"],
+    principal_type: "user",
+  },
+);
+if (createError) throw createError;
+
+const { data: revealed, error: revealError } = await neon.credentials.reveal(
   projectId,
   branchId,
   created.token_id,
 );
-const { data: rotated } = await neon.credentials.rotate(
+if (revealError) throw revealError;
+
+const { data: rotated, error: rotateError } = await neon.credentials.rotate(
   projectId,
   branchId,
   created.token_id,
 );
+if (rotateError) throw rotateError;
 ```
 
 ### `neon.aiGateway`
