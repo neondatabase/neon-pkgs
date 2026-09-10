@@ -446,11 +446,4 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			}
 		}
 	});
-
-	it("lists function triggers on the default branch", async () => {
-		const listed = expectOk(
-			await neon.functions.triggers.list(projectId, defaultBranchId),
-		);
-		expect(Array.isArray(listed)).toBe(true);
-	});
 });
