@@ -1,13 +1,7 @@
-import { createNeonClient } from "@neon/sdk";
+import { createNeonClient, isNeonError, NeonClientError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
-import {
-	createNeonTool,
-	createNeonTools,
-	isNeonError,
-	NeonClientError,
-	toolIds,
-} from "./index.js";
+import { createNeonTool, createNeonTools, toolIds } from "./index.js";
 import { hiddenToolIds } from "./lib/ergonomic/ids.js";
 
 const methodPaths = (value: object, prefix = ""): string[] => {

@@ -4,18 +4,9 @@ import {
 	type CreateNeonToolsOptions,
 	createNeonTool,
 	createNeonTools,
-	isNeonError,
-	type NeonClientError,
-	type NeonRequestTimeoutError,
-	type NeonWaitTimeoutError,
 	publishedId,
 } from "./index.js";
 import { toMastraTools } from "./mastra.js";
-
-expectTypeOf(isNeonError).toBeFunction();
-expectTypeOf<NeonClientError["kind"]>().toEqualTypeOf<"client">();
-expectTypeOf<NeonRequestTimeoutError["source"]>().toEqualTypeOf<"request">();
-expectTypeOf<NeonWaitTimeoutError["source"]>().toEqualTypeOf<"wait">();
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
 expectTypeOf(

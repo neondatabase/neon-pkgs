@@ -1,3 +1,4 @@
+import { NeonError } from "@neon/sdk";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
@@ -19,26 +20,6 @@ import {
 	unpublishedToolError,
 } from "./lib/ergonomic/index.js";
 
-export type {
-	NeonApiErrorKind,
-	NeonErrorKind,
-	NeonErrorUnion,
-} from "@neon/sdk";
-export {
-	isNeonError,
-	NeonAbortError,
-	NeonApiError,
-	NeonAuthError,
-	NeonClientError,
-	NeonError,
-	NeonNetworkError,
-	NeonNotFoundError,
-	NeonOperationError,
-	NeonRateLimitError,
-	NeonRequestTimeoutError,
-	NeonTimeoutError,
-	NeonWaitTimeoutError,
-} from "@neon/sdk";
 export type { NeonBearerCredential } from "./lib/auth.js";
 export type {
 	InjectedNeonTool,
@@ -62,7 +43,7 @@ export type {
 	NeonToolResult,
 } from "./lib/operation.js";
 export type { NeonToolId, PublishedId };
-export { publishedId, toolIds };
+export { NeonError, publishedId, toolIds };
 
 type ToolFactories = typeof toolFactories;
 

@@ -1,10 +1,6 @@
+import { isNeonError, NeonAuthError, NeonError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
-import {
-	createNeonTools,
-	isNeonError,
-	NeonAuthError,
-	NeonError,
-} from "./index.js";
+import { createNeonTools } from "./index.js";
 
 const requestFrom = (input: RequestInfo | URL, init?: RequestInit) =>
 	new Request(input, init);

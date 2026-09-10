@@ -65,21 +65,7 @@ await tools["projects.list"].execute(
 );
 ```
 
-Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller. `@neon/tools` re-exports the SDK error classes and `isNeonError`. `instanceof NeonError` matches every one; `isNeonError` is what narrows `kind` (and `source` on timeouts).
-
-```ts
-import { isNeonError } from "@neon/tools";
-
-try {
-	await tools["projects.createAndConnect"].execute({ name: "preview" });
-} catch (error) {
-	if (!isNeonError(error)) throw error;
-	if (error.kind === "timeout" && error.source === "wait") {
-		// The project may already exist. List before retrying.
-	}
-	throw error;
-}
-```
+Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
 
 Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
 
@@ -234,77 +220,7 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
-`registerNeonTools` publishes that catalog and catches `execute()` failures. The MCP client sees `isError: true` and a message-only payload:
-
-```ts
-{
-	isError: true,
-	structuredContent: {
-		error: {
-			message: "Timed out after 300000ms waiting for 1 operation(s) to finish.",
-		},
-	},
-}
-```
-
-The thrown value is still a `NeonWaitTimeoutError` (`kind: "timeout"`, `source: "wait"`). To branch on those fields, register the tool yourself:
-
-```ts
-import { McpServer } from "@modelcontextprotocol/server";
-import { createNeonTools, isNeonError } from "@neon/tools";
-
-const apiKey = process.env.NEON_API_KEY;
-if (!apiKey) throw new Error("NEON_API_KEY is required");
-
-const server = new McpServer({ name: "neon", version: "1.0.0" });
-const tools = createNeonTools({
-	apiKey,
-	tools: ["projects.createAndConnect"] as const,
-});
-const create = tools["projects.createAndConnect"];
-
-server.registerTool(
-	create.id,
-	{
-		title: create.title,
-		description: create.description,
-		inputSchema: create.inputSchema,
-		annotations: create.annotations,
-		_meta: { "neon/requiresApproval": create.requiresApproval },
-	},
-	async (input, ctx) => {
-		try {
-			const { data } = await create.execute(input, {
-				signal: ctx.mcpReq.signal,
-			});
-			const structuredContent = { data };
-			return {
-				content: [
-					{ type: "text", text: JSON.stringify(structuredContent) },
-				],
-				structuredContent,
-			};
-		} catch (error) {
-			if (!isNeonError(error)) throw error;
-			if (error.kind === "timeout" && error.source === "wait") {
-				// The project may already exist. List before retrying.
-			}
-			const structuredContent = {
-				error: { message: error.message, kind: error.kind },
-			};
-			return {
-				isError: true,
-				content: [
-					{ type: "text", text: JSON.stringify(structuredContent) },
-				],
-				structuredContent,
-			};
-		}
-	},
-);
-```
-
-MCP 2 `inputSchema` from `registerNeonTools` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy. A custom `registerTool` can pass the Zod `inputSchema` instead.
+`registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
 
 Hosts that convert Zod themselves:
 
@@ -338,7 +254,7 @@ import { registerNeonTools } from "@neon/tools/mcp-v1";
 
 MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
-The adapter returns both text content and object-valued `structuredContent`.
+The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with structured error data.
 
 MCP annotations are advisory; the protocol does not enforce approval. Tools expose `neon/requiresApproval` in MCP `_meta`. Hosts must read that value and enforce their own approval policy before execution.
 

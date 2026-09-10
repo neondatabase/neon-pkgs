@@ -1,5 +1,5 @@
 ---
-"@neon/tools": minor
+"@neon/tools": patch
 ---
 
-Re-export SDK 4 error classes and `isNeonError`. Tools-originated failures throw `NeonClientError`.
+Object-list failures throw `NeonClientError`.
