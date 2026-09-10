@@ -1,6 +1,6 @@
 export const hiddenToolIds = [
 	"operations.waitFor",
-	"postgres.roles.password",
+	"postgres.roles.revealPassword",
 	"storage.objects.get",
 ] as const;
 
@@ -122,7 +122,8 @@ export const isNeonToolId = (id: string): id is NeonToolId =>
 const hiddenToolHint: Record<HiddenToolId, string> = {
 	"operations.waitFor":
 		"Write tools wait for readiness. operations.waitFor is not a tool.",
-	"postgres.roles.password": "Role passwords are not published as a tool.",
+	"postgres.roles.revealPassword":
+		"Role passwords are not published as a tool.",
 	"storage.objects.get": "Object bytes are not published as a tool.",
 };
 

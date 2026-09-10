@@ -83,7 +83,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, and `storage.objects.get`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.revealPassword`, and `storage.objects.get`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI.
 
 ## Optional host add-ons
 
