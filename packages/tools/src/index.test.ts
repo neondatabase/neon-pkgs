@@ -282,6 +282,27 @@ describe("Bearer credentials", () => {
 		).toEqual(["Bearer oauth-token-a", "Bearer oauth-token-b"]);
 	});
 
+	test("rejects an empty constructor credential before execute", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "",
+				tools: ["projects.list"],
+			}),
+		).toThrow("A Neon API key or OAuth access token is required");
+	});
+
+	test("falls back to the constructor credential when execute passes apiKey: undefined", async () => {
+		const { requests, tools } = listProjects({
+			apiKey: "constructor-key",
+		});
+
+		await tools["projects.list"].execute({}, { apiKey: undefined });
+
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer constructor-key",
+		);
+	});
+
 	test("requires a credential at execute when none was given at construction", async () => {
 		const { requests, tools } = listProjects({});
 
