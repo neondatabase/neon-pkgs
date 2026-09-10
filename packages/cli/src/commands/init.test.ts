@@ -877,6 +877,33 @@ describe("init handler", () => {
 		]);
 	});
 
+	test("--services none writes the starter policy", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-services-none-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const pickConfig = vi.fn(async () => false);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				services: ["none"],
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: async () => "skip",
+				pickConfig,
+			}),
+		);
+
+		expect(pickConfig).not.toHaveBeenCalled();
+		expect(run.mock.calls[1][0].slice(0, 4)).toEqual([
+			"config",
+			"init",
+			"--services",
+			"none",
+		]);
+	});
+
 	test("--no-config and --services conflict before children", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-conflict-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -1038,6 +1065,33 @@ describe("init handler", () => {
 			template: "hono",
 			default: true,
 		});
+	});
+
+	test("empty --template forwards --project-id into nested link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-proj-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const runBootstrap = nestedBootstrapOk();
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				template: "hono",
+				projectId: "typed-proj",
+				branch: "main",
+				contextFile: join(cwd, ".neon"),
+				runBootstrap,
+			}),
+		);
+
+		expect(run).not.toHaveBeenCalled();
+		expect(runBootstrap.mock.calls[0][0].linkExtra).toEqual([
+			"--project-id",
+			"typed-proj",
+			"--branch",
+			"main",
+		]);
 	});
 
 	test("forwards --project-id only onto link", async () => {
@@ -1268,5 +1322,12 @@ describe("init flag parsing", () => {
 		expect((await parse(["--skip-template"])).template).toBeUndefined();
 		expect((await parse(["--template", "hono"])).template).toBe("hono");
 		expect((await parse(["--template", "hono"])).skipTemplate).toBe(false);
+	});
+
+	test("--services none is the raw none token", async () => {
+		const argv = (await builder(
+			yargs().scriptName("neon").exitProcess(false),
+		).parseAsync(["--services", "none"])) as { services?: unknown };
+		expect(argv.services).toEqual(["none"]);
 	});
 });

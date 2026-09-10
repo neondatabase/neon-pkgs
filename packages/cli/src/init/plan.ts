@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
+import { NO_SERVICES } from "../neon_services.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import { agentArgv } from "../utils/agent_flag.js";
@@ -453,10 +454,17 @@ export const planConfigInitStep = (input: {
 	services?: readonly string[];
 }): InitStep => {
 	if (input.services !== undefined) {
-		return ["config", "init", "--services", input.services.join(",")];
+		return [
+			"config",
+			"init",
+			"--services",
+			input.services.length === 0
+				? NO_SERVICES
+				: input.services.join(","),
+		];
 	}
 	if (input.yes) {
-		return ["config", "init", "--services", "none"];
+		return ["config", "init", "--services", NO_SERVICES];
 	}
 	return ["config", "init"];
 };

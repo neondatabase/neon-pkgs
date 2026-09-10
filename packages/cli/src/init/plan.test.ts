@@ -369,6 +369,17 @@ describe("planExistingInit", () => {
 			}),
 		).toEqual([["config", "init", "--services", "auth,functions"]]);
 	});
+
+	test("parsed --services none is config init --services none", () => {
+		expect(
+			planExistingInit({
+				linked: true,
+				yes: false,
+				agentSetup: "skip",
+				config: { kind: "write", services: [] },
+			}),
+		).toEqual([["config", "init", "--services", "none"]]);
+	});
 });
 
 describe("planLinkStep", () => {
@@ -402,6 +413,15 @@ describe("planConfigInitStep", () => {
 			"init",
 			"--services",
 			"auth",
+		]);
+	});
+
+	test("empty selection is the none token, not an empty --services value", () => {
+		expect(planConfigInitStep({ yes: false, services: [] })).toEqual([
+			"config",
+			"init",
+			"--services",
+			"none",
 		]);
 	});
 });

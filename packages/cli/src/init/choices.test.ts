@@ -173,6 +173,18 @@ describe("resolveInitConfigChoice", () => {
 		).toEqual({ kind: "write", services: ["auth", "functions"] });
 	});
 
+	test("parsed --services none is write with an empty selection", () => {
+		expect(
+			resolveInitConfigChoice({
+				flag: undefined,
+				yes: false,
+				canAsk: true,
+				existingConfig: false,
+				services: [],
+			}),
+		).toEqual({ kind: "write", services: [] });
+	});
+
 	test("--config writes without forcing --services none", () => {
 		expect(
 			resolveInitConfigChoice({

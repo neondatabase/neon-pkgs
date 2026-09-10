@@ -254,6 +254,7 @@ const nestedBootstrapProps = (
 	contextFile: string,
 	templateId: string | undefined,
 	useDefault: boolean,
+	linkExtra: readonly string[],
 ): BootstrapProps => ({
 	apiClient: props.apiClient,
 	apiKey: props.apiKey,
@@ -272,6 +273,7 @@ const nestedBootstrapProps = (
 	linkNoConfig: true,
 	narrate: "human",
 	...(templateId !== undefined ? { template: templateId } : {}),
+	...(linkExtra.length > 0 ? { linkExtra } : {}),
 	...(props.agent !== undefined ? { agent: props.agent } : {}),
 	...(props.configDir ? { configDir: props.configDir } : {}),
 	...(props.profile ? { profile: props.profile } : {}),
@@ -377,6 +379,13 @@ export const handler = async (props: InitProps) => {
 	if (props.config === false && services !== undefined) {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
 	}
+	const linkExtra = linkInputArgv({
+		...(props.orgId ? { orgId: props.orgId } : {}),
+		...(props.projectId ? { projectId: props.projectId } : {}),
+		...(props.projectName ? { projectName: props.projectName } : {}),
+		...(props.regionId ? { regionId: props.regionId } : {}),
+		...(props.branch ? { branch: props.branch } : {}),
+	});
 	const templateChoice = resolveInitTemplateChoice({
 		empty: directoryIsEmpty(names),
 		yes,
@@ -410,6 +419,7 @@ export const handler = async (props: InitProps) => {
 					? templateChoice.id
 					: undefined,
 				yes,
+				linkExtra,
 			),
 		);
 		printNestedBootstrapDone(
@@ -434,7 +444,14 @@ export const handler = async (props: InitProps) => {
 		if (picked.kind === "template") {
 			const runBootstrap = props.runBootstrap ?? bootstrapHandler;
 			const result = await runBootstrap(
-				nestedBootstrapProps(props, cwd, contextFile, picked.id, false),
+				nestedBootstrapProps(
+					props,
+					cwd,
+					contextFile,
+					picked.id,
+					false,
+					linkExtra,
+				),
 			);
 			printNestedBootstrapDone(result, cwd, picked.id);
 			return;
@@ -442,13 +459,6 @@ export const handler = async (props: InitProps) => {
 	}
 
 	const alreadyLinked = isLinked(contextFile);
-	const linkExtra = linkInputArgv({
-		...(props.orgId ? { orgId: props.orgId } : {}),
-		...(props.projectId ? { projectId: props.projectId } : {}),
-		...(props.projectName ? { projectName: props.projectName } : {}),
-		...(props.regionId ? { regionId: props.regionId } : {}),
-		...(props.branch ? { branch: props.branch } : {}),
-	});
 	const shouldLink = !alreadyLinked || linkExtra.length > 0;
 	const existingConfig = hasNeonConfigFile(cwd);
 	const canAskConfig =

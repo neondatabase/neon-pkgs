@@ -83,6 +83,7 @@ export type BootstrapProps = CommonProps & {
 	printBanner?: boolean;
 	skipDoneSummary?: boolean;
 	linkNoConfig?: boolean;
+	linkExtra?: readonly string[];
 	narrate?: "command" | "human";
 };
 
@@ -639,7 +640,10 @@ const executePostScaffold = async (
 		await runInitSteps(
 			[
 				props.linkNoConfig === true
-					? planLinkStep({ yes: choices.yes })
+					? planLinkStep({
+							yes: choices.yes,
+							extra: props.linkExtra,
+						})
 					: choices.yes
 						? ["link", "--yes"]
 						: ["link"],
