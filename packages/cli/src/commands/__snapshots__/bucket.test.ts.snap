@@ -12,8 +12,6 @@ exports[`bucket > create with default access level 1`] = `""`;
 
 exports[`bucket > create with public_read access level 1`] = `""`;
 
-exports[`bucket > delete 1`] = `""`;
-
 exports[`bucket > delete reports a helpful error when the bucket is missing 1`] = `""`;
 
 exports[`bucket > list (yaml) 1`] = `
@@ -277,5 +275,3 @@ exports[`bucket > object put without a bucket is rejected client-side 1`] = `""`
 exports[`bucket > object put without a key is rejected client-side 1`] = `""`;
 
 exports[`bucket > object rm alias 1`] = `""`;
-
-exports[`bucket > rm alias deletes a bucket 1`] = `""`;

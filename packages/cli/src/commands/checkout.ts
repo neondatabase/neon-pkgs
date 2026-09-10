@@ -50,7 +50,7 @@ export const formatCheckoutPolicyFailure = (opts: {
 	return [
 		`Branch ${opts.branchName} (${opts.branchId}) was created and checked out, but applying neon.ts to it failed: ${opts.failure}`,
 		`The branch is usable but does not match the policy, and \`${cli} checkout\` never reconciles a branch that already exists.`,
-		`Fix the cause above, then run \`${cli} deploy --update-existing${envArg}\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${cli} branches delete ${opts.branchName}\` then \`${cli} checkout ${opts.branchName}${envArg}\`.`,
+		`Fix the cause above, then run \`${cli} deploy --update-existing${envArg}\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${cli} branches delete ${opts.branchName} --yes\` then \`${cli} checkout ${opts.branchName}${envArg}\`.`,
 	].join("\n");
 };
 
