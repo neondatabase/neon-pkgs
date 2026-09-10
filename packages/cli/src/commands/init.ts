@@ -250,8 +250,11 @@ const nestedBootstrapProps = (
 	props: InitProps,
 	cwd: string,
 	contextFile: string,
-	templateId: string | undefined,
-	useDefault: boolean,
+	template: {
+		id?: string;
+		selected?: BootstrapTemplate;
+		useDefault: boolean;
+	},
 	linkExtra: readonly string[],
 ): BootstrapProps => ({
 	apiClient: props.apiClient,
@@ -262,7 +265,7 @@ const nestedBootstrapProps = (
 	directory: nestedBootstrapDirectory(cwd),
 	force: false,
 	listTemplates: false,
-	default: useDefault,
+	default: template.useDefault,
 	install: true,
 	git: true,
 	link: true,
@@ -270,7 +273,10 @@ const nestedBootstrapProps = (
 	skipDoneSummary: true,
 	linkNoConfig: true,
 	narrate: "human",
-	...(templateId !== undefined ? { template: templateId } : {}),
+	...(template.selected ? { selectedTemplate: template.selected } : {}),
+	...(!template.selected && template.id !== undefined
+		? { template: template.id }
+		: {}),
 	...(linkExtra.length > 0 ? { linkExtra } : {}),
 	...(props.agent !== undefined ? { agent: props.agent } : {}),
 	...(props.configDir ? { configDir: props.configDir } : {}),
@@ -413,10 +419,12 @@ export const handler = async (props: InitProps) => {
 				props,
 				cwd,
 				contextFile,
-				templateChoice.kind === "template"
-					? templateChoice.id
-					: undefined,
-				yes,
+				{
+					useDefault: yes,
+					...(templateChoice.kind === "template"
+						? { id: templateChoice.id }
+						: {}),
+				},
 				linkExtra,
 			),
 		);
@@ -432,10 +440,7 @@ export const handler = async (props: InitProps) => {
 		if (props.pickTemplate === undefined && !canPickAgentsInteractively()) {
 			throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
 		}
-		const templates =
-			props.pickTemplate !== undefined
-				? []
-				: await (props.fetchTemplates ?? fetchTemplates)();
+		const templates = await (props.fetchTemplates ?? fetchTemplates)();
 		const picked = await (
 			props.pickTemplate ?? pickInitTemplateInteractively
 		)(templates);
@@ -446,12 +451,11 @@ export const handler = async (props: InitProps) => {
 					props,
 					cwd,
 					contextFile,
-					picked.id,
-					false,
+					{ selected: picked.template, useDefault: false },
 					linkExtra,
 				),
 			);
-			printNestedBootstrapDone(result, cwd, picked.id);
+			printNestedBootstrapDone(result, cwd, picked.template.id);
 			return;
 		}
 	}

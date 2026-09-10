@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
+import type { BootstrapTemplate } from "../init/bootstrap.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { builder } from "./init.js";
@@ -1015,14 +1016,26 @@ describe("init handler", () => {
 		);
 
 		expect(runBootstrap).not.toHaveBeenCalled();
-		expect(fetchCatalog).not.toHaveBeenCalled();
+		expect(fetchCatalog).toHaveBeenCalledTimes(1);
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["link"]);
 	});
 
-	test("empty interactive template pick calls nested bootstrap with that id", async () => {
+	test("empty interactive template pick passes the catalog entry, not just the id", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-tmpl-"));
 		const run = vi.fn().mockResolvedValue(true);
 		const runBootstrap = nestedBootstrapOk();
+		const catalogHono = {
+			id: "hono",
+			title: "Updated REST API",
+			description: "Updated template source",
+			requires: ["database" as const],
+			source: {
+				owner: "neondatabase",
+				repo: "examples",
+				ref: "main",
+				subdir: "updated-hono",
+			},
+		};
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -1031,13 +1044,25 @@ describe("init handler", () => {
 				run,
 				contextFile: join(cwd, ".neon"),
 				runBootstrap,
-				pickTemplate: async () => ({ kind: "template", id: "hono" }),
+				fetchTemplates: async () => [catalogHono],
+				pickTemplate: async (
+					templates: readonly BootstrapTemplate[],
+				) => {
+					const [picked] = templates;
+					if (picked === undefined) {
+						throw new Error("expected catalog template");
+					}
+					return { kind: "template", template: picked };
+				},
 			}),
 		);
 
 		expect(run).not.toHaveBeenCalled();
+		expect(runBootstrap.mock.calls[0][0].template).toBeUndefined();
+		expect(runBootstrap.mock.calls[0][0].selectedTemplate).toEqual(
+			catalogHono,
+		);
 		expect(runBootstrap.mock.calls[0][0]).toMatchObject({
-			template: "hono",
 			default: false,
 			printBanner: false,
 			linkNoConfig: true,

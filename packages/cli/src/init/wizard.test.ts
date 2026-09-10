@@ -106,6 +106,25 @@ describe("init pickers", () => {
 		expect(question.choices[0]?.title).toMatch(/recommended/i);
 	});
 
+	test("template picker returns the catalog template, including source", async () => {
+		canPickMock.mockReturnValue(true);
+		promptsMock.mockResolvedValue({ id: "hono" });
+		const catalogHono = {
+			id: "hono",
+			title: "Updated REST API",
+			description: "Updated template source",
+			requires: ["database" as const],
+			source: {
+				owner: "neondatabase",
+				repo: "examples",
+				ref: "main",
+				subdir: "updated-hono",
+			},
+		};
+		const picked = await pickInitTemplateInteractively([catalogHono]);
+		expect(picked).toEqual({ kind: "template", template: catalogHono });
+	});
+
 	test("config confirm defaults to yes", async () => {
 		canPickMock.mockReturnValue(true);
 		promptsMock.mockResolvedValue({ value: false });

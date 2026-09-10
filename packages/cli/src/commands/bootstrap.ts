@@ -85,6 +85,12 @@ export type BootstrapProps = CommonProps & {
 	linkNoConfig?: boolean;
 	linkExtra?: readonly string[];
 	narrate?: "command" | "human";
+	/**
+	 * Init already fetched this catalog entry. `--template` with a known id
+	 * still prefers FALLBACK_TEMPLATES, which would ignore a source change
+	 * the picker already showed.
+	 */
+	selectedTemplate?: BootstrapTemplate;
 };
 
 export type NestedBootstrapResult = {
@@ -241,17 +247,18 @@ export const handler = async (
 			...(props.default ? { yes: true } : {}),
 		});
 	}
-	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
 	// prompt path even on a TTY.
 	const interactive =
 		!props.default && Boolean(process.stdout.isTTY) && !isCi();
-	const template = await resolveSelectedTemplate(
-		props,
-		interactive,
-		templates,
-	);
+	const template =
+		props.selectedTemplate ??
+		(await resolveSelectedTemplate(
+			props,
+			interactive,
+			await resolveTemplateList(props),
+		));
 	const targetDir = await resolveTargetDir(props, interactive, template);
 	ensureTargetUsable(targetDir, props.force);
 	await scaffold(template, targetDir);

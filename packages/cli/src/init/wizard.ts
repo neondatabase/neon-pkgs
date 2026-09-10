@@ -9,7 +9,7 @@ import { formatTemplateTitle, SKIP_TEMPLATE_VALUE } from "./template_title.js";
 
 export type InitTemplatePick =
 	| { kind: "skip" }
-	| { kind: "template"; id: string };
+	| { kind: "template"; template: BootstrapTemplate };
 
 const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 	if (state.aborted) {
@@ -100,7 +100,7 @@ export const pickInitTemplateInteractively = async (
 	if (selected === undefined) {
 		throw new Error("Aborted.");
 	}
-	return { kind: "template", id: selected.id };
+	return { kind: "template", template: selected };
 };
 
 export const pickInitConfigInteractively = async (): Promise<boolean> => {
