@@ -1,4 +1,4 @@
-import { createNeonClient } from "@neon/sdk";
+import { createNeonClient, isNeonError, NeonClientError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
 import { createNeonTool, createNeonTools, toolIds } from "./index.js";
@@ -208,13 +208,22 @@ describe("special mappings", () => {
 				}),
 		});
 
-		await expect(
-			tools["storage.objects.list"].execute({
+		let thrown: unknown;
+		try {
+			await tools["storage.objects.list"].execute({
 				project_id: "project-id",
 				branch_id: "branch-id",
 				bucket_name: "assets",
-			}),
-		).rejects.toThrow("truncated without a next cursor");
+			});
+		} catch (error) {
+			thrown = error;
+		}
+		expect(thrown).toBeInstanceOf(NeonClientError);
+		expect(isNeonError(thrown)).toBe(true);
+		if (thrown instanceof NeonClientError) {
+			expect(thrown.kind).toBe("client");
+			expect(thrown.message).toContain("truncated without a next cursor");
+		}
 	});
 
 	test("forwards region_id on endpoint create", async () => {
