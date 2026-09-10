@@ -580,6 +580,7 @@ describe("pushConfig", () => {
 		// unavailable in the project/region. (The AI Gateway is never probed at all — it is
 		// always available and credential-gated, not a per-branch resource.)
 		expect(methods).not.toContain("listBranchBuckets");
+		expect(methods).not.toContain("listBranchTriggers");
 	});
 
 	test("uses an injected bundleFunction instead of the default esbuild bundler", async () => {
@@ -648,6 +649,129 @@ describe("pushConfig", () => {
 		// Still exactly one function on the branch (no duplicate created).
 		const functions = await api.listBranchFunctions(projectId, "br-main");
 		expect(functions.map((f) => f.slug)).toEqual(["fn1"]);
+	});
+
+	test("creates a schedule trigger after deploying the function", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					identifier: "function:fn1",
+					action: "create",
+				}),
+				expect.objectContaining({
+					identifier: "trigger:fn1:hourly",
+					action: "create",
+				}),
+			]),
+		);
+		const created = api.history.filter(
+			(h) => h.method === "createBranchTrigger",
+		);
+		expect(created).toHaveLength(1);
+		expect(created[0].args[2]).toMatchObject({
+			name: "hourly",
+			functionSlug: "fn1",
+			cron: "0 * * * *",
+			functionPath: "/",
+			enabled: true,
+		});
+		const triggers = await api.listBranchTriggers(projectId, "br-main");
+		expect(triggers).toEqual([
+			expect.objectContaining({
+				name: "hourly",
+				functionSlug: "fn1",
+				cron: "0 * * * *",
+			}),
+		]);
+	});
+
+	test("updates a schedule trigger when its cron changes", async () => {
+		const { api, projectId } = seededFake();
+		api.seedFunction(projectId, "br-main", {
+			id: "fn-existing",
+			slug: "fn1",
+			name: "Hello World",
+			invocationUrl: "https://x/functions/fn1",
+		});
+		api.seedTrigger(projectId, "br-main", {
+			triggerId: "trg-hourly",
+			name: "hourly",
+			functionSlug: "fn1",
+			functionPath: "/",
+			cron: "0 0 * * *",
+			enabled: true,
+			inherited: false,
+			nextRunAt: "2026-01-02T00:00:00Z",
+		});
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					identifier: "trigger:fn1:hourly",
+					action: "update",
+				}),
+			]),
+		);
+		const updated = api.history.filter(
+			(h) => h.method === "updateBranchTrigger",
+		);
+		expect(updated).toHaveLength(1);
+		expect(updated[0].args[2]).toBe("trg-hourly");
+		expect(updated[0].args[3]).toMatchObject({
+			cron: "0 * * * *",
+			enabled: true,
+			functionPath: "/",
+		});
+		const triggers = await api.listBranchTriggers(projectId, "br-main");
+		expect(triggers[0]?.cron).toBe("0 * * * *");
 	});
 
 	test("surfaces a first-deployed function's invocation URL in the applied details", async () => {

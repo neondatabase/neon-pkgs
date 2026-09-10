@@ -17,6 +17,7 @@ import type {
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
+	NeonCredentialReveal,
 	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
@@ -25,8 +26,14 @@ import type {
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonTriggerSnapshot,
 } from "@neon/config";
-import { ErrorCode, PlatformError } from "@neon/config";
+import {
+	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
+	DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
+	ErrorCode,
+	PlatformError,
+} from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yargs from "yargs/yargs";
 
@@ -196,6 +203,18 @@ class FakeNeonApi implements NeonApi {
 	async deployBranchFunction(): Promise<NeonFunctionDeploymentSnapshot> {
 		throw new Error("not implemented");
 	}
+	async listBranchTriggers(): Promise<NeonTriggerSnapshot[]> {
+		return [];
+	}
+	async createBranchTrigger(): Promise<NeonTriggerSnapshot> {
+		throw new Error("not implemented");
+	}
+	async updateBranchTrigger(): Promise<NeonTriggerSnapshot> {
+		throw new Error("not implemented");
+	}
+	async deleteBranchTrigger(): Promise<void> {
+		throw new Error("not implemented");
+	}
 	async getAiGatewayEnabled(): Promise<boolean> {
 		return false;
 	}
@@ -223,6 +242,9 @@ class FakeNeonApi implements NeonApi {
 	}
 	async listCredentials(): Promise<NeonCredentialMeta[]> {
 		return [];
+	}
+	async revealCredential(): Promise<NeonCredentialReveal> {
+		throw new Error("not implemented");
 	}
 	async revokeCredential(
 		_projectId: string,
@@ -292,6 +314,89 @@ class StorageNeonApi extends FakeNeonApi {
 		for (const cred of this.credentials) {
 			if (cred.tokenId === tokenId)
 				cred.revokedAt = "2026-01-02T00:00:00Z";
+		}
+	}
+}
+
+const STORAGE_DEFAULT_TOKEN_ID = "cred-storage-default";
+const STORAGE_DEFAULT_SHORT = "storagedef01";
+const GATEWAY_DEFAULT_TOKEN_ID = "cred-gateway-default";
+const GATEWAY_DEFAULT_SHORT = "gatewaydef01";
+
+/**
+ * A branch that already has the platform default credentials, which is the production
+ * shape in regions with Object Storage and the AI Gateway. `env pull` must reveal those
+ * rather than minting a combined `neon-env ${branch}` credential.
+ */
+class DefaultCredsNeonApi extends FakeNeonApi {
+	revealCalls = 0;
+	createCalls = 0;
+	readonly credentials: NeonCredentialMeta[] = [
+		{
+			tokenId: STORAGE_DEFAULT_TOKEN_ID,
+			tokenIdShort: STORAGE_DEFAULT_SHORT,
+			name: DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
+			scopes: ["storage:read", "storage:write"],
+			principalType: "user",
+			branchId: BRANCH_ID,
+			createdAt: "2026-01-01T00:00:00Z",
+		},
+		{
+			tokenId: GATEWAY_DEFAULT_TOKEN_ID,
+			tokenIdShort: GATEWAY_DEFAULT_SHORT,
+			name: DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
+			scopes: ["ai_gateway:invoke"],
+			principalType: "user",
+			branchId: BRANCH_ID,
+			createdAt: "2026-01-01T00:00:00Z",
+		},
+	];
+
+	override async listBranchBuckets(): Promise<NeonBucketSnapshot[]> {
+		return [{ name: "assets", accessLevel: "private" }];
+	}
+
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		return this.credentials.filter((c) => c.revokedAt === undefined);
+	}
+
+	override async revealCredential(
+		_projectId: string,
+		_branchId: string,
+		tokenId: string,
+	): Promise<NeonCredentialReveal> {
+		this.revealCalls += 1;
+		const found = this.credentials.find(
+			(c) => c.tokenId === tokenId && c.revokedAt === undefined,
+		);
+		if (found === undefined) {
+			throw new Error(`unknown credential ${tokenId}`);
+		}
+		return {
+			tokenId,
+			apiToken: `nt_live_${found.tokenIdShort}_secret`,
+			s3SecretAccessKey: `s3secret-${found.tokenIdShort}`.padEnd(64, "0"),
+		};
+	}
+
+	override async createCredential(
+		_projectId: string,
+		branchId: string,
+		input: CreateCredentialInput,
+	): Promise<NeonCredentialSecret> {
+		this.createCalls += 1;
+		return super.createCredential(_projectId, branchId, input);
+	}
+
+	override async revokeCredential(
+		_projectId: string,
+		_branchId: string,
+		tokenId: string,
+	): Promise<void> {
+		for (const cred of this.credentials) {
+			if (cred.tokenId === tokenId) {
+				cred.revokedAt = "2026-01-02T00:00:00Z";
+			}
 		}
 	}
 }
@@ -506,7 +611,7 @@ describe("env pull", () => {
 		// The placeholder named no credential, so there was nothing of ours to revoke.
 		expect(api.credentials.filter((c) => c.revokedAt).length).toBe(0);
 		// And the user is told which values are new, so they can update anything holding the old ones.
-		expect(logged).toContain("Issued a new branch credential");
+		expect(logged).toContain("Wrote credential secrets");
 		expect(logged).toContain("AWS_ACCESS_KEY_ID");
 	});
 
@@ -522,6 +627,83 @@ describe("env pull", () => {
 
 		expect(api.createCalls).toBe(1);
 		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toBe(afterFirst);
+	});
+
+	it("reveals the platform storage default instead of minting", async () => {
+		const api = new DefaultCredsNeonApi();
+
+		await pull(baseProps(api, cwd));
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env.AWS_ACCESS_KEY_ID).toBe(STORAGE_DEFAULT_TOKEN_ID);
+		expect(env.AWS_SECRET_ACCESS_KEY).toBe(
+			"s3secret-storagedef01".padEnd(64, "0"),
+		);
+		expect(api.createCalls).toBe(0);
+		expect(api.revealCalls).toBe(1);
+		expect(api.credentials.filter((c) => c.revokedAt).length).toBe(0);
+	});
+
+	it("reuses a revealed storage default on the next pull", async () => {
+		const api = new DefaultCredsNeonApi();
+
+		await pull(baseProps(api, cwd));
+		const afterFirst = readFileSync(join(cwd, ".env.local"), "utf8");
+		await pull(baseProps(api, cwd));
+
+		expect(api.createCalls).toBe(0);
+		expect(api.revealCalls).toBe(1);
+		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toBe(afterFirst);
+	});
+
+	it("replaces a leftover neon-env mint with the storage default and revokes the mint", async () => {
+		const api = new DefaultCredsNeonApi();
+		api.credentials.push({
+			tokenId: "cred-fake-0001",
+			tokenIdShort: "credfake0001",
+			name: "neon-env main",
+			scopes: ["storage:read", "storage:write"],
+			principalType: "user",
+			branchId: BRANCH_ID,
+			createdAt: "2026-01-01T00:00:00Z",
+		});
+		writeFileSync(
+			join(cwd, ".env"),
+			[
+				"AWS_ACCESS_KEY_ID=cred-fake-0001",
+				`AWS_SECRET_ACCESS_KEY=${"s3secret1".padEnd(64, "0")}`,
+				"",
+			].join("\n"),
+		);
+
+		const logged = await captureLog(async () => {
+			await pull(baseProps(api, cwd));
+		});
+
+		const env = readEnvFile(join(cwd, ".env"));
+		expect(env.AWS_ACCESS_KEY_ID).toBe(STORAGE_DEFAULT_TOKEN_ID);
+		expect(
+			api.credentials.find((c) => c.tokenId === "cred-fake-0001")
+				?.revokedAt,
+		).toBeDefined();
+		expect(
+			api.credentials.find((c) => c.tokenId === STORAGE_DEFAULT_TOKEN_ID)
+				?.revokedAt,
+		).toBeUndefined();
+		expect(logged).toContain("Wrote credential secrets");
+		expect(logged).toContain("Revoked the credential it replaced");
+	});
+
+	it("reveals both platform defaults when the AI Gateway is implied", async () => {
+		const api = new DefaultCredsNeonApi();
+
+		await pull(baseProps(api, cwd), { implyAiGateway: true });
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env.AWS_ACCESS_KEY_ID).toBe(STORAGE_DEFAULT_TOKEN_ID);
+		expect(env.NEON_AI_GATEWAY_TOKEN).toBe("nt_live_gatewaydef01_secret");
+		expect(api.createCalls).toBe(0);
+		expect(api.revealCalls).toBe(2);
 	});
 });
 
@@ -625,7 +807,7 @@ describe("env pull --service", () => {
 			});
 		});
 
-		expect(logged).toContain("Issued a new branch credential");
+		expect(logged).toContain("Wrote credential secrets");
 		expect(logged).not.toContain("Left the credential it replaced live");
 	});
 
@@ -1186,6 +1368,9 @@ class NoCredentialsNeonApi extends FakeNeonApi {
 		return this.unavailable();
 	}
 	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		return this.unavailable();
+	}
+	override async revealCredential(): Promise<NeonCredentialReveal> {
 		return this.unavailable();
 	}
 }

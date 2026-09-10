@@ -225,6 +225,14 @@ const functionDevConfigSchema = z.strictObject({
 	port: devPortSchema.optional(),
 });
 
+const functionScheduleTriggerSchema = z.strictObject({
+	type: z.literal("schedule"),
+	name: z.string().min(1).max(255),
+	cron: z.string().min(1),
+	functionPath: z.string().min(1).optional(),
+	enabled: z.boolean().optional(),
+});
+
 /**
  * The name of a package the bundler must leave alone. Accepts what esbuild's `external`
  * accepts for a package — a bare name, a scope, or a subpath — and rejects a relative or
@@ -331,6 +339,7 @@ export const functionDefSchema = z
 		externalPackages: functionExternalPackagesSchema.optional(),
 		bundler: bundlerSchema.optional(),
 		dev: functionDevConfigSchema.optional(),
+		triggers: z.array(functionScheduleTriggerSchema).optional(),
 	})
 	.check((ctx) => {
 		const entries = ctx.value.externalPackages ?? [];
@@ -415,11 +424,39 @@ export const bucketDefSchema = z.strictObject({
 });
 
 /** Static, beta Preview feature set: AI Gateway toggle + functions/buckets records. */
-export const previewInputSchema = z.strictObject({
-	aiGateway: serviceToggleInputSchema.optional(),
-	functions: z.record(functionSlugSchema, functionDefSchema).optional(),
-	buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
-});
+export const previewInputSchema = z
+	.strictObject({
+		aiGateway: serviceToggleInputSchema.optional(),
+		functions: z.record(functionSlugSchema, functionDefSchema).optional(),
+		buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
+	})
+	.superRefine((preview, ctx) => {
+		const byName = new Map<string, string>();
+		for (const [slug, fn] of Object.entries(preview.functions ?? {})) {
+			const seenOnFn = new Set<string>();
+			for (const [index, trigger] of (fn.triggers ?? []).entries()) {
+				if (seenOnFn.has(trigger.name)) {
+					ctx.addIssue({
+						code: "custom",
+						path: ["functions", slug, "triggers", index, "name"],
+						message: `trigger name "${trigger.name}" is listed more than once on function "${slug}"`,
+					});
+					continue;
+				}
+				seenOnFn.add(trigger.name);
+				const prior = byName.get(trigger.name);
+				if (prior !== undefined) {
+					ctx.addIssue({
+						code: "custom",
+						path: ["functions", slug, "triggers", index, "name"],
+						message: `trigger name "${trigger.name}" is already used by function "${prior}"`,
+					});
+					continue;
+				}
+				byName.set(trigger.name, slug);
+			}
+		}
+	});
 
 /** Per-function deploy tuning returned by the `branch` closure. */
 export const functionTuningSchema = z.strictObject({

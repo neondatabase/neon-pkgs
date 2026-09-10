@@ -165,6 +165,39 @@ describe("resolveConfig", () => {
 		});
 	});
 
+	test("defaults schedule trigger functionPath and enabled", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./functions/hello-world.ts",
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, {
+			name: "main",
+			exists: true,
+		});
+		expect(resolved.preview?.functions[0]?.triggers).toEqual([
+			{
+				type: "schedule",
+				name: "hourly",
+				cron: "0 * * * *",
+				functionPath: "/",
+				enabled: true,
+			},
+		]);
+	});
+
 	test("resolves a bare externalPackages string to includeFiles: true", () => {
 		const config = defineConfig({
 			preview: {

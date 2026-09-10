@@ -154,6 +154,7 @@ export type {
 	CreateBucketInput,
 	CreateCredentialInput,
 	CreateProjectInput,
+	CreateTriggerInput,
 	DeployFunctionInput,
 	EnableDataApiInput,
 	GetConnectionUriInput,
@@ -163,6 +164,7 @@ export type {
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
+	NeonCredentialReveal,
 	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
@@ -171,7 +173,13 @@ export type {
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonTriggerSnapshot,
 	UpdateBranchInput,
+	UpdateTriggerInput,
+} from "./lib/neon-api.js";
+export {
+	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
+	DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
 } from "./lib/neon-api.js";
 export { createRealNeonApi } from "./lib/neon-api-real.js";
 export type {
@@ -203,6 +211,7 @@ export type {
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
+	FunctionScheduleTriggerDef,
 	FunctionTuning,
 	PostgresConfig,
 	PreviewInput,
@@ -213,6 +222,7 @@ export type {
 	ResolvedDataApiConfig,
 	ResolvedExternalPackage,
 	ResolvedFunctionConfig,
+	ResolvedFunctionScheduleTrigger,
 	ResolvedPreviewConfig,
 	ServiceEnabled,
 	ServiceToggle,
