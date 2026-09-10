@@ -1,7 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
-
+import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
-import { runAgentTooling, runScaffoldFollowUp } from "./tooling.js";
+import {
+	runAgentTooling,
+	runInitSteps,
+	runScaffoldFollowUp,
+} from "./tooling.js";
 
 const host = "https://console.neon.tech/api/v2";
 const forward = {
@@ -182,5 +186,25 @@ describe("runAgentTooling", () => {
 			}),
 		).rejects.toThrow(/plugin and skills\/MCP/);
 		expect(run).not.toHaveBeenCalled();
+	});
+});
+
+describe("runInitSteps", () => {
+	test("human narrate uses the step label and still debugs argv", async () => {
+		const run = vi.fn().mockResolvedValue(true);
+		const info = vi.spyOn(log, "info").mockReturnValue();
+		const debug = vi.spyOn(log, "debug").mockReturnValue();
+		await runInitSteps([["plugins", "-y"]], {
+			cwd: "/app",
+			run,
+			forward,
+			narrate: "human",
+		});
+		expect(info).toHaveBeenCalledWith("Installing the Neon plugin…");
+		expect(debug).toHaveBeenCalledWith(
+			"Running `%s %s`",
+			expect.any(String),
+			"plugins -y",
+		);
 	});
 });

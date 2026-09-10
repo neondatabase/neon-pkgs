@@ -10,11 +10,14 @@ import {
 	collectYesAgents,
 	directoryIsEmpty,
 	initYesSupportedAgents,
+	linkInputArgv,
 	NAMED_AGENTS_MIXED,
 	namedAgentsNeedSplit,
 	noDetectedAgentsMessage,
 	planAgentSteps,
+	planConfigInitStep,
 	planExistingInit,
+	planLinkStep,
 	planToolingSteps,
 	planYesAgentSteps,
 	postScaffoldActions,
@@ -179,14 +182,23 @@ describe("planAgentSteps", () => {
 });
 
 describe("planExistingInit", () => {
-	test("skills-mcp unlinked interactive: skills, mcp, link, config init", () => {
+	const write = { kind: "write" as const };
+	const skip = { kind: "skip" as const };
+
+	test("skills-mcp unlinked interactive: skills, mcp, link --no-config, config init", () => {
 		expect(
 			planExistingInit({
 				linked: false,
 				yes: false,
 				agentSetup: "skills-mcp",
+				config: write,
 			}),
-		).toEqual([["skills"], ["mcp"], ["link"], ["config", "init"]]);
+		).toEqual([
+			["skills"],
+			["mcp"],
+			["link", "--no-config"],
+			["config", "init"],
+		]);
 	});
 
 	test("skills-mcp unlinked -y", () => {
@@ -195,11 +207,12 @@ describe("planExistingInit", () => {
 				linked: false,
 				yes: true,
 				agentSetup: "skills-mcp",
+				config: { kind: "write", services: ["none"] },
 			}),
 		).toEqual([
 			["skills", "-y"],
 			["mcp", "-y"],
-			["link", "--yes"],
+			["link", "--yes", "--no-config"],
 			["config", "init", "--services", "none"],
 		]);
 	});
@@ -210,18 +223,20 @@ describe("planExistingInit", () => {
 				linked: true,
 				yes: false,
 				agentSetup: "skills-mcp",
+				config: write,
 			}),
 		).toEqual([["skills"], ["mcp"], ["config", "init"]]);
 	});
 
-	test("plugin unlinked interactive: plugins, link, config init", () => {
+	test("plugin unlinked interactive: plugins, link --no-config, config init", () => {
 		expect(
 			planExistingInit({
 				linked: false,
 				yes: false,
 				agentSetup: "plugin",
+				config: write,
 			}),
-		).toEqual([["plugins"], ["link"], ["config", "init"]]);
+		).toEqual([["plugins"], ["link", "--no-config"], ["config", "init"]]);
 	});
 
 	test("plugin unlinked -y", () => {
@@ -230,10 +245,11 @@ describe("planExistingInit", () => {
 				linked: false,
 				yes: true,
 				agentSetup: "plugin",
+				config: { kind: "write", services: ["none"] },
 			}),
 		).toEqual([
 			["plugins", "-y"],
-			["link", "--yes"],
+			["link", "--yes", "--no-config"],
 			["config", "init", "--services", "none"],
 		]);
 	});
@@ -244,18 +260,23 @@ describe("planExistingInit", () => {
 				linked: true,
 				yes: false,
 				agentSetup: "plugin",
+				config: write,
 			}),
 		).toEqual([["plugins"], ["config", "init"]]);
 	});
 
-	test("skip unlinked: link and config init", () => {
+	test("skip unlinked: link --no-config and config init", () => {
 		expect(
 			planExistingInit({
 				linked: false,
 				yes: false,
 				agentSetup: "skip",
+				config: write,
 			}),
-		).toEqual([["link"], ["config", "init"]]);
+		).toEqual([
+			["link", "--no-config"],
+			["config", "init"],
+		]);
 	});
 
 	test("skip unlinked -y", () => {
@@ -264,9 +285,10 @@ describe("planExistingInit", () => {
 				linked: false,
 				yes: true,
 				agentSetup: "skip",
+				config: { kind: "write", services: ["none"] },
 			}),
 		).toEqual([
-			["link", "--yes"],
+			["link", "--yes", "--no-config"],
 			["config", "init", "--services", "none"],
 		]);
 	});
@@ -277,8 +299,133 @@ describe("planExistingInit", () => {
 				linked: true,
 				yes: false,
 				agentSetup: "skip",
+				config: write,
 			}),
 		).toEqual([["config", "init"]]);
+	});
+
+	test("declined config omits config init", () => {
+		expect(
+			planExistingInit({
+				linked: false,
+				yes: false,
+				agentSetup: "skip",
+				config: skip,
+			}),
+		).toEqual([["link", "--no-config"]]);
+	});
+
+	test("-y --no-config is link only", () => {
+		expect(
+			planExistingInit({
+				linked: false,
+				yes: true,
+				agentSetup: "skip",
+				config: skip,
+			}),
+		).toEqual([["link", "--yes", "--no-config"]]);
+	});
+
+	test("already linked and declined config is empty", () => {
+		expect(
+			planExistingInit({
+				linked: true,
+				yes: false,
+				agentSetup: "skip",
+				config: skip,
+			}),
+		).toEqual([]);
+	});
+
+	test("forwards explicit link inputs onto link", () => {
+		expect(
+			planExistingInit({
+				linked: false,
+				yes: true,
+				agentSetup: "skip",
+				config: skip,
+				linkExtra: ["--project-id", "proj-1", "--branch", "main"],
+			}),
+		).toEqual([
+			[
+				"link",
+				"--yes",
+				"--no-config",
+				"--project-id",
+				"proj-1",
+				"--branch",
+				"main",
+			],
+		]);
+	});
+
+	test("explicit services go on config init", () => {
+		expect(
+			planExistingInit({
+				linked: true,
+				yes: false,
+				agentSetup: "skip",
+				config: { kind: "write", services: ["auth", "functions"] },
+			}),
+		).toEqual([["config", "init", "--services", "auth,functions"]]);
+	});
+});
+
+describe("planLinkStep", () => {
+	test("always suppresses the nested neon.ts offer", () => {
+		expect(planLinkStep({ yes: false })).toEqual(["link", "--no-config"]);
+		expect(planLinkStep({ yes: true })).toEqual([
+			"link",
+			"--yes",
+			"--no-config",
+		]);
+	});
+});
+
+describe("planConfigInitStep", () => {
+	test("interactive has no services flag", () => {
+		expect(planConfigInitStep({ yes: false })).toEqual(["config", "init"]);
+	});
+
+	test("-y uses none", () => {
+		expect(planConfigInitStep({ yes: true })).toEqual([
+			"config",
+			"init",
+			"--services",
+			"none",
+		]);
+	});
+
+	test("explicit services win over -y", () => {
+		expect(planConfigInitStep({ yes: true, services: ["auth"] })).toEqual([
+			"config",
+			"init",
+			"--services",
+			"auth",
+		]);
+	});
+});
+
+describe("linkInputArgv", () => {
+	test("omits unset fields", () => {
+		expect(linkInputArgv({})).toEqual([]);
+	});
+
+	test("emits flags in a stable order", () => {
+		expect(
+			linkInputArgv({
+				projectId: "proj-1",
+				orgId: "org-1",
+				branch: "main",
+			}),
+		).toEqual([
+			"--org-id",
+			"org-1",
+			"--project-id",
+			"proj-1",
+			"--branch",
+			"main",
+		]);
 	});
 });
 

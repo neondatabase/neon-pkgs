@@ -10,6 +10,9 @@ import {
 	tryResolveAddMcpAgentId,
 	uniqueAgentIds,
 } from "./agents.js";
+import type { InitConfigPlan } from "./choices.js";
+
+export type { InitConfigPlan };
 
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
 
@@ -196,6 +199,9 @@ const BOOLEAN_FLAGS = new Set([
 	"--no-env-pull",
 	"--no-agent-setup",
 	"--no-link",
+	"--no-config",
+	"--skip-template",
+	"--config",
 	"--list",
 	"--list-templates",
 	"--force-auth",
@@ -432,20 +438,79 @@ export const resolveNamedAgents = (raw: readonly string[]): AgentType[] => {
 	return uniqueAgentIds(resolved);
 };
 
+export const planLinkStep = (input: {
+	yes: boolean;
+	extra?: readonly string[];
+}): InitStep => [
+	"link",
+	...(input.yes ? (["--yes"] as const) : []),
+	"--no-config",
+	...(input.extra ?? []),
+];
+
+export const planConfigInitStep = (input: {
+	yes: boolean;
+	services?: readonly string[];
+}): InitStep => {
+	if (input.services !== undefined) {
+		return ["config", "init", "--services", input.services.join(",")];
+	}
+	if (input.yes) {
+		return ["config", "init", "--services", "none"];
+	}
+	return ["config", "init"];
+};
+
+export const linkInputArgv = (input: {
+	projectId?: string;
+	orgId?: string;
+	projectName?: string;
+	regionId?: string;
+	branch?: string;
+}): string[] => {
+	const args: string[] = [];
+	if (input.orgId) {
+		args.push("--org-id", input.orgId);
+	}
+	if (input.projectId) {
+		args.push("--project-id", input.projectId);
+	}
+	if (input.projectName) {
+		args.push("--project-name", input.projectName);
+	}
+	if (input.regionId) {
+		args.push("--region-id", input.regionId);
+	}
+	if (input.branch) {
+		args.push("--branch", input.branch);
+	}
+	return args;
+};
+
 export const planExistingInit = (input: {
 	linked: boolean;
 	yes: boolean;
 	agentSetup: InitAgentSetup;
+	config: InitConfigPlan;
+	linkExtra?: readonly string[];
 }): InitStep[] => {
 	const steps: InitStep[] = [...planAgentSteps(input)];
 	if (!input.linked) {
-		steps.push(input.yes ? ["link", "--yes"] : ["link"]);
+		steps.push(
+			planLinkStep({
+				yes: input.yes,
+				extra: input.linkExtra,
+			}),
+		);
 	}
-	steps.push(
-		input.yes
-			? ["config", "init", "--services", "none"]
-			: ["config", "init"],
-	);
+	if (input.config.kind === "write") {
+		steps.push(
+			planConfigInitStep({
+				yes: input.yes,
+				services: input.config.services,
+			}),
+		);
+	}
 	return steps;
 };
 

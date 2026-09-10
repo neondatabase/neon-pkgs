@@ -21,7 +21,7 @@ export const shouldPrintInitBanner = (yes: boolean): boolean =>
 
 export const printInitBanner = (): void => {
 	process.stdout.write(
-		`\n${chalk.hex(NEON_GREEN)(formatInitBanner())}\n\n${chalk.dim("Let's get this directory set up with Neon.")}\n\n`,
+		`\n${chalk.hex(NEON_GREEN)(formatInitBanner())}\n\n${chalk.dim("Set up this directory for Neon.")}\n\n`,
 	);
 };
 
@@ -92,4 +92,40 @@ export const agentSetupDoneLabel = (input: {
 		return "not run";
 	}
 	return agentSetupLabel(input.setup);
+};
+
+export type InitConfigSummary = "created" | "skipped" | "existing" | "template";
+
+export const configSummaryLabel = (summary: InitConfigSummary): string => {
+	switch (summary) {
+		case "created":
+			return "neon.ts created";
+		case "skipped":
+			return "skipped";
+		case "existing":
+			return "existing Neon config";
+		case "template":
+			return "provided by template";
+		default: {
+			const _exhaustive: never = summary;
+			return _exhaustive;
+		}
+	}
+};
+
+export const INIT_STEP_LABELS: Record<string, string> = {
+	bootstrap: "Creating the app from the selected template…",
+	plugins: "Installing the Neon plugin…",
+	skills: "Installing Neon agent skills…",
+	mcp: "Setting up the Neon MCP server…",
+	link: "Linking a Neon project…",
+	config: "Setting up neon.ts…",
+};
+
+export const initStepLabel = (step: readonly string[]): string | undefined => {
+	const command = step[0];
+	if (command === undefined) {
+		return undefined;
+	}
+	return INIT_STEP_LABELS[command];
 };

@@ -356,6 +356,8 @@ describe("bootstrap", () => {
 		expect(stderr).toMatch(/Plugin agents/);
 		expect(stderr).toMatch(/Skills and MCP agents/);
 		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
+		expect(stderr).not.toContain("--skip-template");
+		expect(stderr).not.toMatch(/Skip the template/);
 	});
 
 	test("mixed --agent fails before scaffold", async () => {

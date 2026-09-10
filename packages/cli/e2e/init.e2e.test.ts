@@ -47,6 +47,8 @@ describe("e2e — neon init", () => {
 		expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(0);
 		expect(`${result.stderr}\n${result.stdout}`).toMatch(/scaffold/i);
 		expect(`${result.stderr}\n${result.stdout}`).toMatch(/-a, --agent/);
+		expect(`${result.stderr}\n${result.stdout}`).toMatch(/--skip-template/);
+		expect(`${result.stderr}\n${result.stdout}`).toMatch(/--no-config/);
 	});
 
 	it("rejects --data", async () => {

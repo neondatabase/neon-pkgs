@@ -3,9 +3,11 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
 	agentSetupDoneLabel,
+	configSummaryLabel,
 	formatInitBanner,
 	formatInitDone,
 	INIT_BANNER_LINES,
+	initStepLabel,
 	printInitBanner,
 	printInitDone,
 	shouldPrintInitBanner,
@@ -42,9 +44,7 @@ describe("printInitBanner", () => {
 		printInitBanner();
 		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
 		expect(strip(out)).toContain("██████╗");
-		expect(strip(out)).toContain(
-			"Let's get this directory set up with Neon.",
-		);
+		expect(strip(out)).toContain("Set up this directory for Neon.");
 		expect(stderr).not.toHaveBeenCalled();
 		stdout.mockRestore();
 		stderr.mockRestore();
@@ -136,5 +136,24 @@ describe("printInitDone", () => {
 		expect(stderr).not.toHaveBeenCalled();
 		stdout.mockRestore();
 		stderr.mockRestore();
+	});
+});
+
+describe("configSummaryLabel", () => {
+	test("names created, skipped, existing, and template configs", () => {
+		expect(configSummaryLabel("created")).toBe("neon.ts created");
+		expect(configSummaryLabel("skipped")).toBe("skipped");
+		expect(configSummaryLabel("existing")).toBe("existing Neon config");
+		expect(configSummaryLabel("template")).toBe("provided by template");
+	});
+});
+
+describe("initStepLabel", () => {
+	test("maps child commands to human labels", () => {
+		expect(initStepLabel(["plugins", "-y"])).toBe(
+			"Installing the Neon plugin…",
+		);
+		expect(initStepLabel(["config", "init"])).toBe("Setting up neon.ts…");
+		expect(initStepLabel(["unknown"])).toBeUndefined();
 	});
 });

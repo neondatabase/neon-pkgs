@@ -555,6 +555,7 @@ describe("link", () => {
 			);
 			const text = `${stdout}\n${stderr}`;
 			expect(text).not.toContain("--agent");
+			expect(text.replace(/\s+/g, "")).toContain("--no-config");
 			expectNonInteractiveHelp(text);
 		});
 	});
