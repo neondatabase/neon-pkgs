@@ -270,6 +270,7 @@ server.registerTool(
 		description: create.description,
 		inputSchema: create.inputSchema,
 		annotations: create.annotations,
+		_meta: { "neon/requiresApproval": create.requiresApproval },
 	},
 	async (input) => {
 		try {
