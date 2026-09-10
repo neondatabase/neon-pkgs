@@ -4,6 +4,7 @@ import {
 	type CreateNeonToolsOptions,
 	createNeonTool,
 	createNeonTools,
+	type NeonToolInjectOptions,
 	publishedId,
 } from "./index.js";
 import { toMastraTools } from "./mastra.js";
@@ -106,24 +107,102 @@ revokeCredential
 const omittedProject = createNeonTools({
 	apiKey: "test-key",
 	tools: ["projects.get"] as const,
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedProject["projects.get"].execute({}).then((result) => {
 	expectTypeOf(result.data.id).toEqualTypeOf<string>();
 });
 
+createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	inject: {
+		// @ts-expect-error inject keys are the field names
+		projectId: "granted-project",
+	},
+});
+
 const filledProject = createNeonTools({
 	apiKey: "test-key",
 	tools: ["projects.get"] as const,
-	inject: { projectId: "granted-project" },
+	inject: { project_id: "granted-project", mode: "fallback" },
 });
 filledProject["projects.get"].execute({});
 filledProject["projects.get"].execute({ project_id: "caller-project" });
 
+declare const wideInject: NeonToolInjectOptions;
+const fromWideGet = createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	inject: wideInject,
+});
+// @ts-expect-error union inject does not guarantee project_id
+fromWideGet["projects.get"].execute({});
+fromWideGet["projects.get"].execute({ project_id: "project-id" });
+
+const fromWideDelete = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: wideInject,
+});
+fromWideDelete["branches.delete"].execute({
+	project_id: "project-id",
+	branch_id: "br-id",
+});
+// @ts-expect-error union inject does not guarantee project_id
+fromWideDelete["branches.delete"].execute({ branch_id: "br-id" });
+// @ts-expect-error union inject does not guarantee branch_id
+fromWideDelete["branches.delete"].execute({ project_id: "project-id" });
+
+const injectProject: NeonToolInjectOptions = {
+	project_id: "granted-project",
+};
+const fromProjectDelete = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: injectProject,
+});
+fromProjectDelete["branches.delete"].execute({ branch_id: "br-id" });
+// @ts-expect-error project-only inject still requires branch_id
+fromProjectDelete["branches.delete"].execute({});
+
+const injectBranch: NeonToolInjectOptions = {
+	branch_id: "granted-branch",
+};
+const fromBranchDelete = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: injectBranch,
+});
+fromBranchDelete["branches.delete"].execute({ project_id: "project-id" });
+// @ts-expect-error branch-only inject still requires project_id
+fromBranchDelete["branches.delete"].execute({});
+// @ts-expect-error branch-only inject still requires project_id
+fromBranchDelete["branches.delete"].execute({ branch_id: "br-id" });
+
+const injectSatisfies = {
+	project_id: "granted-project",
+} satisfies NeonToolInjectOptions;
+const fromSatisfies = createNeonTools({
+	apiKey: "test-key",
+	tools: ["branches.delete"] as const,
+	inject: injectSatisfies,
+});
+fromSatisfies["branches.delete"].execute({ branch_id: "br-id" });
+// @ts-expect-error project_id is injected
+fromSatisfies["branches.delete"].execute({});
+
+createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	// @ts-expect-error undefined is not an inject value
+	inject: { project_id: undefined },
+});
+
 const omittedBranch = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.delete"] as const,
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedBranch["branches.delete"].execute({ branch_id: "br-id" });
 
@@ -146,16 +225,15 @@ const omittedBoth = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.delete"] as const,
 	inject: {
-		projectId: "granted-project",
-		branchId: "granted-branch",
-		omitFromSchema: true,
+		project_id: "granted-project",
+		branch_id: "granted-branch",
 	},
 });
 omittedBoth["branches.delete"].execute({});
 
 const omittedCreateNeonTool = createNeonTool("projects.get", {
 	apiKey: "test-key",
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedCreateNeonTool.execute({});
 
@@ -260,7 +338,7 @@ createBranchAndConnect.execute({
 const omittedWorkflow = createNeonTools({
 	apiKey: "test-key",
 	tools: ["branches.createAndConnect"] as const,
-	inject: { projectId: "granted-project", omitFromSchema: true },
+	inject: { project_id: "granted-project" },
 });
 omittedWorkflow["branches.createAndConnect"].execute({ name: "feature-x" });
 
