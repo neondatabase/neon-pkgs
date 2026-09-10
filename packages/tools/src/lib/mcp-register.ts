@@ -36,6 +36,21 @@ const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
 		if (typeof error.code === "string") {
 			payload.code = error.code;
 		}
+		if (typeof error.source === "string") {
+			payload.source = error.source;
+		}
+		if (typeof error.timeoutMs === "number") {
+			payload.timeoutMs = error.timeoutMs;
+		}
+		if (typeof error.requestId === "string") {
+			payload.requestId = error.requestId;
+		}
+		if (typeof error.reason === "string") {
+			payload.reason = error.reason;
+		}
+		if (typeof error.operationId === "string") {
+			payload.operationId = error.operationId;
+		}
 	}
 	return payload;
 };
