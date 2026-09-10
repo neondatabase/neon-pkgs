@@ -63,7 +63,6 @@ import {
 	type NestedBootstrapResult,
 } from "./bootstrap.js";
 import { hasNeonConfigFile } from "./config.js";
-import { autoPullEnvAfterPin } from "./env.js";
 
 export type { InitRun };
 export { initChildEnv };
@@ -100,7 +99,6 @@ export type InitProps = CommonProps & {
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
 	detectAgent?: () => AgentType | null;
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
-	pullEnvAfterConfig?: typeof autoPullEnvAfterPin;
 };
 
 export const command = "init";
@@ -528,20 +526,22 @@ export const handler = async (props: InitProps) => {
 				branch,
 			})
 		) {
-			const projectId = context.projectId;
-			if (projectId !== undefined && branch !== undefined) {
-				const pull = props.pullEnvAfterConfig ?? autoPullEnvAfterPin;
-				await pull({
-					apiClient: props.apiClient,
-					apiKey: props.apiKey,
-					apiHost: props.apiHost,
-					output: props.output,
-					contextFile,
-					projectId,
-					branch,
+			try {
+				await runInitSteps([["env", "pull"]], {
 					cwd,
-					envPull: true,
+					run,
+					forward,
+					authEnv,
+					narrate: "human",
 				});
+			} catch (err) {
+				const message =
+					err instanceof Error ? err.message : String(err);
+				log.warning(
+					"Created neon.ts, but pulling its Neon env vars failed: %s\n" +
+						`Run \`${getCliName()} env pull\` once resolved.`,
+					message,
+				);
 			}
 		}
 	}

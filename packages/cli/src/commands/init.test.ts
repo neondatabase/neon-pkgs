@@ -22,7 +22,6 @@ const baseProps = (overrides: Record<string, unknown> = {}) => ({
 	apiHost: host,
 	output: "table" as const,
 	contextFile: "/tmp/does-not-exist/.neon",
-	pullEnvAfterConfig: vi.fn().mockResolvedValue({ status: "skipped" }),
 	...overrides,
 });
 
@@ -703,7 +702,7 @@ describe("init handler", () => {
 		expect(runBootstrap).toHaveBeenCalledTimes(1);
 	});
 
-	test("strips an ambient NEON_API_KEY from skills and plugins, not bootstrap, link, or mcp", async () => {
+	test("strips an ambient NEON_API_KEY from skills and plugins, not bootstrap, link, mcp, or env", async () => {
 		const { initChildEnv } = await import("./init.js");
 		const base = { PATH: "/bin", NEON_API_KEY: "napi_env" };
 		expect(initChildEnv("bootstrap", undefined, base)).toEqual(base);
@@ -714,6 +713,7 @@ describe("init handler", () => {
 			PATH: "/bin",
 		});
 		expect(initChildEnv("link", undefined, base)).toEqual(base);
+		expect(initChildEnv("env", undefined, base)).toEqual(base);
 		expect(
 			initChildEnv("mcp", { NEON_API_KEY: "napi_flag" }, base),
 		).toEqual({
@@ -1149,6 +1149,7 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"plugins",
 			"config",
+			"env",
 		]);
 	});
 
@@ -1161,7 +1162,6 @@ describe("init handler", () => {
 			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
 		);
 		const run = vi.fn().mockResolvedValue(true);
-		const pullEnvAfterConfig = vi.fn().mockResolvedValue({ status: "ok" });
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -1171,18 +1171,50 @@ describe("init handler", () => {
 				yes: true,
 				contextFile,
 				detectProjectAgents: () => ["cursor"],
-				pullEnvAfterConfig,
 			}),
 		);
 
-		expect(pullEnvAfterConfig).toHaveBeenCalledWith(
-			expect.objectContaining({
-				projectId: "proj-1",
-				branch: "main",
+		expect(
+			run.mock.calls
+				.find((call) => call[0][0] === "env")?.[0]
+				.slice(0, 2),
+		).toEqual(["env", "pull"]);
+	});
+
+	test("env pull after neon.ts forwards an explicit API key", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-env-key-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+		);
+		const { recordCredentialInputs: record } = await import(
+			"@neon-internals/cli-core/auth_selection"
+		);
+		record({
+			apiKeyFlag: "napi_flag",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir: "",
+		});
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
 				cwd,
-				envPull: true,
+				run,
+				yes: true,
+				contextFile,
+				detectProjectAgents: () => ["cursor"],
 			}),
 		);
+
+		expect(
+			run.mock.calls.find((call) => call[0][0] === "env")?.[2],
+		).toEqual({ NEON_API_KEY: "napi_flag" });
 	});
 
 	test("does not pull env when neon.ts already existed", async () => {
@@ -1195,7 +1227,6 @@ describe("init handler", () => {
 			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
 		);
 		const run = vi.fn().mockResolvedValue(true);
-		const pullEnvAfterConfig = vi.fn();
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -1205,11 +1236,42 @@ describe("init handler", () => {
 				yes: true,
 				contextFile,
 				detectProjectAgents: () => ["cursor"],
-				pullEnvAfterConfig,
 			}),
 		);
 
-		expect(pullEnvAfterConfig).not.toHaveBeenCalled();
+		expect(run.mock.calls.map((call) => call[0][0])).not.toContain("env");
+	});
+
+	test("a failed env pull warns and still finishes", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-env-fail-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+		);
+		const run = vi.fn().mockImplementation(async (argv: string[]) => {
+			return argv[0] !== "env";
+		});
+		const { handler } = await import("./init.js");
+		const { log } = await import("../log.js");
+		const warning = vi.spyOn(log, "warning");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				contextFile,
+				detectProjectAgents: () => ["cursor"],
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toContain("env");
+		expect(warning).toHaveBeenCalled();
+		expect(String(warning.mock.calls[0]?.[0])).toMatch(
+			/pulling its Neon env vars failed/,
+		);
 	});
 });
 

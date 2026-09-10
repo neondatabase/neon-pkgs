@@ -154,6 +154,9 @@ describe("initStepLabel", () => {
 			"Installing the Neon plugin…",
 		);
 		expect(initStepLabel(["config", "init"])).toBe("Setting up neon.ts…");
+		expect(initStepLabel(["env", "pull"])).toBe(
+			"Refreshing Neon env vars…",
+		);
 		expect(initStepLabel(["unknown"])).toBeUndefined();
 	});
 });

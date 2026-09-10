@@ -207,4 +207,16 @@ describe("runInitSteps", () => {
 			"plugins -y",
 		);
 	});
+
+	test("env pull receives the auth overlay", async () => {
+		const run = vi.fn().mockResolvedValue(true);
+		const authEnv = { NEON_API_KEY: "napi_flag" };
+		await runInitSteps([["env", "pull"]], {
+			cwd: "/app",
+			run,
+			forward,
+			authEnv,
+		});
+		expect(run.mock.calls[0][2]).toEqual(authEnv);
+	});
 });

@@ -120,6 +120,7 @@ export const INIT_STEP_LABELS: Record<string, string> = {
 	mcp: "Setting up the Neon MCP server…",
 	link: "Linking a Neon project…",
 	config: "Setting up neon.ts…",
+	env: "Refreshing Neon env vars…",
 };
 
 export const initStepLabel = (step: readonly string[]): string | undefined => {
