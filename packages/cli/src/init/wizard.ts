@@ -58,30 +58,45 @@ export const pickAgentSetupInteractively =
 		return setup;
 	};
 
+export type InitTemplateChoice = {
+	title: string;
+	value: string;
+	description: string;
+};
+
+export const initTemplatePickerChoices = (
+	templates: readonly BootstrapTemplate[],
+): InitTemplateChoice[] => {
+	const [recommended, ...rest] = templates;
+	if (recommended === undefined) {
+		throw new Error("No templates available to scaffold from.");
+	}
+	return [
+		{
+			title: `${formatTemplateTitle(recommended)} (recommended)`,
+			value: recommended.id,
+			description:
+				"Scaffold this starter, then set up agents and link a Neon project.",
+		},
+		{
+			title: "Skip the template",
+			value: SKIP_TEMPLATE_VALUE,
+			description:
+				"Set up agents and link a Neon project without copying template files.",
+		},
+		...rest.map((template) => ({
+			title: formatTemplateTitle(template),
+			value: template.id,
+			description: template.description ?? "",
+		})),
+	];
+};
+
 export const pickInitTemplateInteractively = async (
 	templates: readonly BootstrapTemplate[],
 ): Promise<InitTemplatePick> => {
 	requireInteractive();
-	if (templates.length === 0) {
-		throw new Error("No templates available to scaffold from.");
-	}
-	const choices = templates.map((template, index) => ({
-		title:
-			index === 0
-				? `${formatTemplateTitle(template)} (recommended)`
-				: formatTemplateTitle(template),
-		value: template.id,
-		description:
-			index === 0
-				? "Scaffold this starter, then set up agents and link a Neon project."
-				: (template.description ?? ""),
-	}));
-	choices.push({
-		title: "Skip the template",
-		value: SKIP_TEMPLATE_VALUE,
-		description:
-			"Set up agents and link a Neon project without copying template files.",
-	});
+	const choices = initTemplatePickerChoices(templates);
 	const { id } = await prompts({
 		onState: restoreCursorOnAbort,
 		type: "select",

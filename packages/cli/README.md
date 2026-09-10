@@ -792,7 +792,7 @@ Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`, including the link step inside nested bootstrap when a template is scaffolded. They are not filled from `.neon`; a linked directory is not relinked unless you pass one of those flags.
 
-`--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. After a new `neon.ts` on a pinned branch, init runs `env pull`.
+`--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
 
 `-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to nested bootstrap, `--yes --no-config` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 

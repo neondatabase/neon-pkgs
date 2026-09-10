@@ -22,6 +22,9 @@ export const INIT_TEMPLATE_CONFLICT =
 export const INIT_CONFIG_SERVICES_CONFLICT =
 	"--no-config cannot be combined with --services.";
 
+export const INIT_TEMPLATE_KEEPS_CONFIG =
+	"A scaffolded template keeps the neon.ts it ships. --config, --no-config, and --services apply when you skip the template or set up an existing app.";
+
 export const initTemplateInNonEmptyMessage = (): string =>
 	`--template is only for an empty directory. This directory already has files, so there is nothing to scaffold. Omit --template, or run \`${getCliName()} bootstrap\` in an empty folder.`;
 

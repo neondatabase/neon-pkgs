@@ -1092,6 +1092,55 @@ describe("init handler", () => {
 		});
 	});
 
+	test("empty --template --no-config warns that the template keeps neon.ts", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-noconfig-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const runBootstrap = nestedBootstrapOk();
+		const { handler } = await import("./init.js");
+		const { log } = await import("../log.js");
+		const warning = vi.spyOn(log, "warning");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				template: "hono",
+				config: false,
+				contextFile: join(cwd, ".neon"),
+				runBootstrap,
+			}),
+		);
+
+		expect(runBootstrap).toHaveBeenCalledTimes(1);
+		expect(warning).toHaveBeenCalledWith(
+			expect.stringMatching(/keeps the neon\.ts it ships/),
+		);
+	});
+
+	test("empty --template without config flags does not warn about neon.ts", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-nowarn-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const runBootstrap = nestedBootstrapOk();
+		const { handler } = await import("./init.js");
+		const { log } = await import("../log.js");
+		const warning = vi.spyOn(log, "warning");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				template: "hono",
+				contextFile: join(cwd, ".neon"),
+				runBootstrap,
+			}),
+		);
+
+		expect(runBootstrap).toHaveBeenCalledTimes(1);
+		expect(warning).not.toHaveBeenCalled();
+	});
+
 	test("empty --template forwards --project-id into nested link", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-proj-"));
 		const run = vi.fn().mockResolvedValue(true);
@@ -1306,6 +1355,7 @@ describe("init CLI", () => {
 			snapshot: false,
 		});
 		const help = `${stdout}\n${stderr}`;
+		const flat = help.replace(/\s+/g, " ");
 		expect(help).toMatch(/scaffold/i);
 		expect(help).toMatch(/plugin/i);
 		expect(help).toMatch(/skip agent setup/i);
@@ -1314,15 +1364,16 @@ describe("init CLI", () => {
 		expect(help).toMatch(/exits/);
 		expect(help).toMatch(/-a, --agent/);
 		expect(help).toMatch(/Skip agent selection/);
-		expect(help.replace(/\s+/g, " ")).toMatch(
-			/forwarded to plugins, or to skills and mcp/i,
-		);
+		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
 		expect(help).toMatch(/Plugin agents/);
 		expect(help).toMatch(/Skills and MCP agents/);
 		expect(help).toMatch(/--skip-template/);
 		expect(help).toMatch(/--no-config/);
-		expect(help).toMatch(/Create neon.ts/);
+		expect(flat).toMatch(/create neon\.ts/i);
 		expect(help).toMatch(/skip scaffolding/i);
+		expect(flat).toMatch(/Existing app or --skip-template/);
+		expect(flat).toMatch(/scaffolding a template keeps/i);
+		expect(flat).toMatch(/Ignored when scaffolding a template/);
 		expect(help).not.toMatch(/installed apps/);
 		expect(help).not.toMatch(/Set output format/);
 	});

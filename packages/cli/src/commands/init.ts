@@ -13,6 +13,7 @@ import { type InitRun, initChildEnv, spawnCliChild } from "../init/child.js";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
+	INIT_TEMPLATE_KEEPS_CONFIG,
 	type InitConfigPlan,
 	resolveInitConfigChoice,
 	resolveInitTemplateChoice,
@@ -135,16 +136,17 @@ export const builder = (yargs: yargs.Argv) =>
 		.option("config", {
 			type: "boolean",
 			describe:
-				"Create neon.ts after linking. Use --no-config to skip. Omitted in a terminal: you will be asked",
+				"Existing app or --skip-template: create neon.ts after linking. Use --no-config to skip. Omitted in a terminal: you will be asked. Scaffolding a template keeps that template's neon.ts",
 		})
 		.option(
 			"services",
 			servicesOption({
 				key: "services",
 				allowed: CONFIG_INIT_SERVICES,
-				describe: "Services to declare in neon.ts",
+				describe:
+					"Existing app or --skip-template: services to declare in neon.ts",
 				noneMeans: CONFIG_INIT_NONE_MEANS,
-				also: "Implies creating neon.ts. Cannot be combined with --no-config.",
+				also: "Implies creating neon.ts. Cannot be combined with --no-config. Ignored when scaffolding a template.",
 			}),
 		)
 		.option("org-id", {
@@ -200,7 +202,7 @@ export const builder = (yargs: yargs.Argv) =>
 			helpEpilogue(
 				"Empty directory: pick a starter template, or skip scaffolding and only set up agents, a Neon project, and neon.ts. That skip is not on `neon bootstrap`.",
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
-				"neon.ts is optional. Saying no skips the services picker and does not write the file.",
+				"neon.ts is optional when you skip the template or set up an existing app. Saying no skips the services picker and does not write the file. Scaffolding a template keeps that template's neon.ts.",
 				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. link --yes may still ask for a project.",
 				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with -y.",
 				helpCsv("Plugin agents", initPluginAgents()),
@@ -356,6 +358,16 @@ const printNestedBootstrapDone = (
 	);
 };
 
+const noteTemplateKeepsShippedConfig = (
+	config: boolean | undefined,
+	services: readonly string[] | undefined,
+): void => {
+	if (config === undefined && services === undefined) {
+		return;
+	}
+	log.warning(INIT_TEMPLATE_KEEPS_CONFIG);
+};
+
 export const handler = async (props: InitProps) => {
 	if (props.output === "json" || props.output === "yaml") {
 		throw new Error(
@@ -414,6 +426,7 @@ export const handler = async (props: InitProps) => {
 			throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
 		}
 		const runBootstrap = props.runBootstrap ?? bootstrapHandler;
+		noteTemplateKeepsShippedConfig(props.config, services);
 		const result = await runBootstrap(
 			nestedBootstrapProps(
 				props,
@@ -446,6 +459,7 @@ export const handler = async (props: InitProps) => {
 		)(templates);
 		if (picked.kind === "template") {
 			const runBootstrap = props.runBootstrap ?? bootstrapHandler;
+			noteTemplateKeepsShippedConfig(props.config, services);
 			const result = await runBootstrap(
 				nestedBootstrapProps(
 					props,

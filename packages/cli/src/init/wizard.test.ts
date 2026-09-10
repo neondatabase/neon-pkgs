@@ -17,6 +17,7 @@ vi.mock("../utils/agent_picker.js", async (importOriginal) => {
 });
 
 import {
+	initTemplatePickerChoices,
 	pickAgentSetupInteractively,
 	pickInitConfigInteractively,
 	pickInitTemplateInteractively,
@@ -101,9 +102,32 @@ describe("init pickers", () => {
 		expect(question.message).toBe(
 			"How would you like to set up this directory?",
 		);
-		expect(question.choices.at(-1)?.value).toBe("skip");
-		expect(question.choices.at(-1)?.title).toBe("Skip the template");
+		expect(question.choices[1]?.value).toBe("skip");
+		expect(question.choices[1]?.title).toBe("Skip the template");
 		expect(question.choices[0]?.title).toMatch(/recommended/i);
+	});
+
+	test("skip stays the second choice when the catalog is longer than one page", () => {
+		const templates = Array.from({ length: 12 }, (_, index) => ({
+			id: `tmpl-${index}`,
+			title: `Template ${index}`,
+			description: `Description ${index}`,
+			requires: ["database" as const],
+			source: {
+				owner: "neondatabase",
+				repo: "examples",
+				ref: "main",
+				subdir: `with-${index}`,
+			},
+		}));
+		const choices = initTemplatePickerChoices(templates);
+		expect(choices).toHaveLength(13);
+		expect(choices[0]?.value).toBe("tmpl-0");
+		expect(choices[0]?.title).toMatch(/recommended/i);
+		expect(choices[1]?.value).toBe("skip");
+		expect(choices[1]?.title).toBe("Skip the template");
+		expect(choices[2]?.value).toBe("tmpl-1");
+		expect(choices.at(-1)?.value).toBe("tmpl-11");
 	});
 
 	test("template picker returns the catalog template, including source", async () => {
