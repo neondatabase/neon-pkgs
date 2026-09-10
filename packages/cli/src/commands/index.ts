@@ -35,6 +35,7 @@ import * as setContext from "./set_context.js";
 import * as skills from "./skills.js";
 import * as snapshots from "./snapshots.js";
 import * as status from "./status.js";
+import * as triggers from "./triggers.js";
 import * as users from "./user.js";
 import * as vpcEndpoints from "./vpc_endpoints.js";
 
@@ -70,6 +71,7 @@ export default [
 	ask,
 	dataApi,
 	functions,
+	triggers,
 	dev,
 	diff,
 	config,

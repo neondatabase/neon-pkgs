@@ -1,12 +1,16 @@
 import {
 	createCredential,
 	listCredentials,
+	revealCredential,
 	revokeCredential,
+	rotateCredential,
 } from "../../client/sdk.gen.js";
 import type {
 	CreateCredentialRequest,
 	CreateCredentialResponse,
 	CredentialMeta,
+	CredentialSecret,
+	RotateCredentialResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import type { NeonResult, Outcome } from "../result.js";
@@ -112,6 +116,90 @@ export class Credentials<DThrow extends boolean> {
 				throwOnError: false,
 				signal,
 			}),
+		);
+	}
+
+	/**
+	 * Reveal an existing credential's live secrets (`api_token`,
+	 * `s3_secret_access_key`). 404 if revoked/expired or not in this project;
+	 * 409 if the credential predates secret retrieval — rotate it to obtain one.
+	 *
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials/{token_id}/reveal
+	 */
+	reveal(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+	): Promise<Outcome<CredentialSecret, DThrow>>;
+	reveal<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<CredentialSecret, Throw>>;
+	reveal(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+		opts?: CallOptions,
+	): Promise<CredentialSecret | NeonResult<CredentialSecret>> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				revealCredential({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						token_id: tokenId,
+					},
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
+		);
+	}
+
+	/**
+	 * Rotate an existing credential: mint new `api_token` /
+	 * `s3_secret_access_key` (returned once) while keeping `token_id`, `scopes`
+	 * and `branch_id` unchanged.
+	 *
+	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials/{token_id}/rotate
+	 */
+	rotate(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+	): Promise<Outcome<RotateCredentialResponse, DThrow>>;
+	rotate<Throw extends boolean = DThrow>(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<RotateCredentialResponse, Throw>>;
+	rotate(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+		opts?: CallOptions,
+	): Promise<
+		RotateCredentialResponse | NeonResult<RotateCredentialResponse>
+	> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				rotateCredential({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						token_id: tokenId,
+					},
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data,
 		);
 	}
 }

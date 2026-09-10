@@ -1,4 +1,5 @@
 export const hiddenToolIds = [
+	"credentials.reveal",
 	"operations.waitFor",
 	"postgres.roles.password",
 	"storage.objects.get",
@@ -76,6 +77,12 @@ export const toolIds = [
 	"credentials.list",
 	"credentials.create",
 	"credentials.revoke",
+	"credentials.rotate",
+	"triggers.list",
+	"triggers.get",
+	"triggers.create",
+	"triggers.update",
+	"triggers.delete",
 	"aiGateway.get",
 	"logs.query",
 	"logs.fields",
@@ -120,6 +127,7 @@ export const isNeonToolId = (id: string): id is NeonToolId =>
 	(toolIds as readonly string[]).includes(id);
 
 const hiddenToolHint: Record<HiddenToolId, string> = {
+	"credentials.reveal": "Credential secrets are not published as a tool.",
 	"operations.waitFor":
 		"Write tools wait for readiness. operations.waitFor is not a tool.",
 	"postgres.roles.password": "Role passwords are not published as a tool.",

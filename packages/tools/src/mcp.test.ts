@@ -497,6 +497,8 @@ describe("MCP catalog size", () => {
 			(sum, tool) => sum + JSON.stringify(tool).length,
 			0,
 		);
-		expect(chars / 4).toBeLessThan(20_000);
+		// Guardrail against a runaway compact catalog, not a frozen cap: it grows
+		// as the API adds operations. Raise it deliberately when new tools land.
+		expect(chars / 4).toBeLessThan(25_000);
 	});
 });

@@ -14,6 +14,7 @@ import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
 import { Snapshots } from "./resources/snapshots.js";
 import { Storage } from "./resources/storage.js";
+import { Triggers } from "./resources/triggers.js";
 
 /**
  * The ergonomic Neon client. Resource namespaces wrap the raw operations with auth-once,
@@ -33,6 +34,7 @@ export interface NeonClient<DThrow extends boolean = false> {
 	readonly postgres: Postgres<DThrow>;
 	readonly storage: Storage<DThrow>;
 	readonly functions: Functions<DThrow>;
+	readonly triggers: Triggers<DThrow>;
 	readonly credentials: Credentials<DThrow>;
 	readonly aiGateway: AiGateway<DThrow>;
 	readonly logs: Logs<DThrow>;
@@ -71,6 +73,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		postgres: new Postgres<Throw>(ctx),
 		storage: new Storage<Throw>(ctx),
 		functions: new Functions<Throw>(ctx),
+		triggers: new Triggers<Throw>(ctx),
 		credentials: new Credentials<Throw>(ctx),
 		aiGateway: new AiGateway<Throw>(ctx),
 		logs: new Logs<Throw>(ctx),

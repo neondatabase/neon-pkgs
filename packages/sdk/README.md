@@ -510,6 +510,35 @@ const { data: registered } = await neon.functions.customDomains.register(
 // Point a CNAME for docs.example.com at registered.cname_target
 ```
 
+### `neon.triggers`
+
+Function Triggers (beta): invoke a deployed function on a cron schedule. `Trigger`
+is a discriminated union on `type` (`"schedule"` is the only type today) — narrow on
+`t.type` to read a variant's fields. `create` and `update` inputs must carry the
+`type` discriminator.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId)` | `Trigger[]` | Ordered by `trigger_id`; includes triggers inherited from a parent branch |
+| `get(projectId, branchId, triggerId)` | `Trigger` | |
+| `create(projectId, branchId, input)` | `Trigger` | `input`: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }` — cron is five numeric fields, always UTC |
+| `update(projectId, branchId, triggerId, input)` | `Trigger` | Partial, but must include `type` plus ≥1 field. Send `{ type: "schedule", enabled: false }` to pause without deleting |
+| `delete(projectId, branchId, triggerId)` | **→void** | |
+
+```ts
+const { data: trigger } = await neon.triggers.create(projectId, branchId, {
+  type: "schedule",
+  function_slug: "uptime",
+  name: "uptime-check",
+  schedule: { cron: "*/15 * * * *" },
+});
+// Pause it later without deleting
+await neon.triggers.update(projectId, branchId, trigger!.trigger_id, {
+  type: "schedule",
+  enabled: false,
+});
+```
+
 ### `neon.credentials`
 
 Branch-scoped scoped credentials (beta). Secrets (`api_token`, `s3_secret_access_key`)
@@ -519,6 +548,8 @@ are returned **once** on `create`.
 | --- | --- | --- |
 | `list(projectId, branchId)` | `CredentialMeta[]` | |
 | `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke` |
+| `reveal(projectId, branchId, tokenId)` | `CredentialSecret` | Recovers `api_token` / `s3_secret_access_key` of an existing credential. 404 if revoked/expired; 409 if the credential predates secret retrieval (rotate to obtain one). |
+| `rotate(projectId, branchId, tokenId)` | `RotateCredentialResponse` | New `api_token` / `s3_secret_access_key`, returned once; `token_id`, `scopes`, `branch_id` unchanged. |
 | `revoke(projectId, branchId, tokenId)` | **→void** | |
 
 ### `neon.aiGateway`
