@@ -2,6 +2,7 @@ export const hiddenToolIds = [
 	"operations.waitFor",
 	"postgres.roles.password",
 	"storage.objects.get",
+	"credentials.reveal",
 ] as const;
 
 export type HiddenToolId = (typeof hiddenToolIds)[number];
@@ -73,9 +74,15 @@ export const toolIds = [
 	"functions.customDomains.list",
 	"functions.customDomains.register",
 	"functions.customDomains.delete",
+	"functions.triggers.list",
+	"functions.triggers.get",
+	"functions.triggers.create",
+	"functions.triggers.update",
+	"functions.triggers.delete",
 	"credentials.list",
 	"credentials.create",
 	"credentials.revoke",
+	"credentials.rotate",
 	"aiGateway.get",
 	"logs.query",
 	"logs.fields",
@@ -124,6 +131,7 @@ const hiddenToolHint: Record<HiddenToolId, string> = {
 		"Write tools wait for readiness. operations.waitFor is not a tool.",
 	"postgres.roles.password": "Role passwords are not published as a tool.",
 	"storage.objects.get": "Object bytes are not published as a tool.",
+	"credentials.reveal": "Credential secrets are not published as a tool.",
 };
 
 export const unpublishedToolError = (id: string): TypeError => {

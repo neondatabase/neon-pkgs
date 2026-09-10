@@ -492,7 +492,10 @@ const { data: deployment } = await neon.functions.deploy(projectId, branchId, "a
 
 Branch custom domains (beta). v1 can only point a domain at a function
 (`entity_type: "function"`, `entity_id` is the function slug). The response
-`cname_target` is the hostname to CNAME; the domain goes live after DNS
+includes `cname_target` (the hostname to CNAME). Optional `status`,
+`dns_status`, `binding_status`, and `status_reason` report provisioning;
+they may be absent right after register. Those strings are not enums —
+treat any undocumented value as unknown. The domain goes live after DNS
 resolves and a certificate is issued on the first request.
 
 | Method | Returns | Notes |
@@ -510,16 +513,77 @@ const { data: registered } = await neon.functions.customDomains.register(
 // Point a CNAME for docs.example.com at registered.cname_target
 ```
 
+#### `neon.functions.triggers`
+
+Branch Function triggers (beta). v1 only supports `type: "schedule"`. Cron
+is a numeric five-field expression in UTC. List is the full set visible on
+the branch (not cursor-paginated). An inherited trigger keeps its
+project-wide id and stays disabled on the child until enabled there.
+Editing an inherited trigger writes a child-local shadow. Deleting an
+inherited trigger writes a tombstone so it does not reappear.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId)` | `Trigger[]` | |
+| `create(projectId, branchId, input)` | `Trigger` | `input`: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }` |
+| `get(projectId, branchId, triggerId)` | `Trigger` | |
+| `update(projectId, branchId, triggerId, input)` | `Trigger` | `input` must include `type: "schedule"`; other fields optional |
+| `delete(projectId, branchId, triggerId)` | **→void** | |
+
+```ts
+const { data: trigger } = await neon.functions.triggers.create(projectId, branchId, {
+  type: "schedule",
+  function_slug: "worker",
+  name: "daily-refresh",
+  schedule: { cron: "0 9 * * *" },
+  enabled: false,
+});
+await neon.functions.triggers.update(projectId, branchId, trigger.trigger_id, {
+  type: "schedule",
+  enabled: true,
+});
+await neon.functions.triggers.delete(projectId, branchId, trigger.trigger_id);
+```
+
 ### `neon.credentials`
 
-Branch-scoped scoped credentials (beta). Secrets (`api_token`, `s3_secret_access_key`)
-are returned **once** on `create`.
+Branch-scoped scoped credentials (beta). `create` returns `api_token` and
+`s3_secret_access_key` once. `reveal` recovers those secrets later (POST,
+so they never ride a GET). `rotate` replaces the secrets in place and
+keeps `token_id`.
+
+Create **input** `scopes` are `CredentialScope`: `storage:read`,
+`storage:write`, `ai_gateway:invoke`, `functions:invoke`. List / create /
+rotate **responses** use `GrantedCredentialScope[]`, which also includes
+`telemetry:write` and must accept unknown values. Echoing
+`created.scopes` into `create()` is a TypeScript error; narrow to
+`CredentialScope` at the call site. The SDK does not filter response
+scopes.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list(projectId, branchId)` | `CredentialMeta[]` | |
-| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke` |
+| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` |
 | `revoke(projectId, branchId, tokenId)` | **→void** | |
+| `reveal(projectId, branchId, tokenId)` | `CredentialSecret` | `{ token_id, api_token, s3_secret_access_key }` — no `branch_id`. 404 if revoked, expired, or wrong project. 409 if issued before secret retrieval; rotate to obtain one |
+| `rotate(projectId, branchId, tokenId)` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret |
+
+```ts
+const { data: created } = await neon.credentials.create(projectId, branchId, {
+  scopes: ["storage:read"],
+  principal_type: "user",
+});
+const { data: revealed } = await neon.credentials.reveal(
+  projectId,
+  branchId,
+  created.token_id,
+);
+const { data: rotated } = await neon.credentials.rotate(
+  projectId,
+  branchId,
+  created.token_id,
+);
+```
 
 ### `neon.aiGateway`
 

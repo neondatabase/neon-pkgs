@@ -2025,15 +2025,42 @@ export const zPresignResponse = z.strictObject({
 });
 
 /**
- * A single capability a credential may exercise. A credential is granted
- * a set of these; it may only perform actions explicitly listed in its
- * scopes.
+ * A single capability you may request when issuing a credential. A
+ * credential is granted a set of these; it may only perform actions
+ * explicitly listed in its scopes.
+ *
+ * This is the *requestable* set. Responses describing an existing
+ * credential use `GrantedCredentialScope`, which is deliberately wider:
+ * a credential may have been granted a scope that this endpoint does not
+ * offer, and a response must be able to report it.
  *
  */
 export const zCredentialScope = z.enum([
     'storage:read',
     'storage:write',
     'ai_gateway:invoke',
+    'functions:invoke'
+]);
+
+/**
+ * A single capability a credential actually carries, as reported by
+ * responses that describe an existing credential.
+ *
+ * This set is a superset of `CredentialScope` (the requestable set)
+ * because a credential's scopes are not limited to what this API offers:
+ * the platform accepts additional scopes for customer-managed (`user`)
+ * credentials, so one may exist on your branch that was not issued
+ * through this endpoint. Responses must be able to report such a
+ * credential rather than fail to describe it — a client that rejected
+ * the value would, on rotate, discard the replacement secret after the
+ * rotation had already committed. Treat unknown values as opaque.
+ *
+ */
+export const zGrantedCredentialScope = z.enum([
+    'storage:read',
+    'storage:write',
+    'ai_gateway:invoke',
+    'telemetry:write',
     'functions:invoke'
 ]);
 
@@ -2049,8 +2076,52 @@ export const zCreateCredentialResponse = z.strictObject({
     name: z.string().optional(),
     api_token: z.string(),
     s3_secret_access_key: z.string(),
-    scopes: z.array(zCredentialScope),
+    scopes: z.array(zGrantedCredentialScope),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    created_at: z.iso.datetime(),
+    expires_at: z.iso.datetime().optional()
+});
+
+/**
+ * The live secrets of an existing credential, recovered on demand by the
+ * reveal endpoint. `api_token` and `s3_secret_access_key` are the same
+ * values handed back once at issuance.
+ *
+ * The field set is deliberately narrower than `CreateCredentialResponse`:
+ * it carries only what reveal can actually recover. `token_id_short`,
+ * `scopes`, `principal_type`, `created_at` and `expires_at` are metadata,
+ * not secrets — read them from the list endpoint instead.
+ *
+ * No `branch_id` is returned. Reveal is scoped by `(project_id,
+ * token_id)`, so the branch in the request path authorizes the call but
+ * is not proven to be the branch the credential was issued on. Echoing it
+ * back would assert an anchor this endpoint never verified. For a
+ * credential's true anchor branch, read `branch_id` from the list
+ * endpoint, which is branch-exact.
+ *
+ */
+export const zCredentialSecret = z.strictObject({
+    token_id: z.string(),
+    api_token: z.string(),
+    s3_secret_access_key: z.string()
+});
+
+/**
+ * The replacement secret material for an existing credential, returned
+ * exactly once. `token_id`, `scopes`, `branch_id` and `created_at` are
+ * unchanged by the rotation — only `api_token` and
+ * `s3_secret_access_key` are new.
+ *
+ */
+export const zRotateCredentialResponse = z.strictObject({
+    token_id: z.string(),
+    token_id_short: z.string(),
+    name: z.string().optional(),
+    api_token: z.string(),
+    s3_secret_access_key: z.string(),
+    scopes: z.array(zGrantedCredentialScope),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    principal_type: z.enum(['user']),
     created_at: z.iso.datetime(),
     expires_at: z.iso.datetime().optional()
 });
@@ -2059,7 +2130,7 @@ export const zCredentialMeta = z.strictObject({
     token_id: z.string(),
     token_id_short: z.string(),
     name: z.string().optional(),
-    scopes: z.array(zCredentialScope),
+    scopes: z.array(zGrantedCredentialScope),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
     principal_type: z.string(),
     function_id: z.string().optional(),
@@ -2106,11 +2177,97 @@ export const zNeonFunctionsListResponse = z.strictObject({
     functions: z.array(zNeonFunction)
 });
 
+/**
+ * Opaque, server-minted project-wide trigger identifier.
+ */
+export const zTriggerId = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}$/);
+
+/**
+ * A numeric five-field cron schedule interpreted in UTC.
+ */
+export const zFunctionTriggerSchedule = z.strictObject({
+    cron: z.string().min(1).max(1024)
+});
+
+export const zScheduleTriggerCreateRequest = z.strictObject({
+    type: z.enum(['schedule']),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/),
+    name: z.string().min(1).max(256),
+    function_path: z.string().min(1).max(2048).optional(),
+    schedule: zFunctionTriggerSchedule,
+    enabled: z.boolean().optional()
+});
+
+/**
+ * Trigger creation payload discriminated by `type`. The only currently
+ * supported trigger type is `schedule`.
+ *
+ */
+export const zTriggerCreateRequest = z.strictObject({
+    type: z.literal('schedule')
+}).merge(zScheduleTriggerCreateRequest);
+
+export const zScheduleTriggerUpdateRequest = z.strictObject({
+    type: z.enum(['schedule']),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).optional(),
+    name: z.string().min(1).max(256).optional(),
+    function_path: z.string().min(1).max(2048).optional(),
+    schedule: zFunctionTriggerSchedule.optional(),
+    enabled: z.boolean().optional()
+});
+
+/**
+ * Partial trigger update discriminated by `type`. The only currently
+ * supported trigger type is `schedule`.
+ *
+ */
+export const zTriggerUpdateRequest = z.strictObject({
+    type: z.literal('schedule')
+}).merge(zScheduleTriggerUpdateRequest);
+
+/**
+ * A branch-effective schedule trigger for a Function.
+ */
+export const zScheduleTrigger = z.strictObject({
+    type: z.enum(['schedule']),
+    trigger_id: zTriggerId,
+    function_slug: z.string(),
+    name: z.string(),
+    function_path: z.string(),
+    schedule: zFunctionTriggerSchedule,
+    enabled: z.boolean(),
+    version: z.int().gte(1),
+    next_run_at: z.string().nullable(),
+    source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    inherited: z.boolean()
+});
+
+/**
+ * A branch-effective trigger discriminated by `type`. The only currently
+ * supported trigger type is `schedule`.
+ *
+ */
+export const zTrigger = z.strictObject({
+    type: z.literal('schedule')
+}).merge(zScheduleTrigger);
+
+export const zTriggerResponse = z.strictObject({
+    trigger: zTrigger
+});
+
+export const zTriggersListResponse = z.strictObject({
+    triggers: z.array(zTrigger)
+});
+
 export const zCustomDomain = z.strictObject({
     domain: z.string(),
     entity_type: z.string(),
     entity_id: z.string(),
-    cname_target: z.string()
+    cname_target: z.string(),
+    status: z.string().optional(),
+    dns_status: z.string().optional(),
+    binding_status: z.string().optional(),
+    status_reason: z.string().optional()
 });
 
 export const zCustomDomainRegisterRequest = z.strictObject({
@@ -2655,10 +2812,6 @@ export const zDeleteProjectBranchPath = z.strictObject({
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
 });
 
-export const zDeleteProjectBranchQuery = z.strictObject({
-    hard_delete: z.boolean().optional()
-});
-
 export const zGetProjectBranchPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
@@ -3195,6 +3348,18 @@ export const zRevokeCredentialPath = z.strictObject({
     token_id: z.string()
 });
 
+export const zRevealCredentialPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    token_id: z.string()
+});
+
+export const zRotateCredentialPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    token_id: z.string()
+});
+
 export const zListProjectBranchFunctionsPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
@@ -3231,6 +3396,38 @@ export const zCreateProjectBranchFunctionDeploymentPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     slug: z.string().regex(/^[a-z0-9]{1,20}$/)
+});
+
+export const zListProjectBranchTriggersPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zCreateProjectBranchTriggerBody = zTriggerCreateRequest;
+
+export const zCreateProjectBranchTriggerPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zDeleteProjectBranchTriggerPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    trigger_id: zTriggerId
+});
+
+export const zGetProjectBranchTriggerPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    trigger_id: zTriggerId
+});
+
+export const zUpdateProjectBranchTriggerBody = zTriggerUpdateRequest;
+
+export const zUpdateProjectBranchTriggerPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    trigger_id: zTriggerId
 });
 
 export const zListProjectBranchCustomDomainsPath = z.strictObject({

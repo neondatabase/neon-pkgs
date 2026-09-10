@@ -250,7 +250,6 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "branches.delete",
 			generated: "deleteProjectBranch",
-			omit: ["hard_delete"],
 			run: (neon, input, signal) =>
 				neon.branches.delete(input.project_id, input.branch_id, {
 					signal,
@@ -822,6 +821,68 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
+	"functions.triggers.list": (options) =>
+		fromGenerated(options, {
+			id: "functions.triggers.list",
+			generated: "listProjectBranchTriggers",
+			run: (neon, input, signal) =>
+				neon.functions.triggers.list(
+					input.project_id,
+					input.branch_id,
+					{
+						signal,
+					},
+				),
+		}),
+	"functions.triggers.get": (options) =>
+		fromGenerated(options, {
+			id: "functions.triggers.get",
+			generated: "getProjectBranchTrigger",
+			run: (neon, input, signal) =>
+				neon.functions.triggers.get(
+					input.project_id,
+					input.branch_id,
+					input.trigger_id,
+					{ signal },
+				),
+		}),
+	"functions.triggers.create": (options) =>
+		fromGenerated(options, {
+			id: "functions.triggers.create",
+			generated: "createProjectBranchTrigger",
+			run: (neon, input, signal) =>
+				neon.functions.triggers.create(
+					input.project_id,
+					input.branch_id,
+					input.body,
+					{ signal },
+				),
+		}),
+	"functions.triggers.update": (options) =>
+		fromGenerated(options, {
+			id: "functions.triggers.update",
+			generated: "updateProjectBranchTrigger",
+			run: (neon, input, signal) =>
+				neon.functions.triggers.update(
+					input.project_id,
+					input.branch_id,
+					input.trigger_id,
+					input.body,
+					{ signal },
+				),
+		}),
+	"functions.triggers.delete": (options) =>
+		fromGenerated(options, {
+			id: "functions.triggers.delete",
+			generated: "deleteProjectBranchTrigger",
+			run: (neon, input, signal) =>
+				neon.functions.triggers.delete(
+					input.project_id,
+					input.branch_id,
+					input.trigger_id,
+					{ signal },
+				),
+		}),
 	"credentials.list": (options) =>
 		fromGenerated(options, {
 			id: "credentials.list",
@@ -853,6 +914,24 @@ export const toolFactories = {
 			generated: "revokeCredential",
 			run: (neon, input, signal) =>
 				neon.credentials.revoke(
+					input.project_id,
+					input.branch_id,
+					input.token_id,
+					{ signal },
+				),
+		}),
+	"credentials.rotate": (options) =>
+		fromGenerated(options, {
+			id: "credentials.rotate",
+			generated: "rotateCredential",
+			annotations: {
+				readOnlyHint: false,
+				destructiveHint: true,
+				idempotentHint: false,
+				openWorldHint: false,
+			},
+			run: (neon, input, signal) =>
+				neon.credentials.rotate(
 					input.project_id,
 					input.branch_id,
 					input.token_id,

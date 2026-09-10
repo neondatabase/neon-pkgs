@@ -336,4 +336,122 @@ describe("special mappings", () => {
 			}).success,
 		).toBe(false);
 	});
+
+	test("forwards trigger create body without flattening the discriminator", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["functions.triggers.create"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse(
+					{
+						trigger: {
+							type: "schedule",
+							trigger_id: "trg-1",
+							function_slug: "worker",
+							name: "daily-refresh",
+							function_path: "/",
+							schedule: { cron: "0 9 * * *" },
+							enabled: false,
+							version: 1,
+							next_run_at: null,
+							source_branch_id: "br-id",
+							inherited: false,
+						},
+					},
+					201,
+				);
+			},
+		});
+
+		const body = {
+			type: "schedule" as const,
+			function_slug: "worker",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		};
+		await tools["functions.triggers.create"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			body,
+		});
+
+		expect(requests[0].method).toBe("POST");
+		expect(requests[0].url).toContain(
+			"/projects/project-id/branches/branch-id/triggers",
+		);
+		expect(await requests[0].json()).toEqual(body);
+	});
+
+	test("trigger list is a single request, not a paginated walk", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["functions.triggers.list"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ triggers: [] });
+			},
+		});
+
+		const listed = await tools["functions.triggers.list"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+		});
+
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).not.toContain("cursor=");
+		expect(listed.data).toEqual([]);
+		const schema = z.toJSONSchema(
+			tools["functions.triggers.list"].inputSchema,
+		);
+		expect(schema.properties).not.toHaveProperty("cursor");
+		expect(tools["functions.triggers.list"].description).not.toContain(
+			"Returns every page",
+		);
+	});
+
+	test("rotate maps path ids and is marked non-idempotent", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["credentials.rotate"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					token_id: "nak_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					token_id_short: "aaaaaaaaaaaa",
+					api_token: "nt_live_new",
+					s3_secret_access_key: "nsk_live_new",
+					scopes: ["storage:read"],
+					branch_id: "branch-id",
+					principal_type: "user",
+					created_at: "2026-09-10T00:00:00Z",
+				});
+			},
+		});
+
+		expect(tools["credentials.rotate"].annotations.idempotentHint).toBe(
+			false,
+		);
+		expect(tools["credentials.rotate"].requiresApproval).toBe(true);
+
+		await tools["credentials.rotate"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			token_id: "nak_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		});
+
+		expect(requests[0].method).toBe("POST");
+		expect(requests[0].url).toContain(
+			"/projects/project-id/branches/branch-id/credentials/nak_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/rotate",
+		);
+	});
+
+	test("branches.delete has no hard_delete input", () => {
+		const tool = createNeonTool("branches.delete", { apiKey: "test-key" });
+		const schema = z.toJSONSchema(tool.inputSchema);
+		expect(schema.properties).not.toHaveProperty("hard_delete");
+	});
 });

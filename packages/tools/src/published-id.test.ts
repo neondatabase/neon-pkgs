@@ -27,6 +27,13 @@ describe("publishedId", () => {
 		expect(publishedId("functions.customDomains.delete")).toBe(
 			"delete_functions_custom_domains",
 		);
+		expect(publishedId("functions.triggers.list")).toBe(
+			"list_functions_triggers",
+		);
+		expect(publishedId("functions.triggers.create")).toBe(
+			"create_functions_triggers",
+		);
+		expect(publishedId("credentials.rotate")).toBe("rotate_credentials");
 	});
 
 	test("every catalog tool publishes publishedId(selector)", () => {
