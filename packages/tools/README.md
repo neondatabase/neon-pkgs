@@ -65,7 +65,20 @@ await tools["projects.list"].execute(
 );
 ```
 
-Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller.
+Each tool includes its Zod 4 `inputSchema`, published `id`, title, description, safety annotations, stability metadata, and `execute()`. Inputs are snake_case at the tool boundary. `execute()` strictly validates the input, rejects unknown fields, and returns typed, JSON-safe `{ data }`. Neon SDK errors remain typed and are thrown to the caller. `@neon/tools` re-exports the SDK error classes and `isNeonError`. `instanceof NeonError` matches every one; `isNeonError` is what narrows `kind` (and `source` on timeouts).
+
+```ts
+import { isNeonError } from "@neon/tools";
+
+try {
+	await tools["projects.createAndConnect"].execute({ name: "preview" });
+} catch (error) {
+	if (!isNeonError(error)) throw error;
+	if (error.kind === "timeout" && error.source === "wait") {
+		// The project may already exist. List before retrying.
+	}
+}
+```
 
 Paginated lists call `.all()` and return the item array. Do not pass a cursor; those fields are omitted from the input schema.
 
