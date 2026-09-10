@@ -64,27 +64,23 @@ export type InitTemplateChoice = {
 	description: string;
 };
 
+/** First catalog template; skip is index 0 so it stays on the first screen. */
+export const INIT_TEMPLATE_PICKER_INITIAL = 1;
+
 export const initTemplatePickerChoices = (
 	templates: readonly BootstrapTemplate[],
 ): InitTemplateChoice[] => {
-	const [recommended, ...rest] = templates;
-	if (recommended === undefined) {
+	if (templates.length === 0) {
 		throw new Error("No templates available to scaffold from.");
 	}
 	return [
-		{
-			title: `${formatTemplateTitle(recommended)} (recommended)`,
-			value: recommended.id,
-			description:
-				"Scaffold this starter, then set up agents and link a Neon project.",
-		},
 		{
 			title: "Skip the template",
 			value: SKIP_TEMPLATE_VALUE,
 			description:
 				"Set up agents and link a Neon project without copying template files.",
 		},
-		...rest.map((template) => ({
+		...templates.map((template) => ({
 			title: formatTemplateTitle(template),
 			value: template.id,
 			description: template.description ?? "",
@@ -102,7 +98,7 @@ export const pickInitTemplateInteractively = async (
 		type: "select",
 		name: "id",
 		message: "How would you like to set up this directory?",
-		initial: 0,
+		initial: INIT_TEMPLATE_PICKER_INITIAL,
 		choices,
 	});
 	if (id === SKIP_TEMPLATE_VALUE) {

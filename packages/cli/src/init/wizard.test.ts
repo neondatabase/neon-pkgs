@@ -17,6 +17,7 @@ vi.mock("../utils/agent_picker.js", async (importOriginal) => {
 });
 
 import {
+	INIT_TEMPLATE_PICKER_INITIAL,
 	initTemplatePickerChoices,
 	pickAgentSetupInteractively,
 	pickInitConfigInteractively,
@@ -73,7 +74,7 @@ describe("init pickers", () => {
 		expect(question.choices[2]?.title).toBe("Skip agent setup");
 	});
 
-	test("template picker ends with skip the template", async () => {
+	test("template picker lists skip first and selects the first template", async () => {
 		canPickMock.mockReturnValue(true);
 		promptsMock.mockResolvedValue({ id: "skip" });
 		const picked = await pickInitTemplateInteractively([
@@ -93,6 +94,7 @@ describe("init pickers", () => {
 		expect(picked).toEqual({ kind: "skip" });
 		const question = promptsMock.mock.calls[0]?.[0] as {
 			message: string;
+			initial: number;
 			choices: Array<{
 				title: string;
 				value: string;
@@ -102,12 +104,15 @@ describe("init pickers", () => {
 		expect(question.message).toBe(
 			"How would you like to set up this directory?",
 		);
-		expect(question.choices[1]?.value).toBe("skip");
-		expect(question.choices[1]?.title).toBe("Skip the template");
-		expect(question.choices[0]?.title).toMatch(/recommended/i);
+		expect(question.initial).toBe(INIT_TEMPLATE_PICKER_INITIAL);
+		expect(question.choices[0]?.value).toBe("skip");
+		expect(question.choices[0]?.title).toBe("Skip the template");
+		expect(question.choices[1]?.value).toBe("hono");
+		expect(question.choices[1]?.title).toBe("Hono API");
+		expect(question.choices[1]?.title).not.toMatch(/recommended/i);
 	});
 
-	test("skip stays the second choice when the catalog is longer than one page", () => {
+	test("skip stays the first choice when the catalog is longer than one page", () => {
 		const templates = Array.from({ length: 12 }, (_, index) => ({
 			id: `tmpl-${index}`,
 			title: `Template ${index}`,
@@ -122,12 +127,14 @@ describe("init pickers", () => {
 		}));
 		const choices = initTemplatePickerChoices(templates);
 		expect(choices).toHaveLength(13);
-		expect(choices[0]?.value).toBe("tmpl-0");
-		expect(choices[0]?.title).toMatch(/recommended/i);
-		expect(choices[1]?.value).toBe("skip");
-		expect(choices[1]?.title).toBe("Skip the template");
+		expect(choices[0]?.value).toBe("skip");
+		expect(choices[0]?.title).toBe("Skip the template");
+		expect(choices[1]?.value).toBe("tmpl-0");
+		expect(choices[1]?.title).not.toMatch(/recommended/i);
 		expect(choices[2]?.value).toBe("tmpl-1");
 		expect(choices.at(-1)?.value).toBe("tmpl-11");
+		expect(INIT_TEMPLATE_PICKER_INITIAL).toBe(1);
+		expect(choices[INIT_TEMPLATE_PICKER_INITIAL]?.value).toBe("tmpl-0");
 	});
 
 	test("template picker returns the catalog template, including source", async () => {
