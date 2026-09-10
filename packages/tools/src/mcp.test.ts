@@ -10,9 +10,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import { createNeonTools, publishedId, toolIds } from "./index.js";
 import {
 	type McpToolResult,
+	type McpToolServer as McpToolServerV2,
 	registerNeonTools as registerNeonToolsV2,
 } from "./mcp.js";
-import { registerNeonTools as registerNeonToolsV1 } from "./mcp-v1.js";
+import {
+	type McpToolServer as McpToolServerV1,
+	registerNeonTools as registerNeonToolsV1,
+} from "./mcp-v1.js";
 
 const closeables: Array<{ close(): Promise<void> }> = [];
 
@@ -132,20 +136,7 @@ describe("MCP v2 compatibility", () => {
 	});
 
 	test("returns API failures as structured MCP errors", async () => {
-		type ToolHandler = (
-			input: unknown,
-			context: unknown,
-		) => Promise<McpToolResult>;
-		let handler: ToolHandler | undefined;
-		const server = {
-			registerTool(
-				_name: string,
-				_config: unknown,
-				registeredHandler: ToolHandler,
-			) {
-				handler = registeredHandler;
-			},
-		};
+		const { v2, handler } = captureHandler();
 		const failingTools = createNeonTools({
 			apiKey: "bad-key",
 			tools: ["projects.list"],
@@ -158,12 +149,9 @@ describe("MCP v2 compatibility", () => {
 					},
 				),
 		});
-		registerNeonToolsV2(server, failingTools);
-		if (handler === undefined) {
-			throw new Error("Expected MCP tool registration.");
-		}
+		registerNeonToolsV2(v2, failingTools);
 
-		const result = await handler({}, {});
+		const result = await handler()({}, {});
 		expect(result).toMatchObject({
 			isError: true,
 			structuredContent: {
@@ -181,17 +169,18 @@ const captureHandler = () => {
 		context: unknown,
 	) => Promise<McpToolResult>;
 	let handler: ToolHandler | undefined;
-	const server = {
-		registerTool(
-			_name: string,
-			_config: unknown,
-			registeredHandler: ToolHandler,
-		) {
-			handler = registeredHandler;
+	const stub = {
+		registerTool(...args: unknown[]) {
+			const registeredHandler = args[2];
+			if (typeof registeredHandler !== "function") {
+				throw new TypeError("Expected registerTool handler");
+			}
+			handler = registeredHandler as ToolHandler;
 		},
 	};
 	return {
-		server,
+		v2: stub as McpToolServerV2,
+		v1: stub as McpToolServerV1,
 		handler: () => {
 			if (handler === undefined) {
 				throw new Error("Expected MCP tool registration.");
@@ -222,9 +211,9 @@ const toolsWithCapturedAuth = () => {
 
 describe("MCP request credentials", () => {
 	test("sends MCP v2 http.authInfo.token as the Bearer credential", async () => {
-		const { server, handler } = captureHandler();
+		const { v2, handler } = captureHandler();
 		const { requests, tools } = toolsWithCapturedAuth();
-		registerNeonToolsV2(server, tools);
+		registerNeonToolsV2(v2, tools);
 
 		await handler()(
 			{},
@@ -237,9 +226,9 @@ describe("MCP request credentials", () => {
 	});
 
 	test("sends MCP v1 authInfo.token as the Bearer credential", async () => {
-		const { server, handler } = captureHandler();
+		const { v1, handler } = captureHandler();
 		const { requests, tools } = toolsWithCapturedAuth();
-		registerNeonToolsV1(server, tools);
+		registerNeonToolsV1(v1, tools);
 
 		await handler()({}, { authInfo: { token: "oauth-access-token" } });
 
@@ -249,9 +238,9 @@ describe("MCP request credentials", () => {
 	});
 
 	test("uses the constructor credential when MCP extra has no authInfo", async () => {
-		const { server, handler } = captureHandler();
+		const { v2, handler } = captureHandler();
 		const { requests, tools } = toolsWithCapturedAuth();
-		registerNeonToolsV2(server, tools);
+		registerNeonToolsV2(v2, tools);
 
 		await handler()({}, {});
 
@@ -261,9 +250,9 @@ describe("MCP request credentials", () => {
 	});
 
 	test("does not fall back to the constructor credential when authInfo is present without a token", async () => {
-		const { server, handler } = captureHandler();
+		const { v2, handler } = captureHandler();
 		const { requests, tools } = toolsWithCapturedAuth();
-		registerNeonToolsV2(server, tools);
+		registerNeonToolsV2(v2, tools);
 
 		const result = await handler()(
 			{},

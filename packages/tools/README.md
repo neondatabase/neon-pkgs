@@ -220,6 +220,8 @@ const tools = createNeonTools({
 registerNeonTools(server, tools);
 ```
 
+`server` is typed as `Pick<McpServer, "registerTool">` from `@modelcontextprotocol/server`. `@neon/tools/mcp-v1` types that argument against `@modelcontextprotocol/sdk`. Both packages are optional peers. The type check only runs when that peer is installed; with `skipLibCheck` and no MCP 2 package, an MCP 1 server type-checks against `@neon/tools/mcp`.
+
 `registerNeonTools` publishes that catalog. MCP 2 `inputSchema` is JSON Schema without `$schema`. Generated fields have types, enums, `required`, and constraints, and no OpenAPI property docs. Fields this package described with `.describe()` (`pooled`, `finalize`, `zip`) keep that copy.
 
 Hosts that convert Zod themselves:

@@ -80,10 +80,23 @@
 		"@neon/sdk": "workspace:*",
 		"zod": "^4.4.3"
 	},
+	"peerDependencies": {
+		"@modelcontextprotocol/sdk": "^1.0.0",
+		"@modelcontextprotocol/server": "^2.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@modelcontextprotocol/sdk": {
+			"optional": true
+		},
+		"@modelcontextprotocol/server": {
+			"optional": true
+		}
+	},
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
 		"@mastra/core": "1.56.0-alpha.5",
 		"@modelcontextprotocol/client": "2.0.0",
+		"@modelcontextprotocol/sdk": "1.30.0",
 		"@modelcontextprotocol/server": "2.0.0",
 		"@modelcontextprotocol/sdk-v1": "npm:@modelcontextprotocol/sdk@1.30.0",
 		"@types/node": "catalog:",

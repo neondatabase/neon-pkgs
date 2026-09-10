@@ -1,11 +1,13 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
 	type McpToolResult,
-	type McpToolServer,
 	registerNeonToolsWithSchema,
 } from "./lib/mcp-register.js";
 import type { NeonTool } from "./lib/operation.js";
 
-export type { McpToolResult, McpToolServer };
+export type McpToolServer = Pick<McpServer, "registerTool">;
+
+export type { McpToolResult };
 
 export const registerNeonTools = (
 	server: McpToolServer,
