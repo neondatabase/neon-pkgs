@@ -75,7 +75,7 @@ const createBranch = createNeonTool("branches.createAndConnect", { apiKey });
 
 ## Writes and waiting
 
-Tools run with `waitForReadiness: true`. When a mutation response includes an `operations` array, the call waits until those operations finish. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first.
+Tools run with `waitForReadiness: true` unless you pass `wait: false`. When a mutation response includes an `operations` array, the call waits until those operations finish. The default deadline is five minutes (`wait.timeoutMs`). Pass `wait: { timeoutMs: 30_000 }` on `createNeonTools` or `createNeonTool` to bound that. Set it below the host's own tool-call timeout, otherwise the host gives up first. Pass `wait: false` to return immediately with the created resource and its `operations`.
 
 An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying.
 
