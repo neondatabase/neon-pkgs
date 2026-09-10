@@ -1,3 +1,4 @@
+import type { NeonError } from "@neon/sdk";
 import { expectTypeOf } from "vitest";
 import { toEveTool } from "./eve.js";
 import {
@@ -7,6 +8,7 @@ import {
 	publishedId,
 } from "./index.js";
 import { toMastraTools } from "./mastra.js";
+import { registerNeonTools } from "./mcp.js";
 
 expectTypeOf(publishedId("projects.list")).toEqualTypeOf<"list_projects">();
 expectTypeOf(
@@ -294,3 +296,48 @@ createProjectOnly.execute({ name: "x", no_compute: true });
 
 // @ts-expect-error tools is required
 createNeonTools({ apiKey: "test-key" });
+
+const enveloped = createNeonTools({
+	apiKey: "test-key",
+	tools: ["projects.get"] as const,
+	throwOnError: false,
+});
+enveloped["projects.get"].execute({ project_id: "p" }).then((result) => {
+	if (result.error) {
+		expectTypeOf(result.error).toEqualTypeOf<NeonError>();
+	} else {
+		expectTypeOf(result.data.id).toEqualTypeOf<string>();
+	}
+});
+
+registerNeonTools({ registerTool() {} }, enveloped);
+
+const envelopedOne = createNeonTool("projects.get", {
+	apiKey: "test-key",
+	throwOnError: false,
+});
+envelopedOne.execute({ project_id: "p" }).then((result) => {
+	if (result.error) {
+		expectTypeOf(result.error).toEqualTypeOf<NeonError>();
+	} else {
+		expectTypeOf(result.data.id).toEqualTypeOf<string>();
+	}
+});
+
+const annotatedEnvelope: CreateNeonToolsOptions<["projects.get"]> = {
+	apiKey: "test-key",
+	tools: ["projects.get"],
+	throwOnError: false,
+};
+createNeonTools(annotatedEnvelope)
+	["projects.get"].execute({ project_id: "p" })
+	.then((result) => {
+		if ("error" in result && result.error) {
+			expectTypeOf(result.error).toEqualTypeOf<NeonError>();
+		} else {
+			expectTypeOf(result.data.id).toEqualTypeOf<string>();
+		}
+	});
+
+toEveTool(enveloped["projects.get"]);
+toMastraTools(enveloped);
