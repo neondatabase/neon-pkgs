@@ -28,7 +28,8 @@ const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
 			payload.kind = error.kind;
 		}
 		if (
-			typeof error.status === "number" ||
+			(typeof error.status === "number" &&
+				Number.isFinite(error.status)) ||
 			typeof error.status === "string"
 		) {
 			payload.status = error.status;
@@ -39,7 +40,10 @@ const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
 		if (typeof error.source === "string") {
 			payload.source = error.source;
 		}
-		if (typeof error.timeoutMs === "number") {
+		if (
+			typeof error.timeoutMs === "number" &&
+			Number.isFinite(error.timeoutMs)
+		) {
 			payload.timeoutMs = error.timeoutMs;
 		}
 		if (typeof error.requestId === "string") {

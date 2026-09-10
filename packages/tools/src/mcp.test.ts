@@ -402,6 +402,53 @@ describe("MCP request credentials", () => {
 		});
 		expect(result.structuredContent.error).not.toHaveProperty("operations");
 	});
+
+	test("omits non-finite timeoutMs and status from MCP errors", async () => {
+		const { server, handler } = captureHandler();
+		const catalog = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+			fetch: async () =>
+				new Response(JSON.stringify({ projects: [], pagination: {} }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		});
+		registerNeonToolsV2(server, {
+			"projects.list": {
+				...catalog["projects.list"],
+				execute: async () => {
+					throw Object.assign(new Error("Timed out"), {
+						name: "TimeoutError",
+						kind: "timeout",
+						timeoutMs: Number.NaN,
+						status: Number.POSITIVE_INFINITY,
+					});
+				},
+			},
+		});
+
+		const result = await handler()({}, {});
+		const structuredContent = {
+			error: {
+				message: "Timed out",
+				name: "TimeoutError",
+				kind: "timeout",
+			},
+		};
+		expect(result).toEqual({
+			isError: true,
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(structuredContent),
+				},
+			],
+			structuredContent,
+		});
+		expect(result.structuredContent.error).not.toHaveProperty("timeoutMs");
+		expect(result.structuredContent.error).not.toHaveProperty("status");
+	});
 });
 
 describe("MCP v1 compatibility", () => {
