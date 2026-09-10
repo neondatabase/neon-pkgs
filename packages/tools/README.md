@@ -272,9 +272,11 @@ server.registerTool(
 		annotations: create.annotations,
 		_meta: { "neon/requiresApproval": create.requiresApproval },
 	},
-	async (input) => {
+	async (input, ctx) => {
 		try {
-			const { data } = await create.execute(input);
+			const { data } = await create.execute(input, {
+				signal: ctx.mcpReq.signal,
+			});
 			const structuredContent = { data };
 			return {
 				content: [
