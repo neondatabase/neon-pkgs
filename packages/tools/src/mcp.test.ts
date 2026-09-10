@@ -52,13 +52,13 @@ describe("MCP v2 compatibility", () => {
 
 		const listed = await client.listTools();
 		expect(listed.tools.map((tool) => tool.name)).toEqual([
-			"list_projects",
+			"projects_list",
 		]);
 		expect(listed.tools[0].annotations?.readOnlyHint).toBe(true);
 		expect(listed.tools[0]._meta?.["neon/requiresApproval"]).toBe(false);
 
 		const called = await client.callTool({
-			name: "list_projects",
+			name: "projects_list",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
@@ -66,7 +66,7 @@ describe("MCP v2 compatibility", () => {
 		});
 
 		const invalid = await client.callTool({
-			name: "list_projects",
+			name: "projects_list",
 			arguments: { limit: "one" },
 		});
 		expect(invalid.isError).toBe(true);
@@ -301,7 +301,7 @@ describe("MCP v1 compatibility", () => {
 		closeables.push(client, server);
 
 		const called = await client.callTool({
-			name: "list_projects",
+			name: "projects_list",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
@@ -349,7 +349,7 @@ describe("MCP path injection", () => {
 		});
 
 		const called = await client.callTool({
-			name: "get_projects",
+			name: "projects_get",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({
@@ -403,7 +403,7 @@ describe("MCP path injection", () => {
 		});
 
 		const called = await client.callTool({
-			name: "get_projects",
+			name: "projects_get",
 			arguments: {},
 		});
 		expect(called.isError).toBeFalsy();
@@ -444,7 +444,7 @@ describe("MCP path injection", () => {
 		closeables.push(client, server);
 
 		const called = await client.callTool({
-			name: "get_projects",
+			name: "projects_get",
 			arguments: {},
 		});
 		expect(called.structuredContent).toEqual({

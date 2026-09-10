@@ -156,7 +156,7 @@ export const createBranchTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "branches.create",
+			selector: "branches.create",
 			id: publishedId("branches.create"),
 			title: "Create branch",
 			description:
@@ -200,7 +200,7 @@ export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "branches.createAndConnect",
+			selector: "branches.createAndConnect",
 			id: publishedId("branches.createAndConnect"),
 			title: "Create branch and connect",
 			description:
@@ -237,7 +237,7 @@ export const createProjectTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "projects.create",
+			selector: "projects.create",
 			id: publishedId("projects.create"),
 			title: "Create project",
 			description:
@@ -260,7 +260,7 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "projects.createAndConnect",
+			selector: "projects.createAndConnect",
 			id: publishedId("projects.createAndConnect"),
 			title: "Create project and connect",
 			description:
@@ -289,7 +289,7 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "branches.getDefault",
+			selector: "branches.getDefault",
 			id: publishedId("branches.getDefault"),
 			title: "Get default branch",
 			description:
@@ -313,7 +313,7 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "branches.resetFromParent",
+			selector: "branches.resetFromParent",
 			id: publishedId("branches.resetFromParent"),
 			title: "Reset branch from parent",
 			description:
@@ -344,7 +344,7 @@ export const compareSchemaTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "branches.compareSchema",
+			selector: "branches.compareSchema",
 			id: publishedId("branches.compareSchema"),
 			title: "Compare database schema",
 			description:
@@ -388,7 +388,7 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "postgres.connectionString",
+			selector: "postgres.connectionString",
 			id: publishedId("postgres.connectionString"),
 			title: "Get connection string",
 			description:
@@ -432,7 +432,7 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "snapshots.restore",
+			selector: "snapshots.restore",
 			id: publishedId("snapshots.restore"),
 			title: "Restore snapshot",
 			description:
@@ -465,7 +465,7 @@ export const setScheduleTool = (options: ToolClientOptions) =>
 	bindTool(
 		options,
 		{
-			operationId: "snapshots.setSchedule",
+			selector: "snapshots.setSchedule",
 			id: publishedId("snapshots.setSchedule"),
 			title: "Set snapshot schedule",
 			description:
