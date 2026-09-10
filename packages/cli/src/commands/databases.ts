@@ -4,6 +4,10 @@ import { retryOnLock } from "../api.js";
 
 import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import {
+	branchNameForMissingDelete,
+	reportMissingDelete,
+} from "../utils/missing_delete.js";
 import { writer } from "../writer.js";
 
 export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
@@ -116,7 +120,7 @@ export const deleteDb = async (
 	props: BranchScopeProps & { database: string },
 ) => {
 	const branchId = await branchIdFromProps(props);
-	const { data } = await retryOnLock(() =>
+	const { data, status } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchDatabase(
 			props.projectId,
 			branchId,
@@ -124,10 +128,14 @@ export const deleteDb = async (
 		),
 	);
 
-	// A 204 (database already gone) carries no body; only a 200 returns it.
-	if (data) {
+	// 204 is empty; some clients still parse that as `{}`, so require the record.
+	if (status === 200 && data?.database) {
 		writer(props).end(data.database, {
 			fields: DATABASE_FIELDS,
 		});
+		return;
 	}
+	const branchName = branchNameForMissingDelete(props, branchId);
+	const message = `Database "${props.database}" not found on branch ${branchName}; nothing to delete.`;
+	reportMissingDelete(props, message);
 };
