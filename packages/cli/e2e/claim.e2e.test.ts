@@ -106,6 +106,28 @@ describe.sequential("e2e — neon claim against live Claimable Neon", () => {
 				);
 				expect(fetched.id).toBe(created.project_id);
 
+				const checkout = await runCli(
+					[
+						"checkout",
+						created.branch_id,
+						"--create",
+						"--no-env-pull",
+					],
+					{
+						...anonymous,
+						configDir: createdIn.configDir,
+						contextFile: createdIn.contextFile,
+						cwd: createdIn.cwd,
+						json: false,
+					},
+				);
+				expect(checkout.code, checkout.stderr).toBe(0);
+				const afterCheckout = await runAnonymousJson<BareProject>(
+					["projects", "get", created.project_id],
+					createdIn,
+				);
+				expect(afterCheckout.id).toBe(created.project_id);
+
 				const liveStatus = await runAnonymousJson<ClaimStatus>(
 					["claim", "status", ...claimHostArgs()],
 					createdIn,
