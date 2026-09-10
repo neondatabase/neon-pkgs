@@ -385,4 +385,72 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			}
 		}
 	});
+
+	it("creates, reveals, rotates and revokes a branch credential", async () => {
+		let tokenId: string | undefined;
+		try {
+			const created = expectOk(
+				await neon.credentials.create(projectId, defaultBranchId, {
+					name: "sdk-e2e",
+					scopes: ["storage:read"],
+					principal_type: "user",
+				}),
+			);
+			tokenId = created.token_id;
+			expect(created.api_token.length).toBeGreaterThan(0);
+			expect(created.s3_secret_access_key.length).toBeGreaterThan(0);
+
+			const revealed = expectOk(
+				await neon.credentials.reveal(
+					projectId,
+					defaultBranchId,
+					created.token_id,
+				),
+			);
+			expect(revealed.token_id).toBe(created.token_id);
+			expect(revealed.api_token).toBe(created.api_token);
+			expect(revealed).not.toHaveProperty("branch_id");
+
+			const rotated = expectOk(
+				await neon.credentials.rotate(
+					projectId,
+					defaultBranchId,
+					created.token_id,
+				),
+			);
+			expect(rotated.token_id).toBe(created.token_id);
+			expect(rotated.api_token).not.toBe(created.api_token);
+
+			expectOk(
+				await neon.credentials.revoke(
+					projectId,
+					defaultBranchId,
+					created.token_id,
+				),
+			);
+			tokenId = undefined;
+
+			const { error } = await neon.credentials.reveal(
+				projectId,
+				defaultBranchId,
+				created.token_id,
+			);
+			expect(error).toBeInstanceOf(NeonNotFoundError);
+		} finally {
+			if (tokenId) {
+				await neon.credentials.revoke(
+					projectId,
+					defaultBranchId,
+					tokenId,
+				);
+			}
+		}
+	});
+
+	it("lists function triggers on the default branch", async () => {
+		const listed = expectOk(
+			await neon.functions.triggers.list(projectId, defaultBranchId),
+		);
+		expect(Array.isArray(listed)).toBe(true);
+	});
 });

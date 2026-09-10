@@ -497,7 +497,6 @@ describe("MCP catalog size", () => {
 			(sum, tool) => sum + JSON.stringify(tool).length,
 			0,
 		);
-		// Six new published tools (triggers + rotate) measured 20,719.
 		expect(chars / 4).toBeLessThan(21_000);
 	});
 });

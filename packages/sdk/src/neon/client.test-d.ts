@@ -357,16 +357,15 @@ it("credential create input stays requestable scopes", () => {
 		scopes: created.scopes,
 		principal_type: "user" as const,
 	};
-	// Response scopes are wider than create input. Echoing them without
-	// narrowing is a type error — that is the migration.
 	// @ts-expect-error GrantedCredentialScope is not assignable to CredentialScope
 	neon.credentials.create("p", "br", echoed);
-	const telemetry = {
-		scopes: ["telemetry:write"] as const,
+	const telemetry: Array<"telemetry:write"> = ["telemetry:write"];
+	const telemetryInput = {
+		scopes: telemetry,
 		principal_type: "user" as const,
 	};
 	// @ts-expect-error telemetry:write is granted-only
-	neon.credentials.create("p", "br", telemetry);
+	neon.credentials.create("p", "br", telemetryInput);
 });
 
 it("functions.customDomains is typed", () => {
