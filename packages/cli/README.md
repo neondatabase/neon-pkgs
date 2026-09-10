@@ -950,7 +950,42 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
+## Function triggers (`triggers`)
+
+`neon triggers` (alias `neon trigger`) manages **scheduled function triggers** on a branch — cron jobs that invoke a Neon Function. Beta. The only trigger type is `schedule`; cron is a five-field UTC expression.
+
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect) and the branch through `--branch <id|name>`, the `.neon` pin, or the project's default branch.
+
+```bash
+neon triggers create --function-slug uptime --name uptime-check --cron '*/15 * * * *'
+neon triggers list
+neon triggers get trigger-test-123
+neon triggers update trigger-test-123 --cron '0 3 * * *'
+neon triggers enable trigger-test-123
+neon triggers disable trigger-test-123
+neon triggers delete trigger-test-123
+```
+
+`enable` / `disable` are wrappers over `update --enabled`. List shows `inherited` when the effective config was authored on an ancestor branch.
+
+## Branch credentials (`credentials`)
+
+`neon credentials` (alias `neon credential`) lists, issues, reveals, rotates, and revokes **branch-scoped credentials** — the tokens behind Object Storage (`AWS_*`) and the AI Gateway (`NEON_AI_GATEWAY_TOKEN`). Beta. In regions where those services exist, a new project already has default credentials named `Default AI gateway credential` and `Default object storage credential`; `list` then `reveal` recovers their secrets without minting another token.
+
+```bash
+neon credentials list
+neon credentials create --name app --scope storage:read --scope storage:write
+neon credentials reveal nak_live_…
+neon credentials rotate nak_live_…
+neon credentials revoke nak_live_…
+```
+
+`create` always issues a customer-managed (`user`) credential. `--scope` is repeatable; `--help` lists the values. `reveal` and `rotate` print `api_token` and `s3_secret_access_key`. Rotation keeps the same `token_id` (it is the `AWS_ACCESS_KEY_ID`) and is not idempotent: a retry after a lost response mints another secret.
+
+All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
 ## Database diagnostics (`inspect`)
+
 
 `neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Oldest group first. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
 

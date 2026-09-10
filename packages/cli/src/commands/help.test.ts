@@ -29,6 +29,8 @@ const PARENT_COMMANDS = [
 	"claim",
 	"data-api",
 	"functions",
+	"triggers",
+	"credentials",
 	"config",
 	"env",
 	"buckets",
