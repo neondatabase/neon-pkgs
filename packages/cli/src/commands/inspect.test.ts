@@ -4,6 +4,7 @@ import { describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
 import { INSPECT_QUERIES } from "../utils/inspect_queries.js";
 import { writer } from "../writer.js";
+import { visibleInspectFields } from "./inspect.js";
 
 // `inspect db` opens a real Postgres connection with the embedded wire client,
 // so these tests drive the hermetic `--db-url` path: point at a port nothing is
@@ -181,6 +182,57 @@ describe("inspect db", () => {
 				"Local File Cache hit rate (compute-wide",
 			),
 		});
+	});
+
+	test("cache checks keep disabled-LFC notes separate from metric values", () => {
+		const hitRate = INSPECT_QUERIES["lfc-hit-rate"];
+		const workingSet = INSPECT_QUERIES["working-set"];
+
+		expect(
+			visibleInspectFields(
+				hitRate,
+				[{ name: "lfc hit rate", ratio: 0.9, note: null }],
+				false,
+			),
+		).toEqual(["name", "ratio"]);
+		expect(
+			visibleInspectFields(
+				hitRate,
+				[{ name: "lfc hit rate", ratio: null, note: "LFC disabled" }],
+				false,
+			),
+		).toEqual(["name", "note"]);
+		expect(
+			visibleInspectFields(
+				workingSet,
+				[
+					{
+						window: null,
+						working_set: null,
+						lfc_size: null,
+						exceeds_lfc: null,
+						note: "LFC disabled",
+					},
+				],
+				false,
+			),
+		).toEqual(["note"]);
+	});
+
+	test.each([
+		"lfc-hit-rate",
+		"working-set",
+	] as const)("%s guards Neon metrics when LFC is disabled", (name) => {
+		const sql = INSPECT_QUERIES[name].sql;
+
+		expect(sql).toContain(
+			"current_setting('neon.file_cache_size_limit', true)",
+		);
+		expect(sql).toContain("WHEN settings.lfc_bytes > 0 THEN");
+		expect(sql).toContain(
+			"LFC disabled; cache is served from shared_buffers",
+		);
+		expect(sql).toContain("Compute cache hit rate metric");
 	});
 
 	test("stalled-queries is compute-wide and preserves its diagnostic fields", () => {
