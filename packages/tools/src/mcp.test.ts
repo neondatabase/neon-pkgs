@@ -6,13 +6,9 @@ import { Client as ClientV1 } from "@modelcontextprotocol/sdk-v1/client/index.js
 import { InMemoryTransport as InMemoryTransportV1 } from "@modelcontextprotocol/sdk-v1/inMemory.js";
 import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk-v1/server/mcp.js";
 import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
+import { NeonWaitTimeoutError } from "@neon/sdk";
 import { afterEach, describe, expect, test } from "vitest";
-import {
-	createNeonTools,
-	NeonWaitTimeoutError,
-	publishedId,
-	toolIds,
-} from "./index.js";
+import { createNeonTools, publishedId, toolIds } from "./index.js";
 import {
 	type McpToolResult,
 	registerNeonTools as registerNeonToolsV2,
