@@ -986,7 +986,6 @@ All sub-commands honor the [global options](#global-options), including `--outpu
 
 ## Database diagnostics (`inspect`)
 
-
 `neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Oldest group first. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
 
 ```bash
@@ -1324,6 +1323,8 @@ Id   Name      Project         Created At            Last Used At          Last 
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
+| triggers                                                                   | `list`, `get`, `create`, `update`, `enable`, `disable`, `delete`                                             | Manage function triggers           |
+| credentials                                                                | `list`, `create`, `reveal`, `rotate`, `revoke`                                                               | Manage branch credentials          |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
 | set-context                                                                |                                                                                                              | Deprecated; use `link`             |

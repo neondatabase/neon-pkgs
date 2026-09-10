@@ -47,7 +47,6 @@ export const TRIGGER_FIELDS = [
 	"next_run_at",
 ] as const;
 
-// `schedule` is `{ cron }`; render just the cron expression in the table.
 const renderColumns = {
 	schedule: (t: Trigger) => t.schedule?.cron ?? "",
 } as const;
@@ -270,7 +269,6 @@ export const update = async (props: UpdateProps) => {
 	}
 	if (props.enabled !== undefined) body.enabled = props.enabled;
 
-	// PATCH must carry the `type` discriminator plus at least one field to change.
 	const changed = Object.keys(body).filter((k) => k !== "type");
 	if (changed.length === 0) {
 		throw new Error(
