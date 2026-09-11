@@ -177,10 +177,6 @@ export type {
 	UpdateBranchInput,
 	UpdateTriggerInput,
 } from "./lib/neon-api.js";
-export {
-	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
-	DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
-} from "./lib/neon-api.js";
 export { createRealNeonApi } from "./lib/neon-api-real.js";
 export type {
 	AppliedChange,

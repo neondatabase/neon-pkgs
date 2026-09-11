@@ -14,8 +14,6 @@ import {
 	type Config,
 	type CredentialScope,
 	createNeonApiFromOptions,
-	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
-	DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
 	deriveCredentialScopes,
 	ErrorCode,
 	isPlatformError,
@@ -1275,6 +1273,11 @@ type BranchCredentialSecrets = {
 	secretAccessKey: string;
 	apiToken: string;
 };
+
+/** Exact `name` values the credentials list endpoint returns for the platform defaults. */
+const DEFAULT_AI_GATEWAY_CREDENTIAL_NAME = "Default AI gateway credential";
+const DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME =
+	"Default object storage credential";
 
 /** Whether an issued credential can still be used: not revoked, not past its expiry. */
 export function isLiveCredential(

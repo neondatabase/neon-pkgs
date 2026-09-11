@@ -161,7 +161,7 @@ A persisted secret is only reusable if it still names the platform default (when
 
 No local bookkeeping is needed to do it, because the secrets carry their own credential id: `AWS_ACCESS_KEY_ID` **is** the credential's token id, and the AI Gateway token is minted as `nt_live_<tokenIdShort>_<secret>`. So the `.env` you are about to rewrite already records which credential issued it.
 
-The [`neon` CLI](../cli) does all of this — `neon env pull` and `neon dev` reveal the defaults (and reuse them) rather than minting per run. If you are calling `fetchEnv` on a loop yourself, `listCredentials` / `revealCredential` / `createCredential` / `revokeCredential` on a `NeonApi`, plus `DEFAULT_AI_GATEWAY_CREDENTIAL_NAME` and `DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME` from `@neon/config/v1`, are the pieces you need.
+The [`neon` CLI](../cli) additionally reuses persisted secrets (`neon env pull`, `neon dev`) so a loop does not re-reveal every start. `fetchEnv` itself reveals or mints on every call.
 
 ### Fetching a subset
 

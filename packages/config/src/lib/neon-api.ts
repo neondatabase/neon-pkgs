@@ -257,16 +257,6 @@ export interface CreateCredentialInput {
 }
 
 /**
- * Platform-issued default credential labels. A project in a region with Object Storage
- * and the AI Gateway already has these on every branch; `fetchEnv` / `env pull` reveal
- * them instead of minting a combined `neon-env ${branch}` credential.
- */
-export const DEFAULT_AI_GATEWAY_CREDENTIAL_NAME =
-	"Default AI gateway credential";
-export const DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME =
-	"Default object storage credential";
-
-/**
  * The secret-bearing result of {@link NeonApi.createCredential} — the Neon API
  * `CreateCredentialResponse`. `apiToken` and `s3SecretAccessKey` are returned at
  * issuance and again from {@link NeonApi.revealCredential}. `tokenId` is the

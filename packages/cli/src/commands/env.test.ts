@@ -28,12 +28,7 @@ import type {
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
 } from "@neon/config";
-import {
-	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
-	DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
-	ErrorCode,
-	PlatformError,
-} from "@neon/config";
+import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yargs from "yargs/yargs";
 
@@ -243,7 +238,11 @@ class FakeNeonApi implements NeonApi {
 	async listCredentials(): Promise<NeonCredentialMeta[]> {
 		return [];
 	}
-	async revealCredential(): Promise<NeonCredentialReveal> {
+	async revealCredential(
+		_projectId: string,
+		_branchId: string,
+		_tokenId: string,
+	): Promise<NeonCredentialReveal> {
 		throw new Error("not implemented");
 	}
 	async revokeCredential(
@@ -335,7 +334,7 @@ class DefaultCredsNeonApi extends FakeNeonApi {
 		{
 			tokenId: STORAGE_DEFAULT_TOKEN_ID,
 			tokenIdShort: STORAGE_DEFAULT_SHORT,
-			name: DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
+			name: "Default object storage credential",
 			scopes: ["storage:read", "storage:write"],
 			principalType: "user",
 			branchId: BRANCH_ID,
@@ -344,7 +343,7 @@ class DefaultCredsNeonApi extends FakeNeonApi {
 		{
 			tokenId: GATEWAY_DEFAULT_TOKEN_ID,
 			tokenIdShort: GATEWAY_DEFAULT_SHORT,
-			name: DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
+			name: "Default AI gateway credential",
 			scopes: ["ai_gateway:invoke"],
 			principalType: "user",
 			branchId: BRANCH_ID,

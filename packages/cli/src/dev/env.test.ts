@@ -21,11 +21,7 @@ import type {
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
 } from "@neon/config";
-import {
-	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
-	ErrorCode,
-	PlatformError,
-} from "@neon/config";
+import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -279,7 +275,11 @@ class FakeNeonApi implements NeonApi {
 		return [];
 	}
 
-	async revealCredential(): Promise<NeonCredentialReveal> {
+	async revealCredential(
+		_projectId: string,
+		_branchId: string,
+		_tokenId: string,
+	): Promise<NeonCredentialReveal> {
 		throw new Error("not implemented");
 	}
 
@@ -368,7 +368,7 @@ class DefaultCredsNeonApi extends FakeNeonApi {
 		{
 			tokenId: "cred-gateway-default",
 			tokenIdShort: "gatewaydef01",
-			name: DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
+			name: "Default AI gateway credential",
 			scopes: ["ai_gateway:invoke"],
 			principalType: "user",
 			branchId: BRANCH_ID,

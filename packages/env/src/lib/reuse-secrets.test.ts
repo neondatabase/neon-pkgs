@@ -1,8 +1,4 @@
-import {
-	DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
-	DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
-	defineConfig,
-} from "@neon/config/v1";
+import { defineConfig } from "@neon/config/v1";
 import { fetchEnvReusingSecrets } from "@neon-internals/env-core/reuse-secrets";
 import { beforeEach, describe, expect, test } from "vitest";
 import { FakeNeonApi } from "./fake-neon-api.js";
@@ -158,8 +154,8 @@ describe("fetchEnvReusingSecrets", () => {
 		});
 		const live = await api.listCredentials(projectId, "br-main");
 		expect(live.map((c) => c.name).sort()).toEqual([
-			DEFAULT_AI_GATEWAY_CREDENTIAL_NAME,
-			DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
+			"Default AI gateway credential",
+			"Default object storage credential",
 		]);
 	});
 
@@ -186,10 +182,10 @@ describe("fetchEnvReusingSecrets", () => {
 		});
 		const live = await api.listCredentials(projectId, "br-main");
 		expect(
-			live.find((c) => c.name === DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME),
+			live.find((c) => c.name === "Default object storage credential"),
 		).toBeDefined();
 		expect(
-			live.find((c) => c.name === DEFAULT_AI_GATEWAY_CREDENTIAL_NAME)
+			live.find((c) => c.name === "Default AI gateway credential")
 				?.scopes,
 		).toEqual(["ai_gateway:invoke"]);
 	});
@@ -429,7 +425,7 @@ describe("fetchEnvReusingSecrets", () => {
 			projectId,
 			"br-main",
 			{
-				name: DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME,
+				name: "Default object storage credential",
 				scopes: ["storage:read", "storage:write"],
 				principalType: "user",
 			},
