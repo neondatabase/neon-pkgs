@@ -21,10 +21,6 @@ import { invalidParamsResult, validateParams } from "../params.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 /**
- * Inspect a freshly restored (not-yet-finalized) branch and decide whether to commit.
- * Return `true` to finalize the restore, `false` to abort it.
- */
-/**
  * Inspect a restored-but-un-finalized branch and decide whether to commit it.
  *
  * The second argument carries the call's `signal`. The SDK cannot interrupt this callback
