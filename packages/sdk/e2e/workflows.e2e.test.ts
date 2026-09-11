@@ -128,11 +128,10 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 
 			// Only the project id — everything else is auto-selected from the real project.
 			const pooled = expectOk(
-				await neon.postgres.connectionString({ projectId: project.id }),
+				await neon.postgres.connectionString(project.id),
 			);
 			const direct = expectOk(
-				await neon.postgres.connectionString({
-					projectId: project.id,
+				await neon.postgres.connectionString(project.id, {
 					pooled: false,
 				}),
 			);
