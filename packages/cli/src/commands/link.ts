@@ -34,7 +34,7 @@ const PROJECTS_LIST_LIMIT = 100;
 
 const CREATE_NEW_SENTINEL = "__create_new__";
 
-type LinkProps = CommonProps & {
+export type LinkProps = CommonProps & {
 	orgId?: string;
 	projectId?: string;
 	projectName?: string;
@@ -46,6 +46,7 @@ type LinkProps = CommonProps & {
 	checks: boolean;
 	envPull: boolean;
 	config?: boolean;
+	cwd?: string;
 };
 
 type Inputs = {
@@ -187,7 +188,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.strict();
 
-export const handler = async (props: LinkProps) => {
+export const runLink = async (props: LinkProps) => {
 	if (props.clear) {
 		clearContext(props.contextFile);
 		return;
@@ -208,7 +209,7 @@ export const handler = async (props: LinkProps) => {
 	}
 
 	if (!canPromptInteractively()) {
-		log.error(
+		throw new LinkInputError(
 			[
 				"Missing inputs and no interactive terminal for prompts.",
 				"",
@@ -217,12 +218,12 @@ export const handler = async (props: LinkProps) => {
 				orgScopedKeyHint,
 			].join("\n"),
 		);
-		process.exit(1);
-		return;
 	}
 
 	await runInteractive(props, inputs);
 };
+
+export const handler = runLink;
 
 // ----------------------------------------------------------------------------
 // Input parsing & validation
@@ -687,7 +688,10 @@ const runNonInteractive = async (
 
 const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 	if (!props.yes) {
-		await confirmRelinkIfNeeded(props);
+		const proceed = await confirmRelinkIfNeeded(props);
+		if (!proceed) {
+			return;
+		}
 	}
 
 	const orgResolution = await resolveOrg(props, inputs.orgId);
@@ -780,10 +784,10 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 	});
 };
 
-const confirmRelinkIfNeeded = async (props: LinkProps): Promise<void> => {
+const confirmRelinkIfNeeded = async (props: LinkProps): Promise<boolean> => {
 	const existing = readContextFile(props.contextFile);
 	if (!existing.orgId || !existing.projectId) {
-		return;
+		return true;
 	}
 	const { proceed } = await prompts({
 		onState: onPromptState,
@@ -794,8 +798,9 @@ const confirmRelinkIfNeeded = async (props: LinkProps): Promise<void> => {
 	});
 	if (!proceed) {
 		process.stdout.write("Aborted. Existing link preserved.\n");
-		process.exit(0);
+		return false;
 	}
+	return true;
 };
 
 const promptOrgFromList = async (orgs: Organization[]): Promise<string> => {
@@ -1142,6 +1147,7 @@ const finalizeLink = async (
 	const { config: _offerConfig, ...rest } = props;
 	await autoPullEnvAfterPin({
 		...rest,
+		...(props.cwd ? { cwd: props.cwd } : {}),
 		projectId: summary.projectId,
 		branch: summary.branch,
 		envPull: props.envPull,
@@ -1176,7 +1182,7 @@ const maybeOfferConfigInit = async (
 	props: LinkProps,
 	summary: HumanSummary,
 ): Promise<void> => {
-	const cwd = process.cwd();
+	const cwd = props.cwd ?? process.cwd();
 	if (
 		!shouldOfferConfigInit({
 			hasConfig: hasNeonConfigFile(cwd),
@@ -1207,6 +1213,7 @@ const maybeOfferConfigInit = async (
 		const { config: _offerConfig, ...rest } = props;
 		await autoPullEnvAfterPin({
 			...rest,
+			cwd,
 			projectId: summary.projectId,
 			branch: summary.branch,
 			envPull: props.envPull,

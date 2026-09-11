@@ -22,20 +22,28 @@ import {
 	shouldPrintInitBanner,
 } from "../init/chrome.js";
 import {
+	type InitLinkInputs,
+	type InitLinkProps,
+	type RunLink,
+	runAuthenticatedLink,
+} from "../init/link.js";
+import {
 	assertNamedAgentTooling,
 	type ChildForward,
 	chooseYesAgentTooling,
 	type InitAgentSetup,
 	initPluginAgents,
 	initSkillsMcpAgents,
-	planLinkStep,
 	postScaffoldActions,
 	projectContextFile,
 	resolveNamedAgents,
 } from "../init/plan.js";
 import { formatTemplateTitle } from "../init/template_title.js";
-import { runAgentTooling, runInitSteps } from "../init/tooling.js";
-import { pickAgentSetupInteractively } from "../init/wizard.js";
+import { runAgentTooling } from "../init/tooling.js";
+import {
+	pickAgentSetupInteractively,
+	pickInitLinkInteractively,
+} from "../init/wizard.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
@@ -68,8 +76,14 @@ export type BootstrapProps = CommonProps & {
 	/** Keeps re-executed children on the same account. */
 	configDir?: string;
 	profile?: string;
+	oauthHost?: string;
+	clientId?: string;
+	forceAuth?: boolean;
+	allowUnsafeTls?: boolean;
 	run?: InitRun;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	pickLink?: () => Promise<boolean>;
+	linkProject?: RunLink;
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 	detectProjectAgents?: (
 		cwd: string,
@@ -83,7 +97,7 @@ export type BootstrapProps = CommonProps & {
 	printBanner?: boolean;
 	skipDoneSummary?: boolean;
 	linkNoConfig?: boolean;
-	linkExtra?: readonly string[];
+	linkInputs?: InitLinkInputs;
 	narrate?: "command" | "human";
 	/**
 	 * Init already fetched this catalog entry. `--template` with a known id
@@ -143,7 +157,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link with defaults. Project selection may still be required",
 				type: "boolean",
 				default: false,
 			},
@@ -160,7 +174,8 @@ export const builder = (argv: yargs.Argv) =>
 				default: true,
 			},
 			link: {
-				describe: `Run \`${getCliName()} link\` after scaffolding. Templates with neon.ts link after install so env pull works; otherwise link runs before install. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
+				describe:
+					"Link a Neon project after scaffolding. Templates with neon.ts link after install so env pull works; otherwise linking happens before install. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.",
 				type: "boolean",
 				default: true,
 			},
@@ -189,7 +204,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --default",
-			"Skip the pickers; link --yes still asks for a project unless one is already linked",
+			"Skip the pickers; project selection may still be required",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -470,11 +485,6 @@ const runPostScaffoldSteps = async (
 	if (props.link && !canLink) {
 		logSkippedLink(pm);
 	}
-	const wantLink =
-		canLink &&
-		(await confirm(
-			`Link this project to a Neon project now? (runs ${getCliName()} link)`,
-		));
 
 	const outcome = await executePostScaffold(props, targetDir, {
 		yes: false,
@@ -483,7 +493,7 @@ const runPostScaffoldSteps = async (
 		git: wantGit,
 		agentSetup,
 		install: wantInstall,
-		link: wantLink,
+		link: canLink,
 		hasNeonConfig: neonConfig,
 		named,
 	});
@@ -504,7 +514,6 @@ const installPrompt = (inferred: PackageManager | undefined): string =>
 		? `Install dependencies with ${inferred}?`
 		: "Install dependencies?";
 
-/** `link --yes` still asks for a project unless one is already linked. */
 const runDefaultSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
@@ -514,7 +523,7 @@ const runDefaultSteps = async (
 	named: readonly AgentType[],
 ): Promise<NestedBootstrapResult> => {
 	log.info(
-		"Quick start (--default): skipping the template, install, git, and agent pickers. link --yes still asks for a project unless one is already linked.",
+		"Quick start (--default): skipping the template, install, git, and agent pickers. Project selection may still be required.",
 	);
 	const wantGit = props.git && !isGitRepo(targetDir);
 	const agentSetup: InitAgentSetup =
@@ -644,22 +653,38 @@ const executePostScaffold = async (
 			logSkippedLink(choices.pm);
 			continue;
 		}
-		await runInitSteps(
-			[
-				props.linkNoConfig === true
-					? planLinkStep({
-							yes: choices.yes,
-							extra: props.linkExtra,
-						})
-					: choices.yes
-						? ["link", "--yes"]
-						: ["link"],
-			],
-			{
-				cwd: targetDir,
-				...kids,
-			},
-		);
+		const acceptedLink =
+			choices.yes ||
+			(await (props.pickLink ?? pickInitLinkInteractively)());
+		if (!acceptedLink) {
+			continue;
+		}
+		const linkProject = props.linkProject ?? runAuthenticatedLink;
+		const linkProps: InitLinkProps = {
+			apiClient: props.apiClient,
+			apiKey: props.apiKey,
+			apiHost: props.apiHost,
+			output: props.output,
+			contextFile: projectContextFile(targetDir, props.contextFile),
+			yes: choices.yes,
+			clear: false,
+			checks: true,
+			envPull: true,
+			config: props.linkNoConfig !== true,
+			cwd: targetDir,
+			...props.linkInputs,
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+			...(props.clientId ? { clientId: props.clientId } : {}),
+			...(props.forceAuth !== undefined
+				? { forceAuth: props.forceAuth }
+				: {}),
+			...(props.allowUnsafeTls !== undefined
+				? { allowUnsafeTls: props.allowUnsafeTls }
+				: {}),
+		};
+		await linkProject(linkProps);
 		linked = true;
 	}
 	return {

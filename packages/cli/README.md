@@ -742,7 +742,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal asks about dependency install, git, agent tooling (the Neon plugin, or skills and MCP separately — never both), and `neon link` before running those steps. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so link can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Project selection may still be required. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -773,9 +773,9 @@ An empty directory (nothing except `.git`) asks how to set up the directory. Pic
 
 `-y` in an empty directory scaffolds the default template (`bootstrap --default`) and does not add a later `config init` step. `--skip-template` skips scaffolding even with `-y`. `--template <id>` scaffolds that template; combine it with `-y` to skip the remaining bootstrap pickers.
 
-An existing app (or skip-template) installs agent tooling, then `neon link --no-config` unless `.neon` already has a projectId, then asks whether to create `neon.ts`. Saying no skips the services picker and does not write the file. `--no-config` does the same without asking. `-y` writes `config init --services none` unless `--no-config`. `--services` implies creating `neon.ts`.
+An existing app (or skip-template) installs agent tooling, then asks whether to link unless `.neon` already has a projectId, then asks whether to create `neon.ts`. Linking uses the same organization, project, and branch flow as `neon link`. Saying no to `neon.ts` skips the services picker and does not write the file. `--no-config` does the same without asking. `-y` writes `config init --services none` unless `--no-config`. `--services` implies creating `neon.ts`.
 
-In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together.
+In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. Agent selection and setup finish before the link question. It never runs plugin and skills+MCP together.
 
 ```bash
 $ neon init
@@ -794,7 +794,7 @@ Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `
 
 `--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
 
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to nested bootstrap, `--yes --no-config` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, uses default choices in the built-in link flow, passes `--default` to nested bootstrap, and forwards `--services none` to `config init`. `--agent` is forwarded to agent setup. `mcp -y` is the global install. Default linking skips the "already linked" confirmation; it can still require project selection.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
@@ -1228,7 +1228,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` forwards `--profile` and `--config-dir` to the commands it runs. An explicit `--api-key` is passed to those children through `NEON_API_KEY`, not argv.
+`neon init` forwards `--profile` and `--config-dir` to agent and config children and uses them directly for its link flow. An explicit `--api-key` is passed to authenticated children through `NEON_API_KEY`, not argv.
 
 ## API passthrough (`api`)
 

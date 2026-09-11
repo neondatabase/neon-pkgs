@@ -21,6 +21,7 @@ import {
 	initTemplatePickerChoices,
 	pickAgentSetupInteractively,
 	pickInitConfigInteractively,
+	pickInitLinkInteractively,
 	pickInitTemplateInteractively,
 } from "./wizard.js";
 
@@ -50,6 +51,13 @@ describe("init pickers", () => {
 	test("config picker refuses when there is no TTY", async () => {
 		canPickMock.mockReturnValue(false);
 		await expect(pickInitConfigInteractively()).rejects.toThrow(
+			/No interactive terminal/,
+		);
+	});
+
+	test("link picker refuses when there is no TTY", async () => {
+		canPickMock.mockReturnValue(false);
+		await expect(pickInitLinkInteractively()).rejects.toThrow(
 			/No interactive terminal/,
 		);
 	});
@@ -173,5 +181,21 @@ describe("init pickers", () => {
 		expect(
 			stdout.mock.calls.map((call) => String(call[0])).join(""),
 		).toMatch(/neon config apply/);
+	});
+
+	test("link confirm describes the action without another command", async () => {
+		canPickMock.mockReturnValue(true);
+		promptsMock.mockResolvedValue({ value: true });
+		const accepted = await pickInitLinkInteractively();
+		expect(accepted).toBe(true);
+		const question = promptsMock.mock.calls[0]?.[0] as {
+			message: string;
+			initial: boolean;
+		};
+		expect(question.message).toBe(
+			"Link this project to a Neon project now?",
+		);
+		expect(question.message).not.toMatch(/runs neon link/i);
+		expect(question.initial).toBe(true);
 	});
 });

@@ -23,6 +23,7 @@ const baseProps = (overrides: Record<string, unknown> = {}) => ({
 	apiHost: host,
 	output: "table" as const,
 	contextFile: "/tmp/does-not-exist/.neon",
+	linkProject: vi.fn().mockResolvedValue(undefined),
 	...overrides,
 });
 
@@ -134,12 +135,11 @@ describe("init handler", () => {
 		expect(run.mock.calls[0][0]).not.toContain("-y");
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"plugins",
-			"link",
 			"config",
 		]);
 	});
 
-	test("existing app runs skills, mcp, link, config init", async () => {
+	test("existing app runs skills, mcp, and config init", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-app-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
@@ -158,15 +158,103 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"skills",
 			"mcp",
-			"link",
 			"config",
 		]);
-		expect(run.mock.calls[3][0].slice(0, 2)).toEqual(["config", "init"]);
+		expect(run.mock.calls[2][0].slice(0, 2)).toEqual(["config", "init"]);
 		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
 		expect(out).toContain("Neon setup complete.");
 		expect(out).not.toContain("INFO:");
 		expect(out).not.toContain("██████╗");
 		expect(out).not.toContain("See the README");
+	});
+
+	test("finishes agent setup before link consent and links in process", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-order-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const calls: string[] = [];
+		const run = vi.fn(async (argv: string[]) => {
+			calls.push(argv[0] ?? "");
+			return true;
+		});
+		const pickLink = vi.fn(async () => {
+			calls.push("consent");
+			return true;
+		});
+		const linkProject = vi.fn(async () => {
+			calls.push("link");
+		});
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				contextFile: join(cwd, ".neon"),
+				config: false,
+				pickAgentSetup: async () => "plugin",
+				pickLink,
+				linkProject,
+			}),
+		);
+
+		expect(calls).toEqual(["plugins", "consent", "link"]);
+		expect(run.mock.calls.some((call) => call[0][0] === "link")).toBe(
+			false,
+		);
+		expect(linkProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				config: false,
+				cwd,
+				yes: false,
+			}),
+		);
+	});
+
+	test("declining link skips authentication and linking", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-decline-link-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				linkProject,
+				contextFile: join(cwd, ".neon"),
+				config: false,
+				pickAgentSetup: async () => "skip",
+				pickLink: async () => false,
+			}),
+		);
+
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	test("link failure stops config setup", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-link-failure-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const linkProject = vi.fn().mockRejectedValue(new Error("link failed"));
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					linkProject,
+					contextFile: join(cwd, ".neon"),
+					config: true,
+					pickAgentSetup: async () => "skip",
+					pickLink: async () => true,
+				}),
+			),
+		).rejects.toThrow("link failed");
+
+		expect(run).not.toHaveBeenCalled();
 	});
 
 	test("linked app skips link", async () => {
@@ -308,7 +396,7 @@ describe("init handler", () => {
 		expect(runBootstrap.mock.calls[0][0].run).toBe(run);
 	});
 
-	test("existing -y passes NEON_API_KEY only to mcp and link", async () => {
+	test("existing -y passes NEON_API_KEY only to mcp children", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-key-app-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		mkdirSync(join(cwd, ".vscode"));
@@ -337,7 +425,6 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
 			["skills", undefined],
 			["mcp", { NEON_API_KEY: "napi_test" }],
-			["link", { NEON_API_KEY: "napi_test" }],
 			["config", undefined],
 		]);
 	});
@@ -385,7 +472,6 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"skills",
 			"mcp",
-			"link",
 			"config",
 		]);
 	});
@@ -429,7 +515,7 @@ describe("init handler", () => {
 		);
 	});
 
-	test("interactive plugin: plugins then link and config init", async () => {
+	test("interactive plugin: plugins then config init", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-plugin-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
@@ -446,12 +532,11 @@ describe("init handler", () => {
 
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"plugins",
-			"link",
 			"config",
 		]);
 	});
 
-	test("interactive skip: link and config init", async () => {
+	test("interactive skip: config init remains a child", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pick-skip-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
@@ -466,10 +551,7 @@ describe("init handler", () => {
 			}),
 		);
 
-		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
-			"link",
-			"config",
-		]);
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["config"]);
 	});
 
 	test("-y with .cursor installs the plugin, not skills and mcp", async () => {
@@ -489,11 +571,10 @@ describe("init handler", () => {
 
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"plugins",
-			"link",
 			"config",
 		]);
 		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["plugins", "-y"]);
-		expect(run.mock.calls[2][0].slice(0, 4)).toEqual([
+		expect(run.mock.calls[1][0].slice(0, 4)).toEqual([
 			"config",
 			"init",
 			"--services",
@@ -520,7 +601,6 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"skills",
 			"mcp",
-			"link",
 			"config",
 		]);
 		expect(run.mock.calls[0][0].slice(0, 2)).toEqual(["skills", "-y"]);
@@ -556,7 +636,6 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"skills",
 			"mcp",
-			"link",
 			"config",
 		]);
 		expect(run.mock.calls[0][0]).toEqual(
@@ -756,32 +835,33 @@ describe("init handler", () => {
 
 		expect(run.mock.calls.map((call) => [call[0][0], call[2]])).toEqual([
 			["plugins", undefined],
-			["link", { NEON_API_KEY: "napi_test" }],
 			["config", undefined],
 		]);
 	});
 
-	test("child link always gets --no-config", async () => {
+	test("in-process link always suppresses link's config offer", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-link-noconfig-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
 		const { handler } = await import("./init.js");
 
 		await handler(
 			baseProps({
 				cwd,
 				run,
+				linkProject,
 				yes: true,
 				contextFile: join(cwd, ".neon"),
 				detectProjectAgents: () => ["cursor"],
 			}),
 		);
 
-		const linkArgv = run.mock.calls.find(
-			(call) => call[0][0] === "link",
-		)?.[0];
-		expect(linkArgv).toEqual(
-			expect.arrayContaining(["link", "--yes", "--no-config"]),
+		expect(run.mock.calls.some((call) => call[0][0] === "link")).toBe(
+			false,
+		);
+		expect(linkProject).toHaveBeenCalledWith(
+			expect.objectContaining({ config: false, yes: true }),
 		);
 	});
 
@@ -801,7 +881,7 @@ describe("init handler", () => {
 			}),
 		);
 
-		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["link"]);
+		expect(run).not.toHaveBeenCalled();
 		expect(existsSync(join(cwd, "neon.ts"))).toBe(false);
 	});
 
@@ -822,10 +902,7 @@ describe("init handler", () => {
 			}),
 		);
 
-		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
-			"plugins",
-			"link",
-		]);
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["plugins"]);
 	});
 
 	test("--config without -y writes neon.ts without --services none", async () => {
@@ -845,10 +922,9 @@ describe("init handler", () => {
 		);
 
 		expect(run.mock.calls.map((call) => call[0].slice(0, 2))).toEqual([
-			["link", "--no-config"],
 			["config", "init"],
 		]);
-		expect(run.mock.calls[1][0]).not.toContain("--services");
+		expect(run.mock.calls[0][0]).not.toContain("--services");
 	});
 
 	test("--services implies neon.ts and skips the consent prompt", async () => {
@@ -870,7 +946,7 @@ describe("init handler", () => {
 		);
 
 		expect(pickConfig).not.toHaveBeenCalled();
-		expect(run.mock.calls[1][0].slice(0, 4)).toEqual([
+		expect(run.mock.calls[0][0].slice(0, 4)).toEqual([
 			"config",
 			"init",
 			"--services",
@@ -897,7 +973,7 @@ describe("init handler", () => {
 		);
 
 		expect(pickConfig).not.toHaveBeenCalled();
-		expect(run.mock.calls[1][0].slice(0, 4)).toEqual([
+		expect(run.mock.calls[0][0].slice(0, 4)).toEqual([
 			"config",
 			"init",
 			"--services",
@@ -990,7 +1066,6 @@ describe("init handler", () => {
 		expect(runBootstrap).not.toHaveBeenCalled();
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual([
 			"plugins",
-			"link",
 			"config",
 		]);
 	});
@@ -1017,7 +1092,7 @@ describe("init handler", () => {
 
 		expect(runBootstrap).not.toHaveBeenCalled();
 		expect(fetchCatalog).toHaveBeenCalledTimes(1);
-		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["link"]);
+		expect(run).not.toHaveBeenCalled();
 	});
 
 	test("empty interactive template pick passes the catalog entry, not just the id", async () => {
@@ -1160,15 +1235,13 @@ describe("init handler", () => {
 		);
 
 		expect(run).not.toHaveBeenCalled();
-		expect(runBootstrap.mock.calls[0][0].linkExtra).toEqual([
-			"--project-id",
-			"typed-proj",
-			"--branch",
-			"main",
-		]);
+		expect(runBootstrap.mock.calls[0][0].linkInputs).toEqual({
+			projectId: "typed-proj",
+			branch: "main",
+		});
 	});
 
-	test("forwards --project-id only onto link", async () => {
+	test("forwards typed link inputs without values inherited from .neon", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-proj-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		writeFileSync(
@@ -1176,27 +1249,44 @@ describe("init handler", () => {
 			`${JSON.stringify({ projectId: "from-file", orgId: "org-file", branch: "main" })}\n`,
 		);
 		const run = vi.fn().mockResolvedValue(true);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
 		const { handler } = await import("./init.js");
 
 		await handler(
 			baseProps({
 				cwd,
 				run,
+				linkProject,
 				yes: true,
 				projectId: "typed-proj",
+				configDir: "/cfg",
+				profile: "work",
+				oauthHost: "https://oauth.example.test",
+				clientId: "client",
+				forceAuth: true,
+				allowUnsafeTls: true,
 				contextFile: join(cwd, ".neon"),
 				detectProjectAgents: () => ["cursor"],
 			}),
 		);
 
-		const linkArgv = run.mock.calls.find(
-			(call) => call[0][0] === "link",
-		)?.[0];
-		expect(linkArgv).toEqual(
-			expect.arrayContaining(["--project-id", "typed-proj"]),
+		expect(run.mock.calls.some((call) => call[0][0] === "link")).toBe(
+			false,
 		);
-		expect(linkArgv).not.toContain("from-file");
-		expect(linkArgv).not.toContain("--org-id");
+		expect(linkProject).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectId: "typed-proj",
+				configDir: "/cfg",
+				profile: "work",
+				oauthHost: "https://oauth.example.test",
+				clientId: "client",
+				forceAuth: true,
+				allowUnsafeTls: true,
+			}),
+		);
+		const passed = linkProject.mock.calls[0]?.[0];
+		expect(passed?.orgId).toBeUndefined();
+		expect(passed?.branch).toBeUndefined();
 	});
 
 	test("linked rerun without explicit link flags does not relink", async () => {
