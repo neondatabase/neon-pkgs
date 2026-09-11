@@ -129,7 +129,7 @@ export const builder = (argv: yargs.Argv) =>
 							"  2. neon.ts, when this directory has one — including derived function",
 							"     URLs (the function does not have to be deployed).",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
-							"     which mints a branch credential for it.",
+							"     which pulls the default AI Gateway credential.",
 							"",
 							"On an unclaimed Claimable Neon project, neon.ts is still the source",
 							"of truth when it only declares Postgres, Auth, and the Data API.",
@@ -140,8 +140,8 @@ export const builder = (argv: yargs.Argv) =>
 							"and writes nothing for them.",
 							"",
 							"The pull bundled into link / checkout / config apply follows 2 and 3",
-							"without the AI Gateway, so it never mints a credential you did not ask",
-							"for. Run `env pull` to add it.",
+							"without the AI Gateway, so it never writes a gateway token you did",
+							"not ask for. Run `env pull` to add it.",
 						].join("\n"),
 					)
 					.example(
@@ -289,9 +289,9 @@ export const pull = async (
 	const branchId = branch.branchId;
 
 	// Resolve the target file first and layer its current contents under the resolver's env
-	// source. This lets `fetchEnv` reuse one-time secrets that are already on disk — Neon Auth
-	// keys and the unified branch credential's `api_token` / `s3_secret_access_key`, which the
-	// API returns exactly once — instead of minting a fresh credential on every pull.
+	// source. This lets `fetchEnv` reuse secrets that are already on disk — Neon Auth
+	// keys and the platform default (or minted fallback) credential secrets — instead of
+	// revealing or minting on every pull.
 	const targetPath = resolveEnvFilePath(cwd, props.file);
 	const fileExisted = existsSync(targetPath);
 	const existingEnv = fileExisted ? readEnvFile(targetPath) : {};
@@ -367,7 +367,7 @@ export const pull = async (
 	// needs the new values. Name the keys rather than leaving the user to diff the file.
 	if (credential?.issued) {
 		log.info(
-			"Issued a new branch credential — these now hold fresh values: %s",
+			"Wrote credential secrets — these now hold fresh values: %s",
 			credential.keys.join(", "),
 		);
 		if (credential.revoked.length > 0) {

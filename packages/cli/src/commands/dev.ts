@@ -146,13 +146,11 @@ export const devEnvContext = (
 };
 
 /**
- * Say when a run issued a branch credential.
+ * Say when this run obtained credential secrets it did not already hold.
  *
- * `dev` has nowhere to persist one — it writes no file — so on a branch with nothing to reuse
- * it mints per start and cannot name the previous one to revoke it. Every other command that
- * mints says so; this is the one that runs dozens of times a day, and the server banner listing
- * `NEON_AI_GATEWAY_TOKEN` reads as "fetched", not "just created, and the last one is still
- * live". The note names the one action that stops it, so it disappears once followed.
+ * `dev` writes no file. With platform defaults, each start re-reveals the same secrets until
+ * `env pull` persists them. In a region with no defaults, each start mints another credential
+ * and cannot revoke the last one. The note names the one action that stops either loop.
  */
 export const reportDevCredential = (
 	credential: CredentialOutcome | undefined,
@@ -160,16 +158,16 @@ export const reportDevCredential = (
 	if (!credential?.issued) return;
 	if (credential.revoked.length > 0) {
 		log.info(
-			"Issued a new branch credential — %s changed. Revoked the one it replaced (%s).",
+			"Wrote credential secrets — %s changed. Revoked the leftover it replaced (%s).",
 			credential.keys.join(", "),
 			credential.revoked.join(", "),
 		);
 		return;
 	}
 	log.warning(
-		"Issued a branch credential for this run (%s) and left any previous one live — a dev " +
-			`server has nowhere to keep it. Run \`${getCliName()} env pull\` once to write it to ` +
-			"your .env, and restarts will reuse it instead of issuing another.",
+		"Resolved credential secrets for this run (%s) without writing them to a file. " +
+			`Run \`${getCliName()} env pull\` once so restarts reuse them instead of ` +
+			"revealing or minting again.",
 		credential.keys.join(", "),
 	);
 };

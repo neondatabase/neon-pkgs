@@ -771,7 +771,7 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
 	});
 
-	test("buckets policy mints a credential + reads storage, surfacing the AWS storage env", async () => {
+	test("buckets policy reveals the storage default + reads storage, surfacing the AWS storage env", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
 			preview: { buckets: { uploads: { access: "public_read" } } },
@@ -781,13 +781,10 @@ describe("branch storage + AI Gateway (Preview)", () => {
 			projectId,
 			branchId: "br-main",
 		});
-		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(callsTo(api, "revealCredential")).toBe(1);
 		expect(callsTo(api, "getProjectBranchStorage")).toBe(1);
 		expect(env.storage.secretAccessKey).toHaveLength(64);
-		// The S3 access-key id must be the credential's FULL token id — the storage
-		// gateway rejects the short token id with InvalidAccessKeyId. The fake mints
-		// full ids as `<short>-fake-fake-fake-<seq>`, so the access key id must carry
-		// that suffix and not equal the bare short id.
 		expect(env.storage.accessKeyId).toContain("-fake-");
 		expect(env.storage.endpoint).toContain("storage");
 		expect(env.storage.region).toBe("us-east-1");
@@ -805,7 +802,8 @@ describe("branch storage + AI Gateway (Preview)", () => {
 				apiHost: "https://console-stage.neon.build/api/v2",
 			},
 		);
-		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(callsTo(api, "revealCredential")).toBe(1);
 		// AI Gateway needs no S3 connection info.
 		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
 		expect(env.aiGateway.apiKey).toMatch(/^nt_live_/);
@@ -873,7 +871,8 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		);
 		expect(callsTo(api, "createCredential")).toBe(0);
 
-		// buckets + functions: one credential carrying storage + functions:invoke.
+		// buckets + functions: reveal the storage default; do not mint just to add
+		// functions:invoke.
 		await fetchEnv(
 			defineConfig({
 				preview: {
@@ -883,11 +882,8 @@ describe("branch storage + AI Gateway (Preview)", () => {
 			}),
 			{ api, projectId, branchId: "br-main" },
 		);
-		expect(lastCreateScopes(api)).toEqual([
-			"storage:read",
-			"storage:write",
-			"functions:invoke",
-		]);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(lastCreateScopes(api)).toBeUndefined();
 	});
 
 	test("keys: selecting only non-secret storage vars mints no credential", async () => {
@@ -933,7 +929,8 @@ describe("branch storage + AI Gateway (Preview)", () => {
 			},
 		);
 
-		expect(callsTo(api, "createCredential")).toBe(1);
+		expect(callsTo(api, "createCredential")).toBe(0);
+		expect(callsTo(api, "revealCredential")).toBe(1);
 		// Storage wasn't selected at all, so its endpoint was never read.
 		expect(callsTo(api, "getProjectBranchStorage")).toBe(0);
 		expect(env.aiGateway.apiKey).toMatch(/^nt_live_/);

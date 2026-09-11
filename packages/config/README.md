@@ -25,7 +25,13 @@ export default defineConfig({
   // Beta (Preview) features, keyed by slug / name.
   preview: {
     functions: {
-      hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
+      hello: {
+        name: "Hello",
+        source: "./functions/hello.ts",
+        triggers: [
+          { type: "schedule", name: "hourly", cron: "0 * * * *" },
+        ],
+      },
     },
   },
   // Dynamic: per-branch tuning only. Cannot add/remove services or functions.
