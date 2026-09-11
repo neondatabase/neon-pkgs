@@ -88,7 +88,7 @@ describe("logs", () => {
 			mockDir: "single_org",
 			snapshot: false,
 			stdout: expect.stringContaining(
-				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.",
+				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2 and aws-eu-central-1.",
 			),
 		});
 	});
@@ -100,7 +100,7 @@ describe("logs", () => {
 			mockDir: "single_org",
 			snapshot: false,
 			stdout: expect.stringContaining(
-				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.",
+				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2 and aws-eu-central-1.",
 			),
 		});
 	});
