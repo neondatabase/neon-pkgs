@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.4.2
+
+### Patch Changes
+
+- 0607d8e: Name `aws-eu-central-1` alongside `aws-us-east-2` in neon.ts unavailable-feature errors and `neon logs` help.
+
 ## 1.4.1
 
 ### Patch Changes
