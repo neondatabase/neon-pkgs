@@ -29,13 +29,18 @@ import {
 	shouldPrintInitBanner,
 } from "../init/chrome.js";
 import {
+	type InitLinkInputs,
+	type InitLinkProps,
+	type RunLink,
+	runAuthenticatedLink,
+} from "../init/link.js";
+import {
 	assertNamedAgentTooling,
 	directoryIsEmpty,
 	INIT_NEEDS_YES_OR_TERMINAL,
 	type InitAgentSetup,
 	initPluginAgents,
 	initSkillsMcpAgents,
-	linkInputArgv,
 	planExistingInit,
 	resolveNamedAgents,
 } from "../init/plan.js";
@@ -43,6 +48,7 @@ import { runAgentTooling, runInitSteps } from "../init/tooling.js";
 import {
 	type InitTemplatePick,
 	pickInitConfigInteractively,
+	pickInitLinkInteractively,
 	pickInitTemplateInteractively,
 } from "../init/wizard.js";
 import { log } from "../log.js";
@@ -73,9 +79,14 @@ export type InitProps = CommonProps & {
 	agent?: string[];
 	configDir?: string;
 	profile?: string;
+	oauthHost?: string;
+	clientId?: string;
+	forceAuth?: boolean;
+	allowUnsafeTls?: boolean;
 	analytics?: boolean;
 	data?: string;
 	cwd?: string;
+	link?: boolean;
 	skipTemplate?: boolean;
 	template?: string;
 	config?: boolean;
@@ -95,6 +106,8 @@ export type InitProps = CommonProps & {
 		templates: readonly BootstrapTemplate[],
 	) => Promise<InitTemplatePick>;
 	pickConfig?: () => Promise<boolean>;
+	pickLink?: () => Promise<boolean>;
+	linkProject?: RunLink;
 	detectProjectAgents?: (
 		cwd: string,
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
@@ -120,7 +133,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Empty dir: scaffold the default template. --skip-template: plugin, or skills and MCP, for project folders, else the host CLI agent. Exits if none. Then link --yes and config init --services none. link --yes still asks for a project unless one is already linked",
+				"Empty dir: scaffold the default template. --skip-template: plugin, or skills and MCP, for project folders, else the host CLI agent. Exits if none. Then link with defaults and create the bare neon.ts policy. Project selection may still be required",
 		})
 		.option("skip-template", {
 			type: "boolean",
@@ -132,6 +145,12 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "string",
 			describe:
 				"Template to scaffold into an empty directory. Conflicts with --skip-template",
+		})
+		.option("link", {
+			type: "boolean",
+			default: true,
+			describe:
+				"Link a Neon project during setup. Use --no-link to skip without being asked",
 		})
 		.option("config", {
 			type: "boolean",
@@ -203,7 +222,7 @@ export const builder = (yargs: yargs.Argv) =>
 				"Empty directory: pick a starter template, or skip scaffolding and only set up agents, a Neon project, and neon.ts. That skip is not on `neon bootstrap`.",
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
 				"neon.ts is optional when you skip the template or set up an existing app. Saying no skips the services picker and does not write the file. Scaffolding a template keeps that template's neon.ts.",
-				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. link --yes may still ask for a project.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. Project selection may still be required.",
 				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with -y.",
 				helpCsv("Plugin agents", initPluginAgents()),
 				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),
@@ -257,7 +276,7 @@ const nestedBootstrapProps = (
 		selected?: BootstrapTemplate;
 		useDefault: boolean;
 	},
-	linkExtra: readonly string[],
+	linkInputs: InitLinkInputs,
 ): BootstrapProps => ({
 	apiClient: props.apiClient,
 	apiKey: props.apiKey,
@@ -270,7 +289,7 @@ const nestedBootstrapProps = (
 	default: template.useDefault,
 	install: true,
 	git: true,
-	link: true,
+	link: props.link !== false,
 	printBanner: false,
 	skipDoneSummary: true,
 	linkNoConfig: true,
@@ -279,12 +298,20 @@ const nestedBootstrapProps = (
 	...(!template.selected && template.id !== undefined
 		? { template: template.id }
 		: {}),
-	...(linkExtra.length > 0 ? { linkExtra } : {}),
+	linkInputs,
 	...(props.agent !== undefined ? { agent: props.agent } : {}),
 	...(props.configDir ? { configDir: props.configDir } : {}),
 	...(props.profile ? { profile: props.profile } : {}),
+	...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+	...(props.clientId ? { clientId: props.clientId } : {}),
+	...(props.forceAuth !== undefined ? { forceAuth: props.forceAuth } : {}),
+	...(props.allowUnsafeTls !== undefined
+		? { allowUnsafeTls: props.allowUnsafeTls }
+		: {}),
 	...(props.analytics === false ? { analytics: false } : {}),
 	...(props.run ? { run: props.run } : {}),
+	...(props.linkProject ? { linkProject: props.linkProject } : {}),
+	...(props.pickLink ? { pickLink: props.pickLink } : {}),
 	...(props.pickAgentSetup ? { pickAgentSetup: props.pickAgentSetup } : {}),
 	...(props.detectProjectAgents
 		? { detectProjectAgents: props.detectProjectAgents }
@@ -395,13 +422,19 @@ export const handler = async (props: InitProps) => {
 	if (props.config === false && services !== undefined) {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
 	}
-	const linkExtra = linkInputArgv({
+	const linkInputs: InitLinkInputs = {
 		...(props.orgId ? { orgId: props.orgId } : {}),
 		...(props.projectId ? { projectId: props.projectId } : {}),
 		...(props.projectName ? { projectName: props.projectName } : {}),
 		...(props.regionId ? { regionId: props.regionId } : {}),
 		...(props.branch ? { branch: props.branch } : {}),
-	});
+	};
+	const hasExplicitLinkInputs =
+		props.orgId !== undefined ||
+		props.projectId !== undefined ||
+		props.projectName !== undefined ||
+		props.regionId !== undefined ||
+		props.branch !== undefined;
 	const templateChoice = resolveInitTemplateChoice({
 		empty: directoryIsEmpty(names),
 		yes,
@@ -438,7 +471,7 @@ export const handler = async (props: InitProps) => {
 						? { id: templateChoice.id }
 						: {}),
 				},
-				linkExtra,
+				linkInputs,
 			),
 		);
 		printNestedBootstrapDone(
@@ -466,7 +499,7 @@ export const handler = async (props: InitProps) => {
 					cwd,
 					contextFile,
 					{ selected: picked.template, useDefault: false },
-					linkExtra,
+					linkInputs,
 				),
 			);
 			printNestedBootstrapDone(result, cwd, picked.template.id);
@@ -475,7 +508,8 @@ export const handler = async (props: InitProps) => {
 	}
 
 	const alreadyLinked = isLinked(contextFile);
-	const shouldLink = !alreadyLinked || linkExtra.length > 0;
+	const shouldLink =
+		props.link !== false && (!alreadyLinked || hasExplicitLinkInputs);
 	const existingConfig = hasNeonConfigFile(cwd);
 	const canAskConfig =
 		props.pickConfig !== undefined || canPickAgentsInteractively();
@@ -501,16 +535,41 @@ export const handler = async (props: InitProps) => {
 			: {}),
 	});
 
-	await runInitSteps(
-		planExistingInit({
-			linked: !shouldLink,
+	const canAskLink =
+		props.pickLink !== undefined || canPickAgentsInteractively();
+	const acceptedLink =
+		shouldLink &&
+		(yes ||
+			!canAskLink ||
+			(await (props.pickLink ?? pickInitLinkInteractively)()));
+	if (acceptedLink) {
+		const linkProject = props.linkProject ?? runAuthenticatedLink;
+		const linkProps: InitLinkProps = {
+			apiClient: props.apiClient,
+			apiKey: props.apiKey,
+			apiHost: props.apiHost,
+			output: props.output,
+			contextFile,
 			yes,
-			agentSetup: "skip",
-			config: { kind: "skip" },
-			...(linkExtra.length > 0 ? { linkExtra } : {}),
-		}),
-		{ cwd, run, forward, authEnv, narrate: "human" },
-	);
+			clear: false,
+			checks: true,
+			envPull: true,
+			config: false,
+			cwd,
+			...linkInputs,
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+			...(props.clientId ? { clientId: props.clientId } : {}),
+			...(props.forceAuth !== undefined
+				? { forceAuth: props.forceAuth }
+				: {}),
+			...(props.allowUnsafeTls !== undefined
+				? { allowUnsafeTls: props.allowUnsafeTls }
+				: {}),
+		};
+		await linkProject(linkProps);
+	}
 
 	const configResolution = resolveInitConfigChoice({
 		flag: props.config,
@@ -573,7 +632,7 @@ export const handler = async (props: InitProps) => {
 					label: "Project",
 					value: projectRow({
 						alreadyLinked,
-						linkedNow: shouldLink,
+						linkedNow: acceptedLink,
 					}),
 				},
 				{
