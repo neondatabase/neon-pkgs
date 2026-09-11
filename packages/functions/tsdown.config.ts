@@ -8,6 +8,7 @@ export default defineConfig({
 	entry: [
 		"src/index.ts",
 		"src/hono.ts",
+		"src/triggers.ts",
 		"src/lib/**/*.ts",
 		"!src/**/*.test.*",
 	],
