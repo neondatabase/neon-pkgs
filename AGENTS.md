@@ -341,6 +341,13 @@ repo imported it. See below.
 
 ### `internals/` — private packages bundled into their consumers
 
+Code whose only consumers are other packages in this repo, and that Neon users are not
+meant to import, is not part of a published package. Put it in `internals/` as a
+`@neon-internals/*` workspace package and bundle it into the consumers. Re-exporting it
+from `@neon/config/v1`, `@neon/env`, or any other public entry so a sibling can reach it
+is how implementor-only code becomes someone else's API (`@neon/env/runtime`,
+`@neon/config/paths`).
+
 Credential reading, profile resolution and config paths are shared by `neon` and `@neon/env`
 from `@neon-internals/cli-core` — the two that read a credential off disk; `@neon/config` takes
 an explicit key and reads nothing. `@neon-internals/env-core` is the second one, holding
