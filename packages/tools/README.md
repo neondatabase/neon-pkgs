@@ -47,6 +47,25 @@ const compared = await tools["branches.compareSchema"].execute({
 });
 ```
 
+Trigger create keeps the discriminator nested as `body`:
+
+```ts
+const triggerTools = createNeonTools({
+	apiKey,
+	tools: ["triggers.create"],
+});
+const createdTrigger = await triggerTools["triggers.create"].execute({
+	project_id: "project-id",
+	branch_id: "br-feature",
+	body: {
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	},
+});
+```
+
 `limit` on a list tool caps how many items come back.
 
 MCP and Mastra publish `tool.id` (`list_projects`), not the record key.
@@ -83,7 +102,7 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, and `storage.objects.get`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, and `credentials.reveal`. Waiting is what the write tools already do. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
 
 ## Optional host add-ons
 
@@ -254,7 +273,7 @@ import { registerNeonTools } from "@neon/tools/mcp-v1";
 
 MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
-The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with structured error data.
+The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with `{ error: { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId } }` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
 
 MCP annotations are advisory; the protocol does not enforce approval. Tools expose `neon/requiresApproval` in MCP `_meta`. Hosts must read that value and enforce their own approval policy before execution.
 
@@ -281,7 +300,7 @@ export default defineTool(
 );
 ```
 
-Eve uses the filename as the model-facing tool name, so name the file after the published `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal.
+Eve uses the filename as the model-facing tool name, so name the file after the published `id`. The adapter maps approval requirements to Eve's `approval` hook and forwards its abort signal. `abortSignal` is optional. Credentials are the constructor `apiKey` (a string or a callback invoked on every request).
 
 ## Mastra
 
@@ -305,7 +324,7 @@ const listProjects = createTool(configs.list_projects);
 const createProject = createTool(configs.create_and_connect_projects);
 ```
 
-The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal.
+The adapter maps approval requirements to Mastra's `requireApproval` field and forwards its abort signal. Credentials are the constructor `apiKey` (a string or a callback invoked on every request).
 
 ## Safety and binary data
 

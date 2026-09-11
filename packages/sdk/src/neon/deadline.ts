@@ -12,7 +12,11 @@
  * to a caller who was promised `{ data, error }`.
  */
 
-import { NeonAbortError, NeonError, NeonTimeoutError } from "./errors.js";
+import {
+	NeonAbortError,
+	NeonClientError,
+	NeonRequestTimeoutError,
+} from "./errors.js";
 
 /**
  * The largest delay `setTimeout` can represent. Beyond it Node warns
@@ -33,6 +37,8 @@ export interface Deadline {
 	 * the caller passed no signal, so nothing extra is allocated for the common case.
 	 */
 	readonly signal: AbortSignal | undefined;
+	/** Finite `requestTimeoutMs` when this deadline has a request budget. */
+	readonly timeoutMs: number | undefined;
 	/** Budget left in milliseconds; `Infinity` when no request timeout applies. */
 	remainingMs(): number;
 	/**
@@ -56,6 +62,7 @@ export interface Deadline {
 
 const UNBOUNDED: Deadline = {
 	signal: undefined,
+	timeoutMs: undefined,
 	remainingMs: () => Number.POSITIVE_INFINITY,
 	source: () => undefined,
 	fired: () => new Promise<void>(() => {}),
@@ -78,15 +85,13 @@ export function resolveTimeoutMs(value: number | undefined): number {
 		return Number.POSITIVE_INFINITY;
 	}
 	if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
-		throw new NeonError(
+		throw new NeonClientError(
 			`requestTimeoutMs must be a positive number of milliseconds, or Infinity to disable; received ${String(value)}.`,
-			"client",
 		);
 	}
 	if (value > MAX_TIMER_MS) {
-		throw new NeonError(
+		throw new NeonClientError(
 			`requestTimeoutMs must be at most ${MAX_TIMER_MS}ms (about 24.8 days); received ${value}. Pass Infinity for no deadline.`,
-			"client",
 		);
 	}
 	return value;
@@ -100,14 +105,23 @@ export function resolveTimeoutMs(value: number | undefined): number {
  * interceptor, transport and parsing faults through one channel, so an error merely named
  * `AbortError` is not evidence that the caller cancelled.
  */
-export function cancelled(deadline: Deadline): NeonError | undefined {
+export function cancelled(
+	deadline: Deadline,
+): NeonAbortError | NeonRequestTimeoutError | undefined {
 	const source = deadline.source();
 	if (source === "caller") {
 		return new NeonAbortError("The request was aborted by its signal.");
 	}
 	if (source === "timeout") {
-		return new NeonTimeoutError(
+		const timeoutMs = deadline.timeoutMs;
+		if (timeoutMs === undefined) {
+			throw new NeonClientError(
+				"Internal: a request timeout fired without a requestTimeoutMs budget.",
+			);
+		}
+		return new NeonRequestTimeoutError(
 			"Timed out waiting for the Neon API to respond (requestTimeoutMs).",
+			{ timeoutMs },
 		);
 	}
 	return undefined;
@@ -215,6 +229,7 @@ export function createDeadline(
 
 	return {
 		signal: controller.signal,
+		timeoutMs: bounded ? timeoutMs : undefined,
 		remainingMs,
 		source: () => {
 			if (!source && remainingMs() === 0) trip("timeout");

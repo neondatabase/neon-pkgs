@@ -19,7 +19,7 @@ import type {
 } from "../../client/types.gen.js";
 import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
-import { NeonError } from "../errors.js";
+import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
@@ -91,11 +91,17 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches (cursor-paginated) */
+	list(projectId: string, query?: ListQuery): Paginated<Branch, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		query: ListQuery | undefined,
+		opts: CallOptions<Throw>,
+	): Paginated<Branch, Throw>;
 	list(
 		projectId: string,
 		query?: ListQuery,
 		opts?: CallOptions,
-	): Paginated<Branch> {
+	): Paginated<Branch, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectBranches({
@@ -110,6 +116,7 @@ export class Branches<DThrow extends boolean> {
 				cursor: data?.pagination?.next,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -169,7 +176,7 @@ export class Branches<DThrow extends boolean> {
 		return this.#ctx.run(
 			{
 				...opts,
-				waitForReadiness: opts?.waitForReadiness ?? true,
+				waitForReadiness: this.#ctx.resolveWait(opts, true),
 			},
 			(client, signal) =>
 				createProjectBranch({
@@ -263,7 +270,7 @@ export class Branches<DThrow extends boolean> {
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
-			{ ...opts, waitForReadiness: opts?.waitForReadiness ?? true },
+			{ ...opts, waitForReadiness: this.#ctx.resolveWait(opts, true) },
 			(client, signal) =>
 				createProjectBranch({
 					client,
@@ -295,7 +302,7 @@ export class Branches<DThrow extends boolean> {
 
 	/**
 	 * Resolve the project's default branch (by the `default` flag — not by name).
-	 * Returns a `client`-kind {@link NeonError} when no default branch is found.
+	 * Returns a {@link NeonClientError} when no default branch is found.
 	 */
 	getDefault(projectId: string): Promise<Outcome<Branch, DThrow>>;
 	getDefault<Throw extends boolean = DThrow>(
@@ -325,9 +332,8 @@ export class Branches<DThrow extends boolean> {
 		if (!branch) {
 			return finalize(
 				err<Branch>(
-					new NeonError(
+					new NeonClientError(
 						"No default branch found for the project.",
-						"client",
 					),
 				),
 				shouldThrow,
@@ -407,9 +413,8 @@ export class Branches<DThrow extends boolean> {
 		if (!parentId) {
 			return finalize(
 				err<Branch>(
-					new NeonError(
+					new NeonClientError(
 						"Branch has no parent and cannot be reset.",
-						"client",
 					),
 				),
 				shouldThrow,
@@ -528,7 +533,7 @@ export class Branches<DThrow extends boolean> {
 
 function parseCreateInput(input?: CreateInput):
 	| {
-			error: NeonError;
+			error: NeonClientError;
 	  }
 	| {
 			error?: undefined;
@@ -542,7 +547,7 @@ function parseCreateInput(input?: CreateInput):
 	if (input.noCompute === true) {
 		if ("compute" in input && input.compute !== undefined) {
 			return {
-				error: new NeonError(NO_COMPUTE_WITH_COMPUTE, "client"),
+				error: new NeonClientError(NO_COMPUTE_WITH_COMPUTE),
 			};
 		}
 		const { noCompute: _noCompute, compute: _compute, ...branch } = input;

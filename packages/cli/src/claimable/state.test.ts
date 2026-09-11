@@ -9,13 +9,16 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { clearAuthContext, setAuthContext } from "../auth_context.js";
 import {
 	assertionHasExpired,
+	claimableApiHost,
 	claimableCredentialsPath,
+	isClaimableEnvTarget,
 	listClaimableCredentials,
 	readClaimableCredentials,
+	readLinkedClaimableCredentials,
 	removeClaimableCredentials,
-	resolveClaimableContext,
 	shouldUseClaimableCredentials,
 	writeClaimableCredentials,
 } from "./state.js";
@@ -29,6 +32,7 @@ const temporaryDirectory = (): string => {
 };
 
 afterEach(() => {
+	clearAuthContext();
 	for (const directory of temporaryDirectories.splice(0)) {
 		rmSync(directory, { recursive: true, force: true });
 	}
@@ -150,26 +154,21 @@ describe("claimable credentials", () => {
 });
 
 describe("claimable context", () => {
-	it("resolves a versioned marker with a matching project", () => {
+	it("reads the assertion file for a linked project id", () => {
+		const configDir = temporaryDirectory();
+		writeClaimableCredentials(configDir, credentials);
+
 		expect(
-			resolveClaimableContext({
-				projectId: "project-test",
+			readLinkedClaimableCredentials(configDir, {
+				projectId: credentials.projectId,
 				branch: "br-test",
-				claimable: {
-					version: 1,
-					origin: "https://claimable.neon.tech",
-				},
 			}),
-		).toEqual({
-			projectId: "project-test",
-			branch: "br-test",
-			origin: "https://claimable.neon.tech",
-		});
+		).toEqual(credentials);
 	});
 
 	it("returns null for an ordinary Neon context", () => {
 		expect(
-			resolveClaimableContext({
+			readLinkedClaimableCredentials(temporaryDirectory(), {
 				orgId: "org-test",
 				projectId: "project-test",
 				branch: "main",
@@ -177,14 +176,96 @@ describe("claimable context", () => {
 		).toBeNull();
 	});
 
-	it("refuses a malformed marker rather than falling back to account auth", () => {
-		expect(() =>
-			resolveClaimableContext(
-				JSON.parse(
-					'{"projectId":"project-test","claimable":{"version":2,"origin":"https://claimable.neon.tech"}}',
-				),
+	it("returns null for a project id that could not have an assertion file", () => {
+		expect(
+			readLinkedClaimableCredentials(temporaryDirectory(), {
+				projectId: "new-project id",
+			}),
+		).toBeNull();
+	});
+
+	it("ignores leftover claimable fields in .neon and uses the credential file origin", () => {
+		const root = temporaryDirectory();
+		const configDir = join(root, "config");
+		const contextFile = join(root, ".neon");
+		writeClaimableCredentials(configDir, credentials);
+		const leftover = {
+			projectId: credentials.projectId,
+			branch: "br-test",
+			claimable: {
+				version: 2,
+				origin: "https://other.example",
+			},
+		};
+		writeFileSync(contextFile, JSON.stringify(leftover));
+		const before = readFileSync(contextFile, "utf8");
+
+		expect(
+			shouldUseClaimableCredentials(
+				{
+					apiKeyFlag: "",
+					apiKeyEnv: "",
+					profileEnv: "",
+					profileFlag: "",
+					configDir,
+				},
+				undefined,
+				{ projectId: credentials.projectId, branch: "br-test" },
+				configDir,
 			),
-		).toThrow("Unsupported Claimable Neon context version");
+		).toBe(true);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: claimableApiHost(credentials.origin),
+				contextFile,
+				configDir,
+			}),
+		).toBe(true);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: claimableApiHost("https://other.example"),
+				contextFile,
+				configDir,
+			}),
+		).toBe(false);
+		expect(readFileSync(contextFile, "utf8")).toBe(before);
+	});
+
+	it("does not select Claimable auth from a leftover marker without a credential file", () => {
+		const root = temporaryDirectory();
+		const configDir = join(root, "config");
+		const contextFile = join(root, ".neon");
+		writeFileSync(
+			contextFile,
+			JSON.stringify({
+				projectId: credentials.projectId,
+				claimable: { version: 1, origin: credentials.origin },
+			}),
+		);
+		const before = readFileSync(contextFile, "utf8");
+
+		expect(
+			shouldUseClaimableCredentials(
+				{
+					apiKeyFlag: "",
+					apiKeyEnv: "",
+					profileEnv: "",
+					profileFlag: "",
+					configDir,
+				},
+				undefined,
+				{ projectId: credentials.projectId },
+				configDir,
+			),
+		).toBe(false);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: claimableApiHost(credentials.origin),
+				contextFile,
+				configDir,
+			}),
+		).toBe(false);
+		expect(readFileSync(contextFile, "utf8")).toBe(before);
 	});
 });
 
@@ -198,31 +279,30 @@ describe("claimable credential selection", () => {
 	};
 
 	it("uses the linked claimable project when no account credential was selected", () => {
+		const configDir = temporaryDirectory();
+		writeClaimableCredentials(configDir, credentials);
+
 		expect(
-			shouldUseClaimableCredentials(noInputs, undefined, {
-				projectId: "project-test",
-				claimable: {
-					version: 1,
-					origin: "https://claimable.neon.tech",
-				},
-			}),
+			shouldUseClaimableCredentials(
+				noInputs,
+				undefined,
+				{ projectId: credentials.projectId },
+				configDir,
+			),
 		).toBe(true);
 	});
 
-	it("lets every explicit or ambient account selection override the local marker", () => {
-		const context = {
-			projectId: "project-test",
-			claimable: {
-				version: 1,
-				origin: "https://claimable.neon.tech",
-			},
-		} as const;
+	it("lets every explicit or ambient account selection override the credential file", () => {
+		const configDir = temporaryDirectory();
+		writeClaimableCredentials(configDir, credentials);
+		const context = { projectId: credentials.projectId };
 
 		expect(
 			shouldUseClaimableCredentials(
 				{ ...noInputs, apiKeyFlag: "napi_explicit" },
 				undefined,
 				context,
+				configDir,
 			),
 		).toBe(false);
 		expect(
@@ -230,6 +310,7 @@ describe("claimable credential selection", () => {
 				{ ...noInputs, apiKeyEnv: "napi_ambient" },
 				undefined,
 				context,
+				configDir,
 			),
 		).toBe(false);
 		expect(
@@ -237,10 +318,86 @@ describe("claimable credential selection", () => {
 				{ ...noInputs, profileEnv: "work" },
 				undefined,
 				context,
+				configDir,
 			),
 		).toBe(false);
-		expect(shouldUseClaimableCredentials(noInputs, "work", context)).toBe(
-			false,
+		expect(
+			shouldUseClaimableCredentials(noInputs, "work", context, configDir),
+		).toBe(false);
+	});
+});
+
+describe("claimable env target", () => {
+	it("matches a credential file only when the API host is that origin's /v1", () => {
+		const root = temporaryDirectory();
+		const configDir = join(root, "config");
+		const contextFile = join(root, ".neon");
+		writeClaimableCredentials(configDir, credentials);
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: credentials.projectId }),
 		);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: claimableApiHost(credentials.origin),
+				contextFile,
+				configDir,
+			}),
+		).toBe(true);
+		expect(
+			isClaimableEnvTarget({
+				apiHost: "https://console.neon.tech/api/v2",
+				contextFile,
+				configDir,
+			}),
+		).toBe(false);
+	});
+
+	it("treats a claimable auth source as claimable even without a credential file", () => {
+		setAuthContext({ source: "claimable", configDir: "/tmp" });
+		expect(
+			isClaimableEnvTarget({
+				apiHost: "https://console.neon.tech/api/v2",
+				contextFile: join(temporaryDirectory(), "missing.neon"),
+				configDir: "",
+			}),
+		).toBe(true);
+	});
+
+	it("does not parse an unused assertion when account auth is already selected", () => {
+		const root = temporaryDirectory();
+		const configDir = join(root, "config");
+		const contextFile = join(root, ".neon");
+		writeClaimableCredentials(configDir, credentials);
+		writeFileSync(
+			claimableCredentialsPath(configDir, credentials.projectId),
+			"{",
+		);
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: credentials.projectId }),
+		);
+		setAuthContext({ source: "api-key", configDir });
+		expect(
+			isClaimableEnvTarget({
+				apiHost: "https://console.neon.tech/api/v2",
+				contextFile,
+				configDir,
+			}),
+		).toBe(false);
+		expect(
+			shouldUseClaimableCredentials(
+				{
+					apiKeyFlag: "napi_test",
+					apiKeyEnv: "",
+					profileEnv: "",
+					profileFlag: "",
+					configDir,
+				},
+				undefined,
+				{ projectId: credentials.projectId },
+				configDir,
+			),
+		).toBe(false);
 	});
 });

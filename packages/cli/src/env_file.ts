@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 /**
  * Default dotenv file `env pull` writes to: `.env` when one already exists in the working
@@ -7,7 +7,9 @@ import { join } from "node:path";
  * `vercel env pull` convention. An explicit `--file` always wins over this.
  */
 export const resolveEnvFilePath = (cwd: string, file?: string): string => {
-	if (file) return join(cwd, file);
+	// path.join concatenates a later absolute segment onto cwd, so `--file /abs/path`
+	// would write under the working directory. resolve() keeps an absolute path as-is.
+	if (file) return resolve(cwd, file);
 	if (existsSync(join(cwd, ".env"))) return join(cwd, ".env");
 	return join(cwd, ".env.local");
 };

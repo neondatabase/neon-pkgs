@@ -1,18 +1,26 @@
 import { expectTypeOf, it } from "vitest";
 import type {
 	Branch,
+	ConsumptionHistoryPerProject,
+	CreateCredentialResponse,
+	CredentialScope,
+	CredentialSecret,
 	CustomDomain,
 	Endpoint,
+	GrantedCredentialScope,
 	NeonAuthIntegration,
 	NeonAuthOauthProvider,
 	Operation,
 	Project,
+	ProjectBranchLogRecord,
 	ProjectListItem,
 	ProjectPermission,
+	RotateCredentialResponse,
 	Snapshot,
+	Trigger,
 } from "../client/types.gen.js";
-import { createNeonClient } from "./client.js";
-import type { Paginated } from "./paginate.js";
+import { createNeonClient, type NeonClient } from "./client.js";
+import type { Page, Paginated } from "./paginate.js";
 import type { BranchConnection } from "./resources/branches.js";
 import type { ProjectConnection } from "./resources/projects.js";
 import type { NeonResult } from "./result.js";
@@ -130,6 +138,41 @@ it("cancellation and deadline options are accepted on the client and per call", 
 		// @ts-expect-error — a deadline is a number of milliseconds
 		requestTimeoutMs: "30s",
 	});
+
+	createNeonClient({
+		apiKey: "x",
+		wait: { timeoutMs: 5_000 },
+	});
+	createNeonClient({
+		apiKey: "x",
+		wait: {
+			pollIntervalMs: 500,
+			timeoutMs: 5_000,
+			// @ts-expect-error — abort is per-call, not client wait
+			signal: controller.signal,
+		},
+	});
+	expectTypeOf(
+		neon.projects.create({ name: "x" }, { wait: { timeoutMs: 600_000 } }),
+	).resolves.toEqualTypeOf<NeonResult<Project>>();
+	neon.projects.create(
+		{ name: "x" },
+		{
+			wait: {
+				timeoutMs: 600_000,
+				// @ts-expect-error — abort is CallOptions.signal, not wait.signal
+				signal: controller.signal,
+			},
+		},
+	);
+	neon.operations.waitFor([], {
+		timeoutMs: 120_000,
+		signal: controller.signal,
+	});
+	neon.operations.waitFor([], {
+		// @ts-expect-error — waitFor takes top-level timeoutMs, not nested wait
+		wait: { timeoutMs: 120_000 },
+	});
 });
 
 it("postgres namespace + tier-2/3 resources are reachable and typed", () => {
@@ -234,6 +277,154 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	).resolves.toEqualTypeOf<ProjectPermission[]>();
 });
 
+it("triggers is typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.triggers.list("p", "br")).resolves.toEqualTypeOf<
+		NeonResult<Trigger[]>
+	>();
+	expectTypeOf(neon.triggers.list("p", "br")).not.toEqualTypeOf<
+		Paginated<Trigger>
+	>();
+	expectTypeOf(
+		neon.triggers.create("p", "br", {
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	expectTypeOf(neon.triggers.get("p", "br", "trg")).resolves.toEqualTypeOf<
+		NeonResult<Trigger>
+	>();
+	expectTypeOf(
+		neon.triggers.update("p", "br", "trg", {
+			type: "schedule",
+			enabled: true,
+		}),
+	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	expectTypeOf(neon.triggers.delete("p", "br", "trg")).resolves.toEqualTypeOf<
+		NeonResult<void>
+	>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(throwing.triggers.list("p", "br")).resolves.toEqualTypeOf<
+		Trigger[]
+	>();
+	expectTypeOf(
+		throwing.triggers.create("p", "br", {
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		}),
+	).resolves.toEqualTypeOf<Trigger>();
+
+	neon.triggers.create("p", "br", {
+		// @ts-expect-error v1 only accepts type: "schedule"
+		type: "webhook",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	});
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error function_slug is required
+		{
+			type: "schedule",
+			name: "daily-refresh",
+			schedule: { cron: "0 9 * * *" },
+		},
+	);
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error name is required
+		{
+			type: "schedule",
+			function_slug: "worker",
+			schedule: { cron: "0 9 * * *" },
+		},
+	);
+	neon.triggers.create(
+		"p",
+		"br",
+		// @ts-expect-error schedule is required
+		{
+			type: "schedule",
+			function_slug: "worker",
+			name: "daily-refresh",
+		},
+	);
+	neon.triggers.create("p", "br", {
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		// @ts-expect-error cron is required
+		schedule: {},
+	});
+	neon.triggers.update(
+		"p",
+		"br",
+		"trg",
+		// @ts-expect-error update keeps the type discriminant
+		{ enabled: true },
+	);
+	neon.triggers.update("p", "br", "trg", {
+		// @ts-expect-error v1 only accepts type: "schedule"
+		type: "webhook",
+		enabled: true,
+	});
+});
+
+it("credentials reveal and rotate are typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(
+		neon.credentials.reveal("p", "br", "tok"),
+	).resolves.toEqualTypeOf<NeonResult<CredentialSecret>>();
+	expectTypeOf(
+		neon.credentials.rotate("p", "br", "tok"),
+	).resolves.toEqualTypeOf<NeonResult<RotateCredentialResponse>>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.credentials.reveal("p", "br", "tok"),
+	).resolves.toEqualTypeOf<CredentialSecret>();
+	expectTypeOf(
+		throwing.credentials.rotate("p", "br", "tok"),
+	).resolves.toEqualTypeOf<RotateCredentialResponse>();
+});
+
+it("credential create input stays requestable scopes", () => {
+	const neon = createNeonClient({ apiKey: "x", throwOnError: true });
+	const requestable: CredentialScope[] = [
+		"storage:read",
+		"storage:write",
+		"ai_gateway:invoke",
+		"functions:invoke",
+	];
+	expectTypeOf(neon.credentials.create).toBeCallableWith("p", "br", {
+		scopes: requestable,
+		principal_type: "user",
+	});
+
+	const created = {} as CreateCredentialResponse;
+	expectTypeOf(created.scopes).toEqualTypeOf<GrantedCredentialScope[]>();
+	const echoed = {
+		scopes: created.scopes,
+		principal_type: "user" as const,
+	};
+	// @ts-expect-error GrantedCredentialScope is not assignable to CredentialScope
+	neon.credentials.create("p", "br", echoed);
+	const telemetry: Array<"telemetry:write"> = ["telemetry:write"];
+	const telemetryInput = {
+		scopes: telemetry,
+		principal_type: "user" as const,
+	};
+	// @ts-expect-error telemetry:write is granted-only
+	neon.credentials.create("p", "br", telemetryInput);
+});
+
 it("functions.customDomains is typed", () => {
 	const neon = createNeonClient({ apiKey: "x" });
 	expectTypeOf(neon.functions.customDomains.list("p", "br")).toEqualTypeOf<
@@ -261,4 +452,128 @@ it("functions.customDomains is typed", () => {
 	expectTypeOf(
 		throwing.functions.customDomains.delete("p", "br", "docs.example.com"),
 	).resolves.toEqualTypeOf<void>();
+});
+
+it("README cancellation snippets typecheck", async () => {
+	const apiKey = "x";
+	const id = "p";
+	const projectId = "p";
+	const branchId = "br";
+	const neon = createNeonClient({ apiKey });
+
+	const controller = new AbortController();
+	const { error } = await neon.projects
+		.list({}, { signal: controller.signal })
+		.all();
+	if (error?.kind === "aborted") {
+		expectTypeOf(error.kind).toEqualTypeOf<"aborted">();
+	}
+
+	const result = await neon.projects.get(id, { signal: controller.signal });
+	if (result.error?.kind === "aborted") {
+		expectTypeOf(result.error.kind).toEqualTypeOf<"aborted">();
+	}
+
+	const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
+	const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
+	if (slow.error?.kind === "timeout" && slow.error.source === "request") {
+		expectTypeOf(slow.error.source).toEqualTypeOf<"request">();
+		// @ts-expect-error operations is a wait-timeout field
+		slow.error.operations;
+	}
+
+	await bounded.storage.objects.get(
+		projectId,
+		branchId,
+		"bucket",
+		"big.tar",
+		{
+			requestTimeoutMs: Number.POSITIVE_INFINITY,
+		},
+	);
+
+	const created = await neon.projects.create(
+		{ name: "app" },
+		{ wait: { timeoutMs: 30_000 } },
+	);
+	if (created.error?.kind === "timeout" && created.error.source === "wait") {
+		expectTypeOf(created.error.operations).toEqualTypeOf<
+			readonly Operation[]
+		>();
+		const resumed = await neon.operations.waitFor(
+			created.error.operations,
+			{ timeoutMs: 120_000 },
+		);
+		if (resumed.error) throw resumed.error;
+	}
+});
+
+it("NeonClient without a type argument is the non-throwing client", () => {
+	function seed(neon: NeonClient) {
+		return neon.projects.get("p");
+	}
+	expectTypeOf(seed).returns.toEqualTypeOf<Promise<NeonResult<Project>>>();
+	const neon: NeonClient = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon).toEqualTypeOf<NeonClient<false>>();
+});
+
+it("NeonClient<true> still returns the bare resource", () => {
+	const throwing: NeonClient<true> = createNeonClient({
+		apiKey: "x",
+		throwOnError: true,
+	});
+	expectTypeOf(throwing.projects.get("p")).resolves.toEqualTypeOf<Project>();
+});
+
+it("paginated lists honour throwOnError on page() and all()", async () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	expectTypeOf(neon.projects.list().all()).resolves.toEqualTypeOf<
+		NeonResult<ProjectListItem[]>
+	>();
+	expectTypeOf(neon.projects.list().page()).resolves.toEqualTypeOf<
+		NeonResult<Page<ProjectListItem>>
+	>();
+	expectTypeOf(
+		neon.projects.list(undefined, { throwOnError: true }),
+	).toEqualTypeOf<Paginated<ProjectListItem, true>>();
+	expectTypeOf(
+		neon.projects.list(undefined, { throwOnError: true }).all(),
+	).resolves.toEqualTypeOf<ProjectListItem[]>();
+
+	const consumptionQuery = {
+		from: "2024-03-01T00:00:00Z",
+		to: "2024-03-02T00:00:00Z",
+		granularity: "daily" as const,
+	};
+	expectTypeOf(neon.consumption.perProject(consumptionQuery)).toEqualTypeOf<
+		Paginated<ConsumptionHistoryPerProject>
+	>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(throwing.branches.list("p")).toEqualTypeOf<
+		Paginated<Branch, true>
+	>();
+	expectTypeOf(throwing.branches.list("p").all()).resolves.toEqualTypeOf<
+		Branch[]
+	>();
+	expectTypeOf(throwing.branches.list("p").page()).resolves.toEqualTypeOf<
+		Page<Branch>
+	>();
+	expectTypeOf(
+		throwing.branches.list("p", undefined, { throwOnError: false }).all(),
+	).resolves.toEqualTypeOf<NeonResult<Branch[]>>();
+	expectTypeOf(throwing.operations.list("p")).toEqualTypeOf<
+		Paginated<Operation, true>
+	>();
+	expectTypeOf(throwing.logs.query("p", "br")).toEqualTypeOf<
+		Paginated<ProjectBranchLogRecord, true>
+	>();
+	expectTypeOf(
+		throwing.consumption.perProject(consumptionQuery),
+	).toEqualTypeOf<Paginated<ConsumptionHistoryPerProject, true>>();
+
+	for await (const branch of throwing.branches.list("p")) {
+		expectTypeOf(branch).toEqualTypeOf<Branch>();
+		break;
+	}
 });

@@ -29,6 +29,7 @@ import {
 	createProjectBranchDatabase as _createProjectBranchDatabase,
 	createProjectBranchFunctionDeployment as _createProjectBranchFunctionDeployment,
 	createProjectBranchRole as _createProjectBranchRole,
+	createProjectBranchTrigger as _createProjectBranchTrigger,
 	createProjectEndpoint as _createProjectEndpoint,
 	createProjectTransferRequest as _createProjectTransferRequest,
 	createSnapshot as _createSnapshot,
@@ -51,6 +52,7 @@ import {
 	deleteProjectBranchDatabase as _deleteProjectBranchDatabase,
 	deleteProjectBranchFunction as _deleteProjectBranchFunction,
 	deleteProjectBranchRole as _deleteProjectBranchRole,
+	deleteProjectBranchTrigger as _deleteProjectBranchTrigger,
 	deleteProjectEndpoint as _deleteProjectEndpoint,
 	deleteProjectJwks as _deleteProjectJwks,
 	deleteProjectVpcEndpoint as _deleteProjectVpcEndpoint,
@@ -95,6 +97,7 @@ import {
 	getProjectBranchSchema as _getProjectBranchSchema,
 	getProjectBranchSchemaComparison as _getProjectBranchSchemaComparison,
 	getProjectBranchStorage as _getProjectBranchStorage,
+	getProjectBranchTrigger as _getProjectBranchTrigger,
 	getProjectEndpoint as _getProjectEndpoint,
 	getProjectJwks as _getProjectJwks,
 	getProjectOperation as _getProjectOperation,
@@ -120,6 +123,7 @@ import {
 	listProjectBranchLogFields as _listProjectBranchLogFields,
 	listProjectBranchLogFieldValues as _listProjectBranchLogFieldValues,
 	listProjectBranchRoles as _listProjectBranchRoles,
+	listProjectBranchTriggers as _listProjectBranchTriggers,
 	listProjectEndpoints as _listProjectEndpoints,
 	listProjectMembers as _listProjectMembers,
 	listProjectOperations as _listProjectOperations,
@@ -138,10 +142,12 @@ import {
 	restartProjectEndpoint as _restartProjectEndpoint,
 	restoreProjectBranch as _restoreProjectBranch,
 	restoreSnapshot as _restoreSnapshot,
+	revealCredential as _revealCredential,
 	revokeApiKey as _revokeApiKey,
 	revokeCredential as _revokeCredential,
 	revokeOrgApiKey as _revokeOrgApiKey,
 	revokePermissionFromProject as _revokePermissionFromProject,
+	rotateCredential as _rotateCredential,
 	sendNeonAuthEmailProviderTest as _sendNeonAuthEmailProviderTest,
 	sendNeonAuthTestEmail as _sendNeonAuthTestEmail,
 	setDefaultProjectBranch as _setDefaultProjectBranch,
@@ -173,6 +179,7 @@ import {
 	updateProjectBranchDataApi as _updateProjectBranchDataApi,
 	updateProjectBranchDatabase as _updateProjectBranchDatabase,
 	updateProjectBranchFunction as _updateProjectBranchFunction,
+	updateProjectBranchTrigger as _updateProjectBranchTrigger,
 	updateProjectEndpoint as _updateProjectEndpoint,
 	updateSnapshot as _updateSnapshot,
 } from "./sdk.gen.js";
@@ -203,6 +210,7 @@ export const createProjectBranchDataApi = wrapRaw(_createProjectBranchDataApi);
 export const createProjectBranchDatabase = wrapRaw(_createProjectBranchDatabase);
 export const createProjectBranchFunctionDeployment = wrapRaw(_createProjectBranchFunctionDeployment);
 export const createProjectBranchRole = wrapRaw(_createProjectBranchRole);
+export const createProjectBranchTrigger = wrapRaw(_createProjectBranchTrigger);
 export const createProjectEndpoint = wrapRaw(_createProjectEndpoint);
 export const createProjectTransferRequest = wrapRaw(_createProjectTransferRequest);
 export const createSnapshot = wrapRaw(_createSnapshot);
@@ -225,6 +233,7 @@ export const deleteProjectBranchDataApi = wrapRaw(_deleteProjectBranchDataApi);
 export const deleteProjectBranchDatabase = wrapRaw(_deleteProjectBranchDatabase);
 export const deleteProjectBranchFunction = wrapRaw(_deleteProjectBranchFunction);
 export const deleteProjectBranchRole = wrapRaw(_deleteProjectBranchRole);
+export const deleteProjectBranchTrigger = wrapRaw(_deleteProjectBranchTrigger);
 export const deleteProjectEndpoint = wrapRaw(_deleteProjectEndpoint);
 export const deleteProjectJwks = wrapRaw(_deleteProjectJwks);
 export const deleteProjectVpcEndpoint = wrapRaw(_deleteProjectVpcEndpoint);
@@ -269,6 +278,7 @@ export const getProjectBranchRolePassword = wrapRaw(_getProjectBranchRolePasswor
 export const getProjectBranchSchema = wrapRaw(_getProjectBranchSchema);
 export const getProjectBranchSchemaComparison = wrapRaw(_getProjectBranchSchemaComparison);
 export const getProjectBranchStorage = wrapRaw(_getProjectBranchStorage);
+export const getProjectBranchTrigger = wrapRaw(_getProjectBranchTrigger);
 export const getProjectEndpoint = wrapRaw(_getProjectEndpoint);
 export const getProjectJwks = wrapRaw(_getProjectJwks);
 export const getProjectOperation = wrapRaw(_getProjectOperation);
@@ -294,6 +304,7 @@ export const listProjectBranchFunctions = wrapRaw(_listProjectBranchFunctions);
 export const listProjectBranchLogFields = wrapRaw(_listProjectBranchLogFields);
 export const listProjectBranchLogFieldValues = wrapRaw(_listProjectBranchLogFieldValues);
 export const listProjectBranchRoles = wrapRaw(_listProjectBranchRoles);
+export const listProjectBranchTriggers = wrapRaw(_listProjectBranchTriggers);
 export const listProjectEndpoints = wrapRaw(_listProjectEndpoints);
 export const listProjectMembers = wrapRaw(_listProjectMembers);
 export const listProjectOperations = wrapRaw(_listProjectOperations);
@@ -312,10 +323,12 @@ export const resetProjectBranchRolePassword = wrapRaw(_resetProjectBranchRolePas
 export const restartProjectEndpoint = wrapRaw(_restartProjectEndpoint);
 export const restoreProjectBranch = wrapRaw(_restoreProjectBranch);
 export const restoreSnapshot = wrapRaw(_restoreSnapshot);
+export const revealCredential = wrapRaw(_revealCredential);
 export const revokeApiKey = wrapRaw(_revokeApiKey);
 export const revokeCredential = wrapRaw(_revokeCredential);
 export const revokeOrgApiKey = wrapRaw(_revokeOrgApiKey);
 export const revokePermissionFromProject = wrapRaw(_revokePermissionFromProject);
+export const rotateCredential = wrapRaw(_rotateCredential);
 export const sendNeonAuthEmailProviderTest = wrapRaw(_sendNeonAuthEmailProviderTest);
 export const sendNeonAuthTestEmail = wrapRaw(_sendNeonAuthTestEmail);
 export const setDefaultProjectBranch = wrapRaw(_setDefaultProjectBranch);
@@ -347,5 +360,6 @@ export const updateProjectBranch = wrapRaw(_updateProjectBranch);
 export const updateProjectBranchDataApi = wrapRaw(_updateProjectBranchDataApi);
 export const updateProjectBranchDatabase = wrapRaw(_updateProjectBranchDatabase);
 export const updateProjectBranchFunction = wrapRaw(_updateProjectBranchFunction);
+export const updateProjectBranchTrigger = wrapRaw(_updateProjectBranchTrigger);
 export const updateProjectEndpoint = wrapRaw(_updateProjectEndpoint);
 export const updateSnapshot = wrapRaw(_updateSnapshot);

@@ -14,6 +14,7 @@ import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
 import { Snapshots } from "./resources/snapshots.js";
 import { Storage } from "./resources/storage.js";
+import { Triggers } from "./resources/triggers.js";
 
 /**
  * The ergonomic Neon client. Resource namespaces wrap the raw operations with auth-once,
@@ -23,20 +24,24 @@ import { Storage } from "./resources/storage.js";
  * `projects` and `branches` are top-level; the Postgres data plane (compute endpoints,
  * roles, databases, the Data API, connection strings) is grouped under `postgres` so
  * future top-level namespaces (e.g. functions, object storage) stay unambiguous.
+ *
+ * `DThrow` defaults to `false`, matching `createNeonClient`. Use `NeonClient<true>` for a
+ * client created with `throwOnError: true`.
  */
-export interface NeonClient<DThrow extends boolean> {
+export interface NeonClient<DThrow extends boolean = false> {
 	readonly projects: Projects<DThrow>;
 	readonly branches: Branches<DThrow>;
 	readonly postgres: Postgres<DThrow>;
 	readonly storage: Storage<DThrow>;
 	readonly functions: Functions<DThrow>;
+	readonly triggers: Triggers<DThrow>;
 	readonly credentials: Credentials<DThrow>;
 	readonly aiGateway: AiGateway<DThrow>;
 	readonly logs: Logs<DThrow>;
 	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
 	readonly auth: Auth<DThrow>;
-	readonly consumption: Consumption;
+	readonly consumption: Consumption<DThrow>;
 	readonly apiKeys: ApiKeys<DThrow>;
 	readonly regions: Regions<DThrow>;
 	readonly user: User<DThrow>;
@@ -68,13 +73,14 @@ export function createNeonClient<Throw extends boolean = false>(
 		postgres: new Postgres<Throw>(ctx),
 		storage: new Storage<Throw>(ctx),
 		functions: new Functions<Throw>(ctx),
+		triggers: new Triggers<Throw>(ctx),
 		credentials: new Credentials<Throw>(ctx),
 		aiGateway: new AiGateway<Throw>(ctx),
 		logs: new Logs<Throw>(ctx),
 		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
 		auth: new Auth<Throw>(ctx),
-		consumption: new Consumption(ctx),
+		consumption: new Consumption<Throw>(ctx),
 		apiKeys: new ApiKeys<Throw>(ctx),
 		regions: new Regions<Throw>(ctx),
 		user: new User<Throw>(ctx),

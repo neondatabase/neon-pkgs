@@ -10,6 +10,7 @@ import type {
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
+	NeonCredentialReveal,
 	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
@@ -18,6 +19,7 @@ import type {
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonTriggerSnapshot,
 } from "@neon/config";
 import { ErrorCode, PlatformError } from "@neon/config";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -225,6 +227,22 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
+	async listBranchTriggers(): Promise<NeonTriggerSnapshot[]> {
+		return [];
+	}
+
+	async createBranchTrigger(): Promise<NeonTriggerSnapshot> {
+		throw new Error("not implemented");
+	}
+
+	async updateBranchTrigger(): Promise<NeonTriggerSnapshot> {
+		throw new Error("not implemented");
+	}
+
+	async deleteBranchTrigger(): Promise<void> {
+		throw new Error("not implemented");
+	}
+
 	async getAiGatewayEnabled(): Promise<boolean> {
 		return false;
 	}
@@ -255,6 +273,14 @@ class FakeNeonApi implements NeonApi {
 
 	async listCredentials(): Promise<NeonCredentialMeta[]> {
 		return [];
+	}
+
+	async revealCredential(
+		_projectId: string,
+		_branchId: string,
+		_tokenId: string,
+	): Promise<NeonCredentialReveal> {
+		throw new Error("not implemented");
 	}
 
 	async revokeCredential(): Promise<void> {
@@ -335,6 +361,52 @@ class CredentialStoreNeonApi extends FakeNeonApi {
 	}
 }
 
+class DefaultCredsNeonApi extends FakeNeonApi {
+	revealCalls = 0;
+	createCalls = 0;
+	readonly credentials: NeonCredentialMeta[] = [
+		{
+			tokenId: "cred-gateway-default",
+			tokenIdShort: "gatewaydef01",
+			name: "Default AI gateway credential",
+			scopes: ["ai_gateway:invoke"],
+			principalType: "user",
+			branchId: BRANCH_ID,
+			createdAt: "2026-01-01T00:00:00Z",
+		},
+	];
+
+	override async listCredentials(): Promise<NeonCredentialMeta[]> {
+		return this.credentials.filter((c) => c.revokedAt === undefined);
+	}
+
+	override async revealCredential(
+		_projectId: string,
+		_branchId: string,
+		tokenId: string,
+	): Promise<NeonCredentialReveal> {
+		this.revealCalls += 1;
+		const found = this.credentials.find((c) => c.tokenId === tokenId);
+		if (found === undefined) {
+			throw new Error(`unknown credential ${tokenId}`);
+		}
+		return {
+			tokenId,
+			apiToken: `nt_live_${found.tokenIdShort}_secret`,
+			s3SecretAccessKey: "s3secret".padEnd(64, "0"),
+		};
+	}
+
+	override async createCredential(
+		_projectId: string,
+		branchId: string,
+		input: CreateCredentialInput,
+	): Promise<NeonCredentialSecret> {
+		this.createCalls += 1;
+		return super.createCredential(_projectId, branchId, input);
+	}
+}
+
 describe("resolveDevEnv", () => {
 	let cwd: string;
 
@@ -408,6 +480,47 @@ describe("resolveDevEnv", () => {
 
 		expect(api.createCalls).toBe(2);
 		expect(api.credentials.filter((c) => c.revokedAt)).toEqual([]);
+	});
+
+	it("reveals the default AI Gateway credential instead of minting", async () => {
+		const api = new DefaultCredsNeonApi();
+		const result = await resolveDevEnv({
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true,
+			api,
+		});
+
+		expect(result.vars.NEON_AI_GATEWAY_TOKEN).toBe(
+			"nt_live_gatewaydef01_secret",
+		);
+		expect(api.createCalls).toBe(0);
+		expect(api.revealCalls).toBe(1);
+		expect(result.credential?.issued).toBe(true);
+	});
+
+	it("reuses a persisted default gateway token without revealing again", async () => {
+		const api = new DefaultCredsNeonApi();
+		const ctx = {
+			cwd,
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			implyAiGateway: true as const,
+			api,
+		};
+		const first = await resolveDevEnv(ctx);
+		const second = await resolveDevEnv({
+			...ctx,
+			env: { NEON_AI_GATEWAY_TOKEN: first.vars.NEON_AI_GATEWAY_TOKEN },
+		});
+
+		expect(second.vars.NEON_AI_GATEWAY_TOKEN).toBe(
+			first.vars.NEON_AI_GATEWAY_TOKEN,
+		);
+		expect(second.credential?.issued).toBe(false);
+		expect(api.createCalls).toBe(0);
+		expect(api.revealCalls).toBe(1);
 	});
 
 	it("keeps the rest of the env when the gateway's credentials cannot be read", async () => {

@@ -253,6 +253,7 @@ describe("diffConfig", () => {
 				preview: {
 					buckets: [],
 					functions: [],
+					triggers: [],
 				},
 			},
 			{ updateExisting: false },
@@ -299,6 +300,7 @@ describe("diffConfig", () => {
 							invocationUrl: "https://x/functions/fn1",
 						},
 					],
+					triggers: [],
 				},
 			},
 			{ updateExisting: false },
@@ -307,5 +309,169 @@ describe("diffConfig", () => {
 		// The function already exists remotely, so its deploy is flagged as an update.
 		const deploy = diff.plan.find((p) => p.kind === "deploy-function");
 		expect(deploy).toMatchObject({ functionExists: true });
+	});
+
+	test("plans a schedule trigger after the function deploy", () => {
+		const hourly = {
+			type: "schedule" as const,
+			name: "hourly",
+			cron: "0 * * * *",
+			functionPath: "/",
+			enabled: true,
+		};
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "fn1",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							bundler: "esbuild",
+							triggers: [hourly],
+						},
+					],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: { buckets: [], functions: [], triggers: [] },
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual([
+			"deploy-function",
+			"create-trigger",
+		]);
+		expect(diff.plan[1]).toMatchObject({
+			kind: "create-trigger",
+			functionSlug: "fn1",
+			trigger: hourly,
+		});
+	});
+
+	test("plans an update when an existing trigger's cron drifts", () => {
+		const hourly = {
+			type: "schedule" as const,
+			name: "hourly",
+			cron: "0 * * * *",
+			functionPath: "/",
+			enabled: true,
+		};
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "fn1",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							bundler: "esbuild",
+							triggers: [hourly],
+						},
+					],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [],
+					functions: [
+						{
+							id: "fn-1",
+							slug: "fn1",
+							name: "Hello World",
+							invocationUrl: "https://x/functions/fn1",
+						},
+					],
+					triggers: [
+						{
+							triggerId: "trg-1",
+							name: "hourly",
+							functionSlug: "fn1",
+							functionPath: "/",
+							cron: "0 0 * * *",
+							enabled: true,
+							inherited: false,
+							nextRunAt: "2026-01-02T00:00:00Z",
+						},
+					],
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual([
+			"deploy-function",
+			"update-trigger",
+		]);
+		expect(diff.plan[1]).toMatchObject({
+			kind: "update-trigger",
+			triggerId: "trg-1",
+			functionSlug: "fn1",
+			trigger: hourly,
+		});
+	});
+
+	test("leaves undeclared remote triggers alone", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "fn1",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							bundler: "esbuild",
+						},
+					],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [],
+					functions: [
+						{
+							id: "fn-1",
+							slug: "fn1",
+							name: "Hello World",
+							invocationUrl: "https://x/functions/fn1",
+						},
+					],
+					triggers: [
+						{
+							triggerId: "trg-orphan",
+							name: "nightly",
+							functionSlug: "fn1",
+							functionPath: "/",
+							cron: "0 0 * * *",
+							enabled: true,
+							inherited: false,
+							nextRunAt: "2026-01-02T00:00:00Z",
+						},
+					],
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
 	});
 });

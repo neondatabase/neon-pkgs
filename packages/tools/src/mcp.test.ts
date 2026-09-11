@@ -6,6 +6,7 @@ import { Client as ClientV1 } from "@modelcontextprotocol/sdk-v1/client/index.js
 import { InMemoryTransport as InMemoryTransportV1 } from "@modelcontextprotocol/sdk-v1/inMemory.js";
 import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk-v1/server/mcp.js";
 import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
+import { NeonWaitTimeoutError } from "@neon/sdk";
 import { afterEach, describe, expect, test } from "vitest";
 import { createNeonTools, publishedId, toolIds } from "./index.js";
 import {
@@ -154,7 +155,10 @@ describe("MCP v2 compatibility", () => {
 					JSON.stringify({ message: "Authentication failed" }),
 					{
 						status: 401,
-						headers: { "content-type": "application/json" },
+						headers: {
+							"content-type": "application/json",
+							"x-request-id": "req-auth-1",
+						},
 					},
 				),
 		});
@@ -169,6 +173,10 @@ describe("MCP v2 compatibility", () => {
 			structuredContent: {
 				error: {
 					message: expect.stringContaining("Authentication failed"),
+					name: "NeonAuthError",
+					kind: "auth",
+					status: 401,
+					requestId: "req-auth-1",
 				},
 			},
 		});
@@ -274,13 +282,168 @@ describe("MCP request credentials", () => {
 			isError: true,
 			structuredContent: {
 				error: {
+					name: "TypeError",
 					message: expect.stringContaining(
 						"A Neon API key or OAuth access token is required",
 					),
 				},
 			},
 		});
+		expect(result.structuredContent.error).not.toHaveProperty("kind");
 		expect(requests).toHaveLength(0);
+	});
+
+	test("copies name, kind, status, and code from a thrown non-NeonError", async () => {
+		const { server, handler } = captureHandler();
+		const catalog = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+			fetch: async () =>
+				new Response(JSON.stringify({ projects: [], pagination: {} }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		});
+		const thrown = Object.assign(new Error("branch limit"), {
+			name: "ConflictError",
+			kind: "conflict",
+			status: 409,
+			code: "branch_limit",
+			source: "wait",
+			timeoutMs: 30_000,
+			requestId: "req-1",
+			reason: "ECONNRESET",
+			operationId: "op-1",
+		});
+		registerNeonToolsV2(server, {
+			"projects.list": {
+				...catalog["projects.list"],
+				execute: async () => {
+					throw thrown;
+				},
+			},
+		});
+
+		const result = await handler()({}, {});
+		const structuredContent = {
+			error: {
+				message: "branch limit",
+				name: "ConflictError",
+				kind: "conflict",
+				status: 409,
+				code: "branch_limit",
+				source: "wait",
+				timeoutMs: 30_000,
+				requestId: "req-1",
+				reason: "ECONNRESET",
+				operationId: "op-1",
+			},
+		};
+		expect(result).toEqual({
+			isError: true,
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(structuredContent),
+				},
+			],
+			structuredContent,
+		});
+	});
+
+	test("copies wait-timeout source without the operations list", async () => {
+		const { server, handler } = captureHandler();
+		const catalog = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+			fetch: async () =>
+				new Response(JSON.stringify({ projects: [], pagination: {} }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		});
+		registerNeonToolsV2(server, {
+			"projects.list": {
+				...catalog["projects.list"],
+				execute: async () => {
+					throw new NeonWaitTimeoutError("Timed out waiting.", {
+						timeoutMs: 5_000,
+						operations: [
+							{
+								id: "op-1",
+								project_id: "project-id",
+								action: "create_branch",
+								status: "running",
+								failures_count: 0,
+								created_at: "2026-01-01T00:00:00Z",
+								updated_at: "2026-01-01T00:00:00Z",
+								total_duration_ms: 0,
+							},
+						],
+					});
+				},
+			},
+		});
+
+		const result = await handler()({}, {});
+		expect(result.isError).toBe(true);
+		expect(result.structuredContent).toEqual({
+			error: {
+				message: "Timed out waiting.",
+				name: "NeonWaitTimeoutError",
+				kind: "timeout",
+				source: "wait",
+				timeoutMs: 5_000,
+			},
+		});
+		expect(result.structuredContent.error).not.toHaveProperty("operations");
+	});
+
+	test("omits non-finite timeoutMs and status from MCP errors", async () => {
+		const { server, handler } = captureHandler();
+		const catalog = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.list"] as const,
+			fetch: async () =>
+				new Response(JSON.stringify({ projects: [], pagination: {} }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+		});
+		registerNeonToolsV2(server, {
+			"projects.list": {
+				...catalog["projects.list"],
+				execute: async () => {
+					throw Object.assign(new Error("Timed out"), {
+						name: "TimeoutError",
+						kind: "timeout",
+						timeoutMs: Number.NaN,
+						status: Number.POSITIVE_INFINITY,
+					});
+				},
+			},
+		});
+
+		const result = await handler()({}, {});
+		const structuredContent = {
+			error: {
+				message: "Timed out",
+				name: "TimeoutError",
+				kind: "timeout",
+			},
+		};
+		expect(result).toEqual({
+			isError: true,
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(structuredContent),
+				},
+			],
+			structuredContent,
+		});
+		expect(result.structuredContent.error).not.toHaveProperty("timeoutMs");
+		expect(result.structuredContent.error).not.toHaveProperty("status");
 	});
 });
 
@@ -497,6 +660,6 @@ describe("MCP catalog size", () => {
 			(sum, tool) => sum + JSON.stringify(tool).length,
 			0,
 		);
-		expect(chars / 4).toBeLessThan(20_000);
+		expect(chars / 4).toBeLessThan(21_000);
 	});
 });

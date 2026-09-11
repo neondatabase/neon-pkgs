@@ -65,6 +65,9 @@ mastraTools.delete_projects;
 mastraTools.list_projects.execute({ limit: "one" }, {});
 
 const eveListProjects = toEveTool(tools["projects.list"]);
+eveListProjects.execute({}, {}).then((result) => {
+	expectTypeOf(result.data[0]?.id).toEqualTypeOf<string>();
+});
 eveListProjects
 	.execute({}, { abortSignal: new AbortController().signal })
 	.then((result) => {
