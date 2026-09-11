@@ -1,5 +1,14 @@
 # neon
 
+## 4.17.1
+
+### Patch Changes
+
+- 9e553ab: Subcommand `--help` lists that command's flags first and points at `neon --help` for globals.
+- 26f29be: `neon --help` now prints on stdout, so pipes and `grep` see it. Piped help wraps on word boundaries instead of splitting words mid-line.
+- 0a19bdc: `--output json` now ends with a newline, like `--output yaml` and the table output already did. Piped and redirected JSON no longer runs into the next line.
+- c7432f9: Fix `neon init` to finish coding-agent setup before starting its built-in project linking flow.
+
 ## 4.17.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # neonctl
 
+## 4.17.1
+
+### Patch Changes
+
+- c7432f9: Fix `neon init` to finish coding-agent setup before starting its built-in project linking flow.
+- Updated dependencies [9e553ab]
+- Updated dependencies [26f29be]
+- Updated dependencies [0a19bdc]
+- Updated dependencies [c7432f9]
+  - neon@4.17.1
+
 ## 4.17.0
 
 ### Patch Changes
