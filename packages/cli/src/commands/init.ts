@@ -86,6 +86,7 @@ export type InitProps = CommonProps & {
 	analytics?: boolean;
 	data?: string;
 	cwd?: string;
+	link?: boolean;
 	skipTemplate?: boolean;
 	template?: string;
 	config?: boolean;
@@ -144,6 +145,12 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "string",
 			describe:
 				"Template to scaffold into an empty directory. Conflicts with --skip-template",
+		})
+		.option("link", {
+			type: "boolean",
+			default: true,
+			describe:
+				"Link a Neon project during setup. Use --no-link to skip without being asked",
 		})
 		.option("config", {
 			type: "boolean",
@@ -282,7 +289,7 @@ const nestedBootstrapProps = (
 	default: template.useDefault,
 	install: true,
 	git: true,
-	link: true,
+	link: props.link !== false,
 	printBanner: false,
 	skipDoneSummary: true,
 	linkNoConfig: true,
@@ -501,7 +508,8 @@ export const handler = async (props: InitProps) => {
 	}
 
 	const alreadyLinked = isLinked(contextFile);
-	const shouldLink = !alreadyLinked || hasExplicitLinkInputs;
+	const shouldLink =
+		props.link !== false && (!alreadyLinked || hasExplicitLinkInputs);
 	const existingConfig = hasNeonConfigFile(cwd);
 	const canAskConfig =
 		props.pickConfig !== undefined || canPickAgentsInteractively();

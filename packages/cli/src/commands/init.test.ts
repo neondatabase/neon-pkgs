@@ -233,6 +233,33 @@ describe("init handler", () => {
 		expect(run).not.toHaveBeenCalled();
 	});
 
+	test("--no-link skips link consent and authentication", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-no-link-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		mkdirSync(join(cwd, ".cursor"));
+		const run = vi.fn().mockResolvedValue(true);
+		const pickLink = vi.fn(async () => true);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				link: false,
+				linkProject,
+				pickLink,
+				yes: true,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["plugins"]);
+		expect(pickLink).not.toHaveBeenCalled();
+		expect(linkProject).not.toHaveBeenCalled();
+	});
+
 	test("link failure stops config setup", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-link-failure-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -394,6 +421,24 @@ describe("init handler", () => {
 		);
 
 		expect(runBootstrap.mock.calls[0][0].run).toBe(run);
+	});
+
+	test("empty --no-link forwards the choice into nested bootstrap", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-no-link-tmpl-"));
+		const runBootstrap = nestedBootstrapOk({ linked: false });
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				link: false,
+				contextFile: join(cwd, ".neon"),
+				runBootstrap,
+			}),
+		);
+
+		expect(runBootstrap.mock.calls[0][0].link).toBe(false);
 	});
 
 	test("existing -y passes NEON_API_KEY only to mcp children", async () => {
@@ -1458,6 +1503,7 @@ describe("init CLI", () => {
 		expect(help).toMatch(/Plugin agents/);
 		expect(help).toMatch(/Skills and MCP agents/);
 		expect(help).toMatch(/--skip-template/);
+		expect(help).toMatch(/--no-link/);
 		expect(help).toMatch(/--no-config/);
 		expect(flat).toMatch(/create neon\.ts/i);
 		expect(help).toMatch(/skip scaffolding/i);
@@ -1535,6 +1581,7 @@ describe("init flag parsing", () => {
 			yargs().scriptName("neon").exitProcess(false),
 		).parseAsync(args)) as {
 			config?: boolean;
+			link?: boolean;
 			skipTemplate?: boolean;
 			template?: string;
 		};
@@ -1550,6 +1597,11 @@ describe("init flag parsing", () => {
 		expect((await parse(["--skip-template"])).template).toBeUndefined();
 		expect((await parse(["--template", "hono"])).template).toBe("hono");
 		expect((await parse(["--template", "hono"])).skipTemplate).toBe(false);
+	});
+
+	test("--no-link skips project linking", async () => {
+		expect((await parse([])).link).toBe(true);
+		expect((await parse(["--no-link"])).link).toBe(false);
 	});
 
 	test("--services none is the raw none token", async () => {

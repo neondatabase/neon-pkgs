@@ -780,11 +780,12 @@ In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), s
 ```bash
 $ neon init
 $ neon init --skip-template
+$ neon init --skip-template --no-link
 $ neon init -y
 $ neon init --agent cursor --agent claude-code
 ```
 
-Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates.
+Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates. `--no-link` skips project linking without asking, including when a template is scaffolded.
 
 `-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. `--skip-template` or an existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
