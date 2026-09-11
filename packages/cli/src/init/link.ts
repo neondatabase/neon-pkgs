@@ -21,27 +21,12 @@ export type InitLinkInputs = Pick<
 
 export type RunLink = (props: InitLinkProps) => Promise<void>;
 
-type LinkDependencies = {
-	authenticate: typeof ensureAuth;
-	link: RunLink;
-	recover: (canRetry: boolean) => Promise<boolean>;
-};
-
-const defaultDependencies: LinkDependencies = {
-	authenticate: ensureAuth,
-	link: runLink,
-	recover: recoverFrom401,
-};
-
 const isUnauthorized = (error: unknown): boolean =>
 	isNeonApiError(error) && error.status === 401;
 
 const authenticationFailed = (): Error => new Error("Authentication failed.");
 
-export const runAuthenticatedLink = async (
-	props: InitLinkProps,
-	dependencies: LinkDependencies = defaultDependencies,
-): Promise<void> => {
+export const runAuthenticatedLink: RunLink = async (props) => {
 	const authenticated = {
 		...props,
 		_: ["link"],
@@ -53,28 +38,28 @@ export const runAuthenticatedLink = async (
 		clientId: props.clientId ?? defaultClientID,
 		help: false,
 	};
-	await dependencies.authenticate(authenticated);
+	await ensureAuth(authenticated);
 
 	try {
-		await dependencies.link(authenticated);
+		await runLink(authenticated);
 		return;
 	} catch (error) {
 		if (!isUnauthorized(error)) {
 			throw error;
 		}
-		if (!(await dependencies.recover(true))) {
+		if (!(await recoverFrom401(true))) {
 			throw authenticationFailed();
 		}
 	}
 
-	await dependencies.authenticate(authenticated);
+	await ensureAuth(authenticated);
 	try {
-		await dependencies.link(authenticated);
+		await runLink(authenticated);
 	} catch (error) {
 		if (!isUnauthorized(error)) {
 			throw error;
 		}
-		await dependencies.recover(false);
+		await recoverFrom401(false);
 		throw authenticationFailed();
 	}
 };
