@@ -113,4 +113,16 @@ describe("parseTrigger", () => {
 		expect(response.status).toBe(400);
 		expect(await response.text()).toBe("Invalid trigger payload");
 	});
+
+	it("returns 401 when the trigger header is missing even if the body is not JSON", async () => {
+		const response = await app.request(
+			"/cron",
+			cronRequest({ omitHeader: true, body: "not-json" }),
+		);
+
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe(
+			`Missing ${invocationIdHeader} header`,
+		);
+	});
 });

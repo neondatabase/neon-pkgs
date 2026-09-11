@@ -93,6 +93,11 @@ function parseFromHeadersAndData(
 async function parseFromRequest(
 	request: Request,
 ): Promise<ParseTriggerInvocationResult> {
+	const headerId = request.headers.get(TRIGGER_INVOCATION_ID_HEADER)?.trim();
+	if (!headerId) {
+		return { ok: false, error: "missing_header" };
+	}
+
 	let data: unknown;
 	try {
 		// Clone so the caller can still request.json() after this returns.

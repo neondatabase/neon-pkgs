@@ -162,4 +162,17 @@ describe("parseTriggerInvocation(request)", () => {
 			error: "missing_header",
 		});
 	});
+
+	it("fails missing_header before reading JSON when the header is absent", async () => {
+		const request = new Request("https://example.test/cron", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "not-json",
+		});
+
+		expect(await parseTriggerInvocation(request)).toEqual({
+			ok: false,
+			error: "missing_header",
+		});
+	});
 });
