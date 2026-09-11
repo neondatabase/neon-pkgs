@@ -13,7 +13,7 @@ import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 const BETA_NOTE =
-	"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2.";
+	"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2 and aws-eu-central-1.";
 const LOGS_EPILOG = `
 ${BETA_NOTE}
 

@@ -205,7 +205,7 @@ describe("isPreviewFeatureUnavailable", () => {
 });
 
 describe("previewUnavailableError", () => {
-	test("503 with region-unavailable API body: points at aws-us-east-2 beta rollout", () => {
+	test("503 with region-unavailable API body: points at beta regions", () => {
 		const original = new PlatformError(ErrorCode.ServerError, "boom", {
 			details: {
 				status: 503,
@@ -232,13 +232,15 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/currently in beta/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).toMatch(/one of those regions/);
 		expect(wrapped.message).not.toMatch(/private preview/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(503);
 		expect(wrapped.details.requestId).toBe("req-503-region");
 	});
 
-	test("503 with project-unavailable API body: points at aws-us-east-2 beta rollout", () => {
+	test("503 with project-unavailable API body: points at beta regions", () => {
 		const original = new PlatformError(ErrorCode.ServerError, "boom", {
 			details: {
 				status: 503,
@@ -262,6 +264,8 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/currently in beta/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).toMatch(/one of those regions/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(503);
 		expect(wrapped.details.requestId).toBe("req-503");
@@ -280,9 +284,10 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/incident/);
 		expect(wrapped.message).toMatch(/neonstatus\.com/);
 		expect(wrapped.message).not.toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/aws-eu-central-1/);
 	});
 
-	test("404: points at aws-us-east-2 beta rollout", () => {
+	test("404: points at beta regions", () => {
 		const original = new PlatformError(ErrorCode.NotFound, "boom", {
 			details: { status: 404, neonMessage: "this route does not exist" },
 		});
@@ -296,6 +301,8 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/currently in beta/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).toMatch(/one of those regions/);
 		expect(wrapped.message).not.toMatch(/private preview/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(404);

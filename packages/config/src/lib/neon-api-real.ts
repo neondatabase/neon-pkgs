@@ -1577,16 +1577,17 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 	503: "Service Unavailable",
 };
 
-/** AWS region where Neon features are currently available in beta. */
-const PLATFORM_BETA_REGION_ID = "aws-us-east-2";
+/** AWS regions where Neon features are currently available in beta. */
+const PLATFORM_BETA_REGIONS =
+	"AWS US East (Ohio) (`aws-us-east-2`) and AWS Europe (Frankfurt) (`aws-eu-central-1`)";
 
 const PLATFORM_BETA_REGION_GUIDANCE =
-	"Neon features (Functions and Object Storage) are currently in beta and only available in the AWS US East (Ohio) region " +
-	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Run \`neon link\` to link or create a new project in that region.`;
+	"Neon features (Functions and Object Storage) are currently in beta and only available in " +
+	`${PLATFORM_BETA_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
 
 const PLATFORM_BETA_REGION_GUIDANCE_SHORT =
-	"Neon features are currently in beta and only available in the AWS US East (Ohio) region " +
-	`(\`${PLATFORM_BETA_REGION_ID}\`); more regions are coming shortly. Run \`neon link\` to link or create a new project in that region.`;
+	"Neon features are currently in beta and only available in " +
+	`${PLATFORM_BETA_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
 
 /**
  * True when the Neon API body indicates the feature isn't deployed for this project's
@@ -1608,11 +1609,12 @@ function isRegionUnavailableNeonMessage(
 /**
  * Per-status guidance for a platform feature that came back "unavailable". These features
  * are currently in beta and rolling out region by region — today only in
- * {@link PLATFORM_BETA_REGION_ID} — so we tailor the next step instead of emitting one
+ * {@link PLATFORM_BETA_REGIONS} — so we tailor the next step instead of emitting one
  * catch-all:
  *
  * - 404 / 501, or an API message that names region/project unavailability — the route
- *   isn't deployed for this project's region: create a project in `aws-us-east-2`.
+ *   isn't deployed for this project's region: create a project in `aws-us-east-2` or
+ *   `aws-eu-central-1`.
  * - 503 without a region-unavailable body — the route exists but is refusing right now;
  *   Neon may be having a transient incident. Retry; if it persists check neonstatus.com.
  * - anything else — point at the beta region requirement.
