@@ -7,7 +7,7 @@ export type InitRun = (
 ) => Promise<boolean>;
 
 // bootstrap re-execs link, which needs the key in this process env.
-export const AUTH_CHILD = new Set(["bootstrap", "link", "mcp"]);
+export const AUTH_CHILD = new Set(["bootstrap", "link", "mcp", "env"]);
 
 export const initChildEnv = (
 	command: string | undefined,

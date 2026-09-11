@@ -105,27 +105,35 @@ sends:
 }
 ```
 
-Object Storage, Functions, and the AI Gateway are sent to the service so demand is
-recorded, but are reported as unavailable until the project is claimed; the CLI does
-not silently remove them.
+Object Storage, Functions, and the AI Gateway passed with `--service` are sent so
+demand is recorded, then reported as unavailable until the project is claimed. The CLI
+does not drop them from the request.
+
+The bundled env pull still follows `neon.ts`. A `neon.ts` that names AI Gateway,
+Functions, or Object Storage fails the pull, and the create is rolled back. Use
+`--config` for a different policy file (registration and that pull), or `--no-env-pull`
+to skip the dotenv write.
 
 The command writes:
 
-- a `.neon` context that identifies the project and Claimable Neon service;
+- a `.neon` context with the project id and pinned branch;
 - an owner-only identity assertion under the CLI config directory;
-- `DATABASE_URL` and any granted Auth or Data API variables to `.env` or `.env.local`
-  (disable this with `--no-env-pull`).
+- `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH`, and Auth / Data API variables
+  when `neon.ts` declares them (or, with no `neon.ts`, when they are provisioned) to `.env`
+  or `.env.local` (disable this with `--no-env-pull`). The write is the same `env pull` used
+  after create.
 
-Subsequent project commands automatically exchange the assertion for a short-lived agent
-token and send API calls to Claimable Neon. The service decides which operations are
-allowed before claim.
+Subsequent project commands find that assertion by the linked project id, exchange it for a
+short-lived agent token, and send API calls to Claimable Neon. The service decides which
+operations are allowed before claim.
 
 ```bash
 neon claim status                 # lifecycle and transfer status
 neon projects get <project-id>    # regular CLI command, same agent token
 neon psql --role-name neondb_owner -- -c "select now()"
 neon config plan
-neon env pull --service postgres --service auth --service data-api
+neon checkout main
+neon env pull
 
 neon claim accept                 # create a claim code and open the transfer URL
 neon claim delete --yes           # permanently delete an unclaimed project
@@ -432,8 +440,8 @@ The branch argument is **optional**: run `neon checkout` with no branch in an in
 
 Branch **id vs name** is detected automatically (a `br-…` value is treated as an id):
 
-- **id** — matched strictly by id. A non-existent id is a hard "not found" error (ids are server-assigned, so checkout never creates one).
-- **name** — matched by name. If the name doesn't exist, in an interactive terminal `checkout` offers to **create** it (equivalent to `neon branch create --name <name>`: branched from the project's default branch with a read-write compute), then checks it out. In a non-interactive context a missing name is the usual "not found" error.
+- **id** — matched strictly by id. A non-existent id is a hard "not found" error (ids are server-assigned, so checkout never creates one, including with `--create`).
+- **name** — matched by name. If the name doesn't exist, pass `--create` to create it (equivalent to `neon branch create --name <name>`: branched from the project's default branch with a read-write compute, or from `neon.ts` when that file is present), then check it out. `--create` is a no-op when the name already exists. Without `--create`, an interactive terminal offers to create the branch; in CI or with no TTY the error names `--create`.
 
 The project is resolved through the standard neon chain, each entry winning over the next:
 
@@ -449,11 +457,15 @@ The resolved branch is then written (by name) to the same `.neon` file `link` us
 $ neon checkout main --project-id polished-snowflake-12345678
 INFO: Checked out branch br-main-branch-87654321 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
 
+$ neon checkout dev --create --project-id polished-snowflake-12345678
+INFO: Created branch dev (br-dev-branch-12345678).
+INFO: Checked out branch br-dev-branch-12345678 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
+
 $ cat .neon
 {
   "orgId": "org-abc123",
   "projectId": "polished-snowflake-12345678",
-  "branch": "main"
+  "branch": "dev"
 }
 ```
 
@@ -497,6 +509,8 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`. Declared function URLs are derived from the branch connection host; the function does not have to be deployed.
 3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, object storage, and function invocation URLs read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
 
+On an unclaimed Claimable Neon project, `neon.ts` is still the source of truth when it only declares Postgres, Auth, and the Data API. A `neon.ts` that declares AI Gateway, Functions, or Object Storage fails: those cannot be used until the project is claimed. Without a `neon.ts`, a bare pull writes provisioned Postgres, Auth, and Data API. Naming AI Gateway, Functions, or Object Storage with `--service` / `--env` warns and writes nothing for them. `--config` selects the policy file, the same flag as `claim create` and `config plan`.
+
 If the gateway can't be resolved, it is dropped with a warning and the rest of the pull still lands. Gateway variables already in your file for *this* branch are left alone — a pull that couldn't reach the gateway is no evidence the branch has stopped having one — while ones left over from a different branch are pruned like any other stale value.
 
 ```bash
@@ -505,6 +519,9 @@ neon env pull
 
 # Pull a specific branch into a specific file
 neon env pull --branch preview --file .env.preview
+
+# Use a specific neon.ts
+neon env pull --config ./claimable.ts
 
 # Only the AI Gateway
 neon env pull --service ai-gateway
@@ -725,7 +742,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal asks about dependency install, git, agent tooling (the Neon plugin, or skills and MCP separately — never both), and `neon link` before running those steps. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so link can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. `link --yes` still asks for a project unless one is already linked. `--no-agent-setup` and `--no-link` skip those. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Project selection may still be required. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -750,27 +767,35 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 ## Set up a project (`init`)
 
-`neon init` sets up this directory for Neon.
+`neon init` sets up this directory for Neon as one flow: agents, a linked project, and optionally `neon.ts`.
 
-An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking. Interactive bootstrap prints a NEON banner, asks every setup question, then runs the work — dependency install last, except when a `neon.ts` needs deps before `link`.
+An empty directory (nothing except `.git`) asks how to set up the directory. Pick a starter template, or skip scaffolding and only install agent tooling, link a project, and optionally write `neon.ts`. That skip is only on `init` — `neon bootstrap` always scaffolds.
 
-An existing app installs agent tooling, then `neon link` unless `.neon` already has a projectId, then `neon config init`. Interactive `config init` opens the services picker; `-y` uses `--services none` (starter policy).
+`-y` in an empty directory scaffolds the default template (`bootstrap --default`) and does not add a later `config init` step. `--skip-template` skips scaffolding even with `-y`. `--template <id>` scaffolds that template; combine it with `-y` to skip the remaining bootstrap pickers.
 
-In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together.
+An existing app (or skip-template) installs agent tooling, then asks whether to link unless `.neon` already has a projectId, then asks whether to create `neon.ts`. Linking uses the same organization, project, and branch flow as `neon link`. Saying no to `neon.ts` skips the services picker and does not write the file. `--no-config` does the same without asking. `-y` writes `config init --services none` unless `--no-config`. `--services` implies creating `neon.ts`.
+
+In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. Agent selection and setup finish before the link question. It never runs plugin and skills+MCP together.
 
 ```bash
 $ neon init
+$ neon init --skip-template
+$ neon init --skip-template --no-link
 $ neon init -y
 $ neon init --agent cursor --agent claude-code
 ```
 
-Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates.
+Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates. `--no-link` skips project linking without asking, including when a template is scaffolded.
 
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. `--skip-template` or an existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
 `--agent` / `-a` (repeatable) names coding agents and skips agent selection, interactive or with `-y`. Init forwards those names to `plugins`, or to `skills` and `mcp`, not both.
 
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`, including the link step inside nested bootstrap when a template is scaffolded. They are not filled from `.neon`; a linked directory is not relinked unless you pass one of those flags.
+
+`--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
+
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, uses default choices in the built-in link flow, passes `--default` to nested bootstrap, and forwards `--services none` to `config init`. `--agent` is forwarded to agent setup. `mcp -y` is the global install. Default linking skips the "already linked" confirmation; it can still require project selection.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
@@ -930,6 +955,40 @@ neon snapshots schedule get --branch main
 neon snapshots schedule set --branch main --frequency daily --hour 3 --retention 604800
 neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]'
 ```
+
+All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
+## Function triggers (`triggers`)
+
+`neon triggers` (alias `neon trigger`) manages **scheduled function triggers** on a branch — cron jobs that invoke a Neon Function. Beta. The only trigger type is `schedule`; cron is a five-field UTC expression.
+
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect) and the branch through `--branch <id|name>`, the `.neon` pin, or the project's default branch.
+
+```bash
+neon triggers create --function-slug uptime --name uptime-check --cron '*/15 * * * *'
+neon triggers list
+neon triggers get trigger-test-123
+neon triggers update trigger-test-123 --cron '0 3 * * *'
+neon triggers enable trigger-test-123
+neon triggers disable trigger-test-123
+neon triggers delete trigger-test-123
+```
+
+`enable` / `disable` are wrappers over `update --enabled`. List shows `inherited` when the effective config was authored on an ancestor branch.
+
+## Branch credentials (`credentials`)
+
+`neon credentials` (alias `neon credential`) lists, issues, reveals, rotates, and revokes **branch-scoped credentials** — the tokens behind Object Storage (`AWS_*`) and the AI Gateway (`NEON_AI_GATEWAY_TOKEN`). Beta. In regions where those services exist, a new project already has default credentials named `Default AI gateway credential` and `Default object storage credential`; `list` then `reveal` recovers their secrets without minting another token.
+
+```bash
+neon credentials list
+neon credentials create --name app --scope storage:read --scope storage:write
+neon credentials reveal nak_live_…
+neon credentials rotate nak_live_…
+neon credentials revoke nak_live_…
+```
+
+`create` always issues a customer-managed (`user`) credential. `--scope` is repeatable; `--help` lists the values. `reveal` and `rotate` print `api_token` and `s3_secret_access_key`. Rotation keeps the same `token_id` (it is the `AWS_ACCESS_KEY_ID`) and is not idempotent: a retry after a lost response mints another secret.
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
@@ -1170,7 +1229,7 @@ When both are only environment variables the key wins, which keeps a CI pipeline
 
 `neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
-`neon init` forwards `--profile` and `--config-dir` to the commands it runs. An explicit `--api-key` is passed to those children through `NEON_API_KEY`, not argv.
+`neon init` forwards `--profile` and `--config-dir` to agent and config children and uses them directly for its link flow. An explicit `--api-key` is passed to authenticated children through `NEON_API_KEY`, not argv.
 
 ## API passthrough (`api`)
 
@@ -1272,6 +1331,8 @@ Id   Name      Project         Created At            Last Used At          Last 
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
+| triggers                                                                   | `list`, `get`, `create`, `update`, `enable`, `disable`, `delete`                                             | Manage function triggers           |
+| credentials                                                                | `list`, `create`, `reveal`, `rotate`, `revoke`                                                               | Manage branch credentials          |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
 | set-context                                                                |                                                                                                              | Deprecated; use `link`             |

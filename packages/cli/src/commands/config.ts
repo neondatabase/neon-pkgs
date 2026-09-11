@@ -40,7 +40,11 @@ import {
 	renderNeonConfigFromView,
 } from "../config_template.js";
 
-import { contextBranch, readContextFile } from "../context.js";
+import {
+	contextBranch,
+	ensureDirectoryGitignored,
+	readContextFile,
+} from "../context.js";
 import { isCi } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
@@ -438,6 +442,7 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 				formatInstallCommand(pm, missing),
 			);
 		} else {
+			ensureDirectoryGitignored(join(cwd, "node_modules"));
 			log.info("Installing %s with %s…", missing.join(", "), pm);
 			const ok = await run(pm, args, cwd);
 			if (!ok) {

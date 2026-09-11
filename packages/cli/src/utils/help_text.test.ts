@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { helpCsv, helpEpilogue } from "./help_text.js";
+import {
+	globalOptionsTrailer,
+	helpCsv,
+	helpEpilogue,
+	wrapHelpText,
+} from "./help_text.js";
 
 describe("helpCsv", () => {
 	test("keeps a short list on one line", () => {
@@ -30,10 +35,42 @@ describe("helpCsv", () => {
 	});
 });
 
+describe("wrapHelpText", () => {
+	test("keeps a short string on one line", () => {
+		expect(wrapHelpText("authenticated passthrough", 80)).toBe(
+			"authenticated passthrough",
+		);
+	});
+
+	test("wraps on word boundaries", () => {
+		expect(wrapHelpText("authenticated passthrough", 14)).toBe(
+			"authenticated\npassthrough",
+		);
+	});
+
+	test("does not split a word longer than the width", () => {
+		expect(wrapHelpText("passthrough", 4)).toBe("passthrough");
+	});
+});
+
 describe("helpEpilogue", () => {
 	test("starts with a blank line and drops empty blocks", () => {
 		expect(helpEpilogue("Installs https://mcp.neon.tech/mcp", "")).toBe(
 			"\nInstalls https://mcp.neon.tech/mcp",
+		);
+	});
+});
+
+describe("globalOptionsTrailer", () => {
+	test("points at neon --help from a neon usage line", () => {
+		expect(globalOptionsTrailer("neon projects list [options]")).toBe(
+			"Global options: see neon --help",
+		);
+	});
+
+	test("points at neonctl --help from a neonctl usage line", () => {
+		expect(globalOptionsTrailer("neonctl projects list [options]")).toBe(
+			"Global options: see neonctl --help",
 		);
 	});
 });

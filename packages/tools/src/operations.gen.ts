@@ -35,6 +35,7 @@ export const operationIds = [
 	"createProjectBranchDatabase",
 	"createProjectBranchFunctionDeployment",
 	"createProjectBranchRole",
+	"createProjectBranchTrigger",
 	"createProjectEndpoint",
 	"createProjectTransferRequest",
 	"createSnapshot",
@@ -57,6 +58,7 @@ export const operationIds = [
 	"deleteProjectBranchDatabase",
 	"deleteProjectBranchFunction",
 	"deleteProjectBranchRole",
+	"deleteProjectBranchTrigger",
 	"deleteProjectEndpoint",
 	"deleteProjectJWKS",
 	"deleteProjectVPCEndpoint",
@@ -101,6 +103,7 @@ export const operationIds = [
 	"getProjectBranchSchema",
 	"getProjectBranchSchemaComparison",
 	"getProjectBranchStorage",
+	"getProjectBranchTrigger",
 	"getProjectEndpoint",
 	"getProjectJWKS",
 	"getProjectOperation",
@@ -126,6 +129,7 @@ export const operationIds = [
 	"listProjectBranchLogFields",
 	"listProjectBranchLogFieldValues",
 	"listProjectBranchRoles",
+	"listProjectBranchTriggers",
 	"listProjectEndpoints",
 	"listProjectMembers",
 	"listProjectOperations",
@@ -144,10 +148,12 @@ export const operationIds = [
 	"restartProjectEndpoint",
 	"restoreProjectBranch",
 	"restoreSnapshot",
+	"revealCredential",
 	"revokeApiKey",
 	"revokeCredential",
 	"revokeOrgApiKey",
 	"revokePermissionFromProject",
+	"rotateCredential",
 	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setDefaultProjectBranch",
@@ -179,6 +185,7 @@ export const operationIds = [
 	"updateProjectBranchDataAPI",
 	"updateProjectBranchDatabase",
 	"updateProjectBranchFunction",
+	"updateProjectBranchTrigger",
 	"updateProjectEndpoint",
 	"updateSnapshot"
 ] as const;
@@ -1051,6 +1058,38 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"createProjectBranchTrigger": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "createProjectBranchTrigger",
+				id: "create_project_branch_trigger",
+				title: "Create a trigger",
+				description: "Creates a trigger for a Function visible on the branch.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zCreateProjectBranchTriggerPath.shape["project_id"],
+	"branch_id": zod.zCreateProjectBranchTriggerPath.shape["branch_id"],
+	"body": zod.zCreateProjectBranchTriggerBody,
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/triggers",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.createProjectBranchTrigger({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: input.body,
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"createProjectEndpoint": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -1478,7 +1517,6 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"project_id": zod.zDeleteProjectBranchPath.shape["project_id"],
 	"branch_id": zod.zDeleteProjectBranchPath.shape["branch_id"],
-	"hard_delete": zod.zDeleteProjectBranchQuery.shape["hard_delete"].optional(),
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
@@ -1492,7 +1530,6 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.deleteProjectBranch({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
-			query: optionalGroup({ "hard_delete": input["hard_delete"] }, false),
 			client,
 			signal,
 			throwOnError: true,
@@ -1744,6 +1781,37 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.deleteProjectBranchRole({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "role_name": input["role_name"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"deleteProjectBranchTrigger": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "deleteProjectBranchTrigger",
+				id: "delete_project_branch_trigger",
+				title: "Delete a trigger",
+				description: "Deletes a branch-local trigger or writes a branch-local tombstone for an inherited trigger so it does not reappear.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zDeleteProjectBranchTriggerPath.shape["project_id"],
+	"branch_id": zod.zDeleteProjectBranchTriggerPath.shape["branch_id"],
+	"trigger_id": zod.zDeleteProjectBranchTriggerPath.shape["trigger_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "DELETE",
+					path: "/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.deleteProjectBranchTrigger({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "trigger_id": input["trigger_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -3115,6 +3183,37 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"getProjectBranchTrigger": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "getProjectBranchTrigger",
+				id: "get_project_branch_trigger",
+				title: "Get a trigger",
+				description: "Returns the trigger visible on the branch.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zGetProjectBranchTriggerPath.shape["project_id"],
+	"branch_id": zod.zGetProjectBranchTriggerPath.shape["branch_id"],
+	"trigger_id": zod.zGetProjectBranchTriggerPath.shape["trigger_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.getProjectBranchTrigger({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "trigger_id": input["trigger_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"getProjectEndpoint": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -3883,6 +3982,36 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"listProjectBranchTriggers": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "listProjectBranchTriggers",
+				id: "list_project_branch_triggers",
+				title: "List triggers on the branch",
+				description: "Lists the complete project-bounded set of triggers visible on the branch, ordered by `trigger_id`.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zListProjectBranchTriggersPath.shape["project_id"],
+	"branch_id": zod.zListProjectBranchTriggersPath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/triggers",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.listProjectBranchTriggers({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"listProjectEndpoints": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -4465,6 +4594,37 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"revealCredential": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "revealCredential",
+				id: "reveal_credential",
+				title: "Reveal a credential's secrets",
+				description: "Returns the live `api_token` and `s3_secret_access_key` of an existing credential, so a credential whose issuance response was lost can be recovered without minting a new one.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zRevealCredentialPath.shape["project_id"],
+	"branch_id": zod.zRevealCredentialPath.shape["branch_id"],
+	"token_id": zod.zRevealCredentialPath.shape["token_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/credentials/{token_id}/reveal",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Credentials"],
+				},
+				invoke: (client, input, signal) =>
+					raw.revealCredential({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "token_id": input["token_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"revokeApiKey": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -4578,6 +4738,37 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.revokePermissionFromProject({
 			path: optionalGroup({ "project_id": input["project_id"], "permission_id": input["permission_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"rotateCredential": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "rotateCredential",
+				id: "rotate_credential",
+				title: "Rotate a credential's secrets",
+				description: "Replaces the secret material on an existing scoped credential in place.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zRotateCredentialPath.shape["project_id"],
+	"branch_id": zod.zRotateCredentialPath.shape["branch_id"],
+	"token_id": zod.zRotateCredentialPath.shape["token_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/credentials/{token_id}/rotate",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Credentials"],
+				},
+				invoke: (client, input, signal) =>
+					raw.rotateCredential({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "token_id": input["token_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -5603,6 +5794,39 @@ export const operationFactories = {
 					raw.updateProjectBranchFunction({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "slug": input["slug"] }, true),
 			body: optionalGroup({ "name": input["name"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"updateProjectBranchTrigger": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "updateProjectBranchTrigger",
+				id: "update_project_branch_trigger",
+				title: "Update a trigger",
+				description: "Applies a partial update.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zUpdateProjectBranchTriggerPath.shape["project_id"],
+	"branch_id": zod.zUpdateProjectBranchTriggerPath.shape["branch_id"],
+	"trigger_id": zod.zUpdateProjectBranchTriggerPath.shape["trigger_id"],
+	"body": zod.zUpdateProjectBranchTriggerBody,
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "PATCH",
+					path: "/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Functions"],
+				},
+				invoke: (client, input, signal) =>
+					raw.updateProjectBranchTrigger({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "trigger_id": input["trigger_id"] }, true),
+			body: input.body,
 			client,
 			signal,
 			throwOnError: true,

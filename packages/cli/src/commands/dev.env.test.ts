@@ -72,10 +72,7 @@ describe("neon dev's resolver context", () => {
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBeUndefined();
 	});
 
-	it("reports a credential it issued, and names the one thing that stops it recurring", () => {
-		// `dev` has nowhere to persist a credential, so on a branch with nothing to reuse it
-		// issues one per start and leaves the last live. Every other command that mints says
-		// so; this is the one run dozens of times a day.
+	it("reports secrets it resolved, and names the one thing that stops it recurring", () => {
 		const logged = captureStderr(() =>
 			reportDevCredential({
 				issued: true,
@@ -86,7 +83,7 @@ describe("neon dev's resolver context", () => {
 		);
 
 		expect(logged).toContain("NEON_AI_GATEWAY_TOKEN");
-		expect(logged).toContain("left any previous one live");
+		expect(logged).toContain("without writing them to a file");
 		expect(logged).toContain("env pull");
 	});
 
@@ -114,8 +111,10 @@ describe("neon dev's resolver context", () => {
 			}),
 		);
 
-		expect(logged).toContain("Revoked the one it replaced (cred-old-0001)");
-		expect(logged).not.toContain("left any previous one live");
+		expect(logged).toContain(
+			"Revoked the leftover it replaced (cred-old-0001)",
+		);
+		expect(logged).not.toContain("without writing them to a file");
 	});
 
 	it("omits the branch rather than passing undefined when none is resolved", () => {

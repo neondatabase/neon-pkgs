@@ -9,6 +9,7 @@ import { join } from "node:path";
 import strip from "strip-ansi";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import {
+	claimableCredentialsPath,
 	readClaimableCredentials,
 	writeClaimableCredentials,
 } from "../claimable/state.js";
@@ -202,6 +203,89 @@ describe("claim status and delete after the assertion expires", () => {
 		expect(
 			readClaimableCredentials(configDir, expiredCredentials.projectId),
 		).toBeNull();
+	});
+
+	test("status with a regular .neon and no assertion is not a missing identity", async () => {
+		const { code, stderr } = await runCli(
+			["claim", "status"],
+			{},
+			({ contextFile }) => {
+				writeFileSync(
+					contextFile,
+					JSON.stringify({
+						projectId: "patient-art-12345",
+						branch: "main",
+					}),
+				);
+			},
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("not linked to a claimable project");
+		expect(stderr).not.toContain("identity assertion is missing");
+		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+
+	test("status with a leftover claimable field and no assertion is not a missing identity", async () => {
+		const { code, stderr } = await runCli(
+			["claim", "status"],
+			{},
+			({ contextFile }) => {
+				writeFileSync(
+					contextFile,
+					JSON.stringify({
+						projectId: "patient-art-12345",
+						claimable: {
+							version: 1,
+							origin: "https://claimable.neon.tech",
+						},
+					}),
+				);
+			},
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("not linked to a claimable project");
+		expect(stderr).not.toContain("identity assertion is missing");
+		expect(reachedClaimableService(stderr)).toBe(false);
+	});
+
+	test("status of an explicit project does not parse a leftover linked assertion", async () => {
+		const linkedProjectId = "patient-art-12345";
+		const { code, stdout, stderr } = await runCli(
+			[
+				"claim",
+				"status",
+				expiredCredentials.projectId,
+				"--output",
+				"json",
+			],
+			{},
+			({ configDir, contextFile }) => {
+				writeFileSync(
+					contextFile,
+					JSON.stringify({
+						projectId: linkedProjectId,
+						branch: "main",
+					}),
+				);
+				writeFileSync(
+					claimableCredentialsPath(configDir, linkedProjectId),
+					"{",
+					{ mode: 0o600 },
+				);
+				writeClaimableCredentials(configDir, expiredCredentials);
+			},
+		);
+
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(JSON.parse(stdout)).toMatchObject({
+			project_id: expiredCredentials.projectId,
+			state: "expired",
+			reconciled: false,
+		});
+		expect(reachedClaimableService(stderr)).toBe(false);
 	});
 
 	test("accept refuses an expired assertion without contacting the service", async () => {

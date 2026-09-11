@@ -1,0 +1,17 @@
+{
+  "triggers": [
+    {
+      "type": "schedule",
+      "trigger_id": "trigger-test-123",
+      "function_slug": "uptime",
+      "name": "uptime-check",
+      "function_path": "/",
+      "schedule": { "cron": "*/15 * * * *" },
+      "enabled": true,
+      "version": 1,
+      "next_run_at": "2026-09-10T03:00:00.000Z",
+      "source_branch_id": "br-sunny-branch-123456",
+      "inherited": false
+    }
+  ]
+}

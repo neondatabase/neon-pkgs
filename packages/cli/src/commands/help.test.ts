@@ -6,7 +6,9 @@ import { test } from "../test_utils/fixtures";
 describe("help", () => {
 	test("without args", async ({ testCliCommand }) => {
 		await testCliCommand([], {
-			stderr: expect.stringContaining(`neon <command> [options]`),
+			snapshot: false,
+			stdout: expect.stringContaining(`neon <command> [options]`),
+			stderr: "",
 		});
 	});
 });
@@ -29,6 +31,8 @@ const PARENT_COMMANDS = [
 	"claim",
 	"data-api",
 	"functions",
+	"triggers",
+	"credentials",
 	"config",
 	"env",
 	"buckets",
@@ -39,10 +43,10 @@ const PARENT_COMMANDS = [
 describe("parent commands print help with no subcommand", () => {
 	for (const verb of PARENT_COMMANDS) {
 		test(verb, async ({ testCliCommand }) => {
-			const { stderr: bare } = await testCliCommand([verb], {
+			const { stdout: bare } = await testCliCommand([verb], {
 				snapshot: false,
 			});
-			const { stderr: flagged } = await testCliCommand([verb, "--help"], {
+			const { stdout: flagged } = await testCliCommand([verb, "--help"], {
 				snapshot: false,
 			});
 			const text = strip(bare);

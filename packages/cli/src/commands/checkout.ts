@@ -29,6 +29,7 @@ type CheckoutProps = CommonProps & {
 	id?: string;
 	envPull: boolean;
 	env?: string;
+	create?: boolean;
 	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
 	color?: boolean;
 };
@@ -50,7 +51,7 @@ export const formatCheckoutPolicyFailure = (opts: {
 	return [
 		`Branch ${opts.branchName} (${opts.branchId}) was created and checked out, but applying neon.ts to it failed: ${opts.failure}`,
 		`The branch is usable but does not match the policy, and \`${cli} checkout\` never reconciles a branch that already exists.`,
-		`Fix the cause above, then run \`${cli} deploy --update-existing${envArg}\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${cli} branches delete ${opts.branchName}\` then \`${cli} checkout ${opts.branchName}${envArg}\`.`,
+		`Fix the cause above, then run \`${cli} deploy --update-existing${envArg}\` to apply the policy to it — or, if your policy only configures new branches (keyed on \`!branch.exists\`), delete the branch and check it out again: \`${cli} branches delete ${opts.branchName}\` then \`${cli} checkout ${opts.branchName} --create${envArg}\`.`,
 	].join("\n");
 };
 
@@ -75,6 +76,12 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: true,
 			},
+			create: {
+				describe:
+					"Create the named branch if it does not exist, then check it out",
+				type: "boolean",
+				default: false,
+			},
 			...envFlag,
 			env: {
 				...envFlag.env,
@@ -93,7 +100,11 @@ export const builder = (argv: yargs.Argv) =>
 				'Pin the branch named "main" in the closest .neon file',
 			],
 			[
-				"$0 checkout feat --env .env.local",
+				"$0 checkout dev --create",
+				"Create and pin a missing branch named dev",
+			],
+			[
+				"$0 checkout feat --create --env .env.local",
 				"Create feat from neon.ts, loading Function env from .env.local first",
 			],
 			[
@@ -112,6 +123,12 @@ export const handler = async (props: CheckoutProps) => {
 			"%s Currently on branch %s",
 			chalk.dim("→"),
 			chalk.cyan.bold(previousBranch),
+		);
+	}
+
+	if (props.create && !props.id?.trim()) {
+		throw new Error(
+			`No branch specified. Pass a branch name with --create (e.g. \`${getCliName()} checkout dev --create\`).`,
 		);
 	}
 
@@ -210,9 +227,9 @@ const applyPolicyOrDescribeFailure = async (
  *
  * - Branch **id** (`br-…`): looked up by id. A non-existent id is a hard "not
  *   found" error — we never offer to create one, since ids are server-assigned.
- * - Branch **name**: looked up by name. If it doesn't exist, in an interactive
- *   terminal we offer to create it (like `neonctl branch create --name <name>`);
- *   in a non-interactive context it's the usual "not found" error.
+ * - Branch **name**: looked up by name. If it doesn't exist, `--create` creates
+ *   it (like `neon branch create --name <name>`). Without the flag, a TTY offers
+ *   to create it; CI / non-TTY exits with a not-found error that names `--create`.
  * - **Omitted**: open an interactive picker listing the project's branches plus a
  *   "create a new branch" option (TTY only); in a non-interactive context a missing
  *   branch is a hard error.
@@ -292,12 +309,17 @@ const resolveBranchId = async (
 		};
 	}
 
-	// Name not found: offer to create it interactively, mirroring `branch create`.
-	if (isCi() || !process.stdout.isTTY) {
-		throw new Error(notFoundMessage(ref, branches));
+	if (props.create) {
+		return createCheckoutBranch(props, projectId, ref, branches);
 	}
 
-	log.error(notFoundMessage(ref, branches));
+	const missingName = notFoundMessage(ref, branches, { suggestCreate: true });
+	// Name not found: offer to create it interactively, mirroring `branch create`.
+	if (isCi() || !process.stdout.isTTY) {
+		throw new Error(missingName);
+	}
+
+	log.error(missingName);
 	const { create } = await prompts({
 		type: "confirm",
 		name: "create",
@@ -357,8 +379,12 @@ const createCheckoutBranch = async (
 	};
 };
 
-const notFoundMessage = (ref: string, branches: Branch[]): string =>
-	`Branch ${ref} not found.\nAvailable branches: ${branches
+const notFoundMessage = (
+	ref: string,
+	branches: Branch[],
+	opts?: { suggestCreate: boolean },
+): string =>
+	`Branch ${ref} not found.${opts?.suggestCreate ? " Pass --create to create it." : ""}\nAvailable branches: ${branches
 		.map((b: Branch) => b.name)
 		.join(", ")}`;
 

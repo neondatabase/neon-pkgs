@@ -4071,23 +4071,12 @@
             },
             "delete": {
                 "summary": "Delete branch",
-                "description": "Deletes the specified branch from a project and places all compute endpoints into an idle state, breaking existing client connections.\n\nThe deletion completes after all operations finish.\nYou cannot delete a project's root or default branch, or a branch that has a child branch.\nA project must have at least one branch.\n\nBy default, deleted branches can be recovered within a 7-day grace period.\nUse the `hard_delete` parameter to permanently delete the branch immediately.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
+                "description": "Deletes the specified branch from a project and places all compute endpoints into an idle state, breaking existing client connections.\n\nThe deletion completes after all operations finish.\nYou cannot delete a project's root or default branch, or a branch that has a child branch.\nA project must have at least one branch.\n\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
                 "tags": [
                     "Branch"
                 ],
                 "operationId": "deleteProjectBranch",
-                "parameters": [
-                    {
-                        "name": "hard_delete",
-                        "in": "query",
-                        "description": "If true, the branch is permanently deleted immediately without a recovery window.\nIf false (default), the branch can be recovered within 7 days via the recover endpoint.\n\nThis parameter is part of the Branch Recovery feature, which is in preview and not available to all users.\n",
-                        "required": false,
-                        "schema": {
-                            "type": "boolean",
-                            "default": false
-                        }
-                    }
-                ],
+                "parameters": [],
                 "responses": {
                     "200": {
                         "description": "Deleted the specified branch",
@@ -9484,6 +9473,140 @@
                 }
             }
         },
+        "/projects/{project_id}/branches/{branch_id}/credentials/{token_id}/reveal": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "token_id",
+                    "in": "path",
+                    "description": "The opaque credential id (e.g. nak_live_<32hex>).",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "post": {
+                "summary": "Reveal a credential's secrets",
+                "description": "Returns the live `api_token` and `s3_secret_access_key` of an existing\ncredential, so a credential whose issuance response was lost can be\nrecovered without minting a new one.\n\nThis is a POST with an explicit `/reveal` verb so the secrets never ride\na GET, where they would land in access logs, browser history and proxy\ncaches. Revoked and expired credentials return 404, as does a\n`token_id` that does not belong to this project.\n\nA credential issued before secret retrieval was supported has no\nrecoverable secret and returns 409 \u2014 rotate it to obtain one.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Credentials"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "revealCredential",
+                "responses": {
+                    "200": {
+                        "description": "The credential's live secrets.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CredentialSecret"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Credential not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GeneralError"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The credential exists but has no recoverable secret because it was\nissued before secret retrieval was supported. Rotate the credential\nto obtain a recoverable secret.\n",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GeneralError"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/credentials/{token_id}/rotate": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "token_id",
+                    "in": "path",
+                    "description": "The opaque credential id (e.g. nak_live_<32hex>).",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "post": {
+                "summary": "Rotate a credential's secrets",
+                "description": "Replaces the secret material on an existing scoped credential in\nplace. `token_id` is preserved \u2014 it is the `AWS_ACCESS_KEY_ID` for\nS3-compatible clients, so the access key id your application already\nholds keeps working and only the secret changes. This is the analog of\nresetting a Postgres password, not of issuing a second credential.\n\nThe response carries the new `api_token` and `s3_secret_access_key`\nexactly once. Rotation is **not** idempotent: retrying after an\nambiguous timeout mints another secret and supersedes the previous\nreplacement, so a retry does not recover a lost response \u2014 it only\ninvalidates the secret you did not receive. If you lose the response,\nissue a replacement credential and revoke this one.\n\nThe old secret stops authenticating as soon as the rotation commits.\nWhere a region caches credentials on its data-plane verifiers, a\nreplica may briefly keep accepting the old secret \u2014 and rejecting the\nnew one \u2014 until its cache entry expires; where it does not, the\ncutover is immediate apart from requests already in flight. Either way\nthe changeover is not atomic across replicas, so retry an unexpected\nauthentication failure right after rotating rather than treating the\nnew secret as bad. `last_used_at` continues to report the logical\ncredential's prior usage and says nothing about whether the new secret\nhas been used yet.\n\nOnly a live, unexpired, unrevoked customer-managed (`user`) credential\non a live project and live branch is eligible. Anything else \u2014\nincluding the platform-internal `function` and `system` credentials \u2014\nis reported as not found, indistinguishable from an unknown\n`token_id`.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Credentials"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "rotateCredential",
+                "responses": {
+                    "200": {
+                        "description": "Credential rotated \u2014 new secrets shown once.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RotateCredentialResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
         "/projects/{project_id}/branches/{branch_id}/functions": {
             "parameters": [
                 {
@@ -9724,6 +9847,196 @@
                                 }
                             }
                         }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/triggers": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "List triggers on the branch",
+                "description": "Lists the complete project-bounded set of triggers visible on the branch,\nordered by `trigger_id`. An inherited trigger keeps its project-wide ID\nand source branch, and is disabled on the child until explicitly enabled\nthere.\n\nThe only currently supported trigger type is `schedule`.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "listProjectBranchTriggers",
+                "responses": {
+                    "200": {
+                        "description": "The branch-effective trigger list",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggersListResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "post": {
+                "summary": "Create a trigger",
+                "description": "Creates a trigger for a Function visible on the branch. The required\n`type` discriminator selects the trigger-specific configuration. The\nonly currently supported type is `schedule`, whose cron is a numeric\nfive-field expression interpreted in UTC.\n\nThe name must be unique among triggers visible on the branch, including\ninherited triggers.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "createProjectBranchTrigger",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TriggerCreateRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Trigger created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "trigger_id",
+                    "in": "path",
+                    "description": "The opaque, project-wide trigger ID",
+                    "required": true,
+                    "schema": {
+                        "$ref": "#/components/schemas/TriggerID"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "Get a trigger",
+                "description": "Returns the trigger visible on the branch. The only currently supported\ntrigger type is `schedule`.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "getProjectBranchTrigger",
+                "responses": {
+                    "200": {
+                        "description": "The trigger",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "patch": {
+                "summary": "Update a trigger",
+                "description": "Applies a partial update. The required `type` discriminator must identify\nthe existing trigger kind; the only currently supported type is\n`schedule`. Editing an inherited trigger creates a child-local shadow\nwith the same `trigger_id`; it remains disabled unless this request\nexplicitly enables it. Updating the schedule or enabled state increments\n`version` and recomputes `next_run_at`.\n\nDisabling stops future scheduling but does not cancel occurrences already\ncommitted for delivery.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "updateProjectBranchTrigger",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TriggerUpdateRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "The updated trigger",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "delete": {
+                "summary": "Delete a trigger",
+                "description": "Deletes a branch-local trigger or writes a branch-local tombstone for an\ninherited trigger so it does not reappear. Deletion stops future\nscheduling but does not cancel occurrences already committed for delivery.\nThe only currently supported trigger type is `schedule`.\n\n**Note**: This endpoint is currently in Beta.\n",
+                "tags": [
+                    "Functions"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "deleteProjectBranchTrigger",
+                "responses": {
+                    "204": {
+                        "description": "Trigger deleted"
                     },
                     "default": {
                         "$ref": "#/components/responses/GeneralError"
@@ -17037,11 +17350,22 @@
             },
             "CredentialScope": {
                 "type": "string",
-                "description": "A single capability a credential may exercise. A credential is granted\na set of these; it may only perform actions explicitly listed in its\nscopes.\n",
+                "description": "A single capability you may request when issuing a credential. A\ncredential is granted a set of these; it may only perform actions\nexplicitly listed in its scopes.\n\nThis is the *requestable* set. Responses describing an existing\ncredential use `GrantedCredentialScope`, which is deliberately wider:\na credential may have been granted a scope that this endpoint does not\noffer, and a response must be able to report it.\n",
                 "enum": [
                     "storage:read",
                     "storage:write",
                     "ai_gateway:invoke",
+                    "functions:invoke"
+                ]
+            },
+            "GrantedCredentialScope": {
+                "type": "string",
+                "description": "A single capability a credential actually carries, as reported by\nresponses that describe an existing credential.\n\nThis set is a superset of `CredentialScope` (the requestable set)\nbecause a credential's scopes are not limited to what this API offers:\nthe platform accepts additional scopes for customer-managed (`user`)\ncredentials, so one may exist on your branch that was not issued\nthrough this endpoint. Responses must be able to report such a\ncredential rather than fail to describe it \u2014 a client that rejected\nthe value would, on rotate, discard the replacement secret after the\nrotation had already committed. Treat unknown values as opaque.\n",
+                "enum": [
+                    "storage:read",
+                    "storage:write",
+                    "ai_gateway:invoke",
+                    "telemetry:write",
                     "functions:invoke"
                 ]
             },
@@ -17113,7 +17437,7 @@
                     "scopes": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/CredentialScope"
+                            "$ref": "#/components/schemas/GrantedCredentialScope"
                         }
                     },
                     "branch_id": {
@@ -17128,6 +17452,100 @@
                         "type": "string",
                         "format": "date-time",
                         "description": "When the credential expires; absent means never expires.\n"
+                    }
+                }
+            },
+            "CredentialSecret": {
+                "type": "object",
+                "required": [
+                    "token_id",
+                    "api_token",
+                    "s3_secret_access_key"
+                ],
+                "description": "The live secrets of an existing credential, recovered on demand by the\nreveal endpoint. `api_token` and `s3_secret_access_key` are the same\nvalues handed back once at issuance.\n\nThe field set is deliberately narrower than `CreateCredentialResponse`:\nit carries only what reveal can actually recover. `token_id_short`,\n`scopes`, `principal_type`, `created_at` and `expires_at` are metadata,\nnot secrets \u2014 read them from the list endpoint instead.\n\nNo `branch_id` is returned. Reveal is scoped by `(project_id,\ntoken_id)`, so the branch in the request path authorizes the call but\nis not proven to be the branch the credential was issued on. Echoing it\nback would assert an anchor this endpoint never verified. For a\ncredential's true anchor branch, read `branch_id` from the list\nendpoint, which is branch-exact.\n",
+                "x-sensitive": [
+                    "api_token",
+                    "s3_secret_access_key"
+                ],
+                "properties": {
+                    "token_id": {
+                        "type": "string",
+                        "description": "Opaque credential id (e.g. nak_live_<32hex>)."
+                    },
+                    "api_token": {
+                        "type": "string",
+                        "description": "Bearer token."
+                    },
+                    "s3_secret_access_key": {
+                        "type": "string",
+                        "description": "nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY."
+                    }
+                }
+            },
+            "RotateCredentialResponse": {
+                "type": "object",
+                "required": [
+                    "token_id",
+                    "token_id_short",
+                    "api_token",
+                    "s3_secret_access_key",
+                    "scopes",
+                    "branch_id",
+                    "principal_type",
+                    "created_at"
+                ],
+                "x-sensitive": [
+                    "api_token",
+                    "s3_secret_access_key"
+                ],
+                "description": "The replacement secret material for an existing credential, returned\nexactly once. `token_id`, `scopes`, `branch_id` and `created_at` are\nunchanged by the rotation \u2014 only `api_token` and\n`s3_secret_access_key` are new.\n",
+                "properties": {
+                    "token_id": {
+                        "type": "string",
+                        "description": "Opaque credential id (e.g. nak_live_<32hex>), unchanged by the\nrotation. Doubles as the `AWS_ACCESS_KEY_ID` for SigV4.\n"
+                    },
+                    "token_id_short": {
+                        "type": "string",
+                        "description": "First 12 hex chars of token_id; safe to log."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Customer-supplied label carried on the credential. Absent when none was set at issuance."
+                    },
+                    "api_token": {
+                        "type": "string",
+                        "description": "The new Bearer token; returned exactly once."
+                    },
+                    "s3_secret_access_key": {
+                        "type": "string",
+                        "description": "The new nsk_live_<64 hex> AWS_SECRET_ACCESS_KEY; returned exactly once."
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/GrantedCredentialScope"
+                        }
+                    },
+                    "branch_id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    },
+                    "principal_type": {
+                        "type": "string",
+                        "enum": [
+                            "user"
+                        ],
+                        "description": "Always `user`: only customer-managed credentials are rotatable\nthrough this endpoint.\n"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When the credential was originally issued. Rotation replaces the\nsecrets in place and does not reset this.\n"
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When the credential expires; absent means never expires. Rotation\ndoes not extend it.\n"
                     }
                 }
             },
@@ -17155,7 +17573,7 @@
                     "scopes": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/CredentialScope"
+                            "$ref": "#/components/schemas/GrantedCredentialScope"
                         }
                     },
                     "branch_id": {
@@ -17321,6 +17739,252 @@
                     }
                 }
             },
+            "TriggerID": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque, server-minted project-wide trigger identifier."
+            },
+            "FunctionTriggerSchedule": {
+                "type": "object",
+                "description": "A numeric five-field cron schedule interpreted in UTC.",
+                "required": [
+                    "cron"
+                ],
+                "properties": {
+                    "cron": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024,
+                        "description": "Numeric five-field cron expression (minute through day-of-week), interpreted in UTC.",
+                        "example": "0 9 * * 1-5"
+                    }
+                },
+                "additionalProperties": false
+            },
+            "TriggerCreateRequest": {
+                "type": "object",
+                "description": "Trigger creation payload discriminated by `type`. The only currently\nsupported trigger type is `schedule`.\n",
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "schedule": "#/components/schemas/ScheduleTriggerCreateRequest"
+                    }
+                },
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/ScheduleTriggerCreateRequest"
+                    }
+                ]
+            },
+            "ScheduleTriggerCreateRequest": {
+                "type": "object",
+                "required": [
+                    "type",
+                    "function_slug",
+                    "name",
+                    "schedule"
+                ],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "schedule"
+                        ],
+                        "description": "Trigger type discriminator."
+                    },
+                    "function_slug": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]{1,20}$",
+                        "description": "The branch-local Function slug to invoke."
+                    },
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                        "description": "Human-readable name, unique among triggers visible on the branch."
+                    },
+                    "function_path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "default": "/",
+                        "description": "Path passed to the target Function. Defaults to `/`."
+                    },
+                    "schedule": {
+                        "$ref": "#/components/schemas/FunctionTriggerSchedule"
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Whether future occurrences should be scheduled."
+                    }
+                },
+                "additionalProperties": false
+            },
+            "TriggerUpdateRequest": {
+                "type": "object",
+                "description": "Partial trigger update discriminated by `type`. The only currently\nsupported trigger type is `schedule`.\n",
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "schedule": "#/components/schemas/ScheduleTriggerUpdateRequest"
+                    }
+                },
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/ScheduleTriggerUpdateRequest"
+                    }
+                ]
+            },
+            "ScheduleTriggerUpdateRequest": {
+                "type": "object",
+                "required": [
+                    "type"
+                ],
+                "minProperties": 2,
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "schedule"
+                        ],
+                        "description": "Trigger type discriminator; it does not change the trigger type."
+                    },
+                    "function_slug": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]{1,20}$",
+                        "description": "Replacement branch-local Function slug."
+                    },
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                    },
+                    "function_path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                    },
+                    "schedule": {
+                        "$ref": "#/components/schemas/FunctionTriggerSchedule"
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "True enables and false disables future scheduling."
+                    }
+                },
+                "additionalProperties": false
+            },
+            "Trigger": {
+                "type": "object",
+                "description": "A branch-effective trigger discriminated by `type`. The only currently\nsupported trigger type is `schedule`.\n",
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "schedule": "#/components/schemas/ScheduleTrigger"
+                    }
+                },
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/ScheduleTrigger"
+                    }
+                ]
+            },
+            "ScheduleTrigger": {
+                "type": "object",
+                "description": "A branch-effective schedule trigger for a Function.",
+                "required": [
+                    "type",
+                    "trigger_id",
+                    "function_slug",
+                    "name",
+                    "function_path",
+                    "schedule",
+                    "enabled",
+                    "version",
+                    "next_run_at",
+                    "source_branch_id",
+                    "inherited"
+                ],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "schedule"
+                        ],
+                        "description": "Trigger type discriminator."
+                    },
+                    "trigger_id": {
+                        "$ref": "#/components/schemas/TriggerID"
+                    },
+                    "function_slug": {
+                        "type": "string",
+                        "description": "The branch-local Function slug resolved when an occurrence is consumed."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable trigger name."
+                    },
+                    "function_path": {
+                        "type": "string",
+                        "description": "Path passed to the target Function."
+                    },
+                    "schedule": {
+                        "$ref": "#/components/schemas/FunctionTriggerSchedule"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "version": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "Monotonic configuration version."
+                    },
+                    "next_run_at": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Next scheduled occurrence as an RFC 3339 UTC timestamp, or null\nwhile disabled or inherited and not explicitly enabled on this branch.\n"
+                    },
+                    "source_branch_id": {
+                        "description": "The public `branch_id` of the branch that authored the effective configuration.",
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    },
+                    "inherited": {
+                        "type": "boolean",
+                        "description": "True when the effective configuration was authored on an ancestor branch."
+                    }
+                },
+                "additionalProperties": false
+            },
+            "TriggerResponse": {
+                "type": "object",
+                "required": [
+                    "trigger"
+                ],
+                "properties": {
+                    "trigger": {
+                        "$ref": "#/components/schemas/Trigger"
+                    }
+                }
+            },
+            "TriggersListResponse": {
+                "type": "object",
+                "required": [
+                    "triggers"
+                ],
+                "properties": {
+                    "triggers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Trigger"
+                        }
+                    }
+                }
+            },
             "CustomDomain": {
                 "type": "object",
                 "required": [
@@ -17344,7 +18008,23 @@
                     },
                     "cname_target": {
                         "type": "string",
-                        "description": "The hostname the customer must point their custom domain at with a\nCNAME record. Empty when the serving region has no custom-domains\nfront door configured. This is the only activation input: point DNS\nhere and the domain goes live once a certificate is issued on the first\nrequest. (v1 has no status/lifecycle field.)\n"
+                        "description": "The hostname the customer must point their custom domain at with a\nCNAME record. Empty when the serving region has no custom-domains\nfront door configured. This is the activation input: point DNS here\nand the domain goes live (see `status`) once a certificate is issued\non the first request.\n"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "The domain's current validity, computed by a background check:\n`pending` (still converging \u2014 point your CNAME at `cname_target` and\nwait), `active` (live: DNS resolves to the edge, the CA is authorized,\nand routing is published), or `error` (a fixable problem \u2014 see\n`status_reason`). Not an `enum`: treat any undocumented value as\nunknown. May be absent briefly right after registration.\n"
+                    },
+                    "dns_status": {
+                        "type": "string",
+                        "description": "The DNS + CAA portion of the check: `pending` (no records yet), `ok`\n(resolves to our edge and the CA is authorized), `misconfigured` (your\nCNAME does not resolve to our edge), or `caa_blocked` (your CAA records\nforbid Let's Encrypt). Not an `enum`.\n"
+                    },
+                    "binding_status": {
+                        "type": "string",
+                        "description": "Whether Neon's internal routing for the domain is published:\n`pending`, `present`, or `missing`. `missing` is an internal fault\nsurfaced for support. Not an `enum`.\n"
+                    },
+                    "status_reason": {
+                        "type": "string",
+                        "description": "A short, stable machine-readable reason for a non-active `status`\n(e.g. `cname-not-pointing-at-edge`, `caa-blocks-lets-encrypt`,\n`binding-missing`), suitable for keying an actionable hint. Empty when\nactive or pending.\n"
                     }
                 }
             },

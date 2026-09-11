@@ -69,9 +69,10 @@ describe("open", () => {
 		const result = runCli(["open", "--help"]);
 
 		expect(result.status).toBe(0);
-		expect(result.stderr).toContain("--project-id");
-		expect(result.stderr).toContain(
+		expect(result.stdout).toContain("--project-id");
+		expect(result.stdout).toContain(
 			"defaults to the project linked in .neon",
 		);
+		expect(result.stderr).toBe("");
 	});
 });

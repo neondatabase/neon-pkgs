@@ -34,7 +34,7 @@ const PROJECTS_LIST_LIMIT = 100;
 
 const CREATE_NEW_SENTINEL = "__create_new__";
 
-type LinkProps = CommonProps & {
+export type LinkProps = CommonProps & {
 	orgId?: string;
 	projectId?: string;
 	projectName?: string;
@@ -45,6 +45,8 @@ type LinkProps = CommonProps & {
 	clear: boolean;
 	checks: boolean;
 	envPull: boolean;
+	config?: boolean;
+	cwd?: string;
 };
 
 type Inputs = {
@@ -142,6 +144,12 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: true,
 			},
+			config: {
+				describe:
+					"Offer to create neon.ts after interactive linking. Use --no-config to skip the offer",
+				type: "boolean",
+				default: true,
+			},
 		})
 		.example([
 			[
@@ -180,7 +188,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.strict();
 
-export const handler = async (props: LinkProps) => {
+export const runLink = async (props: LinkProps) => {
 	if (props.clear) {
 		clearContext(props.contextFile);
 		return;
@@ -201,7 +209,7 @@ export const handler = async (props: LinkProps) => {
 	}
 
 	if (!canPromptInteractively()) {
-		log.error(
+		throw new LinkInputError(
 			[
 				"Missing inputs and no interactive terminal for prompts.",
 				"",
@@ -210,12 +218,12 @@ export const handler = async (props: LinkProps) => {
 				orgScopedKeyHint,
 			].join("\n"),
 		);
-		process.exit(1);
-		return;
 	}
 
 	await runInteractive(props, inputs);
 };
+
+export const handler = runLink;
 
 // ----------------------------------------------------------------------------
 // Input parsing & validation
@@ -680,7 +688,10 @@ const runNonInteractive = async (
 
 const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 	if (!props.yes) {
-		await confirmRelinkIfNeeded(props);
+		const proceed = await confirmRelinkIfNeeded(props);
+		if (!proceed) {
+			return;
+		}
 	}
 
 	const orgResolution = await resolveOrg(props, inputs.orgId);
@@ -773,10 +784,10 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 	});
 };
 
-const confirmRelinkIfNeeded = async (props: LinkProps): Promise<void> => {
+const confirmRelinkIfNeeded = async (props: LinkProps): Promise<boolean> => {
 	const existing = readContextFile(props.contextFile);
 	if (!existing.orgId || !existing.projectId) {
-		return;
+		return true;
 	}
 	const { proceed } = await prompts({
 		onState: onPromptState,
@@ -787,8 +798,9 @@ const confirmRelinkIfNeeded = async (props: LinkProps): Promise<void> => {
 	});
 	if (!proceed) {
 		process.stdout.write("Aborted. Existing link preserved.\n");
-		process.exit(0);
+		return false;
 	}
+	return true;
 };
 
 const promptOrgFromList = async (orgs: Organization[]): Promise<string> => {
@@ -1132,8 +1144,10 @@ const finalizeLink = async (
 	if (!summary.branch || !summary.projectId) {
 		return;
 	}
+	const { config: _offerConfig, ...rest } = props;
 	await autoPullEnvAfterPin({
-		...props,
+		...rest,
+		...(props.cwd ? { cwd: props.cwd } : {}),
 		projectId: summary.projectId,
 		branch: summary.branch,
 		envPull: props.envPull,
@@ -1155,19 +1169,26 @@ const finalizeInteractiveLink = async (
 };
 
 /**
- * Offer to set up infrastructure-as-code at the end of an interactive `link` —
- * the natural moment, since the project is now linked. Skipped when the project
- * already has a `neon.ts` (nothing to scaffold). On yes, `config init` writes the
- * starter `neon.ts` and installs the config packages, then env is pulled again so
- * the local `.env` reflects the policy — the same pull `link` runs when a project
- * already ships a `neon.ts`.
+ * Interactive `link` offers neon.ts only when the directory has none and the
+ * caller did not pass --no-config. Init always passes --no-config so it can ask
+ * once after linking.
  */
+export const shouldOfferConfigInit = (input: {
+	hasConfig: boolean;
+	offer: boolean;
+}): boolean => !input.hasConfig && input.offer;
+
 const maybeOfferConfigInit = async (
 	props: LinkProps,
 	summary: HumanSummary,
 ): Promise<void> => {
-	const cwd = process.cwd();
-	if (hasNeonConfigFile(cwd)) {
+	const cwd = props.cwd ?? process.cwd();
+	if (
+		!shouldOfferConfigInit({
+			hasConfig: hasNeonConfigFile(cwd),
+			offer: props.config !== false,
+		})
+	) {
 		return;
 	}
 
@@ -1189,8 +1210,10 @@ const maybeOfferConfigInit = async (
 	// reflects the policy, matching how `link` pulls when a project already ships
 	// a neon.ts. Only meaningful when a branch was pinned (same guard as finalize).
 	if (summary.branch && summary.projectId) {
+		const { config: _offerConfig, ...rest } = props;
 		await autoPullEnvAfterPin({
-			...props,
+			...rest,
+			cwd,
 			projectId: summary.projectId,
 			branch: summary.branch,
 			envPull: props.envPull,

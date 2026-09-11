@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
-import chalk from "chalk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import { isCi } from "../env.js";
@@ -23,6 +22,12 @@ import {
 	shouldPrintInitBanner,
 } from "../init/chrome.js";
 import {
+	type InitLinkInputs,
+	type InitLinkProps,
+	type RunLink,
+	runAuthenticatedLink,
+} from "../init/link.js";
+import {
 	assertNamedAgentTooling,
 	type ChildForward,
 	chooseYesAgentTooling,
@@ -33,8 +38,12 @@ import {
 	projectContextFile,
 	resolveNamedAgents,
 } from "../init/plan.js";
-import { runAgentTooling, runInitSteps } from "../init/tooling.js";
-import { pickAgentSetupInteractively } from "../init/wizard.js";
+import { formatTemplateTitle } from "../init/template_title.js";
+import { runAgentTooling } from "../init/tooling.js";
+import {
+	pickAgentSetupInteractively,
+	pickInitLinkInteractively,
+} from "../init/wizard.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
@@ -52,7 +61,7 @@ import {
 } from "../utils/package_manager.js";
 import { writer } from "../writer.js";
 
-type BootstrapProps = CommonProps & {
+export type BootstrapProps = CommonProps & {
 	directory?: string;
 	template?: string;
 	force: boolean;
@@ -67,13 +76,49 @@ type BootstrapProps = CommonProps & {
 	/** Keeps re-executed children on the same account. */
 	configDir?: string;
 	profile?: string;
+	oauthHost?: string;
+	clientId?: string;
+	forceAuth?: boolean;
+	allowUnsafeTls?: boolean;
 	run?: InitRun;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
+	pickLink?: () => Promise<boolean>;
+	linkProject?: RunLink;
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 	detectProjectAgents?: (
 		cwd: string,
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
 	detectAgent?: () => AgentType | null;
+	/**
+	 * Nested from `init`: skip the banner (init already printed it), suppress
+	 * link's neon.ts offer so init can ask once, skip the done summary (init
+	 * prints one), and use init's human step labels.
+	 */
+	printBanner?: boolean;
+	skipDoneSummary?: boolean;
+	linkNoConfig?: boolean;
+	linkInputs?: InitLinkInputs;
+	narrate?: "command" | "human";
+	/**
+	 * Init already fetched this catalog entry. `--template` with a known id
+	 * still prefers FALLBACK_TEMPLATES, which would ignore a source change
+	 * the picker already showed.
+	 */
+	selectedTemplate?: BootstrapTemplate;
+};
+
+export type NestedBootstrapResult = {
+	templateTitle: string;
+	targetDir: string;
+	hasNeonConfig: boolean;
+	installed: boolean;
+	installFailed: boolean;
+	gitFailed: boolean;
+	git: boolean;
+	linked: boolean;
+	skippedLinkForDeps: boolean;
+	agentSetup: InitAgentSetup;
+	agentsRan: boolean;
 };
 
 // The directory positional is optional: omitting it in an interactive terminal
@@ -112,7 +157,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link --yes. Skips those pickers; link --yes still asks for a project unless one is already linked",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link with defaults. Project selection may still be required",
 				type: "boolean",
 				default: false,
 			},
@@ -129,7 +174,8 @@ export const builder = (argv: yargs.Argv) =>
 				default: true,
 			},
 			link: {
-				describe: `Run \`${getCliName()} link\` after scaffolding. Templates with neon.ts link after install so env pull works; otherwise link runs before install. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.`,
+				describe:
+					"Link a Neon project after scaffolding. Templates with neon.ts link after install so env pull works; otherwise linking happens before install. In interactive mode this is offered as a prompt; use --no-link to skip without being asked.",
 				type: "boolean",
 				default: true,
 			},
@@ -158,7 +204,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --default",
-			"Skip the pickers; link --yes still asks for a project unless one is already linked",
+			"Skip the pickers; project selection may still be required",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -177,7 +223,9 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.strict();
 
-export const handler = async (props: BootstrapProps): Promise<void> => {
+export const handler = async (
+	props: BootstrapProps,
+): Promise<NestedBootstrapResult | undefined> => {
 	if (props.listTemplates) {
 		const templates = await fetchTemplates();
 		if (props.output === "json" || props.output === "yaml") {
@@ -202,7 +250,7 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 		return;
 	}
 
-	if (shouldPrintInitBanner(props.default)) {
+	if (props.printBanner !== false && shouldPrintInitBanner(props.default)) {
 		printInitBanner();
 	}
 	const named = resolveNamedAgents(props.agent ?? []);
@@ -214,22 +262,23 @@ export const handler = async (props: BootstrapProps): Promise<void> => {
 			...(props.default ? { yes: true } : {}),
 		});
 	}
-	const templates = await resolveTemplateList(props);
 	// --default is a non-interactive quick start: it fills in the template and
 	// directory and runs setup without asking, so it must not fall into the
 	// prompt path even on a TTY.
 	const interactive =
 		!props.default && Boolean(process.stdout.isTTY) && !isCi();
-	const template = await resolveSelectedTemplate(
-		props,
-		interactive,
-		templates,
-	);
+	const template =
+		props.selectedTemplate ??
+		(await resolveSelectedTemplate(
+			props,
+			interactive,
+			await resolveTemplateList(props),
+		));
 	const targetDir = await resolveTargetDir(props, interactive, template);
 	ensureTargetUsable(targetDir, props.force);
 	await scaffold(template, targetDir);
 	printScaffolded(template, targetDir);
-	await runPostScaffoldSteps(props, targetDir, interactive, template, named);
+	return runPostScaffoldSteps(props, targetDir, interactive, template, named);
 };
 
 /**
@@ -243,21 +292,6 @@ const resolveTemplateList = async (
 	props.template && findTemplate(FALLBACK_TEMPLATES, props.template)
 		? FALLBACK_TEMPLATES
 		: fetchTemplates();
-
-/**
- * The picker label for a template: the title first, then the Neon services it
- * uses as a dim, italic suffix, e.g. "Hono API …  Postgres · Functions". The
- * suffix is styled with chalk.dim (and italic) only — never a foreground color —
- * so it survives the cyan/underline `prompts` paints over the focused row: dim
- * and italic reset with their own SGRs, leaving the row's color and underline
- * intact. Descriptions are intentionally omitted to keep the picker uncluttered.
- */
-const formatTemplateTitle = (template: BootstrapTemplate): string => {
-	if (!template.services || template.services.length === 0) {
-		return template.title;
-	}
-	return `${template.title}  ${chalk.dim.italic(template.services.join(" · "))}`;
-};
 
 const resolveSelectedTemplate = async (
 	props: BootstrapProps,
@@ -362,19 +396,40 @@ const scaffold = async (
 // Post-scaffold steps (install dependencies, git init, link to a Neon project)
 // ----------------------------------------------------------------------------
 
+const nestedResult = (
+	template: BootstrapTemplate,
+	targetDir: string,
+	hasNeonConfig: boolean,
+	outcome: {
+		installed: boolean;
+		installFailed: boolean;
+		gitFailed: boolean;
+		git: boolean;
+		linked: boolean;
+		skippedLinkForDeps: boolean;
+		agentSetup: InitAgentSetup;
+		agentsRan: boolean;
+	},
+): NestedBootstrapResult => ({
+	templateTitle: template.title,
+	targetDir,
+	hasNeonConfig,
+	...outcome,
+});
+
 const runPostScaffoldSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
 	interactive: boolean,
 	template: BootstrapTemplate,
 	named: readonly AgentType[],
-): Promise<void> => {
+): Promise<NestedBootstrapResult> => {
 	const inferred = inferPackageManager(targetDir);
 	const defaultPm = resolvePackageManager(targetDir);
 	const neonConfig = hasNeonConfig(targetDir);
 
 	if (props.default) {
-		await runDefaultSteps(
+		return runDefaultSteps(
 			props,
 			targetDir,
 			defaultPm,
@@ -382,26 +437,29 @@ const runPostScaffoldSteps = async (
 			template,
 			named,
 		);
-		return;
 	}
 
 	if (!interactive) {
-		printDoneSummary({
-			heading: "Project scaffolded.",
-			template,
-			targetDir,
-			pm: defaultPm,
+		const outcome = {
 			installed: false,
 			installFailed: false,
 			gitFailed: false,
 			git: false,
-			agentSetup: "skip",
+			agentSetup: "skip" as const,
 			linked: false,
 			skippedLinkForDeps: false,
-			suggestLink: true,
 			agentsRan: false,
+		};
+		finishPostScaffold({
+			heading: "Project scaffolded.",
+			template,
+			targetDir,
+			pm: defaultPm,
+			...outcome,
+			suggestLink: true,
+			skipPrint: props.skipDoneSummary === true,
 		});
-		return;
+		return nestedResult(template, targetDir, neonConfig, outcome);
 	}
 
 	let pm: PackageManager = defaultPm;
@@ -427,11 +485,6 @@ const runPostScaffoldSteps = async (
 	if (props.link && !canLink) {
 		logSkippedLink(pm);
 	}
-	const wantLink =
-		canLink &&
-		(await confirm(
-			`Link this project to a Neon project now? (runs ${getCliName()} link)`,
-		));
 
 	const outcome = await executePostScaffold(props, targetDir, {
 		yes: false,
@@ -440,7 +493,7 @@ const runPostScaffoldSteps = async (
 		git: wantGit,
 		agentSetup,
 		install: wantInstall,
-		link: wantLink,
+		link: canLink,
 		hasNeonConfig: neonConfig,
 		named,
 	});
@@ -451,7 +504,9 @@ const runPostScaffoldSteps = async (
 		pm,
 		...outcome,
 		suggestLink: !outcome.linked,
+		skipPrint: props.skipDoneSummary === true,
 	});
+	return nestedResult(template, targetDir, neonConfig, outcome);
 };
 
 const installPrompt = (inferred: PackageManager | undefined): string =>
@@ -459,7 +514,6 @@ const installPrompt = (inferred: PackageManager | undefined): string =>
 		? `Install dependencies with ${inferred}?`
 		: "Install dependencies?";
 
-/** `link --yes` still asks for a project unless one is already linked. */
 const runDefaultSteps = async (
 	props: BootstrapProps,
 	targetDir: string,
@@ -467,9 +521,9 @@ const runDefaultSteps = async (
 	neonConfig: boolean,
 	template: BootstrapTemplate,
 	named: readonly AgentType[],
-): Promise<void> => {
+): Promise<NestedBootstrapResult> => {
 	log.info(
-		"Quick start (--default): skipping the template, install, git, and agent pickers. link --yes still asks for a project unless one is already linked.",
+		"Quick start (--default): skipping the template, install, git, and agent pickers. Project selection may still be required.",
 	);
 	const wantGit = props.git && !isGitRepo(targetDir);
 	const agentSetup: InitAgentSetup =
@@ -496,7 +550,9 @@ const runDefaultSteps = async (
 		pm,
 		...outcome,
 		suggestLink: !outcome.linked,
+		skipPrint: props.skipDoneSummary === true,
 	});
+	return nestedResult(template, targetDir, neonConfig, outcome);
 };
 
 const executePostScaffold = async (
@@ -523,7 +579,10 @@ const executePostScaffold = async (
 	agentSetup: InitAgentSetup;
 	agentsRan: boolean;
 }> => {
-	const kids = bootstrapChildren(props, targetDir);
+	const kids = {
+		...bootstrapChildren(props, targetDir),
+		...(props.narrate ? { narrate: props.narrate } : {}),
+	};
 	let installed = false;
 	let installFailed = false;
 	let gitFailed = false;
@@ -594,10 +653,38 @@ const executePostScaffold = async (
 			logSkippedLink(choices.pm);
 			continue;
 		}
-		await runInitSteps([choices.yes ? ["link", "--yes"] : ["link"]], {
+		const acceptedLink =
+			choices.yes ||
+			(await (props.pickLink ?? pickInitLinkInteractively)());
+		if (!acceptedLink) {
+			continue;
+		}
+		const linkProject = props.linkProject ?? runAuthenticatedLink;
+		const linkProps: InitLinkProps = {
+			apiClient: props.apiClient,
+			apiKey: props.apiKey,
+			apiHost: props.apiHost,
+			output: props.output,
+			contextFile: projectContextFile(targetDir, props.contextFile),
+			yes: choices.yes,
+			clear: false,
+			checks: true,
+			envPull: true,
+			config: props.linkNoConfig !== true,
 			cwd: targetDir,
-			...kids,
-		});
+			...props.linkInputs,
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+			...(props.clientId ? { clientId: props.clientId } : {}),
+			...(props.forceAuth !== undefined
+				? { forceAuth: props.forceAuth }
+				: {}),
+			...(props.allowUnsafeTls !== undefined
+				? { allowUnsafeTls: props.allowUnsafeTls }
+				: {}),
+		};
+		await linkProject(linkProps);
 		linked = true;
 	}
 	return {
@@ -776,9 +863,11 @@ const printDoneSummary = (input: {
 };
 
 const finishPostScaffold = (
-	input: Parameters<typeof printDoneSummary>[0],
+	input: Parameters<typeof printDoneSummary>[0] & { skipPrint?: boolean },
 ): void => {
-	printDoneSummary(input);
+	if (!input.skipPrint) {
+		printDoneSummary(input);
+	}
 	if (input.installFailed || input.gitFailed) {
 		throw new Error("Setup did not finish.");
 	}

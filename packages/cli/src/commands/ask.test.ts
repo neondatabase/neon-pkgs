@@ -359,13 +359,13 @@ describe("neon ask", () => {
 	test("help lists --prompt and not the hosted URL", async ({
 		testCliCommand,
 	}) => {
-		const { stderr } = await testCliCommand(["ask", "--help"], {
+		const { stdout } = await testCliCommand(["ask", "--help"], {
 			apiKey: false,
 			snapshot: false,
 			env: ASK_ENV,
 		});
-		expect(stderr).toMatch(/--prompt/);
-		expect(stderr).not.toMatch(/br-frosty-cell/);
-		expect(stderr).not.toMatch(/--url/);
+		expect(stdout).toMatch(/--prompt/);
+		expect(stdout).not.toMatch(/br-frosty-cell/);
+		expect(stdout).not.toMatch(/--url/);
 	});
 });

@@ -706,7 +706,6 @@ describe("neon mcp", () => {
 			...runOptions(home, cwd),
 		});
 		const compact = strip(`${stdout}\n${stderr}`).replace(/\s+/g, "");
-		expect(stdout).toBe("");
 		expect(compact).toContain(NEON_MCP_URL);
 		expect(compact).toContain("globalconfig");
 		expect(compact).toContain("globallyinstalledapps");

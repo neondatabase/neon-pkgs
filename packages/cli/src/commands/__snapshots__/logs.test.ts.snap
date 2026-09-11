@@ -7,7 +7,8 @@ exports[`logs > a truncated field-values run keeps json output clean and stderr 
     "postgres"
   ],
   "is_truncated": true
-}"
+}
+"
 `;
 
 exports[`logs > a truncated field-values run says how to narrow the lookup 1`] = `
@@ -34,7 +35,8 @@ exports[`logs > a truncated query keeps json output clean and stderr empty 1`] =
   ],
   "next_cursor": "eyJvZmZzZXQiOjEwMH0",
   "is_truncated": true
-}"
+}
+"
 `;
 
 exports[`logs > a truncated query points at the next cursor in table output 1`] = `
@@ -141,10 +143,6 @@ scope_name
 severity_text
 "
 `;
-
-exports[`logs > help states the default windows and seven-day cap 1`] = `""`;
-
-exports[`logs > help states the default windows and seven-day cap 2`] = `""`;
 
 exports[`logs > query (yaml) 1`] = `
 "logs:
@@ -253,10 +251,6 @@ next_cursor: ""
 is_truncated: false
 "
 `;
-
-exports[`logs > query help states the Beta and region constraint 1`] = `""`;
-
-exports[`logs > query help states the minimum-severity backend limitation 1`] = `""`;
 
 exports[`logs > query maps every structured filter onto its wire name 1`] = `
 "logs:
@@ -460,5 +454,3 @@ Timestamp                 Source       Service Name  Severity Text  Message
 2025-01-01T00:00:01.000Z  pg_endpoint  postgres      ERROR          connection to database failed
 "
 `;
-
-exports[`logs > the command group help states the Beta and region constraint 1`] = `""`;

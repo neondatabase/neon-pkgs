@@ -48,8 +48,8 @@ describe("help output never prints secrets", () => {
 
 		expect(stderr + stdout).not.toContain(API_KEY);
 		// The option itself is still documented, and says where it reads from.
-		expect(stderr).toContain("--api-key");
-		expect(stderr).toContain("NEON_API_KEY");
+		expect(stdout).toContain("--api-key");
+		expect(stdout).toContain("NEON_API_KEY");
 	});
 
 	it("does not print NEON_API_KEY in subcommand help", async () => {
@@ -59,7 +59,9 @@ describe("help output never prints secrets", () => {
 		);
 
 		expect(stderr + stdout).not.toContain(API_KEY);
-		expect(stderr).toContain("--api-key");
+		expect(stdout).not.toContain("--api-key");
+		expect(stdout).toContain("Global options: see neon --help");
+		expect(stderr).toBe("");
 	});
 
 	it("does not print an explicit --api-key value in help", async () => {
@@ -117,5 +119,135 @@ describe("NEON_API_KEY still authorizes requests", () => {
 				server.close((err) => (err ? reject(err) : resolve()));
 			});
 		}
+	});
+});
+
+describe("help is the answer on stdout", () => {
+	it("writes --help to stdout", async () => {
+		const { code, stdout, stderr } = await runCli(["--help"]);
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).toContain("neon <command>");
+		expect(stdout).toContain("neon api");
+	});
+
+	it("writes empty-argv help to stdout", async () => {
+		const { code, stdout, stderr } = await runCli([]);
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).toContain("neon <command>");
+	});
+
+	it("writes parent-command help to stdout", async () => {
+		const { code, stdout, stderr } = await runCli(["projects"]);
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+		expect(stdout).toContain("neon projects");
+	});
+
+	it("does not split passthrough mid-word when piped", async () => {
+		const { stdout } = await runCli(["--help"]);
+		expect(stdout).toMatch(/passthrough/);
+		expect(stdout).not.toMatch(/passthroug\s*\n\s*h/);
+	});
+
+	it("wraps the api description to COLUMNS", async () => {
+		const { stdout } = await runCli(["--help"], { COLUMNS: "40" });
+		expect(stdout).toMatch(/passthrough/);
+		expect(stdout).not.toMatch(/passthroug\s*\n\s*h/);
+		const apiIdx = stdout.indexOf("neon api");
+		expect(apiIdx).toBeGreaterThanOrEqual(0);
+		const descLines = stdout
+			.slice(apiIdx, apiIdx + 500)
+			.split("\n")
+			.slice(1, 12);
+		expect(
+			descLines.some(
+				(line) =>
+					line.includes("authenticated") ||
+					line.includes("passthrough"),
+			),
+		).toBe(true);
+		expect(
+			Math.max(...descLines.map((line) => line.length)),
+		).toBeLessThanOrEqual(40);
+	});
+});
+
+describe("subcommand help lists command flags before globals", () => {
+	it("puts projects list flags first and points at neon --help for globals", async () => {
+		const { stdout, stderr } = await runCli(["projects", "list", "--help"]);
+		const trailer = "Global options: see neon --help";
+
+		expect(stderr).toBe("");
+		expect(stdout).toContain("--org-id");
+		expect(stdout).toContain("--recoverable-only");
+		expect(stdout).toContain(trailer);
+		expect(stdout.indexOf("--org-id")).toBeLessThan(
+			stdout.indexOf(trailer),
+		);
+		expect(stdout).not.toContain("--api-key");
+		expect(stdout).not.toContain("--context-file");
+	});
+
+	it("still lists every global on top-level --help", async () => {
+		const { stdout, stderr } = await runCli(["--help"]);
+
+		expect(stderr).toBe("");
+		expect(stdout).toContain("--api-key");
+		expect(stdout).toContain("--output");
+		expect(stdout).toContain("--context-file");
+		expect(stdout).not.toContain("Global options: see");
+	});
+
+	it("treats empty argv as top-level help", async () => {
+		const { stdout, stderr } = await runCli([]);
+
+		expect(stderr).toBe("");
+		expect(stdout).toContain("--api-key");
+		expect(stdout).toContain("--context-file");
+		expect(stdout).not.toContain("Global options: see");
+	});
+
+	it("collapses globals on a parent command that only lists subcommands", async () => {
+		const { stdout, stderr } = await runCli(["projects", "--help"]);
+
+		expect(stderr).toBe("");
+		expect(stdout).toContain("Commands:");
+		expect(stdout).toContain("Global options: see neon --help");
+		expect(stdout).not.toContain("--api-key");
+	});
+
+	it("formats functions deploy --help through the same renderer", async () => {
+		const { stdout, stderr } = await runCli([
+			"functions",
+			"deploy",
+			"--help",
+		]);
+		const trailer = "Global options: see neon --help";
+
+		expect(stderr).toBe("");
+		expect(stdout).toContain("--src");
+		expect(stdout).toContain(trailer);
+		expect(stdout.indexOf("--src")).toBeLessThan(stdout.indexOf(trailer));
+		expect(stdout).not.toContain("--api-key");
+	});
+
+	it("collapses globals on a nested parent whose Commands block follows the description", async () => {
+		const { stdout, stderr } = await runCli([
+			"functions",
+			"domains",
+			"--help",
+		]);
+		const trailer = "Global options: see neon --help";
+
+		expect(stderr).toBe("");
+		expect(stdout).toContain("Commands:");
+		expect(stdout).toContain(trailer);
+		expect(stdout.indexOf("Commands:")).toBeLessThan(
+			stdout.indexOf(trailer),
+		);
+		expect(stdout).not.toContain("--api-key");
+		expect(stdout).not.toContain("--context-file");
 	});
 });

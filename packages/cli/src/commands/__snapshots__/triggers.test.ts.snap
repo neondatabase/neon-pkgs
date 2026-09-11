@@ -1,0 +1,99 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`triggers > create 1`] = `
+"type: schedule
+trigger_id: trigger-test-123
+function_slug: uptime
+name: uptime-check
+function_path: /
+schedule:
+  cron: "*/15 * * * *"
+enabled: true
+version: 1
+next_run_at: 2026-09-10T03:00:00.000Z
+source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;
+
+exports[`triggers > delete 1`] = `""`;
+
+exports[`triggers > disable 1`] = `
+"type: schedule
+trigger_id: trigger-test-123
+function_slug: uptime
+name: uptime-check
+function_path: /
+schedule:
+  cron: "*/15 * * * *"
+enabled: false
+version: 2
+next_run_at: null
+source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;
+
+exports[`triggers > enable 1`] = `
+"type: schedule
+trigger_id: trigger-test-123
+function_slug: uptime
+name: uptime-check
+function_path: /
+schedule:
+  cron: "*/15 * * * *"
+enabled: true
+version: 2
+next_run_at: 2026-09-10T03:00:00.000Z
+source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;
+
+exports[`triggers > get 1`] = `
+"type: schedule
+trigger_id: trigger-test-123
+function_slug: uptime
+name: uptime-check
+function_path: /
+schedule:
+  cron: "*/15 * * * *"
+enabled: true
+version: 1
+next_run_at: 2026-09-10T03:00:00.000Z
+source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;
+
+exports[`triggers > list 1`] = `
+"- type: schedule
+  trigger_id: trigger-test-123
+  function_slug: uptime
+  name: uptime-check
+  function_path: /
+  schedule:
+    cron: "*/15 * * * *"
+  enabled: true
+  version: 1
+  next_run_at: 2026-09-10T03:00:00.000Z
+  source_branch_id: br-sunny-branch-123456
+  inherited: false
+"
+`;
+
+exports[`triggers > update 1`] = `
+"type: schedule
+trigger_id: trigger-test-123
+function_slug: uptime
+name: uptime-check
+function_path: /
+schedule:
+  cron: 0 3 * * *
+enabled: true
+version: 2
+next_run_at: 2026-09-10T03:00:00.000Z
+source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;

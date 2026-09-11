@@ -468,6 +468,27 @@ export interface FunctionDef {
 	 * `neon.ts`. Ignored at deploy time. See {@link FunctionDevConfig}.
 	 */
 	dev?: FunctionDevConfig;
+	/**
+	 * Schedule triggers that invoke this function on a cron. Names must be unique among
+	 * every trigger visible on the branch, including other functions. Applied after the
+	 * function is deployed. Triggers that exist remotely but are omitted here are left
+	 * alone.
+	 */
+	triggers?: FunctionScheduleTriggerDef[];
+}
+
+/**
+ * A cron schedule that invokes a function. `cron` is a numeric five-field expression
+ * in UTC. `functionPath` defaults to `/`. `enabled` defaults to `true`.
+ *
+ * @example { type: "schedule", name: "hourly", cron: "0 * * * *" }
+ */
+export interface FunctionScheduleTriggerDef {
+	type: "schedule";
+	name: string;
+	cron: string;
+	functionPath?: string;
+	enabled?: boolean;
 }
 
 /**
@@ -659,6 +680,15 @@ export interface ResolvedFunctionConfig {
 	 * (no defaults applied). Only consumed by `neon dev`; deploy ignores it.
 	 */
 	dev?: FunctionDevConfig;
+	triggers?: ResolvedFunctionScheduleTrigger[];
+}
+
+export interface ResolvedFunctionScheduleTrigger {
+	type: "schedule";
+	name: string;
+	cron: string;
+	functionPath: string;
+	enabled: boolean;
 }
 
 /** A bucket with its access level defaulted to `private`. */

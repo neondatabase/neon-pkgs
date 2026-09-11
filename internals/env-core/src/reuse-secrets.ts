@@ -1,5 +1,6 @@
 import {
 	type Config,
+	type CredentialScope,
 	credentialScopesSatisfied,
 	type NeonCredentialMeta,
 } from "@neon/config/v1";
@@ -8,14 +9,16 @@ import {
 	createApiFromOptions,
 	credentialEnvKeys,
 	credentialName,
+	defaultAiGatewayCredential,
+	defaultStorageCredential,
 	type FetchEnvKeysOptions,
 	type FetchEnvOptions,
 	type FunctionUrlMode,
 	fetchEnvKeysState,
 	isFunctionBaseUrlKey,
+	isLiveCredential,
 	NEON_ENV_VAR_KEYS,
 	policyEnvKeys,
-	previewCredentialScopes,
 	resolveBranchPolicy,
 	toEntries,
 } from "./env.js";
@@ -25,9 +28,10 @@ import {
  */
 export interface CredentialOutcome {
 	/**
-	 * `true` when a new credential was minted — because none was persisted, or because the
-	 * persisted secrets could not be verified against this branch. `false` when the persisted
-	 * secrets were verified and kept, and when the policy enables nothing credential-backed.
+	 * `true` when secrets were revealed or minted this call — because none were persisted, or
+	 * because the persisted secrets could not be verified as the platform defaults (or, with
+	 * no defaults, as a still-live minted credential). `false` when the persisted secrets
+	 * were verified and kept, and when the policy enables nothing credential-backed.
 	 */
 	issued: boolean;
 	/**
@@ -67,20 +71,19 @@ interface PersistedSecrets {
 }
 
 /**
- * Resolve a branch's env while keeping one-time secrets the caller already holds.
+ * Resolve a branch's env while keeping secrets the caller already holds.
  *
- * {@link fetchEnvKeys} — and the public `fetchEnv` — only ever *fetch*. The Neon API returns a
- * credential's `api_token` / `s3_secret_access_key` exactly once, at mint time, so "fetching"
- * them means minting a new credential; a plain `fetchEnv` on every `neon dev` start or `env
- * pull` would leave a live credential behind each time. This is the wrapper that avoids that:
- * it looks at what the caller already has, decides what is still usable, and asks `fetchEnv`
- * for only the rest.
+ * {@link fetchEnvKeys} reveals the platform default credentials (or mints a fallback when a
+ * region has none). Calling it on every `neon dev` start would rewrite `.env` with freshly
+ * revealed secrets each time. This wrapper looks at what the caller already has, keeps a
+ * half when it already *is* that default (storage and gateway are independent credentials),
+ * and asks `fetchEnv` for only the rest.
  *
  * The check is a real verification, not a presence test. A persisted secret is kept only when
- * it names a credential that still exists on this branch, is not revoked or expired, and
- * carries every scope the policy needs. A `.env.example` placeholder, a credential revoked in
- * the console, one copied in from another branch, or one predating a newly-enabled feature all
- * fail that check and get replaced.
+ * it names a credential that still exists on this branch, is not revoked or expired, and —
+ * when defaults exist — *is* that default. A leftover `neon-env ${branch}` credential this
+ * tool minted is replaced by the defaults and revoked. A `.env.example` placeholder, a
+ * credential revoked in the console, or one copied in from another branch fails that check.
  *
  * None of this needs local bookkeeping, because the secrets carry their own credential id:
  * `AWS_ACCESS_KEY_ID` **is** the credential's `tokenId` (the storage gateway authenticates
@@ -115,13 +118,13 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		/**
 		 * Revoke the credential a freshly-minted one supersedes. Defaults to `true`.
 		 *
-		 * Pass `false` when this resolve covers only *part* of what the branch has. Object
-		 * storage and the AI Gateway share one credential, so a partial resolve cannot tell
-		 * whether the credential its persisted secrets name also backs a service it is not
-		 * resolving — and revoking it would kill that service while its vars, which this call
-		 * is not rewriting, stay on disk and stop working. The cost is an orphaned credential,
-		 * which is the safer of the two failures. An explicitly scoped `neon env pull`
-		 * (`--service` or `--env`) is the caller that needs this.
+		 * Pass `false` when this resolve covers only *part* of what the branch has. A
+		 * partial resolve cannot tell whether a minted leftover its persisted secrets name
+		 * also backs a service it is not resolving — and revoking it would kill that service
+		 * while its vars, which this call is not rewriting, stay on disk and stop working.
+		 * The cost is an orphaned credential, which is the safer of the two failures. An
+		 * explicitly scoped `neon env pull` (`--service` or `--env`) is the caller that
+		 * needs this. Platform defaults are never revoked.
 		 */
 		revokeSuperseded?: boolean;
 		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
@@ -188,45 +191,49 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		requested === null || storageCredentialSelected;
 	const gatewayCredentialManaged =
 		requested === null || gatewayCredentialSelected;
-	const complete =
-		(!storageCredentialSelected ||
-			Boolean(persisted.accessKeyId && persisted.secretAccessKey)) &&
-		(!gatewayCredentialSelected || Boolean(persisted.apiToken));
+	const storageComplete = Boolean(
+		persisted.accessKeyId && persisted.secretAccessKey,
+	);
+	const gatewayComplete = Boolean(persisted.apiToken);
 
-	// An unscoped pull replaces the branch's complete env, so persisted secrets from a feature
-	// the policy just disabled still name a credential the replacement supersedes. An explicit
-	// key selection manages only the selected credential halves.
-	const named =
+	const listed =
 		(storageCredentialManaged && persisted.accessKeyId !== "") ||
 		(gatewayCredentialManaged && persisted.apiToken !== "")
-			? namedCredentials(
-					await api.listCredentials(options.projectId, branch.id),
-					persisted,
-				)
+			? await api.listCredentials(options.projectId, branch.id)
+			: [];
+	const named =
+		listed.length > 0
+			? namedCredentials(listed, persisted)
 			: { storage: null, gateway: null };
+	const now = Date.now();
+	const storageDefault = defaultStorageCredential(listed, now);
+	const gatewayDefault = defaultAiGatewayCredential(listed, now);
 
-	const reusable = complete
-		? reusableCredential(named, {
-				storageEnabled: storageCredentialSelected,
-				gatewayEnabled: gatewayCredentialSelected,
-			})
-		: null;
-	const scopes = previewCredentialScopes(desired.preview, {
-		storage: storageCredentialSelected,
-		aiGateway: gatewayCredentialSelected,
-	});
-	const keep =
-		reusable !== null && credentialScopesSatisfied(reusable.scopes, scopes);
+	const keepStorage =
+		!storageCredentialSelected ||
+		(storageComplete &&
+			halfReusable(named.storage, storageDefault, [
+				"storage:read",
+				"storage:write",
+			]));
+	const keepGateway =
+		!gatewayCredentialSelected ||
+		(gatewayComplete &&
+			halfReusable(named.gateway, gatewayDefault, ["ai_gateway:invoke"]));
+
+	const keptSecretKeys = credentialEnvKeys({
+		storage: storageCredentialSelected && keepStorage,
+		aiGateway: gatewayCredentialSelected && keepGateway,
+	}).filter((key) => selected.has(key));
 
 	// Ask for the selected policy values, minus the secrets we're keeping — which is what
-	// stops `fetchEnv` from minting a credential it doesn't need. An unscoped call stays
-	// `keys: null`: rewriting it as `policyEnvKeys` would drop `NEON_FUNCTION_*_BASE_URL`.
+	// stops `fetchEnv` from revealing or minting a credential it doesn't need. An unscoped
+	// call stays `keys: null`: rewriting it as `policyEnvKeys` would drop
+	// `NEON_FUNCTION_*_BASE_URL`.
 	const fetchKeys =
 		requested === null
 			? null
-			: keep
-				? selectedPolicyKeys.filter((key) => !secretKeys.includes(key))
-				: selectedPolicyKeys;
+			: selectedPolicyKeys.filter((key) => !keptSecretKeys.includes(key));
 	const fetched = await fetchEnvKeysState(
 		config,
 		// Pass the resolved id so `fetchEnv` targets the same branch this call verified against,
@@ -235,7 +242,9 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			...fetchOptions,
 			branchId: branch.id,
 			api,
-			...(keep && requested === null ? { omitKeys: secretKeys } : {}),
+			...(keptSecretKeys.length > 0 && requested === null
+				? { omitKeys: keptSecretKeys }
+				: {}),
 		},
 		fetchKeys,
 	);
@@ -244,11 +253,15 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	const unavailable = fetched.functionUrlsUnavailable
 		? { functionUrlsUnavailable: true as const }
 		: {};
-	if (keep) {
-		for (const key of secretKeys) {
-			const value = source[key];
-			if (value !== undefined) vars[key] = value;
-		}
+	for (const key of keptSecretKeys) {
+		const value = source[key];
+		if (value !== undefined) vars[key] = value;
+	}
+
+	const issued =
+		(storageCredentialSelected && !keepStorage) ||
+		(gatewayCredentialSelected && !keepGateway);
+	if (!issued) {
 		return {
 			vars,
 			credential: {
@@ -261,18 +274,16 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		};
 	}
 
-	// A replacement was minted, so revoke what it supersedes: the credentials the old secrets
-	// named, minus any this tool did not issue. Their secrets lived nowhere but the env source
-	// this call replaces, so revoking them strands nothing — and it keeps a branch from
-	// accumulating a live credential per call. Everything else on the branch is left alone: it
-	// may belong to a teammate, another checkout, or a deployed function, and nothing
-	// observable distinguishes those from an orphan of our own.
+	// A replacement was revealed or minted, so revoke leftovers this tool issued: the
+	// `neon-env ${branch}` credentials the old secrets named. Platform defaults are never
+	// revoked. Everything else on the branch is left alone: it may belong to a teammate,
+	// another checkout, or a deployed function.
 	//
 	// Revoked *after* the fetch, so a failed fetch leaves the caller's existing secrets working.
 	const ours = new Set<string>();
 	for (const meta of [
-		storageCredentialManaged ? named.storage : null,
-		gatewayCredentialManaged ? named.gateway : null,
+		storageCredentialManaged && !keepStorage ? named.storage : null,
+		gatewayCredentialManaged && !keepGateway ? named.gateway : null,
 	]) {
 		if (
 			meta !== null &&
@@ -344,14 +355,6 @@ function gatewayTokenIdShort(apiToken: string): string | null {
 	return /^nt_live_([^_]+)_.+$/.exec(apiToken)?.[1] ?? null;
 }
 
-/** Whether an issued credential can still be used: not revoked, not past its expiry. */
-function isLiveCredential(meta: NeonCredentialMeta, now: number): boolean {
-	if (meta.revokedAt !== undefined) return false;
-	if (meta.expiresAt === undefined) return true;
-	const expiresAt = Date.parse(meta.expiresAt);
-	return Number.isNaN(expiresAt) || expiresAt > now;
-}
-
 /**
  * The live credentials the persisted secrets name — at most one per half. A half that names
  * nothing contributes nothing, which is what a placeholder, a credential revoked in the
@@ -377,24 +380,19 @@ function namedCredentials(
 }
 
 /**
- * The credential the persisted secrets can be *reused* as, or `null`.
+ * Whether a persisted half can be reused.
  *
- * Strict on purpose: every half the policy enables has to name a live credential, and when both
- * features are enabled they must name the *same* one — they share a single credential, so
- * halves that disagree came from two different calls and neither can be trusted.
+ * When a platform default exists, only that default is reusable — a leftover
+ * `neon-env ${branch}` mint is replaced. When no default exists (mint fallback),
+ * any live credential the secrets name is reusable if it still carries the
+ * scopes that half needs.
  */
-function reusableCredential(
-	named: ReturnType<typeof namedCredentials>,
-	enabled: { storageEnabled: boolean; gatewayEnabled: boolean },
-): NeonCredentialMeta | null {
-	if (enabled.storageEnabled && enabled.gatewayEnabled) {
-		return named.storage &&
-			named.gateway &&
-			named.storage.tokenId === named.gateway.tokenId
-			? named.storage
-			: null;
-	}
-	if (enabled.storageEnabled) return named.storage;
-	if (enabled.gatewayEnabled) return named.gateway;
-	return null;
+function halfReusable(
+	named: NeonCredentialMeta | null,
+	defaultMeta: NeonCredentialMeta | null,
+	requiredScopes: CredentialScope[],
+): boolean {
+	if (named === null) return false;
+	if (defaultMeta !== null) return named.tokenId === defaultMeta.tokenId;
+	return credentialScopesSatisfied(named.scopes, requiredScopes);
 }

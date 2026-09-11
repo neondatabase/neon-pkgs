@@ -38,17 +38,17 @@ const { project, connectionString } = data;
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `apiKey` | `string \| (() => string \| Promise<string>)` | — (required) | Neon API key, or a function returning it (sync/async). Sent as a Bearer token. |
+| `apiKey` | `string \| (() => string \| Promise<string>)` | — (required) | Neon API key, or a function returning it (sync/async). Sent as a Bearer token. Missing or `""` throws a `"client"`-kind error when the client is created, not a 401 on the first call. |
 | `throwOnError` | `boolean` | `false` | When `true`, methods return the resource directly and **throw** on error. When `false`, they return `{ data, error }`. **Narrows return types** at the type level. |
 | `waitForReadiness` | `boolean` | — (unset) | Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll until `operations` finish; other mutations do not. Set `false` to disable polling on those four. Set `true` to poll on every mutation that returns operations. |
 | `wait` | `{ pollIntervalMs?: number; timeoutMs?: number }` | `1000` / `300000` | Tuning for the readiness poller. |
-| `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. |
+| `retries` | `number` | `2` | Automatic retries on always-safe statuses (`423`, `429`, `503`) with backoff. Must be a non-negative integer (`0` disables retries). `NaN`, `Infinity`, a fraction, or a negative throws a `client`-kind error at construction. |
 | `requestTimeoutMs` | `number` | — (unbounded) | Deadline for a request **and** its retries. Aborts the request and resolves with a `NeonTimeoutError`. Pass `Infinity` per call to opt out of a client-wide value. Separate from `wait.timeoutMs`. |
-| `orgId` | `string` | — | Default organization, applied to project create/list and as the transfer source org. Overridable per call. |
+| `orgId` | `string` | — | Default organization for project create/list and as the transfer source org. Client-wide — not a `CallOptions` key. Override via method input (`org_id` on list/create, `fromOrgId` on transfer). |
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-Every option except `apiKey` is also accepted **per call** via the last `options` argument (`{ throwOnError?, waitForReadiness?, requestTimeoutMs?, signal? }`), overriding the client default. Paginated methods take it too, after their query.
+`CallOptions` — `{ throwOnError?, waitForReadiness?, requestTimeoutMs?, wait?, signal? }` — is accepted **per call** as the last `options` argument, overriding the client default where one exists (`signal` is call-only). `retries`, `orgId`, `baseUrl`, and `fetch` are client-wide. Paginated methods take `CallOptions` after their query.
 
 ## The result model
 
@@ -83,7 +83,9 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 | `NeonAuthError` | `"auth"` | (401/403) |
 | `NeonRateLimitError` | `"rate_limit"` | (429, after retries) |
 | `NeonOperationError` | `"operation"` | `operationId`, `status` — an awaited operation failed |
-| `NeonTimeoutError` | `"timeout"` | a deadline was exceeded — `requestTimeoutMs`, or the readiness/wait budget |
+| `NeonTimeoutError` | `"timeout"` | abstract base of the two rows below; `instanceof` still matches both |
+| `NeonRequestTimeoutError` | `"timeout"` | `source: "request"`, `timeoutMs` — `requestTimeoutMs` ran out |
+| `NeonWaitTimeoutError` | `"timeout"` | `source: "wait"`, `timeoutMs`, `operations` — readiness budget ran out; pass `operations` to `neon.operations.waitFor` |
 | `NeonAbortError` | `"aborted"` | the caller's `signal` fired |
 | `NeonNetworkError` | `"network"` | `reason` — transport failure (no response) |
 | `NeonClientError` | `"client"` | SDK-side errors (e.g. ambiguous connection-string selection, invalid `requestTimeoutMs`) |
@@ -152,25 +154,43 @@ and a `throwOnError` client throws the same `NeonErrorUnion` member it would hav
 
 ```ts
 const controller = new AbortController();
-const { error } = await neon.projects.list().all();
+const { error } = await neon.projects.list({}, { signal: controller.signal }).all();
+if (error?.kind === "aborted") { /* the caller stopped it */ }
 
-// cancel in-flight work (a user navigating away, a request handler aborting)
 const result = await neon.projects.get(id, { signal: controller.signal });
 if (result.error?.kind === "aborted") { /* the caller stopped it */ }
+```
 
-// bound a call, on the client or per call
-const neon = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
-const slow = await neon.projects.get(id, { requestTimeoutMs: 5_000 });
-if (slow.error?.kind === "timeout") { /* the deadline was exceeded */ }
+```ts
+const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
+const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
+if (slow.error?.kind === "timeout" && slow.error.source === "request") {
+  /* the request deadline was exceeded */
+}
 
-// opt a single call back out of a client-wide deadline
-await neon.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
+await bounded.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
   requestTimeoutMs: Number.POSITIVE_INFINITY,
 });
 ```
 
 `"aborted"` and `"timeout"` are deliberately distinct: a timeout is worth retrying, a
-cancellation is not.
+cancellation is not. `"timeout"` still covers both budgets; `source` says which one fired:
+
+```ts
+const { data, error } = await neon.projects.create(
+  { name: "app" },
+  { wait: { timeoutMs: 30_000 } },
+);
+
+if (error?.kind === "timeout" && error.source === "wait") {
+  // The project exists and is still provisioning. Poll again with a fresh budget
+  // instead of calling create a second time.
+  const resumed = await neon.operations.waitFor(error.operations, {
+    timeoutMs: 120_000,
+  });
+  if (resumed.error) throw resumed.error;
+}
+```
 
 `requestTimeoutMs` must be a positive number of milliseconds up to `2147483647`, or
 `Infinity`. Anything else — `0`, a negative, `NaN`, or a value past that range — is
@@ -224,7 +244,7 @@ consuming it twice gets a fresh deadline each time.
 
 Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle.
 
-Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. The primitive is `neon.operations.waitFor(operations)`.
+Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor(operations)`.
 
 ```ts
 const neon = createNeonClient({ apiKey });
@@ -237,6 +257,11 @@ await skipWait.projects.create({ name: "app" }, { waitForReadiness: true }); // 
 
 const alwaysWait = createNeonClient({ apiKey, waitForReadiness: true });
 await alwaysWait.projects.update(id, { name: "renamed" }); // polls
+
+await neon.projects.create(
+  { name: "app" },
+  { wait: { timeoutMs: 600_000 } },
+);
 ```
 
 ---
@@ -467,7 +492,10 @@ const { data: deployment } = await neon.functions.deploy(projectId, branchId, "a
 
 Branch custom domains (beta). v1 can only point a domain at a function
 (`entity_type: "function"`, `entity_id` is the function slug). The response
-`cname_target` is the hostname to CNAME; the domain goes live after DNS
+includes `cname_target` (the hostname to CNAME). Optional `status`,
+`dns_status`, `binding_status`, and `status_reason` report provisioning;
+they may be absent right after register. Those strings are not enums —
+treat any undocumented value as unknown. The domain goes live after DNS
 resolves and a certificate is issued on the first request.
 
 | Method | Returns | Notes |
@@ -485,16 +513,84 @@ const { data: registered } = await neon.functions.customDomains.register(
 // Point a CNAME for docs.example.com at registered.cname_target
 ```
 
+### `neon.triggers`
+
+Branch-scoped triggers (beta). v1 only supports `type: "schedule"`, which invokes a Function. Cron is a numeric five-field expression in UTC. List is the full set visible on the branch (not cursor-paginated). An inherited trigger keeps its project-wide id and stays disabled on the child until enabled there. Editing an inherited trigger writes a child-local shadow. Deleting an inherited trigger writes a tombstone so it does not reappear.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `list(projectId, branchId)` | `Trigger[]` | |
+| `create(projectId, branchId, input)` | `Trigger` | `input`: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }` |
+| `get(projectId, branchId, triggerId)` | `Trigger` | |
+| `update(projectId, branchId, triggerId, input)` | `Trigger` | `input` must include `type: "schedule"`; other fields optional |
+| `delete(projectId, branchId, triggerId)` | **→void** | |
+
+```ts
+const { data: trigger, error: createError } =
+  await neon.triggers.create(projectId, branchId, {
+    type: "schedule",
+    function_slug: "worker",
+    name: "daily-refresh",
+    schedule: { cron: "0 9 * * *" },
+    enabled: false,
+  });
+if (createError) throw createError;
+
+await neon.triggers.update(projectId, branchId, trigger.trigger_id, {
+  type: "schedule",
+  enabled: true,
+});
+await neon.triggers.delete(projectId, branchId, trigger.trigger_id);
+```
+
 ### `neon.credentials`
 
-Branch-scoped scoped credentials (beta). Secrets (`api_token`, `s3_secret_access_key`)
-are returned **once** on `create`.
+Branch-scoped scoped credentials (beta). `create` returns `api_token` and
+`s3_secret_access_key` once. `reveal` recovers those secrets later (POST,
+so they never ride a GET). `rotate` replaces the secrets in place and
+keeps `token_id`.
+
+Create **input** `scopes` are `CredentialScope`: `storage:read`,
+`storage:write`, `ai_gateway:invoke`, `functions:invoke`. List / create /
+rotate **responses** use `GrantedCredentialScope[]`, which also includes
+`telemetry:write` and must accept unknown values. Echoing
+`created.scopes` into `create()` is a TypeScript error; narrow to
+`CredentialScope` at the call site. The SDK does not filter response
+scopes.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list(projectId, branchId)` | `CredentialMeta[]` | |
-| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` — scopes: `storage:read`, `storage:write`, `ai_gateway:invoke`, `functions:invoke` |
+| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` |
 | `revoke(projectId, branchId, tokenId)` | **→void** | |
+| `reveal(projectId, branchId, tokenId)` | `CredentialSecret` | `{ token_id, api_token, s3_secret_access_key }` — no `branch_id`. 404 if revoked, expired, or wrong project. 409 if issued before secret retrieval; rotate to obtain one |
+| `rotate(projectId, branchId, tokenId)` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret |
+
+```ts
+const { data: created, error: createError } = await neon.credentials.create(
+  projectId,
+  branchId,
+  {
+    scopes: ["storage:read"],
+    principal_type: "user",
+  },
+);
+if (createError) throw createError;
+
+const { data: revealed, error: revealError } = await neon.credentials.reveal(
+  projectId,
+  branchId,
+  created.token_id,
+);
+if (revealError) throw revealError;
+
+const { data: rotated, error: rotateError } = await neon.credentials.rotate(
+  projectId,
+  branchId,
+  created.token_id,
+);
+if (rotateError) throw rotateError;
+```
 
 ### `neon.aiGateway`
 
@@ -649,7 +745,7 @@ await neon.snapshots.restore(projectId, snapshotId, {
 | --- | --- | --- |
 | `list(projectId)` | **[P]** `Operation` | |
 | `get(projectId, operationId)` | `Operation` | |
-| `waitFor(operations, options?)` | **→void** | `options`: `{ pollIntervalMs?, timeoutMs?, signal? }` — the readiness primitive |
+| `waitFor(operations, options?)` | **→void** | `options`: `{ pollIntervalMs?, timeoutMs?, signal? }` — the readiness primitive. A wait timeout's `error.operations` is the still-outstanding subset; pass it here to resume. |
 
 ```ts
 // Wait on operations from a raw call (or when waitForReadiness is off)

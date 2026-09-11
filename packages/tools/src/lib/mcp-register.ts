@@ -16,6 +16,49 @@ const errorMessage = (error: unknown): string =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
+const mcpErrorPayload = (error: unknown): Record<string, unknown> => {
+	const payload: Record<string, unknown> = {
+		message: errorMessage(error),
+	};
+	if (isRecord(error)) {
+		if (typeof error.name === "string") {
+			payload.name = error.name;
+		}
+		if (typeof error.kind === "string") {
+			payload.kind = error.kind;
+		}
+		if (
+			(typeof error.status === "number" &&
+				Number.isFinite(error.status)) ||
+			typeof error.status === "string"
+		) {
+			payload.status = error.status;
+		}
+		if (typeof error.code === "string") {
+			payload.code = error.code;
+		}
+		if (typeof error.source === "string") {
+			payload.source = error.source;
+		}
+		if (
+			typeof error.timeoutMs === "number" &&
+			Number.isFinite(error.timeoutMs)
+		) {
+			payload.timeoutMs = error.timeoutMs;
+		}
+		if (typeof error.requestId === "string") {
+			payload.requestId = error.requestId;
+		}
+		if (typeof error.reason === "string") {
+			payload.reason = error.reason;
+		}
+		if (typeof error.operationId === "string") {
+			payload.operationId = error.operationId;
+		}
+	}
+	return payload;
+};
+
 const authInfoFrom = (context: unknown): unknown => {
 	if (!isRecord(context)) {
 		return undefined;
@@ -83,7 +126,7 @@ const createToolHandler =
 			};
 		} catch (error) {
 			const structuredContent = {
-				error: { message: errorMessage(error) },
+				error: mcpErrorPayload(error),
 			};
 			return {
 				content: [

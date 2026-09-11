@@ -3,6 +3,11 @@ import cliui from "cliui";
 import type yargs from "yargs";
 
 import {
+	globalOptionsTrailer,
+	helpWidth,
+	wrapHelpText,
+} from "./utils/help_text.js";
+import {
 	consumeBlockIfMatches,
 	consumeNextMatching,
 	drawPointer,
@@ -11,6 +16,71 @@ import {
 
 // target width for the leftmost column
 const SPACE_WIDTH = 20;
+const DESCRIPTION_GUTTER = 4;
+
+const wrapDescription = (text: string) =>
+	wrapHelpText(
+		text,
+		Math.max(1, helpWidth() - SPACE_WIDTH - DESCRIPTION_GUTTER),
+	);
+
+const isGlobalOptionsHeader = (header: string) =>
+	/global options:/i.test(header);
+
+const isTopLevelUsage = (usage: string) => /^\S+ <command>/.test(usage);
+
+const renderOptionBlock = (optionsBlock: string[]): string[] => {
+	const result: string[] = [];
+	const [header, ...body] = optionsBlock;
+	if (header === undefined) {
+		return result;
+	}
+	result.push(header);
+	body.forEach((line) => {
+		const [option, description] = splitColumns(line);
+		const ui = cliui({
+			width: helpWidth(),
+			wrap: false,
+		});
+		if (option.startsWith("-")) {
+			ui.div({
+				text: chalk.green(option),
+				padding: [0, 0, 0, 0],
+			});
+			ui.div(
+				{
+					text: chalk.gray(drawPointer(SPACE_WIDTH)),
+					width: SPACE_WIDTH,
+					padding: [0, 2, 0, 0],
+				},
+				{
+					text: chalk.rgb(
+						210,
+						210,
+						210,
+					)(wrapDescription(description ?? "")),
+					padding: [0, 0, 0, 0],
+				},
+			);
+		} else {
+			ui.div(
+				{
+					padding: [0, 0, 0, 0],
+					text: "",
+					width: SPACE_WIDTH,
+				},
+				{
+					text: chalk.rgb(210, 210, 210)(wrapDescription(option)),
+					padding: [0, 0, 0, 0],
+				},
+			);
+		}
+
+		result.push(ui.toString());
+	});
+	result.push("");
+	return result;
+};
 
 const formatHelp = (help: string) => {
 	const lines = help.split("\n");
@@ -30,14 +100,19 @@ const formatHelp = (help: string) => {
 		result.push("");
 	}
 
-	// commands description block
-	// example command to see: neonctl projects
-	const commandsBlock = consumeBlockIfMatches(lines, /^Commands:/);
-	if (commandsBlock.length > 0) {
-		const header = commandsBlock.shift() as string;
+	const consumeCommands = () => {
+		const commandsBlock = consumeBlockIfMatches(lines, /^Commands:/);
+		if (commandsBlock.length === 0) {
+			return;
+		}
+		const header = commandsBlock.shift();
+		if (header === undefined) {
+			return;
+		}
 		result.push(header);
 		const ui = cliui({
-			width: 0,
+			width: helpWidth(),
+			wrap: false,
 		});
 		commandsBlock.forEach((line) => {
 			if (/^\s{3,}/.exec(line)) {
@@ -47,7 +122,10 @@ const formatHelp = (help: string) => {
 						width: SPACE_WIDTH,
 						padding: [0, 0, 0, 0],
 					},
-					{ text: line.trim(), padding: [0, 0, 0, 0] },
+					{
+						text: wrapDescription(line.trim()),
+						padding: [0, 0, 0, 0],
+					},
 				);
 				return;
 			}
@@ -67,21 +145,26 @@ const formatHelp = (help: string) => {
 					width: SPACE_WIDTH,
 					padding: [0, 0, 0, 0],
 				},
-				{ text: description, padding: [0, 0, 0, 2] },
+				{ text: wrapDescription(description), padding: [0, 0, 0, 2] },
 			);
 		});
 		result.push(ui.toString());
 		result.push("");
-	}
+	};
 
-	// positional args block
-	// example command to see: neonctl branches rename
-	const positionalsBlock = consumeBlockIfMatches(lines, /Positionals:/);
-	if (positionalsBlock.length > 0) {
-		const header = positionalsBlock.shift() as string;
+	const consumePositionals = () => {
+		const positionalsBlock = consumeBlockIfMatches(lines, /Positionals:/);
+		if (positionalsBlock.length === 0) {
+			return;
+		}
+		const header = positionalsBlock.shift();
+		if (header === undefined) {
+			return;
+		}
 		result.push(header);
 		const ui = cliui({
-			width: 0,
+			width: helpWidth(),
+			wrap: false,
 		});
 		positionalsBlock.forEach((line) => {
 			const [positional, description] = splitColumns(line);
@@ -92,14 +175,17 @@ const formatHelp = (help: string) => {
 					padding: [0, 2, 0, 0],
 				},
 				{
-					text: description,
+					text: wrapDescription(description),
 					padding: [0, 0, 0, 0],
 				},
 			);
 		});
 		result.push(ui.toString());
 		result.push("");
-	}
+	};
+
+	consumeCommands();
+	consumePositionals();
 
 	// command description
 	// example command to see: neonctl projects list
@@ -109,51 +195,38 @@ const formatHelp = (help: string) => {
 		result.push("");
 	}
 
+	// Nested parents (`functions domains`) put Commands after the description;
+	// `projects` puts them before it. `functions deploy` puts Positionals after
+	// the description; `branches rename` puts them before it.
+	consumeCommands();
+	consumePositionals();
+
+	const optionBlocks: string[][] = [];
 	while (true) {
-		// there are two options blocks: global and specific
-		// example to see both: neonctl projects create
 		const optionsBlock = consumeBlockIfMatches(lines, /.*options:/i);
 		if (optionsBlock.length === 0) {
 			break;
 		}
-		result.push(optionsBlock.shift() as string);
-		optionsBlock.forEach((line) => {
-			const [option, description] = splitColumns(line);
-			const ui = cliui({
-				width: 0,
-			});
-			if (option.startsWith("-")) {
-				ui.div({
-					text: chalk.green(option),
-					padding: [0, 0, 0, 0],
-				});
-				ui.div(
-					{
-						text: chalk.gray(drawPointer(SPACE_WIDTH)),
-						width: SPACE_WIDTH,
-						padding: [0, 2, 0, 0],
-					},
-					{
-						text: chalk.rgb(210, 210, 210)(description ?? ""),
-						padding: [0, 0, 0, 0],
-					},
-				);
-			} else {
-				ui.div(
-					{
-						padding: [0, 0, 0, 0],
-						text: "",
-						width: SPACE_WIDTH,
-					},
-					{
-						text: chalk.rgb(210, 210, 210)(option),
-						padding: [0, 0, 0, 0],
-					},
-				);
-			}
+		optionBlocks.push(optionsBlock);
+	}
 
-			result.push(ui.toString());
-		});
+	for (const block of optionBlocks) {
+		const header = block[0];
+		if (header !== undefined && !isGlobalOptionsHeader(header)) {
+			result.push(...renderOptionBlock(block));
+		}
+	}
+
+	const globalBlocks = optionBlocks.filter((block) => {
+		const header = block[0];
+		return header !== undefined && isGlobalOptionsHeader(header);
+	});
+	if (topLevelCommand !== null && isTopLevelUsage(topLevelCommand)) {
+		for (const block of globalBlocks) {
+			result.push(...renderOptionBlock(block));
+		}
+	} else if (globalBlocks.length > 0 && topLevelCommand !== null) {
+		result.push(globalOptionsTrailer(topLevelCommand));
 		result.push("");
 	}
 
@@ -161,7 +234,8 @@ const formatHelp = (help: string) => {
 	if (exampleBlock.length > 0) {
 		result.push(exampleBlock.shift() as string);
 		const ui = cliui({
-			width: 0,
+			width: helpWidth(),
+			wrap: false,
 		});
 		for (const line of exampleBlock) {
 			const [command, description] = splitColumns(line);
@@ -170,7 +244,7 @@ const formatHelp = (help: string) => {
 				padding: [0, 0, 0, 0],
 			});
 			ui.div({
-				text: chalk.reset(description),
+				text: chalk.reset(wrapDescription(description)),
 				padding: [0, 0, 0, 2],
 			});
 		}
@@ -181,8 +255,16 @@ const formatHelp = (help: string) => {
 };
 
 export const showHelp = async (argv: yargs.Argv) => {
-	// add wrap to ensure that there are no line breaks
 	const help = await argv.getHelp();
-	process.stderr.write(formatHelp(help).join("\n") + "\n");
+	const text = `${formatHelp(help).join("\n")}\n`;
+	await new Promise<void>((resolve, reject) => {
+		process.stdout.write(text, (err) => {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve();
+		});
+	});
 	process.exit(0);
 };

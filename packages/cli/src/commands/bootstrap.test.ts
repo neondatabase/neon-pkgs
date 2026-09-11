@@ -1,5 +1,6 @@
 import { fork } from "node:child_process";
 import {
+	chmodSync,
 	existsSync,
 	lstatSync,
 	mkdtempSync,
@@ -14,6 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import { gzipSync } from "fflate";
+import { type IPty, spawn as spawnPty } from "node-pty";
+import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import YAML from "yaml";
 
@@ -49,6 +52,11 @@ const FIXTURE: Record<string, FixtureFile> = {
 		type: "file",
 		mode: 0o644,
 		content: '{ "name": "with-remix" }\n',
+	},
+	"updated-hono/selected.txt": {
+		type: "file",
+		mode: 0o644,
+		content: "selected catalog template\n",
 	},
 };
 
@@ -204,6 +212,39 @@ const runBootstrap = (
 	});
 };
 
+const waitForText = (
+	term: IPty,
+	output: () => string,
+	text: string,
+): Promise<void> =>
+	new Promise((resolve, reject) => {
+		if (stripAnsi(output()).includes(text)) {
+			resolve();
+			return;
+		}
+		const timer = setTimeout(() => {
+			subscription.dispose();
+			reject(
+				new Error(
+					`Timed out waiting for "${text}". Output:\n${stripAnsi(output())}`,
+				),
+			);
+		}, 10_000);
+		const subscription = term.onData(() => {
+			if (!stripAnsi(output()).includes(text)) {
+				return;
+			}
+			clearTimeout(timer);
+			subscription.dispose();
+			resolve();
+		});
+	});
+
+const waitForExit = (term: IPty): Promise<number> =>
+	new Promise((resolve) => {
+		term.onExit(({ exitCode }) => resolve(exitCode));
+	});
+
 const parseListedTemplates = (stdout: string): unknown[] => {
 	const parsed: unknown = JSON.parse(stdout.trim());
 	if (!Array.isArray(parsed)) {
@@ -266,6 +307,91 @@ describe("bootstrap", () => {
 			readFileSync(join(dest, "with-remix/package.json")),
 		).toThrow();
 	});
+
+	test("finishes interactive agent setup before asking to link", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const target = join(dest, "app");
+		const spawnHelper = join(
+			process.cwd(),
+			"node_modules",
+			"node-pty",
+			"prebuilds",
+			`${process.platform}-${process.arch}`,
+			"spawn-helper",
+		);
+		if (existsSync(spawnHelper)) {
+			chmodSync(spawnHelper, 0o755);
+		}
+		let output = "";
+		const term = spawnPty(
+			process.execPath,
+			[
+				join(process.cwd(), "./dist/index.js"),
+				"bootstrap",
+				target,
+				"--template",
+				"plain",
+				"--no-install",
+				"--no-git",
+				"--api-key",
+				"test-key",
+				"--config-dir",
+				join(dest, "config"),
+				"--context-file",
+				join(target, ".neon"),
+				"--no-analytics",
+			],
+			{
+				name: "xterm-256color",
+				cols: 120,
+				rows: 40,
+				env: {
+					...process.env,
+					CI: "",
+					NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
+					NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
+				},
+			},
+		);
+		term.onData((chunk) => {
+			output += chunk;
+		});
+
+		await waitForText(
+			term,
+			() => output,
+			"How would you like to set up your coding agents?",
+		);
+		term.write("\r");
+		await waitForText(
+			term,
+			() => output,
+			"Which coding agents should get the Neon plugin?",
+		);
+		term.write("\r");
+		await waitForText(
+			term,
+			() => output,
+			"Install the Neon plugin into these agents?",
+		);
+		term.write("n\r");
+		await waitForText(
+			term,
+			() => output,
+			"Link this project to a Neon project now?",
+		);
+
+		const rendered = stripAnsi(output);
+		expect(
+			rendered.indexOf("Which coding agents should get the Neon plugin?"),
+		).toBeLessThan(
+			rendered.indexOf("Link this project to a Neon project now?"),
+		);
+		expect(rendered).not.toContain("(runs neon link)");
+
+		term.write("n\r");
+		expect(await waitForExit(term)).toBe(0);
+	}, 20_000);
 
 	test("refuses a non-empty directory without --force", async () => {
 		writeFileSync(join(dest, "keep.txt"), "mine\n");
@@ -344,18 +470,21 @@ describe("bootstrap", () => {
 	});
 
 	test("help describes --agent forwarding", async () => {
-		const { code, stderr } = await runBootstrap(server, ["--help"]);
+		const { code, stdout, stderr } = await runBootstrap(server, ["--help"]);
 		expect(code, stderr).toBe(0);
-		const flat = stderr.replace(/\s+/g, " ");
+		const flat = stdout.replace(/\s+/g, " ");
 		expect(flat).toContain("--list-templates");
 		expect(flat).toContain("--agent-setup");
 		expect(flat).toContain("host CLI agent");
 		expect(flat).toContain("omit --default in a terminal");
 		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
 		expect(flat).toMatch(/skips agent selection/i);
-		expect(stderr).toMatch(/Plugin agents/);
-		expect(stderr).toMatch(/Skills and MCP agents/);
-		expect(stderr).toMatch(/(?<![-\w])--agent(?![-\w])/);
+		expect(stdout).toMatch(/Plugin agents/);
+		expect(stdout).toMatch(/Skills and MCP agents/);
+		expect(stdout).toMatch(/(?<![-\w])--agent(?![-\w])/);
+		expect(stdout).not.toContain("--skip-template");
+		expect(stdout).not.toMatch(/Skip the template/);
+		expect(stderr).toBe("");
 	});
 
 	test("mixed --agent fails before scaffold", async () => {
@@ -424,5 +553,62 @@ describe("bootstrap", () => {
 		);
 		// git init ran as part of the quick start.
 		expect(existsSync(join(dest, ".git"))).toBe(true);
+	});
+
+	test("selectedTemplate scaffolds the catalog source for a known id", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const previousCodeload = process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+		const previousCi = process.env.CI;
+		process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = base;
+		process.env.CI = "true";
+		const { handler } = await import("./bootstrap.js");
+		try {
+			await handler({
+				apiClient: {} as never,
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "table",
+				contextFile: join(dest, ".neon"),
+				directory: dest,
+				force: true,
+				listTemplates: false,
+				default: false,
+				install: false,
+				git: false,
+				link: false,
+				agentSetup: false,
+				analytics: false,
+				printBanner: false,
+				skipDoneSummary: true,
+				selectedTemplate: {
+					id: "hono",
+					title: "Updated REST API",
+					description: "Updated template source",
+					requires: ["database"],
+					source: {
+						owner: "neondatabase",
+						repo: "examples",
+						ref: "main",
+						subdir: "updated-hono",
+					},
+				},
+			});
+		} finally {
+			if (previousCodeload === undefined) {
+				delete process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+			} else {
+				process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = previousCodeload;
+			}
+			if (previousCi === undefined) {
+				delete process.env.CI;
+			} else {
+				process.env.CI = previousCi;
+			}
+		}
+
+		expect(readFileSync(join(dest, "selected.txt"), "utf8")).toBe(
+			"selected catalog template\n",
+		);
+		expect(() => readFileSync(join(dest, "src/index.ts"))).toThrow();
 	});
 });

@@ -2,8 +2,8 @@ import {
 	type BucketObjectsListResponse,
 	createNeonClient,
 	type NeonClient,
+	NeonClientError,
 	type NeonConfig,
-	NeonError,
 	type Paginated,
 } from "@neon/sdk";
 import * as z from "zod";
@@ -122,7 +122,7 @@ const objectListPage = (
 	if ("data" in value && value.data !== undefined) {
 		return value.data;
 	}
-	throw new NeonError("Object list returned no data.", "client");
+	throw new NeonClientError("Object list returned no data.");
 };
 
 export const collectObjectList = async (
@@ -192,9 +192,8 @@ export const collectObjectList = async (
 			continue;
 		}
 		if (page.is_truncated) {
-			throw new NeonError(
+			throw new NeonClientError(
 				"Object list was truncated without a next cursor.",
-				"client",
 			);
 		}
 		break;
