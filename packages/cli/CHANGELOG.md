@@ -1,5 +1,15 @@
 # neon
 
+## 4.16.0
+
+### Minor Changes
+
+- 3d6be94: Add `neon triggers` and `neon credentials` commands for scheduled function triggers and branch-scoped credentials.
+
+### Patch Changes
+
+- e069f88: Let `neon init` set up an empty directory without a template, and honor the choice to skip neon.ts.
+
 ## 4.15.0
 
 ### Minor Changes

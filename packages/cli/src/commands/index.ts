@@ -9,6 +9,7 @@ import * as checkout from "./checkout.js";
 import * as claim from "./claim.js";
 import * as config from "./config.js";
 import * as cs from "./connection_string.js";
+import * as credentials from "./credentials.js";
 import * as dataApi from "./data_api.js";
 import * as databases from "./databases.js";
 import * as deploy from "./deploy.js";
@@ -35,6 +36,7 @@ import * as setContext from "./set_context.js";
 import * as skills from "./skills.js";
 import * as snapshots from "./snapshots.js";
 import * as status from "./status.js";
+import * as triggers from "./triggers.js";
 import * as users from "./user.js";
 import * as vpcEndpoints from "./vpc_endpoints.js";
 
@@ -70,6 +72,8 @@ export default [
 	ask,
 	dataApi,
 	functions,
+	triggers,
+	credentials,
 	dev,
 	diff,
 	config,

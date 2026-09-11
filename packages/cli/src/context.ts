@@ -228,6 +228,12 @@ export const enrichFromContext = (
 	if (args._[0] === "link" || args._[0] === "set-context") {
 		return;
 	}
+	// `init` forwards --project-id / --org-id / --branch only to `link`. Filling
+	// them from `.neon` would make a linked rerun look like the user typed those
+	// flags and force a relink. Init already reads `.neon` via isLinked().
+	if (args._[0] === "init") {
+		return;
+	}
 	// `api-keys` mints credentials, and how far a credential reaches must be something the
 	// user typed — never something inherited from whichever project happens to be checked
 	// out. Enriched here, `api-keys create --name ci` in a linked directory would quietly
