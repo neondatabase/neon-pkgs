@@ -1,5 +1,6 @@
 import { fork } from "node:child_process";
 import {
+	chmodSync,
 	existsSync,
 	lstatSync,
 	mkdtempSync,
@@ -14,6 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import { gzipSync } from "fflate";
+import { type IPty, spawn as spawnPty } from "node-pty";
+import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import YAML from "yaml";
 
@@ -209,6 +212,39 @@ const runBootstrap = (
 	});
 };
 
+const waitForText = (
+	term: IPty,
+	output: () => string,
+	text: string,
+): Promise<void> =>
+	new Promise((resolve, reject) => {
+		if (stripAnsi(output()).includes(text)) {
+			resolve();
+			return;
+		}
+		const timer = setTimeout(() => {
+			subscription.dispose();
+			reject(
+				new Error(
+					`Timed out waiting for "${text}". Output:\n${stripAnsi(output())}`,
+				),
+			);
+		}, 10_000);
+		const subscription = term.onData(() => {
+			if (!stripAnsi(output()).includes(text)) {
+				return;
+			}
+			clearTimeout(timer);
+			subscription.dispose();
+			resolve();
+		});
+	});
+
+const waitForExit = (term: IPty): Promise<number> =>
+	new Promise((resolve) => {
+		term.onExit(({ exitCode }) => resolve(exitCode));
+	});
+
 const parseListedTemplates = (stdout: string): unknown[] => {
 	const parsed: unknown = JSON.parse(stdout.trim());
 	if (!Array.isArray(parsed)) {
@@ -271,6 +307,91 @@ describe("bootstrap", () => {
 			readFileSync(join(dest, "with-remix/package.json")),
 		).toThrow();
 	});
+
+	test("finishes interactive agent setup before asking to link", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const target = join(dest, "app");
+		const spawnHelper = join(
+			process.cwd(),
+			"node_modules",
+			"node-pty",
+			"prebuilds",
+			`${process.platform}-${process.arch}`,
+			"spawn-helper",
+		);
+		if (existsSync(spawnHelper)) {
+			chmodSync(spawnHelper, 0o755);
+		}
+		let output = "";
+		const term = spawnPty(
+			process.execPath,
+			[
+				join(process.cwd(), "./dist/index.js"),
+				"bootstrap",
+				target,
+				"--template",
+				"plain",
+				"--no-install",
+				"--no-git",
+				"--api-key",
+				"test-key",
+				"--config-dir",
+				join(dest, "config"),
+				"--context-file",
+				join(target, ".neon"),
+				"--no-analytics",
+			],
+			{
+				name: "xterm-256color",
+				cols: 120,
+				rows: 40,
+				env: {
+					...process.env,
+					CI: "",
+					NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
+					NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
+				},
+			},
+		);
+		term.onData((chunk) => {
+			output += chunk;
+		});
+
+		await waitForText(
+			term,
+			() => output,
+			"How would you like to set up your coding agents?",
+		);
+		term.write("\r");
+		await waitForText(
+			term,
+			() => output,
+			"Which coding agents should get the Neon plugin?",
+		);
+		term.write("\r");
+		await waitForText(
+			term,
+			() => output,
+			"Install the Neon plugin into these agents?",
+		);
+		term.write("n\r");
+		await waitForText(
+			term,
+			() => output,
+			"Link this project to a Neon project now?",
+		);
+
+		const rendered = stripAnsi(output);
+		expect(
+			rendered.indexOf("Which coding agents should get the Neon plugin?"),
+		).toBeLessThan(
+			rendered.indexOf("Link this project to a Neon project now?"),
+		);
+		expect(rendered).not.toContain("(runs neon link)");
+
+		term.write("n\r");
+		expect(await waitForExit(term)).toBe(0);
+	}, 20_000);
 
 	test("refuses a non-empty directory without --force", async () => {
 		writeFileSync(join(dest, "keep.txt"), "mine\n");

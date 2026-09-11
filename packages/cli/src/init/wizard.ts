@@ -131,3 +131,18 @@ export const pickInitConfigInteractively = async (): Promise<boolean> => {
 	}
 	return value === true;
 };
+
+export const pickInitLinkInteractively = async (): Promise<boolean> => {
+	requireInteractive();
+	const { value } = await prompts({
+		onState: restoreCursorOnAbort,
+		type: "confirm",
+		name: "value",
+		message: "Link this project to a Neon project now?",
+		initial: true,
+	});
+	if (value === undefined) {
+		throw new Error("Aborted.");
+	}
+	return value === true;
+};
