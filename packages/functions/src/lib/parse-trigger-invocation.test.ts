@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-	parseTriggerInvocation,
-	TRIGGER_INVOCATION_ID_HEADER,
-} from "./parse-trigger-invocation.js";
+import { parseTriggerInvocation } from "./parse-trigger-invocation.js";
 
 const invocationId = "ucBDafV0gB8qoEM4UcdIu84Qx5JCAXYwpRnPVAagPa0";
+const invocationIdHeader = "x-neon-trigger-invocation-id";
 
 const scheduleBody = {
 	version: 1,
@@ -18,32 +16,56 @@ const scheduleBody = {
 	data: { scheduled_at: "2026-09-11T08:34:00Z" },
 };
 
-describe("parseTriggerInvocation", () => {
+const parsedSchedule = {
+	version: 1,
+	invocationId,
+	trigger: {
+		type: "schedule",
+		id: "trigger-66360036-ee42-4174-8ed5-416fa31757eb",
+		name: "every-minute",
+	},
+	data: { scheduledAt: "2026-09-11T08:34:00Z" },
+} as const;
+
+function scheduleHeaders(header?: string): Headers {
+	const headers = new Headers({ "content-type": "application/json" });
+	if (header !== undefined) {
+		headers.set(invocationIdHeader, header);
+	}
+	return headers;
+}
+
+function scheduleRequest(init?: {
+	header?: string;
+	body?: string | object;
+}): Request {
+	return new Request("https://example.test/cron", {
+		method: "POST",
+		headers: scheduleHeaders(init?.header ?? invocationId),
+		body:
+			typeof init?.body === "string"
+				? init.body
+				: JSON.stringify(init?.body ?? scheduleBody),
+	});
+}
+
+describe("parseTriggerInvocation({ headers, data })", () => {
 	it("accepts a schedule delivery whose header matches invocation_id", () => {
 		const result = parseTriggerInvocation({
-			header: invocationId,
-			body: scheduleBody,
+			headers: scheduleHeaders(invocationId),
+			data: scheduleBody,
 		});
 
 		expect(result).toEqual({
 			ok: true,
-			invocation: {
-				version: 1,
-				invocationId,
-				trigger: {
-					type: "schedule",
-					id: "trigger-66360036-ee42-4174-8ed5-416fa31757eb",
-					name: "every-minute",
-				},
-				data: { scheduledAt: "2026-09-11T08:34:00Z" },
-			},
+			invocation: parsedSchedule,
 		});
 	});
 
 	it("trims the header before comparing", () => {
 		const result = parseTriggerInvocation({
-			header: ` ${invocationId} `,
-			body: scheduleBody,
+			headers: scheduleHeaders(` ${invocationId} `),
+			data: scheduleBody,
 		});
 
 		expect(result.ok).toBe(true);
@@ -51,36 +73,45 @@ describe("parseTriggerInvocation", () => {
 
 	it("fails missing_header when the header is absent or blank", () => {
 		expect(
-			parseTriggerInvocation({ header: undefined, body: scheduleBody }),
+			parseTriggerInvocation({
+				headers: scheduleHeaders(),
+				data: scheduleBody,
+			}),
 		).toEqual({ ok: false, error: "missing_header" });
 		expect(
-			parseTriggerInvocation({ header: "  ", body: scheduleBody }),
+			parseTriggerInvocation({
+				headers: scheduleHeaders("  "),
+				data: scheduleBody,
+			}),
 		).toEqual({ ok: false, error: "missing_header" });
 	});
 
 	it("fails invocation_id_mismatch when the header does not match the body", () => {
 		expect(
 			parseTriggerInvocation({
-				header: "other-id",
-				body: scheduleBody,
+				headers: scheduleHeaders("other-id"),
+				data: scheduleBody,
 			}),
 		).toEqual({ ok: false, error: "invocation_id_mismatch" });
 	});
 
 	it("fails invalid_body for a malformed payload even when the header is set", () => {
 		expect(
-			parseTriggerInvocation({ header: invocationId, body: null }),
-		).toEqual({ ok: false, error: "invalid_body" });
-		expect(
 			parseTriggerInvocation({
-				header: invocationId,
-				body: { ...scheduleBody, version: 2 },
+				headers: scheduleHeaders(invocationId),
+				data: null,
 			}),
 		).toEqual({ ok: false, error: "invalid_body" });
 		expect(
 			parseTriggerInvocation({
-				header: invocationId,
-				body: {
+				headers: scheduleHeaders(invocationId),
+				data: { ...scheduleBody, version: 2 },
+			}),
+		).toEqual({ ok: false, error: "invalid_body" });
+		expect(
+			parseTriggerInvocation({
+				headers: scheduleHeaders(invocationId),
+				data: {
 					...scheduleBody,
 					trigger: {
 						...scheduleBody.trigger,
@@ -90,10 +121,45 @@ describe("parseTriggerInvocation", () => {
 			}),
 		).toEqual({ ok: false, error: "invalid_body" });
 	});
+});
 
-	it("exports the delivery header name", () => {
-		expect(TRIGGER_INVOCATION_ID_HEADER).toBe(
-			"x-neon-trigger-invocation-id",
-		);
+describe("parseTriggerInvocation(request)", () => {
+	it("accepts a schedule delivery Request", async () => {
+		const result = await parseTriggerInvocation(scheduleRequest());
+
+		expect(result).toEqual({
+			ok: true,
+			invocation: parsedSchedule,
+		});
+	});
+
+	it("leaves the original Request body readable", async () => {
+		const request = scheduleRequest();
+		const parsed = await parseTriggerInvocation(request);
+
+		expect(parsed.ok).toBe(true);
+		expect(await request.json()).toEqual(scheduleBody);
+	});
+
+	it("fails invalid_body when the Request body is not JSON", async () => {
+		expect(
+			await parseTriggerInvocation(scheduleRequest({ body: "not-json" })),
+		).toEqual({
+			ok: false,
+			error: "invalid_body",
+		});
+	});
+
+	it("fails missing_header when the Request has no trigger header", async () => {
+		const request = new Request("https://example.test/cron", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(scheduleBody),
+		});
+
+		expect(await parseTriggerInvocation(request)).toEqual({
+			ok: false,
+			error: "missing_header",
+		});
 	});
 });

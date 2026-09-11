@@ -1,6 +1,6 @@
 // The Functions proxy drops client-supplied x-neon-* headers, so a present
 // value is from a trigger delivery. It must match body.invocation_id.
-export const TRIGGER_INVOCATION_ID_HEADER = "x-neon-trigger-invocation-id";
+const TRIGGER_INVOCATION_ID_HEADER = "x-neon-trigger-invocation-id";
 
 export type ScheduleTriggerInvocation = {
 	version: 1;
@@ -18,8 +18,8 @@ export type ScheduleTriggerInvocation = {
 export type TriggerInvocation = ScheduleTriggerInvocation;
 
 export type ParseTriggerInvocationInput = {
-	header: string | null | undefined;
-	body: unknown;
+	headers: HeadersInit;
+	data: unknown;
 };
 
 export type ParseTriggerInvocationResult =
@@ -31,6 +31,12 @@ export type ParseTriggerInvocationResult =
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRequest(
+	input: Request | ParseTriggerInvocationInput,
+): input is Request {
+	return input instanceof Request;
 }
 
 function parseScheduleInvocation(
@@ -62,16 +68,18 @@ function parseScheduleInvocation(
 	};
 }
 
-export function parseTriggerInvocation({
-	header,
-	body,
-}: ParseTriggerInvocationInput): ParseTriggerInvocationResult {
-	const headerId = header?.trim();
+function parseFromHeadersAndData(
+	headers: HeadersInit,
+	data: unknown,
+): ParseTriggerInvocationResult {
+	const headerId = new Headers(headers)
+		.get(TRIGGER_INVOCATION_ID_HEADER)
+		?.trim();
 	if (!headerId) {
 		return { ok: false, error: "missing_header" };
 	}
 
-	const invocation = parseScheduleInvocation(body);
+	const invocation = parseScheduleInvocation(data);
 	if (!invocation) {
 		return { ok: false, error: "invalid_body" };
 	}
@@ -80,4 +88,32 @@ export function parseTriggerInvocation({
 	}
 
 	return { ok: true, invocation };
+}
+
+async function parseFromRequest(
+	request: Request,
+): Promise<ParseTriggerInvocationResult> {
+	let data: unknown;
+	try {
+		// Clone so the caller can still request.json() after this returns.
+		data = await request.clone().json();
+	} catch {
+		return { ok: false, error: "invalid_body" };
+	}
+	return parseFromHeadersAndData(request.headers, data);
+}
+
+export function parseTriggerInvocation(
+	request: Request,
+): Promise<ParseTriggerInvocationResult>;
+export function parseTriggerInvocation(
+	input: ParseTriggerInvocationInput,
+): ParseTriggerInvocationResult;
+export function parseTriggerInvocation(
+	input: Request | ParseTriggerInvocationInput,
+): ParseTriggerInvocationResult | Promise<ParseTriggerInvocationResult> {
+	if (isRequest(input)) {
+		return parseFromRequest(input);
+	}
+	return parseFromHeadersAndData(input.headers, input.data);
 }

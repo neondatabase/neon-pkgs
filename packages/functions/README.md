@@ -337,24 +337,11 @@ Functions proxy drops client-supplied `x-neon-*` headers, so
 match `invocation_id` in the body.
 
 ```ts
-import {
-	TRIGGER_INVOCATION_ID_HEADER,
-	parseTriggerInvocation,
-} from "@neon/functions/triggers";
+import { parseTriggerInvocation } from "@neon/functions/triggers";
 
 export default {
 	async fetch(request: Request): Promise<Response> {
-		let body: unknown;
-		try {
-			body = await request.json();
-		} catch {
-			return new Response("Invalid JSON body", { status: 400 });
-		}
-
-		const parsed = parseTriggerInvocation({
-			header: request.headers.get(TRIGGER_INVOCATION_ID_HEADER),
-			body,
-		});
+		const parsed = await parseTriggerInvocation(request);
 		if (!parsed.ok) {
 			const status = parsed.error === "invalid_body" ? 400 : 401;
 			return new Response(parsed.error, { status });
@@ -363,6 +350,18 @@ export default {
 		return Response.json({ ok: true, invocationId: parsed.invocation.invocationId });
 	},
 };
+```
+
+`parseTriggerInvocation(request)` clones the Request before reading JSON, so
+`request.json()` still works afterwards.
+
+If you already have the JSON body, pass headers and data instead:
+
+```ts
+const parsed = parseTriggerInvocation({
+	headers: request.headers,
+	data,
+});
 ```
 
 `parseTriggerInvocation` returns `{ ok: true, invocation }` or `{ ok: false, error }`.
