@@ -84,11 +84,15 @@ const formatHelp = (help: string) => {
 		result.push("");
 	}
 
-	// commands description block
-	// example command to see: neonctl projects
-	const commandsBlock = consumeBlockIfMatches(lines, /^Commands:/);
-	if (commandsBlock.length > 0) {
-		const header = commandsBlock.shift() as string;
+	const consumeCommands = () => {
+		const commandsBlock = consumeBlockIfMatches(lines, /^Commands:/);
+		if (commandsBlock.length === 0) {
+			return;
+		}
+		const header = commandsBlock.shift();
+		if (header === undefined) {
+			return;
+		}
 		result.push(header);
 		const ui = cliui({
 			width: 0,
@@ -126,7 +130,7 @@ const formatHelp = (help: string) => {
 		});
 		result.push(ui.toString());
 		result.push("");
-	}
+	};
 
 	const consumePositionals = () => {
 		const positionalsBlock = consumeBlockIfMatches(lines, /Positionals:/);
@@ -159,6 +163,7 @@ const formatHelp = (help: string) => {
 		result.push("");
 	};
 
+	consumeCommands();
 	consumePositionals();
 
 	// command description
@@ -169,8 +174,10 @@ const formatHelp = (help: string) => {
 		result.push("");
 	}
 
-	// `functions deploy` puts Positionals after the description; `branches rename`
-	// puts them before it.
+	// Nested parents (`functions domains`) put Commands after the description;
+	// `projects` puts them before it. `functions deploy` puts Positionals after
+	// the description; `branches rename` puts them before it.
+	consumeCommands();
 	consumePositionals();
 
 	const optionBlocks: string[][] = [];

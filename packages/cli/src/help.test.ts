@@ -170,4 +170,17 @@ describe("subcommand help lists command flags before globals", () => {
 		expect(stderr.indexOf("--src")).toBeLessThan(stderr.indexOf(trailer));
 		expect(stderr).not.toContain("--api-key");
 	});
+
+	it("collapses globals on a nested parent whose Commands block follows the description", async () => {
+		const { stderr } = await runCli(["functions", "domains", "--help"]);
+		const trailer = "Global options: see neon --help";
+
+		expect(stderr).toContain("Commands:");
+		expect(stderr).toContain(trailer);
+		expect(stderr.indexOf("Commands:")).toBeLessThan(
+			stderr.indexOf(trailer),
+		);
+		expect(stderr).not.toContain("--api-key");
+		expect(stderr).not.toContain("--context-file");
+	});
 });
