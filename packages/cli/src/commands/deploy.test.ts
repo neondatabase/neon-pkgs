@@ -8,14 +8,14 @@ describe("deploy", () => {
 		await testCliCommand(["deploy", "--help"], {
 			mockDir: "single_org",
 			snapshot: false,
-			stderr: expect.stringContaining(
+			stdout: expect.stringContaining(
 				"Use neon deploy with a neon.ts file for a full deployment",
 			),
 		});
 		await testCliCommand(["deploy", "--help"], {
 			mockDir: "single_org",
 			snapshot: false,
-			stderr: expect.stringContaining(
+			stdout: expect.stringContaining(
 				"neon deploy --env <file> loads that .env file",
 			),
 		});

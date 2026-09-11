@@ -157,7 +157,8 @@ describe("inspect db", () => {
 	}) => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"Ranking and row limits stay per database",
 			),
 		});
@@ -168,7 +169,8 @@ describe("inspect db", () => {
 	}) => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining("fails the whole run"),
+			snapshot: false,
+			stdout: expect.stringContaining("fails the whole run"),
 		});
 	});
 
@@ -177,7 +179,8 @@ describe("inspect db", () => {
 	}) => {
 		await testCliCommand(["inspect", "db", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining(
+			snapshot: false,
+			stdout: expect.stringContaining(
 				"Local File Cache hit rate (compute-wide",
 			),
 		});

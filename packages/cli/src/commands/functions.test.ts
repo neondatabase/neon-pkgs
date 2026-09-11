@@ -22,14 +22,14 @@ describe("functions", () => {
 		await testCliCommand(["functions", "deploy", "--help"], {
 			mockDir: "single_org",
 			snapshot: false,
-			stderr: expect.stringContaining(
+			stdout: expect.stringContaining(
 				"Use neon functions deploy to deploy one function manually",
 			),
 		});
 		await testCliCommand(["functions", "deploy", "--help"], {
 			mockDir: "single_org",
 			snapshot: false,
-			stderr: expect.stringContaining(
+			stdout: expect.stringContaining(
 				"neon functions deploy --env is KEY=VALUE",
 			),
 		});
@@ -1112,11 +1112,13 @@ describe("functions", () => {
 	}) => {
 		await testCliCommand(["functions", "deploy", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining("--no-bundle"),
+			snapshot: false,
+			stdout: expect.stringContaining("--no-bundle"),
 		});
 		await testCliCommand(["functions", "deploy", "--help"], {
 			mockDir: "single_org",
-			stderr: expect.stringContaining("index.ts, index.js, or index.mjs"),
+			snapshot: false,
+			stdout: expect.stringContaining("index.ts, index.js, or index.mjs"),
 		});
 	});
 
