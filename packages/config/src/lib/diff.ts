@@ -4,6 +4,7 @@ import type {
 	NeonBucketSnapshot,
 	NeonEndpointSnapshot,
 	NeonFunctionSnapshot,
+	NeonTriggerSnapshot,
 } from "./neon-api.js";
 import type {
 	BucketAccessLevel,
@@ -13,6 +14,7 @@ import type {
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
+	ResolvedFunctionScheduleTrigger,
 } from "./types.js";
 
 /**
@@ -95,6 +97,23 @@ export type PlanStep =
 			fn: ResolvedFunctionConfig;
 			/** Whether the function already existed remotely when the plan was computed. */
 			functionExists: boolean;
+	  }
+	| {
+			kind: "create-trigger";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			functionSlug: string;
+			trigger: ResolvedFunctionScheduleTrigger;
+	  }
+	| {
+			kind: "update-trigger";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			triggerId: string;
+			functionSlug: string;
+			trigger: ResolvedFunctionScheduleTrigger;
 	  };
 
 export interface RemoteServiceState {
@@ -116,6 +135,7 @@ export interface RemoteServiceState {
 export interface RemotePreviewState {
 	buckets: NeonBucketSnapshot[];
 	functions: NeonFunctionSnapshot[];
+	triggers: NeonTriggerSnapshot[];
 }
 
 export interface RemoteState {
@@ -182,6 +202,7 @@ function diffPreview(args: {
 	const state: RemotePreviewState = remote.preview ?? {
 		buckets: [],
 		functions: [],
+		triggers: [],
 	};
 
 	for (const bucket of preview.buckets) {
@@ -198,9 +219,6 @@ function diffPreview(args: {
 
 	for (const fn of preview.functions) {
 		const exists = state.functions.some((f) => f.slug === fn.slug);
-		// Neon creates the function on its first deployment (there is no separate create
-		// endpoint), so always emit a single deploy step and let `functionExists` decide
-		// whether it is reported as a create or an update.
 		plan.push({
 			kind: "deploy-function",
 			projectId: remote.projectId,
@@ -209,6 +227,37 @@ function diffPreview(args: {
 			fn,
 			functionExists: exists,
 		});
+		for (const trigger of fn.triggers ?? []) {
+			const remoteTrigger = state.triggers.find(
+				(t) => t.functionSlug === fn.slug && t.name === trigger.name,
+			);
+			if (!remoteTrigger) {
+				plan.push({
+					kind: "create-trigger",
+					projectId: remote.projectId,
+					branchId: remote.branch.id,
+					branchName: remote.branch.name,
+					functionSlug: fn.slug,
+					trigger,
+				});
+				continue;
+			}
+			if (
+				remoteTrigger.cron !== trigger.cron ||
+				remoteTrigger.enabled !== trigger.enabled ||
+				remoteTrigger.functionPath !== trigger.functionPath
+			) {
+				plan.push({
+					kind: "update-trigger",
+					projectId: remote.projectId,
+					branchId: remote.branch.id,
+					branchName: remote.branch.name,
+					triggerId: remoteTrigger.triggerId,
+					functionSlug: fn.slug,
+					trigger,
+				});
+			}
+		}
 	}
 }
 

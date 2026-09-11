@@ -216,6 +216,26 @@ describe("getAnalyticsEventProperties", () => {
 		).not.toContain("example.invalid");
 	});
 
+	it("redacts credential token ids from the command string", () => {
+		expect(
+			getAnalyticsEventProperties({
+				_: [
+					"credentials",
+					"reveal",
+					"nak_live_0123456789abcdef0123456789abcdef",
+				],
+			}).command,
+		).toBe("credentials reveal nak_live_<redacted>");
+	});
+
+	it("leaves other positionals alone", () => {
+		expect(
+			getAnalyticsEventProperties({
+				_: ["branches", "delete", "br-sunny-branch-123456"],
+			}).command,
+		).toBe("branches delete br-sunny-branch-123456");
+	});
+
 	it("attributes commands run by a coding agent", () => {
 		vi.stubEnv("CODEX_CI", undefined);
 		vi.stubEnv("CODEX_THREAD_ID", undefined);
@@ -227,5 +247,23 @@ describe("getAnalyticsEventProperties", () => {
 				_: ["branches", "list"],
 			}).agent,
 		).toBe("claude-code");
+	});
+});
+
+describe("getErrorAnalyticsEventProperties credential ids", () => {
+	it("redacts credential token ids from error telemetry, not the thrown Error", () => {
+		const error = new Error(
+			"Credential nak_live_0123456789abcdef0123456789abcdef not found on branch br-main.",
+		);
+		const properties = getErrorAnalyticsEventProperties(error, "API_ERROR");
+		expect(properties.message).toBe(
+			"Credential nak_live_<redacted> not found on branch br-main.",
+		);
+		expect(error.message).toContain(
+			"nak_live_0123456789abcdef0123456789abcdef",
+		);
+		expect(properties.stack).not.toContain(
+			"nak_live_0123456789abcdef0123456789abcdef",
+		);
 	});
 });

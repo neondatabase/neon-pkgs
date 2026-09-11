@@ -5,12 +5,6 @@ import type yargs from "yargs";
 
 import { log } from "./log.js";
 
-export type ClaimableContext = {
-	version: 1;
-	/** Omits the `/v1` API prefix. */
-	origin: string;
-};
-
 export type Context = {
 	orgId?: string;
 	projectId?: string;
@@ -26,7 +20,6 @@ export type Context = {
 	 * dropped the next time the context is written.
 	 */
 	branchId?: string;
-	claimable?: ClaimableContext;
 };
 
 /**
@@ -111,6 +104,19 @@ export const isPluginsCommand = (args: { _: (string | number)[] }): boolean =>
 
 export const isAskCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "ask";
+
+/**
+ * `inspect db --db-url` talks to Postgres with that URI. Skip only when the
+ * parsed value is nonempty: empty `--db-url` still goes through project
+ * resolution and needs an API client.
+ */
+export const isInspectDbUrl = (args: {
+	_: (string | number)[];
+	dbUrl?: string;
+}): boolean =>
+	(args._[0] === "inspect" || args._[0] === "inspection") &&
+	typeof args.dbUrl === "string" &&
+	args.dbUrl.length > 0;
 
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
@@ -220,6 +226,12 @@ export const enrichFromContext = (
 	// and must see the raw flags rather than values pre-filled from an existing
 	// `.neon`, so skip enrichment for both.
 	if (args._[0] === "link" || args._[0] === "set-context") {
+		return;
+	}
+	// `init` forwards --project-id / --org-id / --branch only to `link`. Filling
+	// them from `.neon` would make a linked rerun look like the user typed those
+	// flags and force a relink. Init already reads `.neon` via isLinked().
+	if (args._[0] === "init") {
 		return;
 	}
 	// `api-keys` mints credentials, and how far a credential reaches must be something the
@@ -334,10 +346,24 @@ export const setContext = (file: string, context: ResolvedContext) => {
  * must not be blocked by a `.gitignore` write error.
  */
 export const ensureGitignored = (file: string): void => {
+	ensureGitignoreEntry(file, basenameOf(file));
+};
+
+/**
+ * Make sure a directory is ignored by the `.gitignore` in its parent. The written entry keeps
+ * the conventional trailing slash, while coverage checks also recognize an existing entry
+ * without one.
+ */
+export const ensureDirectoryGitignored = (directory: string): void => {
+	const normalized = directory.replace(/[\\/]+$/, "");
+	ensureGitignoreEntry(directory, `${basenameOf(normalized)}/`);
+};
+
+const ensureGitignoreEntry = (path: string, entry: string): void => {
 	try {
-		const dir = dirname(file);
-		const entry = basenameOf(file);
+		const dir = dirname(path);
 		const gitignorePath = resolve(dir, GITIGNORE_FILE);
+		const coveredEntry = entry.replace(/\/$/, "");
 
 		if (!existsSync(gitignorePath)) {
 			writeFileSync(gitignorePath, `${entry}\n`);
@@ -345,7 +371,7 @@ export const ensureGitignored = (file: string): void => {
 		}
 
 		const current = readFileSync(gitignorePath, "utf-8");
-		if (hasGitignoreEntry(current, entry)) {
+		if (hasGitignoreEntry(current, coveredEntry)) {
 			return;
 		}
 
@@ -355,7 +381,7 @@ export const ensureGitignored = (file: string): void => {
 		writeFileSync(gitignorePath, current + addition);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		log.debug("Failed to update .gitignore next to %s: %s", file, message);
+		log.debug("Failed to update .gitignore next to %s: %s", path, message);
 	}
 };
 

@@ -119,6 +119,33 @@ describe("functions.customDomains", () => {
 		});
 	});
 
+	it("passes through optional status fields", async () => {
+		const withStatus = {
+			...domain,
+			status: "pending",
+			dns_status: "pending",
+			binding_status: "pending",
+			status_reason: "",
+		};
+		const { neon } = neonRouting(() => ({
+			status: 201,
+			body: withStatus,
+		}));
+
+		const { data, error } = await neon.functions.customDomains.register(
+			"p-1",
+			"br-1",
+			{
+				domain: "docs.example.com",
+				entity_type: "function",
+				entity_id: "api",
+			},
+		);
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual(withStatus);
+	});
+
 	it("deletes with a 204", async () => {
 		const { neon, calls } = neonRouting(() => ({ status: 204 }));
 

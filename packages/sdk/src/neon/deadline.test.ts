@@ -1,6 +1,7 @@
 import { getEventListeners } from "node:events";
 import { describe, expect, it } from "vitest";
 import { cancelled, createDeadline, delay, runBounded } from "./deadline.js";
+import { NeonRequestTimeoutError } from "./errors.js";
 
 describe("delay", () => {
 	it("reports elapsed when it runs to completion", async () => {
@@ -30,6 +31,7 @@ describe("createDeadline", () => {
 	it("is unbounded and allocates no signal when nothing can cancel it", () => {
 		const deadline = createDeadline(Number.POSITIVE_INFINITY);
 		expect(deadline.signal).toBeUndefined();
+		expect(deadline.timeoutMs).toBeUndefined();
 		expect(deadline.remainingMs()).toBe(Number.POSITIVE_INFINITY);
 		expect(deadline.source()).toBeUndefined();
 	});
@@ -41,6 +43,7 @@ describe("createDeadline", () => {
 			controller.signal,
 		);
 		expect(deadline.signal).toBeDefined();
+		expect(deadline.timeoutMs).toBeUndefined();
 		expect(deadline.remainingMs()).toBe(Number.POSITIVE_INFINITY);
 		deadline.dispose();
 	});
@@ -49,6 +52,7 @@ describe("createDeadline", () => {
 		const deadline = createDeadline(5);
 		await deadline.fired();
 		expect(deadline.source()).toBe("timeout");
+		expect(deadline.timeoutMs).toBe(5);
 		expect(deadline.signal?.aborted).toBe(true);
 		deadline.dispose();
 	});
@@ -117,7 +121,11 @@ describe("cancelled", () => {
 	it("maps a timeout to a timeout error", async () => {
 		const deadline = createDeadline(1);
 		await deadline.fired();
-		expect(cancelled(deadline)?.kind).toBe("timeout");
+		const error = cancelled(deadline);
+		expect(error).toBeInstanceOf(NeonRequestTimeoutError);
+		expect(error?.kind).toBe("timeout");
+		expect(error).toMatchObject({ source: "request", timeoutMs: 1 });
+		expect(error && "operations" in error).toBe(false);
 		deadline.dispose();
 	});
 

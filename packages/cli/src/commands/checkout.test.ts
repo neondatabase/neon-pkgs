@@ -237,7 +237,7 @@ describe("checkout", () => {
 			],
 			{
 				code: 1,
-				stderr: "ERROR: Branch does-not-exist not found. Available branches: main, test_branch, 123, test_branch_with_fixed_cu, test_branch_with_autoscaling, protected_branch",
+				stderr: "ERROR: Branch does-not-exist not found. Pass --create to create it. Available branches: main, test_branch, 123, test_branch_with_fixed_cu, test_branch_with_autoscaling, protected_branch",
 			},
 		);
 		removeFile(ctx);
@@ -254,7 +254,7 @@ describe("checkout", () => {
 		await testCliCommand(
 			[
 				"checkout",
-				"br-does-not-exist-123456",
+				"br-missing-branch-123456",
 				"--project-id",
 				"test",
 				"--context-file",
@@ -262,7 +262,7 @@ describe("checkout", () => {
 			],
 			{
 				code: 1,
-				stderr: "ERROR: Branch br-does-not-exist-123456 not found. Available branches: main, test_branch, 123, test_branch_with_fixed_cu, test_branch_with_autoscaling, protected_branch",
+				stderr: "ERROR: Branch br-missing-branch-123456 not found. Available branches: main, test_branch, 123, test_branch_with_fixed_cu, test_branch_with_autoscaling, protected_branch",
 			},
 		);
 		removeFile(ctx);
@@ -285,6 +285,67 @@ describe("checkout", () => {
 		);
 		removeFile(ctx);
 	});
+
+	test("errors when --create is passed without a branch name", async ({
+		testCliCommand,
+		removeFile,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("create_no_name");
+		await testCliCommand(["checkout", "--create", "--context-file", ctx], {
+			code: 1,
+			stderr: "ERROR: No branch specified. Pass a branch name with --create (e.g. `neon checkout dev --create`).",
+		});
+		removeFile(ctx);
+	});
+
+	test("does not suggest --create when a branch id is missing", async ({
+		testCliCommand,
+		removeFile,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("id_not_found_create");
+		await testCliCommand(
+			[
+				"checkout",
+				"br-missing-branch-123456",
+				"--create",
+				"--project-id",
+				"test",
+				"--context-file",
+				ctx,
+			],
+			{
+				code: 1,
+				stderr: "ERROR: Branch br-missing-branch-123456 not found. Available branches: main, test_branch, 123, test_branch_with_fixed_cu, test_branch_with_autoscaling, protected_branch",
+			},
+		);
+		removeFile(ctx);
+	});
+
+	test("--create on an existing name pins it and does not create", async ({
+		testCliCommand,
+		readFile,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("create_existing");
+		await testCliCommand([
+			"checkout",
+			"main",
+			"--create",
+			"--project-id",
+			"test",
+			"--no-env-pull",
+			"--env",
+			"/no/such-neon-checkout.env",
+			"--context-file",
+			ctx,
+		]);
+		expect(parseContext(readFile(ctx))).toEqual({
+			projectId: "test",
+			branch: "main",
+		});
+	});
 });
 
 describe("checkout --env", () => {
@@ -298,6 +359,21 @@ describe("checkout --env", () => {
 			},
 		);
 		expect(`${stdout}\n${stderr}`).toContain("Path to a .env file");
+	});
+
+	test("help describes --create and the create examples", async ({
+		testCliCommand,
+	}) => {
+		const { stdout, stderr } = await testCliCommand(
+			["checkout", "--help"],
+			{
+				snapshot: false,
+			},
+		);
+		const text = `${stdout}\n${stderr}`;
+		expect(text).toContain("--create");
+		expect(text).toContain("checkout dev --create");
+		expect(text).toContain("checkout feat --create --env .env.local");
 	});
 
 	test("checking out an existing branch does not load --env", async ({
@@ -333,6 +409,8 @@ describe("formatCheckoutPolicyFailure", () => {
 		expect(message).toContain(
 			"neon deploy --update-existing --env .env.local",
 		);
-		expect(message).toContain("neon checkout feat --env .env.local");
+		expect(message).toContain(
+			"neon checkout feat --create --env .env.local",
+		);
 	});
 });

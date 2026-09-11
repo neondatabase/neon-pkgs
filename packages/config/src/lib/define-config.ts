@@ -363,6 +363,17 @@ function resolveFunctionConfig(
 			: {}),
 		// Passed through untouched (no defaults); only `neon dev` reads it.
 		...(def.dev ? { dev: def.dev } : {}),
+		...(def.triggers
+			? {
+					triggers: def.triggers.map((trigger) => ({
+						type: "schedule" as const,
+						name: trigger.name,
+						cron: trigger.cron,
+						functionPath: trigger.functionPath ?? "/",
+						enabled: trigger.enabled ?? true,
+					})),
+				}
+			: {}),
 	};
 }
 

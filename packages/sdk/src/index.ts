@@ -25,16 +25,22 @@ export { createNeonClient } from "./neon/client.js";
 export type { NeonConfig } from "./neon/config.js";
 export type { CallOptions } from "./neon/context.js";
 export {
+	isNeonError,
 	NeonAbortError,
 	NeonApiError,
+	type NeonApiErrorKind,
 	NeonAuthError,
+	NeonClientError,
 	NeonError,
 	type NeonErrorKind,
+	type NeonErrorUnion,
 	NeonNetworkError,
 	NeonNotFoundError,
 	NeonOperationError,
 	NeonRateLimitError,
+	NeonRequestTimeoutError,
 	NeonTimeoutError,
+	NeonWaitTimeoutError,
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
 export type {
@@ -65,7 +71,7 @@ export type {
 	UpdateSnapshotInput,
 } from "./neon/resources/snapshots.js";
 export type { NeonResult, Outcome } from "./neon/result.js";
-export type { WaitForOptions } from "./neon/wait.js";
+export type { WaitBudget, WaitForOptions } from "./neon/wait.js";
 export type * from "./raw.js";
 // The raw 1:1 surface as a namespace, and all generated types flat.
 export * as raw from "./raw.js";

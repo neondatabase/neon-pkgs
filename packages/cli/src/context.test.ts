@@ -12,9 +12,11 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
 	applyContext,
 	currentContextFile,
+	enrichFromContext,
 	ensureGitignored,
 	isAskCommand,
 	isCurrentBranchProbe,
+	isInspectDbUrl,
 	isMcpOauth,
 	isPluginsCommand,
 	isSkillsCommand,
@@ -77,6 +79,53 @@ describe("isCurrentBranchProbe", () => {
 	});
 });
 
+describe("enrichFromContext", () => {
+	test("init does not inherit project, org, or branch from .neon", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-init-enrich-"));
+		const contextFile = join(dir, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({
+				orgId: "org-file",
+				projectId: "proj-file",
+				branch: "main",
+				branchId: "br-legacy",
+			})}\n`,
+		);
+		const args = {
+			_: ["init"],
+			contextFile,
+		} as Parameters<typeof enrichFromContext>[0];
+		enrichFromContext(args);
+		expect(args).not.toHaveProperty("orgId");
+		expect(args).not.toHaveProperty("projectId");
+		expect(args).not.toHaveProperty("branch");
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("other commands still inherit identifiers, including legacy branchId", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-proj-enrich-"));
+		const contextFile = join(dir, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({
+				orgId: "org-file",
+				projectId: "proj-file",
+				branchId: "br-legacy",
+			})}\n`,
+		);
+		const args = {
+			_: ["projects"],
+			contextFile,
+		} as Parameters<typeof enrichFromContext>[0];
+		enrichFromContext(args);
+		expect(args.orgId).toBe("org-file");
+		expect(args.projectId).toBe("proj-file");
+		expect(args.branch).toBe("br-legacy");
+		rmSync(dir, { recursive: true, force: true });
+	});
+});
+
 describe("isSkillsCommand", () => {
 	test("true for skills and skills update", () => {
 		expect(isSkillsCommand({ _: ["skills"] })).toBe(true);
@@ -102,6 +151,41 @@ describe("isAskCommand", () => {
 		expect(isAskCommand({ _: ["skills"] })).toBe(false);
 		expect(isAskCommand({ _: ["mcp"] })).toBe(false);
 		expect(isAskCommand({ _: ["init"] })).toBe(false);
+	});
+});
+
+describe("isInspectDbUrl", () => {
+	test("is true for inspect and inspection with a nonempty --db-url", () => {
+		expect(
+			isInspectDbUrl({
+				_: ["inspect", "db", "table-sizes"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
+		expect(
+			isInspectDbUrl({
+				_: ["inspection", "db", "locks"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
+	});
+
+	test("is false without a nonempty --db-url or on another command", () => {
+		expect(isInspectDbUrl({ _: ["inspect", "db", "table-sizes"] })).toBe(
+			false,
+		);
+		expect(
+			isInspectDbUrl({
+				_: ["inspect", "db", "table-sizes"],
+				dbUrl: "",
+			}),
+		).toBe(false);
+		expect(
+			isInspectDbUrl({
+				_: ["projects", "list"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(false);
 	});
 });
 

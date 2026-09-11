@@ -6,14 +6,10 @@ import {
 	resolveTimeoutMs,
 	runBounded,
 } from "./deadline.js";
-import { type NeonError, toNeonError } from "./errors.js";
+import { type NeonErrorUnion, toNeonError } from "./errors.js";
 import { err, finalize, type NeonResult, ok } from "./result.js";
 import { withRetries } from "./retry.js";
-import {
-	hasOperations,
-	type WaitForOptions,
-	waitForOperations,
-} from "./wait.js";
+import { hasOperations, type WaitBudget, waitForOperations } from "./wait.js";
 
 /** Fully-resolved runtime configuration shared by every resource namespace. */
 export interface ResolvedConfig {
@@ -22,8 +18,12 @@ export interface ResolvedConfig {
 	retries: number;
 	/** `Infinity` when calls are unbounded, which is the default. */
 	requestTimeoutMs: number;
-	waitForReadiness: boolean;
-	waitOptions: WaitForOptions;
+	/**
+	 * Unset and `false` stay distinct. Create-family methods default polling on when
+	 * this is unset; collapsing them in `resolveConfig` made a client `false` a no-op.
+	 */
+	waitForReadiness: boolean | undefined;
+	waitOptions: WaitBudget;
 	orgId?: string;
 }
 
@@ -38,6 +38,12 @@ export interface CallOptions<Throw extends boolean = boolean> {
 	 * value; readiness polling keeps its own `wait` budget either way.
 	 */
 	requestTimeoutMs?: number;
+	/**
+	 * Override the client's `wait` budget for this call's readiness polling.
+	 * Does not turn polling on; pair it with `waitForReadiness` when the method
+	 * would not wait otherwise.
+	 */
+	wait?: WaitBudget;
 	/** Cancel the call. Surfaces as a `NeonAbortError` (`kind: "aborted"`). */
 	signal?: AbortSignal;
 }
@@ -57,7 +63,7 @@ type Exec<D> = (
 /** The request phase's outcome, before readiness polling is considered. */
 type Requested<D> =
 	| { ok: true; data: D | undefined; response: Response | undefined }
-	| { ok: false; error: NeonError };
+	| { ok: false; error: NeonErrorUnion };
 
 /**
  * Shared execution core: runs a raw client call under a deadline and with retries, maps
@@ -95,14 +101,33 @@ export class RequestContext {
 		return createDeadline(timeoutMs, opts?.signal);
 	}
 
+	/** Per-call, then client, then the method's own default. */
+	resolveWait(
+		opts: CallOptions | undefined,
+		methodDefault: boolean,
+	): boolean {
+		return (
+			opts?.waitForReadiness ??
+			this.#config.waitForReadiness ??
+			methodDefault
+		);
+	}
+
+	/** The `throwOnError` policy for one call: the per-call override if given, else the client's. */
+	shouldThrow(opts: CallOptions | undefined): boolean {
+		return opts?.throwOnError ?? this.#config.throwOnError;
+	}
+
 	/** Run a raw call and map its body; applies the resolved `throwOnError` policy. */
 	async run<D, T>(
 		opts: CallOptions | undefined,
 		exec: Exec<D>,
 		map: (data: D) => T,
 	): Promise<T | NeonResult<T>> {
-		const shouldThrow = opts?.throwOnError ?? this.#config.throwOnError;
-		return finalize(await this.execute(opts, exec, map), shouldThrow);
+		return finalize(
+			await this.execute(opts, exec, map),
+			this.shouldThrow(opts),
+		);
 	}
 
 	/** Like {@link run} but for endpoints that may return an empty (204) body. */
@@ -110,7 +135,7 @@ export class RequestContext {
 		opts: CallOptions | undefined,
 		exec: Exec<D>,
 	): Promise<void | NeonResult<void>> {
-		const shouldThrow = opts?.throwOnError ?? this.#config.throwOnError;
+		const shouldThrow = this.shouldThrow(opts);
 		const requested = await this.#request(opts, exec);
 		if (!requested.ok)
 			return finalize(err<void>(requested.error), shouldThrow);
@@ -188,8 +213,12 @@ export class RequestContext {
 		const wait = opts?.waitForReadiness ?? this.#config.waitForReadiness;
 		if (!wait || !hasOperations(data)) return undefined;
 		return waitForOperations(this.#config.client, data.operations, {
-			...this.#config.waitOptions,
-			signal: opts?.signal ?? this.#config.waitOptions.signal,
+			pollIntervalMs:
+				opts?.wait?.pollIntervalMs ??
+				this.#config.waitOptions.pollIntervalMs,
+			timeoutMs:
+				opts?.wait?.timeoutMs ?? this.#config.waitOptions.timeoutMs,
+			signal: opts?.signal,
 		});
 	}
 }

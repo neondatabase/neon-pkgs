@@ -1407,6 +1407,140 @@ export const getApiClient = ({
 					body: data,
 				}),
 			),
+
+		// ─── Function Triggers ───────────────────────────────────────────────
+		listProjectBranchTriggers: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.listProjectBranchTriggers({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		getProjectBranchTrigger: (
+			projectId: string,
+			branchId: string,
+			triggerId: string,
+		) =>
+			call(() =>
+				raw.getProjectBranchTrigger({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						trigger_id: triggerId,
+					},
+				}),
+			),
+		createProjectBranchTrigger: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.CreateProjectBranchTriggerData["body"]>,
+		) =>
+			call(() =>
+				raw.createProjectBranchTrigger({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		updateProjectBranchTrigger: (
+			projectId: string,
+			branchId: string,
+			triggerId: string,
+			data: NonNullable<raw.UpdateProjectBranchTriggerData["body"]>,
+		) =>
+			call(() =>
+				raw.updateProjectBranchTrigger({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						trigger_id: triggerId,
+					},
+					body: data,
+				}),
+			),
+		deleteProjectBranchTrigger: (
+			projectId: string,
+			branchId: string,
+			triggerId: string,
+		) =>
+			call(() =>
+				raw.deleteProjectBranchTrigger({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						trigger_id: triggerId,
+					},
+				}),
+			),
+
+		// ─── Branch credentials ──────────────────────────────────────────────
+		listCredentials: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.listCredentials({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		createCredential: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.CreateCredentialData["body"]>,
+		) =>
+			call(() =>
+				raw.createCredential({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		revokeCredential: (
+			projectId: string,
+			branchId: string,
+			tokenId: string,
+		) =>
+			call(() =>
+				raw.revokeCredential({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						token_id: tokenId,
+					},
+				}),
+			),
+		revealCredential: (
+			projectId: string,
+			branchId: string,
+			tokenId: string,
+		) =>
+			call(() =>
+				raw.revealCredential({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						token_id: tokenId,
+					},
+				}),
+			),
+		rotateCredential: (
+			projectId: string,
+			branchId: string,
+			tokenId: string,
+		) =>
+			call(() =>
+				raw.rotateCredential({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						token_id: tokenId,
+					},
+				}),
+			),
 	};
 };
 

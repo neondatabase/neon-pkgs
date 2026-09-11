@@ -1,7 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`logs > a sub-command is required 1`] = `""`;
-
 exports[`logs > a truncated field-values run keeps json output clean and stderr empty 1`] = `
 "{
   "values": [

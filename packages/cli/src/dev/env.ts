@@ -19,6 +19,7 @@ import {
 	fetchEnvReusingSecrets,
 	type ReusedBranchEnv,
 } from "@neon-internals/env-core/reuse-secrets";
+import { declaredNeonServices } from "../config_services.js";
 import {
 	ENV_PULL_SERVICES,
 	type EnvPullKey,
@@ -45,11 +46,11 @@ export type DevEnvContext = {
 	api?: NeonApi;
 	/**
 	 * Env source layered under `process.env` when resolving the branch env. Lets callers
-	 * supply already-persisted values (e.g. the existing `.env` for `env pull`) so one-time
-	 * secrets — Neon Auth keys and the unified branch credential's `api_token` /
-	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run. See
-	 * {@link fetchEnvReusingSecrets}, which verifies them against the branch before keeping
-	 * them.
+	 * supply already-persisted values (e.g. the existing `.env` for `env pull`) so credential
+	 * secrets — Neon Auth keys and the platform default (or minted fallback) `api_token` /
+	 * `s3_secret_access_key` — are **reused** rather than re-revealed or re-minted on every
+	 * run. See {@link fetchEnvReusingSecrets}, which verifies them against the branch before
+	 * keeping them.
 	 */
 	env?: NodeJS.ProcessEnv;
 	/**
@@ -75,6 +76,20 @@ export type DevEnvContext = {
 	implyAiGateway?: boolean;
 	/** Env pull needs function slugs even when their runtime secrets are unset. */
 	omitUnsetFunctionEnv?: boolean;
+	/**
+	 * Explicit neon.ts path. When set, this file is the policy instead of the
+	 * upward search from {@link DevEnvContext.cwd}. `claim create --config`
+	 * uses the same file for registration and the bundled env pull.
+	 */
+	config?: string;
+	/**
+	 * This request is talking to Claimable Neon. Skip credential minting.
+	 * neon.ts is still the source of truth when it only declares Postgres, Auth,
+	 * and the Data API; a policy that names AI Gateway, Functions, or Object
+	 * Storage fails because those cannot be used until the project is claimed.
+	 * Without a neon.ts, resolve provisioned Postgres / Auth / Data API.
+	 */
+	claimable?: boolean;
 };
 
 /** The API-targeting options every runtime call forwards from the context. */
@@ -114,6 +129,218 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
 	skipped?: readonly NeonService[];
 };
 
+const CLAIMABLE_UNSUPPORTED_SERVICES: ReadonlySet<NeonService> = new Set([
+	"ai-gateway",
+	"functions",
+	"object-storage",
+]);
+
+const CLAIMABLE_RESOLVE_ORDER = ["postgres", "auth", "data-api"] as const;
+
+const emptyClaimableCredential = (): CredentialOutcome => ({
+	issued: false,
+	keys: [],
+	revoked: [],
+	superseded: [],
+});
+
+const isClaimableUnsupportedService = (service: NeonService): boolean =>
+	CLAIMABLE_UNSUPPORTED_SERVICES.has(service);
+
+export const dropClaimableUnsupported = (
+	services: readonly NeonService[],
+	envKeys: readonly EnvPullKey[],
+): {
+	services: NeonService[];
+	envKeys: EnvPullKey[];
+	skipped: NeonService[];
+} => {
+	const skipped: NeonService[] = [];
+	const keptServices: NeonService[] = [];
+	for (const service of services) {
+		if (isClaimableUnsupportedService(service)) {
+			if (!skipped.includes(service)) skipped.push(service);
+			continue;
+		}
+		keptServices.push(service);
+	}
+	const keptKeys: EnvPullKey[] = [];
+	for (const key of envKeys) {
+		const service = serviceForEnvKey(key);
+		if (service !== null && isClaimableUnsupportedService(service)) {
+			if (!skipped.includes(service)) skipped.push(service);
+			continue;
+		}
+		keptKeys.push(key);
+	}
+	return { services: keptServices, envKeys: keptKeys, skipped };
+};
+
+const warnClaimableSkipped = (skipped: readonly NeonService[]): void => {
+	if (skipped.length === 0) return;
+	log.warning(
+		"Skipped %s: not available on an unclaimed Claimable Neon project. " +
+			"Postgres, Auth, and the Data API can be pulled when they are provisioned.",
+		skipped.join(", "),
+	);
+};
+
+/**
+ * Claimable Neon does not complete concurrent Management API reads.
+ * Resolve one allowed service at a time.
+ */
+const resolveClaimableServicesSequentially = async (
+	ctx: DevEnvContext,
+	services: readonly NeonService[],
+	envKeys: readonly EnvPullKey[],
+): Promise<ResolvedNeonEnvVars> => {
+	const leftover = envKeys.filter((key) => serviceForEnvKey(key) === null);
+	const parts: ResolvedNeonEnvVars[] = [];
+	for (const service of CLAIMABLE_RESOLVE_ORDER) {
+		const named = services.includes(service);
+		const keysForService = [
+			...envKeys.filter((key) => serviceForEnvKey(key) === service),
+			...(service === "postgres" ? leftover : []),
+		];
+		if (!named && keysForService.length === 0) continue;
+		parts.push(
+			await resolveSelectedServices(
+				ctx,
+				named ? [service] : [],
+				keysForService,
+			),
+		);
+	}
+	const resolvedPostgresPartition =
+		services.includes("postgres") ||
+		envKeys.some((key) => serviceForEnvKey(key) === "postgres");
+	if (leftover.length > 0 && !resolvedPostgresPartition) {
+		parts.push(await resolveSelectedServices(ctx, [], leftover));
+	}
+	if (parts.length === 0) {
+		return { vars: {}, credential: emptyClaimableCredential() };
+	}
+	const vars = Object.assign({}, ...parts.map((part) => part.vars));
+	const skipped = parts.flatMap((part) => part.skipped ?? []);
+	return {
+		vars,
+		credential: emptyClaimableCredential(),
+		...(skipped.length > 0 ? { skipped } : {}),
+	};
+};
+
+const resolveClaimableLiveEnv = async (
+	ctx: DevEnvContext,
+): Promise<ResolvedNeonEnvVars> => {
+	const { projectId, branchId } = ctx;
+	if (!projectId || !branchId) {
+		throw new MissingBranchContextError(
+			`No project/branch context found. Link a branch (\`${getCliName()} link\` / ` +
+				`\`${getCliName()} checkout\`) or pass --project-id and --branch.`,
+		);
+	}
+	const api = apiFor(ctx);
+	const auth = await api.getNeonAuth(projectId, branchId);
+	const dataApiEnabled = await readDataApiEnabled(api, projectId, branchId);
+	const services: NeonService[] = ["postgres"];
+	if (auth !== null) services.push("auth");
+	if (dataApiEnabled !== false) services.push("data-api");
+	return await resolveClaimableServicesSequentially(ctx, services, []);
+};
+
+const throwPolicyMissingOnBranch = (names: string, branchId: string): never => {
+	throw new DevEnvMismatchError(
+		`Your neon.ts declares ${names} for branch ${branchId}, but the branch ` +
+			"does not have it yet, so the matching env vars cannot be injected. " +
+			`Provision it first with \`${getCliName()} deploy\` (or \`${getCliName()} config apply\`), ` +
+			`then re-run \`${getCliName()} dev\`.`,
+	);
+};
+
+/**
+ * Honor neon.ts on Claimable Neon without going through `plan` / `fetchEnv`.
+ * Those fire concurrent Management API reads, which Claimable does not complete.
+ */
+const resolveClaimablePolicyEnv = async (
+	ctx: DevEnvContext,
+	config: Config,
+): Promise<ResolvedNeonEnvVars> => {
+	const declared = declaredNeonServices(config);
+	const unsupported = declared.filter(isClaimableUnsupportedService);
+	if (unsupported.length > 0) {
+		throw new DevEnvMismatchError(
+			`Your neon.ts declares ${unsupported.join(", ")}, which cannot be used ` +
+				"on an unclaimed Claimable Neon project. Remove those services from neon.ts.",
+		);
+	}
+	const { projectId, branchId } = ctx;
+	if (!projectId || !branchId) {
+		throw new MissingBranchContextError(
+			"Found a neon.ts but could not resolve the project/branch. " +
+				`Run \`${getCliName()} link\` and \`${getCliName()} checkout <branch>\`, or pass ` +
+				"--project-id / --branch.",
+		);
+	}
+	const api = apiFor(ctx);
+	const missing: NeonService[] = [];
+	if (declared.includes("auth")) {
+		const auth = await api.getNeonAuth(projectId, branchId);
+		if (auth === null) missing.push("auth");
+	}
+	if (declared.includes("data-api")) {
+		const dataApiEnabled = await readDataApiEnabled(
+			api,
+			projectId,
+			branchId,
+		);
+		if (dataApiEnabled === false) missing.push("data-api");
+	}
+	if (missing.length > 0) {
+		throwPolicyMissingOnBranch(missing.join(", "), branchId);
+	}
+	return await resolveClaimableServicesSequentially(
+		ctx,
+		["postgres", ...declared],
+		[],
+	);
+};
+
+const resolveClaimableNeonEnvVars = async (
+	ctx: DevEnvContext,
+): Promise<ResolvedNeonEnvVars> => {
+	if (ctx.services !== undefined || ctx.envKeys !== undefined) {
+		const dropped = dropClaimableUnsupported(
+			ctx.services ?? [],
+			ctx.envKeys ?? [],
+		);
+		warnClaimableSkipped(dropped.skipped);
+		if (dropped.services.length === 0 && dropped.envKeys.length === 0) {
+			return {
+				vars: {},
+				credential: emptyClaimableCredential(),
+				...(dropped.skipped.length > 0
+					? { skipped: dropped.skipped }
+					: {}),
+			};
+		}
+		const resolved = await resolveClaimableServicesSequentially(
+			ctx,
+			dropped.services,
+			dropped.envKeys,
+		);
+		const skipped = [...(resolved.skipped ?? []), ...dropped.skipped];
+		return {
+			...resolved,
+			...(skipped.length > 0 ? { skipped } : {}),
+		};
+	}
+	const config = await loadNeonConfig(ctx);
+	if (config) {
+		return await resolveClaimablePolicyEnv(ctx, config);
+	}
+	return await resolveClaimableLiveEnv(ctx);
+};
+
 /**
  * Resolve the branch's Neon env vars (pooled / direct `DATABASE_URL`, plus Auth /
  * Data API when enabled) into a `{ KEY: value }` map. Shared by `neon dev` (which
@@ -141,12 +368,20 @@ export type ResolvedNeonEnvVars = ReusedBranchEnv & {
  *      `pullConfig` cannot read it back.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
  *
+ * {@link DevEnvContext.claimable} keeps the same precedence. Credentials are not
+ * minted. A neon.ts that names AI Gateway, Functions, or Object Storage fails
+ * instead of pulling a subset. The live and policy reads run one service at a
+ * time because Claimable Neon does not complete concurrent Management API reads.
+ *
  * Unlike {@link resolveDevEnv}, this never swallows errors — callers decide how to
  * handle them.
  */
 export const resolveNeonEnvVars = async (
 	ctx: DevEnvContext,
 ): Promise<ResolvedNeonEnvVars> => {
+	if (ctx.claimable) {
+		return await resolveClaimableNeonEnvVars(ctx);
+	}
 	if (ctx.services !== undefined || ctx.envKeys !== undefined) {
 		return await resolveSelectedServices(
 			ctx,
@@ -210,16 +445,17 @@ const withAiGateway = (config: Config): Config => ({
  *
  * So the gateway is only added once its credential endpoint has been shown to answer, by
  * reading the branch's credentials first. A project that does not have them says so on a
- * read, before anything is minted — which is the whole question, since the gateway's env is a
- * credential and nothing else.
+ * read, before anything is revealed or minted — which is the whole question, since the
+ * gateway's env is a credential and nothing else.
  *
  * Deciding this **before** resolving, rather than by catching and retrying, is what keeps it
  * honest. A retry re-runs every call the first attempt made, so it would blame the gateway for
- * a one-off failure in shared work, and — worse — a first attempt that minted a credential and
- * then failed would be papered over by a second that succeeds without one, swallowing the
- * error and stranding a secret nobody holds. Once the read succeeds, a later failure is a real
- * failure and propagates: the same thing already happens on a branch with object storage,
- * whose credential is minted whether or not the gateway is involved.
+ * a one-off failure in shared work, and — worse — a first attempt that revealed or minted a
+ * credential and then failed would be papered over by a second that succeeds without one,
+ * swallowing the error and stranding a secret nobody holds. Once the read succeeds, a later
+ * failure is a real failure and propagates: the same thing already happens on a branch with
+ * object storage, whose credential is revealed (or minted as a fallback) whether or not the
+ * gateway is involved.
  */
 const resolveWithImpliedGateway = async (
 	config: Config,
@@ -622,12 +858,9 @@ const assertPolicyMatchesBranch = async (
 	const missing = result.applied.filter(isMissingResource);
 	if (missing.length === 0) return;
 
-	const names = missing.map((change) => change.identifier).join(", ");
-	throw new DevEnvMismatchError(
-		`Your neon.ts declares ${names} for branch ${ctx.branchId}, but the branch ` +
-			"does not have it yet, so the matching env vars cannot be injected. " +
-			`Provision it first with \`${getCliName()} deploy\` (or \`${getCliName()} config apply\`), ` +
-			`then re-run \`${getCliName()} dev\`.`,
+	throwPolicyMissingOnBranch(
+		missing.map((change) => change.identifier).join(", "),
+		ctx.branchId as string,
 	);
 };
 
@@ -715,6 +948,7 @@ const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
 		const { config } = await loadConfigFromFile({
 			cwd: ctx.cwd,
+			...(ctx.config ? { path: ctx.config } : {}),
 			...(ctx.omitUnsetFunctionEnv
 				? { unsetFunctionEnv: "omit" as const }
 				: {}),

@@ -4,6 +4,7 @@ import type { AgentType } from "../mcp/agents.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { AUTH_CHILD, type InitRun } from "./child.js";
+import { initStepLabel } from "./chrome.js";
 import { detectAgent } from "./detect_host.js";
 import {
 	assertNamedAgentTooling,
@@ -40,6 +41,7 @@ export type AgentToolingOptions = AgentDetectors & {
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 	agentSetup?: InitAgentSetup;
 	command?: "init" | "bootstrap";
+	narrate?: "command" | "human";
 };
 
 const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
@@ -52,10 +54,18 @@ export const runInitSteps = async (
 		run: InitRun;
 		forward: ChildForward;
 		authEnv?: NodeJS.ProcessEnv;
+		narrate?: "command" | "human";
 	},
 ): Promise<void> => {
 	for (const step of steps) {
-		log.info("Running `%s %s`", getCliName(), step.join(" "));
+		const label =
+			options.narrate === "human" ? initStepLabel(step) : undefined;
+		if (label !== undefined) {
+			log.info(label);
+		} else {
+			log.info("Running `%s %s`", getCliName(), step.join(" "));
+		}
+		log.debug("Running `%s %s`", getCliName(), step.join(" "));
 		const argv = childArgv(step, options.forward);
 		const command = step[0];
 		const ok = await options.run(
