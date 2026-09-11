@@ -1577,7 +1577,6 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 	503: "Service Unavailable",
 };
 
-/** AWS regions where Neon features are currently available in beta. */
 const PLATFORM_BETA_REGIONS =
 	"AWS US East (Ohio) (`aws-us-east-2`) and AWS Europe (Frankfurt) (`aws-eu-central-1`)";
 
@@ -1608,13 +1607,10 @@ function isRegionUnavailableNeonMessage(
 
 /**
  * Per-status guidance for a platform feature that came back "unavailable". These features
- * are currently in beta and rolling out region by region — today only in
- * {@link PLATFORM_BETA_REGIONS} — so we tailor the next step instead of emitting one
- * catch-all:
+ * roll out region by region, so we tailor the next step instead of emitting one catch-all:
  *
  * - 404 / 501, or an API message that names region/project unavailability — the route
- *   isn't deployed for this project's region: create a project in `aws-us-east-2` or
- *   `aws-eu-central-1`.
+ *   isn't deployed for this project's region.
  * - 503 without a region-unavailable body — the route exists but is refusing right now;
  *   Neon may be having a transient incident. Retry; if it persists check neonstatus.com.
  * - anything else — point at the beta region requirement.
