@@ -19,7 +19,7 @@ export type TriggerInvocation = ScheduleTriggerInvocation;
 
 export type ParseTriggerInvocationInput = {
 	headers: HeadersInit;
-	data: unknown;
+	body: unknown;
 };
 
 export type ParseTriggerInvocationResult =
@@ -70,7 +70,7 @@ function parseScheduleInvocation(
 
 function parseFromHeadersAndData(
 	headers: HeadersInit,
-	data: unknown,
+	body: unknown,
 ): ParseTriggerInvocationResult {
 	const headerId = new Headers(headers)
 		.get(TRIGGER_INVOCATION_ID_HEADER)
@@ -79,7 +79,7 @@ function parseFromHeadersAndData(
 		return { ok: false, error: "missing_header" };
 	}
 
-	const invocation = parseScheduleInvocation(data);
+	const invocation = parseScheduleInvocation(body);
 	if (!invocation) {
 		return { ok: false, error: "invalid_body" };
 	}
@@ -98,14 +98,14 @@ async function parseFromRequest(
 		return { ok: false, error: "missing_header" };
 	}
 
-	let data: unknown;
+	let body: unknown;
 	try {
 		// Clone so the caller can still request.json() after this returns.
-		data = await request.clone().json();
+		body = await request.clone().json();
 	} catch {
 		return { ok: false, error: "invalid_body" };
 	}
-	return parseFromHeadersAndData(request.headers, data);
+	return parseFromHeadersAndData(request.headers, body);
 }
 
 export function parseTriggerInvocation(
@@ -120,5 +120,5 @@ export function parseTriggerInvocation(
 	if (isRequest(input)) {
 		return parseFromRequest(input);
 	}
-	return parseFromHeadersAndData(input.headers, input.data);
+	return parseFromHeadersAndData(input.headers, input.body);
 }

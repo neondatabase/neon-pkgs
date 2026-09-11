@@ -49,11 +49,11 @@ function scheduleRequest(init?: {
 	});
 }
 
-describe("parseTriggerInvocation({ headers, data })", () => {
+describe("parseTriggerInvocation({ headers, body })", () => {
 	it("accepts a schedule delivery whose header matches invocation_id", () => {
 		const result = parseTriggerInvocation({
 			headers: scheduleHeaders(invocationId),
-			data: scheduleBody,
+			body: scheduleBody,
 		});
 
 		expect(result).toEqual({
@@ -65,7 +65,7 @@ describe("parseTriggerInvocation({ headers, data })", () => {
 	it("trims the header before comparing", () => {
 		const result = parseTriggerInvocation({
 			headers: scheduleHeaders(` ${invocationId} `),
-			data: scheduleBody,
+			body: scheduleBody,
 		});
 
 		expect(result.ok).toBe(true);
@@ -75,13 +75,13 @@ describe("parseTriggerInvocation({ headers, data })", () => {
 		expect(
 			parseTriggerInvocation({
 				headers: scheduleHeaders(),
-				data: scheduleBody,
+				body: scheduleBody,
 			}),
 		).toEqual({ ok: false, error: "missing_header" });
 		expect(
 			parseTriggerInvocation({
 				headers: scheduleHeaders("  "),
-				data: scheduleBody,
+				body: scheduleBody,
 			}),
 		).toEqual({ ok: false, error: "missing_header" });
 	});
@@ -90,7 +90,7 @@ describe("parseTriggerInvocation({ headers, data })", () => {
 		expect(
 			parseTriggerInvocation({
 				headers: scheduleHeaders("other-id"),
-				data: scheduleBody,
+				body: scheduleBody,
 			}),
 		).toEqual({ ok: false, error: "invocation_id_mismatch" });
 	});
@@ -99,19 +99,19 @@ describe("parseTriggerInvocation({ headers, data })", () => {
 		expect(
 			parseTriggerInvocation({
 				headers: scheduleHeaders(invocationId),
-				data: null,
+				body: null,
 			}),
 		).toEqual({ ok: false, error: "invalid_body" });
 		expect(
 			parseTriggerInvocation({
 				headers: scheduleHeaders(invocationId),
-				data: { ...scheduleBody, version: 2 },
+				body: { ...scheduleBody, version: 2 },
 			}),
 		).toEqual({ ok: false, error: "invalid_body" });
 		expect(
 			parseTriggerInvocation({
 				headers: scheduleHeaders(invocationId),
-				data: {
+				body: {
 					...scheduleBody,
 					trigger: {
 						...scheduleBody.trigger,

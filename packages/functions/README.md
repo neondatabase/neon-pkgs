@@ -331,10 +331,9 @@ This does not close the pool. Isolate teardown tears the connections down with t
 
 ## Function Trigger deliveries
 
-A [Function Trigger](https://neon.com/docs/cli/triggers) POSTs JSON to your function. The
-Functions proxy drops client-supplied `x-neon-*` headers, so
-`x-neon-trigger-invocation-id` only arrives on a real delivery. The header value must
-match `invocation_id` in the body.
+A [Function Trigger](https://neon.com/docs/cli/triggers) POSTs JSON to your function.
+`parseTriggerInvocation` checks `x-neon-trigger-invocation-id` against
+`invocation_id` in that JSON.
 
 ```ts
 import { parseTriggerInvocation } from "@neon/functions/triggers";
@@ -352,26 +351,36 @@ export default {
 };
 ```
 
-`parseTriggerInvocation(request)` clones the Request before reading JSON, so
-`request.json()` still works afterwards.
+`parseTriggerInvocation(request)` checks the header first, then clones the Request
+and reads JSON from the clone, so `request.json()` still works afterwards.
 
-If you already have the JSON body, pass headers and data instead:
+If you already have the JSON:
 
 ```ts
+const body = await request.json();
 const parsed = parseTriggerInvocation({
 	headers: request.headers,
-	data,
+	body,
 });
 ```
 
-`parseTriggerInvocation` returns `{ ok: true, invocation }` or `{ ok: false, error }`.
-`error` is `missing_header`, `invalid_body`, or `invocation_id_mismatch`. Unknown
-`trigger.type` values fail as `invalid_body` until this package adds them.
+On success, `parsed.invocation` is camelCase: `invocationId`, `trigger.id`,
+`trigger.name`, `trigger.type` (`"schedule"`), `data.scheduledAt`.
+
+On failure, `parsed.error` is `missing_header`, `invalid_body`, or
+`invocation_id_mismatch`. Invalid JSON on the Request path is `invalid_body`.
+Unknown `trigger.type` values fail as `invalid_body` until this package adds them.
 
 ### `parseTrigger` (Hono)
 
-On a Hono route, `parseTrigger(c)` reads the header and JSON body, throws
-`HTTPException` (401 / 400) on failure, and returns the invocation.
+`parseTrigger(c)` runs the Request overload on `c.req.raw` and throws
+`HTTPException`. `c.req.json()` still works afterwards.
+
+| Failure | Status | Message |
+| --- | --- | --- |
+| missing header | 401 | `Missing x-neon-trigger-invocation-id header` |
+| header ≠ `invocation_id` | 401 | `Invocation id mismatch` |
+| invalid JSON or payload | 400 | `Invalid trigger payload` |
 
 ```ts
 import { Hono } from "hono";
