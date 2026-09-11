@@ -4,6 +4,7 @@ import type {
 	CreateBucketInput,
 	CreateCredentialInput,
 	CreateProjectInput,
+	CreateTriggerInput,
 	DataApiSettings,
 	DeployFunctionInput,
 	EnableDataApiInput,
@@ -14,6 +15,7 @@ import type {
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
+	NeonCredentialReveal,
 	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
@@ -22,7 +24,9 @@ import type {
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonTriggerSnapshot,
 	UpdateBranchInput,
+	UpdateTriggerInput,
 } from "@neon/config/v1";
 
 /**
@@ -68,6 +72,7 @@ export class FakeNeonApi implements NeonApi {
 	private readonly storageDisabled = new Set<string>();
 	/** Preview functions, keyed by `${projectId}:${branchId}`. */
 	private readonly functions = new Map<string, NeonFunctionSnapshot[]>();
+	private readonly triggers = new Map<string, NeonTriggerSnapshot[]>();
 	/** Monotonic per-function deployment counter, keyed by `${projectId}:${branchId}:${slug}`. */
 	private readonly functionDeployments = new Map<string, number>();
 	/** Issued credentials (incl. secrets), keyed by `${projectId}:${branchId}`. */
@@ -127,6 +132,9 @@ export class FakeNeonApi implements NeonApi {
 
 		this.branches.set(project.id, branches);
 		this.endpoints.set(project.id, endpoints);
+		for (const branch of branches) {
+			this.seedDefaultBranchCredentials(project.id, branch.id);
+		}
 	}
 
 	private seedBranchAuth(
@@ -151,6 +159,71 @@ export class FakeNeonApi implements NeonApi {
 			ownerName: d.ownerName ?? resolvedRoles[0]?.name ?? "neondb_owner",
 		}));
 		this.databases.set(branchId, resolvedDatabases);
+	}
+
+	private seedDefaultBranchCredentials(
+		projectId: string,
+		branchId: string,
+	): void {
+		const key = `${projectId}:${branchId}`;
+		if ((this.credentials.get(key) ?? []).length > 0) return;
+		this.issueCredential(projectId, branchId, {
+			name: "Default object storage credential",
+			scopes: ["storage:read", "storage:write"],
+			principalType: "user",
+		});
+		this.issueCredential(projectId, branchId, {
+			name: "Default AI gateway credential",
+			scopes: ["ai_gateway:invoke"],
+			principalType: "user",
+		});
+	}
+
+	/** Test helper: drop every credential on a branch, including platform defaults. */
+	clearBranchCredentials(projectId: string, branchId: string): void {
+		this.credentials.set(`${projectId}:${branchId}`, []);
+	}
+
+	private issueCredential(
+		projectId: string,
+		branchId: string,
+		input: CreateCredentialInput,
+	): NeonCredentialSecret {
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const seq = this.nextId.toString(16).padStart(12, "0");
+		this.nextId += 1;
+		const tokenIdShort = `c${seq.slice(-11)}`;
+		const tokenId = `${tokenIdShort}-fake-fake-fake-${seq}`;
+		const apiToken = `nt_live_${tokenIdShort}_${seq}secret`;
+		const s3SecretAccessKey = `s3secret${seq}`.padEnd(64, "0");
+		const key = `${projectId}:${branchId}`;
+		const list = this.credentials.get(key) ?? [];
+		list.push({
+			tokenId,
+			tokenIdShort,
+			...(input.name !== undefined ? { name: input.name } : {}),
+			scopes: [...input.scopes],
+			principalType: input.principalType,
+			...(input.functionId !== undefined
+				? { functionId: input.functionId }
+				: {}),
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+			apiToken,
+			s3SecretAccessKey,
+		});
+		this.credentials.set(key, list);
+		return {
+			tokenId,
+			tokenIdShort,
+			...(input.name !== undefined ? { name: input.name } : {}),
+			apiToken,
+			s3SecretAccessKey,
+			scopes: [...input.scopes],
+			branchId,
+			createdAt: "2026-01-01T00:00:00Z",
+		};
 	}
 
 	async listProjects(filter: {
@@ -204,6 +277,7 @@ export class FakeNeonApi implements NeonApi {
 		this.branches.set(id, [defaultBranch]);
 		this.endpoints.set(id, [defaultEndpoint]);
 		this.seedBranchAuth(defaultBranch.id);
+		this.seedDefaultBranchCredentials(id, defaultBranch.id);
 
 		return clone(project);
 	}
@@ -293,6 +367,7 @@ export class FakeNeonApi implements NeonApi {
 			parentRoles.length > 0 ? parentRoles : undefined,
 			parentDatabases.length > 0 ? parentDatabases : undefined,
 		);
+		this.seedDefaultBranchCredentials(projectId, branch.id);
 
 		return { branch: clone(branch), endpoints: [clone(endpoint)] };
 	}
@@ -718,6 +793,111 @@ export class FakeNeonApi implements NeonApi {
 		return { id, status: "completed" };
 	}
 
+	async listBranchTriggers(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonTriggerSnapshot[]> {
+		this.history.push({
+			method: "listBranchTriggers",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return (this.triggers.get(`${projectId}:${branchId}`) ?? []).map(clone);
+	}
+
+	async createBranchTrigger(
+		projectId: string,
+		branchId: string,
+		input: CreateTriggerInput,
+	): Promise<NeonTriggerSnapshot> {
+		this.history.push({
+			method: "createBranchTrigger",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const snapshot: NeonTriggerSnapshot = {
+			triggerId: this.allocateId("trg"),
+			name: input.name,
+			functionSlug: input.functionSlug,
+			functionPath: input.functionPath ?? "/",
+			cron: input.cron,
+			enabled: input.enabled ?? true,
+			inherited: false,
+			nextRunAt: input.enabled === false ? null : "2026-01-02T00:00:00Z",
+		};
+		const key = `${projectId}:${branchId}`;
+		const list = this.triggers.get(key) ?? [];
+		list.push(snapshot);
+		this.triggers.set(key, list);
+		return clone(snapshot);
+	}
+
+	async updateBranchTrigger(
+		projectId: string,
+		branchId: string,
+		triggerId: string,
+		input: UpdateTriggerInput,
+	): Promise<NeonTriggerSnapshot> {
+		this.history.push({
+			method: "updateBranchTrigger",
+			args: [projectId, branchId, triggerId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const list = this.triggers.get(`${projectId}:${branchId}`) ?? [];
+		const found = list.find((t) => t.triggerId === triggerId);
+		if (!found) {
+			throw new Error(
+				`Fake Neon: trigger ${triggerId} not found on branch ${branchId}`,
+			);
+		}
+		if (input.name !== undefined) found.name = input.name;
+		if (input.functionSlug !== undefined)
+			found.functionSlug = input.functionSlug;
+		if (input.cron !== undefined) found.cron = input.cron;
+		if (input.functionPath !== undefined)
+			found.functionPath = input.functionPath;
+		if (input.enabled !== undefined) {
+			found.enabled = input.enabled;
+			found.nextRunAt = input.enabled ? "2026-01-02T00:00:00Z" : null;
+		}
+		found.inherited = false;
+		return clone(found);
+	}
+
+	async deleteBranchTrigger(
+		projectId: string,
+		branchId: string,
+		triggerId: string,
+	): Promise<void> {
+		this.history.push({
+			method: "deleteBranchTrigger",
+			args: [projectId, branchId, triggerId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		this.triggers.set(
+			key,
+			(this.triggers.get(key) ?? []).filter(
+				(t) => t.triggerId !== triggerId,
+			),
+		);
+	}
+
+	seedTrigger(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonTriggerSnapshot,
+	): void {
+		const key = `${projectId}:${branchId}`;
+		const list = this.triggers.get(key) ?? [];
+		list.push({ ...snapshot });
+		this.triggers.set(key, list);
+	}
+
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
 	//
 	// No methods: the AI Gateway is always available on a branch (credential-gated, not
@@ -736,46 +916,7 @@ export class FakeNeonApi implements NeonApi {
 			method: "createCredential",
 			args: [projectId, branchId, input],
 		});
-		this.requireProject(projectId);
-		this.requireBranch(projectId, branchId);
-		const seq = this.nextId.toString(16).padStart(12, "0");
-		this.nextId += 1;
-		// Keep the id 12 characters like the real one, but take the tail of the sequence rather
-		// than the head: `c${seq}`.slice(0, 12) truncated the digit that actually varies, so
-		// every credential the fake minted shared one `tokenIdShort`. Real short ids are
-		// unique, and anything that looks a credential up by id needs the fake's to be too.
-		const tokenIdShort = `c${seq.slice(-11)}`;
-		const tokenId = `${tokenIdShort}-fake-fake-fake-${seq}`;
-		const apiToken = `nt_live_${tokenIdShort}_${seq}secret`;
-		const s3SecretAccessKey = `s3secret${seq}`.padEnd(64, "0");
-		const key = `${projectId}:${branchId}`;
-		const list = this.credentials.get(key) ?? [];
-		list.push({
-			tokenId,
-			tokenIdShort,
-			...(input.name !== undefined ? { name: input.name } : {}),
-			scopes: [...input.scopes],
-			principalType: input.principalType,
-			...(input.functionId !== undefined
-				? { functionId: input.functionId }
-				: {}),
-			branchId,
-			createdAt: "2026-01-01T00:00:00Z",
-			apiToken,
-			s3SecretAccessKey,
-		});
-		this.credentials.set(key, list);
-		const secret: NeonCredentialSecret = {
-			tokenId,
-			tokenIdShort,
-			...(input.name !== undefined ? { name: input.name } : {}),
-			apiToken,
-			s3SecretAccessKey,
-			scopes: [...input.scopes],
-			branchId,
-			createdAt: "2026-01-01T00:00:00Z",
-		};
-		return clone(secret);
+		return clone(this.issueCredential(projectId, branchId, input));
 	}
 
 	async listCredentials(
@@ -794,6 +935,32 @@ export class FakeNeonApi implements NeonApi {
 			.map(({ apiToken: _a, s3SecretAccessKey: _s, ...meta }) =>
 				clone(meta),
 			);
+	}
+
+	async revealCredential(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+	): Promise<NeonCredentialReveal> {
+		this.history.push({
+			method: "revealCredential",
+			args: [projectId, branchId, tokenId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const found = (
+			this.credentials.get(`${projectId}:${branchId}`) ?? []
+		).find((c) => c.tokenId === tokenId && c.revokedAt === undefined);
+		if (!found) {
+			throw new Error(
+				`Fake Neon: credential ${tokenId} not found on branch ${branchId}`,
+			);
+		}
+		return {
+			tokenId: found.tokenId,
+			apiToken: found.apiToken,
+			s3SecretAccessKey: found.s3SecretAccessKey,
+		};
 	}
 
 	async revokeCredential(

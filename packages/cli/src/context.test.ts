@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
 	applyContext,
 	currentContextFile,
+	enrichFromContext,
 	ensureGitignored,
 	isAskCommand,
 	isCurrentBranchProbe,
@@ -75,6 +76,53 @@ describe("isCurrentBranchProbe", () => {
 		expect(
 			isCurrentBranchProbe({ _: ["config"], currentBranch: true }),
 		).toBe(false);
+	});
+});
+
+describe("enrichFromContext", () => {
+	test("init does not inherit project, org, or branch from .neon", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-init-enrich-"));
+		const contextFile = join(dir, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({
+				orgId: "org-file",
+				projectId: "proj-file",
+				branch: "main",
+				branchId: "br-legacy",
+			})}\n`,
+		);
+		const args = {
+			_: ["init"],
+			contextFile,
+		} as Parameters<typeof enrichFromContext>[0];
+		enrichFromContext(args);
+		expect(args).not.toHaveProperty("orgId");
+		expect(args).not.toHaveProperty("projectId");
+		expect(args).not.toHaveProperty("branch");
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("other commands still inherit identifiers, including legacy branchId", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-proj-enrich-"));
+		const contextFile = join(dir, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({
+				orgId: "org-file",
+				projectId: "proj-file",
+				branchId: "br-legacy",
+			})}\n`,
+		);
+		const args = {
+			_: ["projects"],
+			contextFile,
+		} as Parameters<typeof enrichFromContext>[0];
+		enrichFromContext(args);
+		expect(args.orgId).toBe("org-file");
+		expect(args.projectId).toBe("proj-file");
+		expect(args.branch).toBe("br-legacy");
+		rmSync(dir, { recursive: true, force: true });
 	});
 });
 

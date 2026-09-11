@@ -1,5 +1,6 @@
+import { isNeonError, NeonAuthError, NeonError } from "@neon/sdk";
 import { describe, expect, test } from "vitest";
-import { createNeonTools, NeonError } from "./index.js";
+import { createNeonTools } from "./index.js";
 
 const requestFrom = (input: RequestInfo | URL, init?: RequestInit) =>
 	new Request(input, init);
@@ -66,8 +67,18 @@ describe("JSON-safe transport", () => {
 				),
 		});
 
-		await expect(tools["projects.list"].execute({})).rejects.toBeInstanceOf(
-			NeonError,
-		);
+		let thrown: unknown;
+		try {
+			await tools["projects.list"].execute({});
+		} catch (error) {
+			thrown = error;
+		}
+		expect(thrown).toBeInstanceOf(NeonAuthError);
+		expect(thrown).toBeInstanceOf(NeonError);
+		expect(isNeonError(thrown)).toBe(true);
+		if (thrown instanceof NeonAuthError) {
+			expect(thrown.kind).toBe("auth");
+			expect(thrown.status).toBe(401);
+		}
 	});
 });

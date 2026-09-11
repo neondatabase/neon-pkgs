@@ -45,6 +45,7 @@ type LinkProps = CommonProps & {
 	clear: boolean;
 	checks: boolean;
 	envPull: boolean;
+	config?: boolean;
 };
 
 type Inputs = {
@@ -139,6 +140,12 @@ export const builder = (argv: yargs.Argv) =>
 					"Pull the linked branch's Neon env vars (DATABASE_URL, …) into a local .env after " +
 					"linking. On by default; use --no-env-pull to skip (e.g. when injecting env at " +
 					"runtime with `neon-env run` / `neon dev`). Only runs when a branch is pinned.",
+				type: "boolean",
+				default: true,
+			},
+			config: {
+				describe:
+					"Offer to create neon.ts after interactive linking. Use --no-config to skip the offer",
 				type: "boolean",
 				default: true,
 			},
@@ -1132,8 +1139,9 @@ const finalizeLink = async (
 	if (!summary.branch || !summary.projectId) {
 		return;
 	}
+	const { config: _offerConfig, ...rest } = props;
 	await autoPullEnvAfterPin({
-		...props,
+		...rest,
 		projectId: summary.projectId,
 		branch: summary.branch,
 		envPull: props.envPull,
@@ -1155,19 +1163,26 @@ const finalizeInteractiveLink = async (
 };
 
 /**
- * Offer to set up infrastructure-as-code at the end of an interactive `link` —
- * the natural moment, since the project is now linked. Skipped when the project
- * already has a `neon.ts` (nothing to scaffold). On yes, `config init` writes the
- * starter `neon.ts` and installs the config packages, then env is pulled again so
- * the local `.env` reflects the policy — the same pull `link` runs when a project
- * already ships a `neon.ts`.
+ * Interactive `link` offers neon.ts only when the directory has none and the
+ * caller did not pass --no-config. Init always passes --no-config so it can ask
+ * once after linking.
  */
+export const shouldOfferConfigInit = (input: {
+	hasConfig: boolean;
+	offer: boolean;
+}): boolean => !input.hasConfig && input.offer;
+
 const maybeOfferConfigInit = async (
 	props: LinkProps,
 	summary: HumanSummary,
 ): Promise<void> => {
 	const cwd = process.cwd();
-	if (hasNeonConfigFile(cwd)) {
+	if (
+		!shouldOfferConfigInit({
+			hasConfig: hasNeonConfigFile(cwd),
+			offer: props.config !== false,
+		})
+	) {
 		return;
 	}
 
@@ -1189,8 +1204,9 @@ const maybeOfferConfigInit = async (
 	// reflects the policy, matching how `link` pulls when a project already ships
 	// a neon.ts. Only meaningful when a branch was pinned (same guard as finalize).
 	if (summary.branch && summary.projectId) {
+		const { config: _offerConfig, ...rest } = props;
 		await autoPullEnvAfterPin({
-			...props,
+			...rest,
 			projectId: summary.projectId,
 			branch: summary.branch,
 			envPull: props.envPull,

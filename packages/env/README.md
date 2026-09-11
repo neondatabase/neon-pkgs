@@ -153,13 +153,15 @@ functions.hello.baseUrl; // string
 
 ### The branch credential
 
-Object storage and the AI Gateway are backed by one branch credential, and the Neon API returns its secrets (`s3_secret_access_key`, `api_token`) **once**, at mint time — they aren't stored server-side, and the list endpoint returns metadata only. So there is nothing to *fetch*: `fetchEnv` mints. Call it on every `neon dev` start and you leave a live credential behind each time.
+Object storage and the AI Gateway are backed by platform default credentials on every branch in a region that has those products (`Default object storage credential`, `Default AI gateway credential`). `fetchEnv` reveals those by exact name. It mints a combined `neon-env ${branch}` credential only when a needed default is missing.
 
-Handling that is the caller's problem, and it is not just "cache the secret": a persisted secret is only reusable if it still names a live credential on that branch — unrevoked, unexpired, and carrying every scope the policy needs. A presence check cannot tell a real secret from a `.env.example` placeholder.
+Secrets (`s3_secret_access_key`, `api_token`) are returned from reveal as well as at mint time. Call `fetchEnv` on every `neon dev` start without reusing what you already hold and you re-reveal the same defaults — or, in a region with no defaults, you leave a live minted credential behind each time.
+
+A persisted secret is only reusable if it still names the platform default (when one exists), or a still-live minted credential (when none does). A presence check cannot tell a real secret from a `.env.example` placeholder.
 
 No local bookkeeping is needed to do it, because the secrets carry their own credential id: `AWS_ACCESS_KEY_ID` **is** the credential's token id, and the AI Gateway token is minted as `nt_live_<tokenIdShort>_<secret>`. So the `.env` you are about to rewrite already records which credential issued it.
 
-The [`neon` CLI](../cli) does all of this — `neon env pull` and `neon dev` reuse a branch credential rather than issuing one per run. If you are calling `fetchEnv` on a loop yourself, `credentialScopesSatisfied` and `deriveCredentialScopes` from `@neon/config/v1`, plus `listCredentials` / `createCredential` / `revokeCredential` on a `NeonApi`, are the pieces you need.
+The [`neon` CLI](../cli) additionally reuses persisted secrets (`neon env pull`, `neon dev`) so a loop does not re-reveal every start. `fetchEnv` itself reveals or mints on every call.
 
 ### Fetching a subset
 
@@ -187,7 +189,7 @@ selected.branch?.name; // string | undefined
 
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are one credential and must be selected together. Literal lists that contain only one half are a type error; a runtime-built list that resolves to one half throws before any API request or credential issuance.
 
-Work is skipped, not just the result narrowed. Leave out `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and **no credential is minted at all** — which is exactly how `fetchEnvReusingSecrets` refreshes everything else while keeping secrets you already have. The non-secret vars of those features (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are branch metadata and stay available on their own.
+Work is skipped, not just the result narrowed. Leave out `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `NEON_AI_GATEWAY_TOKEN` and **no credential is revealed or minted at all** — which is exactly how `fetchEnvReusingSecrets` refreshes everything else while keeping secrets you already have. The non-secret vars of those features (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AI_GATEWAY_BASE_URL`) are branch metadata and stay available on their own.
 
 ## Connection role & database selection
 

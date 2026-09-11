@@ -1,5 +1,41 @@
 # neon
 
+## 4.17.0
+
+### Minor Changes
+
+- e1e834a: `env pull` / `fetchEnv` reveal the platform default AI Gateway and object-storage credentials instead of minting a combined branch credential. `neon.ts` functions can declare schedule triggers that apply after deploy.
+
+### Patch Changes
+
+- Updated dependencies [e1e834a]
+  - @neon/config@1.4.0
+  - @neon/config-runtime@1.3.0
+
+## 4.16.0
+
+### Minor Changes
+
+- 3d6be94: Add `neon triggers` and `neon credentials` commands for scheduled function triggers and branch-scoped credentials.
+
+### Patch Changes
+
+- e069f88: Let `neon init` set up an empty directory without a template, and honor the choice to skip neon.ts.
+
+## 4.15.0
+
+### Minor Changes
+
+- 475686f: `neon checkout <name> --create` creates a missing named branch, then pins it.
+
+### Patch Changes
+
+- 1712d73: Ignore `node_modules/` when the CLI installs the packages needed for a Neon config.
+- Updated dependencies [0d4dd06]
+  - @neon/sdk@4.1.0
+  - @neon/config@1.3.3
+  - @neon/config-runtime@1.2.4
+
 ## 4.14.6
 
 ### Patch Changes

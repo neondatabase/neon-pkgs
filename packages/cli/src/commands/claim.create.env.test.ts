@@ -22,6 +22,7 @@ import type {
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
+	NeonCredentialReveal,
 	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
@@ -30,6 +31,7 @@ import type {
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonTriggerSnapshot,
 } from "@neon/config";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readClaimableCredentials } from "../claimable/state.js";
@@ -163,6 +165,18 @@ class FakeNeonApi implements NeonApi {
 	async deployBranchFunction(): Promise<NeonFunctionDeploymentSnapshot> {
 		throw new Error("not implemented");
 	}
+	async listBranchTriggers(): Promise<NeonTriggerSnapshot[]> {
+		return [];
+	}
+	async createBranchTrigger(): Promise<NeonTriggerSnapshot> {
+		throw new Error("not implemented");
+	}
+	async updateBranchTrigger(): Promise<NeonTriggerSnapshot> {
+		throw new Error("not implemented");
+	}
+	async deleteBranchTrigger(): Promise<void> {
+		throw new Error("not implemented");
+	}
 	async getAiGatewayEnabled(): Promise<boolean> {
 		return false;
 	}
@@ -190,6 +204,9 @@ class FakeNeonApi implements NeonApi {
 	}
 	async listCredentials(): Promise<NeonCredentialMeta[]> {
 		return [];
+	}
+	async revealCredential(): Promise<NeonCredentialReveal> {
+		throw new Error("not implemented");
 	}
 	async revokeCredential(): Promise<void> {}
 	async getProjectBranchStorage(): Promise<NeonBranchStorageSnapshot | null> {

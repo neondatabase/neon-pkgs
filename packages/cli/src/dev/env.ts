@@ -46,11 +46,11 @@ export type DevEnvContext = {
 	api?: NeonApi;
 	/**
 	 * Env source layered under `process.env` when resolving the branch env. Lets callers
-	 * supply already-persisted values (e.g. the existing `.env` for `env pull`) so one-time
-	 * secrets — Neon Auth keys and the unified branch credential's `api_token` /
-	 * `s3_secret_access_key` — are **reused** rather than re-minted on every run. See
-	 * {@link fetchEnvReusingSecrets}, which verifies them against the branch before keeping
-	 * them.
+	 * supply already-persisted values (e.g. the existing `.env` for `env pull`) so credential
+	 * secrets — Neon Auth keys and the platform default (or minted fallback) `api_token` /
+	 * `s3_secret_access_key` — are **reused** rather than re-revealed or re-minted on every
+	 * run. See {@link fetchEnvReusingSecrets}, which verifies them against the branch before
+	 * keeping them.
 	 */
 	env?: NodeJS.ProcessEnv;
 	/**
@@ -445,16 +445,17 @@ const withAiGateway = (config: Config): Config => ({
  *
  * So the gateway is only added once its credential endpoint has been shown to answer, by
  * reading the branch's credentials first. A project that does not have them says so on a
- * read, before anything is minted — which is the whole question, since the gateway's env is a
- * credential and nothing else.
+ * read, before anything is revealed or minted — which is the whole question, since the
+ * gateway's env is a credential and nothing else.
  *
  * Deciding this **before** resolving, rather than by catching and retrying, is what keeps it
  * honest. A retry re-runs every call the first attempt made, so it would blame the gateway for
- * a one-off failure in shared work, and — worse — a first attempt that minted a credential and
- * then failed would be papered over by a second that succeeds without one, swallowing the
- * error and stranding a secret nobody holds. Once the read succeeds, a later failure is a real
- * failure and propagates: the same thing already happens on a branch with object storage,
- * whose credential is minted whether or not the gateway is involved.
+ * a one-off failure in shared work, and — worse — a first attempt that revealed or minted a
+ * credential and then failed would be papered over by a second that succeeds without one,
+ * swallowing the error and stranding a secret nobody holds. Once the read succeeds, a later
+ * failure is a real failure and propagates: the same thing already happens on a branch with
+ * object storage, whose credential is revealed (or minted as a fallback) whether or not the
+ * gateway is involved.
  */
 const resolveWithImpliedGateway = async (
 	config: Config,

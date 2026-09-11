@@ -210,6 +210,33 @@ export interface NeonFunctionDeploymentSnapshot {
 	status: "pending" | "building" | "completed" | "failed";
 }
 
+export interface NeonTriggerSnapshot {
+	triggerId: string;
+	name: string;
+	functionSlug: string;
+	functionPath: string;
+	cron: string;
+	enabled: boolean;
+	inherited: boolean;
+	nextRunAt: string | null;
+}
+
+export interface CreateTriggerInput {
+	name: string;
+	functionSlug: string;
+	cron: string;
+	functionPath?: string;
+	enabled?: boolean;
+}
+
+export interface UpdateTriggerInput {
+	name?: string;
+	functionSlug?: string;
+	cron?: string;
+	functionPath?: string;
+	enabled?: boolean;
+}
+
 // ─── Preview: branch-scoped credentials ─────────────────────────────────────
 
 /**
@@ -231,11 +258,10 @@ export interface CreateCredentialInput {
 
 /**
  * The secret-bearing result of {@link NeonApi.createCredential} — the Neon API
- * `CreateCredentialResponse`. `apiToken` and `s3SecretAccessKey` are returned **exactly
- * once** (they are not stored server-side), so the caller must persist them immediately;
- * they can never be re-fetched (the list endpoint returns metadata only). `tokenIdShort`
- * is the public identifier embedded in `apiToken` (`nt_live_<tokenIdShort>_…`) and doubles
- * as the S3 access-key id.
+ * `CreateCredentialResponse`. `apiToken` and `s3SecretAccessKey` are returned at
+ * issuance and again from {@link NeonApi.revealCredential}. `tokenId` is the
+ * `AWS_ACCESS_KEY_ID`. `tokenIdShort` is the public identifier embedded in
+ * `apiToken` (`nt_live_<tokenIdShort>_…`).
  */
 export interface NeonCredentialSecret {
 	tokenId: string;
@@ -243,13 +269,23 @@ export interface NeonCredentialSecret {
 	name?: string;
 	/** Bearer token (`nt_live_…`); returned once. Used for AI Gateway / Functions invoke. */
 	apiToken: string;
-	/** 64-char hex S3 secret access key; returned once. Paired with `tokenIdShort` as the access-key id. */
+	/** `nsk_live_…` S3 secret access key. Paired with `tokenId` as `AWS_ACCESS_KEY_ID`. */
 	s3SecretAccessKey: string;
 	scopes: CredentialScope[];
 	branchId: string;
 	createdAt: string;
 	/** When the credential expires; absent means it never expires. */
 	expiresAt?: string;
+}
+
+/**
+ * Secrets recovered from {@link NeonApi.revealCredential}. Narrower than
+ * {@link NeonCredentialSecret}: metadata lives on the list endpoint.
+ */
+export interface NeonCredentialReveal {
+	tokenId: string;
+	apiToken: string;
+	s3SecretAccessKey: string;
 }
 
 /**
@@ -466,6 +502,30 @@ export interface NeonApi {
 		input: DeployFunctionInput,
 	): Promise<NeonFunctionDeploymentSnapshot>;
 
+	listBranchTriggers(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonTriggerSnapshot[]>;
+
+	createBranchTrigger(
+		projectId: string,
+		branchId: string,
+		input: CreateTriggerInput,
+	): Promise<NeonTriggerSnapshot>;
+
+	updateBranchTrigger(
+		projectId: string,
+		branchId: string,
+		triggerId: string,
+		input: UpdateTriggerInput,
+	): Promise<NeonTriggerSnapshot>;
+
+	deleteBranchTrigger(
+		projectId: string,
+		branchId: string,
+		triggerId: string,
+	): Promise<void>;
+
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
 	//
 	// The AI Gateway is always available on a branch (credential-gated, not per-branch
@@ -478,11 +538,9 @@ export interface NeonApi {
 	// ─── Preview: branch-scoped credentials ──────────────────────────────────
 
 	/**
-	 * Mint a new scoped service credential on a branch (`POST .../credentials`). The
-	 * returned {@link NeonCredentialSecret} carries `apiToken` + `s3SecretAccessKey`
-	 * **once** — persist them immediately. Used by `fetchEnv` / `env pull` to issue the
-	 * unified credential for the branch's enabled Preview features (object storage, AI
-	 * Gateway, Functions).
+	 * Mint a new scoped service credential on a branch (`POST .../credentials`).
+	 * Prefer {@link NeonApi.revealCredential} on the platform defaults when they
+	 * already cover the needed scopes.
 	 */
 	createCredential(
 		projectId: string,
@@ -499,6 +557,16 @@ export interface NeonApi {
 		projectId: string,
 		branchId: string,
 	): Promise<NeonCredentialMeta[]>;
+
+	/**
+	 * Recover `apiToken` and `s3SecretAccessKey` for an existing credential
+	 * (`POST .../credentials/{tokenId}/reveal`).
+	 */
+	revealCredential(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+	): Promise<NeonCredentialReveal>;
 
 	/**
 	 * Revoke (soft-delete) a credential by its `tokenId` (`DELETE .../credentials/{id}`).

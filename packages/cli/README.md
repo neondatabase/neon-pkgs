@@ -767,27 +767,34 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 ## Set up a project (`init`)
 
-`neon init` sets up this directory for Neon.
+`neon init` sets up this directory for Neon as one flow: agents, a linked project, and optionally `neon.ts`.
 
-An empty directory (nothing except `.git`) runs `neon bootstrap .` and stops. With `-y` that is `neon bootstrap . --default`. Bootstrap handles scaffolding, agent tooling, and linking. Interactive bootstrap prints a NEON banner, asks every setup question, then runs the work — dependency install last, except when a `neon.ts` needs deps before `link`.
+An empty directory (nothing except `.git`) asks how to set up the directory. Pick a starter template, or skip scaffolding and only install agent tooling, link a project, and optionally write `neon.ts`. That skip is only on `init` — `neon bootstrap` always scaffolds.
 
-An existing app installs agent tooling, then `neon link` unless `.neon` already has a projectId, then `neon config init`. Interactive `config init` opens the services picker; `-y` uses `--services none` (starter policy).
+`-y` in an empty directory scaffolds the default template (`bootstrap --default`) and does not add a later `config init` step. `--skip-template` skips scaffolding even with `-y`. `--template <id>` scaffolds that template; combine it with `-y` to skip the remaining bootstrap pickers.
+
+An existing app (or skip-template) installs agent tooling, then `neon link --no-config` unless `.neon` already has a projectId, then asks whether to create `neon.ts`. Saying no skips the services picker and does not write the file. `--no-config` does the same without asking. `-y` writes `config init --services none` unless `--no-config`. `--services` implies creating `neon.ts`.
 
 In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. It never runs plugin and skills+MCP together.
 
 ```bash
 $ neon init
+$ neon init --skip-template
 $ neon init -y
 $ neon init --agent cursor --agent claude-code
 ```
 
 Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates.
 
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. Existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. `--skip-template` or an existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
 
 `--agent` / `-a` (repeatable) names coding agents and skips agent selection, interactive or with `-y`. Init forwards those names to `plugins`, or to `skills` and `mcp`, not both.
 
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to `bootstrap`, `--yes` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
+`--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`, including the link step inside nested bootstrap when a template is scaffolded. They are not filled from `.neon`; a linked directory is not relinked unless you pass one of those flags.
+
+`--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
+
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, `--default` to nested bootstrap, `--yes --no-config` to `link`, and `--services none` to `config init`. `--agent` is forwarded with them. `mcp -y` is the global install. `link --yes` only skips the "already linked" confirmation; it still asks for a project unless one is already linked.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
@@ -947,6 +954,40 @@ neon snapshots schedule get --branch main
 neon snapshots schedule set --branch main --frequency daily --hour 3 --retention 604800
 neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","day":1,"hour":2},{"frequency":"daily","hour":3}]'
 ```
+
+All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
+## Function triggers (`triggers`)
+
+`neon triggers` (alias `neon trigger`) manages **scheduled function triggers** on a branch — cron jobs that invoke a Neon Function. Beta. The only trigger type is `schedule`; cron is a five-field UTC expression.
+
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect) and the branch through `--branch <id|name>`, the `.neon` pin, or the project's default branch.
+
+```bash
+neon triggers create --function-slug uptime --name uptime-check --cron '*/15 * * * *'
+neon triggers list
+neon triggers get trigger-test-123
+neon triggers update trigger-test-123 --cron '0 3 * * *'
+neon triggers enable trigger-test-123
+neon triggers disable trigger-test-123
+neon triggers delete trigger-test-123
+```
+
+`enable` / `disable` are wrappers over `update --enabled`. List shows `inherited` when the effective config was authored on an ancestor branch.
+
+## Branch credentials (`credentials`)
+
+`neon credentials` (alias `neon credential`) lists, issues, reveals, rotates, and revokes **branch-scoped credentials** — the tokens behind Object Storage (`AWS_*`) and the AI Gateway (`NEON_AI_GATEWAY_TOKEN`). Beta. In regions where those services exist, a new project already has default credentials named `Default AI gateway credential` and `Default object storage credential`; `list` then `reveal` recovers their secrets without minting another token.
+
+```bash
+neon credentials list
+neon credentials create --name app --scope storage:read --scope storage:write
+neon credentials reveal nak_live_…
+neon credentials rotate nak_live_…
+neon credentials revoke nak_live_…
+```
+
+`create` always issues a customer-managed (`user`) credential. `--scope` is repeatable; `--help` lists the values. `reveal` and `rotate` print `api_token` and `s3_secret_access_key`. Rotation keeps the same `token_id` (it is the `AWS_ACCESS_KEY_ID`) and is not idempotent: a retry after a lost response mints another secret.
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
@@ -1289,6 +1330,8 @@ Id   Name      Project         Created At            Last Used At          Last 
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
+| triggers                                                                   | `list`, `get`, `create`, `update`, `enable`, `disable`, `delete`                                             | Manage function triggers           |
+| credentials                                                                | `list`, `create`, `reveal`, `rotate`, `revoke`                                                               | Manage branch credentials          |
 | [connection-string](https://neon.com/docs/reference/cli-connection-string) |                                                                                                              | Get connection string              |
 | [psql](https://neon.com/docs/reference/cli-psql)                           |                                                                                                              | Connect to a database via psql     |
 | set-context                                                                |                                                                                                              | Deprecated; use `link`             |

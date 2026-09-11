@@ -1,5 +1,22 @@
 # @neondatabase/config-runtime
 
+## 1.3.0
+
+### Minor Changes
+
+- e1e834a: `env pull` / `fetchEnv` reveal the platform default AI Gateway and object-storage credentials instead of minting a combined branch credential. `neon.ts` functions can declare schedule triggers that apply after deploy.
+
+### Patch Changes
+
+- Updated dependencies [e1e834a]
+  - @neon/config@1.4.0
+
+## 1.2.4
+
+### Patch Changes
+
+- @neon/config@1.3.3
+
 ## 1.2.3
 
 ### Patch Changes
