@@ -6,6 +6,7 @@ Runtime helpers for [Neon Functions](https://neon.com):
 - **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler, or from a
   [Hono](https://hono.dev) route via `@neon/functions/hono`.
 - **`attachDatabasePool`** — keep a module-scope `pg.Pool` from killing the isolate when Postgres drops an idle client.
+- **`parseTriggerInvocation`** — parse a Function Trigger delivery (`@neon/functions/triggers`), or `parseTrigger(c)` on a Hono context via `@neon/functions/hono`.
 
 ## Install
 
@@ -327,6 +328,71 @@ If `onUnexpectedError` throws, or returns a promise that rejects, both the pool 
 the reporter error are logged. Neither is rethrown from the listener, so the isolate stays up.
 
 This does not close the pool. Isolate teardown tears the connections down with the process.
+
+## Function Trigger deliveries
+
+A [Function Trigger](https://neon.com/docs/cli/triggers) POSTs JSON to your function.
+`parseTriggerInvocation` checks `x-neon-trigger-invocation-id` against
+`invocation_id` in that JSON.
+
+```ts
+import { parseTriggerInvocation } from "@neon/functions/triggers";
+
+export default {
+	async fetch(request: Request): Promise<Response> {
+		const parsed = await parseTriggerInvocation(request);
+		if (!parsed.ok) {
+			const status = parsed.error === "invalid_body" ? 400 : 401;
+			return new Response(parsed.error, { status });
+		}
+
+		return Response.json({ ok: true, invocationId: parsed.invocation.invocationId });
+	},
+};
+```
+
+`parseTriggerInvocation(request)` checks the header first, then clones the Request
+and reads JSON from the clone, so `request.json()` still works afterwards.
+
+If you already have the JSON:
+
+```ts
+const body = await request.json();
+const parsed = parseTriggerInvocation({
+	headers: request.headers,
+	body,
+});
+```
+
+On success, `parsed.invocation` is camelCase: `invocationId`, `trigger.id`,
+`trigger.name`, `trigger.type` (`"schedule"`), `data.scheduledAt`.
+
+On failure, `parsed.error` is `missing_header`, `invalid_body`, or
+`invocation_id_mismatch`. Invalid JSON on the Request path is `invalid_body`.
+Unknown `trigger.type` values fail as `invalid_body` until this package adds them.
+
+### `parseTrigger` (Hono)
+
+`parseTrigger(c)` runs the Request overload on `c.req.raw` and throws
+`HTTPException`. `c.req.json()` still works afterwards.
+
+| Failure | Status | Message |
+| --- | --- | --- |
+| missing header | 401 | `Missing x-neon-trigger-invocation-id header` |
+| header ≠ `invocation_id` | 401 | `Invocation id mismatch` |
+| invalid JSON or payload | 400 | `Invalid trigger payload` |
+
+```ts
+import { Hono } from "hono";
+import { parseTrigger } from "@neon/functions/hono";
+
+const app = new Hono();
+
+app.post("/cron", async (c) => {
+	const invocation = await parseTrigger(c);
+	return c.json({ ok: true, invocationId: invocation.invocationId });
+});
+```
 
 ## Runtime integration
 
