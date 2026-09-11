@@ -173,7 +173,33 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({ key_name: "agent" });
 	});
 
-	test("maps member confirmation flags into SDK options", async () => {
+	test("keeps the database selector distinct from its new name", async () => {
+		const requests: Request[] = [];
+		const tool = createNeonTool("postgres.databases.update", {
+			apiKey: "test-key",
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ database: { name: "renamed" } });
+			},
+		});
+
+		await tool.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			database_name: "original",
+			name: "renamed",
+		});
+
+		expect(requests).toHaveLength(1);
+		expect(new URL(requests[0].url).pathname).toBe(
+			"/api/v2/projects/project-id/branches/branch-id/databases/original",
+		);
+		expect(await requests[0].json()).toEqual({
+			database: { name: "renamed" },
+		});
+	});
+
+	test("maps member confirmation flags into SDK input", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",

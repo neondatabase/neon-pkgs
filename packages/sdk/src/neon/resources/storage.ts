@@ -1,9 +1,12 @@
 import { getProjectBranchStorage } from "../../client/sdk.gen.js";
 import type { BranchStorage } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 import { BucketObjects } from "./bucket-objects.js";
 import { Buckets } from "./buckets.js";
+
+export type StorageGetParams = { projectId: string; branchId: string };
 
 /**
  * Branch-scoped object storage: branch storage state, buckets, and bucket objects.
@@ -21,20 +24,26 @@ export class Storage<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/storage */
-	get(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<BranchStorage, DThrow>>;
+	get(params: StorageGetParams): Promise<Outcome<BranchStorage, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: StorageGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<BranchStorage, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
+		params: StorageGetParams,
 		opts?: CallOptions,
 	): Promise<BranchStorage | NeonResult<BranchStorage>> {
+		const invalid = validateParams(params, "storage.get", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<BranchStorage>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>

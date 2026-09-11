@@ -30,6 +30,7 @@ import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import { err, finalize, type NeonResult, type Outcome } from "../result.js";
 
 /** Input for {@link Projects.transfer} (org → org). */
@@ -50,29 +51,64 @@ type MemberListQuery = Omit<
 >;
 
 /** Per-call options for {@link Members.setRole}. */
-export interface SetRoleOptions<Throw extends boolean = boolean>
-	extends CallOptions<Throw> {
+export type SetRoleOptions<Throw extends boolean = boolean> =
+	CallOptions<Throw>;
+
+/** Per-call options for {@link Members.removeRole}. */
+export type RemoveRoleOptions<Throw extends boolean = boolean> =
+	CallOptions<Throw>;
+
+export type ProjectListParams = ListQuery;
+export interface ProjectGetParams {
+	projectId: string;
+}
+export type ProjectCreateParams = CreateInput;
+export type ProjectCreateAndConnectParams = CreateInput & {
+	/** Return a pooled connection string (default `true`). */
+	pooled?: boolean;
+};
+export type ProjectUpdateParams = UpdateInput & { projectId: string };
+export interface ProjectDeleteParams {
+	projectId: string;
+}
+export interface ProjectRecoverParams {
+	projectId: string;
+}
+export type ProjectTransferParams = TransferProjectsInput;
+export interface ProjectTransferFromUserParams {
+	toOrgId: string;
+	projectIds: string[];
+}
+export interface ProjectPermissionListParams {
+	projectId: string;
+}
+export interface ProjectPermissionGrantParams {
+	projectId: string;
+	email: string;
+}
+export interface ProjectPermissionRevokeParams {
+	projectId: string;
+	permissionId: string;
+}
+export type ProjectMemberListParams = MemberListQuery & { projectId: string };
+export interface ProjectMemberSetRoleParams {
+	projectId: string;
+	memberId: string;
+	role: ProjectRole;
 	/**
 	 * Acknowledge that the call lowers the caller's own role. The API rejects a
 	 * self-demotion without it, so it is left off by default.
 	 */
 	confirmSelfDemotion?: boolean;
 }
-
-/** Per-call options for {@link Members.removeRole}. */
-export interface RemoveRoleOptions<Throw extends boolean = boolean>
-	extends CallOptions<Throw> {
+export interface ProjectMemberRemoveRoleParams {
+	projectId: string;
+	memberId: string;
 	/**
 	 * Acknowledge that the call can cost the caller management access. The API
 	 * rejects such a self-removal without it, so it is left off by default.
 	 */
 	confirmSelfLockout?: boolean;
-}
-
-/** Per-call options for the connect workflow. */
-interface WorkflowOptions<Throw extends boolean> extends CallOptions<Throw> {
-	/** Return a pooled connection string (default `true`). */
-	pooled?: boolean;
 }
 
 /** A project with a ready-to-use connection string to its default branch. */
@@ -90,15 +126,26 @@ export class Permissions<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/permissions */
-	list(projectId: string): Promise<Outcome<ProjectPermission[], DThrow>>;
+	list(
+		params: ProjectPermissionListParams,
+	): Promise<Outcome<ProjectPermission[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
+		params: ProjectPermissionListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectPermission[], Throw>>;
 	list(
-		projectId: string,
+		params: ProjectPermissionListParams,
 		opts?: CallOptions,
 	): Promise<ProjectPermission[] | NeonResult<ProjectPermission[]>> {
+		const error = validateParams(params, "projects.permissions.list", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<ProjectPermission[]>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -114,19 +161,26 @@ export class Permissions<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/permissions */
 	grant(
-		projectId: string,
-		email: string,
+		params: ProjectPermissionGrantParams,
 	): Promise<Outcome<ProjectPermission, DThrow>>;
 	grant<Throw extends boolean = DThrow>(
-		projectId: string,
-		email: string,
+		params: ProjectPermissionGrantParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectPermission, Throw>>;
 	grant(
-		projectId: string,
-		email: string,
+		params: ProjectPermissionGrantParams,
 		opts?: CallOptions,
 	): Promise<ProjectPermission | NeonResult<ProjectPermission>> {
+		const error = validateParams(params, "projects.permissions.grant", {
+			projectId: "string",
+			email: "string",
+		});
+		if (error)
+			return invalidParamsResult<ProjectPermission>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, email } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -143,19 +197,26 @@ export class Permissions<DThrow extends boolean> {
 
 	/** @apiCall DELETE /projects/{project_id}/permissions/{permission_id} */
 	revoke(
-		projectId: string,
-		permissionId: string,
+		params: ProjectPermissionRevokeParams,
 	): Promise<Outcome<ProjectPermission, DThrow>>;
 	revoke<Throw extends boolean = DThrow>(
-		projectId: string,
-		permissionId: string,
+		params: ProjectPermissionRevokeParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectPermission, Throw>>;
 	revoke(
-		projectId: string,
-		permissionId: string,
+		params: ProjectPermissionRevokeParams,
 		opts?: CallOptions,
 	): Promise<ProjectPermission | NeonResult<ProjectPermission>> {
+		const error = validateParams(params, "projects.permissions.revoke", {
+			projectId: "string",
+			permissionId: "string",
+		});
+		if (error)
+			return invalidParamsResult<ProjectPermission>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, permissionId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -195,29 +256,32 @@ export class Members<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects/{project_id}/members (cursor-paginated)
 	 */
-	list(
-		projectId: string,
-		query?: MemberListQuery,
-	): Paginated<ProjectMember, DThrow>;
+	list(params: ProjectMemberListParams): Paginated<ProjectMember, DThrow>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		query: MemberListQuery | undefined,
+		params: ProjectMemberListParams,
 		opts: CallOptions<Throw>,
 	): Paginated<ProjectMember, Throw>;
 	list(
-		projectId: string,
-		query?: MemberListQuery,
+		params: ProjectMemberListParams,
 		opts?: CallOptions,
 	): Paginated<ProjectMember, boolean> {
+		const error = validateParams(params, "projects.members.list", {
+			projectId: "string",
+		});
+		const { projectId, ...query } = error
+			? ({} as ProjectMemberListParams)
+			: params;
 		return paginate(
-			(cursor, signal) =>
-				listProjectMembers({
+			async (cursor, signal) => {
+				if (error) throw error;
+				return listProjectMembers({
 					client: this.#ctx.client,
 					path: { project_id: projectId },
 					query: { ...query, cursor },
 					throwOnError: false,
 					signal,
-				}),
+				});
+			},
 			(data) => ({
 				items: data?.project_members ?? [],
 				cursor: data?.pagination?.next,
@@ -236,31 +300,36 @@ export class Members<DThrow extends boolean> {
 	 * @apiCall PUT /projects/{project_id}/members/{member_id}/role
 	 */
 	setRole(
-		projectId: string,
-		memberId: string,
-		role: ProjectRole,
+		params: ProjectMemberSetRoleParams,
 	): Promise<Outcome<ProjectMemberRoleResponse, DThrow>>;
 	setRole<Throw extends boolean = DThrow>(
-		projectId: string,
-		memberId: string,
-		role: ProjectRole,
-		opts: SetRoleOptions<Throw>,
+		params: ProjectMemberSetRoleParams,
+		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectMemberRoleResponse, Throw>>;
 	setRole(
-		projectId: string,
-		memberId: string,
-		role: ProjectRole,
-		opts?: SetRoleOptions<boolean>,
+		params: ProjectMemberSetRoleParams,
+		opts?: CallOptions<boolean>,
 	): Promise<
 		ProjectMemberRoleResponse | NeonResult<ProjectMemberRoleResponse>
 	> {
+		const error = validateParams(params, "projects.members.setRole", {
+			projectId: "string",
+			memberId: "string",
+			role: "string",
+		});
+		if (error)
+			return invalidParamsResult<ProjectMemberRoleResponse>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, memberId, role, confirmSelfDemotion } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				setProjectMemberRole({
 					client,
 					path: { project_id: projectId, member_id: memberId },
-					query: opts?.confirmSelfDemotion
+					query: confirmSelfDemotion
 						? { confirm_self_demotion: true }
 						: undefined,
 					body: { role },
@@ -279,28 +348,35 @@ export class Members<DThrow extends boolean> {
 	 * @apiCall DELETE /projects/{project_id}/members/{member_id}/role
 	 */
 	removeRole(
-		projectId: string,
-		memberId: string,
+		params: ProjectMemberRemoveRoleParams,
 	): Promise<Outcome<ProjectMemberRoleResponse, DThrow>>;
 	removeRole<Throw extends boolean = DThrow>(
-		projectId: string,
-		memberId: string,
-		opts: RemoveRoleOptions<Throw>,
+		params: ProjectMemberRemoveRoleParams,
+		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectMemberRoleResponse, Throw>>;
 	removeRole(
-		projectId: string,
-		memberId: string,
-		opts?: RemoveRoleOptions<boolean>,
+		params: ProjectMemberRemoveRoleParams,
+		opts?: CallOptions<boolean>,
 	): Promise<
 		ProjectMemberRoleResponse | NeonResult<ProjectMemberRoleResponse>
 	> {
+		const error = validateParams(params, "projects.members.removeRole", {
+			projectId: "string",
+			memberId: "string",
+		});
+		if (error)
+			return invalidParamsResult<ProjectMemberRoleResponse>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, memberId, confirmSelfLockout } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				removeProjectMemberRole({
 					client,
 					path: { project_id: projectId, member_id: memberId },
-					query: opts?.confirmSelfLockout
+					query: confirmSelfLockout
 						? { confirm_self_lockout: true }
 						: undefined,
 					throwOnError: false,
@@ -331,13 +407,13 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects
 	 */
-	list(query?: ListQuery): Paginated<ProjectListItem, DThrow>;
+	list(params?: ProjectListParams): Paginated<ProjectListItem, DThrow>;
 	list<Throw extends boolean = DThrow>(
-		query: ListQuery | undefined,
+		params: ProjectListParams | undefined,
 		opts: CallOptions<Throw>,
 	): Paginated<ProjectListItem, Throw>;
 	list(
-		query?: ListQuery,
+		query: ProjectListParams = {},
 		opts?: CallOptions,
 	): Paginated<ProjectListItem, boolean> {
 		return paginate(
@@ -362,21 +438,30 @@ export class Projects<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id} */
-	get(id: string): Promise<Outcome<Project, DThrow>>;
+	get(params: ProjectGetParams): Promise<Outcome<Project, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		id: string,
+		params: ProjectGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	get(
-		id: string,
+		params: ProjectGetParams,
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
+		const error = validateParams(params, "projects.get", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Project>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				getProject({
 					client,
-					path: { project_id: id },
+					path: { project_id: projectId },
 					throwOnError: false,
 					signal,
 				}),
@@ -390,13 +475,13 @@ export class Projects<DThrow extends boolean> {
 	 * {@link Projects.createAndConnect} or `postgres.connectionString` when a
 	 * connection string is needed.
 	 */
-	create(input?: CreateInput): Promise<Outcome<Project, DThrow>>;
+	create(params?: ProjectCreateParams): Promise<Outcome<Project, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		input: CreateInput | undefined,
+		params: ProjectCreateParams | undefined,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	create(
-		input?: CreateInput,
+		input: ProjectCreateParams = {},
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
 		return this.#ctx.run(
@@ -430,16 +515,23 @@ export class Projects<DThrow extends boolean> {
 	 * @workflow createProject + waitForReadiness
 	 */
 	createAndConnect(
-		input?: CreateInput,
+		params?: ProjectCreateAndConnectParams,
 	): Promise<Outcome<ProjectConnection, DThrow>>;
 	createAndConnect<Throw extends boolean = DThrow>(
-		input: CreateInput | undefined,
-		opts: WorkflowOptions<Throw>,
+		params: ProjectCreateAndConnectParams | undefined,
+		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectConnection, Throw>>;
 	async createAndConnect(
-		input?: CreateInput,
-		opts?: WorkflowOptions<boolean>,
+		params: ProjectCreateAndConnectParams = {},
+		opts?: CallOptions<boolean>,
 	): Promise<ProjectConnection | NeonResult<ProjectConnection>> {
+		const error = validateParams(params, "projects.createAndConnect");
+		if (error)
+			return invalidParamsResult<ProjectConnection>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { pooled = true, ...input } = params;
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
@@ -467,29 +559,36 @@ export class Projects<DThrow extends boolean> {
 				project: data.project,
 				connectionString,
 			}),
-			opts?.pooled ?? true,
+			pooled,
 		);
 		return finalize(out, shouldThrow);
 	}
 
 	/** @apiCall PATCH /projects/{project_id} */
-	update(id: string, input: UpdateInput): Promise<Outcome<Project, DThrow>>;
+	update(params: ProjectUpdateParams): Promise<Outcome<Project, DThrow>>;
 	update<Throw extends boolean = DThrow>(
-		id: string,
-		input: UpdateInput,
+		params: ProjectUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	update(
-		id: string,
-		input: UpdateInput,
+		params: ProjectUpdateParams,
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
+		const error = validateParams(params, "projects.update", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Project>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				updateProject({
 					client,
-					path: { project_id: id },
+					path: { project_id: projectId },
 					body: { project: input },
 					throwOnError: false,
 					signal,
@@ -499,21 +598,30 @@ export class Projects<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id} */
-	delete(id: string): Promise<Outcome<Project, DThrow>>;
+	delete(params: ProjectDeleteParams): Promise<Outcome<Project, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		id: string,
+		params: ProjectDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	delete(
-		id: string,
+		params: ProjectDeleteParams,
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
+		const error = validateParams(params, "projects.delete", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Project>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				deleteProject({
 					client,
-					path: { project_id: id },
+					path: { project_id: projectId },
 					throwOnError: false,
 					signal,
 				}),
@@ -526,21 +634,30 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall POST /projects/{project_id}/recover
 	 */
-	recover(id: string): Promise<Outcome<Project, DThrow>>;
+	recover(params: ProjectRecoverParams): Promise<Outcome<Project, DThrow>>;
 	recover<Throw extends boolean = DThrow>(
-		id: string,
+		params: ProjectRecoverParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Project, Throw>>;
 	recover(
-		id: string,
+		params: ProjectRecoverParams,
 		opts?: CallOptions,
 	): Promise<Project | NeonResult<Project>> {
+		const error = validateParams(params, "projects.recover", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Project>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				recoverProject({
 					client,
-					path: { project_id: id },
+					path: { project_id: projectId },
 					throwOnError: false,
 					signal,
 				}),
@@ -554,13 +671,13 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall POST /organizations/{source_org_id}/projects/transfer
 	 */
-	transfer(input: TransferProjectsInput): Promise<Outcome<void, DThrow>>;
+	transfer(params: ProjectTransferParams): Promise<Outcome<void, DThrow>>;
 	transfer<Throw extends boolean = DThrow>(
-		input: TransferProjectsInput,
+		params: ProjectTransferParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	async transfer(
-		input: TransferProjectsInput,
+		input: ProjectTransferParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
 		const shouldThrow =
@@ -598,16 +715,15 @@ export class Projects<DThrow extends boolean> {
 	 *
 	 * @apiCall POST /users/me/projects/transfer
 	 */
-	transferFromUser(input: {
-		toOrgId: string;
-		projectIds: string[];
-	}): Promise<Outcome<void, DThrow>>;
+	transferFromUser(
+		params: ProjectTransferFromUserParams,
+	): Promise<Outcome<void, DThrow>>;
 	transferFromUser<Throw extends boolean = DThrow>(
-		input: { toOrgId: string; projectIds: string[] },
+		params: ProjectTransferFromUserParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	transferFromUser(
-		input: { toOrgId: string; projectIds: string[] },
+		input: ProjectTransferFromUserParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
 		return this.#ctx.run(

@@ -66,7 +66,10 @@ describe("credentials", () => {
 			body: { credentials: [meta] },
 		}));
 
-		const { data, error } = await neon.credentials.list("p-1", "br-1");
+		const { data, error } = await neon.credentials.list({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 		expect(error).toBeUndefined();
 		expect(data).toEqual([meta]);
 		expect(calls[0].method).toBe("GET");
@@ -86,11 +89,11 @@ describe("credentials", () => {
 			scopes: ["storage:read" as const],
 			principal_type: "user" as const,
 		};
-		const { data, error } = await neon.credentials.create(
-			"p-1",
-			"br-1",
-			input,
-		);
+		const { data, error } = await neon.credentials.create({
+			projectId: "p-1",
+			branchId: "br-1",
+			...input,
+		});
 		expect(error).toBeUndefined();
 		expect(data).toEqual(created);
 		expect(calls[0].method).toBe("POST");
@@ -99,11 +102,11 @@ describe("credentials", () => {
 
 	it("revokes with a 204", async () => {
 		const { neon, calls } = neonRouting(() => ({ status: 204 }));
-		const { error } = await neon.credentials.revoke(
-			"p-1",
-			"br-1",
-			meta.token_id,
-		);
+		const { error } = await neon.credentials.revoke({
+			projectId: "p-1",
+			branchId: "br-1",
+			tokenId: meta.token_id,
+		});
 		expect(error).toBeUndefined();
 		expect(calls[0].method).toBe("DELETE");
 		expect(calls[0].url).toContain(
@@ -122,11 +125,11 @@ describe("credentials", () => {
 			body: secret,
 		}));
 
-		const { data, error } = await neon.credentials.reveal(
-			"p-1",
-			"br-1",
-			meta.token_id,
-		);
+		const { data, error } = await neon.credentials.reveal({
+			projectId: "p-1",
+			branchId: "br-1",
+			tokenId: meta.token_id,
+		});
 		expect(error).toBeUndefined();
 		expect(data).toEqual(secret);
 		expect(data).not.toHaveProperty("branch_id");
@@ -142,11 +145,11 @@ describe("credentials", () => {
 			status: 404,
 			body: { message: "not found" },
 		}));
-		const { error } = await neon.credentials.reveal(
-			"p-1",
-			"br-1",
-			"missing",
-		);
+		const { error } = await neon.credentials.reveal({
+			projectId: "p-1",
+			branchId: "br-1",
+			tokenId: "missing",
+		});
 		expect(error).toBeInstanceOf(NeonNotFoundError);
 	});
 
@@ -155,11 +158,11 @@ describe("credentials", () => {
 			status: 409,
 			body: { message: "no recoverable secret" },
 		}));
-		const { error } = await neon.credentials.reveal(
-			"p-1",
-			"br-1",
-			meta.token_id,
-		);
+		const { error } = await neon.credentials.reveal({
+			projectId: "p-1",
+			branchId: "br-1",
+			tokenId: meta.token_id,
+		});
 		expect(error).toBeInstanceOf(NeonApiError);
 		expect(error).toMatchObject({ status: 409 });
 		expect(calls).toHaveLength(1);
@@ -177,11 +180,11 @@ describe("credentials", () => {
 			body: rotated,
 		}));
 
-		const { data, error } = await neon.credentials.rotate(
-			"p-1",
-			"br-1",
-			meta.token_id,
-		);
+		const { data, error } = await neon.credentials.rotate({
+			projectId: "p-1",
+			branchId: "br-1",
+			tokenId: meta.token_id,
+		});
 		expect(error).toBeUndefined();
 		expect(data).toEqual(rotated);
 		expect(data?.token_id).toBe(meta.token_id);
@@ -200,11 +203,11 @@ describe("credentials", () => {
 			{ retries: 2 },
 		);
 
-		const { error } = await neon.credentials.rotate(
-			"p-1",
-			"br-1",
-			meta.token_id,
-		);
+		const { error } = await neon.credentials.rotate({
+			projectId: "p-1",
+			branchId: "br-1",
+			tokenId: meta.token_id,
+		});
 		expect(error).toBeInstanceOf(NeonApiError);
 		expect(error).toMatchObject({ status: 500 });
 		expect(calls).toHaveLength(1);

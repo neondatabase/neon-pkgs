@@ -49,7 +49,9 @@ it("NeonTimeoutError is abstract; subclasses take the matching init", () => {
 
 it("kind narrows NeonResult.error to the matching subclass", async () => {
 	const neon = createNeonClient({ apiKey: "x" });
-	const { error }: NeonResult<Project> = await neon.projects.get("p");
+	const { error }: NeonResult<Project> = await neon.projects.get({
+		projectId: "p",
+	});
 
 	if (error?.kind === "not_found") {
 		expectTypeOf(error).toEqualTypeOf<NeonNotFoundError>();
@@ -119,7 +121,9 @@ it("kind narrows NeonResult.error to the matching subclass", async () => {
 
 it("a switch over kind is exhaustive", async () => {
 	const neon = createNeonClient({ apiKey: "x" });
-	const { error }: NeonResult<Project> = await neon.projects.get("p");
+	const { error }: NeonResult<Project> = await neon.projects.get({
+		projectId: "p",
+	});
 	if (!error) return;
 
 	switch (error.kind) {
@@ -141,7 +145,9 @@ it("a switch over kind is exhaustive", async () => {
 
 it("instanceof NeonApiError exposes status on the union", async () => {
 	const neon = createNeonClient({ apiKey: "x" });
-	const { error }: NeonResult<Project> = await neon.projects.get("p");
+	const { error }: NeonResult<Project> = await neon.projects.get({
+		projectId: "p",
+	});
 	if (error instanceof NeonApiError) {
 		expectTypeOf(error.status).toEqualTypeOf<number>();
 		expectTypeOf(error.kind).toEqualTypeOf<NeonApiErrorKind>();

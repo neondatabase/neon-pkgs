@@ -43,24 +43,143 @@ export {
 	NeonWaitTimeoutError,
 } from "./neon/errors.js";
 export type { Page, Paginated } from "./neon/paginate.js";
+// Named operation parameter types.
 export type {
+	ApiKeysCreateParams,
+	ApiKeysRevokeParams,
+} from "./neon/resources/account.js";
+export type { AiGatewayGetParams } from "./neon/resources/ai-gateway.js";
+export type {
+	AuthCreateParams,
+	AuthDisableParams,
+	AuthGetParams,
+	AuthOauthProvidersAddParams,
+	AuthOauthProvidersDeleteParams,
+	AuthOauthProvidersListParams,
+	AuthOauthProvidersUpdateParams,
+	AuthTrustedDomainsAddParams,
+	AuthTrustedDomainsDeleteParams,
+	AuthTrustedDomainsListParams,
+	AuthUpdateConfigParams,
+	AuthUsersCreateParams,
+	AuthUsersDeleteParams,
+	AuthUsersUpdateRoleParams,
+} from "./neon/resources/auth.js";
+export type {
+	BranchCompareSchemaParams,
 	BranchConnection,
+	BranchCreateAndConnectParams,
+	BranchCreateParams,
+	BranchDeleteParams,
+	BranchFinalizeRestoreParams,
+	BranchGetDefaultParams,
+	BranchGetParams,
+	BranchListParams,
+	BranchResetFromParentParams,
+	BranchSetDefaultParams,
+	BranchUpdateParams,
 	CompareSchemaInput,
 	ComputeSettings,
 	CreateAndConnectInput,
 	ResetFromParentInput,
 } from "./neon/resources/branches.js";
 export type {
+	BucketObjectsDeleteByPrefixParams,
+	BucketObjectsDeleteParams,
+	BucketObjectsGetParams,
+	BucketObjectsListParams,
+	BucketObjectsPresignParams,
+} from "./neon/resources/bucket-objects.js";
+export type {
+	BucketsCreateParams,
+	BucketsDeleteParams,
+	BucketsListParams,
+} from "./neon/resources/buckets.js";
+export type {
+	CredentialsCreateParams,
+	CredentialsListParams,
+	CredentialsRevealParams,
+	CredentialsRevokeParams,
+	CredentialsRotateParams,
+} from "./neon/resources/credentials.js";
+export type {
+	CustomDomainsDeleteParams,
+	CustomDomainsListParams,
+	CustomDomainsRegisterParams,
+} from "./neon/resources/custom-domains.js";
+export type {
+	DataApiCreateParams,
+	DataApiDeleteParams,
+	DataApiGetParams,
+	DataApiUpdateParams,
+} from "./neon/resources/dataapi.js";
+export type {
+	DatabasesCreateParams,
+	DatabasesDeleteParams,
+	DatabasesGetParams,
+	DatabasesListParams,
+	DatabasesUpdateParams,
+} from "./neon/resources/databases.js";
+export type {
+	EndpointsCreateParams,
+	EndpointsDeleteParams,
+	EndpointsGetParams,
+	EndpointsListByBranchParams,
+	EndpointsListParams,
+	EndpointsRestartParams,
+	EndpointsStartParams,
+	EndpointsSuspendParams,
+	EndpointsUpdateParams,
+} from "./neon/resources/endpoints.js";
+export type {
+	FunctionsDeleteParams,
+	FunctionsDeployParams,
+	FunctionsGetParams,
+	FunctionsListParams,
+	FunctionsUpdateParams,
+} from "./neon/resources/functions.js";
+export type {
 	LogFieldValuesQuery,
 	LogQueryInput,
+	LogsFieldsParams,
+	LogsFieldValuesParams,
+	LogsQueryParams,
 } from "./neon/resources/logs.js";
+export type {
+	OperationsGetParams,
+	OperationsListParams,
+	OperationsWaitForParams,
+} from "./neon/resources/operations.js";
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
+	ProjectCreateAndConnectParams,
+	ProjectCreateParams,
+	ProjectDeleteParams,
+	ProjectGetParams,
+	ProjectListParams,
+	ProjectMemberListParams,
+	ProjectMemberRemoveRoleParams,
+	ProjectMemberSetRoleParams,
+	ProjectPermissionGrantParams,
+	ProjectPermissionListParams,
+	ProjectPermissionRevokeParams,
+	ProjectRecoverParams,
+	ProjectTransferFromUserParams,
+	ProjectTransferParams,
+	ProjectUpdateParams,
 	RemoveRoleOptions,
 	SetRoleOptions,
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
+export type {
+	RolesCreateParams,
+	RolesDeleteParams,
+	RolesGetParams,
+	RolesListParams,
+	RolesPasswordParams,
+	RolesResetPasswordParams,
+} from "./neon/resources/roles.js";
 export type {
 	BackupScheduleItemInput,
 	CreateSnapshotInput,
@@ -68,8 +187,23 @@ export type {
 	RestoreSnapshotInput,
 	SetScheduleInput,
 	SnapshotFrequency,
+	SnapshotsCreateParams,
+	SnapshotsDeleteParams,
+	SnapshotsGetScheduleParams,
+	SnapshotsListParams,
+	SnapshotsRestoreParams,
+	SnapshotsSetScheduleParams,
+	SnapshotsUpdateParams,
 	UpdateSnapshotInput,
 } from "./neon/resources/snapshots.js";
+export type { StorageGetParams } from "./neon/resources/storage.js";
+export type {
+	TriggersCreateParams,
+	TriggersDeleteParams,
+	TriggersGetParams,
+	TriggersListParams,
+	TriggersUpdateParams,
+} from "./neon/resources/triggers.js";
 export type { NeonResult, Outcome } from "./neon/result.js";
 export type { WaitBudget, WaitForOptions } from "./neon/wait.js";
 export type * from "./raw.js";

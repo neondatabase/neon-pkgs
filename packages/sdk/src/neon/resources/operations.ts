@@ -5,6 +5,7 @@ import {
 import type { Operation } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { type Paginated, paginate } from "../paginate.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 import { type WaitForOptions, waitForOperations } from "../wait.js";
 
@@ -18,6 +19,10 @@ import { type WaitForOptions, waitForOperations } from "../wait.js";
 export type WaitForForOptions<Throw extends boolean> = WaitForOptions &
 	Omit<CallOptions<Throw>, "requestTimeoutMs" | "waitForReadiness" | "wait">;
 
+export type OperationsListParams = { projectId: string };
+export type OperationsGetParams = { projectId: string; operationId: string };
+export type OperationsWaitForParams = { operations: readonly Operation[] };
+
 /** Operation resource — read operations and wait for them to finish. */
 export class Operations<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -27,21 +32,30 @@ export class Operations<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/operations (cursor-paginated) */
-	list(projectId: string): Paginated<Operation, DThrow>;
+	list(params: OperationsListParams): Paginated<Operation, DThrow>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
+		params: OperationsListParams,
 		opts: CallOptions<Throw>,
 	): Paginated<Operation, Throw>;
-	list(projectId: string, opts?: CallOptions): Paginated<Operation, boolean> {
+	list(
+		params: OperationsListParams,
+		opts?: CallOptions,
+	): Paginated<Operation, boolean> {
+		const invalid = validateParams(params, "operations.list", {
+			projectId: "string",
+		});
+		const { projectId } = invalid ? ({} as OperationsListParams) : params;
 		return paginate(
-			(cursor, signal) =>
-				listProjectOperations({
+			async (cursor, signal) => {
+				if (invalid) throw invalid;
+				return listProjectOperations({
 					client: this.#ctx.client,
 					path: { project_id: projectId },
 					query: { cursor },
 					throwOnError: false,
 					signal,
-				}),
+				});
+			},
 			(data) => ({
 				items: data?.operations ?? [],
 				cursor: data?.pagination?.cursor,
@@ -52,20 +66,26 @@ export class Operations<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/operations/{operation_id} */
-	get(
-		projectId: string,
-		operationId: string,
-	): Promise<Outcome<Operation, DThrow>>;
+	get(params: OperationsGetParams): Promise<Outcome<Operation, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		operationId: string,
+		params: OperationsGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Operation, Throw>>;
 	get(
-		projectId: string,
-		operationId: string,
+		params: OperationsGetParams,
 		opts?: CallOptions,
 	): Promise<Operation | NeonResult<Operation>> {
+		const invalid = validateParams(params, "operations.get", {
+			projectId: "string",
+			operationId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Operation>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, operationId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -84,15 +104,25 @@ export class Operations<DThrow extends boolean> {
 	 * The primitive behind `waitForReadiness`; use it directly with operations obtained
 	 * from any source (e.g. a raw call or a create response).
 	 */
-	waitFor(operations: readonly Operation[]): Promise<Outcome<void, DThrow>>;
+	waitFor(params: OperationsWaitForParams): Promise<Outcome<void, DThrow>>;
 	waitFor<Throw extends boolean = DThrow>(
-		operations: readonly Operation[],
+		params: OperationsWaitForParams,
 		opts: WaitForForOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	async waitFor(
-		operations: readonly Operation[],
+		params: OperationsWaitForParams,
 		opts?: WaitForForOptions<boolean>,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "operations.waitFor", {
+			operations: "array",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { operations } = params;
 		const defaults = this.#ctx.defaults;
 		const shouldThrow = opts?.throwOnError ?? defaults.throwOnError;
 		const result = await waitForOperations(this.#ctx.client, operations, {

@@ -48,9 +48,12 @@ describe("a caller's signal reaches the request", () => {
 		setTimeout(() => controller.abort(), 20);
 
 		const startedAt = Date.now();
-		const { data, error } = await neon.projects.get("p", {
-			signal: controller.signal,
-		});
+		const { data, error } = await neon.projects.get(
+			{ projectId: "p" },
+			{
+				signal: controller.signal,
+			},
+		);
 
 		expect(Date.now() - startedAt).toBeLessThan(1_000);
 		expect(data).toBeUndefined();
@@ -67,7 +70,7 @@ describe("a caller's signal reaches the request", () => {
 		setTimeout(() => controller.abort(), 20);
 
 		const result = await neon.projects
-			.get("p", { signal: controller.signal })
+			.get({ projectId: "p" }, { signal: controller.signal })
 			.catch((thrown) => ({ thrown }));
 
 		expect(result).not.toHaveProperty("thrown");
@@ -87,7 +90,10 @@ describe("a caller's signal reaches the request", () => {
 		setTimeout(() => controller.abort(), 20);
 
 		await expect(
-			neon.projects.get("p", { signal: controller.signal }),
+			neon.projects.get(
+				{ projectId: "p" },
+				{ signal: controller.signal },
+			),
 		).rejects.toBeInstanceOf(NeonAbortError);
 	});
 
@@ -133,7 +139,7 @@ describe("requestTimeoutMs bounds a call", () => {
 		});
 
 		const startedAt = Date.now();
-		const { error } = await neon.projects.get("p");
+		const { error } = await neon.projects.get({ projectId: "p" });
 
 		expect(Date.now() - startedAt).toBeLessThan(1_000);
 		expect(error?.kind).toBe("timeout");
@@ -159,7 +165,7 @@ describe("requestTimeoutMs bounds a call", () => {
 		});
 
 		const startedAt = Date.now();
-		const { error } = await neon.projects.get("p");
+		const { error } = await neon.projects.get({ projectId: "p" });
 
 		expect(error?.kind).toBe("timeout");
 		expect(Date.now() - startedAt).toBeLessThan(1_000);
@@ -204,7 +210,7 @@ describe("requestTimeoutMs bounds a call", () => {
 			},
 		});
 
-		const { data, error } = await neon.projects.get("p");
+		const { data, error } = await neon.projects.get({ projectId: "p" });
 		expect(error).toBeUndefined();
 		expect(data?.id).toBe("p");
 	});
@@ -223,9 +229,12 @@ describe("requestTimeoutMs bounds a call", () => {
 			},
 		});
 
-		const { error } = await neon.projects.get("p", {
-			requestTimeoutMs: Number.POSITIVE_INFINITY,
-		});
+		const { error } = await neon.projects.get(
+			{ projectId: "p" },
+			{
+				requestTimeoutMs: Number.POSITIVE_INFINITY,
+			},
+		);
 		expect(error).toBeUndefined();
 	});
 
@@ -256,7 +265,7 @@ describe("retry scheduling", () => {
 		setTimeout(() => controller.abort(), 20);
 
 		const result = await neon.projects
-			.get("p", { signal: controller.signal })
+			.get({ projectId: "p" }, { signal: controller.signal })
 			.catch((thrown) => ({ thrown }));
 
 		expect(result).not.toHaveProperty("thrown");
@@ -275,7 +284,10 @@ describe("retry scheduling", () => {
 		setTimeout(() => controller.abort(), 20);
 
 		await expect(
-			neon.projects.get("p", { signal: controller.signal }),
+			neon.projects.get(
+				{ projectId: "p" },
+				{ signal: controller.signal },
+			),
 		).rejects.toBeInstanceOf(NeonAbortError);
 	});
 
@@ -292,7 +304,7 @@ describe("retry scheduling", () => {
 		});
 
 		const startedAt = Date.now();
-		const { error } = await neon.projects.get("p");
+		const { error } = await neon.projects.get({ projectId: "p" });
 
 		// The real 429 is surfaced instead of being hidden behind a long sleep or a
 		// timeout, and the header is never shortened into an early retry.
@@ -313,7 +325,7 @@ describe("retry scheduling", () => {
 			fetch: rateLimited.fetch,
 		});
 
-		await neon.projects.get("p");
+		await neon.projects.get({ projectId: "p" });
 		expect(rateLimited.calls()).toBe(3);
 	});
 });

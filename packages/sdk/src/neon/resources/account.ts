@@ -15,7 +15,16 @@ import type {
 	RegionResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
+
+export type ApiKeysCreateParams = {
+	keyName: string;
+};
+
+export type ApiKeysRevokeParams = {
+	keyId: number;
+};
 
 /** Current user / account resource. */
 export class User<DThrow extends boolean> {
@@ -118,15 +127,27 @@ export class ApiKeys<DThrow extends boolean> {
 	 *
 	 * @apiCall POST /api_keys
 	 */
-	create(keyName: string): Promise<Outcome<ApiKeyCreateResponse, DThrow>>;
+	create(
+		params: ApiKeysCreateParams,
+	): Promise<Outcome<ApiKeyCreateResponse, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		keyName: string,
+		params: ApiKeysCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<ApiKeyCreateResponse, Throw>>;
 	create(
-		keyName: string,
+		params: ApiKeysCreateParams,
 		opts?: CallOptions,
 	): Promise<ApiKeyCreateResponse | NeonResult<ApiKeyCreateResponse>> {
+		const invalid = validateParams(params, "apiKeys.create", {
+			keyName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<ApiKeyCreateResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { keyName } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -141,15 +162,27 @@ export class ApiKeys<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /api_keys/{key_id} */
-	revoke(keyId: number): Promise<Outcome<ApiKeyRevokeResponse, DThrow>>;
+	revoke(
+		params: ApiKeysRevokeParams,
+	): Promise<Outcome<ApiKeyRevokeResponse, DThrow>>;
 	revoke<Throw extends boolean = DThrow>(
-		keyId: number,
+		params: ApiKeysRevokeParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<ApiKeyRevokeResponse, Throw>>;
 	revoke(
-		keyId: number,
+		params: ApiKeysRevokeParams,
 		opts?: CallOptions,
 	): Promise<ApiKeyRevokeResponse | NeonResult<ApiKeyRevokeResponse>> {
+		const invalid = validateParams(params, "apiKeys.revoke", {
+			keyId: "number",
+		});
+		if (invalid) {
+			return invalidParamsResult<ApiKeyRevokeResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { keyId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>

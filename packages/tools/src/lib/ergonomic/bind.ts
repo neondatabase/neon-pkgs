@@ -144,10 +144,10 @@ export const collectObjectList = async (
 	for (;;) {
 		const page = objectListPage(
 			await neon.storage.objects.list(
-				input.project_id,
-				input.branch_id,
-				input.bucket_name,
 				{
+					projectId: input.project_id,
+					branchId: input.branch_id,
+					bucketName: input.bucket_name,
 					...(input.prefix === undefined
 						? {}
 						: { prefix: input.prefix }),

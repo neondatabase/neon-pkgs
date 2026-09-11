@@ -29,7 +29,7 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 	beforeAll(async () => {
 		neon = makeClient();
 		projectId = await createProject({ name: uniqueProjectName("sdk-res") });
-		const main = expectOk(await neon.branches.getDefault(projectId));
+		const main = expectOk(await neon.branches.getDefault({ projectId }));
 		defaultBranchId = main.id;
 	});
 
@@ -39,7 +39,8 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("round-trips a branch through create, get, update and delete", async () => {
 		const created = expectOk(
-			await neon.branches.create(projectId, {
+			await neon.branches.create({
+				projectId,
 				name: "crud",
 				parent_id: defaultBranchId,
 				noCompute: true,
@@ -48,46 +49,53 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(created.name).toBe("crud");
 
 		const fetched = expectOk(
-			await neon.branches.get(projectId, created.id),
+			await neon.branches.get({ projectId, branchId: created.id }),
 		);
 		expect(fetched.id).toBe(created.id);
 
 		const renamed = expectOk(
 			await neon.branches.update(
-				projectId,
-				created.id,
-				{ name: "crud-renamed" },
+				{ projectId, branchId: created.id, name: "crud-renamed" },
 				{ waitForReadiness: true },
 			),
 		);
 		expect(renamed.name).toBe("crud-renamed");
 
 		expectOk(
-			await neon.branches.delete(projectId, created.id, {
-				waitForReadiness: true,
-			}),
+			await neon.branches.delete(
+				{ projectId, branchId: created.id },
+				{
+					waitForReadiness: true,
+				},
+			),
 		);
 
-		const { error } = await neon.branches.get(projectId, created.id);
+		const { error } = await neon.branches.get({
+			projectId,
+			branchId: created.id,
+		});
 		expect(error).toBeInstanceOf(NeonNotFoundError);
 	});
 
 	it("compares schemas and resets a child back to its parent", async () => {
 		const child = expectOk(
-			await neon.branches.createAndConnect(projectId, {
+			await neon.branches.createAndConnect({
+				projectId,
 				name: "reset-child",
 				parentId: defaultBranchId,
 			}),
 		);
 		const branchId = child.branch.id;
 		const roles = expectOk(
-			await neon.postgres.roles.list(projectId, branchId),
+			await neon.postgres.roles.list({ projectId, branchId }),
 		);
 		const owner = roles[0];
 		if (!owner) throw new Error("child branch has no role");
 
 		const matching = expectOk(
-			await neon.branches.compareSchema(projectId, branchId, {
+			await neon.branches.compareSchema({
+				projectId,
+				branchId,
 				databaseName: "neondb",
 				baseBranchId: defaultBranchId,
 			}),
@@ -96,31 +104,34 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 		expectOk(
 			await neon.postgres.databases.create(
-				projectId,
-				branchId,
-				{ name: "child_only", owner_name: owner.name },
+				{
+					projectId,
+					branchId,
+					name: "child_only",
+					owner_name: owner.name,
+				},
 				{ waitForReadiness: true },
 			),
 		);
 
 		expectOk(
 			await neon.branches.resetFromParent(
-				projectId,
-				branchId,
-				undefined,
+				{ projectId, branchId },
 				{
 					waitForReadiness: true,
 				},
 			),
 		);
 		const after = expectOk(
-			await neon.postgres.databases.list(projectId, branchId),
+			await neon.postgres.databases.list({ projectId, branchId }),
 		);
 		expect(after.map((database) => database.name)).not.toContain(
 			"child_only",
 		);
 		const matchingAgain = expectOk(
-			await neon.branches.compareSchema(projectId, branchId, {
+			await neon.branches.compareSchema({
+				projectId,
+				branchId,
 				databaseName: "neondb",
 				baseBranchId: defaultBranchId,
 			}),
@@ -128,15 +139,19 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		expect(matchingAgain.diff ?? "").toBe("");
 
 		expectOk(
-			await neon.branches.delete(projectId, branchId, {
-				waitForReadiness: true,
-			}),
+			await neon.branches.delete(
+				{ projectId, branchId },
+				{
+					waitForReadiness: true,
+				},
+			),
 		);
 	});
 
 	it("creates a branch with its compute and a connection string in one call", async () => {
 		const created = expectOk(
-			await neon.branches.createAndConnect(projectId, {
+			await neon.branches.createAndConnect({
+				projectId,
 				name: "with-compute",
 				parentId: defaultBranchId,
 			}),
@@ -148,74 +163,89 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 		// The endpoint the workflow reports must be the one the API actually attached.
 		const endpoints = expectOk(
-			await neon.postgres.endpoints.listByBranch(
+			await neon.postgres.endpoints.listByBranch({
 				projectId,
-				created.branch.id,
-			),
+				branchId: created.branch.id,
+			}),
 		);
 		expect(endpoints.map((endpoint) => endpoint.id)).toContain(
 			created.endpoint.id,
 		);
 
 		expectOk(
-			await neon.branches.delete(projectId, created.branch.id, {
-				waitForReadiness: true,
-			}),
+			await neon.branches.delete(
+				{ projectId, branchId: created.branch.id },
+				{
+					waitForReadiness: true,
+				},
+			),
 		);
 	});
 
 	it("attaches a read-write endpoint unless noCompute is true", async () => {
 		const withCompute = expectOk(
-			await neon.branches.create(projectId, {
+			await neon.branches.create({
+				projectId,
 				name: "with-endpoint",
 				parent_id: defaultBranchId,
 			}),
 		);
 		const attached = expectOk(
-			await neon.postgres.endpoints.listByBranch(
+			await neon.postgres.endpoints.listByBranch({
 				projectId,
-				withCompute.id,
-			),
+				branchId: withCompute.id,
+			}),
 		);
 		expect(
 			attached.filter((endpoint) => endpoint.type === "read_write"),
 		).toHaveLength(1);
 
 		const bare = expectOk(
-			await neon.branches.create(projectId, {
+			await neon.branches.create({
+				projectId,
 				name: "bare",
 				parent_id: defaultBranchId,
 				noCompute: true,
 			}),
 		);
 		const none = expectOk(
-			await neon.postgres.endpoints.listByBranch(projectId, bare.id),
+			await neon.postgres.endpoints.listByBranch({
+				projectId,
+				branchId: bare.id,
+			}),
 		);
 		expect(none).toEqual([]);
 
 		expectOk(
-			await neon.branches.delete(projectId, withCompute.id, {
-				waitForReadiness: true,
-			}),
+			await neon.branches.delete(
+				{ projectId, branchId: withCompute.id },
+				{
+					waitForReadiness: true,
+				},
+			),
 		);
 		expectOk(
-			await neon.branches.delete(projectId, bare.id, {
-				waitForReadiness: true,
-			}),
+			await neon.branches.delete(
+				{ projectId, branchId: bare.id },
+				{
+					waitForReadiness: true,
+				},
+			),
 		);
 	});
 
 	it("manages roles, including the two different password shapes", async () => {
 		const before = expectOk(
-			await neon.postgres.roles.list(projectId, defaultBranchId),
+			await neon.postgres.roles.list({
+				projectId,
+				branchId: defaultBranchId,
+			}),
 		);
 		expect(before.length).toBeGreaterThan(0);
 
 		const created = expectOk(
 			await neon.postgres.roles.create(
-				projectId,
-				defaultBranchId,
-				{ name: "e2e_role" },
+				{ projectId, branchId: defaultBranchId, name: "e2e_role" },
 				{ waitForReadiness: true },
 			),
 		);
@@ -224,20 +254,18 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		// `password` unwraps to a bare string, `resetPassword` returns the whole Role —
 		// an asymmetry that's easy to break when the response mapping is touched.
 		const password = expectOk(
-			await neon.postgres.roles.password(
+			await neon.postgres.roles.password({
 				projectId,
-				defaultBranchId,
-				"e2e_role",
-			),
+				branchId: defaultBranchId,
+				roleName: "e2e_role",
+			}),
 		);
 		expect(typeof password).toBe("string");
 		expect(password.length).toBeGreaterThan(0);
 
 		const reset = expectOk(
 			await neon.postgres.roles.resetPassword(
-				projectId,
-				defaultBranchId,
-				"e2e_role",
+				{ projectId, branchId: defaultBranchId, roleName: "e2e_role" },
 				{ waitForReadiness: true },
 			),
 		);
@@ -246,65 +274,77 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 		expectOk(
 			await neon.postgres.roles.delete(
-				projectId,
-				defaultBranchId,
-				"e2e_role",
+				{ projectId, branchId: defaultBranchId, roleName: "e2e_role" },
 				{ waitForReadiness: true },
 			),
 		);
 		const after = expectOk(
-			await neon.postgres.roles.list(projectId, defaultBranchId),
+			await neon.postgres.roles.list({
+				projectId,
+				branchId: defaultBranchId,
+			}),
 		);
 		expect(after.map((role) => role.name)).not.toContain("e2e_role");
 	});
 
 	it("round-trips a database", async () => {
 		const roles = expectOk(
-			await neon.postgres.roles.list(projectId, defaultBranchId),
+			await neon.postgres.roles.list({
+				projectId,
+				branchId: defaultBranchId,
+			}),
 		);
 		const owner = roles[0];
 		if (!owner) throw new Error("project has no role to own a database");
 
 		const created = expectOk(
 			await neon.postgres.databases.create(
-				projectId,
-				defaultBranchId,
-				{ name: "e2e_db", owner_name: owner.name },
+				{
+					projectId,
+					branchId: defaultBranchId,
+					name: "e2e_db",
+					owner_name: owner.name,
+				},
 				{ waitForReadiness: true },
 			),
 		);
 		expect(created.name).toBe("e2e_db");
 
 		const fetched = expectOk(
-			await neon.postgres.databases.get(
+			await neon.postgres.databases.get({
 				projectId,
-				defaultBranchId,
-				"e2e_db",
-			),
+				branchId: defaultBranchId,
+				databaseName: "e2e_db",
+			}),
 		);
 		expect(fetched.owner_name).toBe(owner.name);
 
 		expectOk(
 			await neon.postgres.databases.delete(
-				projectId,
-				defaultBranchId,
-				"e2e_db",
+				{
+					projectId,
+					branchId: defaultBranchId,
+					databaseName: "e2e_db",
+				},
 				{ waitForReadiness: true },
 			),
 		);
 		const after = expectOk(
-			await neon.postgres.databases.list(projectId, defaultBranchId),
+			await neon.postgres.databases.list({
+				projectId,
+				branchId: defaultBranchId,
+			}),
 		);
 		expect(after.map((db) => db.name)).not.toContain("e2e_db");
 	});
 
 	it("lists and fetches the default branch's endpoint", async () => {
-		const all = expectOk(await neon.postgres.endpoints.list(projectId));
+		const all = expectOk(await neon.postgres.endpoints.list({ projectId }));
 		const byBranch = expectOk(
-			await neon.postgres.endpoints.listByBranch(
+			await neon.postgres.endpoints.listByBranch({
 				projectId,
-				defaultBranchId,
-			),
+				branchId: defaultBranchId,
+			}),
 		);
 		expect(byBranch.length).toBeGreaterThan(0);
 		expect(all.map((endpoint) => endpoint.id)).toEqual(
@@ -314,7 +354,10 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		const first = byBranch[0];
 		if (!first) throw new Error("default branch has no endpoint");
 		const fetched = expectOk(
-			await neon.postgres.endpoints.get(projectId, first.id),
+			await neon.postgres.endpoints.get({
+				projectId,
+				endpointId: first.id,
+			}),
 		);
 		expect(fetched.id).toBe(first.id);
 		expect(fetched.branch_id).toBe(defaultBranchId);
@@ -322,26 +365,30 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 
 	it("waitFor resolves against operations the project has already run", async () => {
 		const operations = expectOk(
-			await neon.operations.list(projectId).all(),
+			await neon.operations.list({ projectId }).all(),
 		);
 		expect(operations.length).toBeGreaterThan(0);
 
 		// Everything this project has done is finished by now, so waitFor must recognise
 		// the terminal states and return rather than poll until the timeout.
-		expectOk(await neon.operations.waitFor(operations.slice(0, 5)));
+		expectOk(
+			await neon.operations.waitFor({
+				operations: operations.slice(0, 5),
+			}),
+		);
 
 		const single = operations[0];
 		if (!single) throw new Error("unreachable");
 		const fetched = expectOk(
-			await neon.operations.get(projectId, single.id),
+			await neon.operations.get({ projectId, operationId: single.id }),
 		);
 		expect(fetched.id).toBe(single.id);
 	});
 
 	it("a wait timeout carries outstanding operations so waitFor can resume", async () => {
 		const { data, error } = await neon.branches.create(
-			projectId,
 			{
+				projectId,
 				name: "wait-timeout-resume",
 				parent_id: defaultBranchId,
 				noCompute: true,
@@ -370,18 +417,23 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			branchId =
 				error.operations.find((op) => op.branch_id)?.branch_id ??
 				branchId;
-			expectOk(await neon.operations.waitFor(error.operations));
+			expectOk(
+				await neon.operations.waitFor({ operations: error.operations }),
+			);
 			if (branchId) {
 				const branch = expectOk(
-					await neon.branches.get(projectId, branchId),
+					await neon.branches.get({ projectId, branchId }),
 				);
 				expect(branch.id).toBe(branchId);
 			}
 		} finally {
 			if (branchId) {
-				await neon.branches.delete(projectId, branchId, {
-					waitForReadiness: true,
-				});
+				await neon.branches.delete(
+					{ projectId, branchId },
+					{
+						waitForReadiness: true,
+					},
+				);
 			}
 		}
 	});
@@ -390,7 +442,9 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 		let tokenId: string | undefined;
 		try {
 			const created = expectOk(
-				await neon.credentials.create(projectId, defaultBranchId, {
+				await neon.credentials.create({
+					projectId,
+					branchId: defaultBranchId,
 					name: "sdk-e2e",
 					scopes: ["storage:read"],
 					principal_type: "user",
@@ -401,48 +455,48 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			expect(created.s3_secret_access_key.length).toBeGreaterThan(0);
 
 			const revealed = expectOk(
-				await neon.credentials.reveal(
+				await neon.credentials.reveal({
 					projectId,
-					defaultBranchId,
-					created.token_id,
-				),
+					branchId: defaultBranchId,
+					tokenId: created.token_id,
+				}),
 			);
 			expect(revealed.token_id).toBe(created.token_id);
 			expect(revealed.api_token).toBe(created.api_token);
 			expect(revealed).not.toHaveProperty("branch_id");
 
 			const rotated = expectOk(
-				await neon.credentials.rotate(
+				await neon.credentials.rotate({
 					projectId,
-					defaultBranchId,
-					created.token_id,
-				),
+					branchId: defaultBranchId,
+					tokenId: created.token_id,
+				}),
 			);
 			expect(rotated.token_id).toBe(created.token_id);
 			expect(rotated.api_token).not.toBe(created.api_token);
 
 			expectOk(
-				await neon.credentials.revoke(
+				await neon.credentials.revoke({
 					projectId,
-					defaultBranchId,
-					created.token_id,
-				),
+					branchId: defaultBranchId,
+					tokenId: created.token_id,
+				}),
 			);
 			tokenId = undefined;
 
-			const { error } = await neon.credentials.reveal(
+			const { error } = await neon.credentials.reveal({
 				projectId,
-				defaultBranchId,
-				created.token_id,
-			);
+				branchId: defaultBranchId,
+				tokenId: created.token_id,
+			});
 			expect(error).toBeInstanceOf(NeonNotFoundError);
 		} finally {
 			if (tokenId) {
-				await neon.credentials.revoke(
+				await neon.credentials.revoke({
 					projectId,
-					defaultBranchId,
+					branchId: defaultBranchId,
 					tokenId,
-				);
+				});
 			}
 		}
 	});

@@ -76,7 +76,7 @@ describe("functions.customDomains", () => {
 		});
 
 		const { data, error } = await neon.functions.customDomains
-			.list("p-1", "br-1")
+			.list({ projectId: "p-1", branchId: "br-1" })
 			.all();
 
 		expect(error).toBeUndefined();
@@ -98,15 +98,13 @@ describe("functions.customDomains", () => {
 			body: domain,
 		}));
 
-		const { data, error } = await neon.functions.customDomains.register(
-			"p-1",
-			"br-1",
-			{
-				domain: "docs.example.com",
-				entity_type: "function",
-				entity_id: "api",
-			},
-		);
+		const { data, error } = await neon.functions.customDomains.register({
+			projectId: "p-1",
+			branchId: "br-1",
+			domain: "docs.example.com",
+			entity_type: "function",
+			entity_id: "api",
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual(domain);
@@ -132,15 +130,13 @@ describe("functions.customDomains", () => {
 			body: withStatus,
 		}));
 
-		const { data, error } = await neon.functions.customDomains.register(
-			"p-1",
-			"br-1",
-			{
-				domain: "docs.example.com",
-				entity_type: "function",
-				entity_id: "api",
-			},
-		);
+		const { data, error } = await neon.functions.customDomains.register({
+			projectId: "p-1",
+			branchId: "br-1",
+			domain: "docs.example.com",
+			entity_type: "function",
+			entity_id: "api",
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual(withStatus);
@@ -149,11 +145,11 @@ describe("functions.customDomains", () => {
 	it("deletes with a 204", async () => {
 		const { neon, calls } = neonRouting(() => ({ status: 204 }));
 
-		const { error } = await neon.functions.customDomains.delete(
-			"p-1",
-			"br-1",
-			"docs.example.com",
-		);
+		const { error } = await neon.functions.customDomains.delete({
+			projectId: "p-1",
+			branchId: "br-1",
+			domain: "docs.example.com",
+		});
 
 		expect(error).toBeUndefined();
 		expect(calls).toHaveLength(1);

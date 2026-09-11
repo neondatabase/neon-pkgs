@@ -55,7 +55,9 @@ describe("projects.members.list", () => {
 			{ project_members: [member("m-2")] },
 		]);
 
-		const { data, error } = await neon.projects.members.list("p-1").all();
+		const { data, error } = await neon.projects.members
+			.list({ projectId: "p-1" })
+			.all();
 
 		expect(error).toBeUndefined();
 		expect(data?.map((m) => m.member_id)).toEqual(["m-1", "m-2"]);
@@ -67,7 +69,7 @@ describe("projects.members.list", () => {
 	it("forwards the limit query parameter", async () => {
 		const { neon, calls } = neonQueued([{ project_members: [] }]);
 
-		await neon.projects.members.list("p-1", { limit: 25 }).all();
+		await neon.projects.members.list({ projectId: "p-1", limit: 25 }).all();
 
 		expect(calls[0]?.url).toContain("limit=25");
 	});
@@ -87,7 +89,11 @@ describe("projects.members.setRole", () => {
 	it("sends the role and withholds the self-demotion acknowledgement", async () => {
 		const { neon, calls } = neonQueued([roleResponse]);
 
-		await neon.projects.members.setRole("p-1", "m-1", "viewer");
+		await neon.projects.members.setRole({
+			projectId: "p-1",
+			memberId: "m-1",
+			role: "viewer",
+		});
 
 		expect(calls[0]?.method).toBe("PUT");
 		expect(calls[0]?.url).toContain("/projects/p-1/members/m-1/role");
@@ -98,7 +104,10 @@ describe("projects.members.setRole", () => {
 	it("adds confirm_self_demotion only when acknowledged", async () => {
 		const { neon, calls } = neonQueued([roleResponse]);
 
-		await neon.projects.members.setRole("p-1", "m-1", "viewer", {
+		await neon.projects.members.setRole({
+			projectId: "p-1",
+			memberId: "m-1",
+			role: "viewer",
 			confirmSelfDemotion: true,
 		});
 
@@ -108,11 +117,11 @@ describe("projects.members.setRole", () => {
 	it("returns the rotation hints rather than just the role", async () => {
 		const { neon } = neonQueued([roleResponse]);
 
-		const { data } = await neon.projects.members.setRole(
-			"p-1",
-			"m-1",
-			"viewer",
-		);
+		const { data } = await neon.projects.members.setRole({
+			projectId: "p-1",
+			memberId: "m-1",
+			role: "viewer",
+		});
 
 		expect(data?.credential_rotation_recommended).toBe(true);
 		expect(data?.org_api_key_rotation_recommended).toBe(false);
@@ -130,7 +139,10 @@ describe("projects.members.removeRole", () => {
 	it("withholds the self-lockout acknowledgement by default", async () => {
 		const { neon, calls } = neonQueued([removed]);
 
-		await neon.projects.members.removeRole("p-1", "m-1");
+		await neon.projects.members.removeRole({
+			projectId: "p-1",
+			memberId: "m-1",
+		});
 
 		expect(calls[0]?.method).toBe("DELETE");
 		expect(calls[0]?.url).toContain("/projects/p-1/members/m-1/role");
@@ -140,7 +152,9 @@ describe("projects.members.removeRole", () => {
 	it("adds confirm_self_lockout only when acknowledged", async () => {
 		const { neon, calls } = neonQueued([removed]);
 
-		await neon.projects.members.removeRole("p-1", "m-1", {
+		await neon.projects.members.removeRole({
+			projectId: "p-1",
+			memberId: "m-1",
 			confirmSelfLockout: true,
 		});
 

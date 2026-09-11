@@ -9,9 +9,21 @@ import type {
 	BucketCreateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = BucketCreateRequest;
+
+export type BucketsListParams = { projectId: string; branchId: string };
+export type BucketsCreateParams = {
+	projectId: string;
+	branchId: string;
+} & CreateInput;
+export type BucketsDeleteParams = {
+	projectId: string;
+	branchId: string;
+	bucketName: string;
+};
 
 /** Branch-scoped object-storage buckets. */
 export class Buckets<DThrow extends boolean> {
@@ -22,20 +34,26 @@ export class Buckets<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/buckets */
-	list(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<Bucket[], DThrow>>;
+	list(params: BucketsListParams): Promise<Outcome<Bucket[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: BucketsListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Bucket[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: BucketsListParams,
 		opts?: CallOptions,
 	): Promise<Bucket[] | NeonResult<Bucket[]>> {
+		const invalid = validateParams(params, "storage.buckets.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Bucket[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -50,23 +68,26 @@ export class Buckets<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/buckets */
-	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
-	): Promise<Outcome<Bucket, DThrow>>;
+	create(params: BucketsCreateParams): Promise<Outcome<Bucket, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: BucketsCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Bucket, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: BucketsCreateParams,
 		opts?: CallOptions,
 	): Promise<Bucket | NeonResult<Bucket>> {
+		const invalid = validateParams(params, "storage.buckets.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Bucket>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -82,23 +103,27 @@ export class Buckets<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id}/buckets/{bucket_name} */
-	delete(
-		projectId: string,
-		branchId: string,
-		bucketName: string,
-	): Promise<Outcome<void, DThrow>>;
+	delete(params: BucketsDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		bucketName: string,
+		params: BucketsDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		bucketName: string,
+		params: BucketsDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "storage.buckets.delete", {
+			projectId: "string",
+			branchId: "string",
+			bucketName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, bucketName } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchBucket({
 				client,

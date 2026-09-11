@@ -20,14 +20,20 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 			branch_id: "br-1",
 			db_name: "neondb",
 		});
-		const { data, error } = await neon.auth.get("p-1", "br-1");
+		const { data, error } = await neon.auth.get({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 		expect(error).toBeUndefined();
 		expect(data?.branch_id).toBe("br-1");
 	});
 
 	it("auth.oauthProviders.list unwraps the providers array", async () => {
 		const neon = neonReturning(200, { providers: [{ id: "google" }] });
-		const { data } = await neon.auth.oauthProviders.list("p-1", "br-1");
+		const { data } = await neon.auth.oauthProviders.list({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 		expect(data).toEqual([{ id: "google" }]);
 	});
 
@@ -37,7 +43,9 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 				{ id: "perm-1", granted_to_email: "a@b.c", granted_at: "now" },
 			],
 		});
-		const { data } = await neon.projects.permissions.list("p-1");
+		const { data } = await neon.projects.permissions.list({
+			projectId: "p-1",
+		});
 		expect(data).toHaveLength(1);
 		expect(data?.[0]?.granted_to_email).toBe("a@b.c");
 	});
@@ -47,22 +55,24 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 			project: { id: "p-1" },
 			branches: [],
 		});
-		const { data } = await neon.projects.recover("p-1");
+		const { data } = await neon.projects.recover({ projectId: "p-1" });
 		expect(data).toEqual({ id: "p-1" });
 	});
 
 	it("postgres.endpoints.listByBranch unwraps endpoints", async () => {
 		const neon = neonReturning(200, { endpoints: [{ id: "ep-1" }] });
-		const { data } = await neon.postgres.endpoints.listByBranch(
-			"p-1",
-			"br-1",
-		);
+		const { data } = await neon.postgres.endpoints.listByBranch({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 		expect(data).toEqual([{ id: "ep-1" }]);
 	});
 
 	it("propagates typed errors through the ergonomic channel", async () => {
 		const neon = neonReturning(403, { message: "forbidden" });
-		const { data, error } = await neon.projects.permissions.list("p-1");
+		const { data, error } = await neon.projects.permissions.list({
+			projectId: "p-1",
+		});
 		expect(data).toBeUndefined();
 		expect(error?.kind).toBe("auth");
 	});

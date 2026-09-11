@@ -17,6 +17,7 @@ import type {
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonAbortError, NeonClientError } from "../errors.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 /**
@@ -106,6 +107,29 @@ export interface SetScheduleInput {
 	schedule: BackupScheduleItemInput[];
 }
 
+export type SnapshotsListParams = { projectId: string };
+export type SnapshotsCreateParams = {
+	projectId: string;
+	branchId: string;
+} & CreateSnapshotInput;
+export type SnapshotsUpdateParams = {
+	projectId: string;
+	snapshotId: string;
+} & UpdateSnapshotInput;
+export type SnapshotsDeleteParams = { projectId: string; snapshotId: string };
+export type SnapshotsRestoreParams = {
+	projectId: string;
+	snapshotId: string;
+} & RestoreSnapshotInput;
+export type SnapshotsGetScheduleParams = {
+	projectId: string;
+	branchId: string;
+};
+export type SnapshotsSetScheduleParams = {
+	projectId: string;
+	branchId: string;
+} & SetScheduleInput;
+
 /** Snapshot resource. */
 export class Snapshots<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -115,15 +139,25 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/snapshots */
-	list(projectId: string): Promise<Outcome<Snapshot[], DThrow>>;
+	list(params: SnapshotsListParams): Promise<Outcome<Snapshot[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
+		params: SnapshotsListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Snapshot[], Throw>>;
 	list(
-		projectId: string,
+		params: SnapshotsListParams,
 		opts?: CallOptions,
 	): Promise<Snapshot[] | NeonResult<Snapshot[]>> {
+		const invalid = validateParams(params, "snapshots.list", {
+			projectId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Snapshot[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -138,23 +172,26 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/snapshot */
-	create(
-		projectId: string,
-		branchId: string,
-		input?: CreateSnapshotInput,
-	): Promise<Outcome<Snapshot, DThrow>>;
+	create(params: SnapshotsCreateParams): Promise<Outcome<Snapshot, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateSnapshotInput | undefined,
+		params: SnapshotsCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Snapshot, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input?: CreateSnapshotInput,
+		params: SnapshotsCreateParams,
 		opts?: CallOptions,
 	): Promise<Snapshot | NeonResult<Snapshot>> {
+		const invalid = validateParams(params, "snapshots.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Snapshot>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -175,23 +212,26 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/** @apiCall PATCH /projects/{project_id}/snapshots/{snapshot_id} */
-	update(
-		projectId: string,
-		snapshotId: string,
-		input: UpdateSnapshotInput,
-	): Promise<Outcome<Snapshot, DThrow>>;
+	update(params: SnapshotsUpdateParams): Promise<Outcome<Snapshot, DThrow>>;
 	update<Throw extends boolean = DThrow>(
-		projectId: string,
-		snapshotId: string,
-		input: UpdateSnapshotInput,
+		params: SnapshotsUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Snapshot, Throw>>;
 	update(
-		projectId: string,
-		snapshotId: string,
-		input: UpdateSnapshotInput,
+		params: SnapshotsUpdateParams,
 		opts?: CallOptions,
 	): Promise<Snapshot | NeonResult<Snapshot>> {
+		const invalid = validateParams(params, "snapshots.update", {
+			projectId: "string",
+			snapshotId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Snapshot>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, snapshotId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -215,20 +255,26 @@ export class Snapshots<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/snapshots/{snapshot_id} */
-	delete(
-		projectId: string,
-		snapshotId: string,
-	): Promise<Outcome<void, DThrow>>;
+	delete(params: SnapshotsDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		snapshotId: string,
+		params: SnapshotsDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		snapshotId: string,
+		params: SnapshotsDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "snapshots.delete", {
+			projectId: "string",
+			snapshotId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, snapshotId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -256,23 +302,26 @@ export class Snapshots<DThrow extends boolean> {
 	 *
 	 * @apiCall POST /projects/{project_id}/snapshots/{snapshot_id}/restore
 	 */
-	restore(
-		projectId: string,
-		snapshotId: string,
-		input?: RestoreSnapshotInput,
-	): Promise<Outcome<Branch, DThrow>>;
+	restore(params: SnapshotsRestoreParams): Promise<Outcome<Branch, DThrow>>;
 	restore<Throw extends boolean = DThrow>(
-		projectId: string,
-		snapshotId: string,
-		input: RestoreSnapshotInput | undefined,
+		params: SnapshotsRestoreParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	async restore(
-		projectId: string,
-		snapshotId: string,
-		input?: RestoreSnapshotInput,
+		params: SnapshotsRestoreParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const invalid = validateParams(params, "snapshots.restore", {
+			projectId: "string",
+			snapshotId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Branch>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, snapshotId, ...input } = params;
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const preview = input?.preview;
@@ -391,19 +440,27 @@ export class Snapshots<DThrow extends boolean> {
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/backup_schedule */
 	getSchedule(
-		projectId: string,
-		branchId: string,
+		params: SnapshotsGetScheduleParams,
 	): Promise<Outcome<BackupSchedule, DThrow>>;
 	getSchedule<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: SnapshotsGetScheduleParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<BackupSchedule, Throw>>;
 	getSchedule(
-		projectId: string,
-		branchId: string,
+		params: SnapshotsGetScheduleParams,
 		opts?: CallOptions,
 	): Promise<BackupSchedule | NeonResult<BackupSchedule>> {
+		const invalid = validateParams(params, "snapshots.getSchedule", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<BackupSchedule>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -429,29 +486,35 @@ export class Snapshots<DThrow extends boolean> {
 	 * @apiCall PUT /projects/{project_id}/branches/{branch_id}/backup_schedule
 	 */
 	setSchedule(
-		projectId: string,
-		branchId: string,
-		schedule: SetScheduleInput,
+		params: SnapshotsSetScheduleParams,
 	): Promise<Outcome<void, DThrow>>;
 	setSchedule<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		schedule: SetScheduleInput,
+		params: SnapshotsSetScheduleParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	setSchedule(
-		projectId: string,
-		branchId: string,
-		schedule: SetScheduleInput,
+		params: SnapshotsSetScheduleParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "snapshots.setSchedule", {
+			projectId: "string",
+			branchId: "string",
+			schedule: "array",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, schedule } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				setSnapshotSchedule({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: schedule,
+					body: { schedule },
 					throwOnError: false,
 					signal,
 				}),

@@ -153,8 +153,11 @@ const methods = [
 			opts?: CallOptions<false>,
 		): Promise<NeonResult<unknown>> =>
 			opts
-				? neon.branches.create("p-1", { name: "feature" }, opts)
-				: neon.branches.create("p-1", { name: "feature" }),
+				? neon.branches.create(
+						{ projectId: "p-1", name: "feature" },
+						opts,
+					)
+				: neon.branches.create({ projectId: "p-1", name: "feature" }),
 	},
 	{
 		name: "branches.createAndConnect",
@@ -165,11 +168,13 @@ const methods = [
 		): Promise<NeonResult<unknown>> =>
 			opts
 				? neon.branches.createAndConnect(
-						"p-1",
-						{ name: "feature" },
+						{ projectId: "p-1", name: "feature" },
 						opts,
 					)
-				: neon.branches.createAndConnect("p-1", { name: "feature" }),
+				: neon.branches.createAndConnect({
+						projectId: "p-1",
+						name: "feature",
+					}),
 	},
 ];
 
@@ -250,7 +255,8 @@ describe("create-family waitForReadiness precedence", () => {
 				},
 			};
 		});
-		const { error } = await neon.projects.update("p-1", {
+		const { error } = await neon.projects.update({
+			projectId: "p-1",
 			name: "renamed",
 		});
 		expect(error).toBeUndefined();
@@ -278,7 +284,8 @@ describe("create-family waitForReadiness precedence", () => {
 			},
 			{ waitForReadiness: true },
 		);
-		const { error } = await neon.projects.update("p-1", {
+		const { error } = await neon.projects.update({
+			projectId: "p-1",
 			name: "renamed",
 		});
 		expect(error).toBeUndefined();

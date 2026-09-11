@@ -36,7 +36,7 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 
 			// Readiness polling is the point: the project must be usable, not merely created.
 			const project = expectOk(
-				await neon.projects.get(created.project.id),
+				await neon.projects.get({ projectId: created.project.id }),
 			);
 			expect(project.id).toBe(created.project.id);
 		},
@@ -80,9 +80,12 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			);
 			track(project.id);
 
-			const main = expectOk(await neon.branches.getDefault(project.id));
+			const main = expectOk(
+				await neon.branches.getDefault({ projectId: project.id }),
+			);
 			expectOk(
-				await neon.branches.create(project.id, {
+				await neon.branches.create({
+					projectId: project.id,
 					name: "dev",
 					parent_id: main.id,
 					noCompute: true,
@@ -94,7 +97,9 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			// `pagination.next` while projects use `pagination.cursor`, and a stubbed
 			// response can only ever confirm whichever one the stub was written with.
 			const all = expectOk(
-				await neon.branches.list(project.id, { limit: 1 }).all(),
+				await neon.branches
+					.list({ projectId: project.id, limit: 1 })
+					.all(),
 			);
 			expect(all.map((branch) => branch.name).sort()).toStrictEqual([
 				"dev",
@@ -102,7 +107,8 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 			]);
 
 			const streamed: string[] = [];
-			for await (const branch of neon.branches.list(project.id, {
+			for await (const branch of neon.branches.list({
+				projectId: project.id,
 				limit: 1,
 			})) {
 				streamed.push(branch.name);
