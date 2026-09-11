@@ -276,6 +276,21 @@ export const closeAnalytics = async (opts?: { timeout?: number }) => {
 	}
 };
 
+const getErrorAnalyticsEventContext = (
+	_args: AnalyticsEventArgs,
+): ErrorEventContext => ({
+	version: pkg.version,
+	ci: isCi(),
+	agent: getCliAgent(process.env),
+});
+
+// `nak_live_…` is the credential token id (also AWS_ACCESS_KEY_ID). CLI Started
+// joins argv, so `credentials reveal <tokenId>` would otherwise ship the key id.
+const CREDENTIAL_TOKEN_ID = /\bnak_live_[0-9a-f]+\b/gi;
+
+const redactCredentialTokenIds = (text: string): string =>
+	text.replace(CREDENTIAL_TOKEN_ID, "nak_live_<redacted>");
+
 export const getErrorAnalyticsEventProperties = (
 	err: Error,
 	errCode: ErrorCode,
@@ -286,8 +301,8 @@ export const getErrorAnalyticsEventProperties = (
 
 	return {
 		...context,
-		message: err.message,
-		stack: err.stack,
+		message: redactCredentialTokenIds(err.message),
+		stack: err.stack ? redactCredentialTokenIds(err.stack) : err.stack,
 		errCode,
 		statusCode: apiError?.status,
 		requestId,
@@ -330,20 +345,13 @@ export const trackEvent = (
 	log.debug("Sent CLI event: %s", event);
 };
 
-const getErrorAnalyticsEventContext = (
-	_args: AnalyticsEventArgs,
-): ErrorEventContext => ({
-	version: pkg.version,
-	ci: isCi(),
-	agent: getCliAgent(process.env),
-});
-
 const analyticsCommand = (args: AnalyticsEventArgs): string => {
 	const command = args._.join(" ");
-	if (args._[0] !== "ask" || typeof args.prompt !== "string") {
-		return command;
-	}
-	return `${command} ${args.prompt}`;
+	const raw =
+		args._[0] !== "ask" || typeof args.prompt !== "string"
+			? command
+			: `${command} ${args.prompt}`;
+	return redactCredentialTokenIds(raw);
 };
 
 export const getAnalyticsEventProperties = (

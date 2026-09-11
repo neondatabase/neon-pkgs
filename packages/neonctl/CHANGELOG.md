@@ -1,5 +1,63 @@
 # neonctl
 
+## 4.17.0
+
+### Patch Changes
+
+- Updated dependencies [e1e834a]
+  - neon@4.17.0
+
+## 4.16.0
+
+### Patch Changes
+
+- Updated dependencies [3d6be94]
+- Updated dependencies [e069f88]
+  - neon@4.16.0
+
+## 4.15.0
+
+### Patch Changes
+
+- Updated dependencies [1712d73]
+- Updated dependencies [475686f]
+  - neon@4.15.0
+
+## 4.14.6
+
+### Patch Changes
+
+- Updated dependencies [ae5d526]
+- Updated dependencies [f991894]
+  - neon@4.14.6
+
+## 4.14.5
+
+### Patch Changes
+
+- Updated dependencies [a2f6012]
+  - neon@4.14.5
+
+## 4.14.4
+
+### Patch Changes
+
+- Updated dependencies [9434724]
+  - neon@4.14.4
+
+## 4.14.3
+
+### Patch Changes
+
+- neon@4.14.3
+
+## 4.14.2
+
+### Patch Changes
+
+- Updated dependencies [fc95f62]
+  - neon@4.14.2
+
 ## 4.14.1
 
 ### Patch Changes

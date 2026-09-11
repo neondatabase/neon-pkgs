@@ -45,6 +45,28 @@ describe("writer", () => {
 	});
 
 	describe("outputs json", () => {
+		it("ends the document with a newline", () => {
+			const objectOut = getMockWritable();
+			writer({ output: "json", out: objectOut.stream }).end(
+				{ foo: "bar" },
+				{ fields: ["foo"] },
+			);
+			const objectJson = objectOut.getData();
+			expect(objectJson.endsWith("}\n")).toBe(true);
+			expect(JSON.parse(objectJson)).toEqual({ foo: "bar" });
+
+			const arrayOut = getMockWritable();
+			writer({ output: "json", out: arrayOut.stream }).end(
+				[{ foo: "bar" }],
+				{
+					fields: ["foo"],
+				},
+			);
+			const arrayJson = arrayOut.getData();
+			expect(arrayJson.endsWith("]\n")).toBe(true);
+			expect(JSON.parse(arrayJson)).toEqual([{ foo: "bar" }]);
+		});
+
 		it("outputs single data", () => {
 			const { stream, getData } = getMockWritable();
 			const out = writer({ output: "json", out: stream });

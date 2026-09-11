@@ -65,6 +65,35 @@ describe("config init", () => {
 			expect.arrayContaining(["@neon/config", "@neon/env"]),
 		);
 		expect(calls[0].cwd).toBe(workspace);
+		expect(readFileSync(join(workspace, ".gitignore"), "utf8")).toBe(
+			"node_modules/\n",
+		);
+	});
+
+	test("appends node_modules/ to an existing .gitignore before installing", async () => {
+		writeFileSync(join(workspace, ".gitignore"), "dist\n");
+
+		await initCmd({
+			cwd: workspace,
+			run: () => Promise.resolve(true),
+		});
+
+		expect(readFileSync(join(workspace, ".gitignore"), "utf8")).toBe(
+			"dist\nnode_modules/\n",
+		);
+	});
+
+	test("does not duplicate an existing node_modules gitignore entry", async () => {
+		writeFileSync(join(workspace, ".gitignore"), "node_modules\ndist\n");
+
+		await initCmd({
+			cwd: workspace,
+			run: () => Promise.resolve(true),
+		});
+
+		expect(readFileSync(join(workspace, ".gitignore"), "utf8")).toBe(
+			"node_modules\ndist\n",
+		);
 	});
 
 	test("installs with the package manager the project uses, not the one that invoked us", async () => {
@@ -147,6 +176,7 @@ describe("config init", () => {
 
 		expect(calls).toHaveLength(0);
 		expect(existsSync(join(workspace, "neon.ts"))).toBe(true);
+		expect(existsSync(join(workspace, ".gitignore"))).toBe(false);
 	});
 
 	test("--services declares the selected services and scaffolds the function source", async () => {

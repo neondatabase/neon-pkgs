@@ -31,6 +31,7 @@ import {
 import type { NeonApiClient } from "../api.js";
 import * as authModule from "../auth";
 import { AuthRefreshError, refreshToken } from "../auth";
+import { claimableCredentialsPath } from "../claimable/state.js";
 import * as credentialIo from "../credential_io.js";
 import { log } from "../log.js";
 import { test } from "../test_utils/fixtures";
@@ -772,6 +773,50 @@ describe("ensureAuth", () => {
 		expect(authSpy).not.toHaveBeenCalled();
 	});
 
+	test("does not parse a leftover Claimable assertion when --api-key is set", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const contextFile = join(configDir, ".neon");
+		const projectId = "patient-art-12345";
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId, branch: "main" }),
+		);
+		writeFileSync(claimableCredentialsPath(configDir, projectId), "{", {
+			mode: 0o600,
+		});
+		recordCredentialInputs({
+			apiKeyFlag: "napi_test",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir,
+		});
+		try {
+			const props = {
+				...setupTestProps(server),
+				apiKey: "napi_test",
+				contextFile,
+			};
+			await ensureAuth(props);
+			expect(props.apiKey).toBe("napi_test");
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			recordCredentialInputs({
+				apiKeyFlag: "",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir,
+			});
+			rmSync(contextFile, { force: true });
+			rmSync(claimableCredentialsPath(configDir, projectId), {
+				force: true,
+			});
+		}
+	});
+
 	test("should try refresh when token is missing access_token but has refresh_token", async ({
 		runMockServer,
 	}) => {
@@ -822,6 +867,67 @@ describe("ensureAuth", () => {
 		expect(authSpy).not.toHaveBeenCalled();
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
 		expect(props.apiKey).toBe("valid-token");
+	});
+
+	test("should skip global auth for inspect db --db-url", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["inspect", "db", "table-sizes"],
+			dbUrl: "postgresql://127.0.0.1:1/postgres",
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("inspect db --db-url does not refresh or refuse broken stored credentials", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
+			mode: 0o700,
+		});
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["inspect", "db", "locks"],
+			dbUrl: "postgresql://127.0.0.1:1/postgres",
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("inspect db --db-url does not refresh an expired stored token", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(
+			join(configDir, "credentials.json"),
+			JSON.stringify({
+				access_token: "expired-token",
+				refresh_token: "refresh-token",
+				expires_at: Date.now() - 3600 * 1000,
+			}),
+			{ mode: 0o700 },
+		);
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["inspect", "db", "table-sizes"],
+			dbUrl: "postgresql://127.0.0.1:1/postgres",
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
 	});
 
 	test("should skip global auth for ask command", async ({

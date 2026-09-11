@@ -315,8 +315,10 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		expect(pulled.preview?.credentials).toHaveLength(1);
-		const [meta] = pulled.preview?.credentials ?? [];
+		expect(pulled.preview?.credentials?.some((c) => c.name === "app")).toBe(
+			true,
+		);
+		const meta = pulled.preview?.credentials?.find((c) => c.name === "app");
 		expect(meta).toMatchObject({
 			name: "app",
 			principalType: "user",

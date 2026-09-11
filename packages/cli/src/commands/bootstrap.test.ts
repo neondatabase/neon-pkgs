@@ -50,6 +50,11 @@ const FIXTURE: Record<string, FixtureFile> = {
 		mode: 0o644,
 		content: '{ "name": "with-remix" }\n',
 	},
+	"updated-hono/selected.txt": {
+		type: "file",
+		mode: 0o644,
+		content: "selected catalog template\n",
+	},
 };
 
 const MANIFEST_YAML = `templates:
@@ -356,6 +361,9 @@ describe("bootstrap", () => {
 		expect(stdout).toMatch(/Plugin agents/);
 		expect(stdout).toMatch(/Skills and MCP agents/);
 		expect(stdout).toMatch(/(?<![-\w])--agent(?![-\w])/);
+		expect(stdout).not.toContain("--skip-template");
+		expect(stdout).not.toMatch(/Skip the template/);
+		expect(stderr).toBe("");
 	});
 
 	test("mixed --agent fails before scaffold", async () => {
@@ -424,5 +432,62 @@ describe("bootstrap", () => {
 		);
 		// git init ran as part of the quick start.
 		expect(existsSync(join(dest, ".git"))).toBe(true);
+	});
+
+	test("selectedTemplate scaffolds the catalog source for a known id", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const previousCodeload = process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+		const previousCi = process.env.CI;
+		process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = base;
+		process.env.CI = "true";
+		const { handler } = await import("./bootstrap.js");
+		try {
+			await handler({
+				apiClient: {} as never,
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "table",
+				contextFile: join(dest, ".neon"),
+				directory: dest,
+				force: true,
+				listTemplates: false,
+				default: false,
+				install: false,
+				git: false,
+				link: false,
+				agentSetup: false,
+				analytics: false,
+				printBanner: false,
+				skipDoneSummary: true,
+				selectedTemplate: {
+					id: "hono",
+					title: "Updated REST API",
+					description: "Updated template source",
+					requires: ["database"],
+					source: {
+						owner: "neondatabase",
+						repo: "examples",
+						ref: "main",
+						subdir: "updated-hono",
+					},
+				},
+			});
+		} finally {
+			if (previousCodeload === undefined) {
+				delete process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+			} else {
+				process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = previousCodeload;
+			}
+			if (previousCi === undefined) {
+				delete process.env.CI;
+			} else {
+				process.env.CI = previousCi;
+			}
+		}
+
+		expect(readFileSync(join(dest, "selected.txt"), "utf8")).toBe(
+			"selected catalog template\n",
+		);
+		expect(() => readFileSync(join(dest, "src/index.ts"))).toThrow();
 	});
 });

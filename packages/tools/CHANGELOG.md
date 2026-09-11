@@ -1,5 +1,46 @@
 # @neon/tools
 
+## 1.3.1
+
+### Patch Changes
+
+- 1c632b8: MCP tool failures include `name`, `kind`, `status`/`code`, `source`, `timeoutMs`, `requestId`, `reason`, and `operationId` when the thrown error has them.
+
+## 1.3.0
+
+### Minor Changes
+
+- 0d4dd06: Wrap Function triggers (`neon.triggers`) and credential reveal/rotate. Create input scopes stay `CredentialScope`; responses now type `GrantedCredentialScope[]`. Branch delete no longer accepts `hard_delete`. `@neon/tools/schemas` no longer exports `zDeleteProjectBranchQuery`.
+
+### Patch Changes
+
+- fb83cc4: Object-list failures throw `NeonClientError`.
+- Updated dependencies [0d4dd06]
+  - @neon/sdk@4.1.0
+
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [bb909d2]
+- Updated dependencies [640adad]
+- Updated dependencies [86baf96]
+- Updated dependencies [fae6ba7]
+- Updated dependencies [df4dfc2]
+- Updated dependencies [780119e]
+  - @neon/sdk@4.0.0
+
+## 1.2.1
+
+### Patch Changes
+
+- `collectPages` now consumes the bare page / item array that a throwing SDK client returns from `Paginated.page()` and `.all()`, instead of unwrapping a `{ data, error }` envelope.
+- Updated dependencies [9ac65e5]
+- Updated dependencies [ed53d40]
+- Updated dependencies [0474691]
+- Updated dependencies [79494fe]
+  - @neon/sdk@3.2.0
+
 ## 1.2.0
 
 ### Minor Changes

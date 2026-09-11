@@ -80,3 +80,8 @@ export const wrapHelpText = (text: string, width: number): string => {
 
 export const helpEpilogue = (...blocks: string[]): string =>
 	["", ...blocks.filter((block) => block !== "")].join("\n");
+
+export const globalOptionsTrailer = (usage: string): string => {
+	const cli = usage.trim().split(/\s+/)[0];
+	return `Global options: see ${cli === "" ? "neon" : cli} --help`;
+};

@@ -5,7 +5,7 @@ import type {
 } from "./lib/operation.js";
 
 export interface EveToolContext {
-	abortSignal: AbortSignal;
+	abortSignal?: AbortSignal;
 }
 
 type EveToolSource = {
@@ -26,7 +26,10 @@ export const toEveTool = <const Tool extends EveToolSource>(tool: Tool) => ({
 		input: Parameters<Tool["execute"]>[0],
 		context: EveToolContext,
 	): ReturnType<Tool["execute"]> =>
-		tool.execute(input, { signal: context.abortSignal }) as ReturnType<
-			Tool["execute"]
-		>,
+		tool.execute(
+			input,
+			context.abortSignal === undefined
+				? undefined
+				: { signal: context.abortSignal },
+		) as ReturnType<Tool["execute"]>,
 });

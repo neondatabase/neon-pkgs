@@ -53,6 +53,25 @@ describe("Eve compatibility", () => {
 
 		expect(toEveTool(tools["projects.list"]).approval).toBeUndefined();
 	});
+
+	test("runs without abortSignal using the constructor credential", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "constructor-key",
+			tools: ["projects.list"],
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					projects: [{ id: "project-id" }],
+					pagination: {},
+				});
+			},
+		});
+		await toEveTool(tools["projects.list"]).execute({}, {});
+		expect(requests[0].headers.get("authorization")).toBe(
+			"Bearer constructor-key",
+		);
+	});
 });
 
 describe("Mastra compatibility", () => {

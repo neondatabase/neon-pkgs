@@ -45,6 +45,7 @@ import type {
 	CreateBucketInput,
 	CreateCredentialInput,
 	CreateProjectInput,
+	CreateTriggerInput,
 	DeployFunctionInput,
 	EnableDataApiInput,
 	GetConnectionUriInput,
@@ -54,6 +55,7 @@ import type {
 	NeonBranchStorageSnapshot,
 	NeonBucketSnapshot,
 	NeonCredentialMeta,
+	NeonCredentialReveal,
 	NeonCredentialSecret,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
@@ -62,7 +64,9 @@ import type {
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonTriggerSnapshot,
 	UpdateBranchInput,
+	UpdateTriggerInput,
 } from "./neon-api.js";
 import type {
 	BucketAccessLevel,
@@ -236,6 +240,22 @@ const functionDeploymentResponseSchema = z.object({
 	deployment: functionDeploymentSchema,
 });
 
+const scheduleTriggerSchema = z.object({
+	type: z.literal("schedule"),
+	trigger_id: z.string(),
+	function_slug: z.string(),
+	name: z.string(),
+	function_path: z.string(),
+	schedule: z.object({ cron: z.string() }),
+	enabled: z.boolean(),
+	inherited: z.boolean(),
+	next_run_at: z.string().nullable(),
+});
+const triggerResponseSchema = z.object({ trigger: scheduleTriggerSchema });
+const triggersListResponseSchema = z.object({
+	triggers: z.array(scheduleTriggerSchema),
+});
+
 // ─── Preview: branch-scoped credentials ─────────────────────────────────────
 
 const credentialScopeSchema = z.enum([
@@ -270,6 +290,11 @@ const credentialMetaSchema = z.object({
 });
 const listCredentialsResponseSchema = z.object({
 	credentials: z.array(credentialMetaSchema),
+});
+const revealCredentialResponseSchema = z.object({
+	token_id: z.string(),
+	api_token: z.string(),
+	s3_secret_access_key: z.string(),
 });
 
 interface CreateNeonAuthRestInput {
@@ -814,6 +839,13 @@ class RealNeonApi implements NeonApi {
 		});
 	}
 
+	private async patchJson(path: string, body: unknown): Promise<unknown> {
+		return this.request("PATCH", path, {
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+	}
+
 	private async getJson(path: string): Promise<unknown> {
 		return this.request("GET", path);
 	}
@@ -837,7 +869,7 @@ class RealNeonApi implements NeonApi {
 	}
 
 	private async request(
-		method: "GET" | "POST" | "DELETE",
+		method: "GET" | "POST" | "PATCH" | "DELETE",
 		path: string,
 		init: { headers?: Record<string, string>; body?: BodyInit } = {},
 	): Promise<unknown> {
@@ -1157,6 +1189,118 @@ class RealNeonApi implements NeonApi {
 		);
 	}
 
+	async listBranchTriggers(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonTriggerSnapshot[]> {
+		try {
+			return await this.call(
+				`listBranchTriggers(${projectId}/${branchId})`,
+				async () => {
+					const data = await this.getJson(
+						triggersPath(projectId, branchId),
+					);
+					const parsed = triggersListResponseSchema.parse(data);
+					return parsed.triggers.map(triggerToSnapshot);
+				},
+				{ projectId },
+			);
+		} catch (err) {
+			throw previewUnavailableError(err, "Function triggers");
+		}
+	}
+
+	async createBranchTrigger(
+		projectId: string,
+		branchId: string,
+		input: CreateTriggerInput,
+	): Promise<NeonTriggerSnapshot> {
+		try {
+			return await this.call(
+				`createBranchTrigger(${projectId}/${branchId}/${input.name})`,
+				async () => {
+					const data = await this.postJson(
+						triggersPath(projectId, branchId),
+						{
+							type: "schedule",
+							name: input.name,
+							function_slug: input.functionSlug,
+							schedule: { cron: input.cron },
+							...(input.functionPath !== undefined
+								? { function_path: input.functionPath }
+								: {}),
+							...(input.enabled !== undefined
+								? { enabled: input.enabled }
+								: {}),
+						},
+					);
+					const parsed = triggerResponseSchema.parse(data);
+					return triggerToSnapshot(parsed.trigger);
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			throw previewUnavailableError(err, "Function triggers");
+		}
+	}
+
+	async updateBranchTrigger(
+		projectId: string,
+		branchId: string,
+		triggerId: string,
+		input: UpdateTriggerInput,
+	): Promise<NeonTriggerSnapshot> {
+		try {
+			return await this.call(
+				`updateBranchTrigger(${projectId}/${branchId}/${triggerId})`,
+				async () => {
+					const data = await this.patchJson(
+						`${triggersPath(projectId, branchId)}/${encodeURIComponent(triggerId)}`,
+						{
+							type: "schedule",
+							...(input.name !== undefined
+								? { name: input.name }
+								: {}),
+							...(input.functionSlug !== undefined
+								? { function_slug: input.functionSlug }
+								: {}),
+							...(input.cron !== undefined
+								? { schedule: { cron: input.cron } }
+								: {}),
+							...(input.functionPath !== undefined
+								? { function_path: input.functionPath }
+								: {}),
+							...(input.enabled !== undefined
+								? { enabled: input.enabled }
+								: {}),
+						},
+					);
+					const parsed = triggerResponseSchema.parse(data);
+					return triggerToSnapshot(parsed.trigger);
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			throw previewUnavailableError(err, "Function triggers");
+		}
+	}
+
+	async deleteBranchTrigger(
+		projectId: string,
+		branchId: string,
+		triggerId: string,
+	): Promise<void> {
+		await this.call(
+			`deleteBranchTrigger(${projectId}/${branchId}/${triggerId})`,
+			async () => {
+				await this.deleteJson(
+					`${triggersPath(projectId, branchId)}/${encodeURIComponent(triggerId)}`,
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
 	//
 	// No methods: the AI Gateway is always available on a branch (credential-gated, not
@@ -1219,6 +1363,33 @@ class RealNeonApi implements NeonApi {
 		}
 	}
 
+	async revealCredential(
+		projectId: string,
+		branchId: string,
+		tokenId: string,
+	): Promise<NeonCredentialReveal> {
+		try {
+			return await this.call(
+				`revealCredential(${projectId}/${branchId}/${tokenId})`,
+				async () => {
+					const data = await this.postJson(
+						`${credentialsPath(projectId, branchId)}/${encodeURIComponent(tokenId)}/reveal`,
+						{},
+					);
+					const parsed = revealCredentialResponseSchema.parse(data);
+					return {
+						tokenId: parsed.token_id,
+						apiToken: parsed.api_token,
+						s3SecretAccessKey: parsed.s3_secret_access_key,
+					};
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			throw previewUnavailableError(err, "Branch credentials");
+		}
+	}
+
 	async revokeCredential(
 		projectId: string,
 		branchId: string,
@@ -1246,6 +1417,25 @@ function branchPreviewPath(
 
 function credentialsPath(projectId: string, branchId: string): string {
 	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/credentials`;
+}
+
+function triggersPath(projectId: string, branchId: string): string {
+	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/triggers`;
+}
+
+function triggerToSnapshot(
+	data: z.infer<typeof scheduleTriggerSchema>,
+): NeonTriggerSnapshot {
+	return {
+		triggerId: data.trigger_id,
+		name: data.name,
+		functionSlug: data.function_slug,
+		functionPath: data.function_path,
+		cron: data.schedule.cron,
+		enabled: data.enabled,
+		inherited: data.inherited,
+		nextRunAt: data.next_run_at,
+	};
 }
 
 function createCredentialToSnapshot(

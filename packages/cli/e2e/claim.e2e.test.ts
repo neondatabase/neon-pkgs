@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect } from "vitest";
@@ -93,12 +93,40 @@ describe.sequential("e2e — neon claim against live Claimable Neon", () => {
 				);
 				projectId = created.project_id;
 				expect(created.state).toBe("unclaimed");
+				expect(
+					JSON.parse(readFileSync(createdIn.contextFile, "utf8")),
+				).toEqual({
+					projectId: created.project_id,
+					branch: created.branch_id,
+				});
 
 				const fetched = await runAnonymousJson<BareProject>(
 					["projects", "get", created.project_id],
 					createdIn,
 				);
 				expect(fetched.id).toBe(created.project_id);
+
+				const checkout = await runCli(
+					[
+						"checkout",
+						created.branch_id,
+						"--create",
+						"--no-env-pull",
+					],
+					{
+						...anonymous,
+						configDir: createdIn.configDir,
+						contextFile: createdIn.contextFile,
+						cwd: createdIn.cwd,
+						json: false,
+					},
+				);
+				expect(checkout.code, checkout.stderr).toBe(0);
+				const afterCheckout = await runAnonymousJson<BareProject>(
+					["projects", "get", created.project_id],
+					createdIn,
+				);
+				expect(afterCheckout.id).toBe(created.project_id);
 
 				const liveStatus = await runAnonymousJson<ClaimStatus>(
 					["claim", "status", ...claimHostArgs()],

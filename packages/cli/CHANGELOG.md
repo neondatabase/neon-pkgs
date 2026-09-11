@@ -1,5 +1,87 @@
 # neon
 
+## 4.17.0
+
+### Minor Changes
+
+- e1e834a: `env pull` / `fetchEnv` reveal the platform default AI Gateway and object-storage credentials instead of minting a combined branch credential. `neon.ts` functions can declare schedule triggers that apply after deploy.
+
+### Patch Changes
+
+- Updated dependencies [e1e834a]
+  - @neon/config@1.4.0
+  - @neon/config-runtime@1.3.0
+
+## 4.16.0
+
+### Minor Changes
+
+- 3d6be94: Add `neon triggers` and `neon credentials` commands for scheduled function triggers and branch-scoped credentials.
+
+### Patch Changes
+
+- e069f88: Let `neon init` set up an empty directory without a template, and honor the choice to skip neon.ts.
+
+## 4.15.0
+
+### Minor Changes
+
+- 475686f: `neon checkout <name> --create` creates a missing named branch, then pins it.
+
+### Patch Changes
+
+- 1712d73: Ignore `node_modules/` when the CLI installs the packages needed for a Neon config.
+- Updated dependencies [0d4dd06]
+  - @neon/sdk@4.1.0
+  - @neon/config@1.3.3
+  - @neon/config-runtime@1.2.4
+
+## 4.14.6
+
+### Patch Changes
+
+- ae5d526: `.neon` from `neon claim create` is the project id and branch only. Later commands use the identity assertion file, so `neon checkout` no longer drops Claimable auth.
+- f991894: `neon inspect db --db-url` connects with the connection string and no longer opens a browser login.
+
+## 4.14.5
+
+### Patch Changes
+
+- a2f6012: `neon claim create --file` and `neon env pull --file` keep an absolute path instead of joining it onto the working directory.
+
+## 4.14.4
+
+### Patch Changes
+
+- 9434724: `neon env pull` works on unclaimed Claimable Neon projects. A `neon.ts` that only declares Postgres, Auth, and the Data API is honored; one that names AI Gateway, Functions, or Object Storage fails until the project is claimed. `neon claim create` writes the same vars as that pull.
+- Updated dependencies [bb909d2]
+- Updated dependencies [640adad]
+- Updated dependencies [86baf96]
+- Updated dependencies [fae6ba7]
+- Updated dependencies [df4dfc2]
+- Updated dependencies [780119e]
+  - @neon/sdk@4.0.0
+  - @neon/config@1.3.2
+  - @neon/config-runtime@1.2.3
+
+## 4.14.3
+
+### Patch Changes
+
+- Updated dependencies [9ac65e5]
+- Updated dependencies [ed53d40]
+- Updated dependencies [0474691]
+- Updated dependencies [79494fe]
+  - @neon/sdk@3.2.0
+  - @neon/config@1.3.1
+  - @neon/config-runtime@1.2.2
+
+## 4.14.2
+
+### Patch Changes
+
+- fc95f62: A top-level command that only has subcommands (`neon claim`, `neon env`, `neon logs`, …) prints that command's help when you run it with no subcommand, instead of an error that says to run `--help`.
+
 ## 4.14.1
 
 ### Patch Changes

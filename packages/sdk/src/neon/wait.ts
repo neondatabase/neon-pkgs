@@ -9,9 +9,8 @@ import {
 } from "./deadline.js";
 import {
 	NeonAbortError,
-	type NeonError,
 	NeonOperationError,
-	NeonTimeoutError,
+	NeonWaitTimeoutError,
 	toNeonError,
 } from "./errors.js";
 import { err, type NeonResult, ok } from "./result.js";
@@ -23,11 +22,14 @@ const FAILURE: ReadonlySet<OperationStatus> = new Set([
 	"cancelled",
 ]);
 
-export interface WaitForOptions {
+export interface WaitBudget {
 	/** How often to poll each pending operation. Default 1000ms. */
 	pollIntervalMs?: number;
 	/** Overall deadline before giving up. Default 300000ms (5 min). */
 	timeoutMs?: number;
+}
+
+export interface WaitForOptions extends WaitBudget {
 	signal?: AbortSignal;
 }
 
@@ -38,8 +40,8 @@ export interface WaitForOptions {
 function readinessEnded(
 	deadline: Deadline,
 	timeoutMs: number,
-	pending: number,
-): NeonError | undefined {
+	outstanding: readonly Operation[],
+): NeonAbortError | NeonWaitTimeoutError | undefined {
 	const source = deadline.source();
 	if (source === "caller") {
 		return new NeonAbortError(
@@ -47,8 +49,9 @@ function readinessEnded(
 		);
 	}
 	if (source === "timeout") {
-		return new NeonTimeoutError(
-			`Timed out after ${timeoutMs}ms waiting for ${pending} operation(s) to finish.`,
+		return new NeonWaitTimeoutError(
+			`Timed out after ${timeoutMs}ms waiting for ${outstanding.length} operation(s) to finish.`,
+			{ timeoutMs, operations: outstanding },
 		);
 	}
 	return undefined;
@@ -57,7 +60,7 @@ function readinessEnded(
 /**
  * Poll the given operations until each reaches a terminal `finished`/`skipped` state.
  * Returns an error result carrying {@link NeonOperationError} if any operation ends in
- * `failed`/`error`/`cancelled`, {@link NeonTimeoutError} if the deadline is exceeded, or
+ * `failed`/`error`/`cancelled`, {@link NeonWaitTimeoutError} if the deadline is exceeded, or
  * {@link NeonAbortError} if the caller's signal fired.
  *
  * `timeoutMs` is a real deadline rather than a check between polls. Each poll runs under
@@ -86,14 +89,14 @@ export async function waitForOperations(
 		pending = pending.filter((op) => !FAILURE.has(op.status));
 
 		while (pending.length > 0) {
-			const ended = readinessEnded(deadline, timeoutMs, pending.length);
+			const ended = readinessEnded(deadline, timeoutMs, pending);
 			if (ended) return err(ended);
 
 			if (
 				(await delay(pollIntervalMs, deadline.signal)) === "cancelled"
 			) {
 				return err(
-					readinessEnded(deadline, timeoutMs, pending.length) ??
+					readinessEnded(deadline, timeoutMs, pending) ??
 						new NeonAbortError(
 							"Waiting for operations was aborted by its signal.",
 						),
@@ -101,10 +104,8 @@ export async function waitForOperations(
 			}
 
 			const stillPending: Operation[] = [];
-			// Counted from what is left rather than from the round's starting size, so a
-			// timeout part-way through a round reports the operations actually outstanding.
-			let remaining = pending.length;
-			for (const op of pending) {
+			for (let i = 0; i < pending.length; i++) {
+				const op = pending[i];
 				const polled = await runBounded(deadline, () =>
 					getProjectOperation({
 						client,
@@ -117,10 +118,15 @@ export async function waitForOperations(
 					}),
 				);
 
-				// Cancellation is read from the deadline before the response is
-				// classified: an aborted poll comes back as a transport failure with no
-				// response, which `toNeonError` would otherwise report as a network error.
-				const stopped = readinessEnded(deadline, timeoutMs, remaining);
+				// Classify from the deadline first: an aborted poll is a transport
+				// failure with no response, which toNeonError would report as a network
+				// error. The in-flight op is still outstanding.
+				const outstanding = [...stillPending, ...pending.slice(i)];
+				const stopped = readinessEnded(
+					deadline,
+					timeoutMs,
+					outstanding,
+				);
 				if (stopped) return err(stopped);
 				if (polled === undefined) {
 					return err(toNeonError(undefined, undefined));
@@ -133,8 +139,7 @@ export async function waitForOperations(
 				if (FAILURE.has(current.status)) {
 					return err(operationFailed(current));
 				}
-				if (SUCCESS.has(current.status)) remaining -= 1;
-				else stillPending.push(current);
+				if (!SUCCESS.has(current.status)) stillPending.push(current);
 			}
 			pending = stillPending;
 		}

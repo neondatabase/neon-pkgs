@@ -20,6 +20,7 @@ import {
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonBranchStorageSnapshot,
+	type NeonCredentialMeta,
 	type NeonDatabaseSnapshot,
 	type NeonRoleSnapshot,
 	PlatformError,
@@ -940,11 +941,10 @@ export async function fetchEnvKeysState(
 		result.dataApi = { url: dataApiSnapshot.url } satisfies NeonDataApiEnv;
 	}
 
-	// Object storage + AI Gateway (Preview). A single branch credential backs whichever of
-	// these the policy enables; functions never force one but ride along on its scopes. None
-	// of this runs when the policy enables neither, so the Postgres / Auth / Data API path
-	// never touches the credentials/storage endpoints (and keeps working on production, where
-	// they may not exist yet).
+	// Object storage + AI Gateway (Preview). Platform defaults back these when the region
+	// has them; functions never force a credential. None of this runs when the policy enables
+	// neither, so the Postgres / Auth / Data API path never touches the credentials/storage
+	// endpoints (and keeps working where those endpoints do not exist).
 	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
 	const wantsStorage =
 		storageEnabled &&
@@ -955,7 +955,7 @@ export async function fetchEnvKeysState(
 	const wantsGateway =
 		gatewayEnabled &&
 		(wants(K.aiGateway.apiKey) || wants(K.aiGateway.baseUrl));
-	// A credential is minted only for its *secrets*. The endpoint, region and gateway host
+	// A credential is revealed (or minted as a fallback) only for its *secrets*. The endpoint, region and gateway host
 	// are plain branch metadata, so selecting only those touches no credential at all — which
 	// is how a caller holding valid secrets refreshes the rest without issuing a new one.
 	const wantsStorageCredential =
@@ -984,7 +984,7 @@ export async function fetchEnvKeysState(
 		}
 
 		const secrets = wantsCredential
-			? await mintBranchCredential({
+			? await resolveBranchCredentialSecrets({
 					api,
 					projectId,
 					branchId: branch.id,
@@ -1199,9 +1199,9 @@ export async function resolveBranchPolicy(
 }
 
 /**
- * Scopes the branch credential should carry for a resolved branch policy and optional key
- * selection. Only object storage and the AI Gateway *require* a credential; functions never
- * force one, but `functions:invoke` rides along when another selected feature mints one.
+ * Scopes a minted fallback credential should carry. Only object storage and the AI Gateway
+ * *require* secrets; functions never force a credential. `functions:invoke` rides along only
+ * when this path still has to mint (defaults already cover storage and the gateway).
  */
 export function previewCredentialScopes(
 	preview: ResolvedPreviewConfig | undefined,
@@ -1268,26 +1268,135 @@ export function policyEnvKeys(
 	];
 }
 
+type BranchCredentialSecrets = {
+	accessKeyId: string;
+	secretAccessKey: string;
+	apiToken: string;
+};
+
+/** Exact `name` values the credentials list endpoint returns for the platform defaults. */
+const DEFAULT_AI_GATEWAY_CREDENTIAL_NAME = "Default AI gateway credential";
+const DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME =
+	"Default object storage credential";
+
+/** Whether an issued credential can still be used: not revoked, not past its expiry. */
+export function isLiveCredential(
+	meta: NeonCredentialMeta,
+	now: number,
+): boolean {
+	if (meta.revokedAt !== undefined) return false;
+	if (meta.expiresAt === undefined) return true;
+	const expiresAt = Date.parse(meta.expiresAt);
+	return Number.isNaN(expiresAt) || expiresAt > now;
+}
+
+export function defaultStorageCredential(
+	live: readonly NeonCredentialMeta[],
+	now: number,
+): NeonCredentialMeta | null {
+	return (
+		live.find(
+			(meta) =>
+				meta.name === DEFAULT_OBJECT_STORAGE_CREDENTIAL_NAME &&
+				isLiveCredential(meta, now),
+		) ?? null
+	);
+}
+
+export function defaultAiGatewayCredential(
+	live: readonly NeonCredentialMeta[],
+	now: number,
+): NeonCredentialMeta | null {
+	return (
+		live.find(
+			(meta) =>
+				meta.name === DEFAULT_AI_GATEWAY_CREDENTIAL_NAME &&
+				isLiveCredential(meta, now),
+		) ?? null
+	);
+}
+
 /**
- * Mint the branch credential backing object storage / the AI Gateway.
+ * Resolve secrets for object storage / the AI Gateway.
  *
- * `api_token` and `s3_secret_access_key` come back **exactly once** — they are not stored
- * server-side and the list endpoint returns metadata only — so the caller's copy is the only
- * copy. That is why {@link fetchEnv} mints rather than fetches: there is nothing to fetch. A
- * caller that already holds a valid copy should leave the secret keys out of `keys` (see
- * {@link fetchEnvReusingSecrets}) instead of minting one it will discard.
+ * Regions that expose those products already have platform defaults on every branch.
+ * Reveal those by exact name instead of minting a combined `neon-env ${branch}` credential.
+ * Mint only the half (or both) that has no default — regions without the credentials
+ * endpoint still fail at list, same as before.
+ *
+ * A caller that already holds secrets for those defaults should leave the secret keys out
+ * of `keys` (see {@link fetchEnvReusingSecrets}) instead of revealing them again.
  */
+async function resolveBranchCredentialSecrets(args: {
+	api: NeonApi;
+	projectId: string;
+	branchId: string;
+	branchName: string;
+	scopes: CredentialScope[];
+}): Promise<BranchCredentialSecrets> {
+	const needsStorage =
+		args.scopes.includes("storage:read") ||
+		args.scopes.includes("storage:write");
+	const needsGateway = args.scopes.includes("ai_gateway:invoke");
+	const live = await args.api.listCredentials(args.projectId, args.branchId);
+	const now = Date.now();
+	const storageDefault = defaultStorageCredential(live, now);
+	const gatewayDefault = defaultAiGatewayCredential(live, now);
+
+	const secrets: BranchCredentialSecrets = {
+		accessKeyId: "",
+		secretAccessKey: "",
+		apiToken: "",
+	};
+
+	if (needsStorage && storageDefault) {
+		const revealed = await args.api.revealCredential(
+			args.projectId,
+			args.branchId,
+			storageDefault.tokenId,
+		);
+		secrets.accessKeyId = revealed.tokenId;
+		secrets.secretAccessKey = revealed.s3SecretAccessKey;
+	}
+	if (needsGateway && gatewayDefault) {
+		const revealed = await args.api.revealCredential(
+			args.projectId,
+			args.branchId,
+			gatewayDefault.tokenId,
+		);
+		secrets.apiToken = revealed.apiToken;
+	}
+
+	const missingStorage = needsStorage && storageDefault === null;
+	const missingGateway = needsGateway && gatewayDefault === null;
+	if (missingStorage || missingGateway) {
+		const minted = await mintBranchCredential({
+			...args,
+			scopes: deriveCredentialScopes({
+				storage: missingStorage,
+				aiGateway: missingGateway,
+				functions: args.scopes.includes("functions:invoke"),
+			}),
+		});
+		if (missingStorage) {
+			secrets.accessKeyId = minted.accessKeyId;
+			secrets.secretAccessKey = minted.secretAccessKey;
+		}
+		if (missingGateway) {
+			secrets.apiToken = minted.apiToken;
+		}
+	}
+
+	return secrets;
+}
+
 async function mintBranchCredential(args: {
 	api: NeonApi;
 	projectId: string;
 	branchId: string;
 	branchName: string;
 	scopes: CredentialScope[];
-}): Promise<{
-	accessKeyId: string;
-	secretAccessKey: string;
-	apiToken: string;
-}> {
+}): Promise<BranchCredentialSecrets> {
 	const minted = await args.api.createCredential(
 		args.projectId,
 		args.branchId,

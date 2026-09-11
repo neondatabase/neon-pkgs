@@ -202,6 +202,95 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	test("accepts a schedule trigger on a function", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects a duplicate trigger name on the same function", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 0 * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toContain(
+				'trigger name "hourly" is listed more than once on function "fn1"',
+			);
+		}
+	});
+
+	test("rejects a trigger name used by two functions", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+						],
+					},
+					world: {
+						name: "World",
+						source: "./world.ts",
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 0 * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toContain(
+				'trigger name "hourly" is already used by function "hello"',
+			);
+		}
+	});
+
 	test("accepts a function dev block with a port", () => {
 		const result = configInputSchema.safeParse({
 			preview: {

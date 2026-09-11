@@ -4391,12 +4391,33 @@ export type PresignResponse = {
 };
 
 /**
- * A single capability a credential may exercise. A credential is granted
- * a set of these; it may only perform actions explicitly listed in its
- * scopes.
+ * A single capability you may request when issuing a credential. A
+ * credential is granted a set of these; it may only perform actions
+ * explicitly listed in its scopes.
+ *
+ * This is the *requestable* set. Responses describing an existing
+ * credential use `GrantedCredentialScope`, which is deliberately wider:
+ * a credential may have been granted a scope that this endpoint does not
+ * offer, and a response must be able to report it.
  *
  */
 export type CredentialScope = 'storage:read' | 'storage:write' | 'ai_gateway:invoke' | 'functions:invoke';
+
+/**
+ * A single capability a credential actually carries, as reported by
+ * responses that describe an existing credential.
+ *
+ * This set is a superset of `CredentialScope` (the requestable set)
+ * because a credential's scopes are not limited to what this API offers:
+ * the platform accepts additional scopes for customer-managed (`user`)
+ * credentials, so one may exist on your branch that was not issued
+ * through this endpoint. Responses must be able to report such a
+ * credential rather than fail to describe it — a client that rejected
+ * the value would, on rotate, discard the replacement secret after the
+ * rotation had already committed. Treat unknown values as opaque.
+ *
+ */
+export type GrantedCredentialScope = 'storage:read' | 'storage:write' | 'ai_gateway:invoke' | 'telemetry:write' | 'functions:invoke';
 
 export type CreateCredentialRequest = {
     /**
@@ -4435,11 +4456,96 @@ export type CreateCredentialResponse = {
      * nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY, returned exactly once.
      */
     s3_secret_access_key: string;
-    scopes: Array<CredentialScope>;
+    scopes: Array<GrantedCredentialScope>;
     branch_id: string;
     created_at: string;
     /**
      * When the credential expires; absent means never expires.
+     *
+     */
+    expires_at?: string;
+};
+
+/**
+ * The live secrets of an existing credential, recovered on demand by the
+ * reveal endpoint. `api_token` and `s3_secret_access_key` are the same
+ * values handed back once at issuance.
+ *
+ * The field set is deliberately narrower than `CreateCredentialResponse`:
+ * it carries only what reveal can actually recover. `token_id_short`,
+ * `scopes`, `principal_type`, `created_at` and `expires_at` are metadata,
+ * not secrets — read them from the list endpoint instead.
+ *
+ * No `branch_id` is returned. Reveal is scoped by `(project_id,
+ * token_id)`, so the branch in the request path authorizes the call but
+ * is not proven to be the branch the credential was issued on. Echoing it
+ * back would assert an anchor this endpoint never verified. For a
+ * credential's true anchor branch, read `branch_id` from the list
+ * endpoint, which is branch-exact.
+ *
+ */
+export type CredentialSecret = {
+    /**
+     * Opaque credential id (e.g. nak_live_<32hex>).
+     */
+    token_id: string;
+    /**
+     * Bearer token.
+     */
+    api_token: string;
+    /**
+     * nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY.
+     */
+    s3_secret_access_key: string;
+};
+
+/**
+ * The replacement secret material for an existing credential, returned
+ * exactly once. `token_id`, `scopes`, `branch_id` and `created_at` are
+ * unchanged by the rotation — only `api_token` and
+ * `s3_secret_access_key` are new.
+ *
+ */
+export type RotateCredentialResponse = {
+    /**
+     * Opaque credential id (e.g. nak_live_<32hex>), unchanged by the
+     * rotation. Doubles as the `AWS_ACCESS_KEY_ID` for SigV4.
+     *
+     */
+    token_id: string;
+    /**
+     * First 12 hex chars of token_id; safe to log.
+     */
+    token_id_short: string;
+    /**
+     * Customer-supplied label carried on the credential. Absent when none was set at issuance.
+     */
+    name?: string;
+    /**
+     * The new Bearer token; returned exactly once.
+     */
+    api_token: string;
+    /**
+     * The new nsk_live_<64 hex> AWS_SECRET_ACCESS_KEY; returned exactly once.
+     */
+    s3_secret_access_key: string;
+    scopes: Array<GrantedCredentialScope>;
+    branch_id: string;
+    /**
+     * Always `user`: only customer-managed credentials are rotatable
+     * through this endpoint.
+     *
+     */
+    principal_type: 'user';
+    /**
+     * When the credential was originally issued. Rotation replaces the
+     * secrets in place and does not reset this.
+     *
+     */
+    created_at: string;
+    /**
+     * When the credential expires; absent means never expires. Rotation
+     * does not extend it.
      *
      */
     expires_at?: string;
@@ -4455,7 +4561,7 @@ export type CredentialMeta = {
      * Customer-supplied label; absent when not provided at issuance.
      */
     name?: string;
-    scopes: Array<CredentialScope>;
+    scopes: Array<GrantedCredentialScope>;
     branch_id?: string;
     principal_type: string;
     function_id?: string;
@@ -4544,6 +4650,141 @@ export type NeonFunctionsListResponse = {
     functions: Array<NeonFunction>;
 };
 
+/**
+ * Opaque, server-minted project-wide trigger identifier.
+ */
+export type TriggerId = string;
+
+/**
+ * A numeric five-field cron schedule interpreted in UTC.
+ */
+export type FunctionTriggerSchedule = {
+    /**
+     * Numeric five-field cron expression (minute through day-of-week), interpreted in UTC.
+     */
+    cron: string;
+};
+
+/**
+ * Trigger creation payload discriminated by `type`. The only currently
+ * supported trigger type is `schedule`.
+ *
+ */
+export type TriggerCreateRequest = {
+    type: 'schedule';
+} & ScheduleTriggerCreateRequest;
+
+export type ScheduleTriggerCreateRequest = {
+    /**
+     * Trigger type discriminator.
+     */
+    type: 'schedule';
+    /**
+     * The branch-local Function slug to invoke.
+     */
+    function_slug: string;
+    /**
+     * Human-readable name, unique among triggers visible on the branch.
+     */
+    name: string;
+    /**
+     * Path passed to the target Function. Defaults to `/`.
+     */
+    function_path?: string;
+    schedule: FunctionTriggerSchedule;
+    /**
+     * Whether future occurrences should be scheduled.
+     */
+    enabled?: boolean;
+};
+
+/**
+ * Partial trigger update discriminated by `type`. The only currently
+ * supported trigger type is `schedule`.
+ *
+ */
+export type TriggerUpdateRequest = {
+    type: 'schedule';
+} & ScheduleTriggerUpdateRequest;
+
+export type ScheduleTriggerUpdateRequest = {
+    /**
+     * Trigger type discriminator; it does not change the trigger type.
+     */
+    type: 'schedule';
+    /**
+     * Replacement branch-local Function slug.
+     */
+    function_slug?: string;
+    name?: string;
+    function_path?: string;
+    schedule?: FunctionTriggerSchedule;
+    /**
+     * True enables and false disables future scheduling.
+     */
+    enabled?: boolean;
+};
+
+/**
+ * A branch-effective trigger discriminated by `type`. The only currently
+ * supported trigger type is `schedule`.
+ *
+ */
+export type Trigger = {
+    type: 'schedule';
+} & ScheduleTrigger;
+
+/**
+ * A branch-effective schedule trigger for a Function.
+ */
+export type ScheduleTrigger = {
+    /**
+     * Trigger type discriminator.
+     */
+    type: 'schedule';
+    trigger_id: TriggerId;
+    /**
+     * The branch-local Function slug resolved when an occurrence is consumed.
+     */
+    function_slug: string;
+    /**
+     * Human-readable trigger name.
+     */
+    name: string;
+    /**
+     * Path passed to the target Function.
+     */
+    function_path: string;
+    schedule: FunctionTriggerSchedule;
+    enabled: boolean;
+    /**
+     * Monotonic configuration version.
+     */
+    version: number;
+    /**
+     * Next scheduled occurrence as an RFC 3339 UTC timestamp, or null
+     * while disabled or inherited and not explicitly enabled on this branch.
+     *
+     */
+    next_run_at: string | null;
+    /**
+     * The public `branch_id` of the branch that authored the effective configuration.
+     */
+    source_branch_id: string;
+    /**
+     * True when the effective configuration was authored on an ancestor branch.
+     */
+    inherited: boolean;
+};
+
+export type TriggerResponse = {
+    trigger: Trigger;
+};
+
+export type TriggersListResponse = {
+    triggers: Array<Trigger>;
+};
+
 export type CustomDomain = {
     /**
      * The registered custom domain (normalized, lowercase).
@@ -4565,12 +4806,45 @@ export type CustomDomain = {
     /**
      * The hostname the customer must point their custom domain at with a
      * CNAME record. Empty when the serving region has no custom-domains
-     * front door configured. This is the only activation input: point DNS
-     * here and the domain goes live once a certificate is issued on the first
-     * request. (v1 has no status/lifecycle field.)
+     * front door configured. This is the activation input: point DNS here
+     * and the domain goes live (see `status`) once a certificate is issued
+     * on the first request.
      *
      */
     cname_target: string;
+    /**
+     * The domain's current validity, computed by a background check:
+     * `pending` (still converging — point your CNAME at `cname_target` and
+     * wait), `active` (live: DNS resolves to the edge, the CA is authorized,
+     * and routing is published), or `error` (a fixable problem — see
+     * `status_reason`). Not an `enum`: treat any undocumented value as
+     * unknown. May be absent briefly right after registration.
+     *
+     */
+    status?: string;
+    /**
+     * The DNS + CAA portion of the check: `pending` (no records yet), `ok`
+     * (resolves to our edge and the CA is authorized), `misconfigured` (your
+     * CNAME does not resolve to our edge), or `caa_blocked` (your CAA records
+     * forbid Let's Encrypt). Not an `enum`.
+     *
+     */
+    dns_status?: string;
+    /**
+     * Whether Neon's internal routing for the domain is published:
+     * `pending`, `present`, or `missing`. `missing` is an internal fault
+     * surfaced for support. Not an `enum`.
+     *
+     */
+    binding_status?: string;
+    /**
+     * A short, stable machine-readable reason for a non-active `status`
+     * (e.g. `cname-not-pointing-at-edge`, `caa-blocks-lets-encrypt`,
+     * `binding-missing`), suitable for keying an actionable hint. Empty when
+     * active or pending.
+     *
+     */
+    status_reason?: string;
 };
 
 export type CustomDomainRegisterRequest = {
@@ -8443,16 +8717,7 @@ export type DeleteProjectBranchData = {
          */
         branch_id: string;
     };
-    query?: {
-        /**
-         * If true, the branch is permanently deleted immediately without a recovery window.
-         * If false (default), the branch can be recovered within 7 days via the recover endpoint.
-         *
-         * This parameter is part of the Branch Recovery feature, which is in preview and not available to all users.
-         *
-         */
-        hard_delete?: boolean;
-    };
+    query?: never;
     url: '/projects/{project_id}/branches/{branch_id}';
 };
 
@@ -13104,6 +13369,121 @@ export type RevokeCredentialResponses = {
 
 export type RevokeCredentialResponse = RevokeCredentialResponses[keyof RevokeCredentialResponses];
 
+export type RevealCredentialData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The opaque credential id (e.g. nak_live_<32hex>).
+         */
+        token_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/credentials/{token_id}/reveal';
+};
+
+export type RevealCredentialErrors = {
+    /**
+     * Credential not found
+     */
+    404: GeneralError;
+    /**
+     * The credential exists but has no recoverable secret because it was
+     * issued before secret retrieval was supported. Rotate the credential
+     * to obtain a recoverable secret.
+     *
+     */
+    409: GeneralError;
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RevealCredentialError = RevealCredentialErrors[keyof RevealCredentialErrors];
+
+export type RevealCredentialResponses = {
+    /**
+     * The credential's live secrets.
+     */
+    200: CredentialSecret;
+};
+
+export type RevealCredentialResponse = RevealCredentialResponses[keyof RevealCredentialResponses];
+
+export type RotateCredentialData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The opaque credential id (e.g. nak_live_<32hex>).
+         */
+        token_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/credentials/{token_id}/rotate';
+};
+
+export type RotateCredentialErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RotateCredentialError = RotateCredentialErrors[keyof RotateCredentialErrors];
+
+export type RotateCredentialResponses = {
+    /**
+     * Credential rotated — new secrets shown once.
+     */
+    200: RotateCredentialResponse;
+};
+
+export type RotateCredentialResponse2 = RotateCredentialResponses[keyof RotateCredentialResponses];
+
 export type ListProjectBranchFunctionsData = {
     body?: never;
     path: {
@@ -13368,6 +13748,258 @@ export type CreateProjectBranchFunctionDeploymentResponses = {
 };
 
 export type CreateProjectBranchFunctionDeploymentResponse = CreateProjectBranchFunctionDeploymentResponses[keyof CreateProjectBranchFunctionDeploymentResponses];
+
+export type ListProjectBranchTriggersData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/triggers';
+};
+
+export type ListProjectBranchTriggersErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListProjectBranchTriggersError = ListProjectBranchTriggersErrors[keyof ListProjectBranchTriggersErrors];
+
+export type ListProjectBranchTriggersResponses = {
+    /**
+     * The branch-effective trigger list
+     */
+    200: TriggersListResponse;
+};
+
+export type ListProjectBranchTriggersResponse = ListProjectBranchTriggersResponses[keyof ListProjectBranchTriggersResponses];
+
+export type CreateProjectBranchTriggerData = {
+    body: TriggerCreateRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/triggers';
+};
+
+export type CreateProjectBranchTriggerErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CreateProjectBranchTriggerError = CreateProjectBranchTriggerErrors[keyof CreateProjectBranchTriggerErrors];
+
+export type CreateProjectBranchTriggerResponses = {
+    /**
+     * Trigger created
+     */
+    201: TriggerResponse;
+};
+
+export type CreateProjectBranchTriggerResponse = CreateProjectBranchTriggerResponses[keyof CreateProjectBranchTriggerResponses];
+
+export type DeleteProjectBranchTriggerData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The opaque, project-wide trigger ID
+         */
+        trigger_id: TriggerId;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}';
+};
+
+export type DeleteProjectBranchTriggerErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteProjectBranchTriggerError = DeleteProjectBranchTriggerErrors[keyof DeleteProjectBranchTriggerErrors];
+
+export type DeleteProjectBranchTriggerResponses = {
+    /**
+     * Trigger deleted
+     */
+    204: void;
+};
+
+export type DeleteProjectBranchTriggerResponse = DeleteProjectBranchTriggerResponses[keyof DeleteProjectBranchTriggerResponses];
+
+export type GetProjectBranchTriggerData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The opaque, project-wide trigger ID
+         */
+        trigger_id: TriggerId;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}';
+};
+
+export type GetProjectBranchTriggerErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchTriggerError = GetProjectBranchTriggerErrors[keyof GetProjectBranchTriggerErrors];
+
+export type GetProjectBranchTriggerResponses = {
+    /**
+     * The trigger
+     */
+    200: TriggerResponse;
+};
+
+export type GetProjectBranchTriggerResponse = GetProjectBranchTriggerResponses[keyof GetProjectBranchTriggerResponses];
+
+export type UpdateProjectBranchTriggerData = {
+    body: TriggerUpdateRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The opaque, project-wide trigger ID
+         */
+        trigger_id: TriggerId;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/triggers/{trigger_id}';
+};
+
+export type UpdateProjectBranchTriggerErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type UpdateProjectBranchTriggerError = UpdateProjectBranchTriggerErrors[keyof UpdateProjectBranchTriggerErrors];
+
+export type UpdateProjectBranchTriggerResponses = {
+    /**
+     * The updated trigger
+     */
+    200: TriggerResponse;
+};
+
+export type UpdateProjectBranchTriggerResponse = UpdateProjectBranchTriggerResponses[keyof UpdateProjectBranchTriggerResponses];
 
 export type ListProjectBranchCustomDomainsData = {
     body?: never;

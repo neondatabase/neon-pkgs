@@ -1,7 +1,9 @@
 import { createClient, createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
 import { resolveTimeoutMs } from "./deadline.js";
-import type { WaitForOptions } from "./wait.js";
+import { NeonError } from "./errors.js";
+import { resolveRetries } from "./retry.js";
+import type { WaitBudget } from "./wait.js";
 
 const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
 
@@ -9,7 +11,9 @@ const DEFAULT_BASE_URL = "https://console.neon.tech/api/v2";
 export interface NeonConfig<Throw extends boolean = false> {
 	/**
 	 * Your Neon API key, or a function returning it (sync or async — handy for refreshing
-	 * short-lived tokens). Used as a Bearer credential on every request.
+	 * short-lived tokens). Used as a Bearer credential on every request. A missing or
+	 * empty string throws a `"client"`-kind error at construction; a function that later
+	 * returns empty is not checked here.
 	 */
 	apiKey: string | (() => string | Promise<string>);
 	/**
@@ -18,14 +22,20 @@ export interface NeonConfig<Throw extends boolean = false> {
 	 */
 	throwOnError?: Throw;
 	/**
-	 * When `true`, mutations that kick off provisioning operations poll until those
-	 * operations finish before resolving, so the returned resource is ready to use.
-	 * Default `false`. Overridable per call.
+	 * Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`,
+	 * `branches.create`, and `branches.createAndConnect` poll until provisioning
+	 * operations finish; other mutations do not. Set `false` to disable polling on
+	 * those four. Set `true` to poll on every mutation that returns operations.
+	 * Overridable per call.
 	 */
 	waitForReadiness?: boolean;
-	/** Tuning for the readiness poller (interval / timeout). */
-	wait?: WaitForOptions;
-	/** Number of automatic retries on always-safe statuses (423/429/503). Default 2. */
+	/** Tuning for the readiness poller (interval / timeout). Not a per-call abort. */
+	wait?: WaitBudget;
+	/**
+	 * Number of automatic retries on always-safe statuses (423/429/503). Default 2.
+	 * `0` disables retries. Non-integer, negative, `NaN`, or `Infinity` throws a
+	 * `"client"`-kind error at construction.
+	 */
 	retries?: number;
 	/**
 	 * Deadline in milliseconds for a single request **and** its retries, after which the
@@ -46,13 +56,23 @@ export interface NeonConfig<Throw extends boolean = false> {
 	fetch?: typeof fetch;
 	/**
 	 * Default organization id. Applied to project creation/listing and as the source org
-	 * for transfers when not given explicitly; overridable on every call.
+	 * for transfers when not given explicitly. Not a `CallOptions` key — pass `org_id`
+	 * on list/create, or `fromOrgId` on transfer.
 	 */
 	orgId?: string;
 }
 
 export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 	const apiKey = config.apiKey;
+	if (
+		typeof apiKey !== "function" &&
+		(typeof apiKey !== "string" || apiKey === "")
+	) {
+		throw new NeonError(
+			"createNeonClient: `apiKey` is required — pass a string or a function returning one.",
+			"client",
+		);
+	}
 	const auth = typeof apiKey === "function" ? apiKey : () => apiKey;
 
 	const client = createClient(
@@ -66,9 +86,9 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 	return {
 		client,
 		throwOnError: config.throwOnError ?? false,
-		retries: config.retries ?? 2,
+		retries: resolveRetries(config.retries),
 		requestTimeoutMs: resolveTimeoutMs(config.requestTimeoutMs),
-		waitForReadiness: config.waitForReadiness ?? false,
+		waitForReadiness: config.waitForReadiness,
 		waitOptions: config.wait ?? {},
 		orgId: config.orgId,
 	};

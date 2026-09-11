@@ -370,6 +370,28 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					runtime: step.fn.runtime,
 				},
 			};
+		case "create-trigger":
+			return {
+				kind: "service",
+				action: "create",
+				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
+				details: {
+					functionSlug: step.functionSlug,
+					cron: step.trigger.cron,
+					enabled: step.trigger.enabled,
+				},
+			};
+		case "update-trigger":
+			return {
+				kind: "service",
+				action: "update",
+				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
+				details: {
+					functionSlug: step.functionSlug,
+					cron: step.trigger.cron,
+					enabled: step.trigger.enabled,
+				},
+			};
 	}
 }
 
@@ -461,15 +483,21 @@ async function resolvePreviewState(args: {
 	// `plan`/`apply` fail on a feature the user didn't ask for if it's unavailable in the
 	// project/region. A declared-but-unavailable feature still throws (failing the push),
 	// which is the intended signal to enable it first.
-	const [buckets, functions] = await Promise.all([
+	const wantsTriggers = desired.functions.some(
+		(fn) => (fn.triggers?.length ?? 0) > 0,
+	);
+	const [buckets, functions, triggers] = await Promise.all([
 		desired.buckets.length > 0
 			? api.listBranchBuckets(projectId, branchId)
 			: Promise.resolve([]),
 		desired.functions.length > 0
 			? api.listBranchFunctions(projectId, branchId)
 			: Promise.resolve([]),
+		wantsTriggers
+			? api.listBranchTriggers(projectId, branchId)
+			: Promise.resolve([]),
 	]);
-	return { buckets, functions };
+	return { buckets, functions, triggers };
 }
 
 /**
@@ -642,6 +670,53 @@ async function applyStep(
 					source: step.fn.source,
 					runtime: step.fn.runtime,
 					deploymentId: deployment.id,
+				},
+			};
+		}
+		case "create-trigger": {
+			await ctx.api.createBranchTrigger(
+				ctx.remoteProjectId,
+				step.branchId,
+				{
+					name: step.trigger.name,
+					functionSlug: step.functionSlug,
+					cron: step.trigger.cron,
+					functionPath: step.trigger.functionPath,
+					enabled: step.trigger.enabled,
+				},
+			);
+			return {
+				kind: "service",
+				action: "create",
+				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
+				details: {
+					functionSlug: step.functionSlug,
+					cron: step.trigger.cron,
+					enabled: step.trigger.enabled,
+				},
+			};
+		}
+		case "update-trigger": {
+			await ctx.api.updateBranchTrigger(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.triggerId,
+				{
+					name: step.trigger.name,
+					functionSlug: step.functionSlug,
+					cron: step.trigger.cron,
+					functionPath: step.trigger.functionPath,
+					enabled: step.trigger.enabled,
+				},
+			);
+			return {
+				kind: "service",
+				action: "update",
+				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
+				details: {
+					functionSlug: step.functionSlug,
+					cron: step.trigger.cron,
+					enabled: step.trigger.enabled,
 				},
 			};
 		}

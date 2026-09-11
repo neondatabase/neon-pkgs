@@ -16,7 +16,7 @@ import { type WaitForOptions, waitForOperations } from "../wait.js";
  * offer a knob that silently did nothing.
  */
 export type WaitForForOptions<Throw extends boolean> = WaitForOptions &
-	Omit<CallOptions<Throw>, "requestTimeoutMs" | "waitForReadiness">;
+	Omit<CallOptions<Throw>, "requestTimeoutMs" | "waitForReadiness" | "wait">;
 
 /** Operation resource — read operations and wait for them to finish. */
 export class Operations<DThrow extends boolean> {
@@ -27,7 +27,12 @@ export class Operations<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/operations (cursor-paginated) */
-	list(projectId: string, opts?: CallOptions): Paginated<Operation> {
+	list(projectId: string): Paginated<Operation, DThrow>;
+	list<Throw extends boolean = DThrow>(
+		projectId: string,
+		opts: CallOptions<Throw>,
+	): Paginated<Operation, Throw>;
+	list(projectId: string, opts?: CallOptions): Paginated<Operation, boolean> {
 		return paginate(
 			(cursor, signal) =>
 				listProjectOperations({
@@ -42,6 +47,7 @@ export class Operations<DThrow extends boolean> {
 				cursor: data?.pagination?.cursor,
 			}),
 			() => this.#ctx.deadlineFor(opts),
+			this.#ctx.shouldThrow(opts),
 		);
 	}
 
@@ -93,7 +99,7 @@ export class Operations<DThrow extends boolean> {
 			pollIntervalMs:
 				opts?.pollIntervalMs ?? defaults.waitOptions.pollIntervalMs,
 			timeoutMs: opts?.timeoutMs ?? defaults.waitOptions.timeoutMs,
-			signal: opts?.signal ?? defaults.waitOptions.signal,
+			signal: opts?.signal,
 		});
 		if (!shouldThrow) return result;
 		if (result.error) throw result.error;

@@ -1,5 +1,40 @@
 # @neon/sdk
 
+## 4.1.0
+
+### Minor Changes
+
+- 0d4dd06: Wrap Function triggers (`neon.triggers`) and credential reveal/rotate. Create input scopes stay `CredentialScope`; responses now type `GrantedCredentialScope[]`. Branch delete no longer accepts `hard_delete`. `@neon/tools/schemas` no longer exports `zDeleteProjectBranchQuery`.
+
+## 4.0.0
+
+### Major Changes
+
+- 640adad: `CallOptions` now accepts `wait: { pollIntervalMs?, timeoutMs? }`, so a single client can use a longer readiness budget on one `projects.create` without changing the rest. Client `wait` no longer accepts `signal`; pass `signal` on the call. `operations.waitFor` still takes top-level `pollIntervalMs`, `timeoutMs`, and `signal`.
+
+### Minor Changes
+
+- bb909d2: `createNeonClient` now throws a `"client"`-kind error when `apiKey` is missing or `""`, instead of sending an unauthenticated request and surfacing a 401 on the first call. A function that later returns empty is still accepted at construction.
+- 780119e: `NeonTimeoutError` is now the abstract base of `NeonRequestTimeoutError` (`source: "request"`) and `NeonWaitTimeoutError` (`source: "wait"`, plus `operations` for `neon.operations.waitFor`). `kind` remains `"timeout"`. Direct construction uses the subclasses.
+
+### Patch Changes
+
+- 86baf96: README Cancellation & deadlines examples now compile. Abort uses `list({}, { signal })`; a request timeout is `source === "request"`.
+- fae6ba7: Docs: `CallOptions` is `throwOnError`, `waitForReadiness`, `requestTimeoutMs`, `wait`, and `signal`. `retries`, `orgId`, `baseUrl`, and `fetch` are client-wide; per-request org selection uses method input (`org_id` / `fromOrgId`).
+- df4dfc2: `retries` is validated at `createNeonClient`. `NaN`, `Infinity`, fractions, and negatives throw a `"client"`-kind error instead of retrying forever (`NaN`/`Infinity`) or being accepted silently. `0` and the default `2` are unchanged.
+
+## 3.2.0
+
+### Minor Changes
+
+- 9ac65e5: `Paginated.page()` and `Paginated.all()` now honour `throwOnError` (client-wide and per call), matching every other method. With `throwOnError: true` they resolve to the bare page / item array and reject on failure instead of always returning `{ data, error }`. `Paginated<T>` gained a second type parameter `Throw` (default `false`), and `Consumption` is now generic over the client's `throwOnError` like the other resources. Default (`throwOnError: false`) clients are unaffected; the async iterator still throws on a page error.
+- ed53d40: `error.kind` now narrows. `NeonResult` and `RawResult` type `error` as `NeonErrorUnion`, and every error class carries a literal `kind`, so `if (error?.kind === "not_found") error.status` compiles without `instanceof`. New `NeonClientError` (`kind: "client"`) replaces the bare `NeonError` the SDK used for SDK-side failures. `isNeonError` is the type guard for `catch` after `throwOnError`. `instanceof NeonError` still matches; `instanceof NeonApiError` still matches 404/401/429 subclasses.
+
+### Patch Changes
+
+- 0474691: `NeonClient` now defaults its type parameter to `false`, so `NeonClient` can be used without a type argument to describe the client returned by `createNeonClient({ apiKey })`. `NeonClient<true>` continues to describe a `throwOnError: true` client.
+- 79494fe: `createNeonClient({ waitForReadiness: false })` now turns off readiness polling on `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect`. Those methods still default polling on when the client option is unset. Per-call `{ waitForReadiness }` still wins.
+
 ## 3.1.0
 
 ### Minor Changes

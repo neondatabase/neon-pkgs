@@ -165,6 +165,11 @@ describe("resolveEnvFilePath", () => {
 		);
 	});
 
+	it("keeps an absolute --file instead of joining it onto cwd", () => {
+		const absolute = join(tmpdir(), "neonctl-elsewhere", ".env.prod");
+		expect(resolveEnvFilePath(cwd, absolute)).toBe(absolute);
+	});
+
 	it("defaults to .env.local when no .env exists", () => {
 		expect(resolveEnvFilePath(cwd)).toBe(join(cwd, ".env.local"));
 	});
