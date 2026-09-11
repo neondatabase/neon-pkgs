@@ -1,5 +1,11 @@
 # @neondatabase/functions
 
+## 0.10.0
+
+### Minor Changes
+
+- 7c086cb: Add `@neon/functions/triggers` (`parseTriggerInvocation(request)` or `{ headers, body }`) for Function Trigger deliveries, and `parseTrigger(c)` on `@neon/functions/hono`.
+
 ## 0.9.0
 
 ### Minor Changes
