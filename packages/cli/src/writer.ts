@@ -40,7 +40,7 @@ const writeYaml = (chunks: Chunk[]) => {
 };
 
 const writeJson = (chunks: Chunk[]) => {
-	return JSON.stringify(
+	const json = JSON.stringify(
 		chunks.length === 1
 			? chunks[0].data
 			: Object.fromEntries(
@@ -52,6 +52,7 @@ const writeJson = (chunks: Chunk[]) => {
 		null,
 		2,
 	);
+	return json === undefined ? json : `${json}\n`;
 };
 
 const writeTable = (
