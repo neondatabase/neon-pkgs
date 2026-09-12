@@ -1,7 +1,13 @@
 import { getProjectBranchAiGateway } from "../../client/sdk.gen.js";
 import type { BranchAiGateway } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
+
+export type AiGatewayGetParams = {
+	projectId: string;
+	branchId: string;
+};
 
 /** Branch-scoped AI Gateway endpoint metadata. */
 export class AiGateway<DThrow extends boolean> {
@@ -12,20 +18,26 @@ export class AiGateway<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/ai_gateway */
-	get(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<BranchAiGateway, DThrow>>;
+	get(params: AiGatewayGetParams): Promise<Outcome<BranchAiGateway, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: AiGatewayGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<BranchAiGateway, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
+		params: AiGatewayGetParams,
 		opts?: CallOptions,
 	): Promise<BranchAiGateway | NeonResult<BranchAiGateway>> {
+		const invalid = validateParams(params, "aiGateway.get", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<BranchAiGateway>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>

@@ -50,7 +50,8 @@ describe("branches.create", () => {
 			},
 		}));
 
-		const { data, error } = await neon.branches.create("p-1", {
+		const { data, error } = await neon.branches.create({
+			projectId: "p-1",
 			name: "feature",
 			parent_id: "br-parent",
 			compute: { minCu: 0.5, maxCu: 2, suspendTimeoutSeconds: 300 },
@@ -78,7 +79,7 @@ describe("branches.create", () => {
 			body: { branch: { id: "br-1", name: "feature" } },
 		}));
 
-		await neon.branches.create("p-1", { name: "feature" });
+		await neon.branches.create({ projectId: "p-1", name: "feature" });
 
 		expect(calls[0]?.body).toEqual({
 			branch: { name: "feature" },
@@ -92,7 +93,8 @@ describe("branches.create", () => {
 			body: { branch: { id: "br-1", name: "bare" } },
 		}));
 
-		const { data, error } = await neon.branches.create("p-1", {
+		const { data, error } = await neon.branches.create({
+			projectId: "p-1",
 			name: "bare",
 			noCompute: true,
 		});
@@ -108,9 +110,10 @@ describe("branches.create", () => {
 			body: { message: "should not be called" },
 		}));
 
-		const { data, error } = await neon.branches.create("p-1", {
+		// @ts-expect-error runtime guard for JS callers
+		const { data, error } = await neon.branches.create({
+			projectId: "p-1",
 			noCompute: true,
-			// @ts-expect-error runtime guard for JS callers
 			compute: { minCu: 1 },
 		});
 
@@ -131,9 +134,10 @@ describe("branches.create", () => {
 			},
 		});
 		await expect(
-			throwing.branches.create("p-1", {
+			// @ts-expect-error runtime guard for JS callers
+			throwing.branches.create({
+				projectId: "p-1",
 				noCompute: true,
-				// @ts-expect-error runtime guard for JS callers
 				compute: { minCu: 1 },
 			}),
 		).rejects.toMatchObject({
@@ -162,7 +166,8 @@ describe("branches.createAndConnect", () => {
 			},
 		}));
 
-		const { data, error } = await neon.branches.createAndConnect("p-1", {
+		const { data, error } = await neon.branches.createAndConnect({
+			projectId: "p-1",
 			name: "feature",
 			parentId: "br-parent",
 		});
@@ -198,11 +203,11 @@ describe("branches.resetFromParent", () => {
 			};
 		});
 
-		const { data, error } = await neon.branches.resetFromParent(
-			"p-1",
-			"br-child",
-			{ preserveUnderName: "feature-old" },
-		);
+		const { data, error } = await neon.branches.resetFromParent({
+			projectId: "p-1",
+			branchId: "br-child",
+			preserveUnderName: "feature-old",
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual({ id: "br-child", name: "feature" });
@@ -222,10 +227,10 @@ describe("branches.resetFromParent", () => {
 			body: { branch: { id: "br-root" } },
 		}));
 
-		const { data, error } = await neon.branches.resetFromParent(
-			"p-1",
-			"br-root",
-		);
+		const { data, error } = await neon.branches.resetFromParent({
+			projectId: "p-1",
+			branchId: "br-root",
+		});
 
 		expect(data).toBeUndefined();
 		expect(error?.kind).toBe("client");
@@ -244,16 +249,14 @@ describe("branches.compareSchema", () => {
 			body: { diff: "--- a\n+++ b\n" },
 		}));
 
-		const { data, error } = await neon.branches.compareSchema(
-			"p-1",
-			"br-child",
-			{
-				databaseName: "neondb",
-				baseBranchId: "br-parent",
-				lsn: "0/1",
-				baseLsn: "0/2",
-			},
-		);
+		const { data, error } = await neon.branches.compareSchema({
+			projectId: "p-1",
+			branchId: "br-child",
+			databaseName: "neondb",
+			baseBranchId: "br-parent",
+			lsn: "0/1",
+			baseLsn: "0/2",
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual({ diff: "--- a\n+++ b\n" });

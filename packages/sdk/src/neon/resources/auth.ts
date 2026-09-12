@@ -32,7 +32,39 @@ import type {
 	UpdateNeonAuthUserRoleResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
+
+type BranchParams = { projectId: string; branchId: string };
+
+export type AuthOauthProvidersListParams = BranchParams;
+export type AuthOauthProvidersAddParams = BranchParams &
+	NeonAuthAddOAuthProviderRequest;
+export type AuthOauthProvidersUpdateParams = BranchParams & {
+	providerId: NeonAuthOauthProviderId;
+} & NeonAuthUpdateOAuthProviderRequest;
+export type AuthOauthProvidersDeleteParams = BranchParams & {
+	providerId: NeonAuthOauthProviderId;
+};
+
+export type AuthTrustedDomainsListParams = BranchParams;
+export type AuthTrustedDomainsAddParams = BranchParams &
+	NeonAuthAddDomainToRedirectUriWhitelistRequest;
+export type AuthTrustedDomainsDeleteParams = BranchParams &
+	NeonAuthDeleteDomainFromRedirectUriWhitelistRequest;
+
+export type AuthUsersCreateParams = BranchParams &
+	CreateBranchNeonAuthNewUserRequest;
+export type AuthUsersDeleteParams = BranchParams & { authUserId: string };
+export type AuthUsersUpdateRoleParams = BranchParams & {
+	authUserId: string;
+	roles: string[];
+};
+
+export type AuthGetParams = BranchParams;
+export type AuthCreateParams = BranchParams & EnableNeonAuthIntegrationRequest;
+export type AuthDisableParams = BranchParams & { deleteData?: boolean };
+export type AuthUpdateConfigParams = BranchParams & NeonAuthConfigUpdate;
 
 /** Branch-scoped Neon Auth OAuth providers (Google, GitHub, …). */
 export class AuthOauthProviders<DThrow extends boolean> {
@@ -44,19 +76,27 @@ export class AuthOauthProviders<DThrow extends boolean> {
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/auth/oauth_providers */
 	list(
-		projectId: string,
-		branchId: string,
+		params: AuthOauthProvidersListParams,
 	): Promise<Outcome<NeonAuthOauthProvider[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: AuthOauthProvidersListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthOauthProvider[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: AuthOauthProvidersListParams,
 		opts?: CallOptions,
 	): Promise<NeonAuthOauthProvider[] | NeonResult<NeonAuthOauthProvider[]>> {
+		const invalid = validateParams(params, "auth.oauthProviders.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthOauthProvider[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -72,22 +112,27 @@ export class AuthOauthProviders<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/auth/oauth_providers */
 	add(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthAddOAuthProviderRequest,
+		params: AuthOauthProvidersAddParams,
 	): Promise<Outcome<NeonAuthOauthProvider, DThrow>>;
 	add<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthAddOAuthProviderRequest,
+		params: AuthOauthProvidersAddParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthOauthProvider, Throw>>;
 	add(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthAddOAuthProviderRequest,
+		params: AuthOauthProvidersAddParams,
 		opts?: CallOptions,
 	): Promise<NeonAuthOauthProvider | NeonResult<NeonAuthOauthProvider>> {
+		const invalid = validateParams(params, "auth.oauthProviders.add", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthOauthProvider>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -104,25 +149,28 @@ export class AuthOauthProviders<DThrow extends boolean> {
 
 	/** @apiCall PATCH …/auth/oauth_providers/{oauth_provider_id} */
 	update(
-		projectId: string,
-		branchId: string,
-		providerId: NeonAuthOauthProviderId,
-		input: NeonAuthUpdateOAuthProviderRequest,
+		params: AuthOauthProvidersUpdateParams,
 	): Promise<Outcome<NeonAuthOauthProvider, DThrow>>;
 	update<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		providerId: NeonAuthOauthProviderId,
-		input: NeonAuthUpdateOAuthProviderRequest,
+		params: AuthOauthProvidersUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthOauthProvider, Throw>>;
 	update(
-		projectId: string,
-		branchId: string,
-		providerId: NeonAuthOauthProviderId,
-		input: NeonAuthUpdateOAuthProviderRequest,
+		params: AuthOauthProvidersUpdateParams,
 		opts?: CallOptions,
 	): Promise<NeonAuthOauthProvider | NeonResult<NeonAuthOauthProvider>> {
+		const invalid = validateParams(params, "auth.oauthProviders.update", {
+			projectId: "string",
+			branchId: "string",
+			providerId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthOauthProvider>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, providerId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -143,22 +191,28 @@ export class AuthOauthProviders<DThrow extends boolean> {
 
 	/** @apiCall DELETE …/auth/oauth_providers/{oauth_provider_id} */
 	delete(
-		projectId: string,
-		branchId: string,
-		providerId: NeonAuthOauthProviderId,
+		params: AuthOauthProvidersDeleteParams,
 	): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		providerId: NeonAuthOauthProviderId,
+		params: AuthOauthProvidersDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		providerId: NeonAuthOauthProviderId,
+		params: AuthOauthProvidersDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "auth.oauthProviders.delete", {
+			projectId: "string",
+			branchId: "string",
+			providerId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, providerId } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteBranchNeonAuthOauthProvider({
 				client,
@@ -184,22 +238,30 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 
 	/** @apiCall GET …/auth/trusted_domains */
 	list(
-		projectId: string,
-		branchId: string,
+		params: AuthTrustedDomainsListParams,
 	): Promise<Outcome<NeonAuthRedirectUriWhitelistDomain[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: AuthTrustedDomainsListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthRedirectUriWhitelistDomain[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: AuthTrustedDomainsListParams,
 		opts?: CallOptions,
 	): Promise<
 		| NeonAuthRedirectUriWhitelistDomain[]
 		| NeonResult<NeonAuthRedirectUriWhitelistDomain[]>
 	> {
+		const invalid = validateParams(params, "auth.trustedDomains.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthRedirectUriWhitelistDomain[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -214,23 +276,26 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST …/auth/trusted_domains */
-	add(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthAddDomainToRedirectUriWhitelistRequest,
-	): Promise<Outcome<void, DThrow>>;
+	add(params: AuthTrustedDomainsAddParams): Promise<Outcome<void, DThrow>>;
 	add<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthAddDomainToRedirectUriWhitelistRequest,
+		params: AuthTrustedDomainsAddParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	add(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthAddDomainToRedirectUriWhitelistRequest,
+		params: AuthTrustedDomainsAddParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "auth.trustedDomains.add", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			addBranchNeonAuthTrustedDomain({
 				client,
@@ -244,22 +309,27 @@ export class AuthTrustedDomains<DThrow extends boolean> {
 
 	/** @apiCall DELETE …/auth/trusted_domains */
 	delete(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthDeleteDomainFromRedirectUriWhitelistRequest,
+		params: AuthTrustedDomainsDeleteParams,
 	): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthDeleteDomainFromRedirectUriWhitelistRequest,
+		params: AuthTrustedDomainsDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthDeleteDomainFromRedirectUriWhitelistRequest,
+		params: AuthTrustedDomainsDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "auth.trustedDomains.delete", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteBranchNeonAuthTrustedDomain({
 				client,
@@ -282,25 +352,30 @@ export class AuthUsers<DThrow extends boolean> {
 
 	/** @apiCall POST …/auth/users */
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateBranchNeonAuthNewUserRequest,
+		params: AuthUsersCreateParams,
 	): Promise<Outcome<NeonAuthCreateNewUserResponse, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateBranchNeonAuthNewUserRequest,
+		params: AuthUsersCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthCreateNewUserResponse, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateBranchNeonAuthNewUserRequest,
+		params: AuthUsersCreateParams,
 		opts?: CallOptions,
 	): Promise<
 		| NeonAuthCreateNewUserResponse
 		| NeonResult<NeonAuthCreateNewUserResponse>
 	> {
+		const invalid = validateParams(params, "auth.users.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthCreateNewUserResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -316,23 +391,27 @@ export class AuthUsers<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE …/auth/users/{auth_user_id} */
-	delete(
-		projectId: string,
-		branchId: string,
-		authUserId: string,
-	): Promise<Outcome<void, DThrow>>;
+	delete(params: AuthUsersDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		authUserId: string,
+		params: AuthUsersDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		authUserId: string,
+		params: AuthUsersDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "auth.users.delete", {
+			projectId: "string",
+			branchId: "string",
+			authUserId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, authUserId } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteBranchNeonAuthUser({
 				client,
@@ -349,28 +428,32 @@ export class AuthUsers<DThrow extends boolean> {
 
 	/** @apiCall PATCH …/auth/users/{auth_user_id}/role */
 	updateRole(
-		projectId: string,
-		branchId: string,
-		authUserId: string,
-		roles: string[],
+		params: AuthUsersUpdateRoleParams,
 	): Promise<Outcome<UpdateNeonAuthUserRoleResponse, DThrow>>;
 	updateRole<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		authUserId: string,
-		roles: string[],
+		params: AuthUsersUpdateRoleParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<UpdateNeonAuthUserRoleResponse, Throw>>;
 	updateRole(
-		projectId: string,
-		branchId: string,
-		authUserId: string,
-		roles: string[],
+		params: AuthUsersUpdateRoleParams,
 		opts?: CallOptions,
 	): Promise<
 		| UpdateNeonAuthUserRoleResponse
 		| NeonResult<UpdateNeonAuthUserRoleResponse>
 	> {
+		const invalid = validateParams(params, "auth.users.updateRole", {
+			projectId: "string",
+			branchId: "string",
+			authUserId: "string",
+			roles: "array",
+		});
+		if (invalid) {
+			return invalidParamsResult<UpdateNeonAuthUserRoleResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, authUserId, roles } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -409,20 +492,26 @@ export class Auth<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/auth */
-	get(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<NeonAuthIntegration, DThrow>>;
+	get(params: AuthGetParams): Promise<Outcome<NeonAuthIntegration, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: AuthGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthIntegration, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
+		params: AuthGetParams,
 		opts?: CallOptions,
 	): Promise<NeonAuthIntegration | NeonResult<NeonAuthIntegration>> {
+		const invalid = validateParams(params, "auth.get", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthIntegration>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -438,25 +527,30 @@ export class Auth<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/auth */
 	create(
-		projectId: string,
-		branchId: string,
-		input: EnableNeonAuthIntegrationRequest,
+		params: AuthCreateParams,
 	): Promise<Outcome<NeonAuthCreateIntegrationResponse, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: EnableNeonAuthIntegrationRequest,
+		params: AuthCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthCreateIntegrationResponse, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: EnableNeonAuthIntegrationRequest,
+		params: AuthCreateParams,
 		opts?: CallOptions,
 	): Promise<
 		| NeonAuthCreateIntegrationResponse
 		| NeonResult<NeonAuthCreateIntegrationResponse>
 	> {
+		const invalid = validateParams(params, "auth.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthCreateIntegrationResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -472,28 +566,31 @@ export class Auth<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id}/auth */
-	disable(
-		projectId: string,
-		branchId: string,
-		input?: { deleteData?: boolean },
-	): Promise<Outcome<void, DThrow>>;
+	disable(params: AuthDisableParams): Promise<Outcome<void, DThrow>>;
 	disable<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: { deleteData?: boolean } | undefined,
+		params: AuthDisableParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	disable(
-		projectId: string,
-		branchId: string,
-		input?: { deleteData?: boolean },
+		params: AuthDisableParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "auth.disable", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, deleteData } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			disableNeonAuth({
 				client,
 				path: { project_id: projectId, branch_id: branchId },
-				body: { delete_data: input?.deleteData },
+				body: { delete_data: deleteData },
 				throwOnError: false,
 				signal,
 			}),
@@ -502,22 +599,27 @@ export class Auth<DThrow extends boolean> {
 
 	/** @apiCall PATCH /projects/{project_id}/branches/{branch_id}/auth/config */
 	updateConfig(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthConfigUpdate,
+		params: AuthUpdateConfigParams,
 	): Promise<Outcome<NeonAuthConfigResponse, DThrow>>;
 	updateConfig<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthConfigUpdate,
+		params: AuthUpdateConfigParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<NeonAuthConfigResponse, Throw>>;
 	updateConfig(
-		projectId: string,
-		branchId: string,
-		input: NeonAuthConfigUpdate,
+		params: AuthUpdateConfigParams,
 		opts?: CallOptions,
 	): Promise<NeonAuthConfigResponse | NeonResult<NeonAuthConfigResponse>> {
+		const invalid = validateParams(params, "auth.updateConfig", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<NeonAuthConfigResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>

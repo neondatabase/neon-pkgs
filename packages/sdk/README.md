@@ -7,6 +7,9 @@ Two layers, one package:
 - **`createNeonClient`** — an ergonomic client (auth once, `{ data, error }` results, typed errors, retries, readiness polling, auto-pagination, workflows), organized into resource namespaces.
 - **`raw`** — the full generated 1:1 surface: every endpoint as a standalone, tree-shakeable function. Also at the `@neon/sdk/raw` subpath.
 
+The next major release changes ergonomic resource methods to named parameter objects. If
+you are upgrading existing code, start with [Migrating to named parameters](./MIGRATION.md).
+
 ---
 
 ## Install
@@ -25,7 +28,10 @@ import { createNeonClient } from "@neon/sdk";
 const neon = createNeonClient({ apiKey: process.env.NEON_API_KEY! });
 
 // create a project and get a ready-to-use connection string
-const { data, error } = await neon.projects.createAndConnect({ name: "my-app" });
+const { data, error } = await neon.projects.createAndConnect({
+  name: "my-app",
+  pooled: true,
+});
 if (error) throw error;
 const { project, connectionString } = data;
 ```
@@ -48,14 +54,14 @@ const { project, connectionString } = data;
 | `baseUrl` | `string` | `https://console.neon.tech/api/v2` | Override the API base URL. |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation (proxies, tests, non-global runtimes). |
 
-`CallOptions` — `{ throwOnError?, waitForReadiness?, requestTimeoutMs?, wait?, signal? }` — is accepted **per call** as the last `options` argument, overriding the client default where one exists (`signal` is call-only). `retries`, `orgId`, `baseUrl`, and `fetch` are client-wide. Paginated methods take `CallOptions` after their query.
+`CallOptions` — `{ throwOnError?, waitForReadiness?, requestTimeoutMs?, wait?, signal? }` — is accepted **per call** as the last `options` argument, overriding the client default where one exists (`signal` is call-only). `retries`, `orgId`, `baseUrl`, and `fetch` are client-wide. Resource identifiers and request fields live together in the first named parameter object; paginated methods still take `CallOptions` second.
 
 ## The result model
 
 By default every method resolves to a discriminated `{ data, error }` envelope — no `try/catch` needed:
 
 ```ts
-const { data, error } = await neon.projects.get("late-frost-12345");
+const { data, error } = await neon.projects.get({ projectId: "late-frost-12345" });
 if (error) {
   // error is NeonErrorUnion — discriminate on error.kind
   return;
@@ -67,8 +73,11 @@ Set `throwOnError` (on the client or per call) to get the bare resource and thro
 
 ```ts
 const neon = createNeonClient({ apiKey, throwOnError: true });
-const project = await neon.projects.get("…");                 // Project (throws on error)
-const res     = await neon.projects.get("…", { throwOnError: false }); // { data, error }
+const project = await neon.projects.get({ projectId: "…" }); // Project (throws on error)
+const res = await neon.projects.get(
+  { projectId: "…" },
+  { throwOnError: false },
+); // { data, error }
 ```
 
 ## Errors
@@ -93,7 +102,7 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 The error channel is typed as `NeonErrorUnion`, the union of every row below the base.
 
 ```ts
-const { error } = await neon.branches.get(pid, "nope");
+const { error } = await neon.branches.get({ projectId: pid, branchId: "nope" });
 if (error?.kind === "not_found") {
   error.status;    // 404
   error.requestId; // string | undefined
@@ -118,7 +127,7 @@ With `throwOnError`, the thrown value is a `NeonErrorUnion` member at runtime, b
 import { isNeonError } from "@neon/sdk";
 
 try {
-  await neon.projects.get(pid, { throwOnError: true });
+  await neon.projects.get({ projectId: pid }, { throwOnError: true });
 } catch (e: unknown) {
   if (!isNeonError(e)) throw e;
   if (e.kind === "not_found") e.status;   // number
@@ -134,7 +143,7 @@ error trackers instead of collapsing onto one string:
 ```ts
 import { NeonNetworkError } from "@neon/sdk";
 
-const { error } = await neon.projects.get(id);
+const { error } = await neon.projects.get({ projectId: id });
 if (error instanceof NeonNetworkError) {
   error.reason; // "ECONNRESET"
   error.message; // 'Network error: no response received from the Neon API (ECONNRESET).'
@@ -157,20 +166,27 @@ const controller = new AbortController();
 const { error } = await neon.projects.list({}, { signal: controller.signal }).all();
 if (error?.kind === "aborted") { /* the caller stopped it */ }
 
-const result = await neon.projects.get(id, { signal: controller.signal });
+const result = await neon.projects.get(
+  { projectId: id },
+  { signal: controller.signal },
+);
 if (result.error?.kind === "aborted") { /* the caller stopped it */ }
 ```
 
 ```ts
 const bounded = createNeonClient({ apiKey, requestTimeoutMs: 30_000 });
-const slow = await bounded.projects.get(id, { requestTimeoutMs: 5_000 });
+const slow = await bounded.projects.get(
+  { projectId: id },
+  { requestTimeoutMs: 5_000 },
+);
 if (slow.error?.kind === "timeout" && slow.error.source === "request") {
   /* the request deadline was exceeded */
 }
 
-await bounded.storage.objects.get(projectId, branchId, "bucket", "big.tar", {
-  requestTimeoutMs: Number.POSITIVE_INFINITY,
-});
+await bounded.storage.objects.get(
+  { projectId, branchId, bucketName: "bucket", objectKey: "big.tar" },
+  { requestTimeoutMs: Number.POSITIVE_INFINITY },
+);
 ```
 
 `"aborted"` and `"timeout"` are deliberately distinct: a timeout is worth retrying, a
@@ -185,7 +201,7 @@ const { data, error } = await neon.projects.create(
 if (error?.kind === "timeout" && error.source === "wait") {
   // The project exists and is still provisioning. Poll again with a fresh budget
   // instead of calling create a second time.
-  const resumed = await neon.operations.waitFor(error.operations, {
+  const resumed = await neon.operations.waitFor({ operations: error.operations }, {
     timeoutMs: 120_000,
   });
   if (resumed.error) throw resumed.error;
@@ -244,19 +260,19 @@ consuming it twice gets a fresh deadline each time.
 
 Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle.
 
-Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor(operations)`.
+Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor({ operations })`.
 
 ```ts
 const neon = createNeonClient({ apiKey });
 await neon.projects.create({ name: "app" }); // polls (method default)
-await neon.projects.update(id, { name: "renamed" }); // does not poll
+await neon.projects.update({ projectId: id, name: "renamed" }); // does not poll
 
 const skipWait = createNeonClient({ apiKey, waitForReadiness: false });
 await skipWait.projects.create({ name: "app" }); // returns before operations finish
 await skipWait.projects.create({ name: "app" }, { waitForReadiness: true }); // polls anyway
 
 const alwaysWait = createNeonClient({ apiKey, waitForReadiness: true });
-await alwaysWait.projects.update(id, { name: "renamed" }); // polls
+await alwaysWait.projects.update({ projectId: id, name: "renamed" }); // polls
 
 await neon.projects.create(
   { name: "app" },
@@ -268,26 +284,26 @@ await neon.projects.create(
 
 ## API reference
 
-Legend: **[P]** returns `Paginated<T>` — `page()`/`all()` resolve to the resource (or `{ data, error }`) per `throwOnError` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take an optional trailing `options` arg and resolve to the resource (or `{ data, error }`).
+Legend: **[P]** returns `Paginated<T>` — `page()`/`all()` resolve to the resource (or `{ data, error }`) per `throwOnError` · **[W]** workflow (multi-step) · **→void** resolves to `void`. Unless noted, methods take one named parameter object followed by an optional `CallOptions` argument and resolve to the resource (or `{ data, error }`). Zero-input methods remain zero-input.
 
 ### `neon.projects`
 
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list(query?)` | **[P]** `ProjectListItem` | `query`: `{ search?, org_id?, limit? }` (cursor managed for you) |
-| `get(id)` | `Project` | |
+| `get({ projectId })` | `Project` | |
 | `create(input?)` | `Project` | API always provisions default-branch compute. No connection string. Readiness polling on by default. `input`: `{ name?, region_id?, pg_version?, org_id?, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, settings? }` |
-| `createAndConnect(input?, { pooled? })` | **[W]** `{ project, connectionString }` | one call + readiness; `pooled` default `true` |
-| `update(id, input)` | `Project` | `input`: `{ name?, settings? }` |
-| `delete(id)` | `Project` | |
+| `createAndConnect({ …input, pooled? }, options?)` | **[W]** `{ project, connectionString }` | one call + readiness; `pooled` default `true` |
+| `update({ projectId, name?, settings? })` | `Project` | `name` is the new project name |
+| `delete({ projectId })` | `Project` | |
+| `recover({ projectId })` | `Project` | beta — recover a soft-deleted project |
 | `transfer({ fromOrgId?, toOrgId, projectIds })` | **→void** | `fromOrgId` defaults to client `orgId` |
 | `transferFromUser({ toOrgId, projectIds })` | **→void** | personal account → org |
 
 ```ts
 // Provision a project and get a pooled connection string in one call
 const { data } = await neon.projects.createAndConnect(
-  { name: "tenant-42", region_id: "aws-us-east-1" },
-  { pooled: true },
+  { name: "tenant-42", region_id: "aws-us-east-1", pooled: true },
 );
 // data: { project, connectionString }
 
@@ -303,17 +319,17 @@ await neon.projects.transfer({
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, query?)` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order?, include_deleted? }` |
-| `get(projectId, branchId)` | `Branch` | |
-| `create(projectId, input?)` | `Branch` | RW compute on by default. `noCompute: true` skips the endpoint. No connection string. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
-| `update(projectId, branchId, input)` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
-| `delete(projectId, branchId)` | **→void** | |
-| `createAndConnect(projectId, input?, { pooled? })` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }` |
-| `getDefault(projectId)` | `Branch` | resolves the default branch by the `default` flag |
-| `setDefault(projectId, branchId)` | `Branch` | |
-| `resetFromParent(projectId, branchId, { preserveUnderName? }?)` | `Branch` | parent HEAD only; discards writes since the branch diverged. `preserveUnderName` is required when the branch has children. Pass `{ waitForReadiness: true }` before using the branch |
-| `compareSchema(projectId, branchId, input)` | `{ diff? }` | `input`: `{ databaseName, baseBranchId?, lsn?, timestamp?, baseLsn?, baseTimestamp? }`. Omitting `baseBranchId` compares against the parent |
-| `finalizeRestore(projectId, branchId, { name? }?)` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
+| `list({ projectId, …query })` | **[P]** `Branch` | `query`: `{ search?, sort_by?, sort_order?, include_deleted? }` |
+| `get({ projectId, branchId })` | `Branch` | |
+| `create({ projectId, …input })` | `Branch` | RW compute on by default. `noCompute: true` skips the endpoint. No connection string. Readiness polling on by default. `input`: `{ name?, parent_id?, parent_lsn?, parent_timestamp?, protected?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? }, noCompute? }` |
+| `update({ projectId, branchId, …input })` | `Branch` | `input`: `{ name?, protected?, expires_at? }` |
+| `delete({ projectId, branchId })` | **→void** | |
+| `createAndConnect({ projectId, …input, pooled? }, options?)` | **[W]** `{ branch, endpoint, connectionString }` | `input`: `{ name?, parentId?, compute?: { minCu?, maxCu?, suspendTimeoutSeconds? } }`; `pooled` default `true` |
+| `getDefault({ projectId })` | `Branch` | resolves the default branch by the `default` flag |
+| `setDefault({ projectId, branchId })` | `Branch` | |
+| `resetFromParent({ projectId, branchId, preserveUnderName? }, options?)` | `Branch` | parent HEAD only; discards writes since the branch diverged. `preserveUnderName` is required when the branch has children. Pass `{ waitForReadiness: true }` before using the branch |
+| `compareSchema({ projectId, branchId, …input })` | `{ diff? }` | `input`: `{ databaseName, baseBranchId?, lsn?, timestamp?, baseLsn?, baseTimestamp? }`. Omitting `baseBranchId` compares against the parent |
+| `finalizeRestore({ projectId, branchId, name? })` | **→void** | commits a restore previewed with `snapshots.restore({ finalize: false })` |
 
 **There is no `recover`.** Neon stopped publishing `POST /projects/{project_id}/branches/{branch_id}/recover` in its OpenAPI spec, so the wrapper is gone until it returns. The endpoint still answers, so a soft-deleted branch can still be recovered through the low-level client — note that this envelope carries the API's own error body rather than a `NeonError`:
 
@@ -331,21 +347,24 @@ const branch = data?.branch;
 
 ```ts
 // Resolve the project's default ("production") branch
-const { data: prod } = await neon.branches.getDefault(projectId);
+const { data: prod } = await neon.branches.getDefault({ projectId });
 
-await neon.branches.create(projectId, {
+await neon.branches.create({
+  projectId,
   name: "preview/pr-123",
   parent_id: prod?.id,
 });
 
-await neon.branches.create(projectId, {
+await neon.branches.create({
+  projectId,
   name: "schema-only",
   parent_id: prod?.id,
   noCompute: true,
 });
 
 // Branch off it with its own compute — returns a ready connection string
-const { data } = await neon.branches.createAndConnect(projectId, {
+const { data } = await neon.branches.createAndConnect({
+  projectId,
   name: "preview/pr-123",
   parentId: prod?.id,
   compute: { minCu: 0.25, maxCu: 2 },
@@ -353,14 +372,13 @@ const { data } = await neon.branches.createAndConnect(projectId, {
 // data: { branch, endpoint, connectionString }
 
 const { data: schema } = await neon.branches.compareSchema(
-  projectId,
-  data!.branch.id,
-  { databaseName: "neondb" },
+  { projectId, branchId: data!.branch.id, databaseName: "neondb" },
 );
 
-await neon.branches.resetFromParent(projectId, data!.branch.id, undefined, {
-  waitForReadiness: true,
-});
+await neon.branches.resetFromParent(
+  { projectId, branchId: data!.branch.id },
+  { waitForReadiness: true },
+);
 ```
 
 ### `neon.postgres`
@@ -378,28 +396,30 @@ const { data: uri } = await neon.postgres.connectionString({
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId)` | `Endpoint[]` |
-| `get(projectId, endpointId)` | `Endpoint` |
-| `create(projectId, input)` | `Endpoint` — `input`: `{ branch_id, type, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, suspend_timeout_seconds?, provisioner? }` |
-| `update(projectId, endpointId, input)` | `Endpoint` |
-| `delete(projectId, endpointId)` | **→void** |
-| `start` / `suspend` / `restart(projectId, endpointId)` | `Endpoint` |
+| `list({ projectId })` | `Endpoint[]` |
+| `listByBranch({ projectId, branchId })` | `Endpoint[]` |
+| `get({ projectId, endpointId })` | `Endpoint` |
+| `create({ projectId, …input })` | `Endpoint` — `input`: `{ branch_id, type, autoscaling_limit_min_cu?, autoscaling_limit_max_cu?, suspend_timeout_seconds?, provisioner? }` |
+| `update({ projectId, endpointId, …input })` | `Endpoint` |
+| `delete({ projectId, endpointId })` | **→void** |
+| `start` / `suspend` / `restart({ projectId, endpointId })` | `Endpoint` |
 
 #### `neon.postgres.roles`
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId, branchId)` | `Role[]` |
-| `get(projectId, branchId, name)` | `Role` |
-| `create(projectId, branchId, { name, no_login? })` | `Role` |
-| `delete(projectId, branchId, name)` | **→void** |
-| `password(projectId, branchId, name)` | `string` (reveals the password) |
-| `resetPassword(projectId, branchId, name)` | `Role` (carries the new password) |
+| `list({ projectId, branchId })` | `Role[]` |
+| `get({ projectId, branchId, roleName })` | `Role` |
+| `create({ projectId, branchId, name, no_login? })` | `Role` |
+| `delete({ projectId, branchId, roleName })` | **→void** |
+| `password({ projectId, branchId, roleName })` | `string` (reveals the password) |
+| `resetPassword({ projectId, branchId, roleName })` | `Role` (carries the new password) |
 
 ```ts
 // Reveal a role's password, or rotate it
-const { data: password } = await neon.postgres.roles.password(projectId, branchId, "neondb_owner");
-const { data: role } = await neon.postgres.roles.resetPassword(projectId, branchId, "neondb_owner");
+const roleParams = { projectId, branchId, roleName: "neondb_owner" };
+const { data: password } = await neon.postgres.roles.password(roleParams);
+const { data: role } = await neon.postgres.roles.resetPassword(roleParams);
 // role.password holds the new secret
 ```
 
@@ -407,20 +427,20 @@ const { data: role } = await neon.postgres.roles.resetPassword(projectId, branch
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId, branchId)` | `Database[]` |
-| `get(projectId, branchId, name)` | `Database` |
-| `create(projectId, branchId, { name, owner_name })` | `Database` |
-| `update(projectId, branchId, name, { name?, owner_name? })` | `Database` |
-| `delete(projectId, branchId, name)` | **→void** |
+| `list({ projectId, branchId })` | `Database[]` |
+| `get({ projectId, branchId, databaseName })` | `Database` |
+| `create({ projectId, branchId, name, owner_name })` | `Database` |
+| `update({ projectId, branchId, databaseName, name?, owner_name? })` | `Database` |
+| `delete({ projectId, branchId, databaseName })` | **→void** |
 
 #### `neon.postgres.dataApi`
 
 | Method | Returns |
 | --- | --- |
-| `get(projectId, branchId, databaseName)` | `DataApiReponse` |
-| `create(projectId, branchId, databaseName, input?)` | `DataApiCreateResponse` |
-| `update(projectId, branchId, databaseName, input?)` | **→void** |
-| `delete(projectId, branchId, databaseName)` | **→void** |
+| `get({ projectId, branchId, databaseName })` | `DataApiReponse` |
+| `create({ projectId, branchId, databaseName, …input })` | `DataApiCreateResponse` |
+| `update({ projectId, branchId, databaseName, …input })` | **→void** |
+| `delete({ projectId, branchId, databaseName })` | **→void** |
 
 ### `neon.storage`
 
@@ -431,31 +451,37 @@ enabled and the branch S3 endpoint metadata; buckets and objects are nested unde
 
 | Method | Returns |
 | --- | --- |
-| `get(projectId, branchId)` | `BranchStorage` |
+| `get({ projectId, branchId })` | `BranchStorage` |
 
 #### `neon.storage.buckets`
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId, branchId)` | `Bucket[]` |
-| `create(projectId, branchId, { name, access_level? })` | `Bucket` — `access_level`: `"private"` \| `"public_read"` |
-| `delete(projectId, branchId, bucketName)` | **→void** |
+| `list({ projectId, branchId })` | `Bucket[]` |
+| `create({ projectId, branchId, name, access_level? })` | `Bucket` — `access_level`: `"private"` \| `"public_read"` |
+| `delete({ projectId, branchId, bucketName })` | **→void** |
 
 #### `neon.storage.objects`
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, branchId, bucketName, query?)` | `BucketObjectsListResponse` | `query`: `{ prefix?, delimiter?, cursor?, limit? }` — one page (`folders`, `objects`, `next_cursor`) |
-| `get(projectId, branchId, bucketName, objectKey)` | `Blob` | raw object bytes |
-| `delete(projectId, branchId, bucketName, objectKey)` | **→void** | |
-| `deleteByPrefix(projectId, branchId, bucketName, prefix)` | `{ deleted: number }` | `prefix` must end with `/` |
-| `presign(projectId, branchId, bucketName, objectKey, input)` | `PresignResponse` | `input`: `{ operation: "upload" \| "download", content_type?, expires_in_seconds? }` |
+| `list({ projectId, branchId, bucketName, …query })` | `BucketObjectsListResponse` | `query`: `{ prefix?, delimiter?, cursor?, limit? }` — one page (`folders`, `objects`, `next_cursor`) |
+| `get({ projectId, branchId, bucketName, objectKey })` | `Blob` | raw object bytes |
+| `delete({ projectId, branchId, bucketName, objectKey })` | **→void** | |
+| `deleteByPrefix({ projectId, branchId, bucketName, prefix })` | `{ deleted: number }` | `prefix` must end with `/` |
+| `presign({ projectId, branchId, bucketName, objectKey, …input })` | `PresignResponse` | `input`: `{ operation: "upload" \| "download", content_type?, expires_in_seconds? }` |
 
 ```ts
 // Upload via presigned PUT (same flow as neon bucket object put)
 const { data: presign } = await neon.storage.objects.presign(
-  projectId, branchId, "avatars", "user-1.png",
-  { operation: "upload", content_type: "image/png" },
+  {
+    projectId,
+    branchId,
+    bucketName: "avatars",
+    objectKey: "user-1.png",
+    operation: "upload",
+    content_type: "image/png",
+  },
 );
 if (!presign) throw new Error("presign failed");
 
@@ -472,16 +498,19 @@ Branch-scoped Neon Functions (beta).
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, branchId, query?)` | **[P]** `NeonFunction` | `query`: `{ limit? }` |
-| `get(projectId, branchId, slug)` | `NeonFunction` | |
-| `update(projectId, branchId, slug, input)` | `NeonFunction` | `input`: `{ name? }` |
-| `delete(projectId, branchId, slug)` | **→void** | |
-| `deploy(projectId, branchId, slug, input?)` | `NeonFunctionDeployment` | multipart — `input`: `{ zip?: Blob \| File, runtime?: "nodejs24", environment?: string }` (`environment` is a JSON-encoded `Record<string, string>`) |
+| `list({ projectId, branchId, …query })` | **[P]** `NeonFunction` | `query`: `{ limit? }` |
+| `get({ projectId, branchId, slug })` | `NeonFunction` | |
+| `update({ projectId, branchId, slug, …input })` | `NeonFunction` | `input`: `{ name? }` |
+| `delete({ projectId, branchId, slug })` | **→void** | |
+| `deploy({ projectId, branchId, slug, …input })` | `NeonFunctionDeployment` | multipart — `input`: `{ zip?: Blob \| File, runtime?: "nodejs24", environment?: string }` (`environment` is a JSON-encoded `Record<string, string>`) |
 
 ```ts
 // Deploy a bundled index.mjs inside a zip (first deploy must include zip)
 const zip = await Bun.file("bundle.zip").arrayBuffer();
-const { data: deployment } = await neon.functions.deploy(projectId, branchId, "api", {
+const { data: deployment } = await neon.functions.deploy({
+  projectId,
+  branchId,
+  slug: "api",
   zip: new File([zip], "bundle.zip", { type: "application/zip" }),
   runtime: "nodejs24",
 });
@@ -500,15 +529,19 @@ resolves and a certificate is issued on the first request.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, branchId, query?)` | **[P]** `CustomDomain` | `query`: `{ limit? }` |
-| `register(projectId, branchId, input)` | `CustomDomain` | `input`: `{ domain, entity_type, entity_id }` |
-| `delete(projectId, branchId, domain)` | **→void** | |
+| `list({ projectId, branchId, …query })` | **[P]** `CustomDomain` | `query`: `{ limit? }` |
+| `register({ projectId, branchId, …input })` | `CustomDomain` | `input`: `{ domain, entity_type, entity_id }` |
+| `delete({ projectId, branchId, domain })` | **→void** | |
 
 ```ts
 const { data: registered } = await neon.functions.customDomains.register(
-  projectId,
-  branchId,
-  { domain: "docs.example.com", entity_type: "function", entity_id: "api" },
+  {
+    projectId,
+    branchId,
+    domain: "docs.example.com",
+    entity_type: "function",
+    entity_id: "api",
+  },
 );
 // Point a CNAME for docs.example.com at registered.cname_target
 ```
@@ -519,15 +552,17 @@ Branch-scoped triggers (beta). v1 only supports `type: "schedule"`, which invoke
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, branchId)` | `Trigger[]` | |
-| `create(projectId, branchId, input)` | `Trigger` | `input`: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }` |
-| `get(projectId, branchId, triggerId)` | `Trigger` | |
-| `update(projectId, branchId, triggerId, input)` | `Trigger` | `input` must include `type: "schedule"`; other fields optional |
-| `delete(projectId, branchId, triggerId)` | **→void** | |
+| `list({ projectId, branchId })` | `Trigger[]` | |
+| `create({ projectId, branchId, …input })` | `Trigger` | `input`: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }` |
+| `get({ projectId, branchId, triggerId })` | `Trigger` | |
+| `update({ projectId, branchId, triggerId, …input })` | `Trigger` | `input` must include `type: "schedule"`; other fields optional |
+| `delete({ projectId, branchId, triggerId })` | **→void** | |
 
 ```ts
 const { data: trigger, error: createError } =
-  await neon.triggers.create(projectId, branchId, {
+  await neon.triggers.create({
+    projectId,
+    branchId,
     type: "schedule",
     function_slug: "worker",
     name: "daily-refresh",
@@ -536,11 +571,14 @@ const { data: trigger, error: createError } =
   });
 if (createError) throw createError;
 
-await neon.triggers.update(projectId, branchId, trigger.trigger_id, {
+await neon.triggers.update({
+  projectId,
+  branchId,
+  triggerId: trigger.trigger_id,
   type: "schedule",
   enabled: true,
 });
-await neon.triggers.delete(projectId, branchId, trigger.trigger_id);
+await neon.triggers.delete({ projectId, branchId, triggerId: trigger.trigger_id });
 ```
 
 ### `neon.credentials`
@@ -560,17 +598,17 @@ scopes.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, branchId)` | `CredentialMeta[]` | |
-| `create(projectId, branchId, input)` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` |
-| `revoke(projectId, branchId, tokenId)` | **→void** | |
-| `reveal(projectId, branchId, tokenId)` | `CredentialSecret` | `{ token_id, api_token, s3_secret_access_key }` — no `branch_id`. 404 if revoked, expired, or wrong project. 409 if issued before secret retrieval; rotate to obtain one |
-| `rotate(projectId, branchId, tokenId)` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret |
+| `list({ projectId, branchId })` | `CredentialMeta[]` | |
+| `create({ projectId, branchId, …input })` | `CreateCredentialResponse` | `input`: `{ name?, scopes, principal_type: "user" }` |
+| `revoke({ projectId, branchId, tokenId })` | **→void** | |
+| `reveal({ projectId, branchId, tokenId })` | `CredentialSecret` | `{ token_id, api_token, s3_secret_access_key }` — no `branch_id`. 404 if revoked, expired, or wrong project. 409 if issued before secret retrieval; rotate to obtain one |
+| `rotate({ projectId, branchId, tokenId })` | `RotateCredentialResponse` | Not idempotent. A lost 200 already committed; create a replacement and revoke this one. After rotate, a replica may briefly accept the old secret |
 
 ```ts
 const { data: created, error: createError } = await neon.credentials.create(
-  projectId,
-  branchId,
   {
+    projectId,
+    branchId,
     scopes: ["storage:read"],
     principal_type: "user",
   },
@@ -578,16 +616,12 @@ const { data: created, error: createError } = await neon.credentials.create(
 if (createError) throw createError;
 
 const { data: revealed, error: revealError } = await neon.credentials.reveal(
-  projectId,
-  branchId,
-  created.token_id,
+  { projectId, branchId, tokenId: created.token_id },
 );
 if (revealError) throw revealError;
 
 const { data: rotated, error: rotateError } = await neon.credentials.rotate(
-  projectId,
-  branchId,
-  created.token_id,
+  { projectId, branchId, tokenId: created.token_id },
 );
 if (rotateError) throw rotateError;
 ```
@@ -598,7 +632,7 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `get(projectId, branchId)` | `BranchAiGateway` | 404 when AI Gateway is not enabled on the branch |
+| `get({ projectId, branchId })` | `BranchAiGateway` | 404 when AI Gateway is not enabled on the branch |
 
 ### `neon.logs`
 
@@ -632,7 +666,7 @@ function logsUnavailableReason(error: unknown): string | undefined {
   return typeof body.reason === "string" ? body.reason : undefined;
 }
 
-const { error } = await neon.logs.fields(projectId, branchId);
+const { error } = await neon.logs.fields({ projectId, branchId });
 if (error) {
   if (logsUnavailableReason(error) === "telemetry_not_enabled") {
     // no logs on this branch, ever — carry on
@@ -649,9 +683,9 @@ produced a `pg_endpoint` record. And `minimum_severity` can be rejected outright
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `query(projectId, branchId, input?)` | **[P]** `ProjectBranchLogRecord` | `input`: `{ since?, start_time?, end_time?, limit?, sort_order?, source?, service_name?, scope_name?, minimum_severity?, severity_text?, body_contains?, trace_id?, logql? }` — filters combine with `AND` |
-| `fields(projectId, branchId)` | `string[]` | field names this branch has emitted, usable as `fieldName` below |
-| `fieldValues(projectId, branchId, fieldName, query?)` | `ProjectBranchLogFieldValuesResponse` | `query`: `{ since?, start_time?, end_time?, source?, limit? }` — check `is_truncated` |
+| `query({ projectId, branchId, …input })` | **[P]** `ProjectBranchLogRecord` | `input`: `{ since?, start_time?, end_time?, limit?, sort_order?, source?, service_name?, scope_name?, minimum_severity?, severity_text?, body_contains?, trace_id?, logql? }` — filters combine with `AND` |
+| `fields({ projectId, branchId })` | `string[]` | field names this branch has emitted, usable as `fieldName` below |
+| `fieldValues({ projectId, branchId, fieldName, …query })` | `ProjectBranchLogFieldValuesResponse` | `query`: `{ since?, start_time?, end_time?, source?, limit? }` — check `is_truncated` |
 
 Give the window as **either** `since` (`"30m"`, `"6h"`, `"7d"`) **or** `start_time`;
 supplying both is rejected with `conflicting_time_range`. `logql` replaces the seven
@@ -669,7 +703,9 @@ were complete.
 ```ts
 // Errors from a function over the last 6 hours, newest first
 const { data: errors } = await neon.logs
-  .query(projectId, branchId, {
+  .query({
+    projectId,
+    branchId,
     since: "6h",
     source: "function",
     // some branches' log backends reject minimum_severity; severity_text always works
@@ -678,16 +714,16 @@ const { data: errors } = await neon.logs
   .all();
 
 // Paging replays the filters for you — the endpoint returns wrong results otherwise
-for await (const line of neon.logs.query(projectId, branchId, { since: "1h" })) {
+for await (const line of neon.logs.query({ projectId, branchId, since: "1h" })) {
   console.log(line.timestamp, line.message);
 }
 
 // Discover what you can enumerate, then read one field's values
-const { data: fields } = await neon.logs.fields(projectId, branchId);
+const { data: fields } = await neon.logs.fields({ projectId, branchId });
 // e.g. ["service_name", "severity_text", "scope_name", "entity_type"]
 
 const { data: services } = await neon.logs.fieldValues(
-  projectId, branchId, "service_name", { since: "24h" },
+  { projectId, branchId, fieldName: "service_name", since: "24h" },
 );
 console.log(services?.values);
 if (services?.is_truncated) {
@@ -697,7 +733,7 @@ if (services?.is_truncated) {
 
 **`fieldName` must be a name `fields` returned.** The enumerable set and the filterable
 set overlap rather than nest: `source` is a filter — on `query` and on `fieldValues`' own
-query — but is not enumerable, so `fieldValues(…, "source")` answers `400` with
+query — but is not enumerable, so `fieldValues({ …, fieldName: "source" })` answers `400` with
 `reason: "unknown_field"`; `entity_type` is enumerable but is not a filter on `query`.
 
 `fields` returns a bare `string[]` because its response carries nothing else.
@@ -708,17 +744,19 @@ the values can be trusted and unwrapping would hide it.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId)` | `Snapshot[]` | |
-| `create(projectId, branchId, input?)` | `Snapshot` | `input`: `{ name?, timestamp?, lsn?, expiresAt? }` (point-in-time) |
-| `update(projectId, snapshotId, input)` | `Snapshot` | `input`: `{ name?, expiresAt? }` — pass `expiresAt: null` to clear the expiration |
-| `delete(projectId, snapshotId)` | **→void** | |
-| `restore(projectId, snapshotId, input?)` | `Branch` | see below |
-| `getSchedule(projectId, branchId)` | `BackupSchedule` | `frequency` stays a wide `string`: a branch can still hold a schedule created when the API accepted other values |
-| `setSchedule(projectId, branchId, schedule)` | **→void** | `schedule.schedule[].frequency` is narrowed to `SnapshotFrequency` (`"daily" \| "weekly" \| "monthly"`) |
+| `list({ projectId })` | `Snapshot[]` | |
+| `create({ projectId, branchId, …input })` | `Snapshot` | `input`: `{ name?, timestamp?, lsn?, expiresAt? }` (point-in-time) |
+| `update({ projectId, snapshotId, …input })` | `Snapshot` | `input`: `{ name?, expiresAt? }` — pass `expiresAt: null` to clear the expiration |
+| `delete({ projectId, snapshotId })` | **→void** | |
+| `restore({ projectId, snapshotId, …input })` | `Branch` | see below |
+| `getSchedule({ projectId, branchId })` | `BackupSchedule` | `frequency` stays a wide `string`: a branch can still hold a schedule created when the API accepted other values |
+| `setSchedule({ projectId, branchId, schedule })` | **→void** | `schedule[].frequency` is narrowed to `SnapshotFrequency` (`"daily" \| "weekly" \| "monthly"`) |
 
 ```ts
 // Snapshot a branch at a point in time (or an `lsn`), with a name + TTL
-const { data: snapshot } = await neon.snapshots.create(projectId, branchId, {
+const { data: snapshot } = await neon.snapshots.create({
+  projectId,
+  branchId,
   name: "pre-migration",
   timestamp: "2026-06-01T00:00:00Z",
   expiresAt: "2026-07-01T00:00:00Z",
@@ -731,7 +769,9 @@ const { data: snapshot } = await neon.snapshots.create(projectId, branchId, {
 - **Transaction-style** with `preview`: it restores un-finalized, runs your callback against the restored branch, then **finalizes (commit)** if it returns `true` or **deletes the preview branch (abort)** if `false` (unless `keepOnAbort`):
 
 ```ts
-await neon.snapshots.restore(projectId, snapshotId, {
+await neon.snapshots.restore({
+  projectId,
+  snapshotId,
   targetBranchId,
   // second argument carries the call's signal; the SDK cannot interrupt your callback
   preview: async (branch, { signal }) =>
@@ -743,9 +783,9 @@ await neon.snapshots.restore(projectId, snapshotId, {
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId)` | **[P]** `Operation` | |
-| `get(projectId, operationId)` | `Operation` | |
-| `waitFor(operations, options?)` | **→void** | `options`: `{ pollIntervalMs?, timeoutMs?, signal? }` — the readiness primitive. A wait timeout's `error.operations` is the still-outstanding subset; pass it here to resume. |
+| `list({ projectId })` | **[P]** `Operation` | |
+| `get({ projectId, operationId })` | `Operation` | |
+| `waitFor({ operations }, options?)` | **→void** | `options`: `{ pollIntervalMs?, timeoutMs?, signal?, throwOnError? }` — the readiness primitive. `requestTimeoutMs`, `waitForReadiness`, and `wait` are excluded. A wait timeout's `error.operations` is the still-outstanding subset; pass it here to resume. |
 
 ```ts
 // Wait on operations from a raw call (or when waitForReadiness is off)
@@ -754,7 +794,10 @@ const { data } = await raw.createProjectBranch({
   path: { project_id: projectId },
   body: { branch: { name: "wip" } },
 });
-const { error } = await neon.operations.waitFor(data!.operations, { timeoutMs: 120_000 });
+const { error } = await neon.operations.waitFor(
+  { operations: data!.operations },
+  { timeoutMs: 120_000 },
+);
 ```
 
 ### `neon.consumption`
@@ -794,8 +837,8 @@ await neon.consumption.perProject({
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list()` | `ApiKeysListResponseItem[]` | |
-| `create(keyName)` | `ApiKeyCreateResponse` | the `key` token is shown **once** |
-| `revoke(keyId)` | `ApiKeyRevokeResponse` | |
+| `create({ keyName })` | `ApiKeyCreateResponse` | the `key` token is shown **once** |
+| `revoke({ keyId })` | `ApiKeyRevokeResponse` | |
 
 ### `neon.regions` / `neon.user`
 
@@ -811,21 +854,28 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `get(projectId, branchId)` | `NeonAuthIntegration` | |
-| `create(projectId, branchId, input)` | `NeonAuthCreateIntegrationResponse` | enable the integration |
-| `disable(projectId, branchId, { deleteData? }?)` | **→void** | |
-| `updateConfig(projectId, branchId, input)` | `NeonAuthConfigResponse` | |
-| `oauthProviders.list / add / update / delete` | `NeonAuthOauthProvider`(`[]`) / **→void** | |
-| `trustedDomains.list / add / delete` | `NeonAuthRedirectUriWhitelistDomain[]` / **→void** | redirect-URI whitelist |
-| `users.create / delete / updateRole` | `NeonAuthCreateNewUserResponse` / **→void** / role | |
+| `get({ projectId, branchId })` | `NeonAuthIntegration` | |
+| `create({ projectId, branchId, …input })` | `NeonAuthCreateIntegrationResponse` | enable the integration |
+| `disable({ projectId, branchId, deleteData? })` | **→void** | |
+| `updateConfig({ projectId, branchId, …input })` | `NeonAuthConfigResponse` | |
+| `oauthProviders.list({ projectId, branchId })` | `NeonAuthOauthProvider[]` | |
+| `oauthProviders.add({ projectId, branchId, …input })` | `NeonAuthOauthProvider` | |
+| `oauthProviders.update({ projectId, branchId, providerId, …input })` | `NeonAuthOauthProvider` | |
+| `oauthProviders.delete({ projectId, branchId, providerId })` | **→void** | |
+| `trustedDomains.list({ projectId, branchId })` | `NeonAuthRedirectUriWhitelistDomain[]` | redirect-URI whitelist |
+| `trustedDomains.add({ projectId, branchId, domain, auth_provider })` | **→void** | redirect-URI whitelist |
+| `trustedDomains.delete({ projectId, branchId, auth_provider, domains })` | **→void** | redirect-URI whitelist |
+| `users.create({ projectId, branchId, …input })` | `NeonAuthCreateNewUserResponse` | |
+| `users.delete({ projectId, branchId, authUserId })` | **→void** | |
+| `users.updateRole({ projectId, branchId, authUserId, roles })` | role | |
 
 ### `neon.projects.permissions`
 
 | Method | Returns |
 | --- | --- |
-| `list(projectId)` | `ProjectPermission[]` |
-| `grant(projectId, email)` | `ProjectPermission` |
-| `revoke(projectId, permissionId)` | `ProjectPermission` |
+| `list({ projectId })` | `ProjectPermission[]` |
+| `grant({ projectId, email })` | `ProjectPermission` |
+| `revoke({ projectId, permissionId })` | `ProjectPermission` |
 
 For an **org-owned** project, roles for existing organization members live on
 `neon.projects.members` below instead.
@@ -840,9 +890,9 @@ only — a personal project answers 404.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list(projectId, query?)` | **[P]** `ProjectMember` | `query`: `{ limit? }` |
-| `setRole(projectId, memberId, role, { confirmSelfDemotion? }?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
-| `removeRole(projectId, memberId, { confirmSelfLockout? }?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
+| `list({ projectId, …query })` | **[P]** `ProjectMember` | `query`: `{ limit? }` |
+| `setRole({ projectId, memberId, role, confirmSelfDemotion? }, options?)` | `ProjectMemberRoleResponse` | `role`: `"viewer" \| "editor" \| "admin"`; idempotent |
+| `removeRole({ projectId, memberId, confirmSelfLockout? }, options?)` | `ProjectMemberRoleResponse` | clears the explicit grant; idempotent |
 
 A `ProjectMember` carries several role-ish fields, and they are not interchangeable.
 **Read `effective_project_permission`** for "what can this member actually do" — `VIEWER`
@@ -863,15 +913,12 @@ access (`confirmSelfLockout`); without it the API rejects the call.
 
 ```ts
 const { data: grant } = await neon.projects.members.setRole(
-  projectId, memberId, "editor",
+  { projectId, memberId, role: "editor" },
 );
 // A downgrade can leave credentials the member still holds
 if (grant?.credential_rotation_recommended) { /* rotate database credentials */ }
 if (grant?.org_api_key_rotation_recommended) { /* rotate project-scoped org keys */ }
 ```
-
-Also on `neon.projects`: `recover(id)` (beta — recover a soft-deleted project), and on
-`neon.postgres.endpoints`: `listByBranch(projectId, branchId)` → `Endpoint[]`.
 
 ---
 

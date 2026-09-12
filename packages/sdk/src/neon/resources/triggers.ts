@@ -11,10 +11,24 @@ import type {
 	TriggerUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = TriggerCreateRequest;
 type UpdateInput = TriggerUpdateRequest;
+
+export type TriggersListParams = { projectId: string; branchId: string };
+export type TriggersCreateParams = {
+	projectId: string;
+	branchId: string;
+} & CreateInput;
+export type TriggersGetParams = {
+	projectId: string;
+	branchId: string;
+	triggerId: string;
+};
+export type TriggersUpdateParams = TriggersGetParams & UpdateInput;
+export type TriggersDeleteParams = TriggersGetParams;
 
 /** Branch-scoped Function triggers. v1 only supports `type: "schedule"`. */
 export class Triggers<DThrow extends boolean> {
@@ -25,20 +39,26 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/triggers */
-	list(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<Trigger[], DThrow>>;
+	list(params: TriggersListParams): Promise<Outcome<Trigger[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: TriggersListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Trigger[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: TriggersListParams,
 		opts?: CallOptions,
 	): Promise<Trigger[] | NeonResult<Trigger[]>> {
+		const invalid = validateParams(params, "triggers.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Trigger[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -53,23 +73,26 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/triggers */
-	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
-	): Promise<Outcome<Trigger, DThrow>>;
+	create(params: TriggersCreateParams): Promise<Outcome<Trigger, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: TriggersCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Trigger, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: TriggersCreateParams,
 		opts?: CallOptions,
 	): Promise<Trigger | NeonResult<Trigger>> {
+		const invalid = validateParams(params, "triggers.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Trigger>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -85,23 +108,27 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/triggers/{trigger_id} */
-	get(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
-	): Promise<Outcome<Trigger, DThrow>>;
+	get(params: TriggersGetParams): Promise<Outcome<Trigger, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
+		params: TriggersGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Trigger, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
+		params: TriggersGetParams,
 		opts?: CallOptions,
 	): Promise<Trigger | NeonResult<Trigger>> {
+		const invalid = validateParams(params, "triggers.get", {
+			projectId: "string",
+			branchId: "string",
+			triggerId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Trigger>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, triggerId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -120,26 +147,27 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall PATCH /projects/{project_id}/branches/{branch_id}/triggers/{trigger_id} */
-	update(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
-		input: UpdateInput,
-	): Promise<Outcome<Trigger, DThrow>>;
+	update(params: TriggersUpdateParams): Promise<Outcome<Trigger, DThrow>>;
 	update<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
-		input: UpdateInput,
+		params: TriggersUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Trigger, Throw>>;
 	update(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
-		input: UpdateInput,
+		params: TriggersUpdateParams,
 		opts?: CallOptions,
 	): Promise<Trigger | NeonResult<Trigger>> {
+		const invalid = validateParams(params, "triggers.update", {
+			projectId: "string",
+			branchId: "string",
+			triggerId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Trigger>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, triggerId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -159,23 +187,27 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id}/triggers/{trigger_id} */
-	delete(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
-	): Promise<Outcome<void, DThrow>>;
+	delete(params: TriggersDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
+		params: TriggersDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		triggerId: string,
+		params: TriggersDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "triggers.delete", {
+			projectId: "string",
+			branchId: "string",
+			triggerId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, triggerId } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchTrigger({
 				client,

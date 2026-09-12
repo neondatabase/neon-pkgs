@@ -175,8 +175,8 @@ export const createBranchTool = (options: ToolClientOptions) =>
 		(neon, input, signal) => {
 			if (input.no_compute === true) {
 				return neon.branches.create(
-					input.project_id,
 					{
+						projectId: input.project_id,
 						name: input.name,
 						parent_id: input.parent_id,
 						noCompute: true,
@@ -185,8 +185,8 @@ export const createBranchTool = (options: ToolClientOptions) =>
 				);
 			}
 			return neon.branches.create(
-				input.project_id,
 				{
+					projectId: input.project_id,
 					name: input.name,
 					parent_id: input.parent_id,
 					compute: mapCompute(input.compute),
@@ -218,18 +218,16 @@ export const createBranchAndConnectTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.branches.createAndConnect(
-				input.project_id,
 				{
+					projectId: input.project_id,
 					name: input.name,
 					parentId: input.parent_id,
 					compute: mapCompute(input.compute),
-				},
-				{
-					signal,
 					...(input.pooled === undefined
 						? {}
 						: { pooled: input.pooled }),
 				},
+				{ signal },
 			),
 	);
 
@@ -276,13 +274,8 @@ export const createProjectAndConnectTool = (options: ToolClientOptions) =>
 				tags: ["Project"],
 			},
 		},
-		(neon, input, signal) => {
-			const { pooled, ...project } = input;
-			return neon.projects.createAndConnect(project, {
-				signal,
-				...(pooled === undefined ? {} : { pooled }),
-			});
-		},
+		(neon, input, signal) =>
+			neon.projects.createAndConnect(input, { signal }),
 	);
 
 export const getDefaultTool = (options: ToolClientOptions) =>
@@ -306,7 +299,10 @@ export const getDefaultTool = (options: ToolClientOptions) =>
 			},
 		},
 		(neon, input, signal) =>
-			neon.branches.getDefault(input.project_id, { signal }),
+			neon.branches.getDefault(
+				{ projectId: input.project_id },
+				{ signal },
+			),
 	);
 
 export const resetFromParentTool = (options: ToolClientOptions) =>
@@ -331,11 +327,13 @@ export const resetFromParentTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.branches.resetFromParent(
-				input.project_id,
-				input.branch_id,
-				input.preserve_under_name === undefined
-					? undefined
-					: { preserveUnderName: input.preserve_under_name },
+				{
+					projectId: input.project_id,
+					branchId: input.branch_id,
+					...(input.preserve_under_name === undefined
+						? undefined
+						: { preserveUnderName: input.preserve_under_name }),
+				},
 				{ signal },
 			),
 	);
@@ -362,9 +360,9 @@ export const compareSchemaTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.branches.compareSchema(
-				input.project_id,
-				input.branch_id,
 				{
+					projectId: input.project_id,
+					branchId: input.branch_id,
 					databaseName: input.database_name,
 					...(input.base_branch_id === undefined
 						? {}
@@ -450,9 +448,9 @@ export const restoreSnapshotTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.snapshots.restore(
-				input.project_id,
-				input.snapshot_id,
 				{
+					projectId: input.project_id,
+					snapshotId: input.snapshot_id,
 					name: input.name,
 					targetBranchId: input.target_branch_id,
 					finalize: input.finalize,
@@ -483,9 +481,11 @@ export const setScheduleTool = (options: ToolClientOptions) =>
 		},
 		(neon, input, signal) =>
 			neon.snapshots.setSchedule(
-				input.project_id,
-				input.branch_id,
-				{ schedule: input.schedule },
+				{
+					projectId: input.project_id,
+					branchId: input.branch_id,
+					schedule: input.schedule,
+				},
 				{ signal },
 			),
 	);

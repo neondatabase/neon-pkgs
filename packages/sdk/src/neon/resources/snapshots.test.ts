@@ -37,7 +37,9 @@ function neonCapturing() {
 describe("snapshots.update maps the ergonomic input to the API body", () => {
 	it("sends camelCase expiresAt as snake_case expires_at", async () => {
 		const { neon, calls } = neonCapturing();
-		await neon.snapshots.update("p-1", "snap-1", {
+		await neon.snapshots.update({
+			projectId: "p-1",
+			snapshotId: "snap-1",
 			name: "renamed",
 			expiresAt: "2030-01-01T00:00:00Z",
 		});
@@ -48,13 +50,21 @@ describe("snapshots.update maps the ergonomic input to the API body", () => {
 
 	it("forwards an explicit null to clear the expiration", async () => {
 		const { neon, calls } = neonCapturing();
-		await neon.snapshots.update("p-1", "snap-1", { expiresAt: null });
+		await neon.snapshots.update({
+			projectId: "p-1",
+			snapshotId: "snap-1",
+			expiresAt: null,
+		});
 		expect(calls[0]?.body).toEqual({ snapshot: { expires_at: null } });
 	});
 
 	it("omits expires_at entirely when not provided", async () => {
 		const { neon, calls } = neonCapturing();
-		await neon.snapshots.update("p-1", "snap-1", { name: "renamed" });
+		await neon.snapshots.update({
+			projectId: "p-1",
+			snapshotId: "snap-1",
+			name: "renamed",
+		});
 		expect(calls[0]?.body).toEqual({ snapshot: { name: "renamed" } });
 	});
 });
@@ -86,9 +96,9 @@ describe("snapshots.restore keeps the result contract around its preview callbac
 		const controller = new AbortController();
 
 		const { error } = await neon.snapshots.restore(
-			"p-1",
-			"snap-1",
 			{
+				projectId: "p-1",
+				snapshotId: "snap-1",
 				targetBranchId: "br-1",
 				preview: async (_branch, { signal }) => {
 					controller.abort();
@@ -106,7 +116,9 @@ describe("snapshots.restore keeps the result contract around its preview callbac
 	it("reports a callback that throws for its own reasons as a client error", async () => {
 		const neon = neonRestoring();
 
-		const { error } = await neon.snapshots.restore("p-1", "snap-1", {
+		const { error } = await neon.snapshots.restore({
+			projectId: "p-1",
+			snapshotId: "snap-1",
 			targetBranchId: "br-1",
 			preview: async () => {
 				throw new Error("my checks blew up");
@@ -121,7 +133,9 @@ describe("snapshots.restore keeps the result contract around its preview callbac
 describe("snapshots.setSchedule forwards the schedule body verbatim", () => {
 	it("sends the narrowed schedule as the request body", async () => {
 		const { neon, calls } = neonCapturing();
-		await neon.snapshots.setSchedule("p-1", "br-1", {
+		await neon.snapshots.setSchedule({
+			projectId: "p-1",
+			branchId: "br-1",
 			schedule: [
 				{ frequency: "weekly", day: 1, hour: 2 },
 				{ frequency: "daily", hour: 3, retention_seconds: 604800 },

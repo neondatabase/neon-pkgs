@@ -67,7 +67,12 @@ class PaginatedList<T, D> implements Paginated<T, boolean> {
 				this.#fetchPage(cursor, deadline.signal),
 			);
 		} catch (error) {
-			return err(cancelled(deadline) ?? toNeonError(error, undefined));
+			return err(
+				cancelled(deadline) ??
+					(isNeonError(error)
+						? error
+						: toNeonError(error, undefined)),
+			);
 		}
 		const cancellation = cancelled(deadline);
 		if (cancellation) return err(cancellation);

@@ -18,7 +18,9 @@ describe.sequential("e2e — @neon/sdk error mapping against the real API", () =
 	it("maps a missing project to NeonNotFoundError with the real status", async () => {
 		const neon = makeClient();
 
-		const { data, error } = await neon.projects.get(MISSING_PROJECT_ID);
+		const { data, error } = await neon.projects.get({
+			projectId: MISSING_PROJECT_ID,
+		});
 
 		expect(data).toBeUndefined();
 		expect(error).toBeInstanceOf(NeonNotFoundError);
@@ -46,7 +48,7 @@ describe.sequential("e2e — @neon/sdk error mapping against the real API", () =
 		const neon = makeThrowingClient();
 
 		await expect(
-			neon.projects.get(MISSING_PROJECT_ID),
+			neon.projects.get({ projectId: MISSING_PROJECT_ID }),
 		).rejects.toBeInstanceOf(NeonNotFoundError);
 	});
 

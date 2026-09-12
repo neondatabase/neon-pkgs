@@ -11,10 +11,26 @@ import type {
 	DatabaseUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = DatabaseCreateRequest["database"];
 type UpdateInput = DatabaseUpdateRequest["database"];
+
+export type DatabasesListParams = {
+	projectId: string;
+	branchId: string;
+};
+
+export type DatabasesGetParams = DatabasesListParams & {
+	databaseName: string;
+};
+
+export type DatabasesCreateParams = DatabasesListParams & CreateInput;
+
+export type DatabasesUpdateParams = DatabasesGetParams & UpdateInput;
+
+export type DatabasesDeleteParams = DatabasesGetParams;
 
 /** Database resource (branch-scoped). */
 export class Databases<DThrow extends boolean> {
@@ -25,20 +41,26 @@ export class Databases<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/databases */
-	list(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<Database[], DThrow>>;
+	list(params: DatabasesListParams): Promise<Outcome<Database[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: DatabasesListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Database[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: DatabasesListParams,
 		opts?: CallOptions,
 	): Promise<Database[] | NeonResult<Database[]>> {
+		const invalid = validateParams(params, "databases.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Database[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -53,23 +75,27 @@ export class Databases<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/databases/{database_name} */
-	get(
-		projectId: string,
-		branchId: string,
-		name: string,
-	): Promise<Outcome<Database, DThrow>>;
+	get(params: DatabasesGetParams): Promise<Outcome<Database, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: DatabasesGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Database, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: DatabasesGetParams,
 		opts?: CallOptions,
 	): Promise<Database | NeonResult<Database>> {
+		const invalid = validateParams(params, "databases.get", {
+			projectId: "string",
+			branchId: "string",
+			databaseName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Database>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, databaseName } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -78,7 +104,7 @@ export class Databases<DThrow extends boolean> {
 					path: {
 						project_id: projectId,
 						branch_id: branchId,
-						database_name: name,
+						database_name: databaseName,
 					},
 					throwOnError: false,
 					signal,
@@ -88,23 +114,26 @@ export class Databases<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/databases */
-	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
-	): Promise<Outcome<Database, DThrow>>;
+	create(params: DatabasesCreateParams): Promise<Outcome<Database, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: DatabasesCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Database, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: DatabasesCreateParams,
 		opts?: CallOptions,
 	): Promise<Database | NeonResult<Database>> {
+		const invalid = validateParams(params, "databases.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Database>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -120,26 +149,27 @@ export class Databases<DThrow extends boolean> {
 	}
 
 	/** @apiCall PATCH /projects/{project_id}/branches/{branch_id}/databases/{database_name} */
-	update(
-		projectId: string,
-		branchId: string,
-		name: string,
-		input: UpdateInput,
-	): Promise<Outcome<Database, DThrow>>;
+	update(params: DatabasesUpdateParams): Promise<Outcome<Database, DThrow>>;
 	update<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
-		input: UpdateInput,
+		params: DatabasesUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Database, Throw>>;
 	update(
-		projectId: string,
-		branchId: string,
-		name: string,
-		input: UpdateInput,
+		params: DatabasesUpdateParams,
 		opts?: CallOptions,
 	): Promise<Database | NeonResult<Database>> {
+		const invalid = validateParams(params, "databases.update", {
+			projectId: "string",
+			branchId: "string",
+			databaseName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Database>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, databaseName, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -148,7 +178,7 @@ export class Databases<DThrow extends boolean> {
 					path: {
 						project_id: projectId,
 						branch_id: branchId,
-						database_name: name,
+						database_name: databaseName,
 					},
 					body: { database: input },
 					throwOnError: false,
@@ -159,30 +189,34 @@ export class Databases<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id}/databases/{database_name} */
-	delete(
-		projectId: string,
-		branchId: string,
-		name: string,
-	): Promise<Outcome<void, DThrow>>;
+	delete(params: DatabasesDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: DatabasesDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: DatabasesDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "databases.delete", {
+			projectId: "string",
+			branchId: "string",
+			databaseName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, databaseName } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchDatabase({
 				client,
 				path: {
 					project_id: projectId,
 					branch_id: branchId,
-					database_name: name,
+					database_name: databaseName,
 				},
 				throwOnError: false,
 				signal,

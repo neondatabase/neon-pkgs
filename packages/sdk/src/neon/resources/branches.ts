@@ -21,16 +21,12 @@ import { withConnectionString } from "../connection.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
 
 type ListQuery = Omit<NonNullable<ListProjectBranchesData["query"]>, "cursor">;
 type BranchFields = NonNullable<BranchCreateRequest["branch"]>;
 type UpdateInput = BranchUpdateRequest["branch"];
-
-interface WorkflowOptions<Throw extends boolean> extends CallOptions<Throw> {
-	/** Return a pooled connection string (default `true`). */
-	pooled?: boolean;
-}
 
 export interface ComputeSettings {
 	minCu?: number;
@@ -83,6 +79,46 @@ export interface CompareSchemaInput {
 	baseTimestamp?: string;
 }
 
+export type BranchListParams = ListQuery & { projectId: string };
+export interface BranchGetParams {
+	projectId: string;
+	branchId: string;
+}
+export type BranchCreateParams = CreateInput & { projectId: string };
+export type BranchUpdateParams = UpdateInput & {
+	projectId: string;
+	branchId: string;
+};
+export interface BranchDeleteParams {
+	projectId: string;
+	branchId: string;
+}
+export type BranchCreateAndConnectParams = CreateAndConnectInput & {
+	projectId: string;
+	/** Return a pooled connection string (default `true`). */
+	pooled?: boolean;
+};
+export interface BranchGetDefaultParams {
+	projectId: string;
+}
+export interface BranchSetDefaultParams {
+	projectId: string;
+	branchId: string;
+}
+export type BranchResetFromParentParams = ResetFromParentInput & {
+	projectId: string;
+	branchId: string;
+};
+export type BranchCompareSchemaParams = CompareSchemaInput & {
+	projectId: string;
+	branchId: string;
+};
+export interface BranchFinalizeRestoreParams {
+	projectId: string;
+	branchId: string;
+	name?: string;
+}
+
 export class Branches<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
@@ -91,26 +127,32 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches (cursor-paginated) */
-	list(projectId: string, query?: ListQuery): Paginated<Branch, DThrow>;
+	list(params: BranchListParams): Paginated<Branch, DThrow>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		query: ListQuery | undefined,
+		params: BranchListParams,
 		opts: CallOptions<Throw>,
 	): Paginated<Branch, Throw>;
 	list(
-		projectId: string,
-		query?: ListQuery,
+		params: BranchListParams,
 		opts?: CallOptions,
 	): Paginated<Branch, boolean> {
+		const error = validateParams(params, "branches.list", {
+			projectId: "string",
+		});
+		const { projectId, ...query } = error
+			? ({} as BranchListParams)
+			: params;
 		return paginate(
-			(cursor, signal) =>
-				listProjectBranches({
+			async (cursor, signal) => {
+				if (error) throw error;
+				return listProjectBranches({
 					client: this.#ctx.client,
 					path: { project_id: projectId },
 					query: { ...query, cursor },
 					throwOnError: false,
 					signal,
-				}),
+				});
+			},
 			(data) => ({
 				items: data?.branches ?? [],
 				cursor: data?.pagination?.next,
@@ -121,17 +163,25 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id} */
-	get(projectId: string, branchId: string): Promise<Outcome<Branch, DThrow>>;
+	get(params: BranchGetParams): Promise<Outcome<Branch, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: BranchGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
+		params: BranchGetParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const error = validateParams(params, "branches.get", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Branch>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -153,20 +203,24 @@ export class Branches<DThrow extends boolean> {
 	 * Readiness polling stays on for `noCompute` branches because a
 	 * compute-less branch still has provisioning operations.
 	 */
-	create(
-		projectId: string,
-		input?: CreateInput,
-	): Promise<Outcome<Branch, DThrow>>;
+	create(params: BranchCreateParams): Promise<Outcome<Branch, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		input: CreateInput | undefined,
+		params: BranchCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	async create(
-		projectId: string,
-		input?: CreateInput,
+		params: BranchCreateParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const paramsError = validateParams(params, "branches.create", {
+			projectId: "string",
+		});
+		if (paramsError)
+			return invalidParamsResult<Branch>(
+				paramsError,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, ...input } = params;
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const parsed = parseCreateInput(input);
@@ -200,23 +254,25 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall PATCH /projects/{project_id}/branches/{branch_id} */
-	update(
-		projectId: string,
-		branchId: string,
-		input: UpdateInput,
-	): Promise<Outcome<Branch, DThrow>>;
+	update(params: BranchUpdateParams): Promise<Outcome<Branch, DThrow>>;
 	update<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: UpdateInput,
+		params: BranchUpdateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	update(
-		projectId: string,
-		branchId: string,
-		input: UpdateInput,
+		params: BranchUpdateParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const error = validateParams(params, "branches.update", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Branch>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -232,17 +288,25 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id} */
-	delete(projectId: string, branchId: string): Promise<Outcome<void, DThrow>>;
+	delete(params: BranchDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: BranchDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
+		params: BranchDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const error = validateParams(params, "branches.delete", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (error)
+			return invalidParamsResult<void>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, branchId } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranch({
 				client,
@@ -254,19 +318,25 @@ export class Branches<DThrow extends boolean> {
 	}
 
 	createAndConnect(
-		projectId: string,
-		input?: CreateAndConnectInput,
+		params: BranchCreateAndConnectParams,
 	): Promise<Outcome<BranchConnection, DThrow>>;
 	createAndConnect<Throw extends boolean = DThrow>(
-		projectId: string,
-		input: CreateAndConnectInput | undefined,
-		opts: WorkflowOptions<Throw>,
+		params: BranchCreateAndConnectParams,
+		opts: CallOptions<Throw>,
 	): Promise<Outcome<BranchConnection, Throw>>;
 	async createAndConnect(
-		projectId: string,
-		input?: CreateAndConnectInput,
-		opts?: WorkflowOptions<boolean>,
+		params: BranchCreateAndConnectParams,
+		opts?: CallOptions<boolean>,
 	): Promise<BranchConnection | NeonResult<BranchConnection>> {
+		const error = validateParams(params, "branches.createAndConnect", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<BranchConnection>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, pooled = true, name, parentId, compute } = params;
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
@@ -277,10 +347,10 @@ export class Branches<DThrow extends boolean> {
 					path: { project_id: projectId },
 					body: {
 						branch: {
-							name: input?.name,
-							parent_id: input?.parentId,
+							name,
+							parent_id: parentId,
 						},
-						endpoints: [readWriteEndpoint(input?.compute)],
+						endpoints: [readWriteEndpoint(compute)],
 					},
 					throwOnError: false,
 					signal,
@@ -295,7 +365,7 @@ export class Branches<DThrow extends boolean> {
 				endpoint: data.endpoints[0],
 				connectionString,
 			}),
-			opts?.pooled ?? true,
+			pooled,
 		);
 		return finalize(out, shouldThrow);
 	}
@@ -304,15 +374,26 @@ export class Branches<DThrow extends boolean> {
 	 * Resolve the project's default branch (by the `default` flag — not by name).
 	 * Returns a {@link NeonClientError} when no default branch is found.
 	 */
-	getDefault(projectId: string): Promise<Outcome<Branch, DThrow>>;
+	getDefault(
+		params: BranchGetDefaultParams,
+	): Promise<Outcome<Branch, DThrow>>;
 	getDefault<Throw extends boolean = DThrow>(
-		projectId: string,
+		params: BranchGetDefaultParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	async getDefault(
-		projectId: string,
+		params: BranchGetDefaultParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const error = validateParams(params, "branches.getDefault", {
+			projectId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Branch>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId } = params;
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const result = await this.#ctx.execute(
@@ -344,19 +425,26 @@ export class Branches<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/set_as_default */
 	setDefault(
-		projectId: string,
-		branchId: string,
+		params: BranchSetDefaultParams,
 	): Promise<Outcome<Branch, DThrow>>;
 	setDefault<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: BranchSetDefaultParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	setDefault(
-		projectId: string,
-		branchId: string,
+		params: BranchSetDefaultParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const error = validateParams(params, "branches.setDefault", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Branch>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -377,22 +465,26 @@ export class Branches<DThrow extends boolean> {
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/restore
 	 */
 	resetFromParent(
-		projectId: string,
-		branchId: string,
-		input?: ResetFromParentInput,
+		params: BranchResetFromParentParams,
 	): Promise<Outcome<Branch, DThrow>>;
 	resetFromParent<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: ResetFromParentInput | undefined,
+		params: BranchResetFromParentParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Branch, Throw>>;
 	async resetFromParent(
-		projectId: string,
-		branchId: string,
-		input?: ResetFromParentInput,
+		params: BranchResetFromParentParams,
 		opts?: CallOptions,
 	): Promise<Branch | NeonResult<Branch>> {
+		const error = validateParams(params, "branches.resetFromParent", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (error)
+			return invalidParamsResult<Branch>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, branchId, preserveUnderName } = params;
 		const shouldThrow =
 			opts?.throwOnError ?? this.#ctx.defaults.throwOnError;
 		const current = await this.#ctx.execute(
@@ -428,9 +520,9 @@ export class Branches<DThrow extends boolean> {
 					path: { project_id: projectId, branch_id: branchId },
 					body: {
 						source_branch_id: parentId,
-						...(input?.preserveUnderName === undefined
+						...(preserveUnderName === undefined
 							? {}
-							: { preserve_under_name: input.preserveUnderName }),
+							: { preserve_under_name: preserveUnderName }),
 					},
 					throwOnError: false,
 					signal,
@@ -445,24 +537,38 @@ export class Branches<DThrow extends boolean> {
 	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/compare_schema
 	 */
 	compareSchema(
-		projectId: string,
-		branchId: string,
-		input: CompareSchemaInput,
+		params: BranchCompareSchemaParams,
 	): Promise<Outcome<BranchSchemaCompareResponse, DThrow>>;
 	compareSchema<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CompareSchemaInput,
+		params: BranchCompareSchemaParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<BranchSchemaCompareResponse, Throw>>;
 	compareSchema(
-		projectId: string,
-		branchId: string,
-		input: CompareSchemaInput,
+		params: BranchCompareSchemaParams,
 		opts?: CallOptions,
 	): Promise<
 		BranchSchemaCompareResponse | NeonResult<BranchSchemaCompareResponse>
 	> {
+		const error = validateParams(params, "branches.compareSchema", {
+			projectId: "string",
+			branchId: "string",
+			databaseName: "string",
+		});
+		if (error)
+			return invalidParamsResult<BranchSchemaCompareResponse>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const {
+			projectId,
+			branchId,
+			databaseName,
+			baseBranchId,
+			lsn,
+			timestamp,
+			baseLsn,
+			baseTimestamp,
+		} = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -470,20 +576,16 @@ export class Branches<DThrow extends boolean> {
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 					query: {
-						db_name: input.databaseName,
-						...(input.baseBranchId === undefined
+						db_name: databaseName,
+						...(baseBranchId === undefined
 							? {}
-							: { base_branch_id: input.baseBranchId }),
-						...(input.lsn === undefined ? {} : { lsn: input.lsn }),
-						...(input.timestamp === undefined
+							: { base_branch_id: baseBranchId }),
+						...(lsn === undefined ? {} : { lsn }),
+						...(timestamp === undefined ? {} : { timestamp }),
+						...(baseLsn === undefined ? {} : { base_lsn: baseLsn }),
+						...(baseTimestamp === undefined
 							? {}
-							: { timestamp: input.timestamp }),
-						...(input.baseLsn === undefined
-							? {}
-							: { base_lsn: input.baseLsn }),
-						...(input.baseTimestamp === undefined
-							? {}
-							: { base_timestamp: input.baseTimestamp }),
+							: { base_timestamp: baseTimestamp }),
 					},
 					throwOnError: false,
 					signal,
@@ -500,29 +602,33 @@ export class Branches<DThrow extends boolean> {
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/restore/finalize
 	 */
 	finalizeRestore(
-		projectId: string,
-		branchId: string,
-		input?: { name?: string },
+		params: BranchFinalizeRestoreParams,
 	): Promise<Outcome<void, DThrow>>;
 	finalizeRestore<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: { name?: string } | undefined,
+		params: BranchFinalizeRestoreParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	finalizeRestore(
-		projectId: string,
-		branchId: string,
-		input?: { name?: string },
+		params: BranchFinalizeRestoreParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const error = validateParams(params, "branches.finalizeRestore", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (error)
+			return invalidParamsResult<void>(
+				error,
+				this.#ctx.shouldThrow(opts),
+			);
+		const { projectId, branchId, name } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
 				finalizeRestoreBranch({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
-					body: { name: input?.name },
+					body: { name },
 					throwOnError: false,
 					signal,
 				}),

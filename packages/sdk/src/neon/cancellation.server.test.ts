@@ -155,7 +155,7 @@ describe("against a real socket that never responds", () => {
 			requestTimeoutMs: 60,
 		});
 
-		const { error } = await neon.projects.get("p-1");
+		const { error } = await neon.projects.get({ projectId: "p-1" });
 		behaviour.hang = false;
 		expect(error?.kind).toBe("timeout");
 	});
@@ -166,9 +166,12 @@ describe("against a real socket that never responds", () => {
 		const controller = new AbortController();
 		setTimeout(() => controller.abort(), 40);
 
-		const { error } = await neon.projects.get("p-1", {
-			signal: controller.signal,
-		});
+		const { error } = await neon.projects.get(
+			{ projectId: "p-1" },
+			{
+				signal: controller.signal,
+			},
+		);
 		behaviour.hang = false;
 		expect(error?.kind).toBe("aborted");
 	});
@@ -202,7 +205,7 @@ describe("work that happens before fetch is reached", () => {
 		});
 
 		const startedAt = Date.now();
-		const { error } = await neon.projects.get("p-1");
+		const { error } = await neon.projects.get({ projectId: "p-1" });
 		expect(error?.kind).toBe("timeout");
 		expect(Date.now() - startedAt).toBeLessThan(1_000);
 	});
@@ -350,7 +353,9 @@ describe("readiness polling", () => {
 			throw new Error("expected wait timeout");
 		}
 		resetBehaviour({ operationRunning: false, hangOperations: false });
-		const resumed = await neon.operations.waitFor(error.operations);
+		const resumed = await neon.operations.waitFor({
+			operations: error.operations,
+		});
 		expect(resumed.error).toBeUndefined();
 	});
 
@@ -362,18 +367,20 @@ describe("readiness polling", () => {
 			retries: 0,
 		});
 		const { error } = await neon.operations.waitFor(
-			[
-				{
-					id: "op-1",
-					project_id: "p-1",
-					action: "create_timeline",
-					status: "running",
-					failures_count: 0,
-					created_at: "2026-01-01T00:00:00Z",
-					updated_at: "2026-01-01T00:00:00Z",
-					total_duration_ms: 0,
-				},
-			],
+			{
+				operations: [
+					{
+						id: "op-1",
+						project_id: "p-1",
+						action: "create_timeline",
+						status: "running",
+						failures_count: 0,
+						created_at: "2026-01-01T00:00:00Z",
+						updated_at: "2026-01-01T00:00:00Z",
+						total_duration_ms: 0,
+					},
+				],
+			},
 			{ pollIntervalMs: 5, timeoutMs: 80 },
 		);
 		if (error?.kind !== "timeout" || error.source !== "wait") {
@@ -423,13 +430,19 @@ describe("per-call timeout validation", () => {
 		// Not validating per-call left NaN silently meaning "unbounded" and a value past
 		// setTimeout's range silently meaning 1ms.
 		await expect(
-			neon.projects.get("p-1", { requestTimeoutMs: Number.NaN }),
+			neon.projects.get(
+				{ projectId: "p-1" },
+				{ requestTimeoutMs: Number.NaN },
+			),
 		).rejects.toMatchObject({ kind: "client" });
 		await expect(
-			neon.projects.get("p-1", { requestTimeoutMs: 2 ** 31 }),
+			neon.projects.get(
+				{ projectId: "p-1" },
+				{ requestTimeoutMs: 2 ** 31 },
+			),
 		).rejects.toMatchObject({ kind: "client" });
 		await expect(
-			neon.projects.get("p-1", { requestTimeoutMs: -1 }),
+			neon.projects.get({ projectId: "p-1" }, { requestTimeoutMs: -1 }),
 		).rejects.toMatchObject({ kind: "client" });
 	});
 
@@ -441,9 +454,12 @@ describe("per-call timeout validation", () => {
 			requestTimeoutMs: 50,
 		});
 
-		const { error } = await neon.projects.get("p-1", {
-			requestTimeoutMs: Number.POSITIVE_INFINITY,
-		});
+		const { error } = await neon.projects.get(
+			{ projectId: "p-1" },
+			{
+				requestTimeoutMs: Number.POSITIVE_INFINITY,
+			},
+		);
 		expect(error).toBeUndefined();
 	});
 });

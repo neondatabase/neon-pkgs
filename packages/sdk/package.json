@@ -42,6 +42,7 @@
 	},
 	"files": [
 		"README.md",
+		"MIGRATION.md",
 		"dist/",
 		"package.json"
 	],

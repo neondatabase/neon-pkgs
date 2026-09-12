@@ -65,7 +65,10 @@ describe("triggers", () => {
 			body: { triggers: [trigger] },
 		}));
 
-		const { data, error } = await neon.triggers.list("p-1", "br-1");
+		const { data, error } = await neon.triggers.list({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual([trigger]);
@@ -81,7 +84,10 @@ describe("triggers", () => {
 			body: { triggers: [] },
 		}));
 
-		const { data, error } = await neon.triggers.list("p-1", "br-1");
+		const { data, error } = await neon.triggers.list({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 		expect(error).toBeUndefined();
 		expect(data).toEqual([]);
 	});
@@ -99,11 +105,11 @@ describe("triggers", () => {
 			schedule: { cron: "0 9 * * *" },
 			enabled: false,
 		};
-		const { data, error } = await neon.triggers.create(
-			"p-1",
-			"br-1",
-			input,
-		);
+		const { data, error } = await neon.triggers.create({
+			projectId: "p-1",
+			branchId: "br-1",
+			...input,
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual(trigger);
@@ -124,7 +130,11 @@ describe("triggers", () => {
 			body: { trigger: inherited },
 		}));
 
-		const { data, error } = await neon.triggers.get("p-1", "br-1", "trg-1");
+		const { data, error } = await neon.triggers.get({
+			projectId: "p-1",
+			branchId: "br-1",
+			triggerId: "trg-1",
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual(inherited);
@@ -141,12 +151,13 @@ describe("triggers", () => {
 			body: { trigger: enabled },
 		}));
 
-		const { data, error } = await neon.triggers.update(
-			"p-1",
-			"br-1",
-			"trg-1",
-			{ type: "schedule", enabled: true },
-		);
+		const { data, error } = await neon.triggers.update({
+			projectId: "p-1",
+			branchId: "br-1",
+			triggerId: "trg-1",
+			type: "schedule",
+			enabled: true,
+		});
 
 		expect(error).toBeUndefined();
 		expect(data).toEqual(enabled);
@@ -157,7 +168,11 @@ describe("triggers", () => {
 	it("deletes with a 204", async () => {
 		const { neon, calls } = neonRouting(() => ({ status: 204 }));
 
-		const { error } = await neon.triggers.delete("p-1", "br-1", "trg-1");
+		const { error } = await neon.triggers.delete({
+			projectId: "p-1",
+			branchId: "br-1",
+			triggerId: "trg-1",
+		});
 
 		expect(error).toBeUndefined();
 		expect(calls).toHaveLength(1);
@@ -173,7 +188,11 @@ describe("triggers", () => {
 			body: { message: "missing" },
 		}));
 
-		const { error } = await neon.triggers.get("p-1", "br-1", "missing");
+		const { error } = await neon.triggers.get({
+			projectId: "p-1",
+			branchId: "br-1",
+			triggerId: "missing",
+		});
 		expect(error).toBeInstanceOf(NeonNotFoundError);
 	});
 });

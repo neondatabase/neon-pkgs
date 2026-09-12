@@ -56,7 +56,12 @@ describe("logs.query pagination", () => {
 		]);
 
 		const { data, error } = await neon.logs
-			.query("p-1", "br-1", { since: "1h", minimum_severity: "warn" })
+			.query({
+				projectId: "p-1",
+				branchId: "br-1",
+				since: "1h",
+				minimum_severity: "warn",
+			})
 			.all();
 
 		expect(error).toBeUndefined();
@@ -88,7 +93,9 @@ describe("logs.query pagination", () => {
 			},
 		]);
 
-		const { data } = await neon.logs.query("p-1", "br-1").all();
+		const { data } = await neon.logs
+			.query({ projectId: "p-1", branchId: "br-1" })
+			.all();
 
 		expect(data?.map((r) => r.message)).toEqual(["only"]);
 		expect(calls).toHaveLength(1);
@@ -97,7 +104,7 @@ describe("logs.query pagination", () => {
 	it("sends no filters when none are given", async () => {
 		const { neon, calls } = neonQueued([{ logs: [], is_truncated: false }]);
 
-		await neon.logs.query("p-1", "br-1").all();
+		await neon.logs.query({ projectId: "p-1", branchId: "br-1" }).all();
 
 		expect(calls[0]?.body).toEqual({});
 	});
@@ -109,7 +116,11 @@ describe("logs.query pagination", () => {
 		]);
 		const input = { since: "1h" };
 
-		const page = neon.logs.query("p-1", "br-1", input);
+		const page = neon.logs.query({
+			projectId: "p-1",
+			branchId: "br-1",
+			...input,
+		});
 		input.since = "6h";
 		await page.all();
 
@@ -122,7 +133,9 @@ describe("logs.query pagination", () => {
 			{ logs: [record("a")], is_truncated: true },
 		]);
 
-		const { data, error } = await neon.logs.query("p-1", "br-1").all();
+		const { data, error } = await neon.logs
+			.query({ projectId: "p-1", branchId: "br-1" })
+			.all();
 
 		expect(data).toBeUndefined();
 		expect(error?.message).toContain("no cursor");
@@ -137,7 +150,10 @@ describe("logs field discovery", () => {
 			{ fields: ["source", "severity_text"] },
 		]);
 
-		const { data } = await neon.logs.fields("p-1", "br-1");
+		const { data } = await neon.logs.fields({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 
 		expect(data).toEqual(["source", "severity_text"]);
 		expect(calls[0]?.url).toContain(
@@ -150,7 +166,10 @@ describe("logs field discovery", () => {
 			{ values: ["function"], is_truncated: true },
 		]);
 
-		const { data } = await neon.logs.fieldValues("p-1", "br-1", "source", {
+		const { data } = await neon.logs.fieldValues({
+			projectId: "p-1",
+			branchId: "br-1",
+			fieldName: "source",
 			since: "6h",
 			limit: 1,
 		});
@@ -176,7 +195,10 @@ describe("logs error propagation", () => {
 			404,
 		);
 
-		const { data, error } = await neon.logs.fields("p-1", "br-1");
+		const { data, error } = await neon.logs.fields({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
 
 		expect(data).toBeUndefined();
 		expect(error?.kind).toBe("not_found");

@@ -13,6 +13,7 @@ import type {
 import type { CallOptions, RequestContext } from "../context.js";
 import { NeonClientError } from "../errors.js";
 import { type Paginated, paginate } from "../paginate.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 /**
@@ -28,6 +29,17 @@ export type LogQueryInput = Omit<ProjectBranchLogsQueryRequest, "cursor">;
 export type LogFieldValuesQuery = NonNullable<
 	ListProjectBranchLogFieldValuesData["query"]
 >;
+
+export type LogsQueryParams = {
+	projectId: string;
+	branchId: string;
+} & LogQueryInput;
+export type LogsFieldsParams = { projectId: string; branchId: string };
+export type LogsFieldValuesParams = {
+	projectId: string;
+	branchId: string;
+	fieldName: string;
+} & LogFieldValuesQuery;
 
 /**
  * Branch-scoped logs emitted by the services running on a branch — Neon Functions,
@@ -62,29 +74,29 @@ export class Logs<DThrow extends boolean> {
 	 *
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/logs/query (cursor-paginated)
 	 */
-	query(
-		projectId: string,
-		branchId: string,
-		input?: LogQueryInput,
-	): Paginated<ProjectBranchLogRecord, DThrow>;
+	query(params: LogsQueryParams): Paginated<ProjectBranchLogRecord, DThrow>;
 	query<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: LogQueryInput | undefined,
+		params: LogsQueryParams,
 		opts: CallOptions<Throw>,
 	): Paginated<ProjectBranchLogRecord, Throw>;
 	query(
-		projectId: string,
-		branchId: string,
-		input?: LogQueryInput,
+		params: LogsQueryParams,
 		opts?: CallOptions,
 	): Paginated<ProjectBranchLogRecord, boolean> {
+		const invalid = validateParams(params, "logs.query", {
+			projectId: "string",
+			branchId: "string",
+		});
+		const { projectId, branchId, ...input } = invalid
+			? ({} as LogsQueryParams)
+			: params;
 		// Snapshot the filters. The endpoint returns wrong results unless every page
 		// repeats them unchanged, and a `Paginated` is lazy — reading `input` per page
 		// would let a caller mutating it afterwards change the query mid-walk.
 		const filters = { ...input };
 		return paginate<ProjectBranchLogRecord, ProjectBranchLogsQueryResponse>(
 			async (cursor, signal) => {
+				if (invalid) throw invalid;
 				const page = await queryProjectBranchLogs({
 					client: this.#ctx.client,
 					path: { project_id: projectId, branch_id: branchId },
@@ -123,20 +135,26 @@ export class Logs<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/logs/fields
 	 */
-	fields(
-		projectId: string,
-		branchId: string,
-	): Promise<Outcome<string[], DThrow>>;
+	fields(params: LogsFieldsParams): Promise<Outcome<string[], DThrow>>;
 	fields<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: LogsFieldsParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<string[], Throw>>;
 	fields(
-		projectId: string,
-		branchId: string,
+		params: LogsFieldsParams,
 		opts?: CallOptions,
 	): Promise<string[] | NeonResult<string[]>> {
+		const invalid = validateParams(params, "logs.fields", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<string[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -165,28 +183,31 @@ export class Logs<DThrow extends boolean> {
 	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/logs/fields/{field_name}/values
 	 */
 	fieldValues(
-		projectId: string,
-		branchId: string,
-		fieldName: string,
-		query?: LogFieldValuesQuery,
+		params: LogsFieldValuesParams,
 	): Promise<Outcome<ProjectBranchLogFieldValuesResponse, DThrow>>;
 	fieldValues<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		fieldName: string,
-		query: LogFieldValuesQuery | undefined,
+		params: LogsFieldValuesParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<ProjectBranchLogFieldValuesResponse, Throw>>;
 	fieldValues(
-		projectId: string,
-		branchId: string,
-		fieldName: string,
-		query?: LogFieldValuesQuery,
+		params: LogsFieldValuesParams,
 		opts?: CallOptions,
 	): Promise<
 		| ProjectBranchLogFieldValuesResponse
 		| NeonResult<ProjectBranchLogFieldValuesResponse>
 	> {
+		const invalid = validateParams(params, "logs.fieldValues", {
+			projectId: "string",
+			branchId: "string",
+			fieldName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<ProjectBranchLogFieldValuesResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, fieldName, ...query } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>

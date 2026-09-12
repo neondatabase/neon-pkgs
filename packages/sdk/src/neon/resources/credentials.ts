@@ -13,9 +13,23 @@ import type {
 	RotateCredentialResponse,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = CreateCredentialRequest;
+
+export type CredentialsListParams = { projectId: string; branchId: string };
+export type CredentialsCreateParams = {
+	projectId: string;
+	branchId: string;
+} & CreateInput;
+export type CredentialsRevokeParams = {
+	projectId: string;
+	branchId: string;
+	tokenId: string;
+};
+export type CredentialsRevealParams = CredentialsRevokeParams;
+export type CredentialsRotateParams = CredentialsRevokeParams;
 
 /** Branch-scoped scoped credentials. */
 export class Credentials<DThrow extends boolean> {
@@ -27,19 +41,27 @@ export class Credentials<DThrow extends boolean> {
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/credentials */
 	list(
-		projectId: string,
-		branchId: string,
+		params: CredentialsListParams,
 	): Promise<Outcome<CredentialMeta[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: CredentialsListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<CredentialMeta[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: CredentialsListParams,
 		opts?: CallOptions,
 	): Promise<CredentialMeta[] | NeonResult<CredentialMeta[]>> {
+		const invalid = validateParams(params, "credentials.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<CredentialMeta[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -55,24 +77,29 @@ export class Credentials<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials */
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: CredentialsCreateParams,
 	): Promise<Outcome<CreateCredentialResponse, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: CredentialsCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<CreateCredentialResponse, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: CredentialsCreateParams,
 		opts?: CallOptions,
 	): Promise<
 		CreateCredentialResponse | NeonResult<CreateCredentialResponse>
 	> {
+		const invalid = validateParams(params, "credentials.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<CreateCredentialResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -88,23 +115,27 @@ export class Credentials<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id}/credentials/{token_id} */
-	revoke(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
-	): Promise<Outcome<void, DThrow>>;
+	revoke(params: CredentialsRevokeParams): Promise<Outcome<void, DThrow>>;
 	revoke<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRevokeParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	revoke(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRevokeParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "credentials.revoke", {
+			projectId: "string",
+			branchId: "string",
+			tokenId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, tokenId } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			revokeCredential({
 				client,
@@ -121,22 +152,28 @@ export class Credentials<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials/{token_id}/reveal */
 	reveal(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRevealParams,
 	): Promise<Outcome<CredentialSecret, DThrow>>;
 	reveal<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRevealParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<CredentialSecret, Throw>>;
 	reveal(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRevealParams,
 		opts?: CallOptions,
 	): Promise<CredentialSecret | NeonResult<CredentialSecret>> {
+		const invalid = validateParams(params, "credentials.reveal", {
+			projectId: "string",
+			branchId: "string",
+			tokenId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<CredentialSecret>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, tokenId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -156,24 +193,30 @@ export class Credentials<DThrow extends boolean> {
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/credentials/{token_id}/rotate */
 	rotate(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRotateParams,
 	): Promise<Outcome<RotateCredentialResponse, DThrow>>;
 	rotate<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRotateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<RotateCredentialResponse, Throw>>;
 	rotate(
-		projectId: string,
-		branchId: string,
-		tokenId: string,
+		params: CredentialsRotateParams,
 		opts?: CallOptions,
 	): Promise<
 		RotateCredentialResponse | NeonResult<RotateCredentialResponse>
 	> {
+		const invalid = validateParams(params, "credentials.rotate", {
+			projectId: "string",
+			branchId: "string",
+			tokenId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<RotateCredentialResponse>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, tokenId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>

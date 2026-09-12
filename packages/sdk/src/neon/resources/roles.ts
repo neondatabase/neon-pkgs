@@ -8,9 +8,27 @@ import {
 } from "../../client/sdk.gen.js";
 import type { Role, RoleCreateRequest } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
+import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
 type CreateInput = RoleCreateRequest["role"];
+
+export type RolesListParams = {
+	projectId: string;
+	branchId: string;
+};
+
+export type RolesGetParams = RolesListParams & {
+	roleName: string;
+};
+
+export type RolesCreateParams = RolesListParams & CreateInput;
+
+export type RolesDeleteParams = RolesGetParams;
+
+export type RolesPasswordParams = RolesGetParams;
+
+export type RolesResetPasswordParams = RolesGetParams;
 
 /** Role resource (branch-scoped). */
 export class Roles<DThrow extends boolean> {
@@ -21,17 +39,26 @@ export class Roles<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/roles */
-	list(projectId: string, branchId: string): Promise<Outcome<Role[], DThrow>>;
+	list(params: RolesListParams): Promise<Outcome<Role[], DThrow>>;
 	list<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
+		params: RolesListParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Role[], Throw>>;
 	list(
-		projectId: string,
-		branchId: string,
+		params: RolesListParams,
 		opts?: CallOptions,
 	): Promise<Role[] | NeonResult<Role[]>> {
+		const invalid = validateParams(params, "roles.list", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Role[]>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -46,23 +73,27 @@ export class Roles<DThrow extends boolean> {
 	}
 
 	/** @apiCall GET /projects/{project_id}/branches/{branch_id}/roles/{role_name} */
-	get(
-		projectId: string,
-		branchId: string,
-		name: string,
-	): Promise<Outcome<Role, DThrow>>;
+	get(params: RolesGetParams): Promise<Outcome<Role, DThrow>>;
 	get<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesGetParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Role, Throw>>;
 	get(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesGetParams,
 		opts?: CallOptions,
 	): Promise<Role | NeonResult<Role>> {
+		const invalid = validateParams(params, "roles.get", {
+			projectId: "string",
+			branchId: "string",
+			roleName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Role>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, roleName } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -71,7 +102,7 @@ export class Roles<DThrow extends boolean> {
 					path: {
 						project_id: projectId,
 						branch_id: branchId,
-						role_name: name,
+						role_name: roleName,
 					},
 					throwOnError: false,
 					signal,
@@ -81,23 +112,26 @@ export class Roles<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/roles */
-	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
-	): Promise<Outcome<Role, DThrow>>;
+	create(params: RolesCreateParams): Promise<Outcome<Role, DThrow>>;
 	create<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: RolesCreateParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Role, Throw>>;
 	create(
-		projectId: string,
-		branchId: string,
-		input: CreateInput,
+		params: RolesCreateParams,
 		opts?: CallOptions,
 	): Promise<Role | NeonResult<Role>> {
+		const invalid = validateParams(params, "roles.create", {
+			projectId: "string",
+			branchId: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Role>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, ...input } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -113,30 +147,34 @@ export class Roles<DThrow extends boolean> {
 	}
 
 	/** @apiCall DELETE /projects/{project_id}/branches/{branch_id}/roles/{role_name} */
-	delete(
-		projectId: string,
-		branchId: string,
-		name: string,
-	): Promise<Outcome<void, DThrow>>;
+	delete(params: RolesDeleteParams): Promise<Outcome<void, DThrow>>;
 	delete<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesDeleteParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<void, Throw>>;
 	delete(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesDeleteParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
+		const invalid = validateParams(params, "roles.delete", {
+			projectId: "string",
+			branchId: "string",
+			roleName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<void>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, roleName } = params;
 		return this.#ctx.runVoid(opts, (client, signal) =>
 			deleteProjectBranchRole({
 				client,
 				path: {
 					project_id: projectId,
 					branch_id: branchId,
-					role_name: name,
+					role_name: roleName,
 				},
 				throwOnError: false,
 				signal,
@@ -149,23 +187,27 @@ export class Roles<DThrow extends boolean> {
 	 *
 	 * @apiCall GET /projects/{project_id}/branches/{branch_id}/roles/{role_name}/reveal_password
 	 */
-	password(
-		projectId: string,
-		branchId: string,
-		name: string,
-	): Promise<Outcome<string, DThrow>>;
+	password(params: RolesPasswordParams): Promise<Outcome<string, DThrow>>;
 	password<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesPasswordParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<string, Throw>>;
 	password(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesPasswordParams,
 		opts?: CallOptions,
 	): Promise<string | NeonResult<string>> {
+		const invalid = validateParams(params, "roles.password", {
+			projectId: "string",
+			branchId: "string",
+			roleName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<string>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, roleName } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -174,7 +216,7 @@ export class Roles<DThrow extends boolean> {
 					path: {
 						project_id: projectId,
 						branch_id: branchId,
-						role_name: name,
+						role_name: roleName,
 					},
 					throwOnError: false,
 					signal,
@@ -189,22 +231,28 @@ export class Roles<DThrow extends boolean> {
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password
 	 */
 	resetPassword(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesResetPasswordParams,
 	): Promise<Outcome<Role, DThrow>>;
 	resetPassword<Throw extends boolean = DThrow>(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesResetPasswordParams,
 		opts: CallOptions<Throw>,
 	): Promise<Outcome<Role, Throw>>;
 	resetPassword(
-		projectId: string,
-		branchId: string,
-		name: string,
+		params: RolesResetPasswordParams,
 		opts?: CallOptions,
 	): Promise<Role | NeonResult<Role>> {
+		const invalid = validateParams(params, "roles.resetPassword", {
+			projectId: "string",
+			branchId: "string",
+			roleName: "string",
+		});
+		if (invalid) {
+			return invalidParamsResult<Role>(
+				invalid,
+				this.#ctx.shouldThrow(opts),
+			);
+		}
+		const { projectId, branchId, roleName } = params;
 		return this.#ctx.run(
 			opts,
 			(client, signal) =>
@@ -213,7 +261,7 @@ export class Roles<DThrow extends boolean> {
 					path: {
 						project_id: projectId,
 						branch_id: branchId,
-						role_name: name,
+						role_name: roleName,
 					},
 					throwOnError: false,
 					signal,
