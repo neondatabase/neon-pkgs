@@ -247,21 +247,23 @@ export async function pushConfig(
 
 	const branchById = new Map(branches.map((b) => [b.id, b] as const));
 	const branchByName = new Map(branches.map((b) => [b.name, b] as const));
+	const ctx: ApplyContext = {
+		api,
+		remoteProjectId: remoteProject.id,
+		branchById,
+		branchByName,
+		bundleFunction:
+			options.bundleFunction ??
+			makeDefaultBundleFunction((message) => {
+				warnings.push(message);
+			}),
+		deploymentIdBySlug: new Map(),
+	};
 
 	for (const step of diff.plan) {
 		const change = dryRun
 			? synthesizeAppliedChange(step)
-			: await applyStep(step, {
-					api,
-					remoteProjectId: remoteProject.id,
-					branchById,
-					branchByName,
-					bundleFunction:
-						options.bundleFunction ??
-						makeDefaultBundleFunction((message) => {
-							warnings.push(message);
-						}),
-				});
+			: await applyStep(step, ctx);
 		applied.push(change);
 	}
 
@@ -565,6 +567,7 @@ interface ApplyContext {
 	branchById: Map<string, NeonBranchSnapshot>;
 	branchByName: Map<string, NeonBranchSnapshot>;
 	bundleFunction: FunctionBundler;
+	deploymentIdBySlug: Map<string, number>;
 }
 
 async function applyStep(
@@ -702,6 +705,7 @@ async function applyStep(
 					environment: step.fn.env,
 				},
 			);
+			ctx.deploymentIdBySlug.set(step.fn.slug, deployment.id);
 			return {
 				kind: "service",
 				action: step.functionExists ? "update" : "create",
@@ -786,11 +790,21 @@ async function applyStep(
 		}
 		case "retarget-custom-domain": {
 			const methods = requireCustomDomainApi(ctx.api);
+			const minDeploymentId = ctx.deploymentIdBySlug.get(
+				step.functionSlug,
+			);
+			if (minDeploymentId === undefined) {
+				throw new PlatformError(
+					ErrorCode.ServerError,
+					`Cannot retarget a custom domain onto ${JSON.stringify(step.functionSlug)}: this apply did not deploy that function.`,
+				);
+			}
 			await waitForCompletedFunctionDeployment({
 				api: ctx.api,
 				projectId: ctx.remoteProjectId,
 				branchId: step.branchId,
 				slug: step.functionSlug,
+				minDeploymentId,
 			});
 			await methods.deleteBranchCustomDomain(
 				ctx.remoteProjectId,
@@ -911,6 +925,7 @@ async function waitForCompletedFunctionDeployment(args: {
 	projectId: string;
 	branchId: string;
 	slug: string;
+	minDeploymentId: number;
 }): Promise<void> {
 	const get = args.api.getBranchFunction;
 	if (!get) {
@@ -931,13 +946,16 @@ async function waitForCompletedFunctionDeployment(args: {
 			args.branchId,
 			args.slug,
 		);
-		const status = fn.currentDeployment?.status;
-		if (status === "completed") return;
-		if (status === "failed") {
-			throw new PlatformError(
-				ErrorCode.ServerError,
-				`Deployment of function ${JSON.stringify(args.slug)} failed; left the previous custom-domain registration in place.`,
-			);
+		const dep = fn.currentDeployment;
+		// GET can still report the previous deployment after this apply's POST returns.
+		if (dep !== undefined && dep.id >= args.minDeploymentId) {
+			if (dep.status === "completed") return;
+			if (dep.status === "failed") {
+				throw new PlatformError(
+					ErrorCode.ServerError,
+					`Deployment of function ${JSON.stringify(args.slug)} failed; left the previous custom-domain registration in place.`,
+				);
+			}
 		}
 		if (Date.now() >= deadline) {
 			throw new PlatformError(

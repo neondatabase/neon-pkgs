@@ -1163,6 +1163,14 @@ export class FakeNeonApi implements NeonApi {
 		const list = this.functions.get(key) ?? [];
 		list.push({ ...snapshot });
 		this.functions.set(key, list);
+		const lastId =
+			snapshot.currentDeployment?.id ?? snapshot.activeDeploymentId;
+		if (lastId !== undefined) {
+			this.functionDeployments.set(
+				`${projectId}:${branchId}:${snapshot.slug}`,
+				lastId,
+			);
+		}
 	}
 
 	private requireProject(projectId: string): void {
