@@ -258,7 +258,24 @@ class FakeNeonApi implements NeonApi {
 				invocationUrl: `https://${branchId}.fake.neon.tech/functions/${slug}`,
 			});
 		}
+		const fn = this.functions.get(slug);
+		if (fn) {
+			fn.activeDeploymentId = 1;
+			fn.currentDeployment = { id: 1, status: "completed" };
+		}
 		return { id: 1, status: "completed" };
+	}
+
+	async getBranchFunction(
+		_projectId: string,
+		_branchId: string,
+		slug: string,
+	): Promise<NeonFunctionSnapshot> {
+		const fn = this.functions.get(slug);
+		if (!fn) {
+			throw new Error(`Function ${slug} was not found.`);
+		}
+		return fn;
 	}
 
 	async listBranchTriggers(): Promise<NeonTriggerSnapshot[]> {

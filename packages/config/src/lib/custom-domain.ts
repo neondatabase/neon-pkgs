@@ -1,17 +1,11 @@
-/**
- * Normalize a neon.ts custom-domain hostname the way the API does: trim, lowercase,
- * strip a trailing root dot. Callers still validate the result.
- */
 export function normalizeCustomDomain(value: string): string {
 	return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-/**
- * DNS hostname after {@link normalizeCustomDomain}. Length follows the OpenAPI bound
- * (3–254). Neon-managed / internal names are left to the API.
- */
-const CUSTOM_DOMAIN_RE =
-	/^(?=.{3,254}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const CUSTOM_DOMAIN_RE = new RegExp(
+	`^(?=.{3,254}$)(?:${DNS_LABEL}\\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$`,
+);
 
 /** `undefined` when `value` is a usable custom domain; otherwise the schema message. */
 export function customDomainValidationError(value: string): string | undefined {

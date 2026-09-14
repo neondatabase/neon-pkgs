@@ -801,7 +801,32 @@ export class FakeNeonApi implements NeonApi {
 		const id = (this.functionDeployments.get(deployKey) ?? 0) + 1;
 		this.functionDeployments.set(deployKey, id);
 		fn.activeDeploymentId = id;
+		fn.currentDeployment = { id, status: "completed" };
 		return { id, status: "completed" };
+	}
+
+	async getBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<NeonFunctionSnapshot> {
+		this.history.push({
+			method: "getBranchFunction",
+			args: [projectId, branchId, slug],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const fn = (this.functions.get(`${projectId}:${branchId}`) ?? []).find(
+			(item) => item.slug === slug,
+		);
+		if (!fn) {
+			throw new PlatformError(
+				ErrorCode.NotFound,
+				`Function ${JSON.stringify(slug)} was not found.`,
+				{ details: { status: 404 } },
+			);
+		}
+		return clone(fn);
 	}
 
 	async listBranchTriggers(

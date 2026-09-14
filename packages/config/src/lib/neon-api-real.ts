@@ -232,10 +232,14 @@ const neonFunctionSchema = z.object({
 	slug: z.string(),
 	name: z.string(),
 	invocation_url: z.string(),
+	current_deployment: functionDeploymentSchema.optional(),
 	active_deployment: functionDeploymentSchema.optional(),
 });
 const functionsListResponseSchema = z.object({
 	functions: z.array(neonFunctionSchema),
+});
+const functionGetResponseSchema = z.object({
+	function: neonFunctionSchema,
 });
 const functionDeploymentResponseSchema = z.object({
 	deployment: functionDeploymentSchema,
@@ -1226,6 +1230,25 @@ class RealNeonApi implements NeonApi {
 		);
 	}
 
+	async getBranchFunction(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<NeonFunctionSnapshot> {
+		return this.call(
+			`getBranchFunction(${projectId}/${branchId}/${slug})`,
+			async () => {
+				const data = await this.getJson(
+					`${branchPreviewPath(projectId, branchId, "functions")}/${encodeURIComponent(slug)}`,
+				);
+				return functionToSnapshot(
+					functionGetResponseSchema.parse(data).function,
+				);
+			},
+			{ projectId },
+		);
+	}
+
 	async listBranchTriggers(
 		projectId: string,
 		branchId: string,
@@ -1646,6 +1669,11 @@ function functionToSnapshot(
 	};
 	if (fn.active_deployment) {
 		snapshot.activeDeploymentId = fn.active_deployment.id;
+	}
+	if (fn.current_deployment) {
+		snapshot.currentDeployment = deploymentToSnapshot(
+			fn.current_deployment,
+		);
 	}
 	return snapshot;
 }

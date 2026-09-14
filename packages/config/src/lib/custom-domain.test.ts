@@ -29,4 +29,10 @@ describe("customDomainValidationError", () => {
 			/not a DNS hostname/,
 		);
 	});
+
+	test("accepts a punycode TLD", () => {
+		expect(
+			customDomainValidationError("api.xn--e1afmkfd.xn--p1ai"),
+		).toBeUndefined();
+	});
 });

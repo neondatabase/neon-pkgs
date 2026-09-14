@@ -786,6 +786,12 @@ async function applyStep(
 		}
 		case "retarget-custom-domain": {
 			const methods = requireCustomDomainApi(ctx.api);
+			await waitForCompletedFunctionDeployment({
+				api: ctx.api,
+				projectId: ctx.remoteProjectId,
+				branchId: step.branchId,
+				slug: step.functionSlug,
+			});
 			await methods.deleteBranchCustomDomain(
 				ctx.remoteProjectId,
 				step.branchId,
@@ -898,6 +904,49 @@ function functionSlugFromIdentifier(identifier: string): string | undefined {
 	return identifier.startsWith(prefix)
 		? identifier.slice(prefix.length)
 		: undefined;
+}
+
+async function waitForCompletedFunctionDeployment(args: {
+	api: NeonApi;
+	projectId: string;
+	branchId: string;
+	slug: string;
+}): Promise<void> {
+	const get = args.api.getBranchFunction;
+	if (!get) {
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			`Cannot retarget a custom domain onto ${JSON.stringify(args.slug)}: this NeonApi adapter does not implement getBranchFunction, so apply cannot confirm the function finished deploying.`,
+		);
+	}
+	const intervalMs =
+		Number(process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS) || 2000;
+	const timeoutMs =
+		Number(process.env.NEON_FUNCTIONS_POLL_TIMEOUT_MS) || 600_000;
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const fn = await get.call(
+			args.api,
+			args.projectId,
+			args.branchId,
+			args.slug,
+		);
+		const status = fn.currentDeployment?.status;
+		if (status === "completed") return;
+		if (status === "failed") {
+			throw new PlatformError(
+				ErrorCode.ServerError,
+				`Deployment of function ${JSON.stringify(args.slug)} failed; left the previous custom-domain registration in place.`,
+			);
+		}
+		if (Date.now() >= deadline) {
+			throw new PlatformError(
+				ErrorCode.ServerError,
+				`Timed out waiting for function ${JSON.stringify(args.slug)} to finish deploying; left the previous custom-domain registration in place.`,
+			);
+		}
+		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+	}
 }
 
 function requireCustomDomainApi(api: NeonApi): {

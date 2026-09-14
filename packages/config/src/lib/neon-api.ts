@@ -188,6 +188,8 @@ export interface NeonFunctionSnapshot {
 	invocationUrl: string;
 	/** Id (platform version number) of the active deployment, when any code is deployed. */
 	activeDeploymentId?: number;
+	/** Most recent deployment, including in-progress and failed builds. */
+	currentDeployment?: NeonFunctionDeploymentSnapshot;
 }
 
 /**
@@ -508,6 +510,17 @@ export interface NeonApi {
 		slug: string,
 		input: DeployFunctionInput,
 	): Promise<NeonFunctionDeploymentSnapshot>;
+
+	/**
+	 * Read one function, including {@link NeonFunctionSnapshot.currentDeployment}.
+	 * Optional so a pre-feature adapter still type-checks; retarget waits on it
+	 * before deleting the previous custom-domain registration.
+	 */
+	getBranchFunction?(
+		projectId: string,
+		branchId: string,
+		slug: string,
+	): Promise<NeonFunctionSnapshot>;
 
 	listBranchTriggers(
 		projectId: string,
