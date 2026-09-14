@@ -227,12 +227,6 @@ export const renderAppliedChanges = (
 	return lines.join("\n");
 };
 
-/**
- * Render branch-setting **conflicts** as a `git diff`-style before→after
- * report: grouped per branch, sorted by field, `current → desired`. The heading
- * names `--update-existing` only when every conflict can be applied that way.
- * Returns "" when there are no conflicts.
- */
 const isOverrideableConflict = (conflict: ConflictReport): boolean =>
 	/updateExisting/i.test(conflict.reason);
 
