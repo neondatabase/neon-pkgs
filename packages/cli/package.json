@@ -75,7 +75,7 @@
 		"pg-protocol": "^1.14.0",
 		"picocolors": "^1.1.1",
 		"prompts": "2.4.2",
-		"undici": "^7.28.0",
+		"undici": "^7.29.0",
 		"which": "3.0.1",
 		"yaml": "^2.9.0",
 		"yargs": "17.7.2",
