@@ -905,6 +905,45 @@ describe("defineConfig — Data API config", () => {
 		).toEqual(["docs.example.com"]);
 	});
 
+	test("tuning [] on one function clears a static hostname overlap", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						customDomains: ["docs.example.com"],
+					},
+					other: {
+						name: "Other",
+						source: "./other.ts",
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+			branch: () => ({
+				preview: {
+					functions: {
+						other: { customDomains: [] },
+					},
+				},
+			}),
+		});
+		const resolved = resolveConfig(config, {
+			name: "main",
+			exists: true,
+		});
+		expect(
+			resolved.preview?.functions.map((fn) => [
+				fn.slug,
+				fn.customDomains,
+			]),
+		).toEqual([
+			["hello", ["docs.example.com"]],
+			["other", []],
+		]);
+	});
+
 	test("rejects the same hostname on two functions after merge", () => {
 		expect(() =>
 			resolveConfig(

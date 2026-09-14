@@ -462,7 +462,6 @@ export const previewInputSchema = z
 	})
 	.superRefine((preview, ctx) => {
 		const byName = new Map<string, string>();
-		const byDomain = new Map<string, string>();
 		for (const [slug, fn] of Object.entries(preview.functions ?? {})) {
 			const seenOnFn = new Set<string>();
 			for (const [index, trigger] of (fn.triggers ?? []).entries()) {
@@ -485,20 +484,6 @@ export const previewInputSchema = z
 					continue;
 				}
 				byName.set(trigger.name, slug);
-			}
-			for (const [index, domain] of (fn.customDomains ?? []).entries()) {
-				const normalized = normalizeCustomDomain(domain);
-				if (customDomainValidationError(domain)) continue;
-				const prior = byDomain.get(normalized);
-				if (prior !== undefined) {
-					ctx.addIssue({
-						code: "custom",
-						path: ["functions", slug, "customDomains", index],
-						message: `custom domain "${normalized}" is already used by function "${prior}"`,
-					});
-					continue;
-				}
-				byDomain.set(normalized, slug);
 			}
 		}
 	});

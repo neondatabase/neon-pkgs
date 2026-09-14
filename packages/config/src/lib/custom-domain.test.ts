@@ -35,4 +35,28 @@ describe("customDomainValidationError", () => {
 			customDomainValidationError("api.xn--e1afmkfd.xn--p1ai"),
 		).toBeUndefined();
 	});
+
+	test("accepts a 253-character hostname, including a trailing root dot", () => {
+		const hostname = hostnameOfLength(253);
+		expect(customDomainValidationError(hostname)).toBeUndefined();
+		expect(customDomainValidationError(`${hostname}.`)).toBeUndefined();
+	});
+
+	test("rejects a 254-character normalized hostname", () => {
+		expect(customDomainValidationError(hostnameOfLength(254))).toMatch(
+			/3–253 characters after normalizing/,
+		);
+	});
 });
+
+/** DNS labels of at most 63 characters so length is the only variable. */
+function hostnameOfLength(length: number): string {
+	const labels: string[] = [];
+	let remaining = length;
+	while (remaining > 64) {
+		labels.push("a".repeat(63));
+		remaining -= 64;
+	}
+	labels.push("a".repeat(remaining));
+	return labels.join(".");
+}

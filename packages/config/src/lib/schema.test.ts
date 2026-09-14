@@ -807,7 +807,7 @@ describe("customDomains", () => {
 		);
 	});
 
-	test("rejects the same hostname on two functions", () => {
+	test("parses the same hostname on two functions (uniqueness is after merge)", () => {
 		const result = previewInputSchema.safeParse({
 			functions: {
 				hello: {
@@ -822,10 +822,7 @@ describe("customDomains", () => {
 				},
 			},
 		});
-		if (result.success) throw new Error("expected failure");
-		expect(formatZodIssues(result.error).join("\n")).toContain(
-			'custom domain "docs.example.com" is already used by function "hello"',
-		);
+		expect(result.success).toBe(true);
 	});
 
 	test("rejects a non-hostname", () => {

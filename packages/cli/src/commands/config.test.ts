@@ -958,6 +958,36 @@ describe("config commands", () => {
 		}
 	});
 
+	it("plan exits 0 for a non-domain conflict (no read-write endpoint)", async () => {
+		const origExitCode = process.exitCode;
+		try {
+			const api = new FakeNeonApi();
+			api.listEndpoints = async () => [];
+			const config = writeConfig(
+				"export default { branch: () => ({ postgres: { computeSettings: { autoscalingLimitMaxCu: 2 } } }) };\n",
+			);
+			for (const output of ["table", "json", "yaml"] as const) {
+				process.exitCode = 0;
+				const { stream, read } = captureOut();
+				await planCmd({
+					...baseProps(api, stream),
+					output,
+					config,
+				});
+				const out = read();
+				if (output === "json") {
+					const result = JSON.parse(out);
+					expect(result.conflicts[0].field).toBe("endpoint");
+				} else {
+					expect(out).toMatch(/endpoint/);
+				}
+				expect(process.exitCode ?? 0).toBe(0);
+			}
+		} finally {
+			process.exitCode = origExitCode;
+		}
+	});
+
 	it("pulls the branch env into a local .env after a successful apply (like link/checkout)", async () => {
 		const api = new FakeNeonApi();
 		const { stream } = captureOut();

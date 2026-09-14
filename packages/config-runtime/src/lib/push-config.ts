@@ -790,10 +790,8 @@ async function applyStep(
 		}
 		case "retarget-custom-domain": {
 			const methods = requireCustomDomainApi(ctx.api);
-			const minDeploymentId = ctx.deploymentIdBySlug.get(
-				step.functionSlug,
-			);
-			if (minDeploymentId === undefined) {
+			const deploymentId = ctx.deploymentIdBySlug.get(step.functionSlug);
+			if (deploymentId === undefined) {
 				throw new PlatformError(
 					ErrorCode.ServerError,
 					`Cannot retarget a custom domain onto ${JSON.stringify(step.functionSlug)}: this apply did not deploy that function.`,
@@ -804,8 +802,28 @@ async function applyStep(
 				projectId: ctx.remoteProjectId,
 				branchId: step.branchId,
 				slug: step.functionSlug,
-				minDeploymentId,
+				deploymentId,
 			});
+			const observed = (
+				await methods.listBranchCustomDomains(
+					ctx.remoteProjectId,
+					step.branchId,
+				)
+			).find((item) => item.domain === step.domain);
+			if (
+				observed === undefined ||
+				observed.entityType !== "function" ||
+				observed.entityId !== step.previousSlug
+			) {
+				const seen =
+					observed === undefined
+						? "no registration"
+						: `${observed.entityType} ${JSON.stringify(observed.entityId)}`;
+				throw new PlatformError(
+					ErrorCode.Conflict,
+					`Cannot retarget ${JSON.stringify(step.domain)}: planned owner was function ${JSON.stringify(step.previousSlug)}; observed ${seen}. DELETE was not attempted.`,
+				);
+			}
 			await methods.deleteBranchCustomDomain(
 				ctx.remoteProjectId,
 				step.branchId,
@@ -830,7 +848,7 @@ async function applyStep(
 					rewritten instanceof PlatformError
 						? rewritten.code
 						: ErrorCode.ServerError,
-					`Deleted the previous registration of ${JSON.stringify(step.domain)} (function ${JSON.stringify(step.previousSlug)}) but failed to register it on ${JSON.stringify(step.functionSlug)}. The hostname is currently unregistered. ${message}`,
+					`Deleted the previous registration of ${JSON.stringify(step.domain)} (function ${JSON.stringify(step.previousSlug)}) but failed to register it on ${JSON.stringify(step.functionSlug)}. Inspect current ownership with \`neon function domains list\` before recovering. ${message}`,
 					{
 						cause: rewritten instanceof Error ? rewritten : err,
 						details:
@@ -925,7 +943,7 @@ async function waitForCompletedFunctionDeployment(args: {
 	projectId: string;
 	branchId: string;
 	slug: string;
-	minDeploymentId: number;
+	deploymentId: number;
 }): Promise<void> {
 	const get = args.api.getBranchFunction;
 	if (!get) {
@@ -948,7 +966,13 @@ async function waitForCompletedFunctionDeployment(args: {
 		);
 		const dep = fn.currentDeployment;
 		// GET can still report the previous deployment after this apply's POST returns.
-		if (dep !== undefined && dep.id >= args.minDeploymentId) {
+		if (dep !== undefined && dep.id > args.deploymentId) {
+			throw new PlatformError(
+				ErrorCode.ServerError,
+				`Cannot retarget a custom domain onto ${JSON.stringify(args.slug)}: current deployment is ${dep.id}, this apply submitted ${args.deploymentId}; left the previous custom-domain registration in place.`,
+			);
+		}
+		if (dep !== undefined && dep.id === args.deploymentId) {
 			if (dep.status === "completed") return;
 			if (dep.status === "failed") {
 				throw new PlatformError(

@@ -695,7 +695,13 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 	});
 	const services = utilizedServices(config);
 	reportPushResult(props, result, "plan", services);
-	if (result.conflicts.length > 0) {
+	if (
+		result.conflicts.some(
+			(conflict) =>
+				conflict.field === "customDomain" &&
+				!/updateExisting/i.test(conflict.reason),
+		)
+	) {
 		process.exitCode = 1;
 	}
 
