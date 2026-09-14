@@ -127,7 +127,10 @@ const renderBranchGroups = (
 };
 
 /** Friendly label for a service change identifier (`bucket:x` → `bucket x`). */
-const serviceLabel = (identifier: string): string => {
+const serviceLabel = (
+	identifier: string,
+	details?: AppliedChange["details"],
+): string => {
 	if (identifier === "auth") return "Neon Auth";
 	if (identifier === "dataApi") return "Data API";
 	if (identifier.startsWith("bucket:")) {
@@ -137,7 +140,17 @@ const serviceLabel = (identifier: string): string => {
 		return `function ${identifier.slice("function:".length)}`;
 	}
 	if (identifier.startsWith("domain:")) {
-		return `domain ${identifier.slice("domain:".length)}`;
+		const domain = identifier.slice("domain:".length);
+		const previous =
+			typeof details?.previousSlug === "string"
+				? details.previousSlug
+				: undefined;
+		const slug =
+			typeof details?.slug === "string" ? details.slug : undefined;
+		if (previous !== undefined && slug !== undefined) {
+			return `domain ${domain}: ${previous} → ${slug}`;
+		}
+		return `domain ${domain}`;
 	}
 	return identifier;
 };
@@ -183,7 +196,7 @@ export const renderAppliedChanges = (
 		.filter((c) => c.kind === "service")
 		.sort((a, b) => a.identifier.localeCompare(b.identifier));
 	for (const service of services) {
-		const label = serviceLabel(service.identifier);
+		const label = serviceLabel(service.identifier, service.details);
 		const line =
 			service.action === "create"
 				? `+ ${label}`
@@ -215,12 +228,24 @@ export const renderAppliedChanges = (
 };
 
 /**
- * Render branch-setting **conflicts** (drift the policy wants to change but that
- * needs `--update-existing`) as a `git diff`-style before→after report: grouped
- * per branch, sorted by field, `current → desired` with the old value in red and
- * the new in green. Conflicts already carry both sides, so this is the fullest
- * form of the diff. Returns "" when there are no conflicts.
+ * Render branch-setting **conflicts** as a `git diff`-style before→after
+ * report: grouped per branch, sorted by field, `current → desired`. The heading
+ * names `--update-existing` only when every conflict can be applied that way.
+ * Returns "" when there are no conflicts.
  */
+const isOverrideableConflict = (conflict: ConflictReport): boolean =>
+	/updateExisting/i.test(conflict.reason);
+
+const CUSTOM_DOMAIN_REASON = /^custom domain "([^"]+)"/;
+
+const labeledConflictField = (conflict: ConflictReport): string => {
+	if (conflict.field !== "customDomain") return conflict.field;
+	const match = CUSTOM_DOMAIN_REASON.exec(conflict.reason);
+	return match?.[1] !== undefined
+		? `customDomain ${match[1]}`
+		: conflict.field;
+};
+
 export const renderBranchSettingConflicts = (
 	conflicts: ConflictReport[],
 	opts: { color: boolean },
@@ -233,14 +258,19 @@ export const renderBranchSettingConflicts = (
 		const existing = byBranch.get(conflict.identifier) ?? [];
 		byBranch.set(conflict.identifier, [
 			...existing,
-			...expandField(conflict.field, conflict.current, conflict.desired),
+			...expandField(
+				labeledConflictField(conflict),
+				conflict.current,
+				conflict.desired,
+			),
 		]);
 	}
 
+	const heading = conflicts.every(isOverrideableConflict)
+		? "Branch settings differ (re-run with --update-existing to apply)"
+		: "Branch settings differ";
 	const lines: string[] = [
-		paint.title(
-			"Branch settings differ (re-run with --update-existing to apply)",
-		),
+		paint.title(heading),
 		...renderBranchGroups(byBranch, paint),
 	];
 	return lines.join("\n");

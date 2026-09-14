@@ -949,7 +949,9 @@ describe("config commands", () => {
 				config,
 			});
 
-			expect(read()).toContain("customDomain");
+			const out = read();
+			expect(out).toContain("customDomain");
+			expect(out).not.toContain("re-run with --update-existing to apply");
 			expect(process.exitCode).toBe(1);
 		} finally {
 			process.exitCode = origExitCode;

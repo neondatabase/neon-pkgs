@@ -21,7 +21,7 @@ describe("renderBranchSettingConflicts", () => {
 				field: "ttl",
 				current: null,
 				desired: "2026-07-20T00:00:00Z",
-				reason: "…",
+				reason: "Existing branch has a different TTL. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
 			},
 			{
 				kind: "branch",
@@ -29,7 +29,7 @@ describe("renderBranchSettingConflicts", () => {
 				field: "protected",
 				current: false,
 				desired: true,
-				reason: "…",
+				reason: "Existing branch has a different `protected` flag. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
 			},
 		];
 
@@ -59,6 +59,45 @@ describe("renderBranchSettingConflicts", () => {
 		];
 		const text = renderBranchSettingConflicts(conflicts, { color: false });
 		expect(text).toContain("computeSettings.autoscalingLimitMaxCu  2 → 4");
+	});
+
+	it("includes the hostname on a retarget conflict", () => {
+		const text = renderBranchSettingConflicts(
+			[
+				{
+					kind: "branch",
+					identifier: "main",
+					field: "customDomain",
+					current: "old",
+					desired: "new",
+					reason: 'custom domain "docs.example.com" is registered to function "old". Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to retarget it to "new".',
+				},
+			],
+			{ color: false },
+		);
+		expect(text).toContain(
+			"Branch settings differ (re-run with --update-existing to apply)",
+		);
+		expect(text).toMatch(/customDomain docs\.example\.com\s+old → new/);
+	});
+
+	it("omits --update-existing from the heading when a conflict cannot use it", () => {
+		const text = renderBranchSettingConflicts(
+			[
+				{
+					kind: "branch",
+					identifier: "main",
+					field: "customDomain",
+					current: { entityType: "bucket", entityId: "uploads" },
+					desired: { entityType: "function", entityId: "hello" },
+					reason: 'custom domain "docs.example.com" is registered to entity type "bucket", which neon.ts cannot retarget. Delete it with `neon function domains delete` or stop declaring it.',
+				},
+			],
+			{ color: false },
+		);
+		expect(text.split("\n")[0]).toBe("Branch settings differ");
+		expect(text).not.toContain("--update-existing");
+		expect(text).toContain("customDomain docs.example.com");
 	});
 
 	it("adds ANSI codes only when color is on (same layout stripped)", () => {
@@ -227,6 +266,27 @@ describe("renderAppliedChanges", () => {
 			color: false,
 		});
 		expect(text.split("\n")[1]).toBe("  + domain docs.example.com");
+	});
+
+	it("renders a custom-domain retarget as ~ domain <hostname>: previous → next", () => {
+		const changes: AppliedChange[] = [
+			{
+				kind: "service",
+				action: "update",
+				identifier: "domain:docs.example.com",
+				details: {
+					domain: "docs.example.com",
+					slug: "new",
+					previousSlug: "old",
+				},
+			},
+		];
+		const text = renderAppliedChanges(changes, "Planned changes", {
+			color: false,
+		});
+		expect(text.split("\n")[1]).toBe(
+			"  ~ domain docs.example.com: old → new",
+		);
 	});
 });
 
