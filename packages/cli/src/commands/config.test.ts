@@ -294,7 +294,10 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 
-	async listBranchCustomDomains(): Promise<NeonCustomDomainSnapshot[]> {
+	async listBranchCustomDomains(
+		_projectId: string,
+		_branchId: string,
+	): Promise<NeonCustomDomainSnapshot[]> {
 		return [...this.customDomains.values()];
 	}
 
