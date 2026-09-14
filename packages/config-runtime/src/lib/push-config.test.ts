@@ -29,9 +29,25 @@ afterAll(() => {
 	rmSync(fnTmpDir, { recursive: true, force: true });
 });
 
-function seededFake(opts?: { protected?: boolean }) {
+function seededFake(opts?: {
+	protected?: boolean;
+	branches?: Array<{
+		id: string;
+		name: string;
+		isDefault: boolean;
+		protected?: boolean;
+	}>;
+}) {
 	const api = new FakeNeonApi();
 	const projectId = "proj-push";
+	const branches = opts?.branches ?? [
+		{
+			id: "br-main",
+			name: "main",
+			isDefault: true,
+			protected: opts?.protected ?? false,
+		},
+	];
 	api.seedProject({
 		project: {
 			id: projectId,
@@ -40,16 +56,14 @@ function seededFake(opts?: { protected?: boolean }) {
 			pgVersion: 17,
 			orgId: "org-push",
 		},
-		branches: [
-			{
-				branch: {
-					id: "br-main",
-					name: "main",
-					isDefault: true,
-					protected: opts?.protected ?? false,
-				},
+		branches: branches.map((branch) => ({
+			branch: {
+				id: branch.id,
+				name: branch.name,
+				isDefault: branch.isDefault,
+				protected: branch.protected ?? opts?.protected ?? false,
 			},
-		],
+		})),
 	});
 	return { api, projectId };
 }
@@ -1076,6 +1090,84 @@ describe("pushConfig", () => {
 				cnameTarget: "custom-domains.fake.neon.tech",
 			},
 		]);
+	});
+
+	test("does not register static customDomains on a non-default branch", async () => {
+		const { api, projectId } = seededFake({
+			branches: [
+				{ id: "br-main", name: "main", isDefault: true },
+				{ id: "br-dev", name: "dev", isDefault: false },
+			],
+		});
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-dev",
+		});
+		expect(
+			api.history.some((h) => h.method === "registerBranchCustomDomain"),
+		).toBe(false);
+		expect(result.customDomains).toBeUndefined();
+	});
+
+	test("registers a tuning custom domain on a non-default branch", async () => {
+		const { api, projectId } = seededFake({
+			branches: [
+				{ id: "br-main", name: "main", isDefault: true },
+				{ id: "br-dev", name: "dev", isDefault: false },
+			],
+		});
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+			branch: (branch) => ({
+				preview: {
+					functions: {
+						fn1: branch.isDefault
+							? {}
+							: { customDomains: ["preview.example.com"] },
+					},
+				},
+			}),
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-dev",
+		});
+		expect(result.customDomains).toEqual([
+			{
+				domain: "preview.example.com",
+				slug: "fn1",
+				cnameTarget: "custom-domains.fake.neon.tech",
+			},
+		]);
+		const registered = api.history.filter(
+			(h) => h.method === "registerBranchCustomDomain",
+		);
+		expect(registered).toHaveLength(1);
+		expect(registered[0].args[2]).toEqual({
+			domain: "preview.example.com",
+			functionSlug: "fn1",
+		});
 	});
 
 	test("does not list custom domains when every function uses []", async () => {

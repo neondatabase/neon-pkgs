@@ -841,7 +841,7 @@ describe("defineConfig — Data API config", () => {
 		});
 	});
 
-	test("normalizes customDomains and lets tuning replace including []", () => {
+	test("applies static customDomains on the default branch when tuning omits the key", () => {
 		const config = defineConfig({
 			preview: {
 				functions: {
@@ -852,14 +852,10 @@ describe("defineConfig — Data API config", () => {
 					},
 				},
 			},
-			branch: (branch) => ({
+			branch: () => ({
 				preview: {
 					functions: {
-						hello: {
-							customDomains: branch.isDefault
-								? ["docs.example.com"]
-								: [],
-						},
+						hello: { runtime: "nodejs24" },
 					},
 				},
 			}),
@@ -871,16 +867,100 @@ describe("defineConfig — Data API config", () => {
 				isDefault: true,
 			}).preview?.functions[0]?.customDomains,
 		).toEqual(["docs.example.com"]);
+	});
+
+	test("does not apply static customDomains on a non-default branch", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+		});
 		expect(
 			resolveConfig(config, {
 				name: "dev",
 				exists: true,
 				isDefault: false,
 			}).preview?.functions[0]?.customDomains,
-		).toEqual([]);
+		).toBeUndefined();
+		expect(
+			resolveConfig(config, { name: "dev", exists: false }).preview
+				?.functions[0]?.customDomains,
+		).toBeUndefined();
 	});
 
-	test("inherits static customDomains when tuning omits the key", () => {
+	test("still applies static triggers on a non-default branch", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						customDomains: ["docs.example.com"],
+						triggers: [
+							{
+								type: "schedule",
+								name: "hourly",
+								cron: "0 * * * *",
+							},
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, {
+			name: "dev",
+			exists: true,
+			isDefault: false,
+		}).preview?.functions[0];
+		expect(resolved?.customDomains).toBeUndefined();
+		expect(resolved?.triggers).toEqual([
+			{
+				type: "schedule",
+				name: "hourly",
+				cron: "0 * * * *",
+				functionPath: "/",
+				enabled: true,
+			},
+		]);
+	});
+
+	test("lets tuning set a custom domain on a non-default branch", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+			branch: (branch) => ({
+				preview: {
+					functions: {
+						hello: branch.isDefault
+							? {}
+							: { customDomains: ["preview.example.com"] },
+					},
+				},
+			}),
+		});
+		expect(
+			resolveConfig(config, {
+				name: "preview",
+				exists: true,
+				isDefault: false,
+			}).preview?.functions[0]?.customDomains,
+		).toEqual(["preview.example.com"]);
+	});
+
+	test("tuning [] on the default branch registers nothing", () => {
 		const config = defineConfig({
 			preview: {
 				functions: {
@@ -894,15 +974,18 @@ describe("defineConfig — Data API config", () => {
 			branch: () => ({
 				preview: {
 					functions: {
-						hello: { runtime: "nodejs24" },
+						hello: { customDomains: [] },
 					},
 				},
 			}),
 		});
 		expect(
-			resolveConfig(config, { name: "dev", exists: true }).preview
-				?.functions[0]?.customDomains,
-		).toEqual(["docs.example.com"]);
+			resolveConfig(config, {
+				name: "main",
+				exists: true,
+				isDefault: true,
+			}).preview?.functions[0]?.customDomains,
+		).toEqual([]);
 	});
 
 	test("tuning [] on one function clears a static hostname overlap", () => {
@@ -932,6 +1015,7 @@ describe("defineConfig — Data API config", () => {
 		const resolved = resolveConfig(config, {
 			name: "main",
 			exists: true,
+			isDefault: true,
 		});
 		expect(
 			resolved.preview?.functions.map((fn) => [
@@ -971,7 +1055,7 @@ describe("defineConfig — Data API config", () => {
 						},
 					}),
 				}),
-				{ name: "main", exists: true },
+				{ name: "main", exists: true, isDefault: true },
 			),
 		).toThrow(/used by both function "hello" and "other"/);
 	});

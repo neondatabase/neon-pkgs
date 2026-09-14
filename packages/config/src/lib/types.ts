@@ -476,14 +476,12 @@ export interface FunctionDef {
 	 */
 	triggers?: FunctionScheduleTriggerDef[];
 	/**
-	 * Customer-owned hostnames that should point at this function on the branch (beta).
+	 * Customer-owned hostnames that should point at this function (beta).
 	 * v1 only supports functions. Hostnames are unique across functions in the resolved
-	 * policy. Applied after the function is deployed. Domains that exist remotely but
-	 * are omitted here are left alone — delete with `neon function domains delete`.
-	 *
-	 * A hostname is globally unique. Child-branch checkout will 409 if this list is
-	 * inherited onto a branch that does not own the name; replace it with `[]` from
-	 * {@link FunctionTuning} on those branches.
+	 * policy. Applied after the function is deployed, on the project's default branch.
+	 * Other branches apply a list only when {@link FunctionTuning.customDomains} sets one.
+	 * Domains that exist remotely but are omitted here are left alone — delete with
+	 * `neon function domains delete`.
 	 *
 	 * @example ["docs.example.com"]
 	 */
@@ -571,7 +569,8 @@ export interface FunctionTuning {
 	runtime?: FunctionRuntime;
 	/**
 	 * When present, replaces {@link FunctionDef.customDomains} for this branch.
-	 * `[]` registers nothing on this branch. Omit the key to inherit the static list.
+	 * `[]` registers nothing on this branch. Omit the key: the default branch
+	 * inherits the static list; other branches do not.
 	 */
 	customDomains?: string[];
 }
@@ -700,9 +699,8 @@ export interface ResolvedFunctionConfig {
 	dev?: FunctionDevConfig;
 	triggers?: ResolvedFunctionScheduleTrigger[];
 	/**
-	 * Normalized hostnames this function should own on the branch. Absent when neither
-	 * the definition nor the branch tuning declared the field. Empty when tuning replaced
-	 * the list with `[]`.
+	 * Normalized hostnames this function should own on the branch. Absent when this
+	 * branch has no list to apply. Empty when tuning replaced the list with `[]`.
 	 */
 	customDomains?: string[];
 }

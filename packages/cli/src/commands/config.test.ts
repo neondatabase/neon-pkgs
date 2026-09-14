@@ -1599,4 +1599,32 @@ describe("createBranchFromPolicyOnCheckout", () => {
 			resendApiKey: "re_from_file",
 		});
 	});
+
+	it("deploys the function on checkout without registering static customDomains", async () => {
+		const api = new CreateBranchNeonApi();
+		const source = join(cwd, "hello.ts");
+		writeFileSync(
+			source,
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default { preview: { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+				source,
+			)}, customDomains: ["docs.example.com"] } } } };\n`,
+		);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+		expect(api.deployBranchFunctionCalls).toHaveLength(1);
+		expect(
+			await api.listBranchCustomDomains(PROJECT_ID, NEW_BRANCH_ID),
+		).toEqual([]);
+	});
 });

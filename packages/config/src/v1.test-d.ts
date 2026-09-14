@@ -281,17 +281,6 @@ describe("defineConfig return-type stability", () => {
 					},
 				},
 			},
-			branch: (branch) => ({
-				preview: {
-					functions: {
-						hello: {
-							customDomains: branch.isDefault
-								? ["docs.example.com"]
-								: [],
-						},
-					},
-				},
-			}),
 		});
 		expectTypeOf(config).toExtend<Config>();
 	});

@@ -4,4 +4,4 @@
 "neon": minor
 ---
 
-Declare function custom domains in neon.ts (`customDomains` on the function and on branch tuning). `plan` / `apply` register or retarget them and print CNAME targets.
+Declare function custom domains in neon.ts. The static list applies on the default branch; other branches need an explicit list. `plan` / `apply` register or retarget them and print CNAME targets.

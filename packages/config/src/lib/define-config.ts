@@ -224,7 +224,7 @@ export function resolveConfig(
 		};
 	}
 
-	const preview = resolvePreviewConfig(config.preview, tuning);
+	const preview = resolvePreviewConfig(config.preview, tuning, branch);
 	if (preview) resolved.preview = preview;
 
 	return resolved;
@@ -319,13 +319,14 @@ function normalizeDataApiSettings(
 function resolvePreviewConfig(
 	preview: PreviewInput | undefined,
 	tuning: BranchTuning,
+	branch: BranchTarget,
 ): ResolvedPreviewConfig | undefined {
 	if (!preview) return undefined;
 	const fnTuning = tuning.preview?.functions ?? {};
 	const functions: ResolvedFunctionConfig[] = Object.entries(
 		preview.functions ?? {},
 	).map(([slug, def]) =>
-		resolveFunctionConfig(slug, def, fnTuning[slug] ?? {}),
+		resolveFunctionConfig(slug, def, fnTuning[slug] ?? {}, branch),
 	);
 	assertUniqueResolvedCustomDomains(functions);
 	const buckets = Object.entries(preview.buckets ?? {}).map(
@@ -345,7 +346,9 @@ function resolveFunctionConfig(
 	slug: string,
 	def: FunctionDef,
 	tuning: FunctionTuning,
+	branch: BranchTarget,
 ): ResolvedFunctionConfig {
+	const customDomains = resolveFunctionCustomDomains(def, tuning, branch);
 	return {
 		slug,
 		name: def.name,
@@ -376,16 +379,23 @@ function resolveFunctionConfig(
 					})),
 				}
 			: {}),
-		...(tuning.customDomains !== undefined
-			? { customDomains: tuning.customDomains.map(normalizeCustomDomain) }
-			: def.customDomains !== undefined
-				? {
-						customDomains: def.customDomains.map(
-							normalizeCustomDomain,
-						),
-					}
-				: {}),
+		...(customDomains !== undefined ? { customDomains } : {}),
 	};
+}
+
+function resolveFunctionCustomDomains(
+	def: FunctionDef,
+	tuning: FunctionTuning,
+	branch: BranchTarget,
+): string[] | undefined {
+	if (tuning.customDomains !== undefined) {
+		return tuning.customDomains.map(normalizeCustomDomain);
+	}
+	// Hostnames are globally unique, so a child checkout 409s if it inherits this list.
+	if (def.customDomains !== undefined && branch.isDefault === true) {
+		return def.customDomains.map(normalizeCustomDomain);
+	}
+	return undefined;
 }
 
 function assertUniqueResolvedCustomDomains(

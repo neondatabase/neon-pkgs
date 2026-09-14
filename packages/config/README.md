@@ -39,13 +39,6 @@ export default defineConfig({
   branch: (branch) => ({
     protected: branch.name === "main",
     ...(branch.name === "main" ? {} : { parent: "main", ttl: "7d" }),
-    preview: {
-      functions: {
-        hello: {
-          customDomains: branch.isDefault ? ["docs.example.com"] : [],
-        },
-      },
-    },
   }),
 });
 ```
@@ -59,11 +52,11 @@ Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false`
 
 ### Function custom domains (beta)
 
-`customDomains` is a list of hostnames on a function. v1 supports functions only. Hostnames are unique across functions in the resolved policy. `plan` previews registrations and retargets; `apply` performs them. `apply` registers a hostname that is not on this branch, retargets one that already points at another function on this branch (`--update-existing` / `updateExisting: true`; DELETE then POST), and leaves omitted remotes alone. Delete with `neon function domains delete`.
+`customDomains` is a list of hostnames on a function. v1 supports functions only. Hostnames are unique across functions in the resolved policy. The static list is applied on the project's default branch. Other branches do not apply it unless the `branch` closure sets `customDomains` (another hostname, or `[]` to register nothing even on default). `plan` previews registrations and retargets; `apply` performs them. `apply` registers a hostname that is not on this branch, retargets one that already points at another function on this branch (`--update-existing` / `updateExisting: true`; DELETE then POST), and leaves omitted remotes alone. Delete with `neon function domains delete`.
 
 Retarget waits for this apply's function deployment, then re-reads ownership before DELETE. If that read shows a different owner than the plan, apply stops without DELETE. DELETE is still unconditional on the hostname, so a move between that read and DELETE can remove someone else's registration. If POST fails after DELETE, the error reports both operations and tells you to inspect with `neon function domains list`.
 
-A hostname is globally unique. Child-branch checkout 409s if the static list is inherited onto a branch that does not own the name. Replace it with `[]` from the `branch` closure on those branches. `[]` registers nothing on that branch; omitting the tuning key inherits the static list.
+A hostname is globally unique, so `neon checkout` of a non-default branch deploys the function and does not register the static list.
 
 DNS is yours: `plan` / `apply` print `CNAME <hostname> -> <cname_target>` when the hostname is registered to the declared function and the API returns a target. A blocking conflict does not print CNAME. Point the hostname at that target. An empty target means the region has no custom-domains front door.
 
@@ -241,7 +234,7 @@ import {
 - `auth: {}` and `dataApi: {}` enable those integrations with Neon defaults. Absence of `dataApi` leaves an existing Data API alone. `dataApi: false` / `dataApi.enabled: false` disables it (an override: `updateExisting` or `confirm`). `auth.enabled: false` still leaves Auth alone.
 - Mutable branch drift (`protected`, `ttl`, `postgres.computeSettings`) is reported as a conflict unless `updateExisting` is passed (or a `confirm` callback is supplied to `pushConfig`).
 - Applying to a branch with the `protected` flag set on Neon requires `allowProtectedBranch` (or a `confirm` callback).
-- Omitted `customDomains` leave remote registrations alone. `[]` in branch tuning registers nothing on that branch. Delete with `neon function domains delete`.
+- Omitted `customDomains` leave remote registrations alone. The static list applies on the default branch. `[]` in branch tuning registers nothing on that branch. Delete with `neon function domains delete`.
 
 ## Env vars
 
