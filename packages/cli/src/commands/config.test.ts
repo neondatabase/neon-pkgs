@@ -912,6 +912,58 @@ describe("config commands", () => {
 		expect(out).not.toContain("CNAME docs.example.com");
 	});
 
+	it("plans no static custom domain on a non-default branch", async () => {
+		const devId = "br-sunny-glade-12345";
+		const api = new FakeNeonApi();
+		api.listBranches = async () => [
+			{
+				id: BRANCH_ID,
+				name: BRANCH_NAME,
+				isDefault: true,
+				protected: false,
+			},
+			{
+				id: devId,
+				name: "dev",
+				isDefault: false,
+				protected: false,
+			},
+		];
+		api.listEndpoints = async () => [
+			{
+				id: "ep-fake-1",
+				branchId: BRANCH_ID,
+				type: "read_write",
+				autoscalingLimitMinCu: 0.25,
+				autoscalingLimitMaxCu: 0.25,
+				suspendTimeout: "5m",
+			},
+			{
+				id: "ep-fake-2",
+				branchId: devId,
+				type: "read_write",
+				autoscalingLimitMinCu: 0.25,
+				autoscalingLimitMaxCu: 0.25,
+				suspendTimeout: "5m",
+			},
+		];
+		const { stream, read } = captureOut();
+		const config = writeConfig(
+			'export default { preview: { functions: { hello: { name: "Hello", source: "./hello.ts", customDomains: ["docs.example.com"] } } } };\n',
+		);
+
+		await planCmd({
+			...baseProps(api, stream),
+			branch: devId,
+			output: "table",
+			config,
+		});
+
+		const out = stripAnsi(read());
+		expect(out).toContain("function hello");
+		expect(out).not.toContain("domain docs.example.com");
+	});
+
 	it("prints CNAME for an already-registered declared domain on plan", async () => {
 		const api = new FakeNeonApi();
 		api.seedCustomDomain({
@@ -1629,5 +1681,58 @@ describe("createBranchFromPolicyOnCheckout", () => {
 		expect(
 			await api.listBranchCustomDomains(PROJECT_ID, NEW_BRANCH_ID),
 		).toEqual([]);
+	});
+
+	it("registers a tuning custom domain on checkout of a non-default branch", async () => {
+		const api = new CreateBranchNeonApi();
+		const source = join(cwd, "hello.ts");
+		writeFileSync(
+			source,
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default {
+  preview: {
+    functions: {
+      hello: {
+        name: "Hello",
+        source: ${JSON.stringify(source)},
+        customDomains: ["docs.example.com"],
+      },
+    },
+  },
+  branch: (branch) => ({
+    preview: {
+      functions: {
+        hello: branch.isDefault
+          ? {}
+          : { customDomains: ["preview.example.com"] },
+      },
+    },
+  }),
+};
+`,
+		);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+		expect(api.deployBranchFunctionCalls).toHaveLength(1);
+		expect(
+			await api.listBranchCustomDomains(PROJECT_ID, NEW_BRANCH_ID),
+		).toEqual([
+			{
+				domain: "preview.example.com",
+				entityType: "function",
+				entityId: "hello",
+				cnameTarget: "custom-domains.fake.neon.tech",
+			},
+		]);
 	});
 });

@@ -736,6 +736,8 @@ neon function domains delete docs.example.com
 
 Register prints the record, then an INFO line `CNAME <domain> to <cname_target>`. The domain goes live after that CNAME resolves and a certificate is issued on the first request.
 
+A `neon.ts` `customDomains` list is applied by `neon config plan`, `neon config apply`, and `neon checkout` only on the project's default branch. Other branches still deploy the function. Set `customDomains` in the `branch` closure to register a hostname on a child. See [`@neon/config` Default-branch-only fields](../config/README.md#default-branch-only-fields).
+
 When a package cannot be bundled — a native addon with no esbuild loader, or an optional peer dependency a library references on an untaken code path — list it in that function's `externalPackages` and the bundler leaves the import alone. `neon dev` honours the same list. It does not make the package resolvable in the deployed archive (there is no `node_modules` next to the bundle), so it only unblocks an import that is never evaluated — a dependency the handler actually calls has to be bundled, and a natively-backed one cannot be. See [`@neon/config`](../config/README.md#unbundleable-dependencies-externalpackages).
 
 ## Scaffold a project (`bootstrap`)

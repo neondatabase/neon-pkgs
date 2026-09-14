@@ -1118,6 +1118,49 @@ describe("pushConfig", () => {
 		expect(
 			api.history.some((h) => h.method === "registerBranchCustomDomain"),
 		).toBe(false);
+		expect(
+			api.history.some((h) => h.method === "listBranchCustomDomains"),
+		).toBe(false);
+		expect(result.customDomains).toBeUndefined();
+	});
+
+	test("dry-run on a non-default branch plans the function and not the static domain", async () => {
+		const { api, projectId } = seededFake({
+			branches: [
+				{ id: "br-main", name: "main", isDefault: true },
+				{ id: "br-dev", name: "dev", isDefault: false },
+			],
+		});
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-dev",
+			dryRun: true,
+		});
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					identifier: "function:fn1",
+					action: "create",
+				}),
+			]),
+		);
+		expect(
+			result.applied.some(
+				(c) => c.identifier === "domain:docs.example.com",
+			),
+		).toBe(false);
 		expect(result.customDomains).toBeUndefined();
 	});
 

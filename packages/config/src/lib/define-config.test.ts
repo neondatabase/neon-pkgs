@@ -841,222 +841,280 @@ describe("defineConfig — Data API config", () => {
 		});
 	});
 
-	test("applies static customDomains on the default branch when tuning omits the key", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						customDomains: ["Docs.Example.COM."],
-					},
-				},
-			},
-			branch: () => ({
+	describe("default-branch-only customDomains", () => {
+		test("applies static customDomains on the default branch when tuning omits the key", () => {
+			const config = defineConfig({
 				preview: {
 					functions: {
-						hello: { runtime: "nodejs24" },
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							customDomains: ["Docs.Example.COM."],
+						},
 					},
 				},
-			}),
+				branch: () => ({
+					preview: {
+						functions: {
+							hello: { runtime: "nodejs24" },
+						},
+					},
+				}),
+			});
+			expect(
+				resolveConfig(config, {
+					name: "main",
+					exists: true,
+					isDefault: true,
+				}).preview?.functions[0]?.customDomains,
+			).toEqual(["docs.example.com"]);
 		});
-		expect(
-			resolveConfig(config, {
-				name: "main",
-				exists: true,
-				isDefault: true,
-			}).preview?.functions[0]?.customDomains,
-		).toEqual(["docs.example.com"]);
-	});
 
-	test("does not apply static customDomains on a non-default branch", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						customDomains: ["docs.example.com"],
+		test("does not apply static customDomains on a non-default branch", () => {
+			const config = defineConfig({
+				preview: {
+					functions: {
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							customDomains: ["docs.example.com"],
+						},
 					},
 				},
-			},
+			});
+			expect(
+				resolveConfig(config, {
+					name: "dev",
+					exists: true,
+					isDefault: false,
+				}).preview?.functions[0]?.customDomains,
+			).toBeUndefined();
+			expect(
+				resolveConfig(config, { name: "dev", exists: false }).preview
+					?.functions[0]?.customDomains,
+			).toBeUndefined();
+			expect(
+				resolveConfig(config, { name: "main", exists: true }).preview
+					?.functions[0]?.customDomains,
+			).toBeUndefined();
 		});
-		expect(
-			resolveConfig(config, {
+
+		test("still applies static triggers and env on a non-default branch", () => {
+			const config = defineConfig({
+				preview: {
+					functions: {
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							env: { TOKEN: "secret" },
+							customDomains: ["docs.example.com"],
+							triggers: [
+								{
+									type: "schedule",
+									name: "hourly",
+									cron: "0 * * * *",
+								},
+							],
+						},
+					},
+				},
+			});
+			const resolved = resolveConfig(config, {
 				name: "dev",
 				exists: true,
 				isDefault: false,
-			}).preview?.functions[0]?.customDomains,
-		).toBeUndefined();
-		expect(
-			resolveConfig(config, { name: "dev", exists: false }).preview
-				?.functions[0]?.customDomains,
-		).toBeUndefined();
-	});
-
-	test("still applies static triggers on a non-default branch", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						customDomains: ["docs.example.com"],
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-						],
-					},
+			}).preview?.functions[0];
+			expect(resolved?.customDomains).toBeUndefined();
+			expect(resolved?.env).toEqual({ TOKEN: "secret" });
+			expect(resolved?.triggers).toEqual([
+				{
+					type: "schedule",
+					name: "hourly",
+					cron: "0 * * * *",
+					functionPath: "/",
+					enabled: true,
 				},
-			},
+			]);
 		});
-		const resolved = resolveConfig(config, {
-			name: "dev",
-			exists: true,
-			isDefault: false,
-		}).preview?.functions[0];
-		expect(resolved?.customDomains).toBeUndefined();
-		expect(resolved?.triggers).toEqual([
-			{
-				type: "schedule",
-				name: "hourly",
-				cron: "0 * * * *",
-				functionPath: "/",
-				enabled: true,
-			},
-		]);
-	});
 
-	test("lets tuning set a custom domain on a non-default branch", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						customDomains: ["docs.example.com"],
-					},
-				},
-			},
-			branch: (branch) => ({
+		test("lets tuning set a custom domain on a non-default branch", () => {
+			const config = defineConfig({
 				preview: {
 					functions: {
-						hello: branch.isDefault
-							? {}
-							: { customDomains: ["preview.example.com"] },
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							customDomains: ["docs.example.com"],
+						},
 					},
 				},
-			}),
+				branch: (branch) => ({
+					preview: {
+						functions: {
+							hello: branch.isDefault
+								? {}
+								: { customDomains: ["preview.example.com"] },
+						},
+					},
+				}),
+			});
+			expect(
+				resolveConfig(config, {
+					name: "preview",
+					exists: true,
+					isDefault: false,
+				}).preview?.functions[0]?.customDomains,
+			).toEqual(["preview.example.com"]);
 		});
-		expect(
-			resolveConfig(config, {
-				name: "preview",
-				exists: true,
-				isDefault: false,
-			}).preview?.functions[0]?.customDomains,
-		).toEqual(["preview.example.com"]);
-	});
 
-	test("tuning [] on the default branch registers nothing", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						customDomains: ["docs.example.com"],
-					},
-				},
-			},
-			branch: () => ({
+		test("tuning [] on the default branch registers nothing", () => {
+			const config = defineConfig({
 				preview: {
 					functions: {
-						hello: { customDomains: [] },
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							customDomains: ["docs.example.com"],
+						},
 					},
 				},
-			}),
+				branch: () => ({
+					preview: {
+						functions: {
+							hello: { customDomains: [] },
+						},
+					},
+				}),
+			});
+			expect(
+				resolveConfig(config, {
+					name: "main",
+					exists: true,
+					isDefault: true,
+				}).preview?.functions[0]?.customDomains,
+			).toEqual([]);
 		});
-		expect(
-			resolveConfig(config, {
+
+		test("tuning [] on one function clears a static hostname overlap", () => {
+			const config = defineConfig({
+				preview: {
+					functions: {
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							customDomains: ["docs.example.com"],
+						},
+						other: {
+							name: "Other",
+							source: "./other.ts",
+							customDomains: ["docs.example.com"],
+						},
+					},
+				},
+				branch: () => ({
+					preview: {
+						functions: {
+							other: { customDomains: [] },
+						},
+					},
+				}),
+			});
+			const resolved = resolveConfig(config, {
 				name: "main",
 				exists: true,
 				isDefault: true,
-			}).preview?.functions[0]?.customDomains,
-		).toEqual([]);
-	});
-
-	test("tuning [] on one function clears a static hostname overlap", () => {
-		const config = defineConfig({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						customDomains: ["docs.example.com"],
-					},
-					other: {
-						name: "Other",
-						source: "./other.ts",
-						customDomains: ["docs.example.com"],
-					},
-				},
-			},
-			branch: () => ({
-				preview: {
-					functions: {
-						other: { customDomains: [] },
-					},
-				},
-			}),
+			});
+			expect(
+				resolved.preview?.functions.map((fn) => [
+					fn.slug,
+					fn.customDomains,
+				]),
+			).toEqual([
+				["hello", ["docs.example.com"]],
+				["other", []],
+			]);
 		});
-		const resolved = resolveConfig(config, {
-			name: "main",
-			exists: true,
-			isDefault: true,
-		});
-		expect(
-			resolved.preview?.functions.map((fn) => [
-				fn.slug,
-				fn.customDomains,
-			]),
-		).toEqual([
-			["hello", ["docs.example.com"]],
-			["other", []],
-		]);
-	});
 
-	test("rejects the same hostname on two functions after merge", () => {
-		expect(() =>
-			resolveConfig(
-				defineConfig({
-					preview: {
-						functions: {
-							hello: {
-								name: "Hello",
-								source: "./hello.ts",
-								customDomains: ["docs.example.com"],
-							},
-							other: {
-								name: "Other",
-								source: "./other.ts",
-							},
-						},
-					},
-					branch: () => ({
+		test("rejects the same hostname on two functions after merge", () => {
+			expect(() =>
+				resolveConfig(
+					defineConfig({
 						preview: {
 							functions: {
+								hello: {
+									name: "Hello",
+									source: "./hello.ts",
+									customDomains: ["docs.example.com"],
+								},
 								other: {
+									name: "Other",
+									source: "./other.ts",
+								},
+							},
+						},
+						branch: () => ({
+							preview: {
+								functions: {
+									other: {
+										customDomains: ["docs.example.com"],
+									},
+								},
+							},
+						}),
+					}),
+					{ name: "main", exists: true, isDefault: true },
+				),
+			).toThrow(/used by both function "hello" and "other"/);
+		});
+
+		test("rejects overlapping static customDomains on the default branch", () => {
+			expect(() =>
+				resolveConfig(
+					defineConfig({
+						preview: {
+							functions: {
+								hello: {
+									name: "Hello",
+									source: "./hello.ts",
+									customDomains: ["docs.example.com"],
+								},
+								other: {
+									name: "Other",
+									source: "./other.ts",
 									customDomains: ["docs.example.com"],
 								},
 							},
 						},
 					}),
-				}),
-				{ name: "main", exists: true, isDefault: true },
-			),
-		).toThrow(/used by both function "hello" and "other"/);
+					{ name: "main", exists: true, isDefault: true },
+				),
+			).toThrow(/used by both function "hello" and "other"/);
+		});
+
+		test("does not treat overlapping static customDomains as a conflict on a non-default branch", () => {
+			const config = defineConfig({
+				preview: {
+					functions: {
+						hello: {
+							name: "Hello",
+							source: "./hello.ts",
+							customDomains: ["docs.example.com"],
+						},
+						other: {
+							name: "Other",
+							source: "./other.ts",
+							customDomains: ["docs.example.com"],
+						},
+					},
+				},
+			});
+			expect(
+				resolveConfig(config, {
+					name: "dev",
+					exists: true,
+					isDefault: false,
+				}).preview?.functions.map((fn) => fn.customDomains),
+			).toEqual([undefined, undefined]);
+		});
 	});
 });

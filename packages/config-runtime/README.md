@@ -14,7 +14,7 @@ npm install @neon/config-runtime
 
 ## API
 
-- `inspect` / `plan` / `apply` — read the current branch state, diff a policy against it, and apply the changes. `PushResult.customDomains` lists declared hostnames with `slug` and, after apply, `cnameTarget`. Static `customDomains` apply on the default branch; other branches need an explicit list.
+- `inspect` / `plan` / `apply` — read the current branch state, diff a policy against it, and apply the changes. `PushResult.customDomains` lists declared hostnames with `slug` and, after apply, `cnameTarget`. Static `customDomains` apply only on the default branch; see [`@neon/config`](../config/README.md#default-branch-only-fields).
 - `pullConfig` / `pushConfig` — lower-level pull/push primitives.
 - `createBranch` — create a branch to target.
 - `buildFunctionBundle` — ZIP a function for deploy, honoring `bundler`. Omit / `"esbuild"`: a file `source` is the entry; a directory is searched for `index.ts`, then `index.js`, then `index.mjs`. `"none"`: zip `source` as-is. An inline function: zip the file map it returns. On the esbuild path, `externalPackages` are passed to esbuild's `external`, and unless an entry sets `includeFiles: false` the package's real files are staged into the archive. Reports a bundled-in native dependency that was never declared, as a warning.
