@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 5.0.0
+
+### Major Changes
+
+- b9907b8: Change ergonomic SDK resource methods to accept one flat named parameter object followed by optional call options. Update tools to bind the new method shapes while preserving their published input schemas.
+
 ## 4.2.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # @neon/tools
 
+## 1.3.4
+
+### Patch Changes
+
+- b9907b8: Change ergonomic SDK resource methods to accept one flat named parameter object followed by optional call options. Update tools to bind the new method shapes while preserving their published input schemas.
+- Updated dependencies [b9907b8]
+  - @neon/sdk@5.0.0
+
 ## 1.3.3
 
 ### Patch Changes
