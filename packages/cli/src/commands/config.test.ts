@@ -952,6 +952,21 @@ describe("config commands", () => {
 			const out = read();
 			expect(out).toContain("customDomain");
 			expect(out).not.toContain("re-run with --update-existing to apply");
+			expect(out).not.toContain("CNAME");
+			expect(process.exitCode).toBe(1);
+
+			process.exitCode = 0;
+			const jsonOut = captureOut();
+			await planCmd({
+				...baseProps(api, jsonOut.stream),
+				output: "json",
+				config,
+			});
+			const result = JSON.parse(jsonOut.read());
+			expect(result.conflicts[0].field).toBe("customDomain");
+			expect(result.customDomains).toEqual([
+				{ domain: "docs.example.com", slug: "hello" },
+			]);
 			expect(process.exitCode).toBe(1);
 		} finally {
 			process.exitCode = origExitCode;

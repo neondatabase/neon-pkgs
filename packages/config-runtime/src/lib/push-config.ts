@@ -1061,8 +1061,17 @@ function enrichDeclaredCustomDomains(args: {
 	}
 	if (declared.length === 0) return;
 
+	const blockedDomains = new Set(
+		args.result.conflicts.flatMap((conflict) => {
+			if (conflict.field !== "customDomain") return [];
+			const match = /^custom domain "([^"]+)"/.exec(conflict.reason);
+			return match?.[1] !== undefined ? [match[1]] : [];
+		}),
+	);
+
 	const cnameByDomain = new Map<string, string>();
 	for (const remote of args.preview?.customDomains ?? []) {
+		if (blockedDomains.has(remote.domain)) continue;
 		cnameByDomain.set(remote.domain, remote.cnameTarget);
 	}
 	for (const change of args.applied) {

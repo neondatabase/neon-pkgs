@@ -65,7 +65,7 @@ Retarget waits for this apply's function deployment, then re-reads ownership bef
 
 A hostname is globally unique. Child-branch checkout 409s if the static list is inherited onto a branch that does not own the name. Replace it with `[]` from the `branch` closure on those branches. `[]` registers nothing on that branch; omitting the tuning key inherits the static list.
 
-DNS is yours: after apply, `plan` / `apply` print `CNAME <hostname> -> <cname_target>` when the API returns a target. Point the hostname there. An empty target means the region has no custom-domains front door.
+DNS is yours: `plan` / `apply` print `CNAME <hostname> -> <cname_target>` when the hostname is registered to the declared function and the API returns a target. A blocking conflict does not print CNAME. Point the hostname at that target. An empty target means the region has no custom-domains front door.
 
 ### Shipping a prebuilt directory (`bundler: "none"`)
 

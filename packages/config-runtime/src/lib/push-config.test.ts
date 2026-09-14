@@ -1935,6 +1935,41 @@ describe("pushConfig", () => {
 		);
 	});
 
+	test("dry-run of a blocked domain omits the conflicting owner's CNAME", async () => {
+		const { api, projectId } = seededFake();
+		api.seedCustomDomain(projectId, "br-main", {
+			domain: "docs.example.com",
+			entityType: "bucket",
+			entityId: "uploads",
+			cnameTarget: "edge.example",
+		});
+		const config = defineConfig({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello",
+						source: fnSource,
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+		});
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			dryRun: true,
+		});
+		expect(result.conflicts).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ field: "customDomain" }),
+			]),
+		);
+		expect(result.customDomains).toEqual([
+			{ domain: "docs.example.com", slug: "fn1" },
+		]);
+	});
+
 	test("dry-run of a new domain omits cnameTarget", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
