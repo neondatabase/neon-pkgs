@@ -24,6 +24,7 @@ import type {
 	NeonCredentialMeta,
 	NeonCredentialReveal,
 	NeonCredentialSecret,
+	NeonCustomDomainSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
@@ -71,6 +72,10 @@ class FakeNeonApi implements NeonApi {
 	}[] = [];
 	/** Functions materialized by a deploy, keyed by slug (Neon creates on first deploy). */
 	private readonly functions = new Map<string, NeonFunctionSnapshot>();
+	private readonly customDomains = new Map<
+		string,
+		NeonCustomDomainSnapshot
+	>();
 
 	async listProjects(): Promise<NeonProjectSnapshot[]> {
 		throw new Error("not implemented");
@@ -270,6 +275,37 @@ class FakeNeonApi implements NeonApi {
 
 	async deleteBranchTrigger(): Promise<void> {
 		throw new Error("not implemented");
+	}
+
+	async listBranchCustomDomains(): Promise<NeonCustomDomainSnapshot[]> {
+		return [...this.customDomains.values()];
+	}
+
+	async registerBranchCustomDomain(
+		_projectId: string,
+		_branchId: string,
+		input: { domain: string; functionSlug: string },
+	): Promise<NeonCustomDomainSnapshot> {
+		const snapshot: NeonCustomDomainSnapshot = {
+			domain: input.domain,
+			entityType: "function",
+			entityId: input.functionSlug,
+			cnameTarget: "custom-domains.fake.neon.tech",
+		};
+		this.customDomains.set(input.domain, snapshot);
+		return snapshot;
+	}
+
+	async deleteBranchCustomDomain(
+		_projectId: string,
+		_branchId: string,
+		domain: string,
+	): Promise<void> {
+		this.customDomains.delete(domain);
+	}
+
+	seedCustomDomain(snapshot: NeonCustomDomainSnapshot): void {
+		this.customDomains.set(snapshot.domain, snapshot);
 	}
 
 	async getAiGatewayEnabled(): Promise<boolean> {
@@ -840,6 +876,67 @@ describe("config commands", () => {
 		await applyCmd({ ...baseProps(api, stream), output: "table", config });
 
 		expect(read()).toContain("Utilized services: Postgres");
+	});
+
+	it("plans a custom-domain register without inventing a CNAME target", async () => {
+		const api = new FakeNeonApi();
+		const { stream, read } = captureOut();
+		const config = writeConfig(
+			'export default { preview: { functions: { hello: { name: "Hello", source: "./hello.ts", customDomains: ["docs.example.com"] } } } };\n',
+		);
+
+		await planCmd({ ...baseProps(api, stream), output: "table", config });
+
+		const out = read();
+		expect(out).toContain("domain docs.example.com");
+		expect(out).not.toContain("CNAME docs.example.com");
+	});
+
+	it("prints CNAME for an already-registered declared domain on plan", async () => {
+		const api = new FakeNeonApi();
+		api.seedCustomDomain({
+			domain: "docs.example.com",
+			entityType: "function",
+			entityId: "hello",
+			cnameTarget: "edge.neon.tech",
+		});
+		const { stream, read } = captureOut();
+		const config = writeConfig(
+			'export default { preview: { functions: { hello: { name: "Hello", source: "./hello.ts", customDomains: ["docs.example.com"] } } } };\n',
+		);
+
+		await planCmd({ ...baseProps(api, stream), output: "table", config });
+
+		expect(read()).toContain("CNAME docs.example.com -> edge.neon.tech");
+	});
+
+	it("exits 1 when plan hits a blocking custom-domain conflict", async () => {
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
+		try {
+			const api = new FakeNeonApi();
+			api.seedCustomDomain({
+				domain: "docs.example.com",
+				entityType: "bucket",
+				entityId: "uploads",
+				cnameTarget: "edge.neon.tech",
+			});
+			const { stream, read } = captureOut();
+			const config = writeConfig(
+				'export default { preview: { functions: { hello: { name: "Hello", source: "./hello.ts", customDomains: ["docs.example.com"] } } } };\n',
+			);
+
+			await planCmd({
+				...baseProps(api, stream),
+				output: "table",
+				config,
+			});
+
+			expect(read()).toContain("customDomain");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			process.exitCode = origExitCode;
+		}
 	});
 
 	it("pulls the branch env into a local .env after a successful apply (like link/checkout)", async () => {

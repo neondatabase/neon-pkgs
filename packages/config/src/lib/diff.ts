@@ -2,6 +2,7 @@ import type {
 	EnableDataApiInput,
 	NeonBranchSnapshot,
 	NeonBucketSnapshot,
+	NeonCustomDomainSnapshot,
 	NeonEndpointSnapshot,
 	NeonFunctionSnapshot,
 	NeonTriggerSnapshot,
@@ -114,6 +115,23 @@ export type PlanStep =
 			triggerId: string;
 			functionSlug: string;
 			trigger: ResolvedFunctionScheduleTrigger;
+	  }
+	| {
+			kind: "register-custom-domain";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			functionSlug: string;
+			domain: string;
+	  }
+	| {
+			kind: "retarget-custom-domain";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			functionSlug: string;
+			previousSlug: string;
+			domain: string;
 	  };
 
 export interface RemoteServiceState {
@@ -136,6 +154,8 @@ export interface RemotePreviewState {
 	buckets: NeonBucketSnapshot[];
 	functions: NeonFunctionSnapshot[];
 	triggers: NeonTriggerSnapshot[];
+	/** Absent on pre-feature snapshots; treated as none. */
+	customDomains?: NeonCustomDomainSnapshot[];
 }
 
 export interface RemoteState {
@@ -171,7 +191,7 @@ export function diffConfig(
 	const plan: PlanStep[] = [];
 	diffBranchConfig({ config, remote, options, plan, conflicts });
 	diffServices({ config, remote, options, plan, conflicts });
-	diffPreview({ config, remote, plan });
+	diffPreview({ config, remote, options, plan, conflicts });
 	return { plan, conflicts };
 }
 
@@ -192,9 +212,11 @@ export function diffConfig(
 function diffPreview(args: {
 	config: ResolvedBranchConfig;
 	remote: RemoteState;
+	options: DiffOptions;
 	plan: PlanStep[];
+	conflicts: ConflictReport[];
 }): void {
-	const { config, remote, plan } = args;
+	const { config, remote, options, plan, conflicts } = args;
 	const preview = config.preview;
 	if (!preview) return;
 	// `remote.preview` is only fetched when the policy has a preview block; treat a missing
@@ -204,6 +226,7 @@ function diffPreview(args: {
 		functions: [],
 		triggers: [],
 	};
+	const customDomains = state.customDomains ?? [];
 
 	for (const bucket of preview.buckets) {
 		if (state.buckets.some((b) => b.name === bucket.name)) continue;
@@ -258,6 +281,79 @@ function diffPreview(args: {
 				});
 			}
 		}
+		diffFunctionCustomDomains({
+			fn,
+			customDomains,
+			remote,
+			options,
+			plan,
+			conflicts,
+		});
+	}
+}
+
+const FUNCTION_CUSTOM_DOMAIN_ENTITY = "function";
+
+function diffFunctionCustomDomains(args: {
+	fn: ResolvedFunctionConfig;
+	customDomains: NeonCustomDomainSnapshot[];
+	remote: RemoteState;
+	options: DiffOptions;
+	plan: PlanStep[];
+	conflicts: ConflictReport[];
+}): void {
+	const { fn, customDomains, remote, options, plan, conflicts } = args;
+	for (const domain of fn.customDomains ?? []) {
+		const existing = customDomains.find((d) => d.domain === domain);
+		if (!existing) {
+			plan.push({
+				kind: "register-custom-domain",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+				functionSlug: fn.slug,
+				domain,
+			});
+			continue;
+		}
+		if (existing.entityType !== FUNCTION_CUSTOM_DOMAIN_ENTITY) {
+			conflicts.push({
+				kind: "branch",
+				identifier: remote.branch.name,
+				field: "customDomain",
+				current: {
+					entityType: existing.entityType,
+					entityId: existing.entityId,
+				},
+				desired: {
+					entityType: FUNCTION_CUSTOM_DOMAIN_ENTITY,
+					entityId: fn.slug,
+				},
+				reason: `custom domain "${domain}" is registered to entity type "${existing.entityType}", which neon.ts cannot retarget. Delete it with \`neon function domains delete\` or stop declaring it.`,
+			});
+			continue;
+		}
+		if (existing.entityId === fn.slug) continue;
+		if (options.updateExisting) {
+			plan.push({
+				kind: "retarget-custom-domain",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+				functionSlug: fn.slug,
+				previousSlug: existing.entityId,
+				domain,
+			});
+			continue;
+		}
+		conflicts.push({
+			kind: "branch",
+			identifier: remote.branch.name,
+			field: "customDomain",
+			current: existing.entityId,
+			desired: fn.slug,
+			reason: `custom domain "${domain}" is registered to function "${existing.entityId}". Pass \`updateExisting: true\` (SDK) or \`--update-existing\` (CLI) to retarget it to "${fn.slug}".`,
+		});
 	}
 }
 

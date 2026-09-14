@@ -5,6 +5,7 @@ import {
 	configInputSchema,
 	dataApiConfigSchema,
 	formatZodIssues,
+	previewInputSchema,
 } from "./schema.js";
 import { COMPUTE_UNITS } from "./types.js";
 
@@ -785,6 +786,61 @@ describe("formatZodIssues", () => {
 		if (result.success) throw new Error("expected failure");
 		expect(formatZodIssues(result.error).join("\n")).toContain(
 			"postgres.computeSettings.autoscalingLimitMaxCu",
+		);
+	});
+});
+
+describe("customDomains", () => {
+	test("rejects a duplicate hostname on one function", () => {
+		const result = previewInputSchema.safeParse({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					customDomains: ["Docs.Example.com", "docs.example.com"],
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toContain(
+			'custom domain "docs.example.com" is listed more than once',
+		);
+	});
+
+	test("rejects the same hostname on two functions", () => {
+		const result = previewInputSchema.safeParse({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					customDomains: ["docs.example.com"],
+				},
+				other: {
+					name: "Other",
+					source: "./other.ts",
+					customDomains: ["docs.example.com"],
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toContain(
+			'custom domain "docs.example.com" is already used by function "hello"',
+		);
+	});
+
+	test("rejects a non-hostname", () => {
+		const result = previewInputSchema.safeParse({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					customDomains: ["not a host"],
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toMatch(
+			/not a DNS hostname/,
 		);
 	});
 });

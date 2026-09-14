@@ -1,3 +1,4 @@
+import { normalizeCustomDomain } from "./custom-domain.js";
 import { parseBranchTtl } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
 import { normalizeExternalPackage } from "./external-packages.js";
@@ -326,6 +327,7 @@ function resolvePreviewConfig(
 	).map(([slug, def]) =>
 		resolveFunctionConfig(slug, def, fnTuning[slug] ?? {}),
 	);
+	assertUniqueResolvedCustomDomains(functions);
 	const buckets = Object.entries(preview.buckets ?? {}).map(
 		([name, def]) => ({
 			name,
@@ -374,7 +376,33 @@ function resolveFunctionConfig(
 					})),
 				}
 			: {}),
+		...(tuning.customDomains !== undefined
+			? { customDomains: tuning.customDomains.map(normalizeCustomDomain) }
+			: def.customDomains !== undefined
+				? {
+						customDomains: def.customDomains.map(
+							normalizeCustomDomain,
+						),
+					}
+				: {}),
 	};
+}
+
+function assertUniqueResolvedCustomDomains(
+	functions: ResolvedFunctionConfig[],
+): void {
+	const byDomain = new Map<string, string>();
+	for (const fn of functions) {
+		for (const domain of fn.customDomains ?? []) {
+			const prior = byDomain.get(domain);
+			if (prior !== undefined) {
+				throw new ConfigValidationError([
+					`custom domain "${domain}" is used by both function "${prior}" and "${fn.slug}"`,
+				]);
+			}
+			byDomain.set(domain, fn.slug);
+		}
+	}
 }
 
 /**

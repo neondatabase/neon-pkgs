@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
 	renderAppliedChanges,
 	renderBranchSettingConflicts,
+	renderCustomDomainFollowup,
 } from "./config_diff";
 
 describe("renderBranchSettingConflicts", () => {
@@ -211,5 +212,50 @@ describe("renderAppliedChanges", () => {
 			color: false,
 		});
 		expect(text.split("\n")[1]).toBe("  - Data API");
+	});
+
+	it("renders a custom-domain register as + domain <hostname>", () => {
+		const changes: AppliedChange[] = [
+			{
+				kind: "service",
+				action: "create",
+				identifier: "domain:docs.example.com",
+				details: { domain: "docs.example.com", slug: "hello" },
+			},
+		];
+		const text = renderAppliedChanges(changes, "Planned changes", {
+			color: false,
+		});
+		expect(text.split("\n")[1]).toBe("  + domain docs.example.com");
+	});
+});
+
+describe("renderCustomDomainFollowup", () => {
+	it("prints CNAME lines and skips an empty target", () => {
+		const text = renderCustomDomainFollowup(
+			{
+				customDomains: [
+					{
+						domain: "docs.example.com",
+						slug: "hello",
+						cnameTarget: "edge.neon.tech",
+					},
+					{
+						domain: "empty.example.com",
+						slug: "hello",
+						cnameTarget: "",
+					},
+					{ domain: "new.example.com", slug: "hello" },
+				],
+				warnings: [
+					"No CNAME target for empty.example.com; this region has no custom-domains front door.",
+				],
+			},
+			{ color: false },
+		);
+		expect(text).toContain("CNAME docs.example.com -> edge.neon.tech");
+		expect(text).not.toContain("CNAME empty.example.com");
+		expect(text).not.toContain("CNAME new.example.com");
+		expect(text).toContain("no custom-domains front door");
 	});
 });

@@ -474,4 +474,209 @@ describe("diffConfig", () => {
 		);
 		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
 	});
+
+	const helloFn = {
+		slug: "fn1",
+		name: "Hello World",
+		source: "./hello.ts",
+		env: {},
+		runtime: "nodejs24" as const,
+		bundler: "esbuild" as const,
+	};
+
+	test("plans a custom-domain register after the function deploy", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{ ...helloFn, customDomains: ["docs.example.com"] },
+					],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: { buckets: [], functions: [], triggers: [] },
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual([
+			"deploy-function",
+			"register-custom-domain",
+		]);
+		expect(diff.plan[1]).toMatchObject({
+			kind: "register-custom-domain",
+			functionSlug: "fn1",
+			domain: "docs.example.com",
+		});
+	});
+
+	test("does not plan a domain step when the function already owns it", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{ ...helloFn, customDomains: ["docs.example.com"] },
+					],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [],
+					functions: [],
+					triggers: [],
+					customDomains: [
+						{
+							domain: "docs.example.com",
+							entityType: "function",
+							entityId: "fn1",
+							cnameTarget: "edge.example",
+						},
+					],
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+	});
+
+	test("omitted customDomains leave remote registrations alone", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [helloFn],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [],
+					functions: [],
+					triggers: [],
+					customDomains: [
+						{
+							domain: "docs.example.com",
+							entityType: "function",
+							entityId: "fn1",
+							cnameTarget: "edge.example",
+						},
+					],
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+	});
+
+	test("retargets a domain to another function only with updateExisting", () => {
+		const other = { ...helloFn, slug: "fn2" };
+		const remoteState = {
+			...remote,
+			preview: {
+				buckets: [],
+				functions: [],
+				triggers: [],
+				customDomains: [
+					{
+						domain: "docs.example.com",
+						entityType: "function",
+						entityId: "fn1",
+						cnameTarget: "edge.example",
+					},
+				],
+			},
+		};
+		const desired = {
+			authEnabled: false,
+			dataApiEnabled: false,
+			preview: {
+				functions: [
+					helloFn,
+					{ ...other, customDomains: ["docs.example.com"] },
+				],
+				buckets: [],
+				aiGatewayEnabled: false,
+			},
+		};
+		const blocked = diffConfig(desired, remoteState, {
+			updateExisting: false,
+		});
+		expect(blocked.plan.map((p) => p.kind)).toEqual([
+			"deploy-function",
+			"deploy-function",
+		]);
+		expect(blocked.conflicts).toEqual([
+			expect.objectContaining({
+				field: "customDomain",
+				current: "fn1",
+				desired: "fn2",
+			}),
+		]);
+		expect(blocked.conflicts[0]?.reason).toMatch(/updateExisting/);
+
+		const allowed = diffConfig(desired, remoteState, {
+			updateExisting: true,
+		});
+		expect(allowed.plan.map((p) => p.kind)).toEqual([
+			"deploy-function",
+			"deploy-function",
+			"retarget-custom-domain",
+		]);
+		expect(allowed.plan[2]).toMatchObject({
+			kind: "retarget-custom-domain",
+			functionSlug: "fn2",
+			previousSlug: "fn1",
+			domain: "docs.example.com",
+		});
+	});
+
+	test("unknown entity types are blocking even with updateExisting", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{ ...helloFn, customDomains: ["docs.example.com"] },
+					],
+					buckets: [],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [],
+					functions: [],
+					triggers: [],
+					customDomains: [
+						{
+							domain: "docs.example.com",
+							entityType: "bucket",
+							entityId: "uploads",
+							cnameTarget: "edge.example",
+						},
+					],
+				},
+			},
+			{ updateExisting: true },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+		expect(diff.conflicts).toEqual([
+			expect.objectContaining({ field: "customDomain" }),
+		]);
+		expect(diff.conflicts[0]?.reason).not.toMatch(/updateExisting/);
+	});
 });

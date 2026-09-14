@@ -840,4 +840,100 @@ describe("defineConfig — Data API config", () => {
 			},
 		});
 	});
+
+	test("normalizes customDomains and lets tuning replace including []", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						customDomains: ["Docs.Example.COM."],
+					},
+				},
+			},
+			branch: (branch) => ({
+				preview: {
+					functions: {
+						hello: {
+							customDomains: branch.isDefault
+								? ["docs.example.com"]
+								: [],
+						},
+					},
+				},
+			}),
+		});
+		expect(
+			resolveConfig(config, {
+				name: "main",
+				exists: true,
+				isDefault: true,
+			}).preview?.functions[0]?.customDomains,
+		).toEqual(["docs.example.com"]);
+		expect(
+			resolveConfig(config, {
+				name: "dev",
+				exists: true,
+				isDefault: false,
+			}).preview?.functions[0]?.customDomains,
+		).toEqual([]);
+	});
+
+	test("inherits static customDomains when tuning omits the key", () => {
+		const config = defineConfig({
+			preview: {
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						customDomains: ["docs.example.com"],
+					},
+				},
+			},
+			branch: () => ({
+				preview: {
+					functions: {
+						hello: { runtime: "nodejs24" },
+					},
+				},
+			}),
+		});
+		expect(
+			resolveConfig(config, { name: "dev", exists: true }).preview
+				?.functions[0]?.customDomains,
+		).toEqual(["docs.example.com"]);
+	});
+
+	test("rejects the same hostname on two functions after merge", () => {
+		expect(() =>
+			resolveConfig(
+				defineConfig({
+					preview: {
+						functions: {
+							hello: {
+								name: "Hello",
+								source: "./hello.ts",
+								customDomains: ["docs.example.com"],
+							},
+							other: {
+								name: "Other",
+								source: "./other.ts",
+							},
+						},
+					},
+					branch: () => ({
+						preview: {
+							functions: {
+								other: {
+									customDomains: ["docs.example.com"],
+								},
+							},
+						},
+					}),
+				}),
+				{ name: "main", exists: true },
+			),
+		).toThrow(/used by both function "hello" and "other"/);
+	});
 });

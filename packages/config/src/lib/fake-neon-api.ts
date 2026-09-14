@@ -1,3 +1,4 @@
+import { ErrorCode, PlatformError } from "./errors.js";
 import type {
 	CreateBranchInput,
 	CreateBucketInput,
@@ -15,6 +16,7 @@ import type {
 	NeonCredentialMeta,
 	NeonCredentialReveal,
 	NeonCredentialSecret,
+	NeonCustomDomainSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
@@ -72,6 +74,15 @@ export class FakeNeonApi implements NeonApi {
 	/** Preview functions, keyed by `${projectId}:${branchId}`. */
 	private readonly functions = new Map<string, NeonFunctionSnapshot[]>();
 	private readonly triggers = new Map<string, NeonTriggerSnapshot[]>();
+	/** Custom domains keyed by normalized hostname (globally unique). */
+	private readonly customDomains = new Map<
+		string,
+		{
+			projectId: string;
+			branchId: string;
+			snapshot: NeonCustomDomainSnapshot;
+		}
+	>();
 	/** Monotonic per-function deployment counter, keyed by `${projectId}:${branchId}:${slug}`. */
 	private readonly functionDeployments = new Map<string, number>();
 	/** Issued credentials (incl. secrets), keyed by `${projectId}:${branchId}`. */
@@ -898,6 +909,114 @@ export class FakeNeonApi implements NeonApi {
 		const list = this.triggers.get(key) ?? [];
 		list.push({ ...snapshot });
 		this.triggers.set(key, list);
+	}
+
+	async listBranchCustomDomains(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonCustomDomainSnapshot[]> {
+		this.history.push({
+			method: "listBranchCustomDomains",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return [...this.customDomains.values()]
+			.filter((e) => e.projectId === projectId && e.branchId === branchId)
+			.map((e) => clone(e.snapshot));
+	}
+
+	async registerBranchCustomDomain(
+		projectId: string,
+		branchId: string,
+		input: { domain: string; functionSlug: string },
+	): Promise<NeonCustomDomainSnapshot> {
+		this.history.push({
+			method: "registerBranchCustomDomain",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const functions = this.functions.get(`${projectId}:${branchId}`) ?? [];
+		if (!functions.some((fn) => fn.slug === input.functionSlug)) {
+			throw new PlatformError(
+				ErrorCode.NotFound,
+				`function ${JSON.stringify(input.functionSlug)} not found on branch ${branchId}`,
+				{ details: { status: 404 } },
+			);
+		}
+		const existing = this.customDomains.get(input.domain);
+		if (existing) {
+			if (
+				existing.projectId === projectId &&
+				existing.branchId === branchId &&
+				existing.snapshot.entityType === "function" &&
+				existing.snapshot.entityId === input.functionSlug
+			) {
+				return clone(existing.snapshot);
+			}
+			throw new PlatformError(
+				ErrorCode.Conflict,
+				`a conflicting resource already exists on Neon.`,
+				{
+					details: {
+						status: 409,
+						neonMessage: "domain already registered",
+					},
+				},
+			);
+		}
+		const snapshot: NeonCustomDomainSnapshot = {
+			domain: input.domain,
+			entityType: "function",
+			entityId: input.functionSlug,
+			cnameTarget: "custom-domains.fake.neon.tech",
+		};
+		this.customDomains.set(input.domain, {
+			projectId,
+			branchId,
+			snapshot,
+		});
+		return clone(snapshot);
+	}
+
+	async deleteBranchCustomDomain(
+		projectId: string,
+		branchId: string,
+		domain: string,
+	): Promise<void> {
+		this.history.push({
+			method: "deleteBranchCustomDomain",
+			args: [projectId, branchId, domain],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const existing = this.customDomains.get(domain);
+		if (
+			!existing ||
+			existing.projectId !== projectId ||
+			existing.branchId !== branchId
+		) {
+			throw new PlatformError(
+				ErrorCode.NotFound,
+				`custom domain ${JSON.stringify(domain)} not found on branch ${branchId}`,
+				{ details: { status: 404 } },
+			);
+		}
+		this.customDomains.delete(domain);
+	}
+
+	/** Test helper: attach a custom domain to a branch. */
+	seedCustomDomain(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonCustomDomainSnapshot,
+	): void {
+		this.customDomains.set(snapshot.domain, {
+			projectId,
+			branchId,
+			snapshot: { ...snapshot },
+		});
 	}
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────

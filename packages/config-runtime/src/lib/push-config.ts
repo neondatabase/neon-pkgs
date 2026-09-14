@@ -6,6 +6,7 @@ import {
 	ErrorCode,
 	type NeonApi,
 	type NeonBranchSnapshot,
+	type NeonCustomDomainSnapshot,
 	type PlanStep,
 	PlatformError,
 	PushAbortedError,
@@ -286,6 +287,13 @@ export async function pushConfig(
 		warnings,
 	};
 	if (remoteProject.orgId) result.orgId = remoteProject.orgId;
+	enrichDeclaredCustomDomains({
+		result,
+		preview: remote.preview,
+		functions: resolved.preview?.functions ?? [],
+		applied,
+		warnings,
+	});
 	return result;
 }
 
@@ -295,7 +303,8 @@ function isOverrideStep(step: PlanStep): boolean {
 		step.kind === "update-branch-protected" ||
 		step.kind === "update-endpoint" ||
 		step.kind === "update-data-api" ||
-		step.kind === "disable-data-api"
+		step.kind === "disable-data-api" ||
+		step.kind === "retarget-custom-domain"
 	);
 }
 
@@ -392,6 +401,27 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 					enabled: step.trigger.enabled,
 				},
 			};
+		case "register-custom-domain":
+			return {
+				kind: "service",
+				action: "create",
+				identifier: `domain:${step.domain}`,
+				details: {
+					domain: step.domain,
+					slug: step.functionSlug,
+				},
+			};
+		case "retarget-custom-domain":
+			return {
+				kind: "service",
+				action: "update",
+				identifier: `domain:${step.domain}`,
+				details: {
+					domain: step.domain,
+					slug: step.functionSlug,
+					previousSlug: step.previousSlug,
+				},
+			};
 	}
 }
 
@@ -486,7 +516,13 @@ async function resolvePreviewState(args: {
 	const wantsTriggers = desired.functions.some(
 		(fn) => (fn.triggers?.length ?? 0) > 0,
 	);
-	const [buckets, functions, triggers] = await Promise.all([
+	const wantsCustomDomains = desired.functions.some(
+		(fn) => (fn.customDomains?.length ?? 0) > 0,
+	);
+	const customDomainApi = wantsCustomDomains
+		? requireCustomDomainApi(api)
+		: undefined;
+	const [buckets, functions, triggers, customDomains] = await Promise.all([
 		desired.buckets.length > 0
 			? api.listBranchBuckets(projectId, branchId)
 			: Promise.resolve([]),
@@ -496,8 +532,13 @@ async function resolvePreviewState(args: {
 		wantsTriggers
 			? api.listBranchTriggers(projectId, branchId)
 			: Promise.resolve([]),
+		customDomainApi
+			? customDomainApi.listBranchCustomDomains(projectId, branchId)
+			: Promise.resolve([]),
 	]);
-	return { buckets, functions, triggers };
+	const preview: RemotePreviewState = { buckets, functions, triggers };
+	if (wantsCustomDomains) preview.customDomains = customDomains;
+	return preview;
 }
 
 /**
@@ -720,6 +761,77 @@ async function applyStep(
 				},
 			};
 		}
+		case "register-custom-domain": {
+			const methods = requireCustomDomainApi(ctx.api);
+			let snapshot: NeonCustomDomainSnapshot;
+			try {
+				snapshot = await methods.registerBranchCustomDomain(
+					ctx.remoteProjectId,
+					step.branchId,
+					{ domain: step.domain, functionSlug: step.functionSlug },
+				);
+			} catch (err) {
+				throw rewriteCustomDomainConflict(err, step.domain);
+			}
+			return {
+				kind: "service",
+				action: "create",
+				identifier: `domain:${step.domain}`,
+				details: {
+					domain: snapshot.domain,
+					slug: step.functionSlug,
+					cnameTarget: snapshot.cnameTarget,
+				},
+			};
+		}
+		case "retarget-custom-domain": {
+			const methods = requireCustomDomainApi(ctx.api);
+			await methods.deleteBranchCustomDomain(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.domain,
+			);
+			let snapshot: NeonCustomDomainSnapshot;
+			try {
+				snapshot = await methods.registerBranchCustomDomain(
+					ctx.remoteProjectId,
+					step.branchId,
+					{ domain: step.domain, functionSlug: step.functionSlug },
+				);
+			} catch (err) {
+				const rewritten = rewriteCustomDomainConflict(err, step.domain);
+				const message =
+					rewritten instanceof PlatformError
+						? rewritten.message
+						: rewritten instanceof Error
+							? rewritten.message
+							: String(rewritten);
+				throw new PlatformError(
+					rewritten instanceof PlatformError
+						? rewritten.code
+						: ErrorCode.ServerError,
+					`Deleted the previous registration of ${JSON.stringify(step.domain)} (function ${JSON.stringify(step.previousSlug)}) but failed to register it on ${JSON.stringify(step.functionSlug)}. The hostname is currently unregistered. ${message}`,
+					{
+						cause: rewritten instanceof Error ? rewritten : err,
+						details:
+							rewritten instanceof PlatformError
+								? { ...rewritten.details }
+								: {},
+					},
+				);
+			}
+			return {
+				kind: "service",
+				action: "update",
+				identifier: `domain:${step.domain}`,
+				details: {
+					domain: snapshot.domain,
+					slug: step.functionSlug,
+					previousSlug: step.previousSlug,
+					cnameTarget: snapshot.cnameTarget,
+				},
+			};
+		}
 	}
 }
 
@@ -786,4 +898,105 @@ function functionSlugFromIdentifier(identifier: string): string | undefined {
 	return identifier.startsWith(prefix)
 		? identifier.slice(prefix.length)
 		: undefined;
+}
+
+function requireCustomDomainApi(api: NeonApi): {
+	listBranchCustomDomains: NonNullable<NeonApi["listBranchCustomDomains"]>;
+	registerBranchCustomDomain: NonNullable<
+		NeonApi["registerBranchCustomDomain"]
+	>;
+	deleteBranchCustomDomain: NonNullable<NeonApi["deleteBranchCustomDomain"]>;
+} {
+	const list = api.listBranchCustomDomains;
+	const register = api.registerBranchCustomDomain;
+	const remove = api.deleteBranchCustomDomain;
+	if (!list || !register || !remove) {
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"This NeonApi adapter does not implement custom domains. Implement listBranchCustomDomains, registerBranchCustomDomain, and deleteBranchCustomDomain, or remove customDomains from neon.ts.",
+		);
+	}
+	return {
+		listBranchCustomDomains: list.bind(api),
+		registerBranchCustomDomain: register.bind(api),
+		deleteBranchCustomDomain: remove.bind(api),
+	};
+}
+
+function rewriteCustomDomainConflict(err: unknown, domain: string): unknown {
+	if (!(err instanceof PlatformError) || err.code !== ErrorCode.Conflict) {
+		return err;
+	}
+	const neonMessage =
+		typeof err.details.neonMessage === "string"
+			? err.details.neonMessage
+			: undefined;
+	const requestId =
+		typeof err.details.requestId === "string"
+			? err.details.requestId
+			: undefined;
+	const status =
+		typeof err.details.status === "number" ? err.details.status : undefined;
+	const apiParts = [
+		status !== undefined ? `HTTP ${status}` : undefined,
+		neonMessage ? `Neon API said: "${neonMessage}"` : undefined,
+		requestId ? `request id ${requestId}` : undefined,
+	].filter((part): part is string => part !== undefined);
+	return new PlatformError(
+		ErrorCode.Conflict,
+		[
+			`Hostname ${JSON.stringify(domain)} is already registered to another resource.`,
+			apiParts.length > 0 ? `(${apiParts.join("; ")})` : undefined,
+			"Declare it only on the branch that owns it (use the branch closure), or delete it there first with `neon function domains delete`.",
+		]
+			.filter((part): part is string => part !== undefined)
+			.join(" "),
+		{ cause: err, details: { ...err.details } },
+	);
+}
+
+function enrichDeclaredCustomDomains(args: {
+	result: PushResult;
+	preview: RemotePreviewState | undefined;
+	functions: ResolvedFunctionConfig[];
+	applied: AppliedChange[];
+	warnings: string[];
+}): void {
+	const declared: Array<{ domain: string; slug: string }> = [];
+	for (const fn of args.functions) {
+		for (const domain of fn.customDomains ?? []) {
+			declared.push({ domain, slug: fn.slug });
+		}
+	}
+	if (declared.length === 0) return;
+
+	const cnameByDomain = new Map<string, string>();
+	for (const remote of args.preview?.customDomains ?? []) {
+		cnameByDomain.set(remote.domain, remote.cnameTarget);
+	}
+	for (const change of args.applied) {
+		const domain =
+			typeof change.details?.domain === "string"
+				? change.details.domain
+				: undefined;
+		const cnameTarget = change.details?.cnameTarget;
+		if (domain !== undefined && typeof cnameTarget === "string") {
+			cnameByDomain.set(domain, cnameTarget);
+		}
+	}
+
+	args.result.customDomains = declared.map(({ domain, slug }) => {
+		const entry: { domain: string; slug: string; cnameTarget?: string } = {
+			domain,
+			slug,
+		};
+		const cnameTarget = cnameByDomain.get(domain);
+		if (cnameTarget !== undefined) entry.cnameTarget = cnameTarget;
+		if (cnameTarget === "") {
+			args.warnings.push(
+				`No CNAME target for ${domain}; this region has no custom-domains front door.`,
+			);
+		}
+		return entry;
+	});
 }

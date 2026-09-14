@@ -237,6 +237,13 @@ export interface UpdateTriggerInput {
 	enabled?: boolean;
 }
 
+export interface NeonCustomDomainSnapshot {
+	domain: string;
+	entityType: string;
+	entityId: string;
+	cnameTarget: string;
+}
+
 // ─── Preview: branch-scoped credentials ─────────────────────────────────────
 
 /**
@@ -524,6 +531,28 @@ export interface NeonApi {
 		projectId: string,
 		branchId: string,
 		triggerId: string,
+	): Promise<void>;
+
+	/**
+	 * List custom domains on a branch. Optional so a pre-feature `NeonApi` still
+	 * type-checks; `pushConfig` requires the method only when the policy declares
+	 * domains.
+	 */
+	listBranchCustomDomains?(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonCustomDomainSnapshot[]>;
+
+	registerBranchCustomDomain?(
+		projectId: string,
+		branchId: string,
+		input: { domain: string; functionSlug: string },
+	): Promise<NeonCustomDomainSnapshot>;
+
+	deleteBranchCustomDomain?(
+		projectId: string,
+		branchId: string,
+		domain: string,
 	): Promise<void>;
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────

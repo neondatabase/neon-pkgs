@@ -475,6 +475,19 @@ export interface FunctionDef {
 	 * alone.
 	 */
 	triggers?: FunctionScheduleTriggerDef[];
+	/**
+	 * Customer-owned hostnames that should point at this function on the branch (beta).
+	 * v1 only supports functions. Hostnames are unique across functions in the resolved
+	 * policy. Applied after the function is deployed. Domains that exist remotely but
+	 * are omitted here are left alone — delete with `neon function domains delete`.
+	 *
+	 * A hostname is globally unique. Child-branch checkout will 409 if this list is
+	 * inherited onto a branch that does not own the name; replace it with `[]` from
+	 * {@link FunctionTuning} on those branches.
+	 *
+	 * @example ["docs.example.com"]
+	 */
+	customDomains?: string[];
 }
 
 /**
@@ -550,12 +563,17 @@ export interface PreviewInput {
 /**
  * Per-branch deploy tuning for a single function. Returned (per slug) by the `branch`
  * closure. Deliberately **cannot** change the function's existence, source, name, env
- * **keys**, or memory — only runtime selection is currently configurable — so the static
- * secret/function set stays sound.
+ * **keys**, or memory — so the static secret/function set stays sound. Runtime selection
+ * and the custom-domain list may vary per branch.
  */
 export interface FunctionTuning {
 	/** Runtime to execute the function with. Defaults to `"nodejs24"`. */
 	runtime?: FunctionRuntime;
+	/**
+	 * When present, replaces {@link FunctionDef.customDomains} for this branch.
+	 * `[]` registers nothing on this branch. Omit the key to inherit the static list.
+	 */
+	customDomains?: string[];
 }
 
 /**
@@ -681,6 +699,12 @@ export interface ResolvedFunctionConfig {
 	 */
 	dev?: FunctionDevConfig;
 	triggers?: ResolvedFunctionScheduleTrigger[];
+	/**
+	 * Normalized hostnames this function should own on the branch. Absent when neither
+	 * the definition nor the branch tuning declared the field. Empty when tuning replaced
+	 * the list with `[]`.
+	 */
+	customDomains?: string[];
 }
 
 export interface ResolvedFunctionScheduleTrigger {
@@ -784,6 +808,17 @@ export interface PushResult {
 	dryRun: boolean;
 	applied: AppliedChange[];
 	conflicts: ConflictReport[];
+	/**
+	 * Declared custom domains for this branch after the push (or what apply would
+	 * leave in place). `cnameTarget` is omitted when the domain is not registered yet
+	 * (dry-run of a new registration). An empty string means the region has no
+	 * custom-domains front door.
+	 */
+	customDomains?: Array<{
+		domain: string;
+		slug: string;
+		cnameTarget?: string;
+	}>;
 	/**
 	 * Advisory findings from the push — a function that bundles a native dependency it never
 	 * declared, or a staged package whose version could not be pinned.

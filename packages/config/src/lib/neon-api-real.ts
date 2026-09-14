@@ -57,6 +57,7 @@ import type {
 	NeonCredentialMeta,
 	NeonCredentialReveal,
 	NeonCredentialSecret,
+	NeonCustomDomainSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,
@@ -256,6 +257,18 @@ const triggersListResponseSchema = z.object({
 	triggers: z.array(scheduleTriggerSchema),
 });
 
+const customDomainApiSchema = z.object({
+	domain: z.string(),
+	entity_type: z.string(),
+	entity_id: z.string(),
+	cname_target: z.string(),
+});
+const customDomainsListResponseSchema = z.object({
+	custom_domains: z.array(customDomainApiSchema),
+	pagination: z.object({ next: z.string().optional() }).optional(),
+});
+const CUSTOM_DOMAINS_LIST_LIMIT = 100;
+
 // ─── Preview: branch-scoped credentials ─────────────────────────────────────
 
 const credentialScopeSchema = z.enum([
@@ -401,6 +414,27 @@ function readHttpStatusFromError(err: unknown): number | undefined {
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Walk a cursor-paginated Neon list until `pagination.next` is absent or repeats.
+ * Custom domains are the first preview list that can span pages; functions/triggers
+ * still take a single page.
+ */
+export async function collectCursorPages<T>(
+	fetchPage: (
+		cursor: string | undefined,
+	) => Promise<{ items: T[]; next?: string }>,
+): Promise<T[]> {
+	const items: T[] = [];
+	let cursor: string | undefined;
+	for (;;) {
+		const page = await fetchPage(cursor);
+		items.push(...page.items);
+		if (!page.next || page.next === cursor) break;
+		cursor = page.next;
+	}
+	return items;
 }
 
 class RealNeonApi implements NeonApi {
@@ -846,8 +880,11 @@ class RealNeonApi implements NeonApi {
 		});
 	}
 
-	private async getJson(path: string): Promise<unknown> {
-		return this.request("GET", path);
+	private async getJson(
+		path: string,
+		query?: Record<string, string | number | undefined>,
+	): Promise<unknown> {
+		return this.request("GET", withQuery(path, query));
 	}
 
 	private async deleteJson(path: string): Promise<unknown> {
@@ -1301,6 +1338,80 @@ class RealNeonApi implements NeonApi {
 		);
 	}
 
+	async listBranchCustomDomains(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonCustomDomainSnapshot[]> {
+		try {
+			return await this.call(
+				`listBranchCustomDomains(${projectId}/${branchId})`,
+				async () =>
+					collectCursorPages(async (cursor) => {
+						const data = await this.getJson(
+							customDomainsPath(projectId, branchId),
+							{
+								limit: CUSTOM_DOMAINS_LIST_LIMIT,
+								...(cursor ? { cursor } : {}),
+							},
+						);
+						const parsed =
+							customDomainsListResponseSchema.parse(data);
+						return {
+							items: parsed.custom_domains.map(
+								customDomainToSnapshot,
+							),
+							...(parsed.pagination?.next
+								? { next: parsed.pagination.next }
+								: {}),
+						};
+					}),
+				{ projectId },
+			);
+		} catch (err) {
+			throw previewUnavailableError(err, "Custom domains");
+		}
+	}
+
+	async registerBranchCustomDomain(
+		projectId: string,
+		branchId: string,
+		input: { domain: string; functionSlug: string },
+	): Promise<NeonCustomDomainSnapshot> {
+		return this.call(
+			`registerBranchCustomDomain(${projectId}/${branchId}/${input.domain})`,
+			async () => {
+				const data = await this.postJson(
+					customDomainsPath(projectId, branchId),
+					{
+						domain: input.domain,
+						entity_type: "function",
+						entity_id: input.functionSlug,
+					},
+				);
+				return customDomainToSnapshot(
+					customDomainApiSchema.parse(data),
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	async deleteBranchCustomDomain(
+		projectId: string,
+		branchId: string,
+		domain: string,
+	): Promise<void> {
+		await this.call(
+			`deleteBranchCustomDomain(${projectId}/${branchId}/${domain})`,
+			async () => {
+				await this.deleteJson(
+					`${customDomainsPath(projectId, branchId)}/${encodeURIComponent(domain)}`,
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
 	//
 	// No methods: the AI Gateway is always available on a branch (credential-gated, not
@@ -1421,6 +1532,35 @@ function credentialsPath(projectId: string, branchId: string): string {
 
 function triggersPath(projectId: string, branchId: string): string {
 	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/triggers`;
+}
+
+function customDomainsPath(projectId: string, branchId: string): string {
+	return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/custom-domains`;
+}
+
+function withQuery(
+	path: string,
+	query?: Record<string, string | number | undefined>,
+): string {
+	if (!query) return path;
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(query)) {
+		if (value === undefined) continue;
+		params.set(key, String(value));
+	}
+	const qs = params.toString();
+	return qs.length > 0 ? `${path}?${qs}` : path;
+}
+
+function customDomainToSnapshot(
+	data: z.infer<typeof customDomainApiSchema>,
+): NeonCustomDomainSnapshot {
+	return {
+		domain: data.domain,
+		entityType: data.entity_type,
+		entityId: data.entity_id,
+		cnameTarget: data.cname_target,
+	};
 }
 
 function triggerToSnapshot(

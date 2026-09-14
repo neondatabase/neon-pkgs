@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ErrorCode, PlatformError } from "./errors.js";
 import {
 	buildFunctionDeployForm,
+	collectCursorPages,
 	createNeonAuthRestInput,
 	isPreviewFeatureUnavailable,
 	previewUnavailableError,
@@ -313,5 +314,34 @@ describe("previewUnavailableError", () => {
 			details: { status: 401 },
 		});
 		expect(previewUnavailableError(original, "Functions")).toBe(original);
+	});
+});
+
+describe("collectCursorPages", () => {
+	test("walks every page and stops when next repeats", async () => {
+		const pages = [
+			{ items: ["a"], next: "p2" },
+			{ items: ["b"], next: "p2" },
+		];
+		let calls = 0;
+		const items = await collectCursorPages(async () => {
+			const page = pages[calls];
+			if (page === undefined) throw new Error("over-fetched");
+			calls += 1;
+			return page;
+		});
+		expect(items).toEqual(["a", "b"]);
+		expect(calls).toBe(2);
+	});
+
+	test("passes the previous next cursor into the following fetch", async () => {
+		const seen: Array<string | undefined> = [];
+		const items = await collectCursorPages(async (cursor) => {
+			seen.push(cursor);
+			if (cursor === undefined) return { items: [1], next: "two" };
+			return { items: [2] };
+		});
+		expect(seen).toEqual([undefined, "two"]);
+		expect(items).toEqual([1, 2]);
 	});
 });

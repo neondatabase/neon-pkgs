@@ -166,6 +166,7 @@ export type {
 	NeonCredentialMeta,
 	NeonCredentialReveal,
 	NeonCredentialSecret,
+	NeonCustomDomainSnapshot,
 	NeonDataApiSnapshot,
 	NeonDatabaseSnapshot,
 	NeonEndpointSnapshot,

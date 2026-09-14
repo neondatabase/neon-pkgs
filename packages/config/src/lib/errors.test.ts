@@ -54,4 +54,20 @@ describe("PushConflictError", () => {
 		expect(err.message).toContain("[branch:main] protected");
 		expect(err.message).toContain("--update-existing");
 	});
+
+	test("unknown custom-domain entity types do not suggest --update-existing", () => {
+		const err = new PushConflictError([
+			{
+				kind: "branch",
+				identifier: "main",
+				field: "customDomain",
+				current: { entityType: "bucket", entityId: "uploads" },
+				desired: { entityType: "function", entityId: "hello" },
+				reason: 'custom domain "docs.example.com" is registered to entity type "bucket", which neon.ts cannot retarget. Delete it with `neon function domains delete` or stop declaring it.',
+			},
+		]);
+		expect(err.message).toContain("customDomain");
+		expect(err.message).not.toContain("--update-existing");
+		expect(err.message).not.toContain("updateExisting");
+	});
 });

@@ -136,6 +136,9 @@ const serviceLabel = (identifier: string): string => {
 	if (identifier.startsWith("function:")) {
 		return `function ${identifier.slice("function:".length)}`;
 	}
+	if (identifier.startsWith("domain:")) {
+		return `domain ${identifier.slice("domain:".length)}`;
+	}
 	return identifier;
 };
 
@@ -240,5 +243,44 @@ export const renderBranchSettingConflicts = (
 		),
 		...renderBranchGroups(byBranch, paint),
 	];
+	return lines.join("\n");
+};
+
+/**
+ * CNAME instructions plus push warnings. Empty `cnameTarget` is kept on the
+ * structured result but must not print as `CNAME x -> `.
+ */
+export const renderCustomDomainFollowup = (
+	result: {
+		customDomains?: Array<{
+			domain: string;
+			slug: string;
+			cnameTarget?: string;
+		}>;
+		warnings: string[];
+	},
+	opts: { color: boolean },
+): string => {
+	const paint = palette(opts.color);
+	const lines: string[] = [];
+	const cnames = (result.customDomains ?? []).filter(
+		(d) => d.cnameTarget !== undefined && d.cnameTarget !== "",
+	);
+	if (cnames.length > 0) {
+		lines.push(paint.title("Custom domains"));
+		for (const d of cnames) {
+			lines.push(`  CNAME ${d.domain} -> ${d.cnameTarget}`);
+		}
+		lines.push(
+			"  Point each hostname at the CNAME target. Neon does not create DNS records.",
+		);
+	}
+	if (result.warnings.length > 0) {
+		if (lines.length > 0) lines.push("");
+		lines.push(paint.title("Warnings"));
+		for (const warning of result.warnings) {
+			lines.push(`  ${warning}`);
+		}
+	}
 	return lines.join("\n");
 };
