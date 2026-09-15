@@ -1,5 +1,17 @@
 # neon
 
+## 4.18.0
+
+### Minor Changes
+
+- 7d4b4ee: Declare function custom domains in neon.ts. The static list applies on the default branch; other branches need an explicit list. `plan` / `apply` register or retarget them and print CNAME targets.
+
+### Patch Changes
+
+- Updated dependencies [7d4b4ee]
+  - @neon/config@1.5.0
+  - @neon/config-runtime@1.4.0
+
 ## 4.17.4
 
 ### Patch Changes
