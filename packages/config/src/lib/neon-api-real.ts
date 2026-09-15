@@ -1386,7 +1386,7 @@ class RealNeonApi implements NeonApi {
 				{ projectId },
 			);
 		} catch (err) {
-			throw previewUnavailableError(err, "Custom domains");
+			throw customDomainsUnavailableError(err);
 		}
 	}
 
@@ -1395,23 +1395,27 @@ class RealNeonApi implements NeonApi {
 		branchId: string,
 		input: { domain: string; functionSlug: string },
 	): Promise<NeonCustomDomainSnapshot> {
-		return this.call(
-			`registerBranchCustomDomain(${projectId}/${branchId}/${input.domain})`,
-			async () => {
-				const data = await this.postJson(
-					customDomainsPath(projectId, branchId),
-					{
-						domain: input.domain,
-						entity_type: "function",
-						entity_id: input.functionSlug,
-					},
-				);
-				return customDomainToSnapshot(
-					customDomainApiSchema.parse(data),
-				);
-			},
-			{ projectId, mutating: true },
-		);
+		try {
+			return await this.call(
+				`registerBranchCustomDomain(${projectId}/${branchId}/${input.domain})`,
+				async () => {
+					const data = await this.postJson(
+						customDomainsPath(projectId, branchId),
+						{
+							domain: input.domain,
+							entity_type: "function",
+							entity_id: input.functionSlug,
+						},
+					);
+					return customDomainToSnapshot(
+						customDomainApiSchema.parse(data),
+					);
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			throw customDomainsUnavailableError(err);
+		}
 	}
 
 	async deleteBranchCustomDomain(
@@ -1419,15 +1423,19 @@ class RealNeonApi implements NeonApi {
 		branchId: string,
 		domain: string,
 	): Promise<void> {
-		await this.call(
-			`deleteBranchCustomDomain(${projectId}/${branchId}/${domain})`,
-			async () => {
-				await this.deleteJson(
-					`${customDomainsPath(projectId, branchId)}/${encodeURIComponent(domain)}`,
-				);
-			},
-			{ projectId, mutating: true },
-		);
+		try {
+			await this.call(
+				`deleteBranchCustomDomain(${projectId}/${branchId}/${domain})`,
+				async () => {
+					await this.deleteJson(
+						`${customDomainsPath(projectId, branchId)}/${encodeURIComponent(domain)}`,
+					);
+				},
+				{ projectId, mutating: true },
+			);
+		} catch (err) {
+			throw customDomainsUnavailableError(err);
+		}
 	}
 
 	// ─── Preview: AI Gateway ───────────────────────────────────────────────────
@@ -1796,6 +1804,57 @@ function platformFeatureUnavailableHint(
 		return "The endpoint is reachable but refused the request — Neon may be having a transient incident. Retry shortly; if it keeps failing, check https://neonstatus.com and contact Neon support.";
 	}
 	return PLATFORM_BETA_REGION_GUIDANCE_SHORT;
+}
+
+const CUSTOM_DOMAINS_UNAVAILABLE_HINT =
+	"Custom domains are enabled per project; deploying functions does not enable them. Remove `customDomains` from the function in neon.ts to continue deploying functions.";
+
+/**
+ * Custom-domain 404s in Functions-capable regions are project enablement, not a
+ * missing-region problem.
+ */
+export function customDomainsUnavailableError(err: unknown): unknown {
+	if (!isPreviewFeatureUnavailable(err)) return err;
+	const details = err instanceof PlatformError ? err.details : {};
+	const status =
+		typeof details.status === "number" ? details.status : undefined;
+	const neonMessage =
+		typeof details.neonMessage === "string"
+			? details.neonMessage
+			: undefined;
+	const requestId =
+		typeof details.requestId === "string" ? details.requestId : undefined;
+
+	const statusText = status ? HTTP_STATUS_TEXT[status] : undefined;
+	const apiParts = [
+		status
+			? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
+			: undefined,
+		neonMessage ? `Neon API said: "${neonMessage}"` : undefined,
+		requestId ? `request id ${requestId}` : undefined,
+	].filter((part): part is string => part !== undefined);
+	const apiContext = apiParts.length > 0 ? ` (${apiParts.join("; ")})` : "";
+
+	const hint =
+		status === 503 && !isRegionUnavailableNeonMessage(neonMessage)
+			? "The endpoint is reachable but refused the request — Neon may be having a transient incident. Retry shortly; if it keeps failing, check https://neonstatus.com and contact Neon support."
+			: CUSTOM_DOMAINS_UNAVAILABLE_HINT;
+
+	return new PlatformError(
+		ErrorCode.FeatureUnavailable,
+		[
+			`Custom domains aren't available for this Neon project${apiContext}.`,
+			hint,
+		].join(" "),
+		{
+			cause: err,
+			details: {
+				feature: "Custom domains",
+				...(status !== undefined ? { status } : {}),
+				...(requestId !== undefined ? { requestId } : {}),
+			},
+		},
+	);
 }
 
 /**
