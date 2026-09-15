@@ -4,6 +4,7 @@ import {
 	requireApiKey,
 } from "@neon/e2e-harness";
 import { createNeonClient, type NeonClient } from "../src/index.js";
+import { formatNeonError, isNeonError } from "../src/neon/errors.js";
 
 export {
 	DEFAULT_REGION,
@@ -43,7 +44,12 @@ export function expectOk<T>(result: {
 	error?: { message: string } | undefined;
 }): T {
 	if (result.error) {
-		throw new Error(`expected success, got: ${result.error.message}`);
+		const detail = isNeonError(result.error)
+			? formatNeonError(result.error)
+			: result.error.message;
+		throw new Error(`expected success, got: ${detail}`, {
+			cause: result.error,
+		});
 	}
 	return result.data as T;
 }
