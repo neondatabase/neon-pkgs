@@ -99,6 +99,8 @@ Retarget waits for this apply's function deployment, then re-reads ownership bef
 
 DNS is yours: `plan` / `apply` print `CNAME <hostname> -> <cname_target>` when the hostname is registered to the declared function and the API returns a target. A blocking conflict does not print CNAME. Point the hostname at that target. An empty target means the region has no custom-domains front door.
 
+A project that can deploy functions can still reject custom-domain list and register with HTTP 404 until custom domains are enabled for that project.
+
 ### Shipping a prebuilt directory (`bundler: "none"`)
 
 esbuild is the default. A file `source` is the entry; a directory is searched for `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to zip `source` as-is instead — a directory whose root contains `index.mjs` or `index.js`, or a single file of that name:

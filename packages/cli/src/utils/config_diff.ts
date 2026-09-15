@@ -275,10 +275,6 @@ export const renderBranchSettingConflicts = (
 	return lines.join("\n");
 };
 
-/**
- * CNAME instructions plus push warnings. Empty `cnameTarget` is kept on the
- * structured result but must not print as `CNAME x -> `.
- */
 export const renderCustomDomainFollowup = (
 	result: {
 		customDomains?: Array<{
