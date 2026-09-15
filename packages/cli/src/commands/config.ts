@@ -129,6 +129,11 @@ const neonctlBundler: FunctionBundler = async (fn) => {
 	return zip;
 };
 
+// Hostnames are user-controlled; matching /updateExisting/i classified
+// updateexisting.example.com as overrideable.
+const reasonAllowsUpdateExisting = (reason: string): boolean =>
+	reason.includes("Pass `updateExisting: true`");
+
 const INSPECT_FIELDS = ["project", "branch", "config"] as const;
 
 export type ConfigProps = BranchScopeProps & {
@@ -699,7 +704,7 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 		result.conflicts.some(
 			(conflict) =>
 				conflict.field === "customDomain" &&
-				!/updateExisting/i.test(conflict.reason),
+				!reasonAllowsUpdateExisting(conflict.reason),
 		)
 	) {
 		process.exitCode = 1;
@@ -752,7 +757,7 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 		if (err instanceof PushConflictError) {
 			reportConflicts(props, err.conflicts);
 			const overrideable = err.conflicts.every((c) =>
-				/updateExisting/i.test(c.reason),
+				reasonAllowsUpdateExisting(c.reason),
 			);
 			throw new Error(
 				overrideable
@@ -857,7 +862,7 @@ const reportPushResult = (
 		});
 		if (conflictText) out.text(`\n${conflictText}\n`);
 		for (const conflict of result.conflicts) {
-			if (!/updateExisting/i.test(conflict.reason)) {
+			if (!reasonAllowsUpdateExisting(conflict.reason)) {
 				out.text(`  ! ${conflict.field}: ${conflict.reason}\n`);
 			}
 		}
@@ -907,7 +912,7 @@ const reportConflicts = (
 	});
 	if (text) out.text(`${text}\n`);
 	for (const conflict of conflicts) {
-		if (!/updateExisting/i.test(conflict.reason)) {
+		if (!reasonAllowsUpdateExisting(conflict.reason)) {
 			out.text(`  ! ${conflict.field}: ${conflict.reason}\n`);
 		}
 	}
@@ -1027,7 +1032,7 @@ const logPolicyResult = (
 		);
 		if (conflictText) log.info("%s", conflictText);
 		for (const conflict of result.conflicts) {
-			if (!/updateExisting/i.test(conflict.reason)) {
+			if (!reasonAllowsUpdateExisting(conflict.reason)) {
 				log.info("  ! %s: %s", conflict.field, conflict.reason);
 			}
 		}

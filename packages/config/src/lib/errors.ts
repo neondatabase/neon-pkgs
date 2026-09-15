@@ -162,7 +162,7 @@ export class PushConflictError extends PlatformError {
 			(c) =>
 				!isImmutableConflict(c) &&
 				(c.field !== "customDomain" ||
-					/updateExisting/i.test(c.reason)),
+					reasonAllowsUpdateExisting(c.reason)),
 		);
 		lines.push("");
 		if (hasOverrideable) {
@@ -182,8 +182,14 @@ function isImmutableConflict(_c: ConflictReport): boolean {
 	return false;
 }
 
+// Hostnames are user-controlled; matching /updateExisting/i classified
+// updateexisting.example.com as overrideable.
+function reasonAllowsUpdateExisting(reason: string): boolean {
+	return reason.includes("Pass `updateExisting: true`");
+}
+
 function suggestFix(c: ConflictReport): string {
-	if (c.field === "customDomain" && !/updateExisting/i.test(c.reason)) {
+	if (c.field === "customDomain" && !reasonAllowsUpdateExisting(c.reason)) {
 		return "delete the domain with `neon function domains delete`, or stop declaring it in neon.ts.";
 	}
 	if (isImmutableConflict(c)) {

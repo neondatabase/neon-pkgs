@@ -227,8 +227,10 @@ export const renderAppliedChanges = (
 	return lines.join("\n");
 };
 
+// Hostnames are user-controlled; matching /updateExisting/i classified
+// updateexisting.example.com as overrideable.
 const isOverrideableConflict = (conflict: ConflictReport): boolean =>
-	/updateExisting/i.test(conflict.reason);
+	conflict.reason.includes("Pass `updateExisting: true`");
 
 const CUSTOM_DOMAIN_REASON = /^custom domain "([^"]+)"/;
 

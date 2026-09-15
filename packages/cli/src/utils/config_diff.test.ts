@@ -100,6 +100,24 @@ describe("renderBranchSettingConflicts", () => {
 		expect(text).toContain("customDomain docs.example.com");
 	});
 
+	it("does not treat a hostname containing updateexisting as overrideable", () => {
+		const text = renderBranchSettingConflicts(
+			[
+				{
+					kind: "branch",
+					identifier: "main",
+					field: "customDomain",
+					current: { entityType: "bucket", entityId: "uploads" },
+					desired: { entityType: "function", entityId: "hello" },
+					reason: 'custom domain "updateexisting.example.com" is registered to entity type "bucket", which neon.ts cannot retarget. Delete it with `neon function domains delete` or stop declaring it.',
+				},
+			],
+			{ color: false },
+		);
+		expect(text.split("\n")[0]).toBe("Branch settings differ");
+		expect(text).not.toContain("re-run with --update-existing");
+	});
+
 	it("adds ANSI codes only when color is on (same layout stripped)", () => {
 		const conflicts: ConflictReport[] = [
 			{

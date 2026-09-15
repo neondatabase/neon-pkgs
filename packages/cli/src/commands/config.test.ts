@@ -1028,6 +1028,37 @@ describe("config commands", () => {
 		}
 	});
 
+	it("exits 1 for a blocking domain even when the hostname contains updateexisting", async () => {
+		const origExitCode = process.exitCode;
+		process.exitCode = 0;
+		try {
+			const api = new FakeNeonApi();
+			api.seedCustomDomain({
+				domain: "updateexisting.example.com",
+				entityType: "bucket",
+				entityId: "uploads",
+				cnameTarget: "edge.neon.tech",
+			});
+			const { stream, read } = captureOut();
+			const config = writeConfig(
+				'export default { preview: { functions: { hello: { name: "Hello", source: "./hello.ts", customDomains: ["updateexisting.example.com"] } } } };\n',
+			);
+
+			await planCmd({
+				...baseProps(api, stream),
+				output: "table",
+				config,
+			});
+
+			const out = read();
+			expect(out).toContain("customDomain");
+			expect(out).not.toContain("re-run with --update-existing to apply");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			process.exitCode = origExitCode;
+		}
+	});
+
 	it("plan exits 0 for a non-domain conflict (no read-write endpoint)", async () => {
 		const origExitCode = process.exitCode;
 		try {

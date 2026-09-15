@@ -420,11 +420,6 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Walk a cursor-paginated Neon list until `pagination.next` is absent or repeats.
- * Custom domains are the first preview list that can span pages; functions/triggers
- * still take a single page.
- */
 export async function collectCursorPages<T>(
 	fetchPage: (
 		cursor: string | undefined,
