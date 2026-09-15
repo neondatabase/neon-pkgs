@@ -908,7 +908,7 @@ describe("config commands", () => {
 		await planCmd({ ...baseProps(api, stream), output: "table", config });
 
 		const out = read();
-		expect(out).toContain("domain docs.example.com");
+		expect(out).toContain("domain docs.example.com -> hello");
 		expect(out).not.toContain("CNAME docs.example.com");
 	});
 

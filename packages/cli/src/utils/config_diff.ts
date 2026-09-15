@@ -150,6 +150,9 @@ const serviceLabel = (
 		if (previous !== undefined && slug !== undefined) {
 			return `domain ${domain}: ${previous} → ${slug}`;
 		}
+		if (slug !== undefined) {
+			return `domain ${domain} -> ${slug}`;
+		}
 		return `domain ${domain}`;
 	}
 	return identifier;

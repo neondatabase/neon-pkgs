@@ -271,7 +271,7 @@ describe("renderAppliedChanges", () => {
 		expect(text.split("\n")[1]).toBe("  - Data API");
 	});
 
-	it("renders a custom-domain register as + domain <hostname>", () => {
+	it("renders a custom-domain register as + domain <hostname> -> <slug>", () => {
 		const changes: AppliedChange[] = [
 			{
 				kind: "service",
@@ -283,7 +283,9 @@ describe("renderAppliedChanges", () => {
 		const text = renderAppliedChanges(changes, "Planned changes", {
 			color: false,
 		});
-		expect(text.split("\n")[1]).toBe("  + domain docs.example.com");
+		expect(text.split("\n")[1]).toBe(
+			"  + domain docs.example.com -> hello",
+		);
 	});
 
 	it("renders a custom-domain retarget as ~ domain <hostname>: previous → next", () => {
