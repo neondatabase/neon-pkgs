@@ -4,7 +4,8 @@ import {
 	requireApiKey,
 } from "@neon/e2e-harness";
 import { createNeonClient, type NeonClient } from "../src/index.js";
-import { formatNeonError, isNeonError } from "../src/neon/errors.js";
+import { isNeonError } from "../src/neon/errors.js";
+import { formatNeonError } from "./format-error.js";
 
 export {
 	DEFAULT_REGION,
