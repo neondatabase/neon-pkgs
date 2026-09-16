@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { parseTrigger } from "./parse-trigger.js";
 
 const invocationId = "ucBDafV0gB8qoEM4UcdIu84Qx5JCAXYwpRnPVAagPa0";
@@ -20,9 +20,11 @@ const app = new Hono();
 app.post("/cron", async (c) => c.json(await parseTrigger(c)));
 app.post("/cron-reread", async (c) => {
 	const invocation = await parseTrigger(c);
+	expectTypeOf(invocation.data.scheduledAt).toEqualTypeOf<string>();
 	const data = await c.req.json();
 	return c.json({
 		invocationId: invocation.invocationId,
+		scheduledAt: invocation.data.scheduledAt,
 		bodyId: data.invocation_id,
 	});
 });
@@ -66,7 +68,7 @@ describe("parseTrigger", () => {
 		});
 	});
 
-	it("returns the parsed storage_object_created invocation", async () => {
+	it("returns 400 for a storage_object_created delivery", async () => {
 		const storageInvocationId =
 			"LBLRZLmY62NxOKUOSntTS2CNCzcvDXNcVxl1F63dv_s";
 		const response = await app.request(
@@ -89,18 +91,8 @@ describe("parseTrigger", () => {
 			}),
 		);
 
-		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({
-			version: 1,
-			invocationId: storageInvocationId,
-			type: "storage_object_created",
-			trigger: {
-				type: "storage_object_created",
-				id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
-				name: "on-upload",
-			},
-			data: { bucketName: "uploads", objectKey: "smoke.txt" },
-		});
+		expect(response.status).toBe(400);
+		expect(await response.text()).toBe("Invalid trigger payload");
 	});
 
 	it("leaves the Hono request body readable", async () => {
@@ -109,6 +101,7 @@ describe("parseTrigger", () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({
 			invocationId,
+			scheduledAt: "2026-09-11T08:34:00Z",
 			bodyId: invocationId,
 		});
 	});

@@ -379,7 +379,10 @@ Unknown `trigger.type` values fail as `invalid_body` until this package adds the
 ### `parseTrigger` (Hono)
 
 `parseTrigger(c)` runs the Request overload on `c.req.raw` and throws
-`HTTPException`. `c.req.json()` still works afterwards.
+`HTTPException`. `c.req.json()` still works afterwards. It returns a
+`ScheduleTriggerInvocation`, so existing `invocation.data.scheduledAt`
+callers keep compiling. A `storage_object_created` delivery is
+`invalid_body`; parse those with `parseTriggerInvocation`.
 
 | Failure | Status | Message |
 | --- | --- | --- |
@@ -395,14 +398,7 @@ const app = new Hono();
 
 app.post("/cron", async (c) => {
 	const invocation = await parseTrigger(c);
-	if (invocation.type === "schedule") {
-		return c.json({ ok: true, scheduledAt: invocation.data.scheduledAt });
-	}
-	return c.json({
-		ok: true,
-		bucketName: invocation.data.bucketName,
-		objectKey: invocation.data.objectKey,
-	});
+	return c.json({ ok: true, scheduledAt: invocation.data.scheduledAt });
 });
 ```
 
