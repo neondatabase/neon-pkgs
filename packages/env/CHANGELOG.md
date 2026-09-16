@@ -1,5 +1,16 @@
 # @neondatabase/env
 
+## 1.4.0
+
+### Minor Changes
+
+- 6fffc2a: AI Gateway, Functions, and Object Storage in neon.ts are GA as top-level `aiGateway`, `functions`, and `buckets`. The same keys still work under `preview` (deprecated); `neon config apply` / `deploy` warn that they can be lifted.
+
+### Patch Changes
+
+- Updated dependencies [6fffc2a]
+  - @neon/config@1.6.0
+
 ## 1.3.5
 
 ### Patch Changes
