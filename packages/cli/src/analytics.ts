@@ -348,7 +348,7 @@ export const trackEvent = (
 /**
  * CLI Started runs before the template picker. The resolved catalog id is
  * known only after scaffold, so it rides on cli_command_success via this
- * process-local slot — yargs never sees an interactive or --default choice.
+ * process-local slot. Yargs never sees an interactive or --default choice.
  */
 export type CommandSuccessExtras = {
 	template?: string;
