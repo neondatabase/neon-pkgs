@@ -1,5 +1,15 @@
 # neon
 
+## 4.18.1
+
+### Patch Changes
+
+- 345568a: `neon triggers` enable, disable, and update send the existing trigger `type`, so `storage_object_created` triggers can be patched.
+- Updated dependencies [345568a]
+  - @neon/sdk@6.0.0
+  - @neon/config@1.5.1
+  - @neon/config-runtime@1.4.1
+
 ## 4.18.0
 
 ### Minor Changes

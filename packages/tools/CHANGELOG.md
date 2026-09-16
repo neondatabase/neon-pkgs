@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 1.4.0
+
+### Minor Changes
+
+- 345568a: `triggers.create` and `triggers.update` accept `storage_object_created` bodies. Generated trigger schemas include both kinds.
+
+### Patch Changes
+
+- Updated dependencies [345568a]
+  - @neon/sdk@6.0.0
+
 ## 1.3.4
 
 ### Patch Changes
