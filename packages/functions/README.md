@@ -6,7 +6,7 @@ Runtime helpers for [Neon Functions](https://neon.com):
 - **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler, or from a
   [Hono](https://hono.dev) route via `@neon/functions/hono`.
 - **`attachDatabasePool`** — keep a module-scope `pg.Pool` from killing the isolate when Postgres drops an idle client.
-- **`parseTriggerInvocation`** — parse a Function Trigger delivery (`@neon/functions/triggers`), or `parseTrigger(c)` on a Hono context via `@neon/functions/hono`.
+- **`parseTriggerDelivery`** — parse a Function Trigger delivery (`@neon/functions/triggers`), including schedule and `storage_object_created`. `parseTriggerInvocation` and Hono `parseTrigger(c)` remain schedule-only.
 
 ## Install
 
