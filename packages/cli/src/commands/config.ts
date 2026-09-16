@@ -816,8 +816,17 @@ const warnDeprecatedPreviewOnCreate = async (
 		runtimeApi?: NeonApi;
 	},
 ): Promise<void> => {
-	const listed = await warningTargetForExistingBranch(props);
-	warnDeprecatedPreview(config, { ...listed, exists: false });
+	try {
+		const listed = await warningTargetForExistingBranch(props);
+		warnDeprecatedPreview(config, { ...listed, exists: false });
+	} catch {
+		warnDeprecatedPreview(config, {
+			name: props.branchName,
+			id: props.branchId,
+			exists: false,
+			isDefault: false,
+		});
+	}
 };
 
 export const applyCmd = async (props: ConfigProps): Promise<void> => {

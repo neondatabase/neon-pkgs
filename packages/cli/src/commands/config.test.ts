@@ -1619,6 +1619,35 @@ class CreateBranchThenRejectNeonApi extends CreateBranchNeonApi {
 	}
 }
 
+/** Third `listBranches` is the CLI GA warning after create+push already listed. */
+class WarningListFailsNeonApi extends CreateBranchNeonApi {
+	private listCalls = 0;
+
+	override async listBranches(
+		projectId: string,
+	): Promise<NeonBranchSnapshot[]> {
+		this.listCalls += 1;
+		if (this.listCalls >= 3) {
+			throw new Error("warning list failed");
+		}
+		return super.listBranches(projectId);
+	}
+}
+
+class PartialCreateThenWarningListFailsNeonApi extends CreateBranchThenRejectNeonApi {
+	private listCalls = 0;
+
+	override async listBranches(
+		projectId: string,
+	): Promise<NeonBranchSnapshot[]> {
+		this.listCalls += 1;
+		if (this.listCalls >= 3) {
+			throw new Error("warning list failed");
+		}
+		return super.listBranches(projectId);
+	}
+}
+
 /** Neon rejects a setting the create call carried, so no branch is created at all. */
 class RejectCreateNeonApi extends CreateBranchNeonApi {
 	override async createBranch(): Promise<{
@@ -1705,6 +1734,35 @@ describe("createBranchFromPolicyOnCheckout", () => {
 		// after creation. The id must come back to the caller (checkout pins it) rather than
 		// being lost with the thrown error.
 		const api = new CreateBranchThenRejectNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), AUTH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created?.branchId).toBe(NEW_BRANCH_ID);
+		expect(created?.policyFailure).toContain(AUTH_REJECTED);
+	});
+
+	it("keeps the created branch id when the GA warning list fails", async () => {
+		const api = new WarningListFailsNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), NEW_BRANCH_POLICY);
+
+		const created = await createBranchFromPolicyOnCheckout({
+			projectId: PROJECT_ID,
+			branchName: NEW_BRANCH_NAME,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+	});
+
+	it("keeps the original policy failure when the GA warning list fails", async () => {
+		const api = new PartialCreateThenWarningListFailsNeonApi();
 		writeFileSync(join(cwd, "neon.ts"), AUTH_POLICY);
 
 		const created = await createBranchFromPolicyOnCheckout({

@@ -87,11 +87,6 @@ function memberCompletionEntriesAt(source: string): ts.CompletionEntry[] {
 	);
 }
 
-/**
- * Return the *member* completions the language service offers at the `/*|*\/` marker in
- * `source`. Filters out keyword/global-scope fallbacks so the list reflects the contextual
- * object type (an empty list means "no object members were offered" — the bug we guard).
- */
 function memberCompletionsAt(source: string): string[] {
 	return memberCompletionEntriesAt(source).map((e) => e.name);
 }
@@ -189,7 +184,9 @@ export default defineConfig({
 });
 `).find((entry) => entry.name === "preview");
 			expect(preview).toBeDefined();
-			expect(preview?.kindModifiers.split(",")).toContain("deprecated");
+			expect(preview?.kindModifiers?.split(",") ?? []).toContain(
+				"deprecated",
+			);
 		},
 		LANGUAGE_SERVICE_TIMEOUT_MS,
 	);
