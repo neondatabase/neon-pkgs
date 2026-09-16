@@ -15,7 +15,7 @@ import type {
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
-	ResolvedFunctionScheduleTrigger,
+	ResolvedFunctionTrigger,
 } from "./types.js";
 
 /**
@@ -105,7 +105,7 @@ export type PlanStep =
 			branchId: string;
 			branchName: string;
 			functionSlug: string;
-			trigger: ResolvedFunctionScheduleTrigger;
+			trigger: ResolvedFunctionTrigger;
 	  }
 	| {
 			kind: "update-trigger";
@@ -114,7 +114,7 @@ export type PlanStep =
 			branchName: string;
 			triggerId: string;
 			functionSlug: string;
-			trigger: ResolvedFunctionScheduleTrigger;
+			trigger: ResolvedFunctionTrigger;
 	  }
 	| {
 			kind: "register-custom-domain";
@@ -265,11 +265,18 @@ function diffPreview(args: {
 				});
 				continue;
 			}
-			if (
-				remoteTrigger.cron !== trigger.cron ||
-				remoteTrigger.enabled !== trigger.enabled ||
-				remoteTrigger.functionPath !== trigger.functionPath
-			) {
+			if (remoteTrigger.type !== trigger.type) {
+				conflicts.push({
+					kind: "branch",
+					identifier: remote.branch.name,
+					field: "trigger",
+					current: remoteTrigger.type,
+					desired: trigger.type,
+					reason: `trigger "${trigger.name}" exists as type "${remoteTrigger.type}"; neon.ts declares "${trigger.type}". Delete it with \`neon triggers delete\` or rename one of them.`,
+				});
+				continue;
+			}
+			if (triggerDrifted(remoteTrigger, trigger)) {
 				plan.push({
 					kind: "update-trigger",
 					projectId: remote.projectId,
@@ -290,6 +297,27 @@ function diffPreview(args: {
 			conflicts,
 		});
 	}
+}
+
+function triggerDrifted(
+	remote: NeonTriggerSnapshot,
+	desired: ResolvedFunctionTrigger,
+): boolean {
+	if (desired.type === "schedule") {
+		if (remote.type !== "schedule") return true;
+		return (
+			remote.cron !== desired.cron ||
+			remote.enabled !== desired.enabled ||
+			remote.functionPath !== desired.functionPath
+		);
+	}
+	if (remote.type !== "storage_object_created") return true;
+	return (
+		remote.bucketName !== desired.bucketName ||
+		(remote.prefix ?? undefined) !== (desired.prefix ?? undefined) ||
+		remote.enabled !== desired.enabled ||
+		remote.functionPath !== desired.functionPath
+	);
 }
 
 const FUNCTION_CUSTOM_DOMAIN_ENTITY = "function";

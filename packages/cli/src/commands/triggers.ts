@@ -1,8 +1,10 @@
 import type {
 	ScheduleTriggerCreateRequest,
 	ScheduleTriggerUpdateRequest,
+	StorageObjectCreatedTriggerCreateRequest,
 	StorageObjectCreatedTriggerUpdateRequest,
 	Trigger,
+	TriggerCreateRequest,
 	TriggerUpdateRequest,
 } from "@neon/sdk";
 import type yargs from "yargs";
@@ -146,10 +148,10 @@ function enabledPatch(
 }
 
 function updatePatch(
-	type: Trigger["type"],
+	existing: Trigger,
 	props: UpdateProps,
 ): TriggerUpdateRequest {
-	if (type === "schedule") {
+	if (existing.type === "schedule") {
 		const body: ScheduleTriggerUpdateRequest = { type: "schedule" };
 		if (props["function-slug"] !== undefined) {
 			body.function_slug = props["function-slug"];
@@ -173,6 +175,17 @@ function updatePatch(
 		body.function_path = props["function-path"];
 	}
 	if (props.enabled !== undefined) body.enabled = props.enabled;
+	if (props.bucket !== undefined || props.prefix !== undefined) {
+		body.storage_object_created = {
+			bucket_name:
+				props.bucket ?? existing.storage_object_created.bucket_name,
+			...(props.prefix !== undefined
+				? { prefix: props.prefix }
+				: existing.storage_object_created.prefix !== undefined
+					? { prefix: existing.storage_object_created.prefix }
+					: {}),
+		};
+	}
 	return body;
 }
 
@@ -186,7 +199,14 @@ function noFieldsToUpdateMessage(type: Trigger["type"]): string {
 					"--function-path",
 					"--enabled",
 				]
-			: ["--function-slug", "--name", "--function-path", "--enabled"];
+			: [
+					"--function-slug",
+					"--name",
+					"--bucket",
+					"--prefix",
+					"--function-path",
+					"--enabled",
+				];
 	const last = flags[flags.length - 1];
 	return `No fields to update. Pass at least one of ${flags.slice(0, -1).join(", ")}, or ${last}.`;
 }
@@ -194,7 +214,9 @@ function noFieldsToUpdateMessage(type: Trigger["type"]): string {
 type CreateProps = BranchScopeProps & {
 	"function-slug": string;
 	name: string;
-	cron: string;
+	cron?: string;
+	bucket?: string;
+	prefix?: string;
 	"function-path"?: string;
 	enabled?: boolean;
 };
@@ -204,6 +226,8 @@ type UpdateProps = BranchScopeProps & {
 	"function-slug"?: string;
 	name?: string;
 	cron?: string;
+	bucket?: string;
+	prefix?: string;
 	"function-path"?: string;
 	enabled?: boolean;
 };
@@ -243,7 +267,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"create",
-			"Create a trigger that invokes a function on a cron schedule",
+			"Create a trigger that invokes a function on a cron schedule or when an object is created",
 			(yargs) =>
 				yargs.options({
 					"function-slug": {
@@ -260,7 +284,16 @@ export const builder = (argv: yargs.Argv) =>
 						describe:
 							"Five-field UTC cron expression, e.g. '*/15 * * * *'",
 						type: "string",
-						demandOption: true,
+					},
+					bucket: {
+						describe:
+							"Object-storage bucket to watch (storage_object_created)",
+						type: "string",
+					},
+					prefix: {
+						describe:
+							"Object-key prefix to match (requires --bucket on create)",
+						type: "string",
 					},
 					"function-path": {
 						describe:
@@ -294,6 +327,15 @@ export const builder = (argv: yargs.Argv) =>
 						},
 						cron: {
 							describe: "Five-field UTC cron expression",
+							type: "string",
+						},
+						bucket: {
+							describe:
+								"Object-storage bucket to watch (storage_object_created)",
+							type: "string",
+						},
+						prefix: {
+							describe: "Object-key prefix to match",
 							type: "string",
 						},
 						"function-path": {
@@ -367,18 +409,7 @@ export const get = async (props: BranchScopeProps & { id: string }) => {
 
 export const create = async (props: CreateProps) => {
 	const branchId = await branchIdFromProps(props);
-	const body: ScheduleTriggerCreateRequest = {
-		type: "schedule",
-		function_slug: props["function-slug"],
-		name: props.name,
-		schedule: { cron: props.cron },
-	};
-	if (props["function-path"] !== undefined) {
-		body.function_path = props["function-path"];
-	}
-	if (props.enabled !== undefined) {
-		body.enabled = props.enabled;
-	}
+	const body = createBody(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.createProjectBranchTrigger(
 			props.projectId,
@@ -388,6 +419,51 @@ export const create = async (props: CreateProps) => {
 	);
 	writeTrigger(props, data.trigger);
 };
+
+function createBody(props: CreateProps): TriggerCreateRequest {
+	if (props.cron !== undefined && props.bucket !== undefined) {
+		throw new Error("Pass --cron or --bucket, not both.");
+	}
+	if (props.prefix !== undefined && props.bucket === undefined) {
+		throw new Error("--prefix requires --bucket.");
+	}
+	if (props.cron !== undefined) {
+		const body: ScheduleTriggerCreateRequest = {
+			type: "schedule",
+			function_slug: props["function-slug"],
+			name: props.name,
+			schedule: { cron: props.cron },
+		};
+		if (props["function-path"] !== undefined) {
+			body.function_path = props["function-path"];
+		}
+		if (props.enabled !== undefined) {
+			body.enabled = props.enabled;
+		}
+		return body;
+	}
+	if (props.bucket !== undefined) {
+		const body: StorageObjectCreatedTriggerCreateRequest = {
+			type: "storage_object_created",
+			function_slug: props["function-slug"],
+			name: props.name,
+			storage_object_created: {
+				bucket_name: props.bucket,
+				...(props.prefix !== undefined ? { prefix: props.prefix } : {}),
+			},
+		};
+		if (props["function-path"] !== undefined) {
+			body.function_path = props["function-path"];
+		}
+		if (props.enabled !== undefined) {
+			body.enabled = props.enabled;
+		}
+		return body;
+	}
+	throw new Error(
+		"Pass --cron for a schedule trigger, or --bucket for a storage_object_created trigger.",
+	);
+}
 
 export const update = async (props: UpdateProps) => {
 	const branchId = await branchIdFromProps(props);
@@ -407,8 +483,16 @@ export const update = async (props: UpdateProps) => {
 			`Trigger ${props.id} is type ${trigger.type}; --cron applies to schedule triggers.`,
 		);
 	}
+	if (
+		(props.bucket !== undefined || props.prefix !== undefined) &&
+		trigger.type !== "storage_object_created"
+	) {
+		throw new Error(
+			`Trigger ${props.id} is type ${trigger.type}; --bucket and --prefix apply to storage_object_created triggers.`,
+		);
+	}
 
-	const body = updatePatch(trigger.type, props);
+	const body = updatePatch(trigger, props);
 	const changed = Object.keys(body).filter((k) => k !== "type");
 	if (changed.length === 0) {
 		throw new Error(noFieldsToUpdateMessage(trigger.type));

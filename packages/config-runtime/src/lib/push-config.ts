@@ -1,6 +1,7 @@
 import {
 	type AppliedChange,
 	type Config,
+	type CreateTriggerInput,
 	createNeonApiFromOptions,
 	diffConfig,
 	ErrorCode,
@@ -16,8 +17,10 @@ import {
 	type RemoteServiceState,
 	type RemoteState,
 	type ResolvedFunctionConfig,
+	type ResolvedFunctionTrigger,
 	type ResolvedPreviewConfig,
 	resolveConfig,
+	type UpdateTriggerInput,
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
 
@@ -386,22 +389,14 @@ function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 				kind: "service",
 				action: "create",
 				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
-				details: {
-					functionSlug: step.functionSlug,
-					cron: step.trigger.cron,
-					enabled: step.trigger.enabled,
-				},
+				details: triggerChangeDetails(step.functionSlug, step.trigger),
 			};
 		case "update-trigger":
 			return {
 				kind: "service",
 				action: "update",
 				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
-				details: {
-					functionSlug: step.functionSlug,
-					cron: step.trigger.cron,
-					enabled: step.trigger.enabled,
-				},
+				details: triggerChangeDetails(step.functionSlug, step.trigger),
 			};
 		case "register-custom-domain":
 			return {
@@ -722,23 +717,13 @@ async function applyStep(
 			await ctx.api.createBranchTrigger(
 				ctx.remoteProjectId,
 				step.branchId,
-				{
-					name: step.trigger.name,
-					functionSlug: step.functionSlug,
-					cron: step.trigger.cron,
-					functionPath: step.trigger.functionPath,
-					enabled: step.trigger.enabled,
-				},
+				createTriggerInput(step.functionSlug, step.trigger),
 			);
 			return {
 				kind: "service",
 				action: "create",
 				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
-				details: {
-					functionSlug: step.functionSlug,
-					cron: step.trigger.cron,
-					enabled: step.trigger.enabled,
-				},
+				details: triggerChangeDetails(step.functionSlug, step.trigger),
 			};
 		}
 		case "update-trigger": {
@@ -746,23 +731,13 @@ async function applyStep(
 				ctx.remoteProjectId,
 				step.branchId,
 				step.triggerId,
-				{
-					name: step.trigger.name,
-					functionSlug: step.functionSlug,
-					cron: step.trigger.cron,
-					functionPath: step.trigger.functionPath,
-					enabled: step.trigger.enabled,
-				},
+				updateTriggerInput(step.functionSlug, step.trigger),
 			);
 			return {
 				kind: "service",
 				action: "update",
 				identifier: `trigger:${step.functionSlug}:${step.trigger.name}`,
-				details: {
-					functionSlug: step.functionSlug,
-					cron: step.trigger.cron,
-					enabled: step.trigger.enabled,
-				},
+				details: triggerChangeDetails(step.functionSlug, step.trigger),
 			};
 		}
 		case "register-custom-domain": {
@@ -1099,4 +1074,75 @@ function enrichDeclaredCustomDomains(args: {
 		}
 		return entry;
 	});
+}
+
+function triggerChangeDetails(
+	functionSlug: string,
+	trigger: ResolvedFunctionTrigger,
+): Record<string, unknown> {
+	if (trigger.type === "schedule") {
+		return {
+			functionSlug,
+			type: trigger.type,
+			cron: trigger.cron,
+			enabled: trigger.enabled,
+		};
+	}
+	return {
+		functionSlug,
+		type: trigger.type,
+		bucketName: trigger.bucketName,
+		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
+		enabled: trigger.enabled,
+	};
+}
+
+function createTriggerInput(
+	functionSlug: string,
+	trigger: ResolvedFunctionTrigger,
+): CreateTriggerInput {
+	if (trigger.type === "schedule") {
+		return {
+			type: "schedule",
+			name: trigger.name,
+			functionSlug,
+			cron: trigger.cron,
+			functionPath: trigger.functionPath,
+			enabled: trigger.enabled,
+		};
+	}
+	return {
+		type: "storage_object_created",
+		name: trigger.name,
+		functionSlug,
+		bucketName: trigger.bucketName,
+		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
+		functionPath: trigger.functionPath,
+		enabled: trigger.enabled,
+	};
+}
+
+function updateTriggerInput(
+	functionSlug: string,
+	trigger: ResolvedFunctionTrigger,
+): UpdateTriggerInput {
+	if (trigger.type === "schedule") {
+		return {
+			type: "schedule",
+			name: trigger.name,
+			functionSlug,
+			cron: trigger.cron,
+			functionPath: trigger.functionPath,
+			enabled: trigger.enabled,
+		};
+	}
+	return {
+		type: "storage_object_created",
+		name: trigger.name,
+		functionSlug,
+		bucketName: trigger.bucketName,
+		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
+		functionPath: trigger.functionPath,
+		enabled: trigger.enabled,
+	};
 }

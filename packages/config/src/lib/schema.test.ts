@@ -224,6 +224,55 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(true);
 	});
 
+	test("accepts a storage_object_created trigger when the bucket is declared", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				buckets: { assets: { access: "public_read" } },
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						triggers: [
+							{
+								type: "storage_object_created",
+								name: "on-upload",
+								bucketName: "assets",
+								prefix: "logos/",
+							},
+						],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects a storage_object_created trigger whose bucket is not declared", () => {
+		const result = configInputSchema.safeParse({
+			preview: {
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./hello.ts",
+						triggers: [
+							{
+								type: "storage_object_created",
+								name: "on-upload",
+								bucketName: "assets",
+							},
+						],
+					},
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(formatZodIssues(result.error).join("\n")).toContain(
+				'trigger bucketName "assets" is not declared in preview.buckets',
+			);
+		}
+	});
+
 	test("rejects a duplicate trigger name on the same function", () => {
 		const result = configInputSchema.safeParse({
 			preview: {

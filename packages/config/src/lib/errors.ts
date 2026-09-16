@@ -189,6 +189,9 @@ function reasonAllowsUpdateExisting(reason: string): boolean {
 }
 
 function suggestFix(c: ConflictReport): string {
+	if (c.field === "trigger") {
+		return "delete the remote trigger with `neon triggers delete`, or rename one of the two.";
+	}
 	if (c.field === "customDomain" && !reasonAllowsUpdateExisting(c.reason)) {
 		return "delete the domain with `neon function domains delete`, or stop declaring it in neon.ts.";
 	}

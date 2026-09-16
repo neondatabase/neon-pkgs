@@ -237,6 +237,20 @@ const functionScheduleTriggerSchema = z.strictObject({
 	enabled: z.boolean().optional(),
 });
 
+const functionStorageObjectCreatedTriggerSchema = z.strictObject({
+	type: z.literal("storage_object_created"),
+	name: z.string().min(1).max(255),
+	bucketName: bucketNameSchema,
+	prefix: z.string().min(1).max(1024).optional(),
+	functionPath: z.string().min(1).optional(),
+	enabled: z.boolean().optional(),
+});
+
+const functionTriggerSchema = z.discriminatedUnion("type", [
+	functionScheduleTriggerSchema,
+	functionStorageObjectCreatedTriggerSchema,
+]);
+
 const customDomainSchema = z.string().superRefine((value, ctx) => {
 	const message = customDomainValidationError(value);
 	if (message) {
@@ -368,7 +382,7 @@ export const functionDefSchema = z
 		externalPackages: functionExternalPackagesSchema.optional(),
 		bundler: bundlerSchema.optional(),
 		dev: functionDevConfigSchema.optional(),
-		triggers: z.array(functionScheduleTriggerSchema).optional(),
+		triggers: z.array(functionTriggerSchema).optional(),
 		customDomains: customDomainsSchema.optional(),
 	})
 	.check((ctx) => {
@@ -461,10 +475,27 @@ export const previewInputSchema = z
 		buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
 	})
 	.superRefine((preview, ctx) => {
+		const bucketNames = new Set(Object.keys(preview.buckets ?? {}));
 		const byName = new Map<string, string>();
 		for (const [slug, fn] of Object.entries(preview.functions ?? {})) {
 			const seenOnFn = new Set<string>();
 			for (const [index, trigger] of (fn.triggers ?? []).entries()) {
+				if (
+					trigger.type === "storage_object_created" &&
+					!bucketNames.has(trigger.bucketName)
+				) {
+					ctx.addIssue({
+						code: "custom",
+						path: [
+							"functions",
+							slug,
+							"triggers",
+							index,
+							"bucketName",
+						],
+						message: `trigger bucketName "${trigger.bucketName}" is not declared in preview.buckets`,
+					});
+				}
 				if (seenOnFn.has(trigger.name)) {
 					ctx.addIssue({
 						code: "custom",

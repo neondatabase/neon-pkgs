@@ -469,12 +469,11 @@ export interface FunctionDef {
 	 */
 	dev?: FunctionDevConfig;
 	/**
-	 * Schedule triggers that invoke this function on a cron. Names must be unique among
-	 * every trigger visible on the branch, including other functions. Applied after the
-	 * function is deployed. Triggers that exist remotely but are omitted here are left
-	 * alone.
+	 * Triggers that invoke this function. Names must be unique among every trigger
+	 * visible on the branch, including other functions. Applied after the function is
+	 * deployed. Triggers that exist remotely but are omitted here are left alone.
 	 */
-	triggers?: FunctionScheduleTriggerDef[];
+	triggers?: FunctionTriggerDef[];
 	/**
 	 * Customer-owned hostnames that should point at this function (beta).
 	 * v1 only supports functions. Hostnames are unique across functions in the resolved
@@ -489,8 +488,19 @@ export interface FunctionDef {
 }
 
 /**
+ * A trigger that invokes a function. `functionPath` defaults to `/`. `enabled`
+ * defaults to `true`.
+ *
+ * @example { type: "schedule", name: "hourly", cron: "0 * * * *" }
+ * @example { type: "storage_object_created", name: "on-upload", bucketName: "assets", prefix: "logos/" }
+ */
+export type FunctionTriggerDef =
+	| FunctionScheduleTriggerDef
+	| FunctionStorageObjectCreatedTriggerDef;
+
+/**
  * A cron schedule that invokes a function. `cron` is a numeric five-field expression
- * in UTC. `functionPath` defaults to `/`. `enabled` defaults to `true`.
+ * in UTC.
  *
  * @example { type: "schedule", name: "hourly", cron: "0 * * * *" }
  */
@@ -498,6 +508,22 @@ export interface FunctionScheduleTriggerDef {
 	type: "schedule";
 	name: string;
 	cron: string;
+	functionPath?: string;
+	enabled?: boolean;
+}
+
+/**
+ * Invokes a function when an object is created in a bucket declared in
+ * `preview.buckets`. `prefix` is an exact object-key prefix; omit it to match
+ * every key in the bucket.
+ *
+ * @example { type: "storage_object_created", name: "on-upload", bucketName: "assets", prefix: "logos/" }
+ */
+export interface FunctionStorageObjectCreatedTriggerDef {
+	type: "storage_object_created";
+	name: string;
+	bucketName: string;
+	prefix?: string;
 	functionPath?: string;
 	enabled?: boolean;
 }
@@ -697,7 +723,7 @@ export interface ResolvedFunctionConfig {
 	 * (no defaults applied). Only consumed by `neon dev`; deploy ignores it.
 	 */
 	dev?: FunctionDevConfig;
-	triggers?: ResolvedFunctionScheduleTrigger[];
+	triggers?: ResolvedFunctionTrigger[];
 	/**
 	 * Normalized hostnames this function should own on the branch. Absent when this
 	 * branch has no list to apply. Empty when tuning replaced the list with `[]`.
@@ -705,10 +731,23 @@ export interface ResolvedFunctionConfig {
 	customDomains?: string[];
 }
 
+export type ResolvedFunctionTrigger =
+	| ResolvedFunctionScheduleTrigger
+	| ResolvedFunctionStorageObjectCreatedTrigger;
+
 export interface ResolvedFunctionScheduleTrigger {
 	type: "schedule";
 	name: string;
 	cron: string;
+	functionPath: string;
+	enabled: boolean;
+}
+
+export interface ResolvedFunctionStorageObjectCreatedTrigger {
+	type: "storage_object_created";
+	name: string;
+	bucketName: string;
+	prefix?: string;
 	functionPath: string;
 	enabled: boolean;
 }

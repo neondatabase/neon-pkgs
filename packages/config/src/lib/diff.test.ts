@@ -399,6 +399,7 @@ describe("diffConfig", () => {
 					triggers: [
 						{
 							triggerId: "trg-1",
+							type: "schedule",
 							name: "hourly",
 							functionSlug: "fn1",
 							functionPath: "/",
@@ -459,6 +460,7 @@ describe("diffConfig", () => {
 					triggers: [
 						{
 							triggerId: "trg-orphan",
+							type: "schedule",
 							name: "nightly",
 							functionSlug: "fn1",
 							functionPath: "/",
@@ -473,6 +475,189 @@ describe("diffConfig", () => {
 			{ updateExisting: false },
 		);
 		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+	});
+
+	test("plans a storage_object_created trigger after the function deploy", () => {
+		const onUpload = {
+			type: "storage_object_created" as const,
+			name: "on-upload",
+			bucketName: "assets",
+			prefix: "logos/",
+			functionPath: "/object",
+			enabled: true,
+		};
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "fn1",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							bundler: "esbuild",
+							triggers: [onUpload],
+						},
+					],
+					buckets: [{ name: "assets", access: "public_read" }],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: { buckets: [], functions: [], triggers: [] },
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual([
+			"create-bucket",
+			"deploy-function",
+			"create-trigger",
+		]);
+		expect(diff.plan[2]).toMatchObject({
+			kind: "create-trigger",
+			functionSlug: "fn1",
+			trigger: onUpload,
+		});
+	});
+
+	test("plans an update when an existing storage trigger's prefix drifts", () => {
+		const onUpload = {
+			type: "storage_object_created" as const,
+			name: "on-upload",
+			bucketName: "assets",
+			prefix: "logos/",
+			functionPath: "/object",
+			enabled: true,
+		};
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "fn1",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							bundler: "esbuild",
+							triggers: [onUpload],
+						},
+					],
+					buckets: [{ name: "assets", access: "public_read" }],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [{ name: "assets", accessLevel: "public_read" }],
+					functions: [
+						{
+							id: "fn-1",
+							slug: "fn1",
+							name: "Hello World",
+							invocationUrl: "https://x/functions/fn1",
+						},
+					],
+					triggers: [
+						{
+							triggerId: "trg-1",
+							type: "storage_object_created",
+							name: "on-upload",
+							functionSlug: "fn1",
+							functionPath: "/object",
+							bucketName: "assets",
+							prefix: "incoming/",
+							enabled: true,
+							inherited: false,
+						},
+					],
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual([
+			"deploy-function",
+			"update-trigger",
+		]);
+		expect(diff.plan[1]).toMatchObject({
+			kind: "update-trigger",
+			triggerId: "trg-1",
+			trigger: onUpload,
+		});
+	});
+
+	test("conflicts when a trigger name exists as a different type", () => {
+		const onUpload = {
+			type: "storage_object_created" as const,
+			name: "hourly",
+			bucketName: "assets",
+			functionPath: "/",
+			enabled: true,
+		};
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				preview: {
+					functions: [
+						{
+							slug: "fn1",
+							name: "Hello World",
+							source: "./hello.ts",
+							env: {},
+							runtime: "nodejs24",
+							bundler: "esbuild",
+							triggers: [onUpload],
+						},
+					],
+					buckets: [{ name: "assets", access: "public_read" }],
+					aiGatewayEnabled: false,
+				},
+			},
+			{
+				...remote,
+				preview: {
+					buckets: [{ name: "assets", accessLevel: "public_read" }],
+					functions: [
+						{
+							id: "fn-1",
+							slug: "fn1",
+							name: "Hello World",
+							invocationUrl: "https://x/functions/fn1",
+						},
+					],
+					triggers: [
+						{
+							triggerId: "trg-1",
+							type: "schedule",
+							name: "hourly",
+							functionSlug: "fn1",
+							functionPath: "/",
+							cron: "0 * * * *",
+							enabled: true,
+							inherited: false,
+							nextRunAt: "2026-01-02T00:00:00Z",
+						},
+					],
+				},
+			},
+			{ updateExisting: false },
+		);
+		expect(diff.plan.map((p) => p.kind)).toEqual(["deploy-function"]);
+		expect(diff.conflicts).toEqual([
+			expect.objectContaining({
+				field: "trigger",
+				current: "schedule",
+				desired: "storage_object_created",
+			}),
+		]);
 	});
 
 	const helloFn = {

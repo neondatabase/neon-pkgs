@@ -817,16 +817,10 @@ export class FakeNeonApi implements NeonApi {
 		});
 		this.requireProject(projectId);
 		this.requireBranch(projectId, branchId);
-		const snapshot: NeonTriggerSnapshot = {
-			triggerId: this.allocateId("trg"),
-			name: input.name,
-			functionSlug: input.functionSlug,
-			functionPath: input.functionPath ?? "/",
-			cron: input.cron,
-			enabled: input.enabled ?? true,
-			inherited: false,
-			nextRunAt: input.enabled === false ? null : "2026-01-02T00:00:00Z",
-		};
+		const snapshot = snapshotFromCreateTrigger(
+			this.allocateId("trg"),
+			input,
+		);
 		const key = `${projectId}:${branchId}`;
 		const list = this.triggers.get(key) ?? [];
 		list.push(snapshot);
@@ -853,17 +847,7 @@ export class FakeNeonApi implements NeonApi {
 				`Fake Neon: trigger ${triggerId} not found on branch ${branchId}`,
 			);
 		}
-		if (input.name !== undefined) found.name = input.name;
-		if (input.functionSlug !== undefined)
-			found.functionSlug = input.functionSlug;
-		if (input.cron !== undefined) found.cron = input.cron;
-		if (input.functionPath !== undefined)
-			found.functionPath = input.functionPath;
-		if (input.enabled !== undefined) {
-			found.enabled = input.enabled;
-			found.nextRunAt = input.enabled ? "2026-01-02T00:00:00Z" : null;
-		}
-		found.inherited = false;
+		applyTriggerPatch(found, input);
 		return clone(found);
 	}
 
@@ -1069,6 +1053,70 @@ export class FakeNeonApi implements NeonApi {
 				projectDefaults?.suspendTimeout ??
 				undefined,
 		};
+	}
+}
+
+function snapshotFromCreateTrigger(
+	triggerId: string,
+	input: CreateTriggerInput,
+): NeonTriggerSnapshot {
+	const base = {
+		triggerId,
+		name: input.name,
+		functionSlug: input.functionSlug,
+		functionPath: input.functionPath ?? "/",
+		enabled: input.enabled ?? true,
+		inherited: false,
+	};
+	if (input.type === "storage_object_created") {
+		return {
+			...base,
+			type: "storage_object_created",
+			bucketName: input.bucketName,
+			...(input.prefix !== undefined ? { prefix: input.prefix } : {}),
+		};
+	}
+	return {
+		...base,
+		type: "schedule",
+		cron: input.cron,
+		nextRunAt: input.enabled === false ? null : "2026-01-02T00:00:00Z",
+	};
+}
+
+function applyTriggerPatch(
+	found: NeonTriggerSnapshot,
+	input: UpdateTriggerInput,
+): void {
+	if (input.name !== undefined) found.name = input.name;
+	if (input.functionSlug !== undefined)
+		found.functionSlug = input.functionSlug;
+	if (input.functionPath !== undefined)
+		found.functionPath = input.functionPath;
+	if (input.enabled !== undefined) found.enabled = input.enabled;
+	found.inherited = false;
+	if (found.type === "schedule") {
+		if (input.type === "storage_object_created") {
+			throw new Error("Fake Neon: cannot change trigger type");
+		}
+		if (input.cron !== undefined) found.cron = input.cron;
+		if (input.enabled !== undefined) {
+			found.nextRunAt = input.enabled ? "2026-01-02T00:00:00Z" : null;
+		}
+		return;
+	}
+	if (input.type === "schedule") {
+		throw new Error("Fake Neon: cannot change trigger type");
+	}
+	if (input.bucketName !== undefined) {
+		found.bucketName = input.bucketName;
+		if (input.prefix !== undefined) {
+			found.prefix = input.prefix;
+		} else {
+			delete found.prefix;
+		}
+	} else if (input.prefix !== undefined) {
+		found.prefix = input.prefix;
 	}
 }
 

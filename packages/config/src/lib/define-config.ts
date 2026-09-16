@@ -16,11 +16,13 @@ import type {
 	DataApiInput,
 	DataApiSettings,
 	FunctionDef,
+	FunctionTriggerDef,
 	FunctionTuning,
 	PreviewInput,
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
+	ResolvedFunctionTrigger,
 	ResolvedPreviewConfig,
 	ServiceEnabled,
 	ServiceToggleInput,
@@ -370,16 +372,34 @@ function resolveFunctionConfig(
 		...(def.dev ? { dev: def.dev } : {}),
 		...(def.triggers
 			? {
-					triggers: def.triggers.map((trigger) => ({
-						type: "schedule" as const,
-						name: trigger.name,
-						cron: trigger.cron,
-						functionPath: trigger.functionPath ?? "/",
-						enabled: trigger.enabled ?? true,
-					})),
+					triggers: def.triggers.map(resolveFunctionTrigger),
 				}
 			: {}),
 		...(customDomains !== undefined ? { customDomains } : {}),
+	};
+}
+
+function resolveFunctionTrigger(
+	trigger: FunctionTriggerDef,
+): ResolvedFunctionTrigger {
+	const functionPath = trigger.functionPath ?? "/";
+	const enabled = trigger.enabled ?? true;
+	if (trigger.type === "schedule") {
+		return {
+			type: "schedule",
+			name: trigger.name,
+			cron: trigger.cron,
+			functionPath,
+			enabled,
+		};
+	}
+	return {
+		type: "storage_object_created",
+		name: trigger.name,
+		bucketName: trigger.bucketName,
+		...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
+		functionPath,
+		enabled,
 	};
 }
 

@@ -198,6 +198,42 @@ describe("resolveConfig", () => {
 		]);
 	});
 
+	test("defaults storage_object_created trigger functionPath and enabled", () => {
+		const config = defineConfig({
+			preview: {
+				buckets: { assets: { access: "public_read" } },
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: "./functions/hello-world.ts",
+						triggers: [
+							{
+								type: "storage_object_created",
+								name: "on-upload",
+								bucketName: "assets",
+								prefix: "logos/",
+							},
+						],
+					},
+				},
+			},
+		});
+		const resolved = resolveConfig(config, {
+			name: "main",
+			exists: true,
+		});
+		expect(resolved.preview?.functions[0]?.triggers).toEqual([
+			{
+				type: "storage_object_created",
+				name: "on-upload",
+				bucketName: "assets",
+				prefix: "logos/",
+				functionPath: "/",
+				enabled: true,
+			},
+		]);
+	});
+
 	test("resolves a bare externalPackages string to includeFiles: true", () => {
 		const config = defineConfig({
 			preview: {

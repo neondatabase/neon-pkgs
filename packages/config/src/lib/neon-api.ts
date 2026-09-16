@@ -212,32 +212,69 @@ export interface NeonFunctionDeploymentSnapshot {
 	status: "pending" | "building" | "completed" | "failed";
 }
 
-export interface NeonTriggerSnapshot {
+interface NeonTriggerSnapshotBase {
 	triggerId: string;
 	name: string;
 	functionSlug: string;
 	functionPath: string;
-	cron: string;
 	enabled: boolean;
 	inherited: boolean;
+}
+
+export interface NeonScheduleTriggerSnapshot extends NeonTriggerSnapshotBase {
+	type: "schedule";
+	cron: string;
 	nextRunAt: string | null;
 }
 
-export interface CreateTriggerInput {
-	name: string;
-	functionSlug: string;
-	cron: string;
-	functionPath?: string;
-	enabled?: boolean;
+export interface NeonStorageObjectCreatedTriggerSnapshot
+	extends NeonTriggerSnapshotBase {
+	type: "storage_object_created";
+	bucketName: string;
+	prefix?: string;
 }
 
-export interface UpdateTriggerInput {
-	name?: string;
-	functionSlug?: string;
-	cron?: string;
-	functionPath?: string;
-	enabled?: boolean;
-}
+export type NeonTriggerSnapshot =
+	| NeonScheduleTriggerSnapshot
+	| NeonStorageObjectCreatedTriggerSnapshot;
+
+export type CreateTriggerInput =
+	| {
+			type: "schedule";
+			name: string;
+			functionSlug: string;
+			cron: string;
+			functionPath?: string;
+			enabled?: boolean;
+	  }
+	| {
+			type: "storage_object_created";
+			name: string;
+			functionSlug: string;
+			bucketName: string;
+			prefix?: string;
+			functionPath?: string;
+			enabled?: boolean;
+	  };
+
+export type UpdateTriggerInput =
+	| {
+			type: "schedule";
+			name?: string;
+			functionSlug?: string;
+			cron?: string;
+			functionPath?: string;
+			enabled?: boolean;
+	  }
+	| {
+			type: "storage_object_created";
+			name?: string;
+			functionSlug?: string;
+			bucketName?: string;
+			prefix?: string;
+			functionPath?: string;
+			enabled?: boolean;
+	  };
 
 export interface NeonCustomDomainSnapshot {
 	domain: string;

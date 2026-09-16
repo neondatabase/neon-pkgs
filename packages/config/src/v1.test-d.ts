@@ -35,7 +35,10 @@ import type {
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
+	FunctionScheduleTriggerDef,
 	FunctionSourceEntry,
+	FunctionStorageObjectCreatedTriggerDef,
+	FunctionTriggerDef,
 	FunctionTuning,
 	GetConnectionUriInput,
 	LoadConfigOptions,
@@ -66,6 +69,9 @@ import type {
 	ResolvedBucketConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
+	ResolvedFunctionScheduleTrigger,
+	ResolvedFunctionStorageObjectCreatedTrigger,
+	ResolvedFunctionTrigger,
 	ResolvedPreviewConfig,
 	ServiceEnabled,
 	ServiceToggle,
@@ -111,7 +117,10 @@ describe("config type-export surface", () => {
 		expectTypeOf<FunctionBundlerInput>().not.toBeAny();
 		expectTypeOf<FunctionDevConfig>().not.toBeAny();
 		expectTypeOf<FunctionRuntime>().not.toBeAny();
+		expectTypeOf<FunctionScheduleTriggerDef>().not.toBeAny();
 		expectTypeOf<FunctionSourceEntry>().not.toBeAny();
+		expectTypeOf<FunctionStorageObjectCreatedTriggerDef>().not.toBeAny();
+		expectTypeOf<FunctionTriggerDef>().not.toBeAny();
 		expectTypeOf<FunctionTuning>().not.toBeAny();
 		expectTypeOf<PostgresConfig>().not.toBeAny();
 		expectTypeOf<PreviewInput>().not.toBeAny();
@@ -121,6 +130,9 @@ describe("config type-export surface", () => {
 		expectTypeOf<ResolvedBucketConfig>().not.toBeAny();
 		expectTypeOf<ResolvedDataApiConfig>().not.toBeAny();
 		expectTypeOf<ResolvedFunctionConfig>().not.toBeAny();
+		expectTypeOf<ResolvedFunctionScheduleTrigger>().not.toBeAny();
+		expectTypeOf<ResolvedFunctionStorageObjectCreatedTrigger>().not.toBeAny();
+		expectTypeOf<ResolvedFunctionTrigger>().not.toBeAny();
 		expectTypeOf<ResolvedPreviewConfig>().not.toBeAny();
 		expectTypeOf<ServiceEnabled<true>>().not.toBeAny();
 		expectTypeOf<ServiceToggle>().not.toBeAny();
