@@ -567,7 +567,7 @@ const { data: registered } = await neon.functions.customDomains.register(
 
 Branch-scoped triggers (beta). `type` is `"schedule"` or `"storage_object_created"`. A schedule trigger uses a numeric five-field cron expression in UTC. A storage-object-created trigger watches one exact bucket and, optionally, an object-key prefix; matching is case-sensitive with no path normalization. List is the full set visible on the branch (not cursor-paginated). An inherited trigger keeps its project-wide id and stays disabled on the child until enabled there. Editing an inherited trigger writes a child-local shadow. Deleting an inherited trigger writes a tombstone so it does not reappear.
 
-`create` / `update` keep the request `type` on the return type (`ScheduleTrigger` or `StorageObjectCreatedTrigger`). `list` / `get` return `Trigger` — narrow on `type` before reading `schedule` / `next_run_at` or `storage_object_created`. Update requires the existing trigger's `type` and does not convert kinds. `next_run_at` is schedule-only.
+`create` / `update` keep the request `type` on the return type (`ScheduleTrigger` or `StorageObjectCreatedTrigger`). `list` / `get` return `Trigger` — narrow on `type` before reading `schedule` / `next_run_at` or `storage_object_created`. Update requires the existing trigger's `type` and does not convert kinds. `next_run_at` is schedule-only. `inherited` still marks a child-local view of an ancestor trigger; `source_branch_id` is no longer on the generated schedule trigger type.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
