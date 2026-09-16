@@ -397,7 +397,7 @@ Unknown `trigger.type` values fail as `invalid_body` until this package adds the
 `HTTPException`. `c.req.json()` still works afterwards. It returns a
 `ScheduleTriggerInvocation`, so existing `invocation.data.scheduledAt`
 callers keep compiling. A `storage_object_created` delivery is
-`invalid_body`; parse those with `parseTriggerDelivery`.
+`invalid_body`; parse those with `parseTriggerDelivery(c.req.raw)`.
 
 | Failure | Status | Message |
 | --- | --- | --- |
@@ -414,6 +414,25 @@ const app = new Hono();
 app.post("/cron", async (c) => {
 	const invocation = await parseTrigger(c);
 	return c.json({ ok: true, scheduledAt: invocation.data.scheduledAt });
+});
+```
+
+```ts
+import { parseTriggerDelivery } from "@neon/functions/hono";
+
+app.post("/object", async (c) => {
+	const parsed = await parseTriggerDelivery(c.req.raw);
+	if (!parsed.ok) {
+		const status = parsed.error === "invalid_body" ? 400 : 401;
+		return c.text(parsed.error, status);
+	}
+	if (parsed.invocation.type !== "storage_object_created") {
+		return c.text("invalid_body", 400);
+	}
+	return c.json({
+		bucketName: parsed.invocation.data.bucketName,
+		objectKey: parsed.invocation.data.objectKey,
+	});
 });
 ```
 

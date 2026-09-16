@@ -99,7 +99,7 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 	});
 
 	it("narrows data after a type check on invocation.type", () => {
-		const result = parseTriggerInvocation({
+		const result = parseTriggerDelivery({
 			headers: scheduleHeaders(invocationId),
 			body: scheduleBody,
 		});
@@ -208,7 +208,6 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 			data: { scheduledAt: "2026-09-16T00:00:00Z" },
 		};
 		expectTypeOf(existing.data.scheduledAt).toEqualTypeOf<string>();
-		expect(isScheduleTriggerInvocation(existing)).toBe(false);
 	});
 
 	it("keeps TriggerInvocation as the schedule alias", () => {

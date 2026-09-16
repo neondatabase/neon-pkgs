@@ -39,7 +39,7 @@ export type TriggerDelivery =
 	| StorageObjectCreatedTriggerInvocation;
 
 export function isScheduleTriggerInvocation(
-	invocation: TriggerInvocation | TriggerDelivery,
+	invocation: TriggerDelivery,
 ): invocation is ScheduleTriggerInvocation & { type: "schedule" } {
 	return invocation.type === "schedule";
 }
