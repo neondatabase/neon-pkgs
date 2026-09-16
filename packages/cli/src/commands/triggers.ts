@@ -51,9 +51,11 @@ const TRIGGER_COMMON_FIELDS = [
 type TriggerTableRow = {
 	trigger_id: string;
 	name: string;
+	type: Trigger["type"];
 	function_slug: string;
 	function_path: string;
 	schedule: string;
+	storage: string;
 	enabled: boolean;
 	inherited: boolean;
 	next_run_at: string;
@@ -62,22 +64,37 @@ type TriggerTableRow = {
 export const TRIGGER_FIELDS = [
 	"trigger_id",
 	"name",
+	"type",
 	"function_slug",
 	"function_path",
 	"schedule",
+	"storage",
 	"enabled",
 	"inherited",
 	"next_run_at",
 ] as const satisfies readonly (keyof TriggerTableRow)[];
+
+function storageMatch(
+	config: Extract<
+		Trigger,
+		{ type: "storage_object_created" }
+	>["storage_object_created"],
+): string {
+	return config.prefix === undefined
+		? config.bucket_name
+		: `${config.bucket_name} ${config.prefix}`;
+}
 
 function triggerTableRow(t: Trigger): TriggerTableRow {
 	if (t.type === "schedule") {
 		return {
 			trigger_id: t.trigger_id,
 			name: t.name,
+			type: t.type,
 			function_slug: t.function_slug,
 			function_path: t.function_path,
 			schedule: t.schedule.cron,
+			storage: "",
 			enabled: t.enabled,
 			inherited: t.inherited,
 			next_run_at: t.next_run_at ?? "",
@@ -86,9 +103,11 @@ function triggerTableRow(t: Trigger): TriggerTableRow {
 	return {
 		trigger_id: t.trigger_id,
 		name: t.name,
+		type: t.type,
 		function_slug: t.function_slug,
 		function_path: t.function_path,
 		schedule: "",
+		storage: storageMatch(t.storage_object_created),
 		enabled: t.enabled,
 		inherited: t.inherited,
 		next_run_at: "",

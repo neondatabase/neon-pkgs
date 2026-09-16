@@ -27,6 +27,72 @@ describe("triggers", () => {
 		expect(stdout).toContain("/");
 	});
 
+	test("list table shows type and storage match", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			["triggers", "list", ...BRANCH],
+			{ outputTable: true, snapshot: false },
+		);
+		expect(stdout).toContain("Type");
+		expect(stdout).toContain("schedule");
+		expect(stdout).toContain("storage_object_created");
+		expect(stdout).toContain("Storage");
+		expect(stdout).toContain("uploads incoming/");
+		expect(stdout).toContain("*/15 * * * *");
+	});
+
+	test("get storage trigger", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"triggers",
+			"get",
+			"trigger-storage-123",
+			...BRANCH,
+		]);
+	});
+
+	test("enable storage trigger sends storage type", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"triggers",
+			"enable",
+			"trigger-storage-123",
+			...BRANCH,
+		]);
+	});
+
+	test("update storage trigger name", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"triggers",
+			"update",
+			"trigger-storage-123",
+			...BRANCH,
+			"--name",
+			"ingest-uploads",
+		]);
+	});
+
+	test("update storage trigger rejects --cron", async ({
+		testCliCommand,
+	}) => {
+		const { stderr, code } = await testCliCommand(
+			[
+				"triggers",
+				"update",
+				"trigger-storage-123",
+				...BRANCH,
+				"--cron",
+				"0 3 * * *",
+			],
+			{ code: 1, snapshot: false },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"Trigger trigger-storage-123 is type storage_object_created; --cron applies to schedule triggers.",
+		);
+	});
+
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"triggers",

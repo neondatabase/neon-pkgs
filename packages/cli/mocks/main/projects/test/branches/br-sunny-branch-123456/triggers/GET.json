@@ -12,6 +12,20 @@
       "next_run_at": "2026-09-10T03:00:00.000Z",
       "source_branch_id": "br-sunny-branch-123456",
       "inherited": false
+    },
+    {
+      "type": "storage_object_created",
+      "trigger_id": "trigger-storage-123",
+      "function_slug": "ingest",
+      "name": "uploads",
+      "function_path": "/",
+      "storage_object_created": {
+        "bucket_name": "uploads",
+        "prefix": "incoming/"
+      },
+      "enabled": true,
+      "version": 1,
+      "inherited": false
     }
   ]
 }

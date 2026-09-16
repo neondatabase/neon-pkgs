@@ -1,0 +1,16 @@
+{
+  "trigger": {
+    "type": "storage_object_created",
+    "trigger_id": "trigger-storage-123",
+    "function_slug": "ingest",
+    "name": "uploads",
+    "function_path": "/",
+    "storage_object_created": {
+      "bucket_name": "uploads",
+      "prefix": "incoming/"
+    },
+    "enabled": true,
+    "version": 1,
+    "inherited": false
+  }
+}

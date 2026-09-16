@@ -50,6 +50,21 @@ inherited: false
 "
 `;
 
+exports[`triggers > enable storage trigger sends storage type 1`] = `
+"type: storage_object_created
+trigger_id: trigger-storage-123
+function_slug: ingest
+name: uploads
+function_path: /
+storage_object_created:
+  bucket_name: uploads
+  prefix: incoming/
+enabled: true
+version: 2
+inherited: false
+"
+`;
+
 exports[`triggers > get 1`] = `
 "type: schedule
 trigger_id: trigger-test-123
@@ -62,6 +77,21 @@ enabled: true
 version: 1
 next_run_at: 2026-09-10T03:00:00.000Z
 source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;
+
+exports[`triggers > get storage trigger 1`] = `
+"type: storage_object_created
+trigger_id: trigger-storage-123
+function_slug: ingest
+name: uploads
+function_path: /
+storage_object_created:
+  bucket_name: uploads
+  prefix: incoming/
+enabled: true
+version: 1
 inherited: false
 "
 `;
@@ -79,6 +109,17 @@ exports[`triggers > list 1`] = `
   next_run_at: 2026-09-10T03:00:00.000Z
   source_branch_id: br-sunny-branch-123456
   inherited: false
+- type: storage_object_created
+  trigger_id: trigger-storage-123
+  function_slug: ingest
+  name: uploads
+  function_path: /
+  storage_object_created:
+    bucket_name: uploads
+    prefix: incoming/
+  enabled: true
+  version: 1
+  inherited: false
 "
 `;
 
@@ -94,6 +135,21 @@ enabled: true
 version: 2
 next_run_at: 2026-09-10T03:00:00.000Z
 source_branch_id: br-sunny-branch-123456
+inherited: false
+"
+`;
+
+exports[`triggers > update storage trigger name 1`] = `
+"type: storage_object_created
+trigger_id: trigger-storage-123
+function_slug: ingest
+name: ingest-uploads
+function_path: /
+storage_object_created:
+  bucket_name: uploads
+  prefix: incoming/
+enabled: true
+version: 2
 inherited: false
 "
 `;
