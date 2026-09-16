@@ -1,5 +1,16 @@
 # @neondatabase/config-runtime
 
+## 1.6.0
+
+### Minor Changes
+
+- 626b3c7: Declare Function triggers as a top-level keyed map in neon.ts. Nested `functions.*.triggers` is removed. `storage_object_created` is supported alongside `schedule`. `neon triggers create --bucket` creates a storage trigger.
+
+### Patch Changes
+
+- Updated dependencies [626b3c7]
+  - @neon/config@1.7.0
+
 ## 1.5.0
 
 ### Minor Changes
