@@ -201,14 +201,14 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 	});
 
 	it("accepts a ScheduleTriggerInvocation value without top-level type", () => {
-		const existing: ScheduleTriggerInvocation = {
+		const existing: TriggerInvocation = {
 			version: 1,
 			invocationId: "id",
 			trigger: { type: "schedule", id: "id", name: "cron" },
 			data: { scheduledAt: "2026-09-16T00:00:00Z" },
 		};
-		expect(isScheduleTriggerInvocation(existing)).toBe(true);
 		expectTypeOf(existing.data.scheduledAt).toEqualTypeOf<string>();
+		expect(isScheduleTriggerInvocation(existing)).toBe(false);
 	});
 
 	it("keeps TriggerInvocation as the schedule alias", () => {
@@ -217,7 +217,8 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 			scheduledAt: string;
 		}>();
 		expectTypeOf<TriggerDelivery>().toEqualTypeOf<
-			ScheduleTriggerInvocation | StorageObjectCreatedTriggerInvocation
+			| (ScheduleTriggerInvocation & { type: "schedule" })
+			| StorageObjectCreatedTriggerInvocation
 		>();
 
 		function handleSchedule(invocation: TriggerInvocation) {
@@ -232,6 +233,38 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 		if (!result.ok) return;
 		expectTypeOf(handleSchedule(result.invocation)).toEqualTypeOf<string>();
 		expect(handleSchedule(result.invocation)).toBe("2026-09-11T08:34:00Z");
+	});
+
+	it("narrows TriggerDelivery schedule-first and exhaustively", () => {
+		const result = parseTriggerDelivery({
+			headers: scheduleHeaders(invocationId),
+			body: scheduleBody,
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+
+		const invocation = result.invocation;
+		if (invocation.type === "schedule") {
+			expectTypeOf(invocation.data.scheduledAt).toEqualTypeOf<string>();
+			expect(invocation.data.scheduledAt).toBe("2026-09-11T08:34:00Z");
+		} else {
+			expectTypeOf(invocation.data.objectKey).toEqualTypeOf<string>();
+		}
+
+		switch (invocation.type) {
+			case "schedule":
+				expectTypeOf(
+					invocation.data.scheduledAt,
+				).toEqualTypeOf<string>();
+				break;
+			case "storage_object_created":
+				expectTypeOf(invocation.data.objectKey).toEqualTypeOf<string>();
+				break;
+			default: {
+				const _exhaustive: never = invocation;
+				throw new Error(`unexpected ${_exhaustive}`);
+			}
+		}
 	});
 
 	it("fails invalid_body when storage_object_created data omits object_key", () => {

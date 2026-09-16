@@ -5,6 +5,7 @@ const TRIGGER_INVOCATION_ID_HEADER = "x-neon-trigger-invocation-id";
 export type ScheduleTriggerInvocation = {
 	version: 1;
 	invocationId: string;
+	// Optional so constructed 0.10.0 TriggerInvocation values still type-check.
 	type?: "schedule";
 	trigger: {
 		type: "schedule";
@@ -34,13 +35,13 @@ export type StorageObjectCreatedTriggerInvocation = {
 export type TriggerInvocation = ScheduleTriggerInvocation;
 
 export type TriggerDelivery =
-	| ScheduleTriggerInvocation
+	| (ScheduleTriggerInvocation & { type: "schedule" })
 	| StorageObjectCreatedTriggerInvocation;
 
 export function isScheduleTriggerInvocation(
-	invocation: TriggerDelivery,
-): invocation is ScheduleTriggerInvocation {
-	return invocation.trigger.type === "schedule";
+	invocation: TriggerInvocation | TriggerDelivery,
+): invocation is ScheduleTriggerInvocation & { type: "schedule" } {
+	return invocation.type === "schedule";
 }
 
 export function isStorageObjectCreatedTriggerInvocation(
@@ -80,7 +81,7 @@ function isRequest(
 
 function parseScheduleInvocation(
 	body: unknown,
-): ScheduleTriggerInvocation | undefined {
+): (ScheduleTriggerInvocation & { type: "schedule" }) | undefined {
 	if (!isRecord(body) || body.version !== 1) return undefined;
 
 	const invocationId = body.invocation_id;

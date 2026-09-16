@@ -335,7 +335,9 @@ A [Function Trigger](https://neon.com/docs/cli/triggers) POSTs JSON to your func
 `parseTriggerInvocation` is schedule-only: it checks `x-neon-trigger-invocation-id`
 against `invocation_id` and returns a `TriggerInvocation` (`ScheduleTriggerInvocation`).
 Storage-object-created deliveries use `parseTriggerDelivery`, which returns a
-`TriggerDelivery`.
+`TriggerDelivery`. Schedule members of that union have `type: "schedule"`, so
+both `if (invocation.type === "schedule")` and
+`if (invocation.type === "storage_object_created")` narrow `data`.
 
 ```ts
 import { parseTriggerDelivery } from "@neon/functions/triggers";
