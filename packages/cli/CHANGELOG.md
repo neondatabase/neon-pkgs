@@ -1,5 +1,11 @@
 # neon
 
+## 4.19.0
+
+### Minor Changes
+
+- c5a18f8: `neon init --services` and `neon config init --services` accept `data-api`. Selecting it writes `dataApi: true` and `auth: true` (the default Data API provider requires Auth).
+
 ## 4.18.1
 
 ### Patch Changes
