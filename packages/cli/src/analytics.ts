@@ -379,6 +379,24 @@ export const takeCommandSuccessExtras = (): CommandSuccessExtras => {
 	return extras;
 };
 
+export const commandSuccessProperties = (
+	args: AnalyticsEventArgs & {
+		projectId?: string;
+		branchId?: string;
+		accountId?: string;
+		authMethod?: string;
+		authData?: string;
+	},
+) => ({
+	...getAnalyticsEventProperties(args),
+	projectId: args.projectId,
+	branchId: args.branchId,
+	accountId: args.accountId,
+	authMethod: args.authMethod,
+	authData: args.authData,
+	...takeCommandSuccessExtras(),
+});
+
 const analyticsCommand = (args: AnalyticsEventArgs): string => {
 	const command = args._.join(" ");
 	const raw =

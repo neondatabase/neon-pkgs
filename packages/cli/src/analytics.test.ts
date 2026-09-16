@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	analyticsUserId,
+	commandSuccessProperties,
 	getAnalyticsEventProperties,
 	getErrorAnalyticsEventProperties,
 	recordCommandSuccessExtras,
@@ -296,6 +297,27 @@ describe("command success extras", () => {
 			agent_setup: "plugin",
 			template: "hono",
 		});
+	});
+
+	it("builds the success event from recorded extras", () => {
+		recordCommandSuccessExtras({
+			template: "hono",
+			agent_setup: "plugin",
+			init_kind: "empty-template",
+		});
+		expect(
+			commandSuccessProperties({
+				_: ["init"],
+				projectId: "proj-1",
+			}),
+		).toMatchObject({
+			command: "init",
+			projectId: "proj-1",
+			template: "hono",
+			agent_setup: "plugin",
+			init_kind: "empty-template",
+		});
+		expect(takeCommandSuccessExtras()).toEqual({});
 	});
 });
 

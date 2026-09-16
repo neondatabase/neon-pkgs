@@ -3,7 +3,7 @@ import { hideBin } from "yargs/helpers";
 import {
 	analyticsMiddleware,
 	closeAnalytics,
-	getAnalyticsEventProperties,
+	commandSuccessProperties,
 	initAnalyticsClientMiddleware,
 	sendError,
 	takeCommandSuccessExtras,
@@ -311,15 +311,7 @@ void (async () => {
 			const args = await builder.argv;
 
 			// Send analytics for a successful attempt
-			trackEvent("cli_command_success", {
-				...getAnalyticsEventProperties(args),
-				projectId: args.projectId,
-				branchId: args.branchId,
-				accountId: args.accountId,
-				authMethod: args.authMethod,
-				authData: args.authData,
-				...takeCommandSuccessExtras(),
-			});
+			trackEvent("cli_command_success", commandSuccessProperties(args));
 			if (args._.length === 0 || args.help) {
 				await showHelp(builder);
 				process.exit(0);
