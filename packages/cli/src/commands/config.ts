@@ -1085,17 +1085,21 @@ export const applyPolicyOnCreate = async (props: {
 		throw err;
 	}
 
-	warnDeprecatedPreview(
-		config,
-		await warningTargetForExistingBranch({
-			projectId: props.projectId,
-			branchId: props.branchId,
-			...(props.branchName ? { branchName: props.branchName } : {}),
-			...(props.apiKey ? { apiKey: props.apiKey } : {}),
-			...(props.apiHost ? { apiHost: props.apiHost } : {}),
-			...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
-		}),
-	);
+	try {
+		warnDeprecatedPreview(
+			config,
+			await warningTargetForExistingBranch({
+				projectId: props.projectId,
+				branchId: props.branchId,
+				...(props.branchName ? { branchName: props.branchName } : {}),
+				...(props.apiKey ? { apiKey: props.apiKey } : {}),
+				...(props.apiHost ? { apiHost: props.apiHost } : {}),
+				...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+			}),
+		);
+	} catch {
+		warnDeprecatedPreview(config);
+	}
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,

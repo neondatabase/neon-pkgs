@@ -204,6 +204,36 @@ describe("defineConfig return-type stability", () => {
 		>().toEqualTypeOf<"hello" | "world">();
 	});
 
+	test("positional Config<Auth, DataApi, Preview> still constrains function slugs", () => {
+		type PreviewHello = { functions: { hello: FunctionDef } };
+		type Positional = Config<undefined, undefined, PreviewHello>;
+
+		const accepted: Positional = {
+			preview: {
+				functions: { hello: { name: "Hello", source: "./hello.ts" } },
+			},
+			branch: () => ({
+				preview: { functions: { hello: { runtime: "nodejs24" } } },
+			}),
+		};
+		expectTypeOf(accepted).toExtend<Config>();
+
+		const rejected: Positional = {
+			preview: {
+				functions: { hello: { name: "Hello", source: "./hello.ts" } },
+			},
+			// @ts-expect-error typo slug is not a declared function
+			branch: () => ({
+				preview: {
+					functions: {
+						typo: { runtime: "nodejs24" },
+					},
+				},
+			}),
+		};
+		expectTypeOf(rejected).toExtend<Config>();
+	});
+
 	test("ComputeUnit is the documented size table, not a subset", () => {
 		type DocumentedComputeUnit =
 			| 0.25

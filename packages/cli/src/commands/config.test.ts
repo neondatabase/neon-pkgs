@@ -1412,6 +1412,21 @@ describe("config init --from-branch", () => {
 	});
 });
 
+/** First `listBranches` is the CLI GA warning; apply lists again afterwards. */
+class ApplyWarningListFailsNeonApi extends FakeNeonApi {
+	private listCalls = 0;
+
+	override async listBranches(
+		projectId: string,
+	): Promise<NeonBranchSnapshot[]> {
+		this.listCalls += 1;
+		if (this.listCalls === 1) {
+			throw new Error("warning list failed");
+		}
+		return super.listBranches(projectId);
+	}
+}
+
 describe("applyPolicyOnCreate", () => {
 	let cwd: string;
 
@@ -1499,6 +1514,20 @@ describe("applyPolicyOnCreate", () => {
 		expect(api.deployBranchFunctionCalls[0].input.environment).toEqual({
 			resendApiKey: "re_from_file",
 		});
+	});
+
+	it("still applies when the GA warning list fails", async () => {
+		const api = new ApplyWarningListFailsNeonApi();
+		writeFileSync(join(cwd, "neon.ts"), "export default { auth: {} };\n");
+
+		await applyPolicyOnCreate({
+			projectId: PROJECT_ID,
+			branchId: BRANCH_ID,
+			runtimeApi: api,
+			cwd,
+		});
+
+		expect(api.enableNeonAuthCalls).toHaveLength(1);
 	});
 });
 

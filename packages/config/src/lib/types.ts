@@ -644,16 +644,25 @@ export interface BranchTuning<Slug extends string = string> {
 }
 
 /** Extract declared function slugs from top-level `functions` and/or `preview.functions`. */
+type PreviewFunctionSlugs<Preview> = Preview extends { functions: infer F }
+	? Extract<keyof F, string>
+	: never;
+
+// Config's Functions default is `Record<string, FunctionDef> | undefined`. A string
+// index would otherwise union into FunctionSlugsOf as `string` and drop slug checking
+// on positional `Config<Auth, DataApi, Preview>`.
+type GaFunctionSlugs<Functions> = [Functions] extends [undefined]
+	? never
+	: string extends keyof NonNullable<Functions>
+		? never
+		: Extract<keyof NonNullable<Functions>, string>;
+
 type FunctionSlugsOf<
 	Preview extends PreviewInput | undefined,
 	Functions extends Record<string, FunctionDef> | undefined = undefined,
-> = [NonNullable<Functions>] extends [never]
-	? Preview extends { functions: infer F }
-		? Extract<keyof F, string>
-		: string
-	: Preview extends { functions: infer F }
-		? Extract<keyof NonNullable<Functions> | keyof F, string>
-		: Extract<keyof NonNullable<Functions>, string>;
+> = [PreviewFunctionSlugs<Preview> | GaFunctionSlugs<Functions>] extends [never]
+	? string
+	: PreviewFunctionSlugs<Preview> | GaFunctionSlugs<Functions>;
 
 /**
  * Signature of the `branch` closure. Generic over the static function homes so the
