@@ -176,6 +176,21 @@ function updatePatch(
 	return body;
 }
 
+function noFieldsToUpdateMessage(type: Trigger["type"]): string {
+	const flags =
+		type === "schedule"
+			? [
+					"--function-slug",
+					"--name",
+					"--cron",
+					"--function-path",
+					"--enabled",
+				]
+			: ["--function-slug", "--name", "--function-path", "--enabled"];
+	const last = flags[flags.length - 1];
+	return `No fields to update. Pass at least one of ${flags.slice(0, -1).join(", ")}, or ${last}.`;
+}
+
 type CreateProps = BranchScopeProps & {
 	"function-slug": string;
 	name: string;
@@ -396,9 +411,7 @@ export const update = async (props: UpdateProps) => {
 	const body = updatePatch(trigger.type, props);
 	const changed = Object.keys(body).filter((k) => k !== "type");
 	if (changed.length === 0) {
-		throw new Error(
-			"No fields to update. Pass at least one of --function-slug, --name, --cron, --function-path, or --enabled.",
-		);
+		throw new Error(noFieldsToUpdateMessage(trigger.type));
 	}
 
 	const { data } = await withTriggerNotFound(props.id, branchId, () =>

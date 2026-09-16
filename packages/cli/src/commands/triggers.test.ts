@@ -179,6 +179,19 @@ describe("triggers", () => {
 		expect(stderr).toContain("--cron");
 	});
 
+	test("update storage trigger with no fields omits --cron", async ({
+		testCliCommand,
+	}) => {
+		const { stderr, code } = await testCliCommand(
+			["triggers", "update", "trigger-storage-123", ...BRANCH],
+			{ code: 1, snapshot: false },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("No fields to update");
+		expect(stderr).not.toContain("--cron");
+		expect(stderr).toContain("--name");
+	});
+
 	test("update with a missing target function is left untranslated", async ({
 		testCliCommand,
 	}) => {
