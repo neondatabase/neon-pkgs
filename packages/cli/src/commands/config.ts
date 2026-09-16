@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+	type BranchTarget,
 	packagesToStage,
 	previewGaWarningForConfig,
 	resolveConfig,
@@ -726,16 +727,23 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 	}
 };
 
-const warnDeprecatedPreview = (config: Config): void => {
-	const message = previewGaWarningForConfig(config);
+const warnDeprecatedPreview = (config: Config, target?: BranchTarget): void => {
+	const message = previewGaWarningForConfig(config, target);
 	if (message) log.warning("%s", message);
 };
 
 export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	const config = await loadConfig(props);
-	warnDeprecatedPreview(config);
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Applying to branch");
+	warnDeprecatedPreview(config, {
+		name: branch.branchName,
+		id: branch.branchId,
+		exists: true,
+		...(branch.isDefault !== undefined
+			? { isDefault: branch.isDefault }
+			: {}),
+	});
 	const branchId = branch.branchId;
 
 	// The AI Gateway can't serve on the Free plan, so refuse to provision it up front rather
@@ -965,6 +973,7 @@ const assertAiGatewayProvisionableFromCreds = async (props: {
 export const applyPolicyOnCreate = async (props: {
 	projectId: string;
 	branchId: string;
+	branchName?: string;
 	apiKey?: string;
 	apiHost?: string;
 	runtimeApi?: NeonApi;
@@ -986,7 +995,12 @@ export const applyPolicyOnCreate = async (props: {
 		throw err;
 	}
 
-	warnDeprecatedPreview(config);
+	warnDeprecatedPreview(config, {
+		name: props.branchName ?? props.branchId,
+		id: props.branchId,
+		exists: true,
+		isDefault: false,
+	});
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,
@@ -1093,7 +1107,11 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		throw err;
 	}
 
-	warnDeprecatedPreview(config);
+	warnDeprecatedPreview(config, {
+		name: props.branchName,
+		exists: false,
+		isDefault: false,
+	});
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,

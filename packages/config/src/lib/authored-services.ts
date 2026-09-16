@@ -116,34 +116,32 @@ export function previewGaWarningMessage(keys: readonly string[]): string {
 	return `These neon.ts keys are now GA and can be lifted out of preview: ${lifts.join(", ")}.`;
 }
 
-const WARNING_BRANCH_TARGETS: BranchTarget[] = [
-	{ name: "main", exists: true, isDefault: true },
-	{ name: "preview", exists: false, isDefault: false },
-];
-
 /**
  * Deprecation warning for a policy that still authors GA services under `preview`.
- * Evaluates `branch` against a default and a child target so child-only
- * `preview.functions` tuning is visible without a live apply.
+ * Pass the same {@link BranchTarget} `resolveConfig` / apply will use so
+ * `branch.preview.functions` tuning on that branch is included. Without a
+ * target, only static `preview.*` keys are reported.
  */
-export function previewGaWarningForConfig(config: Config): string | null {
+export function previewGaWarningForConfig(
+	config: Config,
+	target?: BranchTarget,
+): string | null {
 	const keys = new Set(deprecatedPreviewAuthoring(config));
-	if (typeof config.branch === "function") {
-		for (const branch of WARNING_BRANCH_TARGETS) {
-			try {
-				const parsed = branchTuningSchema.safeParse(
-					config.branch(branch) ?? {},
-				);
-				if (!parsed.success) continue;
+	if (typeof config.branch === "function" && target !== undefined) {
+		try {
+			const parsed = branchTuningSchema.safeParse(
+				config.branch(target) ?? {},
+			);
+			if (parsed.success) {
 				for (const key of deprecatedPreviewAuthoring(
 					config,
 					parsed.data,
 				)) {
 					keys.add(key);
 				}
-			} catch {
-				// A throwing closure is a resolveConfig error, not a warning path.
 			}
+		} catch {
+			// A throwing closure is a resolveConfig error, not a warning path.
 		}
 	}
 	if (keys.size === 0) return null;

@@ -82,6 +82,8 @@ export type ResolvedBranchRef = {
 	branchName: string;
 	/** True when no branch was specified and the project's default was used. */
 	usedDefault: boolean;
+	/** Neon `default` flag when the listing returned this branch. */
+	isDefault?: boolean;
 };
 
 /**
@@ -117,6 +119,7 @@ export const resolveBranchRef = async (
 				branchId: found.id,
 				branchName: found.name ?? found.id,
 				usedDefault: false,
+				isDefault: found.default === true,
 			};
 		}
 		// A `br-…` id absent from the listing is still usable as an id (trust it like
@@ -139,6 +142,7 @@ export const resolveBranchRef = async (
 		branchId: defaultBranch.id,
 		branchName: defaultBranch.name ?? defaultBranch.id,
 		usedDefault: true,
+		isDefault: true,
 	};
 };
 

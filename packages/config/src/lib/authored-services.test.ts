@@ -154,26 +154,70 @@ describe("previewGaWarningForConfig", () => {
 		expect(message).toContain("preview.buckets → buckets");
 	});
 
-	test("warns for child-only branch.preview.functions tuning", () => {
-		const message = previewGaWarningForConfig(
-			defineConfig({
-				functions: {
-					hello: { name: "Hello", source: "./hello.ts" },
-				},
-				branch: (branch) =>
-					branch.isDefault
-						? {}
-						: {
-								preview: {
-									functions: {
-										hello: { runtime: "nodejs24" },
+	test("warns for child-only branch.preview.functions tuning on that target", () => {
+		const config = defineConfig({
+			functions: {
+				hello: { name: "Hello", source: "./hello.ts" },
+			},
+			branch: (branch) =>
+				branch.isDefault
+					? {}
+					: {
+							preview: {
+								functions: {
+									hello: { runtime: "nodejs24" },
+								},
+							},
+						},
+		});
+		expect(
+			previewGaWarningForConfig(config, {
+				name: "preview",
+				exists: false,
+				isDefault: false,
+			}),
+		).toContain("branch.preview.functions → branch.functions");
+		expect(
+			previewGaWarningForConfig(config, {
+				name: "main",
+				exists: true,
+				isDefault: true,
+			}),
+		).toBeNull();
+	});
+
+	test("warns for deprecated tuning on an existing non-default branch", () => {
+		const config = defineConfig({
+			functions: {
+				hello: { name: "Hello", source: "./hello.ts" },
+			},
+			branch: (branch) =>
+				branch.exists && !branch.isDefault
+					? {
+							preview: {
+								functions: {
+									hello: {
+										customDomains: ["staging.example.com"],
 									},
 								},
 							},
+						}
+					: {},
+		});
+		expect(
+			previewGaWarningForConfig(config, {
+				name: "staging",
+				exists: true,
+				isDefault: false,
 			}),
-		);
-		expect(message).toContain(
-			"branch.preview.functions → branch.functions",
-		);
+		).toContain("branch.preview.functions → branch.functions");
+		expect(
+			previewGaWarningForConfig(config, {
+				name: "main",
+				exists: true,
+				isDefault: true,
+			}),
+		).toBeNull();
+		expect(previewGaWarningForConfig(config)).toBeNull();
 	});
 });

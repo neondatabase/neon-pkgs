@@ -172,6 +172,7 @@ export const handler = async (props: CheckoutProps) => {
 			? await applyPolicyOrDescribeFailure({
 					projectId,
 					branchId,
+					branchName,
 					...(props.apiKey ? { apiKey: props.apiKey } : {}),
 					...(props.apiHost ? { apiHost: props.apiHost } : {}),
 					...(props.color !== undefined

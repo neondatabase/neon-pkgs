@@ -32,6 +32,7 @@ describe("resolveBranchRef", () => {
 			branchId: "br-feature-branch-000002",
 			branchName: "feature",
 			usedDefault: false,
+			isDefault: false,
 		});
 	});
 
@@ -44,6 +45,7 @@ describe("resolveBranchRef", () => {
 			branchId: "br-feature-branch-000002",
 			branchName: "feature",
 			usedDefault: false,
+			isDefault: false,
 		});
 	});
 
@@ -52,6 +54,7 @@ describe("resolveBranchRef", () => {
 			branchId: "br-feature-branch-000002",
 			branchName: "feature",
 			usedDefault: false,
+			isDefault: false,
 		});
 	});
 
@@ -72,6 +75,7 @@ describe("resolveBranchRef", () => {
 			branchId: "br-main-branch-000001",
 			branchName: "main",
 			usedDefault: true,
+			isDefault: true,
 		});
 	});
 
