@@ -192,6 +192,9 @@ function suggestFix(c: ConflictReport): string {
 	if (c.field === "customDomain" && !reasonAllowsUpdateExisting(c.reason)) {
 		return "delete the domain with `neon function domains delete`, or stop declaring it in neon.ts.";
 	}
+	if (c.field === "trigger") {
+		return "delete the remote trigger with `neon triggers delete`, or rename one of the two.";
+	}
 	if (isImmutableConflict(c)) {
 		return "immutable on Neon — recreate the project, or change your `neon.ts` to match the remote.";
 	}

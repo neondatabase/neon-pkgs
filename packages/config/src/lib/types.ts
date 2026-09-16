@@ -469,13 +469,6 @@ export interface FunctionDef {
 	 */
 	dev?: FunctionDevConfig;
 	/**
-	 * Schedule triggers that invoke this function on a cron. Names must be unique among
-	 * every trigger visible on the branch, including other functions. Applied after the
-	 * function is deployed. Triggers that exist remotely but are omitted here are left
-	 * alone.
-	 */
-	triggers?: FunctionScheduleTriggerDef[];
-	/**
 	 * Customer-owned hostnames that should point at this function (beta).
 	 * v1 only supports functions. Hostnames are unique across functions in the resolved
 	 * policy. Applied after the function is deployed, on the project's default branch.
@@ -489,15 +482,42 @@ export interface FunctionDef {
 }
 
 /**
- * A cron schedule that invokes a function. `cron` is a numeric five-field expression
- * in UTC. `functionPath` defaults to `/`. `enabled` defaults to `true`.
+ * A trigger that invokes a function. The trigger name is the record key in
+ * {@link Config.triggers}. `functionPath` defaults to `/`. `enabled` defaults to `true`.
  *
- * @example { type: "schedule", name: "hourly", cron: "0 * * * *" }
+ * @example { type: "schedule", function: "cron", cron: "0 * * * *" }
+ * @example { type: "storage_object_created", function: "ingest", bucket: "assets", prefix: "logos/" }
+ */
+export type FunctionTriggerDef =
+	| FunctionScheduleTriggerDef
+	| FunctionStorageObjectCreatedTriggerDef;
+
+/**
+ * A cron schedule that invokes a function. `function` is a slug from {@link Config.functions}
+ * (or deprecated `preview.functions`). `cron` is a numeric five-field expression in UTC.
+ *
+ * @example { type: "schedule", function: "cron", cron: "0 * * * *" }
  */
 export interface FunctionScheduleTriggerDef {
 	type: "schedule";
-	name: string;
+	function: string;
 	cron: string;
+	functionPath?: string;
+	enabled?: boolean;
+}
+
+/**
+ * Invokes a function when an object is created in a bucket from {@link Config.buckets}
+ * (or deprecated `preview.buckets`). `prefix` is an exact object-key prefix; omit it to
+ * match every key in the bucket.
+ *
+ * @example { type: "storage_object_created", function: "ingest", bucket: "assets", prefix: "logos/" }
+ */
+export interface FunctionStorageObjectCreatedTriggerDef {
+	type: "storage_object_created";
+	function: string;
+	bucket: string;
+	prefix?: string;
 	functionPath?: string;
 	enabled?: boolean;
 }
@@ -725,6 +745,12 @@ export interface Config<
 	 */
 	buckets?: Buckets;
 	/**
+	 * Function triggers, keyed by branch-unique name. Each value names the function
+	 * (and, for `storage_object_created`, the bucket) it binds. Applied after functions
+	 * are deployed. Triggers that exist remotely but are omitted here are left alone.
+	 */
+	triggers?: Record<string, FunctionTriggerDef>;
+	/**
 	 * @deprecated Use top-level `aiGateway`, `functions`, and `buckets`.
 	 */
 	preview?: Preview;
@@ -756,7 +782,6 @@ export interface ResolvedFunctionConfig {
 	 * (no defaults applied). Only consumed by `neon dev`; deploy ignores it.
 	 */
 	dev?: FunctionDevConfig;
-	triggers?: ResolvedFunctionScheduleTrigger[];
 	/**
 	 * Normalized hostnames this function should own on the branch. Absent when this
 	 * branch has no list to apply. Empty when tuning replaced the list with `[]`.
@@ -764,10 +789,25 @@ export interface ResolvedFunctionConfig {
 	customDomains?: string[];
 }
 
+export type ResolvedFunctionTrigger =
+	| ResolvedFunctionScheduleTrigger
+	| ResolvedFunctionStorageObjectCreatedTrigger;
+
 export interface ResolvedFunctionScheduleTrigger {
 	type: "schedule";
 	name: string;
+	functionSlug: string;
 	cron: string;
+	functionPath: string;
+	enabled: boolean;
+}
+
+export interface ResolvedFunctionStorageObjectCreatedTrigger {
+	type: "storage_object_created";
+	name: string;
+	functionSlug: string;
+	bucketName: string;
+	prefix?: string;
 	functionPath: string;
 	enabled: boolean;
 }
@@ -818,6 +858,11 @@ export interface ResolvedBranchConfig {
 	 */
 	dataApi?: ResolvedDataApiConfig;
 	preview?: ResolvedPreviewConfig;
+	/**
+	 * Resolved triggers from {@link Config.triggers}. Absent when none are declared
+	 * (hand-built configs may omit it).
+	 */
+	triggers?: ResolvedFunctionTrigger[];
 }
 
 /**

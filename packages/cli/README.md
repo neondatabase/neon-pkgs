@@ -583,7 +583,7 @@ If you'd rather not keep env vars on disk, inject them at runtime instead with `
 
 ## Config as code (`config` / `deploy`)
 
-Describe a branch's desired state in a `neon.ts` policy and reconcile it from the CLI — the Neon equivalent of `terraform status` / `plan` / `apply`. A policy splits into a **static** existential set — top-level `auth` / `dataApi` / `aiGateway` / `functions` / `buckets` (the last three still work under deprecated `preview`) that decide what _exists_ — and a **dynamic** `branch` closure that tunes each branch (compute settings, TTL, protection, `parent`) based on the branch it's evaluated for (`name`, `isDefault`, …):
+Describe a branch's desired state in a `neon.ts` policy and reconcile it from the CLI — the Neon equivalent of `terraform status` / `plan` / `apply`. A policy splits into a **static** existential set — top-level `auth` / `dataApi` / `aiGateway` / `functions` / `buckets` / `triggers` (`aiGateway`, `functions`, and `buckets` still work under deprecated `preview`) that decide what _exists_ — and a **dynamic** `branch` closure that tunes each branch (compute settings, TTL, protection, `parent`) based on the branch it's evaluated for (`name`, `isDefault`, …):
 
 ```ts
 // neon.ts
@@ -967,21 +967,23 @@ All sub-commands honor the [global options](#global-options), including `--outpu
 
 ## Function triggers (`triggers`)
 
-`neon triggers` (alias `neon trigger`) manages **scheduled function triggers** on a branch — cron jobs that invoke a Neon Function. Beta. The only trigger type is `schedule`; cron is a five-field UTC expression.
+`neon triggers` (alias `neon trigger`) manages Function triggers on a branch. Types are `schedule` (a five-field UTC cron expression) and `storage_object_created` (an object-storage bucket, with an optional object-key prefix).
 
 Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect) and the branch through `--branch <id|name>`, the `.neon` pin, or the project's default branch.
 
 ```bash
 neon triggers create --function-slug uptime --name uptime-check --cron '*/15 * * * *'
+neon triggers create --function-slug ingest --name on-upload --bucket assets --prefix 'logos/' --function-path /object
 neon triggers list
 neon triggers get trigger-test-123
 neon triggers update trigger-test-123 --cron '0 3 * * *'
+neon triggers update trigger-storage-123 --bucket assets --prefix 'incoming/'
 neon triggers enable trigger-test-123
 neon triggers disable trigger-test-123
 neon triggers delete trigger-test-123
 ```
 
-`enable` / `disable` are wrappers over `update --enabled`. List shows `inherited` when the effective config was authored on an ancestor branch.
+`enable` / `disable` are wrappers over `update --enabled`. List shows `inherited` when the effective config was authored on an ancestor branch. `create` takes `--cron` or `--bucket`, not both.
 
 ## Branch credentials (`credentials`)
 

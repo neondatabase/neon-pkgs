@@ -20,11 +20,13 @@ import type {
 	DataApiInput,
 	DataApiSettings,
 	FunctionDef,
+	FunctionTriggerDef,
 	FunctionTuning,
 	PreviewInput,
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
+	ResolvedFunctionTrigger,
 	ResolvedPreviewConfig,
 	ServiceEnabled,
 	ServiceToggleInput,
@@ -141,7 +143,7 @@ type BucketsAutocomplete<Buckets> =
  * ```
  *
  * The policy is split into a **static** existential set (top-level `auth` / `dataApi` /
- * `aiGateway` / `functions` / `buckets`, plus the deprecated `preview` aliases) and a
+ * `aiGateway` / `functions` / `buckets` / `triggers`, plus the deprecated `preview` aliases) and a
  * **dynamic** per-branch `branch` closure. The static half determines which secrets exist —
  * so `NeonEnv<typeof config>` and `parseEnv` are exact — while the closure can only *tune*
  * a branch (lifecycle, compute, per-function deploy settings), never change what exists.
@@ -181,6 +183,7 @@ export function defineConfig<
 	buckets?: Buckets &
 		Record<string, BucketDef> &
 		BucketsAutocomplete<Buckets>;
+	triggers?: Record<string, FunctionTriggerDef>;
 	// `& PreviewInput` restores top-level member hints (aiGateway/functions/buckets);
 	// `& PreviewAutocomplete<Preview>` restores hints *inside* each function/bucket slug
 	// object (see `PreviewAutocomplete`), which the bare index signature otherwise hides.
@@ -260,6 +263,8 @@ export function resolveConfig(
 		branch,
 	);
 	if (preview) resolved.preview = preview;
+	const triggers = resolveTriggers(config.triggers);
+	if (triggers.length > 0) resolved.triggers = triggers;
 
 	return resolved;
 }
@@ -402,19 +407,35 @@ function resolveFunctionConfig(
 			: {}),
 		// Passed through untouched (no defaults); only `neon dev` reads it.
 		...(def.dev ? { dev: def.dev } : {}),
-		...(def.triggers
-			? {
-					triggers: def.triggers.map((trigger) => ({
-						type: "schedule" as const,
-						name: trigger.name,
-						cron: trigger.cron,
-						functionPath: trigger.functionPath ?? "/",
-						enabled: trigger.enabled ?? true,
-					})),
-				}
-			: {}),
 		...(customDomains !== undefined ? { customDomains } : {}),
 	};
+}
+
+function resolveTriggers(
+	triggers: Record<string, FunctionTriggerDef> | undefined,
+): ResolvedFunctionTrigger[] {
+	if (!triggers) return [];
+	return Object.entries(triggers).map(([name, trigger]) => {
+		if (trigger.type === "schedule") {
+			return {
+				type: "schedule" as const,
+				name,
+				functionSlug: trigger.function,
+				cron: trigger.cron,
+				functionPath: trigger.functionPath ?? "/",
+				enabled: trigger.enabled ?? true,
+			};
+		}
+		return {
+			type: "storage_object_created" as const,
+			name,
+			functionSlug: trigger.function,
+			bucketName: trigger.bucket,
+			...(trigger.prefix !== undefined ? { prefix: trigger.prefix } : {}),
+			functionPath: trigger.functionPath ?? "/",
+			enabled: trigger.enabled ?? true,
+		};
+	});
 }
 
 function resolveFunctionCustomDomains(

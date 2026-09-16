@@ -256,9 +256,26 @@ const scheduleTriggerSchema = z.object({
 	inherited: z.boolean(),
 	next_run_at: z.string().nullable(),
 });
-const triggerResponseSchema = z.object({ trigger: scheduleTriggerSchema });
+const storageObjectCreatedTriggerSchema = z.object({
+	type: z.literal("storage_object_created"),
+	trigger_id: z.string(),
+	function_slug: z.string(),
+	name: z.string(),
+	function_path: z.string(),
+	storage_object_created: z.object({
+		bucket_name: z.string(),
+		prefix: z.string().optional(),
+	}),
+	enabled: z.boolean(),
+	inherited: z.boolean(),
+});
+const triggerApiSchema = z.discriminatedUnion("type", [
+	scheduleTriggerSchema,
+	storageObjectCreatedTriggerSchema,
+]);
+const triggerResponseSchema = z.object({ trigger: triggerApiSchema });
 const triggersListResponseSchema = z.object({
-	triggers: z.array(scheduleTriggerSchema),
+	triggers: z.array(triggerApiSchema),
 });
 
 const customDomainApiSchema = z.object({
@@ -1276,18 +1293,7 @@ class RealNeonApi implements NeonApi {
 				async () => {
 					const data = await this.postJson(
 						triggersPath(projectId, branchId),
-						{
-							type: "schedule",
-							name: input.name,
-							function_slug: input.functionSlug,
-							schedule: { cron: input.cron },
-							...(input.functionPath !== undefined
-								? { function_path: input.functionPath }
-								: {}),
-							...(input.enabled !== undefined
-								? { enabled: input.enabled }
-								: {}),
-						},
+						createTriggerRequestBody(input),
 					);
 					const parsed = triggerResponseSchema.parse(data);
 					return triggerToSnapshot(parsed.trigger);
@@ -1311,24 +1317,7 @@ class RealNeonApi implements NeonApi {
 				async () => {
 					const data = await this.patchJson(
 						`${triggersPath(projectId, branchId)}/${encodeURIComponent(triggerId)}`,
-						{
-							type: "schedule",
-							...(input.name !== undefined
-								? { name: input.name }
-								: {}),
-							...(input.functionSlug !== undefined
-								? { function_slug: input.functionSlug }
-								: {}),
-							...(input.cron !== undefined
-								? { schedule: { cron: input.cron } }
-								: {}),
-							...(input.functionPath !== undefined
-								? { function_path: input.functionPath }
-								: {}),
-							...(input.enabled !== undefined
-								? { enabled: input.enabled }
-								: {}),
-						},
+						updateTriggerRequestBody(input),
 					);
 					const parsed = triggerResponseSchema.parse(data);
 					return triggerToSnapshot(parsed.trigger);
@@ -1590,17 +1579,103 @@ function customDomainToSnapshot(
 }
 
 function triggerToSnapshot(
-	data: z.infer<typeof scheduleTriggerSchema>,
+	data: z.infer<typeof triggerApiSchema>,
 ): NeonTriggerSnapshot {
+	if (data.type === "schedule") {
+		return {
+			type: "schedule",
+			triggerId: data.trigger_id,
+			name: data.name,
+			functionSlug: data.function_slug,
+			functionPath: data.function_path,
+			cron: data.schedule.cron,
+			enabled: data.enabled,
+			inherited: data.inherited,
+			nextRunAt: data.next_run_at,
+		};
+	}
 	return {
+		type: "storage_object_created",
 		triggerId: data.trigger_id,
 		name: data.name,
 		functionSlug: data.function_slug,
 		functionPath: data.function_path,
-		cron: data.schedule.cron,
+		bucketName: data.storage_object_created.bucket_name,
+		...(data.storage_object_created.prefix !== undefined
+			? { prefix: data.storage_object_created.prefix }
+			: {}),
 		enabled: data.enabled,
 		inherited: data.inherited,
-		nextRunAt: data.next_run_at,
+	};
+}
+
+function createTriggerRequestBody(
+	input: CreateTriggerInput,
+): Record<string, unknown> {
+	if (input.type === "storage_object_created") {
+		return {
+			type: "storage_object_created",
+			name: input.name,
+			function_slug: input.functionSlug,
+			storage_object_created: {
+				bucket_name: input.bucketName,
+				...(input.prefix !== undefined ? { prefix: input.prefix } : {}),
+			},
+			...(input.functionPath !== undefined
+				? { function_path: input.functionPath }
+				: {}),
+			...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+		};
+	}
+	return {
+		type: "schedule",
+		name: input.name,
+		function_slug: input.functionSlug,
+		schedule: { cron: input.cron },
+		...(input.functionPath !== undefined
+			? { function_path: input.functionPath }
+			: {}),
+		...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+	};
+}
+
+function updateTriggerRequestBody(
+	input: UpdateTriggerInput,
+): Record<string, unknown> {
+	if (input.type === "storage_object_created") {
+		return {
+			type: "storage_object_created",
+			...(input.name !== undefined ? { name: input.name } : {}),
+			...(input.functionSlug !== undefined
+				? { function_slug: input.functionSlug }
+				: {}),
+			...(input.functionPath !== undefined
+				? { function_path: input.functionPath }
+				: {}),
+			...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+			...(input.bucketName !== undefined
+				? {
+						storage_object_created: {
+							bucket_name: input.bucketName,
+							...(input.prefix !== undefined
+								? { prefix: input.prefix }
+								: {}),
+						},
+					}
+				: {}),
+		};
+	}
+	return {
+		type: "schedule",
+		...(input.name !== undefined ? { name: input.name } : {}),
+		...(input.functionSlug !== undefined
+			? { function_slug: input.functionSlug }
+			: {}),
+		...(input.cron !== undefined ? { schedule: { cron: input.cron } } : {}),
+		...(input.functionPath !== undefined
+			? { function_path: input.functionPath }
+			: {}),
+		...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
 	};
 }
 

@@ -73,6 +73,19 @@ describe("triggers", () => {
 		]);
 	});
 
+	test("update storage trigger bucket", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"triggers",
+			"update",
+			"trigger-storage-123",
+			...BRANCH,
+			"--bucket",
+			"assets",
+			"--prefix",
+			"logos/",
+		]);
+	});
+
 	test("update storage trigger rejects --cron", async ({
 		testCliCommand,
 	}) => {
@@ -93,6 +106,26 @@ describe("triggers", () => {
 		);
 	});
 
+	test("update schedule trigger rejects --bucket", async ({
+		testCliCommand,
+	}) => {
+		const { stderr, code } = await testCliCommand(
+			[
+				"triggers",
+				"update",
+				"trigger-test-123",
+				...BRANCH,
+				"--bucket",
+				"assets",
+			],
+			{ code: 1, snapshot: false },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"Trigger trigger-test-123 is type schedule; --bucket and --prefix apply to storage_object_created triggers.",
+		);
+	});
+
 	test("create", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"triggers",
@@ -105,6 +138,85 @@ describe("triggers", () => {
 			"--cron",
 			"*/15 * * * *",
 		]);
+	});
+
+	test("create storage_object_created", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"triggers",
+			"create",
+			...BRANCH,
+			"--function-slug",
+			"ingest",
+			"--name",
+			"on-upload",
+			"--bucket",
+			"assets",
+			"--prefix",
+			"logos/",
+			"--function-path",
+			"/object",
+		]);
+	});
+
+	test("create rejects --cron and --bucket together", async ({
+		testCliCommand,
+	}) => {
+		const { stderr, code } = await testCliCommand(
+			[
+				"triggers",
+				"create",
+				...BRANCH,
+				"--function-slug",
+				"uptime",
+				"--name",
+				"uptime-check",
+				"--cron",
+				"*/15 * * * *",
+				"--bucket",
+				"assets",
+			],
+			{ code: 1, snapshot: false },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("Pass --cron or --bucket, not both.");
+	});
+
+	test("create requires --cron or --bucket", async ({ testCliCommand }) => {
+		const { stderr, code } = await testCliCommand(
+			[
+				"triggers",
+				"create",
+				...BRANCH,
+				"--function-slug",
+				"uptime",
+				"--name",
+				"uptime-check",
+			],
+			{ code: 1, snapshot: false },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"Pass --cron for a schedule trigger, or --bucket for a storage_object_created trigger.",
+		);
+	});
+
+	test("create --prefix requires --bucket", async ({ testCliCommand }) => {
+		const { stderr, code } = await testCliCommand(
+			[
+				"triggers",
+				"create",
+				...BRANCH,
+				"--function-slug",
+				"ingest",
+				"--name",
+				"on-upload",
+				"--prefix",
+				"logos/",
+			],
+			{ code: 1, snapshot: false },
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("--prefix requires --bucket.");
 	});
 
 	test("update", async ({ testCliCommand }) => {
@@ -189,6 +301,7 @@ describe("triggers", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("No fields to update");
 		expect(stderr).not.toContain("--cron");
+		expect(stderr).toContain("--bucket");
 		expect(stderr).toContain("--name");
 	});
 

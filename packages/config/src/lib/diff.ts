@@ -15,7 +15,7 @@ import type {
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
-	ResolvedFunctionScheduleTrigger,
+	ResolvedFunctionTrigger,
 } from "./types.js";
 
 /**
@@ -105,7 +105,7 @@ export type PlanStep =
 			branchId: string;
 			branchName: string;
 			functionSlug: string;
-			trigger: ResolvedFunctionScheduleTrigger;
+			trigger: ResolvedFunctionTrigger;
 	  }
 	| {
 			kind: "update-trigger";
@@ -114,7 +114,7 @@ export type PlanStep =
 			branchName: string;
 			triggerId: string;
 			functionSlug: string;
-			trigger: ResolvedFunctionScheduleTrigger;
+			trigger: ResolvedFunctionTrigger;
 	  }
 	| {
 			kind: "register-custom-domain";
@@ -250,37 +250,6 @@ function diffPreview(args: {
 			fn,
 			functionExists: exists,
 		});
-		for (const trigger of fn.triggers ?? []) {
-			const remoteTrigger = state.triggers.find(
-				(t) => t.functionSlug === fn.slug && t.name === trigger.name,
-			);
-			if (!remoteTrigger) {
-				plan.push({
-					kind: "create-trigger",
-					projectId: remote.projectId,
-					branchId: remote.branch.id,
-					branchName: remote.branch.name,
-					functionSlug: fn.slug,
-					trigger,
-				});
-				continue;
-			}
-			if (
-				remoteTrigger.cron !== trigger.cron ||
-				remoteTrigger.enabled !== trigger.enabled ||
-				remoteTrigger.functionPath !== trigger.functionPath
-			) {
-				plan.push({
-					kind: "update-trigger",
-					projectId: remote.projectId,
-					branchId: remote.branch.id,
-					branchName: remote.branch.name,
-					triggerId: remoteTrigger.triggerId,
-					functionSlug: fn.slug,
-					trigger,
-				});
-			}
-		}
 		diffFunctionCustomDomains({
 			fn,
 			customDomains,
@@ -290,6 +259,62 @@ function diffPreview(args: {
 			conflicts,
 		});
 	}
+
+	for (const trigger of config.triggers ?? []) {
+		const remoteTrigger = state.triggers.find(
+			(t) => t.name === trigger.name,
+		);
+		if (!remoteTrigger) {
+			plan.push({
+				kind: "create-trigger",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+				functionSlug: trigger.functionSlug,
+				trigger,
+			});
+			continue;
+		}
+		if (remoteTrigger.type !== trigger.type) {
+			conflicts.push({
+				kind: "branch",
+				identifier: trigger.name,
+				field: "trigger",
+				current: remoteTrigger.type,
+				desired: trigger.type,
+				reason: `trigger "${trigger.name}" exists as type ${remoteTrigger.type}; neon.ts declares ${trigger.type}. Delete the remote trigger with \`neon triggers delete\` and apply again.`,
+			});
+			continue;
+		}
+		if (triggerNeedsUpdate(trigger, remoteTrigger)) {
+			plan.push({
+				kind: "update-trigger",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+				triggerId: remoteTrigger.triggerId,
+				functionSlug: trigger.functionSlug,
+				trigger,
+			});
+		}
+	}
+}
+
+function triggerNeedsUpdate(
+	desired: ResolvedFunctionTrigger,
+	remote: NeonTriggerSnapshot,
+): boolean {
+	if (remote.functionSlug !== desired.functionSlug) return true;
+	if (remote.functionPath !== desired.functionPath) return true;
+	if (remote.enabled !== desired.enabled) return true;
+	if (desired.type === "schedule") {
+		return remote.type !== "schedule" || remote.cron !== desired.cron;
+	}
+	return (
+		remote.type !== "storage_object_created" ||
+		remote.bucketName !== desired.bucketName ||
+		remote.prefix !== desired.prefix
+	);
 }
 
 const FUNCTION_CUSTOM_DOMAIN_ENTITY = "function";

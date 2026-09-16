@@ -233,19 +233,17 @@ describe("resolveConfig", () => {
 
 	test("defaults schedule trigger functionPath and enabled", () => {
 		const config = defineConfig({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./functions/hello-world.ts",
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-						],
-					},
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./functions/hello-world.ts",
+				},
+			},
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
 				},
 			},
 		});
@@ -253,11 +251,47 @@ describe("resolveConfig", () => {
 			name: "main",
 			exists: true,
 		});
-		expect(resolved.preview?.functions[0]?.triggers).toEqual([
+		expect(resolved.triggers).toEqual([
 			{
 				type: "schedule",
 				name: "hourly",
+				functionSlug: "fn1",
 				cron: "0 * * * *",
+				functionPath: "/",
+				enabled: true,
+			},
+		]);
+	});
+
+	test("defaults storage_object_created trigger functionPath and enabled", () => {
+		const config = defineConfig({
+			buckets: { assets: { access: "public_read" } },
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./functions/hello-world.ts",
+				},
+			},
+			triggers: {
+				"on-upload": {
+					type: "storage_object_created",
+					function: "fn1",
+					bucket: "assets",
+					prefix: "logos/",
+				},
+			},
+		});
+		const resolved = resolveConfig(config, {
+			name: "main",
+			exists: true,
+		});
+		expect(resolved.triggers).toEqual([
+			{
+				type: "storage_object_created",
+				name: "on-upload",
+				functionSlug: "fn1",
+				bucketName: "assets",
+				prefix: "logos/",
 				functionPath: "/",
 				enabled: true,
 			},
@@ -967,21 +1001,19 @@ describe("defineConfig — Data API config", () => {
 
 		test("still applies static triggers and env on a non-default branch", () => {
 			const config = defineConfig({
-				preview: {
-					functions: {
-						hello: {
-							name: "Hello",
-							source: "./hello.ts",
-							env: { TOKEN: "secret" },
-							customDomains: ["docs.example.com"],
-							triggers: [
-								{
-									type: "schedule",
-									name: "hourly",
-									cron: "0 * * * *",
-								},
-							],
-						},
+				functions: {
+					hello: {
+						name: "Hello",
+						source: "./hello.ts",
+						env: { TOKEN: "secret" },
+						customDomains: ["docs.example.com"],
+					},
+				},
+				triggers: {
+					hourly: {
+						type: "schedule",
+						function: "hello",
+						cron: "0 * * * *",
 					},
 				},
 			});
@@ -989,13 +1021,18 @@ describe("defineConfig — Data API config", () => {
 				name: "dev",
 				exists: true,
 				isDefault: false,
-			}).preview?.functions[0];
-			expect(resolved?.customDomains).toBeUndefined();
-			expect(resolved?.env).toEqual({ TOKEN: "secret" });
-			expect(resolved?.triggers).toEqual([
+			});
+			expect(
+				resolved.preview?.functions[0]?.customDomains,
+			).toBeUndefined();
+			expect(resolved.preview?.functions[0]?.env).toEqual({
+				TOKEN: "secret",
+			});
+			expect(resolved.triggers).toEqual([
 				{
 					type: "schedule",
 					name: "hourly",
+					functionSlug: "hello",
 					cron: "0 * * * *",
 					functionPath: "/",
 					enabled: true,

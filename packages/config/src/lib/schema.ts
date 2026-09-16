@@ -231,11 +231,29 @@ const functionDevConfigSchema = z.strictObject({
 
 const functionScheduleTriggerSchema = z.strictObject({
 	type: z.literal("schedule"),
-	name: z.string().min(1).max(255),
+	function: functionSlugSchema,
 	cron: z.string().min(1),
 	functionPath: z.string().min(1).optional(),
 	enabled: z.boolean().optional(),
 });
+
+const functionStorageObjectCreatedTriggerSchema = z.strictObject({
+	type: z.literal("storage_object_created"),
+	function: functionSlugSchema,
+	bucket: bucketNameSchema,
+	prefix: z.string().min(1).max(1024).optional(),
+	functionPath: z.string().min(1).optional(),
+	enabled: z.boolean().optional(),
+});
+
+const functionTriggerSchema = z.discriminatedUnion("type", [
+	functionScheduleTriggerSchema,
+	functionStorageObjectCreatedTriggerSchema,
+]);
+
+const triggerNameSchema = z.string().min(1).max(255);
+
+const triggersRecordSchema = z.record(triggerNameSchema, functionTriggerSchema);
 
 const customDomainSchema = z.string().superRefine((value, ctx) => {
 	const message = customDomainValidationError(value);
@@ -368,7 +386,6 @@ export const functionDefSchema = z
 		externalPackages: functionExternalPackagesSchema.optional(),
 		bundler: bundlerSchema.optional(),
 		dev: functionDevConfigSchema.optional(),
-		triggers: z.array(functionScheduleTriggerSchema).optional(),
 		customDomains: customDomainsSchema.optional(),
 	})
 	.check((ctx) => {
@@ -454,39 +471,14 @@ export const bucketDefSchema = z.strictObject({
 });
 
 /**
- * Functions record with trigger-name uniqueness. Used as both top-level `functions`
- * and `preview.functions` so {@link previewInputSchema} (`schemas.preview`) keeps the
- * same validation when parsed on its own.
+ * Functions record. Used as both top-level `functions` and `preview.functions`
+ * so {@link previewInputSchema} (`schemas.preview`) keeps the same validation
+ * when parsed on its own.
  */
-export const functionsRecordSchema = z
-	.record(functionSlugSchema, functionDefSchema)
-	.superRefine((functions, ctx) => {
-		const byName = new Map<string, string>();
-		for (const [slug, fn] of Object.entries(functions)) {
-			const seenOnFn = new Set<string>();
-			for (const [index, trigger] of (fn.triggers ?? []).entries()) {
-				if (seenOnFn.has(trigger.name)) {
-					ctx.addIssue({
-						code: "custom",
-						path: [slug, "triggers", index, "name"],
-						message: `trigger name "${trigger.name}" is listed more than once on function "${slug}"`,
-					});
-					continue;
-				}
-				seenOnFn.add(trigger.name);
-				const prior = byName.get(trigger.name);
-				if (prior !== undefined) {
-					ctx.addIssue({
-						code: "custom",
-						path: [slug, "triggers", index, "name"],
-						message: `trigger name "${trigger.name}" is already used by function "${prior}"`,
-					});
-					continue;
-				}
-				byName.set(trigger.name, slug);
-			}
-		}
-	});
+export const functionsRecordSchema = z.record(
+	functionSlugSchema,
+	functionDefSchema,
+);
 
 /** Static, beta Preview feature set: AI Gateway toggle + functions/buckets records. */
 export const previewInputSchema = z.strictObject({
@@ -556,6 +548,7 @@ export const configInputSchema = z
 		aiGateway: serviceToggleInputSchema.optional(),
 		functions: functionsRecordSchema.optional(),
 		buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
+		triggers: triggersRecordSchema.optional(),
 		preview: previewInputSchema.optional(),
 		branch: z
 			.custom<(...args: unknown[]) => unknown>(
@@ -586,6 +579,7 @@ export const configInputSchema = z
 			gaPath: "buckets",
 			previewPath: "preview.buckets",
 		});
+		validateAuthoredTriggers(cfg, ctx);
 		// A Data API verified by Neon Auth (`authProvider: "neon"`, the default) needs Neon
 		// Auth enabled on the same branch so the tokens it verifies actually exist. Enforce
 		// the same invariant the `defineConfig` type-level check expresses, at runtime.
@@ -600,6 +594,46 @@ export const configInputSchema = z
 			});
 		}
 	});
+
+function validateAuthoredTriggers(
+	cfg: {
+		functions?: Record<string, unknown>;
+		buckets?: Record<string, unknown>;
+		preview?: {
+			functions?: Record<string, unknown>;
+			buckets?: Record<string, unknown>;
+		};
+		triggers?: Record<string, z.infer<typeof functionTriggerSchema>>;
+	},
+	ctx: z.RefinementCtx,
+): void {
+	if (cfg.triggers === undefined) return;
+	const functions = new Set(
+		Object.keys(cfg.functions ?? cfg.preview?.functions ?? {}),
+	);
+	const buckets = new Set(
+		Object.keys(cfg.buckets ?? cfg.preview?.buckets ?? {}),
+	);
+	for (const [name, trigger] of Object.entries(cfg.triggers)) {
+		if (!functions.has(trigger.function)) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["triggers", name, "function"],
+				message: `trigger "${name}" references function "${trigger.function}", which is not declared in functions (or preview.functions)`,
+			});
+		}
+		if (
+			trigger.type === "storage_object_created" &&
+			!buckets.has(trigger.bucket)
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["triggers", name, "bucket"],
+				message: `trigger "${name}" references bucket "${trigger.bucket}", which is not declared in buckets (or preview.buckets)`,
+			});
+		}
+	}
+}
 
 function rejectDuplicateHome(
 	ctx: z.RefinementCtx,

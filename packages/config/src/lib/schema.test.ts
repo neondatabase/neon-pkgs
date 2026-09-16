@@ -253,91 +253,103 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
-	test("accepts a schedule trigger on a function", () => {
+	test("accepts a schedule trigger keyed by name", () => {
 		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-						],
-					},
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./hello.ts",
+				},
+			},
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
 				},
 			},
 		});
 		expect(result.success).toBe(true);
 	});
 
-	test("rejects a duplicate trigger name on the same function", () => {
+	test("accepts a storage_object_created trigger when the bucket is declared", () => {
 		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: "./hello.ts",
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 0 * * *",
-							},
-						],
-					},
+			buckets: { assets: { access: "public_read" } },
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./hello.ts",
+				},
+			},
+			triggers: {
+				"on-upload": {
+					type: "storage_object_created",
+					function: "fn1",
+					bucket: "assets",
+					prefix: "logos/",
+				},
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects nested function.triggers", () => {
+		const result = configInputSchema.safeParse({
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./hello.ts",
+					triggers: [
+						{
+							type: "schedule",
+							name: "hourly",
+							cron: "0 * * * *",
+						},
+					],
+				},
+			},
+		});
+		expect(result.success).toBe(false);
+	});
+
+	test("rejects a trigger whose function is not declared", () => {
+		const result = configInputSchema.safeParse({
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
 				},
 			},
 		});
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(formatZodIssues(result.error).join("\n")).toContain(
-				'trigger name "hourly" is listed more than once on function "fn1"',
+				'trigger "hourly" references function "fn1", which is not declared in functions (or preview.functions)',
 			);
 		}
 	});
 
-	test("rejects a trigger name used by two functions", () => {
+	test("rejects a storage_object_created trigger whose bucket is not declared", () => {
 		const result = configInputSchema.safeParse({
-			preview: {
-				functions: {
-					hello: {
-						name: "Hello",
-						source: "./hello.ts",
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-						],
-					},
-					world: {
-						name: "World",
-						source: "./world.ts",
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 0 * * *",
-							},
-						],
-					},
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./hello.ts",
+				},
+			},
+			triggers: {
+				"on-upload": {
+					type: "storage_object_created",
+					function: "fn1",
+					bucket: "assets",
 				},
 			},
 		});
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(formatZodIssues(result.error).join("\n")).toContain(
-				'trigger name "hourly" is already used by function "hello"',
+				'trigger "on-upload" references bucket "assets", which is not declared in buckets (or preview.buckets)',
 			);
 		}
 	});

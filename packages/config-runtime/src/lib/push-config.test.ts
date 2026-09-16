@@ -716,19 +716,14 @@ describe("pushConfig", () => {
 	test("creates a schedule trigger after deploying the function", async () => {
 		const { api, projectId } = seededFake();
 		const config = defineConfig({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: fnSource,
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-						],
-					},
+			functions: {
+				fn1: { name: "Hello World", source: fnSource },
+			},
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
 				},
 			},
 		});
@@ -756,6 +751,7 @@ describe("pushConfig", () => {
 		);
 		expect(created).toHaveLength(1);
 		expect(created[0].args[2]).toMatchObject({
+			type: "schedule",
 			name: "hourly",
 			functionSlug: "fn1",
 			cron: "0 * * * *",
@@ -765,9 +761,70 @@ describe("pushConfig", () => {
 		const triggers = await api.listBranchTriggers(projectId, "br-main");
 		expect(triggers).toEqual([
 			expect.objectContaining({
+				type: "schedule",
 				name: "hourly",
 				functionSlug: "fn1",
 				cron: "0 * * * *",
+			}),
+		]);
+	});
+
+	test("creates a storage_object_created trigger after deploying the function", async () => {
+		const { api, projectId } = seededFake();
+		const config = defineConfig({
+			buckets: { assets: { access: "public_read" } },
+			functions: {
+				fn1: { name: "Hello World", source: fnSource },
+			},
+			triggers: {
+				"on-upload": {
+					type: "storage_object_created",
+					function: "fn1",
+					bucket: "assets",
+					prefix: "logos/",
+					functionPath: "/object",
+				},
+			},
+		});
+
+		const result = await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					identifier: "function:fn1",
+					action: "create",
+				}),
+				expect.objectContaining({
+					identifier: "trigger:fn1:on-upload",
+					action: "create",
+				}),
+			]),
+		);
+		const created = api.history.filter(
+			(h) => h.method === "createBranchTrigger",
+		);
+		expect(created).toHaveLength(1);
+		expect(created[0].args[2]).toMatchObject({
+			type: "storage_object_created",
+			name: "on-upload",
+			functionSlug: "fn1",
+			bucketName: "assets",
+			prefix: "logos/",
+			functionPath: "/object",
+			enabled: true,
+		});
+		const triggers = await api.listBranchTriggers(projectId, "br-main");
+		expect(triggers).toEqual([
+			expect.objectContaining({
+				type: "storage_object_created",
+				name: "on-upload",
+				bucketName: "assets",
+				prefix: "logos/",
 			}),
 		]);
 	});
@@ -782,6 +839,7 @@ describe("pushConfig", () => {
 		});
 		api.seedTrigger(projectId, "br-main", {
 			triggerId: "trg-hourly",
+			type: "schedule",
 			name: "hourly",
 			functionSlug: "fn1",
 			functionPath: "/",
@@ -791,19 +849,14 @@ describe("pushConfig", () => {
 			nextRunAt: "2026-01-02T00:00:00Z",
 		});
 		const config = defineConfig({
-			preview: {
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: fnSource,
-						triggers: [
-							{
-								type: "schedule",
-								name: "hourly",
-								cron: "0 * * * *",
-							},
-						],
-					},
+			functions: {
+				fn1: { name: "Hello World", source: fnSource },
+			},
+			triggers: {
+				hourly: {
+					type: "schedule",
+					function: "fn1",
+					cron: "0 * * * *",
 				},
 			},
 		});
@@ -828,12 +881,16 @@ describe("pushConfig", () => {
 		expect(updated).toHaveLength(1);
 		expect(updated[0].args[2]).toBe("trg-hourly");
 		expect(updated[0].args[3]).toMatchObject({
+			type: "schedule",
 			cron: "0 * * * *",
 			enabled: true,
 			functionPath: "/",
 		});
 		const triggers = await api.listBranchTriggers(projectId, "br-main");
-		expect(triggers[0]?.cron).toBe("0 * * * *");
+		expect(triggers[0]).toMatchObject({
+			type: "schedule",
+			cron: "0 * * * *",
+		});
 	});
 
 	test("surfaces a first-deployed function's invocation URL in the applied details", async () => {
