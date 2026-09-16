@@ -305,6 +305,8 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
 		expect(wrapped.message).toMatch(/aws-eu-central-1/);
 		expect(wrapped.message).toMatch(/one of those regions/);
+		expect(wrapped.message).toMatch(/your neon\.ts/);
+		expect(wrapped.message).not.toMatch(/preview. block/);
 		expect(wrapped.message).not.toMatch(/private preview/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(404);

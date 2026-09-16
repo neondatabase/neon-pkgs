@@ -1899,7 +1899,7 @@ export function previewUnavailableError(
 		[
 			`${featureLabel} isn't available for this Neon project${apiContext}.`,
 			platformFeatureUnavailableHint(status, neonMessage),
-			"If you don't need it, remove the corresponding feature from the `preview` block of your neon.ts and re-run.",
+			"If you don't need it, remove the corresponding feature from your neon.ts and re-run.",
 		].join(" "),
 		{
 			cause: err,
