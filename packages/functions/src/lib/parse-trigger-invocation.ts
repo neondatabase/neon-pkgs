@@ -5,7 +5,7 @@ const TRIGGER_INVOCATION_ID_HEADER = "x-neon-trigger-invocation-id";
 export type ScheduleTriggerInvocation = {
 	version: 1;
 	invocationId: string;
-	type: "schedule";
+	type?: "schedule";
 	trigger: {
 		type: "schedule";
 		id: string;
@@ -38,7 +38,7 @@ export type TriggerInvocation =
 export function isScheduleTriggerInvocation(
 	invocation: TriggerInvocation,
 ): invocation is ScheduleTriggerInvocation {
-	return invocation.type === "schedule";
+	return invocation.trigger.type === "schedule";
 }
 
 export function isStorageObjectCreatedTriggerInvocation(
@@ -52,8 +52,15 @@ export type ParseTriggerInvocationInput = {
 	body: unknown;
 };
 
-export type ParseTriggerInvocationResult =
+export type ParseTriggerDeliveryResult =
 	| { ok: true; invocation: TriggerInvocation }
+	| {
+			ok: false;
+			error: "missing_header" | "invalid_body" | "invocation_id_mismatch";
+	  };
+
+export type ParseTriggerInvocationResult =
+	| { ok: true; invocation: ScheduleTriggerInvocation }
 	| {
 			ok: false;
 			error: "missing_header" | "invalid_body" | "invocation_id_mismatch";
@@ -148,7 +155,7 @@ function parseInvocation(body: unknown): TriggerInvocation | undefined {
 function parseFromHeadersAndData(
 	headers: HeadersInit,
 	body: unknown,
-): ParseTriggerInvocationResult {
+): ParseTriggerDeliveryResult {
 	const headerId = new Headers(headers)
 		.get(TRIGGER_INVOCATION_ID_HEADER)
 		?.trim();
@@ -169,7 +176,7 @@ function parseFromHeadersAndData(
 
 async function parseFromRequest(
 	request: Request,
-): Promise<ParseTriggerInvocationResult> {
+): Promise<ParseTriggerDeliveryResult> {
 	const headerId = request.headers.get(TRIGGER_INVOCATION_ID_HEADER)?.trim();
 	if (!headerId) {
 		return { ok: false, error: "missing_header" };
@@ -185,6 +192,31 @@ async function parseFromRequest(
 	return parseFromHeadersAndData(request.headers, body);
 }
 
+function asScheduleResult(
+	result: ParseTriggerDeliveryResult,
+): ParseTriggerInvocationResult {
+	if (!result.ok) return result;
+	if (!isScheduleTriggerInvocation(result.invocation)) {
+		return { ok: false, error: "invalid_body" };
+	}
+	return { ok: true, invocation: result.invocation };
+}
+
+export function parseTriggerDelivery(
+	request: Request,
+): Promise<ParseTriggerDeliveryResult>;
+export function parseTriggerDelivery(
+	input: ParseTriggerInvocationInput,
+): ParseTriggerDeliveryResult;
+export function parseTriggerDelivery(
+	input: Request | ParseTriggerInvocationInput,
+): ParseTriggerDeliveryResult | Promise<ParseTriggerDeliveryResult> {
+	if (isRequest(input)) {
+		return parseFromRequest(input);
+	}
+	return parseFromHeadersAndData(input.headers, input.body);
+}
+
 export function parseTriggerInvocation(
 	request: Request,
 ): Promise<ParseTriggerInvocationResult>;
@@ -195,7 +227,7 @@ export function parseTriggerInvocation(
 	input: Request | ParseTriggerInvocationInput,
 ): ParseTriggerInvocationResult | Promise<ParseTriggerInvocationResult> {
 	if (isRequest(input)) {
-		return parseFromRequest(input);
+		return parseFromRequest(input).then(asScheduleResult);
 	}
-	return parseFromHeadersAndData(input.headers, input.body);
+	return asScheduleResult(parseFromHeadersAndData(input.headers, input.body));
 }

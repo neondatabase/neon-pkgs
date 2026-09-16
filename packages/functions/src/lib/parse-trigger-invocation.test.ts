@@ -3,7 +3,9 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
 	isScheduleTriggerInvocation,
 	isStorageObjectCreatedTriggerInvocation,
+	parseTriggerDelivery,
 	parseTriggerInvocation,
+	type ScheduleTriggerInvocation,
 } from "./parse-trigger-invocation.js";
 
 const invocationId = "ucBDafV0gB8qoEM4UcdIu84Qx5JCAXYwpRnPVAagPa0";
@@ -169,7 +171,7 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 	});
 
 	it("accepts a storage_object_created delivery whose header matches invocation_id", () => {
-		const result = parseTriggerInvocation({
+		const result = parseTriggerDelivery({
 			headers: scheduleHeaders(storageInvocationId),
 			body: storageBody,
 		});
@@ -186,9 +188,29 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 		expectTypeOf(result.invocation.data.objectKey).toEqualTypeOf<string>();
 	});
 
-	it("fails invalid_body when storage_object_created data omits object_key", () => {
+	it("keeps parseTriggerInvocation schedule-only for a storage_object_created body", () => {
 		expect(
 			parseTriggerInvocation({
+				headers: scheduleHeaders(storageInvocationId),
+				body: storageBody,
+			}),
+		).toEqual({ ok: false, error: "invalid_body" });
+	});
+
+	it("accepts a ScheduleTriggerInvocation value without top-level type", () => {
+		const existing: ScheduleTriggerInvocation = {
+			version: 1,
+			invocationId: "id",
+			trigger: { type: "schedule", id: "id", name: "cron" },
+			data: { scheduledAt: "2026-09-16T00:00:00Z" },
+		};
+		expect(isScheduleTriggerInvocation(existing)).toBe(true);
+		expectTypeOf(existing.data.scheduledAt).toEqualTypeOf<string>();
+	});
+
+	it("fails invalid_body when storage_object_created data omits object_key", () => {
+		expect(
+			parseTriggerDelivery({
 				headers: scheduleHeaders(storageInvocationId),
 				body: {
 					...storageBody,
@@ -210,7 +232,7 @@ describe("parseTriggerInvocation(request)", () => {
 	});
 
 	it("accepts a storage_object_created delivery Request", async () => {
-		const result = await parseTriggerInvocation(
+		const result = await parseTriggerDelivery(
 			scheduleRequest({
 				header: storageInvocationId,
 				body: storageBody,

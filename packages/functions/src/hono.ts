@@ -19,6 +19,7 @@ export type {
 export {
 	isScheduleTriggerInvocation,
 	isStorageObjectCreatedTriggerInvocation,
+	parseTriggerDelivery,
 } from "./lib/parse-trigger-invocation.js";
 export type { UpgradeWebSocketOptions } from "./lib/upgrade-websocket.js";
 
