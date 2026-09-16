@@ -8,5 +8,6 @@ export {
 	parseTriggerInvocation,
 	type ScheduleTriggerInvocation,
 	type StorageObjectCreatedTriggerInvocation,
+	type TriggerDelivery,
 	type TriggerInvocation,
 } from "./lib/parse-trigger-invocation.js";

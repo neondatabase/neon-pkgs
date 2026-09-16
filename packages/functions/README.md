@@ -333,8 +333,9 @@ This does not close the pool. Isolate teardown tears the connections down with t
 
 A [Function Trigger](https://neon.com/docs/cli/triggers) POSTs JSON to your function.
 `parseTriggerInvocation` is schedule-only: it checks `x-neon-trigger-invocation-id`
-against `invocation_id` and returns a `ScheduleTriggerInvocation`. Storage-object-created
-deliveries use `parseTriggerDelivery`, which returns the `TriggerInvocation` union.
+against `invocation_id` and returns a `TriggerInvocation` (`ScheduleTriggerInvocation`).
+Storage-object-created deliveries use `parseTriggerDelivery`, which returns a
+`TriggerDelivery`.
 
 ```ts
 import { parseTriggerDelivery } from "@neon/functions/triggers";

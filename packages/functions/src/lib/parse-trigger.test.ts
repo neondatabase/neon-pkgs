@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { parseTrigger } from "./parse-trigger.js";
+import type { TriggerInvocation } from "./parse-trigger-invocation.js";
 
 const invocationId = "ucBDafV0gB8qoEM4UcdIu84Qx5JCAXYwpRnPVAagPa0";
 const invocationIdHeader = "x-neon-trigger-invocation-id";
@@ -16,8 +17,17 @@ const scheduleBody = {
 	data: { scheduled_at: "2026-09-11T08:34:00Z" },
 };
 
+function handleSchedule(invocation: TriggerInvocation) {
+	return invocation.data.scheduledAt;
+}
+
 const app = new Hono();
 app.post("/cron", async (c) => c.json(await parseTrigger(c)));
+app.post("/cron-typed", async (c) => {
+	const invocation = await parseTrigger(c);
+	expectTypeOf(handleSchedule(invocation)).toEqualTypeOf<string>();
+	return c.json({ scheduledAt: handleSchedule(invocation) });
+});
 app.post("/cron-reread", async (c) => {
 	const invocation = await parseTrigger(c);
 	expectTypeOf(invocation.data.scheduledAt).toEqualTypeOf<string>();
@@ -51,6 +61,15 @@ function cronRequest(init?: {
 }
 
 describe("parseTrigger", () => {
+	it("passes parseTrigger into a TriggerInvocation-typed schedule handler", async () => {
+		const response = await app.request("/cron-typed", cronRequest());
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			scheduledAt: "2026-09-11T08:34:00Z",
+		});
+	});
+
 	it("returns the parsed schedule invocation", async () => {
 		const response = await app.request("/cron", cronRequest());
 

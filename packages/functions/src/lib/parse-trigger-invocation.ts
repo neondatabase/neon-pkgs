@@ -31,18 +31,20 @@ export type StorageObjectCreatedTriggerInvocation = {
 	};
 };
 
-export type TriggerInvocation =
+export type TriggerInvocation = ScheduleTriggerInvocation;
+
+export type TriggerDelivery =
 	| ScheduleTriggerInvocation
 	| StorageObjectCreatedTriggerInvocation;
 
 export function isScheduleTriggerInvocation(
-	invocation: TriggerInvocation,
+	invocation: TriggerDelivery,
 ): invocation is ScheduleTriggerInvocation {
 	return invocation.trigger.type === "schedule";
 }
 
 export function isStorageObjectCreatedTriggerInvocation(
-	invocation: TriggerInvocation,
+	invocation: TriggerDelivery,
 ): invocation is StorageObjectCreatedTriggerInvocation {
 	return invocation.type === "storage_object_created";
 }
@@ -53,14 +55,14 @@ export type ParseTriggerInvocationInput = {
 };
 
 export type ParseTriggerDeliveryResult =
-	| { ok: true; invocation: TriggerInvocation }
+	| { ok: true; invocation: TriggerDelivery }
 	| {
 			ok: false;
 			error: "missing_header" | "invalid_body" | "invocation_id_mismatch";
 	  };
 
 export type ParseTriggerInvocationResult =
-	| { ok: true; invocation: ScheduleTriggerInvocation }
+	| { ok: true; invocation: TriggerInvocation }
 	| {
 			ok: false;
 			error: "missing_header" | "invalid_body" | "invocation_id_mismatch";
@@ -145,7 +147,7 @@ function parseStorageObjectCreatedInvocation(
 	};
 }
 
-function parseInvocation(body: unknown): TriggerInvocation | undefined {
+function parseInvocation(body: unknown): TriggerDelivery | undefined {
 	return (
 		parseScheduleInvocation(body) ??
 		parseStorageObjectCreatedInvocation(body)

@@ -6,6 +6,9 @@ import {
 	parseTriggerDelivery,
 	parseTriggerInvocation,
 	type ScheduleTriggerInvocation,
+	type StorageObjectCreatedTriggerInvocation,
+	type TriggerDelivery,
+	type TriggerInvocation,
 } from "./parse-trigger-invocation.js";
 
 const invocationId = "ucBDafV0gB8qoEM4UcdIu84Qx5JCAXYwpRnPVAagPa0";
@@ -206,6 +209,29 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 		};
 		expect(isScheduleTriggerInvocation(existing)).toBe(true);
 		expectTypeOf(existing.data.scheduledAt).toEqualTypeOf<string>();
+	});
+
+	it("keeps TriggerInvocation as the schedule alias", () => {
+		expectTypeOf<TriggerInvocation>().toEqualTypeOf<ScheduleTriggerInvocation>();
+		expectTypeOf<TriggerInvocation["data"]>().toEqualTypeOf<{
+			scheduledAt: string;
+		}>();
+		expectTypeOf<TriggerDelivery>().toEqualTypeOf<
+			ScheduleTriggerInvocation | StorageObjectCreatedTriggerInvocation
+		>();
+
+		function handleSchedule(invocation: TriggerInvocation) {
+			return invocation.data.scheduledAt;
+		}
+
+		const result = parseTriggerInvocation({
+			headers: scheduleHeaders(invocationId),
+			body: scheduleBody,
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expectTypeOf(handleSchedule(result.invocation)).toEqualTypeOf<string>();
+		expect(handleSchedule(result.invocation)).toBe("2026-09-11T08:34:00Z");
 	});
 
 	it("fails invalid_body when storage_object_created data omits object_key", () => {
