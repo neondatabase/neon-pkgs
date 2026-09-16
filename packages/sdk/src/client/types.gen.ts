@@ -4666,13 +4666,39 @@ export type FunctionTriggerSchedule = {
 };
 
 /**
- * Trigger creation payload discriminated by `type`. The only currently
- * supported trigger type is `schedule`.
+ * Matches successful uploads to one exact bucket and, when configured, an
+ * object-key prefix. The Function receives a JSON request body with
+ * `type` set to `storage_object_created` and a `data` object containing
+ * exactly `bucket_name` and `object_key`.
  *
  */
-export type TriggerCreateRequest = {
+export type FunctionTriggerStorageObjectCreated = {
+    /**
+     * The exact object-storage bucket name to watch.
+     */
+    bucket_name: string;
+    /**
+     * Optional object-key prefix of at most 1024 UTF-8 bytes. When omitted,
+     * every key in the bucket matches. When present, the full object key
+     * must start with these exact bytes; matching is case-sensitive and
+     * does not normalize paths or require a path-segment boundary.
+     * Match-all responses omit this field rather than returning an empty
+     * string.
+     *
+     */
+    prefix?: string;
+};
+
+/**
+ * Trigger creation payload discriminated by `type`. The supported trigger
+ * types are `schedule` and `storage_object_created`.
+ *
+ */
+export type TriggerCreateRequest = ({
     type: 'schedule';
-} & ScheduleTriggerCreateRequest;
+} & ScheduleTriggerCreateRequest) | ({
+    type: 'storage_object_created';
+} & StorageObjectCreatedTriggerCreateRequest);
 
 export type ScheduleTriggerCreateRequest = {
     /**
@@ -4698,14 +4724,40 @@ export type ScheduleTriggerCreateRequest = {
     enabled?: boolean;
 };
 
+export type StorageObjectCreatedTriggerCreateRequest = {
+    /**
+     * Trigger type discriminator.
+     */
+    type: 'storage_object_created';
+    /**
+     * The branch-local Function slug to invoke.
+     */
+    function_slug: string;
+    /**
+     * Human-readable name, unique among triggers visible on the branch.
+     */
+    name: string;
+    /**
+     * Path passed to the target Function. Defaults to `/`.
+     */
+    function_path?: string;
+    storage_object_created: FunctionTriggerStorageObjectCreated;
+    /**
+     * Whether successful matching uploads should invoke the Function.
+     */
+    enabled?: boolean;
+};
+
 /**
- * Partial trigger update discriminated by `type`. The only currently
- * supported trigger type is `schedule`.
+ * Partial trigger update discriminated by `type`. The supported trigger
+ * types are `schedule` and `storage_object_created`.
  *
  */
-export type TriggerUpdateRequest = {
+export type TriggerUpdateRequest = ({
     type: 'schedule';
-} & ScheduleTriggerUpdateRequest;
+} & ScheduleTriggerUpdateRequest) | ({
+    type: 'storage_object_created';
+} & StorageObjectCreatedTriggerUpdateRequest);
 
 export type ScheduleTriggerUpdateRequest = {
     /**
@@ -4725,14 +4777,34 @@ export type ScheduleTriggerUpdateRequest = {
     enabled?: boolean;
 };
 
+export type StorageObjectCreatedTriggerUpdateRequest = {
+    /**
+     * Trigger type discriminator; it does not change the trigger type.
+     */
+    type: 'storage_object_created';
+    /**
+     * Replacement branch-local Function slug.
+     */
+    function_slug?: string;
+    name?: string;
+    function_path?: string;
+    storage_object_created?: FunctionTriggerStorageObjectCreated;
+    /**
+     * True enables and false disables future matching uploads.
+     */
+    enabled?: boolean;
+};
+
 /**
- * A branch-effective trigger discriminated by `type`. The only currently
- * supported trigger type is `schedule`.
+ * A branch-effective trigger discriminated by `type`. The supported trigger
+ * types are `schedule` and `storage_object_created`.
  *
  */
-export type Trigger = {
+export type Trigger = ({
     type: 'schedule';
-} & ScheduleTrigger;
+} & ScheduleTrigger) | ({
+    type: 'storage_object_created';
+} & StorageObjectCreatedTrigger);
 
 /**
  * A branch-effective schedule trigger for a Function.
@@ -4768,9 +4840,40 @@ export type ScheduleTrigger = {
      */
     next_run_at: string | null;
     /**
-     * The public `branch_id` of the branch that authored the effective configuration.
+     * True when the effective configuration was authored on an ancestor branch.
      */
-    source_branch_id: string;
+    inherited: boolean;
+};
+
+/**
+ * A branch-effective trigger that invokes a Function after a successful
+ * upload matching its exact bucket and optional object-key prefix.
+ *
+ */
+export type StorageObjectCreatedTrigger = {
+    /**
+     * Trigger type discriminator.
+     */
+    type: 'storage_object_created';
+    trigger_id: TriggerId;
+    /**
+     * The branch-local Function slug resolved when an invocation is consumed.
+     */
+    function_slug: string;
+    /**
+     * Human-readable trigger name.
+     */
+    name: string;
+    /**
+     * Path passed to the target Function.
+     */
+    function_path: string;
+    storage_object_created: FunctionTriggerStorageObjectCreated;
+    enabled: boolean;
+    /**
+     * Monotonic configuration version.
+     */
+    version: number;
     /**
      * True when the effective configuration was authored on an ancestor branch.
      */

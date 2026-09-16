@@ -4923,10 +4923,12 @@ export const createProjectBranchFunctionDeployment = <ThrowOnError extends boole
  *
  * Lists the complete project-bounded set of triggers visible on the branch,
  * ordered by `trigger_id`. An inherited trigger keeps its project-wide ID
- * and source branch, and is disabled on the child until explicitly enabled
+ * and configuration, and is disabled on the child until explicitly enabled
  * there.
  *
- * The only currently supported trigger type is `schedule`.
+ * The supported trigger types are `schedule` and
+ * `storage_object_created`. A storage-object-created trigger watches one
+ * exact bucket and fires only after an object upload succeeds.
  *
  * **Note**: This endpoint is currently in Beta.
  *
@@ -4954,8 +4956,10 @@ export const listProjectBranchTriggers = <ThrowOnError extends boolean = false>(
  *
  * Creates a trigger for a Function visible on the branch. The required
  * `type` discriminator selects the trigger-specific configuration. The
- * only currently supported type is `schedule`, whose cron is a numeric
- * five-field expression interpreted in UTC.
+ * supported types are `schedule` and `storage_object_created`. A schedule
+ * trigger uses a numeric five-field cron expression interpreted in UTC. A
+ * storage-object-created trigger fires only after a successful upload to
+ * one exact bucket and may narrow matches to an object-key prefix.
  *
  * The name must be unique among triggers visible on the branch, including
  * inherited triggers.
@@ -4990,8 +4994,9 @@ export const createProjectBranchTrigger = <ThrowOnError extends boolean = false>
  *
  * Deletes a branch-local trigger or writes a branch-local tombstone for an
  * inherited trigger so it does not reappear. Deletion stops future
- * scheduling but does not cancel occurrences already committed for delivery.
- * The only currently supported trigger type is `schedule`.
+ * scheduling or storage-event matching but does not cancel invocations
+ * already committed for delivery. The supported trigger types are
+ * `schedule` and `storage_object_created`.
  *
  * **Note**: This endpoint is currently in Beta.
  *
@@ -5017,8 +5022,8 @@ export const deleteProjectBranchTrigger = <ThrowOnError extends boolean = false>
 /**
  * Get a trigger
  *
- * Returns the trigger visible on the branch. The only currently supported
- * trigger type is `schedule`.
+ * Returns the trigger visible on the branch. The supported trigger types
+ * are `schedule` and `storage_object_created`.
  *
  * **Note**: This endpoint is currently in Beta.
  *
@@ -5045,14 +5050,19 @@ export const getProjectBranchTrigger = <ThrowOnError extends boolean = false>(op
  * Update a trigger
  *
  * Applies a partial update. The required `type` discriminator must identify
- * the existing trigger kind; the only currently supported type is
- * `schedule`. Editing an inherited trigger creates a child-local shadow
- * with the same `trigger_id`; it remains disabled unless this request
- * explicitly enables it. Updating the schedule or enabled state increments
- * `version` and recomputes `next_run_at`.
+ * the existing trigger kind. The supported types are `schedule` and
+ * `storage_object_created`. Editing an inherited trigger creates a
+ * child-local shadow with the same `trigger_id`; it remains disabled unless
+ * this request explicitly enables it. For a schedule trigger, updating the
+ * schedule or enabled state increments `version` and recomputes
+ * `next_run_at`.
  *
  * Disabling stops future scheduling but does not cancel occurrences already
- * committed for delivery.
+ * committed for delivery. For `storage_object_created`, the configuration
+ * selects one exact bucket. An omitted object-key prefix matches every key
+ * in that bucket; a present prefix is matched byte-for-byte and
+ * case-sensitively against the full key, without path normalization or a
+ * path-segment boundary.
  *
  * **Note**: This endpoint is currently in Beta.
  *

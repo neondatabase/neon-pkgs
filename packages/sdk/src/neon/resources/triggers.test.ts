@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type {
+	ScheduleTrigger,
+	StorageObjectCreatedTrigger,
+} from "../../client/types.gen.js";
 import { createNeonClient } from "../client.js";
 import { NeonNotFoundError } from "../errors.js";
 
@@ -45,7 +49,7 @@ function neonRouting(
 }
 
 const trigger = {
-	type: "schedule" as const,
+	type: "schedule",
 	trigger_id: "trg-1",
 	function_slug: "worker",
 	name: "daily-refresh",
@@ -54,9 +58,23 @@ const trigger = {
 	enabled: false,
 	version: 1,
 	next_run_at: null,
-	source_branch_id: "br-1",
 	inherited: false,
-};
+} satisfies ScheduleTrigger;
+
+const storageTrigger = {
+	type: "storage_object_created",
+	trigger_id: "trg-2",
+	function_slug: "worker",
+	name: "process-uploads",
+	function_path: "/",
+	storage_object_created: {
+		bucket_name: "uploads",
+		prefix: "incoming/",
+	},
+	enabled: true,
+	version: 1,
+	inherited: false,
+} satisfies StorageObjectCreatedTrigger;
 
 describe("triggers", () => {
 	it("lists the triggers array in one request", async () => {
@@ -92,6 +110,25 @@ describe("triggers", () => {
 		expect(data).toEqual([]);
 	});
 
+	it("lists mixed schedule and storage triggers", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 200,
+			body: { triggers: [trigger, storageTrigger] },
+		}));
+
+		const { data, error } = await neon.triggers.list({
+			projectId: "p-1",
+			branchId: "br-1",
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual([trigger, storageTrigger]);
+		expect(data?.[1]).not.toHaveProperty("schedule");
+		expect(data?.[1]).not.toHaveProperty("next_run_at");
+		expect(calls).toHaveLength(1);
+		expect(calls[0].url).not.toContain("cursor=");
+	});
+
 	it("creates with the request body and unwraps trigger", async () => {
 		const { neon, calls } = neonRouting(() => ({
 			status: 201,
@@ -118,13 +155,43 @@ describe("triggers", () => {
 		expect(calls[0].body).toEqual(input);
 	});
 
+	it("creates a storage_object_created trigger", async () => {
+		const { neon, calls } = neonRouting(() => ({
+			status: 201,
+			body: { trigger: storageTrigger },
+		}));
+
+		const input = {
+			type: "storage_object_created" as const,
+			function_slug: "worker",
+			name: "process-uploads",
+			storage_object_created: {
+				bucket_name: "uploads",
+				prefix: "incoming/",
+			},
+		};
+		const { data, error } = await neon.triggers.create({
+			projectId: "p-1",
+			branchId: "br-1",
+			...input,
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual(storageTrigger);
+		expect(data).not.toHaveProperty("schedule");
+		expect(data).not.toHaveProperty("next_run_at");
+		expect(calls).toHaveLength(1);
+		expect(calls[0].method).toBe("POST");
+		expect(calls[0].url).toContain("/projects/p-1/branches/br-1/triggers");
+		expect(calls[0].body).toEqual(input);
+	});
+
 	it("gets by trigger id and passes inheritance fields through", async () => {
 		const inherited = {
 			...trigger,
 			inherited: true,
-			source_branch_id: "br-parent",
 			next_run_at: null,
-		};
+		} satisfies ScheduleTrigger;
 		const { neon, calls } = neonRouting(() => ({
 			status: 200,
 			body: { trigger: inherited },
@@ -145,7 +212,11 @@ describe("triggers", () => {
 	});
 
 	it("updates with the discriminator and unwraps trigger", async () => {
-		const enabled = { ...trigger, enabled: true, version: 2 };
+		const enabled = {
+			...trigger,
+			enabled: true,
+			version: 2,
+		} satisfies ScheduleTrigger;
 		const { neon, calls } = neonRouting(() => ({
 			status: 200,
 			body: { trigger: enabled },
@@ -163,6 +234,37 @@ describe("triggers", () => {
 		expect(data).toEqual(enabled);
 		expect(calls[0].method).toBe("PATCH");
 		expect(calls[0].body).toEqual({ type: "schedule", enabled: true });
+	});
+
+	it("updates a storage_object_created trigger without replacing config", async () => {
+		const disabled = {
+			...storageTrigger,
+			enabled: false,
+			version: 2,
+		} satisfies StorageObjectCreatedTrigger;
+		const { neon, calls } = neonRouting(() => ({
+			status: 200,
+			body: { trigger: disabled },
+		}));
+
+		const { data, error } = await neon.triggers.update({
+			projectId: "p-1",
+			branchId: "br-1",
+			triggerId: "trg-2",
+			type: "storage_object_created",
+			enabled: false,
+		});
+
+		expect(error).toBeUndefined();
+		expect(data).toEqual(disabled);
+		expect(calls[0].method).toBe("PATCH");
+		expect(calls[0].url).toContain(
+			"/projects/p-1/branches/br-1/triggers/trg-2",
+		);
+		expect(calls[0].body).toEqual({
+			type: "storage_object_created",
+			enabled: false,
+		});
 	});
 
 	it("deletes with a 204", async () => {

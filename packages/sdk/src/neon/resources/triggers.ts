@@ -6,31 +6,45 @@ import {
 	updateProjectBranchTrigger,
 } from "../../client/sdk.gen.js";
 import type {
+	ScheduleTrigger,
+	ScheduleTriggerCreateRequest,
+	ScheduleTriggerUpdateRequest,
+	StorageObjectCreatedTrigger,
+	StorageObjectCreatedTriggerCreateRequest,
+	StorageObjectCreatedTriggerUpdateRequest,
 	Trigger,
-	TriggerCreateRequest,
-	TriggerUpdateRequest,
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { invalidParamsResult, validateParams } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
 
-type CreateInput = TriggerCreateRequest;
-type UpdateInput = TriggerUpdateRequest;
-
 export type TriggersListParams = { projectId: string; branchId: string };
-export type TriggersCreateParams = {
+export type TriggersCreateScheduleParams = {
 	projectId: string;
 	branchId: string;
-} & CreateInput;
+} & ScheduleTriggerCreateRequest;
+export type TriggersCreateStorageParams = {
+	projectId: string;
+	branchId: string;
+} & StorageObjectCreatedTriggerCreateRequest;
+export type TriggersCreateParams =
+	| TriggersCreateScheduleParams
+	| TriggersCreateStorageParams;
 export type TriggersGetParams = {
 	projectId: string;
 	branchId: string;
 	triggerId: string;
 };
-export type TriggersUpdateParams = TriggersGetParams & UpdateInput;
+export type TriggersUpdateScheduleParams = TriggersGetParams &
+	ScheduleTriggerUpdateRequest;
+export type TriggersUpdateStorageParams = TriggersGetParams &
+	StorageObjectCreatedTriggerUpdateRequest;
+export type TriggersUpdateParams =
+	| TriggersUpdateScheduleParams
+	| TriggersUpdateStorageParams;
 export type TriggersDeleteParams = TriggersGetParams;
 
-/** Branch-scoped Function triggers. v1 only supports `type: "schedule"`. */
+/** Branch-scoped Function triggers. */
 export class Triggers<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
 
@@ -73,7 +87,21 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall POST /projects/{project_id}/branches/{branch_id}/triggers */
+	create(
+		params: TriggersCreateScheduleParams,
+	): Promise<Outcome<ScheduleTrigger, DThrow>>;
+	create(
+		params: TriggersCreateStorageParams,
+	): Promise<Outcome<StorageObjectCreatedTrigger, DThrow>>;
 	create(params: TriggersCreateParams): Promise<Outcome<Trigger, DThrow>>;
+	create<Throw extends boolean = DThrow>(
+		params: TriggersCreateScheduleParams,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<ScheduleTrigger, Throw>>;
+	create<Throw extends boolean = DThrow>(
+		params: TriggersCreateStorageParams,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<StorageObjectCreatedTrigger, Throw>>;
 	create<Throw extends boolean = DThrow>(
 		params: TriggersCreateParams,
 		opts: CallOptions<Throw>,
@@ -147,7 +175,21 @@ export class Triggers<DThrow extends boolean> {
 	}
 
 	/** @apiCall PATCH /projects/{project_id}/branches/{branch_id}/triggers/{trigger_id} */
+	update(
+		params: TriggersUpdateScheduleParams,
+	): Promise<Outcome<ScheduleTrigger, DThrow>>;
+	update(
+		params: TriggersUpdateStorageParams,
+	): Promise<Outcome<StorageObjectCreatedTrigger, DThrow>>;
 	update(params: TriggersUpdateParams): Promise<Outcome<Trigger, DThrow>>;
+	update<Throw extends boolean = DThrow>(
+		params: TriggersUpdateScheduleParams,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<ScheduleTrigger, Throw>>;
+	update<Throw extends boolean = DThrow>(
+		params: TriggersUpdateStorageParams,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<StorageObjectCreatedTrigger, Throw>>;
 	update<Throw extends boolean = DThrow>(
 		params: TriggersUpdateParams,
 		opts: CallOptions<Throw>,

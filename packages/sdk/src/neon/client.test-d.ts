@@ -16,7 +16,9 @@ import type {
 	ProjectListItem,
 	ProjectPermission,
 	RotateCredentialResponse,
+	ScheduleTrigger,
 	Snapshot,
+	StorageObjectCreatedTrigger,
 	Trigger,
 } from "../client/types.gen.js";
 import { createNeonClient, type NeonClient } from "./client.js";
@@ -326,7 +328,7 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 	).resolves.toEqualTypeOf<ProjectPermission[]>();
 });
 
-it("triggers is typed", () => {
+it("triggers is typed", async () => {
 	const neon = createNeonClient({ apiKey: "x" });
 	expectTypeOf(
 		neon.triggers.list({ projectId: "p", branchId: "br" }),
@@ -343,7 +345,7 @@ it("triggers is typed", () => {
 			name: "daily-refresh",
 			schedule: { cron: "0 9 * * *" },
 		}),
-	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	).resolves.toEqualTypeOf<NeonResult<ScheduleTrigger>>();
 	expectTypeOf(
 		neon.triggers.get({ projectId: "p", branchId: "br", triggerId: "trg" }),
 	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
@@ -355,7 +357,7 @@ it("triggers is typed", () => {
 			type: "schedule",
 			enabled: true,
 		}),
-	).resolves.toEqualTypeOf<NeonResult<Trigger>>();
+	).resolves.toEqualTypeOf<NeonResult<ScheduleTrigger>>();
 	expectTypeOf(
 		neon.triggers.delete({
 			projectId: "p",
@@ -377,12 +379,84 @@ it("triggers is typed", () => {
 			name: "daily-refresh",
 			schedule: { cron: "0 9 * * *" },
 		}),
-	).resolves.toEqualTypeOf<Trigger>();
+	).resolves.toEqualTypeOf<ScheduleTrigger>();
+
+	const created = await throwing.triggers.create({
+		projectId: "p",
+		branchId: "br",
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	});
+	expectTypeOf(created.schedule.cron).toEqualTypeOf<string>();
+	expectTypeOf(created.next_run_at).toEqualTypeOf<string | null>();
+	expectTypeOf(created.enabled).toEqualTypeOf<boolean>();
+	// @ts-expect-error spec dropped source_branch_id from ScheduleTrigger
+	created.source_branch_id;
+
+	const listed = await throwing.triggers.list({
+		projectId: "p",
+		branchId: "br",
+	});
+	const first = listed[0];
+	if (first?.type === "schedule") {
+		expectTypeOf(first.schedule.cron).toEqualTypeOf<string>();
+		expectTypeOf(first.next_run_at).toEqualTypeOf<string | null>();
+	} else if (first?.type === "storage_object_created") {
+		expectTypeOf(
+			first.storage_object_created.bucket_name,
+		).toEqualTypeOf<string>();
+		// @ts-expect-error storage triggers have no schedule
+		first.schedule;
+	}
+
+	expectTypeOf(
+		throwing.triggers.create({
+			projectId: "p",
+			branchId: "br",
+			type: "storage_object_created",
+			function_slug: "worker",
+			name: "process-uploads",
+			storage_object_created: { bucket_name: "uploads" },
+		}),
+	).resolves.toEqualTypeOf<StorageObjectCreatedTrigger>();
+	expectTypeOf(
+		neon.triggers.create({
+			projectId: "p",
+			branchId: "br",
+			type: "storage_object_created",
+			function_slug: "worker",
+			name: "process-uploads",
+			storage_object_created: {
+				bucket_name: "uploads",
+				prefix: "incoming/",
+			},
+		}),
+	).resolves.toEqualTypeOf<NeonResult<StorageObjectCreatedTrigger>>();
+	expectTypeOf(
+		neon.triggers.update({
+			projectId: "p",
+			branchId: "br",
+			triggerId: "trg",
+			type: "storage_object_created",
+			enabled: false,
+		}),
+	).resolves.toEqualTypeOf<NeonResult<StorageObjectCreatedTrigger>>();
+	expectTypeOf(
+		neon.triggers.update({
+			projectId: "p",
+			branchId: "br",
+			triggerId: "trg",
+			type: "storage_object_created",
+			storage_object_created: { bucket_name: "uploads" },
+		}),
+	).resolves.toEqualTypeOf<NeonResult<StorageObjectCreatedTrigger>>();
 
 	neon.triggers.create({
 		projectId: "p",
 		branchId: "br",
-		// @ts-expect-error v1 only accepts type: "schedule"
+		// @ts-expect-error type must be schedule or storage_object_created
 		type: "webhook",
 		function_slug: "worker",
 		name: "daily-refresh",
@@ -412,14 +486,39 @@ it("triggers is typed", () => {
 		function_slug: "worker",
 		name: "daily-refresh",
 	});
+	// @ts-expect-error cron is required
 	neon.triggers.create({
 		projectId: "p",
 		branchId: "br",
 		type: "schedule",
 		function_slug: "worker",
 		name: "daily-refresh",
-		// @ts-expect-error cron is required
 		schedule: {},
+	});
+	// @ts-expect-error storage create requires storage_object_created
+	neon.triggers.create({
+		projectId: "p",
+		branchId: "br",
+		type: "storage_object_created",
+		function_slug: "worker",
+		name: "process-uploads",
+	});
+	// @ts-expect-error bucket_name is required
+	neon.triggers.create({
+		projectId: "p",
+		branchId: "br",
+		type: "storage_object_created",
+		function_slug: "worker",
+		name: "process-uploads",
+		storage_object_created: { prefix: "incoming/" },
+	});
+	// @ts-expect-error bucket_name is required when patching storage config
+	neon.triggers.update({
+		projectId: "p",
+		branchId: "br",
+		triggerId: "trg",
+		type: "storage_object_created",
+		storage_object_created: { prefix: "incoming/" },
 	});
 	// @ts-expect-error update keeps the type discriminant
 	neon.triggers.update({
@@ -432,7 +531,7 @@ it("triggers is typed", () => {
 		projectId: "p",
 		branchId: "br",
 		triggerId: "trg",
-		// @ts-expect-error v1 only accepts type: "schedule"
+		// @ts-expect-error type must be schedule or storage_object_created
 		type: "webhook",
 		enabled: true,
 	});

@@ -565,14 +565,16 @@ const { data: registered } = await neon.functions.customDomains.register(
 
 ### `neon.triggers`
 
-Branch-scoped triggers (beta). v1 only supports `type: "schedule"`, which invokes a Function. Cron is a numeric five-field expression in UTC. List is the full set visible on the branch (not cursor-paginated). An inherited trigger keeps its project-wide id and stays disabled on the child until enabled there. Editing an inherited trigger writes a child-local shadow. Deleting an inherited trigger writes a tombstone so it does not reappear.
+Branch-scoped triggers (beta). `type` is `"schedule"` or `"storage_object_created"`. A schedule trigger uses a numeric five-field cron expression in UTC. A storage-object-created trigger watches one exact bucket and, optionally, an object-key prefix; matching is case-sensitive with no path normalization. List is the full set visible on the branch (not cursor-paginated). An inherited trigger keeps its project-wide id and stays disabled on the child until enabled there. Editing an inherited trigger writes a child-local shadow. Deleting an inherited trigger writes a tombstone so it does not reappear.
+
+`create` / `update` keep the request `type` on the return type (`ScheduleTrigger` or `StorageObjectCreatedTrigger`). `list` / `get` return `Trigger` — narrow on `type` before reading `schedule` / `next_run_at` or `storage_object_created`. Update requires the existing trigger's `type` and does not convert kinds. `next_run_at` is schedule-only.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `list({ projectId, branchId })` | `Trigger[]` | |
-| `create({ projectId, branchId, …input })` | `Trigger` | `input`: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }` |
-| `get({ projectId, branchId, triggerId })` | `Trigger` | |
-| `update({ projectId, branchId, triggerId, …input })` | `Trigger` | `input` must include `type: "schedule"`; other fields optional |
+| `list({ projectId, branchId })` | `Trigger[]` | mixed kinds; narrow on `type` |
+| `create({ projectId, branchId, …input })` | `ScheduleTrigger` or `StorageObjectCreatedTrigger` | schedule: `{ type: "schedule", function_slug, name, schedule: { cron }, function_path?, enabled? }`; storage: `{ type: "storage_object_created", function_slug, name, storage_object_created: { bucket_name, prefix? }, function_path?, enabled? }` |
+| `get({ projectId, branchId, triggerId })` | `Trigger` | narrow on `type` |
+| `update({ projectId, branchId, triggerId, …input })` | `ScheduleTrigger` or `StorageObjectCreatedTrigger` | `input` must include the existing `type`; other fields optional. A storage `storage_object_created` patch still needs `bucket_name` |
 | `delete({ projectId, branchId, triggerId })` | **→void** | |
 
 ```ts
@@ -594,6 +596,28 @@ await neon.triggers.update({
   triggerId: trigger.trigger_id,
   type: "schedule",
   enabled: true,
+});
+
+const { data: uploadTrigger, error: uploadError } =
+  await neon.triggers.create({
+    projectId,
+    branchId,
+    type: "storage_object_created",
+    function_slug: "worker",
+    name: "process-uploads",
+    storage_object_created: {
+      bucket_name: "uploads",
+      prefix: "incoming/",
+    },
+  });
+if (uploadError) throw uploadError;
+
+await neon.triggers.update({
+  projectId,
+  branchId,
+  triggerId: uploadTrigger.trigger_id,
+  type: "storage_object_created",
+  enabled: false,
 });
 await neon.triggers.delete({ projectId, branchId, triggerId: trigger.trigger_id });
 ```

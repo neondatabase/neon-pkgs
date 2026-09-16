@@ -199,10 +199,14 @@ export type {
 export type { StorageGetParams } from "./neon/resources/storage.js";
 export type {
 	TriggersCreateParams,
+	TriggersCreateScheduleParams,
+	TriggersCreateStorageParams,
 	TriggersDeleteParams,
 	TriggersGetParams,
 	TriggersListParams,
 	TriggersUpdateParams,
+	TriggersUpdateScheduleParams,
+	TriggersUpdateStorageParams,
 } from "./neon/resources/triggers.js";
 export type { NeonResult, Outcome } from "./neon/result.js";
 export type { WaitBudget, WaitForOptions } from "./neon/wait.js";
