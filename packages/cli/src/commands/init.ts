@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import type yargs from "yargs";
 import {
+	type CommandInitKind,
+	recordCommandSuccessExtras,
+} from "../analytics.js";
+import {
 	CONFIG_INIT_NONE_MEANS,
 	CONFIG_INIT_SERVICES,
 	CONFIG_INIT_UNAVAILABLE,
@@ -395,6 +399,16 @@ const noteTemplateKeepsShippedConfig = (
 	log.warning(INIT_TEMPLATE_KEEPS_CONFIG);
 };
 
+const recordInitSuccess = (
+	kind: CommandInitKind,
+	agentSetup?: InitAgentSetup,
+): void => {
+	recordCommandSuccessExtras({
+		init_kind: kind,
+		...(agentSetup !== undefined ? { agent_setup: agentSetup } : {}),
+	});
+};
+
 export const handler = async (props: InitProps) => {
 	if (props.output === "json" || props.output === "yaml") {
 		throw new Error(
@@ -479,6 +493,7 @@ export const handler = async (props: InitProps) => {
 			cwd,
 			templateChoice.kind === "template" ? templateChoice.id : "default",
 		);
+		recordInitSuccess("empty-template", result?.agentSetup);
 		return;
 	}
 
@@ -503,6 +518,7 @@ export const handler = async (props: InitProps) => {
 				),
 			);
 			printNestedBootstrapDone(result, cwd, picked.template.id);
+			recordInitSuccess("empty-template", result?.agentSetup);
 			return;
 		}
 	}
@@ -644,5 +660,9 @@ export const handler = async (props: InitProps) => {
 			],
 			next: [],
 		}),
+	);
+	recordInitSuccess(
+		templateChoice.kind === "existing" ? "existing" : "empty-skip",
+		agentSetup,
 	);
 };

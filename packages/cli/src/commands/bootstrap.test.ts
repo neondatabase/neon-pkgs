@@ -612,7 +612,10 @@ describe("bootstrap", () => {
 			"selected catalog template\n",
 		);
 		expect(() => readFileSync(join(dest, "src/index.ts"))).toThrow();
-		expect(takeCommandSuccessExtras()).toEqual({ template: "hono" });
+		expect(takeCommandSuccessExtras()).toEqual({
+			template: "hono",
+			agent_setup: "skip",
+		});
 	});
 
 	test("--list-templates does not record a scaffolded template", async () => {

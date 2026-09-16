@@ -4,6 +4,7 @@ import {
 	analyticsUserId,
 	getAnalyticsEventProperties,
 	getErrorAnalyticsEventProperties,
+	recordCommandSuccessExtras,
 	recordScaffoldedTemplate,
 	storedCredentialAttribution,
 	takeCommandSuccessExtras,
@@ -253,16 +254,48 @@ describe("getAnalyticsEventProperties", () => {
 	});
 });
 
-describe("recordScaffoldedTemplate", () => {
-	it("attaches the resolved catalog id for the success event", () => {
-		recordScaffoldedTemplate("hono");
-		expect(takeCommandSuccessExtras()).toEqual({ template: "hono" });
+describe("command success extras", () => {
+	it("starts empty", () => {
+		expect(takeCommandSuccessExtras()).toEqual({});
 	});
 
-	it("does not leak a previous command's template", () => {
+	it("merges separate patches", () => {
 		recordScaffoldedTemplate("hono");
+		recordCommandSuccessExtras({
+			agent_setup: "plugin",
+			init_kind: "empty-template",
+		});
+		expect(takeCommandSuccessExtras()).toEqual({
+			template: "hono",
+			agent_setup: "plugin",
+			init_kind: "empty-template",
+		});
+	});
+
+	it("lets a later patch replace the same key", () => {
+		recordCommandSuccessExtras({ agent_setup: "plugin" });
+		recordCommandSuccessExtras({ agent_setup: "skip" });
+		expect(takeCommandSuccessExtras()).toEqual({ agent_setup: "skip" });
+	});
+
+	it("clears every property after take", () => {
+		recordScaffoldedTemplate("hono");
+		recordCommandSuccessExtras({
+			agent_setup: "skills-mcp",
+			init_kind: "empty-skip",
+			scope: "global",
+		});
 		takeCommandSuccessExtras();
 		expect(takeCommandSuccessExtras()).toEqual({});
+	});
+
+	it("keeps the template helper as a merge, not a replace", () => {
+		recordCommandSuccessExtras({ agent_setup: "plugin" });
+		recordScaffoldedTemplate("hono");
+		expect(takeCommandSuccessExtras()).toEqual({
+			agent_setup: "plugin",
+			template: "hono",
+		});
 	});
 });
 

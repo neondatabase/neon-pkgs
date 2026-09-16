@@ -1,5 +1,6 @@
 import type yargs from "yargs";
 
+import { recordCommandSuccessExtras } from "../analytics.js";
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
 import {
@@ -372,4 +373,5 @@ export const handler = async (props: McpProps) => {
 			`Failed to write Neon MCP config for: ${failedAgents.join(", ")}.`,
 		);
 	}
+	recordCommandSuccessExtras({ scope: plan.scope });
 };

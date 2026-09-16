@@ -346,18 +346,31 @@ export const trackEvent = (
 };
 
 /**
- * CLI Started runs before the template picker. The resolved catalog id is
- * known only after scaffold, so it rides on cli_command_success via this
- * process-local slot. Yargs never sees an interactive or --default choice.
+ * CLI Started runs before interactive pickers. Resolved template, agent-setup,
+ * init path, and install scope ride on cli_command_success via this
+ * process-local slot. Yargs never sees those choices.
  */
+export type CommandAgentSetup = "plugin" | "skills-mcp" | "skip";
+export type CommandInitKind = "empty-template" | "empty-skip" | "existing";
+export type CommandInstallScope = "project" | "global";
+
 export type CommandSuccessExtras = {
 	template?: string;
+	agent_setup?: CommandAgentSetup;
+	init_kind?: CommandInitKind;
+	scope?: CommandInstallScope;
 };
 
 let commandSuccessExtras: CommandSuccessExtras = {};
 
+export const recordCommandSuccessExtras = (
+	patch: CommandSuccessExtras,
+): void => {
+	commandSuccessExtras = { ...commandSuccessExtras, ...patch };
+};
+
 export const recordScaffoldedTemplate = (templateId: string): void => {
-	commandSuccessExtras = { ...commandSuccessExtras, template: templateId };
+	recordCommandSuccessExtras({ template: templateId });
 };
 
 export const takeCommandSuccessExtras = (): CommandSuccessExtras => {

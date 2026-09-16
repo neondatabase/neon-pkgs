@@ -1,5 +1,6 @@
 import type yargs from "yargs";
 
+import { recordCommandSuccessExtras } from "../analytics.js";
 import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
 import { skillsHelpValues, skillsYesHelp } from "../skills/catalog.js";
@@ -290,6 +291,7 @@ export const handler = async (props: SkillsProps) => {
 	out.end();
 
 	if (failed.length === 0) {
+		recordCommandSuccessExtras({ scope: plan.scope });
 		log.info(
 			plan.scope === "project"
 				? "Wrote skills in this directory."

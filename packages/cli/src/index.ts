@@ -328,6 +328,7 @@ void (async () => {
 			await closeAnalytics();
 			break;
 		} catch (err) {
+			takeCommandSuccessExtras();
 			attempts++;
 			const shouldRetry = await handleError(
 				"",

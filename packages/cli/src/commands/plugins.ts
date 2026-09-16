@@ -1,5 +1,6 @@
 import type yargs from "yargs";
 
+import { recordCommandSuccessExtras } from "../analytics.js";
 import { getAgentDisplayName } from "../init/agents.js";
 import { log } from "../log.js";
 import { NEON_MCP_URL } from "../mcp/install.js";
@@ -194,6 +195,7 @@ export const handler = async (props: PluginsProps) => {
 	out.end();
 
 	if (failed.length === 0) {
+		recordCommandSuccessExtras({ scope: plan.scope });
 		log.info(
 			plan.scope === "project"
 				? "Installed the Neon plugin (project)."

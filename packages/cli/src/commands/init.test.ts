@@ -4,16 +4,21 @@ import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
+import { takeCommandSuccessExtras } from "../analytics.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { builder } from "./init.js";
 
-vi.mock("../analytics.js", () => ({
-	sendError: vi.fn(),
-	trackEvent: vi.fn(),
-	closeAnalytics: vi.fn(),
-}));
+vi.mock("../analytics.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../analytics.js")>();
+	return {
+		...actual,
+		sendError: vi.fn(),
+		trackEvent: vi.fn(),
+		closeAnalytics: vi.fn(),
+	};
+});
 
 const host = "https://console.neon.tech/api/v2";
 
@@ -60,6 +65,7 @@ describe("init handler", () => {
 	});
 
 	afterEach(() => {
+		takeCommandSuccessExtras();
 		clearCredentialInputs();
 		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
@@ -1573,6 +1579,153 @@ describe("init CLI", () => {
 			);
 		},
 	);
+
+	test("empty template records empty-template and nested agent setup", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-tmpl-"));
+		const runBootstrap = nestedBootstrapOk({ agentSetup: "plugin" });
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run: vi.fn().mockResolvedValue(true),
+				contextFile: join(cwd, ".neon"),
+				runBootstrap,
+				fetchTemplates: async () => [
+					{
+						id: "hono",
+						title: "Hono API",
+						description: "Hono",
+						requires: ["database" as const],
+						source: {
+							owner: "neondatabase",
+							repo: "examples",
+							ref: "main",
+							subdir: "with-hono",
+						},
+					},
+				],
+				pickTemplate: async (
+					templates: readonly BootstrapTemplate[],
+				) => {
+					const [picked] = templates;
+					if (picked === undefined) {
+						throw new Error("expected catalog template");
+					}
+					return { kind: "template", template: picked };
+				},
+			}),
+		);
+
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "empty-template",
+			agent_setup: "plugin",
+		});
+	});
+
+	test("undefined nested bootstrap result omits agent_setup", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-undef-"));
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run: vi.fn().mockResolvedValue(true),
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+				runBootstrap: vi.fn().mockResolvedValue(undefined),
+			}),
+		);
+
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "empty-template",
+		});
+	});
+
+	test("interactive skip records empty-skip and skip", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-skip-"));
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run: vi.fn().mockResolvedValue(true),
+				contextFile: join(cwd, ".neon"),
+				runBootstrap: nestedBootstrapOk(),
+				fetchTemplates: async () => [],
+				pickTemplate: async () => ({ kind: "skip" }),
+				pickAgentSetup: async () => "skip",
+				pickConfig: async () => false,
+			}),
+		);
+
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "empty-skip",
+			agent_setup: "skip",
+		});
+	});
+
+	test("--skip-template records empty-skip", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-flag-skip-"));
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run: vi.fn().mockResolvedValue(true),
+				yes: true,
+				skipTemplate: true,
+				agent: ["cursor"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "empty-skip",
+			agent_setup: "plugin",
+		});
+	});
+
+	test("existing directory records existing", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-existing-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run: vi.fn().mockResolvedValue(true),
+				contextFile: join(cwd, ".neon"),
+				pickAgentSetup: pickSkillsMcp,
+			}),
+		);
+
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "existing",
+			agent_setup: "skills-mcp",
+		});
+	});
+
+	test("--skip-template in a non-empty directory stays existing", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-full-skip-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run: vi.fn().mockResolvedValue(true),
+				skipTemplate: true,
+				agent: ["cursor"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "existing",
+			agent_setup: "plugin",
+		});
+	});
 });
 
 describe("init flag parsing", () => {
