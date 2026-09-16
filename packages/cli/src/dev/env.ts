@@ -363,7 +363,7 @@ const resolveClaimableNeonEnvVars = async (
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
  *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy.
  *      Function invocation URLs are listed live (`functionUrls: "all-live"`) because
- *      `pullConfig` cannot round-trip them into `preview.functions`. With
+ *      `pullConfig` cannot round-trip them into `functions`. With
  *      {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
  *      `pullConfig` cannot read it back.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
@@ -400,7 +400,7 @@ export const resolveNeonEnvVars = async (
 					"--project-id / --branch.",
 			);
 		}
-		await assertPolicyMatchesBranch(withoutPreviewFunctions(config), ctx);
+		await assertPolicyMatchesBranch(withoutDeclaredFunctions(config), ctx);
 		return await fetchAndProject(config, ctx);
 	}
 
@@ -748,13 +748,11 @@ const configForServices = (
 		}
 		config.dataApi = true;
 	}
-
-	const preview: NonNullable<Config["preview"]> = {};
 	if (services.includes("object-storage")) {
 		if (branch.buckets.length === 0) {
 			notOnBranch("object-storage", "object-storage buckets");
 		}
-		preview.buckets = Object.fromEntries(
+		config.buckets = Object.fromEntries(
 			branch.buckets.map((bucket) => [
 				bucket.name,
 				{ access: bucket.accessLevel },
@@ -763,9 +761,8 @@ const configForServices = (
 	}
 	if (services.includes("ai-gateway")) {
 		if (!branch.aiGatewayAvailable) aiGatewayUnavailable();
-		preview.aiGateway = true;
+		config.aiGateway = true;
 	}
-	if (Object.keys(preview).length > 0) config.preview = preview;
 
 	return config;
 };
@@ -831,12 +828,15 @@ export const resolveDevEnv = async (
 };
 
 /** Functions are omitted because `plan` treats undeployed functions as resources to create. */
-const withoutPreviewFunctions = (config: Config): Config => {
-	const preview = config.preview;
-	if (!preview?.functions) return config;
-	const previewWithoutFunctions = { ...preview };
-	delete previewWithoutFunctions.functions;
-	return { ...config, preview: previewWithoutFunctions };
+const withoutDeclaredFunctions = (config: Config): Config => {
+	const next: Config = { ...config };
+	if (next.functions !== undefined) delete next.functions;
+	if (next.preview?.functions) {
+		const previewWithoutFunctions = { ...next.preview };
+		delete previewWithoutFunctions.functions;
+		next.preview = previewWithoutFunctions;
+	}
+	return next;
 };
 
 /**

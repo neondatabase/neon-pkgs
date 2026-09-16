@@ -1,3 +1,7 @@
+import {
+	authoredFunctionTuning,
+	mergeAuthoredPreview,
+} from "./authored-services.js";
 import { normalizeCustomDomain } from "./custom-domain.js";
 import { parseBranchTtl } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
@@ -110,6 +114,16 @@ type PreviewAutocomplete<Preview> = (Preview extends { functions: infer F }
 		? { buckets: { [Name in keyof B]: BucketDef } }
 		: unknown);
 
+type FunctionsAutocomplete<Functions> =
+	Functions extends Record<string, unknown>
+		? { [Slug in keyof Functions]: FunctionDef }
+		: unknown;
+
+type BucketsAutocomplete<Buckets> =
+	Buckets extends Record<string, unknown>
+		? { [Name in keyof Buckets]: BucketDef }
+		: unknown;
+
 /**
  * Validate and freeze a Neon branch policy.
  *
@@ -119,20 +133,18 @@ type PreviewAutocomplete<Preview> = (Preview extends { functions: infer F }
  *
  * export default defineConfig({
  *   auth: true,
- *   preview: {
- *     functions: {
- *       hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
- *     },
+ *   functions: {
+ *     hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
  *   },
  *   branch: (branch) => ({ protected: branch.name === "main" }),
  * });
  * ```
  *
- * The policy is split into a **static** existential set (top-level `auth` / `dataApi`
- * toggles and the beta `preview` block) and a **dynamic** per-branch `branch` closure. The
- * static half determines which secrets exist — so `NeonEnv<typeof config>` and `parseEnv`
- * are exact — while the closure can only *tune* a branch (lifecycle, compute, per-function
- * deploy settings), never change what exists.
+ * The policy is split into a **static** existential set (top-level `auth` / `dataApi` /
+ * `aiGateway` / `functions` / `buckets`, plus the deprecated `preview` aliases) and a
+ * **dynamic** per-branch `branch` closure. The static half determines which secrets exist —
+ * so `NeonEnv<typeof config>` and `parseEnv` are exact — while the closure can only *tune*
+ * a branch (lifecycle, compute, per-function deploy settings), never change what exists.
  *
  * The `branch` callback receives a read-only {@link BranchTarget} descriptor of the branch
  * being decided for (not a live handle); switch on its facts (`branch.name`,
@@ -147,6 +159,9 @@ export function defineConfig<
 	const Auth extends ServiceToggleInput | undefined = undefined,
 	const DataApi extends DataApiInput | undefined = undefined,
 	const Preview extends PreviewInput | undefined = undefined,
+	const Functions extends Record<string, FunctionDef> | undefined = undefined,
+	const Buckets extends Record<string, BucketDef> | undefined = undefined,
+	const AiGateway extends ServiceToggleInput | undefined = undefined,
 >(input: {
 	// Each field is intersected with its concrete interface (not just typed as the bare
 	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
@@ -159,16 +174,23 @@ export function defineConfig<
 	// `DataApiField`): a Neon-Auth Data API without `auth` enabled surfaces a readable hint
 	// as the field's expected type instead of collapsing the value to `never`.
 	dataApi?: DataApiField<Auth, DataApi>;
+	aiGateway?: AiGateway & ServiceToggleInput;
+	functions?: Functions &
+		Record<string, FunctionDef> &
+		FunctionsAutocomplete<Functions>;
+	buckets?: Buckets &
+		Record<string, BucketDef> &
+		BucketsAutocomplete<Buckets>;
 	// `& PreviewInput` restores top-level member hints (aiGateway/functions/buckets);
 	// `& PreviewAutocomplete<Preview>` restores hints *inside* each function/bucket slug
 	// object (see `PreviewAutocomplete`), which the bare index signature otherwise hides.
 	preview?: Preview & PreviewInput & PreviewAutocomplete<Preview>;
-	branch?: BranchTuningFn<Preview>;
-}): Config<Auth, DataApi, Preview> {
+	branch?: BranchTuningFn<Preview, Functions>;
+}): Config<Auth, DataApi, Preview, Functions, Buckets, AiGateway> {
 	if (typeof input === "function") {
 		throw new ConfigValidationError([
-			"defineConfig now expects an object, not a function: `export default defineConfig({ auth: true, preview: { … }, branch: (branch) => ({ … }) })`.",
-			"The static services/preview set moved to the top level; per-branch logic moved into the `branch` closure.",
+			"defineConfig now expects an object, not a function: `export default defineConfig({ auth: true, functions: { … }, branch: (branch) => ({ … }) })`.",
+			"The static services set moved to the top level; per-branch logic moved into the `branch` closure.",
 		]);
 	}
 	if (input === null || typeof input !== "object") {
@@ -182,13 +204,20 @@ export function defineConfig<
 		throw new ConfigValidationError(formatZodIssues(parsed.error));
 	}
 
-	return Object.freeze({ ...input }) as Config<Auth, DataApi, Preview>;
+	return Object.freeze({ ...input }) as Config<
+		Auth,
+		DataApi,
+		Preview,
+		Functions,
+		Buckets,
+		AiGateway
+	>;
 }
 
 /**
  * Evaluate a branch policy for a specific branch target and return a normalized config.
  *
- * Merges the static existential set (services + preview functions/buckets) with the
+ * Merges the static existential set (services + functions/buckets) with the
  * per-branch tuning returned by the `branch` closure into the same {@link
  * ResolvedBranchConfig} the rest of the runtime (diff / push / fetchEnv) consumes.
  */
@@ -224,7 +253,11 @@ export function resolveConfig(
 		};
 	}
 
-	const preview = resolvePreviewConfig(config.preview, tuning, branch);
+	const preview = resolvePreviewConfig(
+		mergeAuthoredPreview(config),
+		tuning,
+		branch,
+	);
 	if (preview) resolved.preview = preview;
 
 	return resolved;
@@ -322,7 +355,7 @@ function resolvePreviewConfig(
 	branch: BranchTarget,
 ): ResolvedPreviewConfig | undefined {
 	if (!preview) return undefined;
-	const fnTuning = tuning.preview?.functions ?? {};
+	const fnTuning = authoredFunctionTuning(tuning);
 	const functions: ResolvedFunctionConfig[] = Object.entries(
 		preview.functions ?? {},
 	).map(([slug, def]) =>

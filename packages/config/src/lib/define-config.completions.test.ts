@@ -153,4 +153,20 @@ export default defineConfig({
 		},
 		LANGUAGE_SERVICE_TIMEOUT_MS,
 	);
+
+	test(
+		"a top-level function slug object offers every FunctionDef member",
+		() => {
+			const completions = memberCompletionsAt(`
+import { defineConfig } from "./define-config.js";
+export default defineConfig({
+	functions: { hello: { /*|*/ } },
+});
+`);
+			expect(completions).toEqual(
+				expect.arrayContaining(["name", "source", "env", "dev"]),
+			);
+		},
+		LANGUAGE_SERVICE_TIMEOUT_MS,
+	);
 });

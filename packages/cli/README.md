@@ -724,7 +724,7 @@ neon config plan --project-id polished-snowflake-12345678 --output json
 neon deploy --branch my-feature --update-existing
 ```
 
-Function deploys declared under `preview.functions` are bundled with esbuild by default. A directory `source` is discovered as `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to ship a prebuilt directory as-is. `neon function deploy --no-bundle` is the same switch without a `neon.ts`.
+Function deploys declared under `functions` are bundled with esbuild by default. A directory `source` is discovered as `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to ship a prebuilt directory as-is. `neon function deploy --no-bundle` is the same switch without a `neon.ts`.
 
 Point a domain you already own at a function with `neon function domains` (alias `domain`):
 

@@ -168,6 +168,44 @@ describe("configInputSchema", () => {
 		expect(result.success).toBe(true);
 	});
 
+	test("accepts GA top-level aiGateway, functions, and buckets", () => {
+		const result = configInputSchema.safeParse({
+			aiGateway: true,
+			functions: {
+				fn1: { name: "Hello World", source: "./hello.ts" },
+			},
+			buckets: { uploads: { access: "public_read" } },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	test("rejects the same service in both GA and preview homes", () => {
+		const result = configInputSchema.safeParse({
+			functions: {
+				hello: { name: "Hello", source: "./hello.ts" },
+			},
+			preview: {
+				functions: {
+					hello: { name: "Hello", source: "./hello.ts" },
+				},
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toContain(
+			"functions is also declared as preview.functions. Keep functions and remove preview.functions.",
+		);
+	});
+
+	test("accepts mixed homes across different services", () => {
+		const result = configInputSchema.safeParse({
+			functions: {
+				hello: { name: "Hello", source: "./hello.ts" },
+			},
+			preview: { buckets: { uploads: {} } },
+		});
+		expect(result.success).toBe(true);
+	});
+
 	test("rejects an invalid function slug used as a record key", () => {
 		const result = configInputSchema.safeParse({
 			preview: {
@@ -194,6 +232,18 @@ describe("configInputSchema", () => {
 			"function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)",
 		);
 		expect(formatted).not.toContain("Invalid key in record");
+	});
+
+	test("surfaces a bad GA function slug on the functions path", () => {
+		const result = configInputSchema.safeParse({
+			functions: {
+				"hello-world": { name: "hello", source: "./x.ts" },
+			},
+		});
+		if (result.success) throw new Error("expected failure");
+		const formatted = formatZodIssues(result.error).join("\n");
+		expect(formatted).toContain("functions.hello-world");
+		expect(formatted).not.toContain("preview.functions");
 	});
 
 	test("rejects an unknown key inside preview", () => {
@@ -750,6 +800,27 @@ describe("branchTuningSchema", () => {
 			preview: { functions: { hello: { memoryMib: 1024 } } },
 		});
 		expect(result.success).toBe(false);
+	});
+
+	test("accepts GA top-level functions tuning", () => {
+		expect(
+			branchTuningSchema.parse({
+				functions: { hello: { runtime: "nodejs24" } },
+			}),
+		).toMatchObject({
+			functions: { hello: { runtime: "nodejs24" } },
+		});
+	});
+
+	test("rejects functions in both GA and preview homes", () => {
+		const result = branchTuningSchema.safeParse({
+			functions: { hello: { runtime: "nodejs24" } },
+			preview: { functions: { hello: { runtime: "nodejs24" } } },
+		});
+		if (result.success) throw new Error("expected failure");
+		expect(formatZodIssues(result.error).join("\n")).toContain(
+			"functions is also declared as preview.functions. Keep functions and remove preview.functions.",
+		);
 	});
 
 	test("rejects wildcard parent", () => {

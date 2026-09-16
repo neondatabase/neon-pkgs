@@ -58,6 +58,7 @@ import {
 	dataApiInputSchema,
 	dataApiSettingsSchema,
 	functionDefSchema,
+	functionsRecordSchema,
 	functionTuningSchema,
 	postgresConfigSchema,
 	previewInputSchema,
@@ -93,6 +94,7 @@ export const schemas = {
 	dataApiSettings: dataApiSettingsSchema,
 	function: functionDefSchema,
 	functionTuning: functionTuningSchema,
+	functions: functionsRecordSchema,
 	postgres: postgresConfigSchema,
 	preview: previewInputSchema,
 	service: serviceToggleSchema,
@@ -101,6 +103,14 @@ export const schemas = {
 
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { createNeonApiFromOptions } from "./lib/auth.js";
+export {
+	authoredAiGateway,
+	authoredBuckets,
+	authoredFunctions,
+	deprecatedPreviewAuthoring,
+	previewGaWarningForConfig,
+	previewGaWarningMessage,
+} from "./lib/authored-services.js";
 // ─── Credentials (pure scope derivation; Preview) ─────────────────────────────
 export type { CredentialFeatureFlags } from "./lib/credentials.js";
 export {

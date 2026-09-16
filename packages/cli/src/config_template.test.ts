@@ -42,15 +42,13 @@ export default defineConfig({
 export default defineConfig({
   // Declare your Neon services here
   auth: true,
-  preview: {
-    aiGateway: true,
-    functions: {
-      hello: { name: "Hello World", source: "./hello.ts" },
-    },
-    buckets: {
-      // "private" is the default; use "public_read" for anonymous reads
-      assets: { access: "private" },
-    },
+  aiGateway: true,
+  functions: {
+    hello: { name: "Hello World", source: "./hello.ts" },
+  },
+  buckets: {
+    // "private" is the default; use "public_read" for anonymous reads
+    assets: { access: "private" },
   },
   // Branch policy: per-branch tuning
   branch: (branch) => {
@@ -70,16 +68,20 @@ export default defineConfig({
 `);
 	});
 
-	it("omits the preview block when only auth is selected", () => {
+	it("omits GA service keys when only auth is selected", () => {
 		const rendered = renderNeonConfig(["auth"]);
 		expect(rendered).toContain("auth: true,");
 		expect(rendered).not.toContain("preview");
+		expect(rendered).not.toContain("aiGateway");
+		expect(rendered).not.toContain("functions");
+		expect(rendered).not.toContain("buckets");
 	});
 
-	it("emits a preview block with only the selected preview features", () => {
+	it("emits only the selected GA service keys", () => {
 		const rendered = renderNeonConfig(["object-storage"]);
 		expect(rendered).toContain("auth: false,");
-		expect(rendered).toContain("preview: {");
+		expect(rendered).not.toContain("preview");
+		expect(rendered).toContain("buckets: {");
 		expect(rendered).toContain('assets: { access: "private" },');
 		expect(rendered).not.toContain("aiGateway");
 		expect(rendered).not.toContain("functions");
@@ -115,22 +117,20 @@ describe("renderNeonConfigFromView", () => {
 
 // Seeded by \`neon config init --from-branch\` from preview.
 // The AI Gateway is not readable from a branch (always available, credential-gated), so add
-// \`preview: { aiGateway: true }\` if the policy should declare it.
+// \`aiGateway: true\` if the policy should declare it.
 // preview is protected on Neon. Not declared here: a policy \`protected\` would
 // apply to every branch this policy is applied to.
 export default defineConfig({
   auth: true,
   dataApi: true,
-  preview: {
-    buckets: {
-      uploads: { access: "public_read" },
-    },
-    // preview has 1 deployed function.
-    // Declaring one needs the local source path, which the branch does not know:
-    // functions: {
-    //   resize: { name: "Resize Image", source: "./resize.ts" },
-    // },
+  buckets: {
+    uploads: { access: "public_read" },
   },
+  // preview has 1 deployed function.
+  // Declaring one needs the local source path, which the branch does not know:
+  // functions: {
+  //   resize: { name: "Resize Image", source: "./resize.ts" },
+  // },
   branch: () => ({
     parent: "main",
     postgres: {

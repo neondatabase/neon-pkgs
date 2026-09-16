@@ -45,6 +45,22 @@ describe("declaredNeonServices", () => {
 
 		expect(declaredNeonServices(config)).toEqual([]);
 	});
+
+	it("maps GA top-level functions, buckets, and aiGateway", () => {
+		const config = defineConfig({
+			functions: {
+				api: { name: "API", source: "./api.ts" },
+			},
+			buckets: { assets: { access: "private" } },
+			aiGateway: true,
+		});
+
+		expect(declaredNeonServices(config)).toEqual([
+			"object-storage",
+			"functions",
+			"ai-gateway",
+		]);
+	});
 });
 
 describe("claimableDataApiCreateBody", () => {

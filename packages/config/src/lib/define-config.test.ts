@@ -165,6 +165,72 @@ describe("resolveConfig", () => {
 		});
 	});
 
+	test("resolves GA top-level functions, buckets, and aiGateway the same way", () => {
+		const config = defineConfig({
+			functions: {
+				fn1: {
+					name: "Hello World",
+					source: "./functions/hello-world.ts",
+					env: { RESEND_API_KEY: "re_abc" },
+				},
+			},
+			buckets: { uploads: {} },
+			aiGateway: { enabled: true },
+		});
+		const resolved = resolveConfig(config, {
+			name: "preview-1",
+			exists: false,
+		});
+		expect(resolved.preview).toEqual({
+			functions: [
+				{
+					slug: "fn1",
+					name: "Hello World",
+					source: "./functions/hello-world.ts",
+					env: { RESEND_API_KEY: "re_abc" },
+					runtime: "nodejs24",
+					bundler: "esbuild",
+				},
+			],
+			buckets: [{ name: "uploads", access: "private" }],
+			aiGatewayEnabled: true,
+		});
+	});
+
+	test("rejects a service declared in both GA and preview homes", () => {
+		expect(() =>
+			defineConfig({
+				functions: {
+					hello: { name: "Hello", source: "./hello.ts" },
+				},
+				preview: {
+					functions: {
+						hello: { name: "Hello", source: "./hello.ts" },
+					},
+				},
+			}),
+		).toThrow(ConfigValidationError);
+	});
+
+	test("applies GA per-branch function runtime tuning", () => {
+		const config = defineConfig({
+			functions: {
+				hello: { name: "Hello", source: "./hello.ts" },
+			},
+			branch: () => ({
+				functions: { hello: { runtime: "nodejs24" } },
+			}),
+		});
+		const resolved = resolveConfig(config, {
+			name: "main",
+			exists: true,
+		});
+		expect(resolved.preview?.functions[0]).toMatchObject({
+			slug: "hello",
+			runtime: "nodejs24",
+		});
+	});
+
 	test("defaults schedule trigger functionPath and enabled", () => {
 		const config = defineConfig({
 			preview: {

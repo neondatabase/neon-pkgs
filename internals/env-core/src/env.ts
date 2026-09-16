@@ -183,8 +183,8 @@ export interface NeonDataApiEnv {
 }
 
 /**
- * S3-compatible object-storage access for the branch (Preview). Present on `NeonEnv` only
- * when the policy declares `preview.buckets`. Combines a minted branch credential's access
+ * S3-compatible object-storage access for the branch. Present on `NeonEnv` only
+ * when the policy declares `buckets` (or deprecated `preview.buckets`). Combines a minted branch credential's access
  * keys (`accessKeyId` = the credential's full token id, e.g. `nak_live_…`, which is what the
  * storage gateway authenticates against; `secretAccessKey` = its
  * `s3_secret_access_key`) with the branch's non-secret connection details
@@ -203,8 +203,8 @@ export interface NeonStorageEnv {
 }
 
 /**
- * AI Gateway access for the branch (Preview). Present on `NeonEnv` only when the policy
- * enables `preview.aiGateway`. `apiKey` is the minted credential's bearer (`api_token`);
+ * AI Gateway access for the branch. Present on `NeonEnv` only when the policy
+ * enables `aiGateway` (or deprecated `preview.aiGateway`). `apiKey` is the minted credential's bearer (`api_token`);
  * `baseUrl` is the bare branch-scoped gateway host
  * (`https://<branchId>-api.ai.<region>.…`, no path). Projects to the Neon-branded env
  * (`NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL`); clients like `@neon/ai-sdk-provider`
@@ -254,44 +254,84 @@ type ServiceOn<T> = [T] extends [false]
 /** True when `T` has at least one known key; `false` for `{}` / `never`. */
 type HasKeys<T> = [keyof T] extends [never] ? false : true;
 
+type OrBool<A extends boolean, B extends boolean> = A extends true ? true : B;
+
 /**
- * Whether the policy's **static** `preview` block declares at least one object-storage bucket
- * (`preview.buckets`). Drives whether {@link NeonEnv} carries the `storage` namespace.
+ * Whether a top-level optional record (GA `functions` / `buckets`) has known keys.
+ * A string index signature (`Record<string, …>`, the default `Config` param) is treated
+ * as empty so an untyped policy yields just `{ postgres }`, matching {@link HasPreviewBuckets}.
+ */
+type HasGaRecord<T> = [NonNullable<T>] extends [never]
+	? false
+	: string extends keyof NonNullable<T>
+		? false
+		: HasKeys<NonNullable<T>>;
+
+type HasGaToggle<T> = [NonNullable<T>] extends [never]
+	? false
+	: ServiceOn<NonNullable<T>>;
+
+/**
+ * Whether the policy declares at least one object-storage bucket (`buckets` or
+ * deprecated `preview.buckets`). Drives whether {@link NeonEnv} carries the `storage`
+ * namespace.
  *
  * The leading `[never]` guard is load-bearing: when a policy has no `preview` at all,
  * `NonNullable<C["preview"]>` is `never`, and without the guard the `extends { … }` probe
  * below would vacuously match (everything extends `never`-derived shapes) and `HasKeys<never>`
  * would resolve `true`, wrongly adding the namespace. The guard short-circuits to `false`.
  */
-type HasBuckets<C extends Config> = [NonNullable<C["preview"]>] extends [never]
+type HasPreviewBuckets<C extends Config> = [NonNullable<C["preview"]>] extends [
+	never,
+]
 	? false
 	: NonNullable<C["preview"]> extends { buckets: infer B }
 		? HasKeys<NonNullable<B>>
 		: false;
 
+type HasBuckets<C extends Config> = OrBool<
+	HasGaRecord<C["buckets"]>,
+	HasPreviewBuckets<C>
+>;
+
 /**
- * Whether the policy's **static** `preview` block enables the AI Gateway
- * (`preview.aiGateway`). Drives whether {@link NeonEnv} carries the `aiGateway` namespace.
- *
- * The leading `[never]` guard is load-bearing for the same reason as {@link HasBuckets}: when
- * a policy has no `preview`, `NonNullable<C["preview"]>` is `never`, and a naked `never` in the
- * `extends` below would *distribute* (collapsing the result — and the whole `NeonEnv`
- * intersection — to `never`). The tuple-wrapped guard short-circuits that to `false`.
+ * Whether the policy enables the AI Gateway (`aiGateway` or deprecated `preview.aiGateway`).
+ * Drives whether {@link NeonEnv} carries the `aiGateway` namespace.
  */
-type AiGatewayOn<C extends Config> = [NonNullable<C["preview"]>] extends [never]
+type HasPreviewAiGateway<C extends Config> = [
+	NonNullable<C["preview"]>,
+] extends [never]
 	? false
 	: NonNullable<C["preview"]> extends { aiGateway: infer A }
 		? ServiceOn<NonNullable<A>>
 		: false;
 
+type AiGatewayOn<C extends Config> = OrBool<
+	HasGaToggle<C["aiGateway"]>,
+	HasPreviewAiGateway<C>
+>;
+
 /** The tuple guard prevents a missing preview block from enabling functions. */
-type HasFunctions<C extends Config> = [NonNullable<C["preview"]>] extends [
-	never,
-]
+type HasPreviewFunctions<C extends Config> = [
+	NonNullable<C["preview"]>,
+] extends [never]
 	? false
 	: NonNullable<C["preview"]> extends { functions: infer F }
 		? HasKeys<NonNullable<F>>
 		: false;
+
+type HasFunctions<C extends Config> = OrBool<
+	HasGaRecord<C["functions"]>,
+	HasPreviewFunctions<C>
+>;
+
+type GaFunctionsOfConfig<C extends Config> = [
+	NonNullable<C["functions"]>,
+] extends [never]
+	? Record<never, never>
+	: string extends keyof NonNullable<C["functions"]>
+		? Record<never, never>
+		: NonNullable<C["functions"]>;
 
 type PreviewFunctionsOfConfig<C extends Config> = [
 	NonNullable<C["preview"]>,
@@ -301,8 +341,16 @@ type PreviewFunctionsOfConfig<C extends Config> = [
 		? F
 		: Record<never, never>;
 
+type FunctionsOfConfig<C extends Config> = [
+	keyof GaFunctionsOfConfig<C>,
+] extends [never]
+	? PreviewFunctionsOfConfig<C>
+	: [keyof PreviewFunctionsOfConfig<C>] extends [never]
+		? GaFunctionsOfConfig<C>
+		: GaFunctionsOfConfig<C> & PreviewFunctionsOfConfig<C>;
+
 type FunctionSlugOfConfig<C extends Config> = Extract<
-	keyof PreviewFunctionsOfConfig<C>,
+	keyof FunctionsOfConfig<C>,
 	string
 >;
 
@@ -328,9 +376,9 @@ type FunctionBaseUrlKeyOf<C extends Config> =
  * - `postgres` is always present.
  * - `auth` is added iff `config.auth` is statically enabled.
  * - `dataApi` is added iff `config.dataApi` is statically enabled.
- * - `storage` is added iff `config.preview.buckets` declares at least one bucket.
- * - `aiGateway` is added iff `config.preview.aiGateway` is statically enabled.
- * - `functions` is added iff `config.preview.functions` declares at least one slug.
+ * - `storage` is added iff `config.buckets` (or deprecated `preview.buckets`) declares at least one bucket.
+ * - `aiGateway` is added iff `config.aiGateway` (or deprecated `preview.aiGateway`) is statically enabled.
+ * - `functions` is added iff `config.functions` (or deprecated `preview.functions`) declares at least one slug.
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
@@ -975,8 +1023,8 @@ export async function fetchEnvKeysState(
 				throw new PlatformError(
 					ErrorCode.NotFound,
 					[
-						`fetchEnv: branch policy declares object storage (preview.buckets) but storage is not enabled on branch ${branch.name} (${branch.id}).`,
-						"Enable it via `apply(config, { projectId, branchId })` (or in the Neon Console) — then re-run fetchEnv. Or remove preview.buckets.",
+						`fetchEnv: branch policy declares object storage (buckets) but storage is not enabled on branch ${branch.name} (${branch.id}).`,
+						"Enable it via `apply(config, { projectId, branchId })` (or in the Neon Console) — then re-run fetchEnv. Or remove buckets.",
 					].join(" "),
 					{ details: { projectId, branchId: branch.id } },
 				);

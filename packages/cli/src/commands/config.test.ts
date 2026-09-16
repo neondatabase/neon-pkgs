@@ -1243,7 +1243,7 @@ describe("config init --from-branch", () => {
 		// mentioned in the header comment as something to add by hand.
 		expect(source).not.toMatch(/^\s+aiGateway: true,/m);
 		expect(source).toContain(
-			"// `preview: { aiGateway: true }` if the policy should declare it.",
+			"// `aiGateway: true` if the policy should declare it.",
 		);
 	});
 

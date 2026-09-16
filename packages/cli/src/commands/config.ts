@@ -1,6 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { packagesToStage, resolveConfig } from "@neon/config";
+import {
+	packagesToStage,
+	previewGaWarningForConfig,
+	resolveConfig,
+} from "@neon/config";
 import {
 	apply,
 	assertZipWithinLimits,
@@ -333,7 +337,7 @@ const resolveServices = async (
 };
 
 /**
- * Write the hello-world handler the scaffolded `preview.functions` entry points at. An
+ * Write the hello-world handler the scaffolded `functions` entry points at. An
  * existing `hello.ts` is left alone: the declared function keeps pointing at it, which is the
  * better outcome than overwriting a file the user wrote.
  */
@@ -722,8 +726,14 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 	}
 };
 
+const warnDeprecatedPreview = (config: Config): void => {
+	const message = previewGaWarningForConfig(config);
+	if (message) log.warning("%s", message);
+};
+
 export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	const config = await loadConfig(props);
+	warnDeprecatedPreview(config);
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Applying to branch");
 	const branchId = branch.branchId;
@@ -783,7 +793,7 @@ type ReportMode = "plan" | "apply";
  * the plan/apply table. Postgres is always present (every branch has it); the rest are listed
  * only when the policy declares them. This deliberately surfaces services that produce **no**
  * plan step — notably the AI Gateway, which is always available and only needs a scoped branch
- * credential (not a provisioning step) — so adding `preview.aiGateway` to a neon.ts isn't
+ * credential (not a provisioning step) — so adding `aiGateway` to a neon.ts isn't
  * mistaken for being silently dropped. Service enablement is static top-level config (it never
  * lives in the per-branch closure), so reading it straight off `config` is accurate.
  */
@@ -976,6 +986,8 @@ export const applyPolicyOnCreate = async (props: {
 		throw err;
 	}
 
+	warnDeprecatedPreview(config);
+
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
@@ -1080,6 +1092,8 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return null;
 		throw err;
 	}
+
+	warnDeprecatedPreview(config);
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,

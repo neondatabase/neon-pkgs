@@ -26,7 +26,7 @@ describe("dev", () => {
 			stderr:
 				"ERROR: No --source given and no neon.ts found. Pass --source <path> " +
 				"to run a single function, or add a neon.ts that declares functions " +
-				"under `preview.functions`.",
+				"under `functions`.",
 		});
 	});
 

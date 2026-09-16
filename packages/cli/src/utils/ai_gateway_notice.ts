@@ -2,7 +2,7 @@ import type { NeonApiClient } from "../api.js";
 import { log } from "../log.js";
 
 /**
- * Friendly guidance shown when a branch enables the AI Gateway (`preview.aiGateway`).
+ * Friendly guidance shown when a branch enables the AI Gateway (`aiGateway`).
  *
  * The gateway is credential-gated, not provisioned: enabling it always mints a working
  * branch credential, so `apply` / `checkout` / `env pull` succeed regardless of plan. The
@@ -78,7 +78,7 @@ export type AiGatewayNotice = {
 export const freePlanBlockMessage = (upgradeUrl: string): string =>
 	"This neon.ts enables the AI Gateway, which isn't available on the Free plan — the " +
 	"gateway won't serve model requests. Upgrade to a paid plan and re-run, or remove " +
-	`\`preview.aiGateway\` from neon.ts. Upgrade here: ${upgradeUrl}`;
+	`\`aiGateway\` from neon.ts. Upgrade here: ${upgradeUrl}`;
 
 /**
  * Build the AI Gateway courtesy notice for an account's plan and (optionally) its live model

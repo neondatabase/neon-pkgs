@@ -22,17 +22,14 @@ export default defineConfig({
   // Static: what *exists* on every branch. GA service toggles drive the typed env.
   auth: true,
   dataApi: true,
-  // Beta (Preview) features, keyed by slug / name.
-  preview: {
-    functions: {
-      hello: {
-        name: "Hello",
-        source: "./functions/hello.ts",
-        triggers: [
-          { type: "schedule", name: "hourly", cron: "0 * * * *" },
-        ],
-        customDomains: ["docs.example.com"], // default branch only
-      },
+  functions: {
+    hello: {
+      name: "Hello",
+      source: "./functions/hello.ts",
+      triggers: [
+        { type: "schedule", name: "hourly", cron: "0 * * * *" },
+      ],
+      customDomains: ["docs.example.com"], // default branch only
     },
   },
   // Dynamic: per-branch tuning only. Cannot add/remove services or functions.
@@ -45,8 +42,8 @@ export default defineConfig({
 
 A policy is split into a **static** existential set and a **dynamic** `branch` closure:
 
-- **Static top-level** — `auth` / `dataApi` (GA service toggles) and the beta `preview` block (`aiGateway`, `functions` keyed by slug, `buckets` keyed by name). Because this is static, the secret set is known at the type level, so `parseEnv` / `fetchEnv` from `@neon/env` return an exact `NeonEnv`. Function source, env, and triggers apply on every branch. `customDomains` is default-branch-only ([details](#default-branch-only-fields)).
-- **`branch` closure** — receives a **read-only descriptor** (`BranchTarget`) of the branch being evaluated (`name`, `id`, `exists`, `isDefault`, `isProtected`, `parentId`, `expiresAt`) and returns per-branch *tuning*: `parent`, `ttl`, `protected`, `postgres.computeSettings`, per-function `runtime`, and per-function `customDomains`. Function memory is fixed at `2048` MiB for now and is not user-configurable. It runs both against existing branches and during pre-create evaluation (`exists: false`). It **cannot** change which services or functions exist — that is what keeps the static secret set sound.
+- **Static top-level** — `auth` / `dataApi` / `aiGateway` / `functions` (keyed by slug) / `buckets` (keyed by name). The same keys still work under `preview` (deprecated; `neon config apply` / `deploy` warn that they can be lifted). Because this is static, the secret set is known at the type level, so `parseEnv` / `fetchEnv` from `@neon/env` return an exact `NeonEnv`. Function source, env, and triggers apply on every branch. `customDomains` is default-branch-only ([details](#default-branch-only-fields)).
+- **`branch` closure** — receives a **read-only descriptor** (`BranchTarget`) of the branch being evaluated (`name`, `id`, `exists`, `isDefault`, `isProtected`, `parentId`, `expiresAt`) and returns per-branch *tuning*: `parent`, `ttl`, `protected`, `postgres.computeSettings`, per-function `runtime` (`functions` on the returned object, or deprecated `preview.functions`), and per-function `customDomains`. Function memory is fixed at `2048` MiB for now and is not user-configurable. It runs both against existing branches and during pre-create evaluation (`exists: false`). It **cannot** change which services or functions exist — that is what keeps the static secret set sound.
 
 Service toggles accept `true` / `{}` / `{ enabled: true }` (enabled) and `false` / `{ enabled: false }` (disabled). Function slugs (record keys) must match `^[a-z0-9]{1,20}$`.
 
@@ -56,13 +53,11 @@ A hostname is globally unique, so a child checkout would 409 if it inherited the
 
 ```ts
 export default defineConfig({
-  preview: {
-    functions: {
-      hello: {
-        name: "Hello",
-        source: "./functions/hello.ts",
-        customDomains: ["docs.example.com"],
-      },
+  functions: {
+    hello: {
+      name: "Hello",
+      source: "./functions/hello.ts",
+      customDomains: ["docs.example.com"],
     },
   },
 });
@@ -80,10 +75,8 @@ export default defineConfig({
 branch: (branch) =>
   branch.name === "preview"
     ? {
-        preview: {
-          functions: {
-            hello: { customDomains: ["preview.example.com"] },
-          },
+        functions: {
+          hello: { customDomains: ["preview.example.com"] },
         },
       }
     : {},
@@ -107,13 +100,11 @@ esbuild is the default. A file `source` is the entry; a directory is searched fo
 
 ```ts
 export default defineConfig({
-  preview: {
-    functions: {
-      mastra: {
-        name: "Mastra server",
-        source: ".mastra/output",
-        bundler: "none",
-      },
+  functions: {
+    mastra: {
+      name: "Mastra server",
+      source: ".mastra/output",
+      bundler: "none",
     },
   },
 });
@@ -129,13 +120,11 @@ A function's `source` is bundled with esbuild at deploy time, and a package back
 
 ```ts
 export default defineConfig({
-  preview: {
-    functions: {
-      resize: {
-        name: "Resize",
-        source: "./functions/resize.ts",
-        externalPackages: ["sharp"],
-      },
+  functions: {
+    resize: {
+      name: "Resize",
+      source: "./functions/resize.ts",
+      externalPackages: ["sharp"],
     },
   },
 });

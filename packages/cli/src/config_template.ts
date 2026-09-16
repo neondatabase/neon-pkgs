@@ -17,7 +17,7 @@ export const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
 /**
  * The services `config init` can declare in the `neon.ts` it scaffolds — the subset of
  * {@link NEON_SERVICES} a policy has a field for. {@link renderNeonConfig} owns the mapping
- * from these names to the `neon.ts` fields (`aiGateway`, `buckets`).
+ * from these names to the `neon.ts` fields (`aiGateway`, `functions`, `buckets`).
  *
  * Postgres is absent because every branch has it, so there is nothing to declare. `data-api`
  * is absent because enabling it with the default `authProvider: "neon"` requires `auth` — a
@@ -71,18 +71,18 @@ const block = (level: number, key: string, body: string[]): string[] => [
 	...at(level, "},"),
 ];
 
-/** The `preview` block for the selected services, or "" when none of them is a preview feature. */
-const renderPreview = (services: readonly NeonService[]): string => {
+/** GA service keys for the selected init services, or "" when none of them is selected. */
+const renderGaServices = (services: readonly NeonService[]): string => {
 	const lines: string[] = [];
 
 	if (services.includes("ai-gateway")) {
-		lines.push(...at(2, "aiGateway: true,"));
+		lines.push(...at(1, "aiGateway: true,"));
 	}
 	if (services.includes("functions")) {
 		lines.push(
-			...block(2, "functions", [
+			...block(1, "functions", [
 				...at(
-					3,
+					2,
 					`${FUNCTION_SLUG}: { name: "${FUNCTION_NAME}", source: "./${FUNCTION_FILENAME}" },`,
 				),
 			]),
@@ -90,9 +90,9 @@ const renderPreview = (services: readonly NeonService[]): string => {
 	}
 	if (services.includes("object-storage")) {
 		lines.push(
-			...block(2, "buckets", [
+			...block(1, "buckets", [
 				...at(
-					3,
+					2,
 					`// "private" is the default; use "public_read" for anonymous reads`,
 					`${BUCKET_NAME}: { access: "private" },`,
 				),
@@ -103,12 +103,12 @@ const renderPreview = (services: readonly NeonService[]): string => {
 	if (lines.length === 0) {
 		return "";
 	}
-	return `${block(1, "preview", lines).join("\n")}\n`;
+	return `${lines.join("\n")}\n`;
 };
 
 /**
  * Render the `neon.ts` policy `config init` writes. With no services this is the starter
- * policy — an explicit `auth: false`, no `preview` block, and a `branch` closure that gives
+ * policy — an explicit `auth: false`, no service keys beyond that, and a `branch` closure that gives
  * new non-default branches a 7-day TTL — so the picker's "skip everything" answer and a
  * non-interactive run produce the identical file.
  */
@@ -118,7 +118,7 @@ export const renderNeonConfig = (services: readonly NeonService[]): string =>
 export default defineConfig({
   // Declare your Neon services here
   auth: ${services.includes("auth")},
-${renderPreview(services)}  // Branch policy: per-branch tuning
+${renderGaServices(services)}  // Branch policy: per-branch tuning
   branch: (branch) => {
     if (branch.isDefault) {
       // Default branch: no overrides, uses project defaults
@@ -188,8 +188,8 @@ const renderSeededBranch = (view: NeonConfigView): string => {
 	return `${[...at(1, "branch: () => ({"), ...settings, ...at(1, "}),")].join("\n")}\n`;
 };
 
-/** The `preview` block for a policy seeded from live state. */
-const renderSeededPreview = (
+/** GA service keys for a policy seeded from live state. */
+const renderSeededGaServices = (
 	view: NeonConfigView,
 	branchName: string,
 ): string => {
@@ -199,11 +199,11 @@ const renderSeededPreview = (
 	if (buckets.length > 0) {
 		lines.push(
 			...block(
-				2,
+				1,
 				"buckets",
 				buckets.flatMap(([name, bucket]) =>
 					at(
-						3,
+						2,
 						`${renderKey(name)}: { access: "${bucket.access}" },`,
 					),
 				),
@@ -218,7 +218,7 @@ const renderSeededPreview = (
 	if (functions.length > 0) {
 		lines.push(
 			...at(
-				2,
+				1,
 				`// ${branchName} has ${functions.length} deployed function${functions.length === 1 ? "" : "s"}.`,
 				"// Declaring one needs the local source path, which the branch does not know:",
 				"// functions: {",
@@ -234,7 +234,7 @@ const renderSeededPreview = (
 	if (lines.length === 0) {
 		return "";
 	}
-	return `${block(1, "preview", lines).join("\n")}\n`;
+	return `${lines.join("\n")}\n`;
 };
 
 /**
@@ -260,10 +260,10 @@ export const renderNeonConfigFromView = (
 		view.auth ? "  auth: true," : "",
 		view.dataApi ? "  dataApi: true," : "",
 	].filter((line) => line !== "");
-	const preview = renderSeededPreview(view, branchName);
+	const gaServices = renderSeededGaServices(view, branchName);
 	const branch = renderSeededBranch(view);
 
-	if (services.length === 0 && preview === "" && branch === "") {
+	if (services.length === 0 && gaServices === "" && branch === "") {
 		return { source: renderNeonConfig([]), seeded: false };
 	}
 
@@ -272,7 +272,7 @@ export const renderNeonConfigFromView = (
 		: "";
 	const body = [
 		...services,
-		...(preview === "" ? [] : [preview.trimEnd()]),
+		...(gaServices === "" ? [] : [gaServices.trimEnd()]),
 		...(branch === "" ? [] : [branch.trimEnd()]),
 	].join("\n");
 
@@ -281,7 +281,7 @@ export const renderNeonConfigFromView = (
 
 // Seeded by \`neon config init --from-branch\` from ${branchName}.
 // The AI Gateway is not readable from a branch (always available, credential-gated), so add
-// \`preview: { aiGateway: true }\` if the policy should declare it.
+// \`aiGateway: true\` if the policy should declare it.
 ${protectedNote}export default defineConfig({
 ${body}
 });

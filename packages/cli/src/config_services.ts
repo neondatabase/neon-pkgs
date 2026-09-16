@@ -1,4 +1,9 @@
 import type { DataApiSettings } from "@neon/config";
+import {
+	authoredAiGateway,
+	authoredBuckets,
+	authoredFunctions,
+} from "@neon/config";
 import type { Config } from "@neon/config-runtime";
 import type { NeonService } from "./neon_services.js";
 
@@ -15,13 +20,13 @@ export const declaredNeonServices = (config: Config): NeonService[] => {
 	const services: NeonService[] = [];
 	if (isToggleEnabled(config.auth)) services.push("auth");
 	if (isToggleEnabled(config.dataApi)) services.push("data-api");
-	if (Object.keys(config.preview?.buckets ?? {}).length > 0) {
+	if (Object.keys(authoredBuckets(config) ?? {}).length > 0) {
 		services.push("object-storage");
 	}
-	if (Object.keys(config.preview?.functions ?? {}).length > 0) {
+	if (Object.keys(authoredFunctions(config) ?? {}).length > 0) {
 		services.push("functions");
 	}
-	if (isToggleEnabled(config.preview?.aiGateway)) {
+	if (isToggleEnabled(authoredAiGateway(config))) {
 		services.push("ai-gateway");
 	}
 	return services;

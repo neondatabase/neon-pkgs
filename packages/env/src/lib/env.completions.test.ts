@@ -193,6 +193,6 @@ describe("parseEnv autocomplete", () => {
 			fixture("{ auth: true }", `parseEnv(config, "${CARET}")`),
 		);
 		expect(entries).toHaveLength(1);
-		expect(entries[0]).toMatch(/declares no .?preview\.functions/);
+		expect(entries[0]).toMatch(/declares no .?functions/);
 	});
 });

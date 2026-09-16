@@ -683,6 +683,26 @@ describe("NeonEnv namespace presence (types)", () => {
 		>().toEqualTypeOf<string>();
 	});
 
+	test("GA buckets / aiGateway / functions add the same namespaces", () => {
+		const withBucket = defineConfig({ buckets: { uploads: {} } });
+		const on = defineConfig({ aiGateway: true });
+		const fnOnly = defineConfig({
+			functions: { hello: { name: "H", source: "./h.ts" } },
+		});
+		expectTypeOf<
+			NamespacePresence<typeof withBucket>["storage"]
+		>().toEqualTypeOf<true>();
+		expectTypeOf<
+			NamespacePresence<typeof on>["aiGateway"]
+		>().toEqualTypeOf<true>();
+		expectTypeOf<
+			NamespacePresence<typeof fnOnly>["functions"]
+		>().toEqualTypeOf<true>();
+		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<{
+			hello: NeonFunctionUrlEnv;
+		}>();
+	});
+
 	test("a fully-enabled policy yields every namespace", () => {
 		const everything = defineConfig({
 			auth: true,
@@ -692,6 +712,25 @@ describe("NeonEnv namespace presence (types)", () => {
 				aiGateway: true,
 				functions: { hello: { name: "H", source: "./h.ts" } },
 			},
+		});
+		expectTypeOf<NamespacePresence<typeof everything>>().toEqualTypeOf<{
+			postgres: true;
+			branch: true;
+			auth: true;
+			dataApi: true;
+			storage: true;
+			aiGateway: true;
+			functions: true;
+		}>();
+	});
+
+	test("a fully-enabled GA policy yields every namespace", () => {
+		const everything = defineConfig({
+			auth: true,
+			dataApi: true,
+			buckets: { uploads: {} },
+			aiGateway: true,
+			functions: { hello: { name: "H", source: "./h.ts" } },
 		});
 		expectTypeOf<NamespacePresence<typeof everything>>().toEqualTypeOf<{
 			postgres: true;

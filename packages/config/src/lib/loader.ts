@@ -275,7 +275,7 @@ function safeIsFile(path: string): boolean {
 }
 
 const UNSET_FUNCTION_ENV_ISSUE =
-	/^preview\.functions\.[^.]+\.env\.(.+): Environment variable "\1" for function ".+" is undefined/;
+	/^(?:preview\.)?functions\.[^.]+\.env\.(.+): Environment variable "\1" for function ".+" is undefined/;
 
 function unsetFunctionEnvKeys(err: unknown): string[] | null {
 	if (!isPlatformError(err) || err.code !== ErrorCode.InvalidConfig) {
@@ -357,7 +357,7 @@ function withoutFunctionEnvKeys(
 	config: Config,
 	keys: ReadonlySet<string>,
 ): Config {
-	const functions = config.preview?.functions;
+	const functions = config.functions ?? config.preview?.functions;
 	if (!functions) return config;
 	const nextFunctions: Record<string, FunctionDef> = {};
 	for (const [slug, fn] of Object.entries(functions)) {
@@ -369,6 +369,12 @@ function withoutFunctionEnvKeys(
 			Object.entries(fn.env).filter(([key]) => !keys.has(key)),
 		);
 		nextFunctions[slug] = { ...fn, env };
+	}
+	if (config.functions !== undefined) {
+		return Object.freeze({
+			...config,
+			functions: nextFunctions,
+		});
 	}
 	return Object.freeze({
 		...config,

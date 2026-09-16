@@ -166,7 +166,7 @@ export const postgresConfigSchema = z.strictObject({
 /**
  * Branch-unique function slug. Mirrors the Neon Functions API path-segment rule
  * (`platform/internal/platform/functions/name.go`): 1–20 lowercase letters and digits.
- * Used as the **key schema** of the `preview.functions` record, so a bad slug fails
+ * Used as the **key schema** of the `functions` record, so a bad slug fails
  * validation with a path pointing at the offending key and duplicate slugs are impossible
  * by construction (object keys are unique).
  */
@@ -177,7 +177,7 @@ const functionSlugSchema = z
 		"function slug must be 1-20 lowercase letters and digits (no hyphens or other characters)",
 	);
 
-/** Bucket name: 1–255 chars. Used as the key schema of the `preview.buckets` record. */
+/** Bucket name: 1–255 chars. Used as the key schema of the `buckets` record. */
 const bucketNameSchema = z.string().min(1).max(255);
 
 /**
@@ -453,22 +453,22 @@ export const bucketDefSchema = z.strictObject({
 		.optional(),
 });
 
-/** Static, beta Preview feature set: AI Gateway toggle + functions/buckets records. */
-export const previewInputSchema = z
-	.strictObject({
-		aiGateway: serviceToggleInputSchema.optional(),
-		functions: z.record(functionSlugSchema, functionDefSchema).optional(),
-		buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
-	})
-	.superRefine((preview, ctx) => {
+/**
+ * Functions record with trigger-name uniqueness. Used as both top-level `functions`
+ * and `preview.functions` so {@link previewInputSchema} (`schemas.preview`) keeps the
+ * same validation when parsed on its own.
+ */
+export const functionsRecordSchema = z
+	.record(functionSlugSchema, functionDefSchema)
+	.superRefine((functions, ctx) => {
 		const byName = new Map<string, string>();
-		for (const [slug, fn] of Object.entries(preview.functions ?? {})) {
+		for (const [slug, fn] of Object.entries(functions)) {
 			const seenOnFn = new Set<string>();
 			for (const [index, trigger] of (fn.triggers ?? []).entries()) {
 				if (seenOnFn.has(trigger.name)) {
 					ctx.addIssue({
 						code: "custom",
-						path: ["functions", slug, "triggers", index, "name"],
+						path: [slug, "triggers", index, "name"],
 						message: `trigger name "${trigger.name}" is listed more than once on function "${slug}"`,
 					});
 					continue;
@@ -478,7 +478,7 @@ export const previewInputSchema = z
 				if (prior !== undefined) {
 					ctx.addIssue({
 						code: "custom",
-						path: ["functions", slug, "triggers", index, "name"],
+						path: [slug, "triggers", index, "name"],
 						message: `trigger name "${trigger.name}" is already used by function "${prior}"`,
 					});
 					continue;
@@ -487,6 +487,13 @@ export const previewInputSchema = z
 			}
 		}
 	});
+
+/** Static, beta Preview feature set: AI Gateway toggle + functions/buckets records. */
+export const previewInputSchema = z.strictObject({
+	aiGateway: serviceToggleInputSchema.optional(),
+	functions: functionsRecordSchema.optional(),
+	buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
+});
 
 /** Per-function deploy tuning returned by the `branch` closure. */
 export const functionTuningSchema = z.strictObject({
@@ -518,6 +525,9 @@ export const branchTuningSchema = z
 				}
 			}),
 		postgres: postgresConfigSchema.optional(),
+		functions: z
+			.record(functionSlugSchema, functionTuningSchema)
+			.optional(),
 		preview: previewTuningSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
@@ -525,6 +535,12 @@ export const branchTuningSchema = z
 			ctx,
 			path: ["parent"],
 			parent: cfg.parent,
+		});
+		rejectDuplicateHome(ctx, {
+			gaPresent: cfg.functions !== undefined,
+			previewPresent: cfg.preview?.functions !== undefined,
+			gaPath: "functions",
+			previewPath: "preview.functions",
 		});
 	});
 
@@ -537,6 +553,9 @@ export const configInputSchema = z
 	.strictObject({
 		auth: serviceToggleInputSchema.optional(),
 		dataApi: dataApiInputSchema.optional(),
+		aiGateway: serviceToggleInputSchema.optional(),
+		functions: functionsRecordSchema.optional(),
+		buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
 		preview: previewInputSchema.optional(),
 		branch: z
 			.custom<(...args: unknown[]) => unknown>(
@@ -549,6 +568,24 @@ export const configInputSchema = z
 			.optional(),
 	})
 	.superRefine((cfg, ctx) => {
+		rejectDuplicateHome(ctx, {
+			gaPresent: cfg.aiGateway !== undefined,
+			previewPresent: cfg.preview?.aiGateway !== undefined,
+			gaPath: "aiGateway",
+			previewPath: "preview.aiGateway",
+		});
+		rejectDuplicateHome(ctx, {
+			gaPresent: cfg.functions !== undefined,
+			previewPresent: cfg.preview?.functions !== undefined,
+			gaPath: "functions",
+			previewPath: "preview.functions",
+		});
+		rejectDuplicateHome(ctx, {
+			gaPresent: cfg.buckets !== undefined,
+			previewPresent: cfg.preview?.buckets !== undefined,
+			gaPath: "buckets",
+			previewPath: "preview.buckets",
+		});
 		// A Data API verified by Neon Auth (`authProvider: "neon"`, the default) needs Neon
 		// Auth enabled on the same branch so the tokens it verifies actually exist. Enforce
 		// the same invariant the `defineConfig` type-level check expresses, at runtime.
@@ -563,6 +600,23 @@ export const configInputSchema = z
 			});
 		}
 	});
+
+function rejectDuplicateHome(
+	ctx: z.RefinementCtx,
+	args: {
+		gaPresent: boolean;
+		previewPresent: boolean;
+		gaPath: string;
+		previewPath: string;
+	},
+): void {
+	if (!args.gaPresent || !args.previewPresent) return;
+	ctx.addIssue({
+		code: "custom",
+		path: args.gaPath.split("."),
+		message: `${args.gaPath} is also declared as ${args.previewPath}. Keep ${args.gaPath} and remove ${args.previewPath}.`,
+	});
+}
 
 /**
  * Whether a parsed `auth` / `dataApi` toggle value is enabled: a present object (or `true`)

@@ -121,7 +121,7 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | --- | --- |
 | `NEON_DATA_API_URL` | Data API (PostgREST) integration URL |
 
-**Object storage** (Preview — when `preview.buckets` declares at least one bucket). Projected onto the AWS SDK's standard config vars so an S3 client works from env alone (set `forcePathStyle: true`):
+**Object storage** (when `buckets` declares at least one bucket). Projected onto the AWS SDK's standard config vars so an S3 client works from env alone (set `forcePathStyle: true`):
 
 | Key | From |
 | --- | --- |
@@ -130,14 +130,14 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | `AWS_ENDPOINT_URL_S3` | branch's S3-compatible endpoint URL |
 | `AWS_REGION` | branch region (e.g. `us-east-2`) |
 
-**AI Gateway** (Preview — when `preview.aiGateway` is enabled). Emitted under the Neon-branded vars the deployed Functions runtime injects; clients like [`@neon/ai-sdk-provider`](../ai-sdk-provider) read these and append the `/ai-gateway/<dialect>/…` routes themselves:
+**AI Gateway** (when `aiGateway` is enabled). Emitted under the Neon-branded vars the deployed Functions runtime injects; clients like [`@neon/ai-sdk-provider`](../ai-sdk-provider) read these and append the `/ai-gateway/<dialect>/…` routes themselves:
 
 | Key | From |
 | --- | --- |
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
-**Functions** (Preview — when `preview.functions` declares at least one slug). Each declared slug requires `NEON_FUNCTION_<SLUG>_BASE_URL`, typed as `env.functions.<slug>.baseUrl: string`. These are the public function URLs, not the function's declared `env` secrets (those are uploaded at deploy). `fetchEnv` / `neon env pull` derive the URL from the branch connection host; the function does not have to be deployed. `parseEnv` requires the var to be a URL. `neon dev` injects `http://localhost:<port>` instead.
+**Functions** (when `functions` declares at least one slug). Each declared slug requires `NEON_FUNCTION_<SLUG>_BASE_URL`, typed as `env.functions.<slug>.baseUrl: string`. These are the public function URLs, not the function's declared `env` secrets (those are uploaded at deploy). `fetchEnv` / `neon env pull` derive the URL from the branch connection host; the function does not have to be deployed. `parseEnv` requires the var to be a URL. `neon dev` injects `http://localhost:<port>` instead.
 
 | Key | From |
 | --- | --- |

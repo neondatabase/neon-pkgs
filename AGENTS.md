@@ -177,9 +177,9 @@ green is the failure this workflow exists to prevent:
 
 Three things make that work, and each one is a fact about the platform rather than a choice:
 
-- **The gateway needs no provisioning.** It exists on every branch. `preview.aiGateway` in a
-  `neon.ts` policy produces no plan step — it only widens the branch credential's scope and
-  adds the two env vars to what `@neon/env` emits.
+- **The gateway needs no provisioning.** It exists on every branch. `aiGateway` (or deprecated
+  `preview.aiGateway`) in a `neon.ts` policy produces no plan step — it only widens the branch
+  credential's scope and adds the two env vars to what `@neon/env` emits.
 - **The token is minted, not stored.** `POST /projects/{id}/branches/{branch}/credentials`
   returns `api_token` exactly once. Storing one as a repository secret would only give it time
   to go stale, so setup masks it with `::add-mask::` and revokes it in teardown.

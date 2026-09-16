@@ -9,6 +9,9 @@
  */
 
 import {
+	authoredAiGateway,
+	authoredBuckets,
+	authoredFunctions,
 	type Config,
 	ErrorCode,
 	PlatformError,
@@ -32,13 +35,30 @@ import {
 } from "@neon-internals/env-core/env";
 import { z } from "zod";
 
-/** The static `preview.functions` record of a config, or an empty record when absent. */
-type PreviewFunctionsOf<C extends Config> =
-	NonNullable<C["preview"]> extends {
-		functions: infer F;
-	}
+/** The static `functions` record of a config (GA or deprecated `preview.functions`). */
+type GaFunctionsOf<C extends Config> = [NonNullable<C["functions"]>] extends [
+	never,
+]
+	? Record<never, never>
+	: string extends keyof NonNullable<C["functions"]>
+		? Record<never, never>
+		: NonNullable<C["functions"]>;
+
+type PreviewFunctionsHome<C extends Config> = [
+	NonNullable<C["preview"]>,
+] extends [never]
+	? Record<never, never>
+	: NonNullable<C["preview"]> extends { functions: infer F }
 		? F
 		: Record<never, never>;
+
+type PreviewFunctionsOf<C extends Config> = [keyof GaFunctionsOf<C>] extends [
+	never,
+]
+	? PreviewFunctionsHome<C>
+	: [keyof PreviewFunctionsHome<C>] extends [never]
+		? GaFunctionsOf<C>
+		: GaFunctionsOf<C> & PreviewFunctionsHome<C>;
 
 /** The declared function slugs of a config (record keys), as a string union. */
 export type FunctionSlugOf<C extends Config> = Extract<
@@ -57,7 +77,7 @@ export type FunctionSlugOf<C extends Config> = Extract<
 // Exported (type-only) for the type tests in `env.test-d.ts`; intentionally not re-exported
 // from `index.ts`, so it stays an internal implementation detail.
 export type NoFunctionScopeHint =
-	"this policy declares no `preview.functions`, so there is no function scope to read. Declare the function in `neon.ts` first, or omit the scope to read the branch env";
+	"this policy declares no `functions`, so there is no function scope to read. Declare the function in `neon.ts` first, or omit the scope to read the branch env";
 
 /**
  * The expected type of `parseEnv`'s function-slug `scope` argument: the caller's inferred slug
@@ -148,14 +168,14 @@ const aiGatewayEnvSchema = z.object({
 		.min(1, "NEON_AI_GATEWAY_BASE_URL must not be empty"),
 });
 
-/** Whether a **static** policy declares object storage (`preview.buckets`). No network. */
+/** Whether a **static** policy declares object storage (`buckets`). No network. */
 function configWantsStorage(config: Config): boolean {
-	return Object.keys(config.preview?.buckets ?? {}).length > 0;
+	return Object.keys(authoredBuckets(config) ?? {}).length > 0;
 }
 
-/** Whether a **static** policy enables the AI Gateway (`preview.aiGateway`). No network. */
+/** Whether a **static** policy enables the AI Gateway (`aiGateway`). No network. */
 function configWantsAiGateway(config: Config): boolean {
-	return isServiceEnabledInput(config.preview?.aiGateway);
+	return isServiceEnabledInput(authoredAiGateway(config));
 }
 
 /** Static-toggle helper mirroring `config`'s `isServiceEnabled` for the env reader. */
@@ -185,7 +205,7 @@ function isServiceEnabledInput(
  * The second argument is a **scope** or a **key filter**:
  * - omitted — *external* scope (app bootstrap, build scripts, your dev machine). Returns the
  *   full `{ postgres, auth?, dataApi?, … }` the policy enables.
- * - a **function slug** (a key of `config.preview.functions`) — *function* scope: you are
+ * - a **function slug** (a key of `config.functions`) — *function* scope: you are
  *   running inside that function. Returns the same branch secrets **plus** a typed
  *   `function` namespace with the function's declared env-var keys. The slug autocompletes
  *   from the policy ({@link FunctionSlugOf}) and an undeclared one is a type error.
@@ -338,7 +358,7 @@ export function parseEnv(
 	}
 
 	const declaredFunctionSlugs = Object.keys(
-		config.preview?.functions ?? {},
+		authoredFunctions(config) ?? {},
 	).sort();
 	if (declaredFunctionSlugs.length > 0) {
 		const functions: Record<string, NeonFunctionUrlEnv> = {};
@@ -357,12 +377,12 @@ export function parseEnv(
 	}
 
 	if (scope !== undefined) {
-		const fn = config.preview?.functions?.[scope];
+		const fn = authoredFunctions(config)?.[scope];
 		if (!fn) {
 			throw new PlatformError(
 				ErrorCode.EnvNotInjected,
 				[
-					`parseEnv: no function "${scope}" is declared in this policy's preview.functions.`,
+					`parseEnv: no function "${scope}" is declared in this policy's functions.`,
 					"Pass a declared function slug (or omit the scope to read external env).",
 				].join("\n"),
 				{ details: { scope } },

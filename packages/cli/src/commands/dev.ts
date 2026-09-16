@@ -236,14 +236,14 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 		throw new Error(
 			"No --source given and no neon.ts found. Pass --source <path> to run a " +
 				"single function, or add a neon.ts that declares functions under " +
-				"`preview.functions`.",
+				"`functions`.",
 		);
 	}
 	const { configPath, functions } = resolved;
 	if (functions.length === 0) {
 		throw new Error(
 			"neon.ts has no functions to serve. Add at least one under " +
-				"`preview.functions`, or pass --source <path>.",
+				"`functions`, or pass --source <path>.",
 		);
 	}
 

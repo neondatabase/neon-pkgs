@@ -363,9 +363,9 @@ export type FunctionBundler = (
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
- * Static definition of a Neon Function (Preview feature). Declares that the function
+ * Static definition of a Neon Function. Declares that the function
  * **exists** on every branch; its branch-unique slug is the **record key** in
- * {@link PreviewInput.functions} (not a field here), so slugs are statically enumerable,
+ * `functions` (or deprecated {@link PreviewInput.functions}), so slugs are statically enumerable,
  * cannot duplicate, and the `branch` closure can only tune slugs that are declared here.
  * Runtime tuning is **not** here — it varies per branch and lives in the `branch` closure
  * (see {@link FunctionTuning}). Memory is fixed by the platform policy for now and is not
@@ -531,8 +531,8 @@ export type CredentialPrincipalType = "user" | "function";
 export type BucketAccessLevel = "private" | "public_read";
 
 /**
- * Static definition of a branchable object-storage bucket (Preview feature). The bucket's
- * name is the **record key** in {@link PreviewInput.buckets}, so names are statically
+ * Static definition of a branchable object-storage bucket. The bucket's
+ * name is the **record key** in `buckets` (or deprecated {@link PreviewInput.buckets}), so names are statically
  * enumerable and cannot duplicate.
  */
 export interface BucketDef {
@@ -544,17 +544,28 @@ export interface BucketDef {
 }
 
 /**
- * Static, branch-scoped **Preview** features. Grouped under `preview` to signal they are
- * backed by Neon `x-stability-level: beta` endpoints and may change before GA. Everything
- * here is existential (it determines what exists on the branch); per-branch tuning lives in
- * the `branch` closure.
+ * Deprecated home for AI Gateway, Functions, and Object Storage.
+ *
+ * Those services are GA as top-level `aiGateway`, `functions`, and `buckets`.
+ * A `preview` block still works; deploy/apply warns that the keys can be lifted.
+ *
+ * @deprecated Use top-level `aiGateway`, `functions`, and `buckets`.
  */
 export interface PreviewInput {
-	/** Enable/disable the AI Gateway on the branch (toggle, like auth / dataApi). */
+	/**
+	 * Enable/disable the AI Gateway on the branch (toggle, like auth / dataApi).
+	 * @deprecated Use top-level `aiGateway`.
+	 */
 	aiGateway?: ServiceToggleInput;
-	/** Functions to deploy, keyed by branch-unique slug (`^[a-z0-9]{1,20}$`). */
+	/**
+	 * Functions to deploy, keyed by branch-unique slug (`^[a-z0-9]{1,20}$`).
+	 * @deprecated Use top-level `functions`.
+	 */
 	functions?: Record<string, FunctionDef>;
-	/** Object-storage buckets to create, keyed by bucket name. */
+	/**
+	 * Object-storage buckets to create, keyed by bucket name.
+	 * @deprecated Use top-level `buckets`.
+	 */
 	buckets?: Record<string, BucketDef>;
 }
 
@@ -576,11 +587,16 @@ export interface FunctionTuning {
 }
 
 /**
- * Per-branch tuning of Preview features. Only existing function slugs (those declared in
- * the static {@link PreviewInput.functions}) may be tuned — `Slug` is constrained to the
+ * Per-branch tuning of functions under the deprecated `preview` key.
+ * Only existing function slugs may be tuned — `Slug` is constrained to the
  * declared keys by {@link BranchTuningFn}.
+ *
+ * @deprecated Use top-level `branch: (branch) => ({ functions: { … } })`.
  */
 export interface PreviewTuning<Slug extends string = string> {
+	/**
+	 * @deprecated Use top-level `functions` on the object returned by `branch`.
+	 */
 	functions?: Partial<Record<Slug, FunctionTuning>>;
 }
 
@@ -619,37 +635,48 @@ export interface BranchTuning<Slug extends string = string> {
 	/** Whether the selected branch should be protected. Undefined means "leave as-is". */
 	protected?: boolean;
 	postgres?: PostgresConfig;
+	/** Per-function deploy tuning, keyed by declared slug. */
+	functions?: Partial<Record<Slug, FunctionTuning>>;
+	/**
+	 * @deprecated Use top-level `functions` on this object.
+	 */
 	preview?: PreviewTuning<Slug>;
 }
 
-/** Extract the declared function slugs from a {@link PreviewInput} for closure typing. */
-type FunctionSlugsOf<Preview extends PreviewInput | undefined> =
-	Preview extends {
-		functions: infer F;
-	}
+/** Extract declared function slugs from top-level `functions` and/or `preview.functions`. */
+type FunctionSlugsOf<
+	Preview extends PreviewInput | undefined,
+	Functions extends Record<string, FunctionDef> | undefined = undefined,
+> = [NonNullable<Functions>] extends [never]
+	? Preview extends { functions: infer F }
 		? Extract<keyof F, string>
-		: string;
+		: string
+	: Preview extends { functions: infer F }
+		? Extract<keyof NonNullable<Functions> | keyof F, string>
+		: Extract<keyof NonNullable<Functions>, string>;
 
 /**
- * Signature of the `branch` closure. Generic over the static {@link PreviewInput} so the
- * `preview.functions` keys it may tune are constrained to the slugs actually declared.
+ * Signature of the `branch` closure. Generic over the static function homes so the
+ * `functions` keys it may tune are constrained to the slugs actually declared.
  */
 export type BranchTuningFn<
 	Preview extends PreviewInput | undefined = PreviewInput | undefined,
-> = (branch: BranchTarget) => BranchTuning<FunctionSlugsOf<Preview>>;
+	Functions extends Record<string, FunctionDef> | undefined = undefined,
+> = (branch: BranchTarget) => BranchTuning<FunctionSlugsOf<Preview, Functions>>;
 
 /**
  * A validated Neon branch policy — the value `defineConfig({ … })` returns and `neon.ts`
  * default-exports.
  *
- * Split into a **static** existential set (top-level `auth` / `dataApi` GA toggles plus the
- * beta `preview` block) and a **dynamic** per-branch `branch` closure for tuning. The
- * static half is what makes the secret set — and therefore `NeonEnv<typeof config>` and
- * `parseEnv` — exact; the closure can tune but never change what exists.
+ * Split into a **static** existential set (top-level service toggles and records) and a
+ * **dynamic** per-branch `branch` closure for tuning. The static half is what makes the
+ * secret set — and therefore `NeonEnv<typeof config>` and `parseEnv` — exact; the closure
+ * can tune but never change what exists.
  *
- * Generic over the three static fields so the type system can read the exact toggle/slug
+ * Generic over the static fields so the type system can read the exact toggle/slug
  * literals; the defaults make the bare `Config` a usable "any policy" type for runtime
- * function signatures.
+ * function signatures. The first three type parameters stay `Auth`, `DataApi`, `Preview`
+ * so existing positional `Config<Auth, DataApi, Preview>` consumers keep compiling.
  */
 export interface Config<
 	Auth extends ServiceToggleInput | undefined =
@@ -657,6 +684,15 @@ export interface Config<
 		| undefined,
 	DataApi extends DataApiInput | undefined = DataApiInput | undefined,
 	Preview extends PreviewInput | undefined = PreviewInput | undefined,
+	Functions extends Record<string, FunctionDef> | undefined =
+		| Record<string, FunctionDef>
+		| undefined,
+	Buckets extends Record<string, BucketDef> | undefined =
+		| Record<string, BucketDef>
+		| undefined,
+	AiGateway extends ServiceToggleInput | undefined =
+		| ServiceToggleInput
+		| undefined,
 > {
 	/** Neon Auth integration toggle (GA). Static — drives `NeonEnv.auth`. */
 	auth?: Auth;
@@ -667,10 +703,24 @@ export interface Config<
 	 * top-level `auth`.
 	 */
 	dataApi?: DataApi;
-	/** Beta (Preview) feature set: AI Gateway, functions, buckets. Static. */
+	/**
+	 * AI Gateway toggle (GA). Static — drives `NeonEnv.aiGateway`. Same shapes as `auth`.
+	 */
+	aiGateway?: AiGateway;
+	/**
+	 * Functions to deploy, keyed by branch-unique slug (`^[a-z0-9]{1,20}$`).
+	 */
+	functions?: Functions;
+	/**
+	 * Object-storage buckets to create, keyed by bucket name.
+	 */
+	buckets?: Buckets;
+	/**
+	 * @deprecated Use top-level `aiGateway`, `functions`, and `buckets`.
+	 */
 	preview?: Preview;
 	/** Per-branch tuning closure. Cannot change the static existential set. */
-	branch?: BranchTuningFn<Preview>;
+	branch?: BranchTuningFn<Preview, Functions>;
 }
 
 /**
