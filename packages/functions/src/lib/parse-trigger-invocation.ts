@@ -15,7 +15,23 @@ export type ScheduleTriggerInvocation = {
 	};
 };
 
-export type TriggerInvocation = ScheduleTriggerInvocation;
+export type StorageObjectCreatedTriggerInvocation = {
+	version: 1;
+	invocationId: string;
+	trigger: {
+		type: "storage_object_created";
+		id: string;
+		name: string;
+	};
+	data: {
+		bucketName: string;
+		objectKey: string;
+	};
+};
+
+export type TriggerInvocation =
+	| ScheduleTriggerInvocation
+	| StorageObjectCreatedTriggerInvocation;
 
 export type ParseTriggerInvocationInput = {
 	headers: HeadersInit;
@@ -68,6 +84,51 @@ function parseScheduleInvocation(
 	};
 }
 
+function parseStorageObjectCreatedInvocation(
+	body: unknown,
+): StorageObjectCreatedTriggerInvocation | undefined {
+	if (!isRecord(body) || body.version !== 1) return undefined;
+
+	const invocationId = body.invocation_id;
+	if (typeof invocationId !== "string" || invocationId === "")
+		return undefined;
+
+	if (
+		!isRecord(body.trigger) ||
+		body.trigger.type !== "storage_object_created"
+	) {
+		return undefined;
+	}
+	const triggerId = body.trigger.id;
+	const triggerName = body.trigger.name;
+	if (typeof triggerId !== "string" || triggerId === "") return undefined;
+	if (typeof triggerName !== "string" || triggerName === "") return undefined;
+
+	if (!isRecord(body.data)) return undefined;
+	const bucketName = body.data.bucket_name;
+	const objectKey = body.data.object_key;
+	if (typeof bucketName !== "string" || bucketName === "") return undefined;
+	if (typeof objectKey !== "string" || objectKey === "") return undefined;
+
+	return {
+		version: 1,
+		invocationId,
+		trigger: {
+			type: "storage_object_created",
+			id: triggerId,
+			name: triggerName,
+		},
+		data: { bucketName, objectKey },
+	};
+}
+
+function parseInvocation(body: unknown): TriggerInvocation | undefined {
+	return (
+		parseScheduleInvocation(body) ??
+		parseStorageObjectCreatedInvocation(body)
+	);
+}
+
 function parseFromHeadersAndData(
 	headers: HeadersInit,
 	body: unknown,
@@ -79,7 +140,7 @@ function parseFromHeadersAndData(
 		return { ok: false, error: "missing_header" };
 	}
 
-	const invocation = parseScheduleInvocation(body);
+	const invocation = parseInvocation(body);
 	if (!invocation) {
 		return { ok: false, error: "invalid_body" };
 	}

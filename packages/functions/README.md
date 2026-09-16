@@ -365,7 +365,10 @@ const parsed = parseTriggerInvocation({
 ```
 
 On success, `parsed.invocation` is camelCase: `invocationId`, `trigger.id`,
-`trigger.name`, `trigger.type` (`"schedule"`), `data.scheduledAt`.
+`trigger.name`, `trigger.type` (`"schedule"` or `"storage_object_created"`).
+Schedule deliveries have `data.scheduledAt`. Storage-object-created deliveries
+have `data.bucketName` and `data.objectKey`. Narrow on `trigger.type` before
+reading `data`.
 
 On failure, `parsed.error` is `missing_header`, `invalid_body`, or
 `invocation_id_mismatch`. Invalid JSON on the Request path is `invalid_body`.

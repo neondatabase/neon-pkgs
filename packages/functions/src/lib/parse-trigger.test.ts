@@ -65,6 +65,42 @@ describe("parseTrigger", () => {
 		});
 	});
 
+	it("returns the parsed storage_object_created invocation", async () => {
+		const storageInvocationId =
+			"LBLRZLmY62NxOKUOSntTS2CNCzcvDXNcVxl1F63dv_s";
+		const response = await app.request(
+			"/cron",
+			cronRequest({
+				header: storageInvocationId,
+				body: {
+					version: 1,
+					invocation_id: storageInvocationId,
+					trigger: {
+						id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
+						name: "on-upload",
+						type: "storage_object_created",
+					},
+					data: {
+						object_key: "smoke.txt",
+						bucket_name: "uploads",
+					},
+				},
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			version: 1,
+			invocationId: storageInvocationId,
+			trigger: {
+				type: "storage_object_created",
+				id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
+				name: "on-upload",
+			},
+			data: { bucketName: "uploads", objectKey: "smoke.txt" },
+		});
+	});
+
 	it("leaves the Hono request body readable", async () => {
 		const response = await app.request("/cron-reread", cronRequest());
 

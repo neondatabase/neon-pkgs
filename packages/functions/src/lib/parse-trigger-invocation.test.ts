@@ -27,6 +27,31 @@ const parsedSchedule = {
 	data: { scheduledAt: "2026-09-11T08:34:00Z" },
 } as const;
 
+const storageInvocationId = "LBLRZLmY62NxOKUOSntTS2CNCzcvDXNcVxl1F63dv_s";
+const storageBody = {
+	version: 1,
+	invocation_id: storageInvocationId,
+	trigger: {
+		id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
+		name: "on-upload",
+		type: "storage_object_created",
+	},
+	data: {
+		object_key: "smoke.txt",
+		bucket_name: "uploads",
+	},
+};
+const parsedStorage = {
+	version: 1,
+	invocationId: storageInvocationId,
+	trigger: {
+		type: "storage_object_created",
+		id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
+		name: "on-upload",
+	},
+	data: { bucketName: "uploads", objectKey: "smoke.txt" },
+} as const;
+
 function scheduleHeaders(header?: string): Headers {
 	const headers = new Headers({ "content-type": "application/json" });
 	if (header !== undefined) {
@@ -121,6 +146,30 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 			}),
 		).toEqual({ ok: false, error: "invalid_body" });
 	});
+
+	it("accepts a storage_object_created delivery whose header matches invocation_id", () => {
+		const result = parseTriggerInvocation({
+			headers: scheduleHeaders(storageInvocationId),
+			body: storageBody,
+		});
+
+		expect(result).toEqual({
+			ok: true,
+			invocation: parsedStorage,
+		});
+	});
+
+	it("fails invalid_body when storage_object_created data omits object_key", () => {
+		expect(
+			parseTriggerInvocation({
+				headers: scheduleHeaders(storageInvocationId),
+				body: {
+					...storageBody,
+					data: { bucket_name: "uploads" },
+				},
+			}),
+		).toEqual({ ok: false, error: "invalid_body" });
+	});
 });
 
 describe("parseTriggerInvocation(request)", () => {
@@ -130,6 +179,20 @@ describe("parseTriggerInvocation(request)", () => {
 		expect(result).toEqual({
 			ok: true,
 			invocation: parsedSchedule,
+		});
+	});
+
+	it("accepts a storage_object_created delivery Request", async () => {
+		const result = await parseTriggerInvocation(
+			scheduleRequest({
+				header: storageInvocationId,
+				body: storageBody,
+			}),
+		);
+
+		expect(result).toEqual({
+			ok: true,
+			invocation: parsedStorage,
 		});
 	});
 
