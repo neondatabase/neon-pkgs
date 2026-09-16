@@ -5,6 +5,8 @@ const TRIGGER_INVOCATION_ID_HEADER = "x-neon-trigger-invocation-id";
 export type ScheduleTriggerInvocation = {
 	version: 1;
 	invocationId: string;
+	// Optional so constructed 0.10.0 TriggerInvocation values still type-check.
+	type?: "schedule";
 	trigger: {
 		type: "schedule";
 		id: string;
@@ -15,12 +17,50 @@ export type ScheduleTriggerInvocation = {
 	};
 };
 
+export type StorageObjectCreatedTriggerInvocation = {
+	version: 1;
+	invocationId: string;
+	type: "storage_object_created";
+	trigger: {
+		type: "storage_object_created";
+		id: string;
+		name: string;
+	};
+	data: {
+		bucketName: string;
+		objectKey: string;
+	};
+};
+
 export type TriggerInvocation = ScheduleTriggerInvocation;
+
+export type TriggerDelivery =
+	| (ScheduleTriggerInvocation & { type: "schedule" })
+	| StorageObjectCreatedTriggerInvocation;
+
+export function isScheduleTriggerInvocation(
+	invocation: TriggerDelivery,
+): invocation is ScheduleTriggerInvocation & { type: "schedule" } {
+	return invocation.type === "schedule";
+}
+
+export function isStorageObjectCreatedTriggerInvocation(
+	invocation: TriggerDelivery,
+): invocation is StorageObjectCreatedTriggerInvocation {
+	return invocation.type === "storage_object_created";
+}
 
 export type ParseTriggerInvocationInput = {
 	headers: HeadersInit;
 	body: unknown;
 };
+
+export type ParseTriggerDeliveryResult =
+	| { ok: true; invocation: TriggerDelivery }
+	| {
+			ok: false;
+			error: "missing_header" | "invalid_body" | "invocation_id_mismatch";
+	  };
 
 export type ParseTriggerInvocationResult =
 	| { ok: true; invocation: TriggerInvocation }
@@ -41,7 +81,7 @@ function isRequest(
 
 function parseScheduleInvocation(
 	body: unknown,
-): ScheduleTriggerInvocation | undefined {
+): (ScheduleTriggerInvocation & { type: "schedule" }) | undefined {
 	if (!isRecord(body) || body.version !== 1) return undefined;
 
 	const invocationId = body.invocation_id;
@@ -63,15 +103,62 @@ function parseScheduleInvocation(
 	return {
 		version: 1,
 		invocationId,
+		type: "schedule",
 		trigger: { type: "schedule", id: triggerId, name: triggerName },
 		data: { scheduledAt },
 	};
 }
 
+function parseStorageObjectCreatedInvocation(
+	body: unknown,
+): StorageObjectCreatedTriggerInvocation | undefined {
+	if (!isRecord(body) || body.version !== 1) return undefined;
+
+	const invocationId = body.invocation_id;
+	if (typeof invocationId !== "string" || invocationId === "")
+		return undefined;
+
+	if (
+		!isRecord(body.trigger) ||
+		body.trigger.type !== "storage_object_created"
+	) {
+		return undefined;
+	}
+	const triggerId = body.trigger.id;
+	const triggerName = body.trigger.name;
+	if (typeof triggerId !== "string" || triggerId === "") return undefined;
+	if (typeof triggerName !== "string" || triggerName === "") return undefined;
+
+	if (!isRecord(body.data)) return undefined;
+	const bucketName = body.data.bucket_name;
+	const objectKey = body.data.object_key;
+	if (typeof bucketName !== "string" || bucketName === "") return undefined;
+	if (typeof objectKey !== "string" || objectKey === "") return undefined;
+
+	return {
+		version: 1,
+		invocationId,
+		type: "storage_object_created",
+		trigger: {
+			type: "storage_object_created",
+			id: triggerId,
+			name: triggerName,
+		},
+		data: { bucketName, objectKey },
+	};
+}
+
+function parseInvocation(body: unknown): TriggerDelivery | undefined {
+	return (
+		parseScheduleInvocation(body) ??
+		parseStorageObjectCreatedInvocation(body)
+	);
+}
+
 function parseFromHeadersAndData(
 	headers: HeadersInit,
 	body: unknown,
-): ParseTriggerInvocationResult {
+): ParseTriggerDeliveryResult {
 	const headerId = new Headers(headers)
 		.get(TRIGGER_INVOCATION_ID_HEADER)
 		?.trim();
@@ -79,7 +166,7 @@ function parseFromHeadersAndData(
 		return { ok: false, error: "missing_header" };
 	}
 
-	const invocation = parseScheduleInvocation(body);
+	const invocation = parseInvocation(body);
 	if (!invocation) {
 		return { ok: false, error: "invalid_body" };
 	}
@@ -92,7 +179,7 @@ function parseFromHeadersAndData(
 
 async function parseFromRequest(
 	request: Request,
-): Promise<ParseTriggerInvocationResult> {
+): Promise<ParseTriggerDeliveryResult> {
 	const headerId = request.headers.get(TRIGGER_INVOCATION_ID_HEADER)?.trim();
 	if (!headerId) {
 		return { ok: false, error: "missing_header" };
@@ -108,6 +195,31 @@ async function parseFromRequest(
 	return parseFromHeadersAndData(request.headers, body);
 }
 
+function asScheduleResult(
+	result: ParseTriggerDeliveryResult,
+): ParseTriggerInvocationResult {
+	if (!result.ok) return result;
+	if (!isScheduleTriggerInvocation(result.invocation)) {
+		return { ok: false, error: "invalid_body" };
+	}
+	return { ok: true, invocation: result.invocation };
+}
+
+export function parseTriggerDelivery(
+	request: Request,
+): Promise<ParseTriggerDeliveryResult>;
+export function parseTriggerDelivery(
+	input: ParseTriggerInvocationInput,
+): ParseTriggerDeliveryResult;
+export function parseTriggerDelivery(
+	input: Request | ParseTriggerInvocationInput,
+): ParseTriggerDeliveryResult | Promise<ParseTriggerDeliveryResult> {
+	if (isRequest(input)) {
+		return parseFromRequest(input);
+	}
+	return parseFromHeadersAndData(input.headers, input.body);
+}
+
 export function parseTriggerInvocation(
 	request: Request,
 ): Promise<ParseTriggerInvocationResult>;
@@ -118,7 +230,7 @@ export function parseTriggerInvocation(
 	input: Request | ParseTriggerInvocationInput,
 ): ParseTriggerInvocationResult | Promise<ParseTriggerInvocationResult> {
 	if (isRequest(input)) {
-		return parseFromRequest(input);
+		return parseFromRequest(input).then(asScheduleResult);
 	}
-	return parseFromHeadersAndData(input.headers, input.body);
+	return asScheduleResult(parseFromHeadersAndData(input.headers, input.body));
 }

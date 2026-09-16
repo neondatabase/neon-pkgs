@@ -13,7 +13,14 @@ export { upgradeWebSocket } from "./lib/hono-websocket.js";
 export { parseTrigger } from "./lib/parse-trigger.js";
 export type {
 	ScheduleTriggerInvocation,
+	StorageObjectCreatedTriggerInvocation,
+	TriggerDelivery,
 	TriggerInvocation,
+} from "./lib/parse-trigger-invocation.js";
+export {
+	isScheduleTriggerInvocation,
+	isStorageObjectCreatedTriggerInvocation,
+	parseTriggerDelivery,
 } from "./lib/parse-trigger-invocation.js";
 export type { UpgradeWebSocketOptions } from "./lib/upgrade-websocket.js";
 

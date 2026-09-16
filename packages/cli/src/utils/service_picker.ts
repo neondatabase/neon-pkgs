@@ -15,6 +15,12 @@ const CHOICES: { value: NeonService; title: string; description: string }[] = [
 			"Authentication with users and sessions stored in Postgres.",
 	},
 	{
+		value: "data-api",
+		title: "Data API",
+		description:
+			"PostgREST-compatible HTTP API. Also declares Auth; the default provider needs it.",
+	},
+	{
 		value: "functions",
 		title: "Functions",
 		description:

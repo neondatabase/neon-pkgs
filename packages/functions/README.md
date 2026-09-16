@@ -6,7 +6,7 @@ Runtime helpers for [Neon Functions](https://neon.com):
 - **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler, or from a
   [Hono](https://hono.dev) route via `@neon/functions/hono`.
 - **`attachDatabasePool`** — keep a module-scope `pg.Pool` from killing the isolate when Postgres drops an idle client.
-- **`parseTriggerInvocation`** — parse a Function Trigger delivery (`@neon/functions/triggers`), or `parseTrigger(c)` on a Hono context via `@neon/functions/hono`.
+- **`parseTriggerDelivery`** — parse a Function Trigger delivery (`@neon/functions/triggers`), including schedule and `storage_object_created`. `parseTriggerInvocation` and Hono `parseTrigger(c)` remain schedule-only.
 
 ## Install
 
@@ -332,40 +332,60 @@ This does not close the pool. Isolate teardown tears the connections down with t
 ## Function Trigger deliveries
 
 A [Function Trigger](https://neon.com/docs/cli/triggers) POSTs JSON to your function.
-`parseTriggerInvocation` checks `x-neon-trigger-invocation-id` against
-`invocation_id` in that JSON.
+`parseTriggerInvocation` is schedule-only: it checks `x-neon-trigger-invocation-id`
+against `invocation_id` and returns a `TriggerInvocation` (`ScheduleTriggerInvocation`).
+Storage-object-created deliveries use `parseTriggerDelivery`, which returns a
+`TriggerDelivery`. Schedule members of that union have `type: "schedule"`, so
+both `if (invocation.type === "schedule")` and
+`if (invocation.type === "storage_object_created")` narrow `data`.
 
 ```ts
-import { parseTriggerInvocation } from "@neon/functions/triggers";
+import { parseTriggerDelivery } from "@neon/functions/triggers";
 
 export default {
 	async fetch(request: Request): Promise<Response> {
-		const parsed = await parseTriggerInvocation(request);
+		const parsed = await parseTriggerDelivery(request);
 		if (!parsed.ok) {
 			const status = parsed.error === "invalid_body" ? 400 : 401;
 			return new Response(parsed.error, { status });
 		}
 
-		return Response.json({ ok: true, invocationId: parsed.invocation.invocationId });
+		const invocation = parsed.invocation;
+		if (invocation.type === "storage_object_created") {
+			return Response.json({
+				bucketName: invocation.data.bucketName,
+				objectKey: invocation.data.objectKey,
+			});
+		}
+
+		return Response.json({
+			scheduledAt: invocation.data.scheduledAt,
+		});
 	},
 };
 ```
 
-`parseTriggerInvocation(request)` checks the header first, then clones the Request
-and reads JSON from the clone, so `request.json()` still works afterwards.
+`parseTriggerDelivery(request)` and `parseTriggerInvocation(request)` check the
+header first, then clone the Request and read JSON from the clone, so
+`request.json()` still works afterwards.
 
 If you already have the JSON:
 
 ```ts
 const body = await request.json();
-const parsed = parseTriggerInvocation({
+const parsed = parseTriggerDelivery({
 	headers: request.headers,
 	body,
 });
 ```
 
 On success, `parsed.invocation` is camelCase: `invocationId`, `trigger.id`,
-`trigger.name`, `trigger.type` (`"schedule"`), `data.scheduledAt`.
+`trigger.name`, `trigger.type`. `parseTriggerDelivery` also sets a top-level
+`type`. Schedule deliveries have `data.scheduledAt`. Storage-object-created
+deliveries have `data.bucketName` and `data.objectKey`. Narrow on
+`invocation.type` (or use `isScheduleTriggerInvocation` /
+`isStorageObjectCreatedTriggerInvocation`) before reading `data` — a check on
+`trigger.type` does not narrow the sibling `data` field.
 
 On failure, `parsed.error` is `missing_header`, `invalid_body`, or
 `invocation_id_mismatch`. Invalid JSON on the Request path is `invalid_body`.
@@ -374,7 +394,10 @@ Unknown `trigger.type` values fail as `invalid_body` until this package adds the
 ### `parseTrigger` (Hono)
 
 `parseTrigger(c)` runs the Request overload on `c.req.raw` and throws
-`HTTPException`. `c.req.json()` still works afterwards.
+`HTTPException`. `c.req.json()` still works afterwards. It returns a
+`ScheduleTriggerInvocation`, so existing `invocation.data.scheduledAt`
+callers keep compiling. A `storage_object_created` delivery is
+`invalid_body`; parse those with `parseTriggerDelivery(c.req.raw)`.
 
 | Failure | Status | Message |
 | --- | --- | --- |
@@ -390,7 +413,26 @@ const app = new Hono();
 
 app.post("/cron", async (c) => {
 	const invocation = await parseTrigger(c);
-	return c.json({ ok: true, invocationId: invocation.invocationId });
+	return c.json({ ok: true, scheduledAt: invocation.data.scheduledAt });
+});
+```
+
+```ts
+import { parseTriggerDelivery } from "@neon/functions/hono";
+
+app.post("/object", async (c) => {
+	const parsed = await parseTriggerDelivery(c.req.raw);
+	if (!parsed.ok) {
+		const status = parsed.error === "invalid_body" ? 400 : 401;
+		return c.text(parsed.error, status);
+	}
+	if (parsed.invocation.type !== "storage_object_created") {
+		return c.text("invalid_body", 400);
+	}
+	return c.json({
+		bucketName: parsed.invocation.data.bucketName,
+		objectKey: parsed.invocation.data.objectKey,
+	});
 });
 ```
 

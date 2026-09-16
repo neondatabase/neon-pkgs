@@ -213,6 +213,19 @@ describe("config init", () => {
 		expect(existsSync(join(workspace, "hello.ts"))).toBe(false);
 	});
 
+	test("--services data-api declares the Data API and Auth", async () => {
+		await initCmd({
+			cwd: workspace,
+			install: false,
+			services: ["data-api"],
+		});
+
+		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
+		expect(content).toContain("auth: true");
+		expect(content).toContain("dataApi: true");
+		expect(content).not.toContain("preview");
+	});
+
 	test("--services storage still works, and says what to type instead", async () => {
 		// `storage` was the canonical name before the vocabulary was unified across the
 		// CLI's services flags. Anyone who scripted it keeps working; the warning is what
@@ -360,6 +373,7 @@ describe("config init", () => {
 				services: ["none"],
 				expected: {
 					authEnabled: false,
+					dataApiEnabled: false,
 					aiGateway: false,
 					functions: [],
 					buckets: [],
@@ -369,6 +383,17 @@ describe("config init", () => {
 				services: ["auth"],
 				expected: {
 					authEnabled: true,
+					dataApiEnabled: false,
+					aiGateway: false,
+					functions: [],
+					buckets: [],
+				},
+			},
+			{
+				services: ["data-api"],
+				expected: {
+					authEnabled: true,
+					dataApiEnabled: true,
 					aiGateway: false,
 					functions: [],
 					buckets: [],
@@ -378,6 +403,7 @@ describe("config init", () => {
 				services: ["auth,ai-gateway,functions,object-storage"],
 				expected: {
 					authEnabled: true,
+					dataApiEnabled: false,
 					aiGateway: true,
 					functions: ["hello:./hello.ts"],
 					buckets: ["assets:private"],
@@ -403,6 +429,7 @@ describe("config init", () => {
 
 				expect({
 					authEnabled: resolved.authEnabled,
+					dataApiEnabled: resolved.dataApiEnabled,
 					aiGateway: resolved.preview?.aiGatewayEnabled ?? false,
 					functions: (resolved.preview?.functions ?? []).map(
 						(fn) => `${fn.slug}:${fn.source}`,
