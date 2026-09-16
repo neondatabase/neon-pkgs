@@ -53,6 +53,8 @@ import {
 const PROJECT_ID = "patient-art-12345";
 const BRANCH_ID = "br-snowy-frost-12345";
 const BRANCH_NAME = "main";
+const CHILD_ID = "br-staging-frost-99999";
+const CHILD_NAME = "staging";
 
 /**
  * Full {@link NeonApi} implementation backed by fixed in-memory state for one
@@ -377,6 +379,43 @@ class FakeNeonApi implements NeonApi {
 	}
 }
 
+class ChildBranchNeonApi extends FakeNeonApi {
+	override async listBranches(
+		projectId: string,
+	): Promise<NeonBranchSnapshot[]> {
+		void projectId;
+		return [
+			{
+				id: BRANCH_ID,
+				name: BRANCH_NAME,
+				isDefault: true,
+				protected: false,
+			},
+			{
+				id: CHILD_ID,
+				name: CHILD_NAME,
+				isDefault: false,
+				protected: false,
+				parentId: BRANCH_ID,
+			},
+		];
+	}
+
+	override async listEndpoints(
+		projectId: string,
+	): Promise<NeonEndpointSnapshot[]> {
+		const [main] = await super.listEndpoints(projectId);
+		return [
+			main,
+			{
+				...main,
+				id: "ep-fake-child",
+				branchId: CHILD_ID,
+			},
+		];
+	}
+}
+
 /**
  * Minimal stand-in for the neonctl `Api` client. Only `listProjectBranches` is
  * exercised (by `branchIdFromProps`, to resolve the branch name to its id);
@@ -675,6 +714,62 @@ describe("config commands", () => {
 		expect(bundle.byteLength).toBeGreaterThan(0);
 		expect(bundle[0]).toBe(0x50); // 'P'
 		expect(bundle[1]).toBe(0x4b); // 'K'
+	});
+
+	it("apply warns for preview tuning gated on parentId", async () => {
+		const api = new ChildBranchNeonApi();
+		const { stream } = captureOut();
+		const source = join(cwd, "hello.ts");
+		writeFileSync(
+			source,
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		const config = writeConfig(
+			`export default { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+				source,
+			)} } }, branch: (branch) => branch.parentId ? { preview: { functions: { hello: { runtime: 'nodejs24' } } } } : {} };\n`,
+		);
+		const childApiClient = {
+			listProjectBranches: async () => ({
+				data: {
+					branches: [
+						{
+							id: BRANCH_ID,
+							name: BRANCH_NAME,
+							default: true,
+							protected: false,
+						},
+						{
+							id: CHILD_ID,
+							name: CHILD_NAME,
+							default: false,
+							protected: false,
+							parent_id: BRANCH_ID,
+						},
+					],
+				},
+			}),
+		};
+		const stderrChunks: string[] = [];
+		const origErr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = ((chunk: string | Uint8Array) => {
+			stderrChunks.push(chunk.toString());
+			return origErr(chunk);
+		}) as typeof process.stderr.write;
+
+		try {
+			await applyCmd({
+				...baseProps(api, stream),
+				apiClient: childApiClient as never,
+				branch: CHILD_NAME,
+				config,
+			});
+			expect(stderrChunks.join("")).toContain(
+				"branch.preview.functions → branch.functions",
+			);
+		} finally {
+			process.stderr.write = origErr;
+		}
 	});
 
 	it("apply ships a bundler none directory without esbuild flattening", async () => {

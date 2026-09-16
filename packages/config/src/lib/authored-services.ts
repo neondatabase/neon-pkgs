@@ -24,21 +24,18 @@ const GA_PATH: Record<AuthoredServiceKey, string> = {
 	buckets: "buckets",
 };
 
-/** Functions declared at the top level or under deprecated `preview.functions`. */
 export function authoredFunctions(
 	config: Pick<Config, "functions" | "preview">,
 ): Record<string, FunctionDef> | undefined {
 	return config.functions ?? config.preview?.functions;
 }
 
-/** Buckets declared at the top level or under deprecated `preview.buckets`. */
 export function authoredBuckets(
 	config: Pick<Config, "buckets" | "preview">,
 ): Record<string, BucketDef> | undefined {
 	return config.buckets ?? config.preview?.buckets;
 }
 
-/** AI Gateway toggle at the top level or under deprecated `preview.aiGateway`. */
 export function authoredAiGateway(
 	config: Pick<Config, "aiGateway" | "preview">,
 ): ServiceToggleInput | undefined {

@@ -732,18 +732,84 @@ const warnDeprecatedPreview = (config: Config, target?: BranchTarget): void => {
 	if (message) log.warning("%s", message);
 };
 
+const warningTargetFromResolved = (branch: {
+	branchName: string;
+	branchId: string;
+	isDefault?: boolean;
+	isProtected?: boolean;
+	parentId?: string;
+	expiresAt?: string;
+}): BranchTarget => ({
+	name: branch.branchName,
+	id: branch.branchId,
+	exists: true,
+	...(branch.isDefault !== undefined ? { isDefault: branch.isDefault } : {}),
+	...(branch.isProtected !== undefined
+		? { isProtected: branch.isProtected }
+		: {}),
+	...(branch.parentId ? { parentId: branch.parentId } : {}),
+	...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+});
+
+const warningTargetForExistingBranch = async (props: {
+	projectId: string;
+	branchId: string;
+	branchName?: string;
+	apiKey?: string;
+	apiHost?: string;
+	runtimeApi?: NeonApi;
+}): Promise<BranchTarget> => {
+	if (props.runtimeApi) {
+		const branches = await props.runtimeApi.listBranches(props.projectId);
+		const branch = branches.find((listed) => listed.id === props.branchId);
+		if (branch) {
+			return {
+				name: branch.name,
+				id: branch.id,
+				exists: true,
+				isDefault: branch.isDefault,
+				isProtected: branch.protected,
+				...(branch.parentId ? { parentId: branch.parentId } : {}),
+				...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+			};
+		}
+	}
+	if (props.apiKey) {
+		const apiClient = getApiClient({
+			apiKey: props.apiKey,
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		});
+		const { data } = await apiClient.listProjectBranches({
+			projectId: props.projectId,
+		});
+		const found = data.branches.find(
+			(listed) => listed.id === props.branchId,
+		);
+		if (found) {
+			return {
+				name: found.name ?? props.branchName ?? props.branchId,
+				id: found.id,
+				exists: true,
+				isDefault: found.default === true,
+				isProtected: found.protected === true,
+				...(found.parent_id ? { parentId: found.parent_id } : {}),
+				...(found.expires_at ? { expiresAt: found.expires_at } : {}),
+			};
+		}
+	}
+	return {
+		name: props.branchName ?? props.branchId,
+		id: props.branchId,
+		exists: true,
+		isDefault: false,
+	};
+};
+
 export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	const config = await loadConfig(props);
 	const branch = await resolveBranchRef(props);
 	announceTargetBranch(props, branch, "Applying to branch");
-	warnDeprecatedPreview(config, {
-		name: branch.branchName,
-		id: branch.branchId,
-		exists: true,
-		...(branch.isDefault !== undefined
-			? { isDefault: branch.isDefault }
-			: {}),
-	});
+	warnDeprecatedPreview(config, warningTargetFromResolved(branch));
 	const branchId = branch.branchId;
 
 	// The AI Gateway can't serve on the Free plan, so refuse to provision it up front rather
@@ -995,12 +1061,17 @@ export const applyPolicyOnCreate = async (props: {
 		throw err;
 	}
 
-	warnDeprecatedPreview(config, {
-		name: props.branchName ?? props.branchId,
-		id: props.branchId,
-		exists: true,
-		isDefault: false,
-	});
+	warnDeprecatedPreview(
+		config,
+		await warningTargetForExistingBranch({
+			projectId: props.projectId,
+			branchId: props.branchId,
+			...(props.branchName ? { branchName: props.branchName } : {}),
+			...(props.apiKey ? { apiKey: props.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+			...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+		}),
+	);
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,
@@ -1110,7 +1181,6 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 	warnDeprecatedPreview(config, {
 		name: props.branchName,
 		exists: false,
-		isDefault: false,
 	});
 
 	await assertAiGatewayProvisionableFromCreds({

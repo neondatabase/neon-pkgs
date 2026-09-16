@@ -33,6 +33,7 @@ describe("resolveBranchRef", () => {
 			branchName: "feature",
 			usedDefault: false,
 			isDefault: false,
+			isProtected: false,
 		});
 	});
 
@@ -46,6 +47,7 @@ describe("resolveBranchRef", () => {
 			branchName: "feature",
 			usedDefault: false,
 			isDefault: false,
+			isProtected: false,
 		});
 	});
 
@@ -55,6 +57,7 @@ describe("resolveBranchRef", () => {
 			branchName: "feature",
 			usedDefault: false,
 			isDefault: false,
+			isProtected: false,
 		});
 	});
 
@@ -76,6 +79,7 @@ describe("resolveBranchRef", () => {
 			branchName: "main",
 			usedDefault: true,
 			isDefault: true,
+			isProtected: false,
 		});
 	});
 
