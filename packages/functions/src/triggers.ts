@@ -1,4 +1,6 @@
 export {
+	isScheduleTriggerInvocation,
+	isStorageObjectCreatedTriggerInvocation,
 	type ParseTriggerInvocationInput,
 	type ParseTriggerInvocationResult,
 	parseTriggerInvocation,

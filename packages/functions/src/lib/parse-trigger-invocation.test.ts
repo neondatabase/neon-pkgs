@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { parseTriggerInvocation } from "./parse-trigger-invocation.js";
+import {
+	isScheduleTriggerInvocation,
+	isStorageObjectCreatedTriggerInvocation,
+	parseTriggerInvocation,
+} from "./parse-trigger-invocation.js";
 
 const invocationId = "ucBDafV0gB8qoEM4UcdIu84Qx5JCAXYwpRnPVAagPa0";
 const invocationIdHeader = "x-neon-trigger-invocation-id";
@@ -19,6 +23,7 @@ const scheduleBody = {
 const parsedSchedule = {
 	version: 1,
 	invocationId,
+	type: "schedule",
 	trigger: {
 		type: "schedule",
 		id: "trigger-66360036-ee42-4174-8ed5-416fa31757eb",
@@ -44,6 +49,7 @@ const storageBody = {
 const parsedStorage = {
 	version: 1,
 	invocationId: storageInvocationId,
+	type: "storage_object_created",
 	trigger: {
 		type: "storage_object_created",
 		id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
@@ -85,6 +91,21 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 			ok: true,
 			invocation: parsedSchedule,
 		});
+	});
+
+	it("narrows data after a type check on invocation.type", () => {
+		const result = parseTriggerInvocation({
+			headers: scheduleHeaders(invocationId),
+			body: scheduleBody,
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(isScheduleTriggerInvocation(result.invocation)).toBe(true);
+		if (!isScheduleTriggerInvocation(result.invocation)) return;
+		expectTypeOf(
+			result.invocation.data.scheduledAt,
+		).toEqualTypeOf<string>();
+		expect(result.invocation.data.scheduledAt).toBe("2026-09-11T08:34:00Z");
 	});
 
 	it("trims the header before comparing", () => {
@@ -157,6 +178,12 @@ describe("parseTriggerInvocation({ headers, body })", () => {
 			ok: true,
 			invocation: parsedStorage,
 		});
+		if (!result.ok) return;
+		expect(isStorageObjectCreatedTriggerInvocation(result.invocation)).toBe(
+			true,
+		);
+		if (!isStorageObjectCreatedTriggerInvocation(result.invocation)) return;
+		expectTypeOf(result.invocation.data.objectKey).toEqualTypeOf<string>();
 	});
 
 	it("fails invalid_body when storage_object_created data omits object_key", () => {

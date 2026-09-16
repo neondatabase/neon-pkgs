@@ -364,11 +364,13 @@ const parsed = parseTriggerInvocation({
 });
 ```
 
-On success, `parsed.invocation` is camelCase: `invocationId`, `trigger.id`,
-`trigger.name`, `trigger.type` (`"schedule"` or `"storage_object_created"`).
-Schedule deliveries have `data.scheduledAt`. Storage-object-created deliveries
-have `data.bucketName` and `data.objectKey`. Narrow on `trigger.type` before
-reading `data`.
+On success, `parsed.invocation` is camelCase: `invocationId`, `type`
+(`"schedule"` or `"storage_object_created"`), `trigger.id`, `trigger.name`,
+`trigger.type`. Schedule deliveries have `data.scheduledAt`. Storage-object-created
+deliveries have `data.bucketName` and `data.objectKey`. Narrow on `invocation.type`
+(or use `isScheduleTriggerInvocation` / `isStorageObjectCreatedTriggerInvocation`)
+before reading `data` — a check on `trigger.type` does not narrow the sibling
+`data` field.
 
 On failure, `parsed.error` is `missing_header`, `invalid_body`, or
 `invocation_id_mismatch`. Invalid JSON on the Request path is `invalid_body`.
@@ -393,7 +395,14 @@ const app = new Hono();
 
 app.post("/cron", async (c) => {
 	const invocation = await parseTrigger(c);
-	return c.json({ ok: true, invocationId: invocation.invocationId });
+	if (invocation.type === "schedule") {
+		return c.json({ ok: true, scheduledAt: invocation.data.scheduledAt });
+	}
+	return c.json({
+		ok: true,
+		bucketName: invocation.data.bucketName,
+		objectKey: invocation.data.objectKey,
+	});
 });
 ```
 

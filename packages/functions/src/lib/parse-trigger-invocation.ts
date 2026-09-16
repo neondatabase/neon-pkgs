@@ -5,6 +5,7 @@ const TRIGGER_INVOCATION_ID_HEADER = "x-neon-trigger-invocation-id";
 export type ScheduleTriggerInvocation = {
 	version: 1;
 	invocationId: string;
+	type: "schedule";
 	trigger: {
 		type: "schedule";
 		id: string;
@@ -18,6 +19,7 @@ export type ScheduleTriggerInvocation = {
 export type StorageObjectCreatedTriggerInvocation = {
 	version: 1;
 	invocationId: string;
+	type: "storage_object_created";
 	trigger: {
 		type: "storage_object_created";
 		id: string;
@@ -32,6 +34,18 @@ export type StorageObjectCreatedTriggerInvocation = {
 export type TriggerInvocation =
 	| ScheduleTriggerInvocation
 	| StorageObjectCreatedTriggerInvocation;
+
+export function isScheduleTriggerInvocation(
+	invocation: TriggerInvocation,
+): invocation is ScheduleTriggerInvocation {
+	return invocation.type === "schedule";
+}
+
+export function isStorageObjectCreatedTriggerInvocation(
+	invocation: TriggerInvocation,
+): invocation is StorageObjectCreatedTriggerInvocation {
+	return invocation.type === "storage_object_created";
+}
 
 export type ParseTriggerInvocationInput = {
 	headers: HeadersInit;
@@ -79,6 +93,7 @@ function parseScheduleInvocation(
 	return {
 		version: 1,
 		invocationId,
+		type: "schedule",
 		trigger: { type: "schedule", id: triggerId, name: triggerName },
 		data: { scheduledAt },
 	};
@@ -113,6 +128,7 @@ function parseStorageObjectCreatedInvocation(
 	return {
 		version: 1,
 		invocationId,
+		type: "storage_object_created",
 		trigger: {
 			type: "storage_object_created",
 			id: triggerId,

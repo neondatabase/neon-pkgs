@@ -56,6 +56,7 @@ describe("parseTrigger", () => {
 		expect(await response.json()).toEqual({
 			version: 1,
 			invocationId,
+			type: "schedule",
 			trigger: {
 				type: "schedule",
 				id: "trigger-66360036-ee42-4174-8ed5-416fa31757eb",
@@ -92,6 +93,7 @@ describe("parseTrigger", () => {
 		expect(await response.json()).toEqual({
 			version: 1,
 			invocationId: storageInvocationId,
+			type: "storage_object_created",
 			trigger: {
 				type: "storage_object_created",
 				id: "trigger-057464da-cff9-4ca5-9447-0a312ef351a3",
