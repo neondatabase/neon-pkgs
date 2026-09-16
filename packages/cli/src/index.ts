@@ -6,6 +6,7 @@ import {
 	getAnalyticsEventProperties,
 	initAnalyticsClientMiddleware,
 	sendError,
+	takeCommandSuccessExtras,
 	trackEvent,
 } from "./analytics.js";
 import { isNeonApiError, messageFromBody, type NeonApiClient } from "./api.js";
@@ -317,6 +318,7 @@ void (async () => {
 				accountId: args.accountId,
 				authMethod: args.authMethod,
 				authData: args.authData,
+				...takeCommandSuccessExtras(),
 			});
 			if (args._.length === 0 || args.help) {
 				await showHelp(builder);

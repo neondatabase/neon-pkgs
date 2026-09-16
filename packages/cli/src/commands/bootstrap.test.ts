@@ -19,6 +19,7 @@ import { type IPty, spawn as spawnPty } from "node-pty";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import YAML from "yaml";
+import { takeCommandSuccessExtras } from "../analytics.js";
 
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
@@ -263,6 +264,7 @@ describe("bootstrap", () => {
 	});
 
 	afterEach(async () => {
+		takeCommandSuccessExtras();
 		rmSync(dest, { recursive: true, force: true });
 		await new Promise<void>((resolve, reject) => {
 			server.close((err) => {
@@ -610,5 +612,39 @@ describe("bootstrap", () => {
 			"selected catalog template\n",
 		);
 		expect(() => readFileSync(join(dest, "src/index.ts"))).toThrow();
+		expect(takeCommandSuccessExtras()).toEqual({ template: "hono" });
+	});
+
+	test("--list-templates does not record a scaffolded template", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const previousManifest = process.env.NEON_BOOTSTRAP_MANIFEST_URL;
+		process.env.NEON_BOOTSTRAP_MANIFEST_URL = `${base}/manifest/bootstrap.yaml`;
+		const { handler } = await import("./bootstrap.js");
+		try {
+			await handler({
+				apiClient: {} as never,
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "table",
+				contextFile: join(dest, ".neon"),
+				force: false,
+				listTemplates: true,
+				default: false,
+				install: false,
+				git: false,
+				link: false,
+				agentSetup: false,
+				analytics: false,
+				printBanner: false,
+				skipDoneSummary: true,
+			});
+		} finally {
+			if (previousManifest === undefined) {
+				delete process.env.NEON_BOOTSTRAP_MANIFEST_URL;
+			} else {
+				process.env.NEON_BOOTSTRAP_MANIFEST_URL = previousManifest;
+			}
+		}
+		expect(takeCommandSuccessExtras()).toEqual({});
 	});
 });

@@ -4,11 +4,14 @@ import {
 	analyticsUserId,
 	getAnalyticsEventProperties,
 	getErrorAnalyticsEventProperties,
+	recordScaffoldedTemplate,
 	storedCredentialAttribution,
+	takeCommandSuccessExtras,
 	telemetryCredential,
 } from "./analytics.js";
 
 afterEach(() => {
+	takeCommandSuccessExtras();
 	vi.unstubAllEnvs();
 });
 
@@ -247,6 +250,19 @@ describe("getAnalyticsEventProperties", () => {
 				_: ["branches", "list"],
 			}).agent,
 		).toBe("claude-code");
+	});
+});
+
+describe("recordScaffoldedTemplate", () => {
+	it("attaches the resolved catalog id for the success event", () => {
+		recordScaffoldedTemplate("hono");
+		expect(takeCommandSuccessExtras()).toEqual({ template: "hono" });
+	});
+
+	it("does not leak a previous command's template", () => {
+		recordScaffoldedTemplate("hono");
+		takeCommandSuccessExtras();
+		expect(takeCommandSuccessExtras()).toEqual({});
 	});
 });
 

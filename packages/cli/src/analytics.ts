@@ -345,6 +345,27 @@ export const trackEvent = (
 	log.debug("Sent CLI event: %s", event);
 };
 
+/**
+ * CLI Started runs before the template picker. The resolved catalog id is
+ * known only after scaffold, so it rides on cli_command_success via this
+ * process-local slot — yargs never sees an interactive or --default choice.
+ */
+export type CommandSuccessExtras = {
+	template?: string;
+};
+
+let commandSuccessExtras: CommandSuccessExtras = {};
+
+export const recordScaffoldedTemplate = (templateId: string): void => {
+	commandSuccessExtras = { ...commandSuccessExtras, template: templateId };
+};
+
+export const takeCommandSuccessExtras = (): CommandSuccessExtras => {
+	const extras = commandSuccessExtras;
+	commandSuccessExtras = {};
+	return extras;
+};
+
 const analyticsCommand = (args: AnalyticsEventArgs): string => {
 	const command = args._.join(" ");
 	const raw =
