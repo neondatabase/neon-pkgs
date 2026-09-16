@@ -1861,4 +1861,40 @@ describe("createBranchFromPolicyOnCheckout", () => {
 			},
 		]);
 	});
+
+	it("warns for preview tuning gated on parentId during checkout create", async () => {
+		const api = new CreateBranchNeonApi();
+		const source = join(cwd, "hello.ts");
+		writeFileSync(
+			source,
+			"export default { fetch() { return new Response('ok'); } };\n",
+		);
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default { functions: { hello: { name: 'Hello', source: ${JSON.stringify(
+				source,
+			)} } }, branch: (branch) => branch.parentId ? { preview: { functions: { hello: { runtime: 'nodejs24' } } } } : {} };\n`,
+		);
+		const stderrChunks: string[] = [];
+		const origErr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = ((chunk: string | Uint8Array) => {
+			stderrChunks.push(chunk.toString());
+			return origErr(chunk);
+		}) as typeof process.stderr.write;
+
+		try {
+			const created = await createBranchFromPolicyOnCheckout({
+				projectId: PROJECT_ID,
+				branchName: NEW_BRANCH_NAME,
+				runtimeApi: api,
+				cwd,
+			});
+			expect(created).toEqual({ branchId: NEW_BRANCH_ID });
+			expect(stderrChunks.join("")).toContain(
+				"branch.preview.functions → branch.functions",
+			);
+		} finally {
+			process.stderr.write = origErr;
+		}
+	});
 });

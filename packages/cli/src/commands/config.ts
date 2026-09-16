@@ -805,6 +805,21 @@ const warningTargetForExistingBranch = async (props: {
 	};
 };
 
+const warnDeprecatedPreviewOnCreate = async (
+	config: Config,
+	props: {
+		projectId: string;
+		branchId: string;
+		branchName: string;
+		apiKey?: string;
+		apiHost?: string;
+		runtimeApi?: NeonApi;
+	},
+): Promise<void> => {
+	const listed = await warningTargetForExistingBranch(props);
+	warnDeprecatedPreview(config, { ...listed, exists: false });
+};
+
 export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	const config = await loadConfig(props);
 	const branch = await resolveBranchRef(props);
@@ -1178,11 +1193,6 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		throw err;
 	}
 
-	warnDeprecatedPreview(config, {
-		name: props.branchName,
-		exists: false,
-	});
-
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
@@ -1209,6 +1219,14 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 			branchId,
 		);
 		logPolicyResult(result, { color: props.color !== false });
+		await warnDeprecatedPreviewOnCreate(config, {
+			projectId: props.projectId,
+			branchId,
+			branchName,
+			...(props.apiKey ? { apiKey: props.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+			...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+		});
 		return { branchId };
 	} catch (err) {
 		// The branch exists but its policy didn't fully apply. Hand the id back so checkout
@@ -1220,6 +1238,14 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 				err.branchName,
 				err.branchId,
 			);
+			await warnDeprecatedPreviewOnCreate(config, {
+				projectId: props.projectId,
+				branchId: err.branchId,
+				branchName: err.branchName,
+				...(props.apiKey ? { apiKey: props.apiKey } : {}),
+				...(props.apiHost ? { apiHost: props.apiHost } : {}),
+				...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+			});
 			return { branchId: err.branchId, policyFailure: err.reason };
 		}
 		throw err;

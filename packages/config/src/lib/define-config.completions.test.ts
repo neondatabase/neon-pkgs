@@ -45,7 +45,7 @@ beforeAll(() => {
  * `source`. Filters out keyword/global-scope fallbacks so the list reflects the contextual
  * object type (an empty list means "no object members were offered" — the bug we guard).
  */
-function memberCompletionsAt(source: string): string[] {
+function memberCompletionEntriesAt(source: string): ts.CompletionEntry[] {
 	const marker = "/*|*/";
 	const position = source.indexOf(marker);
 	if (position < 0) throw new Error("missing /*|*/ marker in fixture source");
@@ -82,9 +82,18 @@ function memberCompletionsAt(source: string): string[] {
 	// in-scope identifiers; treat that as "no member completions" so the bug can't hide behind
 	// thousands of global names that happen to include a matching word.
 	if (!info || info.isGlobalCompletion) return [];
-	return info.entries
-		.filter((e) => e.kind !== "keyword" && e.kind !== "warning")
-		.map((e) => e.name);
+	return info.entries.filter(
+		(e) => e.kind !== "keyword" && e.kind !== "warning",
+	);
+}
+
+/**
+ * Return the *member* completions the language service offers at the `/*|*\/` marker in
+ * `source`. Filters out keyword/global-scope fallbacks so the list reflects the contextual
+ * object type (an empty list means "no object members were offered" — the bug we guard).
+ */
+function memberCompletionsAt(source: string): string[] {
+	return memberCompletionEntriesAt(source).map((e) => e.name);
 }
 
 describe("preview slug-object autocomplete (language service)", () => {
@@ -166,6 +175,21 @@ export default defineConfig({
 			expect(completions).toEqual(
 				expect.arrayContaining(["name", "source", "env", "dev"]),
 			);
+		},
+		LANGUAGE_SERVICE_TIMEOUT_MS,
+	);
+
+	test(
+		"the defineConfig preview key is marked deprecated",
+		() => {
+			const preview = memberCompletionEntriesAt(`
+import { defineConfig } from "./define-config.js";
+export default defineConfig({
+	/*|*/
+});
+`).find((entry) => entry.name === "preview");
+			expect(preview).toBeDefined();
+			expect(preview?.kindModifiers.split(",")).toContain("deprecated");
 		},
 		LANGUAGE_SERVICE_TIMEOUT_MS,
 	);

@@ -184,6 +184,7 @@ export function defineConfig<
 	// `& PreviewInput` restores top-level member hints (aiGateway/functions/buckets);
 	// `& PreviewAutocomplete<Preview>` restores hints *inside* each function/bucket slug
 	// object (see `PreviewAutocomplete`), which the bare index signature otherwise hides.
+	/** @deprecated Use top-level `aiGateway`, `functions`, and `buckets`. */
 	preview?: Preview & PreviewInput & PreviewAutocomplete<Preview>;
 	branch?: BranchTuningFn<Preview, Functions>;
 }): Config<Auth, DataApi, Preview, Functions, Buckets, AiGateway> {
