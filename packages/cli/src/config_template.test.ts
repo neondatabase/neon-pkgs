@@ -42,6 +42,7 @@ export default defineConfig({
 export default defineConfig({
   // Declare your Neon services here
   auth: true,
+  dataApi: true,
   preview: {
     aiGateway: true,
     functions: {
@@ -73,6 +74,14 @@ export default defineConfig({
 	it("omits the preview block when only auth is selected", () => {
 		const rendered = renderNeonConfig(["auth"]);
 		expect(rendered).toContain("auth: true,");
+		expect(rendered).not.toContain("dataApi");
+		expect(rendered).not.toContain("preview");
+	});
+
+	it("declares data-api with auth, because the default provider requires it", () => {
+		const rendered = renderNeonConfig(["data-api"]);
+		expect(rendered).toContain("auth: true,");
+		expect(rendered).toContain("dataApi: true,");
 		expect(rendered).not.toContain("preview");
 	});
 

@@ -610,6 +610,8 @@ export default defineConfig({
 ? Which Neon services should neon.ts declare? (space to toggle, enter to confirm) ›
 ◯   Managed Better Auth
      Authentication with users and sessions stored in Postgres.
+◯   Data API
+     PostgREST-compatible HTTP API. Also declares Auth; the default provider needs it.
 ◯   Functions
      Long-running, without timeouts, and closer to your database.
 ◯   Object Storage
@@ -626,6 +628,9 @@ neon config init
 
 # Declare services with no prompt
 neon config init --services auth,functions,object-storage,ai-gateway
+
+# Data API also writes auth: true (the default provider requires it)
+neon config init --services data-api
 
 # Repeat the flag instead, and shorten it — every services flag takes all three spellings
 neon config init -s auth -s functions

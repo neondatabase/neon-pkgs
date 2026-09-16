@@ -17,14 +17,14 @@ export const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
 /**
  * The services `config init` can declare in the `neon.ts` it scaffolds — the subset of
  * {@link NEON_SERVICES} a policy has a field for. {@link renderNeonConfig} owns the mapping
- * from these names to the `neon.ts` fields (`aiGateway`, `buckets`).
+ * from these names to the `neon.ts` fields (`aiGateway`, `buckets`, `dataApi`).
  *
- * Postgres is absent because every branch has it, so there is nothing to declare. `data-api`
- * is absent because enabling it with the default `authProvider: "neon"` requires `auth` — a
- * pairing the picker would have to enforce rather than offer.
+ * Postgres is absent because every branch has it, so there is nothing to declare. Selecting
+ * `data-api` also writes `auth: true`: the default Data API provider requires Neon Auth, and
+ * `defineConfig` type-errors the file without it.
  */
 export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
-	(service) => service !== "postgres" && service !== "data-api",
+	(service) => service !== "postgres",
 );
 
 /**
@@ -34,12 +34,10 @@ export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
  */
 export const CONFIG_INIT_NONE_MEANS = "the bare starter policy";
 
-/** Why the two a policy cannot declare are not selectable, for the refusal message. */
+/** Why a policy cannot declare a real Neon service, for the refusal message. */
 export const CONFIG_INIT_UNAVAILABLE: Partial<Record<NeonService, string>> = {
 	postgres:
 		"every branch has Postgres, so a policy has nothing to declare for it",
-	"data-api":
-		"enabling it with the default provider requires auth, so declare auth here and turn the Data API on with `neon data-api create`",
 };
 
 /** Slug, display name, and source path of the function scaffolded for `functions`. */
@@ -111,14 +109,19 @@ const renderPreview = (services: readonly NeonService[]): string => {
  * policy — an explicit `auth: false`, no `preview` block, and a `branch` closure that gives
  * new non-default branches a 7-day TTL — so the picker's "skip everything" answer and a
  * non-interactive run produce the identical file.
+ *
+ * `data-api` writes `dataApi: true` and forces `auth: true`. The default provider is Neon
+ * Auth; omitting auth is a `defineConfig` type error rather than a deploy-time surprise.
  */
-export const renderNeonConfig = (services: readonly NeonService[]): string =>
-	`import { defineConfig } from "${CONFIG_PACKAGE}/v1";
+export const renderNeonConfig = (services: readonly NeonService[]): string => {
+	const auth = services.includes("auth") || services.includes("data-api");
+	const dataApi = services.includes("data-api") ? "  dataApi: true,\n" : "";
+	return `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
 
 export default defineConfig({
   // Declare your Neon services here
-  auth: ${services.includes("auth")},
-${renderPreview(services)}  // Branch policy: per-branch tuning
+  auth: ${auth},
+${dataApi}${renderPreview(services)}  // Branch policy: per-branch tuning
   branch: (branch) => {
     if (branch.isDefault) {
       // Default branch: no overrides, uses project defaults
@@ -134,6 +137,7 @@ ${renderPreview(services)}  // Branch policy: per-branch tuning
   },
 });
 `;
+};
 
 /** Render a scalar the way it has to appear in TypeScript source. */
 const renderScalar = (value: string | number | boolean): string =>

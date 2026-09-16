@@ -45,9 +45,9 @@ describe("the service vocabulary", () => {
 
 	it("offers each command only what it can act on", () => {
 		expect(ENV_PULL_SERVICES).toContain("functions");
-		// Every branch has Postgres, and the Data API needs auth — neither is declarable.
+		expect(CONFIG_INIT_SERVICES).toContain("data-api");
+		// Every branch has Postgres, so a policy has nothing to declare for it.
 		expect(CONFIG_INIT_SERVICES).not.toContain("postgres");
-		expect(CONFIG_INIT_SERVICES).not.toContain("data-api");
 	});
 });
 
@@ -105,6 +105,10 @@ describe("parseServices", () => {
 		expect(() => parseServices(["postgres"], configInit)).toThrow(
 			/postgres is not something --services can select: every branch has Postgres/,
 		);
+	});
+
+	it("accepts data-api on config init", () => {
+		expect(parseServices(["data-api"], configInit)).toEqual(["data-api"]);
 	});
 
 	it("reports a typo and an unselectable service separately in one message", () => {
@@ -251,7 +255,7 @@ describe("servicesOption", () => {
 				also: "Omitted: ask.",
 			}).describe,
 		).toBe(
-			"Declare these: auth, functions, object-storage, ai-gateway. " +
+			"Declare these: auth, data-api, functions, object-storage, ai-gateway. " +
 				'Pass "none" for the bare starter policy. ' +
 				"Repeat the flag or comma-separate. Omitted: ask.",
 		);
