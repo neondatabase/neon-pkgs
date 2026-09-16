@@ -1,5 +1,11 @@
 # @neondatabase/functions
 
+## 0.11.0
+
+### Minor Changes
+
+- 902bb38: Add `parseTriggerDelivery` for `storage_object_created` Function Trigger deliveries. `TriggerInvocation`, `parseTriggerInvocation`, and Hono `parseTrigger` stay schedule-only, so existing `data.scheduledAt` callers keep compiling.
+
 ## 0.10.0
 
 ### Minor Changes
