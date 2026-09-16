@@ -1,6 +1,8 @@
 import type {
+	ScheduleTriggerCreateRequest,
+	ScheduleTriggerUpdateRequest,
+	StorageObjectCreatedTriggerUpdateRequest,
 	Trigger,
-	TriggerCreateRequest,
 	TriggerUpdateRequest,
 } from "@neon/sdk";
 import type yargs from "yargs";
@@ -37,6 +39,26 @@ async function withTriggerNotFound<T>(
 	}
 }
 
+const TRIGGER_COMMON_FIELDS = [
+	"trigger_id",
+	"name",
+	"function_slug",
+	"function_path",
+	"enabled",
+	"inherited",
+] as const;
+
+type TriggerTableRow = {
+	trigger_id: string;
+	name: string;
+	function_slug: string;
+	function_path: string;
+	schedule: string;
+	enabled: boolean;
+	inherited: boolean;
+	next_run_at: string;
+};
+
 export const TRIGGER_FIELDS = [
 	"trigger_id",
 	"name",
@@ -46,11 +68,94 @@ export const TRIGGER_FIELDS = [
 	"enabled",
 	"inherited",
 	"next_run_at",
-] as const;
+] as const satisfies readonly (keyof TriggerTableRow)[];
 
-const renderColumns = {
-	schedule: (t: Trigger) => t.schedule?.cron ?? "",
-} as const;
+function triggerTableRow(t: Trigger): TriggerTableRow {
+	if (t.type === "schedule") {
+		return {
+			trigger_id: t.trigger_id,
+			name: t.name,
+			function_slug: t.function_slug,
+			function_path: t.function_path,
+			schedule: t.schedule.cron,
+			enabled: t.enabled,
+			inherited: t.inherited,
+			next_run_at: t.next_run_at ?? "",
+		};
+	}
+	return {
+		trigger_id: t.trigger_id,
+		name: t.name,
+		function_slug: t.function_slug,
+		function_path: t.function_path,
+		schedule: "",
+		enabled: t.enabled,
+		inherited: t.inherited,
+		next_run_at: "",
+	};
+}
+
+function writeTrigger(
+	props: BranchScopeProps,
+	data: Trigger | Trigger[],
+	extra?: { emptyMessage: string },
+) {
+	if (props.output !== "table") {
+		writer(props).end(data, {
+			fields: TRIGGER_COMMON_FIELDS,
+			...extra,
+		});
+		return;
+	}
+	const rows = Array.isArray(data)
+		? data.map(triggerTableRow)
+		: triggerTableRow(data);
+	writer(props).end(rows, {
+		fields: TRIGGER_FIELDS,
+		...extra,
+	});
+}
+
+function enabledPatch(
+	type: Trigger["type"],
+	enabled: boolean,
+): TriggerUpdateRequest {
+	if (type === "schedule") {
+		return { type: "schedule", enabled };
+	}
+	return { type: "storage_object_created", enabled };
+}
+
+function updatePatch(
+	type: Trigger["type"],
+	props: UpdateProps,
+): TriggerUpdateRequest {
+	if (type === "schedule") {
+		const body: ScheduleTriggerUpdateRequest = { type: "schedule" };
+		if (props["function-slug"] !== undefined) {
+			body.function_slug = props["function-slug"];
+		}
+		if (props.name !== undefined) body.name = props.name;
+		if (props.cron !== undefined) body.schedule = { cron: props.cron };
+		if (props["function-path"] !== undefined) {
+			body.function_path = props["function-path"];
+		}
+		if (props.enabled !== undefined) body.enabled = props.enabled;
+		return body;
+	}
+	const body: StorageObjectCreatedTriggerUpdateRequest = {
+		type: "storage_object_created",
+	};
+	if (props["function-slug"] !== undefined) {
+		body.function_slug = props["function-slug"];
+	}
+	if (props.name !== undefined) body.name = props.name;
+	if (props["function-path"] !== undefined) {
+		body.function_path = props["function-path"];
+	}
+	if (props.enabled !== undefined) body.enabled = props.enabled;
+	return body;
+}
 
 type CreateProps = BranchScopeProps & {
 	"function-slug": string;
@@ -209,9 +314,7 @@ export const list = async (props: BranchScopeProps) => {
 		props.projectId,
 		branchId,
 	);
-	writer(props).end(data.triggers, {
-		fields: TRIGGER_FIELDS,
-		renderColumns,
+	writeTrigger(props, data.triggers, {
 		emptyMessage: "No triggers found on this branch.",
 	});
 };
@@ -225,15 +328,12 @@ export const get = async (props: BranchScopeProps & { id: string }) => {
 			props.id,
 		),
 	);
-	writer(props).end(data.trigger, {
-		fields: TRIGGER_FIELDS,
-		renderColumns,
-	});
+	writeTrigger(props, data.trigger);
 };
 
 export const create = async (props: CreateProps) => {
 	const branchId = await branchIdFromProps(props);
-	const body: TriggerCreateRequest = {
+	const body: ScheduleTriggerCreateRequest = {
 		type: "schedule",
 		function_slug: props["function-slug"],
 		name: props.name,
@@ -252,25 +352,29 @@ export const create = async (props: CreateProps) => {
 			body,
 		),
 	);
-	writer(props).end(data.trigger, {
-		fields: TRIGGER_FIELDS,
-		renderColumns,
-	});
+	writeTrigger(props, data.trigger);
 };
 
 export const update = async (props: UpdateProps) => {
 	const branchId = await branchIdFromProps(props);
-	const body: TriggerUpdateRequest = { type: "schedule" };
-	if (props["function-slug"] !== undefined) {
-		body.function_slug = props["function-slug"];
+	const { data: existing } = await withTriggerNotFound(
+		props.id,
+		branchId,
+		() =>
+			props.apiClient.getProjectBranchTrigger(
+				props.projectId,
+				branchId,
+				props.id,
+			),
+	);
+	const trigger = existing.trigger;
+	if (props.cron !== undefined && trigger.type !== "schedule") {
+		throw new Error(
+			`Trigger ${props.id} is type ${trigger.type}; --cron applies to schedule triggers.`,
+		);
 	}
-	if (props.name !== undefined) body.name = props.name;
-	if (props.cron !== undefined) body.schedule = { cron: props.cron };
-	if (props["function-path"] !== undefined) {
-		body.function_path = props["function-path"];
-	}
-	if (props.enabled !== undefined) body.enabled = props.enabled;
 
+	const body = updatePatch(trigger.type, props);
 	const changed = Object.keys(body).filter((k) => k !== "type");
 	if (changed.length === 0) {
 		throw new Error(
@@ -288,10 +392,7 @@ export const update = async (props: UpdateProps) => {
 			),
 		),
 	);
-	writer(props).end(data.trigger, {
-		fields: TRIGGER_FIELDS,
-		renderColumns,
-	});
+	writeTrigger(props, data.trigger);
 };
 
 const setEnabled = async (
@@ -299,20 +400,27 @@ const setEnabled = async (
 	enabled: boolean,
 ) => {
 	const branchId = await branchIdFromProps(props);
+	const { data: existing } = await withTriggerNotFound(
+		props.id,
+		branchId,
+		() =>
+			props.apiClient.getProjectBranchTrigger(
+				props.projectId,
+				branchId,
+				props.id,
+			),
+	);
 	const { data } = await withTriggerNotFound(props.id, branchId, () =>
 		retryOnLock(() =>
 			props.apiClient.updateProjectBranchTrigger(
 				props.projectId,
 				branchId,
 				props.id,
-				{ type: "schedule", enabled },
+				enabledPatch(existing.trigger.type, enabled),
 			),
 		),
 	);
-	writer(props).end(data.trigger, {
-		fields: TRIGGER_FIELDS,
-		renderColumns,
-	});
+	writeTrigger(props, data.trigger);
 };
 
 export const deleteTrigger = async (

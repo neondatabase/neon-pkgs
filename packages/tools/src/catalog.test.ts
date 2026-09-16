@@ -419,6 +419,54 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual(body);
 	});
 
+	test("forwards storage_object_created trigger create body", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["triggers.create"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse(
+					{
+						trigger: {
+							type: "storage_object_created",
+							trigger_id: "trg-2",
+							function_slug: "ingest",
+							name: "uploads",
+							function_path: "/",
+							storage_object_created: {
+								bucket_name: "uploads",
+								prefix: "incoming/",
+							},
+							enabled: true,
+							version: 1,
+							inherited: false,
+						},
+					},
+					201,
+				);
+			},
+		});
+
+		const body = {
+			type: "storage_object_created" as const,
+			function_slug: "ingest",
+			name: "uploads",
+			storage_object_created: {
+				bucket_name: "uploads",
+				prefix: "incoming/",
+			},
+		};
+		await tools["triggers.create"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			body,
+		});
+
+		expect(requests[0].method).toBe("POST");
+		expect(await requests[0].json()).toEqual(body);
+	});
+
 	test("trigger list is a single request, not a paginated walk", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

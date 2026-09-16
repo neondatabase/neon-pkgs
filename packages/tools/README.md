@@ -47,7 +47,7 @@ const compared = await tools["branches.compareSchema"].execute({
 });
 ```
 
-Trigger create keeps the discriminator nested as `body`:
+Trigger create keeps the discriminator nested as `body`. `type` is `"schedule"` or `"storage_object_created"`:
 
 ```ts
 const triggerTools = createNeonTools({
@@ -62,6 +62,16 @@ const createdTrigger = await triggerTools["triggers.create"].execute({
 		function_slug: "worker",
 		name: "daily-refresh",
 		schedule: { cron: "0 9 * * *" },
+	},
+});
+const createdStorageTrigger = await triggerTools["triggers.create"].execute({
+	project_id: "project-id",
+	branch_id: "br-feature",
+	body: {
+		type: "storage_object_created",
+		function_slug: "ingest",
+		name: "uploads",
+		storage_object_created: { bucket_name: "uploads", prefix: "incoming/" },
 	},
 });
 ```

@@ -2189,6 +2189,18 @@ export const zFunctionTriggerSchedule = z.strictObject({
     cron: z.string().min(1).max(1024)
 });
 
+/**
+ * Matches successful uploads to one exact bucket and, when configured, an
+ * object-key prefix. The Function receives a JSON request body with
+ * `type` set to `storage_object_created` and a `data` object containing
+ * exactly `bucket_name` and `object_key`.
+ *
+ */
+export const zFunctionTriggerStorageObjectCreated = z.strictObject({
+    bucket_name: z.string().min(3).max(63),
+    prefix: z.string().min(1).max(1024).regex(/^[^\x00-\x1f\x7f-\x9f]+$/).optional()
+});
+
 export const zScheduleTriggerCreateRequest = z.strictObject({
     type: z.enum(['schedule']),
     function_slug: z.string().regex(/^[a-z0-9]{1,20}$/),
@@ -2198,14 +2210,24 @@ export const zScheduleTriggerCreateRequest = z.strictObject({
     enabled: z.boolean().optional()
 });
 
+export const zStorageObjectCreatedTriggerCreateRequest = z.strictObject({
+    type: z.enum(['storage_object_created']),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/),
+    name: z.string().min(1).max(256),
+    function_path: z.string().min(1).max(2048).optional(),
+    storage_object_created: zFunctionTriggerStorageObjectCreated,
+    enabled: z.boolean().optional()
+});
+
 /**
- * Trigger creation payload discriminated by `type`. The only currently
- * supported trigger type is `schedule`.
+ * Trigger creation payload discriminated by `type`. The supported trigger
+ * types are `schedule` and `storage_object_created`.
  *
  */
-export const zTriggerCreateRequest = z.strictObject({
-    type: z.literal('schedule')
-}).merge(zScheduleTriggerCreateRequest);
+export const zTriggerCreateRequest = z.discriminatedUnion('type', [
+    zScheduleTriggerCreateRequest.extend({ type: z.literal('schedule') }),
+    zStorageObjectCreatedTriggerCreateRequest.extend({ type: z.literal('storage_object_created') })
+]);
 
 export const zScheduleTriggerUpdateRequest = z.strictObject({
     type: z.enum(['schedule']),
@@ -2216,14 +2238,24 @@ export const zScheduleTriggerUpdateRequest = z.strictObject({
     enabled: z.boolean().optional()
 });
 
+export const zStorageObjectCreatedTriggerUpdateRequest = z.strictObject({
+    type: z.enum(['storage_object_created']),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).optional(),
+    name: z.string().min(1).max(256).optional(),
+    function_path: z.string().min(1).max(2048).optional(),
+    storage_object_created: zFunctionTriggerStorageObjectCreated.optional(),
+    enabled: z.boolean().optional()
+});
+
 /**
- * Partial trigger update discriminated by `type`. The only currently
- * supported trigger type is `schedule`.
+ * Partial trigger update discriminated by `type`. The supported trigger
+ * types are `schedule` and `storage_object_created`.
  *
  */
-export const zTriggerUpdateRequest = z.strictObject({
-    type: z.literal('schedule')
-}).merge(zScheduleTriggerUpdateRequest);
+export const zTriggerUpdateRequest = z.discriminatedUnion('type', [
+    zScheduleTriggerUpdateRequest.extend({ type: z.literal('schedule') }),
+    zStorageObjectCreatedTriggerUpdateRequest.extend({ type: z.literal('storage_object_created') })
+]);
 
 /**
  * A branch-effective schedule trigger for a Function.
@@ -2238,18 +2270,35 @@ export const zScheduleTrigger = z.strictObject({
     enabled: z.boolean(),
     version: z.int().gte(1),
     next_run_at: z.string().nullable(),
-    source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     inherited: z.boolean()
 });
 
 /**
- * A branch-effective trigger discriminated by `type`. The only currently
- * supported trigger type is `schedule`.
+ * A branch-effective trigger that invokes a Function after a successful
+ * upload matching its exact bucket and optional object-key prefix.
  *
  */
-export const zTrigger = z.strictObject({
-    type: z.literal('schedule')
-}).merge(zScheduleTrigger);
+export const zStorageObjectCreatedTrigger = z.strictObject({
+    type: z.enum(['storage_object_created']),
+    trigger_id: zTriggerId,
+    function_slug: z.string(),
+    name: z.string(),
+    function_path: z.string(),
+    storage_object_created: zFunctionTriggerStorageObjectCreated,
+    enabled: z.boolean(),
+    version: z.int().gte(1),
+    inherited: z.boolean()
+});
+
+/**
+ * A branch-effective trigger discriminated by `type`. The supported trigger
+ * types are `schedule` and `storage_object_created`.
+ *
+ */
+export const zTrigger = z.discriminatedUnion('type', [
+    zScheduleTrigger.extend({ type: z.literal('schedule') }),
+    zStorageObjectCreatedTrigger.extend({ type: z.literal('storage_object_created') })
+]);
 
 export const zTriggerResponse = z.strictObject({
     trigger: zTrigger

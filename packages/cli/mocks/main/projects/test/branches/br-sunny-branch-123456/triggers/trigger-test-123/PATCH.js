@@ -2,7 +2,7 @@ import { expect } from 'vitest';
 
 export default function (req, res) {
   const body = req.body ?? {};
-  // PATCH must always carry the schedule discriminator.
+  // PATCH carries the existing trigger's type discriminator.
   expect(body).toMatchObject({ type: 'schedule' });
 
   // A missing target function returns a DIFFERENT 404 than a missing trigger;

@@ -295,5 +295,51 @@ createProjectOnly.execute({ name: "x" }).then((result) => {
 // @ts-expect-error no_compute is not on projects.create
 createProjectOnly.execute({ name: "x", no_compute: true });
 
+const createTrigger = createNeonTool("triggers.create", { apiKey: "test-key" });
+createTrigger.execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	body: {
+		type: "schedule",
+		function_slug: "worker",
+		name: "daily-refresh",
+		schedule: { cron: "0 9 * * *" },
+	},
+});
+createTrigger.execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	body: {
+		type: "storage_object_created",
+		function_slug: "ingest",
+		name: "uploads",
+		storage_object_created: { bucket_name: "uploads" },
+	},
+});
+createTrigger.execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	body: {
+		type: "storage_object_created",
+		function_slug: "ingest",
+		name: "uploads",
+		storage_object_created: {
+			bucket_name: "uploads",
+			prefix: "incoming/",
+		},
+	},
+});
+createTrigger.execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	body: {
+		type: "storage_object_created",
+		function_slug: "ingest",
+		name: "uploads",
+		// @ts-expect-error storage create requires bucket_name
+		storage_object_created: { prefix: "incoming/" },
+	},
+});
+
 // @ts-expect-error tools is required
 createNeonTools({ apiKey: "test-key" });
