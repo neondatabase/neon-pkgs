@@ -118,16 +118,16 @@ const test = originalTest.extend<{
 });
 
 const expectNonInteractiveHelp = (text: string) => {
-	const commands = [
-		"neon link -y",
+	const uniqueCommands = [
 		"neon orgs list --output json",
 		"neon projects list --org-id <org-id> --output json",
 		"neon link --project-id <project-id> [--branch <name> | -y]",
 		"neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2",
 	];
-	for (const command of commands) {
-		expect(text).toContain(command);
+	for (const command of uniqueCommands) {
+		expect(text.split(command)).toHaveLength(2);
 	}
+	expect(text).toContain("neon link -y");
 	expect(text).toContain("Organization-scoped API keys cannot list orgs");
 };
 
