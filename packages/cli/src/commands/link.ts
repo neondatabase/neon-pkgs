@@ -518,7 +518,7 @@ const resolveBranchRef = async (
  * already looks like a branch id is trusted as an id without listing, so keep
  * the real id in that case.
  */
-const branchPersistValue = (branch: Branch): string => {
+const branchPersistValue = (branch: { id: string; name?: string }): string => {
 	if (branch.name && !looksLikeBranchId(branch.name)) {
 		return branch.name;
 	}
@@ -636,8 +636,18 @@ const resolveBranchFromList = async (
 					: picked.branchId,
 			};
 		}
-		await createBranch(props.apiClient, projectId, picked.name, branches);
-		return { branch: picked.name };
+		const created = await createBranch(
+			props.apiClient,
+			projectId,
+			picked.name,
+			branches,
+		);
+		return {
+			branch: branchPersistValue({
+				id: created,
+				name: picked.name,
+			}),
+		};
 	}
 	throw new LinkInputError(
 		[

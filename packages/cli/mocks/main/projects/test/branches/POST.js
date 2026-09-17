@@ -144,6 +144,15 @@ export default function (req, res) {
         suspend_timeout: req.body.endpoints[0].suspend_timeout_seconds,
       },
     });
+  } else if (req.body.branch?.name === 'br-feature-test-123456') {
+    res.send({
+      branch: {
+        id: 'br-actual-created-654321',
+        name: 'br-feature-test-123456',
+        parent_id: 'br-main-branch-123456',
+        created_at: '2021-01-01T00:00:00.000Z',
+      },
+    });
   } else if (req.body.branch?.name === 'protected_branch') {
     expect(req.body).toMatchObject({
       branch: {
