@@ -375,6 +375,12 @@ describe("link", () => {
 				{ code: 1, snapshot: false },
 			);
 			expect(stderr).toContain("No project selected");
+			expect(stderr).toContain(
+				"neon link -y --org-id org-2 --branch main",
+			);
+			expect(stderr).toContain(
+				"neon link --project-id <project-id> --branch main",
+			);
 			expect(existsSync(ctx)).toBe(false);
 		});
 
@@ -652,6 +658,30 @@ describe("link", () => {
 				orgId: "org-7",
 				projectId: "proj-paged-branches",
 				branch: "page-two",
+			});
+		});
+
+		test("persists the id when the branch name looks like a branch id", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("verify_br_named");
+			await testCliCommand(
+				[
+					"link",
+					"--project-id",
+					"proj-br-named",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-7",
+				projectId: "proj-br-named",
+				branch: "br-actual-branch-654321",
 			});
 		});
 	});

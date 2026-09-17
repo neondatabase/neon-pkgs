@@ -26,6 +26,7 @@ import {
 } from "../utils/branch_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { listAllProjectBranches } from "../utils/enrichers.js";
+import { looksLikeBranchId } from "../utils/formats.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 import { hasNeonConfigFile, initCmd } from "./config.js";
@@ -312,11 +313,16 @@ const missingProjectForOrg = (inputs: Inputs): boolean =>
 
 const orgNeedsProjectError = (inputs: Inputs): LinkInputError => {
 	const orgId = inputs.orgId ?? "<org-id>";
+	const branchFlag = inputs.branch ? ` --branch ${inputs.branch}` : "";
 	return new LinkInputError(
 		[
 			"No project selected. Pass --project-id, or use -y to select the only project:",
-			`  ${getCliName()} link -y --org-id ${orgId}`,
-			`  ${getCliName()} link --project-id <project-id> --branch <name-or-id>`,
+			`  ${getCliName()} link -y --org-id ${orgId}${branchFlag}`,
+			`  ${getCliName()} link --project-id <project-id>${
+				inputs.branch
+					? ` --branch ${inputs.branch}`
+					: " --branch <name-or-id>"
+			}`,
 		].join("\n"),
 	);
 };
@@ -508,11 +514,16 @@ const resolveBranchRef = async (
 };
 
 /**
- * The value to persist for a branch: prefer its human-readable **name** (nicer
- * to read in `.neon`, and still resolvable by every command), falling back to
- * the id when the branch has no name.
+ * Persist the name when later commands will look it up as a name. A name that
+ * already looks like a branch id is trusted as an id without listing, so keep
+ * the real id in that case.
  */
-const branchPersistValue = (branch: Branch): string => branch.name ?? branch.id;
+const branchPersistValue = (branch: Branch): string => {
+	if (branch.name && !looksLikeBranchId(branch.name)) {
+		return branch.name;
+	}
+	return branch.id;
+};
 
 /**
  * Verify the project (and the org, when supplied) and resolve the org id to
