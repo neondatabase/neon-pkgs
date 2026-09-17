@@ -1,5 +1,11 @@
 # neon
 
+## 4.22.0
+
+### Minor Changes
+
+- b8fa571: `neon skills` accepts `neon-auth` and includes it in the default install set.
+
 ## 4.21.1
 
 ### Patch Changes
