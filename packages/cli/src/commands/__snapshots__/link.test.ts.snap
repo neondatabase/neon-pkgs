@@ -79,8 +79,6 @@ exports[`link > input verification > branch names on later list pages still reso
 "
 `;
 
-exports[`link > input verification > unknown --branch-id fails listing the available branches 1`] = `""`;
-
 exports[`link > input verification > unknown --project-id fails with a clear error 1`] = `""`;
 
 exports[`link > non-interactive flag mode > conflicting inputs (--project-id with --project-name) fails 1`] = `""`;

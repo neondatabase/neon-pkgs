@@ -313,14 +313,16 @@ const missingProjectForOrg = (inputs: Inputs): boolean =>
 
 const orgNeedsProjectError = (inputs: Inputs): LinkInputError => {
 	const orgId = inputs.orgId ?? "<org-id>";
-	const branchFlag = inputs.branch ? ` --branch ${inputs.branch}` : "";
+	const branchFlag = inputs.branch
+		? ` --branch ${quoteFlagValue(inputs.branch)}`
+		: "";
 	return new LinkInputError(
 		[
 			"No project selected. Pass --project-id, or use -y to select the only project:",
-			`  ${getCliName()} link -y --org-id ${orgId}${branchFlag}`,
+			`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)}${branchFlag}`,
 			`  ${getCliName()} link --project-id <project-id>${
 				inputs.branch
-					? ` --branch ${inputs.branch}`
+					? ` --branch ${quoteFlagValue(inputs.branch)}`
 					: " --branch <name-or-id>"
 			}`,
 		].join("\n"),
@@ -477,12 +479,29 @@ const verifyOrgAccess = async (
 	}
 };
 
-const formatAvailableBranches = (branches: Branch[]): string =>
-	branches.length > 0
-		? branches
-				.map((b: Branch) => (b.name ? `${b.name} (${b.id})` : b.id))
-				.join(", ")
-		: "(none)";
+const failWithBranchCandidates = (
+	props: LinkProps,
+	projectId: string,
+	branches: Branch[],
+	reason: string,
+): never => {
+	writer(props).end(
+		branches.map((b) => ({
+			id: b.id,
+			name: b.name ?? b.id,
+		})),
+		{
+			fields: ["id", "name"] as const,
+			title: "Branches",
+		},
+	);
+	const orgFlag = props.orgId
+		? ` --org-id ${quoteFlagValue(props.orgId)}`
+		: "";
+	throw new LinkInputError(
+		`${reason}\n  ${getCliName()} link -y${orgFlag} --project-id ${quoteFlagValue(projectId)} --branch <name-or-id>`,
+	);
+};
 
 const listAllBranches = async (
 	props: CommonProps,
@@ -493,11 +512,10 @@ const listAllBranches = async (
  * Resolve a branch reference (name *or* id) to the matching branch, while
  * confirming it actually exists in the project. Unlike the shared
  * `branchIdResolve`, this also verifies references that already look like ids
- * (so a typo'd `br-…` doesn't silently get written), and surfaces the available
- * branches when nothing matches so the user can correct it (or run `checkout`).
+ * (so a typo'd `br-…` doesn't silently get written).
  */
 const resolveBranchRef = async (
-	props: CommonProps,
+	props: LinkProps,
 	projectId: string,
 	branchRef: string,
 ): Promise<Branch> => {
@@ -508,8 +526,11 @@ const resolveBranchRef = async (
 	if (match) {
 		return match;
 	}
-	throw new LinkInputError(
-		`Branch '${branchRef}' not found in project '${projectId}'. Available branches: ${formatAvailableBranches(branches)}. Pin one with \`${getCliName()} checkout <branch>\`.`,
+	return failWithBranchCandidates(
+		props,
+		projectId,
+		branches,
+		`Branch '${branchRef}' not found in project '${projectId}'. Pass --branch with a name or ID from the list:`,
 	);
 };
 
@@ -613,8 +634,11 @@ const resolveBranchFromList = async (
 	if (props.yes) {
 		const def = branches.find((b: Branch) => b.default);
 		if (!def) {
-			throw new LinkInputError(
-				`Project '${projectId}' has no default branch. Pass --branch <name> to pin one.`,
+			return failWithBranchCandidates(
+				props,
+				projectId,
+				branches,
+				`Project '${projectId}' has no default branch. Pass --branch with a name or ID from the list:`,
 			);
 		}
 		return { branch: branchPersistValue(def) };
@@ -624,7 +648,7 @@ const resolveBranchFromList = async (
 			message: "Which branch would you like to link?",
 			nonInteractiveMessage:
 				"No branch could be selected without an interactive terminal. " +
-				`Re-run \`${getCliName()} link\` interactively, or \`${getCliName()} checkout <branch>\` to pin one.`,
+				`Pass --branch <name-or-id>, or -y to pin the default branch.`,
 		});
 		if (picked.kind === "existing") {
 			const existing = branches.find(
@@ -649,11 +673,11 @@ const resolveBranchFromList = async (
 			}),
 		};
 	}
-	throw new LinkInputError(
-		[
-			`Project '${projectId}' has multiple branches. Pass --branch <name-or-id>, or -y to pin its default branch.`,
-			`Available branches: ${formatAvailableBranches(branches)}.`,
-		].join("\n"),
+	return failWithBranchCandidates(
+		props,
+		projectId,
+		branches,
+		`Project '${projectId}' has multiple branches. Pass --branch <name-or-id>, or -y to pin its default branch.`,
 	);
 };
 
