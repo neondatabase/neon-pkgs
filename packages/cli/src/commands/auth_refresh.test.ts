@@ -152,7 +152,13 @@ describe("an expired session", () => {
 		const after = readStored();
 		expect(after.access_token).not.toBe(before.access_token);
 		expect(after.refresh_token).not.toBe(before.refresh_token);
-		expect(after.user_id).toBe("user-1");
+		expect(after).toEqual({
+			type: "oauth",
+			access_token: expect.any(String),
+			refresh_token: expect.any(String),
+			expires_at: expect.any(Number),
+			user_id: "user-1",
+		});
 	});
 
 	it("keeps the rotated token even when the command afterwards fails", async () => {

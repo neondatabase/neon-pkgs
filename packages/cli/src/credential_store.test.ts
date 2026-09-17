@@ -155,6 +155,41 @@ describe("createCredentialStore — keyring", () => {
 		).toBe(JSON.stringify(key));
 	});
 
+	test("rejects a keyring value above its UTF-16 code-unit limit before writing", () => {
+		const dir = makeDir();
+		const items = new Map<string, string>();
+		const writes: number[] = [];
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend & {
+			maxPasswordCodeUnits: number;
+		} = {
+			maxPasswordCodeUnits: 1280,
+			get: (service, account) => items.get(id(service, account)) ?? null,
+			set: (service, account, password) => {
+				writes.push(password.length);
+				items.set(id(service, account), password);
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const credentialsOfLength = (length: number) => {
+			const credentials = { type: "oauth", access_token: "" };
+			credentials.access_token = "x".repeat(
+				length - JSON.stringify(credentials).length,
+			);
+			expect(JSON.stringify(credentials)).toHaveLength(length);
+			return credentials;
+		};
+		const store = createCredentialStore(dir, { keyring });
+		const at = keyringAt();
+
+		store.write(at, credentialsOfLength(1280));
+		expect(() => store.write(at, credentialsOfLength(1281))).toThrow(
+			/1281.*1280/,
+		);
+		expect(writes).toEqual([1280]);
+	});
+
 	test("two config directories do not share a DEFAULT slot", () => {
 		const a = makeDir();
 		const b = makeDir();

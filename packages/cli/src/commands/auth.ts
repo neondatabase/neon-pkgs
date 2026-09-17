@@ -481,8 +481,11 @@ const oauthCredentialsFromTokenSet = (
 			? tokenSet.refresh_token
 			: previous?.refresh_token;
 	const stored: StoredCredentials = {
-		...tokenSet,
 		type: OAUTH,
+		...(typeof tokenSet.access_token === "string" &&
+		tokenSet.access_token !== ""
+			? { access_token: tokenSet.access_token }
+			: {}),
 		expires_at: tokenSet.expires_at,
 		...(typeof refreshTokenValue === "string" && refreshTokenValue !== ""
 			? { refresh_token: refreshTokenValue }
