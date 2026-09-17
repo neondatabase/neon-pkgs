@@ -1,23 +1,8 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`link > --no-checks (offline write) > fails when branch is missing 1`] = `""`;
+
 exports[`link > --no-checks (offline write) > fails when org-id or project-id is missing 1`] = `""`;
-
-exports[`link > --no-checks (offline write) > writes org+project with no API verification 1`] = `
-"Linked <TMP>/nochecks_basic/.neon:
-  orgId:     org-anything
-  projectId: ghost-project
-
-Written offline (--no-checks): nothing was verified.
-
-"
-`;
-
-exports[`link > --no-checks (offline write) > writes org+project with no API verification 2`] = `
-"{
-  "orgId": "org-anything",
-  "projectId": "ghost-project"
-}"
-`;
 
 exports[`link > --no-checks (offline write) > writes org+project+branch when a branch is given 1`] = `
 "Linked <TMP>/nochecks_branch/.neon:
@@ -38,32 +23,45 @@ exports[`link > --no-checks (offline write) > writes org+project+branch when a b
 }"
 `;
 
+exports[`link > --no-checks (offline write) > writes org+project+branch with no API verification 1`] = `
+"Linked <TMP>/nochecks_basic/.neon:
+  orgId:     org-anything
+  projectId: ghost-project
+  branch:    main
+
+Written offline (--no-checks): nothing was verified.
+
+"
+`;
+
+exports[`link > --no-checks (offline write) > writes org+project+branch with no API verification 2`] = `
+"{
+  "orgId": "org-anything",
+  "projectId": "ghost-project",
+  "branch": "main"
+}"
+`;
+
 exports[`link > gitignore scaffolding > appends .neon to an existing .gitignore without duplicating 1`] = `
 "Linked <TMP>/gi_appends/.neon:
-  orgId:     org-2
   projectId: test
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
 
 exports[`link > gitignore scaffolding > appends .neon to an existing .gitignore without duplicating 2`] = `
 "Linked <TMP>/gi_appends/.neon:
-  orgId:     org-2
   projectId: test
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
 
 exports[`link > gitignore scaffolding > creates a .gitignore listing .neon next to the context file 1`] = `
 "Linked <TMP>/gi_creates/.neon:
-  orgId:     org-2
   projectId: test
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
@@ -71,6 +69,15 @@ No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its en
 exports[`link > gitignore scaffolding > set-context also scaffolds .gitignore via the shared applyContext 1`] = `""`;
 
 exports[`link > input verification > --org-id that does not match the project fails with a mismatch error 1`] = `""`;
+
+exports[`link > input verification > branch names on later list pages still resolve 1`] = `
+"Linked <TMP>/verify_paged_branch/.neon:
+  orgId:     org-7
+  projectId: proj-paged-branches
+  branch:    page-two
+
+"
+`;
 
 exports[`link > input verification > unknown --branch-id fails listing the available branches 1`] = `""`;
 
@@ -102,33 +109,33 @@ exports[`link > non-interactive flag mode > link --clear empties the context fil
 
 exports[`link > non-interactive flag mode > link --clear empties the context file 2`] = `"{}"`;
 
-exports[`link > non-interactive flag mode > link --org-id alone records the default org 1`] = `
-"Updated <TMP>/flag_org_only/.neon:
-  orgId:     org-2
-
-"
-`;
-
-exports[`link > non-interactive flag mode > link --org-id alone records the default org 2`] = `
-"{
-  "orgId": "org-2"
-}"
-`;
-
 exports[`link > non-interactive flag mode > link --params JSON behaves like flags 1`] = `
 "Linked <TMP>/flag_params/.neon:
-  orgId:     org-2
   projectId: test
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
 
 exports[`link > non-interactive flag mode > link --params JSON behaves like flags 2`] = `
 "{
-  "orgId": "org-2",
-  "projectId": "test"
+  "projectId": "test",
+  "branch": "main"
+}"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id -y on a personal project omits orgId and pins the default branch 1`] = `
+"Linked <TMP>/flag_existing/.neon:
+  projectId: test
+  branch:    main
+
+"
+`;
+
+exports[`link > non-interactive flag mode > link --project-id -y on a personal project omits orgId and pins the default branch 2`] = `
+"{
+  "projectId": "test",
+  "branch": "main"
 }"
 `;
 
@@ -153,8 +160,7 @@ exports[`link > non-interactive flag mode > link --project-id alone infers the o
 "Linked <TMP>/flag_infer_org/.neon:
   orgId:     org-7
   projectId: proj-in-org
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
@@ -162,7 +168,8 @@ No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its en
 exports[`link > non-interactive flag mode > link --project-id alone infers the org from the project 2`] = `
 "{
   "orgId": "org-7",
-  "projectId": "proj-in-org"
+  "projectId": "proj-in-org",
+  "branch": "main"
 }"
 `;
 
@@ -180,23 +187,6 @@ exports[`link > non-interactive flag mode > link --project-id pins the only bran
   "orgId": "org-7",
   "projectId": "proj-one-branch",
   "branch": "main"
-}"
-`;
-
-exports[`link > non-interactive flag mode > link --project-id with no branches warns and does not pin 1`] = `
-"Linked <TMP>/flag_no_branches/.neon:
-  orgId:     org-7
-  projectId: proj-no-branches
-
-This project has no branches, so none was pinned. Create a branch, then run \`neon checkout <branch>\` to pin it and pull its env vars.
-
-"
-`;
-
-exports[`link > non-interactive flag mode > link --project-id with no branches warns and does not pin 2`] = `
-"{
-  "orgId": "org-7",
-  "projectId": "proj-no-branches"
 }"
 `;
 
@@ -218,43 +208,23 @@ exports[`link > non-interactive flag mode > link creates a new project and write
 }"
 `;
 
-exports[`link > non-interactive flag mode > link to existing project writes org+project, deferring the branch to checkout 1`] = `
-"Linked <TMP>/flag_existing/.neon:
-  orgId:     org-2
-  projectId: test
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
-
-"
-`;
-
-exports[`link > non-interactive flag mode > link to existing project writes org+project, deferring the branch to checkout 2`] = `
-"{
-  "orgId": "org-2",
-  "projectId": "test"
-}"
-`;
-
 exports[`link > non-interactive flag mode > re-linking the same project keeps the already-pinned branch 1`] = `
 "Linked <TMP>/flag_keep_branch/.neon:
-  orgId:     org-2
   projectId: test
-  branch:    br-sunny-branch-123456
+  branch:    test_branch
 
 "
 `;
 
 exports[`link > non-interactive flag mode > re-linking the same project keeps the already-pinned branch 2`] = `
 "{
-  "orgId": "org-2",
   "projectId": "test",
-  "branch": "br-sunny-branch-123456"
+  "branch": "test_branch"
 }"
 `;
 
 exports[`link > non-interactive flag mode > re-linking the same project with -y keeps the already-pinned branch 1`] = `
 "Linked <TMP>/flag_keep_branch_yes/.neon:
-  orgId:     org-2
   projectId: test
   branch:    test_branch
 
@@ -263,7 +233,6 @@ exports[`link > non-interactive flag mode > re-linking the same project with -y 
 
 exports[`link > non-interactive flag mode > re-linking the same project with -y keeps the already-pinned branch 2`] = `
 "{
-  "orgId": "org-2",
   "projectId": "test",
   "branch": "test_branch"
 }"
@@ -286,32 +255,17 @@ exports[`link > org-scoped API key behavior > links an existing project when org
 }"
 `;
 
-exports[`link > org-scoped API key behavior > records --org-id when org listing is forbidden and no projects exist 1`] = `
-"Updated <TMP>/orgkey_empty_org/.neon:
-  orgId:     org-from-console
-
-"
-`;
-
-exports[`link > org-scoped API key behavior > records --org-id when org listing is forbidden and no projects exist 2`] = `
-"{
-  "orgId": "org-from-console"
-}"
-`;
-
 exports[`link > overwrites an existing .neon when re-linking non-interactively 1`] = `
 "Linked <TMP>/overwrite/.neon:
-  orgId:     org-2
   projectId: test
-
-No branch pinned. Run \`neon checkout <branch>\` to pin a branch and pull its env vars.
+  branch:    main
 
 "
 `;
 
 exports[`link > overwrites an existing .neon when re-linking non-interactively 2`] = `
 "{
-  "orgId": "org-2",
-  "projectId": "test"
+  "projectId": "test",
+  "branch": "main"
 }"
 `;

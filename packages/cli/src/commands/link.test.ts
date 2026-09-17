@@ -133,7 +133,7 @@ const expectNonInteractiveHelp = (text: string) => {
 
 describe("link", () => {
 	describe("non-interactive flag mode", () => {
-		test("link to existing project writes org+project, deferring the branch to checkout", async ({
+		test("link --project-id -y on a personal project omits orgId and pins the default branch", async ({
 			testCliCommand,
 			readFile,
 			tmpContext,
@@ -141,10 +141,9 @@ describe("link", () => {
 			const ctx = tmpContext("flag_existing");
 			await testCliCommand([
 				"link",
-				"--org-id",
-				"org-2",
 				"--project-id",
 				"test",
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,
@@ -162,6 +161,7 @@ describe("link", () => {
 				"link",
 				"--project-id",
 				"proj-in-org",
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,
@@ -204,21 +204,29 @@ describe("link", () => {
 			expect(readFile(ctx)).toMatchSnapshot();
 		});
 
-		test("link --project-id with no branches warns and does not pin", async ({
+		test("link --project-id with no branches fails without writing .neon", async ({
 			testCliCommand,
-			readFile,
 			tmpContext,
 		}) => {
 			const ctx = tmpContext("flag_no_branches");
-			await testCliCommand([
-				"link",
-				"--project-id",
-				"proj-no-branches",
-				"--no-env-pull",
-				"--context-file",
-				ctx,
-			]);
-			expect(readFile(ctx)).toMatchSnapshot();
+			await testCliCommand(
+				[
+					"link",
+					"--project-id",
+					"proj-no-branches",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: expect.stringContaining(
+						"Project 'proj-no-branches' has no branches to link",
+					),
+				},
+			);
+			expect(existsSync(ctx)).toBe(false);
 		});
 
 		test("link --project-id -y with no default branch fails without writing .neon", async ({
@@ -326,7 +334,8 @@ describe("link", () => {
 			await testCliCommand([
 				"link",
 				"--params",
-				JSON.stringify({ orgId: "org-2", projectId: "test" }),
+				JSON.stringify({ projectId: "test" }),
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,
@@ -334,20 +343,118 @@ describe("link", () => {
 			expect(readFile(ctx)).toMatchSnapshot();
 		});
 
-		test("link --org-id alone records the default org", async ({
+		test("link --org-id without a project fails and names --project-id or -y", async ({
 			testCliCommand,
-			readFile,
 			tmpContext,
 		}) => {
 			const ctx = tmpContext("flag_org_only");
-			await testCliCommand([
-				"link",
-				"--org-id",
-				"org-2",
-				"--context-file",
+			const { stderr } = await testCliCommand(
+				["link", "--org-id", "org-2", "--context-file", ctx],
+				{ code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("No project selected");
+			expect(stderr).toContain("neon link -y --org-id org-2");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("link --org-id --branch without a project fails the same way", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_org_branch_only");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"--org-id",
+					"org-2",
+					"--branch",
+					"main",
+					"--context-file",
+					ctx,
+				],
+				{ code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("No project selected");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("link --project-id with several branches fails without -y or --branch", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_several_branches");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"--project-id",
+					"test",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("has multiple branches");
+			expect(stderr).toContain("Available branches:");
+			expect(stderr).toContain("-y to pin its default branch");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("stale same-project pin fails without rewriting .neon", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_stale_pin");
+			writeFileSync(
 				ctx,
-			]);
-			expect(readFile(ctx)).toMatchSnapshot();
+				JSON.stringify({
+					projectId: "test",
+					branch: "gone",
+				}),
+			);
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"--project-id",
+					"test",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"Branch 'gone' not found in project 'test'",
+			);
+			expect(JSON.parse(readFileSync(ctx, "utf-8"))).toEqual({
+				projectId: "test",
+				branch: "gone",
+			});
+		});
+
+		test("--org-id on a personal project fails rather than attaching the org", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("flag_personal_org");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"--org-id",
+					"org-2",
+					"--project-id",
+					"test",
+					"-y",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"does not report an organization matching --org-id org-2",
+			);
+			expect(existsSync(ctx)).toBe(false);
 		});
 
 		test("link --clear empties the context file", async ({
@@ -524,6 +631,29 @@ describe("link", () => {
 				},
 			);
 		});
+
+		test("branch names on later list pages still resolve", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("verify_paged_branch");
+			await testCliCommand([
+				"link",
+				"--project-id",
+				"proj-paged-branches",
+				"--branch",
+				"page-two",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			]);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-7",
+				projectId: "proj-paged-branches",
+				branch: "page-two",
+			});
+		});
 	});
 
 	describe("unknown --agent", () => {
@@ -583,17 +713,18 @@ describe("link", () => {
 			expect(readFile(ctx)).toMatchSnapshot();
 		});
 
-		test("records --org-id when org listing is forbidden and no projects exist", async ({
+		test("org-scoped --org-id without a project fails instead of writing org-only context", async ({
 			testCliCommand,
-			readFile,
 			tmpContext,
 		}) => {
 			const ctx = tmpContext("orgkey_empty_org");
-			await testCliCommand(
+			const { stderr } = await testCliCommand(
 				["link", "--org-id", "org-from-console", "--context-file", ctx],
-				{ mockDir: "org-key-empty" },
+				{ mockDir: "org-key-empty", code: 1, snapshot: false },
 			);
-			expect(readFile(ctx)).toMatchSnapshot();
+			expect(stderr).toContain("No project selected");
+			expect(stderr).toContain("neon link -y --org-id org-from-console");
+			expect(existsSync(ctx)).toBe(false);
 		});
 	});
 
@@ -987,19 +1118,18 @@ describe("link", () => {
 			expect(existsSync(ctx)).toBe(false);
 		});
 
-		test("link --org-id without -y still records the org only", async ({
+		test("link --org-id without -y fails instead of writing org-only context", async ({
 			testCliCommand,
-			readFile,
 			tmpContext,
 		}) => {
 			const ctx = tmpContext("org_only_no_yes");
-			await testCliCommand(
+			const { stderr } = await testCliCommand(
 				["link", "--org-id", "org-alpha", "--context-file", ctx],
-				{ mockDir: "link-yes-empty", snapshot: false },
+				{ mockDir: "link-yes-empty", code: 1, snapshot: false },
 			);
-			expect(JSON.parse(readFile(ctx))).toEqual({
-				orgId: "org-alpha",
-			});
+			expect(stderr).toContain("No project selected");
+			expect(stderr).toContain("neon link -y --org-id org-alpha");
+			expect(existsSync(ctx)).toBe(false);
 		});
 
 		test("--params org id with -y discovers the project", async ({
@@ -1373,7 +1503,7 @@ describe("link", () => {
 	});
 
 	describe("--no-checks (offline write)", () => {
-		test("writes org+project with no API verification", async ({
+		test("writes org+project+branch with no API verification", async ({
 			testCliCommand,
 			readFile,
 			tmpContext,
@@ -1386,6 +1516,8 @@ describe("link", () => {
 				"org-anything",
 				"--project-id",
 				"ghost-project",
+				"--branch",
+				"main",
 				"--context-file",
 				ctx,
 			]);
@@ -1413,6 +1545,30 @@ describe("link", () => {
 			expect(readFile(ctx)).toMatchSnapshot();
 		});
 
+		test("fails when branch is missing", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("nochecks_no_branch");
+			await testCliCommand(
+				[
+					"link",
+					"--no-checks",
+					"--org-id",
+					"org-anything",
+					"--project-id",
+					"ghost-project",
+					"--context-file",
+					ctx,
+				],
+				{
+					code: 1,
+					stderr: "ERROR: --no-checks requires --org-id, --project-id, and --branch because identifiers cannot be resolved offline.",
+				},
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
 		test("fails when org-id or project-id is missing", async ({
 			testCliCommand,
 			tmpContext,
@@ -1428,7 +1584,7 @@ describe("link", () => {
 				],
 				{
 					code: 1,
-					stderr: "ERROR: --no-checks writes the context with no API calls, so it needs both --org-id and --project-id (--branch is optional).",
+					stderr: "ERROR: --no-checks requires --org-id, --project-id, and --branch because identifiers cannot be resolved offline.",
 				},
 			);
 		});
@@ -1446,10 +1602,9 @@ describe("link", () => {
 		);
 		await testCliCommand([
 			"link",
-			"--org-id",
-			"org-2",
 			"--project-id",
 			"test",
+			"-y",
 			"--no-env-pull",
 			"--context-file",
 			ctx,
@@ -1465,10 +1620,9 @@ describe("link", () => {
 			const ctx = tmpContext("gi_creates");
 			await testCliCommand([
 				"link",
-				"--org-id",
-				"org-2",
 				"--project-id",
 				"test",
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,
@@ -1486,10 +1640,9 @@ describe("link", () => {
 			writeFileSync(giPath, "node_modules\ndist\n");
 			await testCliCommand([
 				"link",
-				"--org-id",
-				"org-2",
 				"--project-id",
 				"test",
+				"-y",
 				"--no-env-pull",
 				"--context-file",
 				ctx,
@@ -1501,8 +1654,6 @@ describe("link", () => {
 			// Re-link in the same dir must not produce a duplicate entry.
 			await testCliCommand([
 				"link",
-				"--org-id",
-				"org-2",
 				"--project-id",
 				"test",
 				"--no-env-pull",

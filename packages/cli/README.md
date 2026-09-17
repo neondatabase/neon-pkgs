@@ -298,15 +298,15 @@ The Neon CLI supports autocompletion, which you can configure in a few easy step
 
 ## Linking a project
 
-`neon link` is a Vercel-style command that binds the current directory to a Neon project. It picks (or creates) an organization and a project and writes a `.neon` file (`{ "orgId", "projectId", "branch" }`) that subsequent commands run in this directory (or any sub-directory) pick up automatically.
+`neon link` is a Vercel-style command that binds the current directory to a Neon project. It picks (or creates) an organization and a project and writes a `.neon` file (`{ "orgId", "projectId", "branch" }`) that subsequent commands run in this directory (or any sub-directory) pick up automatically. Personal-account projects omit `orgId`.
 
-`link` resolves what it can and **verifies every identifier you pass** before writing, so a `.neon` is never left half-written or pointing at something that doesn't exist:
+`link` resolves what it can and **verifies every identifier you pass** before writing, so a successful `.neon` always has a project and a branch (and an organization when the project has one):
 
-- **org** is inferred from the project (so `--project-id` alone is enough); it's omitted only when the project has no organization (personal account).
-- **project** is taken from `--project-id` (or chosen interactively).
-- **branch** is taken from `--branch`, an existing pin for the same project, or the project's branch list: one branch is pinned automatically; several prompt in a TTY, pin the default with `-y`, or stay unpinned for [`neon checkout <branch>`](#checkout). A project with no branches is linked without a pin and says so.
+- **org** is inferred from the project (so `--project-id` alone is enough); it's omitted only when the project has no organization (personal account). `--org-id` that the project does not confirm is an error.
+- **project** is taken from `--project-id` (or chosen interactively). `--org-id` without a project opens the project picker in a TTY. Without a TTY it needs `-y` (select the only project, or print IDs) or `--project-id`.
+- **branch** is taken from `--branch`, a still-valid pin for the same project, or the project's branch list: one branch is pinned automatically; several prompt in a TTY, or `-y` pins the default. Zero branches, a stale pin, or several branches with no TTY and no `-y` fail without writing.
 
-When a branch ends up pinned, `link` also runs [`env pull`](#env-pull) so the branch's Neon env vars (`DATABASE_URL`, …) land in a local `.env`. With no branch pinned there is nothing to pull, so `link` instead nudges you to run `neon checkout`. Pass `--no-env-pull` to skip the pull (for example when injecting env at runtime with `neon-env run` or `neon dev`).
+When a branch is pinned, `link` also runs [`env pull`](#env-pull) so the branch's Neon env vars (`DATABASE_URL`, …) land in a local `.env`. Pass `--no-env-pull` to skip the pull (for example when injecting env at runtime with `neon-env run` or `neon dev`).
 
 > **Migrating from `set-context`?** `set-context` is **deprecated** in favor of `link` (see [below](#set-context-is-deprecated)). It still works exactly as before for now (a raw write), it just prints a deprecation warning. The `.neon` `branchId` field is also superseded by `branch` (which stores the branch **name** when known); old `branchId` files are still read and are upgraded to `branch` the next time `link`/`checkout` writes the context.
 
@@ -339,8 +339,7 @@ $ neon link
 ```
 
 `link --project-id …` skips org and project. One branch is pinned with no prompt. Several branches
-in a TTY show the branch prompt; `-y` pins the default; no TTY leaves the pin empty for
-`neon checkout`:
+in a TTY show the branch prompt; `-y` pins the default; no TTY without `-y` or `--branch` exits 1:
 
 ```bash
 $ neon link --project-id polished-snowflake-12345678
@@ -357,7 +356,7 @@ neon link -y
 neon link -y --org-id org-abc123
 
 # Link to an existing project (org is inferred). Pins the only branch;
-# several branches prompt in a TTY, or stay unpinned without one.
+# several branches prompt in a TTY, or -y pins the default.
 neon link --project-id polished-snowflake-12345678
 
 # Same, pin the project's default branch when several exist
@@ -375,20 +374,16 @@ neon link --org-id org-abc123 --project-name my-app --region-id aws-us-east-2
 # Same payload, one JSON blob
 neon link --params '{"orgId":"org-abc123","projectName":"my-app","regionId":"aws-us-east-2"}'
 
-# Record just the default org (preserves any existing project/branch). Without
-# `-y` this does not look up projects.
-neon link --org-id org-abc123
-
 # Forget the current context
 neon link --clear
 
 # Offline write — no API calls, no verification (see --no-checks below)
-neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-12345678
+neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-12345678 --branch main
 ```
 
 Every supplied identifier is checked before anything is written, with actionable errors — e.g. `Project '…' not found`, `You don't have access to project '…'`, `Organization '…' not found, or your API key doesn't have access to it`, `Project '…' belongs to organization 'A', not 'B'`, or `Branch '…' not found in project '…'. Available branches: …`.
 
-**Agents and scripts:** `neon link -y` selects the only organization and project. If several exist, it prints their IDs (human table, or `--output json` / `--output yaml`) and names the flag to pass. `--org-id` alone, without `-y`, still records the org and does not discover projects. `neon link --help` prints the explicit-flag recipe.
+**Agents and scripts:** `neon link -y` selects the only organization and project. If several exist, it prints their IDs (human table, or `--output json` / `--output yaml`) and names the flag to pass. `--org-id` alone, without `-y` and without a TTY, is not a completed link — pass `--project-id` or `-y`. `neon link --help` prints the explicit-flag recipe.
 
 ```bash
 neon link -y
@@ -407,7 +402,7 @@ Organization-scoped API keys cannot list user organizations (`orgs list`) or cal
 - If no projects exist yet, interactive `link` errors pointing at `--org-id`.
 - When the regions endpoint is not allowed, interactive create falls back to a built-in static region list. Non-interactive create already requires `--region-id`.
 
-**Offline writes (`--no-checks`)** — write the `.neon` with no API calls at all: no org inference, no existence/access verification, no env pull. Because nothing can be resolved offline, it requires both `--org-id` and `--project-id` (`--branch` optional, stored verbatim). Handy for scripted/CI setups or re-creating a `.neon` from values you already trust:
+**Offline writes (`--no-checks`)** — write the `.neon` with no API calls at all: no org inference, no existence/access verification, no env pull. Because nothing can be resolved offline, it requires `--org-id`, `--project-id`, and `--branch` (stored verbatim). Handy for scripted/CI setups or re-creating a `.neon` from values you already trust:
 
 ```bash
 neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-12345678 --branch main
@@ -421,13 +416,13 @@ How today's `set-context` uses map onto `link`:
 
 | `set-context` (deprecated)              | Recommended `link` equivalent                                                 |
 | --------------------------------------- | ----------------------------------------------------------------------------- |
-| `neon set-context --project-id <id>` | `neon link --project-id <id>` (infers org + verifies; pins the only branch) |
-| `neon set-context --org-id <id>`     | `neon link --org-id <id>`                                                  |
-| `neon set-context --branch-id <id>`  | `neon link --branch <name\|id>`                                            |
+| `neon set-context --project-id <id>` | `neon link --project-id <id>` (infers org + verifies; pins the only branch, or `-y` for the default) |
+| `neon set-context --org-id <id>`     | Not a completed link. Pass `--project-id` / `-y`, or an `--org-id` flag on the org-scoped command |
+| `neon set-context --branch-id <id>`  | `neon link --branch <name\|id>` or [`neon checkout <branch>`](#checkout)   |
 | `neon set-context` (clear)           | `neon link --clear`                                                        |
-| a raw local write (no network)          | `neon link --no-checks --org-id <id> --project-id <id>`                    |
+| a raw local write (no network)          | `neon link --no-checks --org-id <id> --project-id <id> --branch <name>`    |
 
-The key difference: `link` resolves and **verifies** before writing (so you never get a half-written or stale `.neon`), whereas `set-context` writes whatever you give it verbatim. The closest like-for-like replacement for the old raw write is `link --no-checks`.
+The key difference: `link` resolves and **verifies** before writing a complete context, whereas `set-context` writes whatever you give it verbatim. The closest like-for-like replacement for the old raw write is `link --no-checks` with org, project, and branch.
 
 ### open
 
@@ -444,7 +439,7 @@ A branch pinned in `.neon` does not change the destination. `.neon` stores the b
 
 ### checkout
 
-`checkout [id|name]` pins a branch in the local context so subsequent commands target it — it's the focused companion to `link` for the common "switch the branch I'm working on" case (`link` resolves org + project; `checkout` pins the branch). It resolves the branch (by name or id) against the project, then **heals** the `.neon` file: it always (re)writes `projectId`, `branch`, and `orgId` (when the project has one), so a `.neon` that was missing fields or drifted ends up complete and consistent. The branch is stored as its **name** when known (matching `link`). When `orgId` isn't already known (from `--org-id` or the existing `.neon`), it's looked up from the project itself.
+`checkout [id|name]` switches the pinned branch in a linked folder. It resolves the branch (by name or id) against the project, then **heals** the `.neon` file: it always (re)writes `projectId`, `branch`, and `orgId` (when the project has one), so a `.neon` that was missing fields or drifted ends up complete and consistent. The branch is stored as its **name** when known (matching `link`). When `orgId` isn't already known (from `--org-id` or the existing `.neon`), it's looked up from the project itself.
 
 The branch argument is **optional**: run `neon checkout` with no branch in an interactive terminal to fetch the project's branches and pick one from a list. In a non-interactive context (CI or no TTY), a branch must be passed explicitly.
 

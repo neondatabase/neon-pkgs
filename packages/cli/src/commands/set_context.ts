@@ -10,8 +10,8 @@ import { getCliName } from "../utils/cli_name.js";
  * pass (no org inference, no verification, no env pull) — so existing scripts
  * keep working unchanged. The only addition is a deprecation warning (to stderr,
  * so it never pollutes stdout). New work should use `link`, which resolves and
- * verifies inputs; `neonctl link --no-checks` is the closest write-without-checks
- * equivalent of the old `set-context`.
+ * verifies inputs. `link --no-checks --org-id … --project-id … --branch …` is the
+ * closest offline write when you already hold those identifiers.
  */
 type SetContextProps = {
 	projectId?: string;
@@ -40,8 +40,8 @@ export const builder = (argv: yargs.Argv) =>
 export const handler = (props: CommonProps & SetContextProps) => {
 	log.warning(
 		`\`${getCliName()} set-context\` is deprecated and will be removed in a future release. ` +
-			`Use \`${getCliName()} link\` instead — it verifies inputs and infers the org for you ` +
-			`(or \`${getCliName()} link --no-checks\` for the same write-without-checks behavior).`,
+			`Use \`${getCliName()} link\` instead — it verifies inputs and writes a complete context ` +
+			`(or \`${getCliName()} link --no-checks --org-id … --project-id … --branch …\` for an offline write).`,
 	);
 	const context: Context = {
 		projectId: props.projectId,
