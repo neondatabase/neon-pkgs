@@ -1079,6 +1079,30 @@ describe("link", () => {
 			expect(existsSync(ctx)).toBe(false);
 		});
 
+		test("several orgs quote a project name that contains spaces", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_create_orgs_spaces");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-name",
+					"Billing API",
+					"--region-id",
+					"aws-eu-central-1",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-orgs", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id <org-id> --project-name 'Billing API' --region-id aws-eu-central-1",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
 		test("--project-name without --region-id names the missing flag", async ({
 			testCliCommand,
 			tmpContext,
@@ -1125,6 +1149,33 @@ describe("link", () => {
 			);
 			expect(stderr).toContain(
 				"neon link -y --org-id org-alpha --project-name billing-api --region-id aws-us-east-2",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("name-only recovery quotes a project name that contains spaces", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_name_spaces");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-alpha",
+					"--project-name",
+					"Billing API",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name 'Billing API' --region-id aws-us-east-2",
+			);
+			expect(stderr).not.toContain(
+				"--project-name Billing API --region-id",
 			);
 			expect(existsSync(ctx)).toBe(false);
 		});

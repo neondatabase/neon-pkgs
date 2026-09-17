@@ -315,15 +315,22 @@ const isOrgOnlyInput = (inputs: Inputs): boolean =>
 	!inputs.projectName &&
 	!inputs.branch;
 
+const quoteFlagValue = (value: string): string => {
+	if (/^[A-Za-z0-9_./:@-]+$/.test(value)) {
+		return value;
+	}
+	return `'${value.replace(/'/g, `'\\''`)}'`;
+};
+
 const incompleteCreationError = (inputs: Inputs): LinkInputError => {
 	const orgFlag = inputs.orgId
-		? `--org-id ${inputs.orgId}`
+		? `--org-id ${quoteFlagValue(inputs.orgId)}`
 		: "--org-id <org-id>";
 	const nameFlag = inputs.projectName
-		? `--project-name ${inputs.projectName}`
+		? `--project-name ${quoteFlagValue(inputs.projectName)}`
 		: "--project-name <name>";
 	const regionFlag = inputs.regionId
-		? `--region-id ${inputs.regionId}`
+		? `--region-id ${quoteFlagValue(inputs.regionId)}`
 		: "--region-id aws-us-east-2";
 	const example = `${getCliName()} link -y ${orgFlag} ${nameFlag} ${regionFlag}`;
 	if (inputs.projectName) {
@@ -1068,20 +1075,20 @@ const CANDIDATE_FIELDS = ["id", "name"] as const;
 const extraYesFlags = (inputs: Inputs): string => {
 	const flags: string[] = [];
 	if (inputs.projectName) {
-		flags.push(`--project-name ${inputs.projectName}`);
+		flags.push(`--project-name ${quoteFlagValue(inputs.projectName)}`);
 	}
 	if (inputs.regionId) {
-		flags.push(`--region-id ${inputs.regionId}`);
+		flags.push(`--region-id ${quoteFlagValue(inputs.regionId)}`);
 	}
 	if (inputs.branch) {
-		flags.push(`--branch ${inputs.branch}`);
+		flags.push(`--branch ${quoteFlagValue(inputs.branch)}`);
 	}
 	return flags.length > 0 ? ` ${flags.join(" ")}` : "";
 };
 
 const yesProjectIdCommand = (inputs: Inputs): string =>
 	`${getCliName()} link -y --project-id <project-id>${
-		inputs.branch ? ` --branch ${inputs.branch}` : ""
+		inputs.branch ? ` --branch ${quoteFlagValue(inputs.branch)}` : ""
 	}`;
 
 const printNamedCandidates = (
@@ -1158,7 +1165,7 @@ const resolveYesInputs = async (
 			[
 				`No projects are available in organization '${orgId}'.`,
 				"To create and link a project, pass --project-name and --region-id:",
-				`  ${getCliName()} link -y --org-id ${orgId} --project-name <name> --region-id aws-us-east-2`,
+				`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)} --project-name <name> --region-id aws-us-east-2`,
 			].join("\n"),
 		);
 	}
