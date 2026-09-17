@@ -117,6 +117,20 @@ const test = originalTest.extend<{
 	},
 });
 
+const expectSessionRetryFlags = (
+	stderr: string,
+	ctx: string,
+	output?: "json" | "yaml",
+) => {
+	expect(stderr).toContain(`--context-file ${ctx}`);
+	expect(stderr).toContain("--no-env-pull");
+	if (output) {
+		expect(stderr).toContain(`--output ${output}`);
+	} else {
+		expect(stderr).not.toContain("--output table");
+	}
+};
+
 const expectNonInteractiveHelp = (text: string) => {
 	const uniqueCommands = [
 		"neon orgs list --output json",
@@ -260,6 +274,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --project-id proj-no-default --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "json");
 			expect(existsSync(ctx)).toBe(false);
 		});
 
@@ -293,6 +308,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --org-id org-7 --project-id proj-no-default --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "json");
 			expect(stderr).not.toContain("neon checkout");
 			expect(existsSync(ctx)).toBe(false);
 		});
@@ -301,6 +317,7 @@ describe("link", () => {
 			testCliCommand,
 			tmpContext,
 		}) => {
+			const ctx = tmpContext("flag_no_default_yaml");
 			const { stdout, stderr } = await testCliCommand(
 				[
 					"link",
@@ -309,7 +326,7 @@ describe("link", () => {
 					"proj-no-default",
 					"--no-env-pull",
 					"--context-file",
-					tmpContext("flag_no_default_yaml"),
+					ctx,
 				],
 				{
 					output: "yaml",
@@ -324,12 +341,14 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --project-id proj-no-default --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "yaml");
 		});
 
 		test("link -y --project-id with no default prints a branch table", async ({
 			testCliCommand,
 			tmpContext,
 		}) => {
+			const ctx = tmpContext("flag_no_default_table");
 			const { stdout, stderr } = await testCliCommand(
 				[
 					"link",
@@ -338,7 +357,7 @@ describe("link", () => {
 					"proj-no-default",
 					"--no-env-pull",
 					"--context-file",
-					tmpContext("flag_no_default_table"),
+					ctx,
 				],
 				{
 					output: "table",
@@ -354,6 +373,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --project-id proj-no-default --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx);
 		});
 
 		test("link -y --project-id --branch pins a listed non-default branch", async ({
@@ -796,6 +816,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --project-id test --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "json");
 			expect(stderr).not.toContain("neon checkout");
 			expect(existsSync(ctx)).toBe(false);
 		});
@@ -835,6 +856,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --project-id test --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "json");
 			expect(stderr).not.toContain("neon checkout");
 			expect(existsSync(ctx)).toBe(false);
 		});
@@ -843,6 +865,7 @@ describe("link", () => {
 			testCliCommand,
 			tmpContext,
 		}) => {
+			const ctx = tmpContext("verify_no_branch_yaml");
 			const { stdout, stderr } = await testCliCommand(
 				[
 					"link",
@@ -853,7 +876,7 @@ describe("link", () => {
 					"missing",
 					"--no-env-pull",
 					"--context-file",
-					tmpContext("verify_no_branch_yaml"),
+					ctx,
 				],
 				{
 					output: "yaml",
@@ -868,6 +891,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --project-id test --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "yaml");
 			expect(stderr).not.toContain("neon checkout");
 		});
 
@@ -903,6 +927,7 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"neon link -y --org-id org-7 --project-id proj-in-org --branch <name-or-id>",
 			);
+			expectSessionRetryFlags(stderr, ctx, "json");
 			expect(stderr).not.toContain("neon checkout");
 			expect(existsSync(ctx)).toBe(false);
 		});

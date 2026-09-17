@@ -50,6 +50,7 @@ export type LinkProps = CommonProps & {
 	envPull: boolean;
 	config?: boolean;
 	cwd?: string;
+	profile?: string;
 };
 
 type Inputs = {
@@ -211,7 +212,7 @@ export const runLink = async (props: LinkProps) => {
 	const existing = readContextFile(props.contextFile);
 
 	if (props.yes && hasIncompleteCreationInputs(inputs)) {
-		throw incompleteCreationError(inputs);
+		throw incompleteCreationError(props, inputs);
 	}
 
 	if (canResolveNonInteractively(inputs, existing)) {
@@ -227,7 +228,7 @@ export const runLink = async (props: LinkProps) => {
 
 	if (!canPromptInteractively()) {
 		if (missingProjectForOrg(inputs)) {
-			throw orgNeedsProjectError(inputs);
+			throw orgNeedsProjectError(props, inputs);
 		}
 		throw new LinkInputError(
 			[
@@ -311,20 +312,24 @@ const hasIncompleteCreationInputs = (inputs: Inputs): boolean =>
 const missingProjectForOrg = (inputs: Inputs): boolean =>
 	Boolean(inputs.orgId) && !inputs.projectId && !inputs.projectName;
 
-const orgNeedsProjectError = (inputs: Inputs): LinkInputError => {
+const orgNeedsProjectError = (
+	props: LinkProps,
+	inputs: Inputs,
+): LinkInputError => {
 	const orgId = inputs.orgId ?? "<org-id>";
 	const branchFlag = inputs.branch
 		? ` --branch ${quoteFlagValue(inputs.branch)}`
 		: "";
+	const session = sessionRetryFlags(props);
 	return new LinkInputError(
 		[
 			"No project selected. Pass --project-id, or use -y to select the only project:",
-			`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)}${branchFlag}`,
+			`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)}${branchFlag}${session}`,
 			`  ${getCliName()} link --project-id <project-id>${
 				inputs.branch
 					? ` --branch ${quoteFlagValue(inputs.branch)}`
 					: " --branch <name-or-id>"
-			}`,
+			}${session}`,
 		].join("\n"),
 	);
 };
@@ -336,7 +341,27 @@ const quoteFlagValue = (value: string): string => {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
-const incompleteCreationError = (inputs: Inputs): LinkInputError => {
+const sessionRetryFlags = (props: LinkProps): string => {
+	const flags: string[] = [];
+	if (props.contextFile) {
+		flags.push(`--context-file ${quoteFlagValue(props.contextFile)}`);
+	}
+	if (props.output !== "table") {
+		flags.push(`--output ${props.output}`);
+	}
+	if (!props.envPull) {
+		flags.push("--no-env-pull");
+	}
+	if (props.profile) {
+		flags.push(`--profile ${quoteFlagValue(props.profile)}`);
+	}
+	return flags.length > 0 ? ` ${flags.join(" ")}` : "";
+};
+
+const incompleteCreationError = (
+	props: LinkProps,
+	inputs: Inputs,
+): LinkInputError => {
 	const orgFlag = inputs.orgId
 		? `--org-id ${quoteFlagValue(inputs.orgId)}`
 		: "--org-id <org-id>";
@@ -346,7 +371,7 @@ const incompleteCreationError = (inputs: Inputs): LinkInputError => {
 	const regionFlag = inputs.regionId
 		? `--region-id ${quoteFlagValue(inputs.regionId)}`
 		: "--region-id aws-us-east-2";
-	const example = `${getCliName()} link -y ${orgFlag} ${nameFlag} ${regionFlag}`;
+	const example = `${getCliName()} link -y ${orgFlag} ${nameFlag} ${regionFlag}${sessionRetryFlags(props)}`;
 	if (inputs.projectName) {
 		return new LinkInputError(
 			`--project-name requires --region-id. Example:\n  ${example}`,
@@ -499,7 +524,7 @@ const failWithBranchCandidates = (
 		? ` --org-id ${quoteFlagValue(props.orgId)}`
 		: "";
 	throw new LinkInputError(
-		`${reason}\n  ${getCliName()} link -y${orgFlag} --project-id ${quoteFlagValue(projectId)} --branch <name-or-id>`,
+		`${reason}\n  ${getCliName()} link -y${orgFlag} --project-id ${quoteFlagValue(projectId)} --branch <name-or-id>${sessionRetryFlags(props)}`,
 	);
 };
 
@@ -769,7 +794,7 @@ const runNonInteractive = async (
 		return;
 	}
 
-	throw orgNeedsProjectError(inputs);
+	throw orgNeedsProjectError(props, inputs);
 };
 
 // ----------------------------------------------------------------------------
@@ -1131,7 +1156,7 @@ type NamedCandidate = {
 
 const CANDIDATE_FIELDS = ["id", "name"] as const;
 
-const extraYesFlags = (inputs: Inputs): string => {
+const extraYesFlags = (props: LinkProps, inputs: Inputs): string => {
 	const flags: string[] = [];
 	if (inputs.projectName) {
 		flags.push(`--project-name ${quoteFlagValue(inputs.projectName)}`);
@@ -1142,13 +1167,14 @@ const extraYesFlags = (inputs: Inputs): string => {
 	if (inputs.branch) {
 		flags.push(`--branch ${quoteFlagValue(inputs.branch)}`);
 	}
-	return flags.length > 0 ? ` ${flags.join(" ")}` : "";
+	const named = flags.length > 0 ? ` ${flags.join(" ")}` : "";
+	return `${named}${sessionRetryFlags(props)}`;
 };
 
-const yesProjectIdCommand = (inputs: Inputs): string =>
+const yesProjectIdCommand = (props: LinkProps, inputs: Inputs): string =>
 	`${getCliName()} link -y --project-id <project-id>${
 		inputs.branch ? ` --branch ${quoteFlagValue(inputs.branch)}` : ""
-	}`;
+	}${sessionRetryFlags(props)}`;
 
 const printNamedCandidates = (
 	props: LinkProps,
@@ -1189,7 +1215,7 @@ const resolveYesOrgId = async (
 		throw new LinkInputError(
 			[
 				"No organizations were returned for this account. Pass --project-id for a project you can access:",
-				`  ${yesProjectIdCommand(inputs)}`,
+				`  ${yesProjectIdCommand(props, inputs)}`,
 			].join("\n"),
 		);
 	}
@@ -1205,7 +1231,7 @@ const resolveYesOrgId = async (
 	throw new LinkInputError(
 		[
 			"Multiple organizations are available. Pass --org-id with an ID from the list:",
-			`  ${getCliName()} link -y --org-id <org-id>${extraYesFlags(inputs)}`,
+			`  ${getCliName()} link -y --org-id <org-id>${extraYesFlags(props, inputs)}`,
 		].join("\n"),
 	);
 };
@@ -1224,7 +1250,7 @@ const resolveYesInputs = async (
 			[
 				`No projects are available in organization '${orgId}'.`,
 				"To create and link a project, pass --project-name and --region-id:",
-				`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)} --project-name <name> --region-id aws-us-east-2`,
+				`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)} --project-name <name> --region-id aws-us-east-2${sessionRetryFlags(props)}`,
 			].join("\n"),
 		);
 	}
@@ -1240,7 +1266,7 @@ const resolveYesInputs = async (
 	throw new LinkInputError(
 		[
 			`Multiple projects are available in organization '${orgId}'. Pass --project-id with an ID from the list:`,
-			`  ${yesProjectIdCommand(inputs)}`,
+			`  ${yesProjectIdCommand(props, inputs)}`,
 		].join("\n"),
 	);
 };
