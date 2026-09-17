@@ -1,0 +1,10 @@
+{
+  "project": {
+    "id": "project-api",
+    "name": "API",
+    "org_id": "org-alpha",
+    "region_id": "aws-us-east-2",
+    "created_at": "2019-01-01T00:00:00.000Z",
+    "updated_at": "2019-01-01T00:00:00.000Z"
+  }
+}

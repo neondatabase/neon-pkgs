@@ -119,13 +119,14 @@ const test = originalTest.extend<{
 
 const expectNonInteractiveHelp = (text: string) => {
 	const commands = [
+		"neon link -y",
 		"neon orgs list --output json",
 		"neon projects list --org-id <org-id> --output json",
 		"neon link --project-id <project-id> [--branch <name> | -y]",
 		"neon link --org-id <org-id> --project-name <name> --region-id aws-us-east-2",
 	];
 	for (const command of commands) {
-		expect(text.split(command)).toHaveLength(2);
+		expect(text).toContain(command);
 	}
 	expect(text).toContain("Organization-scoped API keys cannot list orgs");
 };
@@ -556,6 +557,7 @@ describe("link", () => {
 			const text = `${stdout}\n${stderr}`;
 			expect(text).not.toContain("--agent");
 			expect(text.replace(/\s+/g, "")).toContain("--no-config");
+			expect(text).toContain("Select the only organization and project");
 			expectNonInteractiveHelp(text);
 		});
 	});
@@ -624,6 +626,490 @@ describe("link", () => {
 			expect(stderr).toContain("no interactive terminal");
 			expect(stderr).not.toContain("link --agent");
 			expectNonInteractiveHelp(stderr);
+		});
+
+		test("link -y in CI prints organizations instead of missing-input help", async ({
+			runLinkInCi,
+			tmpContext,
+		}) => {
+			const result = await runLinkInCi([
+				"link",
+				"-y",
+				"--context-file",
+				tmpContext("ci_yes"),
+			]);
+			expect(result.code).toBe(1);
+			expect(result.stderr).not.toContain("no interactive terminal");
+			expect(result.stderr).toContain(
+				"Multiple organizations are available. Pass --org-id",
+			);
+			expect(result.stdout).toContain("Organization 1");
+			expect(result.stdout).toContain("Organization 2");
+		});
+	});
+
+	describe("-y auto-resolution", () => {
+		test("one organization and one project links them", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_one");
+			const { stdout } = await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{ mockDir: "link-yes-one", snapshot: false },
+			);
+			expect(stdout).toContain("orgId:     org-alpha");
+			expect(stdout).toContain("projectId: project-api");
+			expect(stdout).toContain("branch:    main");
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-alpha",
+				projectId: "project-api",
+				branch: "main",
+			});
+		});
+
+		test("several organizations print ids and recover with --org-id", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_orgs");
+			const listed = await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{
+					mockDir: "link-yes-orgs",
+					output: "json",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(JSON.parse(listed.stdout)).toEqual([
+				{ id: "org-alpha", name: "Alpha" },
+				{ id: "org-beta", name: "Beta" },
+			]);
+			expect(listed.stderr).toContain(
+				"Multiple organizations are available. Pass --org-id",
+			);
+			expect(listed.stderr).toContain("neon link -y --org-id <org-id>");
+			expect(existsSync(ctx)).toBe(false);
+
+			const linked = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-alpha",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-orgs", snapshot: false },
+			);
+			expect(linked.stderr).not.toContain("Multiple organizations");
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-alpha",
+				projectId: "project-api",
+				branch: "main",
+			});
+		});
+
+		test("several projects print ids and name --project-id", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_projects");
+			const { stdout, stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-beta",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					mockDir: "link-yes-orgs",
+					output: "json",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(JSON.parse(stdout)).toEqual([
+				{ id: "project-web", name: "Web" },
+				{ id: "project-worker", name: "Worker" },
+			]);
+			expect(stderr).toContain(
+				"Multiple projects are available in organization 'org-beta'",
+			);
+			expect(stderr).toContain("neon link -y --project-id <project-id>");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("yaml ambiguity output is the candidate array", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const { stdout, stderr } = await testCliCommand(
+				[
+					"link",
+					"--yes",
+					"--no-env-pull",
+					"--context-file",
+					tmpContext("yes_yaml"),
+				],
+				{
+					mockDir: "link-yes-orgs",
+					output: "yaml",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(stdout).toContain("id: org-alpha");
+			expect(stdout).toContain("name: Alpha");
+			expect(stdout).toContain("id: org-beta");
+			expect(stderr).toContain("Pass --org-id");
+		});
+
+		test("table ambiguity output lists ids and names", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const { stdout, stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--no-env-pull",
+					"--context-file",
+					tmpContext("yes_table"),
+				],
+				{
+					mockDir: "link-yes-orgs",
+					output: "table",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(stdout).toContain("Organizations");
+			expect(stdout).toContain("org-alpha");
+			expect(stdout).toContain("Alpha");
+			expect(stdout).toContain("org-beta");
+			expect(stderr).toContain("Pass --org-id");
+		});
+
+		test("one organization with no projects prints the create recipe", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_empty");
+			const { stdout, stderr } = await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{ mockDir: "link-yes-empty", code: 1, snapshot: false },
+			);
+			expect(stdout.trim()).toBe("");
+			expect(stderr).toContain(
+				"No projects are available in organization 'org-alpha'",
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name <name> --region-id aws-us-east-2",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("no organizations names --project-id", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_none");
+			const { stdout, stderr } = await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{ mockDir: "link-yes-none", code: 1, snapshot: false },
+			);
+			expect(stdout.trim()).toBe("");
+			expect(stderr).toContain(
+				"No organizations were returned for this account",
+			);
+			expect(stderr).toContain("neon link -y --project-id <project-id>");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("org-scoped key with one project auto-links it", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_orgkey");
+			await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{ mockDir: "org-key", snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-detected-99887766",
+				projectId: "detected-project-12345",
+				branch: "main",
+			});
+		});
+
+		test("org-scoped key with no projects asks for --org-id", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_orgkey_empty");
+			const { stderr } = await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{ mockDir: "org-key-empty", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("organization-scoped");
+			expect(stderr).toContain("--org-id");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("org-scoped empty org with -y --org-id prints the create recipe", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_orgkey_empty_org");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-from-console",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "org-key-empty", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"No projects are available in organization 'org-from-console'",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("link --org-id without -y still records the org only", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("org_only_no_yes");
+			await testCliCommand(
+				["link", "--org-id", "org-alpha", "--context-file", ctx],
+				{ mockDir: "link-yes-empty", snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-alpha",
+			});
+		});
+
+		test("--params org id with -y discovers the project", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_params_org");
+			await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--params",
+					JSON.stringify({ orgId: "org-alpha" }),
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-orgs", snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-alpha",
+				projectId: "project-api",
+				branch: "main",
+			});
+		});
+
+		test("name and region with one org creates the project", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_create");
+			const { stdout } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-name",
+					"test_project",
+					"--region-id",
+					"aws-us-east-2",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", snapshot: false },
+			);
+			expect(stdout).toContain("Created project new-project-123456");
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-alpha",
+				projectId: "new-project-123456",
+				branch: "main",
+			});
+		});
+
+		test("name and region with several orgs keep those flags in the error", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_create_orgs");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-name",
+					"test_project",
+					"--region-id",
+					"aws-us-east-2",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-orgs", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id <org-id> --project-name test_project --region-id aws-us-east-2",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("--project-name without --region-id names the missing flag", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_name_only");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-alpha",
+					"--project-name",
+					"test_project",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("--project-name requires --region-id");
+			expect(stderr).toContain("--region-id aws-us-east-2");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("--org-id and --region-id without --project-name do not write org-only context", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_region_only");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-alpha",
+					"--region-id",
+					"aws-us-east-2",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("--region-id requires --project-name");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("--params region without name is the same incomplete-creation error", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_params_region");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--params",
+					JSON.stringify({
+						orgId: "org-alpha",
+						regionId: "aws-us-east-2",
+					}),
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain("--region-id requires --project-name");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("existing context is left unchanged when -y cannot choose", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_preserve");
+			const original = {
+				orgId: "org-old",
+				projectId: "project-old",
+				branch: "dev",
+			};
+			writeFileSync(ctx, JSON.stringify(original));
+			const giPath = join(ctx, "..", ".gitignore");
+			const configPath = join(ctx, "..", "neon.ts");
+			writeFileSync(giPath, "node_modules\n");
+			writeFileSync(configPath, "export default {};\n");
+			await testCliCommand(
+				["link", "-y", "--no-env-pull", "--context-file", ctx],
+				{
+					mockDir: "link-yes-orgs",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(JSON.parse(readFileSync(ctx, "utf-8"))).toEqual(original);
+			expect(readFileSync(giPath, "utf-8")).toBe("node_modules\n");
+			expect(readFileSync(configPath, "utf-8")).toBe(
+				"export default {};\n",
+			);
+		});
+
+		test("paged project lists include every candidate", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const { stdout } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--no-env-pull",
+					"--context-file",
+					tmpContext("yes_paged"),
+				],
+				{
+					mockDir: "link-yes-paged",
+					output: "json",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			const projects = JSON.parse(stdout) as Array<{
+				id: string;
+				name: string;
+			}>;
+			expect(projects).toHaveLength(102);
+			expect(projects[0]).toEqual({
+				id: "project-001",
+				name: "Project 1",
+			});
+			expect(projects[101]).toEqual({
+				id: "project-102",
+				name: "Project 102",
+			});
 		});
 	});
 

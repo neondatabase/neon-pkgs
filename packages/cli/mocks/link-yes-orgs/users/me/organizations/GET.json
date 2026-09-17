@@ -1,0 +1,12 @@
+{
+  "organizations": [
+    {
+      "id": "org-alpha",
+      "name": "Alpha"
+    },
+    {
+      "id": "org-beta",
+      "name": "Beta"
+    }
+  ]
+}

@@ -26,6 +26,7 @@ import {
 } from "../utils/branch_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpEpilogue } from "../utils/help_text.js";
+import { writer } from "../writer.js";
 import { hasNeonConfigFile, initCmd } from "./config.js";
 import { autoPullEnvAfterPin } from "./env.js";
 import { REGIONS } from "./projects.js";
@@ -64,6 +65,7 @@ const canPromptInteractively = (): boolean =>
 const nonInteractiveLinkCommands = (): string[] => {
 	const cli = getCliName();
 	return [
+		`${cli} link -y`,
 		`${cli} orgs list --output json`,
 		`${cli} projects list --org-id <org-id> --output json`,
 		`${cli} link --project-id <project-id> [--branch <name> | -y]`,
@@ -117,7 +119,7 @@ export const builder = (argv: yargs.Argv) =>
 			yes: {
 				alias: "y",
 				describe:
-					'Skip the "already linked" confirmation, and pin the project\'s default branch when linking a project that has more than one.',
+					"Skip prompts. Select the only organization and project, or print IDs and the flag to pass. Pin the default branch when several exist. Does not create a project unless --project-name and --region-id are set.",
 				type: "boolean",
 				default: false,
 			},
@@ -152,6 +154,10 @@ export const builder = (argv: yargs.Argv) =>
 			},
 		})
 		.example([
+			[
+				"$0 link -y",
+				"Select the only organization and project, or print the --org-id / --project-id to pass",
+			],
 			[
 				"$0 link --project-id polished-snowflake-12345678",
 				"Link an existing project (org is inferred). Pins the only branch; several prompt in a TTY",
@@ -203,8 +209,23 @@ export const runLink = async (props: LinkProps) => {
 	validateInputs(inputs);
 	const existing = readContextFile(props.contextFile);
 
-	if (canResolveNonInteractively(inputs, existing)) {
+	if (props.yes && hasIncompleteCreationInputs(inputs)) {
+		throw incompleteCreationError(inputs);
+	}
+
+	// `-y` must resolve a project. Org-only writes stay on `link --org-id`
+	// without `-y`.
+	if (
+		canResolveNonInteractively(inputs, existing) &&
+		!(props.yes && isOrgOnlyInput(inputs))
+	) {
 		await runNonInteractive(props, inputs, existing);
+		return;
+	}
+
+	if (props.yes) {
+		const resolved = await resolveYesInputs(props, inputs);
+		await runNonInteractive(props, resolved, existing);
 		return;
 	}
 
@@ -283,6 +304,30 @@ const validateInputs = (inputs: Inputs): void => {
 			`Conflicting inputs: --branch pins a branch of an existing project, but --project-name creates a new one. Create the project first, then \`${getCliName()} checkout <branch>\`.`,
 		);
 	}
+};
+
+const hasIncompleteCreationInputs = (inputs: Inputs): boolean =>
+	Boolean(inputs.projectName) !== Boolean(inputs.regionId);
+
+const isOrgOnlyInput = (inputs: Inputs): boolean =>
+	Boolean(inputs.orgId) &&
+	!inputs.projectId &&
+	!inputs.projectName &&
+	!inputs.branch;
+
+const incompleteCreationError = (inputs: Inputs): LinkInputError => {
+	const orgFlag = inputs.orgId
+		? `--org-id ${inputs.orgId}`
+		: "--org-id <org-id>";
+	const example = `${getCliName()} link -y ${orgFlag} --project-name <name> --region-id aws-us-east-2`;
+	if (inputs.projectName) {
+		return new LinkInputError(
+			`--project-name requires --region-id. Example:\n  ${example}`,
+		);
+	}
+	return new LinkInputError(
+		`--region-id requires --project-name. Example:\n  ${example}`,
+	);
 };
 
 /**
@@ -1005,6 +1050,122 @@ const listAllProjects = async (
 		}
 	}
 	return result;
+};
+
+type NamedCandidate = {
+	id: string;
+	name: string;
+};
+
+const CANDIDATE_FIELDS = ["id", "name"] as const;
+
+const extraYesFlags = (inputs: Inputs): string => {
+	const flags: string[] = [];
+	if (inputs.projectName) {
+		flags.push(`--project-name ${inputs.projectName}`);
+	}
+	if (inputs.regionId) {
+		flags.push(`--region-id ${inputs.regionId}`);
+	}
+	if (inputs.branch) {
+		flags.push(`--branch ${inputs.branch}`);
+	}
+	return flags.length > 0 ? ` ${flags.join(" ")}` : "";
+};
+
+const printNamedCandidates = (
+	props: LinkProps,
+	title: string,
+	items: NamedCandidate[],
+): void => {
+	writer(props).end(items, {
+		fields: CANDIDATE_FIELDS,
+		title,
+	});
+};
+
+const orgScopedKeyNeedsOrgId = (): LinkInputError =>
+	new LinkInputError(
+		"This API key is organization-scoped, so the CLI cannot list your organizations, " +
+			"and no existing project was found in this org to auto-detect the ID. " +
+			"Re-run with `--org-id <your_org_id>` (find it in the Neon Console under Settings).",
+	);
+
+const resolveYesOrgId = async (
+	props: LinkProps,
+	inputs: Inputs,
+): Promise<string> => {
+	const orgResolution = await resolveOrg(props, inputs.orgId);
+	if (orgResolution.kind === "resolved") {
+		if (orgResolution.autoDetected) {
+			log.info(
+				`Detected organization ${orgResolution.orgId} from your existing projects (organization-scoped API key).`,
+			);
+		}
+		return orgResolution.orgId;
+	}
+	if (orgResolution.orgKeyLimited) {
+		throw orgScopedKeyNeedsOrgId();
+	}
+	const orgs = orgResolution.orgs;
+	if (orgs.length === 0) {
+		throw new LinkInputError(
+			[
+				"No organizations were returned for this account. Pass --project-id for a project you can access:",
+				`  ${getCliName()} link -y --project-id <project-id>`,
+			].join("\n"),
+		);
+	}
+	if (orgs.length === 1) {
+		const [only] = orgs;
+		return only.id;
+	}
+	printNamedCandidates(
+		props,
+		"Organizations",
+		orgs.map((org) => ({ id: org.id, name: org.name })),
+	);
+	throw new LinkInputError(
+		[
+			"Multiple organizations are available. Pass --org-id with an ID from the list:",
+			`  ${getCliName()} link -y --org-id <org-id>${extraYesFlags(inputs)}`,
+		].join("\n"),
+	);
+};
+
+const resolveYesInputs = async (
+	props: LinkProps,
+	inputs: Inputs,
+): Promise<Inputs> => {
+	const orgId = await resolveYesOrgId(props, inputs);
+	if (inputs.projectName && inputs.regionId) {
+		return { ...inputs, orgId };
+	}
+	const projects = await listAllProjects(props, orgId);
+	if (projects.length === 0) {
+		throw new LinkInputError(
+			[
+				`No projects are available in organization '${orgId}'.`,
+				"To create and link a project, pass --project-name and --region-id:",
+				`  ${getCliName()} link -y --org-id ${orgId} --project-name <name> --region-id aws-us-east-2`,
+			].join("\n"),
+		);
+	}
+	if (projects.length === 1) {
+		const [only] = projects;
+		return { ...inputs, orgId, projectId: only.id };
+	}
+	printNamedCandidates(
+		props,
+		"Projects",
+		projects.map((project) => ({ id: project.id, name: project.name })),
+	);
+	throw new LinkInputError(
+		[
+			`Multiple projects are available in organization '${orgId}'. Pass --project-id with an ID from the list:`,
+			`  ${getCliName()} link -y --project-id <project-id>`,
+		].join("\n"),
+	);
 };
 
 const fetchRegions = async (props: CommonProps): Promise<RegionResponse[]> => {

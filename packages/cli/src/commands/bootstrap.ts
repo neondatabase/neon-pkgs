@@ -161,7 +161,7 @@ export const builder = (argv: yargs.Argv) =>
 			default: {
 				alias: "y",
 				describe:
-					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link with defaults. Project selection may still be required",
+					"Quick start: scaffold the default template (or --template), then install, git, agent tooling (project folders, else the host CLI agent; if none, pass --agent or omit --default in a terminal), and link with defaults. If several organizations or projects exist, link prints IDs and exits",
 				type: "boolean",
 				default: false,
 			},
@@ -208,7 +208,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			"$0 bootstrap my-app --default",
-			"Skip the pickers; project selection may still be required",
+			"Skip the pickers; if several orgs or projects exist, link prints IDs and exits",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -536,7 +536,7 @@ const runDefaultSteps = async (
 	named: readonly AgentType[],
 ): Promise<NestedBootstrapResult> => {
 	log.info(
-		"Quick start (--default): skipping the template, install, git, and agent pickers. Project selection may still be required.",
+		"Quick start (--default): skipping the template, install, git, and agent pickers. If several organizations or projects exist, link prints IDs and exits.",
 	);
 	const wantGit = props.git && !isGitRepo(targetDir);
 	const agentSetup: InitAgentSetup =

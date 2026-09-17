@@ -137,7 +137,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Empty dir: scaffold the default template. --skip-template: plugin, or skills and MCP, for project folders, else the host CLI agent. Exits if none. Then link with defaults and create the bare neon.ts policy. Project selection may still be required",
+				"Empty dir: scaffold the default template. --skip-template: plugin, or skills and MCP, for project folders, else the host CLI agent. Exits if none. Then link with defaults and create the bare neon.ts policy. If several organizations or projects exist, link prints IDs and exits",
 		})
 		.option("skip-template", {
 			type: "boolean",
@@ -226,7 +226,7 @@ export const builder = (yargs: yargs.Argv) =>
 				"Empty directory: pick a starter template, or skip scaffolding and only set up agents, a Neon project, and neon.ts. That skip is not on `neon bootstrap`.",
 				"Interactive agent setup: plugin (recommended), skills and MCP separately, or skip agent setup. Never both plugin and skills+MCP.",
 				"neon.ts is optional when you skip the template or set up an existing app. Saying no skips the services picker and does not write the file. Scaffolding a template keeps that template's neon.ts.",
-				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. Project selection may still be required.",
+				"-y installs the plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent. Otherwise skills and MCP. If none are found, it exits: pass --agent <name>, run from a supported agent, or omit -y in a terminal to pick. Then link unless already linked. If several organizations or projects exist, link prints IDs and exits.",
 				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with -y.",
 				helpCsv("Plugin agents", initPluginAgents()),
 				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),

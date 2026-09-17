@@ -347,9 +347,15 @@ $ neon link --project-id polished-snowflake-12345678
 ? Which branch would you like to link? › [default] main (br-main-branch-87654321)
 ```
 
-**Non-interactive (flags or `--params` JSON)** — for scripts and CI:
+**Non-interactive (`-y`, flags, or `--params` JSON)** — for scripts, CI, and agents:
 
 ```bash
+# One organization and one project: link them. Several: print IDs and exit 1.
+neon link -y
+
+# After choosing an organization from that list, discover its project the same way
+neon link -y --org-id org-abc123
+
 # Link to an existing project (org is inferred). Pins the only branch;
 # several branches prompt in a TTY, or stay unpinned without one.
 neon link --project-id polished-snowflake-12345678
@@ -369,7 +375,8 @@ neon link --org-id org-abc123 --project-name my-app --region-id aws-us-east-2
 # Same payload, one JSON blob
 neon link --params '{"orgId":"org-abc123","projectName":"my-app","regionId":"aws-us-east-2"}'
 
-# Record just the default org (preserves any existing project/branch)
+# Record just the default org (preserves any existing project/branch). Without
+# `-y` this does not look up projects.
 neon link --org-id org-abc123
 
 # Forget the current context
@@ -381,9 +388,12 @@ neon link --no-checks --org-id org-abc123 --project-id polished-snowflake-123456
 
 Every supplied identifier is checked before anything is written, with actionable errors — e.g. `Project '…' not found`, `You don't have access to project '…'`, `Organization '…' not found, or your API key doesn't have access to it`, `Project '…' belongs to organization 'A', not 'B'`, or `Branch '…' not found in project '…'. Available branches: …`.
 
-**Agents and scripts (no TTY):** List, then link. `neon link --help` prints the same recipe.
+**Agents and scripts:** `neon link -y` selects the only organization and project. If several exist, it prints their IDs (human table, or `--output json` / `--output yaml`) and names the flag to pass. `--org-id` alone, without `-y`, still records the org and does not discover projects. `neon link --help` prints the explicit-flag recipe.
 
 ```bash
+neon link -y
+neon link -y --org-id <org-id>
+neon link -y --project-id <project-id>
 neon orgs list --output json
 neon projects list --org-id <org-id> --output json
 neon link --project-id <project-id> [--branch <name> | -y]
@@ -749,7 +759,7 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 `neon bootstrap` copies a Neon starter template into a new (or current) directory — conceptually like `degit`, but it only pulls from a small set of templates we maintain in the public [`neondatabase/examples`](https://github.com/neondatabase/examples) repo. The template copy needs no Neon login: it downloads files from GitHub.
 
-After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Project selection may still be required. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
+After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Linking uses `neon link -y`: the only organization and project are selected, or their IDs are printed and the command exits. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
@@ -802,7 +812,7 @@ Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `
 
 `--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
 
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, uses default choices in the built-in link flow, passes `--default` to nested bootstrap, and forwards `--services none` to `config init`. `--agent` is forwarded to agent setup. `mcp -y` is the global install. Default linking skips the "already linked" confirmation; it can still require project selection.
+`-y` forwards `-y` to `plugins` or `skills`/`mcp`, uses `link -y` (auto-select or print IDs and exit), passes `--default` to nested bootstrap, and forwards `--services none` to `config init`. `--agent` is forwarded to agent setup. `mcp -y` is the global install. Default linking skips the "already linked" confirmation.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
