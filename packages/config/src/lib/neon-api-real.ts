@@ -1824,10 +1824,10 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 };
 
 const PLATFORM_BETA_REGIONS =
-	"AWS US East (Ohio) (`aws-us-east-2`) and AWS Europe (Frankfurt) (`aws-eu-central-1`)";
+	"AWS US East (Ohio) (`aws-us-east-2`), AWS US East (N. Virginia) (`aws-us-east-1`), AWS Europe (Frankfurt) (`aws-eu-central-1`), and AWS Asia Pacific (Singapore) (`aws-ap-southeast-1`)";
 
 const PLATFORM_BETA_REGION_GUIDANCE =
-	"Neon features (Functions and Object Storage) are currently in beta and only available in " +
+	"Neon features (Functions, Object Storage, and the AI Gateway) are currently in beta and only available in " +
 	`${PLATFORM_BETA_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
 
 const PLATFORM_BETA_REGION_GUIDANCE_SHORT =

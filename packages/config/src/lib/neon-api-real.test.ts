@@ -212,7 +212,7 @@ describe("previewUnavailableError", () => {
 			details: {
 				status: 503,
 				neonMessage:
-					'platform service not available for this region; cell_id:"aws-us-east-1-cell-9"',
+					'platform service not available for this region; cell_id:"aws-us-west-2-cell-9"',
 				requestId: "req-503-region",
 			},
 		});
@@ -234,7 +234,9 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/currently in beta/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).toMatch(/aws-us-east-1/);
 		expect(wrapped.message).toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).toMatch(/aws-ap-southeast-1/);
 		expect(wrapped.message).toMatch(/one of those regions/);
 		expect(wrapped.message).not.toMatch(/private preview/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
@@ -266,7 +268,9 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/currently in beta/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).toMatch(/aws-us-east-1/);
 		expect(wrapped.message).toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).toMatch(/aws-ap-southeast-1/);
 		expect(wrapped.message).toMatch(/one of those regions/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
 		expect(wrapped.details.status).toBe(503);
@@ -286,7 +290,9 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/incident/);
 		expect(wrapped.message).toMatch(/neonstatus\.com/);
 		expect(wrapped.message).not.toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/aws-us-east-1/);
 		expect(wrapped.message).not.toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).not.toMatch(/aws-ap-southeast-1/);
 	});
 
 	test("404: points at beta regions", () => {
@@ -303,9 +309,12 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).toMatch(/currently in beta/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
+		expect(wrapped.message).toMatch(/aws-us-east-1/);
 		expect(wrapped.message).toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).toMatch(/aws-ap-southeast-1/);
 		expect(wrapped.message).toMatch(/one of those regions/);
 		expect(wrapped.message).toMatch(/your neon\.ts/);
+		expect(wrapped.message).toMatch(/AI Gateway/);
 		expect(wrapped.message).not.toMatch(/preview. block/);
 		expect(wrapped.message).not.toMatch(/private preview/);
 		expect(wrapped.message).not.toMatch(/neonstatus\.com/);
@@ -344,7 +353,9 @@ describe("customDomainsUnavailableError", () => {
 		expect(wrapped.message).toMatch(/enabled per project/);
 		expect(wrapped.message).toMatch(/Remove `customDomains`/);
 		expect(wrapped.message).not.toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/aws-us-east-1/);
 		expect(wrapped.message).not.toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).not.toMatch(/aws-ap-southeast-1/);
 		expect(wrapped.message).not.toMatch(/neon link/);
 		expect(wrapped.message).not.toMatch(/one of those regions/);
 	});
@@ -360,6 +371,9 @@ describe("customDomainsUnavailableError", () => {
 		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
 		expect(wrapped.message).toMatch(/Remove `customDomains`/);
 		expect(wrapped.message).not.toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/aws-us-east-1/);
+		expect(wrapped.message).not.toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).not.toMatch(/aws-ap-southeast-1/);
 		expect(wrapped.message).not.toMatch(/neon link/);
 	});
 
@@ -375,6 +389,9 @@ describe("customDomainsUnavailableError", () => {
 		expect(wrapped.message).toMatch(/incident/);
 		expect(wrapped.message).toMatch(/neonstatus\.com/);
 		expect(wrapped.message).not.toMatch(/aws-us-east-2/);
+		expect(wrapped.message).not.toMatch(/aws-us-east-1/);
+		expect(wrapped.message).not.toMatch(/aws-eu-central-1/);
+		expect(wrapped.message).not.toMatch(/aws-ap-southeast-1/);
 		expect(wrapped.message).not.toMatch(/Remove `customDomains`/);
 	});
 
