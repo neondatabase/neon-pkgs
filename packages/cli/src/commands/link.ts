@@ -1073,6 +1073,11 @@ const extraYesFlags = (inputs: Inputs): string => {
 	return flags.length > 0 ? ` ${flags.join(" ")}` : "";
 };
 
+const yesProjectIdCommand = (inputs: Inputs): string =>
+	`${getCliName()} link -y --project-id <project-id>${
+		inputs.branch ? ` --branch ${inputs.branch}` : ""
+	}`;
+
 const printNamedCandidates = (
 	props: LinkProps,
 	title: string,
@@ -1112,7 +1117,7 @@ const resolveYesOrgId = async (
 		throw new LinkInputError(
 			[
 				"No organizations were returned for this account. Pass --project-id for a project you can access:",
-				`  ${getCliName()} link -y --project-id <project-id>`,
+				`  ${yesProjectIdCommand(inputs)}`,
 			].join("\n"),
 		);
 	}
@@ -1163,7 +1168,7 @@ const resolveYesInputs = async (
 	throw new LinkInputError(
 		[
 			`Multiple projects are available in organization '${orgId}'. Pass --project-id with an ID from the list:`,
-			`  ${getCliName()} link -y --project-id <project-id>`,
+			`  ${yesProjectIdCommand(inputs)}`,
 		].join("\n"),
 	);
 };

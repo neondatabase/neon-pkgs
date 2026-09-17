@@ -747,6 +747,61 @@ describe("link", () => {
 			expect(existsSync(ctx)).toBe(false);
 		});
 
+		test("several projects keep --branch in the recovery command", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_projects_branch");
+			const listed = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-beta",
+					"--branch",
+					"dev",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					mockDir: "link-yes-orgs",
+					output: "json",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(JSON.parse(listed.stdout)).toEqual([
+				{ id: "project-web", name: "Web" },
+				{ id: "project-worker", name: "Worker" },
+			]);
+			expect(listed.stderr).toContain(
+				"neon link -y --project-id <project-id> --branch dev",
+			);
+			expect(existsSync(ctx)).toBe(false);
+
+			await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-id",
+					"project-web",
+					"--branch",
+					"dev",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-orgs", snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-beta",
+				projectId: "project-web",
+				branch: "dev",
+			});
+		});
+
 		test("yaml ambiguity output is the candidate array", async ({
 			testCliCommand,
 			tmpContext,
@@ -832,6 +887,50 @@ describe("link", () => {
 			);
 			expect(stderr).toContain("neon link -y --project-id <project-id>");
 			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("no organizations keep --branch in the recovery command", async ({
+			testCliCommand,
+			readFile,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_none_branch");
+			const listed = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--branch",
+					"dev",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-none", code: 1, snapshot: false },
+			);
+			expect(listed.stderr).toContain(
+				"neon link -y --project-id <project-id> --branch dev",
+			);
+			expect(existsSync(ctx)).toBe(false);
+
+			await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-id",
+					"project-api",
+					"--branch",
+					"dev",
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-none", snapshot: false },
+			);
+			expect(JSON.parse(readFile(ctx))).toEqual({
+				orgId: "org-alpha",
+				projectId: "project-api",
+				branch: "dev",
+			});
 		});
 
 		test("org-scoped key with one project auto-links it", async ({
