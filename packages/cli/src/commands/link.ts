@@ -25,6 +25,7 @@ import {
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
 import { getCliName } from "../utils/cli_name.js";
+import { listAllProjectBranches } from "../utils/enrichers.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 import { hasNeonConfigFile, initCmd } from "./config.js";
@@ -480,23 +481,7 @@ const formatAvailableBranches = (branches: Branch[]): string =>
 const listAllBranches = async (
 	props: CommonProps,
 	projectId: string,
-): Promise<Branch[]> => {
-	const result: Branch[] = [];
-	let cursor: string | undefined;
-	while (true) {
-		const { data } = await props.apiClient.listProjectBranches({
-			projectId,
-			limit: PROJECTS_LIST_LIMIT,
-			cursor,
-		});
-		result.push(...data.branches);
-		cursor = data.pagination?.next;
-		if (!cursor || data.branches.length === 0) {
-			break;
-		}
-	}
-	return result;
-};
+): Promise<Branch[]> => listAllProjectBranches(props.apiClient, projectId);
 
 /**
  * Resolve a branch reference (name *or* id) to the matching branch, while

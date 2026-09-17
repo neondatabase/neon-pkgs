@@ -90,4 +90,52 @@ describe("resolveBranchRef", () => {
 			/Branch nope not found.*Available branches: main, feature/s,
 		);
 	});
+
+	it("resolves a branch name that is only on a later list page", async () => {
+		const pagingClient = {
+			listProjectBranches: ({ cursor }: { cursor?: string }) => {
+				if (cursor === "page-2") {
+					return Promise.resolve({
+						data: {
+							branches: [
+								{
+									id: "br-page-two-000003",
+									name: "page-two",
+									default: false,
+								},
+							],
+						},
+					});
+				}
+				return Promise.resolve({
+					data: {
+						branches: [
+							{
+								id: "br-page-one-000001",
+								name: "page-one",
+								default: true,
+							},
+						],
+						pagination: { next: "page-2" },
+					},
+				});
+			},
+		} as never;
+		const pagingProps = {
+			apiClient: pagingClient,
+			apiKey: "",
+			apiHost: "",
+			output: "table",
+			contextFile: "",
+			projectId: "test",
+			branch: "page-two",
+		} as BranchScopeProps;
+		expect(await resolveBranchRef(pagingProps)).toEqual({
+			branchId: "br-page-two-000003",
+			branchName: "page-two",
+			usedDefault: false,
+			isDefault: false,
+			isProtected: false,
+		});
+	});
 });

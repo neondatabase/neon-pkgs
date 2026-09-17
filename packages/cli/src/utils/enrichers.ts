@@ -4,6 +4,33 @@ import { isConfigInit, isCurrentBranchProbe } from "../context.js";
 import type { BranchScopeProps, CommonProps, OrgScopeProps } from "../types.js";
 import { looksLikeBranchId } from "./formats.js";
 
+const BRANCHES_LIST_LIMIT = 100;
+
+/**
+ * Branch list pages cap at 100. A name stored in `.neon` can live on a later
+ * page, so resolution has to walk `pagination.next` before treating it as missing.
+ */
+export const listAllProjectBranches = async (
+	apiClient: CommonProps["apiClient"],
+	projectId: string,
+): Promise<Branch[]> => {
+	const result: Branch[] = [];
+	let cursor: string | undefined;
+	while (true) {
+		const { data } = await apiClient.listProjectBranches({
+			projectId,
+			limit: BRANCHES_LIST_LIMIT,
+			cursor,
+		});
+		result.push(...data.branches);
+		cursor = data.pagination?.next;
+		if (!cursor || data.branches.length === 0) {
+			break;
+		}
+	}
+	return result;
+};
+
 export const branchIdResolve = async ({
 	branch,
 	apiClient,
@@ -18,13 +45,11 @@ export const branchIdResolve = async ({
 		return branch;
 	}
 
-	const { data } = await apiClient.listProjectBranches({
-		projectId,
-	});
-	const branchData = data.branches.find((b: Branch) => b.name === branch);
+	const branches = await listAllProjectBranches(apiClient, projectId);
+	const branchData = branches.find((b: Branch) => b.name === branch);
 	if (!branchData) {
 		throw new Error(
-			`Branch ${branch} not found.\nAvailable branches: ${data.branches
+			`Branch ${branch} not found.\nAvailable branches: ${branches
 				.map((b: Branch) => b.name)
 				.join(", ")}`,
 		);
@@ -46,10 +71,11 @@ const getBranchIdFromProps = async (props: BranchScopeProps) => {
 		});
 	}
 
-	const { data } = await props.apiClient.listProjectBranches({
-		projectId: props.projectId,
-	});
-	const defaultBranch = data.branches.find((b: Branch) => b.default);
+	const branches = await listAllProjectBranches(
+		props.apiClient,
+		props.projectId,
+	);
+	const defaultBranch = branches.find((b: Branch) => b.default);
 
 	if (defaultBranch) {
 		return defaultBranch.id;
@@ -106,10 +132,10 @@ export const resolveBranchRef = async (
 ): Promise<ResolvedBranchRef> => {
 	const branch = typeof props.branch === "string" ? props.branch : props.id;
 
-	const { data } = await props.apiClient.listProjectBranches({
-		projectId: props.projectId,
-	});
-	const branches = data.branches;
+	const branches = await listAllProjectBranches(
+		props.apiClient,
+		props.projectId,
+	);
 
 	const listingFields = (
 		listed: Branch,
