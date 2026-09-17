@@ -8,6 +8,7 @@ export const NEON_PLUGIN_NAME = "neon-postgres";
 export const PLUGIN_SKILLS = [
 	"neon",
 	"neon-ai-gateway",
+	"neon-auth",
 	"neon-functions",
 	"neon-object-storage",
 	"neon-postgres",

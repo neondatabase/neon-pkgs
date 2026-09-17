@@ -23,6 +23,7 @@ describe("pluginsAddArgs", () => {
 		expect(PLUGIN_SKILLS).toEqual([
 			"neon",
 			"neon-ai-gateway",
+			"neon-auth",
 			"neon-functions",
 			"neon-object-storage",
 			"neon-postgres",

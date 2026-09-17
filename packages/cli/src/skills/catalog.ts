@@ -17,6 +17,11 @@ export const NEON_SKILL_CATALOG: readonly SkillEntry[] = [
 		defaultSelected: true,
 	},
 	{
+		skill: "neon-auth",
+		source: AGENT_SKILLS_SOURCE,
+		defaultSelected: true,
+	},
+	{
 		skill: "neon-functions",
 		source: AGENT_SKILLS_SOURCE,
 		defaultSelected: true,

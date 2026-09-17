@@ -60,6 +60,16 @@ describe("resolveSkillId", () => {
 		);
 		expect(resolveSkillId("neon").source).toBe(AGENT_SKILLS_SOURCE);
 	});
+
+	test("maps neon-auth to agent-skills as a default skill", () => {
+		const auth = resolveSkillId("neon-auth");
+		expect(auth).toEqual({
+			skill: "neon-auth",
+			source: AGENT_SKILLS_SOURCE,
+			defaultSelected: true,
+		});
+		expect(listSkillIds()).toContain("neon-auth");
+	});
 });
 
 describe("yesInstallInvocations", () => {
@@ -78,6 +88,7 @@ describe("yesInstallInvocations", () => {
 				(item) => item.skill,
 			),
 		).toEqual(["neon-postgres-agent-platforms"]);
+		expect(yesInstallInvocations()[0]?.skills).toContain("neon-auth");
 	});
 });
 
@@ -93,6 +104,20 @@ describe("invocationsForSelection", () => {
 			{
 				source: AGENT_SKILLS_SOURCE,
 				skills: ["neon", "neon-postgres"],
+			},
+		]);
+	});
+
+	test("groups neon-auth with a sibling from the same source", () => {
+		expect(
+			invocationsForSelection([
+				entry("neon-auth"),
+				entry("neon-functions"),
+			]),
+		).toEqual([
+			{
+				source: AGENT_SKILLS_SOURCE,
+				skills: ["neon-auth", "neon-functions"],
 			},
 		]);
 	});

@@ -863,6 +863,9 @@ $ neon skills -y -s neon -s neon-ai-gateway
 # Named skills into a named agent.
 $ neon skills -s neon -s neon-ai-gateway --agent cursor
 
+# One skill, no prompts.
+$ neon skills -s neon-auth --agent cursor -y
+
 # User-level skills.
 $ neon skills --global
 
@@ -876,7 +879,7 @@ On a TTY the command asks which agents and which skills, then shows a summary to
 
 `-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-`--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
+`--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
 Supported agents match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
 
@@ -917,7 +920,7 @@ Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and
 
 Supported agents with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; detecting both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
 
-The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `neon-postgres-agent-platforms`.
+The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `neon-postgres-agent-platforms`.
 
 `neon plugins --help` lists the plugin, those contents, and the supported agent names.
 
