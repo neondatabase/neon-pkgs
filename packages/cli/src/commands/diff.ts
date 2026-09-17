@@ -5,7 +5,10 @@ import type yargs from "yargs";
 import { isNeonApiError } from "../api.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
-import { fillSingleProject } from "../utils/enrichers.js";
+import {
+	fillSingleProject,
+	listAllProjectBranches,
+} from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
 import {
 	type DatabaseSchemaDiff,
@@ -95,11 +98,10 @@ export const builder = (argv: yargs.Argv) =>
 		]);
 
 export const handler = async (props: DiffProps) => {
-	const branches = (
-		await props.apiClient.listProjectBranches({
-			projectId: props.projectId,
-		})
-	).data.branches;
+	const branches = await listAllProjectBranches(
+		props.apiClient,
+		props.projectId,
+	);
 
 	const after = resolveAfterBranch(branches, props.branch);
 	const before = resolveBeforeBranch(branches, after, props.compareBranch);

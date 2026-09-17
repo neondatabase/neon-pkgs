@@ -75,6 +75,29 @@ describe("checkout", () => {
 		});
 	});
 
+	test("resolves a branch name that is only on a later list page", async ({
+		testCliCommand,
+		readFile,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("paged_name");
+		await testCliCommand(
+			[
+				"checkout",
+				"page-two",
+				"--project-id",
+				"proj-paged-branches",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			],
+			{ snapshot: false },
+		);
+		const pin = parseContext(readFile(ctx));
+		expect(pin.projectId).toBe("proj-paged-branches");
+		expect(pin.branch).toBe("page-two");
+	});
+
 	test("announces the branch currently pinned before switching to a new one", async ({
 		testCliCommand,
 		removeFile,

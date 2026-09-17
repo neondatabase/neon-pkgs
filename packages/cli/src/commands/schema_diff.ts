@@ -5,7 +5,10 @@ import { sendError } from "../analytics.js";
 import { isNeonApiError, messageFromBody } from "../api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types";
-import { branchIdFromProps } from "../utils/enrichers.js";
+import {
+	branchIdFromProps,
+	listAllProjectBranches,
+} from "../utils/enrichers.js";
 import {
 	type PointInTime,
 	type PointInTimeBranchId,
@@ -187,10 +190,11 @@ export const parseSchemaDiffParams = async (props: SchemaDiffProps) => {
 			props.compareSource = props.baseBranch;
 			props.baseBranch = props.branch;
 		} else if (props.branch) {
-			const { data } = await props.apiClient.listProjectBranches({
-				projectId: props.projectId,
-			});
-			const contextBranch = data.branches.find(
+			const branches = await listAllProjectBranches(
+				props.apiClient,
+				props.projectId,
+			);
+			const contextBranch = branches.find(
 				(b: Branch) => b.id === props.branch || b.name === props.branch,
 			);
 
@@ -205,10 +209,11 @@ export const parseSchemaDiffParams = async (props: SchemaDiffProps) => {
 			);
 			props.compareSource = "^parent";
 		} else {
-			const { data } = await props.apiClient.listProjectBranches({
-				projectId: props.projectId,
-			});
-			const defaultBranch = data.branches.find((b: Branch) => b.default);
+			const branches = await listAllProjectBranches(
+				props.apiClient,
+				props.projectId,
+			);
+			const defaultBranch = branches.find((b: Branch) => b.default);
 
 			if (defaultBranch?.parent_id == undefined) {
 				throw new Error(

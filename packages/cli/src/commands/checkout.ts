@@ -13,7 +13,10 @@ import {
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { fillSingleProject } from "../utils/enrichers.js";
+import {
+	fillSingleProject,
+	listAllProjectBranches,
+} from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
 import {
 	applyPolicyOnCreate,
@@ -259,8 +262,7 @@ const resolveBranchId = async (
 	props: CheckoutProps,
 	projectId: string,
 ): Promise<ResolvedBranch> => {
-	const branches = (await props.apiClient.listProjectBranches({ projectId }))
-		.data.branches;
+	const branches = await listAllProjectBranches(props.apiClient, projectId);
 
 	if (!props.id) {
 		const picked = await pickBranchInteractively(branches, {

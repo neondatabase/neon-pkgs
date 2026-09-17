@@ -1,0 +1,3 @@
+{
+  "sql": "CREATE TABLE items (id integer);\n"
+}

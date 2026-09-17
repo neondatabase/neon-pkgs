@@ -1,0 +1,3 @@
+{
+  "databases": [{ "name": "neondb", "owner_name": "neondb_owner" }]
+}
