@@ -319,7 +319,13 @@ const incompleteCreationError = (inputs: Inputs): LinkInputError => {
 	const orgFlag = inputs.orgId
 		? `--org-id ${inputs.orgId}`
 		: "--org-id <org-id>";
-	const example = `${getCliName()} link -y ${orgFlag} --project-name <name> --region-id aws-us-east-2`;
+	const nameFlag = inputs.projectName
+		? `--project-name ${inputs.projectName}`
+		: "--project-name <name>";
+	const regionFlag = inputs.regionId
+		? `--region-id ${inputs.regionId}`
+		: "--region-id aws-us-east-2";
+	const example = `${getCliName()} link -y ${orgFlag} ${nameFlag} ${regionFlag}`;
 	if (inputs.projectName) {
 		return new LinkInputError(
 			`--project-name requires --region-id. Example:\n  ${example}`,

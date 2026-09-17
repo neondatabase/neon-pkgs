@@ -1098,7 +1098,34 @@ describe("link", () => {
 				{ mockDir: "link-yes-one", code: 1, snapshot: false },
 			);
 			expect(stderr).toContain("--project-name requires --region-id");
-			expect(stderr).toContain("--region-id aws-us-east-2");
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name test_project --region-id aws-us-east-2",
+			);
+			expect(stderr).not.toContain("--project-name <name>");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("name-only recovery keeps a non-example project name", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_name_billing");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-alpha",
+					"--project-name",
+					"billing-api",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name billing-api --region-id aws-us-east-2",
+			);
 			expect(existsSync(ctx)).toBe(false);
 		});
 
@@ -1121,6 +1148,59 @@ describe("link", () => {
 				{ mockDir: "link-yes-one", code: 1, snapshot: false },
 			);
 			expect(stderr).toContain("--region-id requires --project-name");
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name <name> --region-id aws-us-east-2",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("region-only recovery keeps a non-example region", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_region_eu");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--org-id",
+					"org-alpha",
+					"--region-id",
+					"aws-eu-central-1",
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name <name> --region-id aws-eu-central-1",
+			);
+			expect(stderr).not.toContain("--region-id aws-us-east-2");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("--params name without region keeps the supplied name", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_params_name");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--params",
+					JSON.stringify({
+						orgId: "org-alpha",
+						projectName: "billing-api",
+					}),
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name billing-api --region-id aws-us-east-2",
+			);
 			expect(existsSync(ctx)).toBe(false);
 		});
 
@@ -1144,6 +1224,35 @@ describe("link", () => {
 				{ mockDir: "link-yes-one", code: 1, snapshot: false },
 			);
 			expect(stderr).toContain("--region-id requires --project-name");
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name <name> --region-id aws-us-east-2",
+			);
+			expect(existsSync(ctx)).toBe(false);
+		});
+
+		test("--params non-example region keeps that region", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const ctx = tmpContext("yes_params_region_eu");
+			const { stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--params",
+					JSON.stringify({
+						orgId: "org-alpha",
+						regionId: "aws-eu-central-1",
+					}),
+					"--context-file",
+					ctx,
+				],
+				{ mockDir: "link-yes-one", code: 1, snapshot: false },
+			);
+			expect(stderr).toContain(
+				"neon link -y --org-id org-alpha --project-name <name> --region-id aws-eu-central-1",
+			);
+			expect(stderr).not.toContain("--region-id aws-us-east-2");
 			expect(existsSync(ctx)).toBe(false);
 		});
 
