@@ -350,6 +350,69 @@ describe("link", () => {
 			expect(existsSync(ctx)).toBe(false);
 		});
 
+		test("branch recovery keeps --profile with --config-dir through the CLI", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const configDir = join(TEST_TMP, "flag_session_profile");
+			mkdirSync(configDir, { recursive: true });
+			writeFileSync(
+				join(configDir, "credentials.review-ci.json"),
+				JSON.stringify({
+					type: "api_key",
+					api_key: "test-key",
+					user_id: "user-key",
+				}),
+				{ mode: 0o600 },
+			);
+			writeFileSync(
+				join(configDir, "profiles.json"),
+				JSON.stringify({
+					version: 1,
+					profiles: {
+						DEFAULT: { credentials: "credentials.json" },
+						"review-ci": {
+							credentials: "credentials.review-ci.json",
+						},
+					},
+				}),
+			);
+			const ctx = tmpContext("flag_session_profile");
+			const { stdout, stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-id",
+					"proj-no-default",
+					"--profile",
+					"review-ci",
+					"--config-dir",
+					configDir,
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					apiKey: false,
+					output: "json",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(JSON.parse(stdout)).toEqual([
+				{ id: "br-alpha-branch-123456", name: "alpha" },
+				{ id: "br-beta-branch-123456", name: "beta" },
+			]);
+			expect(stderr).toContain(
+				"neon link -y --project-id proj-no-default --branch <name-or-id>",
+			);
+			expect(stderr).toContain(`--config-dir ${configDir}`);
+			expect(stderr).toContain("--profile review-ci");
+			expectSessionRetryFlags(stderr, ctx, "json");
+			expect(stderr).not.toContain("--api-key");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
 		test("link -y --project-id with no default prints yaml branch candidates", async ({
 			testCliCommand,
 			tmpContext,
