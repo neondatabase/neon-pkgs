@@ -617,6 +617,7 @@ describe("link", () => {
 					"org-2",
 					"--branch",
 					"main",
+					"--no-env-pull",
 					"--context-file",
 					ctx,
 				],
@@ -627,8 +628,9 @@ describe("link", () => {
 				"neon link -y --org-id org-2 --branch main",
 			);
 			expect(stderr).toContain(
-				"neon link --project-id <project-id> --branch main",
+				"neon link --org-id org-2 --project-id <project-id> --branch main",
 			);
+			expectSessionRetryFlags(stderr, ctx);
 			expect(existsSync(ctx)).toBe(false);
 		});
 
@@ -1148,6 +1150,9 @@ describe("link", () => {
 			);
 			expect(stderr).toContain("No project selected");
 			expect(stderr).toContain("neon link -y --org-id org-from-console");
+			expect(stderr).toContain(
+				"neon link --org-id org-from-console --project-id <project-id>",
+			);
 			expect(existsSync(ctx)).toBe(false);
 		});
 	});
@@ -1298,7 +1303,9 @@ describe("link", () => {
 			expect(stderr).toContain(
 				"Multiple projects are available in organization 'org-beta'",
 			);
-			expect(stderr).toContain("neon link -y --project-id <project-id>");
+			expect(stderr).toContain(
+				"neon link -y --org-id org-beta --project-id <project-id>",
+			);
 			expect(existsSync(ctx)).toBe(false);
 		});
 
@@ -1332,7 +1339,7 @@ describe("link", () => {
 				{ id: "project-worker", name: "Worker" },
 			]);
 			expect(listed.stderr).toContain(
-				"neon link -y --project-id <project-id> --branch dev",
+				"neon link -y --org-id org-beta --project-id <project-id> --branch dev",
 			);
 			expect(existsSync(ctx)).toBe(false);
 
@@ -1553,6 +1560,9 @@ describe("link", () => {
 			);
 			expect(stderr).toContain("No project selected");
 			expect(stderr).toContain("neon link -y --org-id org-alpha");
+			expect(stderr).toContain(
+				"neon link --org-id org-alpha --project-id <project-id>",
+			);
 			expect(existsSync(ctx)).toBe(false);
 		});
 

@@ -326,7 +326,7 @@ const orgNeedsProjectError = (
 		[
 			"No project selected. Pass --project-id, or use -y to select the only project:",
 			`  ${getCliName()} link -y --org-id ${quoteFlagValue(orgId)}${branchFlag}${session}`,
-			`  ${getCliName()} link --project-id <project-id>${
+			`  ${getCliName()} link --org-id ${quoteFlagValue(orgId)} --project-id <project-id>${
 				inputs.branch
 					? ` --branch ${quoteFlagValue(inputs.branch)}`
 					: " --branch <name-or-id>"
@@ -1175,10 +1175,17 @@ const extraYesFlags = (props: LinkProps, inputs: Inputs): string => {
 	return `${named}${sessionRetryFlags(props)}`;
 };
 
-const yesProjectIdCommand = (props: LinkProps, inputs: Inputs): string =>
-	`${getCliName()} link -y --project-id <project-id>${
-		inputs.branch ? ` --branch ${quoteFlagValue(inputs.branch)}` : ""
-	}${sessionRetryFlags(props)}`;
+const yesProjectIdCommand = (
+	props: LinkProps,
+	inputs: Inputs,
+	orgId = inputs.orgId,
+): string => {
+	const orgFlag = orgId ? ` --org-id ${quoteFlagValue(orgId)}` : "";
+	const branchFlag = inputs.branch
+		? ` --branch ${quoteFlagValue(inputs.branch)}`
+		: "";
+	return `${getCliName()} link -y${orgFlag} --project-id <project-id>${branchFlag}${sessionRetryFlags(props)}`;
+};
 
 const printNamedCandidates = (
 	props: LinkProps,
@@ -1270,7 +1277,7 @@ const resolveYesInputs = async (
 	throw new LinkInputError(
 		[
 			`Multiple projects are available in organization '${orgId}'. Pass --project-id with an ID from the list:`,
-			`  ${yesProjectIdCommand(props, inputs)}`,
+			`  ${yesProjectIdCommand(props, inputs, orgId)}`,
 		].join("\n"),
 	);
 };
