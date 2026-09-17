@@ -1,5 +1,12 @@
 # neonctl
 
+## 4.21.1
+
+### Patch Changes
+
+- Updated dependencies [fe4070e]
+  - neon@4.21.1
+
 ## 4.21.0
 
 ### Patch Changes

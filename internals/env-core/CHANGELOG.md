@@ -1,5 +1,12 @@
 # @neon-internals/env-core
 
+## 0.0.20
+
+### Patch Changes
+
+- Updated dependencies [fe4070e]
+  - @neon/config@1.7.1
+
 ## 0.0.19
 
 ### Patch Changes

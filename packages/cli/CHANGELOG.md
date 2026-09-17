@@ -1,5 +1,14 @@
 # neon
 
+## 4.21.1
+
+### Patch Changes
+
+- fe4070e: Name `aws-us-east-1` and `aws-ap-southeast-1` in neon.ts unavailable-feature errors and `neon logs` help.
+- Updated dependencies [fe4070e]
+  - @neon/config@1.7.1
+  - @neon/config-runtime@1.6.1
+
 ## 4.21.0
 
 ### Minor Changes

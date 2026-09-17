@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.7.1
+
+### Patch Changes
+
+- fe4070e: Name `aws-us-east-1` and `aws-ap-southeast-1` in neon.ts unavailable-feature errors and `neon logs` help.
+
 ## 1.7.0
 
 ### Minor Changes
