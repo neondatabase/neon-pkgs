@@ -676,4 +676,29 @@ describe("branches", () => {
 			},
 		);
 	});
+
+	test("schema-diff resolves a later-page context branch when comparing against page-one", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-schema-diff-"));
+		const ctx = join(dir, ".neon");
+		writeFileSync(
+			ctx,
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-paged-branches",
+				branch: "page-two",
+			}),
+		);
+		try {
+			const { stderr } = await testCliCommand(
+				["branches", "schema-diff", "page-one", "--context-file", ctx],
+				{ snapshot: false },
+			);
+			expect(stderr).not.toContain("Branch page-two not found");
+			expect(stderr).not.toContain("Available branches: page-one");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });
