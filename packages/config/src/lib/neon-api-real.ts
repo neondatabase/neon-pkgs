@@ -1823,16 +1823,16 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 	503: "Service Unavailable",
 };
 
-const PLATFORM_BETA_REGIONS =
+const PLATFORM_FEATURE_REGIONS =
 	"AWS US East (Ohio) (`aws-us-east-2`), AWS US East (N. Virginia) (`aws-us-east-1`), AWS Europe (Frankfurt) (`aws-eu-central-1`), and AWS Asia Pacific (Singapore) (`aws-ap-southeast-1`)";
 
-const PLATFORM_BETA_REGION_GUIDANCE =
-	"Neon features (Functions, Object Storage, and the AI Gateway) are currently in beta and only available in " +
-	`${PLATFORM_BETA_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
+const PLATFORM_FEATURE_REGION_GUIDANCE =
+	"Neon features (Functions, Object Storage, and the AI Gateway) are currently only available in " +
+	`${PLATFORM_FEATURE_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
 
-const PLATFORM_BETA_REGION_GUIDANCE_SHORT =
-	"Neon features are currently in beta and only available in " +
-	`${PLATFORM_BETA_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
+const PLATFORM_FEATURE_REGION_GUIDANCE_SHORT =
+	"Neon features are currently only available in " +
+	`${PLATFORM_FEATURE_REGIONS}; more regions are coming shortly. Run \`neon link\` to link or create a new project in one of those regions.`;
 
 /**
  * True when the Neon API body indicates the feature isn't deployed for this project's
@@ -1859,7 +1859,7 @@ function isRegionUnavailableNeonMessage(
  *   isn't deployed for this project's region.
  * - 503 without a region-unavailable body — the route exists but is refusing right now;
  *   Neon may be having a transient incident. Retry; if it persists check neonstatus.com.
- * - anything else — point at the beta region requirement.
+ * - anything else — point at the region requirement.
  *
  * Only statuses {@link isPreviewFeatureUnavailable} accepts (404/501/503) actually reach
  * this, so there is intentionally no 401/403 branch — those never classify as "unavailable".
@@ -1873,12 +1873,12 @@ function platformFeatureUnavailableHint(
 		status === 404 ||
 		status === 501
 	) {
-		return PLATFORM_BETA_REGION_GUIDANCE;
+		return PLATFORM_FEATURE_REGION_GUIDANCE;
 	}
 	if (status === 503) {
 		return "The endpoint is reachable but refused the request — Neon may be having a transient incident. Retry shortly; if it keeps failing, check https://neonstatus.com and contact Neon support.";
 	}
-	return PLATFORM_BETA_REGION_GUIDANCE_SHORT;
+	return PLATFORM_FEATURE_REGION_GUIDANCE_SHORT;
 }
 
 const CUSTOM_DOMAINS_UNAVAILABLE_HINT =
@@ -1938,10 +1938,10 @@ export function customDomainsUnavailableError(err: unknown): unknown {
  * genuine failure (auth, transient 5xx, …) keeps its specific code and message.
  *
  * The message names the failing feature, summarizes the response in one short
- * `HTTP <status> <reason>` line, includes the raw Neon API message + request id (valuable
- * signal while the feature is in beta), gives status-specific guidance (see
- * {@link platformFeatureUnavailableHint}), and offers removing the feature from the policy as an
- * escape hatch. `status`/`requestId` are also kept on `details` for programmatic consumers.
+ * `HTTP <status> <reason>` line, includes the raw Neon API message + request id,
+ * gives status-specific guidance (see {@link platformFeatureUnavailableHint}),
+ * and offers removing the feature from the policy as an escape hatch.
+ * `status`/`requestId` are also kept on `details` for programmatic consumers.
  */
 export function previewUnavailableError(
 	err: unknown,

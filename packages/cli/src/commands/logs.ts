@@ -12,10 +12,10 @@ import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
-const BETA_NOTE =
-	"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.";
+const REGION_NOTE =
+	"Logs are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.";
 const LOGS_EPILOG = `
-${BETA_NOTE}
+${REGION_NOTE}
 
 For more information, visit https://neon.com/docs/reference/neon-cli`;
 

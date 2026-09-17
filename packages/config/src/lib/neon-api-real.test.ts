@@ -207,7 +207,7 @@ describe("isPreviewFeatureUnavailable", () => {
 });
 
 describe("previewUnavailableError", () => {
-	test("503 with region-unavailable API body: points at beta regions", () => {
+	test("503 with region-unavailable API body: points at supported regions", () => {
 		const original = new PlatformError(ErrorCode.ServerError, "boom", {
 			details: {
 				status: 503,
@@ -231,7 +231,7 @@ describe("previewUnavailableError", () => {
 			/platform service not available for this region/,
 		);
 		expect(wrapped.message).toMatch(/request id req-503-region/);
-		expect(wrapped.message).toMatch(/currently in beta/);
+		expect(wrapped.message).toMatch(/currently only available in/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
 		expect(wrapped.message).toMatch(/aws-us-east-1/);
@@ -244,7 +244,7 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.details.requestId).toBe("req-503-region");
 	});
 
-	test("503 with project-unavailable API body: points at beta regions", () => {
+	test("503 with project-unavailable API body: points at supported regions", () => {
 		const original = new PlatformError(ErrorCode.ServerError, "boom", {
 			details: {
 				status: 503,
@@ -265,7 +265,7 @@ describe("previewUnavailableError", () => {
 			/platform functions not available for this project/,
 		);
 		expect(wrapped.message).toMatch(/request id req-503/);
-		expect(wrapped.message).toMatch(/currently in beta/);
+		expect(wrapped.message).toMatch(/currently only available in/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
 		expect(wrapped.message).toMatch(/aws-us-east-1/);
@@ -295,7 +295,7 @@ describe("previewUnavailableError", () => {
 		expect(wrapped.message).not.toMatch(/aws-ap-southeast-1/);
 	});
 
-	test("404: points at beta regions", () => {
+	test("404: points at supported regions", () => {
 		const original = new PlatformError(ErrorCode.NotFound, "boom", {
 			details: { status: 404, neonMessage: "this route does not exist" },
 		});
@@ -306,7 +306,7 @@ describe("previewUnavailableError", () => {
 		if (!(wrapped instanceof PlatformError)) throw new Error("not wrapped");
 		expect(wrapped.code).toBe(ErrorCode.FeatureUnavailable);
 		expect(wrapped.message).toMatch(/HTTP 404 Not Found/);
-		expect(wrapped.message).toMatch(/currently in beta/);
+		expect(wrapped.message).toMatch(/currently only available in/);
 		expect(wrapped.message).toMatch(/more regions are coming shortly/);
 		expect(wrapped.message).toMatch(/aws-us-east-2/);
 		expect(wrapped.message).toMatch(/aws-us-east-1/);
@@ -330,7 +330,7 @@ describe("previewUnavailableError", () => {
 });
 
 describe("customDomainsUnavailableError", () => {
-	test("404 does not prescribe a Functions beta region", () => {
+	test("404 does not prescribe a Functions region", () => {
 		const original = new PlatformError(ErrorCode.NotFound, "boom", {
 			details: {
 				status: 404,

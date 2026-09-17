@@ -81,26 +81,26 @@ describe("logs", () => {
 		);
 	});
 
-	test("the command group help states the Beta and region constraint", async ({
+	test("the command group help states the region constraint", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(["logs", "--help"], {
 			mockDir: "single_org",
 			snapshot: false,
 			stdout: expect.stringContaining(
-				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.",
+				"Logs are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.",
 			),
 		});
 	});
 
-	test("query help states the Beta and region constraint", async ({
+	test("query help states the region constraint", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(["logs", "query", "--help"], {
 			mockDir: "single_org",
 			snapshot: false,
 			stdout: expect.stringContaining(
-				"Logs require Neon Platform Beta and are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.",
+				"Logs are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.",
 			),
 		});
 	});
