@@ -313,6 +313,43 @@ describe("link", () => {
 			expect(existsSync(ctx)).toBe(false);
 		});
 
+		test("branch recovery keeps --config-dir", async ({
+			testCliCommand,
+			tmpContext,
+		}) => {
+			const configDir = join(TEST_TMP, "flag_session_auth");
+			mkdirSync(configDir, { recursive: true });
+			const ctx = tmpContext("flag_session_config_dir");
+			const { stdout, stderr } = await testCliCommand(
+				[
+					"link",
+					"-y",
+					"--project-id",
+					"proj-no-default",
+					"--config-dir",
+					configDir,
+					"--no-env-pull",
+					"--context-file",
+					ctx,
+				],
+				{
+					output: "json",
+					code: 1,
+					snapshot: false,
+				},
+			);
+			expect(JSON.parse(stdout)).toEqual([
+				{ id: "br-alpha-branch-123456", name: "alpha" },
+				{ id: "br-beta-branch-123456", name: "beta" },
+			]);
+			expect(stderr).toContain(
+				"neon link -y --project-id proj-no-default --branch <name-or-id>",
+			);
+			expect(stderr).toContain(`--config-dir ${configDir}`);
+			expectSessionRetryFlags(stderr, ctx, "json");
+			expect(existsSync(ctx)).toBe(false);
+		});
+
 		test("link -y --project-id with no default prints yaml branch candidates", async ({
 			testCliCommand,
 			tmpContext,

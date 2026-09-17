@@ -8,7 +8,7 @@ import type {
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import { isNeonApiError, messageFromBody } from "../api.js";
-
+import { defaultDir } from "../config.js";
 import {
 	applyContext,
 	type Context,
@@ -51,6 +51,7 @@ export type LinkProps = CommonProps & {
 	config?: boolean;
 	cwd?: string;
 	profile?: string;
+	configDir?: string;
 };
 
 type Inputs = {
@@ -345,6 +346,9 @@ const sessionRetryFlags = (props: LinkProps): string => {
 	const flags: string[] = [];
 	if (props.contextFile) {
 		flags.push(`--context-file ${quoteFlagValue(props.contextFile)}`);
+	}
+	if (props.configDir && props.configDir !== defaultDir) {
+		flags.push(`--config-dir ${quoteFlagValue(props.configDir)}`);
 	}
 	if (props.output !== "table") {
 		flags.push(`--output ${props.output}`);

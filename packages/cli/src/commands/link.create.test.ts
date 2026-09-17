@@ -110,4 +110,51 @@ describe("link interactive branch create", () => {
 		expect(fetched.data.branch.id).toBe("br-actual-created-654321");
 		expect(fetched.data.branch.name).toBe("br-feature-test-123456");
 	});
+
+	test("no-default recovery keeps --config-dir and --profile", async ({
+		runMockServer,
+		tmpContext,
+	}) => {
+		const server = await runMockServer("main");
+		const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const apiClient = getApiClient({
+			apiKey: "test-key",
+			apiHost,
+		});
+		const ctx = tmpContext("session_profile");
+		const configDir = join(ctx, "..", "auth");
+
+		let message = "";
+		try {
+			await runLink({
+				apiClient,
+				apiKey: "test-key",
+				apiHost,
+				output: "json",
+				contextFile: ctx,
+				projectId: "proj-no-default",
+				yes: true,
+				clear: false,
+				checks: true,
+				envPull: false,
+				config: false,
+				cwd: join(ctx, ".."),
+				profile: "review-ci",
+				configDir,
+			});
+		} catch (err) {
+			if (!(err instanceof Error)) {
+				throw err;
+			}
+			message = err.message;
+		}
+		expect(message).toContain(
+			"neon link -y --project-id proj-no-default --branch <name-or-id>",
+		);
+		expect(message).toContain(`--config-dir ${configDir}`);
+		expect(message).toContain("--profile review-ci");
+		expect(message).toContain(`--context-file ${ctx}`);
+		expect(message).toContain("--output json");
+		expect(message).toContain("--no-env-pull");
+	});
 });
