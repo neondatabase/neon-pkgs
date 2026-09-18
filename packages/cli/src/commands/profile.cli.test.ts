@@ -809,6 +809,22 @@ describe("profile create", () => {
 		expect(stderr).not.toContain("api-keys create");
 	});
 
+	test("NEON_CONFIG_DIR is named as --config-dir on --mint recovery", async () => {
+		const store = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			["profile", "create", "bot", "--mint"],
+			{ CI: "true", NEON_CONFIG_DIR: store },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			`neon profile create bot --mint --config-dir ${store}`,
+		);
+		expect(stderr).toContain(
+			`neon profile create bot --api-key "$KEY" --config-dir ${store}`,
+		);
+	});
+
 	test("--mint refuses to wait for a browser without a TTY", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([

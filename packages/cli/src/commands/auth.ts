@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
 	credentialInputs,
 	displacedProfileWarning,
@@ -16,7 +16,7 @@ import {
 	type StoredCredentials,
 } from "@neon-internals/cli-core/credentials";
 import {
-	defaultDir,
+	configDir as defaultConfigDir,
 	isOwnedCredentialPath,
 } from "@neon-internals/cli-core/paths";
 import {
@@ -108,6 +108,25 @@ export const interactiveAuthPrefix = (inCi: boolean): string =>
 		? "Cannot run interactive auth in CI."
 		: "Cannot run interactive auth in unattended mode.";
 
+const homeConfigDir = (): string =>
+	defaultConfigDir({
+		env: {
+			...(process.env.HOME === undefined
+				? {}
+				: { HOME: process.env.HOME }),
+			...(process.env.USERPROFILE === undefined
+				? {}
+				: { USERPROFILE: process.env.USERPROFILE }),
+		},
+	});
+
+export const recoveryConfigDirArgs = (configDir: string): string[] => {
+	if (resolve(configDir) === resolve(homeConfigDir())) {
+		return [];
+	}
+	return ["--config-dir", quoteCliArg(configDir)];
+};
+
 const selectedProfileNeedsNamedAuth = (profile: string): boolean => {
 	const flag = credentialInputs().profileFlag.trim();
 	return profile !== DEFAULT_PROFILE || flag !== "";
@@ -122,9 +141,7 @@ const authRecoveryCommand = (
 	if (selectedProfileNeedsNamedAuth(profile)) {
 		parts.push("--profile", quoteCliArg(profile));
 	}
-	if (configDir !== defaultDir) {
-		parts.push("--config-dir", quoteCliArg(configDir));
-	}
+	parts.push(...recoveryConfigDirArgs(configDir));
 	if (keyring === true) {
 		parts.push("--keyring");
 	}

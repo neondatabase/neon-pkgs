@@ -23,7 +23,6 @@ import {
 } from "@neon-internals/cli-core/credentials";
 import {
 	credentialsPath,
-	defaultDir,
 	isOwnedCredentialPath,
 } from "@neon-internals/cli-core/paths";
 import {
@@ -76,6 +75,7 @@ import {
 	authFlow,
 	interactiveAuthPrefix,
 	quoteCliArg,
+	recoveryConfigDirArgs,
 	usableCredential,
 } from "./auth.js";
 
@@ -509,9 +509,7 @@ const profileCreateRecovery = (
 	} else {
 		parts.push("--api-key", '"$KEY"');
 	}
-	if (props.configDir !== defaultDir) {
-		parts.push("--config-dir", quoteCliArg(props.configDir));
-	}
+	parts.push(...recoveryConfigDirArgs(props.configDir));
 	if (props.keyring === true) {
 		parts.push("--keyring");
 	}
