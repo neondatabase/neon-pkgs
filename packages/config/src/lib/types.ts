@@ -469,7 +469,7 @@ export interface FunctionDef {
 	 */
 	dev?: FunctionDevConfig;
 	/**
-	 * Customer-owned hostnames that should point at this function (beta).
+	 * Customer-owned hostnames that should point at this function.
 	 * v1 only supports functions. Hostnames are unique across functions in the resolved
 	 * policy. Applied after the function is deployed, on the project's default branch.
 	 * Other branches apply a list only when {@link FunctionTuning.customDomains} sets one.
