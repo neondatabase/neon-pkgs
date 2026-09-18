@@ -257,4 +257,35 @@ describe("unattended CLI authentication", () => {
 		expect(stderr).toMatch(/unset CI and run `neon auth --config-dir/);
 		expect(probe.hits()).toBe(0);
 	});
+
+	test("explicit home --config-dir is kept when NEON_CONFIG_DIR points elsewhere", async ({
+		testCliCommand,
+	}) => {
+		const { dir, probe } = await isolated();
+		const homeStore = join(dir, ".config", "neon");
+		const other = join(dir, "automation-store");
+		mkdirSync(homeStore, { recursive: true });
+		mkdirSync(other, { recursive: true });
+		const { stderr } = await testCliCommand(
+			[
+				"projects",
+				"list",
+				"--config-dir",
+				homeStore,
+				"--context-file",
+				join(dir, ".neon"),
+				"--oauth-host",
+				probe.url,
+			],
+			{
+				apiKey: false,
+				code: 1,
+				snapshot: false,
+				env: { CI: "true", HOME: dir, NEON_CONFIG_DIR: other },
+			},
+		);
+		expect(stderr).toContain(`--config-dir ${homeStore}`);
+		expect(stderr).not.toContain(`--config-dir ${other}`);
+		expect(probe.hits()).toBe(0);
+	});
 });

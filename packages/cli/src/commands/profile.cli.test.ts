@@ -825,6 +825,26 @@ describe("profile create", () => {
 		);
 	});
 
+	test("explicit home --config-dir is kept on --mint when NEON_CONFIG_DIR points elsewhere", async () => {
+		const home = makeConfigDir({});
+		const homeStore = join(home, ".config", "neon");
+		mkdirSync(homeStore, { recursive: true });
+		const other = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			["profile", "create", "bot", "--mint", "--config-dir", homeStore],
+			{ CI: "true", HOME: home, NEON_CONFIG_DIR: other },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			`neon profile create bot --mint --config-dir ${homeStore}`,
+		);
+		expect(stderr).toContain(
+			`neon profile create bot --api-key "$KEY" --config-dir ${homeStore}`,
+		);
+		expect(stderr).not.toContain(`--config-dir ${other}`);
+	});
+
 	test("--mint refuses to wait for a browser without a TTY", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([

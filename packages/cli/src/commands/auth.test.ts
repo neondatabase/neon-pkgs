@@ -1469,6 +1469,22 @@ describe("authFlow unattended", () => {
 			/unset CI and run `neon auth --config-dir .*` in an interactive terminal on this machine before retrying/,
 		);
 	});
+
+	test("keeps --config-dir when it equals the home default", async () => {
+		vi.stubEnv("CI", "false");
+		vi.stubEnv("NEON_CONFIG_DIR", join(configDir, "elsewhere"));
+		setTty(false, false);
+		const homeStore = join(
+			process.env.HOME ?? process.env.USERPROFILE ?? configDir,
+			".config",
+			"neon",
+		);
+		await expect(
+			authFlow({ ...base(), configDir: homeStore }),
+		).rejects.toThrow(
+			`run \`neon auth --config-dir ${quoteCliArg(homeStore)}\` in an interactive terminal on this machine before retrying`,
+		);
+	});
 });
 
 describe("refreshToken", () => {
