@@ -1,5 +1,19 @@
 # neon
 
+## 5.0.0
+
+### Major Changes
+
+- 33b1e4d: `neon link` always writes a complete `.neon` (organization when the project has one, project, and branch). Org-only, unpinned, and `--no-checks` writes without `--branch` now fail.
+
+### Patch Changes
+
+- 375351b: Drop "Neon Platform Beta" from `neon logs` help and neon.ts unavailable-feature errors.
+- 9b5e00a: `neon link -y` selects the only organization and project, or prints their IDs and the flag to pass, instead of opening a picker.
+- Updated dependencies [375351b]
+  - @neon/config@1.7.2
+  - @neon/config-runtime@1.6.2
+
 ## 4.22.0
 
 ### Minor Changes

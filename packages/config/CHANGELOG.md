@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.7.2
+
+### Patch Changes
+
+- 375351b: Drop "Neon Platform Beta" from `neon logs` help and neon.ts unavailable-feature errors.
+
 ## 1.7.1
 
 ### Patch Changes
