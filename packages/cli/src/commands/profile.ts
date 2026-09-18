@@ -616,9 +616,8 @@ const create = async (props: CreateProps) => {
 	// No key and no --mint means a browser sign-in, which is exactly `neon auth --profile`.
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
 	if (!suppliedKey) {
-		// The no-flag form is the one an agent reaches for first, and `authFlow` answers it
-		// with a bare "Cannot run interactive auth in CI" — true, and no way forward. Say the
-		// same thing `--mint` says, since the two ways out are the same.
+		// The no-flag form is the one an agent reaches for first. `authFlow` names `neon auth`,
+		// `--api-key`, and `NEON_API_KEY`; this command stores a key, so name that recipe.
 		if (
 			props.forceAuth !== true &&
 			(isCi() || !process.stdin.isTTY || !process.stdout.isTTY)
@@ -825,9 +824,14 @@ const createByMinting = async (props: CreateProps) => {
 
 	// `authFlow` refuses to open a browser in CI; minting calls `auth` directly and so has to
 	// make the same check itself, or this would sit waiting for a login nobody can complete.
-	if (isCi() && props.forceAuth !== true) {
+	if (
+		props.forceAuth !== true &&
+		(isCi() || !process.stdin.isTTY || !process.stdout.isTTY)
+	) {
 		throw new Error(
-			`--mint needs a browser sign-in, which cannot happen in CI. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key -`,
+			`--mint needs a browser sign-in, which cannot happen ${
+				isCi() ? "in CI" : "without an interactive terminal"
+			}. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key -`,
 		);
 	}
 

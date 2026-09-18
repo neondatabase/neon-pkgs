@@ -808,6 +808,25 @@ describe("profile create", () => {
 		expect(stderr).toContain("--api-key -");
 	});
 
+	test("--mint refuses to wait for a browser without a TTY", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"bot",
+			"--config-dir",
+			dir,
+			"--mint",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"cannot happen without an interactive terminal",
+		);
+		expect(stderr).toContain("--api-key -");
+		expect(stderr).not.toContain("Cannot run interactive auth");
+	});
+
 	test("options after a -- terminator are refused, not silently dropped", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([

@@ -46,6 +46,17 @@ import {
 vi.mock("open", () => ({ default: vi.fn((url: string) => fetch(url)) }));
 vi.mock("../pkg.ts", () => ({ default: { version: "0.0.0" } }));
 
+const restoreTtyProperty = (
+	stream: NodeJS.ReadStream | NodeJS.WriteStream,
+	original: PropertyDescriptor | undefined,
+): void => {
+	if (original !== undefined) {
+		Object.defineProperty(stream, "isTTY", original);
+		return;
+	}
+	Reflect.deleteProperty(stream, "isTTY");
+};
+
 // Neither suite names a credential explicitly, so an exported NEON_API_KEY or NEON_PROFILE in
 // the shell running the tests would redirect them: the key would satisfy auth outright, and the
 // profile would send `authFlow` to write `credentials.<name>.json` instead of `credentials.json`.
@@ -792,12 +803,8 @@ describe("ensureAuth", () => {
 			).rejects.toThrow(/unattended mode/);
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
-			if (stdinTty) {
-				Object.defineProperty(process.stdin, "isTTY", stdinTty);
-			}
-			if (stdoutTty) {
-				Object.defineProperty(process.stdout, "isTTY", stdoutTty);
-			}
+			restoreTtyProperty(process.stdin, stdinTty);
+			restoreTtyProperty(process.stdout, stdoutTty);
 		}
 	});
 
@@ -1218,21 +1225,13 @@ describe("authFlow unattended", () => {
 
 	afterAll(() => {
 		rmSync(configDir, { recursive: true, force: true });
-		if (stdinTty) {
-			Object.defineProperty(process.stdin, "isTTY", stdinTty);
-		}
-		if (stdoutTty) {
-			Object.defineProperty(process.stdout, "isTTY", stdoutTty);
-		}
+		restoreTtyProperty(process.stdin, stdinTty);
+		restoreTtyProperty(process.stdout, stdoutTty);
 	});
 
 	afterEach(() => {
-		if (stdinTty) {
-			Object.defineProperty(process.stdin, "isTTY", stdinTty);
-		}
-		if (stdoutTty) {
-			Object.defineProperty(process.stdout, "isTTY", stdoutTty);
-		}
+		restoreTtyProperty(process.stdin, stdinTty);
+		restoreTtyProperty(process.stdout, stdoutTty);
 	});
 
 	const base = () => ({
@@ -1267,7 +1266,7 @@ describe("authFlow unattended", () => {
 		const authSpy = vi.spyOn(authModule, "auth");
 		try {
 			await expect(authFlow({ ...base(), yes: true })).rejects.toThrow(
-				/Cannot run interactive auth in unattended mode\. Pass --api-key <key>, set NEON_API_KEY, or run `neon auth` in an interactive terminal before retrying\./,
+				/Cannot run interactive auth in unattended mode\. Pass --api-key <key>, set NEON_API_KEY, or run `neon auth --config-dir /,
 			);
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
@@ -1335,11 +1334,19 @@ describe("authFlow unattended", () => {
 		);
 	});
 
+	test("named --profile recovery names neon auth --profile", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(false, false);
+		await expect(authFlow({ ...base(), profile: "work" })).rejects.toThrow(
+			/Run `neon auth --profile work --config-dir .*` in an interactive terminal before retrying/,
+		);
+	});
+
 	test("names a terminal and --force-auth for neon auth", async () => {
 		vi.stubEnv("CI", "false");
 		setTty(false, false);
 		await expect(authFlow({ ...base(), _: ["auth"] })).rejects.toThrow(
-			/Re-run `neon auth` in an interactive terminal, or pass --force-auth/,
+			/Re-run `neon auth --config-dir .*` in an interactive terminal, or pass --force-auth/,
 		);
 	});
 

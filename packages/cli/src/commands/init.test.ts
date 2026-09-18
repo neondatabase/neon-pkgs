@@ -22,6 +22,17 @@ vi.mock("../analytics.js", async (importOriginal) => {
 
 const host = "https://console.neon.tech/api/v2";
 
+const restoreTtyProperty = (
+	stream: NodeJS.ReadStream | NodeJS.WriteStream,
+	original: PropertyDescriptor | undefined,
+): void => {
+	if (original !== undefined) {
+		Object.defineProperty(stream, "isTTY", original);
+		return;
+	}
+	Reflect.deleteProperty(stream, "isTTY");
+};
+
 const baseProps = (overrides: Record<string, unknown> = {}) => ({
 	apiClient: {} as never,
 	apiKey: "test-key",
@@ -320,12 +331,8 @@ describe("init handler", () => {
 				"plugins",
 			]);
 		} finally {
-			if (stdinTty) {
-				Object.defineProperty(process.stdin, "isTTY", stdinTty);
-			}
-			if (stdoutTty) {
-				Object.defineProperty(process.stdout, "isTTY", stdoutTty);
-			}
+			restoreTtyProperty(process.stdin, stdinTty);
+			restoreTtyProperty(process.stdout, stdoutTty);
 		}
 	});
 

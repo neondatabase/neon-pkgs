@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -62,7 +62,7 @@ describe("unattended CLI authentication", () => {
 	};
 
 	const remedies =
-		/Pass --api-key <key>, set NEON_API_KEY, or run `neon auth` in an interactive terminal before retrying/;
+		/Pass --api-key <key>, set NEON_API_KEY, or run `neon auth/;
 
 	test("link -y names credentials and does not start OAuth", async ({
 		testCliCommand,
@@ -153,7 +153,7 @@ describe("unattended CLI authentication", () => {
 			/Cannot run interactive auth in unattended mode/,
 		);
 		expect(stderr).toMatch(
-			/Re-run `neon auth` in an interactive terminal, or pass --force-auth/,
+			/Re-run `neon auth --config-dir .*` in an interactive terminal, or pass --force-auth/,
 		);
 		expect(stderr).not.toMatch(/Pass --api-key/);
 		expect(probe.hits()).toBe(0);
@@ -183,4 +183,35 @@ describe("unattended CLI authentication", () => {
 		});
 		expect(probe.hits()).toBeGreaterThan(0);
 	}, 15_000);
+
+	test("named --profile recovery names neon auth --profile and --config-dir", async ({
+		testCliCommand,
+	}) => {
+		const { dir, flags, probe } = await isolated();
+		const configDir = join(dir, "config");
+		mkdirSync(configDir, { recursive: true });
+		writeFileSync(
+			join(configDir, "profiles.json"),
+			JSON.stringify({
+				version: 1,
+				profiles: { work: { credentials: "credentials.work.json" } },
+			}),
+		);
+		const { stderr } = await testCliCommand(
+			["projects", "list", "--profile", "work", ...flags],
+			{
+				apiKey: false,
+				code: 1,
+				snapshot: false,
+				env: { NEON_API_KEY: "napi_ambient" },
+			},
+		);
+		expect(stderr).toMatch(/unattended mode/);
+		expect(stderr).toContain(
+			`Run \`neon auth --profile work --config-dir ${configDir}\` in an interactive terminal before retrying`,
+		);
+		expect(stderr).not.toMatch(/Pass --api-key/);
+		expect(stderr).not.toMatch(/set NEON_API_KEY/);
+		expect(probe.hits()).toBe(0);
+	});
 });

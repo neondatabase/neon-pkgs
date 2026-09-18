@@ -15,7 +15,10 @@ import {
 	OAUTH,
 	type StoredCredentials,
 } from "@neon-internals/cli-core/credentials";
-import { isOwnedCredentialPath } from "@neon-internals/cli-core/paths";
+import {
+	defaultDir,
+	isOwnedCredentialPath,
+} from "@neon-internals/cli-core/paths";
 import {
 	assertProfilesUsable,
 	assertValidProfileName,
@@ -93,17 +96,41 @@ type AuthProps = {
 	default?: boolean;
 };
 
+const shellQuote = (value: string): string => {
+	if (/^[A-Za-z0-9_./:@-]+$/.test(value)) {
+		return value;
+	}
+	return `'${value.replace(/'/g, `'\\''`)}'`;
+};
+
+const authRecoveryCommand = (profile: string, configDir: string): string => {
+	const parts = ["neon auth"];
+	if (profile !== DEFAULT_PROFILE) {
+		parts.push("--profile", shellQuote(profile));
+	}
+	if (configDir !== defaultDir) {
+		parts.push("--config-dir", shellQuote(configDir));
+	}
+	return parts.join(" ");
+};
+
 const interactiveAuthBlockedMessage = (
 	command: string | number | undefined,
 	inCi: boolean,
+	profile: string,
+	configDir: string,
 ): string => {
 	const prefix = inCi
 		? "Cannot run interactive auth in CI."
 		: "Cannot run interactive auth in unattended mode.";
+	const authCmd = authRecoveryCommand(profile, configDir);
 	if (command === "auth" || command === "login") {
-		return `${prefix} Re-run \`neon auth\` in an interactive terminal, or pass --force-auth.`;
+		return `${prefix} Re-run \`${authCmd}\` in an interactive terminal, or pass --force-auth.`;
 	}
-	return `${prefix} Pass --api-key <key>, set NEON_API_KEY, or run \`neon auth\` in an interactive terminal before retrying.`;
+	if (profile !== DEFAULT_PROFILE) {
+		return `${prefix} Run \`${authCmd}\` in an interactive terminal before retrying.`;
+	}
+	return `${prefix} Pass --api-key <key>, set NEON_API_KEY, or run \`${authCmd}\` in an interactive terminal before retrying.`;
 };
 
 export const locationForAuth = (
@@ -188,7 +215,9 @@ export const authFlow = async ({
 		Boolean(process.stdin.isTTY) &&
 		Boolean(process.stdout.isTTY);
 	if (!allowInteractiveAuth && (unattendedFlag || !interactiveTerminal)) {
-		throw new Error(interactiveAuthBlockedMessage(_[0], isCi()));
+		throw new Error(
+			interactiveAuthBlockedMessage(_[0], isCi(), profileName, configDir),
+		);
 	}
 
 	let previousFile: string | undefined;
