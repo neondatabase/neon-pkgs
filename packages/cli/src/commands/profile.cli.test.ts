@@ -579,7 +579,9 @@ describe("profile create", () => {
 		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).toContain('neon profile create ci --api-key "$KEY"');
 		expect(stderr).toContain("--api-key -");
-		expect(stderr).toContain("outside CI on this machine");
+		expect(stderr).toContain(
+			"Unset CI and run `neon profile create ci --config-dir",
+		);
 	});
 
 	test("with no key and no TTY, names a terminal and --api-key", async () => {
@@ -805,7 +807,9 @@ describe("profile create", () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).toContain("--api-key -");
-		expect(stderr).toContain("neon profile create ci --mint --config-dir");
+		expect(stderr).toContain(
+			"Unset CI and run `neon profile create ci --mint --config-dir",
+		);
 		expect(stderr).not.toContain("api-keys create");
 	});
 
@@ -818,7 +822,7 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain(
-			`neon profile create bot --mint --config-dir ${store}`,
+			`Unset CI and run \`neon profile create bot --mint --config-dir ${store}\``,
 		);
 		expect(stderr).toContain(
 			`neon profile create bot --api-key "$KEY" --config-dir ${store}`,
@@ -837,7 +841,7 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain(
-			`neon profile create bot --mint --config-dir ${homeStore}`,
+			`Unset CI and run \`neon profile create bot --mint --config-dir ${homeStore}\``,
 		);
 		expect(stderr).toContain(
 			`neon profile create bot --api-key "$KEY" --config-dir ${homeStore}`,

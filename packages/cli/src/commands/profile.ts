@@ -518,11 +518,13 @@ const profileCreateRecovery = (
 
 const profileBrowserBlockedMessage = (props: CreateProps): string => {
 	const inCi = isCi();
-	const terminal = inCi
-		? "in an interactive terminal outside CI on this machine"
-		: "in an interactive terminal on this machine";
+	const browser = profileCreateRecovery(props, "browser");
+	const key = profileCreateRecovery(props, "key");
 	const keyVerb = props.mint === true ? "store" : "supply";
-	return `${interactiveAuthPrefix(inCi)} Run \`${profileCreateRecovery(props, "browser")}\` ${terminal}, or ${keyVerb} an existing key with \`${profileCreateRecovery(props, "key")}\` (use --api-key - to read it from stdin).`;
+	const run = inCi
+		? `Unset CI and run \`${browser}\` in an interactive terminal on this machine`
+		: `Run \`${browser}\` in an interactive terminal on this machine`;
+	return `${interactiveAuthPrefix(inCi)} ${run}, or ${keyVerb} an existing key with \`${key}\` (use --api-key - to read it from stdin).`;
 };
 
 const browserAuthBlocked = (props: ProfileProps): boolean =>
