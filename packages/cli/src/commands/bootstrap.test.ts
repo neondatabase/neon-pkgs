@@ -213,6 +213,49 @@ const runBootstrap = (
 	});
 };
 
+const runBootstrapWithoutKey = (
+	server: Server,
+	args: string[],
+	configDir: string,
+): Promise<{ code: number; stdout: string; stderr: string }> => {
+	const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+	const argv = [
+		"bootstrap",
+		...args,
+		"--config-dir",
+		configDir,
+		"--no-analytics",
+		"--output",
+		"yaml",
+	];
+	return new Promise((resolve, reject) => {
+		const cp = fork(join(process.cwd(), "./dist/index.js"), argv, {
+			stdio: "pipe",
+			env: {
+				PATH: process.env.PATH,
+				HOME: tmpdir(),
+				CI: "",
+				NEON_API_KEY: "",
+				NEON_PROFILE: "",
+				NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
+				NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
+			},
+		});
+		let stdout = "";
+		let stderr = "";
+		cp.stdout?.on("data", (data: Buffer) => {
+			stdout += data.toString();
+		});
+		cp.stderr?.on("data", (data: Buffer) => {
+			stderr += data.toString();
+		});
+		cp.on("error", reject);
+		cp.on("close", (code) => {
+			resolve({ code: code ?? -1, stdout, stderr });
+		});
+	});
+};
+
 const waitForText = (
 	term: IPty,
 	output: () => string,
@@ -555,6 +598,60 @@ describe("bootstrap", () => {
 		);
 		// git init ran as part of the quick start.
 		expect(existsSync(join(dest, ".git"))).toBe(true);
+	});
+
+	test("--default without credentials refuses nested link OAuth", async () => {
+		const configDir = mkdtempSync(join(tmpdir(), "neon-bootstrap-auth-"));
+		try {
+			const { code, stderr } = await runBootstrapWithoutKey(
+				server,
+				[
+					dest,
+					"--default",
+					"--no-install",
+					"--force",
+					"--no-agent-setup",
+					"--no-git",
+					"--template",
+					"plain",
+				],
+				configDir,
+			);
+			expect(code).toBe(1);
+			expect(stderr).toMatch(
+				/Cannot run interactive auth in unattended mode/,
+			);
+			expect(stderr).toMatch(/Pass --api-key <key>/);
+			expect(existsSync(join(dest, "package.json"))).toBe(true);
+		} finally {
+			rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
+	test("--default --no-link without credentials scaffolds", async () => {
+		const configDir = mkdtempSync(join(tmpdir(), "neon-bootstrap-nolink-"));
+		try {
+			const { code, stderr } = await runBootstrapWithoutKey(
+				server,
+				[
+					dest,
+					"--default",
+					"--no-install",
+					"--force",
+					"--no-agent-setup",
+					"--no-git",
+					"--no-link",
+					"--template",
+					"plain",
+				],
+				configDir,
+			);
+			expect(code, stderr).toBe(0);
+			expect(existsSync(join(dest, "package.json"))).toBe(true);
+			expect(stderr).not.toMatch(/Cannot run interactive auth/);
+		} finally {
+			rmSync(configDir, { recursive: true, force: true });
+		}
 	});
 
 	test("selectedTemplate scaffolds the catalog source for a known id", async () => {

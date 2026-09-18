@@ -88,6 +88,76 @@ type AuthProps = {
 	keyring?: boolean;
 	contextFile?: string | ((cwd?: string) => string);
 	dbUrl?: string;
+	yes?: boolean;
+	y?: boolean;
+	default?: boolean;
+};
+
+export const quoteCliArg = (value: string): string => {
+	if (/^[A-Za-z0-9_./:@-]+$/.test(value)) {
+		return value;
+	}
+	return `'${value.replace(/'/g, `'\\''`)}'`;
+};
+
+export const interactiveAuthPrefix = (inCi: boolean): string =>
+	inCi
+		? "Cannot run interactive auth in CI."
+		: "Cannot run interactive auth in unattended mode.";
+
+export const recoveryConfigDirArgs = (configDir: string): string[] => [
+	"--config-dir",
+	quoteCliArg(configDir),
+];
+
+const selectedProfileNeedsNamedAuth = (profile: string): boolean => {
+	const flag = credentialInputs().profileFlag.trim();
+	return profile !== DEFAULT_PROFILE || flag !== "";
+};
+
+const authRecoveryCommand = (
+	profile: string,
+	configDir: string,
+	keyring?: boolean,
+): string => {
+	const parts = ["neon auth"];
+	if (selectedProfileNeedsNamedAuth(profile)) {
+		parts.push("--profile", quoteCliArg(profile));
+	}
+	parts.push(...recoveryConfigDirArgs(configDir));
+	if (keyring === true) {
+		parts.push("--keyring");
+	}
+	return parts.join(" ");
+};
+
+const interactiveAuthBlockedMessage = (
+	command: string | number | undefined,
+	inCi: boolean,
+	profile: string,
+	configDir: string,
+	keyring?: boolean,
+): string => {
+	const prefix = interactiveAuthPrefix(inCi);
+	const authCmd = authRecoveryCommand(profile, configDir, keyring);
+	const forceAuthNote =
+		"Use --force-auth only if a browser can reach this process's 127.0.0.1 callback.";
+	if (command === "auth" || command === "login") {
+		const rerun = inCi
+			? `Unset CI and re-run \`${authCmd}\` in an interactive terminal on this machine.`
+			: `Re-run \`${authCmd}\` in an interactive terminal on this machine.`;
+		return `${prefix} ${rerun} ${forceAuthNote}`;
+	}
+	if (selectedProfileNeedsNamedAuth(profile)) {
+		const run = inCi
+			? `Unset CI and run \`${authCmd}\` in an interactive terminal on this machine before retrying.`
+			: `Run \`${authCmd}\` in an interactive terminal on this machine before retrying.`;
+		return `${prefix} ${run}`;
+	}
+	const authStep = inCi
+		? `unset CI and run \`${authCmd}\` in an interactive terminal on this machine before retrying`
+		: `run \`${authCmd}\` in an interactive terminal on this machine before retrying`;
+	return `${prefix} Pass --api-key <key>, set NEON_API_KEY, or ${authStep}.`;
 };
 
 export const locationForAuth = (
@@ -129,6 +199,7 @@ export const handler = async (args: AuthProps) => {
 };
 
 export const authFlow = async ({
+	_,
 	configDir,
 	oauthHost,
 	clientId,
@@ -138,6 +209,9 @@ export const authFlow = async ({
 	allowUnsafeTls,
 	profile,
 	keyring,
+	yes,
+	y,
+	default: defaultFlag,
 }: AuthProps) => {
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
 	// auth --profile work` is how you make one, so it must work before there is anything
@@ -160,8 +234,23 @@ export const authFlow = async ({
 	}
 
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
-	if (!allowInteractiveAuth && isCi()) {
-		throw new Error("Cannot run interactive auth in CI");
+	const unattendedFlag = yes === true || y === true || defaultFlag === true;
+	// Agents often allocate a PTY, so CI and missing TTYs are not enough;
+	// `-y` / `--default` is the unattended path on a real terminal too.
+	const interactiveTerminal =
+		!isCi() &&
+		Boolean(process.stdin.isTTY) &&
+		Boolean(process.stdout.isTTY);
+	if (!allowInteractiveAuth && (unattendedFlag || !interactiveTerminal)) {
+		throw new Error(
+			interactiveAuthBlockedMessage(
+				_[0],
+				isCi(),
+				profileName,
+				configDir,
+				keyring,
+			),
+		);
 	}
 
 	let previousFile: string | undefined;

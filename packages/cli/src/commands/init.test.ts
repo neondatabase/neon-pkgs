@@ -22,6 +22,17 @@ vi.mock("../analytics.js", async (importOriginal) => {
 
 const host = "https://console.neon.tech/api/v2";
 
+const restoreTtyProperty = (
+	stream: NodeJS.ReadStream | NodeJS.WriteStream,
+	original: PropertyDescriptor | undefined,
+): void => {
+	if (original !== undefined) {
+		Object.defineProperty(stream, "isTTY", original);
+		return;
+	}
+	Reflect.deleteProperty(stream, "isTTY");
+};
+
 const baseProps = (overrides: Record<string, unknown> = {}) => ({
 	apiClient: {} as never,
 	apiKey: "test-key",
@@ -264,6 +275,65 @@ describe("init handler", () => {
 		expect(run.mock.calls.map((call) => call[0][0])).toEqual(["plugins"]);
 		expect(pickLink).not.toHaveBeenCalled();
 		expect(linkProject).not.toHaveBeenCalled();
+	});
+
+	test("-y nested link refuses OAuth after tooling on a TTY", async () => {
+		vi.stubEnv("CI", "false");
+		const stdinTty = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		const stdoutTty = Object.getOwnPropertyDescriptor(
+			process.stdout,
+			"isTTY",
+		);
+		Object.defineProperty(process.stdin, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-nested-auth-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		mkdirSync(join(cwd, ".cursor"));
+		const configDir = mkdtempSync(join(tmpdir(), "neon-init-auth-cfg-"));
+		const run = vi.fn().mockResolvedValue(true);
+		recordCredentialInputs({
+			apiKeyFlag: "",
+			apiKeyEnv: "",
+			profileEnv: "",
+			profileFlag: "",
+			configDir,
+		});
+		const { handler } = await import("./init.js");
+		try {
+			await expect(
+				handler(
+					baseProps({
+						cwd,
+						run,
+						yes: true,
+						skipTemplate: true,
+						config: false,
+						agent: ["cursor"],
+						apiKey: "",
+						configDir,
+						oauthHost: "http://127.0.0.1:1",
+						clientId: "test-client-id",
+						linkProject: undefined,
+						contextFile: join(cwd, ".neon"),
+					}),
+				),
+			).rejects.toThrow(/unattended mode/);
+			expect(run.mock.calls.map((call) => call[0][0])).toEqual([
+				"plugins",
+			]);
+		} finally {
+			restoreTtyProperty(process.stdin, stdinTty);
+			restoreTtyProperty(process.stdout, stdoutTty);
+		}
 	});
 
 	test("link failure stops config setup", async () => {
