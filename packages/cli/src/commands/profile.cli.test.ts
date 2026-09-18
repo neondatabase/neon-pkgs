@@ -583,6 +583,25 @@ describe("profile create", () => {
 		expect(stderr).toContain("--api-key -");
 	});
 
+	test("with no key and no TTY, names a terminal and --api-key", async () => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli([
+			"profile",
+			"create",
+			"bot",
+			"--config-dir",
+			dir,
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"cannot happen without an interactive terminal",
+		);
+		expect(stderr).toContain('neon profile create bot --api-key "$KEY"');
+		expect(stderr).toContain("--api-key -");
+		expect(stderr).not.toContain("Cannot run interactive auth");
+	});
+
 	test("names every way to supply a key when given none", async () => {
 		const dir = makeConfigDir({});
 		const { code, stderr } = await runCli([

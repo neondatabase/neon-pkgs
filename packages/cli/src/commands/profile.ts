@@ -619,9 +619,14 @@ const create = async (props: CreateProps) => {
 		// The no-flag form is the one an agent reaches for first, and `authFlow` answers it
 		// with a bare "Cannot run interactive auth in CI" — true, and no way forward. Say the
 		// same thing `--mint` says, since the two ways out are the same.
-		if (isCi() && props.forceAuth !== true) {
+		if (
+			props.forceAuth !== true &&
+			(isCi() || !process.stdin.isTTY || !process.stdout.isTTY)
+		) {
 			throw new Error(
-				`\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
+				isCi()
+					? `\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`
+					: `\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen without an interactive terminal. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
 			);
 		}
 		const at = locationForCreate(props.configDir, name, props.keyring);

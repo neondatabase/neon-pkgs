@@ -757,6 +757,50 @@ describe("ensureAuth", () => {
 		expect(props.apiKey).toEqual(expect.any(String));
 	});
 
+	test("nested -y refuses OAuth when both streams are TTYs", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+		vi.stubEnv("CI", "false");
+		const stdinTty = Object.getOwnPropertyDescriptor(
+			process.stdin,
+			"isTTY",
+		);
+		const stdoutTty = Object.getOwnPropertyDescriptor(
+			process.stdout,
+			"isTTY",
+		);
+		Object.defineProperty(process.stdin, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: true,
+		});
+		try {
+			await expect(
+				ensureAuth({
+					...setupTestProps(server),
+					forceAuth: false,
+					yes: true,
+				}),
+			).rejects.toThrow(/unattended mode/);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			if (stdinTty) {
+				Object.defineProperty(process.stdin, "isTTY", stdinTty);
+			}
+			if (stdoutTty) {
+				Object.defineProperty(process.stdout, "isTTY", stdoutTty);
+			}
+		}
+	});
+
 	// Changed deliberately: an invalid credentials file used to be treated as absent, so this
 	// command would sign in over the top of it — overwriting a file the user might have wanted
 	// back, possibly as a different account. It now stops and says how to replace it.
@@ -1145,6 +1189,204 @@ describe("deleteCredentialsAt", () => {
 		}).not.toThrow();
 
 		rmSync(nonExistentDir, { recursive: true });
+	});
+});
+
+describe("authFlow unattended", () => {
+	let configDir = "";
+	let stdinTty: PropertyDescriptor | undefined;
+	let stdoutTty: PropertyDescriptor | undefined;
+
+	const setTty = (stdin: boolean, stdout: boolean) => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			configurable: true,
+			enumerable: true,
+			value: stdin,
+		});
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			enumerable: true,
+			value: stdout,
+		});
+	};
+
+	beforeAll(() => {
+		configDir = mkdtempSync("test-config-unattended-");
+		stdinTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+		stdoutTty = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+	});
+
+	afterAll(() => {
+		rmSync(configDir, { recursive: true, force: true });
+		if (stdinTty) {
+			Object.defineProperty(process.stdin, "isTTY", stdinTty);
+		}
+		if (stdoutTty) {
+			Object.defineProperty(process.stdout, "isTTY", stdoutTty);
+		}
+	});
+
+	afterEach(() => {
+		if (stdinTty) {
+			Object.defineProperty(process.stdin, "isTTY", stdinTty);
+		}
+		if (stdoutTty) {
+			Object.defineProperty(process.stdout, "isTTY", stdoutTty);
+		}
+	});
+
+	const base = () => ({
+		_: ["link"] as (string | number)[],
+		apiHost: "http://127.0.0.1:1",
+		clientId: "test-client-id",
+		configDir,
+		oauthHost: "http://127.0.0.1:1",
+		allowUnsafeTls: true,
+	});
+
+	test("starts OAuth in a TTY without -y", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, true);
+		const authSpy = vi.spyOn(authModule, "auth").mockResolvedValue({
+			access_token: "tok",
+			refresh_token: "ref",
+			token_type: "bearer",
+			expires_at: Date.now() / 1000 + 3600,
+		});
+		try {
+			expect(await authFlow(base())).toBe("tok");
+			expect(authSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("refuses -y even when both streams are TTYs", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, true);
+		const authSpy = vi.spyOn(authModule, "auth");
+		try {
+			await expect(authFlow({ ...base(), yes: true })).rejects.toThrow(
+				/Cannot run interactive auth in unattended mode\. Pass --api-key <key>, set NEON_API_KEY, or run `neon auth` in an interactive terminal before retrying\./,
+			);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("refuses --yes even when both streams are TTYs", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, true);
+		const authSpy = vi.spyOn(authModule, "auth");
+		try {
+			await expect(authFlow({ ...base(), y: true })).rejects.toThrow(
+				/unattended mode/,
+			);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("refuses --default even when both streams are TTYs", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, true);
+		const authSpy = vi.spyOn(authModule, "auth");
+		try {
+			await expect(
+				authFlow({ ...base(), default: true }),
+			).rejects.toThrow(/unattended mode/);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("refuses when stdout is a TTY and stdin is not", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(false, true);
+		const authSpy = vi.spyOn(authModule, "auth");
+		try {
+			await expect(authFlow(base())).rejects.toThrow(/unattended mode/);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("refuses when stdin is a TTY and stdout is not", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, false);
+		const authSpy = vi.spyOn(authModule, "auth");
+		try {
+			await expect(authFlow(base())).rejects.toThrow(/unattended mode/);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("keeps the CI prefix", async () => {
+		vi.stubEnv("CI", "true");
+		setTty(true, true);
+		await expect(authFlow(base())).rejects.toThrow(
+			/^Cannot run interactive auth in CI\./,
+		);
+	});
+
+	test("names a terminal and --force-auth for neon auth", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(false, false);
+		await expect(authFlow({ ...base(), _: ["auth"] })).rejects.toThrow(
+			/Re-run `neon auth` in an interactive terminal, or pass --force-auth/,
+		);
+	});
+
+	test("--force-auth overrides CI, -y, and missing TTYs", async () => {
+		vi.stubEnv("CI", "true");
+		setTty(false, false);
+		const authSpy = vi.spyOn(authModule, "auth").mockResolvedValue({
+			access_token: "tok",
+			refresh_token: "ref",
+			token_type: "bearer",
+			expires_at: Date.now() / 1000 + 3600,
+		});
+		try {
+			expect(
+				await authFlow({
+					...base(),
+					yes: true,
+					forceAuth: true,
+				}),
+			).toBe("tok");
+			expect(authSpy).toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("kebab-case --force-auth overrides unattended flags", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, true);
+		const authSpy = vi.spyOn(authModule, "auth").mockResolvedValue({
+			access_token: "tok",
+			refresh_token: "ref",
+			token_type: "bearer",
+			expires_at: Date.now() / 1000 + 3600,
+		});
+		try {
+			expect(
+				await authFlow({
+					...base(),
+					yes: true,
+					"force-auth": true,
+				}),
+			).toBe("tok");
+			expect(authSpy).toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
 	});
 });
 

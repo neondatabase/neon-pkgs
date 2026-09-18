@@ -54,7 +54,9 @@ Run the following command to authenticate a connection to Neon:
 neon auth
 ```
 
-The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon auth](https://neon.com/docs/cli/auth) automatically launches the browser authentication process.
+The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Run it in an interactive terminal. In that same kind of terminal, an unauthenticated command without `-y` / `--yes` / `--default` also starts the browser flow.
+
+Unattended invocations (`-y`, a pipe, or `CI`) do not open a browser. Pass `--api-key`, set `NEON_API_KEY`, or reuse credentials previously saved by `neon auth`. `--force-auth` is the hidden override that still launches a browser from those environments.
 
 Alternatively, you can authenticate a connection with a Neon API key using the `--api-key` option when running a Neon CLI command. For example, an API key is used with the following `neon projects list` command:
 

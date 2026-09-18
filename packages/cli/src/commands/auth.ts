@@ -88,6 +88,22 @@ type AuthProps = {
 	keyring?: boolean;
 	contextFile?: string | ((cwd?: string) => string);
 	dbUrl?: string;
+	yes?: boolean;
+	y?: boolean;
+	default?: boolean;
+};
+
+const interactiveAuthBlockedMessage = (
+	command: string | number | undefined,
+	inCi: boolean,
+): string => {
+	const prefix = inCi
+		? "Cannot run interactive auth in CI."
+		: "Cannot run interactive auth in unattended mode.";
+	if (command === "auth" || command === "login") {
+		return `${prefix} Re-run \`neon auth\` in an interactive terminal, or pass --force-auth.`;
+	}
+	return `${prefix} Pass --api-key <key>, set NEON_API_KEY, or run \`neon auth\` in an interactive terminal before retrying.`;
 };
 
 export const locationForAuth = (
@@ -129,6 +145,7 @@ export const handler = async (args: AuthProps) => {
 };
 
 export const authFlow = async ({
+	_,
 	configDir,
 	oauthHost,
 	clientId,
@@ -138,6 +155,9 @@ export const authFlow = async ({
 	allowUnsafeTls,
 	profile,
 	keyring,
+	yes,
+	y,
+	default: defaultFlag,
 }: AuthProps) => {
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
 	// auth --profile work` is how you make one, so it must work before there is anything
@@ -160,8 +180,15 @@ export const authFlow = async ({
 	}
 
 	const allowInteractiveAuth = forceAuth ?? forceAuthKebab;
-	if (!allowInteractiveAuth && isCi()) {
-		throw new Error("Cannot run interactive auth in CI");
+	const unattendedFlag = yes === true || y === true || defaultFlag === true;
+	// Agents often allocate a PTY, so CI and missing TTYs are not enough;
+	// `-y` / `--default` is the unattended path on a real terminal too.
+	const interactiveTerminal =
+		!isCi() &&
+		Boolean(process.stdin.isTTY) &&
+		Boolean(process.stdout.isTTY);
+	if (!allowInteractiveAuth && (unattendedFlag || !interactiveTerminal)) {
+		throw new Error(interactiveAuthBlockedMessage(_[0], isCi()));
 	}
 
 	let previousFile: string | undefined;
