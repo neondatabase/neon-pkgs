@@ -23,6 +23,7 @@ import {
 } from "@neon-internals/cli-core/credentials";
 import {
 	credentialsPath,
+	defaultDir,
 	isOwnedCredentialPath,
 } from "@neon-internals/cli-core/paths";
 import {
@@ -71,7 +72,12 @@ import type { CommonProps } from "../types.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 import { orgIdForProject } from "./api_keys.js";
-import { authFlow, usableCredential } from "./auth.js";
+import {
+	authFlow,
+	interactiveAuthPrefix,
+	quoteCliArg,
+	usableCredential,
+} from "./auth.js";
 
 type ProfileProps = CommonProps & {
 	configDir: string;
@@ -80,6 +86,7 @@ type ProfileProps = CommonProps & {
 	clientId: string;
 	allowUnsafeTls?: boolean;
 	forceAuth?: boolean;
+	"force-auth"?: boolean;
 };
 
 type CreateProps = ProfileProps & {
@@ -481,6 +488,49 @@ const deleteLeftoverOwnedFile = (
 /** `--api-key -` means "read it from stdin", the usual convention for a piped value. */
 const STDIN = "-";
 
+const forcedAuth = (props: ProfileProps): boolean =>
+	(props.forceAuth ?? props["force-auth"]) === true;
+
+const profileCreateRecovery = (
+	props: CreateProps,
+	kind: "browser" | "key",
+): string => {
+	const parts = ["neon profile create", quoteCliArg(props.name)];
+	if (kind === "browser") {
+		if (props.mint === true) {
+			parts.push("--mint");
+			if (props.orgId !== undefined) {
+				parts.push("--org-id", quoteCliArg(props.orgId));
+			}
+			if (props.projectId !== undefined) {
+				parts.push("--project-id", quoteCliArg(props.projectId));
+			}
+		}
+	} else {
+		parts.push("--api-key", '"$KEY"');
+	}
+	if (props.configDir !== defaultDir) {
+		parts.push("--config-dir", quoteCliArg(props.configDir));
+	}
+	if (props.keyring === true) {
+		parts.push("--keyring");
+	}
+	return parts.join(" ");
+};
+
+const profileBrowserBlockedMessage = (props: CreateProps): string => {
+	const inCi = isCi();
+	const terminal = inCi
+		? "in an interactive terminal outside CI on this machine"
+		: "in an interactive terminal on this machine";
+	const keyVerb = props.mint === true ? "store" : "supply";
+	return `${interactiveAuthPrefix(inCi)} Run \`${profileCreateRecovery(props, "browser")}\` ${terminal}, or ${keyVerb} an existing key with \`${profileCreateRecovery(props, "key")}\` (use --api-key - to read it from stdin).`;
+};
+
+const browserAuthBlocked = (props: ProfileProps): boolean =>
+	!forcedAuth(props) &&
+	(isCi() || !process.stdin.isTTY || !process.stdout.isTTY);
+
 /**
  * The key to store.
  *
@@ -616,17 +666,8 @@ const create = async (props: CreateProps) => {
 	// No key and no --mint means a browser sign-in, which is exactly `neon auth --profile`.
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
 	if (!suppliedKey) {
-		// The no-flag form is the one an agent reaches for first. `authFlow` names `neon auth`,
-		// `--api-key`, and `NEON_API_KEY`; this command stores a key, so name that recipe.
-		if (
-			props.forceAuth !== true &&
-			(isCi() || !process.stdin.isTTY || !process.stdout.isTTY)
-		) {
-			throw new Error(
-				isCi()
-					? `\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen in CI. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`
-					: `\`neon profile create ${name}\` with no key signs in through the browser, which cannot happen without an interactive terminal. Pass a key instead: \`neon profile create ${name} --api-key "$KEY"\`, or pipe it with \`echo "$KEY" | neon profile create ${name} --api-key -\`.`,
-			);
+		if (browserAuthBlocked(props)) {
+			throw new Error(profileBrowserBlockedMessage(props));
 		}
 		const at = locationForCreate(props.configDir, name, props.keyring);
 		const existing = existingLocation(props.configDir, name);
@@ -822,17 +863,8 @@ const recordProfile = (
 const createByMinting = async (props: CreateProps) => {
 	const { name } = props;
 
-	// `authFlow` refuses to open a browser in CI; minting calls `auth` directly and so has to
-	// make the same check itself, or this would sit waiting for a login nobody can complete.
-	if (
-		props.forceAuth !== true &&
-		(isCi() || !process.stdin.isTTY || !process.stdout.isTTY)
-	) {
-		throw new Error(
-			`--mint needs a browser sign-in, which cannot happen ${
-				isCi() ? "in CI" : "without an interactive terminal"
-			}. Mint the key with \`neon api-keys create --name ${name}\` and pipe it in: echo "$KEY" | neon profile create ${name} --api-key -`,
-		);
+	if (browserAuthBlocked(props)) {
+		throw new Error(profileBrowserBlockedMessage(props));
 	}
 
 	const atMint = locationForCreate(props.configDir, name, props.keyring);

@@ -54,9 +54,16 @@ Run the following command to authenticate a connection to Neon:
 neon auth
 ```
 
-The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Run it in an interactive terminal. In that same kind of terminal, an unauthenticated command without `-y` / `--yes` / `--default` also starts the browser flow.
+The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Run it in an interactive terminal on this machine. In that same kind of terminal, an unauthenticated command without `-y` / `--yes` / `--default` also starts the browser flow.
 
-Unattended invocations (`-y`, a pipe, or `CI`) do not open a browser. Pass `--api-key`, set `NEON_API_KEY`, or reuse credentials previously saved by `neon auth`. `--force-auth` is the hidden override that still launches a browser from those environments.
+Unattended invocations (`-y`, a pipe, or `CI`) do not open a browser. Pass `--api-key`, set `NEON_API_KEY`, or run `neon auth` as the same OS user with the same `--config-dir`, then retry. CI should inject a key: a laptop login does not authenticate a runner. `--force-auth` still starts the loopback browser flow when a browser on this machine can reach this process's `127.0.0.1` callback.
+
+Named profiles ignore `NEON_API_KEY`. Store a key first, then retry:
+
+```bash
+printf '%s\n' "$KEY" | neon profile create work --api-key -
+neon link --profile work --project-id "$PROJECT_ID" -y
+```
 
 Alternatively, you can authenticate a connection with a Neon API key using the `--api-key` option when running a Neon CLI command. For example, an API key is used with the following `neon projects list` command:
 

@@ -500,7 +500,7 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).not.toContain("--force");
 		expect(
 			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
@@ -547,12 +547,10 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(existsSync(resolve(dir, "credentials.work.json"))).toBe(true);
 	});
 
-	// The no-flag form is what an agent tries first, and `authFlow` answered it with a bare
-	// "Cannot run interactive auth in CI" — true, and with no way forward from it.
 	test("a keyring pointer is an existing profile even when the item is unread", async () => {
 		const dir = makeConfigDir({
 			"profiles.json": JSON.stringify({
@@ -566,7 +564,7 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).not.toContain("--force");
 	});
 
@@ -578,9 +576,10 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).toContain('neon profile create ci --api-key "$KEY"');
 		expect(stderr).toContain("--api-key -");
+		expect(stderr).toContain("outside CI on this machine");
 	});
 
 	test("with no key and no TTY, names a terminal and --api-key", async () => {
@@ -595,11 +594,11 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain(
-			"cannot happen without an interactive terminal",
+			"Cannot run interactive auth in unattended mode",
 		);
+		expect(stderr).toContain("in an interactive terminal on this machine");
 		expect(stderr).toContain('neon profile create bot --api-key "$KEY"');
 		expect(stderr).toContain("--api-key -");
-		expect(stderr).not.toContain("Cannot run interactive auth");
 	});
 
 	test("names every way to supply a key when given none", async () => {
@@ -804,8 +803,10 @@ describe("profile create", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).toContain("--api-key -");
+		expect(stderr).toContain("neon profile create ci --mint --config-dir");
+		expect(stderr).not.toContain("api-keys create");
 	});
 
 	test("--mint refuses to wait for a browser without a TTY", async () => {
@@ -821,10 +822,13 @@ describe("profile create", () => {
 
 		expect(code).toBe(1);
 		expect(stderr).toContain(
-			"cannot happen without an interactive terminal",
+			"Cannot run interactive auth in unattended mode",
+		);
+		expect(stderr).toContain(
+			"Run `neon profile create bot --mint --config-dir",
 		);
 		expect(stderr).toContain("--api-key -");
-		expect(stderr).not.toContain("Cannot run interactive auth");
+		expect(stderr).not.toContain("api-keys create");
 	});
 
 	test("options after a -- terminator are refused, not silently dropped", async () => {
@@ -899,7 +903,7 @@ describe("profile create — parsing and scope safety", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(stderr).not.toContain("proj-from-context");
 	});
 });
@@ -958,7 +962,7 @@ describe("replacing a profile is atomic", () => {
 		);
 
 		expect(code).toBe(1);
-		expect(stderr).toContain("cannot happen in CI");
+		expect(stderr).toContain("Cannot run interactive auth in CI");
 		expect(
 			readFileSync(resolve(dir, "credentials.work.json"), "utf8"),
 		).toBe(before);

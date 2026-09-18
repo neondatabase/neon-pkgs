@@ -96,20 +96,37 @@ type AuthProps = {
 	default?: boolean;
 };
 
-const shellQuote = (value: string): string => {
+export const quoteCliArg = (value: string): string => {
 	if (/^[A-Za-z0-9_./:@-]+$/.test(value)) {
 		return value;
 	}
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
-const authRecoveryCommand = (profile: string, configDir: string): string => {
+export const interactiveAuthPrefix = (inCi: boolean): string =>
+	inCi
+		? "Cannot run interactive auth in CI."
+		: "Cannot run interactive auth in unattended mode.";
+
+const selectedProfileNeedsNamedAuth = (profile: string): boolean => {
+	const flag = credentialInputs().profileFlag.trim();
+	return profile !== DEFAULT_PROFILE || flag !== "";
+};
+
+const authRecoveryCommand = (
+	profile: string,
+	configDir: string,
+	keyring?: boolean,
+): string => {
 	const parts = ["neon auth"];
-	if (profile !== DEFAULT_PROFILE) {
-		parts.push("--profile", shellQuote(profile));
+	if (selectedProfileNeedsNamedAuth(profile)) {
+		parts.push("--profile", quoteCliArg(profile));
 	}
 	if (configDir !== defaultDir) {
-		parts.push("--config-dir", shellQuote(configDir));
+		parts.push("--config-dir", quoteCliArg(configDir));
+	}
+	if (keyring === true) {
+		parts.push("--keyring");
 	}
 	return parts.join(" ");
 };
@@ -119,18 +136,28 @@ const interactiveAuthBlockedMessage = (
 	inCi: boolean,
 	profile: string,
 	configDir: string,
+	keyring?: boolean,
 ): string => {
-	const prefix = inCi
-		? "Cannot run interactive auth in CI."
-		: "Cannot run interactive auth in unattended mode.";
-	const authCmd = authRecoveryCommand(profile, configDir);
+	const prefix = interactiveAuthPrefix(inCi);
+	const authCmd = authRecoveryCommand(profile, configDir, keyring);
+	const forceAuthNote =
+		"Use --force-auth only if a browser can reach this process's 127.0.0.1 callback.";
 	if (command === "auth" || command === "login") {
-		return `${prefix} Re-run \`${authCmd}\` in an interactive terminal, or pass --force-auth.`;
+		const rerun = inCi
+			? `Unset CI and re-run \`${authCmd}\` in an interactive terminal on this machine.`
+			: `Re-run \`${authCmd}\` in an interactive terminal on this machine.`;
+		return `${prefix} ${rerun} ${forceAuthNote}`;
 	}
-	if (profile !== DEFAULT_PROFILE) {
-		return `${prefix} Run \`${authCmd}\` in an interactive terminal before retrying.`;
+	if (selectedProfileNeedsNamedAuth(profile)) {
+		const run = inCi
+			? `Unset CI and run \`${authCmd}\` in an interactive terminal on this machine before retrying.`
+			: `Run \`${authCmd}\` in an interactive terminal on this machine before retrying.`;
+		return `${prefix} ${run}`;
 	}
-	return `${prefix} Pass --api-key <key>, set NEON_API_KEY, or run \`${authCmd}\` in an interactive terminal before retrying.`;
+	const authStep = inCi
+		? `unset CI and run \`${authCmd}\` in an interactive terminal on this machine before retrying`
+		: `run \`${authCmd}\` in an interactive terminal on this machine before retrying`;
+	return `${prefix} Pass --api-key <key>, set NEON_API_KEY, or ${authStep}.`;
 };
 
 export const locationForAuth = (
@@ -216,7 +243,13 @@ export const authFlow = async ({
 		Boolean(process.stdout.isTTY);
 	if (!allowInteractiveAuth && (unattendedFlag || !interactiveTerminal)) {
 		throw new Error(
-			interactiveAuthBlockedMessage(_[0], isCi(), profileName, configDir),
+			interactiveAuthBlockedMessage(
+				_[0],
+				isCi(),
+				profileName,
+				configDir,
+				keyring,
+			),
 		);
 	}
 

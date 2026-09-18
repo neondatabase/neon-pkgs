@@ -41,6 +41,7 @@ import {
 	deleteCredentialsAt,
 	ensureAuth,
 	locationForAuth,
+	quoteCliArg,
 } from "./auth";
 
 vi.mock("open", () => ({ default: vi.fn((url: string) => fetch(url)) }));
@@ -1266,7 +1267,7 @@ describe("authFlow unattended", () => {
 		const authSpy = vi.spyOn(authModule, "auth");
 		try {
 			await expect(authFlow({ ...base(), yes: true })).rejects.toThrow(
-				/Cannot run interactive auth in unattended mode\. Pass --api-key <key>, set NEON_API_KEY, or run `neon auth --config-dir /,
+				/Cannot run interactive auth in unattended mode\. Pass --api-key <key>, set NEON_API_KEY, or run `neon auth --config-dir .*` in an interactive terminal on this machine before retrying/,
 			);
 			expect(authSpy).not.toHaveBeenCalled();
 		} finally {
@@ -1338,7 +1339,7 @@ describe("authFlow unattended", () => {
 		vi.stubEnv("CI", "false");
 		setTty(false, false);
 		await expect(authFlow({ ...base(), profile: "work" })).rejects.toThrow(
-			/Run `neon auth --profile work --config-dir .*` in an interactive terminal before retrying/,
+			/Run `neon auth --profile work --config-dir .*` in an interactive terminal on this machine before retrying/,
 		);
 	});
 
@@ -1346,7 +1347,7 @@ describe("authFlow unattended", () => {
 		vi.stubEnv("CI", "false");
 		setTty(false, false);
 		await expect(authFlow({ ...base(), _: ["auth"] })).rejects.toThrow(
-			/Re-run `neon auth --config-dir .*` in an interactive terminal, or pass --force-auth/,
+			/Re-run `neon auth --config-dir .*` in an interactive terminal on this machine\. Use --force-auth only if a browser can reach this process's 127\.0\.0\.1 callback/,
 		);
 	});
 
@@ -1394,6 +1395,79 @@ describe("authFlow unattended", () => {
 		} finally {
 			authSpy.mockRestore();
 		}
+	});
+
+	test("camel-case forceAuth false is not overridden by kebab true", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(true, true);
+		const authSpy = vi.spyOn(authModule, "auth");
+		try {
+			await expect(
+				authFlow({
+					...base(),
+					yes: true,
+					forceAuth: false,
+					"force-auth": true,
+				}),
+			).rejects.toThrow(/unattended mode/);
+			expect(authSpy).not.toHaveBeenCalled();
+		} finally {
+			authSpy.mockRestore();
+		}
+	});
+
+	test("explicit --profile DEFAULT names neon auth --profile DEFAULT", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(false, false);
+		recordCredentialInputs({
+			apiKeyFlag: "",
+			apiKeyEnv: "napi_ambient",
+			profileEnv: "work",
+			profileFlag: "DEFAULT",
+			configDir,
+		});
+		try {
+			await expect(
+				authFlow({ ...base(), profile: "DEFAULT" }),
+			).rejects.toThrow(
+				/Run `neon auth --profile DEFAULT --config-dir .*` in an interactive terminal on this machine before retrying/,
+			);
+		} finally {
+			recordCredentialInputs({
+				apiKeyFlag: "",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir,
+			});
+		}
+	});
+
+	test("explicit --keyring is preserved on the recovery command", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(false, false);
+		await expect(
+			authFlow({ ...base(), _: ["auth"], keyring: true }),
+		).rejects.toThrow(/Re-run `neon auth --config-dir .* --keyring`/);
+	});
+
+	test("quotes a config-dir that contains spaces and an apostrophe", async () => {
+		vi.stubEnv("CI", "false");
+		setTty(false, false);
+		const awkward = join(configDir, "Andre's dir");
+		await expect(
+			authFlow({ ...base(), configDir: awkward }),
+		).rejects.toThrow(
+			`run \`neon auth --config-dir ${quoteCliArg(awkward)}\` in an interactive terminal on this machine before retrying`,
+		);
+	});
+
+	test("CI recovery tells the caller to unset CI", async () => {
+		vi.stubEnv("CI", "true");
+		setTty(true, true);
+		await expect(authFlow(base())).rejects.toThrow(
+			/unset CI and run `neon auth --config-dir .*` in an interactive terminal on this machine before retrying/,
+		);
 	});
 });
 

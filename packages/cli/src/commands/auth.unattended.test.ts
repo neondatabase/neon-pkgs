@@ -140,6 +140,22 @@ describe("unattended CLI authentication", () => {
 		expect(probe.hits()).toBe(0);
 	});
 
+	test("login with piped streams uses the same recovery as auth", async ({
+		testCliCommand,
+	}) => {
+		const { flags, probe } = await isolated();
+		const { stderr } = await testCliCommand(["login", ...flags], {
+			apiKey: false,
+			code: 1,
+			snapshot: false,
+		});
+		expect(stderr).toMatch(
+			/Re-run `neon auth --config-dir .*` in an interactive terminal on this machine/,
+		);
+		expect(stderr).not.toMatch(/Pass --api-key/);
+		expect(probe.hits()).toBe(0);
+	});
+
 	test("auth with piped streams names a terminal and --force-auth", async ({
 		testCliCommand,
 	}) => {
@@ -153,7 +169,7 @@ describe("unattended CLI authentication", () => {
 			/Cannot run interactive auth in unattended mode/,
 		);
 		expect(stderr).toMatch(
-			/Re-run `neon auth --config-dir .*` in an interactive terminal, or pass --force-auth/,
+			/Re-run `neon auth --config-dir .*` in an interactive terminal on this machine\. Use --force-auth only if a browser can reach this process's 127\.0\.0\.1 callback/,
 		);
 		expect(stderr).not.toMatch(/Pass --api-key/);
 		expect(probe.hits()).toBe(0);
@@ -168,7 +184,7 @@ describe("unattended CLI authentication", () => {
 			env: { CI: "true" },
 		});
 		expect(stderr).toMatch(/Cannot run interactive auth in CI/);
-		expect(stderr).toMatch(remedies);
+		expect(stderr).toMatch(/unset CI and run `neon auth/);
 		expect(probe.hits()).toBe(0);
 	});
 
@@ -208,7 +224,7 @@ describe("unattended CLI authentication", () => {
 		);
 		expect(stderr).toMatch(/unattended mode/);
 		expect(stderr).toContain(
-			`Run \`neon auth --profile work --config-dir ${configDir}\` in an interactive terminal before retrying`,
+			`Run \`neon auth --profile work --config-dir ${configDir}\` in an interactive terminal on this machine before retrying`,
 		);
 		expect(stderr).not.toMatch(/Pass --api-key/);
 		expect(stderr).not.toMatch(/set NEON_API_KEY/);
