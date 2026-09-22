@@ -85,7 +85,7 @@ export const PACKAGE_MANAGER_MESSAGE =
 	"Which package manager should install the Neon dependencies?";
 
 export const NO_AGENTS_FALLBACK_STATUS =
-	"No coding agents detected. Installing the default Neon skills for Cursor and Codex at user scope.";
+	"No coding agents detected. Installing the default Neon skills for Cursor and Codex in this directory.";
 
 export const YES_SELECTS_RECOMMENDED =
 	"--yes selects Recommended setup. Omit --yes to use --mode custom, and pass flags for any choices you want to skip.";

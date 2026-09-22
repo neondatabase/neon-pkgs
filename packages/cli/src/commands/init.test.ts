@@ -152,7 +152,8 @@ describe("init handler", () => {
 		expect(argvLine(run).some((line) => line.startsWith("bootstrap"))).toBe(
 			false,
 		);
-		expect(argvLine(run)[0]).toContain("skills --global -y");
+		expect(argvLine(run)[0]).toContain("skills -y");
+		expect(argvLine(run)[0]).not.toContain("--global");
 		expect(argvLine(run)[0]).toContain("--agent cursor");
 		expect(argvLine(run)[0]).toContain("--agent codex");
 		expect(argvHeads(run)).not.toContain("mcp");
@@ -167,6 +168,8 @@ describe("init handler", () => {
 		expect(stdoutText(stdout)).toContain(
 			"No coding agents detected. Installing the default Neon skills",
 		);
+		expect(stdoutText(stdout)).toContain("in this directory");
+		expect(stdoutText(stdout)).not.toContain("user scope");
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-skip",
 			agent_setup: "skills",

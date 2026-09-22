@@ -153,7 +153,7 @@ export const agentsRowValue = (input: {
 		return "skipped";
 	}
 	if (input.setup === "skills") {
-		return "default Neon skills at user scope";
+		return "default Neon skills in this directory";
 	}
 	const ids = formatAgentIds(input.agents);
 	if (input.setup === "plugin") {

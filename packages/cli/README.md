@@ -783,7 +783,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 `neon init` sets up coding agents and this directory for Neon. In a terminal it asks **Recommended** or **Custom**. `-y` is Recommended with no prompts.
 
-Recommended installs the Neon plugin for every detected agent (global config, project folders, and the host CLI). Plugin-capable agents get the plugin; the rest get skills and MCP. If none are detected, it installs the default Neon skills for Cursor and Codex at user scope (`~/.agents/skills`) and does not configure MCP. It then links a project when the CLI is authenticated, and writes a default `neon.ts` (Postgres only) using the package manager already in the directory.
+Recommended installs the Neon plugin for every detected agent (global config, project folders, and the host CLI). Plugin-capable agents get the plugin; the rest get skills and MCP. If none are detected, it installs the default Neon skills for Cursor and Codex in this directory (`./.agents/skills`) and does not configure MCP. It then links a project when the CLI is authenticated, and writes a default `neon.ts` (Postgres only) using the package manager already in the directory.
 
 Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser.
 

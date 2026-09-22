@@ -82,7 +82,7 @@ describe("planInitToolingSteps", () => {
 		]);
 	});
 
-	test("empty-union skills fallback is global and does not configure MCP", () => {
+	test("empty-union skills fallback is this directory and does not configure MCP", () => {
 		expect(
 			planInitToolingSteps({
 				tooling: { setup: "skills", agents: FALLBACK_SKILLS_AGENTS },
@@ -91,17 +91,7 @@ describe("planInitToolingSteps", () => {
 				skillsGlobal: true,
 				mcpOauth: true,
 			}),
-		).toEqual([
-			[
-				"skills",
-				"--global",
-				"-y",
-				"--agent",
-				"cursor",
-				"--agent",
-				"codex",
-			],
-		]);
+		).toEqual([["skills", "-y", "--agent", "cursor", "--agent", "codex"]]);
 	});
 
 	test("oauth MCP includes --project-id when pinned", () => {

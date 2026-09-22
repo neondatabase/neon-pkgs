@@ -2,7 +2,6 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
-	readdirSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -147,8 +146,8 @@ describe("e2e — neon init", () => {
 			},
 		);
 		expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(0);
-		expect(readdirSync(dirs.cwd)).toEqual([]);
 		expect(existsSync(join(dirs.cwd, "package.json"))).toBe(false);
+		expect(existsSync(join(dirs.cwd, ".agents"))).toBe(true);
 	});
 
 	e2eTest(
