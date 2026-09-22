@@ -277,7 +277,12 @@ const assertAuthHelpTeachesCredentials = (
 	expect(flat).toContain("--project-id");
 	expect(flat).toContain("NEON_PROFILE");
 	expect(flat).toContain("profile list");
+	expect(flat).toContain(
+		"--api-key or --profile overrides NEON_API_KEY and NEON_PROFILE",
+	);
 	expect(flat).toMatch(/Pass either --api-key or --profile/);
+	expect(flat).toContain("When neither flag is passed");
+	expect(flat).toContain("When no flag or environment variable");
 	expect(flat).toContain("tries to revoke");
 	expect(flat).toContain("no recorded id stays live");
 	expect(flat).toContain("Pick a new name");

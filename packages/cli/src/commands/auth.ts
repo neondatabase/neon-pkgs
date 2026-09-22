@@ -134,7 +134,7 @@ const authHelpEpilogue = (): string => {
 			`A profile holds a browser session or an API key. Select it with --profile <name> or NEON_PROFILE. List profiles with ${cli} profile list.`,
 		),
 		wrapAuthHelp(
-			"On commands that use a credential, --api-key or --profile beats the matching environment variable. Pass either --api-key or --profile, not both. If both NEON_API_KEY and NEON_PROFILE are set, the key wins and stderr names the ignored profile. With neither, DEFAULT is used.",
+			"On commands that use a credential, --api-key or --profile overrides NEON_API_KEY and NEON_PROFILE. Pass either --api-key or --profile, not both. When neither flag is passed and both NEON_API_KEY and NEON_PROFILE are set, the key wins and stderr names the ignored profile. When no flag or environment variable selects a credential, DEFAULT is used.",
 		),
 		wrapAuthHelp(
 			`${cli} profile create <name> replaces an existing profile of that name and tries to revoke the credential it held. An imported key with no recorded id stays live. Pick a new name to keep the old profile.`,
