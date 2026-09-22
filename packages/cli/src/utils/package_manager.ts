@@ -200,7 +200,11 @@ export const recommendedCliUpgradeCommand = (
 	if (path.includes("/.bun/install/global/node_modules/neon/")) {
 		return "bun i -g neon@latest";
 	}
-	if (path.includes("/.pnpm/neon@") && path.includes("/node_modules/neon/")) {
+	if (
+		path.includes("/pnpm/global/") &&
+		path.includes("/.pnpm/neon@") &&
+		path.includes("/node_modules/neon/")
+	) {
 		return "pnpm i -g neon@latest";
 	}
 	if (

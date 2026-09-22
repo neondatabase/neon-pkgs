@@ -1,9 +1,11 @@
+import { once } from "node:events";
 import { describe, expect, it } from "vitest";
 import {
 	formatUpdateNotice,
 	parseUpdateCheckCache,
 	shouldRefreshUpdateCheck,
 	shouldRunUpdateNotifier,
+	spawnUpdateWorkerProcess,
 } from "./update_notifier.js";
 import { recommendedCliUpgradeCommand } from "./utils/package_manager.js";
 
@@ -40,9 +42,25 @@ describe("recommendedCliUpgradeCommand", () => {
 	it.each([
 		"/repo/node_modules/neon/dist/update_notifier.js",
 		"/Users/user/.npm/_npx/abc/node_modules/neon/dist/update_notifier.js",
+		"/repo/node_modules/.pnpm/neon@5.0.1/node_modules/neon/dist/update_notifier.js",
+		"/Users/user/Library/Caches/pnpm/dlx/hash/node_modules/.pnpm/neon@5.0.1/node_modules/neon/dist/update_notifier.js",
 		"/tmp/neon/dist/update_notifier.js",
 	])("suppresses unknown and transient installs at %s", (modulePath) => {
 		expect(recommendedCliUpgradeCommand(modulePath)).toBeUndefined();
+	});
+});
+
+describe("spawnUpdateWorkerProcess", () => {
+	it("handles a missing executable without an unhandled error", async () => {
+		const child = spawnUpdateWorkerProcess({
+			cachePath: "/tmp/neon-update-cache",
+			executablePath: "/path/that/does/not/exist/node",
+			source: "npm",
+			workerPath: "/tmp/neon-update-worker.js",
+		});
+
+		const [error] = await once(child, "error");
+		expect(error).toBeInstanceOf(Error);
 	});
 });
 

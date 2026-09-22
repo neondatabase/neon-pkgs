@@ -6,13 +6,22 @@ import { recordLatestVersion } from "./update_notifier.js";
 const execFileAsync = promisify(execFile);
 const LOOKUP_TIMEOUT_MS = 5000;
 
+export const npmViewInvocation = (
+	platform: NodeJS.Platform,
+): { args: string[]; command: string; shell: boolean } => ({
+	args: ["view", "neon", "version", "--json"],
+	command: platform === "win32" ? "npm.cmd" : "npm",
+	shell: platform === "win32",
+});
+
 const npmLatestVersion = async (): Promise<string | undefined> => {
-	const command = process.platform === "win32" ? "npm.cmd" : "npm";
+	const invocation = npmViewInvocation(process.platform);
 	const { stdout } = await execFileAsync(
-		command,
-		["view", "neon", "version", "--json"],
+		invocation.command,
+		invocation.args,
 		{
 			encoding: "utf8",
+			shell: invocation.shell,
 			timeout: LOOKUP_TIMEOUT_MS,
 			windowsHide: true,
 		},

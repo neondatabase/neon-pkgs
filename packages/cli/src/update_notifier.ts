@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import {
 	existsSync,
 	readFileSync,
@@ -49,6 +49,13 @@ type UpdateNotifierEligibility = Pick<
 };
 
 type UpdateSource = "homebrew" | "npm";
+
+type UpdateWorkerProcessOptions = {
+	cachePath: string;
+	executablePath: string;
+	source: UpdateSource;
+	workerPath: string;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
@@ -148,6 +155,24 @@ const isCurrentBranchProbe = ({
 const updateSource = (command: string): UpdateSource =>
 	command.startsWith("brew ") ? "homebrew" : "npm";
 
+export const spawnUpdateWorkerProcess = ({
+	cachePath,
+	executablePath,
+	source,
+	workerPath,
+}: UpdateWorkerProcessOptions): ChildProcess => {
+	const child = spawn(executablePath, [workerPath, cachePath, source], {
+		detached: true,
+		stdio: "ignore",
+		windowsHide: true,
+	});
+	child.on("error", (error) => {
+		log.debug("CLI update check failed to start: %s", error.message);
+	});
+	child.unref();
+	return child;
+};
+
 const spawnUpdateWorker = (cachePath: string, source: UpdateSource): void => {
 	const workerPath = fileURLToPath(
 		new URL("./update_check_worker.js", import.meta.url),
@@ -155,11 +180,12 @@ const spawnUpdateWorker = (cachePath: string, source: UpdateSource): void => {
 	if (!existsSync(workerPath)) return;
 
 	try {
-		spawn(process.execPath, [workerPath, cachePath, source], {
-			detached: true,
-			stdio: "ignore",
-			windowsHide: true,
-		}).unref();
+		spawnUpdateWorkerProcess({
+			cachePath,
+			executablePath: process.execPath,
+			source,
+			workerPath,
+		});
 	} catch (error) {
 		log.debug(
 			"Could not start the CLI update check: %s",
