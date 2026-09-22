@@ -103,6 +103,34 @@ describe("planInitToolingSteps", () => {
 			],
 		]);
 	});
+
+	test("oauth MCP includes --project-id when pinned", () => {
+		expect(
+			planInitToolingSteps({
+				tooling: {
+					setup: "skills-mcp",
+					skillsAgents: ["opencode"],
+					mcpAgents: ["opencode"],
+				},
+				yes: true,
+				pluginScope: "project",
+				skillsGlobal: false,
+				mcpOauth: true,
+				mcpProjectId: "proj-pin",
+			}),
+		).toEqual([
+			["skills", "-y", "--agent", "opencode"],
+			[
+				"mcp",
+				"-y",
+				"--oauth",
+				"--project-id",
+				"proj-pin",
+				"--agent",
+				"opencode",
+			],
+		]);
+	});
 });
 
 describe("initFlagsFromArgv", () => {

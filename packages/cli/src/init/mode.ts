@@ -58,14 +58,11 @@ export const resolveInitMode = (input: InitModeInput): InitModeResolution => {
 	if (input.yes || input.mode === "recommended") {
 		return { kind: "recommended" };
 	}
-	if (hasCustomOnlyFlags(input)) {
+	if (hasCustomOnlyFlags(input) || hasExistingSetupFlags(input)) {
 		return { kind: "custom" };
 	}
 	if (input.interactive) {
 		return { kind: "ask" };
-	}
-	if (hasExistingSetupFlags(input)) {
-		return { kind: "custom" };
 	}
 	throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
 };

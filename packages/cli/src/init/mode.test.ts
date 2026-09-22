@@ -58,6 +58,26 @@ describe("resolveInitMode", () => {
 		});
 	});
 
+	test("named agents on a TTY select custom", () => {
+		expect(
+			resolveInitMode({
+				...base,
+				interactive: true,
+				namedAgents: true,
+			}),
+		).toEqual({ kind: "custom" });
+	});
+
+	test("--no-link on a TTY selects custom", () => {
+		expect(
+			resolveInitMode({
+				...base,
+				interactive: true,
+				noLink: true,
+			}),
+		).toEqual({ kind: "custom" });
+	});
+
 	test("a TTY with no flags asks", () => {
 		expect(resolveInitMode({ ...base, interactive: true })).toEqual({
 			kind: "ask",

@@ -77,7 +77,9 @@ import {
 	NON_TTY_LINK_NEEDS_AUTH,
 	PROGRESS,
 	skippedLinkNext,
+	TEMPLATE_UNSUPPORTED_FLAGS,
 	unattendedUnauthedNext,
+	YES_SELECTS_RECOMMENDED,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
 import {
@@ -412,6 +414,22 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		});
 
 		if (templateChoice.kind === "template") {
+			if (yes && props.mode === "custom" && props.agentSetup !== "skip") {
+				throw new Error(YES_SELECTS_RECOMMENDED);
+			}
+			if (
+				props.mode !== undefined ||
+				props.projectSetup !== undefined ||
+				props.packageManager !== undefined ||
+				props.mcpScope !== undefined ||
+				props.mcpAuth !== undefined ||
+				props.mcpProjectId !== undefined ||
+				props.mcpProjectPin !== undefined ||
+				(props.skill !== undefined && props.skill.length > 0) ||
+				(props.agentSetup !== undefined && props.agentSetup !== "skip")
+			) {
+				throw new Error(TEMPLATE_UNSUPPORTED_FLAGS);
+			}
 			await runTemplatePath({
 				props,
 				cwd,
@@ -493,7 +511,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const targets = named.length > 0 ? named : detection.detectedAgents;
 
 		let agentSetupChoice: InitAgentSetupChoice | "skills" | "mixed" =
-			props.agentSetup ?? (named.length > 0 ? "plugin" : "plugin");
+			props.agentSetup ?? "plugin";
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
 		let mcpScope: InitMcpScopeChoice = props.mcpScope ?? "global";
@@ -537,10 +555,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					)());
 				agentSetupChoice = setup;
 				if (setup !== "skip") {
-					pluginScope = pluginScopeFor(
-						targets,
-						setup === "plugin" ? "project" : "project",
-					);
+					pluginScope = pluginScopeFor(targets, "project");
 					const available = availableForSetup(setup, pluginScope);
 					const selected =
 						named.length > 0
@@ -612,7 +627,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 									: detection.authenticated
 										? "api-key"
 										: "oauth");
-						delayMcp = mcpAuth === "api-key";
 						tooling = {
 							setup: "skills-mcp",
 							skillsAgents: selected.filter((id) =>
@@ -639,6 +653,14 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			agentSetupChoice === "skip"
 				? agentSetupChoice
 				: funnelAgentSetup(tooling);
+
+		const usesMcp =
+			tooling.setup === "skills-mcp" || tooling.setup === "mixed";
+		delayMcp =
+			usesMcp &&
+			(mcpAuth === "api-key" ||
+				(props.mcpProjectPin === true &&
+					props.mcpProjectId === undefined));
 
 		const mcpOauth =
 			mcpAuth === "oauth" || (recommended && !detection.authenticated);
@@ -667,6 +689,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			mcpOauth,
 			mcpProject: mcpScope === "project",
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
+			...(props.mcpProjectId !== undefined && !delayMcp
+				? { mcpProjectId: props.mcpProjectId }
+				: {}),
 		});
 		if (toolingSteps.length > 0) {
 			await runInitSteps(toolingSteps, {
@@ -826,7 +851,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				yes: true,
 				pluginScope,
 				skillsGlobal: recommended,
-				mcpOauth: false,
+				mcpOauth,
 				mcpProject: mcpScope === "project",
 				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
 			});
@@ -888,11 +913,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		let extraServices = false;
 		let selectedServices: NeonService[] | null = null;
 		if (configPlan.kind === "write") {
-			if (existingConfig) {
-				funnel.config = "existing";
-				selectedServices = null;
-			} else {
-				const planned = configPlan.services ?? ["none"];
+			const planned = existingConfig
+				? undefined
+				: (configPlan.services ?? ["none"]);
+			if (planned !== undefined) {
 				extraServices = !isBareInitServices(planned);
 				selectedServices = extraServices
 					? expandTelemetryServices(
@@ -904,55 +928,59 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						)
 					: [];
 				funnel.services = selectedServices;
-				funnel.config = "created";
 				wroteNewFile = true;
-				let pm = props.packageManager;
-				if (pm === undefined) {
-					pm = recommended
-						? resolvePackageManager(cwd)
-						: inferPackageManager(cwd);
-				}
-				if (pm === undefined) {
-					if (
-						props.pickPackageManager !== undefined ||
-						detection.interactive
-					) {
-						pm =
-							(await (
-								props.pickPackageManager ??
-								pickInitPackageManagerInteractively
-							)()) ?? resolvePackageManager(cwd);
-					} else {
-						pm = resolvePackageManager(cwd);
-					}
-				}
-				printInitProgress(PROGRESS.config);
-				printInitProgress(PROGRESS.install(pm));
-				try {
-					await (props.initConfig ?? defaultInitConfig)({
-						cwd,
-						install: true,
-						packageManager: pm,
-						services: planned,
-					});
-				} catch (error) {
-					if (error instanceof ConfigInstallFailed) {
-						const failed = installFailedNext(error.command);
-						printInitDone(
-							formatInitDone({
-								heading: failed.heading,
-								body: failed.body,
-								rows: [],
-								next: failed.next,
-							}),
-						);
-						printed = true;
-						outcome = "error";
-						throw error;
-					}
-					throw error;
+			} else {
+				selectedServices = null;
+			}
+			let pm = props.packageManager;
+			if (pm === undefined) {
+				pm = recommended
+					? resolvePackageManager(cwd)
+					: inferPackageManager(cwd);
+			}
+			if (pm === undefined) {
+				if (
+					props.pickPackageManager !== undefined ||
+					detection.interactive
+				) {
+					pm =
+						(await (
+							props.pickPackageManager ??
+							pickInitPackageManagerInteractively
+						)()) ?? resolvePackageManager(cwd);
+				} else {
+					pm = resolvePackageManager(cwd);
 				}
 			}
+			if (!existingConfig) {
+				printInitProgress(PROGRESS.config);
+			}
+			printInitProgress(PROGRESS.install(pm));
+			try {
+				await (props.initConfig ?? defaultInitConfig)({
+					cwd,
+					install: true,
+					packageManager: pm,
+					...(planned !== undefined ? { services: planned } : {}),
+				});
+			} catch (error) {
+				if (error instanceof ConfigInstallFailed) {
+					const failed = installFailedNext(error.command);
+					printInitDone(
+						formatInitDone({
+							heading: failed.heading,
+							body: failed.body,
+							rows: [],
+							next: failed.next,
+						}),
+					);
+					printed = true;
+					outcome = "error";
+					throw error;
+				}
+				throw error;
+			}
+			funnel.config = existingConfig ? "existing" : "created";
 		} else {
 			funnel.config = "skipped";
 		}
@@ -1234,6 +1262,7 @@ const runTemplatePath = async (input: {
 		...(props.pickAgentSetup
 			? { pickAgentSetup: props.pickAgentSetup }
 			: {}),
+		...(props.agentSetup === "skip" ? { agentSetup: false } : {}),
 		...(props.detectProjectAgents
 			? { detectProjectAgents: props.detectProjectAgents }
 			: {}),

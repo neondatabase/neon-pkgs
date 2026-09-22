@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
-import { YES_SELECTS_RECOMMENDED } from "../init/copy.js";
+import {
+	TEMPLATE_UNSUPPORTED_FLAGS,
+	YES_SELECTS_RECOMMENDED,
+} from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
@@ -324,7 +327,7 @@ describe("init handler", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-named-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const run = vi.fn().mockResolvedValue(true);
-		const pickAgentSetup = vi.fn(pickSkillsMcp);
+		const pickMode = vi.fn(async () => "recommended" as const);
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -334,15 +337,100 @@ describe("init handler", () => {
 				agent: ["cursor", "claude-code"],
 				link: false,
 				config: false,
-				pickAgentSetup,
+				pickMode,
 				contextFile: join(cwd, ".neon"),
 			}),
 		);
 
-		expect(pickAgentSetup).not.toHaveBeenCalled();
+		expect(pickMode).not.toHaveBeenCalled();
 		expect(argvLine(run)[0]).toContain(
 			"plugins -y --agent cursor --agent claude-code",
 		);
+	});
+
+	test("oauth MCP forwards --project-id without delaying for a link", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-pin-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				agent: ["opencode"],
+				agentSetup: "skills-mcp",
+				mcpAuth: "oauth",
+				mcpProjectId: "proj-pin",
+				link: false,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
+		expect(mcp).toContain("--oauth");
+		expect(mcp).toContain("--project-id proj-pin");
+	});
+
+	test("--template -y --agent-setup skip skips nested agent setup", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-skip-"));
+		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				template: "hono",
+				agentSetup: "skip",
+				contextFile: join(cwd, ".neon"),
+				runBootstrap,
+				fetchTemplates: async () => [honoTemplate()],
+			}),
+		);
+
+		expect(runBootstrap).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agentSetup: false,
+				default: true,
+			}),
+		);
+	});
+
+	test("--template -y --mode custom fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-custom-"));
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					yes: true,
+					mode: "custom",
+					template: "hono",
+					contextFile: join(cwd, ".neon"),
+					fetchTemplates: async () => [honoTemplate()],
+				}),
+			),
+		).rejects.toThrow(YES_SELECTS_RECOMMENDED);
+	});
+
+	test("--template rejects MCP flags", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-mcp-"));
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					template: "hono",
+					mcpAuth: "oauth",
+					contextFile: join(cwd, ".neon"),
+					fetchTemplates: async () => [honoTemplate()],
+				}),
+			),
+		).rejects.toThrow(TEMPLATE_UNSUPPORTED_FLAGS);
 	});
 
 	test("-y --mode custom fails", async () => {
@@ -530,7 +618,12 @@ describe("init handler", () => {
 		);
 
 		expect(linkProject).not.toHaveBeenCalled();
-		expect(initConfig).not.toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd,
+				install: true,
+			}),
+		);
 		expect(argvHeads(run)).toEqual(["skills", "mcp"]);
 	});
 

@@ -1,5 +1,4 @@
 import { getCliName } from "../utils/cli_name.js";
-import type { PackageManager } from "../utils/package_manager.js";
 
 export const INIT_SUBTITLE =
 	"Set up coding agents and this directory for Neon.";
@@ -90,6 +89,9 @@ export const NO_AGENTS_FALLBACK_STATUS =
 
 export const YES_SELECTS_RECOMMENDED =
 	"--yes selects Recommended setup. Omit --yes to use --mode custom, and pass flags for any choices you want to skip.";
+
+export const TEMPLATE_UNSUPPORTED_FLAGS =
+	"--template cannot be combined with --mode, --project-setup, --package-manager, --skill, or MCP flags. After scaffolding, skip agent setup with --agent-setup skip.";
 
 export const NON_TTY_LINK_NEEDS_AUTH =
 	"No interactive terminal. Sign in with `neon auth`, then re-run, or pass --project-setup claimable.";
@@ -202,8 +204,3 @@ export const headingForOutcome = (outcome: InitOutcomeKind): string => {
 		}
 	}
 };
-
-export const formatInstallHint = (
-	_pm: PackageManager,
-	command: string,
-): string => command;
