@@ -251,3 +251,112 @@ describe("subcommand help lists command flags before globals", () => {
 		expect(stdout).not.toContain("--context-file");
 	});
 });
+
+const flattenHelp = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+const assertAuthHelpTeachesCredentials = (
+	stdout: string,
+	stderr: string,
+): void => {
+	const flat = flattenHelp(stdout);
+	const trailer = "Global options: see neon --help";
+	const local = stdout.slice(0, stdout.indexOf(trailer));
+
+	expect(stderr).toBe("");
+	expect(stdout).toContain(trailer);
+	expect(flat).toContain("Sign in with a browser");
+	expect(flat).toContain("auth --profile work");
+	expect(flat).toContain('projects list --api-key "$KEY"');
+	expect(flat).toContain('NEON_API_KEY="$KEY"');
+	expect(flat).toContain('profile create agent --api-key "$KEY"');
+	expect(flat).toContain("profile create agent --api-key -");
+	expect(flat).toContain("profile create ci --mint");
+	expect(flat).toContain("Non-interactive (CI, scripts, agents):");
+	expect(flat).toContain("projects list --profile agent");
+	expect(flat).toContain("--org-id");
+	expect(flat).toContain("--project-id");
+	expect(flat).toContain("NEON_PROFILE");
+	expect(flat).toContain("profile list");
+	expect(flat).toMatch(/Pass either --api-key or --profile/);
+	expect(flat).toContain("tries to revoke");
+	expect(flat).toContain("no recorded id stays live");
+	expect(flat).toContain("Pick a new name");
+	expect(flat).toContain("profile --help");
+	expect(flat).toContain("profile create --help");
+	expect(local).toContain("--keyring");
+	expect(local).not.toContain("--api-key");
+	expect(local).not.toContain("--output");
+	expect(local).not.toContain("--config-dir");
+	expect(local).not.toContain("--context-file");
+	expect(stdout).not.toContain("--force-auth");
+};
+
+describe("auth and login help teach API keys and profiles", () => {
+	it.each([
+		"auth",
+		"login",
+	] as const)("%s --help names browser sign-in and the key/profile recipes", async (command) => {
+		const { code, stdout, stderr } = await runCli([command, "--help"], {
+			NEON_API_KEY: API_KEY,
+		});
+
+		expect(code).toBe(0);
+		expect(stderr + stdout).not.toContain(API_KEY);
+		assertAuthHelpTeachesCredentials(stdout, stderr);
+	});
+
+	it("does not print an explicit --api-key value in auth help", async () => {
+		const { stdout, stderr } = await runCli([
+			"--api-key",
+			API_KEY,
+			"auth",
+			"--help",
+		]);
+
+		expect(stderr + stdout).not.toContain(API_KEY);
+		assertAuthHelpTeachesCredentials(stdout, stderr);
+	});
+
+	it("prints the same help for auth and login", async () => {
+		const auth = await runCli(["auth", "--help"]);
+		const login = await runCli(["login", "--help"]);
+
+		expect(login.stdout).toBe(auth.stdout);
+		expect(login.stderr).toBe(auth.stderr);
+	});
+
+	it("keeps credential tokens intact when wrapped to COLUMNS=40", async () => {
+		const { stdout } = await runCli(["auth", "--help"], { COLUMNS: "40" });
+		const epilogueAt = stdout.indexOf("Non-interactive");
+		expect(epilogueAt).toBeGreaterThanOrEqual(0);
+		for (const line of stdout.slice(epilogueAt).split("\n")) {
+			if (/^\s/.test(line) || line === "") {
+				continue;
+			}
+			expect(line.length).toBeLessThanOrEqual(40);
+		}
+		expect(stdout).toContain("NEON_API_KEY");
+		expect(stdout).toContain("NEON_PROFILE");
+		expect(stdout).toContain("--api-key");
+		expect(stdout).toContain("--profile");
+		expect(stdout).toContain("--project-id");
+		expect(stdout).toContain("--org-id");
+		expect(stdout).toContain('echo "$KEY" |');
+		expect(stdout).toContain("--api-key -");
+	});
+
+	it("wraps the auth catalog description to COLUMNS", async () => {
+		const { stdout } = await runCli(["--help"], { COLUMNS: "40" });
+		expect(flattenHelp(stdout)).toContain("Sign in with a browser");
+		const authIdx = stdout.indexOf("neon auth");
+		expect(authIdx).toBeGreaterThanOrEqual(0);
+		const descLines = stdout
+			.slice(authIdx, authIdx + 500)
+			.split("\n")
+			.slice(1, 12);
+		expect(flattenHelp(descLines.join("\n"))).toContain("API keys");
+		expect(
+			Math.max(...descLines.map((line) => line.length)),
+		).toBeLessThanOrEqual(40);
+	});
+});

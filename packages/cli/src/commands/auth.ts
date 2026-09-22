@@ -74,6 +74,8 @@ import {
 } from "../retire_credential.js";
 import type { ExtendedTokenSet } from "../types.js";
 import { extendTokenSet } from "../utils/auth.js";
+import { getCliName } from "../utils/cli_name.js";
+import { helpEpilogue, helpWidth, wrapHelpText } from "../utils/help_text.js";
 
 type AuthProps = {
 	_: (string | number)[];
@@ -113,7 +115,36 @@ export const locationForAuth = (
 
 export const command = "auth";
 export const aliases = ["login"];
-export const describe = "Authenticate";
+export const describe =
+	"Sign in with a browser. See --help for API keys and profiles";
+
+// yargs wrap is off and formatHelp appends leftover epilogue lines as-is.
+const wrapAuthHelp = (text: string): string => wrapHelpText(text, helpWidth());
+
+const authHelpEpilogue = (): string => {
+	const cli = getCliName();
+	return helpEpilogue(
+		wrapAuthHelp("Non-interactive (CI, scripts, agents):"),
+		wrapAuthHelp("Use an existing API key or an API-key profile."),
+		`  ${cli} projects list --profile agent`,
+		wrapAuthHelp(
+			`${cli} profile create <name> --mint needs a browser during setup, then stores an API key and drops the session. It cannot run in CI. Default key is account-wide; --org-id or --project-id (not both) restricts it.`,
+		),
+		wrapAuthHelp(
+			`A profile holds a browser session or an API key. Select it with --profile <name> or NEON_PROFILE. List profiles with ${cli} profile list.`,
+		),
+		wrapAuthHelp(
+			"On commands that use a credential, --api-key or --profile beats the matching environment variable. Pass either --api-key or --profile, not both. If both NEON_API_KEY and NEON_PROFILE are set, the key wins and stderr names the ignored profile. With neither, DEFAULT is used.",
+		),
+		wrapAuthHelp(
+			`${cli} profile create <name> replaces an existing profile of that name and tries to revoke the credential it held. An imported key with no recorded id stays live. Pick a new name to keep the old profile.`,
+		),
+		wrapAuthHelp(
+			`See ${cli} profile --help and ${cli} profile create --help.`,
+		),
+	);
+};
+
 export const builder = (yargs: yargs.Argv) =>
 	yargs
 		.option("context-file", {
@@ -123,7 +154,33 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"Store the credential in the OS keyring. Per profile; later auth without the flag stays there. See `neon profile list`.",
 			type: "boolean",
-		});
+		})
+		.example("$0 auth", "Sign in with a browser")
+		.example(
+			"$0 auth --profile work",
+			"Save a browser session in profile work",
+		)
+		.example(
+			'$0 projects list --api-key "$KEY"',
+			"Use an existing API key for this command",
+		)
+		.example(
+			'NEON_API_KEY="$KEY" $0 projects list',
+			"Use an existing API key from the environment",
+		)
+		.example(
+			'$0 profile create agent --api-key "$KEY"',
+			"Store an existing API key",
+		)
+		.example(
+			'echo "$KEY" | $0 profile create agent --api-key -',
+			"Store a key read from stdin",
+		)
+		.example(
+			"$0 profile create ci --mint",
+			"Sign in once in a browser and store a new API key",
+		)
+		.epilogue(authHelpEpilogue());
 export const handler = async (args: AuthProps) => {
 	await authFlow(args);
 };
