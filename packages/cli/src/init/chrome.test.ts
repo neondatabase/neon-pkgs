@@ -15,9 +15,15 @@ import {
 
 describe("formatInitBanner", () => {
 	test("is the six-line NEON mark", () => {
+		expect(INIT_BANNER_LINES).toEqual([
+			" ██╗  ██╗██████╗ ██████╗ ██╗  ██╗",
+			" ███╗ ██║██╔═══╝██╔═══██╗███╗ ██║",
+			" ████╗██║██████╗██║   ██║████╗██║",
+			" ██╔████║██╔═══╝██║   ██║██╔████║",
+			" ██║╚███║██████╗╚██████╔╝██║╚███║",
+			" ╚═╝ ╚══╝╚═════╝ ╚═════╝ ╚═╝ ╚══╝",
+		]);
 		expect(formatInitBanner()).toBe(INIT_BANNER_LINES.join("\n"));
-		expect(formatInitBanner().split("\n")).toHaveLength(6);
-		expect(formatInitBanner()).toContain("██████╗");
 	});
 });
 
