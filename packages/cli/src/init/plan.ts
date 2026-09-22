@@ -202,6 +202,7 @@ const BOOLEAN_FLAGS = new Set([
 	"--no-link",
 	"--no-config",
 	"--skip-template",
+	"--claimable",
 	"--config",
 	"--list",
 	"--list-templates",

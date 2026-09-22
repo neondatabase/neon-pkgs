@@ -77,7 +77,6 @@ import {
 	NON_TTY_LINK_NEEDS_AUTH,
 	PROGRESS,
 	skippedLinkNext,
-	TEMPLATE_UNSUPPORTED_FLAGS,
 	unattendedUnauthedNext,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
@@ -87,7 +86,6 @@ import {
 	finishInitFunnel,
 	type InitFunnelAgentSetup,
 	type InitFunnelOutcome,
-	type InitFunnelState,
 	initStartProperties,
 } from "./funnel.js";
 import {
@@ -113,7 +111,6 @@ import {
 	assertNamedAgentTooling,
 	FALLBACK_SKILLS_AGENTS,
 	funnelAgentSetup,
-	INIT_NEEDS_YES_OR_TERMINAL,
 	type InitToolingPlan,
 	planInitToolingSteps,
 	recommendedTooling,
@@ -178,7 +175,7 @@ export type InitProps = CommonProps & {
 	regionId?: string;
 	branch?: string;
 	agentSetup?: boolean;
-	projectSetup?: InitProjectSetupChoice;
+	claimable?: boolean;
 	packageManager?: PackageManager;
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
@@ -468,7 +465,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	let printed = false;
 
 	try {
-		const detection = await detectInitEnvironment({
+		const detectOpts = {
 			cwd,
 			configDir,
 			...(props.detectProjectAgents
@@ -482,7 +479,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? { hasLocalCredentials: props.hasLocalCredentials }
 				: {}),
 			interactive: yes ? false : undefined,
-		});
+		};
+		let detection = await detectInitEnvironment(detectOpts);
 		if (yes) {
 			detection.interactive = false;
 		}
@@ -506,32 +504,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			template: props.template,
 		});
 
-		if (templateChoice.kind === "template") {
-			if (
-				props.projectSetup !== undefined ||
-				props.packageManager !== undefined ||
-				hasInitMcpFlags(props) ||
-				(props.skill !== undefined && props.skill.length > 0)
-			) {
-				throw new Error(TEMPLATE_UNSUPPORTED_FLAGS);
-			}
-			await runTemplatePath({
-				props,
-				cwd,
-				contextFile,
-				yes,
-				linkInputs,
-				servicesFlag,
-				funnel,
-				templateId: templateChoice.id,
-			});
-			outcome = "success";
-			printed = true;
-			return;
-		}
-
 		const skipAgents = props.agentSetup === false;
-		const modeResolution = resolveInitMode({
+		const modeArgs = {
 			yes,
 			interactive:
 				detection.interactive ||
@@ -541,9 +515,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			namedAgents: named.length > 0,
 			noLink: props.link === false,
 			hasLinkInputs: hasExplicitLinkInputs,
-			...(props.projectSetup !== undefined
-				? { projectSetup: props.projectSetup }
-				: {}),
+			claimable: props.claimable === true,
 			...(props.skill !== undefined ? { skills: props.skill } : {}),
 			...(props.mcpScope !== undefined
 				? { mcpScope: props.mcpScope }
@@ -554,6 +526,32 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				: {}),
 			...(props.config !== undefined ? { configFlag: props.config } : {}),
 			...(servicesFlag !== undefined ? { services: servicesFlag } : {}),
+		};
+		resolveInitMode(modeArgs);
+
+		let scaffoldedTemplate = false;
+		if (templateChoice.kind === "template") {
+			await scaffoldInitTemplate({
+				props,
+				cwd,
+				contextFile,
+				linkInputs,
+				servicesFlag,
+				templateId: templateChoice.id,
+			});
+			scaffoldedTemplate = true;
+			detection = await detectInitEnvironment(detectOpts);
+			if (yes) {
+				detection.interactive = false;
+			}
+		}
+
+		const modeResolution = resolveInitMode({
+			...modeArgs,
+			interactive:
+				detection.interactive ||
+				props.pickMode !== undefined ||
+				props.pickAgentSetup !== undefined,
 		});
 
 		const mode: InitMode =
@@ -568,7 +566,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				: modeResolution.kind;
 		funnel.mode = mode;
 
-		if (props.projectSetup === "claimable") {
+		if (props.claimable === true) {
 			if (props.link === false) {
 				throw new Error(CLAIMABLE_NO_LINK);
 			}
@@ -807,9 +805,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				projectSetup = "skip";
 				funnel.link = "skipped";
 			}
-		} else if (props.projectSetup !== undefined) {
-			projectSetup = props.projectSetup;
-		} else if (detection.authenticated) {
+		} else if (props.claimable === true) {
+			projectSetup = "claimable";
+		} else if (hasExplicitLinkInputs || detection.authenticated) {
 			projectSetup = "link";
 		} else if (
 			props.pickProjectSetup !== undefined ||
@@ -824,7 +822,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		if (
 			mcpAuth === "api-key" &&
-			(projectSetup === "claimable" || props.projectSetup === "claimable")
+			(projectSetup === "claimable" || props.claimable === true)
 		) {
 			throw new Error(CLAIMABLE_MCP_API_KEY);
 		}
@@ -1206,7 +1204,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		takeCommandSuccessExtras();
 		recordCommandSuccessExtras({
-			init_kind: detection.emptyDirectory ? "empty-skip" : "existing",
+			init_kind: scaffoldedTemplate
+				? "empty-template"
+				: detection.emptyDirectory
+					? "empty-skip"
+					: "existing",
 			...(extrasSetup(funnel.agentSetup) !== undefined
 				? { agent_setup: extrasSetup(funnel.agentSetup) }
 				: {}),
@@ -1276,32 +1278,21 @@ const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
 const nestedBootstrapDirectory = (cwd: string): string =>
 	resolve(cwd) === resolve(process.cwd()) ? "." : cwd;
 
-const runTemplatePath = async (input: {
+const scaffoldInitTemplate = async (input: {
 	props: InitProps;
 	cwd: string;
 	contextFile: string;
-	yes: boolean;
 	linkInputs: InitLinkInputs;
 	servicesFlag: readonly string[] | undefined;
-	funnel: InitFunnelState;
 	templateId: string;
 }): Promise<void> => {
-	const { props, cwd, contextFile, yes, linkInputs, servicesFlag, funnel } =
-		input;
-	if (!yes && props.runBootstrap === undefined && !props.fetchTemplates) {
-		const { canPickAgentsInteractively } = await import(
-			"../utils/agent_picker.js"
-		);
-		if (!canPickAgentsInteractively()) {
-			throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
-		}
-	}
+	const { props, cwd, contextFile, linkInputs, servicesFlag } = input;
 	noteTemplateKeepsShippedConfig(props.config, servicesFlag);
 	const { handler: bootstrapHandler } = await import(
 		"../commands/bootstrap.js"
 	);
 	const runBootstrap = props.runBootstrap ?? bootstrapHandler;
-	const result = await runBootstrap({
+	await runBootstrap({
 		apiClient: props.apiClient,
 		apiKey: props.apiKey,
 		apiHost: props.apiHost,
@@ -1310,17 +1301,17 @@ const runTemplatePath = async (input: {
 		directory: nestedBootstrapDirectory(cwd),
 		force: false,
 		listTemplates: false,
-		default: yes,
+		default: true,
 		install: true,
 		git: true,
-		link: props.link !== false,
+		link: false,
 		printBanner: false,
 		skipDoneSummary: true,
 		linkNoConfig: true,
 		narrate: "human",
 		template: input.templateId,
 		linkInputs,
-		...(props.agent !== undefined ? { agent: props.agent } : {}),
+		agentSetup: false,
 		...(props.configDir ? { configDir: props.configDir } : {}),
 		...(props.profile ? { profile: props.profile } : {}),
 		...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
@@ -1333,58 +1324,12 @@ const runTemplatePath = async (input: {
 			: {}),
 		...(props.analytics === false ? { analytics: false } : {}),
 		...(props.run ? { run: props.run } : {}),
-		...(props.linkProject ? { linkProject: props.linkProject } : {}),
-		...(props.pickAgentSetup
-			? { pickAgentSetup: props.pickAgentSetup }
-			: {}),
-		...(props.agentSetup === false ? { agentSetup: false } : {}),
 		...(props.detectProjectAgents
 			? { detectProjectAgents: props.detectProjectAgents }
 			: {}),
 		...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
 		...(props.hasProjectPlugins
 			? { hasProjectPlugins: props.hasProjectPlugins }
-			: {}),
-	});
-	funnel.mode = "custom";
-	funnel.agentSetup = result?.agentSetup ?? "skip";
-	funnel.link = result?.linked === true ? "linked" : "skipped";
-	funnel.config =
-		result?.hasNeonConfig === true || hasNeonConfigFile(cwd)
-			? "created"
-			: "skipped";
-	printInitDone(
-		formatInitDone({
-			heading: headingForKind("success"),
-			rows: [
-				{
-					label: "Template",
-					value: result?.templateTitle ?? input.templateId,
-				},
-				{
-					label: "Agents",
-					value: agentsRowValue({
-						setup: funnel.agentSetup,
-						agents: [],
-					}),
-				},
-				{
-					label: "Project",
-					value: projectRowValue(funnel.link),
-				},
-				{
-					label: "Config",
-					value: "provided by template",
-				},
-			],
-			next: [],
-		}),
-	);
-	takeCommandSuccessExtras();
-	recordCommandSuccessExtras({
-		init_kind: "empty-template",
-		...(result?.agentSetup !== undefined
-			? { agent_setup: result.agentSetup }
 			: {}),
 	});
 };

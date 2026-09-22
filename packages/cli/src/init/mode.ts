@@ -15,7 +15,7 @@ export type InitModeInput = {
 	yes: boolean;
 	interactive: boolean;
 	skipAgents: boolean;
-	projectSetup?: InitProjectSetupChoice;
+	claimable: boolean;
 	skills?: readonly string[];
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
@@ -53,7 +53,7 @@ const hasSkillsFlag = (skills: readonly string[] | undefined): boolean =>
 
 const hasCustomizingFlags = (input: InitModeInput): boolean =>
 	input.skipAgents ||
-	input.projectSetup !== undefined ||
+	input.claimable ||
 	hasSkillsFlag(input.skills) ||
 	hasInitMcpFlags(input);
 

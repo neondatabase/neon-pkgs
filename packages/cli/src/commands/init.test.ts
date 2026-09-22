@@ -6,10 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
-import {
-	NO_AGENT_SETUP_CONFLICT,
-	TEMPLATE_UNSUPPORTED_FLAGS,
-} from "../init/copy.js";
+import { NO_AGENT_SETUP_CONFLICT } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
@@ -206,7 +203,7 @@ describe("init handler", () => {
 	test("empty --template -y still nested-bootstraps", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-"));
 		const run = vi.fn().mockResolvedValue(true);
-		const runBootstrap = nestedBootstrapOk({ agentSetup: "plugin" });
+		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -215,13 +212,22 @@ describe("init handler", () => {
 				run,
 				yes: true,
 				template: "hono",
+				link: false,
+				config: false,
 				contextFile: join(cwd, ".neon"),
 				runBootstrap,
-				fetchTemplates: async () => [honoTemplate()],
+				detectInstalledAgents: async () => ["cursor"],
 			}),
 		);
 
-		expect(runBootstrap).toHaveBeenCalled();
+		expect(runBootstrap).toHaveBeenCalledWith(
+			expect.objectContaining({
+				agentSetup: false,
+				link: false,
+				template: "hono",
+			}),
+		);
+		expect(argvHeads(run)).toEqual(["plugins"]);
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-template",
 			agent_setup: "plugin",
@@ -473,24 +479,44 @@ describe("init handler", () => {
 		).rejects.toThrow(NO_AGENT_SETUP_CONFLICT);
 	});
 
-	test("--template rejects MCP flags", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-mcp-"));
+	test("--template -y --skill neon scaffolds then installs skills", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-skill-"));
+		const run = vi.fn().mockResolvedValue(true);
+		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
 		const { handler } = await import("./init.js");
 
-		await expect(
-			handler(
-				baseProps({
-					cwd,
-					template: "hono",
-					mcpAuth: "oauth",
-					contextFile: join(cwd, ".neon"),
-					fetchTemplates: async () => [honoTemplate()],
-				}),
-			),
-		).rejects.toThrow(TEMPLATE_UNSUPPORTED_FLAGS);
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				template: "hono",
+				skill: ["neon"],
+				agent: ["cursor"],
+				link: false,
+				config: false,
+				run,
+				runBootstrap,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(runBootstrap).toHaveBeenCalled();
+		expect(runBootstrap.mock.calls[0]?.[0]).toEqual(
+			expect.objectContaining({
+				agentSetup: false,
+				link: false,
+				template: "hono",
+			}),
+		);
+		expect(argvHeads(run)).toEqual(["skills"]);
+		expect(argvLine(run)[0]).toContain("--skill neon");
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "empty-template",
+			agent_setup: "skills",
+		});
 	});
 
-	test("-y --project-setup claimable is Custom and does not force Recommended", async () => {
+	test("-y --claimable is Custom and does not force Recommended", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-claim-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const createClaimable = vi.fn().mockResolvedValue(undefined);
@@ -500,7 +526,7 @@ describe("init handler", () => {
 			baseProps({
 				cwd,
 				yes: true,
-				projectSetup: "claimable",
+				claimable: true,
 				agentSetup: false,
 				config: false,
 				hasLocalCredentials: () => false,
@@ -916,7 +942,9 @@ describe("init CLI", () => {
 		expect(help).toMatch(/plugin/i);
 		expect(help).toMatch(/--no-agent-setup/);
 		expect(help).toMatch(/-a, --agent/);
-		expect(help).toMatch(/--skip-template/);
+		expect(help).toMatch(/--claimable/);
+		expect(help).not.toMatch(/--skip-template/);
+		expect(help).not.toMatch(/--project-setup/);
 		expect(help).toMatch(/--no-link/);
 		expect(help).toMatch(/--no-config/);
 		expect(flat).toMatch(/does not scaffold/i);
@@ -1053,45 +1081,52 @@ describe("init CLI", () => {
 		30_000,
 	);
 
-	test("empty template records empty-template and nested agent setup", async () => {
+	test("empty template records empty-template after continued setup", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-tmpl-"));
-		const runBootstrap = nestedBootstrapOk({ agentSetup: "plugin" });
+		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
 		const { handler } = await import("./init.js");
 
 		await handler(
 			baseProps({
 				cwd,
-				run: vi.fn().mockResolvedValue(true),
+				yes: true,
 				template: "hono",
+				agentSetup: false,
+				link: false,
+				config: false,
+				run: vi.fn().mockResolvedValue(true),
 				contextFile: join(cwd, ".neon"),
 				runBootstrap,
-				fetchTemplates: async () => [honoTemplate()],
 			}),
 		);
 
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-template",
-			agent_setup: "plugin",
+			agent_setup: "skip",
 		});
 	});
 
-	test("undefined nested bootstrap result omits agent_setup", async () => {
+	test("undefined nested bootstrap result still continues init", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-undef-"));
 		const { handler } = await import("./init.js");
 
 		await handler(
 			baseProps({
 				cwd,
-				run: vi.fn().mockResolvedValue(true),
 				yes: true,
 				template: "hono",
+				agentSetup: false,
+				link: false,
+				config: false,
 				contextFile: join(cwd, ".neon"),
+				run: vi.fn().mockResolvedValue(true),
 				runBootstrap: vi.fn().mockResolvedValue(undefined),
 			}),
 		);
 
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-template",
+			agent_setup: "skip",
 		});
 	});
 
@@ -1222,6 +1257,20 @@ describe("init flag parsing", () => {
 	test("--no-agent-setup skips agent setup", async () => {
 		expect((await parse(["--no-agent-setup"])).agentSetup).toBe(false);
 		expect((await parse([])).agentSetup).toBe(true);
+	});
+
+	test("--claimable is a boolean flag", async () => {
+		const argv = (await builder(
+			yargs().scriptName("neon").exitProcess(false),
+		).parseAsync(["--claimable"])) as { claimable?: boolean };
+		expect(argv.claimable).toBe(true);
+		expect(
+			(
+				(await builder(
+					yargs().scriptName("neon").exitProcess(false),
+				).parseAsync([])) as { claimable?: boolean }
+			).claimable,
+		).toBe(false);
 	});
 
 	test("--services none is the raw none token", async () => {

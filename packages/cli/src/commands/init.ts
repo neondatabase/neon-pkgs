@@ -16,7 +16,7 @@ export type { InitProps, InitRun };
 
 export const command = "init";
 export const describe =
-	"Set up coding agents and this directory for Neon. -y is Recommended. -y with Custom flags configures those choices without prompts.";
+	"Set up coding agents and this directory for Neon. -y is Recommended. -y with Custom flags applies those answers without prompts.";
 
 const removedProtocol = () =>
 	`\`${getCliName()} init --data\` was removed. Run \`${getCliName()} init\` or \`${getCliName()} init -y\`.`;
@@ -32,36 +32,35 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, default neon.ts). With --skill, MCP flags, --no-agent-setup, or --project-setup: Custom using those flags. Empty directories are not scaffolded; use --template or neon bootstrap",
+				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, default neon.ts). With --skill, MCP flags, --no-agent-setup, or --claimable: Custom using those flags. Empty directories are not scaffolded; use --template or neon bootstrap",
 		})
 		.option("agent-setup", {
 			type: "boolean",
 			default: true,
 			describe:
-				"Install Neon into coding agents. Use --no-agent-setup to skip",
+				"Install Neon into coding agents. Use --no-agent-setup to skip. Plugin vs skills is inferred from --skill and MCP flags",
 		})
-		.option("project-setup", {
-			type: "string",
-			choices: ["link", "claimable"] as const,
+		.option("claimable", {
+			type: "boolean",
+			default: false,
 			describe:
-				"Sign in and link an account project, or create a claimable project",
+				"Create a claimable project that expires in 72 hours unless claimed. Selects Custom",
 		})
 		.option("package-manager", {
 			type: "string",
 			choices: ["npm", "pnpm", "yarn", "bun"] as const,
 			describe:
-				"Package manager for neon.ts dependencies. Recommended detects one. Custom asks only when none is detected",
+				"Package manager for neon.ts dependencies. -y uses this without asking. Custom asks only when none is detected",
 		})
 		.option("skip-template", {
+			hidden: true,
 			type: "boolean",
 			default: false,
-			describe:
-				"Do not scaffold a template. Set up agents, a project, and neon.ts in this directory",
 		})
 		.option("template", {
 			type: "string",
 			describe:
-				"Template to scaffold into an empty directory. Conflicts with --skip-template",
+				"Scaffold this template into an empty directory, then continue setup. Works with -y and other init flags",
 		})
 		.option("link", {
 			type: "boolean",
@@ -153,12 +152,8 @@ export const builder = (yargs: yargs.Argv) =>
 			"Custom: those skills and MCP, Recommended defaults for the rest",
 		)
 		.example(
-			"$0 init --no-agent-setup --project-setup claimable",
+			"$0 init --no-agent-setup --claimable",
 			"Skip agent setup and create a claimable project",
-		)
-		.example(
-			"$0 init --skip-template",
-			"Set up this directory without scaffolding a template",
 		)
 		.example(
 			"$0 init --template hono -y",
@@ -171,7 +166,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Recommended setup installs tooling for detected coding agents, links a Neon project when the CLI is authenticated or the session is interactive, and writes a default neon.ts.",
-				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --project-setup is Custom: those flags, Recommended defaults for unanswered questions.",
+				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --claimable is Custom: those flags, Recommended defaults for unanswered questions.",
 				"-y does not scaffold a starter app. Scaffold with --template <id> or neon bootstrap.",
 				"--skill selects skills (not the plugin). MCP flags select skills and MCP. --no-agent-setup skips agent setup. --agent without those flags installs the plugin (and skills/MCP for agents the plugin cannot cover).",
 				"Without a TTY, pass -y or enough flags to answer every question.",

@@ -64,7 +64,7 @@ const FLAG_ALIASES: Readonly<Record<string, string>> = {
 	"--region-id": "--region-id",
 	"--branch": "--branch",
 	"--branch-id": "--branch",
-	"--project-setup": "--project-setup",
+	"--claimable": "--claimable",
 	"--package-manager": "--package-manager",
 	"--skill": "--skill",
 	"--mcp-scope": "--mcp-scope",

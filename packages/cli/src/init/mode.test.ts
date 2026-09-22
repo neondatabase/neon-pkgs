@@ -14,6 +14,7 @@ const base = {
 	namedAgents: false,
 	noLink: false,
 	hasLinkInputs: false,
+	claimable: false,
 } as const;
 
 describe("resolveInitMode", () => {
@@ -38,6 +39,12 @@ describe("resolveInitMode", () => {
 	test("-y with --no-agent-setup selects custom", () => {
 		expect(
 			resolveInitMode({ ...base, yes: true, skipAgents: true }),
+		).toEqual({ kind: "custom" });
+	});
+
+	test("-y with --claimable selects custom", () => {
+		expect(
+			resolveInitMode({ ...base, yes: true, claimable: true }),
 		).toEqual({ kind: "custom" });
 	});
 

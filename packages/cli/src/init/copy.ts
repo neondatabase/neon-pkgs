@@ -59,9 +59,9 @@ export const MCP_PIN_MINT_NOTE =
 export const CLAIMABLE_MCP_API_KEY =
 	"Claimable project setup cannot create an account API key for MCP. Use --mcp-auth oauth.";
 export const CLAIMABLE_NO_LINK =
-	"--project-setup claimable cannot be combined with --no-link.";
+	"--claimable cannot be combined with --no-link.";
 export const CLAIMABLE_ACCOUNT_FLAGS =
-	"--project-setup claimable cannot be combined with --org-id, --project-id, --project-name, --region-id, or --branch.";
+	"--claimable cannot be combined with --org-id, --project-id, --project-name, --region-id, or --branch.";
 
 export const PROJECT_SETUP_MESSAGE =
 	"How would you like to get a Neon project?";
@@ -90,11 +90,8 @@ export const NO_AGENTS_FALLBACK_STATUS =
 export const NO_AGENT_SETUP_CONFLICT =
 	"--no-agent-setup cannot be combined with --agent, --skill, or MCP flags.";
 
-export const TEMPLATE_UNSUPPORTED_FLAGS =
-	"--template cannot be combined with --project-setup, --package-manager, --skill, or MCP flags. After scaffolding, skip agent setup with --no-agent-setup.";
-
 export const NON_TTY_LINK_NEEDS_AUTH =
-	"No interactive terminal. Sign in with `neon auth`, then re-run, or pass --project-setup claimable.";
+	"No interactive terminal. Sign in with `neon auth`, then re-run, or pass --claimable.";
 
 export const NON_TTY_AGENT_SETUP =
 	"No interactive terminal. Pass -y for Recommended, or pass --skill, --mcp-auth, --agent, or --no-agent-setup.";
