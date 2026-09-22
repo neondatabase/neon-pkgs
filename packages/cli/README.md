@@ -779,35 +779,29 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 ## Set up a project (`init`)
 
-`neon init` sets up this directory for Neon as one flow: agents, a linked project, and optionally `neon.ts`.
+`neon init` sets up coding agents and this directory for Neon. In a terminal it asks **Recommended** or **Custom**. `-y` is Recommended with no prompts.
 
-An empty directory (nothing except `.git`) asks how to set up the directory. Pick a starter template, or skip scaffolding and only install agent tooling, link a project, and optionally write `neon.ts`. That skip is only on `init` — `neon bootstrap` always scaffolds.
+Recommended installs the Neon plugin for every detected agent (global config, project folders, and the host CLI). Plugin-capable agents get the plugin; the rest get skills and MCP. If none are detected, it installs the default Neon skills for Cursor and Codex at user scope (`~/.agents/skills`) and does not configure MCP. It then links a project when the CLI is authenticated, and writes a default `neon.ts` (Postgres only) using the package manager already in the directory.
 
-`-y` in an empty directory scaffolds the default template (`bootstrap --default`) and does not add a later `config init` step. `--skip-template` skips scaffolding even with `-y`. `--template <id>` scaffolds that template; combine it with `-y` to skip the remaining bootstrap pickers.
+Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser.
 
-An existing app (or skip-template) installs agent tooling, then asks whether to link unless `.neon` already has a projectId, then asks whether to create `neon.ts`. Linking uses the same organization, project, and branch flow as `neon link`. Saying no to `neon.ts` skips the services picker and does not write the file. `--no-config` does the same without asking. `-y` writes `config init --services none` unless `--no-config`. `--services` implies creating `neon.ts`.
+Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. The package manager is inferred from the directory; Custom asks only when none is detected.
 
-In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. Agent selection and setup finish before the link question. It never runs plugin and skills+MCP together.
+Empty directories are set up in place. `-y` does **not** scaffold a starter app. Scaffold with `--template <id>` or `neon bootstrap`. `--skip-template` is still accepted and is now the default empty-directory path.
 
 ```bash
 $ neon init
-$ neon init --skip-template
-$ neon init --skip-template --no-link
 $ neon init -y
-$ neon init --agent cursor --agent claude-code
+$ neon init --template hono -y
+$ neon init --agent cursor --agent claude-code --no-link
+$ neon init --agent-setup skip --project-setup claimable
 ```
 
-Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates. `--no-link` skips project linking without asking, including when a template is scaffolded.
-
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. `--skip-template` or an existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
-
-`--agent` / `-a` (repeatable) names coding agents and skips agent selection, interactive or with `-y`. Init forwards those names to `plugins`, or to `skills` and `mcp`, not both.
+Without a TTY, pass `-y` or enough flags to answer every question. `--agent` skips agent selection and, without `-y`, selects Custom. `--no-link` skips project linking without asking. `--no-config` skips `neon.ts`. `--services` implies creating `neon.ts`. `--mode custom` cannot be combined with `-y`.
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`, including the link step inside nested bootstrap when a template is scaffolded. They are not filled from `.neon`; a linked directory is not relinked unless you pass one of those flags.
 
-`--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
-
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, uses `link -y` (auto-select or print IDs and exit), passes `--default` to nested bootstrap, and forwards `--services none` to `config init`. `--agent` is forwarded to agent setup. `mcp -y` is the global install. Default linking skips the "already linked" confirmation.
+`--config`, `--no-config`, and `--services` apply when init writes `neon.ts` itself. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new default `neon.ts` on a pinned branch, init runs `env pull` unless link already pulled env or the file declares extra services (those still need `neon config plan` / `neon deploy`).
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 

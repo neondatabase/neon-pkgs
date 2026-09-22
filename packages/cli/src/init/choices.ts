@@ -51,10 +51,7 @@ export const resolveInitTemplateChoice = (input: {
 	if (hasTemplate) {
 		return { kind: "template", id };
 	}
-	if (input.yes) {
-		return { kind: "default" };
-	}
-	return { kind: "ask" };
+	return { kind: "skip" };
 };
 
 export const resolveInitConfigChoice = (input: {
@@ -101,6 +98,15 @@ export const configPlanFromResolution = (
 	return resolution;
 };
 
+export const isBareInitServices = (
+	services: readonly string[] | undefined,
+): boolean => {
+	if (services === undefined || services.length === 0) {
+		return true;
+	}
+	return services.every((service) => service === "none");
+};
+
 export const shouldRefreshEnvAfterNewConfig = (input: {
 	wroteNewFile: boolean;
 	projectId?: string;
@@ -111,3 +117,20 @@ export const shouldRefreshEnvAfterNewConfig = (input: {
 	input.projectId.length > 0 &&
 	typeof input.branch === "string" &&
 	input.branch.length > 0;
+
+export const shouldPullEnvAfterInitConfig = (input: {
+	wroteNewFile: boolean;
+	extraServices: boolean;
+	alreadyPulled: boolean;
+	projectId?: string;
+	branch?: string;
+}): boolean =>
+	!input.extraServices &&
+	!input.alreadyPulled &&
+	shouldRefreshEnvAfterNewConfig({
+		wroteNewFile: input.wroteNewFile,
+		...(input.projectId !== undefined
+			? { projectId: input.projectId }
+			: {}),
+		...(input.branch !== undefined ? { branch: input.branch } : {}),
+	});

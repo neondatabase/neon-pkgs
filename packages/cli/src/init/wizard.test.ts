@@ -22,6 +22,8 @@ import {
 	pickAgentSetupInteractively,
 	pickInitConfigInteractively,
 	pickInitLinkInteractively,
+	pickInitModeInteractively,
+	pickInitProjectSetupInteractively,
 	pickInitTemplateInteractively,
 } from "./wizard.js";
 
@@ -71,15 +73,55 @@ describe("init pickers", () => {
 			choices: Array<{ title: string; value: string }>;
 		};
 		expect(question.message).toBe(
-			"How would you like to set up your coding agents?",
+			"How should Neon be added to your coding agents?",
 		);
 		expect(question.choices.map((choice) => choice.value)).toEqual([
 			"plugin",
 			"skills-mcp",
 			"skip",
 		]);
-		expect(question.choices[0]?.title).toMatch(/recommended/i);
+		expect(question.choices[0]?.title).toBe("Neon plugin");
 		expect(question.choices[2]?.title).toBe("Skip agent setup");
+	});
+
+	test("mode picker lists Recommended then Custom", async () => {
+		canPickMock.mockReturnValue(true);
+		promptsMock.mockResolvedValue({ mode: "recommended" });
+		await pickInitModeInteractively();
+		const question = promptsMock.mock.calls[0]?.[0] as {
+			message: string;
+			choices: Array<{ title: string; value: string }>;
+		};
+		expect(question.message).toBe("How would you like to set up Neon?");
+		expect(question.choices.map((choice) => choice.value)).toEqual([
+			"recommended",
+			"custom",
+		]);
+		expect(question.choices[0]?.title).toBe("Recommended setup");
+		expect(question.choices[1]?.title).toBe("Custom setup");
+	});
+
+	test("project setup lists sign-in then claimable", async () => {
+		canPickMock.mockReturnValue(true);
+		promptsMock.mockResolvedValue({ setup: "link" });
+		await pickInitProjectSetupInteractively();
+		const question = promptsMock.mock.calls[0]?.[0] as {
+			message: string;
+			choices: Array<{
+				title: string;
+				value: string;
+				description: string;
+			}>;
+		};
+		expect(question.message).toBe(
+			"How would you like to get a Neon project?",
+		);
+		expect(question.choices.map((choice) => choice.value)).toEqual([
+			"link",
+			"claimable",
+		]);
+		expect(question.choices[0]?.title).toBe("Sign in to Neon");
+		expect(question.choices[1]?.description).toMatch(/72 hours/);
 	});
 
 	test("template picker lists skip first and selects the first template", async () => {
@@ -174,13 +216,11 @@ describe("init pickers", () => {
 			message: string;
 			initial: boolean;
 		};
-		expect(question.message).toBe(
-			"Create neon.ts to manage this project's Neon setup as code?",
-		);
+		expect(question.message).toBe("Create neon.ts in this directory?");
 		expect(question.initial).toBe(true);
 		expect(
 			stdout.mock.calls.map((call) => String(call[0])).join(""),
-		).toMatch(/neon config apply/);
+		).toMatch(/Declare Neon services/);
 	});
 
 	test("link confirm describes the action without another command", async () => {

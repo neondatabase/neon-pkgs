@@ -6,6 +6,7 @@ import {
 	INIT_TEMPLATE_CONFLICT,
 	resolveInitConfigChoice,
 	resolveInitTemplateChoice,
+	shouldPullEnvAfterInitConfig,
 	shouldRefreshEnvAfterNewConfig,
 } from "./choices.js";
 
@@ -51,14 +52,14 @@ describe("resolveInitTemplateChoice", () => {
 		).toEqual({ kind: "skip" });
 	});
 
-	test("empty -y without --skip-template is the default template", () => {
+	test("empty -y without --skip-template sets up in place", () => {
 		expect(
 			resolveInitTemplateChoice({
 				empty: true,
 				yes: true,
 				skipTemplate: false,
 			}),
-		).toEqual({ kind: "default" });
+		).toEqual({ kind: "skip" });
 	});
 
 	test("empty -y --skip-template skips scaffolding", () => {
@@ -82,14 +83,14 @@ describe("resolveInitTemplateChoice", () => {
 		).toEqual({ kind: "template", id: "hono" });
 	});
 
-	test("empty interactive with no flags asks", () => {
+	test("empty interactive with no flags sets up in place", () => {
 		expect(
 			resolveInitTemplateChoice({
 				empty: true,
 				yes: false,
 				skipTemplate: false,
 			}),
-		).toEqual({ kind: "ask" });
+		).toEqual({ kind: "skip" });
 	});
 
 	test("--skip-template and --template together fail", () => {
@@ -111,7 +112,7 @@ describe("resolveInitTemplateChoice", () => {
 				skipTemplate: false,
 				template: "  ",
 			}),
-		).toEqual({ kind: "ask" });
+		).toEqual({ kind: "skip" });
 	});
 });
 
@@ -270,6 +271,44 @@ describe("configPlanFromResolution", () => {
 				false,
 			),
 		).toEqual({ kind: "write", services: ["none"] });
+	});
+});
+
+describe("shouldPullEnvAfterInitConfig", () => {
+	test("skips a second pull after link already pulled env", () => {
+		expect(
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile: true,
+				extraServices: false,
+				alreadyPulled: true,
+				projectId: "proj-1",
+				branch: "main",
+			}),
+		).toBe(false);
+	});
+
+	test("skips when extra services still need a deploy", () => {
+		expect(
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile: true,
+				extraServices: true,
+				alreadyPulled: false,
+				projectId: "proj-1",
+				branch: "main",
+			}),
+		).toBe(false);
+	});
+
+	test("pulls once for a new bare neon.ts on a pinned branch", () => {
+		expect(
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile: true,
+				extraServices: false,
+				alreadyPulled: false,
+				projectId: "proj-1",
+				branch: "main",
+			}),
+		).toBe(true);
 	});
 });
 

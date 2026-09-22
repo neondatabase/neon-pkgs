@@ -11,7 +11,6 @@ import {
 	directoryIsEmpty,
 	initYesSupportedAgents,
 	linkInputArgv,
-	NAMED_AGENTS_MIXED,
 	namedAgentsNeedSplit,
 	noDetectedAgentsMessage,
 	planAgentSteps,
@@ -736,20 +735,15 @@ describe("assertNamedAgentTooling", () => {
 		).not.toThrow();
 	});
 
-	test("cursor plus vscode fails with both names and two commands", () => {
-		expect(() => assertNamedAgentTooling(["cursor", "vscode"])).toThrow(
-			NAMED_AGENTS_MIXED,
-		);
-		expect(() => assertNamedAgentTooling(["cursor", "vscode"])).toThrow(
-			/Plugin: cursor\. Skills\/MCP: vscode\. Re-run `neon init --agent cursor` or `neon init --agent vscode`/,
-		);
+	test("cursor plus vscode is allowed on init and still split on bootstrap", () => {
+		expect(() =>
+			assertNamedAgentTooling(["cursor", "vscode"]),
+		).not.toThrow();
 		expect(() =>
 			assertNamedAgentTooling(["cursor", "vscode"], "init", {
 				yes: true,
 			}),
-		).toThrow(
-			/Re-run `neon init -y --agent cursor` or `neon init -y --agent vscode`/,
-		);
+		).not.toThrow();
 		expect(() =>
 			assertNamedAgentTooling(["cursor", "vscode"], "bootstrap", {
 				directory: "my-app",

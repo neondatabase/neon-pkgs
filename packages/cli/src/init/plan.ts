@@ -328,6 +328,154 @@ export const chooseYesAgentTooling = (
 	return { setup: "skills-mcp", skillsAgents, mcpAgents };
 };
 
+export const FALLBACK_SKILLS_AGENTS: [AgentType, AgentType] = [
+	"cursor",
+	"codex",
+];
+
+export type InitToolingPlan =
+	| { setup: "plugin"; agents: [AgentType, ...AgentType[]] }
+	| {
+			setup: "skills-mcp";
+			skillsAgents: readonly AgentType[];
+			mcpAgents: readonly AgentType[];
+	  }
+	| {
+			setup: "mixed";
+			pluginAgents: [AgentType, ...AgentType[]];
+			skillsAgents: readonly AgentType[];
+			mcpAgents: readonly AgentType[];
+	  }
+	| { setup: "skills"; agents: [AgentType, ...AgentType[]] }
+	| { setup: "skip" };
+
+export const splitInitTooling = (
+	agents: readonly AgentType[],
+	pluginScope: "global" | "project",
+): InitToolingPlan => {
+	const pluginSet = new Set(pluginsInstallableAgents(pluginScope));
+	const mcpSet = new Set(
+		mcpInstallableAgents(pluginScope === "project" ? "project" : "global"),
+	);
+	const pluginAgents = uniqueAgentIds(
+		agents.filter((id) => pluginSet.has(id)),
+	);
+	const rest = uniqueAgentIds(agents.filter((id) => !pluginSet.has(id)));
+	const skillsAgents = rest.filter((id) => supportsSkills(id));
+	const mcpAgents = rest.filter((id) => mcpSet.has(id));
+	const [pluginFirst, ...pluginRest] = pluginAgents;
+	if (
+		pluginFirst !== undefined &&
+		(skillsAgents.length > 0 || mcpAgents.length > 0)
+	) {
+		return {
+			setup: "mixed",
+			pluginAgents: [pluginFirst, ...pluginRest],
+			skillsAgents,
+			mcpAgents,
+		};
+	}
+	if (pluginFirst !== undefined) {
+		return { setup: "plugin", agents: [pluginFirst, ...pluginRest] };
+	}
+	if (skillsAgents.length === 0 && mcpAgents.length === 0) {
+		return { setup: "skip" };
+	}
+	return { setup: "skills-mcp", skillsAgents, mcpAgents };
+};
+
+export const recommendedTooling = (
+	detected: readonly AgentType[],
+): InitToolingPlan => {
+	const split = splitInitTooling(detected, "global");
+	if (split.setup === "skip") {
+		return { setup: "skills", agents: FALLBACK_SKILLS_AGENTS };
+	}
+	return split;
+};
+
+export const planInitToolingSteps = (input: {
+	tooling: InitToolingPlan;
+	yes: boolean;
+	pluginScope: "global" | "project";
+	skillsGlobal: boolean;
+	mcpOauth: boolean;
+	mcpProject?: boolean;
+	mcpProjectId?: string;
+	skills?: readonly string[];
+}): InitStep[] => {
+	const y = input.yes ? (["-y"] as const) : [];
+	const pluginPrefix = [
+		"plugins",
+		...(input.pluginScope === "global" ? (["--global"] as const) : []),
+		...y,
+	];
+	const skillFlags = (input.skills ?? []).flatMap((skill) => [
+		"--skill",
+		skill,
+	]);
+	const skillsPrefix = [
+		"skills",
+		...(input.skillsGlobal ? (["--global"] as const) : []),
+		...y,
+		...skillFlags,
+	];
+	const mcpPrefix = [
+		"mcp",
+		...y,
+		...(input.mcpOauth ? (["--oauth"] as const) : []),
+		...(input.mcpProject === true ? (["--project"] as const) : []),
+		...(input.mcpProjectId !== undefined
+			? (["--project-id", input.mcpProjectId] as const)
+			: []),
+	];
+	const named = (ids: readonly AgentType[]): string[] => agentArgv(ids);
+	switch (input.tooling.setup) {
+		case "skip":
+			return [];
+		case "plugin":
+			return [[...pluginPrefix, ...named(input.tooling.agents)]];
+		case "skills":
+			return [[...skillsPrefix, ...named(input.tooling.agents)]];
+		case "skills-mcp": {
+			const steps: InitStep[] = [];
+			if (input.tooling.skillsAgents.length > 0) {
+				steps.push([
+					...skillsPrefix,
+					...named(input.tooling.skillsAgents),
+				]);
+			}
+			if (input.tooling.mcpAgents.length > 0) {
+				steps.push([...mcpPrefix, ...named(input.tooling.mcpAgents)]);
+			}
+			return steps;
+		}
+		case "mixed": {
+			const steps: InitStep[] = [
+				[...pluginPrefix, ...named(input.tooling.pluginAgents)],
+			];
+			if (input.tooling.skillsAgents.length > 0) {
+				steps.push([
+					...skillsPrefix,
+					...named(input.tooling.skillsAgents),
+				]);
+			}
+			if (input.tooling.mcpAgents.length > 0) {
+				steps.push([...mcpPrefix, ...named(input.tooling.mcpAgents)]);
+			}
+			return steps;
+		}
+		default: {
+			const _exhaustive: never = input.tooling;
+			return _exhaustive;
+		}
+	}
+};
+
+export const funnelAgentSetup = (
+	tooling: InitToolingPlan,
+): "plugin" | "skills-mcp" | "skills" | "mixed" | "skip" => tooling.setup;
+
 export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] =>
 	planToolingSteps(tooling, { yes: true, named: false });
 
@@ -411,7 +559,7 @@ export const assertNamedAgentTooling = (
 			`${NAMED_AGENTS_UNSUPPORTED} Supported agents: ${initYesSupportedAgents().join(", ")}`,
 		);
 	}
-	if (namedAgentsNeedSplit(named, tooling)) {
+	if (command === "bootstrap" && namedAgentsNeedSplit(named, tooling)) {
 		throw new Error(namedAgentsMixedMessage(named, command, context));
 	}
 };

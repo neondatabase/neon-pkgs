@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { InitCancelled } from "./cancelled.js";
 
 export type InitRun = (
 	argv: string[],
@@ -32,17 +33,28 @@ export const spawnCliChild: InitRun = async (argv, cwd, overlay) => {
 			"Cannot re-exec the Neon CLI: process.argv[1] is missing.",
 		);
 	}
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		const child = spawn(process.execPath, [cli, ...argv], {
 			cwd,
 			stdio: "inherit",
 			env: initChildEnv(argv[0], overlay),
 		});
+		const onSigint = () => {
+			child.kill("SIGINT");
+		};
+		process.on("SIGINT", onSigint);
+		const finish = (code: number | null, signal: NodeJS.Signals | null) => {
+			process.off("SIGINT", onSigint);
+			if (signal === "SIGINT" || signal === "SIGTERM") {
+				reject(new InitCancelled());
+				return;
+			}
+			resolve(code === 0);
+		};
 		child.on("error", () => {
+			process.off("SIGINT", onSigint);
 			resolve(false);
 		});
-		child.on("close", (code) => {
-			resolve(code === 0);
-		});
+		child.on("close", finish);
 	});
 };
