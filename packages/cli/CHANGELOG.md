@@ -1,5 +1,11 @@
 # neon
 
+## 5.0.1
+
+### Patch Changes
+
+- 3061d9f: Explain API-key authentication and named profiles in auth and login help.
+
 ## 5.0.0
 
 ### Major Changes
