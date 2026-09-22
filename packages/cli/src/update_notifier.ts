@@ -17,10 +17,13 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const NOTIFY_INTERVAL_MS = 3 * CHECK_INTERVAL_MS;
 const CACHE_FILE = "update-check.json";
 
+export type UpdateSource = "homebrew" | "npm";
+
 export type UpdateCheckCache = {
 	checkedAt: number;
 	latestVersion?: string;
 	notifiedAt?: number;
+	source: UpdateSource;
 };
 
 type UpdateNoticeOptions = {
@@ -48,8 +51,6 @@ type UpdateNotifierEligibility = Pick<
 	stdoutIsTty: boolean;
 };
 
-type UpdateSource = "homebrew" | "npm";
-
 type UpdateWorkerProcessOptions = {
 	cachePath: string;
 	executablePath: string;
@@ -69,6 +70,7 @@ export const parseUpdateCheckCache = (
 			!isRecord(value) ||
 			typeof value.checkedAt !== "number" ||
 			!Number.isFinite(value.checkedAt) ||
+			(value.source !== "homebrew" && value.source !== "npm") ||
 			(value.latestVersion !== undefined &&
 				typeof value.latestVersion !== "string") ||
 			(value.notifiedAt !== undefined &&
@@ -80,6 +82,7 @@ export const parseUpdateCheckCache = (
 
 		return {
 			checkedAt: value.checkedAt,
+			source: value.source,
 			...(value.latestVersion === undefined
 				? {}
 				: { latestVersion: value.latestVersion }),
@@ -102,7 +105,7 @@ const readUpdateCheckCache = (
 	}
 };
 
-const writeUpdateCheckCache = (
+export const writeUpdateCheckCache = (
 	cachePath: string,
 	cache: UpdateCheckCache,
 ): boolean => {
@@ -114,7 +117,9 @@ const writeUpdateCheckCache = (
 		renameSync(temporaryPath, cachePath);
 		return true;
 	} catch (error) {
-		rmSync(temporaryPath, { force: true });
+		try {
+			rmSync(temporaryPath, { force: true });
+		} catch {}
 		log.debug(
 			"Could not write the CLI update cache: %s",
 			error instanceof Error ? error.message : String(error),
@@ -143,6 +148,12 @@ export const shouldRefreshUpdateCheck = (
 	cache: UpdateCheckCache | undefined,
 	now: number,
 ): boolean => cache === undefined || now - cache.checkedAt >= CHECK_INTERVAL_MS;
+
+export const cacheForUpdateSource = (
+	cache: UpdateCheckCache | undefined,
+	source: UpdateSource,
+): UpdateCheckCache | undefined =>
+	cache?.source === source ? cache : undefined;
 
 const isCurrentBranchProbe = ({
 	commandPath,
@@ -245,7 +256,8 @@ export const notifyIfUpdateAvailable = ({
 
 	const cachePath = join(configDir, CACHE_FILE);
 	const now = Date.now();
-	const cache = readUpdateCheckCache(cachePath);
+	const source = updateSource(command);
+	const cache = cacheForUpdateSource(readUpdateCheckCache(cachePath), source);
 	let nextCache = cache;
 
 	if (
@@ -271,22 +283,24 @@ export const notifyIfUpdateAvailable = ({
 		return;
 	}
 
-	nextCache = { ...nextCache, checkedAt: now };
+	nextCache = { ...nextCache, checkedAt: now, source };
 	if (writeUpdateCheckCache(cachePath, nextCache)) {
-		spawnUpdateWorker(cachePath, updateSource(command));
+		spawnUpdateWorker(cachePath, source);
 	}
 };
 
 export const recordLatestVersion = (
 	cachePath: string,
+	source: UpdateSource,
 	latestVersion: string,
 ): void => {
 	if (semver.valid(latestVersion) === null) return;
 
-	const cache = readUpdateCheckCache(cachePath);
+	const cache = cacheForUpdateSource(readUpdateCheckCache(cachePath), source);
+	if (cache === undefined) return;
+
 	writeUpdateCheckCache(cachePath, {
 		...cache,
-		checkedAt: cache?.checkedAt ?? Date.now(),
 		latestVersion,
 	});
 };

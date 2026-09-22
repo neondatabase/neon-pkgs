@@ -1,11 +1,17 @@
 import { once } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	cacheForUpdateSource,
 	formatUpdateNotice,
 	parseUpdateCheckCache,
 	shouldRefreshUpdateCheck,
 	shouldRunUpdateNotifier,
 	spawnUpdateWorkerProcess,
+	type UpdateCheckCache,
+	writeUpdateCheckCache,
 } from "./update_notifier.js";
 import { recommendedCliUpgradeCommand } from "./utils/package_manager.js";
 
@@ -101,19 +107,23 @@ describe("parseUpdateCheckCache", () => {
 					checkedAt: 100,
 					latestVersion: "5.1.0",
 					notifiedAt: 200,
+					source: "npm",
 				}),
 			),
 		).toEqual({
 			checkedAt: 100,
 			latestVersion: "5.1.0",
 			notifiedAt: 200,
+			source: "npm",
 		});
 	});
 
 	it.each([
 		"",
 		"{}",
+		'{"checkedAt":100}',
 		'{"checkedAt":"100"}',
+		'{"checkedAt":100,"source":"other"}',
 		'{"checkedAt":100,"latestVersion":1}',
 		'{"checkedAt":100,"notifiedAt":"200"}',
 	])("rejects malformed cache data: %s", (raw) => {
@@ -128,7 +138,7 @@ describe("shouldRefreshUpdateCheck", () => {
 		expect(shouldRefreshUpdateCheck(undefined, day)).toBe(true);
 		expect(
 			shouldRefreshUpdateCheck(
-				{ checkedAt: 0, latestVersion: "5.0.1" },
+				{ checkedAt: 0, latestVersion: "5.0.1", source: "npm" },
 				day,
 			),
 		).toBe(true);
@@ -137,10 +147,52 @@ describe("shouldRefreshUpdateCheck", () => {
 	it("keeps a daily check fresh", () => {
 		expect(
 			shouldRefreshUpdateCheck(
-				{ checkedAt: 1, latestVersion: "5.0.1" },
+				{ checkedAt: 1, latestVersion: "5.0.1", source: "npm" },
 				day,
 			),
 		).toBe(false);
+	});
+});
+
+describe("cacheForUpdateSource", () => {
+	const cache: UpdateCheckCache = {
+		checkedAt: 100,
+		latestVersion: "5.1.0",
+		notifiedAt: 200,
+		source: "npm",
+	};
+
+	it("reuses cache state from the same release channel", () => {
+		expect(cacheForUpdateSource(cache, "npm")).toEqual(cache);
+	});
+
+	it("discards version and timing state from another release channel", () => {
+		expect(cacheForUpdateSource(cache, "homebrew")).toBeUndefined();
+	});
+});
+
+describe("writeUpdateCheckCache", () => {
+	it("contains cache write and cleanup failures", () => {
+		const directory = mkdtempSync(join(tmpdir(), "neon-update-cache-"));
+		const parentFile = join(directory, "not-a-directory");
+		writeFileSync(parentFile, "");
+
+		try {
+			expect(() =>
+				writeUpdateCheckCache(join(parentFile, "update-check.json"), {
+					checkedAt: 100,
+					source: "npm",
+				}),
+			).not.toThrow();
+			expect(
+				writeUpdateCheckCache(join(parentFile, "update-check.json"), {
+					checkedAt: 100,
+					source: "npm",
+				}),
+			).toBe(false);
+		} finally {
+			rmSync(directory, { force: true, recursive: true });
+		}
 	});
 });
 

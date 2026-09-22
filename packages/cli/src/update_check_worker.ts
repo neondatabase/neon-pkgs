@@ -67,7 +67,7 @@ const run = async (): Promise<void> => {
 				? await homebrewLatestVersion()
 				: await npmLatestVersion();
 		if (latestVersion !== undefined) {
-			recordLatestVersion(cachePath, latestVersion);
+			recordLatestVersion(cachePath, source, latestVersion);
 		}
 	} catch {
 		// Update checks are advisory and must not affect the command that launched them.
