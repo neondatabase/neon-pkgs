@@ -69,7 +69,6 @@ const FLAG_ALIASES: Readonly<Record<string, string>> = {
 	"--skill": "--skill",
 	"--mcp-scope": "--mcp-scope",
 	"--mcp-auth": "--mcp-auth",
-	"--mcp-project-id": "--mcp-project-id",
 	"--no-mcp-project-pin": "--no-mcp-project-pin",
 	"--mcp-project-pin": "--mcp-project-pin",
 	"--no-agent-setup": "--no-agent-setup",

@@ -131,11 +131,6 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"MCP authentication. Selects skills and MCP setup. oauth is neon mcp --oauth",
 		})
-		.option("mcp-project-id", {
-			type: "string",
-			describe:
-				"Pin MCP tools to this project. Distinct from --project-id, which is for link. Selects skills and MCP setup",
-		})
 		.option("mcp-project-pin", {
 			type: "boolean",
 			describe:

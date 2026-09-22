@@ -182,7 +182,6 @@ export type InitProps = CommonProps & {
 	packageManager?: PackageManager;
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
-	mcpProjectId?: string;
 	mcpProjectPin?: boolean;
 	run?: InitRun;
 	runBootstrap?: (
@@ -431,9 +430,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		...(props.skill !== undefined ? { skills: props.skill } : {}),
 		...(props.mcpScope !== undefined ? { mcpScope: props.mcpScope } : {}),
 		...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
-		...(props.mcpProjectId !== undefined
-			? { mcpProjectId: props.mcpProjectId }
-			: {}),
 		...(props.mcpProjectPin !== undefined
 			? { mcpProjectPin: props.mcpProjectPin }
 			: {}),
@@ -553,9 +549,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? { mcpScope: props.mcpScope }
 				: {}),
 			...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
-			...(props.mcpProjectId !== undefined
-				? { mcpProjectId: props.mcpProjectId }
-				: {}),
 			...(props.mcpProjectPin !== undefined
 				? { mcpProjectPin: props.mcpProjectPin }
 				: {}),
@@ -746,10 +739,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const usesMcp =
 			tooling.setup === "skills-mcp" || tooling.setup === "mixed";
 		delayMcp =
-			usesMcp &&
-			(mcpAuth === "api-key" ||
-				(props.mcpProjectPin === true &&
-					props.mcpProjectId === undefined));
+			usesMcp && (mcpAuth === "api-key" || props.mcpProjectPin === true);
 
 		const mcpOauth =
 			mcpAuth === "oauth" || (recommended && !detection.authenticated);
@@ -778,9 +768,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			mcpOauth,
 			mcpProject: mcpScope === "project",
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
-			...(props.mcpProjectId !== undefined && !delayMcp
-				? { mcpProjectId: props.mcpProjectId }
-				: {}),
 		});
 		if (toolingSteps.length > 0) {
 			await runInitSteps(toolingSteps, {
@@ -898,9 +885,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		if (delayMcp && tooling.setup !== "skip") {
 			const linkedId = readContextFile(contextFile).projectId;
-			let pinId = props.mcpProjectId;
+			let pinId: string | undefined;
 			if (
-				pinId === undefined &&
 				props.mcpProjectPin !== false &&
 				typeof linkedId === "string" &&
 				linkedId.length > 0
@@ -914,7 +900,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 									pickInitMcpPinInteractively
 								)({
 									projectId: linkedId,
-									minting: true,
+									minting: mcpAuth === "api-key",
 								})
 							: false;
 				if (pin) {

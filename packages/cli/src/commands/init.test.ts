@@ -351,9 +351,14 @@ describe("init handler", () => {
 		);
 	});
 
-	test("oauth MCP forwards --project-id without delaying for a link", async () => {
+	test("oauth MCP pins the linked project when --mcp-project-pin is set", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-pin-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-pin", branch: "main" })}\n`,
+		);
 		const run = vi.fn().mockResolvedValue(true);
 		const { handler } = await import("./init.js");
 
@@ -363,10 +368,10 @@ describe("init handler", () => {
 				run,
 				agent: ["opencode"],
 				mcpAuth: "oauth",
-				mcpProjectId: "proj-pin",
+				mcpProjectPin: true,
 				link: false,
 				config: false,
-				contextFile: join(cwd, ".neon"),
+				contextFile,
 			}),
 		);
 
