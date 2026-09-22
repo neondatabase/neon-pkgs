@@ -814,7 +814,7 @@ A failed step stops the rest. `--profile` and `--config-dir` are forwarded to ea
 `neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
 
 ```bash
-# Interactive: global or project, then agents, then API key or OAuth, then confirm.
+# Interactive: global or project, then agents, then API key or OAuth.
 $ neon mcp
 
 # Skip prompts. Global config, installed apps else the host CLI agent, reuse or mint an API key.
@@ -839,7 +839,7 @@ $ neon mcp --project-id <project-id>
 $ neon mcp --category querying --category schema
 ```
 
-On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
+On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
 
 `-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for globally installed apps, else the host CLI agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--agent`, `--project`, `--oauth`, `--read-only`, `--project-id` and `--category` still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent <name>` to name them, or `--oauth` to write the URL only. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. `neon mcp --help` lists the server URL, those `-y` defaults, the supported agent names, and the `--category` values.
 
@@ -852,7 +852,7 @@ The default mints an account-wide API key (or reuses the Bearer already configur
 `neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API. This command needs Node.js 22.20 or newer. The rest of the CLI supports Node.js 20.19 or newer.
 
 ```bash
-# Interactive: this directory, then agents, then skills, then confirm.
+# Interactive: this directory, then agents, then skills.
 $ neon skills
 
 # Skip prompts. This directory, detected agents (project folders, else the host CLI agent), the default skills.
@@ -876,7 +876,7 @@ $ neon skills update -y
 $ neon skills update --global -y
 ```
 
-On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
+On a TTY the command asks which agents and which skills, then installs. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
 `-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
@@ -900,7 +900,7 @@ Default table output is the assistant's text. On a TTY that is a spinner, then t
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
 
 ```bash
-# Interactive: agents, then confirm.
+# Interactive: pick agents, then install.
 $ neon plugins
 
 # Skip prompts. Detected agents (project folders, else the host CLI agent).
@@ -913,7 +913,7 @@ $ neon plugins --agent cursor --agent claude-code
 $ neon plugins --global
 ```
 
-On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
 `-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 

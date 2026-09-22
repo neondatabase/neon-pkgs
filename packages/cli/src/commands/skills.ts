@@ -20,7 +20,7 @@ import {
 	mappedSkillsAgentNames,
 	skillsInstallableAgents,
 } from "../skills/targets.js";
-import { confirmSkillsInstall, confirmSkillsUpdate } from "../skills/wizard.js";
+import { confirmSkillsUpdate } from "../skills/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
@@ -178,7 +178,7 @@ export const builder = (argv: yargs.Argv) =>
 		})
 		.example(
 			"$0 skills",
-			"Interactive: this directory, agents, skills, then confirm",
+			"Interactive: this directory, then agents, then skills",
 		)
 		.example(
 			"$0 skills -y",
@@ -223,18 +223,6 @@ export const handler = async (props: SkillsProps) => {
 			"Skipping %s: no skills mapping.",
 			getAgentDisplayName(agent),
 		);
-	}
-
-	if (interactive) {
-		const ok = await confirmSkillsInstall({
-			scope: plan.scope,
-			agents: plan.agents,
-			invocations: plan.invocations,
-		});
-		if (!ok) {
-			log.info("Aborted. Nothing was written.");
-			return;
-		}
 	}
 
 	const metadata = skillsMetadata("skills");

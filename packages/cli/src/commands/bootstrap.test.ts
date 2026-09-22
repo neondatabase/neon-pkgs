@@ -3,6 +3,7 @@ import {
 	chmodSync,
 	existsSync,
 	lstatSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	readlinkSync,
@@ -325,6 +326,13 @@ describe("bootstrap", () => {
 		if (existsSync(spawnHelper)) {
 			chmodSync(spawnHelper, 0o755);
 		}
+		const npxBin = join(dest, "npx-bin");
+		mkdirSync(npxBin);
+		writeFileSync(
+			join(npxBin, "npx"),
+			"#!/usr/bin/env node\nprocess.exit(0);\n",
+		);
+		chmodSync(join(npxBin, "npx"), 0o755);
 		let output = "";
 		const term = spawnPty(
 			process.execPath,
@@ -351,6 +359,7 @@ describe("bootstrap", () => {
 				env: {
 					...process.env,
 					CI: "",
+					PATH: `${npxBin}:${process.env.PATH ?? ""}`,
 					NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
 					NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
 				},
@@ -371,16 +380,13 @@ describe("bootstrap", () => {
 		await waitForText(
 			term,
 			() => output,
-			"Install the Neon plugin into these agents?",
-		);
-		term.write("n\r");
-		await waitForText(
-			term,
-			() => output,
 			"Link this project to a Neon project now?",
 		);
 
 		const rendered = stripAnsi(output);
+		expect(rendered).not.toContain(
+			"Install the Neon plugin into these agents?",
+		);
 		expect(
 			rendered.indexOf("Which coding agents should get the Neon plugin?"),
 		).toBeLessThan(
