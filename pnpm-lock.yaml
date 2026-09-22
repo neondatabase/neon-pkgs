@@ -193,6 +193,9 @@ importers:
       prompts:
         specifier: 2.4.2
         version: 2.4.2
+      semver:
+        specifier: 7.7.2
+        version: 7.7.2
       undici:
         specifier: ^7.28.0
         version: 7.28.0
@@ -248,6 +251,9 @@ importers:
       '@types/prompts':
         specifier: 2.4.9
         version: 2.4.9
+      '@types/semver':
+        specifier: 7.7.1
+        version: 7.7.1
       '@types/which':
         specifier: 3.0.4
         version: 3.0.4
@@ -2149,6 +2155,9 @@ packages:
 
   '@types/resolve@1.20.2':
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/send@1.2.1':
     resolution: {integrity: sha512-arsCikDvlU99zl1g69TcAB3mzZPpxgw0UQnaHeC1Nwb015xp8bknZv5rIfri9xTOcMuaVgvabfIRA7PSZVuZIQ==}
@@ -6684,6 +6693,8 @@ snapshots:
   '@types/range-parser@1.2.7': {}
 
   '@types/resolve@1.20.2': {}
+
+  '@types/semver@7.7.1': {}
 
   '@types/send@1.2.1':
     dependencies:
