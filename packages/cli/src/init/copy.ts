@@ -77,7 +77,7 @@ export const CONFIG_CONFIRM_HINT =
 export const CONFIG_CONFIRM_MESSAGE = "Create neon.ts in this directory?";
 
 export const SERVICES_HINT =
-	"Postgres is included in every Neon project. Leave all services unselected for the default neon.ts.";
+	"Leave the optional services unselected for the default neon.ts.";
 export const SERVICES_MESSAGE =
 	"Which services should neon.ts declare? (space to toggle, enter to confirm)";
 

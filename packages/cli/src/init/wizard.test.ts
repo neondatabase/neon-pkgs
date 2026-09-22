@@ -24,6 +24,7 @@ import {
 	pickInitLinkInteractively,
 	pickInitModeInteractively,
 	pickInitProjectSetupInteractively,
+	pickInitServicesInteractively,
 	pickInitTemplateInteractively,
 } from "./wizard.js";
 
@@ -237,5 +238,48 @@ describe("init pickers", () => {
 		);
 		expect(question.message).not.toMatch(/runs neon link/i);
 		expect(question.initial).toBe(true);
+	});
+
+	test("services picker locks Postgres as always included", async () => {
+		canPickMock.mockReturnValue(true);
+		promptsMock.mockResolvedValue({ services: ["postgres", "auth"] });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const picked = await pickInitServicesInteractively();
+		expect(picked).toEqual(["auth"]);
+		const question = promptsMock.mock.calls[0]?.[0] as {
+			message: string;
+			cursor: number;
+			onRender: (this: unknown) => void;
+			choices: Array<{
+				title: string;
+				value: string;
+				selected?: boolean;
+			}>;
+		};
+		expect(question.message).toBe(
+			"Which services should neon.ts declare? (space to toggle, enter to confirm)",
+		);
+		expect(question.cursor).toBe(1);
+		expect(question.choices[0]?.value).toBe("postgres");
+		expect(question.choices[0]?.title).toBe("Postgres (always included)");
+		expect(question.choices[0]?.selected).toBe(true);
+		expect(
+			stdout.mock.calls.map((call) => String(call[0])).join(""),
+		).toMatch(/optional services/);
+		const prompt = {
+			value: [
+				{ value: "postgres", selected: false },
+				{ value: "auth", selected: true },
+			],
+		};
+		question.onRender.call(prompt);
+		expect(prompt.value[0]?.selected).toBe(true);
+	});
+
+	test("services picker with only Postgres selected writes the default neon.ts", async () => {
+		canPickMock.mockReturnValue(true);
+		promptsMock.mockResolvedValue({ services: ["postgres"] });
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		await expect(pickInitServicesInteractively()).resolves.toEqual([]);
 	});
 });

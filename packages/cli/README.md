@@ -613,6 +613,8 @@ export default defineConfig({
 
 ```
 ? Which Neon services should neon.ts declare? (space to toggle, enter to confirm) ›
+◉   Postgres (always included)
+     Every Neon project includes a Postgres database.
 ◯   Managed Better Auth
      Authentication with users and sessions stored in Postgres.
 ◯   Data API
@@ -625,7 +627,7 @@ export default defineConfig({
      All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.
 ```
 
-Selecting nothing is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
+Postgres cannot be unselected. Selecting nothing else is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
 
 ```bash
 # Pick interactively (TTY) or take the starter policy (CI)
@@ -785,7 +787,7 @@ Recommended installs the Neon plugin for every detected agent (global config, pr
 
 Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser.
 
-Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. The package manager is inferred from the directory; Custom asks only when none is detected.
+Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected.
 
 Empty directories are set up in place. `-y` does **not** scaffold a starter app. Scaffold with `--template <id>` or `neon bootstrap`. `--skip-template` is still accepted and is now the default empty-directory path.
 

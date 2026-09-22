@@ -9,6 +9,10 @@ import { listSkillIds, NEON_SKILL_CATALOG } from "../skills/catalog.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import type { PackageManager } from "../utils/package_manager.js";
 import { installedPackageManagers } from "../utils/package_manager.js";
+import {
+	keepPostgresSelected,
+	POSTGRES_SERVICE_CHOICE,
+} from "../utils/service_picker.js";
 import type { BootstrapTemplate } from "./bootstrap.js";
 import { InitCancelled, throwIfAborted } from "./cancelled.js";
 import {
@@ -378,13 +382,18 @@ export const pickInitServicesInteractively = async (): Promise<
 > => {
 	requireInteractive();
 	process.stdout.write(`${chalk.dim(SERVICES_HINT)}\n`);
-	const { services } = await prompts({
+	const question = {
 		onState: restoreCursorOnAbort,
-		type: "multiselect",
-		name: "services",
+		onRender() {
+			keepPostgresSelected(this);
+		},
+		type: "multiselect" as const,
+		name: "services" as const,
 		message: SERVICES_MESSAGE,
 		instructions: false,
+		cursor: 1,
 		choices: [
+			POSTGRES_SERVICE_CHOICE,
 			{
 				value: "auth",
 				title: "Managed Better Auth",
@@ -416,7 +425,8 @@ export const pickInitServicesInteractively = async (): Promise<
 					"Declare AI Gateway access. Requires an eligible Neon plan.",
 			},
 		],
-	});
+	};
+	const { services } = await prompts(question);
 	if (!Array.isArray(services)) {
 		return aborted();
 	}
