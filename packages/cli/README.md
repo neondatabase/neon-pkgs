@@ -46,6 +46,11 @@ brew upgrade neonctl
 
 To upgrade a binary version, download the latest binary file, as described above, and replace your old binary with the new one.
 
+Global npm, pnpm, Bun, and Homebrew installs check for updates once per day.
+When an update is available, terminal commands periodically print the matching
+upgrade command. Set `NO_UPDATE_NOTIFIER=1` to disable these checks. The notifier
+does not run in CI, for machine-readable output, or from standalone binaries.
+
 ## Connect
 
 Run the following command to authenticate a connection to Neon:
