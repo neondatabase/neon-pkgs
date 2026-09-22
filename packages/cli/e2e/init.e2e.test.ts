@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { npmEnvForIsolatedHome } from "../src/test_utils/npm_env.js";
 import {
 	createProject,
 	deleteProject,
@@ -73,6 +74,7 @@ const isolatedAgentEnv = (
 	VSCODE_IPC_HOOK_CLI: undefined,
 	VSCODE_PID: undefined,
 	VSCODE_CWD: undefined,
+	...npmEnvForIsolatedHome(),
 });
 
 describe("e2e — neon init", () => {

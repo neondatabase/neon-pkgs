@@ -20,6 +20,7 @@ import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import YAML from "yaml";
 import { takeCommandSuccessExtras } from "../analytics.js";
+import { AGENT_SETUP_MESSAGE } from "../init/copy.js";
 
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
@@ -359,11 +360,7 @@ describe("bootstrap", () => {
 			output += chunk;
 		});
 
-		await waitForText(
-			term,
-			() => output,
-			"How would you like to set up your coding agents?",
-		);
+		await waitForText(term, () => output, AGENT_SETUP_MESSAGE);
 		term.write("\r");
 		await waitForText(
 			term,

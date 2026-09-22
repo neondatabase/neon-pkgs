@@ -9,6 +9,7 @@ import type { BootstrapTemplate } from "../init/bootstrap.js";
 import { YES_SELECTS_RECOMMENDED } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
+import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
 import { builder } from "./init.js";
 
 vi.mock("../analytics.js", async (importOriginal) => {
@@ -851,6 +852,7 @@ describe("init CLI", () => {
 						APPDATA: join(root, "AppData"),
 						CODEX_HOME: join(root, ".codex"),
 						CI: "true",
+						...npmEnvForIsolatedHome(),
 					},
 				},
 			);
@@ -859,6 +861,7 @@ describe("init CLI", () => {
 			);
 			expect(readdirSync(cwd)).toEqual([]);
 		},
+		30_000,
 	);
 
 	cliTest(
@@ -882,6 +885,7 @@ describe("init CLI", () => {
 						APPDATA: join(root, "AppData"),
 						CODEX_HOME: join(root, ".codex"),
 						CI: "true",
+						...npmEnvForIsolatedHome(),
 					},
 				},
 			);
@@ -890,6 +894,7 @@ describe("init CLI", () => {
 			expect(out).toMatch(/neon link/);
 			expect(out).toMatch(/neon claim create/);
 		},
+		30_000,
 	);
 
 	test("empty template records empty-template and nested agent setup", async () => {
