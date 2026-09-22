@@ -16,7 +16,7 @@ export type { InitProps, InitRun };
 
 export const command = "init";
 export const describe =
-	"Set up coding agents and this directory for Neon. -y runs Recommended setup without prompts.";
+	"Set up coding agents and this directory for Neon. -y is Recommended. -y with Custom flags configures those choices without prompts.";
 
 const removedProtocol = () =>
 	`\`${getCliName()} init --data\` was removed. Run \`${getCliName()} init\` or \`${getCliName()} init -y\`.`;
@@ -32,25 +32,19 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Run Recommended setup without prompts: detected agents, link when authenticated, and a default neon.ts. Empty directories are not scaffolded; use --template or neon bootstrap",
-		})
-		.option("mode", {
-			type: "string",
-			choices: ["recommended", "custom"] as const,
-			describe:
-				"Recommended setup or Custom setup. -y selects Recommended",
+				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, default neon.ts). With --skill, MCP flags, --no-agent-setup, or --project-setup: Custom using those flags. Empty directories are not scaffolded; use --template or neon bootstrap",
 		})
 		.option("agent-setup", {
-			type: "string",
-			choices: ["plugin", "skills-mcp", "skip"] as const,
+			type: "boolean",
+			default: true,
 			describe:
-				"Custom: Neon plugin, skills and MCP separately, or skip agent setup",
+				"Install Neon into coding agents. Use --no-agent-setup to skip",
 		})
 		.option("project-setup", {
 			type: "string",
 			choices: ["link", "claimable"] as const,
 			describe:
-				"Custom: sign in and link an account project, or create a claimable project",
+				"Sign in and link an account project, or create a claimable project",
 		})
 		.option("package-manager", {
 			type: "string",
@@ -123,27 +117,29 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "array",
 			string: true,
 			describe:
-				"Custom: Neon skill to install (repeatable). Skips the skills picker. Values listed below",
+				"Neon skill to install (repeatable). Selects skills setup (not the plugin) and skips the skills picker. With MCP flags, also configures MCP. Values listed below",
 		})
 		.option("mcp-scope", {
 			type: "string",
 			choices: ["global", "project"] as const,
-			describe: "Custom: where to configure the Neon MCP server",
+			describe:
+				"Where to configure the Neon MCP server: global (user config, same as neon mcp) or project (this directory, same as neon mcp --project). Selects skills and MCP setup",
 		})
 		.option("mcp-auth", {
 			type: "string",
 			choices: ["oauth", "api-key"] as const,
-			describe: "Custom: MCP authentication",
+			describe:
+				"MCP authentication. Selects skills and MCP setup. oauth is neon mcp --oauth",
 		})
 		.option("mcp-project-id", {
 			type: "string",
 			describe:
-				"Custom: pin MCP tools to this project. Distinct from --project-id, which is for link",
+				"Pin MCP tools to this project. Distinct from --project-id, which is for link. Selects skills and MCP setup",
 		})
 		.option("mcp-project-pin", {
 			type: "boolean",
 			describe:
-				"Custom: pin MCP tools to the linked project. Use --no-mcp-project-pin to decline",
+				"Pin MCP tools to the linked project. Use --no-mcp-project-pin to decline. Selects skills and MCP setup",
 		})
 		.option("data", {
 			hidden: true,
@@ -157,6 +153,14 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.example("$0 init", "Recommended or Custom setup")
 		.example("$0 init -y", "Recommended setup without prompts")
+		.example(
+			"$0 init -y --skill neon --mcp-auth oauth --mcp-scope project",
+			"Custom: those skills and MCP, Recommended defaults for the rest",
+		)
+		.example(
+			"$0 init --no-agent-setup --project-setup claimable",
+			"Skip agent setup and create a claimable project",
+		)
 		.example(
 			"$0 init --skip-template",
 			"Set up this directory without scaffolding a template",
@@ -172,8 +176,9 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Recommended setup installs tooling for detected coding agents, links a Neon project when the CLI is authenticated or the session is interactive, and writes a default neon.ts.",
-				"-y is Recommended setup. It does not scaffold a starter app. Scaffold with --template <id> or neon bootstrap.",
-				"Custom setup chooses plugin, skills and MCP, or skip; sign-in vs a claimable project; and neon.ts services.",
+				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --project-setup is Custom: those flags, Recommended defaults for unanswered questions.",
+				"-y does not scaffold a starter app. Scaffold with --template <id> or neon bootstrap.",
+				"--skill selects skills (not the plugin). MCP flags select skills and MCP. --no-agent-setup skips agent setup. --agent without those flags installs the plugin (and skills/MCP for agents the plugin cannot cover).",
 				"Without a TTY, pass -y or enough flags to answer every question.",
 				"--agent / -a is forwarded to plugins, or to skills and mcp. It skips agent selection, including with -y.",
 				helpCsv("Plugin agents", initPluginAgents()),

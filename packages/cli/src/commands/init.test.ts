@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
@@ -7,8 +7,8 @@ import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
 import {
+	NO_AGENT_SETUP_CONFLICT,
 	TEMPLATE_UNSUPPORTED_FLAGS,
-	YES_SELECTS_RECOMMENDED,
 } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
@@ -362,7 +362,6 @@ describe("init handler", () => {
 				cwd,
 				run,
 				agent: ["opencode"],
-				agentSetup: "skills-mcp",
 				mcpAuth: "oauth",
 				mcpProjectId: "proj-pin",
 				link: false,
@@ -376,7 +375,7 @@ describe("init handler", () => {
 		expect(mcp).toContain("--project-id proj-pin");
 	});
 
-	test("--template -y --agent-setup skip skips nested agent setup", async () => {
+	test("--template -y --no-agent-setup skips nested agent setup", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-skip-"));
 		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
 		const { handler } = await import("./init.js");
@@ -386,7 +385,7 @@ describe("init handler", () => {
 				cwd,
 				yes: true,
 				template: "hono",
-				agentSetup: "skip",
+				agentSetup: false,
 				contextFile: join(cwd, ".neon"),
 				runBootstrap,
 				fetchTemplates: async () => [honoTemplate()],
@@ -401,22 +400,72 @@ describe("init handler", () => {
 		);
 	});
 
-	test("--template -y --mode custom fails", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-custom-"));
+	test("-y --skill is Custom skills, not Recommended plugin", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-skill-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				skill: ["neon"],
+				agent: ["cursor"],
+				link: false,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(argvHeads(run)).toEqual(["skills"]);
+		expect(argvLine(run)[0]).toContain("--skill neon");
+		expect(argvLine(run)[0]).not.toContain("plugins");
+		expect(takeCommandSuccessExtras()?.agent_setup).toBe("skills");
+	});
+
+	test("-y --skill and --mcp-auth is skills and MCP", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-skill-mcp-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				skill: ["neon"],
+				mcpAuth: "oauth",
+				agent: ["opencode"],
+				link: false,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(argvHeads(run)).toEqual(["skills", "mcp"]);
+		expect(argvLine(run)[0]).toContain("--skill neon");
+		expect(argvLine(run).find((line) => line.startsWith("mcp "))).toContain(
+			"--oauth",
+		);
+	});
+
+	test("--no-agent-setup with --skill fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-skip-skill-"));
 		const { handler } = await import("./init.js");
 
 		await expect(
 			handler(
 				baseProps({
 					cwd,
-					yes: true,
-					mode: "custom",
-					template: "hono",
+					agentSetup: false,
+					skill: ["neon"],
 					contextFile: join(cwd, ".neon"),
-					fetchTemplates: async () => [honoTemplate()],
 				}),
 			),
-		).rejects.toThrow(YES_SELECTS_RECOMMENDED);
+		).rejects.toThrow(NO_AGENT_SETUP_CONFLICT);
 	});
 
 	test("--template rejects MCP flags", async () => {
@@ -436,20 +485,26 @@ describe("init handler", () => {
 		).rejects.toThrow(TEMPLATE_UNSUPPORTED_FLAGS);
 	});
 
-	test("-y --mode custom fails", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-custom-"));
+	test("-y --project-setup claimable is Custom and does not force Recommended", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-claim-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
 		const { handler } = await import("./init.js");
 
-		await expect(
-			handler(
-				baseProps({
-					cwd,
-					yes: true,
-					mode: "custom",
-					contextFile: join(cwd, ".neon"),
-				}),
-			),
-		).rejects.toThrow(YES_SELECTS_RECOMMENDED);
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				projectSetup: "claimable",
+				agentSetup: false,
+				config: false,
+				hasLocalCredentials: () => false,
+				createClaimable,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(createClaimable).toHaveBeenCalled();
 	});
 
 	test("Custom skip plus --no-link plus declining neon.ts writes nothing", async () => {
@@ -495,7 +550,7 @@ describe("init handler", () => {
 				run: vi.fn().mockResolvedValue(true),
 				contextFile: join(cwd, ".neon"),
 				hasLocalCredentials: () => false,
-				agentSetup: "skip",
+				agentSetup: false,
 				config: false,
 				createClaimable,
 				linkProject,
@@ -854,12 +909,11 @@ describe("init CLI", () => {
 		const flat = help.replace(/\s+/g, " ");
 		expect(help).toMatch(/Recommended setup/);
 		expect(help).toMatch(/plugin/i);
-		expect(help).toMatch(/skip agent setup/i);
+		expect(help).toMatch(/--no-agent-setup/);
 		expect(help).toMatch(/-a, --agent/);
 		expect(help).toMatch(/--skip-template/);
 		expect(help).toMatch(/--no-link/);
 		expect(help).toMatch(/--no-config/);
-		expect(help).toMatch(/--mode/);
 		expect(flat).toMatch(/does not scaffold/i);
 		expect(flat).toMatch(/forwarded to plugins, or to skills and mcp/i);
 		expect(help).toMatch(/Plugin agents/);
@@ -955,7 +1009,8 @@ describe("init CLI", () => {
 			expect(`${stdout}\n${stderr}`).toMatch(
 				/No coding agents detected/i,
 			);
-			expect(readdirSync(cwd)).toEqual([]);
+			expect(existsSync(join(cwd, ".agents"))).toBe(true);
+			expect(existsSync(join(cwd, "package.json"))).toBe(false);
 		},
 		30_000,
 	);
@@ -1138,7 +1193,7 @@ describe("init flag parsing", () => {
 			link?: boolean;
 			skipTemplate?: boolean;
 			template?: string;
-			mode?: string;
+			agentSetup?: boolean;
 		};
 
 	test("--config is a three-state flag", async () => {
@@ -1159,11 +1214,9 @@ describe("init flag parsing", () => {
 		expect((await parse(["--no-link"])).link).toBe(false);
 	});
 
-	test("--mode is recommended or custom", async () => {
-		expect((await parse(["--mode", "recommended"])).mode).toBe(
-			"recommended",
-		);
-		expect((await parse(["--mode", "custom"])).mode).toBe("custom");
+	test("--no-agent-setup skips agent setup", async () => {
+		expect((await parse(["--no-agent-setup"])).agentSetup).toBe(false);
+		expect((await parse([])).agentSetup).toBe(true);
 	});
 
 	test("--services none is the raw none token", async () => {

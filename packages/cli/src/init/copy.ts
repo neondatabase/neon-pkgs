@@ -87,14 +87,17 @@ export const PACKAGE_MANAGER_MESSAGE =
 export const NO_AGENTS_FALLBACK_STATUS =
 	"No coding agents detected. Installing the default Neon skills for Cursor and Codex in this directory.";
 
-export const YES_SELECTS_RECOMMENDED =
-	"--yes selects Recommended setup. Omit --yes to use --mode custom, and pass flags for any choices you want to skip.";
+export const NO_AGENT_SETUP_CONFLICT =
+	"--no-agent-setup cannot be combined with --agent, --skill, or MCP flags.";
 
 export const TEMPLATE_UNSUPPORTED_FLAGS =
-	"--template cannot be combined with --mode, --project-setup, --package-manager, --skill, or MCP flags. After scaffolding, skip agent setup with --agent-setup skip.";
+	"--template cannot be combined with --project-setup, --package-manager, --skill, or MCP flags. After scaffolding, skip agent setup with --no-agent-setup.";
 
 export const NON_TTY_LINK_NEEDS_AUTH =
 	"No interactive terminal. Sign in with `neon auth`, then re-run, or pass --project-setup claimable.";
+
+export const NON_TTY_AGENT_SETUP =
+	"No interactive terminal. Pass -y for Recommended, or pass --skill, --mcp-auth, --agent, or --no-agent-setup.";
 
 export const HEADING_COMPLETE = "Neon setup complete.";
 export const HEADING_PENDING = "Neon setup needs a next step.";

@@ -1,11 +1,16 @@
 import { describe, expect, test } from "vitest";
-import { YES_SELECTS_RECOMMENDED } from "./copy.js";
-import { resolveInitMode } from "./mode.js";
+import { NO_AGENT_SETUP_CONFLICT, NON_TTY_AGENT_SETUP } from "./copy.js";
+import {
+	assertAgentSetupFlags,
+	inferInitAgentSetup,
+	resolveInitMode,
+} from "./mode.js";
 import { INIT_NEEDS_YES_OR_TERMINAL } from "./plan.js";
 
 const base = {
 	yes: false,
 	interactive: false,
+	skipAgents: false,
 	namedAgents: false,
 	noLink: false,
 	hasLinkInputs: false,
@@ -18,24 +23,32 @@ describe("resolveInitMode", () => {
 		});
 	});
 
-	test("--mode recommended selects recommended", () => {
+	test("-y with --skill selects custom", () => {
 		expect(
-			resolveInitMode({
-				...base,
-				interactive: true,
-				mode: "recommended",
-			}),
+			resolveInitMode({ ...base, yes: true, skills: ["neon"] }),
+		).toEqual({ kind: "custom" });
+	});
+
+	test("-y with MCP flags selects custom", () => {
+		expect(
+			resolveInitMode({ ...base, yes: true, mcpAuth: "oauth" }),
+		).toEqual({ kind: "custom" });
+	});
+
+	test("-y with --no-agent-setup selects custom", () => {
+		expect(
+			resolveInitMode({ ...base, yes: true, skipAgents: true }),
+		).toEqual({ kind: "custom" });
+	});
+
+	test("-y --agent stays recommended", () => {
+		expect(
+			resolveInitMode({ ...base, yes: true, namedAgents: true }),
 		).toEqual({ kind: "recommended" });
 	});
 
-	test("-y with --mode custom fails", () => {
-		expect(() =>
-			resolveInitMode({ ...base, yes: true, mode: "custom" }),
-		).toThrow(YES_SELECTS_RECOMMENDED);
-	});
-
-	test("--agent-setup selects custom", () => {
-		expect(resolveInitMode({ ...base, agentSetup: "skip" })).toEqual({
+	test("--no-agent-setup selects custom", () => {
+		expect(resolveInitMode({ ...base, skipAgents: true })).toEqual({
 			kind: "custom",
 		});
 	});
@@ -88,5 +101,88 @@ describe("resolveInitMode", () => {
 		expect(() => resolveInitMode({ ...base })).toThrow(
 			INIT_NEEDS_YES_OR_TERMINAL,
 		);
+	});
+});
+
+describe("inferInitAgentSetup", () => {
+	const inferBase = {
+		skipAgents: false,
+		hasMcpFlags: false,
+		namedAgents: false,
+		yes: false,
+		canAsk: false,
+	} as const;
+
+	test("--no-agent-setup skips", () => {
+		expect(inferInitAgentSetup({ ...inferBase, skipAgents: true })).toEqual(
+			{ kind: "skip" },
+		);
+	});
+
+	test("--skill without MCP is skills only", () => {
+		expect(inferInitAgentSetup({ ...inferBase, skills: ["neon"] })).toEqual(
+			{ kind: "skills" },
+		);
+	});
+
+	test("--skill plus MCP flags is skills and MCP", () => {
+		expect(
+			inferInitAgentSetup({
+				...inferBase,
+				skills: ["neon"],
+				hasMcpFlags: true,
+			}),
+		).toEqual({ kind: "skills-mcp" });
+	});
+
+	test("MCP flags without --skill is skills and MCP", () => {
+		expect(
+			inferInitAgentSetup({ ...inferBase, hasMcpFlags: true }),
+		).toEqual({ kind: "skills-mcp" });
+	});
+
+	test("named agents without skill or MCP split plugin vs skills", () => {
+		expect(
+			inferInitAgentSetup({ ...inferBase, namedAgents: true }),
+		).toEqual({ kind: "auto" });
+	});
+
+	test("Custom -y without agent flags uses detected tooling", () => {
+		expect(inferInitAgentSetup({ ...inferBase, yes: true })).toEqual({
+			kind: "auto",
+		});
+	});
+
+	test("a TTY with no agent flags asks", () => {
+		expect(inferInitAgentSetup({ ...inferBase, canAsk: true })).toEqual({
+			kind: "ask",
+		});
+	});
+
+	test("non-TTY Custom without agent flags names the flags", () => {
+		expect(() => inferInitAgentSetup(inferBase)).toThrow(
+			NON_TTY_AGENT_SETUP,
+		);
+	});
+});
+
+describe("assertAgentSetupFlags", () => {
+	test("--no-agent-setup with --skill fails", () => {
+		expect(() =>
+			assertAgentSetupFlags({
+				skipAgents: true,
+				namedAgents: false,
+				skills: ["neon"],
+			}),
+		).toThrow(NO_AGENT_SETUP_CONFLICT);
+	});
+
+	test("--no-agent-setup alone is allowed", () => {
+		expect(() =>
+			assertAgentSetupFlags({
+				skipAgents: true,
+				namedAgents: false,
+			}),
+		).not.toThrow();
 	});
 });

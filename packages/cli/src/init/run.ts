@@ -79,7 +79,6 @@ import {
 	skippedLinkNext,
 	TEMPLATE_UNSUPPORTED_FLAGS,
 	unattendedUnauthedNext,
-	YES_SELECTS_RECOMMENDED,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
 import {
@@ -104,9 +103,15 @@ import type {
 	InitMode,
 	InitProjectSetupChoice,
 } from "./mode.js";
-import { resolveInitMode } from "./mode.js";
+import {
+	assertAgentSetupFlags,
+	hasInitMcpFlags,
+	inferInitAgentSetup,
+	resolveInitMode,
+} from "./mode.js";
 import {
 	assertNamedAgentTooling,
+	FALLBACK_SKILLS_AGENTS,
 	funnelAgentSetup,
 	INIT_NEEDS_YES_OR_TERMINAL,
 	type InitToolingPlan,
@@ -172,8 +177,7 @@ export type InitProps = CommonProps & {
 	projectName?: string;
 	regionId?: string;
 	branch?: string;
-	mode?: InitMode;
-	agentSetup?: InitAgentSetupChoice;
+	agentSetup?: boolean;
 	projectSetup?: InitProjectSetupChoice;
 	packageManager?: PackageManager;
 	mcpScope?: InitMcpScopeChoice;
@@ -274,7 +278,7 @@ const pluginScopeFor = (
 };
 
 const availableForSetup = (
-	setup: InitAgentSetupChoice,
+	setup: InitAgentSetupChoice | "skills",
 	scope: "global" | "project",
 ): AgentType[] => {
 	if (setup === "plugin") {
@@ -283,11 +287,91 @@ const availableForSetup = (
 	if (setup === "skip") {
 		return [];
 	}
+	if (setup === "skills") {
+		return [...skillsInstallableAgents()];
+	}
 	const ids = new Set([
 		...skillsInstallableAgents(),
 		...mcpInstallableAgents(scope === "project" ? "project" : "global"),
 	]);
 	return [...ids];
+};
+
+const nonEmptyAgents = (
+	ids: readonly AgentType[],
+	fallback: boolean,
+): [AgentType, ...AgentType[]] | undefined => {
+	const [first, ...rest] = ids;
+	if (first !== undefined) {
+		return [first, ...rest];
+	}
+	if (fallback) {
+		return FALLBACK_SKILLS_AGENTS;
+	}
+	return undefined;
+};
+
+const skillsTooling = (
+	ids: readonly AgentType[],
+	fallback: boolean,
+): InitToolingPlan => {
+	const agents = nonEmptyAgents(
+		ids.filter((id) => skillsInstallableAgents().includes(id)),
+		fallback,
+	);
+	if (agents === undefined) {
+		return { setup: "skip" };
+	}
+	return { setup: "skills", agents };
+};
+
+const skillsMcpTooling = (
+	ids: readonly AgentType[],
+	scope: "global" | "project",
+	fallback: boolean,
+): InitToolingPlan => {
+	const mcpScope = scope === "project" ? "project" : "global";
+	let selected = ids;
+	if (selected.length === 0 && fallback) {
+		selected = FALLBACK_SKILLS_AGENTS;
+	}
+	return {
+		setup: "skills-mcp",
+		skillsAgents: selected.filter((id) =>
+			skillsInstallableAgents().includes(id),
+		),
+		mcpAgents: selected.filter((id) =>
+			mcpInstallableAgents(mcpScope).includes(id),
+		),
+	};
+};
+
+const pickOrDetectAgents = async (input: {
+	named: readonly AgentType[];
+	available: readonly AgentType[];
+	detected: readonly AgentType[];
+	pickAgents?: InitProps["pickAgents"];
+	interactive: boolean;
+}): Promise<AgentType[]> => {
+	if (input.named.length > 0) {
+		return input.named.filter((id) => input.available.includes(id));
+	}
+	const detected = input.detected.filter((id) =>
+		input.available.includes(id),
+	);
+	if (input.pickAgents !== undefined) {
+		return input.pickAgents({
+			available: [...input.available],
+			detected,
+		});
+	}
+	if (input.interactive) {
+		return pickInitAgentsInteractively({
+			available: [...input.available],
+			detected,
+		});
+	}
+	return detected;
 };
 
 const defaultInitConfig: InitConfigFn = async (input) => {
@@ -341,6 +425,19 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	const analytics = props.analytics !== false;
 	const named = resolveNamedAgents(props.agent ?? []);
 	assertNamedAgentTooling(named, "init", yes ? { yes: true } : undefined);
+	assertAgentSetupFlags({
+		skipAgents: props.agentSetup === false,
+		namedAgents: named.length > 0,
+		...(props.skill !== undefined ? { skills: props.skill } : {}),
+		...(props.mcpScope !== undefined ? { mcpScope: props.mcpScope } : {}),
+		...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
+		...(props.mcpProjectId !== undefined
+			? { mcpProjectId: props.mcpProjectId }
+			: {}),
+		...(props.mcpProjectPin !== undefined
+			? { mcpProjectPin: props.mcpProjectPin }
+			: {}),
+	});
 	const run = props.run ?? spawnCliChild;
 	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
 	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
@@ -414,19 +511,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		});
 
 		if (templateChoice.kind === "template") {
-			if (yes && props.mode === "custom" && props.agentSetup !== "skip") {
-				throw new Error(YES_SELECTS_RECOMMENDED);
-			}
 			if (
-				props.mode !== undefined ||
 				props.projectSetup !== undefined ||
 				props.packageManager !== undefined ||
-				props.mcpScope !== undefined ||
-				props.mcpAuth !== undefined ||
-				props.mcpProjectId !== undefined ||
-				props.mcpProjectPin !== undefined ||
-				(props.skill !== undefined && props.skill.length > 0) ||
-				(props.agentSetup !== undefined && props.agentSetup !== "skip")
+				hasInitMcpFlags(props) ||
+				(props.skill !== undefined && props.skill.length > 0)
 			) {
 				throw new Error(TEMPLATE_UNSUPPORTED_FLAGS);
 			}
@@ -445,19 +534,17 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			return;
 		}
 
+		const skipAgents = props.agentSetup === false;
 		const modeResolution = resolveInitMode({
 			yes,
 			interactive:
 				detection.interactive ||
 				props.pickMode !== undefined ||
 				props.pickAgentSetup !== undefined,
+			skipAgents,
 			namedAgents: named.length > 0,
 			noLink: props.link === false,
 			hasLinkInputs: hasExplicitLinkInputs,
-			...(props.mode !== undefined ? { mode: props.mode } : {}),
-			...(props.agentSetup !== undefined
-				? { agentSetup: props.agentSetup }
-				: {}),
 			...(props.projectSetup !== undefined
 				? { projectSetup: props.projectSetup }
 				: {}),
@@ -511,7 +598,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const targets = named.length > 0 ? named : detection.detectedAgents;
 
 		let agentSetupChoice: InitAgentSetupChoice | "skills" | "mixed" =
-			props.agentSetup ?? "plugin";
+			"plugin";
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
 		let mcpScope: InitMcpScopeChoice = props.mcpScope ?? "global";
@@ -521,10 +608,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			? "global"
 			: "project";
 
-		if (props.agentSetup === "skip") {
-			tooling = { setup: "skip" };
-			agentSetupChoice = "skip";
-		} else if (recommended) {
+		if (recommended) {
 			pluginScope = "global";
 			tooling =
 				named.length > 0
@@ -540,46 +624,49 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					? "oauth"
 					: mcpAuth;
 		} else {
-			if (props.agentSetup === undefined && named.length > 0) {
-				tooling = splitInitTooling(
-					named,
-					pluginScopeFor(named, "project"),
-				);
-				pluginScope = pluginScopeFor(named, "project");
+			const inferred = inferInitAgentSetup({
+				skipAgents,
+				hasMcpFlags: hasInitMcpFlags(props),
+				namedAgents: named.length > 0,
+				yes,
+				canAsk:
+					detection.interactive || props.pickAgentSetup !== undefined,
+				...(props.skill !== undefined ? { skills: props.skill } : {}),
+			});
+			if (inferred.kind === "skip") {
+				tooling = { setup: "skip" };
+				agentSetupChoice = "skip";
+			} else if (inferred.kind === "auto") {
+				const autoAgents =
+					named.length > 0 ? named : detection.detectedAgents;
+				pluginScope = pluginScopeFor(autoAgents, "project");
+				tooling = splitInitTooling(autoAgents, pluginScope);
+				if (tooling.setup === "skip" && yes && named.length === 0) {
+					tooling = recommendedTooling([]);
+					printInitProgress(NO_AGENTS_FALLBACK_STATUS);
+				}
 				agentSetupChoice = funnelAgentSetup(tooling);
 			} else {
-				const setup =
-					props.agentSetup ??
-					(await (
-						props.pickAgentSetup ?? pickAgentSetupInteractively
-					)());
-				agentSetupChoice = setup;
+				const setup: InitAgentSetupChoice | "skills" =
+					inferred.kind === "ask"
+						? await (
+								props.pickAgentSetup ??
+								pickAgentSetupInteractively
+							)()
+						: inferred.kind;
+				agentSetupChoice = setup === "skills" ? "skills" : setup;
 				if (setup !== "skip") {
 					pluginScope = pluginScopeFor(targets, "project");
 					const available = availableForSetup(setup, pluginScope);
-					const selected =
-						named.length > 0
-							? named.filter((id) => available.includes(id))
-							: props.pickAgents !== undefined
-								? await props.pickAgents({
-										available,
-										detected:
-											detection.detectedAgents.filter(
-												(id) => available.includes(id),
-											),
-									})
-								: detection.interactive
-									? await pickInitAgentsInteractively({
-											available,
-											detected:
-												detection.detectedAgents.filter(
-													(id) =>
-														available.includes(id),
-												),
-										})
-									: detection.detectedAgents.filter((id) =>
-											available.includes(id),
-										);
+					const selected = await pickOrDetectAgents({
+						named,
+						available,
+						detected: detection.detectedAgents,
+						interactive: detection.interactive,
+						...(props.pickAgents !== undefined
+							? { pickAgents: props.pickAgents }
+							: {}),
+					});
 					if (setup === "plugin") {
 						pluginScope = pluginScopeFor(selected, pluginScope);
 						tooling = splitInitTooling(selected, pluginScope);
@@ -587,7 +674,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							tooling.setup !== "plugin" &&
 							tooling.setup !== "skip"
 						) {
-							const pluginOnly = splitInitTooling(
+							tooling = splitInitTooling(
 								selected.filter((id) =>
 									pluginsInstallableAgents(
 										pluginScope,
@@ -595,10 +682,16 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								),
 								pluginScope,
 							);
-							tooling = pluginOnly;
 						}
+						agentSetupChoice = funnelAgentSetup(tooling);
+					} else if (setup === "skills") {
+						tooling = skillsTooling(selected, yes);
+						agentSetupChoice = funnelAgentSetup(tooling);
 					} else {
-						if (selectedSkills === undefined) {
+						if (
+							selectedSkills === undefined &&
+							inferred.kind === "ask"
+						) {
 							selectedSkills =
 								props.pickSkills !== undefined
 									? await props.pickSkills()
@@ -608,38 +701,34 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						}
 						mcpScope =
 							props.mcpScope ??
-							(props.pickMcpScope !== undefined
-								? await props.pickMcpScope()
-								: detection.interactive
-									? await pickInitMcpScopeInteractively()
-									: "global");
+							(yes
+								? "global"
+								: props.pickMcpScope !== undefined
+									? await props.pickMcpScope()
+									: detection.interactive
+										? await pickInitMcpScopeInteractively()
+										: "global");
 						mcpAuth =
 							props.mcpAuth ??
-							(props.pickMcpAuth !== undefined
-								? await props.pickMcpAuth({
-										authenticated: detection.authenticated,
-									})
-								: detection.interactive
-									? await pickInitMcpAuthInteractively({
+							(yes
+								? detection.authenticated
+									? "api-key"
+									: "oauth"
+								: props.pickMcpAuth !== undefined
+									? await props.pickMcpAuth({
 											authenticated:
 												detection.authenticated,
 										})
-									: detection.authenticated
-										? "api-key"
-										: "oauth");
-						tooling = {
-							setup: "skills-mcp",
-							skillsAgents: selected.filter((id) =>
-								skillsInstallableAgents().includes(id),
-							),
-							mcpAgents: selected.filter((id) =>
-								mcpInstallableAgents(
-									mcpScope === "project"
-										? "project"
-										: "global",
-								).includes(id),
-							),
-						};
+									: detection.interactive
+										? await pickInitMcpAuthInteractively({
+												authenticated:
+													detection.authenticated,
+											})
+										: detection.authenticated
+											? "api-key"
+											: "oauth");
+						tooling = skillsMcpTooling(selected, mcpScope, yes);
+						agentSetupChoice = "skills-mcp";
 					}
 				}
 			}
@@ -1262,7 +1351,7 @@ const runTemplatePath = async (input: {
 		...(props.pickAgentSetup
 			? { pickAgentSetup: props.pickAgentSetup }
 			: {}),
-		...(props.agentSetup === "skip" ? { agentSetup: false } : {}),
+		...(props.agentSetup === false ? { agentSetup: false } : {}),
 		...(props.detectProjectAgents
 			? { detectProjectAgents: props.detectProjectAgents }
 			: {}),

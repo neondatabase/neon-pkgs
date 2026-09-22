@@ -163,8 +163,7 @@ describe("e2e — neon init", () => {
 				const result = await runCli(
 					[
 						"init",
-						"--agent-setup",
-						"skip",
+						"--no-agent-setup",
 						"--no-config",
 						"--project-id",
 						projectId,
