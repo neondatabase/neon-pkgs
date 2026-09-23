@@ -1,0 +1,71 @@
+{
+	"name": "@neon/postgrest-js",
+	"version": "0.2.0-beta",
+	"description": "PostgreSQL client for Neon Data API - query your database without authentication",
+	"keywords": [
+		"neon",
+		"neondb",
+		"postgresql",
+		"postgres",
+		"database",
+		"postgrest",
+		"data-api",
+		"typescript",
+		"sdk",
+		"query-builder"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git",
+		"directory": "packages/postgrest-js"
+	},
+	"homepage": "https://github.com/neondatabase/neon-pkgs/tree/main/packages/postgrest-js#readme",
+	"bugs": {
+		"url": "https://github.com/neondatabase/neon-pkgs/issues"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@neon-internals/internal": "workspace:*",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"dependencies": {
+		"@supabase/postgrest-js": "2.79.0"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

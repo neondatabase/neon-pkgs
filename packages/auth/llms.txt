@@ -1,0 +1,330 @@
+# @neon/auth
+
+> TypeScript SDK for Neon Auth - authentication adapters for PostgreSQL with session caching, request deduplication, and optional anonymous access.
+
+`@neon/auth` provides authentication for applications using Neon Auth. It uses the Better Auth API by default, with optional adapters for different API styles (Supabase-compatible, React hooks).
+
+## When to Use This Package
+
+| Use Case | Package |
+|----------|---------|
+| Auth only (no database queries) | `@neon/auth` |
+| Auth + Database queries | `@neondatabase/neon-js` (includes this package) |
+| Pre-built UI components | Add `@neondatabase/auth-ui` |
+
+## Installation
+
+```bash
+npm install @neon/auth
+```
+
+## Environment Variables
+
+```bash
+# React/Vite
+VITE_NEON_AUTH_URL=https://your-project.neon.tech/auth
+
+# Next.js
+NEON_AUTH_BASE_URL=https://your-project.neon.tech
+```
+
+## Quick Start
+
+```typescript
+import { createAuthClient } from '@neon/auth';
+
+const auth = createAuthClient('https://your-auth-server.com');
+
+// Sign up
+await auth.signUp.email({
+  email: 'user@example.com',
+  password: 'secure-password',
+  name: 'John Doe',
+});
+
+// Sign in
+await auth.signIn.email({
+  email: 'user@example.com',
+  password: 'secure-password',
+});
+
+// Get session
+const session = await auth.getSession();
+
+// Sign out
+await auth.signOut();
+```
+
+## OAuth Authentication
+
+```typescript
+await auth.signIn.social({
+  provider: 'google',
+  callbackURL: '/dashboard',
+});
+```
+
+## Choosing an Adapter
+
+| Adapter | Use When |
+|---------|----------|
+| Default (no adapter) | New projects, prefer Better Auth API |
+| `SupabaseAuthAdapter` | Migrating from Supabase, familiar API |
+| `BetterAuthReactAdapter` | Need React hooks (`useSession`) |
+| `BetterAuthVanillaAdapter` | Better Auth API without React |
+
+**Critical:** Adapters are factory functions - must call with `()`.
+
+## Adapters
+
+### SupabaseAuthAdapter
+
+Supabase-compatible API for migrations:
+
+```typescript
+import { createAuthClient } from '@neon/auth';
+import { SupabaseAuthAdapter } from '@neon/auth/vanilla/adapters';
+
+const auth = createAuthClient('https://your-auth-server.com', {
+  adapter: SupabaseAuthAdapter(), // Must call with ()
+});
+
+await auth.signUp({
+  email: 'user@example.com',
+  password: 'secure-password',
+  options: { data: { name: 'John Doe' } },
+});
+
+await auth.signInWithPassword({
+  email: 'user@example.com',
+  password: 'secure-password',
+});
+
+await auth.signInWithOAuth({
+  provider: 'google',
+  options: { redirectTo: '/dashboard' },
+});
+
+const { data: session } = await auth.getSession();
+```
+
+### BetterAuthVanillaAdapter
+
+Direct Better Auth API without React:
+
+```typescript
+import { createAuthClient } from '@neon/auth';
+import { BetterAuthVanillaAdapter } from '@neon/auth/vanilla/adapters';
+
+const auth = createAuthClient('https://your-auth-server.com', {
+  adapter: BetterAuthVanillaAdapter(),
+});
+
+await auth.signIn.email({ email, password });
+const session = await auth.getSession();
+```
+
+### BetterAuthReactAdapter
+
+React hooks support:
+
+```typescript
+import { createAuthClient } from '@neon/auth';
+import { BetterAuthReactAdapter } from '@neon/auth/react/adapters';
+
+const auth = createAuthClient('https://your-auth-server.com', {
+  adapter: BetterAuthReactAdapter(),
+});
+
+function MyComponent() {
+  const session = auth.useSession();
+
+  if (session.isPending) return <div>Loading...</div>;
+  if (!session.data) return <div>Not logged in</div>;
+
+  return <div>Hello, {session.data.user.name}</div>;
+}
+```
+
+## Anonymous Access
+
+Enable RLS-based data access for unauthenticated users:
+
+```typescript
+const auth = createAuthClient('https://your-auth-server.com', {
+  allowAnonymous: true,
+});
+
+// Returns JWT token: authenticated session → anonymous token → null
+const token = await auth.getJWTToken?.();
+```
+
+Token priority: authenticated session JWT > anonymous token > null
+
+## Session Behavior
+
+**Caching:**
+- Sessions cached 60s (or until JWT expires)
+- `getSession()` returns cached value instantly (<1ms)
+- Cache cleared synchronously on sign-out
+- TTL calculated from JWT `exp` claim
+
+**Cross-Tab Sync (browser only):**
+- Sign-in/sign-out syncs across tabs via BroadcastChannel
+- Automatic - no configuration needed
+- Events: `SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED`, `USER_UPDATED`
+
+**Request Deduplication:**
+- Concurrent `getSession()` calls share single network request
+- Prevents thundering herd on page load
+- 10x faster cold starts (10 concurrent: ~2000ms → ~200ms)
+
+## OAuth in Iframes
+
+SDK automatically detects iframe context and uses popup-based OAuth:
+- Popup opens for OAuth provider (bypasses X-Frame-Options)
+- Session passed back via postMessage
+- 120s timeout with 500ms polling
+
+No configuration needed - works automatically.
+
+## Error Handling
+
+```typescript
+import { AuthError, AuthApiError } from '@neon/auth';
+
+try {
+  await auth.signInWithPassword({ email, password });
+} catch (error) {
+  if (error instanceof AuthApiError) {
+    console.log(error.status);  // HTTP status code
+    console.log(error.message); // Error message
+    console.log(error.code);    // Error code if available
+  }
+  if (error instanceof AuthError) {
+    console.log(error.message); // Generic auth error
+  }
+}
+```
+
+## API Reference
+
+### createAuthClient(url, config?)
+
+- `url` - Auth service URL (required, first argument is string NOT object)
+- `config.adapter` - Optional adapter factory (`SupabaseAuthAdapter()`, `BetterAuthReactAdapter()`)
+- `config.allowAnonymous` - Enable anonymous tokens (default: `false`)
+
+### Default API (Better Auth)
+
+- `signIn.email(credentials)` - Sign in with email/password
+- `signIn.social(options)` - Sign in with OAuth provider
+- `signUp.email(credentials)` - Create new user account
+- `signOut()` - Sign out current user
+- `getSession()` - Get current session (cached)
+- `getJWTToken?.()` - Get JWT token (authenticated or anonymous)
+
+### SupabaseAuthAdapter API
+
+- `signUp(credentials)` - Create user with Supabase-style options
+- `signInWithPassword(credentials)` - Email/password sign in
+- `signInWithOAuth(options)` - OAuth with Supabase-style options
+- `getSession()` - Returns `{ data: session }`
+- `getUser()` - Returns `{ data: user }`
+- `updateUser(attributes)` - Update user metadata
+- `resetPasswordForEmail(email, options)` - Password reset
+- `onAuthStateChange(callback)` - Auth state listener (browser only)
+
+### BetterAuthReactAdapter API
+
+Same as default API, plus:
+- `useSession()` - React hook for session state
+
+## Next.js Integration
+
+See [NEXT-JS.md](./NEXT-JS.md) for complete guide.
+
+**Environment variables:**
+
+```bash
+NEON_AUTH_BASE_URL=https://your-project.neon.tech
+NEON_AUTH_COOKIE_SECRET=your-secret-at-least-32-characters-long
+```
+
+**Unified server setup:**
+
+```typescript
+// lib/auth/server.ts - Single entry point for all server functionality
+import { createNeonAuth } from '@neon/auth/next/server';
+
+export const auth = createNeonAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  cookies: {
+    secret: process.env.NEON_AUTH_COOKIE_SECRET!,
+    sessionDataTtl: 300,          // Optional: session data cache TTL in seconds (default: 300 = 5 min)
+    domain: '.example.com',       // Optional: for cross-subdomain cookies
+  },
+});
+
+// app/api/auth/[...path]/route.ts - API handler
+import { auth } from '@/lib/auth/server';
+export const { GET, POST } = auth.handler();
+
+// middleware.ts - Route protection
+import { auth } from '@/lib/auth/server';
+export default auth.middleware({ loginUrl: '/auth/sign-in' });
+
+// lib/auth/client.ts - Client-side
+"use client"
+import { createAuthClient } from '@neon/auth/next';
+export const authClient = createAuthClient();
+
+// Server Components
+import { auth } from '@/lib/auth/server';
+// Server components using `auth` methods must be rendered dynamically
+export const dynamic = 'force-dynamic';
+const { data: session } = await auth.getSession();
+
+// Server Actions
+import { auth } from '@/lib/auth/server';
+await auth.signIn.email({ email, password });
+```
+
+## Performance
+
+- **Cached `getSession()`**: <1ms (in-memory, no I/O)
+- **Cold start**: ~200ms (single network request)
+- **Concurrent cold start**: ~200ms total (deduplicated)
+- **Token refresh**: <200ms (automatic)
+- **Cross-tab sync**: <50ms (BroadcastChannel)
+
+## Troubleshooting
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Session always null | Cookies blocked | Check browser settings, not incognito |
+| OAuth redirect fails in iframe | X-Frame-Options | SDK uses popup automatically, allow popups |
+| `adapter is not a function` | Missing `()` | Use `SupabaseAuthAdapter()` not `SupabaseAuthAdapter` |
+| Cross-tab sync not working | Node.js environment | BroadcastChannel is browser-only |
+| `onAuthStateChange` not firing | Not subscribed | Call returns unsubscribe function, store reference |
+| Token expired immediately | Clock skew | Check server/client time sync |
+
+## CSS for UI Components
+
+Choose based on your project setup:
+
+```css
+/* Without Tailwind - pre-built bundle (~47KB) */
+@import '@neondatabase/auth-ui/css';
+
+/* With Tailwind CSS v4 - theme tokens only */
+@import 'tailwindcss';
+@import '@neondatabase/auth-ui/tailwind';
+```
+
+Never import both paths - causes duplicate styles.
+
+## Optional
+
+- [Next.js Integration](./NEXT-JS.md): Setup guide for Next.js 15+ with middleware and RSC support
+- [Better Auth Documentation](https://www.better-auth.com/docs): Underlying auth library documentation
