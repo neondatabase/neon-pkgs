@@ -16,6 +16,13 @@ import {
 	listCustomDomains,
 	registerCustomDomain,
 } from "../custom_domains_api.js";
+import { readEnvFile, resolveEnvFilePath } from "../env_file.js";
+import {
+	fetchFunctionTemplates,
+	type RegistryIndexEntry,
+	scaffoldFunctionTemplate,
+	UnknownFunctionTemplateError,
+} from "../functions/templates.js";
 import {
 	createDeployment,
 	deleteFunction,
@@ -42,6 +49,12 @@ const FUNCTION_FIELDS = [
 
 const FUNCTIONS_LIST_LIMIT = 100;
 const CUSTOM_DOMAINS_LIST_LIMIT = 100;
+const FUNCTION_TEMPLATE_FIELDS = [
+	"id",
+	"title",
+	"provider",
+	"description",
+] as const;
 
 const CUSTOM_DOMAIN_FIELDS = [
 	"domain",
@@ -125,6 +138,85 @@ export const builder = (argv: yargs.Argv) =>
 		})
 		.middleware(fillSingleProject as any)
 		.command(
+			"new [template]",
+			"Create a function from a template",
+			(yargs) =>
+				yargs
+					.positional("template", {
+						describe:
+							"Template ID (run `neon functions templates list` to see available templates)",
+						type: "string",
+					})
+					.options({
+						name: {
+							describe:
+								"Function slug and output directory name (defaults to the template ID)",
+							type: "string",
+						},
+						operation: {
+							describe:
+								"Operation to expose (repeatable). Run the command to see a template's operation ids. With no flag and no TTY, every recommended operation is used.",
+							type: "string",
+							array: true,
+						},
+						"all-operations": {
+							describe:
+								"Expose every operation the template declares. Conflicts with --operation.",
+							type: "boolean",
+						},
+						yes: {
+							alias: ["y", "default"],
+							describe:
+								"Skip prompts: use the template's recommended operations and do not ask.",
+							type: "boolean",
+						},
+						dir: {
+							describe:
+								"Destination directory (defaults to functions/<name>)",
+							type: "string",
+						},
+						force: {
+							describe:
+								"Overwrite colliding files in a non-empty destination without prompting. Use --no-force to decline without prompting.",
+							type: "boolean",
+						},
+						install: {
+							describe:
+								"Install dependencies declared by the template. When omitted, interactive terminals ask.",
+							type: "boolean",
+						},
+						"add-to-config": {
+							describe:
+								"Register the function in neon.ts (creating one if none exists). On by default; use --no-add-to-config to keep it local and deploy manually.",
+							type: "boolean",
+						},
+						config: {
+							describe:
+								"Path to the neon.ts policy to edit or create (defaults to searching up from the current directory, then creating ./neon.ts).",
+							type: "string",
+						},
+						env: {
+							describe:
+								"Add the template's required variables to a project dotenv file (a TTY prompts for values; otherwise blank placeholders). On by default; use --no-env to skip.",
+							type: "boolean",
+						},
+						"env-to": {
+							describe:
+								"Project dotenv file to append missing variables to (inside the project root; defaults to an existing .env.local/.env or a new .env.local).",
+							type: "string",
+						},
+					}),
+			(args) => createFromTemplate(args as any),
+		)
+		.command("templates", "Browse function templates", (yargs) =>
+			yargs.command(
+				"list",
+				"List available function templates",
+				(yargs) => yargs,
+				(args) => listTemplates(args as any),
+			),
+		)
+		.command(
 			"deploy <slug>",
 			"Deploy a function from a local directory",
 			(yargs) =>
@@ -161,6 +253,11 @@ export const builder = (argv: yargs.Argv) =>
 								"Environment variable as KEY=VALUE (repeatable)",
 							type: "string",
 							array: true,
+						},
+						"env-from-file": {
+							describe:
+								"Load environment variables from a dotenv file. Repeated --env values override matching file entries.",
+							type: "string",
 						},
 						wait: {
 							describe:
@@ -267,6 +364,150 @@ export const handler = (args: yargs.Argv) => {
 	return args;
 };
 
+type NewFunctionProps = Pick<BranchScopeProps, "output"> & {
+	template?: string;
+	name?: string;
+	operation?: string[];
+	allOperations?: boolean;
+	yes?: boolean;
+	dir?: string;
+	force?: boolean;
+	install?: boolean;
+	addToConfig?: boolean;
+	config?: string;
+	env?: boolean;
+	envTo?: string;
+};
+
+// Fields for the structured (json/yaml) result of `functions new`. Table mode
+// keeps the human next steps logged by the scaffolder; scripts get this record.
+const NEW_FUNCTION_FIELDS = [
+	"template",
+	"provider",
+	"layout",
+	"operations",
+	"routes",
+	"functions",
+	"slug",
+	"directory",
+	"installed",
+	"dependencies",
+	"environment",
+	"env_file",
+	"config",
+	"neon_ts_fragment",
+	"next_steps",
+] as const;
+
+const createFromTemplate = async (props: NewFunctionProps) => {
+	if (props.template === undefined) {
+		await listTemplates(props);
+		if (props.output === "table") {
+			log.info(
+				`Create one with: ${getCliName()} functions new <template>`,
+			);
+		}
+		return;
+	}
+	const structured = props.output === "json" || props.output === "yaml";
+	let result: Awaited<ReturnType<typeof scaffoldFunctionTemplate>>;
+	try {
+		result = await scaffoldFunctionTemplate({
+			template: props.template,
+			name: props.name,
+			operations: props.operation,
+			allOperations: props.allOperations,
+			yes: props.yes,
+			dir: props.dir,
+			force: props.force,
+			install: props.install,
+			addToConfig: props.addToConfig,
+			config: props.config,
+			noEnv: props.env === false,
+			envTo: props.envTo,
+			quiet: structured,
+		});
+	} catch (error) {
+		if (!(error instanceof UnknownFunctionTemplateError)) throw error;
+		throw new Error(
+			`${error.message}\n\nAvailable templates:\n${renderFunctionTemplates(error.templates)}\n\nCreate one with: ${getCliName()} functions new <template>`,
+		);
+	}
+	if (result.cancelled) return;
+	if (!structured) return;
+	writer(props).end(
+		{
+			template: result.template.id,
+			provider: result.template.provider ?? "Neon",
+			layout: result.layout,
+			operations: result.operations,
+			routes: result.routes,
+			functions: result.functions,
+			slug: result.slug,
+			directory: result.directory,
+			installed: result.installed,
+			dependencies: result.dependencies,
+			environment: result.environment,
+			env_file: result.envFile
+				? {
+						path: result.envFile.path,
+						variables: result.envFile.variables,
+						written: result.envFile.written,
+					}
+				: null,
+			config: result.config ?? null,
+			neon_ts_fragment: result.neonTsFragment ?? null,
+			next_steps: result.nextSteps,
+		},
+		{ fields: NEW_FUNCTION_FIELDS },
+	);
+};
+
+type FunctionTemplateOutputProps = Pick<BranchScopeProps, "output"> & {
+	out?: NodeJS.WritableStream;
+};
+
+const writeFunctionTemplates = (
+	props: FunctionTemplateOutputProps,
+	templates: RegistryIndexEntry[],
+): void => {
+	const structured = props.output === "json" || props.output === "yaml";
+	writer(props).end(
+		templates.map(({ id, title, provider, description, logo }) => ({
+			id,
+			title,
+			provider: provider ?? "Neon",
+			description,
+			...(structured && logo ? { logo } : {}),
+		})),
+		{
+			fields: structured
+				? [...FUNCTION_TEMPLATE_FIELDS, "logo"]
+				: FUNCTION_TEMPLATE_FIELDS,
+			emptyMessage: "No function templates found.",
+		},
+	);
+};
+
+const renderFunctionTemplates = (templates: RegistryIndexEntry[]): string => {
+	let output = "";
+	const out = {
+		write(chunk: string | Uint8Array) {
+			output += chunk.toString();
+			return true;
+		},
+	} as unknown as NodeJS.WritableStream;
+	writeFunctionTemplates({ output: "table", out }, templates);
+	return output.trimEnd();
+};
+
+const listTemplates = async (
+	props: FunctionTemplateOutputProps,
+): Promise<void> => {
+	const templates = await fetchFunctionTemplates();
+	writeFunctionTemplates(props, templates);
+};
+
 type DeployProps = BranchScopeProps & {
 	slug: string;
 	src?: string;
@@ -274,14 +515,21 @@ type DeployProps = BranchScopeProps & {
 	entry?: string;
 	runtime?: string;
 	env?: string[];
+	envFromFile?: string;
 	wait: boolean;
 	bundle: boolean;
 };
 
-const parseEnv = (entries: string[] | undefined): string | undefined => {
-	if (!entries || entries.length === 0) return undefined;
-	const map: Record<string, string> = {};
-	for (const entry of entries) {
+export const parseDeployEnvironment = (
+	entries: string[] | undefined,
+	envFromFile: string | undefined,
+	cwd: string,
+): string | undefined => {
+	const map: Record<string, string> =
+		envFromFile === undefined
+			? {}
+			: readEnvFile(resolveEnvFilePath(cwd, envFromFile));
+	for (const entry of entries ?? []) {
 		const eq = entry.indexOf("=");
 		if (eq <= 0) {
 			throw new Error(
@@ -290,6 +538,10 @@ const parseEnv = (entries: string[] | undefined): string | undefined => {
 		}
 		map[entry.slice(0, eq)] = entry.slice(eq + 1);
 	}
+	// Omit environment entirely when nothing resolved, even with --env-from-file: an
+	// empty or comment-only file must not send `{}`, which would wipe a
+	// function's existing environment on redeploy instead of leaving it untouched.
+	if (Object.keys(map).length === 0) return undefined;
 	return JSON.stringify(map);
 };
 
@@ -331,11 +583,12 @@ const deploy = async (props: DeployProps) => {
 	const hasOption =
 		props.src !== undefined ||
 		props.env !== undefined ||
+		props.envFromFile !== undefined ||
 		props.runtime !== undefined ||
 		props.bundle === false;
 	if (!hasOption) {
 		throw new Error(
-			"Provide at least one option to deploy, e.g. --src, --env, or --no-bundle. " +
+			"Provide at least one option to deploy, e.g. --src, --env-from-file, --env, or --no-bundle. " +
 				`See: ${getCliName()} function deploy --help.`,
 		);
 	}
@@ -348,7 +601,11 @@ const deploy = async (props: DeployProps) => {
 	const src = props.src ?? ".";
 	const runtime = props.runtime ?? "nodejs24";
 
-	const environment = parseEnv(props.env);
+	const environment = parseDeployEnvironment(
+		props.env,
+		props.envFromFile,
+		process.cwd(),
+	);
 	const srcStat = statSync(src, { throwIfNoEntry: false });
 	if (srcStat === undefined) {
 		throw new Error(`--src path not found: ${src}.`);
