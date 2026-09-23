@@ -72,6 +72,7 @@ import {
 	extraServicesNext,
 	installFailedNext,
 	MCP_SCOPED_NEEDS_PROJECT,
+	mcpConfigLocationUnavailable,
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
 	namedAgentsUnavailable,
@@ -328,6 +329,17 @@ const skillsMcpTooling = (
 			mcpInstallableAgents(mcpConfigLocation).includes(id),
 		),
 	};
+};
+
+const assertMcpConfigLocationSupported = (
+	ids: readonly AgentType[],
+	location: "global" | "project",
+): void => {
+	const supported = new Set(mcpInstallableAgents(location));
+	const unavailable = ids.filter((id) => !supported.has(id));
+	if (unavailable.length > 0) {
+		throw new Error(mcpConfigLocationUnavailable(unavailable, location));
+	}
 };
 
 const pickOrDetectAgents = async (input: {
@@ -694,6 +706,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 												props.claimable !== true
 											? "api-key"
 											: "oauth");
+						assertMcpConfigLocationSupported(
+							selected,
+							mcpConfigLocation,
+						);
 						tooling = skillsMcpTooling(
 							selected,
 							mcpConfigLocation,

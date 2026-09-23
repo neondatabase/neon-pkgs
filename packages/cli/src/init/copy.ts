@@ -98,6 +98,14 @@ export const MCP_SCOPED_NEEDS_PROJECT =
 export const namedAgentsUnavailable = (ids: readonly string[]): string =>
 	`--agent ${ids.join(", ")} cannot install this tooling. Pass agents that support it, or omit --agent.`;
 
+export const mcpConfigLocationUnavailable = (
+	ids: readonly string[],
+	location: "global" | "project",
+): string =>
+	location === "project"
+		? `--agent ${ids.join(", ")} cannot install project-level MCP config. Use --mcp-config-location global, or choose an agent that supports project config.`
+		: `--agent ${ids.join(", ")} cannot install global MCP config. Choose an agent that supports global config.`;
+
 export const NON_TTY_AGENT_SETUP =
 	"No interactive terminal. Pass -y for Recommended, or pass --skill, --mcp-auth, --agent, or --no-agent-setup.";
 

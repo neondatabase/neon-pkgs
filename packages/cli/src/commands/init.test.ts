@@ -378,6 +378,33 @@ describe("init handler", () => {
 		expect(mcp).toContain("--project-id proj-pin");
 	});
 
+	test("project MCP config rejects an unsupported agent", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-location-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run,
+					yes: true,
+					agent: ["windsurf"],
+					skill: ["neon"],
+					mcpAuth: "oauth",
+					mcpConfigLocation: "project",
+					link: false,
+					config: false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(
+			/--agent windsurf cannot install project-level MCP config.*--mcp-config-location global/,
+		);
+		expect(run).not.toHaveBeenCalled();
+	});
+
 	test("-y --skill is Custom skills, not Recommended plugin", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-skill-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
