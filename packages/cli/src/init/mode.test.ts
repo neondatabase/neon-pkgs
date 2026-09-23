@@ -156,7 +156,7 @@ describe("inferInitAgentSetup", () => {
 		).toEqual({ kind: "skills-mcp" });
 	});
 
-	test("MCP flags without --skill is skills and MCP", () => {
+	test("MCP flags without --skill are skills and MCP", () => {
 		expect(
 			inferInitAgentSetup({ ...inferBase, hasMcpFlags: true }),
 		).toEqual({ kind: "skills-mcp" });

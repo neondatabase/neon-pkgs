@@ -6,7 +6,10 @@ import type { AgentType } from "../mcp/agents.js";
 import { getAgentDisplayName, listMcpAgentIds } from "../mcp/agents.js";
 import type { NeonService } from "../neon_services.js";
 import { listSkillIds, NEON_SKILL_CATALOG } from "../skills/catalog.js";
-import { canPickAgentsInteractively } from "../utils/agent_picker.js";
+import {
+	canPickAgentsInteractively,
+	pickAgentsInteractively,
+} from "../utils/agent_picker.js";
 import type { PackageManager } from "../utils/package_manager.js";
 import { installedPackageManagers } from "../utils/package_manager.js";
 import {
@@ -16,8 +19,11 @@ import {
 import { InitCancelled, restoreCursorVisibilityOnAbort } from "./cancelled.js";
 import {
 	AGENT_DETECTED_DESCRIPTION,
+	AGENT_MCP_PICKER_MESSAGE,
+	AGENT_MCP_SKIP_MESSAGE,
 	AGENT_OTHER_DESCRIPTION,
 	AGENT_PICKER_MESSAGE,
+	AGENT_PLUGIN_SKIP_MESSAGE,
 	AGENT_SETUP_MESSAGE,
 	AGENT_SETUP_PLUGIN_DESCRIPTION,
 	AGENT_SETUP_PLUGIN_TITLE,
@@ -25,6 +31,8 @@ import {
 	AGENT_SETUP_SKILLS_TITLE,
 	AGENT_SETUP_SKIP_DESCRIPTION,
 	AGENT_SETUP_SKIP_TITLE,
+	AGENT_SKILLS_PICKER_MESSAGE,
+	AGENT_SKILLS_SKIP_MESSAGE,
 	CONFIG_CONFIRM_HINT,
 	CONFIG_CONFIRM_MESSAGE,
 	MCP_AUTH_API_KEY_DESCRIPTION,
@@ -138,32 +146,34 @@ export const pickAgentSetupInteractively =
 export const pickInitAgentsInteractively = async (input: {
 	available: readonly AgentType[];
 	detected: readonly AgentType[];
-}): Promise<AgentType[]> => {
+	setup: "plugin" | "skills" | "mcp";
+}): Promise<AgentType[] | undefined> => {
 	requireInteractive();
-	if (input.available.length === 0) {
-		throw new Error("No coding agents are available to pick.");
-	}
 	const detected = new Set(input.detected);
-	const { agents } = await prompts({
-		onState: restoreCursorOnAbort,
-		type: "multiselect",
-		name: "agents",
-		message: AGENT_PICKER_MESSAGE,
-		instructions: false,
-		min: 1,
+	const selected = await pickAgentsInteractively({
+		onCancel: aborted,
+		message:
+			input.setup === "skills"
+				? AGENT_SKILLS_PICKER_MESSAGE
+				: input.setup === "mcp"
+					? AGENT_MCP_PICKER_MESSAGE
+					: AGENT_PICKER_MESSAGE,
+		skipMessage:
+			input.setup === "plugin"
+				? AGENT_PLUGIN_SKIP_MESSAGE
+				: input.setup === "skills"
+					? AGENT_SKILLS_SKIP_MESSAGE
+					: AGENT_MCP_SKIP_MESSAGE,
+		selected: input.detected,
 		choices: input.available.map((id) => ({
-			value: id,
+			id,
 			title: `${getAgentDisplayName(id)} (${id})`,
 			description: detected.has(id)
 				? AGENT_DETECTED_DESCRIPTION
 				: AGENT_OTHER_DESCRIPTION,
-			selected: detected.has(id),
 		})),
 	});
-	if (!Array.isArray(agents)) {
-		return aborted();
-	}
-	return agents.filter((id): id is AgentType => typeof id === "string");
+	return selected.length > 0 ? selected : undefined;
 };
 
 export const pickInitSkillsInteractively = async (): Promise<string[]> => {

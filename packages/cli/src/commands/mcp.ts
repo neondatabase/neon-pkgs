@@ -1,7 +1,7 @@
 import type yargs from "yargs";
-
 import { recordCommandSuccessExtras } from "../analytics.js";
 import { readContextFile } from "../context.js";
+import { AGENT_MCP_SKIP_MESSAGE } from "../init/copy.js";
 import { log } from "../log.js";
 import {
 	existingNeonApiKey,
@@ -22,7 +22,10 @@ import {
 import { resolveMcpPlan } from "../mcp/plan.js";
 import { mcpInstallableAgents, resolveInstallTargets } from "../mcp/targets.js";
 import type { CommonProps } from "../types.js";
-import { canPickAgentsInteractively } from "../utils/agent_picker.js";
+import {
+	canPickAgentsInteractively,
+	skippableAgentPicker,
+} from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { helpCsv, helpEpilogue } from "../utils/help_text.js";
@@ -201,6 +204,7 @@ export type SetupNeonMcpOptions = Pick<
 	readOnly?: boolean;
 	projectId?: string;
 	category?: NeonMcpCategory[];
+	allowAgentSkip?: boolean;
 };
 
 export type McpInstallOutcome = {
@@ -238,6 +242,10 @@ export const setupNeonMcp = async (
 		projectId: options.projectId,
 		categories: options.category ?? [],
 		linkedProjectId,
+		pickAgents: skippableAgentPicker(
+			options.allowAgentSkip,
+			AGENT_MCP_SKIP_MESSAGE,
+		),
 	});
 	const { install, skipped } = resolveInstallTargets({
 		agents: plan.agents,

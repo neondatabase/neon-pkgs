@@ -9,7 +9,11 @@ import type { InitAgentSetupChoice, InitMode } from "./mode.js";
 export const CLI_INIT_START = "cli_init_start";
 export const CLI_INIT_END = "cli_init_end";
 
-export type InitFunnelAgentSetup = InitAgentSetupChoice | "skills" | "mixed";
+export type InitFunnelAgentSetup =
+	| InitAgentSetupChoice
+	| "skills"
+	| "mcp"
+	| "mixed";
 
 export type InitFunnelLink =
 	| "linked"
