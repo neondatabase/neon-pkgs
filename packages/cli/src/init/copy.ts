@@ -93,6 +93,15 @@ export const NO_AGENT_SETUP_CONFLICT =
 export const NON_TTY_LINK_NEEDS_AUTH =
 	"No interactive terminal. Sign in with `neon auth`, then re-run, or pass --claimable.";
 
+export const YES_LINK_NEEDS_AUTH =
+	"-y cannot sign in. Sign in with `neon auth`, then re-run, or pass --claimable.";
+
+export const MCP_PIN_NEEDS_PROJECT =
+	"--mcp-project-pin requires a linked project. Link a project first, or omit --mcp-project-pin.";
+
+export const namedAgentsUnavailable = (ids: readonly string[]): string =>
+	`--agent ${ids.join(", ")} cannot install this tooling. Pass agents that support it, or omit --agent.`;
+
 export const NON_TTY_AGENT_SETUP =
 	"No interactive terminal. Pass -y for Recommended, or pass --skill, --mcp-auth, --agent, or --no-agent-setup.";
 

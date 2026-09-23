@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
-import { NO_AGENT_SETUP_CONFLICT } from "../init/copy.js";
+import {
+	MCP_PIN_NEEDS_PROJECT,
+	NO_AGENT_SETUP_CONFLICT,
+	namedAgentsUnavailable,
+	YES_LINK_NEEDS_AUTH,
+} from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
@@ -198,6 +203,56 @@ describe("init handler", () => {
 		expect(out).toMatch(/neon auth/);
 		expect(out).toMatch(/neon link/);
 		expect(out).toMatch(/neon claim create/);
+	});
+
+	test("Custom -y unanswered project setup skips link when unauthenticated", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-custom-unauth-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				agentSetup: false,
+				config: false,
+				linkProject,
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(takeCommandSuccessExtras()).toEqual({
+			init_kind: "existing",
+			agent_setup: "skip",
+		});
+	});
+
+	test("-y with --project-id refuses to open sign-in", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-project-id-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					yes: true,
+					projectId: "prj-example",
+					agentSetup: false,
+					config: false,
+					linkProject,
+					hasLocalCredentials: () => false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(YES_LINK_NEEDS_AUTH);
+		expect(linkProject).not.toHaveBeenCalled();
 	});
 
 	test("empty --template -y still nested-bootstraps", async () => {
@@ -536,6 +591,74 @@ describe("init handler", () => {
 		);
 
 		expect(createClaimable).toHaveBeenCalled();
+	});
+
+	test("-y --claimable with an MCP-only agent uses OAuth", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-mcp-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				claimable: true,
+				agent: ["mcporter"],
+				config: false,
+				hasLocalCredentials: () => false,
+				createClaimable,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
+		expect(mcp).toContain("--oauth");
+		expect(mcp).toContain("--agent mcporter");
+		expect(createClaimable).toHaveBeenCalled();
+	});
+
+	test("--mcp-project-pin without a linked project fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pin-noproject-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					run: vi.fn().mockResolvedValue(true),
+					yes: true,
+					mcpProjectPin: true,
+					agent: ["opencode"],
+					link: false,
+					config: false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(MCP_PIN_NEEDS_PROJECT);
+	});
+
+	test("--skill with an agent that cannot install skills fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-skill-mcporter-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					yes: true,
+					skill: ["neon"],
+					agent: ["mcporter"],
+					link: false,
+					config: false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(namedAgentsUnavailable(["mcporter"]));
 	});
 
 	test("Custom skip plus --no-link plus declining neon.ts writes nothing", async () => {

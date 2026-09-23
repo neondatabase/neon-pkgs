@@ -785,7 +785,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 Recommended installs the Neon plugin for every detected agent (global config, project folders, and the host CLI). Plugin-capable agents get the plugin; the rest get skills and MCP. If none are detected, it installs the default Neon skills for Cursor and Codex in this directory (`./.agents/skills`) and does not configure MCP. It then links a project when the CLI is authenticated, and writes a default `neon.ts` (Postgres only) using the package manager already in the directory.
 
-Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser.
+Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser. `-y` with `--project-id` or other account flags links when the CLI is already signed in; otherwise it errors and names `neon auth` or `--claimable`.
 
 Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-scope`, `--mcp-auth`, `--mcp-project-pin`) select skills and MCP. `--no-agent-setup` skips agent setup.
 

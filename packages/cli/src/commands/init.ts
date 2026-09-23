@@ -166,7 +166,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"Recommended setup installs tooling for detected coding agents, links a Neon project when the CLI is authenticated or the session is interactive, and writes a default neon.ts.",
-				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --claimable is Custom: those flags, Recommended defaults for unanswered questions.",
+				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --claimable is Custom: those flags, Recommended defaults for unanswered questions. -y never opens a browser.",
 				"-y does not scaffold a starter app. Scaffold with --template <id> or neon bootstrap.",
 				"--skill selects skills (not the plugin). MCP flags select skills and MCP. --no-agent-setup skips agent setup. --agent without those flags installs the plugin (and skills/MCP for agents the plugin cannot cover).",
 				"Without a TTY, pass -y or enough flags to answer every question.",

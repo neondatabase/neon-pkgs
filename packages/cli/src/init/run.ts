@@ -73,11 +73,14 @@ import {
 	existingConfigNext,
 	extraServicesNext,
 	installFailedNext,
+	MCP_PIN_NEEDS_PROJECT,
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
+	namedAgentsUnavailable,
 	PROGRESS,
 	skippedLinkNext,
 	unattendedUnauthedNext,
+	YES_LINK_NEEDS_AUTH,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
 import {
@@ -350,7 +353,16 @@ const pickOrDetectAgents = async (input: {
 	interactive: boolean;
 }): Promise<AgentType[]> => {
 	if (input.named.length > 0) {
-		return input.named.filter((id) => input.available.includes(id));
+		const selected = input.named.filter((id) =>
+			input.available.includes(id),
+		);
+		const dropped = input.named.filter(
+			(id) => !input.available.includes(id),
+		);
+		if (dropped.length > 0) {
+			throw new Error(namedAgentsUnavailable(dropped));
+		}
+		return selected;
 	}
 	const detected = input.detected.filter((id) =>
 		input.available.includes(id),
@@ -648,7 +660,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				agentSetupChoice = setup === "skills" ? "skills" : setup;
 				if (setup !== "skip") {
 					pluginScope = pluginScopeFor(targets, "project");
-					const available = availableForSetup(setup, pluginScope);
+					const available =
+						setup === "plugin"
+							? uniqueAgents([
+									...pluginsInstallableAgents("project"),
+									...pluginsInstallableAgents("global"),
+								])
+							: availableForSetup(setup, pluginScope);
 					const selected = await pickOrDetectAgents({
 						named,
 						available,
@@ -658,6 +676,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							? { pickAgents: props.pickAgents }
 							: {}),
 					});
+					const namedFallback = named.length === 0;
 					if (setup === "plugin") {
 						pluginScope = pluginScopeFor(selected, pluginScope);
 						tooling = splitInitTooling(selected, pluginScope);
@@ -676,7 +695,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						}
 						agentSetupChoice = funnelAgentSetup(tooling);
 					} else if (setup === "skills") {
-						tooling = skillsTooling(selected, yes);
+						tooling = skillsTooling(selected, namedFallback);
 						agentSetupChoice = funnelAgentSetup(tooling);
 					} else {
 						if (
@@ -718,7 +737,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 										: detection.authenticated
 											? "api-key"
 											: "oauth");
-						tooling = skillsMcpTooling(selected, mcpScope, yes);
+						tooling = skillsMcpTooling(
+							selected,
+							mcpScope,
+							namedFallback,
+						);
 						agentSetupChoice = "skills-mcp";
 					}
 				}
@@ -736,11 +759,17 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		const usesMcp =
 			tooling.setup === "skills-mcp" || tooling.setup === "mixed";
+		if (
+			mcpAuth === undefined &&
+			usesMcp &&
+			(!detection.authenticated || props.claimable === true)
+		) {
+			mcpAuth = "oauth";
+		}
 		delayMcp =
 			usesMcp && (mcpAuth === "api-key" || props.mcpProjectPin === true);
 
-		const mcpOauth =
-			mcpAuth === "oauth" || (recommended && !detection.authenticated);
+		const mcpOauth = mcpAuth === "oauth";
 		const earlyTooling = delayMcp
 			? tooling.setup === "skills-mcp"
 				? {
@@ -797,7 +826,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				claimExpiresAt = stored?.expiresAt;
 			}
 		} else if (recommended) {
-			if (detection.authenticated) {
+			if (hasExplicitLinkInputs || detection.authenticated) {
 				projectSetup = "link";
 			} else if (detection.interactive && !yes) {
 				projectSetup = "link";
@@ -809,6 +838,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			projectSetup = "claimable";
 		} else if (hasExplicitLinkInputs || detection.authenticated) {
 			projectSetup = "link";
+		} else if (yes) {
+			projectSetup = "skip";
+			funnel.link = "skipped";
 		} else if (
 			props.pickProjectSetup !== undefined ||
 			detection.interactive
@@ -848,6 +880,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			);
 			claimExpiresAt = stored?.expiresAt;
 		} else if (projectSetup === "link") {
+			if (yes && !detection.authenticated) {
+				throw new Error(YES_LINK_NEEDS_AUTH);
+			}
 			printInitProgress(
 				detection.authenticated ? PROGRESS.link : PROGRESS.auth,
 			);
@@ -883,6 +918,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		if (delayMcp && tooling.setup !== "skip") {
 			const linkedId = readContextFile(contextFile).projectId;
+			if (props.mcpProjectPin === true) {
+				if (typeof linkedId !== "string" || linkedId.length === 0) {
+					throw new Error(MCP_PIN_NEEDS_PROJECT);
+				}
+			}
 			let pinId: string | undefined;
 			if (
 				props.mcpProjectPin !== false &&

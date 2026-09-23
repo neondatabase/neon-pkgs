@@ -437,7 +437,6 @@ export const planInitToolingSteps = (input: {
 		case "plugin":
 			return [[...pluginPrefix, ...named(input.tooling.agents)]];
 		case "skills":
-			// Empty detection: same as `neon skills` (this directory), not --global.
 			return [
 				["skills", ...y, ...skillFlags, ...named(input.tooling.agents)],
 			];
