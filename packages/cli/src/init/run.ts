@@ -65,6 +65,7 @@ import {
 import {
 	CANCELLED_BODY,
 	CLAIMABLE_ACCOUNT_FLAGS,
+	CLAIMABLE_ALREADY_LINKED,
 	CLAIMABLE_MCP_API_KEY,
 	CLAIMABLE_NO_LINK,
 	claimableNext,
@@ -578,15 +579,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				: modeResolution.kind;
 		funnel.mode = mode;
 
-		if (props.claimable === true) {
-			if (props.link === false) {
-				throw new Error(CLAIMABLE_NO_LINK);
-			}
-			if (hasExplicitLinkInputs) {
-				throw new Error(CLAIMABLE_ACCOUNT_FLAGS);
-			}
-		}
-
 		const alreadyLinked = isLinked(contextFile);
 		const existingConfig = hasNeonConfigFile(cwd);
 		const existingFilename = neonConfigFilename(cwd);
@@ -596,6 +588,18 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				configDir,
 				readContextFile(contextFile),
 			) !== null;
+
+		if (props.claimable === true) {
+			if (props.link === false) {
+				throw new Error(CLAIMABLE_NO_LINK);
+			}
+			if (hasExplicitLinkInputs) {
+				throw new Error(CLAIMABLE_ACCOUNT_FLAGS);
+			}
+			if (alreadyLinked) {
+				throw new Error(CLAIMABLE_ALREADY_LINKED);
+			}
+		}
 
 		const recommended = mode === "recommended";
 		const targets = named.length > 0 ? named : detection.detectedAgents;
@@ -721,7 +725,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						mcpAuth =
 							props.mcpAuth ??
 							(yes
-								? detection.authenticated
+								? detection.authenticated &&
+									props.claimable !== true
 									? "api-key"
 									: "oauth"
 								: props.pickMcpAuth !== undefined
@@ -734,7 +739,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 												authenticated:
 													detection.authenticated,
 											})
-										: detection.authenticated
+										: detection.authenticated &&
+												props.claimable !== true
 											? "api-key"
 											: "oauth");
 						tooling = skillsMcpTooling(

@@ -62,6 +62,8 @@ export const CLAIMABLE_NO_LINK =
 	"--claimable cannot be combined with --no-link.";
 export const CLAIMABLE_ACCOUNT_FLAGS =
 	"--claimable cannot be combined with --org-id, --project-id, --project-name, --region-id, or --branch.";
+export const CLAIMABLE_ALREADY_LINKED =
+	"--claimable cannot run in a directory that is already linked. Omit --claimable, or unlink first.";
 
 export const PROJECT_SETUP_MESSAGE =
 	"How would you like to get a Neon project?";

@@ -7,6 +7,8 @@ import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
 import {
+	CLAIMABLE_ALREADY_LINKED,
+	CLAIMABLE_MCP_API_KEY,
 	MCP_PIN_NEEDS_PROJECT,
 	NO_AGENT_SETUP_CONFLICT,
 	namedAgentsUnavailable,
@@ -618,6 +620,85 @@ describe("init handler", () => {
 		expect(mcp).toContain("--oauth");
 		expect(mcp).toContain("--agent mcporter");
 		expect(createClaimable).toHaveBeenCalled();
+	});
+
+	test("--claimable in an already linked directory fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-linked-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "prj-existing", branch: "main" })}\n`,
+		);
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					yes: true,
+					claimable: true,
+					agentSetup: false,
+					config: false,
+					createClaimable,
+					contextFile,
+				}),
+			),
+		).rejects.toThrow(CLAIMABLE_ALREADY_LINKED);
+		expect(createClaimable).not.toHaveBeenCalled();
+	});
+
+	test("-y --claimable with credentials still defaults MCP to OAuth", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-authed-mcp-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				claimable: true,
+				agent: ["mcporter"],
+				mcpScope: "global",
+				config: false,
+				hasLocalCredentials: () => true,
+				createClaimable,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
+		expect(mcp).toContain("--oauth");
+		expect(mcp).toContain("--agent mcporter");
+		expect(createClaimable).toHaveBeenCalled();
+	});
+
+	test("-y --claimable --mcp-auth api-key fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-apikey-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					yes: true,
+					claimable: true,
+					agent: ["mcporter"],
+					mcpAuth: "api-key",
+					config: false,
+					hasLocalCredentials: () => true,
+					createClaimable,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(CLAIMABLE_MCP_API_KEY);
+		expect(createClaimable).not.toHaveBeenCalled();
 	});
 
 	test("--mcp-project-pin without a linked project fails", async () => {
