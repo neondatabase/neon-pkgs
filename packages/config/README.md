@@ -139,10 +139,7 @@ import {
 `branch()` is the **declarative** layer — *what a branch should look like* — and is pure (it runs during `plan` / `status`, so it must stay side-effect free). `experimental.hooks` is its **imperative** companion: run side effects (migrations, seeding, notifications) on the real `checkout` / `deploy` commands. Hooks **never** run during `plan` / `status` / `inspect`, which is what keeps the diff engine deterministic and the typed env sound. Hooks live under the top-level `experimental` namespace rather than as a sibling of `auth` / `dataApi` / `branch`, marking that this shape isn't covered by the same stability guarantees as the rest of the policy.
 
 ```ts
-// Aliased on import: the hook contexts below already have their own `git` field (read-only
-// facts about the current checkout), so importing the helper namespace as `neonGit` avoids
-// shadowing it.
-import { defineConfig, git as neonGit } from "@neondatabase/config/v1";
+import { defineConfig } from "@neondatabase/config/v1";
 
 export default defineConfig({
   auth: true,
@@ -155,11 +152,12 @@ export default defineConfig({
       checkout: {
         // `before` may rewrite the branch name (function form) or abort (throw / non-zero exit).
         // `event` narrows on `event.type`: a "git-checkout" event (the installed git hook)
-        // carries `gitBranch` and never a typed `inputName`; a "neon-checkout" event (an
+        // never carries a typed `inputName` — derive the name from `git.neonSafeBranchName`
+        // (the current branch, already sanitized) instead. A "neon-checkout" event (an
         // explicit `neonctl checkout <name>`) carries whatever the user typed, if anything.
-        before: ({ event }) =>
+        before: ({ event, git }) =>
           event.type === "git-checkout"
-            ? { name: neonGit.neonSafeBranchName(event.gitBranch, { prefix: "preview/" }) }
+            ? { name: `preview/${git.neonSafeBranchName}` }
             : undefined,
         // `after` observes; `branch.created` distinguishes a new branch from a selected one.
         after: async ({ branch, env }) => {
@@ -188,7 +186,7 @@ Every context also carries `event` — what actually triggered this run:
 - `checkout` / `create` get a `CheckoutEvent`: `{ type: "git-checkout"; gitBranch: string }` (the installed `post-checkout` git hook) or `{ type: "neon-checkout"; inputName?: string }` (an explicit `neonctl checkout`). Narrow on `event.type` before reading `event.gitBranch` / `event.inputName` — TypeScript only lets you read the field that variant actually has.
 - `deploy` gets a `DeployEvent`: always `{ type: "neon-deploy" }` today (`deploy` is never triggered by the git hook).
 
-`git.neonSafeBranchName(input, opts?)` derives a valid, stable Neon branch name from an arbitrary string (e.g. a git branch); options: `{ prefix, maxLength, lowercase, preserveSlashes }` (pass `preserveSlashes: false` for a single flat token). Grouped under the `git` namespace rather than a bare top-level export — import it under an alias (as above) wherever a hook context's own `git` field would otherwise shadow it.
+`git.neonSafeBranchName` (on the `git` context of every hook) is the current branch (`git.branch`) already sanitized into a valid Neon branch name — lowercased, each `/`-separated segment reduced to `[a-z0-9-]`, clamped to 256 characters. It's a plain string, not a function: prepend your own prefix with string concatenation, e.g. `` `preview/${git.neonSafeBranchName}` ``. Undefined whenever `git.branch` is (detached HEAD, no repo, or `git` unavailable).
 
 > The imperative runner that executes these hooks lives in `@neondatabase/config-runtime` (`runHook` / `runShellHook`); the CLI invokes it at the checkout/deploy seams. `neon.ts` only authors the hooks.
 

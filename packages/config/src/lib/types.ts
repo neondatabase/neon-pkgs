@@ -668,6 +668,14 @@ export interface GitContext {
 	available: boolean;
 	/** Current branch (`git symbolic-ref --short HEAD`). Undefined in detached-HEAD state. */
 	branch?: string;
+	/**
+	 * `branch`, sanitized into a valid Neon branch name: lowercased, each `/`-separated
+	 * segment reduced to `[a-z0-9-]`, empty results fall back to `"branch"`, clamped to 256
+	 * characters. Undefined whenever `branch` is (detached HEAD, not a git repo, or `git` is
+	 * unavailable). Prepend your own prefix with plain string concatenation, e.g.
+	 * `` `preview/${git.neonSafeBranchName}` ``.
+	 */
+	neonSafeBranchName?: string;
 	/** Full commit SHA of `HEAD`. */
 	sha?: string;
 	/** Abbreviated commit SHA of `HEAD`. */
@@ -692,8 +700,8 @@ export interface GitContext {
  *
  * - `"git-checkout"` — the installed `post-checkout` git hook, via `neonctl git sync`.
  *   Carries the git branch that triggered it (`gitBranch`); `inputName` is always `undefined`
- *   here — nothing was typed at a Neon prompt. Derive the Neon branch name from `gitBranch`
- *   instead (e.g. with `git.neonSafeBranchName`).
+ *   here — nothing was typed at a Neon prompt. The sanitized Neon-safe form of that branch is
+ *   on the sibling `git` context, at `git.neonSafeBranchName`.
  * - `"neon-checkout"` — an explicit `neonctl checkout` invocation. `inputName` is the
  *   name/id the user passed, or `undefined` when they omitted it (interactive picker).
  */

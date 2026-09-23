@@ -1,5 +1,4 @@
 import { describe, expectTypeOf, test } from "vitest";
-import { neonSafeBranchName } from "./branch-name.js";
 import { defineConfig } from "./define-config.js";
 import type {
 	NeonAiGatewayEnv,
@@ -41,6 +40,9 @@ describe("GitContext shape", () => {
 		expectTypeOf<GitContext["isDetached"]>().toEqualTypeOf<boolean>();
 		expectTypeOf<GitContext["isDirty"]>().toEqualTypeOf<boolean>();
 		expectTypeOf<GitContext["branch"]>().toEqualTypeOf<
+			string | undefined
+		>();
+		expectTypeOf<GitContext["neonSafeBranchName"]>().toEqualTypeOf<
 			string | undefined
 		>();
 		expectTypeOf<GitContext["sha"]>().toEqualTypeOf<string | undefined>();
@@ -482,25 +484,5 @@ describe("defineConfig experimental.hooks — negative (@ts-expect-error)", () =
 		// @ts-expect-error a git-checkout event requires `gitBranch`.
 		const event: CheckoutEvent = { type: "git-checkout" };
 		void event;
-	});
-});
-
-describe("neonSafeBranchName (types)", () => {
-	test("returns a string", () => {
-		expectTypeOf(neonSafeBranchName("x")).toEqualTypeOf<string>();
-	});
-
-	test("options are accepted (positive)", () => {
-		neonSafeBranchName("x", {
-			prefix: "preview/",
-			maxLength: 64,
-			lowercase: true,
-			preserveSlashes: false,
-		});
-	});
-
-	test("an unknown option is rejected", () => {
-		// @ts-expect-error `unknown` is not a NeonSafeBranchNameOptions field.
-		neonSafeBranchName("x", { unknown: 1 });
 	});
 });

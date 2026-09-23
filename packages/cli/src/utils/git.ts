@@ -12,6 +12,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import type { CheckoutEvent, GitContext } from '@neondatabase/config';
 
 import { log } from '../log.js';
+import { neonSafeBranchName } from './branch_name.js';
 
 /**
  * Env var the installed `post-checkout` hook sets before invoking `neonctl git sync`, so the
@@ -154,7 +155,7 @@ export const readGitContext = (cwd: string): GitContext => {
     available: true,
     isDetached: branch === undefined,
     isDirty: status !== undefined && status.length > 0,
-    ...(branch ? { branch } : {}),
+    ...(branch ? { branch, neonSafeBranchName: neonSafeBranchName(branch) } : {}),
     ...(sha ? { sha } : {}),
     ...(shortSha ? { shortSha } : {}),
     ...(defaultBranch ? { defaultBranch } : {}),

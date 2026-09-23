@@ -4,7 +4,6 @@ import {
 	defineConfig,
 	diffConfig,
 	errors,
-	git,
 	loadConfigFromFile,
 	resolveConfig,
 	schemas,
@@ -63,7 +62,6 @@ describe("@neondatabase/config public value surface", () => {
 			  "deriveCredentialScopes",
 			  "diffConfig",
 			  "errors",
-			  "git",
 			  "isPlatformError",
 			  "loadConfigFromFile",
 			  "resolveApiKey",
@@ -106,14 +104,6 @@ describe("@neondatabase/config public value surface", () => {
 			  "preview",
 			  "service",
 			  "serviceInput",
-			]
-		`);
-	});
-
-	test("the `git` namespace is stable", () => {
-		expect(Object.keys(git).sort()).toMatchInlineSnapshot(`
-			[
-			  "neonSafeBranchName",
 			]
 		`);
 	});

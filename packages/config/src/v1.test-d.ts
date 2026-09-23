@@ -9,6 +9,7 @@ import type {
 	CheckoutAfterContext,
 	CheckoutBeforeContext,
 	CheckoutBeforeResult,
+	CheckoutEvent,
 	CheckoutHooks,
 	ComputeSettings,
 	ComputeUnit,
@@ -28,6 +29,7 @@ import type {
 	DataApiSettings,
 	DeployAfterContext,
 	DeployBeforeContext,
+	DeployEvent,
 	DeployFunctionInput,
 	DeployHooks,
 	DiffOptions,
@@ -35,6 +37,7 @@ import type {
 	DurationString,
 	DurationUnit,
 	EnableDataApiInput,
+	ExperimentalInput,
 	FunctionDef,
 	FunctionDevConfig,
 	FunctionRuntime,
@@ -67,7 +70,6 @@ import type {
 	NeonPostgresEnv,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
-	NeonSafeBranchNameOptions,
 	NeonStorageEnv,
 	PlanStep,
 	PostgresConfig,
@@ -138,10 +140,13 @@ describe("config type-export surface", () => {
 		expectTypeOf<ServiceToggleInput>().not.toBeAny();
 	});
 
-	test("every public hooks + branch-name type is exported (compile-time tripwire)", () => {
+	test("every public hooks type is exported (compile-time tripwire)", () => {
+		expectTypeOf<ExperimentalInput>().not.toBeAny();
 		expectTypeOf<Hooks>().not.toBeAny();
 		expectTypeOf<CheckoutHooks>().not.toBeAny();
 		expectTypeOf<DeployHooks>().not.toBeAny();
+		expectTypeOf<CheckoutEvent>().not.toBeAny();
+		expectTypeOf<DeployEvent>().not.toBeAny();
 		expectTypeOf<CheckoutBeforeContext>().not.toBeAny();
 		expectTypeOf<CheckoutBeforeResult>().not.toBeAny();
 		expectTypeOf<CheckoutAfterContext>().not.toBeAny();
@@ -151,7 +156,6 @@ describe("config type-export surface", () => {
 		expectTypeOf<HookBranch>().not.toBeAny();
 		expectTypeOf<Hook<CheckoutAfterContext>>().not.toBeAny();
 		expectTypeOf<ShellHook>().not.toBeAny();
-		expectTypeOf<NeonSafeBranchNameOptions>().not.toBeAny();
 	});
 
 	test("every public resolved-env type is exported (compile-time tripwire)", () => {
