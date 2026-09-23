@@ -2,9 +2,13 @@ import { defineConfig } from "tsdown";
 import { preserveDirectives } from "./build/preserve-directives.ts";
 
 /**
- * Keep every package import a runtime import, except the private `@neon-internals/*` packages,
- * which have to be compiled in — they are never published, so a bare specifier surviving into
- * `dist` cannot resolve for anyone who installed from npm.
+ * Keep every package import a runtime import, except the private `@neon-internals/*` packages
+ * (which have to be compiled in — they are never published, so a bare specifier surviving into
+ * `dist` cannot resolve for anyone who installed from npm) and the `@/*` tsconfig path alias
+ * (which resolves to `./src/*`, see tsconfig.json — it has no meaning outside this package's
+ * compiler settings, so it must be inlined rather than passed through as an external import).
+ * The external function receives the raw import source before rolldown's tsconfig-paths-aware
+ * resolver runs, so an id starting with `@/` must be excluded here for that resolution to happen.
  */
 const externalExceptInternals = (id: string): boolean =>
 	!id.startsWith(".") &&
@@ -13,7 +17,8 @@ const externalExceptInternals = (id: string): boolean =>
 	!id.startsWith("#") &&
 	!id.startsWith("\0") &&
 	!/^[a-zA-Z]:[\\/]/.test(id) &&
-	!id.startsWith("@neon-internals/");
+	!id.startsWith("@neon-internals/") &&
+	!id.startsWith("@/");
 
 export default defineConfig({
 	name: "@neon/auth",
