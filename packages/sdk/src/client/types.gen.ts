@@ -3753,6 +3753,10 @@ export type Snapshot = {
      */
     name: string;
     /**
+     * Snapshot resource ID, unique within the project. Distinct from the internal snapshot ID and display name.
+     */
+    slug?: string;
+    /**
      * WAL position (Log Sequence Number) at which the snapshot was captured, in Postgres LSN format (for example, `0/3000000`).
      */
     lsn?: string;
@@ -12151,6 +12155,13 @@ export type CreateSnapshotData = {
          * A name for the snapshot.
          */
         name?: string;
+        /**
+         * User-defined snapshot resource ID. Must be unique within the project.
+         * Must start with a lowercase letter, contain only lowercase letters, numbers, and hyphens,
+         * and end with a letter or number. If omitted, the control plane generates a value.
+         *
+         */
+        slug?: string;
         /**
          * The time at which the snapshot will be automatically deleted. RFC 3339 format.
          *

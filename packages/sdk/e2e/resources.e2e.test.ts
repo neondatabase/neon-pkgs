@@ -500,4 +500,44 @@ describe.sequential("e2e — @neon/sdk resources against the real API", () => {
 			}
 		}
 	});
+
+	it("creates snapshots with and without a slug", async () => {
+		const slug = `sdk-e2e-${Date.now()}`;
+		const ready = { waitForReadiness: true as const };
+		const createdIds: string[] = [];
+		try {
+			const named = expectOk(
+				await neon.snapshots.create(
+					{
+						projectId,
+						branchId: defaultBranchId,
+						name: "sdk-e2e-named",
+						slug,
+					},
+					ready,
+				),
+			);
+			createdIds.push(named.id);
+			expect(named.slug).toBe(slug);
+
+			const listed = expectOk(await neon.snapshots.list({ projectId }));
+			expect(
+				listed.find((snapshot) => snapshot.id === named.id)?.slug,
+			).toBe(slug);
+
+			const generated = expectOk(
+				await neon.snapshots.create(
+					{ projectId, branchId: defaultBranchId },
+					ready,
+				),
+			);
+			createdIds.push(generated.id);
+			expect(generated.slug).toEqual(expect.any(String));
+			expect(generated.slug).not.toBe(slug);
+		} finally {
+			for (const snapshotId of createdIds) {
+				await neon.snapshots.delete({ projectId, snapshotId }, ready);
+			}
+		}
+	});
 });

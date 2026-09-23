@@ -786,7 +786,7 @@ the values can be trusted and unwrapping would hide it.
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `list({ projectId })` | `Snapshot[]` | |
-| `create({ projectId, branchId, …input })` | `Snapshot` | `input`: `{ name?, timestamp?, lsn?, expiresAt? }` (point-in-time) |
+| `create({ projectId, branchId, …input })` | `Snapshot` | `input`: `{ name?, slug?, timestamp?, lsn?, expiresAt? }` (point-in-time) |
 | `update({ projectId, snapshotId, …input })` | `Snapshot` | `input`: `{ name?, expiresAt? }` — pass `expiresAt: null` to clear the expiration |
 | `delete({ projectId, snapshotId })` | **→void** | |
 | `restore({ projectId, snapshotId, …input })` | `Branch` | see below |
@@ -794,15 +794,15 @@ the values can be trusted and unwrapping would hide it.
 | `setSchedule({ projectId, branchId, schedule })` | **→void** | `schedule[].frequency` is narrowed to `SnapshotFrequency` (`"daily" \| "weekly" \| "monthly"`) |
 
 ```ts
-// Snapshot a branch at a point in time (or an `lsn`), with a name + TTL
 const { data: snapshot } = await neon.snapshots.create({
   projectId,
   branchId,
-  name: "pre-migration",
-  timestamp: "2026-06-01T00:00:00Z",
-  expiresAt: "2026-07-01T00:00:00Z",
+  name: "Before migration",
+  slug: "before-migration",
 });
 ```
+
+`slug` is optional and unique within the project. Omit it and the control plane generates one. The value is `snapshot.slug`; it cannot be updated. `update`, `delete`, and `restore` still take `snapshot.id`.
 
 `restore` input: `{ name?, targetBranchId?, finalize?, preview?, keepOnAbort? }`.
 - Restoring **as a new branch** (no `targetBranchId`) finalizes by default → ready to use.

@@ -1776,6 +1776,7 @@ export const zCursorPaginationResponse = z.strictObject({
 export const zSnapshot = z.strictObject({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     name: z.string(),
+    slug: z.string().optional(),
     lsn: z.string().optional(),
     timestamp: z.string().optional(),
     source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
@@ -3233,6 +3234,7 @@ export const zCreateSnapshotQuery = z.strictObject({
     lsn: z.string().optional(),
     timestamp: z.string().optional(),
     name: z.string().optional(),
+    slug: z.string().min(1).max(63).regex(/^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/).optional(),
     expires_at: z.string().optional()
 });
 

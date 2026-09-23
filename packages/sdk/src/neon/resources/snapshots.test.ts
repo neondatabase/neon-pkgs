@@ -34,6 +34,52 @@ function neonCapturing() {
 	return { neon, calls };
 }
 
+function queryParams(url: string | undefined): URLSearchParams {
+	if (url === undefined) {
+		throw new Error("missing captured request URL");
+	}
+	return new URL(url).searchParams;
+}
+
+describe("snapshots.create maps the ergonomic input to the query string", () => {
+	it("forwards a distinct name and slug and sends no body", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.create({
+			projectId: "p-1",
+			branchId: "br-1",
+			name: "Before migration",
+			slug: "before-migration",
+			expiresAt: "2030-01-01T00:00:00Z",
+		});
+		expect(calls[0]?.url).toContain("/projects/p-1/branches/br-1/snapshot");
+		expect(calls[0]?.body).toBe("");
+		const query = queryParams(calls[0]?.url);
+		expect(query.get("name")).toBe("Before migration");
+		expect(query.get("slug")).toBe("before-migration");
+		expect(query.get("expires_at")).toBe("2030-01-01T00:00:00Z");
+	});
+
+	it("omits slug when it is not provided", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.create({
+			projectId: "p-1",
+			branchId: "br-1",
+			name: "Baseline",
+		});
+		expect(queryParams(calls[0]?.url).has("slug")).toBe(false);
+	});
+
+	it("omits slug when it is explicitly undefined", async () => {
+		const { neon, calls } = neonCapturing();
+		await neon.snapshots.create({
+			projectId: "p-1",
+			branchId: "br-1",
+			slug: undefined,
+		});
+		expect(queryParams(calls[0]?.url).has("slug")).toBe(false);
+	});
+});
+
 describe("snapshots.update maps the ergonomic input to the API body", () => {
 	it("sends camelCase expiresAt as snake_case expires_at", async () => {
 		const { neon, calls } = neonCapturing();

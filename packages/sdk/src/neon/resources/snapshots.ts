@@ -36,6 +36,11 @@ export type RestorePreview = (
 export interface CreateSnapshotInput {
 	/** A name for the snapshot. */
 	name?: string;
+	/**
+	 * User-defined resource ID, unique in the project. The control plane
+	 * generates one when this is omitted. It cannot be changed later.
+	 */
+	slug?: string;
 	/** Take the snapshot at this timestamp (ISO 8601). Mutually exclusive with `lsn`. */
 	timestamp?: string;
 	/** Take the snapshot at this LSN. Mutually exclusive with `timestamp`. */
@@ -196,6 +201,7 @@ export class Snapshots<DThrow extends boolean> {
 					path: { project_id: projectId, branch_id: branchId },
 					query: {
 						name: input?.name,
+						slug: input?.slug,
 						timestamp: input?.timestamp,
 						lsn: input?.lsn,
 						expires_at: input?.expiresAt,
