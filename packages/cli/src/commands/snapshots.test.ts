@@ -556,4 +556,13 @@ describe("snapshots", () => {
 		);
 		expect(stdout).toContain("--slug");
 	});
+
+	test("get --help documents lookup order", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(
+			["snapshots", "get", "--help"],
+			{ snapshot: false },
+		);
+		expect(stdout).toContain("Lookup order:");
+		expect(stdout).toContain("unique name, slug");
+	});
 });

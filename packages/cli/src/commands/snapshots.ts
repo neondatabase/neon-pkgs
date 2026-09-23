@@ -53,6 +53,12 @@ const SNAPSHOT_FREQUENCIES = [
 /** Matches createSnapshot.query.slug in the Management API spec. */
 const SNAPSHOT_SLUG = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
+const SNAPSHOT_REF = {
+	describe:
+		"Snapshot id, unique name, or slug. Lookup order: id, unique name, slug.",
+	type: "string",
+} as const;
+
 /** Narrow an arbitrary string to a supported {@link SnapshotFrequency}. */
 const isSnapshotFrequency = (value: string): value is SnapshotFrequency =>
 	SNAPSHOT_FREQUENCIES.some((frequency) => frequency === value);
@@ -79,8 +85,8 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"get <id>",
-			"Get a snapshot by id, slug, or name",
-			(yargs) => yargs,
+			"Get a snapshot by id, unique name, or slug",
+			(yargs) => yargs.positional("id", SNAPSHOT_REF),
 			(args) => get(args as any),
 		)
 		.command(
@@ -147,9 +153,10 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"update <id>",
-			"Update a snapshot's name or expiration by id, slug, or name",
+			"Update a snapshot's name or expiration by id, unique name, or slug",
 			(yargs) =>
 				yargs
+					.positional("id", SNAPSHOT_REF)
 					.options({
 						name: {
 							describe: "Rename the snapshot",
@@ -171,15 +178,16 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"delete <id>",
-			"Delete a snapshot by id, slug, or name",
-			(yargs) => yargs,
+			"Delete a snapshot by id, unique name, or slug",
+			(yargs) => yargs.positional("id", SNAPSHOT_REF),
 			(args) => deleteSnapshot(args as any),
 		)
 		.command(
 			"restore <id>",
-			"Restore a snapshot (id, slug, or name) into a branch",
+			"Restore a snapshot (id, unique name, or slug) into a branch",
 			(yargs) =>
 				yargs
+					.positional("id", SNAPSHOT_REF)
 					.options({
 						name: {
 							describe:
