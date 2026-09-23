@@ -14,12 +14,18 @@ import {
 	currentContextFile,
 	enrichFromContext,
 	ensureGitignored,
+	gitBranchMap,
+	gitBranchMapping,
 	isAskCommand,
 	isCurrentBranchProbe,
 	isInspectDbUrl,
 	isMcpOauth,
 	isPluginsCommand,
 	isSkillsCommand,
+	readContextFile,
+	setGitBranchMap,
+	setGitBranchMapping,
+	setGitFollow,
 	walkContextFile,
 } from "./context.js";
 
@@ -502,5 +508,100 @@ describe("applyContext", () => {
 		expect(readFileSync(join(workspace, ".gitignore"), "utf-8")).toBe(
 			"node_modules\n",
 		);
+	});
+
+	test("preserves an existing git block when the caller omits one", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			branch: "main",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		// A plain checkout/set-context write, with no `git` field at all.
+		applyContext(file, { projectId: "proj-y", branch: "other" });
+
+		expect(readContextFile(file)).toEqual({
+			projectId: "proj-y",
+			branch: "other",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+	});
+
+	test("replaces the git block when the caller provides one explicitly", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		applyContext(file, { projectId: "proj-y", git: { follow: false } });
+
+		expect(readContextFile(file).git).toEqual({ follow: false });
+	});
+});
+
+describe("git branch mapping helpers", () => {
+	let workspace: string;
+	let file: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neonctl-git-map-"));
+		file = join(workspace, ".neon");
+		applyContext(file, { projectId: "proj-y" });
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+	});
+
+	test("gitBranchMapping and gitBranchMap read from the context", () => {
+		expect(gitBranchMapping({}, "feature")).toBeUndefined();
+		expect(gitBranchMap({})).toEqual({});
+
+		const context = { git: { map: { feature: "preview-feature" } } };
+		expect(gitBranchMapping(context, "feature")).toBe("preview-feature");
+		expect(gitBranchMapping(context, "other")).toBeUndefined();
+		expect(gitBranchMap(context)).toEqual({ feature: "preview-feature" });
+	});
+
+	test("setGitBranchMapping records an entry, merging into any existing map", () => {
+		setGitFollow(file, true);
+		setGitBranchMapping(file, "feature-a", "preview-feature-a");
+		setGitBranchMapping(file, "feature-b", "preview-feature-b");
+
+		expect(readContextFile(file)).toEqual({
+			projectId: "proj-y",
+			git: {
+				follow: true,
+				map: {
+					"feature-a": "preview-feature-a",
+					"feature-b": "preview-feature-b",
+				},
+			},
+		});
+	});
+
+	test("setGitBranchMap replaces the whole map, preserving follow", () => {
+		setGitFollow(file, true);
+		setGitBranchMapping(file, "feature-a", "preview-feature-a");
+
+		setGitBranchMap(file, { "feature-c": "preview-feature-c" });
+
+		expect(readContextFile(file).git).toEqual({
+			follow: true,
+			map: { "feature-c": "preview-feature-c" },
+		});
+	});
+
+	test("setGitFollow toggles the flag, preserving the map", () => {
+		setGitBranchMapping(file, "feature-a", "preview-feature-a");
+
+		setGitFollow(file, false);
+
+		expect(readContextFile(file).git).toEqual({
+			follow: false,
+			map: { "feature-a": "preview-feature-a" },
+		});
 	});
 });

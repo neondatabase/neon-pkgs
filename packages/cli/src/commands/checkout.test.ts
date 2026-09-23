@@ -421,6 +421,118 @@ describe("checkout --env", () => {
 	});
 });
 
+describe("checkout lifecycle hooks (Preview)", () => {
+	test("checkout.before can rewrite the branch name before resolution", async ({
+		testCliCommand,
+		readFile,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("hook_checkout_before");
+		const dir = join(TEST_TMP, "hook_checkout_before");
+		writeFileSync(
+			join(dir, "neon.ts"),
+			`export default {
+				experimental: {
+					hooks: {
+						checkout: {
+							before: (ctx) => {
+								if (ctx.event.type === "neon-checkout" && ctx.event.inputName === "old-name") {
+									return { name: "main" };
+								}
+							},
+						},
+					},
+				},
+			};\n`,
+		);
+
+		const { stderr } = await testCliCommand(
+			[
+				"checkout",
+				"old-name",
+				"--project-id",
+				"test",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			],
+			{ cwd: dir, snapshot: false },
+		);
+
+		// The rename is announced, and the pinned branch is the hook's rewrite, not the typed name.
+		expect(stderr).toContain("checkout.before hook mapped");
+		expect(stderr).toContain("old-name");
+		expect(stderr).toContain("main");
+		expect(parseContext(readFile(ctx))).toEqual({
+			projectId: "test",
+			branch: "main",
+		});
+	});
+
+	test("create.before fires only on an actual create, sees the typed event, and can abort it", async ({
+		testCliCommand,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("hook_create_before_abort");
+		const dir = join(TEST_TMP, "hook_create_before_abort");
+		writeFileSync(
+			join(dir, "neon.ts"),
+			`export default {
+				experimental: {
+					hooks: {
+						create: {
+							before: (ctx) => {
+								throw new Error(
+									"create.before saw branchName=" + ctx.branchName +
+									" event.type=" + ctx.event.type,
+								);
+							},
+						},
+					},
+				},
+			};\n`,
+		);
+
+		// Checking out an EXISTING branch never creates one, so the hook must not fire —
+		// and this must succeed rather than throw the hook's error.
+		await testCliCommand(
+			[
+				"checkout",
+				"main",
+				"--project-id",
+				"test",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			],
+			{ cwd: dir, snapshot: false },
+		);
+
+		// A genuine create (hook-created-branch doesn't exist in the fixture) does fire the
+		// hook, and the thrown error aborts the checkout before anything is created or pinned.
+		// (The name deliberately avoids the `br-…` shape — that's parsed as an id and never
+		// auto-created, which would skip `createCheckoutBranch` entirely.)
+		await testCliCommand(
+			[
+				"checkout",
+				"hook-created-branch",
+				"--create",
+				"--project-id",
+				"test",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			],
+			{
+				cwd: dir,
+				snapshot: false,
+				code: 1,
+				stderr: `INFO: → Currently on branch main ERROR: create.before saw branchName=hook-created-branch event.type=neon-checkout`,
+			},
+		);
+	});
+});
+
 describe("formatCheckoutPolicyFailure", () => {
 	test("includes --env on the deploy and checkout retries when checkout had one", () => {
 		const message = formatCheckoutPolicyFailure({

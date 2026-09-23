@@ -1,3 +1,4 @@
+import type { CheckoutEvent, GitContext, Hooks } from "@neon/config";
 import type { Branch } from "@neon/sdk";
 import chalk from "chalk";
 import prompts from "prompts";
@@ -18,6 +19,16 @@ import {
 	listAllProjectBranches,
 } from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
+import { buildCheckoutEvent, readGitContext } from "../utils/git.js";
+import {
+	buildHookBranch,
+	loadHookConfig,
+	resolveHookEnv,
+	runCheckoutAfterHook,
+	runCheckoutBeforeHook,
+	runCreateAfterHook,
+	runCreateBeforeHook,
+} from "../utils/hooks.js";
 import {
 	applyPolicyOnCreate,
 	createBranchFromPolicyOnCheckout,
@@ -141,8 +152,32 @@ export const handler = async (props: CheckoutProps) => {
 	// nothing resolves, fall back to an interactive `neonctl link`.
 	const projectId = await resolveProjectId(props);
 
+	// Lifecycle hooks (Preview): read git facts + load the neon.ts `experimental.hooks` block
+	// once. The `checkout.before` hook may rewrite the branch name (e.g. map a git branch to
+	// a Neon slug) before we resolve it — it runs before resolution because the name isn't
+	// pinned yet.
+	const cwd = process.cwd();
+	const git = readGitContext(cwd);
+	// `event` reflects the raw trigger data (the git branch, or the id/name as typed) — not
+	// anything a hook already rewrote. See `CheckoutEvent` in `@neon/config`.
+	const event = buildCheckoutEvent(git, props.id);
+	const config = await loadHookConfig(cwd);
+	const hooks = config?.experimental?.hooks;
+	if (props.id) {
+		const renamed = await runCheckoutBeforeHook({ hooks, event, git, cwd });
+		if (renamed && renamed !== props.id) {
+			log.info(
+				"%s checkout.before hook mapped %s → %s",
+				chalk.dim("→"),
+				chalk.cyan(props.id),
+				chalk.cyan.bold(renamed),
+			);
+			props.id = renamed;
+		}
+	}
+
 	const { branchId, branchName, created, policyApplied, policyFailure } =
-		await resolveBranchId(props, projectId);
+		await resolveBranchId(props, projectId, { hooks, git, event, cwd });
 
 	const orgId = await resolveOrgId(props, projectId);
 
@@ -193,6 +228,49 @@ export const handler = async (props: CheckoutProps) => {
 		branch: branchId,
 		envPull: props.envPull,
 	});
+
+	// `checkout.after` / `create.after` hooks (Preview): run once the branch is pinned and env
+	// is resolved, regardless of a policy-apply failure above (the branch is checked out
+	// either way). Env is resolved in-memory here even under `--no-env-pull`, so a migration
+	// hook always has a connection string. A hook failure degrades to a warning — the checkout
+	// itself already succeeded.
+	const needsCreateAfter = created && hooks?.create?.after;
+	if (config && (hooks?.checkout?.after || needsCreateAfter)) {
+		const env = await resolveHookEnv(config, {
+			projectId,
+			branch: branchId,
+			...(props.apiKey ? { apiKey: props.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+		});
+		if (env) {
+			const branch = await buildHookBranch({
+				apiClient: props.apiClient,
+				projectId,
+				branchId,
+				created,
+			});
+			if (hooks?.checkout?.after) {
+				await runCheckoutAfterHook({
+					hooks,
+					branch,
+					env,
+					git,
+					event,
+					cwd,
+				});
+			}
+			if (needsCreateAfter) {
+				await runCreateAfterHook({
+					hooks,
+					branch,
+					env,
+					git,
+					event,
+					cwd,
+				});
+			}
+		}
+	}
 
 	// A policy that didn't fully apply is reported last, after the pin and the env pull, so the
 	// created branch is left in a consistent, usable, re-runnable state: the failure is what
@@ -258,9 +336,18 @@ type ResolvedBranch = {
 	policyFailure?: string;
 };
 
+/** Read-only bundle of lifecycle-hook inputs threaded through branch resolution. */
+type HookCtx = {
+	hooks: Hooks | undefined;
+	git: GitContext;
+	event: CheckoutEvent;
+	cwd: string;
+};
+
 const resolveBranchId = async (
 	props: CheckoutProps,
 	projectId: string,
+	hookCtx: HookCtx,
 ): Promise<ResolvedBranch> => {
 	const branches = await listAllProjectBranches(props.apiClient, projectId);
 
@@ -283,7 +370,13 @@ const resolveBranchId = async (
 			};
 		}
 		// The user chose "create a new branch" from the picker.
-		return createCheckoutBranch(props, projectId, picked.name, branches);
+		return createCheckoutBranch(
+			props,
+			projectId,
+			picked.name,
+			branches,
+			hookCtx,
+		);
 	}
 
 	const ref = props.id;
@@ -313,7 +406,7 @@ const resolveBranchId = async (
 	}
 
 	if (props.create) {
-		return createCheckoutBranch(props, projectId, ref, branches);
+		return createCheckoutBranch(props, projectId, ref, branches, hookCtx);
 	}
 
 	const missingName = notFoundMessage(ref, branches, { suggestCreate: true });
@@ -334,7 +427,7 @@ const resolveBranchId = async (
 			`Aborted: branch "${ref}" was not found and not created.`,
 		);
 	}
-	return createCheckoutBranch(props, projectId, ref, branches);
+	return createCheckoutBranch(props, projectId, ref, branches, hookCtx);
 };
 
 /**
@@ -349,7 +442,18 @@ const createCheckoutBranch = async (
 	projectId: string,
 	name: string,
 	branches: Branch[],
+	hookCtx: HookCtx,
 ): Promise<ResolvedBranch> => {
+	// `create.before` (Preview): fires only here, right before a branch is actually created —
+	// never for the existing-branch paths above. Throws propagate to abort the checkout.
+	await runCreateBeforeHook({
+		hooks: hookCtx.hooks,
+		branchName: name,
+		git: hookCtx.git,
+		event: hookCtx.event,
+		cwd: hookCtx.cwd,
+	});
+
 	const fromPolicy = await createBranchFromPolicyOnCheckout({
 		projectId,
 		branchName: name,

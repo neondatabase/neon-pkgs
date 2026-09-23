@@ -2,6 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
 	type BranchTarget,
+	type DeployEvent,
+	type HookBranch,
 	packagesToStage,
 	previewGaWarningForConfig,
 	resolveConfig,
@@ -74,6 +76,12 @@ import {
 } from "../utils/config_diff.js";
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
+import { readGitContext } from "../utils/git.js";
+import {
+	resolveHookEnv,
+	runDeployAfterHook,
+	runDeployBeforeHook,
+} from "../utils/hooks.js";
 import {
 	formatInstallCommand,
 	installArgs,
@@ -894,6 +902,24 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 		});
 	}
 
+	// Lifecycle hooks (Preview): `deploy` never creates a branch, so the branch shape is
+	// already fully known from `resolveBranchRef` — no extra API call needed.
+	const cwd = process.cwd();
+	const git = readGitContext(cwd);
+	const event: DeployEvent = { type: "neon-deploy" };
+	const hooks = config.experimental?.hooks;
+	const hookBranch: HookBranch = {
+		projectId: props.projectId,
+		id: branch.branchId,
+		name: branch.branchName,
+		created: false,
+		isDefault: branch.isDefault ?? false,
+		isProtected: branch.isProtected ?? false,
+		...(branch.parentId ? { parentId: branch.parentId } : {}),
+		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+	};
+	await runDeployBeforeHook({ hooks, branch: hookBranch, git, event, cwd });
+
 	let result: PushResult;
 	try {
 		result = await apply(config, {
@@ -930,6 +956,30 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	// usable for local dev. `--no-env-pull` opts out; a pull failure degrades to a warning
 	// (the apply already succeeded). See autoPullEnvAfterPin.
 	await autoPullEnvAfterPin({ ...props, envPull: props.envPull !== false });
+
+	// `deploy.after` (Preview): runs once the apply has succeeded. Env is resolved in-memory
+	// here regardless of `--no-env-pull`, so a migration hook always has a connection string.
+	// A hook failure degrades to a warning — the apply already succeeded.
+	if (hooks?.deploy?.after) {
+		const env = await resolveHookEnv(config, {
+			projectId: props.projectId,
+			branch: branchId,
+			...(props.apiKey ? { apiKey: props.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+			...(props.runtimeApi ? { api: props.runtimeApi } : {}),
+		});
+		if (env) {
+			await runDeployAfterHook({
+				hooks,
+				branch: hookBranch,
+				env,
+				result,
+				git,
+				event,
+				cwd,
+			});
+		}
+	}
 };
 
 type ReportMode = "plan" | "apply";
