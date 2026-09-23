@@ -13,7 +13,7 @@ import {
 	keepPostgresSelected,
 	POSTGRES_SERVICE_CHOICE,
 } from "../utils/service_picker.js";
-import { InitCancelled, throwIfAborted } from "./cancelled.js";
+import { InitCancelled, restoreCursorVisibilityOnAbort } from "./cancelled.js";
 import {
 	AGENT_DETECTED_DESCRIPTION,
 	AGENT_OTHER_DESCRIPTION,
@@ -62,7 +62,7 @@ import type {
 import { INIT_NEEDS_YES_OR_TERMINAL } from "./plan.js";
 
 const restoreCursorOnAbort = (state: { aborted: boolean }) => {
-	throwIfAborted(state);
+	restoreCursorVisibilityOnAbort(state);
 };
 
 const requireInteractive = (): void => {

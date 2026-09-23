@@ -616,7 +616,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				const autoAgents =
 					named.length > 0 ? named : detection.detectedAgents;
 				pluginScope = pluginScopeFor(autoAgents, "project");
-				tooling = splitInitTooling(autoAgents, pluginScope);
+				tooling = splitInitTooling(
+					autoAgents,
+					pluginScope,
+					mcpConfigLocation,
+				);
 				if (tooling.setup === "skip" && yes && named.length === 0) {
 					tooling = recommendedTooling([]);
 					printInitProgress(NO_AGENTS_FALLBACK_STATUS);

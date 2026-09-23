@@ -25,6 +25,7 @@ import {
 	resolveNamedAgents,
 	resolveYesAgentList,
 	rewriteUnknownAgentArg,
+	splitInitTooling,
 } from "./plan.js";
 
 describe("directoryIsEmpty", () => {
@@ -700,6 +701,14 @@ describe("chooseYesAgentTooling", () => {
 
 	test("windsurf is skills and global MCP", () => {
 		expect(chooseYesAgentTooling(["windsurf"])).toEqual({
+			setup: "skills-mcp",
+			skillsAgents: ["windsurf"],
+			mcpAgents: ["windsurf"],
+		});
+	});
+
+	test("plugin scope does not change MCP config location", () => {
+		expect(splitInitTooling(["windsurf"], "project", "global")).toEqual({
 			setup: "skills-mcp",
 			skillsAgents: ["windsurf"],
 			mcpAgents: ["windsurf"],

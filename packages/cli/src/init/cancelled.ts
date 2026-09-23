@@ -10,9 +10,10 @@ export const restoreCursor = (): void => {
 	process.stdout.write("\n");
 };
 
-export const throwIfAborted = (state: { aborted: boolean }): void => {
+export const restoreCursorVisibilityOnAbort = (state: {
+	aborted: boolean;
+}): void => {
 	if (state.aborted) {
-		restoreCursor();
-		throw new InitCancelled();
+		process.stdout.write("\x1B[?25h");
 	}
 };

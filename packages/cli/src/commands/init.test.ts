@@ -1,7 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
+import { type IPty, spawn as spawnPty } from "node-pty";
+import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
@@ -53,6 +61,39 @@ const argvHeads = (run: ReturnType<typeof vi.fn>): string[] =>
 
 const stdoutText = (spy: { mock: { calls: unknown[][] } }): string =>
 	spy.mock.calls.map((call) => String(call[0])).join("");
+
+const waitForPtyText = (
+	term: IPty,
+	output: () => string,
+	text: string,
+): Promise<void> =>
+	new Promise((resolve, reject) => {
+		if (stripAnsi(output()).includes(text)) {
+			resolve();
+			return;
+		}
+		const timer = setTimeout(() => {
+			subscription.dispose();
+			reject(
+				new Error(
+					`Timed out waiting for "${text}". Output:\n${stripAnsi(output())}`,
+				),
+			);
+		}, 10_000);
+		const subscription = term.onData(() => {
+			if (!stripAnsi(output()).includes(text)) {
+				return;
+			}
+			clearTimeout(timer);
+			subscription.dispose();
+			resolve();
+		});
+	});
+
+const waitForPtyExit = (term: IPty): Promise<number> =>
+	new Promise((resolve) => {
+		term.onExit(({ exitCode }) => resolve(exitCode));
+	});
 
 const clearCredentialInputs = () =>
 	recordCredentialInputs({
@@ -345,6 +386,29 @@ describe("init handler", () => {
 		expect(argvLine(run)[0]).toContain(
 			"plugins -y --agent cursor --agent claude-code",
 		);
+	});
+
+	test("named global-only MCP agent uses the default global location", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-global-mcp-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				agent: ["windsurf"],
+				link: false,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(argvLine(run)).toEqual([
+			expect.stringContaining("skills -y --agent windsurf"),
+			expect.stringContaining("mcp -y --agent windsurf"),
+		]);
 	});
 
 	test("oauth MCP scopes to the linked project when --mcp-project-scoped is set", async () => {
@@ -1101,6 +1165,62 @@ describe("init CLI", () => {
 		expect(help).not.toMatch(/installed apps/);
 		expect(help).not.toMatch(/Set output format/);
 	});
+
+	test("Ctrl-C at the mode picker prints the cancellation summary", async () => {
+		const root = mkdtempSync(join(tmpdir(), "neon-init-cancel-"));
+		const spawnHelper = join(
+			process.cwd(),
+			"node_modules",
+			"node-pty",
+			"prebuilds",
+			`${process.platform}-${process.arch}`,
+			"spawn-helper",
+		);
+		if (existsSync(spawnHelper)) {
+			chmodSync(spawnHelper, 0o755);
+		}
+		let output = "";
+		const term = spawnPty(
+			process.execPath,
+			[
+				join(process.cwd(), "dist/index.js"),
+				"init",
+				"--no-analytics",
+				"--config-dir",
+				join(root, "config"),
+				"--context-file",
+				join(root, ".neon"),
+			],
+			{
+				name: "xterm-256color",
+				cols: 120,
+				rows: 40,
+				cwd: root,
+				env: {
+					...process.env,
+					CI: "",
+					HOME: root,
+					USERPROFILE: root,
+					XDG_CONFIG_HOME: join(root, ".config"),
+				},
+			},
+		);
+		term.onData((chunk) => {
+			output += chunk;
+		});
+
+		await waitForPtyText(
+			term,
+			() => output,
+			"How would you like to set up Neon?",
+		);
+		term.write("\x03");
+
+		expect(await waitForPtyExit(term)).toBe(1);
+		const rendered = stripAnsi(output);
+		expect(rendered).toContain("Neon setup cancelled.");
+		expect(rendered).not.toContain("InitCancelled:");
+	}, 20_000);
 
 	cliTest("rejects --data", async ({ testCliCommand }) => {
 		await testCliCommand(["init", "--data", '{"step":"auth"}'], {

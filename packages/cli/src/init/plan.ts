@@ -352,11 +352,10 @@ export type InitToolingPlan =
 export const splitInitTooling = (
 	agents: readonly AgentType[],
 	pluginScope: "global" | "project",
+	mcpConfigLocation: "global" | "project" = pluginScope,
 ): InitToolingPlan => {
 	const pluginSet = new Set(pluginsInstallableAgents(pluginScope));
-	const mcpSet = new Set(
-		mcpInstallableAgents(pluginScope === "project" ? "project" : "global"),
-	);
+	const mcpSet = new Set(mcpInstallableAgents(mcpConfigLocation));
 	const pluginAgents = uniqueAgentIds(
 		agents.filter((id) => pluginSet.has(id)),
 	);
