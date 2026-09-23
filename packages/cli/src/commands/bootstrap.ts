@@ -592,7 +592,11 @@ const executePostScaffold = async (
 	agentsRan: boolean;
 }> => {
 	const kids = {
-		output: props.output,
+		// Bootstrap's other output (scaffold messages, the done summary) is hardcoded
+		// human text regardless of --output; matching that, the tooling step's own
+		// result table always renders as a table too, same as when it was a spawned
+		// child (which never forwarded --output and so always got the child's default).
+		output: "table" as const,
 		auth: bootstrapAuth(props, targetDir),
 		operations: props.operations,
 		...(props.narrate ? { narrate: props.narrate } : {}),
