@@ -201,7 +201,6 @@ const BOOLEAN_FLAGS = new Set([
 	"--no-agent-setup",
 	"--no-link",
 	"--no-config",
-	"--skip-template",
 	"--claimable",
 	"--config",
 	"--list",

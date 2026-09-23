@@ -51,8 +51,6 @@ const FLAG_ALIASES: Readonly<Record<string, string>> = {
 	"--default": "--yes",
 	"-a": "--agent",
 	"--agent": "--agent",
-	"--skip-template": "--skip-template",
-	"--template": "--template",
 	"--no-link": "--no-link",
 	"--link": "--link",
 	"--no-config": "--no-config",

@@ -789,12 +789,11 @@ Unauthenticated `-y` skips linking and prints the next step: sign up at https://
 
 Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-config-location`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--mcp-config-location` is where the config is written: `global` maps to `neon mcp`, and `project` maps to `neon mcp --project`. `--mcp-project-scoped` limits MCP tools to the linked Neon project by passing its ID to `neon mcp --project-id`. Omitted is false, including in Custom; there is no prompt. `--no-agent-setup` skips agent setup.
 
-Empty directories are set up in place. `-y` does **not** scaffold a starter app. Scaffold with `--template <id>` or `neon bootstrap`. `--template` copies the starter, then continues the rest of init, so it works with `-y` and the other flags.
+Empty directories are set up in place. `neon init` does not scaffold starter files.
 
 ```bash
 $ neon init
 $ neon init -y
-$ neon init --template hono -y
 $ neon init --agent cursor --agent claude-code --no-link
 $ neon init --no-agent-setup --claimable
 $ neon init -y --skill neon --mcp-auth oauth --mcp-config-location project
@@ -806,11 +805,11 @@ Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 
-`--config`, `--no-config`, and `--services` apply when init writes `neon.ts` itself. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new default `neon.ts` on a pinned branch, init runs `env pull` unless link already pulled env or the file declares extra services (those still need `neon config plan` / `neon deploy`).
+After a new default `neon.ts` on a pinned branch, init runs `env pull` unless link already pulled env or the file declares extra services (those still need `neon config plan` / `neon deploy`).
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
-`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
+`skills` needs Node.js 22.20 or newer. See [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 
 ## Install the Neon MCP server (`mcp`)
 
@@ -1360,7 +1359,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a template, then agent tooling and link |
-| init                                                                       |                                                                                                              | In place: agents, link, neon.ts. Scaffold with --template or bootstrap |
+| init                                                                       |                                                                                                              | In place: agents, link, neon.ts       |
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |

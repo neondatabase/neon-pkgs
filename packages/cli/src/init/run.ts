@@ -39,16 +39,13 @@ import {
 	type PackageManager,
 	resolvePackageManager,
 } from "../utils/package_manager.js";
-import type { BootstrapTemplate } from "./bootstrap.js";
 import { InitCancelled, restoreCursor } from "./cancelled.js";
 import { type InitRun, initChildEnv, spawnCliChild } from "./child.js";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
-	INIT_TEMPLATE_KEEPS_CONFIG,
 	isBareInitServices,
 	resolveInitConfigChoice,
-	resolveInitTemplateChoice,
 	shouldPullEnvAfterInitConfig,
 } from "./choices.js";
 import {
@@ -168,8 +165,6 @@ export type InitProps = CommonProps & {
 	data?: string;
 	cwd?: string;
 	link?: boolean;
-	skipTemplate?: boolean;
-	template?: string;
 	config?: boolean;
 	services?: unknown;
 	orgId?: string;
@@ -184,12 +179,6 @@ export type InitProps = CommonProps & {
 	mcpAuth?: InitMcpAuthChoice;
 	mcpProjectScoped?: boolean;
 	run?: InitRun;
-	runBootstrap?: (
-		props: import("../commands/bootstrap.js").BootstrapProps,
-	) => Promise<
-		import("../commands/bootstrap.js").NestedBootstrapResult | undefined
-	>;
-	fetchTemplates?: () => Promise<BootstrapTemplate[]>;
 	pickMode?: () => Promise<InitMode>;
 	pickAgentSetup?: () => Promise<InitAgentSetupChoice>;
 	pickAgents?: (input: {
@@ -406,16 +395,6 @@ const defaultCreateClaimable: InitClaimFn = async (input) => {
 	});
 };
 
-const noteTemplateKeepsShippedConfig = (
-	config: boolean | undefined,
-	services: readonly string[] | undefined,
-): void => {
-	if (config === undefined && services === undefined) {
-		return;
-	}
-	log.warning(INIT_TEMPLATE_KEEPS_CONFIG);
-};
-
 export const runInit = async (props: InitProps): Promise<void> => {
 	if (props.output === "json" || props.output === "yaml") {
 		throw new Error(
@@ -488,7 +467,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				: {}),
 			interactive: yes ? false : undefined,
 		};
-		let detection = await detectInitEnvironment(detectOpts);
+		const detection = await detectInitEnvironment(detectOpts);
 		if (yes) {
 			detection.interactive = false;
 		}
@@ -504,13 +483,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		if (shouldPrintInitBanner(yes)) {
 			printInitBanner();
 		}
-
-		const templateChoice = resolveInitTemplateChoice({
-			empty: detection.emptyDirectory,
-			yes,
-			skipTemplate: props.skipTemplate === true,
-			template: props.template,
-		});
 
 		const skipAgents = props.agentSetup === false;
 		const modeArgs = {
@@ -536,23 +508,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			...(servicesFlag !== undefined ? { services: servicesFlag } : {}),
 		};
 		resolveInitMode(modeArgs);
-
-		let scaffoldedTemplate = false;
-		if (templateChoice.kind === "template") {
-			await scaffoldInitTemplate({
-				props,
-				cwd,
-				contextFile,
-				linkInputs,
-				servicesFlag,
-				templateId: templateChoice.id,
-			});
-			scaffoldedTemplate = true;
-			detection = await detectInitEnvironment(detectOpts);
-			if (yes) {
-				detection.interactive = false;
-			}
-		}
 
 		const modeResolution = resolveInitMode({
 			...modeArgs,
@@ -1227,11 +1182,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		takeCommandSuccessExtras();
 		recordCommandSuccessExtras({
-			init_kind: scaffoldedTemplate
-				? "empty-template"
-				: detection.emptyDirectory
-					? "empty-skip"
-					: "existing",
+			init_kind: detection.emptyDirectory ? "empty-skip" : "existing",
 			...(extrasSetup(funnel.agentSetup) !== undefined
 				? { agent_setup: extrasSetup(funnel.agentSetup) }
 				: {}),
@@ -1296,63 +1247,4 @@ const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
 			return _exhaustive;
 		}
 	}
-};
-
-const nestedBootstrapDirectory = (cwd: string): string =>
-	resolve(cwd) === resolve(process.cwd()) ? "." : cwd;
-
-const scaffoldInitTemplate = async (input: {
-	props: InitProps;
-	cwd: string;
-	contextFile: string;
-	linkInputs: InitLinkInputs;
-	servicesFlag: readonly string[] | undefined;
-	templateId: string;
-}): Promise<void> => {
-	const { props, cwd, contextFile, linkInputs, servicesFlag } = input;
-	noteTemplateKeepsShippedConfig(props.config, servicesFlag);
-	const { handler: bootstrapHandler } = await import(
-		"../commands/bootstrap.js"
-	);
-	const runBootstrap = props.runBootstrap ?? bootstrapHandler;
-	await runBootstrap({
-		apiClient: props.apiClient,
-		apiKey: props.apiKey,
-		apiHost: props.apiHost,
-		output: props.output,
-		contextFile,
-		directory: nestedBootstrapDirectory(cwd),
-		force: false,
-		listTemplates: false,
-		default: true,
-		install: true,
-		git: true,
-		link: false,
-		printBanner: false,
-		skipDoneSummary: true,
-		linkNoConfig: true,
-		narrate: "human",
-		template: input.templateId,
-		linkInputs,
-		agentSetup: false,
-		...(props.configDir ? { configDir: props.configDir } : {}),
-		...(props.profile ? { profile: props.profile } : {}),
-		...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
-		...(props.clientId ? { clientId: props.clientId } : {}),
-		...(props.forceAuth !== undefined
-			? { forceAuth: props.forceAuth }
-			: {}),
-		...(props.allowUnsafeTls !== undefined
-			? { allowUnsafeTls: props.allowUnsafeTls }
-			: {}),
-		...(props.analytics === false ? { analytics: false } : {}),
-		...(props.run ? { run: props.run } : {}),
-		...(props.detectProjectAgents
-			? { detectProjectAgents: props.detectProjectAgents }
-			: {}),
-		...(props.detectAgent ? { detectAgent: props.detectAgent } : {}),
-		...(props.hasProjectPlugins
-			? { hasProjectPlugins: props.hasProjectPlugins }
-			: {}),
-	});
 };

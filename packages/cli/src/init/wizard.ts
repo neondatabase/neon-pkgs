@@ -13,7 +13,6 @@ import {
 	keepPostgresSelected,
 	POSTGRES_SERVICE_CHOICE,
 } from "../utils/service_picker.js";
-import type { BootstrapTemplate } from "./bootstrap.js";
 import { InitCancelled, throwIfAborted } from "./cancelled.js";
 import {
 	AGENT_DETECTED_DESCRIPTION,
@@ -61,11 +60,6 @@ import type {
 	InitProjectSetupChoice,
 } from "./mode.js";
 import { INIT_NEEDS_YES_OR_TERMINAL } from "./plan.js";
-import { formatTemplateTitle, SKIP_TEMPLATE_VALUE } from "./template_title.js";
-
-export type InitTemplatePick =
-	| { kind: "skip" }
-	| { kind: "template"; template: BootstrapTemplate };
 
 const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 	throwIfAborted(state);
@@ -281,62 +275,6 @@ export const pickInitProjectSetupInteractively =
 		}
 		return setup;
 	};
-
-export type InitTemplateChoice = {
-	title: string;
-	value: string;
-	description: string;
-};
-
-/** First catalog template; skip is index 0 so it stays on the first screen. */
-export const INIT_TEMPLATE_PICKER_INITIAL = 1;
-
-export const initTemplatePickerChoices = (
-	templates: readonly BootstrapTemplate[],
-): InitTemplateChoice[] => {
-	if (templates.length === 0) {
-		throw new Error("No templates available to scaffold from.");
-	}
-	return [
-		{
-			title: "Skip the template",
-			value: SKIP_TEMPLATE_VALUE,
-			description:
-				"Set up agents and link a Neon project without copying template files.",
-		},
-		...templates.map((template) => ({
-			title: formatTemplateTitle(template),
-			value: template.id,
-			description: template.description ?? "",
-		})),
-	];
-};
-
-export const pickInitTemplateInteractively = async (
-	templates: readonly BootstrapTemplate[],
-): Promise<InitTemplatePick> => {
-	requireInteractive();
-	const choices = initTemplatePickerChoices(templates);
-	const { id } = await prompts({
-		onState: restoreCursorOnAbort,
-		type: "select",
-		name: "id",
-		message: "How would you like to set up this directory?",
-		initial: INIT_TEMPLATE_PICKER_INITIAL,
-		choices,
-	});
-	if (id === SKIP_TEMPLATE_VALUE) {
-		return { kind: "skip" };
-	}
-	if (typeof id !== "string" || id.length === 0) {
-		return aborted();
-	}
-	const selected = templates.find((template) => template.id === id);
-	if (selected === undefined) {
-		return aborted();
-	}
-	return { kind: "template", template: selected };
-};
 
 export const pickInitConfigInteractively = async (): Promise<boolean> => {
 	requireInteractive();

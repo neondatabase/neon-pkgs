@@ -32,7 +32,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, default neon.ts). With --skill, MCP flags, --no-agent-setup, or --claimable: Custom using those flags. Empty directories are not scaffolded; use --template or neon bootstrap",
+				"Skip prompts. Alone: Recommended (detected agents, link when authenticated, default neon.ts). With --skill, MCP flags, --no-agent-setup, or --claimable: Custom using those flags",
 		})
 		.option("agent-setup", {
 			type: "boolean",
@@ -52,16 +52,6 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"Package manager for neon.ts dependencies. -y uses this without asking. Custom asks only when none is detected",
 		})
-		.option("skip-template", {
-			hidden: true,
-			type: "boolean",
-			default: false,
-		})
-		.option("template", {
-			type: "string",
-			describe:
-				"Scaffold this template into an empty directory, then continue setup. Works with -y and other init flags",
-		})
 		.option("link", {
 			type: "boolean",
 			default: true,
@@ -71,7 +61,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.option("config", {
 			type: "boolean",
 			describe:
-				"Create neon.ts after linking. Use --no-config to skip. Omitted in Custom: you will be asked. Scaffolding a template keeps that template's neon.ts",
+				"Create neon.ts after linking. Use --no-config to skip. Omitted in Custom: you will be asked",
 		})
 		.option(
 			"services",
@@ -80,7 +70,7 @@ export const builder = (yargs: yargs.Argv) =>
 				allowed: CONFIG_INIT_SERVICES,
 				describe: "Services to declare in neon.ts",
 				noneMeans: CONFIG_INIT_NONE_MEANS,
-				also: "Implies creating neon.ts. Cannot be combined with --no-config. Ignored when scaffolding a template.",
+				also: "Implies creating neon.ts. Cannot be combined with --no-config.",
 			}),
 		)
 		.option("org-id", {
@@ -157,18 +147,14 @@ export const builder = (yargs: yargs.Argv) =>
 			"Skip agent setup and create a claimable project",
 		)
 		.example(
-			"$0 init --template hono -y",
-			"Scaffold the hono template, then continue setup",
-		)
-		.example(
 			"$0 init --agent cursor --agent claude-code",
 			"Skip agent selection; install tooling for those agents",
 		)
 		.epilogue(
 			helpEpilogue(
 				"Recommended setup installs tooling for detected coding agents, links a Neon project when the CLI is authenticated or the session is interactive, and writes a default neon.ts.",
+				"init sets up the current directory in place. It does not scaffold starter files.",
 				"-y alone is Recommended. -y with --skill, MCP flags, --no-agent-setup, or --claimable is Custom: those flags, Recommended defaults for unanswered questions. -y never opens a browser.",
-				"-y does not scaffold a starter app. Scaffold with --template <id> or neon bootstrap.",
 				"--skill selects skills (not the plugin). MCP flags select skills and MCP. --no-agent-setup skips agent setup. --agent without those flags installs the plugin (and skills/MCP for agents the plugin cannot cover).",
 				"Without a TTY, pass -y or enough flags to answer every question.",
 				"--agent / -a is forwarded to plugins, or to skills and mcp. It skips agent selection, including with -y.",

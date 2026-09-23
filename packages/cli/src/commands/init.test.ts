@@ -5,7 +5,6 @@ import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
-import type { BootstrapTemplate } from "../init/bootstrap.js";
 import {
 	CLAIMABLE_ALREADY_LINKED,
 	CLAIMABLE_MCP_API_KEY,
@@ -66,35 +65,6 @@ const clearCredentialInputs = () =>
 
 const pickSkillsMcp = async (): Promise<InitAgentSetup> => "skills-mcp";
 
-const nestedBootstrapOk = (overrides: Record<string, unknown> = {}) =>
-	vi.fn().mockResolvedValue({
-		templateTitle: "Hono API",
-		targetDir: "/tmp",
-		hasNeonConfig: true,
-		installed: true,
-		installFailed: false,
-		gitFailed: false,
-		git: true,
-		linked: true,
-		skippedLinkForDeps: false,
-		agentSetup: "skills-mcp",
-		agentsRan: true,
-		...overrides,
-	});
-
-const honoTemplate = (): BootstrapTemplate => ({
-	id: "hono",
-	title: "Hono API",
-	description: "Hono",
-	requires: ["database"],
-	source: {
-		owner: "neondatabase",
-		repo: "examples",
-		ref: "main",
-		subdir: "with-hono",
-	},
-});
-
 describe("init handler", () => {
 	beforeEach(() => {
 		vi.stubEnv("CI", "true");
@@ -134,7 +104,6 @@ describe("init handler", () => {
 	test("empty -y is Recommended in place: skills fallback, link, default neon.ts", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-y-"));
 		const run = vi.fn().mockResolvedValue(true);
-		const runBootstrap = nestedBootstrapOk();
 		const initConfig = vi.fn().mockResolvedValue(undefined);
 		const linkProject = vi.fn().mockResolvedValue(undefined);
 		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
@@ -146,13 +115,11 @@ describe("init handler", () => {
 				run,
 				yes: true,
 				contextFile: join(cwd, ".neon"),
-				runBootstrap,
 				initConfig,
 				linkProject,
 			}),
 		);
 
-		expect(runBootstrap).not.toHaveBeenCalled();
 		expect(argvLine(run).some((line) => line.startsWith("bootstrap"))).toBe(
 			false,
 		);
@@ -255,40 +222,6 @@ describe("init handler", () => {
 			),
 		).rejects.toThrow(YES_LINK_NEEDS_AUTH);
 		expect(linkProject).not.toHaveBeenCalled();
-	});
-
-	test("empty --template -y still nested-bootstraps", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-"));
-		const run = vi.fn().mockResolvedValue(true);
-		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				run,
-				yes: true,
-				template: "hono",
-				link: false,
-				config: false,
-				contextFile: join(cwd, ".neon"),
-				runBootstrap,
-				detectInstalledAgents: async () => ["cursor"],
-			}),
-		);
-
-		expect(runBootstrap).toHaveBeenCalledWith(
-			expect.objectContaining({
-				agentSetup: false,
-				link: false,
-				template: "hono",
-			}),
-		);
-		expect(argvHeads(run)).toEqual(["plugins"]);
-		expect(takeCommandSuccessExtras()).toEqual({
-			init_kind: "empty-template",
-			agent_setup: "plugin",
-		});
 	});
 
 	test("Recommended installs the plugin globally for detected agents", async () => {
@@ -445,31 +378,6 @@ describe("init handler", () => {
 		expect(mcp).toContain("--project-id proj-pin");
 	});
 
-	test("--template -y --no-agent-setup skips nested agent setup", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-skip-"));
-		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				yes: true,
-				template: "hono",
-				agentSetup: false,
-				contextFile: join(cwd, ".neon"),
-				runBootstrap,
-				fetchTemplates: async () => [honoTemplate()],
-			}),
-		);
-
-		expect(runBootstrap).toHaveBeenCalledWith(
-			expect.objectContaining({
-				agentSetup: false,
-				default: true,
-			}),
-		);
-	});
-
 	test("-y --skill is Custom skills, not Recommended plugin", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-skill-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
@@ -536,43 +444,6 @@ describe("init handler", () => {
 				}),
 			),
 		).rejects.toThrow(NO_AGENT_SETUP_CONFLICT);
-	});
-
-	test("--template -y --skill neon scaffolds then installs skills", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-tmpl-skill-"));
-		const run = vi.fn().mockResolvedValue(true);
-		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				yes: true,
-				template: "hono",
-				skill: ["neon"],
-				agent: ["cursor"],
-				link: false,
-				config: false,
-				run,
-				runBootstrap,
-				contextFile: join(cwd, ".neon"),
-			}),
-		);
-
-		expect(runBootstrap).toHaveBeenCalled();
-		expect(runBootstrap.mock.calls[0]?.[0]).toEqual(
-			expect.objectContaining({
-				agentSetup: false,
-				link: false,
-				template: "hono",
-			}),
-		);
-		expect(argvHeads(run)).toEqual(["skills"]);
-		expect(argvLine(run)[0]).toContain("--skill neon");
-		expect(takeCommandSuccessExtras()).toEqual({
-			init_kind: "empty-template",
-			agent_setup: "skills",
-		});
 	});
 
 	test("-y --claimable is Custom and does not force Recommended", async () => {
@@ -1155,6 +1026,7 @@ describe("init CLI", () => {
 		expect(help).not.toMatch(/--mcp-project-pin/);
 		expect(help).not.toMatch(/--no-mcp-project-pin/);
 		expect(help).not.toMatch(/--skip-template/);
+		expect(help).not.toMatch(/--template/);
 		expect(help).not.toMatch(/--project-setup/);
 		expect(help).toMatch(/--no-link/);
 		expect(help).toMatch(/--no-config/);
@@ -1213,21 +1085,18 @@ describe("init CLI", () => {
 		},
 	);
 
-	cliTest(
-		"rejects --template with --skip-template",
-		async ({ testCliCommand }) => {
+	cliTest("rejects removed template flags", async ({ testCliCommand }) => {
+		for (const flag of ["--template", "--skip-template"]) {
 			const { stderr } = await testCliCommand(
-				["init", "--template", "hono", "--skip-template"],
-				{ snapshot: false, code: 1, outputTable: true },
+				flag === "--template" ? ["init", flag, "hono"] : ["init", flag],
+				{ snapshot: false, code: 1 },
 			);
-			expect(stderr).toMatch(
-				/--skip-template cannot be combined with --template/,
-			);
-		},
-	);
+			expect(stderr).toMatch(/Unknown argument/);
+		}
+	});
 
 	cliTest(
-		"empty -y --no-config --no-link does not scaffold a template",
+		"empty -y --no-config --no-link sets up in place",
 		async ({ testCliCommand }) => {
 			const root = mkdtempSync(join(tmpdir(), "neon-init-cli-empty-"));
 			const cwd = join(root, "app");
@@ -1292,55 +1161,6 @@ describe("init CLI", () => {
 		30_000,
 	);
 
-	test("empty template records empty-template after continued setup", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-tmpl-"));
-		const runBootstrap = nestedBootstrapOk({ agentSetup: "skip" });
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				yes: true,
-				template: "hono",
-				agentSetup: false,
-				link: false,
-				config: false,
-				run: vi.fn().mockResolvedValue(true),
-				contextFile: join(cwd, ".neon"),
-				runBootstrap,
-			}),
-		);
-
-		expect(takeCommandSuccessExtras()).toEqual({
-			init_kind: "empty-template",
-			agent_setup: "skip",
-		});
-	});
-
-	test("undefined nested bootstrap result still continues init", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-undef-"));
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				yes: true,
-				template: "hono",
-				agentSetup: false,
-				link: false,
-				config: false,
-				contextFile: join(cwd, ".neon"),
-				run: vi.fn().mockResolvedValue(true),
-				runBootstrap: vi.fn().mockResolvedValue(undefined),
-			}),
-		);
-
-		expect(takeCommandSuccessExtras()).toEqual({
-			init_kind: "empty-template",
-			agent_setup: "skip",
-		});
-	});
-
 	test("Custom skip records empty-skip and skip", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-skip-"));
 		const { handler } = await import("./init.js");
@@ -1359,29 +1179,6 @@ describe("init CLI", () => {
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "empty-skip",
 			agent_setup: "skip",
-		});
-	});
-
-	test("--skip-template records empty-skip", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-flag-skip-"));
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				run: vi.fn().mockResolvedValue(true),
-				yes: true,
-				skipTemplate: true,
-				agent: ["cursor"],
-				link: false,
-				config: false,
-				contextFile: join(cwd, ".neon"),
-			}),
-		);
-
-		expect(takeCommandSuccessExtras()).toEqual({
-			init_kind: "empty-skip",
-			agent_setup: "plugin",
 		});
 	});
 
@@ -1410,29 +1207,6 @@ describe("init CLI", () => {
 			agent_setup: "skills-mcp",
 		});
 	});
-
-	test("--skip-template in a non-empty directory stays existing", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-telem-full-skip-"));
-		writeFileSync(join(cwd, "package.json"), "{}\n");
-		const { handler } = await import("./init.js");
-
-		await handler(
-			baseProps({
-				cwd,
-				run: vi.fn().mockResolvedValue(true),
-				skipTemplate: true,
-				agent: ["cursor"],
-				link: false,
-				config: false,
-				contextFile: join(cwd, ".neon"),
-			}),
-		);
-
-		expect(takeCommandSuccessExtras()).toEqual({
-			init_kind: "existing",
-			agent_setup: "plugin",
-		});
-	});
 });
 
 describe("init flag parsing", () => {
@@ -1442,8 +1216,6 @@ describe("init flag parsing", () => {
 		).parseAsync(args)) as {
 			config?: boolean;
 			link?: boolean;
-			skipTemplate?: boolean;
-			template?: string;
 			agentSetup?: boolean;
 		};
 
@@ -1451,13 +1223,6 @@ describe("init flag parsing", () => {
 		expect((await parse([])).config).toBeUndefined();
 		expect((await parse(["--config"])).config).toBe(true);
 		expect((await parse(["--no-config"])).config).toBe(false);
-	});
-
-	test("--skip-template is not the negation of --template", async () => {
-		expect((await parse(["--skip-template"])).skipTemplate).toBe(true);
-		expect((await parse(["--skip-template"])).template).toBeUndefined();
-		expect((await parse(["--template", "hono"])).template).toBe("hono");
-		expect((await parse(["--template", "hono"])).skipTemplate).toBe(false);
 	});
 
 	test("--no-link skips project linking", async () => {
