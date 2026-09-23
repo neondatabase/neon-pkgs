@@ -132,10 +132,9 @@ export type PluginsInstallOutcome = {
 };
 
 /**
- * Plans and runs the plugin install for every resolved target, in-process. No CLI-only
- * concerns here (no `writer` table, no `recordCommandSuccessExtras`) so `neon init` /
- * `neon bootstrap` can call this directly instead of re-executing the `neon` binary as a
- * child process to reuse `neon plugins`.
+ * Plans and runs the plugin install for every resolved target. No CLI-only concerns here
+ * (no `writer` table, no `recordCommandSuccessExtras`): a caller that only wants the
+ * outcome — `neon init` / `neon bootstrap` — gets it without rendering a result table.
  */
 export const installPlugins = async (
 	options: InstallPluginsOptions,

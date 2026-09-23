@@ -635,7 +635,7 @@ describe("planToolingSteps", () => {
 			),
 		).toEqual([
 			{ kind: "skills", options: { yes: false, agents: ["vscode"] } },
-			{ kind: "mcp", options: { yes: false, agents: ["vscode"] } },
+			{ kind: "mcp", options: { yes: false, agent: ["vscode"] } },
 		]);
 	});
 });

@@ -57,20 +57,22 @@ const authContext = <T extends InitAuthOptions>(
 
 /**
  * Resolves Neon auth the same way a standalone `neon mcp` invocation would, then runs
- * `setupNeonMcp` in-process. Replaces `neon init` / `neon bootstrap`'s former `neon mcp`
- * child-process re-exec: that child authenticated itself independently, so this — not a
- * shared `apiClient` off `InitProps` — is what has to resolve it now.
+ * `setupNeonMcp`. `init`/`bootstrap` never resolve a shared `apiClient` of their own for
+ * this (see `InitAuthOptions` above), so this is what does it, per call.
  *
- * `ensureAuth`'s `isMcpOauth` skip reads the *real* `process.argv` (documented there as
- * required because that middleware runs before flag parsing), so it never fires for a
- * `neon init`/`bootstrap` process. In practice this only costs an extra stored-credential
- * read/refresh when `--oauth` was chosen and a credential happens to exist — `isMcpCommand`
- * still stops it from ever popping an interactive login. Not worth threading real argv
- * through for.
+ * Skips `ensureAuth` entirely when `options.oauth` is true: `setupNeonMcp`'s oauth branch
+ * never reads `apiClient`/`apiKey`, and `ensureAuth`'s own `isMcpOauth` skip reads the real
+ * `process.argv` for `--oauth` (documented there as required because that middleware runs
+ * before flag parsing) — which never contains it for a `neon init`/`bootstrap` process, so
+ * `ensureAuth` would otherwise try to resolve credentials it doesn't need and can fail on
+ * an unrelated bad profile or expired session.
  */
 export const runAuthenticatedMcp = async (
 	options: SetupNeonMcpOptions & InitAuthOptions,
 ): Promise<McpInstallOutcome> => {
+	if (options.oauth === true) {
+		return setupNeonMcp(options);
+	}
 	const authenticated = authContext(options, ["mcp"]);
 	await ensureAuth(authenticated);
 	try {
@@ -97,9 +99,8 @@ export const runAuthenticatedMcp = async (
 
 /**
  * Resolves Neon auth the same way a standalone `neon env pull` invocation would, then runs
- * `pull` in-process — the same function `link`/`checkout` already call directly via
- * `autoPullEnvAfterPin` (see `commands/env.ts`). Replaces `neon init`'s former
- * `neon env pull` child-process re-exec.
+ * `pull` — the same function `link`/`checkout` already call directly via
+ * `autoPullEnvAfterPin` (see `commands/env.ts`).
  */
 export const pullInitEnv = async (
 	props: EnvPullProps & InitAuthOptions,

@@ -228,10 +228,9 @@ export type SkillsInstallOutcome = {
 };
 
 /**
- * Plans and runs the skills install for every resolved source/invocation, in-process. No
- * CLI-only concerns here (no `writer` table, no `recordCommandSuccessExtras`) so `neon init` /
- * `neon bootstrap` can call this directly instead of re-executing the `neon` binary as a
- * child process to reuse `neon skills`.
+ * Plans and runs the skills install for every resolved source/invocation. No CLI-only
+ * concerns here (no `writer` table, no `recordCommandSuccessExtras`): a caller that only
+ * wants the outcome — `neon init` / `neon bootstrap` — gets it without rendering a table.
  */
 export const installSkills = async (
 	options: InstallSkillsOptions,

@@ -43,7 +43,7 @@ import {
 	pullInitEnv as defaultPullInitEnv,
 	type InitAuthOptions,
 } from "./auth.js";
-import { InitCancelled, restoreCursor } from "./cancelled.js";
+import { InitCancelled, raceSigint, restoreCursor } from "./cancelled.js";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
@@ -1098,14 +1098,23 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					);
 				}
 				printInitProgress(PROGRESS.env);
-				await (props.envPull ?? defaultPullInitEnv)({
-					...auth,
-					output: props.output,
-					cwd,
-					projectId: context.projectId,
-					branch,
-				});
+				await raceSigint(
+					(props.envPull ?? defaultPullInitEnv)({
+						...auth,
+						output: props.output,
+						cwd,
+						projectId: context.projectId,
+						branch,
+					}),
+				);
 			} catch (error) {
+				// A SIGINT during the pull raced in as InitCancelled (see raceSigint): let it
+				// fall through to the outer catch's cancelled-summary handling below, same as
+				// a cancellation anywhere else in this function, rather than reporting it as
+				// an env-pull failure here.
+				if (error instanceof InitCancelled) {
+					throw error;
+				}
 				const failed = envPullFailedNext();
 				printInitDone(
 					formatInitDone({

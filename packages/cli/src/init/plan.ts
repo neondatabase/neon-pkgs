@@ -129,10 +129,17 @@ export const planToolingSteps = (
 	tooling: YesAgentTooling,
 	options: { yes: boolean; named: boolean },
 ): ToolingStep[] => {
+	// Plugins/skills options key named agents as `agents`; MCP's own prop is `agent`
+	// (singular) — matches each command's existing CLI prop name. Two helpers so a
+	// step never gets the other step kind's field name.
 	const agentsFor = (
 		ids: readonly AgentType[],
 	): { agents: readonly AgentType[] } | Record<string, never> =>
 		options.named ? { agents: ids } : {};
+	const agentFor = (
+		ids: readonly AgentType[],
+	): { agent: AgentType[] } | Record<string, never> =>
+		options.named ? { agent: [...ids] } : {};
 	switch (tooling.setup) {
 		case "skip":
 			return [];
@@ -159,7 +166,7 @@ export const planToolingSteps = (
 					kind: "mcp",
 					options: {
 						yes: options.yes,
-						...agentsFor(tooling.mcpAgents),
+						...agentFor(tooling.mcpAgents),
 					},
 				});
 			}

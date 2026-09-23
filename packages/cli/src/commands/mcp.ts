@@ -214,12 +214,12 @@ export type McpInstallOutcome = {
 
 /**
  * Resolves auth, mints or reuses an API key, and writes the Neon MCP server into every
- * resolved agent, in-process. No CLI-only concerns here (no `writer` table, no
- * `recordCommandSuccessExtras`) so `neon init` / `neon bootstrap` can call this directly
- * instead of re-executing the `neon` binary as a child process to reuse `neon mcp`.
+ * resolved agent. No CLI-only concerns here (no `writer` table, no
+ * `recordCommandSuccessExtras`): a caller that only wants the outcome — `neon init` /
+ * `neon bootstrap` — gets it without rendering a table.
  *
- * Throws directly (like `neon mcp` does today) when zero agents succeed, since that path
- * never reaches a results table worth showing.
+ * Throws directly when zero agents succeed, since that path never reaches a results table
+ * worth showing (same as the CLI handler always did).
  */
 export const setupNeonMcp = async (
 	options: SetupNeonMcpOptions,

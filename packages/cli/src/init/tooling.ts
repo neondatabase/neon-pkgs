@@ -25,6 +25,7 @@ import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { type InitAuthOptions, runAuthenticatedMcp } from "./auth.js";
+import { raceSigint } from "./cancelled.js";
 import { PROGRESS } from "./copy.js";
 import { detectAgent } from "./detect_host.js";
 import {
@@ -178,30 +179,27 @@ export const runToolingSteps = async (
 		);
 		switch (step.kind) {
 			case "plugins": {
-				const outcome = await ops.installPlugins({
-					...step.options,
-					cwd: options.cwd,
-				});
+				const outcome = await raceSigint(
+					ops.installPlugins({ ...step.options, cwd: options.cwd }),
+				);
 				reportPluginsInstall(reportProps, outcome);
 				const error = pluginsInstallError(outcome);
 				if (error) throw error;
 				break;
 			}
 			case "skills": {
-				const outcome = await ops.installSkills({
-					...step.options,
-					cwd: options.cwd,
-				});
+				const outcome = await raceSigint(
+					ops.installSkills({ ...step.options, cwd: options.cwd }),
+				);
 				reportSkillsInstall(reportProps, outcome);
 				const error = skillsInstallError(outcome);
 				if (error) throw error;
 				break;
 			}
 			case "mcp": {
-				const outcome = await ops.installMcp({
-					...step.options,
-					cwd: options.cwd,
-				});
+				const outcome = await raceSigint(
+					ops.installMcp({ ...step.options, cwd: options.cwd }),
+				);
 				reportMcpInstall(reportProps, outcome);
 				const error = mcpInstallError(outcome);
 				if (error) throw error;

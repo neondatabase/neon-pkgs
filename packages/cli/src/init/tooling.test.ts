@@ -122,7 +122,7 @@ describe("runAgentTooling", () => {
 			expect.objectContaining({ agents: ["vscode"], cwd: "/app" }),
 		);
 		expect(ops.installMcp).toHaveBeenCalledWith(
-			expect.objectContaining({ agents: ["vscode"], cwd: "/app" }),
+			expect.objectContaining({ agent: ["vscode"], cwd: "/app" }),
 		);
 	});
 
