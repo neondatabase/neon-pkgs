@@ -141,12 +141,21 @@ export const handler = async (props: PluginsProps) => {
 	const rows: PluginsInstallRow[] = [];
 	const failed: { agents: string[]; message: string }[] = [];
 	const scope = scopeLabel(plan.scope);
-	for (const mapped of plan.targets) {
+	for (const [index, mapped] of plan.targets.entries()) {
 		const args = pluginsAddArgs({
 			target: mapped.target,
 			global: plan.scope === "global",
 		});
 		const agent = mapped.agents.join(", ");
+		const displayNames = mapped.agents
+			.map((id) => getAgentDisplayName(id))
+			.join(", ");
+		log.info(
+			"Installing the Neon plugin for %s (%d/%d)...",
+			displayNames,
+			index + 1,
+			plan.targets.length,
+		);
 		try {
 			await runPluginsCli({
 				args,

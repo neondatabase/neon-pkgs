@@ -263,6 +263,23 @@ describe("neon plugins", () => {
 		expect([...targets].sort()).toEqual(["claude-code", "cursor"]);
 	});
 
+	test("prints a progress line per target before installing", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		mkdirSync(join(cwd, ".claude"));
+		const { stderr } = await testCliCommand(
+			["plugins", "-y"],
+			runOptions(home, cwd, bin),
+		);
+		expect(stderr).toMatch(
+			/INFO: Installing the Neon plugin for Cursor \(\d\/2\)\.\.\./,
+		);
+		expect(stderr).toMatch(
+			/INFO: Installing the Neon plugin for Claude Code \(\d\/2\)\.\.\./,
+		);
+	});
+
 	test("rejects unknown options and subcommands", async ({
 		testCliCommand,
 	}) => {
