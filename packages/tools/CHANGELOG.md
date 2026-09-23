@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 1.5.0
+
+### Minor Changes
+
+- 5f8ac0a: Support an optional snapshot slug when creating snapshots, and expose the slug on snapshot results.
+
+### Patch Changes
+
+- Updated dependencies [5f8ac0a]
+  - @neon/sdk@6.1.0
+
 ## 1.4.0
 
 ### Minor Changes
