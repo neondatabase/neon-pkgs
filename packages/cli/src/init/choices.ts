@@ -1,5 +1,3 @@
-import { getCliName } from "../utils/cli_name.js";
-
 export type InitConfigPlan =
 	| { kind: "skip" }
 	| { kind: "write"; services?: readonly string[] };
@@ -9,53 +7,8 @@ export type InitConfigResolution =
 	| { kind: "ask" }
 	| { kind: "write"; services?: readonly string[] };
 
-export type InitTemplateResolution =
-	| { kind: "existing" }
-	| { kind: "ask" }
-	| { kind: "skip" }
-	| { kind: "default" }
-	| { kind: "template"; id: string };
-
-export const INIT_TEMPLATE_CONFLICT =
-	"--skip-template cannot be combined with --template.";
-
 export const INIT_CONFIG_SERVICES_CONFLICT =
 	"--no-config cannot be combined with --services.";
-
-export const INIT_TEMPLATE_KEEPS_CONFIG =
-	"A scaffolded template keeps the neon.ts it ships. --config, --no-config, and --services apply when you skip the template or set up an existing app.";
-
-export const initTemplateInNonEmptyMessage = (): string =>
-	`--template is only for an empty directory. This directory already has files, so there is nothing to scaffold. Omit --template, or run \`${getCliName()} bootstrap\` in an empty folder.`;
-
-export const resolveInitTemplateChoice = (input: {
-	empty: boolean;
-	yes: boolean;
-	skipTemplate: boolean;
-	template?: string;
-}): InitTemplateResolution => {
-	const id = input.template?.trim();
-	const hasTemplate = id !== undefined && id.length > 0;
-	if (input.skipTemplate && hasTemplate) {
-		throw new Error(INIT_TEMPLATE_CONFLICT);
-	}
-	if (!input.empty) {
-		if (hasTemplate) {
-			throw new Error(initTemplateInNonEmptyMessage());
-		}
-		return { kind: "existing" };
-	}
-	if (input.skipTemplate) {
-		return { kind: "skip" };
-	}
-	if (hasTemplate) {
-		return { kind: "template", id };
-	}
-	if (input.yes) {
-		return { kind: "default" };
-	}
-	return { kind: "ask" };
-};
 
 export const resolveInitConfigChoice = (input: {
 	flag: boolean | undefined;
@@ -101,6 +54,15 @@ export const configPlanFromResolution = (
 	return resolution;
 };
 
+export const isBareInitServices = (
+	services: readonly string[] | undefined,
+): boolean => {
+	if (services === undefined || services.length === 0) {
+		return true;
+	}
+	return services.every((service) => service === "none");
+};
+
 export const shouldRefreshEnvAfterNewConfig = (input: {
 	wroteNewFile: boolean;
 	projectId?: string;
@@ -111,3 +73,20 @@ export const shouldRefreshEnvAfterNewConfig = (input: {
 	input.projectId.length > 0 &&
 	typeof input.branch === "string" &&
 	input.branch.length > 0;
+
+export const shouldPullEnvAfterInitConfig = (input: {
+	wroteNewFile: boolean;
+	extraServices: boolean;
+	alreadyPulled: boolean;
+	projectId?: string;
+	branch?: string;
+}): boolean =>
+	!input.extraServices &&
+	!input.alreadyPulled &&
+	shouldRefreshEnvAfterNewConfig({
+		wroteNewFile: input.wroteNewFile,
+		...(input.projectId !== undefined
+			? { projectId: input.projectId }
+			: {}),
+		...(input.branch !== undefined ? { branch: input.branch } : {}),
+	});

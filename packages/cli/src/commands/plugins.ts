@@ -14,7 +14,6 @@ import {
 	runPluginsCli,
 } from "../plugins/run.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
-import { confirmPluginsInstall } from "../plugins/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
@@ -90,7 +89,7 @@ export const builder = (argv: yargs.Argv) =>
 				coerce: coerceAgents,
 			},
 		})
-		.example("$0 plugins", "Interactive: agents, then confirm")
+		.example("$0 plugins", "Interactive: pick agents, then install")
 		.example(
 			"$0 plugins -y",
 			"Detected agents (project folders, else the host CLI agent), skip prompts",
@@ -137,17 +136,6 @@ export const handler = async (props: PluginsProps) => {
 			"Skipping %s: plugins are user-level. Pass --global.",
 			getAgentDisplayName(agent),
 		);
-	}
-
-	if (interactive) {
-		const ok = await confirmPluginsInstall({
-			scope: plan.scope,
-			agents: plan.agents,
-		});
-		if (!ok) {
-			log.info("Aborted. Nothing was written.");
-			return;
-		}
 	}
 
 	const rows: PluginsInstallRow[] = [];

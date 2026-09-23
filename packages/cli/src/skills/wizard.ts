@@ -1,13 +1,7 @@
 import prompts from "prompts";
 
-import { getAgentDisplayName } from "../init/agents.js";
-import type { AgentType } from "../mcp/agents.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
-import {
-	NEON_SKILL_CATALOG,
-	type SkillEntry,
-	type SkillsInvocation,
-} from "./catalog.js";
+import { NEON_SKILL_CATALOG, type SkillEntry } from "./catalog.js";
 import type { SkillsInstallScope } from "./targets.js";
 
 const restoreCursorOnAbort = (state: { aborted: boolean }) => {
@@ -59,47 +53,6 @@ const isSkillEntry = (value: unknown): value is SkillEntry => {
 		value.source.length > 0 &&
 		value.skill.length > 0
 	);
-};
-
-export const skillsInstallSummary = (options: {
-	scope: SkillsInstallScope;
-	agents: readonly AgentType[];
-	invocations: readonly SkillsInvocation[];
-}): string => {
-	const skills = options.invocations
-		.flatMap((invocation) => invocation.skills)
-		.join(", ");
-	const rows: [string, string][] = [
-		[
-			"Config",
-			options.scope === "project" ? "this directory" : "user-level",
-		],
-		["Agents", options.agents.map(getAgentDisplayName).join(", ")],
-		["Skills", skills],
-	];
-	const labelWidth = Math.max(...rows.map(([label]) => label.length));
-	return rows
-		.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
-		.join("\n");
-};
-
-export const confirmSkillsInstall = async (options: {
-	scope: SkillsInstallScope;
-	agents: readonly AgentType[];
-	invocations: readonly SkillsInvocation[];
-}): Promise<boolean> => {
-	if (!canPickAgentsInteractively()) {
-		return true;
-	}
-	process.stdout.write(`\n${skillsInstallSummary(options)}\n\n`);
-	const { ok } = await prompts({
-		onState: restoreCursorOnAbort,
-		type: "confirm",
-		name: "ok",
-		message: "Write Neon agent skills into these agents?",
-		initial: true,
-	});
-	return ok === true;
 };
 
 export const confirmSkillsUpdate = async (options: {

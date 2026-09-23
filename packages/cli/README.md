@@ -618,6 +618,8 @@ export default defineConfig({
 
 ```
 ? Which Neon services should neon.ts declare? (space to toggle, enter to confirm) ›
+◉   Postgres (always included)
+     Every Neon project includes a Postgres database.
 ◯   Managed Better Auth
      Authentication with users and sessions stored in Postgres.
 ◯   Data API
@@ -630,7 +632,7 @@ export default defineConfig({
      All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.
 ```
 
-Selecting nothing is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
+Postgres cannot be unselected. Selecting nothing else is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
 
 ```bash
 # Pick interactively (TTY) or take the starter policy (CI)
@@ -784,46 +786,42 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 ## Set up a project (`init`)
 
-`neon init` sets up this directory for Neon as one flow: agents, a linked project, and optionally `neon.ts`.
+`neon init` sets up coding agents and this directory for Neon. In a terminal it asks **Recommended** or **Custom**. `-y` is Recommended with no prompts. `-y` with `--skill`, MCP flags, `--no-agent-setup`, or `--claimable` is Custom using those flags.
 
-An empty directory (nothing except `.git`) asks how to set up the directory. Pick a starter template, or skip scaffolding and only install agent tooling, link a project, and optionally write `neon.ts`. That skip is only on `init` — `neon bootstrap` always scaffolds.
+Recommended installs the Neon plugin for every detected agent (global config, project folders, and the host CLI). Plugin-capable agents get the plugin; the rest get skills and MCP. If none are detected, it installs the default Neon skills for Cursor and Codex in this directory (`./.agents/skills`) and does not configure MCP. It then links a project when the CLI is authenticated, and writes a default `neon.ts` (Postgres only) using the package manager already in the directory.
 
-`-y` in an empty directory scaffolds the default template (`bootstrap --default`) and does not add a later `config init` step. `--skip-template` skips scaffolding even with `-y`. `--template <id>` scaffolds that template; combine it with `-y` to skip the remaining bootstrap pickers.
+Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser. `-y` with `--project-id` or other account flags links when the CLI is already signed in; otherwise it errors and names `neon auth` or `--claimable`.
 
-An existing app (or skip-template) installs agent tooling, then asks whether to link unless `.neon` already has a projectId, then asks whether to create `neon.ts`. Linking uses the same organization, project, and branch flow as `neon link`. Saying no to `neon.ts` skips the services picker and does not write the file. `--no-config` does the same without asking. `-y` writes `config init --services none` unless `--no-config`. `--services` implies creating `neon.ts`.
+Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-config-location`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--mcp-config-location` is where the config is written: `global` maps to `neon mcp`, and `project` maps to `neon mcp --project`. With `-y`, the location defaults to `global`; interactive Custom asks. If some selected agents cannot write that location, init warns and skips MCP for those agents while continuing with the supported agents. It fails when none of the selected agents support the location. `--mcp-project-scoped` limits MCP tools to the linked Neon project by passing its ID to `neon mcp --project-id`. Omitted is false, including in Custom; there is no prompt. `--no-agent-setup` skips agent setup.
 
-In an interactive terminal it offers one of: the Neon plugin (`neon plugins`), skills and MCP separately (`neon skills`, then `neon mcp`), or skip agent setup. Agent selection and setup finish before the link question. It never runs plugin and skills+MCP together.
+Empty directories are set up in place. `neon init` does not scaffold starter files.
 
 ```bash
 $ neon init
-$ neon init --skip-template
-$ neon init --skip-template --no-link
 $ neon init -y
-$ neon init --agent cursor --agent claude-code
+$ neon init --agent cursor --agent claude-code --no-link
+$ neon init --no-agent-setup --claimable
+$ neon init -y --skill neon --mcp-auth oauth --mcp-config-location project
+$ neon init -y --agent cursor --project-id <project-id> \
+    --mcp-auth oauth --mcp-config-location project --mcp-project-scoped
 ```
 
-Without a TTY, pass `-y`. `--agent` skips agent selection but does not replace `-y` for link or templates. `--no-link` skips project linking without asking, including when a template is scaffolded.
+Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is Recommended. `-y` with `--skill`, MCP flags, `--no-agent-setup`, or `--claimable` is Custom: those flags, Recommended defaults for the rest. `--skill` selects skills (not the plugin). MCP flags select skills and MCP. `--agent` skips agent selection and, without `-y`, selects Custom. `--no-link` skips project linking without asking. `--no-config` skips `neon.ts`. `--services` implies creating `neon.ts`. `--org-id`, `--project-id`, `--project-name`, `--region-id`, and `--branch` select linking.
 
-`-y` skips the template picker and the agent-setup offer. Empty dir: `bootstrap --default`. `--skip-template` or an existing app: plugin when Cursor, Claude Code, or Codex is in project folders, else the host CLI agent; otherwise skills and MCP. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. VS Code, GitHub Copilot CLI, and Grok only take the plugin user-level (`neon plugins --global`), so `-y` uses skills and MCP for those.
+`--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 
-`--agent` / `-a` (repeatable) names coding agents and skips agent selection, interactive or with `-y`. Init forwards those names to `plugins`, or to `skills` and `mcp`, not both.
-
-`--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`, including the link step inside nested bootstrap when a template is scaffolded. They are not filled from `.neon`; a linked directory is not relinked unless you pass one of those flags.
-
-`--config`, `--no-config`, and `--services` apply on the existing-app and `--skip-template` path. A template's own `neon.ts` is left as the template shipped it. Passing those flags while scaffolding prints a warning and still copies the template as shipped. After a new `neon.ts` on a pinned branch, init runs `env pull`.
-
-`-y` forwards `-y` to `plugins` or `skills`/`mcp`, uses `link -y` (auto-select or print IDs and exit), passes `--default` to nested bootstrap, and forwards `--services none` to `config init`. `--agent` is forwarded to agent setup. `mcp -y` is the global install. Default linking skips the "already linked" confirmation.
+After a new default `neon.ts` on a pinned branch, init runs `env pull` unless link already pulled env or the file declares extra services (those still need `neon config plan` / `neon deploy`).
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
-`skills` needs Node.js 22.20 or newer. See [`bootstrap`](#scaffold-a-project-bootstrap), [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
+`skills` needs Node.js 22.20 or newer. See [`plugins`](#install-the-neon-plugin-plugins), [`skills`](#install-neon-agent-skills-skills), [`link`](#linking-a-project), and [`mcp`](#install-the-neon-mcp-server-mcp) for what those commands write.
 
 ## Install the Neon MCP server (`mcp`)
 
 `neon mcp` writes the hosted Neon MCP server (`https://mcp.neon.tech/mcp`) into coding-agent config files.
 
 ```bash
-# Interactive: global or project, then agents, then API key or OAuth, then confirm.
+# Interactive: global or project, then agents, then API key or OAuth.
 $ neon mcp
 
 # Skip prompts. Global config, installed apps else the host CLI agent, reuse or mint an API key.
@@ -848,7 +846,7 @@ $ neon mcp --project-id <project-id>
 $ neon mcp --category querying --category schema
 ```
 
-On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then a summary to confirm before it writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
+On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
 
 `-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for globally installed apps, else the host CLI agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--agent`, `--project`, `--oauth`, `--read-only`, `--project-id` and `--category` still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent <name>` to name them, or `--oauth` to write the URL only. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. `neon mcp --help` lists the server URL, those `-y` defaults, the supported agent names, and the `--category` values.
 
@@ -861,7 +859,7 @@ The default mints an account-wide API key (or reuses the Bearer already configur
 `neon skills` installs Neon agent skills by running `npx skills add`. It does not call the Neon API. This command needs Node.js 22.20 or newer. The rest of the CLI supports Node.js 20.19 or newer.
 
 ```bash
-# Interactive: this directory, then agents, then skills, then confirm.
+# Interactive: this directory, then agents, then skills.
 $ neon skills
 
 # Skip prompts. This directory, detected agents (project folders, else the host CLI agent), the default skills.
@@ -885,7 +883,7 @@ $ neon skills update -y
 $ neon skills update --global -y
 ```
 
-On a TTY the command asks which agents and which skills, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
+On a TTY the command asks which agents and which skills, then installs. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 
 `-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
@@ -909,7 +907,7 @@ Default table output is the assistant's text. On a TTY that is a spinner, then t
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
 
 ```bash
-# Interactive: agents, then confirm.
+# Interactive: pick agents, then install.
 $ neon plugins
 
 # Skip prompts. Detected agents (project folders, else the host CLI agent).
@@ -922,7 +920,7 @@ $ neon plugins --agent cursor --agent claude-code
 $ neon plugins --global
 ```
 
-On a TTY the command asks which agents, then shows a summary to confirm. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
 `-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
@@ -1366,7 +1364,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | config                                                                     | `init`, `status`, `plan`, `apply`                                                                            | Drive a branch from `neon.ts`      |
 | deploy                                                                     |                                                                                                              | Alias for `config apply`           |
 | bootstrap                                                                  |                                                                                                              | Scaffold a template, then agent tooling and link |
-| init                                                                       |                                                                                                              | Empty dir: bootstrap. Existing: agents, link, neon.ts |
+| init                                                                       |                                                                                                              | In place: agents, link, neon.ts       |
 | mcp                                                                        |                                                                                                              | Install the Neon MCP server         |
 | plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |

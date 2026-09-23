@@ -3,9 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { neonMcpUrl } from "./install.js";
 import { type ResolveMcpPlanOptions, resolveMcpPlan } from "./plan.js";
-import { mcpInstallSummary } from "./wizard.js";
 
 const dirs: string[] = [];
 
@@ -335,85 +333,5 @@ describe("resolveMcpPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/No coding agents detected in this project/);
-	});
-});
-
-describe("mcpInstallSummary", () => {
-	test("lists only agents that will be written", () => {
-		expect(
-			mcpInstallSummary({
-				scope: "global",
-				install: ["cursor"],
-				skipped: [
-					{
-						agent: "claude-desktop",
-						error: "Add remote servers through Connectors in the app",
-					},
-				],
-				auth: "api-key",
-				reuse: false,
-				url: neonMcpUrl(),
-			}),
-		).toBe(
-			[
-				"Config   user-level",
-				"Agents   Cursor",
-				"Auth     mint an account-wide API key that reaches every organization",
-				`URL      ${neonMcpUrl()}`,
-				"Skipped  Claude Desktop (Add remote servers through Connectors in the app)",
-			].join("\n"),
-		);
-	});
-
-	test("names reuse and OAuth", () => {
-		expect(
-			mcpInstallSummary({
-				scope: "project",
-				install: ["cursor", "claude-code"],
-				skipped: [],
-				auth: "api-key",
-				reuse: true,
-				url: neonMcpUrl({ projectId: "proj-1" }),
-			}),
-		).toContain("reuse the API key already in agent config");
-		expect(
-			mcpInstallSummary({
-				scope: "global",
-				install: ["cursor"],
-				skipped: [],
-				auth: "oauth",
-				reuse: false,
-				url: neonMcpUrl({ readOnly: true }),
-			}),
-		).toContain("OAuth, agent signs in on first use");
-	});
-
-	test("project-scope mint is still an account-wide key", () => {
-		const summary = mcpInstallSummary({
-			scope: "project",
-			install: ["cursor"],
-			skipped: [],
-			auth: "api-key",
-			reuse: false,
-			url: neonMcpUrl(),
-		});
-		expect(summary).toContain(
-			"mint an account-wide API key that reaches every organization",
-		);
-		expect(summary).toContain("this directory");
-	});
-
-	test("--project-id names a key limited to that project", () => {
-		expect(
-			mcpInstallSummary({
-				scope: "global",
-				install: ["cursor"],
-				skipped: [],
-				auth: "api-key",
-				reuse: false,
-				url: neonMcpUrl({ projectId: "proj-in-org" }),
-				mintProjectId: "proj-in-org",
-			}),
-		).toContain("mint an API key limited to proj-in-org");
 	});
 });

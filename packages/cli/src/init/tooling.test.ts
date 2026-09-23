@@ -174,7 +174,7 @@ describe("runAgentTooling", () => {
 		]);
 	});
 
-	test("named cursor plus vscode fails instead of dropping vscode", async () => {
+	test("named cursor plus vscode fails on bootstrap instead of dropping vscode", async () => {
 		const run = vi.fn().mockResolvedValue(true);
 		await expect(
 			runAgentTooling({
@@ -182,6 +182,7 @@ describe("runAgentTooling", () => {
 				yes: true,
 				run,
 				forward,
+				command: "bootstrap",
 				agents: ["cursor", "vscode"],
 			}),
 		).rejects.toThrow(/plugin and skills\/MCP/);
@@ -190,9 +191,9 @@ describe("runAgentTooling", () => {
 });
 
 describe("runInitSteps", () => {
-	test("human narrate uses the step label and still debugs argv", async () => {
+	test("human narrate prints the step label and still debugs argv", async () => {
 		const run = vi.fn().mockResolvedValue(true);
-		const info = vi.spyOn(log, "info").mockReturnValue();
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const debug = vi.spyOn(log, "debug").mockReturnValue();
 		await runInitSteps([["plugins", "-y"]], {
 			cwd: "/app",
@@ -200,12 +201,15 @@ describe("runInitSteps", () => {
 			forward,
 			narrate: "human",
 		});
-		expect(info).toHaveBeenCalledWith("Installing the Neon plugin…");
+		expect(
+			stdout.mock.calls.map((call) => String(call[0])).join(""),
+		).toContain("Installing the Neon plugin...");
 		expect(debug).toHaveBeenCalledWith(
 			"Running `%s %s`",
 			expect.any(String),
 			"plugins -y",
 		);
+		stdout.mockRestore();
 	});
 
 	test("env pull receives the auth overlay", async () => {

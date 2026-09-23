@@ -3,117 +3,10 @@ import { describe, expect, test } from "vitest";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
-	INIT_TEMPLATE_CONFLICT,
 	resolveInitConfigChoice,
-	resolveInitTemplateChoice,
+	shouldPullEnvAfterInitConfig,
 	shouldRefreshEnvAfterNewConfig,
 } from "./choices.js";
-
-describe("resolveInitTemplateChoice", () => {
-	test("non-empty is the existing-app path", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: false,
-				yes: false,
-				skipTemplate: false,
-			}),
-		).toEqual({ kind: "existing" });
-	});
-
-	test("--skip-template in a non-empty directory is redundant existing-app", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: false,
-				yes: true,
-				skipTemplate: true,
-			}),
-		).toEqual({ kind: "existing" });
-	});
-
-	test("--template in a non-empty directory fails before mutations", () => {
-		expect(() =>
-			resolveInitTemplateChoice({
-				empty: false,
-				yes: false,
-				skipTemplate: false,
-				template: "hono",
-			}),
-		).toThrow(/only for an empty directory/);
-	});
-
-	test("empty with --skip-template skips scaffolding", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: false,
-				skipTemplate: true,
-			}),
-		).toEqual({ kind: "skip" });
-	});
-
-	test("empty -y without --skip-template is the default template", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: true,
-				skipTemplate: false,
-			}),
-		).toEqual({ kind: "default" });
-	});
-
-	test("empty -y --skip-template skips scaffolding", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: true,
-				skipTemplate: true,
-			}),
-		).toEqual({ kind: "skip" });
-	});
-
-	test("empty --template selects that id", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: false,
-				skipTemplate: false,
-				template: "hono",
-			}),
-		).toEqual({ kind: "template", id: "hono" });
-	});
-
-	test("empty interactive with no flags asks", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: false,
-				skipTemplate: false,
-			}),
-		).toEqual({ kind: "ask" });
-	});
-
-	test("--skip-template and --template together fail", () => {
-		expect(() =>
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: false,
-				skipTemplate: true,
-				template: "hono",
-			}),
-		).toThrow(INIT_TEMPLATE_CONFLICT);
-	});
-
-	test("blank --template is treated as omitted", () => {
-		expect(
-			resolveInitTemplateChoice({
-				empty: true,
-				yes: false,
-				skipTemplate: false,
-				template: "  ",
-			}),
-		).toEqual({ kind: "ask" });
-	});
-});
 
 describe("resolveInitConfigChoice", () => {
 	test("existing config still runs config init for packages", () => {
@@ -270,6 +163,44 @@ describe("configPlanFromResolution", () => {
 				false,
 			),
 		).toEqual({ kind: "write", services: ["none"] });
+	});
+});
+
+describe("shouldPullEnvAfterInitConfig", () => {
+	test("skips a second pull after link already pulled env", () => {
+		expect(
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile: true,
+				extraServices: false,
+				alreadyPulled: true,
+				projectId: "proj-1",
+				branch: "main",
+			}),
+		).toBe(false);
+	});
+
+	test("skips when extra services still need a deploy", () => {
+		expect(
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile: true,
+				extraServices: true,
+				alreadyPulled: false,
+				projectId: "proj-1",
+				branch: "main",
+			}),
+		).toBe(false);
+	});
+
+	test("pulls once for a new bare neon.ts on a pinned branch", () => {
+		expect(
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile: true,
+				extraServices: false,
+				alreadyPulled: false,
+				projectId: "proj-1",
+				branch: "main",
+			}),
+		).toBe(true);
 	});
 });
 
