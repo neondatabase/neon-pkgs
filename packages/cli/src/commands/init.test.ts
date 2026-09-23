@@ -431,6 +431,7 @@ describe("init handler", () => {
 				run,
 				agent: ["opencode"],
 				mcpAuth: "oauth",
+				mcpConfigLocation: "project",
 				mcpProjectScoped: true,
 				link: false,
 				config: false,
@@ -440,8 +441,8 @@ describe("init handler", () => {
 
 		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
 		expect(mcp).toContain("--oauth");
-		expect(mcp).toContain("--mcp-project-scoped");
-		expect(mcp).not.toContain("--project-id");
+		expect(mcp).toContain("--project");
+		expect(mcp).toContain("--project-id proj-pin");
 	});
 
 	test("--template -y --no-agent-setup skips nested agent setup", async () => {

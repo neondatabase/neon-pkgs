@@ -188,7 +188,7 @@ describe("install scope telemetry", () => {
 		expect(takeCommandSuccessExtras()).toEqual({ scope: "global" });
 	});
 
-	test("mcp --mcp-config-location project records project scope after writing the project Cursor config", async () => {
+	test("mcp --project records project scope after writing the project Cursor config", async () => {
 		const cwd = scratch();
 		mkdirSync(join(cwd, ".cursor"));
 		process.chdir(cwd);
@@ -196,7 +196,7 @@ describe("install scope telemetry", () => {
 			...baseProps(cwd),
 			yes: true,
 			oauth: true,
-			mcpConfigLocation: "project",
+			project: true,
 			agent: ["cursor"],
 		});
 		expect(

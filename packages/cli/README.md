@@ -787,7 +787,7 @@ Recommended installs the Neon plugin for every detected agent (global config, pr
 
 Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser. `-y` with `--project-id` or other account flags links when the CLI is already signed in; otherwise it errors and names `neon auth` or `--claimable`.
 
-Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-config-location`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--mcp-config-location` is where the config is written: `global` is user config, `project` is this directory. `--mcp-project-scoped` limits MCP tools to the linked Neon project. Those two flags are the same on `neon mcp`. Omitted `--mcp-project-scoped` is false, including in Custom; there is no prompt. `--no-agent-setup` skips agent setup.
+Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-config-location`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--mcp-config-location` is where the config is written: `global` maps to `neon mcp`, and `project` maps to `neon mcp --project`. `--mcp-project-scoped` limits MCP tools to the linked Neon project by passing its ID to `neon mcp --project-id`. Omitted is false, including in Custom; there is no prompt. `--no-agent-setup` skips agent setup.
 
 Empty directories are set up in place. `-y` does **not** scaffold a starter app. Scaffold with `--template <id>` or `neon bootstrap`. `--template` copies the starter, then continues the rest of init, so it works with `-y` and the other flags.
 
@@ -829,19 +829,13 @@ $ neon mcp --oauth
 # Named agents.
 $ neon mcp --agent cursor --agent claude-code
 
-# Project-level config (this directory). A minted key is still account-wide unless a project is pinned.
-$ neon mcp --mcp-config-location project
-
-# Same flags as neon init: project config, tools limited to the linked project.
-$ neon mcp --mcp-config-location project --mcp-project-scoped
+# Project-level config. A minted key is still account-wide unless a project is pinned.
+$ neon mcp --project
 
 # Hide write tools. Does not change the minted key.
 $ neon mcp --read-only
 
-# Limit MCP tools to the linked project. A newly minted API key is limited to that project.
-$ neon mcp --mcp-project-scoped
-
-# Pin MCP tools to an explicit project id. Cannot be combined with --mcp-project-scoped.
+# Pin MCP tools to one project. A newly minted API key is limited to that project.
 $ neon mcp --project-id <project-id>
 
 # Limit which tool categories are visible.
@@ -850,7 +844,7 @@ $ neon mcp --category querying --category schema
 
 On a TTY the command asks for config location (global is the default), then agents, then API key vs OAuth, then writes. Detected agents start selected: globally installed agents or project-folder markers such as `.cursor` when the install is project.
 
-`-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for globally installed apps, else the host CLI agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--agent`, `--mcp-config-location`, `--mcp-project-scoped`, `--oauth`, `--read-only`, `--project-id` and `--category` still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. `--mcp-project-scoped` adds `?projectId=` from the linked `.neon` project. `--project-id` does the same for an explicit id. Global and project config never add that param unless you pass one of those flags. Without a TTY, pass `-y` to mint into every detected agent, `--agent <name>` to name them, or `--oauth` to write the URL only. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. `neon mcp --help` lists the server URL, those `-y` defaults, the supported agent names, and the `--category` values.
+`-y` skips those questions. `neon mcp -y` writes `https://mcp.neon.tech/mcp` into global config for globally installed apps, else the host CLI agent, reuses an existing Neon MCP API key or mints an account-wide key, leaves write tools enabled, exposes every tool category, and does not pin a project (including from `.neon`). `--agent`, `--project`, `--oauth`, `--read-only`, `--project-id` and `--category` still apply with `-y`. `--read-only` and `--category` are flags only and are never prompted. A linked project-folder install asks whether to pin MCP tools to that `.neon` project (`?projectId=`). If you pin and selected API-key auth, the minted key is limited to that project too. An unlinked project folder does not ask. Global installs never add that param unless you pass `--project-id`. Without a TTY, pass `-y` to mint into every detected agent, `--agent <name>` to name them, or `--oauth` to write the URL only. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick. `neon mcp --help` lists the server URL, those `-y` defaults, the supported agent names, and the `--category` values.
 
 Supported agents: `antigravity`, `cline`, `cline-cli`, `claude-code`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `mcporter`, `opencode`, `vscode`, `windsurf`, `zed`. Project installs drop `antigravity`, `cline`, `cline-cli`, `goose` and `windsurf`. `claude-desktop` is a known name that is then skipped.
 

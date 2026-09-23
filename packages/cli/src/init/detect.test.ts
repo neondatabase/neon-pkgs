@@ -94,7 +94,7 @@ describe("planInitToolingSteps", () => {
 		).toEqual([["skills", "-y", "--agent", "cursor", "--agent", "codex"]]);
 	});
 
-	test("oauth MCP forwards --mcp-config-location and --mcp-project-scoped", () => {
+	test("oauth MCP includes --project-id when pinned", () => {
 		expect(
 			planInitToolingSteps({
 				tooling: {
@@ -106,8 +106,7 @@ describe("planInitToolingSteps", () => {
 				pluginScope: "project",
 				skillsGlobal: false,
 				mcpOauth: true,
-				mcpConfigLocation: "project",
-				mcpProjectScoped: true,
+				mcpProjectId: "proj-pin",
 			}),
 		).toEqual([
 			["skills", "-y", "--agent", "opencode"],
@@ -115,9 +114,8 @@ describe("planInitToolingSteps", () => {
 				"mcp",
 				"-y",
 				"--oauth",
-				"--mcp-config-location",
-				"project",
-				"--mcp-project-scoped",
+				"--project-id",
+				"proj-pin",
 				"--agent",
 				"opencode",
 			],

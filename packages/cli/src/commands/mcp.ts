@@ -30,9 +30,7 @@ import { writer } from "../writer.js";
 
 type McpProps = CommonProps & {
 	oauth?: boolean;
-	mcpConfigLocation?: "global" | "project";
 	project?: boolean;
-	mcpProjectScoped?: boolean;
 	yes?: boolean;
 	agent?: string[];
 	readOnly?: boolean;
@@ -65,30 +63,18 @@ export const builder = (argv: yargs.Argv) =>
 				describe:
 					"Write the server URL only. The agent prompts for Neon sign-in on first use. No CLI login, no API key minted. Skips the auth question",
 			},
-			"mcp-config-location": {
-				type: "string",
-				choices: ["global", "project"] as const,
-				describe:
-					"Where to write MCP config: global (user config) or project (this directory). Skips the config-location question",
-			},
 			project: {
 				type: "boolean",
 				default: false,
-				hidden: true,
-				describe: "Alias for --mcp-config-location project",
-			},
-			"mcp-project-scoped": {
-				type: "boolean",
-				default: false,
 				describe:
-					"Limit MCP tools to the linked project (?projectId= from .neon). A newly minted API key is limited to that project",
+					"Write project-level MCP config. Skips the config-location question. A linked project-folder install may still pin a project and scope a newly minted key",
 			},
 			yes: {
 				alias: "y",
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Defaults listed below. --agent, --mcp-config-location, --mcp-project-scoped, --oauth, --read-only, --project-id and --category still apply",
+					"Skip prompts. Defaults listed below. --agent, --project, --oauth, --read-only, --project-id and --category still apply",
 			},
 			agent: {
 				alias: "a",
@@ -124,7 +110,7 @@ export const builder = (argv: yargs.Argv) =>
 			"project-id": {
 				type: "string",
 				describe:
-					"Pin MCP tools to one Neon project (?projectId=). A newly minted API key is limited to that project. Cannot be combined with --mcp-project-scoped",
+					"Pin MCP tools to one Neon project (?projectId=). A newly minted API key is limited to that project. A linked project-folder install asks the same when you pick API-key auth",
 				coerce: single("project-id"),
 			},
 			category: {
@@ -174,22 +160,11 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 mcp --agent cursor --agent claude-code",
 			"Install into specific agents",
 		)
-		.example(
-			"$0 mcp --mcp-config-location project",
-			"Write project-level config",
-		)
-		.example(
-			"$0 mcp --mcp-project-scoped",
-			"Limit tools to the linked .neon project",
-		)
-		.example(
-			"$0 mcp --mcp-config-location project --mcp-project-scoped",
-			"Project config, tools limited to the linked project",
-		)
+		.example("$0 mcp --project", "Write project-level config")
 		.example("$0 mcp --read-only", "Hide write tools via ?readonly=true")
 		.example(
 			"$0 mcp --project-id <id>",
-			"Pin tools to an explicit project via ?projectId=",
+			"Pin tools to one project via ?projectId=",
 		)
 		.example(
 			"$0 mcp --category querying --category schema",
@@ -199,10 +174,7 @@ export const builder = (argv: yargs.Argv) =>
 			helpEpilogue(
 				`Installs ${NEON_MCP_URL}`,
 				helpCsv("Supported agents at global scope", mcpGlobalAgents),
-				helpCsv(
-					"--mcp-config-location project does not support",
-					mcpProjectDroppedAgents,
-				),
+				helpCsv("--project does not support", mcpProjectDroppedAgents),
 				helpCsv("Supported categories", NEON_MCP_CATEGORIES),
 				"neon mcp -y:",
 				"  global config",
@@ -220,11 +192,7 @@ export const handler = async (props: McpProps) => {
 	const interactive = canPickAgentsInteractively() && props.yes !== true;
 	const linkedProjectId = readContextFile(props.contextFile).projectId;
 	const plan = await resolveMcpPlan({
-		...(props.mcpConfigLocation !== undefined
-			? { mcpConfigLocation: props.mcpConfigLocation }
-			: {}),
 		project: props.project === true,
-		mcpProjectScoped: props.mcpProjectScoped === true,
 		oauth: props.oauth === true,
 		agents: props.agent ?? [],
 		yes: props.yes === true,

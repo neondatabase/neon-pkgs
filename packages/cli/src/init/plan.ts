@@ -401,8 +401,8 @@ export const planInitToolingSteps = (input: {
 	pluginScope: "global" | "project";
 	skillsGlobal: boolean;
 	mcpOauth: boolean;
-	mcpConfigLocation?: "global" | "project";
-	mcpProjectScoped?: boolean;
+	mcpProject?: boolean;
+	mcpProjectId?: string;
 	skills?: readonly string[];
 }): InitStep[] => {
 	const y = input.yes ? (["-y"] as const) : [];
@@ -425,11 +425,9 @@ export const planInitToolingSteps = (input: {
 		"mcp",
 		...y,
 		...(input.mcpOauth ? (["--oauth"] as const) : []),
-		...(input.mcpConfigLocation === "project"
-			? (["--mcp-config-location", "project"] as const)
-			: []),
-		...(input.mcpProjectScoped === true
-			? (["--mcp-project-scoped"] as const)
+		...(input.mcpProject === true ? (["--project"] as const) : []),
+		...(input.mcpProjectId !== undefined
+			? (["--project-id", input.mcpProjectId] as const)
 			: []),
 	];
 	const named = (ids: readonly AgentType[]): string[] => agentArgv(ids);

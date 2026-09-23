@@ -122,7 +122,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "string",
 			choices: ["global", "project"] as const,
 			describe:
-				"Where to configure the Neon MCP server: global (user config) or project (this directory). Same as neon mcp --mcp-config-location. Selects skills and MCP setup",
+				"Where to configure the Neon MCP server: global (user config, same as neon mcp) or project (this directory, same as neon mcp --project). Selects skills and MCP setup",
 		})
 		.option("mcp-auth", {
 			type: "string",
@@ -134,7 +134,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Limit MCP tools to the linked project, same as neon mcp --mcp-project-scoped. Selects skills and MCP setup",
+				"Limit MCP tools to the linked project, same as neon mcp --project-id. Selects skills and MCP setup",
 		})
 		.option("data", {
 			hidden: true,

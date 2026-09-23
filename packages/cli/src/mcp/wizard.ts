@@ -17,7 +17,7 @@ const restoreCursorOnAbort = (state: { aborted: boolean }) => {
 export const pickMcpScope = async (): Promise<McpInstallScope> => {
 	if (!canPickAgentsInteractively()) {
 		throw new Error(
-			"No interactive terminal. Pass --mcp-config-location project for project config, or -y for global.",
+			"No interactive terminal. Pass --project for project config, or -y for global.",
 		);
 	}
 	const { scope } = await prompts({
@@ -74,4 +74,23 @@ export const pickMcpAuth = async (): Promise<McpAuthKind> => {
 		throw new Error("Aborted.");
 	}
 	return auth;
+};
+
+export const pickMcpProjectPin = async (
+	linkedProjectId: string,
+	willMintKey = false,
+): Promise<boolean> => {
+	if (!canPickAgentsInteractively()) {
+		return false;
+	}
+	const { pin } = await prompts({
+		onState: restoreCursorOnAbort,
+		type: "confirm",
+		name: "pin",
+		message: willMintKey
+			? `Pin MCP tools to the linked project ${linkedProjectId}? A newly minted API key would be limited to that project.`
+			: `Pin MCP tools to the linked project ${linkedProjectId}?`,
+		initial: true,
+	});
+	return pin === true;
 };

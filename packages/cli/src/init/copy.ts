@@ -95,12 +95,6 @@ export const YES_LINK_NEEDS_AUTH =
 export const MCP_SCOPED_NEEDS_PROJECT =
 	"--mcp-project-scoped requires a linked project. Link a project first, or omit --mcp-project-scoped.";
 
-export const MCP_SCOPED_AND_PROJECT_ID =
-	"--mcp-project-scoped cannot be combined with --project-id. Pass one.";
-
-export const MCP_CONFIG_LOCATION_PROJECT_CONFLICT =
-	"Cannot pass --project with --mcp-config-location global. Use --mcp-config-location project.";
-
 export const namedAgentsUnavailable = (ids: readonly string[]): string =>
 	`--agent ${ids.join(", ")} cannot install this tooling. Pass agents that support it, or omit --agent.`;
 

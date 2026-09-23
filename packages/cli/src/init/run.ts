@@ -325,7 +325,7 @@ const skillsMcpTooling = (
 	scope: "global" | "project",
 	fallback: boolean,
 ): InitToolingPlan => {
-	const mcpScope = scope === "project" ? "project" : "global";
+	const mcpConfigLocation = scope === "project" ? "project" : "global";
 	let selected = ids;
 	if (selected.length === 0 && fallback) {
 		selected = FALLBACK_SKILLS_AGENTS;
@@ -336,7 +336,7 @@ const skillsMcpTooling = (
 			skillsInstallableAgents().includes(id),
 		),
 		mcpAgents: selected.filter((id) =>
-			mcpInstallableAgents(mcpScope).includes(id),
+			mcpInstallableAgents(mcpConfigLocation).includes(id),
 		),
 	};
 };
@@ -796,10 +796,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			pluginScope,
 			skillsGlobal: recommended,
 			mcpOauth,
-			...(mcpConfigLocation === "project" ? { mcpConfigLocation } : {}),
-			...(props.mcpProjectScoped === true
-				? { mcpProjectScoped: true }
-				: {}),
+			mcpProject: mcpConfigLocation === "project",
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
 		});
 		if (toolingSteps.length > 0) {
@@ -923,11 +920,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 
 		if (delayMcp && tooling.setup !== "skip") {
+			const linkedId = readContextFile(contextFile).projectId;
+			let pinId: string | undefined;
 			if (props.mcpProjectScoped === true) {
-				const linkedId = readContextFile(contextFile).projectId;
 				if (typeof linkedId !== "string" || linkedId.length === 0) {
 					throw new Error(MCP_SCOPED_NEEDS_PROJECT);
 				}
+				pinId = linkedId;
 			}
 			const mcpOnly: InitToolingPlan =
 				tooling.setup === "skills-mcp"
@@ -949,12 +948,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				pluginScope,
 				skillsGlobal: recommended,
 				mcpOauth,
-				...(mcpConfigLocation === "project"
-					? { mcpConfigLocation }
-					: {}),
-				...(props.mcpProjectScoped === true
-					? { mcpProjectScoped: true }
-					: {}),
+				mcpProject: mcpConfigLocation === "project",
+				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
 			});
 			if (mcpSteps.length > 0) {
 				await runInitSteps(mcpSteps, {
