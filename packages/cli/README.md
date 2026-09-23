@@ -787,7 +787,7 @@ Recommended installs the Neon plugin for every detected agent (global config, pr
 
 Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser. `-y` with `--project-id` or other account flags links when the CLI is already signed in; otherwise it errors and names `neon auth` or `--claimable`.
 
-Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-scope`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--no-agent-setup` skips agent setup.
+Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-scope`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--mcp-scope` is where the config is written: `global` is user config (`neon mcp`), `project` is this directory (`neon mcp --project`). `--mcp-project-scoped` limits MCP tools to the linked Neon project (`neon mcp --project-id`). Omitted is false, including in Custom; there is no prompt. `--no-agent-setup` skips agent setup.
 
 Empty directories are set up in place. `-y` does **not** scaffold a starter app. Scaffold with `--template <id>` or `neon bootstrap`. `--template` copies the starter, then continues the rest of init, so it works with `-y` and the other flags.
 
@@ -798,6 +798,8 @@ $ neon init --template hono -y
 $ neon init --agent cursor --agent claude-code --no-link
 $ neon init --no-agent-setup --claimable
 $ neon init -y --skill neon --mcp-auth oauth --mcp-scope project
+$ neon init -y --agent cursor --project-id <project-id> \
+    --mcp-auth oauth --mcp-scope project --mcp-project-scoped
 ```
 
 Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is Recommended. `-y` with `--skill`, MCP flags, `--no-agent-setup`, or `--claimable` is Custom: those flags, Recommended defaults for the rest. `--skill` selects skills (not the plugin). MCP flags select skills and MCP. `--agent` skips agent selection and, without `-y`, selects Custom. `--no-link` skips project linking without asking. `--no-config` skips `neon.ts`. `--services` implies creating `neon.ts`. `--org-id`, `--project-id`, `--project-name`, `--region-id`, and `--branch` select linking.
