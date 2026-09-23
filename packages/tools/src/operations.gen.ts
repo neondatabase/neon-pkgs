@@ -1177,6 +1177,7 @@ export const operationFactories = {
 	"lsn": zod.zCreateSnapshotQuery.shape["lsn"].optional(),
 	"timestamp": zod.zCreateSnapshotQuery.shape["timestamp"].optional(),
 	"name": zod.zCreateSnapshotQuery.shape["name"].optional(),
+	"slug": zod.zCreateSnapshotQuery.shape["slug"].optional(),
 	"expires_at": zod.zCreateSnapshotQuery.shape["expires_at"].optional(),
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
@@ -1191,7 +1192,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.createSnapshot({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
-			query: optionalGroup({ "lsn": input["lsn"], "timestamp": input["timestamp"], "name": input["name"], "expires_at": input["expires_at"] }, false),
+			query: optionalGroup({ "lsn": input["lsn"], "timestamp": input["timestamp"], "name": input["name"], "slug": input["slug"], "expires_at": input["expires_at"] }, false),
 			client,
 			signal,
 			throwOnError: true,

@@ -8023,6 +8023,18 @@
                         }
                     },
                     {
+                        "name": "slug",
+                        "in": "query",
+                        "description": "User-defined snapshot resource ID. Must be unique within the project.\nMust start with a lowercase letter, contain only lowercase letters, numbers, and hyphens,\nand end with a letter or number. If omitted, the control plane generates a value.\n",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 63,
+                            "pattern": "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$"
+                        }
+                    },
+                    {
                         "name": "expires_at",
                         "in": "query",
                         "description": "The time at which the snapshot will be automatically deleted. RFC 3339 format.\n",
@@ -16513,6 +16525,10 @@
                     "name": {
                         "type": "string",
                         "description": "Human-readable label for the snapshot."
+                    },
+                    "slug": {
+                        "type": "string",
+                        "description": "Snapshot resource ID, unique within the project. Distinct from the internal snapshot ID and display name."
                     },
                     "lsn": {
                         "type": "string",
