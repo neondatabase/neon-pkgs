@@ -27,10 +27,19 @@ describe("raceSigint", () => {
 		resolveWork?.();
 	});
 
-	test("does not react to a signal after work has already settled", async () => {
+	test("removes its SIGINT listener once work settles", async () => {
+		const before = process.listenerCount("SIGINT");
 		await expect(raceSigint(Promise.resolve("done"))).resolves.toBe("done");
-		// The listener is removed on settlement; emitting SIGINT here must not be observed
-		// by this (already-resolved) race and must not throw.
-		expect(() => process.emit("SIGINT")).not.toThrow();
+		expect(process.listenerCount("SIGINT")).toBe(before);
+	});
+
+	test("removes its SIGINT listener after winning the race", async () => {
+		const before = process.listenerCount("SIGINT");
+		const work = new Promise<void>(() => {});
+		const raced = raceSigint(work);
+		await microtask();
+		process.emit("SIGINT");
+		await expect(raced).rejects.toBeInstanceOf(InitCancelled);
+		expect(process.listenerCount("SIGINT")).toBe(before);
 	});
 });
