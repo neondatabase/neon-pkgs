@@ -20,7 +20,7 @@ import {
   createBranchFromPolicyOnCheckout,
 } from './config.js';
 import { handler as linkHandler } from './link.js';
-import { GIT_HOOK_ENV_FLAG, readGitContext } from '../utils/git.js';
+import { buildCheckoutEvent, readGitContext } from '../utils/git.js';
 import {
   buildHookBranch,
   loadHooks,
@@ -30,7 +30,7 @@ import {
   runCreateAfterHook,
   runCreateBeforeHook,
 } from '../utils/hooks.js';
-import type { GitContext, Hooks } from '@neondatabase/config';
+import type { CheckoutEvent, GitContext, Hooks } from '@neondatabase/config';
 
 type CheckoutProps = CommonProps & {
   projectId?: string;
@@ -105,17 +105,13 @@ export const handler = async (props: CheckoutProps) => {
   // `checkout.before` hook may rewrite the branch name (e.g. map a git branch to a Neon
   // slug) before we resolve it; it runs before resolution because the name isn't pinned yet.
   const cwd = process.cwd();
-  const git = readGitContext(cwd, {
-    triggeredByGitHook: process.env[GIT_HOOK_ENV_FLAG] === '1',
-  });
+  const git = readGitContext(cwd);
+  // `event` reflects the raw trigger data (the git branch, or the id/name as typed) — not
+  // anything a hook already rewrote. See `CheckoutEvent` in @neondatabase/config.
+  const event = buildCheckoutEvent(git, props.id);
   const hooks = await loadHooks(cwd);
   if (props.id) {
-    const renamed = await runCheckoutBeforeHook({
-      hooks,
-      inputName: props.id,
-      git,
-      cwd,
-    });
+    const renamed = await runCheckoutBeforeHook({ hooks, event, git, cwd });
     if (renamed && renamed !== props.id) {
       log.info(
         '%s checkout.before hook mapped %s → %s',
@@ -130,7 +126,7 @@ export const handler = async (props: CheckoutProps) => {
   const { branchId, branchName, created, policyApplied } = await resolveBranchId(
     props,
     projectId,
-    { hooks, git, cwd },
+    { hooks, git, event, cwd },
   );
 
   const orgId = await resolveOrgId(props, projectId);
@@ -197,10 +193,10 @@ export const handler = async (props: CheckoutProps) => {
         created,
       });
       if (hooks?.checkout?.after) {
-        await runCheckoutAfterHook({ hooks, branch, env, git, cwd });
+        await runCheckoutAfterHook({ hooks, branch, env, git, event, cwd });
       }
       if (needsCreateAfter) {
-        await runCreateAfterHook({ hooks, branch, env, git, cwd });
+        await runCreateAfterHook({ hooks, branch, env, git, event, cwd });
       }
     }
   }
@@ -210,6 +206,7 @@ export const handler = async (props: CheckoutProps) => {
 type HookCtx = {
   hooks: Hooks | undefined;
   git: GitContext;
+  event: CheckoutEvent;
   cwd: string;
 };
 
@@ -331,6 +328,7 @@ const createCheckoutBranch = async (
     hooks: hookCtx.hooks,
     branchName: name,
     git: hookCtx.git,
+    event: hookCtx.event,
     cwd: hookCtx.cwd,
   });
 

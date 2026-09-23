@@ -9,15 +9,15 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
-import type { GitContext } from '@neondatabase/config';
+import type { CheckoutEvent, GitContext } from '@neondatabase/config';
 
 import { log } from '../log.js';
 
 /**
  * Env var the installed `post-checkout` hook sets before invoking `neonctl git sync`, so the
- * CLI can tell a hook-triggered run from a manual `neonctl checkout` / `deploy`. Surfaced on
- * {@link GitContext.triggeredByGitHook} so a `checkout.before` hook can decide whether to
- * follow `git.branch` or honor the explicit `inputName`.
+ * CLI can tell a hook-triggered run from a manual `neonctl checkout` / `deploy`. Read by
+ * {@link buildCheckoutEvent} to construct the hook contexts' `event` field (see
+ * `CheckoutEvent` in `@neondatabase/config`) — not carried on {@link GitContext} itself.
  */
 export const GIT_HOOK_ENV_FLAG = 'NEON_GIT_HOOK';
 
@@ -128,19 +128,13 @@ export const gitPull = (cwd: string): GitPullOutcome => {
  * uninstalled) it returns `{ available: false, … }` with the optional fields absent.
  *
  * @param cwd directory to inspect.
- * @param options.triggeredByGitHook whether this invocation came from the post-checkout hook.
  */
-export const readGitContext = (
-  cwd: string,
-  options: { triggeredByGitHook?: boolean } = {},
-): GitContext => {
-  const triggeredByGitHook = options.triggeredByGitHook ?? false;
+export const readGitContext = (cwd: string): GitContext => {
   if (!isGitRepo(cwd)) {
     return {
       available: false,
       isDetached: false,
       isDirty: false,
-      triggeredByGitHook,
     };
   }
 
@@ -160,7 +154,6 @@ export const readGitContext = (
     available: true,
     isDetached: branch === undefined,
     isDirty: status !== undefined && status.length > 0,
-    triggeredByGitHook,
     ...(branch ? { branch } : {}),
     ...(sha ? { sha } : {}),
     ...(shortSha ? { shortSha } : {}),
@@ -169,6 +162,25 @@ export const readGitContext = (
     ...(repoRoot ? { repoRoot } : {}),
   };
 };
+
+/**
+ * Construct the `CheckoutEvent` a checkout/create hook context receives: `"git-checkout"`
+ * when the installed `post-checkout` hook triggered this run (env flag {@link
+ * GIT_HOOK_ENV_FLAG}), carrying the git branch that triggered it — `inputName` is never set
+ * on this variant, since nothing was typed at a prompt. `"neon-checkout"` for an explicit
+ * `neonctl checkout` invocation, carrying whatever name/id the user passed (`undefined` for
+ * the interactive picker). `git sync` bails out before ever reaching a checkout when `git`
+ * is detached/unavailable (see `sync` in `commands/git.ts`), so a defined `git.branch` is
+ * expected whenever the env flag is set; falling back to `""` is a defensive guard against
+ * that invariant breaking, not an expected runtime path.
+ */
+export const buildCheckoutEvent = (
+  git: GitContext,
+  inputName: string | undefined,
+): CheckoutEvent =>
+  process.env[GIT_HOOK_ENV_FLAG] === '1'
+    ? { type: 'git-checkout', gitBranch: git.branch ?? '' }
+    : { type: 'neon-checkout', inputName };
 
 /**
  * Path to the `post-checkout` hook for a repo. Uses `git rev-parse --git-path hooks` so it

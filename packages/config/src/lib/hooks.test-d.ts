@@ -12,11 +12,13 @@ import type {
 	CheckoutAfterContext,
 	CheckoutBeforeContext,
 	CheckoutBeforeResult,
+	CheckoutEvent,
 	Config,
 	CreateAfterContext,
 	CreateBeforeContext,
 	DeployAfterContext,
 	DeployBeforeContext,
+	DeployEvent,
 	GitContext,
 	HookBranch,
 	Hooks,
@@ -38,9 +40,6 @@ describe("GitContext shape", () => {
 		expectTypeOf<GitContext["available"]>().toEqualTypeOf<boolean>();
 		expectTypeOf<GitContext["isDetached"]>().toEqualTypeOf<boolean>();
 		expectTypeOf<GitContext["isDirty"]>().toEqualTypeOf<boolean>();
-		expectTypeOf<
-			GitContext["triggeredByGitHook"]
-		>().toEqualTypeOf<boolean>();
 		expectTypeOf<GitContext["branch"]>().toEqualTypeOf<
 			string | undefined
 		>();
@@ -51,6 +50,36 @@ describe("GitContext shape", () => {
 		expectTypeOf<GitContext["repoRoot"]>().toEqualTypeOf<
 			string | undefined
 		>();
+		// @ts-expect-error triggeredByGitHook moved to `event.type` on each hook context.
+		expectTypeOf<GitContext["triggeredByGitHook"]>();
+	});
+});
+
+describe("CheckoutEvent / DeployEvent shape", () => {
+	test("CheckoutEvent narrows event.inputName by event.type", () => {
+		expectTypeOf<CheckoutEvent>().toEqualTypeOf<
+			| { type: "git-checkout"; gitBranch: string; inputName?: undefined }
+			| { type: "neon-checkout"; inputName?: string }
+		>();
+	});
+
+	test("narrowed to git-checkout: inputName is undefined, gitBranch is a string", () => {
+		type GitCheckout = Extract<CheckoutEvent, { type: "git-checkout" }>;
+		expectTypeOf<GitCheckout["inputName"]>().toEqualTypeOf<undefined>();
+		expectTypeOf<GitCheckout["gitBranch"]>().toEqualTypeOf<string>();
+	});
+
+	test("narrowed to neon-checkout: inputName is string | undefined, no gitBranch", () => {
+		type NeonCheckout = Extract<CheckoutEvent, { type: "neon-checkout" }>;
+		expectTypeOf<NeonCheckout["inputName"]>().toEqualTypeOf<
+			string | undefined
+		>();
+		// @ts-expect-error a neon-checkout event carries no gitBranch.
+		expectTypeOf<NeonCheckout["gitBranch"]>();
+	});
+
+	test("DeployEvent is currently a single-member union (deploy is never git-triggered)", () => {
+		expectTypeOf<DeployEvent>().toEqualTypeOf<{ type: "neon-deploy" }>();
 	});
 });
 
@@ -116,10 +145,10 @@ describe("HookBranch shape", () => {
 });
 
 describe("hook context shapes per phase", () => {
-	test("checkout.before sees only the input name + git (no branch/env)", () => {
+	test("checkout.before sees event + git (no branch/env)", () => {
 		expectTypeOf<
-			CheckoutBeforeContext["inputName"]
-		>().toEqualTypeOf<string>();
+			CheckoutBeforeContext["event"]
+		>().toEqualTypeOf<CheckoutEvent>();
 		expectTypeOf<
 			CheckoutBeforeContext["git"]
 		>().toEqualTypeOf<GitContext>();
@@ -129,7 +158,7 @@ describe("hook context shapes per phase", () => {
 		expectTypeOf<CheckoutBeforeContext["env"]>();
 	});
 
-	test("checkout.after sees branch + env (NeonEnv<C>) + git", () => {
+	test("checkout.after sees branch + env (NeonEnv<C>) + git + event", () => {
 		expectTypeOf<
 			CheckoutAfterContext["branch"]
 		>().toEqualTypeOf<HookBranch>();
@@ -137,20 +166,26 @@ describe("hook context shapes per phase", () => {
 			NeonEnv<Config>
 		>();
 		expectTypeOf<CheckoutAfterContext["git"]>().toEqualTypeOf<GitContext>();
+		expectTypeOf<
+			CheckoutAfterContext["event"]
+		>().toEqualTypeOf<CheckoutEvent>();
 	});
 
-	test("create.before sees only the branch name + git (no branch/env — cannot rename)", () => {
+	test("create.before sees the branch name + git + triggering event (no branch/env — cannot rename)", () => {
 		expectTypeOf<
 			CreateBeforeContext["branchName"]
 		>().toEqualTypeOf<string>();
 		expectTypeOf<CreateBeforeContext["git"]>().toEqualTypeOf<GitContext>();
+		expectTypeOf<
+			CreateBeforeContext["event"]
+		>().toEqualTypeOf<CheckoutEvent>();
 		// @ts-expect-error create.before runs before creation — there is no `branch`.
 		expectTypeOf<CreateBeforeContext["branch"]>();
 		// @ts-expect-error create.before runs before env is pulled — there is no `env`.
 		expectTypeOf<CreateBeforeContext["env"]>();
 	});
 
-	test("create.after sees branch + env (NeonEnv<C>) + git", () => {
+	test("create.after sees branch + env (NeonEnv<C>) + git + event", () => {
 		expectTypeOf<
 			CreateAfterContext["branch"]
 		>().toEqualTypeOf<HookBranch>();
@@ -158,18 +193,24 @@ describe("hook context shapes per phase", () => {
 			NeonEnv<Config>
 		>();
 		expectTypeOf<CreateAfterContext["git"]>().toEqualTypeOf<GitContext>();
+		expectTypeOf<
+			CreateAfterContext["event"]
+		>().toEqualTypeOf<CheckoutEvent>();
 	});
 
-	test("deploy.before sees branch + git but no env", () => {
+	test("deploy.before sees branch + git + event but no env", () => {
 		expectTypeOf<
 			DeployBeforeContext["branch"]
 		>().toEqualTypeOf<HookBranch>();
 		expectTypeOf<DeployBeforeContext["git"]>().toEqualTypeOf<GitContext>();
+		expectTypeOf<
+			DeployBeforeContext["event"]
+		>().toEqualTypeOf<DeployEvent>();
 		// @ts-expect-error deploy.before runs before env is pulled — there is no `env`.
 		expectTypeOf<DeployBeforeContext["env"]>();
 	});
 
-	test("deploy.after sees branch + env (NeonEnv<C>) + result (PushResult) + git", () => {
+	test("deploy.after sees branch + env (NeonEnv<C>) + result (PushResult) + git + event", () => {
 		expectTypeOf<
 			DeployAfterContext["branch"]
 		>().toEqualTypeOf<HookBranch>();
@@ -180,6 +221,9 @@ describe("hook context shapes per phase", () => {
 			DeployAfterContext["result"]
 		>().toEqualTypeOf<PushResult>();
 		expectTypeOf<DeployAfterContext["git"]>().toEqualTypeOf<GitContext>();
+		expectTypeOf<
+			DeployAfterContext["event"]
+		>().toEqualTypeOf<DeployEvent>();
 	});
 });
 
@@ -196,7 +240,7 @@ describe("ShellHook union", () => {
 });
 
 describe("defineConfig experimental.hooks — positive (every valid form type-checks)", () => {
-	test("function-form create hooks; context is inferred", () => {
+	test("function-form create hooks; context (incl. event) is inferred", () => {
 		defineConfig({
 			experimental: {
 				hooks: {
@@ -208,6 +252,9 @@ describe("defineConfig experimental.hooks — positive (every valid form type-ch
 							expectTypeOf(
 								ctx.branchName,
 							).toEqualTypeOf<string>();
+							expectTypeOf(
+								ctx.event,
+							).toEqualTypeOf<CheckoutEvent>();
 						},
 						after: async (ctx) => {
 							expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
@@ -223,7 +270,7 @@ describe("defineConfig experimental.hooks — positive (every valid form type-ch
 		});
 	});
 
-	test("function-form checkout + deploy hooks; contexts are inferred", () => {
+	test("function-form checkout hooks; event.type discriminates event.inputName", () => {
 		defineConfig({
 			experimental: {
 				hooks: {
@@ -232,8 +279,22 @@ describe("defineConfig experimental.hooks — positive (every valid form type-ch
 							expectTypeOf(
 								ctx,
 							).toEqualTypeOf<CheckoutBeforeContext>();
-							expectTypeOf(ctx.inputName).toEqualTypeOf<string>();
-							return { name: `preview/${ctx.inputName}` };
+							if (ctx.event.type === "neon-checkout") {
+								expectTypeOf(ctx.event.inputName).toEqualTypeOf<
+									string | undefined
+								>();
+								return {
+									name: `preview/${ctx.event.inputName}`,
+								};
+							}
+							// Narrowed to the git-checkout member: inputName is undefined,
+							// and `event.gitBranch` is available to derive a name from.
+							expectTypeOf(
+								ctx.event.inputName,
+							).toEqualTypeOf<undefined>();
+							expectTypeOf(
+								ctx.event.gitBranch,
+							).toEqualTypeOf<string>();
 						},
 						after: async (ctx) => {
 							// Bare policy (no services): env is exactly postgres + branch.
@@ -246,11 +307,17 @@ describe("defineConfig experimental.hooks — positive (every valid form type-ch
 							expectTypeOf(
 								ctx.branch.created,
 							).toEqualTypeOf<boolean>();
+							expectTypeOf(
+								ctx.event,
+							).toEqualTypeOf<CheckoutEvent>();
 						},
 					},
 					deploy: {
 						before: (ctx) => {
 							expectTypeOf(ctx.branch.id).toEqualTypeOf<string>();
+							expectTypeOf(
+								ctx.event,
+							).toEqualTypeOf<DeployEvent>();
 						},
 						after: async (ctx) => {
 							expectTypeOf(
@@ -259,6 +326,9 @@ describe("defineConfig experimental.hooks — positive (every valid form type-ch
 							expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
 								"postgres" | "branch"
 							>();
+							expectTypeOf(
+								ctx.event,
+							).toEqualTypeOf<DeployEvent>();
 						},
 					},
 				},
@@ -397,16 +467,21 @@ describe("defineConfig experimental.hooks — negative (@ts-expect-error)", () =
 
 	test("reading a field absent from a phase context is a type error", () => {
 		const ctx: CheckoutBeforeContext = {
-			inputName: "x",
+			event: { type: "neon-checkout", inputName: "x" },
 			git: {
 				available: false,
 				isDetached: false,
 				isDirty: false,
-				triggeredByGitHook: false,
 			},
 		};
 		// @ts-expect-error before-checkout context exposes no `branch`.
 		ctx.branch;
+	});
+
+	test("a git-checkout event cannot carry a gitBranch-less shape (type required)", () => {
+		// @ts-expect-error a git-checkout event requires `gitBranch`.
+		const event: CheckoutEvent = { type: "git-checkout" };
+		void event;
 	});
 });
 

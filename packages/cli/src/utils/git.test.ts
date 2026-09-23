@@ -11,7 +11,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import {
+  buildCheckoutEvent,
   currentGitBranch,
+  GIT_HOOK_ENV_FLAG,
   gitPull,
   hasUpstream,
   installPostCheckoutHook,
@@ -53,7 +55,6 @@ describe('git facts', () => {
     const ctx = readGitContext(repo);
     expect(ctx.available).toBe(false);
     expect(ctx.branch).toBeUndefined();
-    expect(ctx.triggeredByGitHook).toBe(false);
   });
 
   test('reads the current branch, sha, and clean/dirty state', () => {
@@ -73,11 +74,32 @@ describe('git facts', () => {
     expect(readGitContext(repo).isDirty).toBe(true);
   });
 
-  test('threads the triggeredByGitHook flag through', () => {
+  test('buildCheckoutEvent: "neon-checkout" outside the git hook, carrying inputName', () => {
+    delete process.env.NEON_GIT_HOOK;
     initRepo(repo);
-    expect(
-      readGitContext(repo, { triggeredByGitHook: true }).triggeredByGitHook,
-    ).toBe(true);
+    const git = readGitContext(repo);
+    expect(buildCheckoutEvent(git, 'feature/billing')).toEqual({
+      type: 'neon-checkout',
+      inputName: 'feature/billing',
+    });
+    expect(buildCheckoutEvent(git, undefined)).toEqual({
+      type: 'neon-checkout',
+      inputName: undefined,
+    });
+  });
+
+  test('buildCheckoutEvent: "git-checkout" when the env flag is set, carrying gitBranch (never inputName)', () => {
+    initRepo(repo);
+    const git = readGitContext(repo);
+    process.env[GIT_HOOK_ENV_FLAG] = '1';
+    try {
+      expect(buildCheckoutEvent(git, 'ignored-typed-name')).toEqual({
+        type: 'git-checkout',
+        gitBranch: 'main',
+      });
+    } finally {
+      delete process.env.NEON_GIT_HOOK;
+    }
   });
 
   test('detects detached HEAD as isDetached with no branch', () => {

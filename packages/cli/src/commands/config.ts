@@ -1,6 +1,6 @@
 import yargs from 'yargs';
 import chalk from 'chalk';
-import { resolveConfig } from '@neondatabase/config';
+import { resolveConfig, type DeployEvent } from '@neondatabase/config';
 import {
   apply,
   createBranch as createBranchFromPolicy,
@@ -25,7 +25,7 @@ import { bundleEntry } from '../utils/esbuild.js';
 import { zipBundle } from '../utils/zip.js';
 import { writer } from '../writer.js';
 import { autoPullEnvAfterPin } from './env.js';
-import { GIT_HOOK_ENV_FLAG, readGitContext } from '../utils/git.js';
+import { readGitContext } from '../utils/git.js';
 import {
   buildHookBranch,
   resolveHookEnv,
@@ -288,9 +288,10 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
   // or abort (a throw propagates); `after` observes the resolved env + PushResult.
   const cwd = props.cwd ?? process.cwd();
   const hooks = config.experimental?.hooks;
-  const git = readGitContext(cwd, {
-    triggeredByGitHook: process.env[GIT_HOOK_ENV_FLAG] === '1',
-  });
+  const git = readGitContext(cwd);
+  // `deploy` is never triggered by the git hook — only `neonctl deploy` / `config apply`
+  // reach this path — so the event is always `"neon-deploy"`. See `DeployEvent`.
+  const event: DeployEvent = { type: 'neon-deploy' };
   if (hooks?.deploy?.before) {
     const hookBranch = await buildHookBranch({
       apiClient: props.apiClient,
@@ -298,7 +299,7 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
       branchId,
       created: false,
     });
-    await runDeployBeforeHook({ hooks, branch: hookBranch, git, cwd });
+    await runDeployBeforeHook({ hooks, branch: hookBranch, git, event, cwd });
   }
 
   const result = await apply(config, {
@@ -343,6 +344,7 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
         env,
         result,
         git,
+        event,
         cwd,
       });
     }

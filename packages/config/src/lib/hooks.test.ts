@@ -10,8 +10,8 @@ describe("defineConfig experimental.hooks", () => {
 			experimental: {
 				hooks: {
 					checkout: {
-						before: ({ inputName }) => ({
-							name: `preview/${inputName}`,
+						before: ({ event }) => ({
+							name: `preview/${event.inputName}`,
 						}),
 						after: async () => {},
 					},
@@ -120,14 +120,15 @@ describe("defineConfig experimental.hooks", () => {
 		expect(config.experimental).toBeUndefined();
 	});
 
-	test("checkout.before can return a rename result", () => {
+	test("checkout.before can return a rename result, for a neon-checkout event", () => {
 		const config = defineConfig({
 			experimental: {
 				hooks: {
 					checkout: {
-						before: ({ inputName }: CheckoutBeforeContext) => {
-							if (inputName === "main") return { name: "main" };
-							return { name: `preview/${inputName}` };
+						before: ({ event }: CheckoutBeforeContext) => {
+							if (event.inputName === "main")
+								return { name: "main" };
+							return { name: `preview/${event.inputName}` };
 						},
 					},
 				},
@@ -137,18 +138,43 @@ describe("defineConfig experimental.hooks", () => {
 		// It's a function in this case; invoke it to confirm the rename contract.
 		if (typeof before !== "function") throw new Error("expected function");
 		const result = before({
-			inputName: "dev-1",
+			event: { type: "neon-checkout", inputName: "dev-1" },
 			git: {
 				available: false,
 				isDetached: false,
 				isDirty: false,
-				triggeredByGitHook: false,
 			},
 		}) as CheckoutBeforeResult;
 		expect(result).toEqual({ name: "preview/dev-1" });
 	});
 
-	test("create.before receives the branch name and git context, and can abort", () => {
+	test("checkout.before's event.inputName is undefined for a git-checkout event", () => {
+		const config = defineConfig({
+			experimental: {
+				hooks: {
+					checkout: {
+						before: (ctx) => {
+							expect(ctx.event.inputName).toBeUndefined();
+							if (ctx.event.type === "git-checkout") {
+								return {
+									name: `preview/${ctx.event.gitBranch}`,
+								};
+							}
+						},
+					},
+				},
+			},
+		});
+		const before = config.experimental?.hooks?.checkout?.before;
+		if (typeof before !== "function") throw new Error("expected function");
+		const result = before({
+			event: { type: "git-checkout", gitBranch: "feature/billing" },
+			git: { available: true, isDetached: false, isDirty: false },
+		}) as CheckoutBeforeResult;
+		expect(result).toEqual({ name: "preview/feature/billing" });
+	});
+
+	test("create.before receives the branch name, git context, and triggering event; can abort", () => {
 		const config = defineConfig({
 			experimental: {
 				hooks: {
@@ -168,11 +194,11 @@ describe("defineConfig experimental.hooks", () => {
 			available: false,
 			isDetached: false,
 			isDirty: false,
-			triggeredByGitHook: false,
 		};
-		expect(() => before({ branchName: "forbidden", git })).toThrow(
+		const event = { type: "neon-checkout" as const };
+		expect(() => before({ branchName: "forbidden", git, event })).toThrow(
 			"branch name not allowed",
 		);
-		expect(before({ branchName: "dev-1", git })).toBeUndefined();
+		expect(before({ branchName: "dev-1", git, event })).toBeUndefined();
 	});
 });

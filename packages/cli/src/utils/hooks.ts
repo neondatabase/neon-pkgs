@@ -1,5 +1,7 @@
 import { Api } from '@neondatabase/api-client';
 import type {
+  CheckoutEvent,
+  DeployEvent,
   GitContext,
   HookBranch,
   Hooks,
@@ -65,7 +67,7 @@ const onOutput = (chunk: string) => {
  */
 export const runCheckoutBeforeHook = async (args: {
   hooks: Hooks | undefined;
-  inputName: string;
+  event: CheckoutEvent;
   git: GitContext;
   cwd: string;
 }): Promise<string | undefined> => {
@@ -73,7 +75,7 @@ export const runCheckoutBeforeHook = async (args: {
   if (!hook) return undefined;
   const result = await runHook(
     hook,
-    { inputName: args.inputName, git: args.git },
+    { event: args.event, git: args.git },
     { cwd: args.cwd, onOutput },
   );
   return result?.name;
@@ -88,13 +90,14 @@ export const runCreateBeforeHook = async (args: {
   hooks: Hooks | undefined;
   branchName: string;
   git: GitContext;
+  event: CheckoutEvent;
   cwd: string;
 }): Promise<void> => {
   const hook = args.hooks?.create?.before;
   if (!hook) return;
   await runHook(
     hook,
-    { branchName: args.branchName, git: args.git },
+    { branchName: args.branchName, git: args.git, event: args.event },
     { cwd: args.cwd, onOutput },
   );
 };
@@ -104,13 +107,14 @@ export const runDeployBeforeHook = async (args: {
   hooks: Hooks | undefined;
   branch: HookBranch;
   git: GitContext;
+  event: DeployEvent;
   cwd: string;
 }): Promise<void> => {
   const hook = args.hooks?.deploy?.before;
   if (!hook) return;
   await runHook(
     hook,
-    { branch: args.branch, git: args.git },
+    { branch: args.branch, git: args.git, event: args.event },
     {
       cwd: args.cwd,
       onOutput,
@@ -127,6 +131,7 @@ export const runCheckoutAfterHook = async (args: {
   branch: HookBranch;
   env: NeonEnv;
   git: GitContext;
+  event: CheckoutEvent;
   cwd: string;
 }): Promise<void> => {
   const hook = args.hooks?.checkout?.after;
@@ -134,7 +139,7 @@ export const runCheckoutAfterHook = async (args: {
   await runAfter('checkout.after', () =>
     runHook(
       hook,
-      { branch: args.branch, env: args.env, git: args.git },
+      { branch: args.branch, env: args.env, git: args.git, event: args.event },
       { cwd: args.cwd, env: hookEnvToProcessEnv(args.env), onOutput },
     ),
   );
@@ -149,6 +154,7 @@ export const runCreateAfterHook = async (args: {
   branch: HookBranch;
   env: NeonEnv;
   git: GitContext;
+  event: CheckoutEvent;
   cwd: string;
 }): Promise<void> => {
   const hook = args.hooks?.create?.after;
@@ -156,7 +162,7 @@ export const runCreateAfterHook = async (args: {
   await runAfter('create.after', () =>
     runHook(
       hook,
-      { branch: args.branch, env: args.env, git: args.git },
+      { branch: args.branch, env: args.env, git: args.git, event: args.event },
       { cwd: args.cwd, env: hookEnvToProcessEnv(args.env), onOutput },
     ),
   );
@@ -169,6 +175,7 @@ export const runDeployAfterHook = async (args: {
   env: NeonEnv;
   result: PushResult;
   git: GitContext;
+  event: DeployEvent;
   cwd: string;
 }): Promise<void> => {
   const hook = args.hooks?.deploy?.after;
@@ -181,6 +188,7 @@ export const runDeployAfterHook = async (args: {
         env: args.env,
         result: args.result,
         git: args.git,
+        event: args.event,
       },
       { cwd: args.cwd, env: hookEnvToProcessEnv(args.env), onOutput },
     ),

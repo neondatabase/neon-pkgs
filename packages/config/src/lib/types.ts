@@ -656,8 +656,12 @@ export interface PushResult {
  * (to name a branch, gate a migration, …) but the hooks never *drive* git — that keeps the
  * git → Neon relationship a loop-free, one-way edge (`git checkout` syncs Neon, never the
  * reverse). Populated from the surrounding repository; all fields except `available`,
- * `isDetached`, `isDirty`, and `triggeredByGitHook` are absent when {@link available} is
- * `false` (not a git repo, or `git` is not installed).
+ * `isDetached`, and `isDirty` are absent when {@link available} is `false` (not a git repo,
+ * or `git` is not installed).
+ *
+ * What *triggered* this hook invocation — the installed git hook vs. an explicit CLI
+ * command — is a separate concern; see {@link CheckoutEvent} / {@link DeployEvent} on each
+ * hook context's `event` field, not this type.
  */
 export interface GitContext {
 	/** `false` when the command did not run inside a git work tree (or `git` is missing). */
@@ -678,14 +682,27 @@ export interface GitContext {
 	remoteUrl?: string;
 	/** Absolute path to the repository root (`git rev-parse --show-toplevel`). */
 	repoRoot?: string;
-	/**
-	 * `true` when this invocation was triggered by the installed git `post-checkout` hook
-	 * (via `neonctl git sync`), `false` for a manual `neonctl checkout` / `deploy`. Lets a
-	 * `checkout.before` hook decide whether to follow `git.branch` or honor an explicit
-	 * `inputName`.
-	 */
-	triggeredByGitHook: boolean;
 }
+
+/**
+ * What triggered a `checkout` (and the `create` it may perform). `inputName` — what the user
+ * typed at a Neon prompt, if anything — lives *inside* the event so narrowing on `event.type`
+ * narrows `inputName` too (TypeScript only propagates discriminated-union narrowing within
+ * the object actually holding the discriminant, not to sibling fields of an outer object):
+ *
+ * - `"git-checkout"` — the installed `post-checkout` git hook, via `neonctl git sync`.
+ *   Carries the git branch that triggered it (`gitBranch`); `inputName` is always `undefined`
+ *   here — nothing was typed at a Neon prompt. Derive the Neon branch name from `gitBranch`
+ *   instead (e.g. with `git.neonSafeBranchName`).
+ * - `"neon-checkout"` — an explicit `neonctl checkout` invocation. `inputName` is the
+ *   name/id the user passed, or `undefined` when they omitted it (interactive picker).
+ */
+export type CheckoutEvent =
+	| { type: "git-checkout"; gitBranch: string; inputName?: undefined }
+	| { type: "neon-checkout"; inputName?: string };
+
+/** What triggered a `deploy`. Currently always `"neon-deploy"` — an explicit `neonctl deploy` / `config apply` invocation; `deploy` is never triggered by the git hook. */
+export type DeployEvent = { type: "neon-deploy" };
 
 /**
  * The branch a hook is acting on — a resolved, live branch (unlike the pre-create
@@ -710,10 +727,14 @@ export interface HookBranch {
 	expiresAt?: string;
 }
 
-/** Context passed to `hooks.checkout.before` (runs before the branch name is resolved). */
+/**
+ * Context passed to `hooks.checkout.before` (runs before the branch name is resolved).
+ * `event.inputName` is only ever a defined string for a `"neon-checkout"` event where the
+ * user typed one; narrow on `event.type` (see {@link CheckoutEvent}) — e.g. to derive the
+ * Neon branch name from `event.gitBranch` on a `"git-checkout"` event.
+ */
 export interface CheckoutBeforeContext {
-	/** The branch name/id the user passed to `checkout` (or the git branch, via `git sync`). */
-	inputName: string;
+	event: CheckoutEvent;
 	git: GitContext;
 }
 
@@ -737,6 +758,7 @@ export interface CheckoutAfterContext<C extends Config = Config> {
 	branch: HookBranch;
 	env: NeonEnv<C>;
 	git: GitContext;
+	event: CheckoutEvent;
 }
 
 /**
@@ -749,6 +771,8 @@ export interface CreateBeforeContext {
 	/** Name of the branch about to be created. */
 	branchName: string;
 	git: GitContext;
+	/** The event that triggered the enclosing `checkout` — `create` never runs standalone. */
+	event: CheckoutEvent;
 }
 
 /**
@@ -760,12 +784,14 @@ export interface CreateAfterContext<C extends Config = Config> {
 	branch: HookBranch;
 	env: NeonEnv<C>;
 	git: GitContext;
+	event: CheckoutEvent;
 }
 
 /** Context passed to `hooks.deploy.before` (branch resolved, policy not yet applied). */
 export interface DeployBeforeContext {
 	branch: HookBranch;
 	git: GitContext;
+	event: DeployEvent;
 }
 
 /**
@@ -778,6 +804,7 @@ export interface DeployAfterContext<C extends Config = Config> {
 	/** What the apply changed. */
 	result: PushResult;
 	git: GitContext;
+	event: DeployEvent;
 }
 
 /**
