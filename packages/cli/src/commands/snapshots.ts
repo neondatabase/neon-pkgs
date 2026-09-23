@@ -327,12 +327,8 @@ const toIso = (value: string, flag: string): string => {
 };
 
 /**
- * Resolve a snapshot from an id, a unique name, or a slug.
- *
- * Id match wins. A unique name still wins over another snapshot's matching
- * slug, so existing `get`/`delete`/`restore`/`update` by name keep working.
- * Slug is the fallback when no name matches. Duplicate names stay a hard
- * error.
+ * Unique names precede slugs so existing name-based commands keep targeting
+ * the named snapshot when another snapshot's slug matches that name.
  */
 const resolveSnapshot = async (
 	props: ProjectScopeProps & { id: string },
@@ -358,16 +354,9 @@ const resolveSnapshot = async (
 		);
 	}
 
-	const bySlug = snapshots.filter((s: Snapshot) => s.slug === props.id);
-	if (bySlug.length === 1) {
-		return bySlug[0];
-	}
-	if (bySlug.length > 1) {
-		throw new Error(
-			`Multiple snapshots have slug "${props.id}". Re-run with the snapshot id:\n${bySlug
-				.map((s: Snapshot) => `  ${s.id}`)
-				.join("\n")}`,
-		);
+	const bySlug = snapshots.find((s: Snapshot) => s.slug === props.id);
+	if (bySlug) {
+		return bySlug;
 	}
 
 	throw new Error(

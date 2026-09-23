@@ -76,6 +76,8 @@ describe("snapshots", () => {
 			"test",
 		]);
 		expect(stdout).toContain("name: nightly");
+		expect(stdout).toContain("id: snap-first-snapshot-123456");
+		expect(stdout).not.toContain("snap-legacy-name-123456");
 	});
 
 	test("get by a name with spaces and uppercase", async ({

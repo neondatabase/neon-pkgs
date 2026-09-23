@@ -111,6 +111,7 @@ exports[`snapshots > finalize a restored branch 1`] = `
 exports[`snapshots > get by a name with spaces and uppercase 1`] = `
 "id: snap-legacy-name-123456
 name: Before Migration
+slug: snap-first-snapshot-123456
 source_branch_id: br-main-branch-123456
 created_at: 2021-04-01T00:00:00.000Z
 manual: true
@@ -172,11 +173,11 @@ exports[`snapshots > get not found errors 1`] = `""`;
 
 exports[`snapshots > list/table output 1`] = `
 "snapshots
-Id                           Name              Slug            Source Branch Id       Expires At                Created At
-snap-first-snapshot-123456   nightly           nightly-backup  br-main-branch-123456  2022-01-01T00:00:00.000Z  2021-01-01T00:00:00.000Z
-snap-second-snapshot-123456  pre-migration                     br-main-branch-123456  never                     2021-02-01T00:00:00.000Z
-snap-third-snapshot-123456   extra             pre-migration   br-main-branch-123456  never                     2021-03-01T00:00:00.000Z
-snap-legacy-name-123456      Before Migration                  br-main-branch-123456  never                     2021-04-01T00:00:00.000Z
+Id                           Name              Slug                        Source Branch Id       Expires At                Created At
+snap-first-snapshot-123456   nightly           nightly-backup              br-main-branch-123456  2022-01-01T00:00:00.000Z  2021-01-01T00:00:00.000Z
+snap-second-snapshot-123456  pre-migration                                 br-main-branch-123456  never                     2021-02-01T00:00:00.000Z
+snap-third-snapshot-123456   extra             pre-migration               br-main-branch-123456  never                     2021-03-01T00:00:00.000Z
+snap-legacy-name-123456      Before Migration  snap-first-snapshot-123456  br-main-branch-123456  never                     2021-04-01T00:00:00.000Z
 "
 `;
 
@@ -201,6 +202,7 @@ exports[`snapshots > list/yaml 1`] = `
   manual: true
 - id: snap-legacy-name-123456
   name: Before Migration
+  slug: snap-first-snapshot-123456
   source_branch_id: br-main-branch-123456
   created_at: 2021-04-01T00:00:00.000Z
   manual: true
@@ -321,6 +323,7 @@ exports[`snapshots > snapshot alias works 1`] = `
   manual: true
 - id: snap-legacy-name-123456
   name: Before Migration
+  slug: snap-first-snapshot-123456
   source_branch_id: br-main-branch-123456
   created_at: 2021-04-01T00:00:00.000Z
   manual: true
