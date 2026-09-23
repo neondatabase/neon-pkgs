@@ -118,11 +118,11 @@ export const builder = (yargs: yargs.Argv) =>
 			describe:
 				"Neon skill to install (repeatable). Selects skills setup (not the plugin) and skips the skills picker. With MCP flags, also configures MCP. Values listed below",
 		})
-		.option("mcp-scope", {
+		.option("mcp-config-location", {
 			type: "string",
 			choices: ["global", "project"] as const,
 			describe:
-				"Where to configure the Neon MCP server: global (user config, same as neon mcp) or project (this directory, same as neon mcp --project). Selects skills and MCP setup",
+				"Where to configure the Neon MCP server: global (user config) or project (this directory). Same as neon mcp --mcp-config-location. Selects skills and MCP setup",
 		})
 		.option("mcp-auth", {
 			type: "string",
@@ -134,7 +134,7 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "boolean",
 			default: false,
 			describe:
-				"Limit MCP tools to the linked project, same as neon mcp --project-id. Selects skills and MCP setup",
+				"Limit MCP tools to the linked project, same as neon mcp --mcp-project-scoped. Selects skills and MCP setup",
 		})
 		.option("data", {
 			hidden: true,
@@ -149,7 +149,7 @@ export const builder = (yargs: yargs.Argv) =>
 		.example("$0 init", "Recommended or Custom setup")
 		.example("$0 init -y", "Recommended setup without prompts")
 		.example(
-			"$0 init -y --skill neon --mcp-auth oauth --mcp-scope project",
+			"$0 init -y --skill neon --mcp-auth oauth --mcp-config-location project",
 			"Custom: those skills and MCP, Recommended defaults for the rest",
 		)
 		.example(

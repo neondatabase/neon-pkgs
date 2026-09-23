@@ -30,9 +30,13 @@ describe("resolveInitMode", () => {
 		).toEqual({ kind: "custom" });
 	});
 
-	test("-y with MCP flags selects custom", () => {
+	test("-y with --mcp-config-location selects custom", () => {
 		expect(
-			resolveInitMode({ ...base, yes: true, mcpAuth: "oauth" }),
+			resolveInitMode({
+				...base,
+				yes: true,
+				mcpConfigLocation: "project",
+			}),
 		).toEqual({ kind: "custom" });
 	});
 

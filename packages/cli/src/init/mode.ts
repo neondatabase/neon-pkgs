@@ -9,7 +9,7 @@ export type InitProjectSetupChoice = "link" | "claimable";
 
 export type InitMcpAuthChoice = "oauth" | "api-key";
 
-export type InitMcpScopeChoice = "global" | "project";
+export type InitMcpConfigLocation = "global" | "project";
 
 export type InitModeInput = {
 	yes: boolean;
@@ -17,7 +17,7 @@ export type InitModeInput = {
 	skipAgents: boolean;
 	claimable: boolean;
 	skills?: readonly string[];
-	mcpScope?: InitMcpScopeChoice;
+	mcpConfigLocation?: InitMcpConfigLocation;
 	mcpAuth?: InitMcpAuthChoice;
 	mcpProjectScoped?: boolean;
 	namedAgents: boolean;
@@ -40,11 +40,11 @@ export type InitAgentSetupInference =
 	| { kind: "ask" };
 
 export const hasInitMcpFlags = (input: {
-	mcpScope?: InitMcpScopeChoice;
+	mcpConfigLocation?: InitMcpConfigLocation;
 	mcpAuth?: InitMcpAuthChoice;
 	mcpProjectScoped?: boolean;
 }): boolean =>
-	input.mcpScope !== undefined ||
+	input.mcpConfigLocation !== undefined ||
 	input.mcpAuth !== undefined ||
 	input.mcpProjectScoped === true;
 
@@ -84,7 +84,7 @@ export const assertAgentSetupFlags = (input: {
 	skipAgents: boolean;
 	namedAgents: boolean;
 	skills?: readonly string[];
-	mcpScope?: InitMcpScopeChoice;
+	mcpConfigLocation?: InitMcpConfigLocation;
 	mcpAuth?: InitMcpAuthChoice;
 	mcpProjectScoped?: boolean;
 }): void => {

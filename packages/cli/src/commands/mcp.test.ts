@@ -140,7 +140,7 @@ describe("neon mcp", () => {
 		expect(written.mcpServers.Neon.headers).toBeUndefined();
 	});
 
-	test("--project mints an account key into the project config", async ({
+	test("--mcp-config-location project mints an account key into the project config", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -153,7 +153,7 @@ describe("neon mcp", () => {
 			}),
 		);
 		const { stderr } = await testCliCommand(
-			["mcp", "-y", "--project"],
+			["mcp", "-y", "--mcp-config-location", "project"],
 			runOptions(home, cwd),
 		);
 
@@ -173,13 +173,13 @@ describe("neon mcp", () => {
 		assertNoSecret("", stderr);
 	});
 
-	test("--project without a linked project still mints an account key", async ({
+	test("--mcp-config-location project without a linked project still mints an account key", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
 		mkdirSync(join(cwd, ".cursor"));
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "-y", "--project"],
+			["mcp", "-y", "--mcp-config-location", "project"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -246,7 +246,7 @@ describe("neon mcp", () => {
 		assertNoSecret(stdout, stderr);
 	});
 
-	test("-y --project detects agents from the project folder", async ({
+	test("-y --mcp-config-location project detects agents from the project folder", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -259,7 +259,7 @@ describe("neon mcp", () => {
 			}),
 		);
 		const { stderr } = await testCliCommand(
-			["mcp", "-y", "--project"],
+			["mcp", "-y", "--mcp-config-location", "project"],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -274,7 +274,7 @@ describe("neon mcp", () => {
 		expect(stderr).not.toMatch(/--org-id/);
 	});
 
-	test("-y --project does not use a global install as project detection", async ({
+	test("-y --mcp-config-location project does not use a global install as project detection", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -285,21 +285,24 @@ describe("neon mcp", () => {
 				projectId: "proj-in-org",
 			}),
 		);
-		const { stderr } = await testCliCommand(["mcp", "-y", "--project"], {
-			...runOptions(home, cwd),
-			code: 1,
-		});
+		const { stderr } = await testCliCommand(
+			["mcp", "-y", "--mcp-config-location", "project"],
+			{
+				...runOptions(home, cwd),
+				code: 1,
+			},
+		);
 		expect(stderr).toMatch(/No coding agents detected in this project/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
 
-	test("-y --project --oauth does not need a linked project", async ({
+	test("-y --mcp-config-location project --oauth does not need a linked project", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
 		mkdirSync(join(cwd, ".cursor"));
 		const { stdout, stderr } = await testCliCommand(
-			["mcp", "-y", "--project", "--oauth"],
+			["mcp", "-y", "--mcp-config-location", "project", "--oauth"],
 			{ ...runOptions(home, cwd), apiKey: false },
 		);
 		const written = JSON.parse(
@@ -333,7 +336,7 @@ describe("neon mcp", () => {
 		);
 	});
 
-	test("--project refuses a tracked MCP config before minting", async ({
+	test("--mcp-config-location project refuses a tracked MCP config before minting", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -343,10 +346,13 @@ describe("neon mcp", () => {
 		execFileSync("git", ["-C", cwd, "add", "--", ".cursor/mcp.json"], {
 			stdio: "ignore",
 		});
-		const { stderr } = await testCliCommand(["mcp", "-y", "--project"], {
-			...runOptions(home, cwd),
-			code: 1,
-		});
+		const { stderr } = await testCliCommand(
+			["mcp", "-y", "--mcp-config-location", "project"],
+			{
+				...runOptions(home, cwd),
+				code: 1,
+			},
+		);
 		expect(stderr).toMatch(/tracked by git/);
 		expect(stderr).not.toMatch(/Minted API key/);
 	});
@@ -571,7 +577,7 @@ describe("neon mcp", () => {
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
 	});
 
-	test("-y --project does not add ?projectId= from .neon", async ({
+	test("-y --mcp-config-location project does not add ?projectId= from .neon", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -583,17 +589,105 @@ describe("neon mcp", () => {
 				projectId: "proj-in-org",
 			}),
 		);
-		await testCliCommand(["mcp", "-y", "--project", "--oauth"], {
-			...runOptions(home, cwd),
-			apiKey: false,
-		});
+		await testCliCommand(
+			["mcp", "-y", "--mcp-config-location", "project", "--oauth"],
+			{
+				...runOptions(home, cwd),
+				apiKey: false,
+			},
+		);
 		const written = JSON.parse(
 			readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
 		);
 		expect(written.mcpServers.Neon.url).toBe(NEON_MCP_URL);
 	});
 
-	test("--project --project-id scopes the key to the flag, not .neon", async ({
+	test("--project is an alias for --mcp-config-location project", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
+		await testCliCommand(["mcp", "-y", "--project", "--oauth"], {
+			...runOptions(home, cwd),
+			apiKey: false,
+		});
+		expect(existsSync(join(cwd, ".cursor", "mcp.json"))).toBe(true);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("--mcp-project-scoped writes ?projectId= from .neon", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		mkdirSync(join(cwd, ".cursor"));
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-in-org",
+			}),
+		);
+		const { stderr } = await testCliCommand(
+			["mcp", "-y", "--mcp-project-scoped"],
+			runOptions(home, cwd),
+		);
+		const written = JSON.parse(
+			readFileSync(join(home, ".cursor", "mcp.json"), "utf8"),
+		);
+		expect(written.mcpServers.Neon.url).toBe(
+			neonMcpUrl({ projectId: "proj-in-org" }),
+		);
+		expect(written.mcpServers.Neon.headers.Authorization).toBe(
+			`Bearer ${PROJECT_SECRET}`,
+		);
+		expect(stderr).toMatch(/Limited to proj-in-org/);
+		expect(stderr).toMatch(/\?projectId=proj-in-org/);
+		assertNoSecret("", stderr);
+	});
+
+	test("--mcp-project-scoped without a linked project fails", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		const { stderr } = await testCliCommand(
+			["mcp", "-y", "--mcp-project-scoped", "--oauth"],
+			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
+		);
+		expect(stderr).toMatch(
+			/--mcp-project-scoped requires a linked project/,
+		);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("--mcp-project-scoped cannot combine with --project-id", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd } = scratch();
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({
+				orgId: "org-7",
+				projectId: "proj-in-org",
+			}),
+		);
+		const { stderr } = await testCliCommand(
+			[
+				"mcp",
+				"-y",
+				"--oauth",
+				"--mcp-project-scoped",
+				"--project-id",
+				"proj-flag",
+			],
+			{ ...runOptions(home, cwd), apiKey: false, code: 1 },
+		);
+		expect(stderr).toMatch(
+			/--mcp-project-scoped cannot be combined with --project-id/,
+		);
+		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
+	});
+
+	test("--mcp-config-location project --project-id scopes the key to the flag, not .neon", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd } = scratch();
@@ -606,7 +700,14 @@ describe("neon mcp", () => {
 			}),
 		);
 		const { stderr } = await testCliCommand(
-			["mcp", "-y", "--project", "--project-id", "proj-in-org"],
+			[
+				"mcp",
+				"-y",
+				"--mcp-config-location",
+				"project",
+				"--project-id",
+				"proj-in-org",
+			],
 			runOptions(home, cwd),
 		);
 		const written = JSON.parse(
@@ -713,6 +814,9 @@ describe("neon mcp", () => {
 		expect(compact).toContain("noprojectpin");
 		expect(compact).toContain("allcategories");
 		expect(compact).toContain("-a,--agent");
+		expect(compact).toContain("--mcp-config-location");
+		expect(compact).toContain("--mcp-project-scoped");
+		expect(compact).not.toContain("--mcp-scope");
 		for (const agent of mcpInstallableAgents("global")) {
 			expect(compact).toContain(agent);
 		}

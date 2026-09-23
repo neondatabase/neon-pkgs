@@ -56,7 +56,7 @@ import {
 import type {
 	InitAgentSetupChoice,
 	InitMcpAuthChoice,
-	InitMcpScopeChoice,
+	InitMcpConfigLocation,
 	InitMode,
 	InitProjectSetupChoice,
 } from "./mode.js";
@@ -197,8 +197,8 @@ export const pickInitSkillsInteractively = async (): Promise<string[]> => {
 	);
 };
 
-export const pickInitMcpScopeInteractively =
-	async (): Promise<InitMcpScopeChoice> => {
+export const pickInitMcpConfigLocationInteractively =
+	async (): Promise<InitMcpConfigLocation> => {
 		requireInteractive();
 		const { scope } = await prompts({
 			onState: restoreCursorOnAbort,

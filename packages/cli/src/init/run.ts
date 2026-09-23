@@ -101,7 +101,7 @@ import {
 import type {
 	InitAgentSetupChoice,
 	InitMcpAuthChoice,
-	InitMcpScopeChoice,
+	InitMcpConfigLocation,
 	InitMode,
 	InitProjectSetupChoice,
 } from "./mode.js";
@@ -127,7 +127,7 @@ import {
 	pickInitAgentsInteractively,
 	pickInitConfigInteractively,
 	pickInitMcpAuthInteractively,
-	pickInitMcpScopeInteractively,
+	pickInitMcpConfigLocationInteractively,
 	pickInitModeInteractively,
 	pickInitPackageManagerInteractively,
 	pickInitProjectSetupInteractively,
@@ -180,7 +180,7 @@ export type InitProps = CommonProps & {
 	agentSetup?: boolean;
 	claimable?: boolean;
 	packageManager?: PackageManager;
-	mcpScope?: InitMcpScopeChoice;
+	mcpConfigLocation?: InitMcpConfigLocation;
 	mcpAuth?: InitMcpAuthChoice;
 	mcpProjectScoped?: boolean;
 	run?: InitRun;
@@ -197,7 +197,7 @@ export type InitProps = CommonProps & {
 		detected: readonly AgentType[];
 	}) => Promise<AgentType[]>;
 	pickSkills?: () => Promise<string[]>;
-	pickMcpScope?: () => Promise<InitMcpScopeChoice>;
+	pickMcpConfigLocation?: () => Promise<InitMcpConfigLocation>;
 	pickMcpAuth?: (input: {
 		authenticated: boolean;
 	}) => Promise<InitMcpAuthChoice>;
@@ -433,7 +433,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		skipAgents: props.agentSetup === false,
 		namedAgents: named.length > 0,
 		...(props.skill !== undefined ? { skills: props.skill } : {}),
-		...(props.mcpScope !== undefined ? { mcpScope: props.mcpScope } : {}),
+		...(props.mcpConfigLocation !== undefined
+			? { mcpConfigLocation: props.mcpConfigLocation }
+			: {}),
 		...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
 		...(props.mcpProjectScoped === true ? { mcpProjectScoped: true } : {}),
 	});
@@ -523,8 +525,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			hasLinkInputs: hasExplicitLinkInputs,
 			claimable: props.claimable === true,
 			...(props.skill !== undefined ? { skills: props.skill } : {}),
-			...(props.mcpScope !== undefined
-				? { mcpScope: props.mcpScope }
+			...(props.mcpConfigLocation !== undefined
+				? { mcpConfigLocation: props.mcpConfigLocation }
 				: {}),
 			...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
 			...(props.mcpProjectScoped === true
@@ -601,7 +603,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			"plugin";
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
-		let mcpScope: InitMcpScopeChoice = props.mcpScope ?? "global";
+		let mcpConfigLocation: InitMcpConfigLocation =
+			props.mcpConfigLocation ?? "global";
 		let selectedSkills: readonly string[] | undefined = props.skill;
 		let delayMcp = false;
 		let pluginScope: "global" | "project" = recommended
@@ -706,14 +709,14 @@ export const runInit = async (props: InitProps): Promise<void> => {
 										? await pickInitSkillsInteractively()
 										: undefined;
 						}
-						mcpScope =
-							props.mcpScope ??
+						mcpConfigLocation =
+							props.mcpConfigLocation ??
 							(yes
 								? "global"
-								: props.pickMcpScope !== undefined
-									? await props.pickMcpScope()
+								: props.pickMcpConfigLocation !== undefined
+									? await props.pickMcpConfigLocation()
 									: detection.interactive
-										? await pickInitMcpScopeInteractively()
+										? await pickInitMcpConfigLocationInteractively()
 										: "global");
 						mcpAuth =
 							props.mcpAuth ??
@@ -738,7 +741,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 											: "oauth");
 						tooling = skillsMcpTooling(
 							selected,
-							mcpScope,
+							mcpConfigLocation,
 							namedFallback,
 						);
 						agentSetupChoice = "skills-mcp";
@@ -793,7 +796,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			pluginScope,
 			skillsGlobal: recommended,
 			mcpOauth,
-			mcpProject: mcpScope === "project",
+			...(mcpConfigLocation === "project" ? { mcpConfigLocation } : {}),
+			...(props.mcpProjectScoped === true
+				? { mcpProjectScoped: true }
+				: {}),
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
 		});
 		if (toolingSteps.length > 0) {
@@ -917,13 +923,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 
 		if (delayMcp && tooling.setup !== "skip") {
-			const linkedId = readContextFile(contextFile).projectId;
-			let pinId: string | undefined;
 			if (props.mcpProjectScoped === true) {
+				const linkedId = readContextFile(contextFile).projectId;
 				if (typeof linkedId !== "string" || linkedId.length === 0) {
 					throw new Error(MCP_SCOPED_NEEDS_PROJECT);
 				}
-				pinId = linkedId;
 			}
 			const mcpOnly: InitToolingPlan =
 				tooling.setup === "skills-mcp"
@@ -945,8 +949,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				pluginScope,
 				skillsGlobal: recommended,
 				mcpOauth,
-				mcpProject: mcpScope === "project",
-				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
+				...(mcpConfigLocation === "project"
+					? { mcpConfigLocation }
+					: {}),
+				...(props.mcpProjectScoped === true
+					? { mcpProjectScoped: true }
+					: {}),
 			});
 			if (mcpSteps.length > 0) {
 				await runInitSteps(mcpSteps, {

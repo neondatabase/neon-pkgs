@@ -1,3 +1,8 @@
+import {
+	MCP_CONFIG_LOCATION_PROJECT_CONFLICT,
+	MCP_SCOPED_AND_PROJECT_ID,
+	MCP_SCOPED_NEEDS_PROJECT,
+} from "../init/copy.js";
 import { detectAgent } from "../init/detect_host.js";
 import { collectYesAgents, noDetectedAgentsMessage } from "../init/plan.js";
 import {
@@ -9,14 +14,11 @@ import {
 import { type AgentType, tryResolveAddMcpAgentId } from "./agents.js";
 import type { McpInstallScope, NeonMcpCategory } from "./install.js";
 import { detectMcpAgents, mcpInstallableAgents } from "./targets.js";
-import {
-	type McpAuthKind,
-	pickMcpAuth,
-	pickMcpProjectPin,
-	pickMcpScope,
-} from "./wizard.js";
+import { type McpAuthKind, pickMcpAuth, pickMcpScope } from "./wizard.js";
 
 export type { McpAuthKind };
+
+export type McpConfigLocation = "global" | "project";
 
 export type McpPlan = {
 	scope: McpInstallScope;
@@ -28,7 +30,9 @@ export type McpPlan = {
 };
 
 export type ResolveMcpPlanOptions = {
+	mcpConfigLocation?: McpConfigLocation;
 	project: boolean;
+	mcpProjectScoped: boolean;
 	oauth: boolean;
 	agents: readonly string[];
 	yes: boolean;
@@ -41,22 +45,51 @@ export type ResolveMcpPlanOptions = {
 	pickScope?: () => Promise<McpInstallScope>;
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	pickAuth?: () => Promise<McpAuthKind>;
-	pickProjectPin?: (
-		linkedProjectId: string,
-		willMintKey: boolean,
-	) => Promise<boolean>;
 	detectAgent?: () => AgentType | null;
+};
+
+const resolveMcpConfigLocation = async (
+	options: ResolveMcpPlanOptions,
+	prompt: boolean,
+): Promise<McpInstallScope> => {
+	if (options.mcpConfigLocation !== undefined) {
+		return options.mcpConfigLocation;
+	}
+	if (options.project) {
+		return "project";
+	}
+	if (prompt) {
+		return await (options.pickScope ?? pickMcpScope)();
+	}
+	return "global";
+};
+
+const resolveMcpUrlProjectId = (
+	options: ResolveMcpPlanOptions,
+): string | undefined => {
+	if (options.mcpProjectScoped) {
+		if (
+			options.linkedProjectId === undefined ||
+			options.linkedProjectId.length === 0
+		) {
+			throw new Error(MCP_SCOPED_NEEDS_PROJECT);
+		}
+		return options.linkedProjectId;
+	}
+	return options.projectId;
 };
 
 export async function resolveMcpPlan(
 	options: ResolveMcpPlanOptions,
 ): Promise<McpPlan> {
+	if (options.mcpConfigLocation === "global" && options.project) {
+		throw new Error(MCP_CONFIG_LOCATION_PROJECT_CONFLICT);
+	}
+	if (options.mcpProjectScoped && options.projectId !== undefined) {
+		throw new Error(MCP_SCOPED_AND_PROJECT_ID);
+	}
 	const prompt = options.interactive && !options.yes;
-	const scope: McpInstallScope = options.project
-		? "project"
-		: prompt
-			? await (options.pickScope ?? pickMcpScope)()
-			: "global";
+	const scope = await resolveMcpConfigLocation(options, prompt);
 
 	const available = mcpInstallableAgents(scope);
 	const availableSet = new Set(available);
@@ -102,28 +135,12 @@ export async function resolveMcpPlan(
 			? await (options.pickAuth ?? pickMcpAuth)()
 			: "api-key";
 
-	let urlProjectId = options.projectId;
-	if (
-		urlProjectId === undefined &&
-		prompt &&
-		scope === "project" &&
-		options.linkedProjectId
-	) {
-		const pin = await (options.pickProjectPin ?? pickMcpProjectPin)(
-			options.linkedProjectId,
-			auth === "api-key",
-		);
-		if (pin) {
-			urlProjectId = options.linkedProjectId;
-		}
-	}
-
 	return {
 		scope,
 		agents,
 		auth,
 		readOnly: options.readOnly,
-		urlProjectId,
+		urlProjectId: resolveMcpUrlProjectId(options),
 		categories: options.categories,
 	};
 }

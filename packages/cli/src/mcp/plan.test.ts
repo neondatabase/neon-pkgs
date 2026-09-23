@@ -3,6 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
+import {
+	MCP_CONFIG_LOCATION_PROJECT_CONFLICT,
+	MCP_SCOPED_AND_PROJECT_ID,
+	MCP_SCOPED_NEEDS_PROJECT,
+} from "../init/copy.js";
 import { type ResolveMcpPlanOptions, resolveMcpPlan } from "./plan.js";
 
 const dirs: string[] = [];
@@ -25,6 +30,7 @@ function planOptions(
 ): ResolveMcpPlanOptions {
 	return {
 		project: false,
+		mcpProjectScoped: false,
 		oauth: false,
 		agents: ["cursor"],
 		yes: false,
@@ -51,9 +57,6 @@ describe("resolveMcpPlan", () => {
 				pickAuth: async () => {
 					throw new Error("auth prompt");
 				},
-				pickProjectPin: async () => {
-					throw new Error("pin prompt");
-				},
 			}),
 		);
 		expect(plan).toEqual({
@@ -66,7 +69,7 @@ describe("resolveMcpPlan", () => {
 		});
 	});
 
-	test("interactive asks scope, then agents, then auth, then pin for project scope", async () => {
+	test("interactive asks scope, then agents, then auth, and does not pin", async () => {
 		const cwd = tmpDir();
 		mkdirSync(join(cwd, ".cursor"));
 		const calls: string[] = [];
@@ -87,41 +90,48 @@ describe("resolveMcpPlan", () => {
 					calls.push("auth");
 					return "oauth";
 				},
-				pickProjectPin: async (linked, willMintKey) => {
-					calls.push("pin");
-					expect(linked).toBe("proj-linked");
-					expect(willMintKey).toBe(false);
-					return true;
-				},
 			}),
 		);
-		expect(calls).toEqual(["scope", "agents", "auth", "pin"]);
+		expect(calls).toEqual(["scope", "agents", "auth"]);
 		expect(plan).toEqual({
 			scope: "project",
 			agents: ["cursor"],
 			auth: "oauth",
 			readOnly: false,
-			urlProjectId: "proj-linked",
+			urlProjectId: undefined,
 			categories: [],
 		});
 	});
 
-	test("interactive global never asks to pin a project", async () => {
+	test("interactive global never sets a URL project from .neon", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
+				linkedProjectId: "proj-linked",
 				pickScope: async () => "global",
 				pickAuth: async () => "api-key",
-				pickProjectPin: async () => {
-					throw new Error("pin prompt");
-				},
 			}),
 		);
 		expect(plan.scope).toBe("global");
 		expect(plan.urlProjectId).toBeUndefined();
 	});
 
-	test("--project skips the scope prompt", async () => {
+	test("--mcp-config-location project skips the scope prompt", async () => {
+		const cwd = tmpDir();
+		const plan = await resolveMcpPlan(
+			planOptions(cwd, {
+				mcpConfigLocation: "project",
+				pickScope: async () => {
+					throw new Error("scope prompt");
+				},
+				pickAuth: async () => "api-key",
+			}),
+		);
+		expect(plan.scope).toBe("project");
+		expect(plan.agents).toEqual(["cursor"]);
+	});
+
+	test("--project is an alias for --mcp-config-location project", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
@@ -130,11 +140,22 @@ describe("resolveMcpPlan", () => {
 					throw new Error("scope prompt");
 				},
 				pickAuth: async () => "api-key",
-				pickProjectPin: async () => false,
 			}),
 		);
 		expect(plan.scope).toBe("project");
-		expect(plan.agents).toEqual(["cursor"]);
+	});
+
+	test("--project with --mcp-config-location global fails", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolveMcpPlan(
+				planOptions(cwd, {
+					mcpConfigLocation: "global",
+					project: true,
+					pickAuth: async () => "api-key",
+				}),
+			),
+		).rejects.toThrow(MCP_CONFIG_LOCATION_PROJECT_CONFLICT);
 	});
 
 	test("--oauth skips the auth prompt", async () => {
@@ -166,14 +187,14 @@ describe("resolveMcpPlan", () => {
 		expect(plan.agents).toEqual(["claude-code"]);
 	});
 
-	test("-y --project uses the host CLI agent when the project has no folders", async () => {
+	test("-y --mcp-config-location project uses the host CLI agent when the project has no folders", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
 				agents: [],
 				yes: true,
 				interactive: false,
-				project: true,
+				mcpConfigLocation: "project",
 				detectAgent: () => "cursor",
 				pickAgents: async () => {
 					throw new Error("agent prompt");
@@ -188,7 +209,7 @@ describe("resolveMcpPlan", () => {
 		expect(plan.auth).toBe("api-key");
 	});
 
-	test("-y --project with no folders or host fails", async () => {
+	test("-y --mcp-config-location project with no folders or host fails", async () => {
 		const cwd = tmpDir();
 		await expect(
 			resolveMcpPlan(
@@ -196,123 +217,95 @@ describe("resolveMcpPlan", () => {
 					agents: [],
 					yes: true,
 					interactive: false,
-					project: true,
+					mcpConfigLocation: "project",
 					detectAgent: () => null,
 				}),
 			),
 		).rejects.toThrow(/omit -y in a terminal/);
 	});
 
-	test("pin yes with API-key auth sets urlProjectId", async () => {
+	test("--mcp-project-scoped uses the linked project", async () => {
 		const cwd = tmpDir();
 		mkdirSync(join(cwd, ".cursor"));
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
-				project: true,
+				mcpConfigLocation: "project",
+				mcpProjectScoped: true,
 				agents: ["cursor"],
 				linkedProjectId: "proj-linked",
 				pickAuth: async () => "api-key",
-				pickProjectPin: async (linked, willMintKey) => {
-					expect(linked).toBe("proj-linked");
-					expect(willMintKey).toBe(true);
-					return true;
-				},
 			}),
 		);
 		expect(plan.auth).toBe("api-key");
 		expect(plan.urlProjectId).toBe("proj-linked");
 	});
 
-	test("--project-id skips the pin prompt", async () => {
+	test("--project-id pins that id without --mcp-project-scoped", async () => {
 		const cwd = tmpDir();
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
-				project: true,
+				mcpConfigLocation: "project",
 				projectId: "proj-flag",
 				pickAuth: async () => "oauth",
-				pickProjectPin: async () => {
-					throw new Error("pin prompt");
-				},
 			}),
 		);
 		expect(plan.urlProjectId).toBe("proj-flag");
 	});
 
-	test("-y --project does not infer a URL project from .neon", async () => {
+	test("-y --mcp-config-location project does not infer a URL project from .neon", async () => {
 		const cwd = tmpDir();
 		mkdirSync(join(cwd, ".cursor"));
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
-				project: true,
+				mcpConfigLocation: "project",
 				yes: true,
 				agents: [],
 				linkedProjectId: "proj-from-neon",
-				pickProjectPin: async () => {
-					throw new Error("pin prompt");
-				},
 			}),
 		);
 		expect(plan.scope).toBe("project");
 		expect(plan.urlProjectId).toBeUndefined();
 	});
 
-	test("pin yes without a linked project is not asked", async () => {
+	test("--mcp-project-scoped without a linked project fails", async () => {
 		const cwd = tmpDir();
-		const plan = await resolveMcpPlan(
-			planOptions(cwd, {
-				project: true,
-				oauth: true,
-				pickProjectPin: async () => {
-					throw new Error("pin prompt");
-				},
-			}),
-		);
-		expect(plan.urlProjectId).toBeUndefined();
+		await expect(
+			resolveMcpPlan(
+				planOptions(cwd, {
+					mcpConfigLocation: "project",
+					mcpProjectScoped: true,
+					oauth: true,
+				}),
+			),
+		).rejects.toThrow(MCP_SCOPED_NEEDS_PROJECT);
 	});
 
-	test("pin no with API-key auth leaves urlProjectId unset", async () => {
+	test("--mcp-project-scoped cannot combine with --project-id", async () => {
 		const cwd = tmpDir();
-		const plan = await resolveMcpPlan(
-			planOptions(cwd, {
-				project: true,
-				linkedProjectId: "proj-linked",
-				pickAuth: async () => "api-key",
-				pickProjectPin: async (_linked, willMintKey) => {
-					expect(willMintKey).toBe(true);
-					return false;
-				},
-			}),
-		);
-		expect(plan.auth).toBe("api-key");
-		expect(plan.urlProjectId).toBeUndefined();
+		await expect(
+			resolveMcpPlan(
+				planOptions(cwd, {
+					mcpProjectScoped: true,
+					projectId: "proj-flag",
+					linkedProjectId: "proj-linked",
+					oauth: true,
+				}),
+			),
+		).rejects.toThrow(MCP_SCOPED_AND_PROJECT_ID);
 	});
 
-	test("pin no omits projectId", async () => {
-		const cwd = tmpDir();
-		const plan = await resolveMcpPlan(
-			planOptions(cwd, {
-				project: true,
-				oauth: true,
-				linkedProjectId: "proj-linked",
-				pickProjectPin: async () => false,
-			}),
-		);
-		expect(plan.urlProjectId).toBeUndefined();
-	});
-
-	test("project scope preselects folder detection, not a global install", async () => {
+	test("project location preselects folder detection, not a global install", async () => {
 		const cwd = tmpDir();
 		let selected: string[] | undefined;
 		const plan = await resolveMcpPlan(
 			planOptions(cwd, {
-				project: true,
+				mcpConfigLocation: "project",
 				oauth: true,
 				agents: [],
 				pickAgents: async (options) => {
 					selected = [...(options.selected ?? [])];
 					return ["cursor"];
 				},
-				pickProjectPin: async () => false,
 			}),
 		);
 		expect(selected).toEqual([]);
@@ -325,7 +318,7 @@ describe("resolveMcpPlan", () => {
 		await expect(
 			resolveMcpPlan(
 				planOptions(cwd, {
-					project: true,
+					mcpConfigLocation: "project",
 					agents: [],
 					yes: true,
 					interactive: false,

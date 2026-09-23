@@ -440,7 +440,8 @@ describe("init handler", () => {
 
 		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
 		expect(mcp).toContain("--oauth");
-		expect(mcp).toContain("--project-id proj-pin");
+		expect(mcp).toContain("--mcp-project-scoped");
+		expect(mcp).not.toContain("--project-id");
 	});
 
 	test("--template -y --no-agent-setup skips nested agent setup", async () => {
@@ -663,7 +664,7 @@ describe("init handler", () => {
 				yes: true,
 				claimable: true,
 				agent: ["mcporter"],
-				mcpScope: "global",
+				mcpConfigLocation: "global",
 				config: false,
 				hasLocalCredentials: () => true,
 				createClaimable,
@@ -905,7 +906,7 @@ describe("init handler", () => {
 				pickAgentSetup: pickSkillsMcp,
 				detectProjectAgents: () => ["opencode"],
 				pickSkills: async () => [],
-				pickMcpScope: async () => "global",
+				pickMcpConfigLocation: async () => "global",
 				pickMcpAuth: async () => "oauth",
 			}),
 		);
@@ -1148,6 +1149,8 @@ describe("init CLI", () => {
 		expect(help).toMatch(/-a, --agent/);
 		expect(help).toMatch(/--claimable/);
 		expect(help).toMatch(/--mcp-project-scoped/);
+		expect(help).toMatch(/--mcp-config-location/);
+		expect(help).not.toMatch(/--mcp-scope/);
 		expect(help).not.toMatch(/--mcp-project-pin/);
 		expect(help).not.toMatch(/--no-mcp-project-pin/);
 		expect(help).not.toMatch(/--skip-template/);
@@ -1396,7 +1399,7 @@ describe("init CLI", () => {
 				pickAgentSetup: pickSkillsMcp,
 				detectProjectAgents: () => ["opencode"],
 				pickSkills: async () => [],
-				pickMcpScope: async () => "global",
+				pickMcpConfigLocation: async () => "global",
 				pickMcpAuth: async () => "oauth",
 			}),
 		);
@@ -1478,6 +1481,22 @@ describe("init flag parsing", () => {
 				).parseAsync([])) as { claimable?: boolean }
 			).claimable,
 		).toBe(false);
+	});
+
+	test("--mcp-config-location is parsed", async () => {
+		const argv = (await builder(
+			yargs().scriptName("neon").exitProcess(false),
+		).parseAsync(["--mcp-config-location", "project"])) as {
+			mcpConfigLocation?: string;
+		};
+		expect(argv.mcpConfigLocation).toBe("project");
+		expect(
+			(
+				(await builder(
+					yargs().scriptName("neon").exitProcess(false),
+				).parseAsync([])) as { mcpConfigLocation?: string }
+			).mcpConfigLocation,
+		).toBeUndefined();
 	});
 
 	test("--mcp-project-scoped is true only when passed", async () => {
