@@ -361,12 +361,43 @@ export type BundleEnvVar = {
 	secret: boolean;
 };
 
-export type BundleTrigger = {
-	type: string;
+/**
+ * A trigger declared in a prebuilt block's `template.json`, normalized to a discriminated union so
+ * a supported type is never confused with one Neon config cannot express. `schedule` and
+ * `storage_object_created` mirror the two Neon config trigger types; every other declared type is
+ * preserved as `unknown` (carrying its original `declaredType`) so the scaffolder can surface it as
+ * a manual step rather than silently drop it.
+ */
+export type BundleScheduleTrigger = {
+	type: "schedule";
+	cron: string;
 	functionPath?: string;
-	cron?: string;
 	description?: string;
 };
+
+export type BundleStorageObjectCreatedTrigger = {
+	type: "storage_object_created";
+	functionPath?: string;
+	/** Concrete bucket name, when the block pins one (Neon config needs a declared bucket). */
+	bucket?: string;
+	prefix?: string;
+	/** Env var naming the bucket at runtime — the form Jeff's blocks ship; not a declared bucket. */
+	bucketEnv?: string;
+	prefixEnv?: string;
+	description?: string;
+};
+
+export type BundleUnknownTrigger = {
+	type: "unknown";
+	declaredType: string;
+	functionPath?: string;
+	description?: string;
+};
+
+export type BundleTrigger =
+	| BundleScheduleTrigger
+	| BundleStorageObjectCreatedTrigger
+	| BundleUnknownTrigger;
 
 /**
  * The metadata half of a prebuilt block, parsed from its `template.json`. This
@@ -413,6 +444,24 @@ const parseBundleEnvironment = (value: unknown): BundleEnvVar[] => {
 	});
 };
 
+/**
+ * Read an optional string field from a trigger record, rejecting a present-but-wrong type so a
+ * malformed field is caught rather than silently dropped.
+ */
+const optionalTriggerString = (
+	item: Record<string, unknown>,
+	key: string,
+): string | undefined => {
+	const value = item[key];
+	if (value === undefined) return undefined;
+	if (typeof value !== "string" || value === "") {
+		throw new Error(
+			`Invalid bundle template.json: trigger \`${key}\` must be a non-empty string.`,
+		);
+	}
+	return value;
+};
+
 const parseBundleTriggers = (value: unknown): BundleTrigger[] => {
 	if (value === undefined) return [];
 	if (!Array.isArray(value)) {
@@ -426,15 +475,46 @@ const parseBundleTriggers = (value: unknown): BundleTrigger[] => {
 				"Invalid bundle template.json: each trigger needs a string type.",
 			);
 		}
+		const functionPath = optionalTriggerString(item, "functionPath");
+		const description = optionalTriggerString(item, "description");
+		if (item.type === "schedule") {
+			const cron = optionalTriggerString(item, "cron");
+			if (cron === undefined) {
+				throw new Error(
+					"Invalid bundle template.json: a schedule trigger needs a `cron` expression.",
+				);
+			}
+			return {
+				type: "schedule",
+				cron,
+				...(functionPath ? { functionPath } : {}),
+				...(description ? { description } : {}),
+			};
+		}
+		if (item.type === "storage_object_created") {
+			return {
+				type: "storage_object_created",
+				...(functionPath ? { functionPath } : {}),
+				...(optionalTriggerString(item, "bucket")
+					? { bucket: optionalTriggerString(item, "bucket") }
+					: {}),
+				...(optionalTriggerString(item, "prefix")
+					? { prefix: optionalTriggerString(item, "prefix") }
+					: {}),
+				...(optionalTriggerString(item, "bucketEnv")
+					? { bucketEnv: optionalTriggerString(item, "bucketEnv") }
+					: {}),
+				...(optionalTriggerString(item, "prefixEnv")
+					? { prefixEnv: optionalTriggerString(item, "prefixEnv") }
+					: {}),
+				...(description ? { description } : {}),
+			};
+		}
 		return {
-			type: item.type,
-			...(typeof item.functionPath === "string"
-				? { functionPath: item.functionPath }
-				: {}),
-			...(typeof item.cron === "string" ? { cron: item.cron } : {}),
-			...(typeof item.description === "string"
-				? { description: item.description }
-				: {}),
+			type: "unknown",
+			declaredType: item.type,
+			...(functionPath ? { functionPath } : {}),
+			...(description ? { description } : {}),
 		};
 	});
 };

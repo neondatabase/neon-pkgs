@@ -16,6 +16,7 @@ import {
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
+import type { TriggerDeclaration } from "./config-editor.js";
 import {
 	applyConfigPlan,
 	type ConfigOutcome,
@@ -33,6 +34,7 @@ import {
 	type BundleDelivery,
 	type BundleManifest,
 	type BundleTemplate,
+	type BundleTrigger,
 	extractBundle,
 	type FunctionTemplate,
 	type FunctionTemplateEnvironment,
@@ -720,7 +722,7 @@ export const scaffoldFunctionTemplate = async (
 			registered: false,
 			fragment:
 				configPlan.kind === "create" || configPlan.kind === "edit"
-					? renderFragment(configPlan.decls)
+					? renderFragment(configPlan.decls, configPlan.triggerDecls)
 					: undefined,
 			reason: `config write failed: ${message}`,
 			hasEnv: false,
@@ -918,6 +920,96 @@ export const scaffoldFunctionTemplate = async (
 	};
 };
 
+/** A trigger the CLI cannot register, with why, so it can be surfaced as a manual step. */
+export type UnsupportedTrigger = {
+	type: string;
+	reason: string;
+	description?: string;
+};
+
+export type ClassifiedTriggers = {
+	/** Triggers rendered into `neon.ts` in the same edit as the function. */
+	registrable: TriggerDeclaration[];
+	/** Triggers Neon config cannot express today; surfaced as manual next steps. */
+	unsupported: UnsupportedTrigger[];
+};
+
+/** The trigger's type as declared in the block (an `unknown` trigger keeps its original string). */
+const declaredTriggerType = (trigger: BundleTrigger): string =>
+	trigger.type === "unknown" ? trigger.declaredType : trigger.type;
+
+const triggerNameSegment = (functionPath: string | undefined): string =>
+	(functionPath ?? "")
+		.replace(/^\/+/, "")
+		.replace(/[^a-zA-Z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.toLowerCase();
+
+/**
+ * Split a block's declared triggers into the ones the CLI can register in `neon.ts` and the ones
+ * it must leave to the operator. Only `schedule` triggers are registrable: they need just the
+ * function slug, a cron, and an optional path. A `storage_object_created` trigger needs a bucket
+ * declared under `buckets` — Jeff's blocks name theirs through a runtime env var (`bucketEnv`) and
+ * the bundle scaffolder declares no buckets, so registering one would reference an undeclared
+ * bucket and produce an invalid config; it is surfaced as manual instead. Unknown types are never
+ * fabricated. Trigger names are deterministic (`<slug>-<path-segment>`) and de-duplicated.
+ */
+export const classifyBundleTriggers = (
+	triggers: BundleTrigger[],
+	slug: string,
+): ClassifiedTriggers => {
+	const registrable: TriggerDeclaration[] = [];
+	const unsupported: UnsupportedTrigger[] = [];
+	const usedNames = new Set<string>();
+	const uniqueName = (base: string): string => {
+		let candidate = base;
+		let suffix = 2;
+		while (usedNames.has(candidate)) {
+			candidate = `${base}-${suffix}`;
+			suffix += 1;
+		}
+		usedNames.add(candidate);
+		return candidate;
+	};
+	for (const trigger of triggers) {
+		if (trigger.type === "schedule") {
+			const segment = triggerNameSegment(trigger.functionPath);
+			const name = uniqueName(
+				segment ? `${slug}-${segment}` : `${slug}-schedule`,
+			);
+			registrable.push({
+				name,
+				type: "schedule",
+				function: slug,
+				cron: trigger.cron,
+				...(trigger.functionPath && trigger.functionPath !== "/"
+					? { functionPath: trigger.functionPath }
+					: {}),
+			});
+		} else if (trigger.type === "storage_object_created") {
+			const bucketRef = trigger.bucketEnv
+				? `\`${trigger.bucketEnv}\``
+				: "an environment variable";
+			unsupported.push({
+				type: "storage_object_created",
+				reason: `names its bucket via ${bucketRef} and needs a bucket declared under \`buckets\` in neon.ts; declare the bucket, then add the trigger by hand`,
+				...(trigger.description
+					? { description: trigger.description }
+					: {}),
+			});
+		} else {
+			unsupported.push({
+				type: trigger.declaredType,
+				reason: "is not a trigger type Neon config supports today (only schedule and storage_object_created exist)",
+				...(trigger.description
+					? { description: trigger.description }
+					: {}),
+			});
+		}
+	}
+	return { registrable, unsupported };
+};
+
 export type ScaffoldBundleProps = {
 	entry: RegistryIndexEntry;
 	name?: string;
@@ -953,7 +1045,12 @@ export type ScaffoldBundleResult = {
 	sha256: string;
 	capabilities: string[];
 	dependsOn: string[];
+	/** Every declared trigger type, in declaration order (for reporting). */
 	triggers: string[];
+	/** Names of the triggers written into `neon.ts`. */
+	registeredTriggers: string[];
+	/** Triggers Neon config cannot express, surfaced as manual steps. */
+	unsupportedTriggers: UnsupportedTrigger[];
 	migrations: string[];
 	/** Every declared env var name (required, optional, and platform-injected). */
 	environment: string[];
@@ -977,6 +1074,7 @@ const bundleNextStepsDoc = (
 	cli: string,
 	directory: string,
 	unappliedNote: string[],
+	registeredTriggers: string[],
 ): string => {
 	const lines: string[] = [
 		`# ${item.title} — Neon setup`,
@@ -989,6 +1087,16 @@ const bundleNextStepsDoc = (
 			? `- Run locally: \`${cli} dev\`\n- Deploy: \`${cli} deploy\``
 			: `- Deploy: \`${cli} functions deploy ${slug} --src ${directory} --no-bundle\``,
 	];
+	if (registeredTriggers.length > 0) {
+		lines.push(
+			"",
+			"## Triggers",
+			"",
+			`Registered in neon.ts and applied on \`${cli} deploy\`: ${registeredTriggers
+				.map((name) => `\`${name}\``)
+				.join(", ")}.`,
+		);
+	}
 	if (unappliedNote.length > 0) {
 		lines.push(
 			"",
@@ -1057,6 +1165,10 @@ export const scaffoldBundleTemplate = async (
 			!isCi());
 
 	const item = await (props.loadItem ?? loadBundleItem)(entry);
+	const {
+		registrable: registrableTriggers,
+		unsupported: unsupportedTriggers,
+	} = classifyBundleTriggers(item.triggers, slug);
 	const injectedEnv = item.environment.filter(
 		(variable) => variable.injected,
 	);
@@ -1079,7 +1191,9 @@ export const scaffoldBundleTemplate = async (
 		sha256: delivery.sha256,
 		capabilities: [...delivery.capabilities],
 		dependsOn: [...delivery.dependsOn],
-		triggers: item.triggers.map((trigger) => trigger.type),
+		triggers: item.triggers.map(declaredTriggerType),
+		registeredTriggers: [],
+		unsupportedTriggers,
 		migrations: [],
 		environment: allEnvNames,
 		injectedEnvironment: injectedEnv.map((variable) => variable.name),
@@ -1138,6 +1252,9 @@ export const scaffoldBundleTemplate = async (
 				bundler: "none",
 			},
 		],
+		...(registrableTriggers.length > 0
+			? { triggers: registrableTriggers }
+			: {}),
 		...(props.config !== undefined ? { configPath: props.config } : {}),
 		...(props.addToConfig !== undefined
 			? { addToConfig: props.addToConfig }
@@ -1207,7 +1324,7 @@ export const scaffoldBundleTemplate = async (
 			registered: false,
 			fragment:
 				configPlan.kind === "create" || configPlan.kind === "edit"
-					? renderFragment(configPlan.decls)
+					? renderFragment(configPlan.decls, configPlan.triggerDecls)
 					: undefined,
 			reason: `config write failed: ${message}`,
 			hasEnv: false,
@@ -1228,15 +1345,16 @@ export const scaffoldBundleTemplate = async (
 		envOutcome = { written: [], present: [], variables: [] };
 	}
 
+	const registeredTriggers = configOutcome.registeredTriggers ?? [];
 	const unapplied: string[] = [];
 	if (manifest.migrations.length > 0) {
 		unapplied.push(
 			`${manifest.migrations.length} SQL migration${manifest.migrations.length > 1 ? "s" : ""} under \`migrations/\` — apply them to your branch before invoking the function.`,
 		);
 	}
-	if (item.triggers.length > 0) {
+	for (const trigger of unsupportedTriggers) {
 		unapplied.push(
-			`${item.triggers.length} trigger${item.triggers.length > 1 ? "s" : ""} (${item.triggers.map((trigger) => trigger.type).join(", ")}) — configure them in the Neon console.`,
+			`\`${trigger.type}\` trigger ${trigger.reason}.${trigger.description ? ` (${trigger.description})` : ""}`,
 		);
 	}
 	if (delivery.dependsOn.length > 0) {
@@ -1253,6 +1371,7 @@ export const scaffoldBundleTemplate = async (
 		cli,
 		path,
 		unapplied,
+		registeredTriggers,
 	);
 	try {
 		writeFileSync(join(targetDir, "NEON_NEXT_STEPS.md"), doc);
@@ -1269,6 +1388,11 @@ export const scaffoldBundleTemplate = async (
 	if (configOutcome.registered) {
 		nextSteps.push(`Run locally: ${cli} dev`);
 		nextSteps.push(`Deploy the prebuilt function: ${cli} deploy`);
+		if (registeredTriggers.length > 0) {
+			nextSteps.push(
+				`Registered ${registeredTriggers.length} trigger${registeredTriggers.length > 1 ? "s" : ""} in neon.ts (${registeredTriggers.join(", ")}); applied on ${cli} deploy.`,
+			);
+		}
 	} else {
 		nextSteps.push(
 			`Deploy the prebuilt function: ${cli} functions deploy ${slug} --src ${path} --no-bundle`,
@@ -1325,7 +1449,9 @@ export const scaffoldBundleTemplate = async (
 		sha256: delivery.sha256,
 		capabilities: [...delivery.capabilities],
 		dependsOn: [...delivery.dependsOn],
-		triggers: item.triggers.map((trigger) => trigger.type),
+		triggers: item.triggers.map(declaredTriggerType),
+		registeredTriggers,
+		unsupportedTriggers,
 		migrations: manifest.migrations,
 		environment: allEnvNames,
 		injectedEnvironment: injectedEnv.map((variable) => variable.name),

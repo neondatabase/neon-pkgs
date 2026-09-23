@@ -35,9 +35,14 @@ import {
 import {
 	analyzeNeonConfig,
 	buildFunctionEntry,
+	buildTriggerEntry,
 	type FunctionDeclaration,
 	insertFunction,
+	insertTrigger,
 	replaceFunction,
+	replaceTrigger,
+	sameTriggerConfig,
+	type TriggerDeclaration,
 } from "./config-editor.js";
 
 /** One function to register: a Neon slug plus the file or directory it deploys. */
@@ -55,6 +60,12 @@ export type RegisterInput = {
 	cwd: string;
 	/** One target for router/single-file layouts; several for the separate layout. */
 	targets: RegisterTarget[];
+	/**
+	 * Supported function triggers to register alongside the functions, in the same atomic edit.
+	 * Each `function` must name a slug this same call registers; the caller drops anything Neon
+	 * config cannot express (see the bundle scaffolder).
+	 */
+	triggers?: TriggerDeclaration[];
 	configPath?: string;
 	addToConfig?: boolean;
 	force?: boolean;
@@ -87,6 +98,7 @@ export type ConfigPlan =
 			root: string;
 			relativePath: string;
 			decls: FunctionDeclaration[];
+			triggerDecls?: TriggerDeclaration[];
 	  }
 	| {
 			kind: "create";
@@ -96,6 +108,7 @@ export type ConfigPlan =
 			text: string;
 			deps: DepPlan;
 			decls: FunctionDeclaration[];
+			triggerDecls?: TriggerDeclaration[];
 	  }
 	| {
 			kind: "edit";
@@ -105,6 +118,7 @@ export type ConfigPlan =
 			relativePath: string;
 			text: string;
 			decls: FunctionDeclaration[];
+			triggerDecls?: TriggerDeclaration[];
 	  };
 
 export type ConfigOutcome = {
@@ -113,6 +127,8 @@ export type ConfigOutcome = {
 	path?: string;
 	relativePath?: string;
 	registeredSlugs?: string[];
+	/** Names of the triggers written in the same edit. Empty when none were registered. */
+	registeredTriggers?: string[];
 	fragment?: string;
 	reason?: string;
 	suggestInit?: boolean;
@@ -139,42 +155,75 @@ const envMap = (names: string[]): Record<string, string> | undefined =>
 				names.map((name) => [name, `process.env.${name}!`]),
 			);
 
-/** The pasteable `functions: { … }` block shown when auto-registration is declined or unsafe. */
-export const renderFragment = (decls: FunctionDeclaration[]): string => {
-	const entries = decls
+/**
+ * The pasteable `functions: { … }` (and, when triggers are supported, `triggers: { … }`) block
+ * shown when auto-registration is declined or unsafe.
+ */
+export const renderFragment = (
+	decls: FunctionDeclaration[],
+	triggerDecls: TriggerDeclaration[] = [],
+): string => {
+	const functionEntries = decls
 		.map((decl) => `  ${buildFunctionEntry(decl, { includeEnv: true })},`)
 		.join("\n");
-	return `functions: {\n${entries}\n},`;
+	const functions = `functions: {\n${functionEntries}\n},`;
+	if (triggerDecls.length === 0) return functions;
+	const triggerEntries = triggerDecls
+		.map((decl) => `  ${buildTriggerEntry(decl)},`)
+		.join("\n");
+	return `${functions}\ntriggers: {\n${triggerEntries}\n},`;
 };
 
+/** One edit in a batch: an insert or replace of either a function or a trigger member. */
+type EditOp =
+	| {
+			kind: "function";
+			decl: FunctionDeclaration;
+			mode: "insert" | "replace";
+	  }
+	| { kind: "trigger"; decl: TriggerDeclaration; mode: "insert" | "replace" };
+
 /**
- * Apply a batch of function edits to a config source, re-analyzing between each so
- * splice offsets stay valid — reusing {@link insertFunction}/{@link replaceFunction}
- * rather than growing a second, batch-aware editor.
+ * Apply a batch of function/trigger edits to a config source, re-analyzing between each so
+ * splice offsets stay valid — reusing the single-member editors rather than growing a second,
+ * batch-aware editor.
  */
-const applyDecls = (
+const applyEdits = (
 	source: string,
 	extension: string,
-	ops: { decl: FunctionDeclaration; mode: "insert" | "replace" }[],
+	ops: EditOp[],
 ): string => {
 	let current = source;
-	for (const { decl, mode } of ops) {
+	for (const op of ops) {
 		const analysis = analyzeNeonConfig(current, extension);
 		if (!analysis.safe) {
 			throw new Error(
 				`Could not edit the Neon config: ${analysis.reason}.`,
 			);
 		}
-		current =
-			mode === "replace"
-				? replaceFunction(analysis, decl.slug, decl)
-				: insertFunction(analysis, decl);
+		if (op.kind === "function") {
+			current =
+				op.mode === "replace"
+					? replaceFunction(analysis, op.decl.slug, op.decl)
+					: insertFunction(analysis, op.decl);
+		} else {
+			current =
+				op.mode === "replace"
+					? replaceTrigger(analysis, op.decl.name, op.decl)
+					: insertTrigger(analysis, op.decl);
+		}
 	}
 	return current;
 };
 
 const quoteSlugs = (decls: FunctionDeclaration[]): string =>
 	decls.map((decl) => `"${decl.slug}"`).join(", ");
+
+const quoteNames = (decls: { name: string }[]): string =>
+	decls.map((decl) => `"${decl.name}"`).join(", ");
+
+const joinList = (...parts: string[]): string =>
+	parts.filter((part) => part !== "").join(", ");
 
 const defaultConfirm =
 	(initial: boolean) =>
@@ -265,6 +314,14 @@ export const planConfigRegistration = async (
 			),
 		);
 
+	// Only register triggers whose target function is registered in this same call —
+	// a trigger may never point at a function that isn't present (Neon config rejects
+	// that, and it is the "absent function" case we must not create).
+	const registeredSlugs = new Set(input.targets.map((target) => target.slug));
+	const triggerDecls = (input.triggers ?? []).filter((trigger) =>
+		registeredSlugs.has(trigger.function),
+	);
+
 	const wantRegister = async (
 		message: string,
 	): Promise<boolean | undefined> => {
@@ -280,12 +337,12 @@ export const planConfigRegistration = async (
 	): ConfigPlan => {
 		if (input.addToConfig === true) {
 			throw new Error(
-				`Cannot register ${quoteSlugs(bestEffortDecls(root))} in ${rel(path)}: ${reason}. Register by hand:\n\n${renderFragment(bestEffortDecls(root))}`,
+				`Cannot register ${quoteSlugs(bestEffortDecls(root))} in ${rel(path)}: ${reason}. Register by hand:\n\n${renderFragment(bestEffortDecls(root), triggerDecls)}`,
 			);
 		}
 		return {
 			kind: "fragment",
-			fragment: renderFragment(bestEffortDecls(root)),
+			fragment: renderFragment(bestEffortDecls(root), triggerDecls),
 			reason,
 			suggestInit: false,
 		};
@@ -301,16 +358,29 @@ export const planConfigRegistration = async (
 		}
 		return {
 			kind: "fragment",
-			fragment: renderFragment(bestEffortDecls(root)),
+			fragment: renderFragment(bestEffortDecls(root), triggerDecls),
 			reason,
 			suggestInit: false,
 		};
 	};
 
-	// insertFunction always prepends, so inserting in reverse keeps the written
-	// order matching selection order.
-	const insertOps = (decls: FunctionDeclaration[]) =>
-		[...decls].reverse().map((decl) => ({ decl, mode: "insert" as const }));
+	// insertFunction/insertTrigger always prepend, so inserting in reverse keeps the
+	// written order matching selection order. Triggers are inserted before functions
+	// so that a freshly created config renders `functions` above `triggers`.
+	const functionInsertOps = (decls: FunctionDeclaration[]): EditOp[] =>
+		[...decls]
+			.reverse()
+			.map((decl) => ({ kind: "function", decl, mode: "insert" }));
+
+	const triggerInsertOps = (decls: TriggerDeclaration[]): EditOp[] =>
+		[...decls]
+			.reverse()
+			.map((decl) => ({ kind: "trigger", decl, mode: "insert" }));
+
+	const createOps = (
+		decls: FunctionDeclaration[],
+		triggers: TriggerDeclaration[],
+	): EditOp[] => [...triggerInsertOps(triggers), ...functionInsertOps(decls)];
 
 	const planForExisting = async (
 		discovered: DiscoveredConfig,
@@ -337,61 +407,101 @@ export const planConfigRegistration = async (
 			}
 		}
 
-		if (inserts.length === 0 && conflicts.length === 0) {
-			return { kind: "noop", path, root, relativePath: rel(path), decls };
+		// Triggers use the same conflict rules as functions: an identical existing
+		// declaration is a no-op, a differing one is a conflict resolved by --force
+		// or a prompt. Detect every conflict here, before any write.
+		const existingTriggers = analysis.triggers;
+		const triggerInserts: TriggerDeclaration[] = [];
+		const triggerConflicts: TriggerDeclaration[] = [];
+		for (const decl of triggerDecls) {
+			const existing = existingTriggers.find((t) => t.name === decl.name);
+			if (!existing) {
+				triggerInserts.push(decl);
+			} else if (!sameTriggerConfig(existing, decl)) {
+				triggerConflicts.push(decl);
+			}
 		}
 
-		if (conflicts.length > 0) {
-			const many = conflicts.length > 1;
+		const conflictItems = joinList(
+			quoteSlugs(conflicts),
+			quoteNames(triggerConflicts),
+		);
+		const insertItems = joinList(
+			quoteSlugs(inserts),
+			quoteNames(triggerInserts),
+		);
+		const conflictCount = conflicts.length + triggerConflicts.length;
+		const insertCount = inserts.length + triggerInserts.length;
+
+		if (insertCount === 0 && conflictCount === 0) {
+			return {
+				kind: "noop",
+				path,
+				root,
+				relativePath: rel(path),
+				decls,
+				triggerDecls,
+			};
+		}
+
+		if (conflictCount > 0) {
+			const many = conflictCount > 1;
 			if (input.addToConfig === true) {
 				if (!input.force) {
 					throw new Error(
-						`${quoteSlugs(conflicts)} already declared in ${rel(path)} with a different source. Pass --name to register under a different slug, or --force to replace the existing declaration${many ? "s" : ""}.`,
+						`${conflictItems} already declared in ${rel(path)} with a different config. Pass --name to register under a different slug, or --force to replace the existing declaration${many ? "s" : ""}.`,
 					);
 				}
 			} else if (input.interactive) {
 				const answer = await (
 					input.confirmReplace ?? defaultConfirm(false)
 				)(
-					`${rel(path)} already declares ${quoteSlugs(conflicts)} with a different source. Replace ${many ? "them" : "it"}?`,
+					`${rel(path)} already declares ${conflictItems} with a different config. Replace ${many ? "them" : "it"}?`,
 				);
 				if (answer === undefined) return { kind: "cancelled" };
 				if (!answer) {
 					return {
 						kind: "fragment",
-						fragment: renderFragment(decls),
-						reason: `kept the existing ${quoteSlugs(conflicts)} declaration${many ? "s" : ""}`,
+						fragment: renderFragment(decls, triggerDecls),
+						reason: `kept the existing ${conflictItems} declaration${many ? "s" : ""}`,
 						suggestInit: false,
 					};
 				}
 			} else {
 				return {
 					kind: "fragment",
-					fragment: renderFragment(decls),
-					reason: `${quoteSlugs(conflicts)} already declared with a different source`,
+					fragment: renderFragment(decls, triggerDecls),
+					reason: `${conflictItems} already declared with a different config`,
 					suggestInit: false,
 				};
 			}
 		} else {
 			const answer = await wantRegister(
-				`Register ${quoteSlugs(inserts)} in ${rel(path)}?`,
+				`Register ${insertItems} in ${rel(path)}?`,
 			);
 			if (answer === undefined) return { kind: "cancelled" };
 			if (!answer) return { kind: "skip", declined: true };
 		}
 
-		const ops = [
-			...insertOps(inserts),
-			...conflicts.map((decl) => ({ decl, mode: "replace" as const })),
+		const ops: EditOp[] = [
+			...triggerInsertOps(triggerInserts),
+			...functionInsertOps(inserts),
+			...conflicts.map(
+				(decl): EditOp => ({ kind: "function", decl, mode: "replace" }),
+			),
+			...triggerConflicts.map(
+				(decl): EditOp => ({ kind: "trigger", decl, mode: "replace" }),
+			),
 		];
 		return {
 			kind: "edit",
-			action: conflicts.length > 0 ? "replaced" : "updated",
+			action: conflictCount > 0 ? "replaced" : "updated",
 			path,
 			root,
 			relativePath: rel(path),
-			text: applyDecls(discovered.source, discovered.extension, ops),
+			text: applyEdits(discovered.source, discovered.extension, ops),
 			decls,
+			triggerDecls,
 		};
 	};
 
@@ -424,8 +534,12 @@ export const planConfigRegistration = async (
 		const decls = buildDecls(root);
 		if (!decls) return notContained(root);
 
+		const createItems = joinList(
+			quoteSlugs(decls),
+			quoteNames(triggerDecls),
+		);
 		const answer = await wantRegister(
-			`No Neon config found. Create ${rel(targetPath)} and register ${quoteSlugs(decls)}?`,
+			`No Neon config found. Create ${rel(targetPath)} and register ${createItems}?`,
 		);
 		if (answer === undefined) return { kind: "cancelled" };
 		if (!answer) return { kind: "skip", declined: true };
@@ -439,11 +553,11 @@ export const planConfigRegistration = async (
 			root,
 			relativePath: rel(targetPath),
 			// Start from the minimal starter (import + empty defineConfig) and let
-			// the shared editor fill in only the selected functions.
-			text: applyDecls(
+			// the shared editor fill in only the functions and triggers required.
+			text: applyEdits(
 				MINIMAL_CONFIG_STARTER,
 				extension,
-				insertOps(decls),
+				createOps(decls, triggerDecls),
 			),
 			deps: {
 				missing,
@@ -453,6 +567,7 @@ export const planConfigRegistration = async (
 				root,
 			},
 			decls,
+			triggerDecls,
 		};
 	};
 
@@ -525,6 +640,9 @@ export const applyConfigPlan = async (
 	];
 	const hasEnv = envNames.length > 0;
 	const registeredSlugs = plan.decls.map((decl) => decl.slug);
+	const registeredTriggers = (plan.triggerDecls ?? []).map(
+		(decl) => decl.name,
+	);
 
 	if (plan.kind === "noop") {
 		return {
@@ -533,6 +651,7 @@ export const applyConfigPlan = async (
 			path: plan.path,
 			relativePath: plan.relativePath,
 			registeredSlugs,
+			registeredTriggers,
 			hasEnv,
 			envNames,
 		};
@@ -546,6 +665,7 @@ export const applyConfigPlan = async (
 			path: plan.path,
 			relativePath: plan.relativePath,
 			registeredSlugs,
+			registeredTriggers,
 			hasEnv,
 			envNames,
 		};
@@ -573,6 +693,7 @@ export const applyConfigPlan = async (
 		path: plan.path,
 		relativePath: plan.relativePath,
 		registeredSlugs,
+		registeredTriggers,
 		depInstalled,
 		depCommand,
 		hasEnv,

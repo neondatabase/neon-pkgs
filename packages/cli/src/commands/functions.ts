@@ -418,6 +418,8 @@ const NEW_BUNDLE_FIELDS = [
 	"capabilities",
 	"depends_on",
 	"triggers",
+	"registered_triggers",
+	"unsupported_triggers",
 	"migrations",
 	"environment",
 	"injected_environment",
@@ -444,6 +446,14 @@ const emitBundleResult = (
 			capabilities: result.capabilities,
 			depends_on: result.dependsOn,
 			triggers: result.triggers,
+			registered_triggers: result.registeredTriggers,
+			unsupported_triggers: result.unsupportedTriggers.map((trigger) => ({
+				type: trigger.type,
+				reason: trigger.reason,
+				...(trigger.description
+					? { description: trigger.description }
+					: {}),
+			})),
 			migrations: result.migrations,
 			environment: result.environment,
 			injected_environment: result.injectedEnvironment,

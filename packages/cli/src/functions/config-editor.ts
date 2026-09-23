@@ -408,19 +408,37 @@ export type ExistingFunction = {
 	valueEndOffset: number;
 };
 
+/** Primitive value a trigger member can carry once statically extracted. */
+export type TriggerFieldValue = string | number | boolean;
+
+export type ExistingTrigger = {
+	name: string;
+	/**
+	 * The trigger's statically-extracted primitive fields (`type`, `function`, `cron`, …), or
+	 * `undefined` when the value isn't a static object of literals — in which case the caller
+	 * cannot prove two declarations equal and must treat it as a conflict.
+	 */
+	fields?: Record<string, TriggerFieldValue>;
+	keyStartOffset: number;
+	valueEndOffset: number;
+};
+
+type BlockContext = {
+	openOffset: number;
+	closeOffset: number;
+	keyIndent: string;
+	memberIndent: string;
+	hasMembers: boolean;
+};
+
 type EditContext = {
 	source: string;
 	extension: string;
 	configOpenOffset: number;
 	topIndent: string;
 	unit: string;
-	functionsBlock?: {
-		openOffset: number;
-		closeOffset: number;
-		keyIndent: string;
-		memberIndent: string;
-		hasMembers: boolean;
-	};
+	functionsBlock?: BlockContext;
+	triggersBlock?: BlockContext;
 };
 
 export type ConfigAnalysis =
@@ -429,6 +447,7 @@ export type ConfigAnalysis =
 			safe: true;
 			binding: string;
 			functions: ExistingFunction[];
+			triggers: ExistingTrigger[];
 			ctx: EditContext;
 	  };
 
@@ -505,6 +524,97 @@ const extractSourceValue = (
 	if (source.valueEndIndex !== source.valueStartIndex) return undefined;
 	if (literal.type !== "string") return undefined;
 	return parseStringLiteral(literal.value);
+};
+
+/**
+ * Extract a trigger object literal's members as primitive values, so two declarations can be
+ * compared for equality before a conflict is reported. Returns `undefined` for anything not
+ * provably static (a computed value, a spread, a nested object, a non-literal expression) — the
+ * caller then treats the existing trigger as a conflict rather than silently overwriting it.
+ */
+const extractPrimitiveFields = (
+	tokens: Token[],
+	valueStartIndex: number,
+): Record<string, TriggerFieldValue> | undefined => {
+	const first = tokens[valueStartIndex];
+	if (!(first?.type === "punct" && first.value === "{")) return undefined;
+	const shape = readObjectMembers(tokens, valueStartIndex);
+	if (shape.kind !== "object") return undefined;
+	const fields: Record<string, TriggerFieldValue> = {};
+	for (const member of shape.members) {
+		if (member.valueEndIndex !== member.valueStartIndex) return undefined;
+		const literal = tokens[member.valueStartIndex];
+		if (literal.type === "string") {
+			const value = parseStringLiteral(literal.value);
+			if (value === undefined) return undefined;
+			fields[member.key] = value;
+		} else if (literal.type === "number") {
+			const value = Number(literal.value);
+			if (!Number.isFinite(value)) return undefined;
+			fields[member.key] = value;
+		} else if (
+			literal.type === "ident" &&
+			(literal.value === "true" || literal.value === "false")
+		) {
+			fields[member.key] = literal.value === "true";
+		} else {
+			return undefined;
+		}
+	}
+	return fields;
+};
+
+type RecordBlock =
+	| { kind: "unsafe"; reason: string }
+	| {
+			kind: "block";
+			members: ConfigMember[];
+			close: number;
+			ctx: BlockContext;
+	  };
+
+/**
+ * Resolve a top-level record member (`functions` or `triggers`) to its object-literal members and
+ * the offsets/indentation an edit needs, or an `unsafe` verdict when the value isn't a static
+ * object literal. Shared by the two record blocks the editor manages so their splice geometry
+ * stays identical.
+ */
+const readTopLevelRecord = (
+	tokens: Token[],
+	source: string,
+	member: ConfigMember,
+	unit: string,
+	label: string,
+): RecordBlock => {
+	const blockOpen = tokens[member.valueStartIndex];
+	if (!(blockOpen?.type === "punct" && blockOpen.value === "{")) {
+		return {
+			kind: "unsafe",
+			reason: `the \`${label}\` value is not a static object literal`,
+		};
+	}
+	const block = readObjectMembers(tokens, member.valueStartIndex);
+	if (block.kind === "unsafe")
+		return { kind: "unsafe", reason: block.reason };
+	const keyIndent = lineIndent(source, tokens[member.keyTokenIndex].start);
+	return {
+		kind: "block",
+		members: block.members,
+		close: block.close,
+		ctx: {
+			openOffset: blockOpen.end,
+			closeOffset: tokens[block.close].start,
+			keyIndent,
+			memberIndent:
+				block.members.length > 0
+					? lineIndent(
+							source,
+							tokens[block.members[0].keyTokenIndex].start,
+						)
+					: `${keyIndent}${unit}`,
+			hasMembers: block.members.length > 0,
+		},
+	};
 };
 
 /**
@@ -586,6 +696,14 @@ export const analyzeNeonConfig = (
 		};
 	}
 
+	const triggersMembers = config.members.filter((m) => m.key === "triggers");
+	if (triggersMembers.length > 1) {
+		return {
+			safe: false,
+			reason: "multiple `triggers` keys in the config",
+		};
+	}
+
 	const preview = config.members.find((m) => m.key === "preview");
 	if (preview) {
 		const previewValue = tokens[preview.valueStartIndex];
@@ -622,16 +740,12 @@ export const analyzeNeonConfig = (
 	const functions: ExistingFunction[] = [];
 	const functionsMember = functionsMembers[0];
 	if (functionsMember) {
-		const blockOpen = tokens[functionsMember.valueStartIndex];
-		if (!(blockOpen?.type === "punct" && blockOpen.value === "{")) {
-			return {
-				safe: false,
-				reason: "the `functions` value is not a static object literal",
-			};
-		}
-		const block = readObjectMembers(
+		const block = readTopLevelRecord(
 			tokens,
-			functionsMember.valueStartIndex,
+			source,
+			functionsMember,
+			unit,
+			"functions",
 		);
 		if (block.kind === "unsafe") {
 			return { safe: false, reason: block.reason };
@@ -652,26 +766,42 @@ export const analyzeNeonConfig = (
 				valueEndOffset: tokens[member.valueEndIndex].end,
 			});
 		}
-		const keyIndent = lineIndent(
-			source,
-			tokens[functionsMember.keyTokenIndex].start,
-		);
-		ctx.functionsBlock = {
-			openOffset: blockOpen.end,
-			closeOffset: tokens[block.close].start,
-			keyIndent,
-			memberIndent:
-				block.members.length > 0
-					? lineIndent(
-							source,
-							tokens[block.members[0].keyTokenIndex].start,
-						)
-					: `${keyIndent}${unit}`,
-			hasMembers: block.members.length > 0,
-		};
+		ctx.functionsBlock = block.ctx;
 	}
 
-	return { safe: true, binding, functions, ctx };
+	const triggers: ExistingTrigger[] = [];
+	const triggersMember = triggersMembers[0];
+	if (triggersMember) {
+		const block = readTopLevelRecord(
+			tokens,
+			source,
+			triggersMember,
+			unit,
+			"triggers",
+		);
+		if (block.kind === "unsafe") {
+			return { safe: false, reason: block.reason };
+		}
+		const seen = new Set<string>();
+		for (const member of block.members) {
+			if (seen.has(member.key)) {
+				return {
+					safe: false,
+					reason: `duplicate trigger name \`${member.key}\``,
+				};
+			}
+			seen.add(member.key);
+			triggers.push({
+				name: member.key,
+				fields: extractPrimitiveFields(tokens, member.valueStartIndex),
+				keyStartOffset: tokens[member.keyTokenIndex].start,
+				valueEndOffset: tokens[member.valueEndIndex].end,
+			});
+		}
+		ctx.triggersBlock = block.ctx;
+	}
+
+	return { safe: true, binding, functions, triggers, ctx };
 };
 
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -709,6 +839,79 @@ export const buildFunctionEntry = (
 		parts.push(`env: { ${inner} }`);
 	}
 	return `${renderKey(decl.slug)}: { ${parts.join(", ")} }`;
+};
+
+/**
+ * A function trigger to register, keyed by its branch-unique `name`. Fields mirror the Neon
+ * config `triggers` shape exactly; only the ones present are rendered, so the emitted entry is a
+ * valid `FunctionTriggerDef` (`functionPath`/`enabled` fall back to their documented defaults).
+ */
+export type TriggerDeclaration = {
+	name: string;
+	type: "schedule" | "storage_object_created";
+	function: string;
+	cron?: string;
+	bucket?: string;
+	prefix?: string;
+	functionPath?: string;
+	enabled?: boolean;
+};
+
+/**
+ * The declaration's primitive fields, in the same normalized form {@link extractPrimitiveFields}
+ * produces for an existing trigger, so a re-registration of the identical trigger compares equal
+ * and is treated as a no-op rather than a conflict.
+ */
+export const triggerFields = (
+	decl: TriggerDeclaration,
+): Record<string, TriggerFieldValue> => {
+	const fields: Record<string, TriggerFieldValue> = {
+		type: decl.type,
+		function: decl.function,
+	};
+	if (decl.cron !== undefined) fields.cron = decl.cron;
+	if (decl.bucket !== undefined) fields.bucket = decl.bucket;
+	if (decl.prefix !== undefined) fields.prefix = decl.prefix;
+	if (decl.functionPath !== undefined)
+		fields.functionPath = decl.functionPath;
+	if (decl.enabled !== undefined) fields.enabled = decl.enabled;
+	return fields;
+};
+
+const canonicalFields = (fields: Record<string, TriggerFieldValue>): string =>
+	JSON.stringify(
+		Object.fromEntries(
+			Object.entries(fields).sort(([a], [b]) => (a < b ? -1 : 1)),
+		),
+	);
+
+/** Whether an existing trigger's provable fields match a declaration exactly. */
+export const sameTriggerConfig = (
+	existing: ExistingTrigger,
+	decl: TriggerDeclaration,
+): boolean =>
+	existing.fields !== undefined &&
+	canonicalFields(existing.fields) === canonicalFields(triggerFields(decl));
+
+/** Render `<name>: { type: …, function: …, cron: … }` as a single-line object member. */
+export const buildTriggerEntry = (decl: TriggerDeclaration): string => {
+	const parts = [
+		`type: ${JSON.stringify(decl.type)}`,
+		`function: ${JSON.stringify(decl.function)}`,
+	];
+	if (decl.cron !== undefined)
+		parts.push(`cron: ${JSON.stringify(decl.cron)}`);
+	if (decl.bucket !== undefined) {
+		parts.push(`bucket: ${JSON.stringify(decl.bucket)}`);
+	}
+	if (decl.prefix !== undefined) {
+		parts.push(`prefix: ${JSON.stringify(decl.prefix)}`);
+	}
+	if (decl.functionPath !== undefined) {
+		parts.push(`functionPath: ${JSON.stringify(decl.functionPath)}`);
+	}
+	if (decl.enabled !== undefined) parts.push(`enabled: ${decl.enabled}`);
+	return `${renderKey(decl.name)}: { ${parts.join(", ")} }`;
 };
 
 const supportsEnvAssertion = (extension: string): boolean =>
@@ -771,6 +974,64 @@ export const replaceFunction = (
 	const entry = buildFunctionEntry(decl, {
 		includeEnv: supportsEnvAssertion(ctx.extension),
 	});
+	return (
+		ctx.source.slice(0, existing.keyStartOffset) +
+		entry +
+		ctx.source.slice(existing.valueEndOffset)
+	);
+};
+
+/**
+ * Insert a trigger member into a safely-analyzed config, mirroring {@link insertFunction}: it
+ * becomes the first member of an existing `triggers` block, or a fresh `triggers` block is added
+ * as the first member of the config object. Every edit is a splice, so surrounding policy text is
+ * preserved verbatim.
+ */
+export const insertTrigger = (
+	analysis: Extract<ConfigAnalysis, { safe: true }>,
+	decl: TriggerDeclaration,
+): string => {
+	const { ctx } = analysis;
+	const entry = buildTriggerEntry(decl);
+	const source = ctx.source;
+	if (ctx.triggersBlock) {
+		const block = ctx.triggersBlock;
+		if (block.hasMembers) {
+			const insertion = `\n${block.memberIndent}${entry},`;
+			return (
+				source.slice(0, block.openOffset) +
+				insertion +
+				source.slice(block.openOffset)
+			);
+		}
+		const insertion = `\n${block.memberIndent}${entry},\n${block.keyIndent}`;
+		return (
+			source.slice(0, block.openOffset) +
+			insertion +
+			source.slice(block.closeOffset)
+		);
+	}
+	const memberIndent = `${ctx.topIndent}${ctx.unit}`;
+	const insertion = `\n${ctx.topIndent}triggers: {\n${memberIndent}${entry},\n${ctx.topIndent}},`;
+	return (
+		source.slice(0, ctx.configOpenOffset) +
+		insertion +
+		source.slice(ctx.configOpenOffset)
+	);
+};
+
+/** Replace an existing trigger member (same name) with a fresh declaration. */
+export const replaceTrigger = (
+	analysis: Extract<ConfigAnalysis, { safe: true }>,
+	name: string,
+	decl: TriggerDeclaration,
+): string => {
+	const { ctx } = analysis;
+	const existing = analysis.triggers.find((trigger) => trigger.name === name);
+	if (!existing) {
+		throw new Error(`Trigger "${name}" is not declared in the config.`);
+	}
+	const entry = buildTriggerEntry(decl);
 	return (
 		ctx.source.slice(0, existing.keyStartOffset) +
 		entry +
