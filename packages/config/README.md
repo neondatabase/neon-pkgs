@@ -136,7 +136,7 @@ import {
 
 ## Lifecycle hooks (Preview)
 
-`branch()` is the **declarative** layer — *what a branch should look like* — and is pure (it runs during `plan` / `status`, so it must stay side-effect free). `hooks` is its **imperative** companion: run side effects (migrations, seeding, notifications) on the real `checkout` / `deploy` commands. Hooks **never** run during `plan` / `status` / `inspect`, which is what keeps the diff engine deterministic and the typed env sound.
+`branch()` is the **declarative** layer — *what a branch should look like* — and is pure (it runs during `plan` / `status`, so it must stay side-effect free). `experimental.hooks` is its **imperative** companion: run side effects (migrations, seeding, notifications) on the real `checkout` / `deploy` commands. Hooks **never** run during `plan` / `status` / `inspect`, which is what keeps the diff engine deterministic and the typed env sound. Hooks live under the top-level `experimental` namespace rather than as a sibling of `auth` / `dataApi` / `branch`, marking that this shape isn't covered by the same stability guarantees as the rest of the policy.
 
 ```ts
 import { defineConfig, toNeonBranchName } from "@neondatabase/config/v1";
@@ -145,26 +145,30 @@ export default defineConfig({
   auth: true,
   branch: (branch) => ({ protected: branch.name === "main" }),
 
-  hooks: {
-    checkout: {
-      // `before` may rewrite the branch name (function form) or abort (throw / non-zero exit).
-      // `git` is read-only facts injected by the CLI.
-      before: ({ inputName, git }) =>
-        git.triggeredByGitHook && git.branch
-          ? { name: toNeonBranchName(git.branch, { prefix: "preview/" }) }
-          : undefined,
-      // `after` observes; `branch.created` distinguishes a new branch from a selected one.
-      after: async ({ branch, env }) => {
-        if (branch.created) await runMigrations(env.postgres.databaseUrlUnpooled);
+  // Experimental (unstable) features live under their own namespace, isolated from the
+  // rest of the policy, so this shape can change without touching `auth` / `branch` / …
+  experimental: {
+    hooks: {
+      checkout: {
+        // `before` may rewrite the branch name (function form) or abort (throw / non-zero exit).
+        // `git` is read-only facts injected by the CLI.
+        before: ({ inputName, git }) =>
+          git.triggeredByGitHook && git.branch
+            ? { name: toNeonBranchName(git.branch, { prefix: "preview/" }) }
+            : undefined,
+        // `after` observes; `branch.created` distinguishes a new branch from a selected one.
+        after: async ({ branch, env }) => {
+          if (branch.created) await runMigrations(env.postgres.databaseUrlUnpooled);
+        },
       },
-    },
-    // Fires only when a branch is actually created — never for an existing-branch checkout.
-    create: {
-      after: "npm run db:seed",
-    },
-    deploy: {
-      // Shell-command form: runs non-interactively (stdin detached, CI=1) with Neon env injected.
-      after: "npm run db:migrate",
+      // Fires only when a branch is actually created — never for an existing-branch checkout.
+      create: {
+        after: "npm run db:seed",
+      },
+      deploy: {
+        // Shell-command form: non-interactive (stdin detached, CI=1), Neon env injected.
+        after: "npm run db:migrate",
+      },
     },
   },
 });

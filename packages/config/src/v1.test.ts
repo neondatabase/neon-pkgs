@@ -97,6 +97,7 @@ describe("@neondatabase/config public value surface", () => {
 			  "dataApi",
 			  "dataApiInput",
 			  "dataApiSettings",
+			  "experimental",
 			  "function",
 			  "functionTuning",
 			  "hooks",

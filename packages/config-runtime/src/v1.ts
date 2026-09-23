@@ -40,6 +40,7 @@ export type {
 	DeployAfterContext,
 	DeployBeforeContext,
 	DeployHooks,
+	ExperimentalInput,
 	GitContext,
 	Hook,
 	HookBranch,

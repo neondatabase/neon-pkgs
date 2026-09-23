@@ -195,22 +195,28 @@ describe("ShellHook union", () => {
 	});
 });
 
-describe("defineConfig hooks — positive (every valid form type-checks)", () => {
+describe("defineConfig experimental.hooks — positive (every valid form type-checks)", () => {
 	test("function-form create hooks; context is inferred", () => {
 		defineConfig({
-			hooks: {
-				create: {
-					before: (ctx) => {
-						expectTypeOf(ctx).toEqualTypeOf<CreateBeforeContext>();
-						expectTypeOf(ctx.branchName).toEqualTypeOf<string>();
-					},
-					after: async (ctx) => {
-						expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
-							"postgres" | "branch"
-						>();
-						expectTypeOf(
-							ctx.branch.created,
-						).toEqualTypeOf<boolean>();
+			experimental: {
+				hooks: {
+					create: {
+						before: (ctx) => {
+							expectTypeOf(
+								ctx,
+							).toEqualTypeOf<CreateBeforeContext>();
+							expectTypeOf(
+								ctx.branchName,
+							).toEqualTypeOf<string>();
+						},
+						after: async (ctx) => {
+							expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
+								"postgres" | "branch"
+							>();
+							expectTypeOf(
+								ctx.branch.created,
+							).toEqualTypeOf<boolean>();
+						},
 					},
 				},
 			},
@@ -219,37 +225,41 @@ describe("defineConfig hooks — positive (every valid form type-checks)", () =>
 
 	test("function-form checkout + deploy hooks; contexts are inferred", () => {
 		defineConfig({
-			hooks: {
-				checkout: {
-					before: (ctx) => {
-						expectTypeOf(
-							ctx,
-						).toEqualTypeOf<CheckoutBeforeContext>();
-						expectTypeOf(ctx.inputName).toEqualTypeOf<string>();
-						return { name: `preview/${ctx.inputName}` };
+			experimental: {
+				hooks: {
+					checkout: {
+						before: (ctx) => {
+							expectTypeOf(
+								ctx,
+							).toEqualTypeOf<CheckoutBeforeContext>();
+							expectTypeOf(ctx.inputName).toEqualTypeOf<string>();
+							return { name: `preview/${ctx.inputName}` };
+						},
+						after: async (ctx) => {
+							// Bare policy (no services): env is exactly postgres + branch.
+							expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
+								"postgres" | "branch"
+							>();
+							expectTypeOf(
+								ctx.env.postgres.databaseUrl,
+							).toEqualTypeOf<string>();
+							expectTypeOf(
+								ctx.branch.created,
+							).toEqualTypeOf<boolean>();
+						},
 					},
-					after: async (ctx) => {
-						// Bare policy (no services): env is exactly postgres + branch.
-						expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
-							"postgres" | "branch"
-						>();
-						expectTypeOf(
-							ctx.env.postgres.databaseUrl,
-						).toEqualTypeOf<string>();
-						expectTypeOf(
-							ctx.branch.created,
-						).toEqualTypeOf<boolean>();
-					},
-				},
-				deploy: {
-					before: (ctx) => {
-						expectTypeOf(ctx.branch.id).toEqualTypeOf<string>();
-					},
-					after: async (ctx) => {
-						expectTypeOf(ctx.result).toEqualTypeOf<PushResult>();
-						expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
-							"postgres" | "branch"
-						>();
+					deploy: {
+						before: (ctx) => {
+							expectTypeOf(ctx.branch.id).toEqualTypeOf<string>();
+						},
+						after: async (ctx) => {
+							expectTypeOf(
+								ctx.result,
+							).toEqualTypeOf<PushResult>();
+							expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
+								"postgres" | "branch"
+							>();
+						},
 					},
 				},
 			},
@@ -259,18 +269,24 @@ describe("defineConfig hooks — positive (every valid form type-checks)", () =>
 	test("the after-hook `env` reflects the policy: `auth: true` ⇒ `env.auth` is present + typed", () => {
 		defineConfig({
 			auth: true,
-			hooks: {
-				checkout: {
-					after: (ctx) => {
-						expectTypeOf(ctx.env.auth).toEqualTypeOf<NeonAuthEnv>();
-						expectTypeOf(
-							ctx.env.postgres.databaseUrl,
-						).toEqualTypeOf<string>();
+			experimental: {
+				hooks: {
+					checkout: {
+						after: (ctx) => {
+							expectTypeOf(
+								ctx.env.auth,
+							).toEqualTypeOf<NeonAuthEnv>();
+							expectTypeOf(
+								ctx.env.postgres.databaseUrl,
+							).toEqualTypeOf<string>();
+						},
 					},
-				},
-				deploy: {
-					after: (ctx) => {
-						expectTypeOf(ctx.env.auth).toEqualTypeOf<NeonAuthEnv>();
+					deploy: {
+						after: (ctx) => {
+							expectTypeOf(
+								ctx.env.auth,
+							).toEqualTypeOf<NeonAuthEnv>();
+						},
 					},
 				},
 			},
@@ -279,11 +295,13 @@ describe("defineConfig hooks — positive (every valid form type-checks)", () =>
 
 	test("the after-hook `env` omits namespaces the policy doesn't enable", () => {
 		defineConfig({
-			hooks: {
-				checkout: {
-					after: (ctx) => {
-						// @ts-expect-error no `auth` in the policy ⇒ no `env.auth`.
-						ctx.env.auth;
+			experimental: {
+				hooks: {
+					checkout: {
+						after: (ctx) => {
+							// @ts-expect-error no `auth` in the policy ⇒ no `env.auth`.
+							ctx.env.auth;
+						},
 					},
 				},
 			},
@@ -292,10 +310,12 @@ describe("defineConfig hooks — positive (every valid form type-checks)", () =>
 
 	test("a `before` hook may return nothing (void) or a rename", () => {
 		defineConfig({
-			hooks: {
-				checkout: {
-					before: () => {
-						/* validate / abort by throwing; return nothing */
+			experimental: {
+				hooks: {
+					checkout: {
+						before: () => {
+							/* validate / abort by throwing; return nothing */
+						},
 					},
 				},
 			},
@@ -304,42 +324,59 @@ describe("defineConfig hooks — positive (every valid form type-checks)", () =>
 
 	test("shell-command hooks: string and array", () => {
 		defineConfig({
-			hooks: {
-				checkout: { after: "npm run db:migrate" },
-				create: { after: "npm run db:seed" },
-				deploy: { after: ["npm run build", "npm run db:migrate"] },
+			experimental: {
+				hooks: {
+					checkout: { after: "npm run db:migrate" },
+					create: { after: "npm run db:seed" },
+					deploy: { after: ["npm run build", "npm run db:migrate"] },
+				},
 			},
 		});
 	});
 
-	test("hooks survive onto the returned Config", () => {
-		const config = defineConfig({ hooks: { deploy: { after: "x" } } });
-		expectTypeOf(config.hooks).toEqualTypeOf<Hooks | undefined>();
+	test("hooks survive onto the returned Config, under `experimental`", () => {
+		const config = defineConfig({
+			experimental: { hooks: { deploy: { after: "x" } } },
+		});
+		expectTypeOf(config.experimental?.hooks).toEqualTypeOf<
+			Hooks | undefined
+		>();
 	});
 });
 
-describe("defineConfig hooks — negative (@ts-expect-error)", () => {
+describe("defineConfig experimental.hooks — negative (@ts-expect-error)", () => {
 	test("an unknown hook phase is rejected", () => {
 		// @ts-expect-error `dev` is not a hook phase.
-		defineConfig({ hooks: { dev: { after: "x" } } });
+		defineConfig({ experimental: { hooks: { dev: { after: "x" } } } });
 	});
 
 	test("an unknown key inside a phase is rejected", () => {
-		// @ts-expect-error `during` is not a phase key (before/after only).
-		defineConfig({ hooks: { checkout: { during: "x" } } });
+		defineConfig({
+			experimental: {
+				// @ts-expect-error `during` is not a phase key (before/after only).
+				hooks: { checkout: { during: "x" } },
+			},
+		});
+	});
+
+	test("an unknown key inside experimental is rejected", () => {
+		// @ts-expect-error `dev` is not an experimental feature.
+		defineConfig({ experimental: { dev: "x" } });
 	});
 
 	test("a non-function / non-shell hook value is rejected", () => {
 		// @ts-expect-error 42 is neither a function nor a shell command.
-		defineConfig({ hooks: { deploy: { after: 42 } } });
+		defineConfig({ experimental: { hooks: { deploy: { after: 42 } } } });
 	});
 
 	test("a checkout.before returning a wrong-typed name is rejected", () => {
 		defineConfig({
-			hooks: {
-				checkout: {
-					// @ts-expect-error `name` must be a string.
-					before: () => ({ name: 123 }),
+			experimental: {
+				hooks: {
+					checkout: {
+						// @ts-expect-error `name` must be a string.
+						before: () => ({ name: 123 }),
+					},
 				},
 			},
 		});
@@ -347,10 +384,12 @@ describe("defineConfig hooks — negative (@ts-expect-error)", () => {
 
 	test("create.before cannot return a rename — only checkout.before can", () => {
 		defineConfig({
-			hooks: {
-				create: {
-					// @ts-expect-error create.before's return type is `void`, not a rename result.
-					before: () => ({ name: "renamed" }),
+			experimental: {
+				hooks: {
+					create: {
+						// @ts-expect-error create.before's return type is `void`, not a rename result.
+						before: () => ({ name: "renamed" }),
+					},
 				},
 			},
 		});

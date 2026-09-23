@@ -507,13 +507,27 @@ export interface Config<
 	/** Per-branch tuning closure. Cannot change the static existential set. */
 	branch?: BranchTuningFn<Preview>;
 	/**
+	 * Experimental (unstable) features, isolated in their own namespace so they can change
+	 * shape or disappear without touching the rest of the policy. See {@link ExperimentalInput}.
+	 */
+	experimental?: ExperimentalInput<Config<Auth, DataApi, Preview>>;
+}
+
+/**
+ * Experimental (unstable) features. Currently just `hooks`. Kept out of the top-level
+ * namespace — rather than a sibling of `auth` / `dataApi` / `branch` — as a signal that this
+ * shape is still moving and isn't covered by the same stability guarantees as the rest of
+ * the policy.
+ */
+export interface ExperimentalInput<C extends Config = Config> {
+	/**
 	 * Imperative lifecycle hooks (Preview) — run side effects (migrations, seeding, …) on the
-	 * real `checkout` / `deploy` commands. The declarative companion to {@link branch}: hooks
-	 * never run during `plan` / `status` / `inspect`, so the diff engine and typed env stay
-	 * sound. Bound to this policy so `after` hooks receive the exact `NeonEnv<this config>`.
+	 * real `checkout` / `deploy` commands. The declarative companion to {@link Config.branch}:
+	 * hooks never run during `plan` / `status` / `inspect`, so the diff engine and typed env
+	 * stay sound. Bound to this policy so `after` hooks receive the exact `NeonEnv<this config>`.
 	 * See {@link Hooks}.
 	 */
-	hooks?: Hooks<Config<Auth, DataApi, Preview>>;
+	hooks?: Hooks<C>;
 }
 
 /**

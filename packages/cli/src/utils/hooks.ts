@@ -44,7 +44,7 @@ const ENV_VARS = {
 export const loadHooks = async (cwd: string): Promise<Hooks | undefined> => {
   try {
     const { config } = await loadConfigFromFile({ cwd });
-    return config.hooks;
+    return config.experimental?.hooks;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (/Could not find a Neon config file/i.test(message)) return undefined;

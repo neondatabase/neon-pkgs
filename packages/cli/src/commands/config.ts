@@ -287,7 +287,7 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
   // Lifecycle hooks (Preview): the `deploy` phase brackets the apply. `before` can validate
   // or abort (a throw propagates); `after` observes the resolved env + PushResult.
   const cwd = props.cwd ?? process.cwd();
-  const hooks = config.hooks;
+  const hooks = config.experimental?.hooks;
   const git = readGitContext(cwd, {
     triggeredByGitHook: process.env[GIT_HOOK_ENV_FLAG] === '1',
   });

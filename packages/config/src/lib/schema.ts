@@ -314,6 +314,11 @@ export const hooksSchema = z.strictObject({
 	deploy: hookPhaseSchema.optional(),
 });
 
+/** Experimental (unstable) features block (`experimental.hooks`). Currently just `hooks`. */
+export const experimentalInputSchema = z.strictObject({
+	hooks: hooksSchema.optional(),
+});
+
 /**
  * The top-level object accepted by `defineConfig`. The `branch` closure is validated
  * structurally as a function here; its returned tuning is validated per-evaluation by
@@ -333,7 +338,7 @@ export const configInputSchema = z
 				},
 			)
 			.optional(),
-		hooks: hooksSchema.optional(),
+		experimental: experimentalInputSchema.optional(),
 	})
 	.superRefine((cfg, ctx) => {
 		// A Data API verified by Neon Auth (`authProvider: "neon"`, the default) needs Neon
