@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, test } from "vitest";
-import { toNeonBranchName } from "./branch-name.js";
+import { neonSafeBranchName } from "./branch-name.js";
 import { defineConfig } from "./define-config.js";
 import type {
 	NeonAiGatewayEnv,
@@ -410,13 +410,13 @@ describe("defineConfig experimental.hooks — negative (@ts-expect-error)", () =
 	});
 });
 
-describe("toNeonBranchName (types)", () => {
+describe("neonSafeBranchName (types)", () => {
 	test("returns a string", () => {
-		expectTypeOf(toNeonBranchName("x")).toEqualTypeOf<string>();
+		expectTypeOf(neonSafeBranchName("x")).toEqualTypeOf<string>();
 	});
 
 	test("options are accepted (positive)", () => {
-		toNeonBranchName("x", {
+		neonSafeBranchName("x", {
 			prefix: "preview/",
 			maxLength: 64,
 			lowercase: true,
@@ -425,7 +425,7 @@ describe("toNeonBranchName (types)", () => {
 	});
 
 	test("an unknown option is rejected", () => {
-		// @ts-expect-error `unknown` is not a ToNeonBranchNameOptions field.
-		toNeonBranchName("x", { unknown: 1 });
+		// @ts-expect-error `unknown` is not a NeonSafeBranchNameOptions field.
+		neonSafeBranchName("x", { unknown: 1 });
 	});
 });

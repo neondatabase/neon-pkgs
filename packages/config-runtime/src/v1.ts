@@ -53,10 +53,10 @@ export type {
 	NeonDataApiEnv,
 	NeonEnv,
 	NeonPostgresEnv,
+	NeonSafeBranchNameOptions,
 	NeonStorageEnv,
 	PushResult,
 	ShellHook,
-	ToNeonBranchNameOptions,
 } from "@neondatabase/config";
 // ─── Re-exports from @neondatabase/config for convenience ─────────────────────
 // Runtime callers usually want a few authoring-side symbols alongside the operations
@@ -70,13 +70,13 @@ export {
 	createRealNeonApi,
 	defineConfig,
 	ErrorCode,
+	git,
 	isPlatformError,
 	loadConfigFromFile,
 	MissingContextError,
 	PlatformError,
 	PushAbortedError,
 	PushConflictError,
-	toNeonBranchName,
 } from "@neondatabase/config";
 export type { FunctionBundler } from "./lib/function-bundle.js";
 // ─── Function bundling (esbuild + zip) ────────────────────────────────────────

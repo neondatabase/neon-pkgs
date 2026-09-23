@@ -67,6 +67,7 @@ import type {
 	NeonPostgresEnv,
 	NeonProjectSnapshot,
 	NeonRoleSnapshot,
+	NeonSafeBranchNameOptions,
 	NeonStorageEnv,
 	PlanStep,
 	PostgresConfig,
@@ -85,7 +86,6 @@ import type {
 	ServiceToggle,
 	ServiceToggleInput,
 	ShellHook,
-	ToNeonBranchNameOptions,
 	UpdateBranchInput,
 } from "./v1.js";
 import { type Config, defineConfig } from "./v1.js";
@@ -151,7 +151,7 @@ describe("config type-export surface", () => {
 		expectTypeOf<HookBranch>().not.toBeAny();
 		expectTypeOf<Hook<CheckoutAfterContext>>().not.toBeAny();
 		expectTypeOf<ShellHook>().not.toBeAny();
-		expectTypeOf<ToNeonBranchNameOptions>().not.toBeAny();
+		expectTypeOf<NeonSafeBranchNameOptions>().not.toBeAny();
 	});
 
 	test("every public resolved-env type is exported (compile-time tripwire)", () => {

@@ -10,13 +10,13 @@
  * - `/` preserved as a segment separator (by default), so a hierarchical git branch like
  *   `feature/billing-ui` round-trips to `feature/billing-ui` instead of being flattened;
  * - empty results fall back to `"branch"`;
- * - clamped to {@link ToNeonBranchNameOptions.maxLength}.
+ * - clamped to {@link NeonSafeBranchNameOptions.maxLength}.
  *
- * @example toNeonBranchName("feature/PROJ-123 Add Billing")            // "feature/proj-123-add-billing"
- * @example toNeonBranchName("feature/x", { prefix: "preview/" })       // "preview/feature/x"
- * @example toNeonBranchName("Hotfix!!", { preserveSlashes: false })    // "hotfix"
+ * @example git.neonSafeBranchName("feature/PROJ-123 Add Billing")            // "feature/proj-123-add-billing"
+ * @example git.neonSafeBranchName("feature/x", { prefix: "preview/" })       // "preview/feature/x"
+ * @example git.neonSafeBranchName("Hotfix!!", { preserveSlashes: false })    // "hotfix"
  */
-export interface ToNeonBranchNameOptions {
+export interface NeonSafeBranchNameOptions {
 	/** Prepended to the input before sanitizing (e.g. `"preview/"`). */
 	prefix?: string;
 	/** Maximum length of the result. Default `256` (Neon's branch-name limit). */
@@ -39,11 +39,13 @@ function sanitizeSegment(segment: string): string {
 }
 
 /**
- * Convert an arbitrary string into a valid Neon branch name. See {@link ToNeonBranchNameOptions}.
+ * Convert an arbitrary string into a valid Neon branch name. See
+ * {@link NeonSafeBranchNameOptions}. Exposed as `git.neonSafeBranchName` (see the `git`
+ * namespace in `v1.ts`), not as a bare top-level export.
  */
-export function toNeonBranchName(
+export function neonSafeBranchName(
 	input: string,
-	options: ToNeonBranchNameOptions = {},
+	options: NeonSafeBranchNameOptions = {},
 ): string {
 	const lowercase = options.lowercase ?? true;
 	const preserveSlashes = options.preserveSlashes ?? true;

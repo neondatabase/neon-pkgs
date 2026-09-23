@@ -35,8 +35,10 @@
  * - `errors` namespace: specific `PlatformError` subclasses (`ConfigLoadError`,
  *   `PushConflictError`, …).
  * - `schemas` namespace: the zod schemas underlying `defineConfig`.
+ * - `git` namespace: pure git/branch-name helpers (`git.neonSafeBranchName`).
  */
 
+import { neonSafeBranchName } from "./lib/branch-name.js";
 import {
 	ConfigLoadError,
 	ConfigValidationError,
@@ -99,11 +101,20 @@ export const schemas = {
 	serviceInput: serviceToggleInputSchema,
 } as const;
 
+/**
+ * Pure git/branch-name helpers, grouped so they read as `git.<helper>` at call sites (e.g.
+ * inside a `checkout.before` hook or the CLI's git → Neon mapping) instead of a bare
+ * top-level function whose name doesn't signal what it's for.
+ */
+export const git = {
+	neonSafeBranchName,
+} as const;
+
 // ─── Lower-level adapters ──────────────────────────────────────────────────────
 export { createNeonApiFromOptions, resolveApiKey } from "./lib/auth.js";
 // ─── Branch-name helper (pure; shared with the CLI's git → Neon mapping) ──────
-export type { ToNeonBranchNameOptions } from "./lib/branch-name.js";
-export { toNeonBranchName } from "./lib/branch-name.js";
+// Grouped under `git` (below), not exported as a bare top-level function.
+export type { NeonSafeBranchNameOptions } from "./lib/branch-name.js";
 // ─── Credentials (pure scope derivation; Preview) ─────────────────────────────
 export type { CredentialFeatureFlags } from "./lib/credentials.js";
 export {

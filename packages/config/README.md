@@ -139,7 +139,10 @@ import {
 `branch()` is the **declarative** layer — *what a branch should look like* — and is pure (it runs during `plan` / `status`, so it must stay side-effect free). `experimental.hooks` is its **imperative** companion: run side effects (migrations, seeding, notifications) on the real `checkout` / `deploy` commands. Hooks **never** run during `plan` / `status` / `inspect`, which is what keeps the diff engine deterministic and the typed env sound. Hooks live under the top-level `experimental` namespace rather than as a sibling of `auth` / `dataApi` / `branch`, marking that this shape isn't covered by the same stability guarantees as the rest of the policy.
 
 ```ts
-import { defineConfig, toNeonBranchName } from "@neondatabase/config/v1";
+// Aliased on import: the hook contexts below already have their own `git` field (read-only
+// facts about the current checkout), so importing the helper namespace as `neonGit` avoids
+// shadowing it.
+import { defineConfig, git as neonGit } from "@neondatabase/config/v1";
 
 export default defineConfig({
   auth: true,
@@ -154,7 +157,7 @@ export default defineConfig({
         // `git` is read-only facts injected by the CLI.
         before: ({ inputName, git }) =>
           git.triggeredByGitHook && git.branch
-            ? { name: toNeonBranchName(git.branch, { prefix: "preview/" }) }
+            ? { name: neonGit.neonSafeBranchName(git.branch, { prefix: "preview/" }) }
             : undefined,
         // `after` observes; `branch.created` distinguishes a new branch from a selected one.
         after: async ({ branch, env }) => {
@@ -178,7 +181,7 @@ Each phase (`checkout`, `create`, `deploy`) exposes a `before` (influence/abort)
 
 `checkout` brackets the whole `checkout` command regardless of whether it created or selected a branch. `create` is the narrower, creation-only signal — use it when you specifically care about the moment a branch comes into existence (e.g. seeding it), not every checkout.
 
-`toNeonBranchName(input, opts?)` derives a valid, stable Neon branch name from an arbitrary string (e.g. a git branch); options: `{ prefix, maxLength, lowercase, preserveSlashes }` (pass `preserveSlashes: false` for a single flat token).
+`git.neonSafeBranchName(input, opts?)` derives a valid, stable Neon branch name from an arbitrary string (e.g. a git branch); options: `{ prefix, maxLength, lowercase, preserveSlashes }` (pass `preserveSlashes: false` for a single flat token). Grouped under the `git` namespace rather than a bare top-level export — import it under an alias (as above) wherever a hook context's own `git` field would otherwise shadow it.
 
 > The imperative runner that executes these hooks lives in `@neondatabase/config-runtime` (`runHook` / `runShellHook`); the CLI invokes it at the checkout/deploy seams. `neon.ts` only authors the hooks.
 
