@@ -36,6 +36,8 @@ type McpProps = CommonProps & {
 	readOnly?: boolean;
 	projectId?: string;
 	category?: NeonMcpCategory[];
+	/** Working directory to detect project agents in / write project-scoped config into. Defaults to `process.cwd()` (tests, and flows like `bootstrap` that scaffold into a different directory). */
+	cwd?: string;
 };
 
 type McpInstallRow = {
@@ -187,20 +189,54 @@ export const builder = (argv: yargs.Argv) =>
 		.strict()
 		.check(noPassthrough("mcp"));
 
-export const handler = async (props: McpProps) => {
-	const cwd = process.cwd();
-	const interactive = canPickAgentsInteractively() && props.yes !== true;
-	const linkedProjectId = readContextFile(props.contextFile).projectId;
+export type SetupNeonMcpOptions = Pick<
+	CommonProps,
+	"apiClient" | "apiKey" | "contextFile"
+> & {
+	cwd?: string;
+	yes?: boolean;
+	oauth?: boolean;
+	project?: boolean;
+	agent?: string[];
+	readOnly?: boolean;
+	projectId?: string;
+	category?: NeonMcpCategory[];
+};
+
+export type McpInstallOutcome = {
+	scope: "project" | "global";
+	rows: McpInstallRow[];
+	failedAgents: string[];
+	url: string;
+	auth: NeonMcpAuth["kind"];
+	minted?: Awaited<ReturnType<typeof mintMcpApiKey>>;
+};
+
+/**
+ * Resolves auth, mints or reuses an API key, and writes the Neon MCP server into every
+ * resolved agent, in-process. No CLI-only concerns here (no `writer` table, no
+ * `recordCommandSuccessExtras`) so `neon init` / `neon bootstrap` can call this directly
+ * instead of re-executing the `neon` binary as a child process to reuse `neon mcp`.
+ *
+ * Throws directly (like `neon mcp` does today) when zero agents succeed, since that path
+ * never reaches a results table worth showing.
+ */
+export const setupNeonMcp = async (
+	options: SetupNeonMcpOptions,
+): Promise<McpInstallOutcome> => {
+	const cwd = options.cwd ?? process.cwd();
+	const interactive = canPickAgentsInteractively() && options.yes !== true;
+	const linkedProjectId = readContextFile(options.contextFile).projectId;
 	const plan = await resolveMcpPlan({
-		project: props.project === true,
-		oauth: props.oauth === true,
-		agents: props.agent ?? [],
-		yes: props.yes === true,
+		project: options.project === true,
+		oauth: options.oauth === true,
+		agents: options.agent ?? [],
+		yes: options.yes === true,
 		cwd,
 		interactive,
-		readOnly: props.readOnly === true,
-		projectId: props.projectId,
-		categories: props.category ?? [],
+		readOnly: options.readOnly === true,
+		projectId: options.projectId,
+		categories: options.category ?? [],
 		linkedProjectId,
 	});
 	const { install, skipped } = resolveInstallTargets({
@@ -231,15 +267,15 @@ export const handler = async (props: McpProps) => {
 				})
 			: undefined;
 	if (plan.auth === "api-key" && !existing) {
-		if (!props.apiClient || !props.apiKey) {
+		if (!options.apiClient || !options.apiKey) {
 			throw new Error(
 				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key or use --oauth to install without a Neon credential.`,
 			);
 		}
 		if (
 			!canPickAgentsInteractively() &&
-			props.yes !== true &&
-			(props.agent ?? []).length === 0
+			options.yes !== true &&
+			(options.agent ?? []).length === 0
 		) {
 			throw new Error(
 				"No interactive terminal. Pass -y to mint into every detected agent, --agent <name> to name them or --oauth to install without minting.",
@@ -263,7 +299,7 @@ export const handler = async (props: McpProps) => {
 		}
 	} else {
 		minted = await mintMcpApiKey({
-			apiClient: props.apiClient,
+			apiClient: options.apiClient,
 			projectId: plan.urlProjectId,
 		});
 		auth = { kind: "api-key", apiKey: minted.key };
@@ -314,8 +350,11 @@ export const handler = async (props: McpProps) => {
 	}
 
 	if (successes === 0) {
-		if (minted && props.apiClient) {
-			const withdrawn = await withdrawMintedKey(props.apiClient, minted);
+		if (minted && options.apiClient) {
+			const withdrawn = await withdrawMintedKey(
+				options.apiClient,
+				minted,
+			);
 			throw new Error(
 				withdrawn
 					? "Failed to write Neon MCP config to any agent. The minted API key has been revoked."
@@ -325,33 +364,73 @@ export const handler = async (props: McpProps) => {
 		throw new Error("Failed to write Neon MCP config to any agent.");
 	}
 
-	log.info("URL: %s", url);
+	return {
+		scope: plan.scope,
+		rows,
+		failedAgents,
+		url,
+		auth: auth.kind,
+		...(minted ? { minted } : {}),
+	};
+};
+
+/** The exact error `neon mcp` throws when some (not all) agents failed, or `undefined` on full success. */
+export const mcpInstallError = (
+	outcome: McpInstallOutcome,
+): Error | undefined =>
+	outcome.failedAgents.length > 0
+		? new Error(
+				`Failed to write Neon MCP config for: ${outcome.failedAgents.join(", ")}.`,
+			)
+		: undefined;
+
+/** Writes the results table plus the URL/minted-key/OAuth notices. Shared by `neon mcp` and any in-process caller that wants the same human output. */
+export const reportMcpInstall = (
+	props: Pick<CommonProps, "output">,
+	outcome: McpInstallOutcome,
+): void => {
+	log.info("URL: %s", outcome.url);
 
 	const out = writer(props);
-	out.write(rows, {
+	out.write(outcome.rows, {
 		fields: ["agent", "status", "error"],
 		title: "MCP",
 	});
 	out.end();
 
-	if (minted) {
+	if (outcome.minted) {
 		log.info(
 			"Minted API key %s (id %d, %s). Revoke with: %s",
-			minted.name,
-			minted.id,
-			minted.projectId ? "project" : "account",
-			mintedKeyRevokeCommand(minted),
+			outcome.minted.name,
+			outcome.minted.id,
+			outcome.minted.projectId ? "project" : "account",
+			mintedKeyRevokeCommand(outcome.minted),
 		);
 	}
 
-	if (plan.auth === "oauth") {
+	if (outcome.auth === "oauth") {
 		log.info("The agent will prompt for Neon sign-in on first use.");
 	}
+};
 
-	if (failedAgents.length > 0) {
-		throw new Error(
-			`Failed to write Neon MCP config for: ${failedAgents.join(", ")}.`,
-		);
+export const handler = async (props: McpProps) => {
+	const outcome = await setupNeonMcp({
+		apiClient: props.apiClient,
+		apiKey: props.apiKey,
+		contextFile: props.contextFile,
+		cwd: props.cwd,
+		yes: props.yes,
+		oauth: props.oauth,
+		project: props.project,
+		agent: props.agent,
+		readOnly: props.readOnly,
+		projectId: props.projectId,
+		category: props.category,
+	});
+	reportMcpInstall(props, outcome);
+	const error = mcpInstallError(outcome);
+	if (error) {
+		throw error;
 	}
-	recordCommandSuccessExtras({ scope: plan.scope });
+	recordCommandSuccessExtras({ scope: outcome.scope });
 };

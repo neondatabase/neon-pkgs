@@ -1,25 +1,44 @@
 import { detectProjectAgents } from "add-mcp";
+import {
+	type McpInstallOutcome,
+	mcpInstallError,
+	reportMcpInstall,
+	type SetupNeonMcpOptions,
+} from "../commands/mcp.js";
+import {
+	type InstallPluginsOptions,
+	installPlugins,
+	type PluginsInstallOutcome,
+	pluginsInstallError,
+	reportPluginsInstall,
+} from "../commands/plugins.js";
+import {
+	type InstallSkillsOptions,
+	installSkills,
+	reportSkillsInstall,
+	type SkillsInstallOutcome,
+	skillsInstallError,
+} from "../commands/skills.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
+import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { AUTH_CHILD, type InitRun } from "./child.js";
-import { initStepLabel } from "./chrome.js";
+import { type InitAuthOptions, runAuthenticatedMcp } from "./auth.js";
+import { PROGRESS } from "./copy.js";
 import { detectAgent } from "./detect_host.js";
 import {
 	assertNamedAgentTooling,
-	type ChildForward,
-	childArgv,
 	chooseYesAgentTooling,
 	collectYesAgents,
 	type InitAgentSetup,
-	type InitStep,
 	initYesSupportedAgents,
 	noDetectedAgentsMessage,
 	planAgentSteps,
 	planToolingSteps,
 	planYesAgentSteps,
 	resolveInitAgentSetup,
+	type ToolingStep,
 } from "./plan.js";
 import { pickAgentSetupInteractively } from "./wizard.js";
 
@@ -30,12 +49,28 @@ export type AgentDetectors = {
 	detectAgent?: () => AgentType | null;
 };
 
+/** One tooling step's install function, injectable so tests can assert on calls without a real npx/git/API round trip. */
+export type ToolingOperations = {
+	installPlugins: (
+		options: Omit<InstallPluginsOptions, "cwd"> & { cwd: string },
+	) => Promise<PluginsInstallOutcome>;
+	installSkills: (
+		options: Omit<InstallSkillsOptions, "cwd"> & { cwd: string },
+	) => Promise<SkillsInstallOutcome>;
+	installMcp: (
+		options: Omit<
+			SetupNeonMcpOptions,
+			"cwd" | "apiClient" | "apiKey" | "contextFile"
+		> & { cwd: string },
+	) => Promise<McpInstallOutcome>;
+};
+
 export type AgentToolingOptions = AgentDetectors & {
 	cwd: string;
 	yes: boolean;
-	run: InitRun;
-	forward: ChildForward;
-	authEnv?: NodeJS.ProcessEnv;
+	output: CommonProps["output"];
+	auth: InitAuthOptions;
+	operations?: Partial<ToolingOperations>;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	agents?: readonly AgentType[];
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
@@ -47,36 +82,135 @@ export type AgentToolingOptions = AgentDetectors & {
 const defaultProjectAgents = (cwd: string): readonly AgentType[] =>
 	detectProjectAgents(cwd);
 
-export const runInitSteps = async (
-	steps: readonly InitStep[],
+const TOOLING_STEP_LABELS: Record<ToolingStep["kind"], string> = {
+	plugins: PROGRESS.plugins,
+	skills: PROGRESS.skills,
+	mcp: PROGRESS.mcp,
+};
+
+/** Reconstructs a display-only, `neon <command> <flags>` style string for a step. Never executed — only ever logged. */
+const toolingStepCommandText = (step: ToolingStep): string => {
+	const flags: string[] = [];
+	switch (step.kind) {
+		case "plugins": {
+			const { options } = step;
+			if (options.yes) flags.push("-y");
+			if (options.global) flags.push("--global");
+			for (const agent of options.agents ?? []) {
+				flags.push("--agent", agent);
+			}
+			break;
+		}
+		case "skills": {
+			const { options } = step;
+			if (options.yes) flags.push("-y");
+			if (options.global) flags.push("--global");
+			for (const skill of options.skills ?? []) {
+				flags.push("--skill", skill);
+			}
+			for (const agent of options.agents ?? []) {
+				flags.push("--agent", agent);
+			}
+			break;
+		}
+		case "mcp": {
+			const { options } = step;
+			if (options.yes) flags.push("-y");
+			if (options.oauth) flags.push("--oauth");
+			if (options.project) flags.push("--project");
+			if (options.projectId !== undefined) {
+				flags.push("--project-id", options.projectId);
+			}
+			for (const agent of options.agent ?? []) {
+				flags.push("--agent", agent);
+			}
+			break;
+		}
+		default: {
+			const _exhaustive: never = step;
+			return _exhaustive;
+		}
+	}
+	return [step.kind, ...flags].join(" ");
+};
+
+/**
+ * Runs plugins/skills/mcp installs in-process, in order, via {@link ToolingOperations}. This
+ * replaces re-executing the `neon` binary as a child process (`neon plugins`, `neon skills`,
+ * `neon mcp`) to reuse those commands — see `packages/cli/AGENTS.md`.
+ */
+export const runToolingSteps = async (
+	steps: readonly ToolingStep[],
 	options: {
 		cwd: string;
-		run: InitRun;
-		forward: ChildForward;
-		authEnv?: NodeJS.ProcessEnv;
+		output: CommonProps["output"];
+		auth: InitAuthOptions;
+		operations?: Partial<ToolingOperations>;
 		narrate?: "command" | "human";
 	},
 ): Promise<void> => {
+	const ops: ToolingOperations = {
+		installPlugins,
+		installSkills,
+		installMcp: (stepOptions) =>
+			runAuthenticatedMcp({ ...stepOptions, ...options.auth }),
+		...options.operations,
+	};
+	const reportProps = { output: options.output };
 	for (const step of steps) {
 		const label =
-			options.narrate === "human" ? initStepLabel(step) : undefined;
+			options.narrate === "human"
+				? TOOLING_STEP_LABELS[step.kind]
+				: undefined;
 		if (label !== undefined) {
 			process.stdout.write(`${label}\n`);
 		} else {
-			log.info("Running `%s %s`", getCliName(), step.join(" "));
+			log.info(
+				"Running `%s %s`",
+				getCliName(),
+				toolingStepCommandText(step),
+			);
 		}
-		log.debug("Running `%s %s`", getCliName(), step.join(" "));
-		const argv = childArgv(step, options.forward);
-		const command = step[0];
-		const ok = await options.run(
-			argv,
-			options.cwd,
-			command !== undefined && AUTH_CHILD.has(command)
-				? options.authEnv
-				: undefined,
+		log.debug(
+			"Running `%s %s`",
+			getCliName(),
+			toolingStepCommandText(step),
 		);
-		if (!ok) {
-			throw new Error(`\`${getCliName()} ${step.join(" ")}\` failed.`);
+		switch (step.kind) {
+			case "plugins": {
+				const outcome = await ops.installPlugins({
+					...step.options,
+					cwd: options.cwd,
+				});
+				reportPluginsInstall(reportProps, outcome);
+				const error = pluginsInstallError(outcome);
+				if (error) throw error;
+				break;
+			}
+			case "skills": {
+				const outcome = await ops.installSkills({
+					...step.options,
+					cwd: options.cwd,
+				});
+				reportSkillsInstall(reportProps, outcome);
+				const error = skillsInstallError(outcome);
+				if (error) throw error;
+				break;
+			}
+			case "mcp": {
+				const outcome = await ops.installMcp({
+					...step.options,
+					cwd: options.cwd,
+				});
+				reportMcpInstall(reportProps, outcome);
+				const error = mcpInstallError(outcome);
+				if (error) throw error;
+				break;
+			}
+			default: {
+				const _exhaustive: never = step;
+				return _exhaustive;
+			}
 		}
 	}
 };
@@ -108,14 +242,14 @@ export const runAgentTooling = async (
 	if (named.length > 0) {
 		assertNamedAgentTooling(named, options.command ?? "init");
 		const tooling = chooseYesAgentTooling(named);
-		await runInitSteps(
+		await runToolingSteps(
 			planToolingSteps(tooling, { yes, named: true }),
 			options,
 		);
 		return tooling.setup;
 	}
 	if (options.agentSetup !== undefined) {
-		await runInitSteps(
+		await runToolingSteps(
 			planAgentSteps({ yes, agentSetup: options.agentSetup }),
 			options,
 		);
@@ -128,7 +262,7 @@ export const runAgentTooling = async (
 			))
 				? "plugin"
 				: "skills-mcp";
-			await runInitSteps(
+			await runToolingSteps(
 				planAgentSteps({ yes: true, agentSetup }),
 				options,
 			);
@@ -139,7 +273,7 @@ export const runAgentTooling = async (
 		if (tooling.setup === "skip") {
 			throw yesMiss();
 		}
-		await runInitSteps(planYesAgentSteps(tooling), options);
+		await runToolingSteps(planYesAgentSteps(tooling), options);
 		return tooling.setup;
 	}
 	const interactive =
@@ -148,26 +282,6 @@ export const runAgentTooling = async (
 		interactive,
 		pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
 	});
-	await runInitSteps(planAgentSteps({ yes, agentSetup }), options);
+	await runToolingSteps(planAgentSteps({ yes, agentSetup }), options);
 	return agentSetup;
-};
-
-export type ScaffoldFollowUpOptions = AgentToolingOptions & {
-	skipAgentSetup: boolean;
-	shouldLink: boolean;
-	linkYes: boolean;
-};
-
-export const runScaffoldFollowUp = async (
-	options: ScaffoldFollowUpOptions,
-): Promise<void> => {
-	if (!options.skipAgentSetup) {
-		await runAgentTooling(options);
-	}
-	if (options.shouldLink) {
-		await runInitSteps(
-			[options.linkYes ? ["link", "--yes"] : ["link"]],
-			options,
-		);
-	}
 };

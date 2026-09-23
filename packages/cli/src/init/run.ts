@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	type CommandAgentSetup,
 	recordCommandSuccessExtras,
@@ -14,6 +13,7 @@ import {
 	initCmd,
 	neonConfigFilename,
 } from "../commands/config.js";
+import type { EnvPullProps, PullOutcome } from "../commands/env.js";
 import { defaultDir } from "../config.js";
 import {
 	CONFIG_INIT_NONE_MEANS,
@@ -39,8 +39,11 @@ import {
 	type PackageManager,
 	resolvePackageManager,
 } from "../utils/package_manager.js";
+import {
+	pullInitEnv as defaultPullInitEnv,
+	type InitAuthOptions,
+} from "./auth.js";
 import { InitCancelled, restoreCursor } from "./cancelled.js";
-import { type InitRun, initChildEnv, spawnCliChild } from "./child.js";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
@@ -120,7 +123,7 @@ import {
 	resolveNamedAgents,
 	splitInitTooling,
 } from "./plan.js";
-import { runInitSteps } from "./tooling.js";
+import { runToolingSteps, type ToolingOperations } from "./tooling.js";
 import {
 	pickAgentSetupInteractively,
 	pickInitAgentsInteractively,
@@ -133,9 +136,6 @@ import {
 	pickInitServicesInteractively,
 	pickInitSkillsInteractively,
 } from "./wizard.js";
-
-export type { InitRun };
-export { initChildEnv };
 
 export type InitConfigFn = (input: {
 	cwd: string;
@@ -180,7 +180,8 @@ export type InitProps = CommonProps & {
 	mcpConfigLocation?: InitMcpConfigLocation;
 	mcpAuth?: InitMcpAuthChoice;
 	mcpProjectScoped?: boolean;
-	run?: InitRun;
+	/** Overrides the plugins/skills/mcp install functions (tests). Production calls the real ones in-process — see `packages/cli/AGENTS.md`. */
+	operations?: Partial<ToolingOperations>;
 	pickMode?: () => Promise<InitMode>;
 	pickAgentSetup?: () => Promise<InitAgentSetupChoice>;
 	pickAgents?: (input: {
@@ -199,6 +200,8 @@ export type InitProps = CommonProps & {
 	linkProject?: RunLink;
 	createClaimable?: InitClaimFn;
 	initConfig?: InitConfigFn;
+	/** Overrides the trailing `env pull` (tests). Production calls the real one in-process. */
+	envPull?: (props: EnvPullProps & InitAuthOptions) => Promise<PullOutcome>;
 	detectProjectAgents?: (
 		cwd: string,
 	) => readonly AgentType[] | Promise<readonly AgentType[]>;
@@ -436,16 +439,24 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
 		...(props.mcpProjectScoped === true ? { mcpProjectScoped: true } : {}),
 	});
-	const run = props.run ?? spawnCliChild;
-	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
-	const authEnv = explicitKey ? { NEON_API_KEY: explicitKey } : undefined;
 	const configDir = props.configDir ?? defaultDir;
-	const forward = {
-		...(props.configDir ? { configDir: props.configDir } : {}),
-		...(props.profile ? { profile: props.profile } : {}),
+	// plugins/skills need no Neon auth at all; mcp/env pull resolve it themselves, in-process,
+	// exactly as the standalone commands do (see `init/auth.ts`) — this is that shared context.
+	const auth: InitAuthOptions = {
+		apiClient: props.apiClient,
+		apiKey: props.apiKey,
 		apiHost: props.apiHost,
 		contextFile,
-		...(props.analytics === false ? { analytics: false } : {}),
+		...(props.configDir ? { configDir: props.configDir } : {}),
+		...(props.profile ? { profile: props.profile } : {}),
+		...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+		...(props.clientId ? { clientId: props.clientId } : {}),
+		...(props.forceAuth !== undefined
+			? { forceAuth: props.forceAuth }
+			: {}),
+		...(props.allowUnsafeTls !== undefined
+			? { allowUnsafeTls: props.allowUnsafeTls }
+			: {}),
 	};
 	const servicesFlag = parsedInitServices(props.services);
 	if (props.config === false && servicesFlag !== undefined) {
@@ -781,11 +792,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
 		});
 		if (toolingSteps.length > 0) {
-			await runInitSteps(toolingSteps, {
+			await runToolingSteps(toolingSteps, {
 				cwd,
-				run,
-				forward,
-				authEnv,
+				output: props.output,
+				auth,
+				operations: props.operations,
 				narrate: "human",
 			});
 			funnel.agentsInstalled = agentsFromTooling(earlyTooling);
@@ -933,11 +944,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
 			});
 			if (mcpSteps.length > 0) {
-				await runInitSteps(mcpSteps, {
+				await runToolingSteps(mcpSteps, {
 					cwd,
-					run,
-					forward,
-					authEnv,
+					output: props.output,
+					auth,
+					operations: props.operations,
 					narrate: "human",
 				});
 				funnel.agentsInstalled = uniqueAgents([
@@ -1078,12 +1089,21 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		if (shouldPull) {
 			try {
-				await runInitSteps([["env", "pull"]], {
+				if (
+					typeof context.projectId !== "string" ||
+					typeof branch !== "string"
+				) {
+					throw new Error(
+						"Env pull requires a linked project and branch.",
+					);
+				}
+				printInitProgress(PROGRESS.env);
+				await (props.envPull ?? defaultPullInitEnv)({
+					...auth,
+					output: props.output,
 					cwd,
-					run,
-					forward,
-					authEnv,
-					narrate: "human",
+					projectId: context.projectId,
+					branch,
 				});
 			} catch (error) {
 				const failed = envPullFailedNext();

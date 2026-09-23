@@ -1,4 +1,7 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
+import type { SetupNeonMcpOptions } from "../commands/mcp.js";
+import type { InstallPluginsOptions } from "../commands/plugins.js";
+import type { InstallSkillsOptions } from "../commands/skills.js";
 import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { NO_SERVICES } from "../neon_services.js";
@@ -27,6 +30,24 @@ export type YesAgentTooling =
 	| { setup: "skip" };
 
 export type InitStep = readonly string[];
+
+/**
+ * One tooling install to run in-process (see `init/tooling.ts:runToolingSteps`) instead of
+ * re-executing `neon plugins` / `neon skills` / `neon mcp` as a child process. `cwd` is
+ * applied by the runner from its own call-site options, not planned here; MCP's auth
+ * (`apiClient` / `apiKey` / `contextFile`) is resolved by `init/auth.ts:runAuthenticatedMcp`
+ * at run time for the same reason.
+ */
+export type ToolingStep =
+	| { kind: "plugins"; options: Omit<InstallPluginsOptions, "cwd"> }
+	| { kind: "skills"; options: Omit<InstallSkillsOptions, "cwd"> }
+	| {
+			kind: "mcp";
+			options: Omit<
+				SetupNeonMcpOptions,
+				"cwd" | "apiClient" | "apiKey" | "contextFile"
+			>;
+	  };
 
 export const directoryIsEmpty = (names: readonly string[]): boolean =>
 	names.filter((name) => name !== ".git").length === 0;
@@ -91,15 +112,14 @@ export const postScaffoldActions = (input: {
 export const planAgentSteps = (input: {
 	yes: boolean;
 	agentSetup: InitAgentSetup;
-}): InitStep[] => {
-	const y = input.yes ? (["-y"] as const) : [];
+}): ToolingStep[] => {
 	if (input.agentSetup === "plugin") {
-		return [["plugins", ...y]];
+		return [{ kind: "plugins", options: { yes: input.yes } }];
 	}
 	if (input.agentSetup === "skills-mcp") {
 		return [
-			["skills", ...y],
-			["mcp", ...y],
+			{ kind: "skills", options: { yes: input.yes } },
+			{ kind: "mcp", options: { yes: input.yes } },
 		];
 	}
 	return [];
@@ -108,22 +128,40 @@ export const planAgentSteps = (input: {
 export const planToolingSteps = (
 	tooling: YesAgentTooling,
 	options: { yes: boolean; named: boolean },
-): InitStep[] => {
-	const prefix = options.yes ? (["-y"] as const) : [];
-	const flagsFor = (ids: readonly AgentType[]): string[] =>
-		options.named ? [...prefix, ...agentArgv(ids)] : [...prefix];
+): ToolingStep[] => {
+	const agentsFor = (
+		ids: readonly AgentType[],
+	): { agents: readonly AgentType[] } | Record<string, never> =>
+		options.named ? { agents: ids } : {};
 	switch (tooling.setup) {
 		case "skip":
 			return [];
 		case "plugin":
-			return [["plugins", ...flagsFor(tooling.agents)]];
+			return [
+				{
+					kind: "plugins",
+					options: { yes: options.yes, ...agentsFor(tooling.agents) },
+				},
+			];
 		case "skills-mcp": {
-			const steps: InitStep[] = [];
+			const steps: ToolingStep[] = [];
 			if (tooling.skillsAgents.length > 0) {
-				steps.push(["skills", ...flagsFor(tooling.skillsAgents)]);
+				steps.push({
+					kind: "skills",
+					options: {
+						yes: options.yes,
+						...agentsFor(tooling.skillsAgents),
+					},
+				});
 			}
 			if (tooling.mcpAgents.length > 0) {
-				steps.push(["mcp", ...flagsFor(tooling.mcpAgents)]);
+				steps.push({
+					kind: "mcp",
+					options: {
+						yes: options.yes,
+						...agentsFor(tooling.mcpAgents),
+					},
+				});
 			}
 			return steps;
 		}
@@ -402,67 +440,96 @@ export const planInitToolingSteps = (input: {
 	mcpProject?: boolean;
 	mcpProjectId?: string;
 	skills?: readonly string[];
-}): InitStep[] => {
-	const y = input.yes ? (["-y"] as const) : [];
-	const pluginPrefix = [
-		"plugins",
-		...(input.pluginScope === "global" ? (["--global"] as const) : []),
-		...y,
-	];
-	const skillFlags = (input.skills ?? []).flatMap((skill) => [
-		"--skill",
-		skill,
-	]);
-	const skillsPrefix = [
-		"skills",
-		...(input.skillsGlobal ? (["--global"] as const) : []),
-		...y,
-		...skillFlags,
-	];
-	const mcpPrefix = [
-		"mcp",
-		...y,
-		...(input.mcpOauth ? (["--oauth"] as const) : []),
-		...(input.mcpProject === true ? (["--project"] as const) : []),
+}): ToolingStep[] => {
+	const pluginOptions = (
+		agents: readonly AgentType[],
+	): Omit<InstallPluginsOptions, "cwd"> => ({
+		yes: input.yes,
+		global: input.pluginScope === "global",
+		agents,
+	});
+	const skillsOptions = (
+		agents: readonly AgentType[],
+	): Omit<InstallSkillsOptions, "cwd"> => ({
+		yes: input.yes,
+		global: input.skillsGlobal,
+		agents,
+		...(input.skills !== undefined ? { skills: input.skills } : {}),
+	});
+	const mcpOptions = (
+		agents: readonly AgentType[],
+	): Omit<
+		SetupNeonMcpOptions,
+		"cwd" | "apiClient" | "apiKey" | "contextFile"
+	> => ({
+		yes: input.yes,
+		oauth: input.mcpOauth,
+		project: input.mcpProject === true,
+		agent: [...agents],
 		...(input.mcpProjectId !== undefined
-			? (["--project-id", input.mcpProjectId] as const)
-			: []),
-	];
-	const named = (ids: readonly AgentType[]): string[] => agentArgv(ids);
+			? { projectId: input.mcpProjectId }
+			: {}),
+	});
 	switch (input.tooling.setup) {
 		case "skip":
 			return [];
 		case "plugin":
-			return [[...pluginPrefix, ...named(input.tooling.agents)]];
-		case "skills":
 			return [
-				["skills", ...y, ...skillFlags, ...named(input.tooling.agents)],
+				{
+					kind: "plugins",
+					options: pluginOptions(input.tooling.agents),
+				},
+			];
+		case "skills":
+			// Deliberately not `skillsOptions`: the plain "skills" tooling plan (the
+			// no-agents-detected Recommended fallback) has never applied `skillsGlobal`,
+			// unlike the "skills-mcp"/"mixed" cases below. Preserved for parity.
+			return [
+				{
+					kind: "skills",
+					options: {
+						yes: input.yes,
+						agents: input.tooling.agents,
+						...(input.skills !== undefined
+							? { skills: input.skills }
+							: {}),
+					},
+				},
 			];
 		case "skills-mcp": {
-			const steps: InitStep[] = [];
+			const steps: ToolingStep[] = [];
 			if (input.tooling.skillsAgents.length > 0) {
-				steps.push([
-					...skillsPrefix,
-					...named(input.tooling.skillsAgents),
-				]);
+				steps.push({
+					kind: "skills",
+					options: skillsOptions(input.tooling.skillsAgents),
+				});
 			}
 			if (input.tooling.mcpAgents.length > 0) {
-				steps.push([...mcpPrefix, ...named(input.tooling.mcpAgents)]);
+				steps.push({
+					kind: "mcp",
+					options: mcpOptions(input.tooling.mcpAgents),
+				});
 			}
 			return steps;
 		}
 		case "mixed": {
-			const steps: InitStep[] = [
-				[...pluginPrefix, ...named(input.tooling.pluginAgents)],
+			const steps: ToolingStep[] = [
+				{
+					kind: "plugins",
+					options: pluginOptions(input.tooling.pluginAgents),
+				},
 			];
 			if (input.tooling.skillsAgents.length > 0) {
-				steps.push([
-					...skillsPrefix,
-					...named(input.tooling.skillsAgents),
-				]);
+				steps.push({
+					kind: "skills",
+					options: skillsOptions(input.tooling.skillsAgents),
+				});
 			}
 			if (input.tooling.mcpAgents.length > 0) {
-				steps.push([...mcpPrefix, ...named(input.tooling.mcpAgents)]);
+				steps.push({
+					kind: "mcp",
+					options: mcpOptions(input.tooling.mcpAgents),
+				});
 			}
 			return steps;
 		}
@@ -477,7 +544,7 @@ export const funnelAgentSetup = (
 	tooling: InitToolingPlan,
 ): "plugin" | "skills-mcp" | "skills" | "mixed" | "skip" => tooling.setup;
 
-export const planYesAgentSteps = (tooling: YesAgentTooling): InitStep[] =>
+export const planYesAgentSteps = (tooling: YesAgentTooling): ToolingStep[] =>
 	planToolingSteps(tooling, { yes: true, named: false });
 
 export const NAMED_AGENTS_UNSUPPORTED =
@@ -644,33 +711,6 @@ export const linkInputArgv = (input: {
 	return args;
 };
 
-export const planExistingInit = (input: {
-	linked: boolean;
-	yes: boolean;
-	agentSetup: InitAgentSetup;
-	config: InitConfigPlan;
-	linkExtra?: readonly string[];
-}): InitStep[] => {
-	const steps: InitStep[] = [...planAgentSteps(input)];
-	if (!input.linked) {
-		steps.push(
-			planLinkStep({
-				yes: input.yes,
-				extra: input.linkExtra,
-			}),
-		);
-	}
-	if (input.config.kind === "write") {
-		steps.push(
-			planConfigInitStep({
-				yes: input.yes,
-				services: input.config.services,
-			}),
-		);
-	}
-	return steps;
-};
-
 export const resolveInitAgentSetup = async (input: {
 	interactive: boolean;
 	pick: () => Promise<InitAgentSetup>;
@@ -679,28 +719,4 @@ export const resolveInitAgentSetup = async (input: {
 		return input.pick();
 	}
 	throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
-};
-
-export type ChildForward = {
-	configDir?: string;
-	profile?: string;
-	apiHost: string;
-	contextFile: string;
-	analytics?: boolean;
-};
-
-export const childArgv = (step: InitStep, forward: ChildForward): string[] => {
-	const args = [...step];
-	if (forward.configDir) {
-		args.push("--config-dir", forward.configDir);
-	}
-	if (forward.profile) {
-		args.push("--profile", forward.profile);
-	}
-	args.push("--api-host", forward.apiHost);
-	args.push("--context-file", forward.contextFile);
-	if (forward.analytics === false) {
-		args.push("--no-analytics");
-	}
-	return args;
 };

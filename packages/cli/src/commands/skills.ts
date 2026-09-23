@@ -32,6 +32,8 @@ type SkillsProps = CommonProps & {
 	global?: boolean;
 	agent?: string[];
 	skill?: string[];
+	/** Working directory to detect project agents in / write project-scoped skills into. Defaults to `process.cwd()` (tests, and flows like `bootstrap` that scaffold into a different directory). */
+	cwd?: string;
 };
 
 type SkillsInstallRow = {
@@ -204,15 +206,44 @@ export const builder = (argv: yargs.Argv) =>
 		.strict()
 		.check(noPassthrough("skills"));
 
-export const handler = async (props: SkillsProps) => {
+export type InstallSkillsOptions = {
+	cwd?: string;
+	yes?: boolean;
+	global?: boolean;
+	agents?: readonly string[];
+	skills?: readonly string[];
+};
+
+type SkillsInstallFailure = {
+	label: string;
+	message: string;
+	skills: readonly string[];
+};
+
+export type SkillsInstallOutcome = {
+	scope: "project" | "global";
+	agents: readonly string[];
+	rows: SkillsInstallRow[];
+	failed: SkillsInstallFailure[];
+};
+
+/**
+ * Plans and runs the skills install for every resolved source/invocation, in-process. No
+ * CLI-only concerns here (no `writer` table, no `recordCommandSuccessExtras`) so `neon init` /
+ * `neon bootstrap` can call this directly instead of re-executing the `neon` binary as a
+ * child process to reuse `neon skills`.
+ */
+export const installSkills = async (
+	options: InstallSkillsOptions,
+): Promise<SkillsInstallOutcome> => {
 	assertSkillsNode();
-	const cwd = process.cwd();
-	const yes = props.yes === true;
+	const cwd = options.cwd ?? process.cwd();
+	const yes = options.yes === true;
 	const interactive = canPickAgentsInteractively() && !yes;
 	const plan = await resolveSkillsPlan({
-		global: props.global === true,
-		agents: props.agent ?? [],
-		skills: props.skill ?? [],
+		global: options.global === true,
+		agents: options.agents ?? [],
+		skills: options.skills ?? [],
 		yes,
 		cwd,
 		interactive,
@@ -227,11 +258,7 @@ export const handler = async (props: SkillsProps) => {
 
 	const metadata = skillsMetadata("skills");
 	const rows: SkillsInstallRow[] = [];
-	const failed: {
-		label: string;
-		message: string;
-		skills: readonly string[];
-	}[] = [];
+	const failed: SkillsInstallFailure[] = [];
 	const scope = scopeLabel(plan.scope);
 	for (const invocation of plan.invocations) {
 		const skills = invocation.skills.join(", ");
@@ -271,43 +298,74 @@ export const handler = async (props: SkillsProps) => {
 		}
 	}
 
-	const out = writer(props);
-	out.write(rows, {
-		fields: ["scope", "skills", "agents", "status", "error"],
-		title: "Skills",
-	});
-	out.end();
+	return { scope: plan.scope, agents: plan.agents, rows, failed };
+};
 
+/** The exact error `neon skills` throws for a failed outcome, or `undefined` on success. */
+export const skillsInstallError = (
+	outcome: SkillsInstallOutcome,
+): Error | undefined => {
+	const { failed, rows, scope, agents } = outcome;
 	if (failed.length === 0) {
-		recordCommandSuccessExtras({ scope: plan.scope });
-		log.info(
-			plan.scope === "project"
-				? "Wrote skills in this directory."
-				: "Wrote user-level skills.",
-		);
-		return;
+		return undefined;
 	}
 	const first = failed[0];
 	if (first === undefined) {
-		throw new Error("Failed to install Neon agent skills.");
+		return new Error("Failed to install Neon agent skills.");
 	}
 	const retry = neonSkillsRetryCommand({
 		skills: failed.flatMap((row) => row.skills),
-		agents: plan.agents,
-		global: plan.scope === "global",
+		agents,
+		global: scope === "global",
 	});
 	if (
 		first.message.includes("needs npx (Node.js)") ||
 		first.message.includes("needs Node.js")
 	) {
-		throw new Error(first.message);
+		return new Error(first.message);
 	}
 	if (failed.length === rows.length) {
-		throw new Error(`${first.message}\nRetry with: ${retry}`);
+		return new Error(`${first.message}\nRetry with: ${retry}`);
 	}
-	throw new Error(
+	return new Error(
 		`Failed to install Neon agent skills for: ${failed.map((row) => row.label).join(", ")}.\n${first.message}\nRetry with: ${retry}`,
 	);
+};
+
+/** Writes the results table and, on success, the "Wrote ... skills" line. Shared by `neon skills` and any in-process caller that wants the same human output. */
+export const reportSkillsInstall = (
+	props: Pick<CommonProps, "output">,
+	outcome: SkillsInstallOutcome,
+): void => {
+	const out = writer(props);
+	out.write(outcome.rows, {
+		fields: ["scope", "skills", "agents", "status", "error"],
+		title: "Skills",
+	});
+	out.end();
+	if (outcome.failed.length === 0) {
+		log.info(
+			outcome.scope === "project"
+				? "Wrote skills in this directory."
+				: "Wrote user-level skills.",
+		);
+	}
+};
+
+export const handler = async (props: SkillsProps) => {
+	const outcome = await installSkills({
+		cwd: props.cwd,
+		yes: props.yes,
+		global: props.global,
+		agents: props.agent,
+		skills: props.skill,
+	});
+	reportSkillsInstall(props, outcome);
+	const error = skillsInstallError(outcome);
+	if (error) {
+		throw error;
+	}
+	recordCommandSuccessExtras({ scope: outcome.scope });
 };
 
 const updateHandler = async (props: SkillsProps) => {

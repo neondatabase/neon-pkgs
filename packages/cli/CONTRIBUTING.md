@@ -68,3 +68,25 @@ selected in one gesture. That line is allowed to be longer than the TTY.
 
 `src/psql/print` is a psql clone and keeps psql's own table modes.
 `src/help.ts` is yargs help. Neither is `-o table`.
+
+## Reusing another command from a flow
+
+`init` and `bootstrap` both install the plugin, skills, and MCP config, and pull env
+vars — the same things `neon plugins`, `neon skills`, `neon mcp`, and `neon env pull` do
+on their own. They used to get that by spawning `neon` again as a child process and
+parsing its argv back out, which meant a full second CLI boot per step and no way to
+show progress until that child produced output.
+
+Instead, extract the command's core work into a plain async function that takes typed
+options and returns a result, with no `writer` call inside it — `installPlugins` in
+`commands/plugins.ts`, `installSkills` in `commands/skills.ts`, `setupNeonMcp` in
+`commands/mcp.ts`, `pull` in `commands/env.ts`. The command's `handler` calls that
+function, then renders the result and records its own telemetry. A flow that needs the
+same behavior imports and calls the function directly, in-process, passing a `cwd` when
+it isn't operating on the current process's working directory (`bootstrap` scaffolds
+into a new directory while the process itself is still running from wherever it was
+invoked). A step that needs Neon auth resolves it itself at the point it's called,
+exactly as the standalone command would — see `init/auth.ts`.
+
+Keep subprocesses for actual external programs: `npx`, `npm`/`pnpm`/`bun`, `git`. The
+rule is specifically about not re-entering the `neon` binary to reuse our own code.

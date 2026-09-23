@@ -32,3 +32,28 @@ Implemented in `src/writer.ts` and `src/human_table.ts`. Every list and get goes
 - Title and `emptyMessage` are not rows. The API-key secret is `writer.text`, not a cell — it stays one selectable line, even if that line is longer than the TTY.
 
 `src/psql/print` emulates psql. `src/help.ts` is the yargs help renderer. Leave both alone.
+
+## Reusing another command's behavior
+
+A command reused by another flow (`init`, `bootstrap`) exposes a typed, in-process
+operation function — `installPlugins`, `installSkills`, `setupNeonMcp`, `pull` — that
+takes explicit options (including a `cwd` override when it reads or writes project
+files) and returns a result without calling `writer`. The command's own `handler` is a
+thin wrapper: parse argv into that options shape, call the operation, render the result,
+record command telemetry.
+
+Never reuse a command by re-executing the `neon` binary as a child process
+(`child_process.spawn`) to invoke it as a subcommand. `init`/`bootstrap` used to spawn
+`neon plugins` / `neon skills` / `neon mcp` / `neon env pull` this way; it paid a full
+CLI boot (module load, yargs setup, another agent-detection pass) per step and gave the
+parent no way to show progress until the child's own output arrived. Call the operation
+function directly instead — see `commands/link.ts`'s `finalizeLink` calling
+`autoPullEnvAfterPin` -> `commands/env.ts`'s `pull` (with `EnvPullProps.cwd`), and
+`init/tooling.ts`'s `runToolingSteps` calling `installPlugins`/`installSkills`/
+`setupNeonMcp` directly for the plugins/skills/mcp steps. `init/auth.ts` has the pattern
+for a step that needs its own Neon auth resolution (mcp, env pull): construct a props
+object with `_` set to the command it's standing in for, call `ensureAuth` on it, same as
+`init/link.ts`'s `runAuthenticatedLink` already does for `link`.
+
+External executables — `npx`, package managers, git, the skills/plugins CLIs — stay
+subprocesses. This is about not re-entering our own CLI.

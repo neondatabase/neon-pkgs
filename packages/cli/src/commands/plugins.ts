@@ -24,6 +24,8 @@ type PluginsProps = CommonProps & {
 	yes?: boolean;
 	global?: boolean;
 	agent?: string[];
+	/** Working directory to detect project agents in / install project-scoped plugins into. Defaults to `process.cwd()` (tests, and flows like `bootstrap` that scaffold into a different directory). */
+	cwd?: string;
 };
 
 const coerceAgents = (value: unknown): string[] => {
@@ -114,13 +116,36 @@ export const builder = (argv: yargs.Argv) =>
 		.strict()
 		.check(noPassthrough("plugins"));
 
-export const handler = async (props: PluginsProps) => {
-	const cwd = process.cwd();
-	const yes = props.yes === true;
+export type InstallPluginsOptions = {
+	cwd?: string;
+	yes?: boolean;
+	global?: boolean;
+	agents?: readonly string[];
+};
+
+type PluginsInstallFailure = { agents: string[]; message: string };
+
+export type PluginsInstallOutcome = {
+	scope: "project" | "global";
+	rows: PluginsInstallRow[];
+	failed: PluginsInstallFailure[];
+};
+
+/**
+ * Plans and runs the plugin install for every resolved target, in-process. No CLI-only
+ * concerns here (no `writer` table, no `recordCommandSuccessExtras`) so `neon init` /
+ * `neon bootstrap` can call this directly instead of re-executing the `neon` binary as a
+ * child process to reuse `neon plugins`.
+ */
+export const installPlugins = async (
+	options: InstallPluginsOptions,
+): Promise<PluginsInstallOutcome> => {
+	const cwd = options.cwd ?? process.cwd();
+	const yes = options.yes === true;
 	const interactive = canPickAgentsInteractively() && !yes;
 	const plan = await resolvePluginsPlan({
-		global: props.global === true,
-		agents: props.agent ?? [],
+		global: options.global === true,
+		agents: options.agents ?? [],
 		yes,
 		cwd,
 		interactive,
@@ -139,7 +164,7 @@ export const handler = async (props: PluginsProps) => {
 	}
 
 	const rows: PluginsInstallRow[] = [];
-	const failed: { agents: string[]; message: string }[] = [];
+	const failed: PluginsInstallFailure[] = [];
 	const scope = scopeLabel(plan.scope);
 	for (const [index, mapped] of plan.targets.entries()) {
 		const args = pluginsAddArgs({
@@ -184,38 +209,68 @@ export const handler = async (props: PluginsProps) => {
 		}
 	}
 
+	return { scope: plan.scope, rows, failed };
+};
+
+/** The exact error `neon plugins` throws for a failed outcome, or `undefined` on success. */
+export const pluginsInstallError = (
+	outcome: PluginsInstallOutcome,
+): Error | undefined => {
+	const { failed, rows, scope } = outcome;
+	if (failed.length === 0) {
+		return undefined;
+	}
+	const first = failed[0];
+	if (first === undefined) {
+		return new Error("Failed to install the Neon plugin.");
+	}
+	const retry = neonPluginsRetryCommand({
+		agents: failed.flatMap((row) => row.agents),
+		global: scope === "global",
+	});
+	if (first.message.includes("needs npx (Node.js)")) {
+		return new Error(first.message);
+	}
+	const detail = failed.map((row) => row.message).join("\n");
+	if (failed.length === rows.length) {
+		return new Error(`${detail}\nRetry with: ${retry}`);
+	}
+	return new Error(
+		`Failed to install the Neon plugin for: ${failed.flatMap((row) => row.agents).join(", ")}.\n${detail}\nRetry with: ${retry}`,
+	);
+};
+
+/** Writes the results table and, on success, the "Installed the Neon plugin" line. Shared by `neon plugins` and any in-process caller that wants the same human output. */
+export const reportPluginsInstall = (
+	props: Pick<CommonProps, "output">,
+	outcome: PluginsInstallOutcome,
+): void => {
 	const out = writer(props);
-	out.write(rows, {
+	out.write(outcome.rows, {
 		fields: ["scope", "plugin", "agent", "status", "error"],
 		title: "Plugins",
 	});
 	out.end();
-
-	if (failed.length === 0) {
-		recordCommandSuccessExtras({ scope: plan.scope });
+	if (outcome.failed.length === 0) {
 		log.info(
-			plan.scope === "project"
+			outcome.scope === "project"
 				? "Installed the Neon plugin (project)."
 				: "Installed the Neon plugin (user).",
 		);
-		return;
 	}
-	const first = failed[0];
-	if (first === undefined) {
-		throw new Error("Failed to install the Neon plugin.");
-	}
-	const retry = neonPluginsRetryCommand({
-		agents: failed.flatMap((row) => row.agents),
-		global: plan.scope === "global",
+};
+
+export const handler = async (props: PluginsProps) => {
+	const outcome = await installPlugins({
+		cwd: props.cwd,
+		yes: props.yes,
+		global: props.global,
+		agents: props.agent,
 	});
-	if (first.message.includes("needs npx (Node.js)")) {
-		throw new Error(first.message);
+	reportPluginsInstall(props, outcome);
+	const error = pluginsInstallError(outcome);
+	if (error) {
+		throw error;
 	}
-	const detail = failed.map((row) => row.message).join("\n");
-	if (failed.length === rows.length) {
-		throw new Error(`${detail}\nRetry with: ${retry}`);
-	}
-	throw new Error(
-		`Failed to install the Neon plugin for: ${failed.flatMap((row) => row.agents).join(", ")}.\n${detail}\nRetry with: ${retry}`,
-	);
+	recordCommandSuccessExtras({ scope: outcome.scope });
 };

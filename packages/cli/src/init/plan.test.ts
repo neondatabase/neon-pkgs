@@ -5,7 +5,6 @@ import type { AgentType } from "../mcp/agents.js";
 import {
 	assertNamedAgentTooling,
 	bootstrapInitStep,
-	childArgv,
 	chooseYesAgentTooling,
 	collectYesAgents,
 	directoryIsEmpty,
@@ -15,7 +14,6 @@ import {
 	noDetectedAgentsMessage,
 	planAgentSteps,
 	planConfigInitStep,
-	planExistingInit,
 	planLinkStep,
 	planToolingSteps,
 	planYesAgentSteps,
@@ -163,222 +161,21 @@ describe("postScaffoldActions", () => {
 describe("planAgentSteps", () => {
 	test("plugin never includes skills or mcp", () => {
 		expect(planAgentSteps({ yes: true, agentSetup: "plugin" })).toEqual([
-			["plugins", "-y"],
+			{ kind: "plugins", options: { yes: true } },
 		]);
 	});
 
 	test("skills-mcp never includes plugins", () => {
 		expect(planAgentSteps({ yes: true, agentSetup: "skills-mcp" })).toEqual(
 			[
-				["skills", "-y"],
-				["mcp", "-y"],
+				{ kind: "skills", options: { yes: true } },
+				{ kind: "mcp", options: { yes: true } },
 			],
 		);
 	});
 
 	test("skip is empty", () => {
 		expect(planAgentSteps({ yes: false, agentSetup: "skip" })).toEqual([]);
-	});
-});
-
-describe("planExistingInit", () => {
-	const write = { kind: "write" as const };
-	const skip = { kind: "skip" as const };
-
-	test("skills-mcp unlinked interactive: skills, mcp, link --no-config, config init", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: false,
-				agentSetup: "skills-mcp",
-				config: write,
-			}),
-		).toEqual([
-			["skills"],
-			["mcp"],
-			["link", "--no-config"],
-			["config", "init"],
-		]);
-	});
-
-	test("skills-mcp unlinked -y", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: true,
-				agentSetup: "skills-mcp",
-				config: { kind: "write", services: ["none"] },
-			}),
-		).toEqual([
-			["skills", "-y"],
-			["mcp", "-y"],
-			["link", "--yes", "--no-config"],
-			["config", "init", "--services", "none"],
-		]);
-	});
-
-	test("skills-mcp linked: skills, mcp, config init", () => {
-		expect(
-			planExistingInit({
-				linked: true,
-				yes: false,
-				agentSetup: "skills-mcp",
-				config: write,
-			}),
-		).toEqual([["skills"], ["mcp"], ["config", "init"]]);
-	});
-
-	test("plugin unlinked interactive: plugins, link --no-config, config init", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: false,
-				agentSetup: "plugin",
-				config: write,
-			}),
-		).toEqual([["plugins"], ["link", "--no-config"], ["config", "init"]]);
-	});
-
-	test("plugin unlinked -y", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: true,
-				agentSetup: "plugin",
-				config: { kind: "write", services: ["none"] },
-			}),
-		).toEqual([
-			["plugins", "-y"],
-			["link", "--yes", "--no-config"],
-			["config", "init", "--services", "none"],
-		]);
-	});
-
-	test("plugin linked: plugins and config init", () => {
-		expect(
-			planExistingInit({
-				linked: true,
-				yes: false,
-				agentSetup: "plugin",
-				config: write,
-			}),
-		).toEqual([["plugins"], ["config", "init"]]);
-	});
-
-	test("skip unlinked: link --no-config and config init", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: false,
-				agentSetup: "skip",
-				config: write,
-			}),
-		).toEqual([
-			["link", "--no-config"],
-			["config", "init"],
-		]);
-	});
-
-	test("skip unlinked -y", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: true,
-				agentSetup: "skip",
-				config: { kind: "write", services: ["none"] },
-			}),
-		).toEqual([
-			["link", "--yes", "--no-config"],
-			["config", "init", "--services", "none"],
-		]);
-	});
-
-	test("skip linked: config init only", () => {
-		expect(
-			planExistingInit({
-				linked: true,
-				yes: false,
-				agentSetup: "skip",
-				config: write,
-			}),
-		).toEqual([["config", "init"]]);
-	});
-
-	test("declined config omits config init", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: false,
-				agentSetup: "skip",
-				config: skip,
-			}),
-		).toEqual([["link", "--no-config"]]);
-	});
-
-	test("-y --no-config is link only", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: true,
-				agentSetup: "skip",
-				config: skip,
-			}),
-		).toEqual([["link", "--yes", "--no-config"]]);
-	});
-
-	test("already linked and declined config is empty", () => {
-		expect(
-			planExistingInit({
-				linked: true,
-				yes: false,
-				agentSetup: "skip",
-				config: skip,
-			}),
-		).toEqual([]);
-	});
-
-	test("forwards explicit link inputs onto link", () => {
-		expect(
-			planExistingInit({
-				linked: false,
-				yes: true,
-				agentSetup: "skip",
-				config: skip,
-				linkExtra: ["--project-id", "proj-1", "--branch", "main"],
-			}),
-		).toEqual([
-			[
-				"link",
-				"--yes",
-				"--no-config",
-				"--project-id",
-				"proj-1",
-				"--branch",
-				"main",
-			],
-		]);
-	});
-
-	test("explicit services go on config init", () => {
-		expect(
-			planExistingInit({
-				linked: true,
-				yes: false,
-				agentSetup: "skip",
-				config: { kind: "write", services: ["auth", "functions"] },
-			}),
-		).toEqual([["config", "init", "--services", "auth,functions"]]);
-	});
-
-	test("parsed --services none is config init --services none", () => {
-		expect(
-			planExistingInit({
-				linked: true,
-				yes: false,
-				agentSetup: "skip",
-				config: { kind: "write", services: [] },
-			}),
-		).toEqual([["config", "init", "--services", "none"]]);
 	});
 });
 
@@ -783,7 +580,7 @@ describe("planYesAgentSteps", () => {
 				setup: "plugin",
 				agents: ["cursor", "codex"],
 			}),
-		).toEqual([["plugins", "-y"]]);
+		).toEqual([{ kind: "plugins", options: { yes: true } }]);
 	});
 
 	test("skills-mcp omits an empty step; MCP is global mcp -y", () => {
@@ -793,7 +590,7 @@ describe("planYesAgentSteps", () => {
 				skillsAgents: [],
 				mcpAgents: ["vscode"],
 			}),
-		).toEqual([["mcp", "-y"]]);
+		).toEqual([{ kind: "mcp", options: { yes: true } }]);
 		expect(
 			planYesAgentSteps({
 				setup: "skills-mcp",
@@ -801,8 +598,8 @@ describe("planYesAgentSteps", () => {
 				mcpAgents: ["vscode"],
 			}),
 		).toEqual([
-			["skills", "-y"],
-			["mcp", "-y"],
+			{ kind: "skills", options: { yes: true } },
+			{ kind: "mcp", options: { yes: true } },
 		]);
 	});
 
@@ -819,7 +616,10 @@ describe("planToolingSteps", () => {
 				{ yes: true, named: true },
 			),
 		).toEqual([
-			["plugins", "-y", "--agent", "cursor", "--agent", "claude-code"],
+			{
+				kind: "plugins",
+				options: { yes: true, agents: ["cursor", "claude-code"] },
+			},
 		]);
 	});
 
@@ -834,8 +634,8 @@ describe("planToolingSteps", () => {
 				{ yes: false, named: true },
 			),
 		).toEqual([
-			["skills", "--agent", "vscode"],
-			["mcp", "--agent", "vscode"],
+			{ kind: "skills", options: { yes: false, agents: ["vscode"] } },
+			{ kind: "mcp", options: { yes: false, agents: ["vscode"] } },
 		]);
 	});
 });
@@ -883,76 +683,5 @@ describe("resolveInitAgentSetup", () => {
 				pick: pickUnused,
 			}),
 		).rejects.toThrow(/Pass -y to use defaults/);
-	});
-});
-
-describe("childArgv", () => {
-	const host = "https://console.neon.tech/api/v2";
-
-	test("forwards account and context, not --output", () => {
-		expect(
-			childArgv(["skills", "-y"], {
-				configDir: "/cfg",
-				profile: "work",
-				apiHost: host,
-				contextFile: "/app/.neon",
-				analytics: false,
-			}),
-		).toEqual([
-			"skills",
-			"-y",
-			"--config-dir",
-			"/cfg",
-			"--profile",
-			"work",
-			"--api-host",
-			host,
-			"--context-file",
-			"/app/.neon",
-			"--no-analytics",
-		]);
-	});
-
-	test("omits optional flags when unset", () => {
-		expect(
-			childArgv(["mcp"], {
-				apiHost: host,
-				contextFile: "/app/.neon",
-			}),
-		).toEqual(["mcp", "--api-host", host, "--context-file", "/app/.neon"]);
-	});
-
-	test("forwards globals onto plugins", () => {
-		expect(
-			childArgv(["plugins", "-y"], {
-				apiHost: host,
-				contextFile: "/app/.neon",
-			}),
-		).toEqual([
-			"plugins",
-			"-y",
-			"--api-host",
-			host,
-			"--context-file",
-			"/app/.neon",
-		]);
-	});
-
-	test("forwards --services none onto config init", () => {
-		expect(
-			childArgv(["config", "init", "--services", "none"], {
-				apiHost: host,
-				contextFile: "/app/.neon",
-			}),
-		).toEqual([
-			"config",
-			"init",
-			"--services",
-			"none",
-			"--api-host",
-			host,
-			"--context-file",
-			"/app/.neon",
-		]);
 	});
 });

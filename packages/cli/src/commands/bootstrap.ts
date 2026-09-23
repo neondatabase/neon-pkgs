@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import {
@@ -8,6 +7,7 @@ import {
 	recordScaffoldedTemplate,
 } from "../analytics.js";
 import { isCi } from "../env.js";
+import type { InitAuthOptions } from "../init/auth.js";
 import {
 	type BootstrapTemplate,
 	ensureTargetUsable,
@@ -17,7 +17,6 @@ import {
 	scaffoldTemplate,
 	templateIds,
 } from "../init/bootstrap.js";
-import { type InitRun, spawnCliChild } from "../init/child.js";
 import {
 	agentSetupDoneLabel,
 	formatInitDone,
@@ -33,7 +32,6 @@ import {
 } from "../init/link.js";
 import {
 	assertNamedAgentTooling,
-	type ChildForward,
 	chooseYesAgentTooling,
 	type InitAgentSetup,
 	initPluginAgents,
@@ -43,7 +41,7 @@ import {
 	resolveNamedAgents,
 } from "../init/plan.js";
 import { formatTemplateTitle } from "../init/template_title.js";
-import { runAgentTooling } from "../init/tooling.js";
+import { runAgentTooling, type ToolingOperations } from "../init/tooling.js";
 import {
 	pickAgentSetupInteractively,
 	pickInitLinkInteractively,
@@ -84,7 +82,8 @@ export type BootstrapProps = CommonProps & {
 	clientId?: string;
 	forceAuth?: boolean;
 	allowUnsafeTls?: boolean;
-	run?: InitRun;
+	/** Overrides the plugins/skills/mcp install functions (tests). Production calls the real ones in-process — see `packages/cli/AGENTS.md`. */
+	operations?: Partial<ToolingOperations>;
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	pickLink?: () => Promise<boolean>;
 	linkProject?: RunLink;
@@ -593,7 +592,9 @@ const executePostScaffold = async (
 	agentsRan: boolean;
 }> => {
 	const kids = {
-		...bootstrapChildren(props, targetDir),
+		output: props.output,
+		auth: bootstrapAuth(props, targetDir),
+		operations: props.operations,
 		...(props.narrate ? { narrate: props.narrate } : {}),
 	};
 	let installed = false;
@@ -729,27 +730,27 @@ const logSkippedLink = (pm: PackageManager): void => {
 	);
 };
 
-const bootstrapChildren = (
+/**
+ * plugins/skills need no Neon auth at all; mcp resolves it itself, in-process, exactly as
+ * the standalone `neon mcp` does (see `init/auth.ts`) — this is that shared context.
+ */
+const bootstrapAuth = (
 	props: BootstrapProps,
 	targetDir: string,
-): {
-	run: InitRun;
-	forward: ChildForward;
-	authEnv?: NodeJS.ProcessEnv;
-} => {
-	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
-	return {
-		run: props.run ?? spawnCliChild,
-		forward: {
-			...(props.configDir ? { configDir: props.configDir } : {}),
-			...(props.profile ? { profile: props.profile } : {}),
-			apiHost: props.apiHost,
-			contextFile: projectContextFile(targetDir, props.contextFile),
-			...(props.analytics === false ? { analytics: false } : {}),
-		},
-		...(explicitKey ? { authEnv: { NEON_API_KEY: explicitKey } } : {}),
-	};
-};
+): InitAuthOptions => ({
+	apiClient: props.apiClient,
+	apiKey: props.apiKey,
+	apiHost: props.apiHost,
+	contextFile: projectContextFile(targetDir, props.contextFile),
+	...(props.configDir ? { configDir: props.configDir } : {}),
+	...(props.profile ? { profile: props.profile } : {}),
+	...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+	...(props.clientId ? { clientId: props.clientId } : {}),
+	...(props.forceAuth !== undefined ? { forceAuth: props.forceAuth } : {}),
+	...(props.allowUnsafeTls !== undefined
+		? { allowUnsafeTls: props.allowUnsafeTls }
+		: {}),
+});
 
 /**
  * Initialize a git repository in the scaffolded directory. Just `git init` — we

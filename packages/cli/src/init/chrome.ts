@@ -9,7 +9,6 @@ import {
 	HEADING_PENDING,
 	INIT_SUBTITLE,
 	type InitOutcomeKind,
-	PROGRESS,
 } from "./copy.js";
 import type {
 	InitFunnelAgentSetup,
@@ -220,29 +219,6 @@ export const configRowValue = (
 	}
 	const _exhaustive: never = config;
 	return _exhaustive;
-};
-
-export const INIT_STEP_LABELS: Record<string, string> = {
-	bootstrap: "Creating the app from the selected template...",
-	plugins: PROGRESS.plugins,
-	skills: PROGRESS.skills,
-	mcp: PROGRESS.mcp,
-	auth: PROGRESS.auth,
-	link: PROGRESS.link,
-	claim: PROGRESS.claim,
-	config: PROGRESS.config,
-	env: PROGRESS.env,
-};
-
-export const initStepLabel = (step: readonly string[]): string | undefined => {
-	const command = step[0];
-	if (command === undefined) {
-		return undefined;
-	}
-	if (command === "config") {
-		return INIT_STEP_LABELS.config;
-	}
-	return INIT_STEP_LABELS[command];
 };
 
 export const headingForKind = (kind: InitOutcomeKind): string => {
