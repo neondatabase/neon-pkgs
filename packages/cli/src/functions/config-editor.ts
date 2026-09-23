@@ -685,6 +685,8 @@ export type FunctionDeclaration = {
 	source: string;
 	/** Env var name → source expression (e.g. `process.env.RESEND_API_KEY!`). */
 	env?: Record<string, string>;
+	/** Non-default bundler, e.g. `"none"` for a prebuilt directory. */
+	bundler?: string;
 };
 
 /** Render `<slug>: { name: …, source: … }` as a single-line object member. */
@@ -696,6 +698,9 @@ export const buildFunctionEntry = (
 		`name: ${JSON.stringify(decl.name)}`,
 		`source: ${JSON.stringify(decl.source)}`,
 	];
+	if (decl.bundler !== undefined) {
+		parts.push(`bundler: ${JSON.stringify(decl.bundler)}`);
+	}
 	const envEntries = Object.entries(decl.env ?? {});
 	if (options.includeEnv && envEntries.length > 0) {
 		const inner = envEntries

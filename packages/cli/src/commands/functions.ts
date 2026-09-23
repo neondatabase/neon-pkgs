@@ -20,6 +20,8 @@ import { readEnvFile, resolveEnvFilePath } from "../env_file.js";
 import {
 	fetchFunctionTemplates,
 	type RegistryIndexEntry,
+	type ScaffoldBundleResult,
+	scaffoldBundleTemplate,
 	scaffoldFunctionTemplate,
 	UnknownFunctionTemplateError,
 } from "../functions/templates.js";
@@ -399,6 +401,67 @@ const NEW_FUNCTION_FIELDS = [
 	"next_steps",
 ] as const;
 
+// Structured (json/yaml) fields for a bundled (prebuilt) artifact. Distinct from
+// NEW_FUNCTION_FIELDS: a bundle has no operations/routes/layout, and instead
+// reports the verified artifact (bytes/sha256), its prebuilt entry, and the
+// platform metadata (capabilities, dependsOn, triggers, migrations) our CLI does
+// not yet orchestrate.
+const NEW_BUNDLE_FIELDS = [
+	"template",
+	"provider",
+	"delivery",
+	"slug",
+	"directory",
+	"entry",
+	"bytes",
+	"sha256",
+	"capabilities",
+	"depends_on",
+	"triggers",
+	"migrations",
+	"environment",
+	"injected_environment",
+	"env_file",
+	"config",
+	"neon_ts_fragment",
+	"next_steps",
+] as const;
+
+const emitBundleResult = (
+	props: NewFunctionProps,
+	result: ScaffoldBundleResult,
+): void => {
+	writer(props).end(
+		{
+			template: result.templateId,
+			provider: result.provider ?? "Neon",
+			delivery: "bundle",
+			slug: result.slug,
+			directory: result.directory,
+			entry: result.entry ?? null,
+			bytes: result.bytes,
+			sha256: result.sha256,
+			capabilities: result.capabilities,
+			depends_on: result.dependsOn,
+			triggers: result.triggers,
+			migrations: result.migrations,
+			environment: result.environment,
+			injected_environment: result.injectedEnvironment,
+			env_file: result.envFile
+				? {
+						path: result.envFile.path,
+						variables: result.envFile.variables,
+						written: result.envFile.written,
+					}
+				: null,
+			config: result.config ?? null,
+			neon_ts_fragment: result.neonTsFragment ?? null,
+			next_steps: result.nextSteps,
+		},
+		{ fields: NEW_BUNDLE_FIELDS },
+	);
+};
+
 const createFromTemplate = async (props: NewFunctionProps) => {
 	if (props.template === undefined) {
 		await listTemplates(props);
@@ -410,6 +473,34 @@ const createFromTemplate = async (props: NewFunctionProps) => {
 		return;
 	}
 	const structured = props.output === "json" || props.output === "yaml";
+	const registry = await fetchFunctionTemplates();
+	const entry = registry.find((candidate) => candidate.id === props.template);
+
+	// Bundled catalog blocks are prebuilt: their operations share one entry and
+	// cannot be pruned, so operation selection is rejected up front.
+	if (entry?.delivery?.mode === "bundle") {
+		if ((props.operation?.length ?? 0) > 0 || props.allOperations) {
+			throw new Error(
+				`"${entry.id}" is a prebuilt bundle; its operations share one entry and cannot be selected. Remove --operation and --all-operations.`,
+			);
+		}
+		const bundleResult = await scaffoldBundleTemplate({
+			entry,
+			name: props.name,
+			yes: props.yes,
+			dir: props.dir,
+			force: props.force,
+			addToConfig: props.addToConfig,
+			config: props.config,
+			noEnv: props.env === false,
+			envTo: props.envTo,
+			quiet: structured,
+		});
+		if (bundleResult.cancelled) return;
+		if (structured) emitBundleResult(props, bundleResult);
+		return;
+	}
+
 	let result: Awaited<ReturnType<typeof scaffoldFunctionTemplate>>;
 	try {
 		result = await scaffoldFunctionTemplate({
@@ -426,6 +517,7 @@ const createFromTemplate = async (props: NewFunctionProps) => {
 			noEnv: props.env === false,
 			envTo: props.envTo,
 			quiet: structured,
+			registry,
 		});
 	} catch (error) {
 		if (!(error instanceof UnknownFunctionTemplateError)) throw error;

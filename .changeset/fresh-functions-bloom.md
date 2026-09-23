@@ -47,6 +47,21 @@ git-tracked one. `--no-env` opts out and `--env-to <path>` picks the destination
 (inside the project root). Structured output reports the env file path and
 variable names only, never values.
 
+The registry now delivers two kinds of entry, inferred from the index metadata and kept as
+separate contracts (no optional-field soup). **Source templates** (`basic`, `resend`, `rest-api`,
+and any entry with a `layout`) are the existing unbundled flow: individual TypeScript modules,
+selectable operations, and normal esbuild/source deploy. **Bundled catalog blocks** (index
+entries carrying `zip`, `sha256`, and `bytes`) are reviewed prebuilt artifacts:
+`neon functions new <block>` downloads the ZIP from the reviewed origin (HTTPS-only,
+allowed-origin/redirect containment, declared and streamed size caps), verifies its SHA-256
+before extraction, and extracts it with strict zip-slip/path/count/total-byte protections. The
+archive is treated as immutable prebuilt content — no `npm install`, no re-bundling — so its
+`index.mjs` entry, `migrations/`, and supporting files are preserved. Operation selection is
+rejected for a bundle, and it is registered as exactly one `neon.ts` function using its
+`functionSlug`, a directory `source`, and `bundler: "none"`. Listing and bundle extraction are
+supported; applying a block's SQL migrations, triggers, and dependent blocks is not yet automated
+and is called out in a generated `NEON_NEXT_STEPS.md` and the command output.
+
 By default `neon functions new` now also registers the scaffolded function in a
 `neon.ts` policy so `neon deploy` picks it up — still fully offline (a local file
 edit, no auth or API call). It searches upward for a supported config filename

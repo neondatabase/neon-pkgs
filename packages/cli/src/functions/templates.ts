@@ -1,4 +1,5 @@
-import { relative, resolve } from "node:path";
+import { writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import prompts from "prompts";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
@@ -29,11 +30,17 @@ import {
 	planEnvSetup,
 } from "./env-setup.js";
 import {
+	type BundleDelivery,
+	type BundleManifest,
+	type BundleTemplate,
+	extractBundle,
 	type FunctionTemplate,
 	type FunctionTemplateEnvironment,
 	type FunctionTemplateOperation,
+	fetchBundleZip,
 	fetchFunctionTemplates,
 	type LoadedTemplate,
+	loadBundleItem,
 	loadFunctionTemplate,
 	MAX_TOTAL_BYTES,
 	type RegistryIndexEntry,
@@ -908,5 +915,447 @@ export const scaffoldFunctionTemplate = async (
 		...(configOutcome.fragment
 			? { neonTsFragment: configOutcome.fragment }
 			: {}),
+	};
+};
+
+export type ScaffoldBundleProps = {
+	entry: RegistryIndexEntry;
+	name?: string;
+	dir?: string;
+	yes?: boolean;
+	force?: boolean;
+	cwd?: string;
+	addToConfig?: boolean;
+	config?: string;
+	noEnv?: boolean;
+	envTo?: string;
+	promptSecret?: (spec: EnvVarSpec) => Promise<string | undefined>;
+	confirmOverwrite?: (message: string) => Promise<boolean | undefined>;
+	confirmRegister?: (message: string) => Promise<boolean | undefined>;
+	confirmReplace?: (message: string) => Promise<boolean | undefined>;
+	loadItem?: (entry: RegistryIndexEntry) => Promise<BundleTemplate>;
+	fetchZip?: (entry: RegistryIndexEntry) => Promise<Uint8Array>;
+	extract?: (zip: Uint8Array, targetDir: string) => BundleManifest;
+	interactive?: boolean;
+	quiet?: boolean;
+};
+
+export type ScaffoldBundleResult = {
+	templateId: string;
+	provider?: string;
+	title: string;
+	slug: string;
+	targetDir: string;
+	directory: string;
+	/** Prebuilt entry module the deployed function loads (e.g. index.mjs). */
+	entry?: string;
+	bytes: number;
+	sha256: string;
+	capabilities: string[];
+	dependsOn: string[];
+	triggers: string[];
+	migrations: string[];
+	/** Every declared env var name (required, optional, and platform-injected). */
+	environment: string[];
+	injectedEnvironment: string[];
+	envFile?: { path: string; variables: string[]; written: string[] };
+	config?: {
+		path: string;
+		action: "created" | "updated" | "replaced" | "noop";
+		dependenciesInstalled?: boolean;
+	};
+	neonTsFragment?: string;
+	nextSteps: string[];
+	cancelled: boolean;
+};
+
+const bundleNextStepsDoc = (
+	item: BundleTemplate,
+	slug: string,
+	manifest: BundleManifest,
+	registered: boolean,
+	cli: string,
+	directory: string,
+	unappliedNote: string[],
+): string => {
+	const lines: string[] = [
+		`# ${item.title} — Neon setup`,
+		"",
+		`Installed as a prebuilt Neon Function under slug \`${slug}\` (bundler: none — the shipped \`${manifest.entry}\` is deployed as-is, not rebuilt).`,
+		"",
+		"## Run and deploy",
+		"",
+		registered
+			? `- Run locally: \`${cli} dev\`\n- Deploy: \`${cli} deploy\``
+			: `- Deploy: \`${cli} functions deploy ${slug} --src ${directory} --no-bundle\``,
+	];
+	if (unappliedNote.length > 0) {
+		lines.push(
+			"",
+			"## Not applied automatically",
+			"",
+			"The Neon CLI installs the prebuilt function only. The following are shipped in this directory but are **not** applied for you yet — do them manually:",
+			"",
+			...unappliedNote.map((note) => `- ${note}`),
+		);
+	}
+	if (item.environment.length > 0) {
+		lines.push(
+			"",
+			"## Environment",
+			"",
+			...item.environment.map(
+				(variable) =>
+					`- \`${variable.name}\`${variable.injected ? " (injected by Neon)" : variable.required ? " (required)" : " (optional)"} — ${variable.description}`,
+			),
+		);
+	}
+	return `${lines.join("\n")}\n`;
+};
+
+/**
+ * Scaffold a bundled (prebuilt) catalog block. Distinct from
+ * {@link scaffoldFunctionTemplate}: the reviewed ZIP is downloaded, size- and
+ * SHA-256-verified, and extracted verbatim — no operation selection, no
+ * dependency install, no esbuild — then registered as exactly one `neon.ts`
+ * function with `bundler: "none"`.
+ */
+export const scaffoldBundleTemplate = async (
+	props: ScaffoldBundleProps,
+): Promise<ScaffoldBundleResult> => {
+	const { entry } = props;
+	if (entry.delivery?.mode !== "bundle") {
+		throw new Error(`Template "${entry.id}" is not a bundled artifact.`);
+	}
+	const delivery: BundleDelivery = entry.delivery;
+	const cwd = props.cwd ?? process.cwd();
+	const cli = getCliName();
+
+	const slug =
+		props.name !== undefined
+			? props.name
+			: SLUG_PATTERN.test(delivery.functionSlug)
+				? delivery.functionSlug
+				: deriveFunctionSlug(delivery.functionSlug || entry.id);
+	if (!SLUG_PATTERN.test(slug)) {
+		if (props.name !== undefined) {
+			throw new Error(`Invalid function slug "${slug}". ${SLUG_HELP}`);
+		}
+		throw new Error(
+			`Could not derive a valid function slug for "${entry.id}". Pass --name with 1-20 lowercase letters and digits.`,
+		);
+	}
+
+	const targetDir = resolve(cwd, props.dir ?? `functions/${slug}`);
+	const path = displayPath(cwd, targetDir);
+	const interactive =
+		props.interactive ??
+		(props.yes !== true &&
+			props.quiet !== true &&
+			process.stdin.isTTY === true &&
+			process.stdout.isTTY === true &&
+			!isCi());
+
+	const item = await (props.loadItem ?? loadBundleItem)(entry);
+	const injectedEnv = item.environment.filter(
+		(variable) => variable.injected,
+	);
+	// A prebuilt block reads its own defaults for optional vars; only the required,
+	// non-injected ones belong in neon.ts and the project dotenv prompt.
+	const requiredEnv = item.environment.filter(
+		(variable) => variable.required && !variable.injected,
+	);
+	const requiredEnvNames = requiredEnv.map((variable) => variable.name);
+	const allEnvNames = item.environment.map((variable) => variable.name);
+
+	const emptyResult = (cancelled: boolean): ScaffoldBundleResult => ({
+		templateId: entry.id,
+		...(item.provider ? { provider: item.provider } : {}),
+		title: item.title,
+		slug,
+		targetDir,
+		directory: path,
+		bytes: delivery.bytes,
+		sha256: delivery.sha256,
+		capabilities: [...delivery.capabilities],
+		dependsOn: [...delivery.dependsOn],
+		triggers: item.triggers.map((trigger) => trigger.type),
+		migrations: [],
+		environment: allEnvNames,
+		injectedEnvironment: injectedEnv.map((variable) => variable.name),
+		nextSteps: [],
+		cancelled,
+	});
+
+	try {
+		ensureTargetUsable(targetDir, props.force === true);
+	} catch (error) {
+		if (
+			!(error instanceof TemplateInputError) ||
+			error.agentCode !== "TARGET_NOT_EMPTY"
+		) {
+			throw error;
+		}
+		if (props.force === false) {
+			if (!props.quiet) log.info("Cancelled; no files were changed.");
+			return emptyResult(true);
+		}
+		if (!interactive) throw error;
+		const confirmOverwrite =
+			props.confirmOverwrite ??
+			(async (message: string) => {
+				const answer = await prompts({
+					type: "confirm",
+					name: "value",
+					message,
+					initial: false,
+				});
+				return answer.value;
+			});
+		const overwrite = await confirmOverwrite(
+			`Target directory ${path} is not empty. Overwrite colliding files? Unrelated files will be kept.`,
+		);
+		if (overwrite !== true) {
+			if (!props.quiet) {
+				log.info(
+					overwrite === false
+						? "Cancelled; no files were changed."
+						: "Aborted; no files were changed.",
+				);
+			}
+			return emptyResult(true);
+		}
+	}
+
+	const configPlan = await planConfigRegistration({
+		cwd,
+		targets: [
+			{
+				slug,
+				displayName: item.title,
+				sourcePath: targetDir,
+				environment: requiredEnvNames,
+				bundler: "none",
+			},
+		],
+		...(props.config !== undefined ? { configPath: props.config } : {}),
+		...(props.addToConfig !== undefined
+			? { addToConfig: props.addToConfig }
+			: {}),
+		...(props.force !== undefined ? { force: props.force } : {}),
+		interactive,
+		...(props.confirmRegister
+			? { confirmRegister: props.confirmRegister }
+			: {}),
+		...(props.confirmReplace
+			? { confirmReplace: props.confirmReplace }
+			: {}),
+	});
+	if (configPlan.kind === "cancelled") {
+		if (!props.quiet) log.info("Aborted; no files were changed.");
+		return emptyResult(true);
+	}
+
+	const projectRoot =
+		configPlan.kind === "create" ||
+		configPlan.kind === "edit" ||
+		configPlan.kind === "noop"
+			? configPlan.root
+			: cwd;
+	const envPlan = await planEnvSetup({
+		cwd,
+		projectRoot,
+		variables: requiredEnv.map((variable) => ({
+			name: variable.name,
+			description: variable.description,
+		})),
+		interactive,
+		...(props.noEnv !== undefined ? { noEnv: props.noEnv } : {}),
+		...(props.envTo !== undefined ? { envTo: props.envTo } : {}),
+		...(props.promptSecret ? { promptSecret: props.promptSecret } : {}),
+	});
+	if (envPlan.kind === "cancelled") {
+		if (!props.quiet) log.info("Aborted; no files were changed.");
+		return emptyResult(true);
+	}
+
+	if (!props.quiet) {
+		const by = item.provider ? ` by ${item.provider}` : "";
+		log.info(
+			`Fetching prebuilt ${entry.id}${by} (${delivery.bytes} bytes) from the Neon Function Registry.`,
+		);
+	}
+	const zip = await (props.fetchZip ?? fetchBundleZip)(entry);
+	const manifest = (props.extract ?? extractBundle)(zip, targetDir);
+	if (!props.quiet) {
+		log.info(
+			`Verified SHA-256 ${delivery.sha256} and extracted to ${path}.`,
+		);
+	}
+
+	let configOutcome: ConfigOutcome;
+	try {
+		configOutcome = await applyConfigPlan(configPlan, { run: runCommand });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		if (!props.quiet) {
+			log.warning(
+				`Extracted the bundle but the Neon config was not updated: ${message}`,
+			);
+		}
+		configOutcome = {
+			registered: false,
+			fragment:
+				configPlan.kind === "create" || configPlan.kind === "edit"
+					? renderFragment(configPlan.decls)
+					: undefined,
+			reason: `config write failed: ${message}`,
+			hasEnv: false,
+			envNames: [],
+		};
+	}
+
+	let envOutcome: EnvSetupOutcome;
+	try {
+		envOutcome = applyEnvSetup(envPlan);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		if (!props.quiet) {
+			log.warning(
+				`Extracted the bundle but the env file was not updated: ${message}`,
+			);
+		}
+		envOutcome = { written: [], present: [], variables: [] };
+	}
+
+	const unapplied: string[] = [];
+	if (manifest.migrations.length > 0) {
+		unapplied.push(
+			`${manifest.migrations.length} SQL migration${manifest.migrations.length > 1 ? "s" : ""} under \`migrations/\` — apply them to your branch before invoking the function.`,
+		);
+	}
+	if (item.triggers.length > 0) {
+		unapplied.push(
+			`${item.triggers.length} trigger${item.triggers.length > 1 ? "s" : ""} (${item.triggers.map((trigger) => trigger.type).join(", ")}) — configure them in the Neon console.`,
+		);
+	}
+	if (delivery.dependsOn.length > 0) {
+		unapplied.push(
+			`dependent block${delivery.dependsOn.length > 1 ? "s" : ""} ${delivery.dependsOn.join(", ")} — install ${delivery.dependsOn.length > 1 ? "them" : "it"} too.`,
+		);
+	}
+
+	const doc = bundleNextStepsDoc(
+		item,
+		slug,
+		manifest,
+		configOutcome.registered,
+		cli,
+		path,
+		unapplied,
+	);
+	try {
+		writeFileSync(join(targetDir, "NEON_NEXT_STEPS.md"), doc);
+	} catch (error) {
+		if (!props.quiet) {
+			log.warning(
+				`Could not write NEON_NEXT_STEPS.md: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	}
+
+	const envFile = envOutcome.path ? envOutcome.relativePath : undefined;
+	const nextSteps: string[] = [];
+	if (configOutcome.registered) {
+		nextSteps.push(`Run locally: ${cli} dev`);
+		nextSteps.push(`Deploy the prebuilt function: ${cli} deploy`);
+	} else {
+		nextSteps.push(
+			`Deploy the prebuilt function: ${cli} functions deploy ${slug} --src ${path} --no-bundle`,
+		);
+		if (configOutcome.fragment) {
+			nextSteps.push(
+				`To manage this function with neon.ts, add to defineConfig:\n${configOutcome.fragment}`,
+			);
+			if (configOutcome.suggestInit) {
+				nextSteps.push(`Or start a policy with: ${cli} config init.`);
+			}
+		}
+	}
+	if (requiredEnvNames.length > 0 && envFile) {
+		nextSteps.push(`Set ${requiredEnvNames.join(", ")} in ${envFile}.`);
+	}
+	for (const note of unapplied) {
+		nextSteps.push(`Not applied automatically: ${note}`);
+	}
+	nextSteps.push(
+		`See ${path}/NEON_NEXT_STEPS.md for the full setup checklist.`,
+	);
+
+	if (!props.quiet) {
+		const by = item.provider ? ` by ${item.provider}` : "";
+		log.info(
+			`Installed prebuilt function ${slug} from the ${entry.id} block${by} in ${path}.`,
+		);
+		if (configOutcome.registered && configOutcome.action) {
+			const verb = {
+				created: `Created ${configOutcome.relativePath} and registered ${slug}`,
+				updated: `Registered ${slug} in ${configOutcome.relativePath}`,
+				replaced: `Replaced ${slug} in ${configOutcome.relativePath}`,
+				noop: `${slug} is already registered in ${configOutcome.relativePath}`,
+			}[configOutcome.action];
+			log.info(`${verb} (bundler: none).`);
+		} else if (configOutcome.reason) {
+			log.info(
+				`Left the Neon config untouched: ${configOutcome.reason}.`,
+			);
+		}
+		for (const step of nextSteps) log.info(step);
+	}
+
+	return {
+		templateId: entry.id,
+		...(item.provider ? { provider: item.provider } : {}),
+		title: item.title,
+		slug,
+		targetDir,
+		directory: path,
+		entry: manifest.entry,
+		bytes: delivery.bytes,
+		sha256: delivery.sha256,
+		capabilities: [...delivery.capabilities],
+		dependsOn: [...delivery.dependsOn],
+		triggers: item.triggers.map((trigger) => trigger.type),
+		migrations: manifest.migrations,
+		environment: allEnvNames,
+		injectedEnvironment: injectedEnv.map((variable) => variable.name),
+		...(envFile
+			? {
+					envFile: {
+						path: envFile,
+						variables: envOutcome.variables,
+						written: envOutcome.written,
+					},
+				}
+			: {}),
+		...(configOutcome.registered && configOutcome.action
+			? {
+					config: {
+						path: configOutcome.relativePath ?? "",
+						action: configOutcome.action,
+						...(configOutcome.depInstalled !== undefined
+							? {
+									dependenciesInstalled:
+										configOutcome.depInstalled,
+								}
+							: {}),
+					},
+				}
+			: {}),
+		...(configOutcome.fragment
+			? { neonTsFragment: configOutcome.fragment }
+			: {}),
+		nextSteps,
+		cancelled: false,
 	};
 };

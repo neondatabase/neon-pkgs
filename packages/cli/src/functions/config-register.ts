@@ -47,6 +47,8 @@ export type RegisterTarget = {
 	/** Absolute path to the file or directory the function's `source` points at. */
 	sourcePath: string;
 	environment: string[];
+	/** Non-default bundler, e.g. `"none"` for a prebuilt bundle directory. */
+	bundler?: string;
 };
 
 export type RegisterInput = {
@@ -234,6 +236,9 @@ export const planConfigRegistration = async (
 			name: target.displayName,
 			source,
 			...(env ? { env } : {}),
+			...(target.bundler !== undefined
+				? { bundler: target.bundler }
+				: {}),
 		};
 	};
 

@@ -665,6 +665,27 @@ How the selection is materialized depends on the template's **layout**:
   register several. `--output json`/`yaml` reports `layout` and the operation-to-slug/source
   mapping.
 
+#### Bundled catalog blocks vs. source templates
+
+The registry delivers entries two ways, and the CLI infers which from the index metadata:
+
+- **Source templates** (`basic`, `resend`, `rest-api`, and any entry with a `layout`) are the
+  unbundled TypeScript flow described above: individual modules copied verbatim, selectable
+  operations, and a normal esbuild/source deploy.
+- **Bundled catalog blocks** are reviewed, prebuilt artifacts (an index entry carrying `zip`,
+  `sha256`, and `bytes`). `neon functions new <block>` downloads the ZIP from the reviewed
+  registry origin (HTTPS-only, allowed-origin and redirect-containment enforced, declared and
+  streamed size caps), **verifies its SHA-256 before extraction**, and extracts it with strict
+  zip-slip, path, per-file, count, and total-byte protections. The archive is treated as
+  immutable prebuilt content — nothing is `npm install`ed or re-bundled — so its `index.mjs`
+  entry, `migrations/`, and supporting files are preserved as shipped. Operation selection does
+  not apply (the operations share one prebuilt entry and cannot be pruned), so `--operation` and
+  `--all-operations` are rejected with a clear message. The block is registered as exactly one
+  `neon.ts` function using its `functionSlug`, a directory `source`, and `bundler: "none"`, and
+  next steps use `neon deploy` / `neon dev` for the prebuilt bundle. A generated
+  `NEON_NEXT_STEPS.md` and the command output list any SQL migrations, triggers, and dependent
+  blocks the artifact ships — these are **not** applied by the CLI yet and must be done by hand.
+
 When the destination is non-empty, an interactive terminal asks before overwriting only
 colliding template paths; unrelated files remain. Declining or aborting makes no changes
 and installs nothing. Non-interactive and CI runs fail safely and name `--force`.
