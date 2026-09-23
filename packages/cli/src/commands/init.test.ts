@@ -441,7 +441,7 @@ describe("init handler", () => {
 
 		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
 		expect(mcp).toContain("--oauth");
-		expect(mcp).toContain("--project");
+		expect(mcp?.split(" ")).toContain("--project");
 		expect(mcp).toContain("--project-id proj-pin");
 	});
 
