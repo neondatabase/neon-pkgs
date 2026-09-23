@@ -33,7 +33,7 @@ describe("runHook return typing", () => {
 	test("a shell-command hook has no typed return channel (resolves to unknown)", () => {
 		// A bare string carries no `Result`, so the generic resolves to `unknown`
 		// (`unknown | undefined` collapses to `unknown`).
-		expectTypeOf(runHook("drizzle-kit migrate", undefined)).toEqualTypeOf<
+		expectTypeOf(runHook("npm run db:migrate", undefined)).toEqualTypeOf<
 			Promise<unknown>
 		>();
 	});

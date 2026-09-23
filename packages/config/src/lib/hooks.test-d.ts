@@ -13,6 +13,8 @@ import type {
 	CheckoutBeforeContext,
 	CheckoutBeforeResult,
 	Config,
+	CreateAfterContext,
+	CreateBeforeContext,
 	DeployAfterContext,
 	DeployBeforeContext,
 	GitContext,
@@ -137,6 +139,27 @@ describe("hook context shapes per phase", () => {
 		expectTypeOf<CheckoutAfterContext["git"]>().toEqualTypeOf<GitContext>();
 	});
 
+	test("create.before sees only the branch name + git (no branch/env — cannot rename)", () => {
+		expectTypeOf<
+			CreateBeforeContext["branchName"]
+		>().toEqualTypeOf<string>();
+		expectTypeOf<CreateBeforeContext["git"]>().toEqualTypeOf<GitContext>();
+		// @ts-expect-error create.before runs before creation — there is no `branch`.
+		expectTypeOf<CreateBeforeContext["branch"]>();
+		// @ts-expect-error create.before runs before env is pulled — there is no `env`.
+		expectTypeOf<CreateBeforeContext["env"]>();
+	});
+
+	test("create.after sees branch + env (NeonEnv<C>) + git", () => {
+		expectTypeOf<
+			CreateAfterContext["branch"]
+		>().toEqualTypeOf<HookBranch>();
+		expectTypeOf<CreateAfterContext["env"]>().toEqualTypeOf<
+			NeonEnv<Config>
+		>();
+		expectTypeOf<CreateAfterContext["git"]>().toEqualTypeOf<GitContext>();
+	});
+
 	test("deploy.before sees branch + git but no env", () => {
 		expectTypeOf<
 			DeployBeforeContext["branch"]
@@ -173,6 +196,27 @@ describe("ShellHook union", () => {
 });
 
 describe("defineConfig hooks — positive (every valid form type-checks)", () => {
+	test("function-form create hooks; context is inferred", () => {
+		defineConfig({
+			hooks: {
+				create: {
+					before: (ctx) => {
+						expectTypeOf(ctx).toEqualTypeOf<CreateBeforeContext>();
+						expectTypeOf(ctx.branchName).toEqualTypeOf<string>();
+					},
+					after: async (ctx) => {
+						expectTypeOf<keyof typeof ctx.env>().toEqualTypeOf<
+							"postgres" | "branch"
+						>();
+						expectTypeOf(
+							ctx.branch.created,
+						).toEqualTypeOf<boolean>();
+					},
+				},
+			},
+		});
+	});
+
 	test("function-form checkout + deploy hooks; contexts are inferred", () => {
 		defineConfig({
 			hooks: {
@@ -261,8 +305,9 @@ describe("defineConfig hooks — positive (every valid form type-checks)", () =>
 	test("shell-command hooks: string and array", () => {
 		defineConfig({
 			hooks: {
-				checkout: { after: "drizzle-kit migrate" },
-				deploy: { after: ["npm run build", "drizzle-kit migrate"] },
+				checkout: { after: "npm run db:migrate" },
+				create: { after: "npm run db:seed" },
+				deploy: { after: ["npm run build", "npm run db:migrate"] },
 			},
 		});
 	});
@@ -295,6 +340,17 @@ describe("defineConfig hooks — negative (@ts-expect-error)", () => {
 				checkout: {
 					// @ts-expect-error `name` must be a string.
 					before: () => ({ name: 123 }),
+				},
+			},
+		});
+	});
+
+	test("create.before cannot return a rename — only checkout.before can", () => {
+		defineConfig({
+			hooks: {
+				create: {
+					// @ts-expect-error create.before's return type is `void`, not a rename result.
+					before: () => ({ name: "renamed" }),
 				},
 			},
 		});

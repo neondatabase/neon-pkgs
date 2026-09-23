@@ -79,6 +79,26 @@ export const runCheckoutBeforeHook = async (args: {
   return result?.name;
 };
 
+/**
+ * Run the `create.before` hook (if any). Fires only when a new branch is actually about to
+ * be created (never for `checkout` selecting an existing one). Throws propagate to abort
+ * the create — the checkout that triggered it aborts too.
+ */
+export const runCreateBeforeHook = async (args: {
+  hooks: Hooks | undefined;
+  branchName: string;
+  git: GitContext;
+  cwd: string;
+}): Promise<void> => {
+  const hook = args.hooks?.create?.before;
+  if (!hook) return;
+  await runHook(
+    hook,
+    { branchName: args.branchName, git: args.git },
+    { cwd: args.cwd, onOutput },
+  );
+};
+
 /** Run the `deploy.before` hook (if any). Throws propagate to abort the deploy. */
 export const runDeployBeforeHook = async (args: {
   hooks: Hooks | undefined;
@@ -112,6 +132,28 @@ export const runCheckoutAfterHook = async (args: {
   const hook = args.hooks?.checkout?.after;
   if (!hook) return;
   await runAfter('checkout.after', () =>
+    runHook(
+      hook,
+      { branch: args.branch, env: args.env, git: args.git },
+      { cwd: args.cwd, env: hookEnvToProcessEnv(args.env), onOutput },
+    ),
+  );
+};
+
+/**
+ * Run the `create.after` hook (if any). Failures degrade to a warning — the branch already
+ * exists, so an `after` failure must not unwind the create.
+ */
+export const runCreateAfterHook = async (args: {
+  hooks: Hooks | undefined;
+  branch: HookBranch;
+  env: NeonEnv;
+  git: GitContext;
+  cwd: string;
+}): Promise<void> => {
+  const hook = args.hooks?.create?.after;
+  if (!hook) return;
+  await runAfter('create.after', () =>
     runHook(
       hook,
       { branch: args.branch, env: args.env, git: args.git },

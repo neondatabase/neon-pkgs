@@ -47,8 +47,8 @@ export interface RunHookOptions {
  *
  * - **Function hook** — awaited and its value returned (e.g. a `checkout.before` rename).
  * - **Shell-command hook** — each command run sequentially and **non-interactively** (stdin
- *   is not attached and `CI=1` is set, so an accidental interactive command like
- *   `drizzle-kit push` fails fast instead of hanging). Returns `undefined` (shell hooks have
+ *   is not attached and `CI=1` is set, so an accidental interactive command fails fast
+ *   instead of hanging). Returns `undefined` (shell hooks have
  *   no return channel). A non-zero exit throws {@link HookExecutionError} and stops the chain.
  * - **`undefined`** — no hook configured; returns `undefined`.
  *
@@ -93,7 +93,7 @@ function runOneCommand(
 			shell: true,
 			cwd: options.cwd ?? process.cwd(),
 			// stdin is intentionally NOT inherited: hooks must be non-interactive so a stray
-			// prompt (e.g. `drizzle-kit push`) fails fast in CI instead of hanging forever.
+			// prompt fails fast in CI instead of hanging forever.
 			stdio: ["ignore", "pipe", "pipe"],
 			env: buildEnv(options.env),
 		});

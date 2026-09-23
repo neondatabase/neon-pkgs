@@ -4,7 +4,7 @@ import { ConfigValidationError } from "./errors.js";
 import type { CheckoutBeforeContext, CheckoutBeforeResult } from "./types.js";
 
 describe("defineConfig hooks", () => {
-	test("accepts function-form checkout/deploy hooks and carries them through", () => {
+	test("accepts function-form checkout/create/deploy hooks and carries them through", () => {
 		const config = defineConfig({
 			auth: true,
 			hooks: {
@@ -14,6 +14,10 @@ describe("defineConfig hooks", () => {
 					}),
 					after: async () => {},
 				},
+				create: {
+					before: () => {},
+					after: async () => {},
+				},
 				deploy: {
 					before: () => {},
 					after: async () => {},
@@ -21,20 +25,23 @@ describe("defineConfig hooks", () => {
 			},
 		});
 		expect(typeof config.hooks?.checkout?.before).toBe("function");
+		expect(typeof config.hooks?.create?.after).toBe("function");
 		expect(typeof config.hooks?.deploy?.after).toBe("function");
 	});
 
 	test("accepts shell-command hooks (string and array)", () => {
 		const config = defineConfig({
 			hooks: {
-				checkout: { after: "drizzle-kit migrate" },
-				deploy: { after: ["npm run build", "drizzle-kit migrate"] },
+				checkout: { after: "npm run db:migrate" },
+				create: { after: "npm run db:seed" },
+				deploy: { after: ["npm run build", "npm run db:migrate"] },
 			},
 		});
-		expect(config.hooks?.checkout?.after).toBe("drizzle-kit migrate");
+		expect(config.hooks?.checkout?.after).toBe("npm run db:migrate");
+		expect(config.hooks?.create?.after).toBe("npm run db:seed");
 		expect(config.hooks?.deploy?.after).toEqual([
 			"npm run build",
-			"drizzle-kit migrate",
+			"npm run db:migrate",
 		]);
 	});
 
@@ -105,5 +112,31 @@ describe("defineConfig hooks", () => {
 			},
 		}) as CheckoutBeforeResult;
 		expect(result).toEqual({ name: "preview/dev-1" });
+	});
+
+	test("create.before receives the branch name and git context, and can abort", () => {
+		const config = defineConfig({
+			hooks: {
+				create: {
+					before: ({ branchName }) => {
+						if (branchName === "forbidden") {
+							throw new Error("branch name not allowed");
+						}
+					},
+				},
+			},
+		});
+		const before = config.hooks?.create?.before;
+		if (typeof before !== "function") throw new Error("expected function");
+		const git = {
+			available: false,
+			isDetached: false,
+			isDirty: false,
+			triggeredByGitHook: false,
+		};
+		expect(() => before({ branchName: "forbidden", git })).toThrow(
+			"branch name not allowed",
+		);
+		expect(before({ branchName: "dev-1", git })).toBeUndefined();
 	});
 });

@@ -631,10 +631,11 @@ export interface PushResult {
 // Hooks are the **imperative** companion to the pure, declarative `branch` closure.
 // `branch()` answers *"what should this branch look like?"* (and runs during `plan` /
 // `status` / `apply`, so it must stay side-effect free). Hooks answer *"do this when a
-// branch is checked out / deployed"* (migrations, seeding, notifications) and run **only**
-// during the real `checkout` / `deploy` commands — never during `plan` / `status` /
-// `inspect`. That separation is what keeps the diff engine deterministic and the typed
-// env (`NeonEnv<typeof config>`) sound.
+// branch is created / checked out / deployed"* (migrations, seeding, notifications) and
+// run **only** during the real `checkout` / `deploy` commands (and, for `create`,
+// whenever those actually create a branch) — never during `plan` / `status` / `inspect`.
+// That separation is what keeps the diff engine deterministic and the typed env
+// (`NeonEnv<typeof config>`) sound.
 
 /**
  * Read-only git facts injected into every hook by the CLI. A hook can *read* the git state
@@ -724,6 +725,29 @@ export interface CheckoutAfterContext<C extends Config = Config> {
 	git: GitContext;
 }
 
+/**
+ * Context passed to `hooks.create.before` (runs before a new branch is created). Fires only
+ * for a genuine creation — never for `checkout` selecting an existing branch. Unlike
+ * `checkout.before`, this cannot rename the branch: by the time a `create` is reached, the
+ * name is already resolved (rename via `checkout.before` if you need that).
+ */
+export interface CreateBeforeContext {
+	/** Name of the branch about to be created. */
+	branchName: string;
+	git: GitContext;
+}
+
+/**
+ * Context passed to `hooks.create.after` (branch created, policy applied, env pulled).
+ * Generic over the policy `C` so `env` is the exact {@link NeonEnv}`<C>`. `branch.created`
+ * is always `true` here.
+ */
+export interface CreateAfterContext<C extends Config = Config> {
+	branch: HookBranch;
+	env: NeonEnv<C>;
+	git: GitContext;
+}
+
 /** Context passed to `hooks.deploy.before` (branch resolved, policy not yet applied). */
 export interface DeployBeforeContext {
 	branch: HookBranch;
@@ -745,9 +769,8 @@ export interface DeployAfterContext<C extends Config = Config> {
 /**
  * A shell-command hook: a single command string, or a list of commands run sequentially
  * (each must exit 0 or the operation aborts). Commands run **non-interactively** (stdin is
- * not a TTY and `CI=1` is set) so an accidental interactive command (`drizzle-kit push`)
- * fails fast instead of hanging. Resolved Neon env vars are injected into the command's
- * environment.
+ * not a TTY and `CI=1` is set) so an accidental interactive command fails fast instead of
+ * hanging. Resolved Neon env vars are injected into the command's environment.
  */
 export type ShellHook = string | string[];
 
@@ -769,6 +792,20 @@ export interface CheckoutHooks<C extends Config = Config> {
 	after?: Hook<CheckoutAfterContext<C>>;
 }
 
+/**
+ * Hooks for branch **creation**. Fires only when `checkout` (or another consumer of
+ * {@link createBranch}) actually creates a new branch — not when `checkout` selects an
+ * existing one. Distinct from `checkout`, which brackets the whole `checkout` command
+ * regardless of whether it created or selected a branch: use `create` when you specifically
+ * care about the creation moment. Generic over the policy `C`.
+ */
+export interface CreateHooks<C extends Config = Config> {
+	/** Runs before the branch is created; throw/non-zero exit to abort. */
+	before?: Hook<CreateBeforeContext, void>;
+	/** Runs after the branch is created and the policy applied. */
+	after?: Hook<CreateAfterContext<C>>;
+}
+
 /** Hooks for the `deploy` command (`neonctl deploy` / `config apply`). Generic over `C`. */
 export interface DeployHooks<C extends Config = Config> {
 	/** Runs before the policy is applied; throw/non-zero exit to abort. */
@@ -778,7 +815,7 @@ export interface DeployHooks<C extends Config = Config> {
 }
 
 /**
- * Imperative lifecycle hooks, keyed by the CLI command they bracket. Each phase exposes a
+ * Imperative lifecycle hooks, keyed by the phase they bracket. Each phase exposes a
  * `before` (influence/abort) and `after` (observe) hook. Hooks never run during `plan` /
  * `status` / `inspect`.
  *
@@ -788,5 +825,6 @@ export interface DeployHooks<C extends Config = Config> {
  */
 export interface Hooks<C extends Config = Config> {
 	checkout?: CheckoutHooks<C>;
+	create?: CreateHooks<C>;
 	deploy?: DeployHooks<C>;
 }

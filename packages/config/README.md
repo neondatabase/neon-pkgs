@@ -155,18 +155,24 @@ export default defineConfig({
           : undefined,
       // `after` observes; `branch.created` distinguishes a new branch from a selected one.
       after: async ({ branch, env }) => {
-        if (branch.created) await migrate(env.postgres.databaseUrlUnpooled);
+        if (branch.created) await runMigrations(env.postgres.databaseUrlUnpooled);
       },
+    },
+    // Fires only when a branch is actually created — never for an existing-branch checkout.
+    create: {
+      after: "npm run db:seed",
     },
     deploy: {
       // Shell-command form: runs non-interactively (stdin detached, CI=1) with Neon env injected.
-      after: "drizzle-kit migrate",
+      after: "npm run db:migrate",
     },
   },
 });
 ```
 
-Each phase (`checkout`, `deploy`) exposes a `before` (influence/abort) and `after` (observe) hook. A hook is either a **function** `(ctx) => …` or a **shell command** (string or array run sequentially). `before` functions can return overrides (`checkout.before` → `{ name }`); any hook can throw / exit non-zero to abort a `before` phase. The `git` context is read-only — hooks never drive git.
+Each phase (`checkout`, `create`, `deploy`) exposes a `before` (influence/abort) and `after` (observe) hook. A hook is either a **function** `(ctx) => …` or a **shell command** (string or array run sequentially). `checkout.before` can return `{ name }` to rewrite the branch; `create.before` and `deploy.before` cannot rename (the name is already resolved by then) but can still abort. Any hook can throw / exit non-zero to abort a `before` phase. The `git` context is read-only — hooks never drive git.
+
+`checkout` brackets the whole `checkout` command regardless of whether it created or selected a branch. `create` is the narrower, creation-only signal — use it when you specifically care about the moment a branch comes into existence (e.g. seeding it), not every checkout.
 
 `toNeonBranchName(input, opts?)` derives a valid, stable Neon branch name from an arbitrary string (e.g. a git branch); options: `{ prefix, maxLength, lowercase, preserveSlashes }` (pass `preserveSlashes: false` for a single flat token).
 

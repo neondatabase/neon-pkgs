@@ -298,15 +298,19 @@ const hookValueSchema = z.union([
 	shellHookSchema,
 ]);
 
-/** `before` / `after` pair shared by the `checkout` and `deploy` hook phases. */
+/** `before` / `after` pair shared by the `checkout`, `create`, and `deploy` hook phases. */
 const hookPhaseSchema = z.strictObject({
 	before: hookValueSchema.optional(),
 	after: hookValueSchema.optional(),
 });
 
-/** Lifecycle hooks block (`hooks.checkout` / `hooks.deploy`, each `before` / `after`). */
+/**
+ * Lifecycle hooks block (`hooks.checkout` / `hooks.create` / `hooks.deploy`, each
+ * `before` / `after`).
+ */
 export const hooksSchema = z.strictObject({
 	checkout: hookPhaseSchema.optional(),
+	create: hookPhaseSchema.optional(),
 	deploy: hookPhaseSchema.optional(),
 });
 
