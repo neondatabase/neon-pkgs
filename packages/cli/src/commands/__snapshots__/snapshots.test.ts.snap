@@ -1,5 +1,15 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`snapshots > create accepts a single-letter slug 1`] = `
+"id: snap-new-snapshot-123456
+name: snap-new-snapshot-123456
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+slug: a
+manual: true
+"
+`;
+
 exports[`snapshots > create at a timestamp 1`] = `
 "id: snap-new-snapshot-123456
 name: snap-new-snapshot-123456
@@ -30,7 +40,11 @@ manual: true
 "
 `;
 
+exports[`snapshots > create rejects a trailing-hyphen slug 1`] = `""`;
+
 exports[`snapshots > create rejects an invalid lsn 1`] = `""`;
+
+exports[`snapshots > create rejects an invalid slug 1`] = `""`;
 
 exports[`snapshots > create rejects both timestamp and lsn 1`] = `""`;
 
@@ -43,9 +57,20 @@ manual: true
 "
 `;
 
+exports[`snapshots > create with name and slug 1`] = `
+"id: snap-new-snapshot-123456
+name: Before migration
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+slug: before-migration
+manual: true
+"
+`;
+
 exports[`snapshots > delete by id 1`] = `
 "id: snap-first-snapshot-123456
 name: nightly
+slug: nightly-backup
 source_branch_id: br-main-branch-123456
 created_at: 2021-01-01T00:00:00.000Z
 expires_at: 2022-01-01T00:00:00.000Z
@@ -56,6 +81,18 @@ manual: false
 exports[`snapshots > delete by name 1`] = `
 "id: snap-first-snapshot-123456
 name: nightly
+slug: nightly-backup
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > delete by slug 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+slug: nightly-backup
 source_branch_id: br-main-branch-123456
 created_at: 2021-01-01T00:00:00.000Z
 expires_at: 2022-01-01T00:00:00.000Z
@@ -71,9 +108,31 @@ exports[`snapshots > finalize a restored branch 1`] = `
 "
 `;
 
+exports[`snapshots > get by a name with spaces and uppercase 1`] = `
+"id: snap-legacy-name-123456
+name: Before Migration
+slug: snap-first-snapshot-123456
+source_branch_id: br-main-branch-123456
+created_at: 2021-04-01T00:00:00.000Z
+manual: true
+"
+`;
+
+exports[`snapshots > get by exact id wins over another snapshot's slug 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+slug: nightly-backup
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
 exports[`snapshots > get by id 1`] = `
 "id: snap-first-snapshot-123456
 name: nightly
+slug: nightly-backup
 source_branch_id: br-main-branch-123456
 created_at: 2021-01-01T00:00:00.000Z
 expires_at: 2022-01-01T00:00:00.000Z
@@ -90,19 +149,42 @@ manual: true
 "
 `;
 
+exports[`snapshots > get by slug 1`] = `
+"id: snap-first-snapshot-123456
+name: nightly
+slug: nightly-backup
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > get by unique name wins over another snapshot's slug 1`] = `
+"id: snap-second-snapshot-123456
+name: pre-migration
+source_branch_id: br-main-branch-123456
+created_at: 2021-02-01T00:00:00.000Z
+manual: true
+"
+`;
+
 exports[`snapshots > get not found errors 1`] = `""`;
 
 exports[`snapshots > list/table output 1`] = `
 "snapshots
-Id                           Name           Source Branch Id       Expires At                Created At
-snap-first-snapshot-123456   nightly        br-main-branch-123456  2022-01-01T00:00:00.000Z  2021-01-01T00:00:00.000Z
-snap-second-snapshot-123456  pre-migration  br-main-branch-123456  never                     2021-02-01T00:00:00.000Z
+Id                           Name              Slug                        Source Branch Id       Expires At                Created At
+snap-first-snapshot-123456   nightly           nightly-backup              br-main-branch-123456  2022-01-01T00:00:00.000Z  2021-01-01T00:00:00.000Z
+snap-second-snapshot-123456  pre-migration                                 br-main-branch-123456  never                     2021-02-01T00:00:00.000Z
+snap-third-snapshot-123456   extra             pre-migration               br-main-branch-123456  never                     2021-03-01T00:00:00.000Z
+snap-legacy-name-123456      Before Migration  snap-first-snapshot-123456  br-main-branch-123456  never                     2021-04-01T00:00:00.000Z
 "
 `;
 
 exports[`snapshots > list/yaml 1`] = `
 "- id: snap-first-snapshot-123456
   name: nightly
+  slug: nightly-backup
   source_branch_id: br-main-branch-123456
   created_at: 2021-01-01T00:00:00.000Z
   expires_at: 2022-01-01T00:00:00.000Z
@@ -112,6 +194,50 @@ exports[`snapshots > list/yaml 1`] = `
   source_branch_id: br-main-branch-123456
   created_at: 2021-02-01T00:00:00.000Z
   manual: true
+- id: snap-third-snapshot-123456
+  name: extra
+  slug: pre-migration
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-03-01T00:00:00.000Z
+  manual: true
+- id: snap-legacy-name-123456
+  name: Before Migration
+  slug: snap-first-snapshot-123456
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-04-01T00:00:00.000Z
+  manual: true
+"
+`;
+
+exports[`snapshots > restore by slug 1`] = `
+"restored_branch:
+  id: br-restored-branch-123456
+  name: recovered
+  source_branch_id: br-main-branch-123456
+  parent_id: br-main-branch-123456
+  created_at: 2021-03-01T00:00:00.000Z
+  current_state: ready
+operations:
+  - id: op-restore-snapshot-1
+    action: restore_snapshot
+    status: running
+    created_at: 2021-03-01T00:00:00.000Z
+"
+`;
+
+exports[`snapshots > restore by unique name 1`] = `
+"restored_branch:
+  id: br-restored-branch-123456
+  name: recovered
+  source_branch_id: br-main-branch-123456
+  parent_id: br-main-branch-123456
+  created_at: 2021-03-01T00:00:00.000Z
+  current_state: ready
+operations:
+  - id: op-restore-snapshot-1
+    action: restore_snapshot
+    status: running
+    created_at: 2021-03-01T00:00:00.000Z
 "
 `;
 
@@ -179,6 +305,7 @@ exports[`snapshots > schedule set with nothing errors 1`] = `""`;
 exports[`snapshots > snapshot alias works 1`] = `
 "- id: snap-first-snapshot-123456
   name: nightly
+  slug: nightly-backup
   source_branch_id: br-main-branch-123456
   created_at: 2021-01-01T00:00:00.000Z
   expires_at: 2022-01-01T00:00:00.000Z
@@ -188,12 +315,47 @@ exports[`snapshots > snapshot alias works 1`] = `
   source_branch_id: br-main-branch-123456
   created_at: 2021-02-01T00:00:00.000Z
   manual: true
+- id: snap-third-snapshot-123456
+  name: extra
+  slug: pre-migration
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-03-01T00:00:00.000Z
+  manual: true
+- id: snap-legacy-name-123456
+  name: Before Migration
+  slug: snap-first-snapshot-123456
+  source_branch_id: br-main-branch-123456
+  created_at: 2021-04-01T00:00:00.000Z
+  manual: true
+"
+`;
+
+exports[`snapshots > update by slug 1`] = `
+"id: snap-first-snapshot-123456
+name: renamed
+slug: nightly-backup
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
+"
+`;
+
+exports[`snapshots > update by unique name 1`] = `
+"id: snap-first-snapshot-123456
+name: renamed
+slug: nightly-backup
+source_branch_id: br-main-branch-123456
+created_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+manual: false
 "
 `;
 
 exports[`snapshots > update clear expiration 1`] = `
 "id: snap-first-snapshot-123456
 name: nightly
+slug: nightly-backup
 source_branch_id: br-main-branch-123456
 created_at: 2021-01-01T00:00:00.000Z
 manual: false
@@ -203,6 +365,7 @@ manual: false
 exports[`snapshots > update expiration 1`] = `
 "id: snap-first-snapshot-123456
 name: nightly
+slug: nightly-backup
 source_branch_id: br-main-branch-123456
 created_at: 2021-01-01T00:00:00.000Z
 expires_at: 2030-01-01T00:00:00.000Z
@@ -213,6 +376,7 @@ manual: false
 exports[`snapshots > update name 1`] = `
 "id: snap-first-snapshot-123456
 name: renamed
+slug: nightly-backup
 source_branch_id: br-main-branch-123456
 created_at: 2021-01-01T00:00:00.000Z
 expires_at: 2022-01-01T00:00:00.000Z

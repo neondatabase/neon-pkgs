@@ -936,11 +936,14 @@ The plugins CLI installs every plugin it finds in the Neon plugin package. Today
 
 `neon snapshots` (alias `neon snapshot`) manages **snapshots** — point-in-time backups of a branch that you can list, rename, expire, restore into a branch, or schedule automatically. Snapshots are a Beta Neon feature and were previously only available in the Console and REST API; this command group brings them to the CLI.
 
-Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect). Branch-scoped sub-commands (`create`, `schedule`) default to the branch pinned in `.neon`, falling back to the project's default branch, and accept `--branch <id|name>`. The `get`, `update`, `delete`, and `restore` sub-commands take a snapshot **id or name** as their positional argument (an id wins; an ambiguous name errors and asks you to use the id).
+Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect). Branch-scoped sub-commands (`create`, `schedule`) default to the branch pinned in `.neon`, falling back to the project's default branch, and accept `--branch <id|name>`. The `get`, `update`, `delete`, and `restore` sub-commands take a snapshot **id, unique name, or slug** as their positional argument. An id wins. A unique name still wins over another snapshot's matching slug, so a name you already use keeps targeting that snapshot. Slug is used when no name matches. An ambiguous name errors and asks you to use the id.
 
 ```bash
 # Snapshot the head of the current/default branch
 neon snapshots create --name pre-migration
+
+# Give the snapshot a slug (unique in the project; omit to let the API generate one)
+neon snapshots create --branch main --name "Before migration" --slug before-migration
 
 # Snapshot a specific branch at a point in time (RFC 3339 timestamp OR LSN — mutually exclusive)
 neon snapshots create --branch main --timestamp 2025-01-01T00:00:00Z
@@ -949,6 +952,7 @@ neon snapshots create --branch main --lsn 0/1F3C8A0 --expires-at 2025-12-31T23:5
 # List / inspect
 neon snapshots list
 neon snapshots get pre-migration
+neon snapshots get before-migration
 
 # Rename or change expiration (omit both to error; --expires-at and --clear-expiration conflict)
 neon snapshots update snap-1234 --name nightly
