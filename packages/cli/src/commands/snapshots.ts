@@ -20,6 +20,7 @@ import { BRANCH_FIELDS } from "./branches.js";
 export const SNAPSHOT_FIELDS: readonly (keyof Snapshot)[] = [
 	"id",
 	"name",
+	"slug",
 	"source_branch_id",
 	"expires_at",
 	"created_at",
@@ -49,6 +50,9 @@ const SNAPSHOT_FREQUENCIES = [
 	"monthly",
 ] as const satisfies readonly SnapshotFrequency[];
 
+/** Matches createSnapshot.query.slug in the Management API spec. */
+const SNAPSHOT_SLUG = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
 /** Narrow an arbitrary string to a supported {@link SnapshotFrequency}. */
 const isSnapshotFrequency = (value: string): value is SnapshotFrequency =>
 	SNAPSHOT_FREQUENCIES.some((frequency) => frequency === value);
@@ -75,7 +79,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"get <id>",
-			"Get a snapshot by id or name",
+			"Get a snapshot by id, slug, or name",
 			(yargs) => yargs,
 			(args) => get(args as any),
 		)
@@ -93,6 +97,11 @@ export const builder = (argv: yargs.Argv) =>
 						},
 						name: {
 							describe: "A name for the snapshot",
+							type: "string",
+						},
+						slug: {
+							describe:
+								"User-defined resource ID, unique in the project (1-63 characters: start with a lowercase letter, then lowercase letters, digits, or hyphens, ending with a letter or digit). Omit to let the API generate one. It cannot be changed later.",
 							type: "string",
 						},
 						timestamp: {
@@ -122,6 +131,10 @@ export const builder = (argv: yargs.Argv) =>
 							"Snapshot the head of main with a name",
 						],
 						[
+							'$0 snapshots create --branch main --name "Before migration" --slug before-migration',
+							"Snapshot main with a display name and a slug",
+						],
+						[
 							"$0 snapshots create --branch main --timestamp 2025-01-01T00:00:00Z",
 							"Snapshot main at a point in time",
 						],
@@ -134,7 +147,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"update <id>",
-			"Update a snapshot's name or expiration",
+			"Update a snapshot's name or expiration by id, slug, or name",
 			(yargs) =>
 				yargs
 					.options({
@@ -158,13 +171,13 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"delete <id>",
-			"Delete a snapshot by id or name",
+			"Delete a snapshot by id, slug, or name",
 			(yargs) => yargs,
 			(args) => deleteSnapshot(args as any),
 		)
 		.command(
 			"restore <id>",
-			"Restore a snapshot into a branch",
+			"Restore a snapshot (id, slug, or name) into a branch",
 			(yargs) =>
 				yargs
 					.options({
@@ -314,9 +327,12 @@ const toIso = (value: string, flag: string): string => {
 };
 
 /**
- * Resolve a snapshot from an id **or** a name. Snapshot names are not guaranteed
- * unique, so an id match wins; a name that resolves to more than one snapshot is a
- * hard error asking the user to disambiguate by id.
+ * Resolve a snapshot from an id, a unique name, or a slug.
+ *
+ * Id match wins. A unique name still wins over another snapshot's matching
+ * slug, so existing `get`/`delete`/`restore`/`update` by name keep working.
+ * Slug is the fallback when no name matches. Duplicate names stay a hard
+ * error.
  */
 const resolveSnapshot = async (
 	props: ProjectScopeProps & { id: string },
@@ -342,13 +358,30 @@ const resolveSnapshot = async (
 		);
 	}
 
+	const bySlug = snapshots.filter((s: Snapshot) => s.slug === props.id);
+	if (bySlug.length === 1) {
+		return bySlug[0];
+	}
+	if (bySlug.length > 1) {
+		throw new Error(
+			`Multiple snapshots have slug "${props.id}". Re-run with the snapshot id:\n${bySlug
+				.map((s: Snapshot) => `  ${s.id}`)
+				.join("\n")}`,
+		);
+	}
+
 	throw new Error(
 		`Snapshot "${props.id}" not found.\nAvailable snapshots: ${
-			snapshots.map((s: Snapshot) => `${s.name} (${s.id})`).join(", ") ||
+			snapshots.map((s: Snapshot) => formatSnapshotRef(s)).join(", ") ||
 			"none"
 		}`,
 	);
 };
+
+const formatSnapshotRef = (snapshot: Snapshot): string =>
+	snapshot.slug
+		? `${snapshot.name} (${snapshot.id}, slug: ${snapshot.slug})`
+		: `${snapshot.name} (${snapshot.id})`;
 
 const list = async (props: ProjectScopeProps) => {
 	const {
@@ -379,6 +412,7 @@ const create = async (
 	props: ProjectScopeProps & {
 		branch?: string;
 		name?: string;
+		slug?: string;
 		timestamp?: string;
 		lsn?: string;
 		expiresAt?: string;
@@ -394,6 +428,11 @@ const create = async (
 			`Invalid --timestamp value: "${props.timestamp}". Use an RFC 3339 timestamp, e.g. 2025-01-01T00:00:00Z.`,
 		);
 	}
+	if (props.slug !== undefined && !SNAPSHOT_SLUG.test(props.slug)) {
+		throw new Error(
+			`Invalid --slug value: "${props.slug}". Use 1-63 characters: start with a lowercase letter, then lowercase letters, digits, or hyphens, and end with a letter or digit.`,
+		);
+	}
 
 	const { branchId } = await resolveBranchRef({
 		...props,
@@ -403,6 +442,7 @@ const create = async (
 	const { data } = await retryOnLock(() =>
 		props.apiClient.createSnapshot(props.projectId, branchId, {
 			name: props.name,
+			slug: props.slug,
 			timestamp: props.timestamp,
 			lsn: props.lsn,
 			expires_at: props.expiresAt

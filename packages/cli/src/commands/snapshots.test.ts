@@ -41,8 +41,57 @@ describe("snapshots", () => {
 		]);
 	});
 
+	test("get by slug", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"snapshots",
+			"get",
+			"nightly-backup",
+			"--project-id",
+			"test",
+		]);
+	});
+
+	test("get by unique name wins over another snapshot's slug", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"get",
+			"pre-migration",
+			"--project-id",
+			"test",
+		]);
+		expect(stdout).toContain("snap-second-snapshot-123456");
+		expect(stdout).not.toContain("snap-third-snapshot-123456");
+	});
+
+	test("get by exact id wins over another snapshot's slug", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"get",
+			"snap-first-snapshot-123456",
+			"--project-id",
+			"test",
+		]);
+		expect(stdout).toContain("name: nightly");
+	});
+
+	test("get by a name with spaces and uppercase", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"snapshots",
+			"get",
+			"Before Migration",
+			"--project-id",
+			"test",
+		]);
+	});
+
 	test("get not found errors", async ({ testCliCommand }) => {
-		await testCliCommand(
+		const { stderr } = await testCliCommand(
 			["snapshots", "get", "does-not-exist", "--project-id", "test"],
 			{
 				code: 1,
@@ -51,6 +100,8 @@ describe("snapshots", () => {
 				),
 			},
 		);
+		expect(stderr).toContain("slug: nightly-backup");
+		expect(stderr).toContain("pre-migration (snap-second-snapshot-123456)");
 	});
 
 	/* create */
@@ -70,6 +121,66 @@ describe("snapshots", () => {
 			"--name",
 			"pre-migration",
 		]);
+	});
+
+	test("create with name and slug", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"create",
+			"--project-id",
+			"test",
+			"--branch",
+			"main",
+			"--name",
+			"Before migration",
+			"--slug",
+			"before-migration",
+		]);
+		expect(stdout).toContain("slug: before-migration");
+		expect(stdout).toContain("name: Before migration");
+	});
+
+	test("create accepts a single-letter slug", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"create",
+			"--project-id",
+			"test",
+			"--slug",
+			"a",
+		]);
+		expect(stdout).toContain("slug: a");
+	});
+
+	test("create rejects an invalid slug", async ({ testCliCommand }) => {
+		await testCliCommand(
+			["snapshots", "create", "--project-id", "test", "--slug", "Before"],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					'Invalid --slug value: "Before"',
+				),
+			},
+		);
+	});
+
+	test("create rejects a trailing-hyphen slug", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"snapshots",
+				"create",
+				"--project-id",
+				"test",
+				"--slug",
+				"before-",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining("Invalid --slug value"),
+			},
+		);
 	});
 
 	test("create at a timestamp", async ({ testCliCommand }) => {
@@ -147,6 +258,32 @@ describe("snapshots", () => {
 			"--name",
 			"renamed",
 		]);
+	});
+
+	test("update by unique name", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"update",
+			"nightly",
+			"--project-id",
+			"test",
+			"--name",
+			"renamed",
+		]);
+		expect(stdout).toContain("id: snap-first-snapshot-123456");
+	});
+
+	test("update by slug", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"update",
+			"nightly-backup",
+			"--project-id",
+			"test",
+			"--name",
+			"renamed",
+		]);
+		expect(stdout).toContain("id: snap-first-snapshot-123456");
 	});
 
 	test("update expiration", async ({ testCliCommand }) => {
@@ -228,6 +365,17 @@ describe("snapshots", () => {
 		]);
 	});
 
+	test("delete by slug", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand([
+			"snapshots",
+			"delete",
+			"nightly-backup",
+			"--project-id",
+			"test",
+		]);
+		expect(stdout).toContain("id: snap-first-snapshot-123456");
+	});
+
 	/* restore */
 
 	test("restore to a new branch", async ({ testCliCommand }) => {
@@ -235,6 +383,30 @@ describe("snapshots", () => {
 			"snapshots",
 			"restore",
 			"snap-first-snapshot-123456",
+			"--project-id",
+			"test",
+			"--name",
+			"recovered",
+		]);
+	});
+
+	test("restore by unique name", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"snapshots",
+			"restore",
+			"nightly",
+			"--project-id",
+			"test",
+			"--name",
+			"recovered",
+		]);
+	});
+
+	test("restore by slug", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"snapshots",
+			"restore",
+			"nightly-backup",
 			"--project-id",
 			"test",
 			"--name",
@@ -373,5 +545,13 @@ describe("snapshots", () => {
 				stderr: expect.stringContaining("valid JSON"),
 			},
 		);
+	});
+
+	test("create --help documents --slug", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(
+			["snapshots", "create", "--help"],
+			{ snapshot: false },
+		);
+		expect(stdout).toContain("--slug");
 	});
 });
