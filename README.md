@@ -36,6 +36,13 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/functions` | Runtime helpers for Neon Functions (e.g. a `waitUntil` primitive for deferring work past a response). |
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
 
+### Auth & data access
+
+| Package | Description |
+| --- | --- |
+| `@neon/auth` | Authentication adapters for Neon Auth (Supabase-compatible and Better Auth APIs), with React, Next.js, and framework-agnostic server toolkit entrypoints. |
+| `@neon/postgrest-js` | Generic PostgreSQL client for the Neon Data API without built-in authentication. |
+
 A few renamed packages are still published as deprecated aliases (`get-db` / `neondb` → `neon-new`; `vite-plugin-db` / `@neondatabase/vite-plugin-postgres` → `vite-plugin-neon-new`); they re-export the new package and print a deprecation warning. `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
 
 `neon-init` is **deprecated and no longer built from this repo**. Everything it did is the

@@ -1,0 +1,20 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		// tsdown.config.ts imports its local plugin with an explicit `.ts` specifier —
+		// Node's ESM loader (which executes the config file directly) requires the
+		// extension, and Bundler resolution alone doesn't permit importing one.
+		"allowImportingTsExtensions": true,
+		// Array.prototype.toSorted (ES2023) is used in a public-surface test; the base
+		// target (ES2022) omits it, so the lib list is overridden rather than left
+		// implicit — DOM/DOM.Iterable are repeated here since setting `lib` replaces
+		// the default set instead of extending it.
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"paths": {
+			"@/*": ["./src/*"]
+		}
+	},
+	"include": ["src", "build", "tsdown.config.ts", "vitest.config.ts"]
+}
