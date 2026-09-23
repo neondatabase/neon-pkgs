@@ -469,6 +469,37 @@ describe("checkout lifecycle hooks (Preview)", () => {
 		});
 	});
 
+	test("a broken neon.ts does not break checking out an existing branch (pre-hooks behavior)", async ({
+		testCliCommand,
+		readFile,
+		tmpContext,
+	}) => {
+		const ctx = tmpContext("hook_broken_config_existing");
+		const dir = join(TEST_TMP, "hook_broken_config_existing");
+		writeFileSync(
+			join(dir, "neon.ts"),
+			"export default { this is not valid TS",
+		);
+
+		await testCliCommand(
+			[
+				"checkout",
+				"main",
+				"--project-id",
+				"test",
+				"--no-env-pull",
+				"--context-file",
+				ctx,
+			],
+			{ cwd: dir, snapshot: false },
+		);
+
+		expect(parseContext(readFile(ctx))).toEqual({
+			projectId: "test",
+			branch: "main",
+		});
+	});
+
 	test("create.before fires only on an actual create, sees the typed event, and can abort it", async ({
 		testCliCommand,
 		tmpContext,

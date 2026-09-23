@@ -19,11 +19,15 @@ import type { NeonApiClient } from "../api.js";
 import { log } from "../log.js";
 
 /**
- * Load the nearest `neon.ts`, or `undefined` when there is no policy on disk (so every
- * command degrades to a no-op without a `neon.ts`). Other load errors — a genuinely broken
- * policy — propagate so the user sees them. Callers read `.experimental?.hooks` off the
- * result for the hooks block, and pass the whole thing to {@link resolveHookEnv} so `after`
- * hooks resolve exactly the namespaces the policy declares.
+ * Load the nearest `neon.ts` for hook discovery, or `undefined` when there is none — or when
+ * it fails to load. Deliberately best-effort: `checkout` on an *existing* branch must keep
+ * working even with a broken `neon.ts` sitting in the repo, exactly as it did before hooks
+ * existed. A load failure other than "missing" degrades to a warning rather than aborting
+ * the checkout; a genuinely broken policy still surfaces loudly the moment something that
+ * actually depends on it runs — `checkout --create`'s own `createBranchFromPolicyOnCheckout`,
+ * or `deploy`, both load the config again through their own (throwing) path. Callers read
+ * `.experimental?.hooks` off the result for the hooks block, and pass the whole thing to
+ * {@link resolveHookEnv} so `after` hooks resolve exactly the namespaces the policy declares.
  */
 export const loadHookConfig = async (
 	cwd: string,
@@ -33,9 +37,13 @@ export const loadHookConfig = async (
 		return config;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		if (/Could not find a Neon config file/i.test(message))
-			return undefined;
-		throw err;
+		if (!/Could not find a Neon config file/i.test(message)) {
+			log.warning(
+				"Could not load neon.ts for lifecycle hooks (continuing without them): %s",
+				message,
+			);
+		}
+		return undefined;
 	}
 };
 

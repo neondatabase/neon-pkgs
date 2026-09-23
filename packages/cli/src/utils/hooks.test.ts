@@ -1,5 +1,8 @@
-import { describe, expect, test } from "vitest";
-import { shapeHookEnv } from "./hooks.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { loadHookConfig, shapeHookEnv } from "./hooks.js";
 
 describe("shapeHookEnv", () => {
 	test("maps postgres, defaulting missing URLs to empty strings", () => {
@@ -101,5 +104,41 @@ describe("shapeHookEnv", () => {
 			api: { baseUrl: "https://api.example.com" },
 			worker: { baseUrl: "https://worker.example.com" },
 		});
+	});
+});
+
+describe("loadHookConfig", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neon-load-hook-config-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	test("returns undefined when there is no neon.ts on disk", async () => {
+		expect(await loadHookConfig(cwd)).toBeUndefined();
+	});
+
+	test("loads a real neon.ts and returns its resolved experimental.hooks", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default { experimental: { hooks: { checkout: { after: "true" } } } };\n`,
+		);
+		const config = await loadHookConfig(cwd);
+		expect(config?.experimental?.hooks?.checkout?.after).toBe("true");
+	});
+
+	// Checking out an *existing* branch must keep working even with a broken neon.ts sitting
+	// in the repo — exactly as it did before hooks existed. A broken policy still surfaces
+	// loudly the moment something that actually depends on it runs (--create, deploy).
+	test("degrades to undefined (with a warning) instead of throwing on a broken neon.ts", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { this is not valid TS",
+		);
+		expect(await loadHookConfig(cwd)).toBeUndefined();
 	});
 });
