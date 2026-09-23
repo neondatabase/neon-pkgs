@@ -19,7 +19,7 @@ export type InitModeInput = {
 	skills?: readonly string[];
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
-	mcpProjectPin?: boolean;
+	mcpProjectScoped?: boolean;
 	namedAgents: boolean;
 	configFlag?: boolean;
 	services?: readonly string[];
@@ -42,11 +42,11 @@ export type InitAgentSetupInference =
 export const hasInitMcpFlags = (input: {
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
-	mcpProjectPin?: boolean;
+	mcpProjectScoped?: boolean;
 }): boolean =>
 	input.mcpScope !== undefined ||
 	input.mcpAuth !== undefined ||
-	input.mcpProjectPin !== undefined;
+	input.mcpProjectScoped === true;
 
 const hasSkillsFlag = (skills: readonly string[] | undefined): boolean =>
 	skills !== undefined && skills.length > 0;
@@ -86,7 +86,7 @@ export const assertAgentSetupFlags = (input: {
 	skills?: readonly string[];
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
-	mcpProjectPin?: boolean;
+	mcpProjectScoped?: boolean;
 }): void => {
 	if (!input.skipAgents) {
 		return;

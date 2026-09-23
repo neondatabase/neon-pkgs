@@ -74,7 +74,7 @@ import {
 	existingConfigNext,
 	extraServicesNext,
 	installFailedNext,
-	MCP_PIN_NEEDS_PROJECT,
+	MCP_SCOPED_NEEDS_PROJECT,
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
 	namedAgentsUnavailable,
@@ -127,7 +127,6 @@ import {
 	pickInitAgentsInteractively,
 	pickInitConfigInteractively,
 	pickInitMcpAuthInteractively,
-	pickInitMcpPinInteractively,
 	pickInitMcpScopeInteractively,
 	pickInitModeInteractively,
 	pickInitPackageManagerInteractively,
@@ -183,7 +182,7 @@ export type InitProps = CommonProps & {
 	packageManager?: PackageManager;
 	mcpScope?: InitMcpScopeChoice;
 	mcpAuth?: InitMcpAuthChoice;
-	mcpProjectPin?: boolean;
+	mcpProjectScoped?: boolean;
 	run?: InitRun;
 	runBootstrap?: (
 		props: import("../commands/bootstrap.js").BootstrapProps,
@@ -202,10 +201,6 @@ export type InitProps = CommonProps & {
 	pickMcpAuth?: (input: {
 		authenticated: boolean;
 	}) => Promise<InitMcpAuthChoice>;
-	pickMcpPin?: (input: {
-		projectId: string;
-		minting: boolean;
-	}) => Promise<boolean>;
 	pickProjectSetup?: () => Promise<InitProjectSetupChoice>;
 	pickConfig?: () => Promise<boolean>;
 	pickServices?: () => Promise<NeonService[]>;
@@ -440,9 +435,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		...(props.skill !== undefined ? { skills: props.skill } : {}),
 		...(props.mcpScope !== undefined ? { mcpScope: props.mcpScope } : {}),
 		...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
-		...(props.mcpProjectPin !== undefined
-			? { mcpProjectPin: props.mcpProjectPin }
-			: {}),
+		...(props.mcpProjectScoped === true ? { mcpProjectScoped: true } : {}),
 	});
 	const run = props.run ?? spawnCliChild;
 	const explicitKey = props.profile ? "" : credentialInputs().apiKeyFlag;
@@ -534,8 +527,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? { mcpScope: props.mcpScope }
 				: {}),
 			...(props.mcpAuth !== undefined ? { mcpAuth: props.mcpAuth } : {}),
-			...(props.mcpProjectPin !== undefined
-				? { mcpProjectPin: props.mcpProjectPin }
+			...(props.mcpProjectScoped === true
+				? { mcpProjectScoped: true }
 				: {}),
 			...(props.config !== undefined ? { configFlag: props.config } : {}),
 			...(servicesFlag !== undefined ? { services: servicesFlag } : {}),
@@ -773,7 +766,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			mcpAuth = "oauth";
 		}
 		delayMcp =
-			usesMcp && (mcpAuth === "api-key" || props.mcpProjectPin === true);
+			usesMcp &&
+			(mcpAuth === "api-key" || props.mcpProjectScoped === true);
 
 		const mcpOauth = mcpAuth === "oauth";
 		const earlyTooling = delayMcp
@@ -924,32 +918,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		if (delayMcp && tooling.setup !== "skip") {
 			const linkedId = readContextFile(contextFile).projectId;
-			if (props.mcpProjectPin === true) {
-				if (typeof linkedId !== "string" || linkedId.length === 0) {
-					throw new Error(MCP_PIN_NEEDS_PROJECT);
-				}
-			}
 			let pinId: string | undefined;
-			if (
-				props.mcpProjectPin !== false &&
-				typeof linkedId === "string" &&
-				linkedId.length > 0
-			) {
-				const pin =
-					props.mcpProjectPin === true
-						? true
-						: detection.interactive
-							? await (
-									props.pickMcpPin ??
-									pickInitMcpPinInteractively
-								)({
-									projectId: linkedId,
-									minting: mcpAuth === "api-key",
-								})
-							: false;
-				if (pin) {
-					pinId = linkedId;
+			if (props.mcpProjectScoped === true) {
+				if (typeof linkedId !== "string" || linkedId.length === 0) {
+					throw new Error(MCP_SCOPED_NEEDS_PROJECT);
 				}
+				pinId = linkedId;
 			}
 			const mcpOnly: InitToolingPlan =
 				tooling.setup === "skills-mcp"

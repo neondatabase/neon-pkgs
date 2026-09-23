@@ -36,6 +36,16 @@ describe("resolveInitMode", () => {
 		).toEqual({ kind: "custom" });
 	});
 
+	test("-y with --mcp-project-scoped selects custom", () => {
+		expect(
+			resolveInitMode({
+				...base,
+				yes: true,
+				mcpProjectScoped: true,
+			}),
+		).toEqual({ kind: "custom" });
+	});
+
 	test("-y with --no-agent-setup selects custom", () => {
 		expect(
 			resolveInitMode({ ...base, yes: true, skipAgents: true }),

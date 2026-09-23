@@ -9,7 +9,7 @@ import type { BootstrapTemplate } from "../init/bootstrap.js";
 import {
 	CLAIMABLE_ALREADY_LINKED,
 	CLAIMABLE_MCP_API_KEY,
-	MCP_PIN_NEEDS_PROJECT,
+	MCP_SCOPED_NEEDS_PROJECT,
 	NO_AGENT_SETUP_CONFLICT,
 	namedAgentsUnavailable,
 	YES_LINK_NEEDS_AUTH,
@@ -414,7 +414,7 @@ describe("init handler", () => {
 		);
 	});
 
-	test("oauth MCP pins the linked project when --mcp-project-pin is set", async () => {
+	test("oauth MCP scopes to the linked project when --mcp-project-scoped is set", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-pin-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -431,7 +431,7 @@ describe("init handler", () => {
 				run,
 				agent: ["opencode"],
 				mcpAuth: "oauth",
-				mcpProjectPin: true,
+				mcpProjectScoped: true,
 				link: false,
 				config: false,
 				contextFile,
@@ -701,7 +701,7 @@ describe("init handler", () => {
 		expect(createClaimable).not.toHaveBeenCalled();
 	});
 
-	test("--mcp-project-pin without a linked project fails", async () => {
+	test("--mcp-project-scoped without a linked project fails", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-pin-noproject-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const { handler } = await import("./init.js");
@@ -712,14 +712,14 @@ describe("init handler", () => {
 					cwd,
 					run: vi.fn().mockResolvedValue(true),
 					yes: true,
-					mcpProjectPin: true,
+					mcpProjectScoped: true,
 					agent: ["opencode"],
 					link: false,
 					config: false,
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(MCP_PIN_NEEDS_PROJECT);
+		).rejects.toThrow(MCP_SCOPED_NEEDS_PROJECT);
 	});
 
 	test("--skill with an agent that cannot install skills fails", async () => {
@@ -1147,6 +1147,9 @@ describe("init CLI", () => {
 		expect(help).toMatch(/--no-agent-setup/);
 		expect(help).toMatch(/-a, --agent/);
 		expect(help).toMatch(/--claimable/);
+		expect(help).toMatch(/--mcp-project-scoped/);
+		expect(help).not.toMatch(/--mcp-project-pin/);
+		expect(help).not.toMatch(/--no-mcp-project-pin/);
 		expect(help).not.toMatch(/--skip-template/);
 		expect(help).not.toMatch(/--project-setup/);
 		expect(help).toMatch(/--no-link/);
@@ -1474,6 +1477,22 @@ describe("init flag parsing", () => {
 					yargs().scriptName("neon").exitProcess(false),
 				).parseAsync([])) as { claimable?: boolean }
 			).claimable,
+		).toBe(false);
+	});
+
+	test("--mcp-project-scoped is true only when passed", async () => {
+		const argv = (await builder(
+			yargs().scriptName("neon").exitProcess(false),
+		).parseAsync(["--mcp-project-scoped"])) as {
+			mcpProjectScoped?: boolean;
+		};
+		expect(argv.mcpProjectScoped).toBe(true);
+		expect(
+			(
+				(await builder(
+					yargs().scriptName("neon").exitProcess(false),
+				).parseAsync([])) as { mcpProjectScoped?: boolean }
+			).mcpProjectScoped,
 		).toBe(false);
 	});
 

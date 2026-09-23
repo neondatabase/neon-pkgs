@@ -33,7 +33,6 @@ import {
 	MCP_AUTH_MESSAGE,
 	MCP_AUTH_OAUTH_DESCRIPTION,
 	MCP_AUTH_OAUTH_TITLE,
-	MCP_PIN_MINT_NOTE,
 	MCP_SCOPE_GLOBAL_DESCRIPTION,
 	MCP_SCOPE_GLOBAL_TITLE,
 	MCP_SCOPE_MESSAGE,
@@ -44,7 +43,6 @@ import {
 	MODE_MESSAGE,
 	MODE_RECOMMENDED_DESCRIPTION,
 	MODE_RECOMMENDED_TITLE,
-	mcpPinMessage,
 	PACKAGE_MANAGER_MESSAGE,
 	PROJECT_SETUP_CLAIMABLE_DESCRIPTION,
 	PROJECT_SETUP_CLAIMABLE_TITLE,
@@ -254,27 +252,6 @@ export const pickInitMcpAuthInteractively = async (input: {
 		return aborted();
 	}
 	return auth;
-};
-
-export const pickInitMcpPinInteractively = async (input: {
-	projectId: string;
-	minting: boolean;
-}): Promise<boolean> => {
-	requireInteractive();
-	if (input.minting) {
-		process.stdout.write(`${chalk.dim(MCP_PIN_MINT_NOTE)}\n`);
-	}
-	const { value } = await prompts({
-		onState: restoreCursorOnAbort,
-		type: "confirm",
-		name: "value",
-		message: mcpPinMessage(input.projectId),
-		initial: true,
-	});
-	if (value === undefined) {
-		return aborted();
-	}
-	return value === true;
 };
 
 export const pickInitProjectSetupInteractively =

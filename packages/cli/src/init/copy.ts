@@ -50,12 +50,6 @@ export const MCP_AUTH_API_KEY_TITLE = "Use a Neon API key";
 export const MCP_AUTH_API_KEY_DESCRIPTION =
 	"Reuse an existing MCP key or create a key after CLI authentication.";
 
-export const mcpPinMessage = (projectId: string): string =>
-	`Limit MCP tools to the linked project ${projectId}?`;
-
-export const MCP_PIN_MINT_NOTE =
-	"The new API key will also be limited to this project.";
-
 export const CLAIMABLE_MCP_API_KEY =
 	"Claimable project setup cannot create an account API key for MCP. Use --mcp-auth oauth.";
 export const CLAIMABLE_NO_LINK =
@@ -98,8 +92,8 @@ export const NON_TTY_LINK_NEEDS_AUTH =
 export const YES_LINK_NEEDS_AUTH =
 	"-y cannot sign in. Sign in with `neon auth`, then re-run, or pass --claimable.";
 
-export const MCP_PIN_NEEDS_PROJECT =
-	"--mcp-project-pin requires a linked project. Link a project first, or omit --mcp-project-pin.";
+export const MCP_SCOPED_NEEDS_PROJECT =
+	"--mcp-project-scoped requires a linked project. Link a project first, or omit --mcp-project-scoped.";
 
 export const namedAgentsUnavailable = (ids: readonly string[]): string =>
 	`--agent ${ids.join(", ")} cannot install this tooling. Pass agents that support it, or omit --agent.`;
