@@ -18,7 +18,7 @@ import express from "express";
 import { gzipSync } from "fflate";
 import { type IPty, spawn as spawnPty } from "node-pty";
 import stripAnsi from "strip-ansi";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import YAML from "yaml";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import { AGENT_SETUP_MESSAGE } from "../init/copy.js";
@@ -619,6 +619,72 @@ describe("bootstrap", () => {
 			template: "hono",
 			agent_setup: "skip",
 		});
+	});
+
+	// Regression test: `windsurf` only installs via skills+MCP (no plugin target), so a
+	// named `--agent windsurf` must reach `installMcp` as `{ agent: ["windsurf"] }`, not
+	// under skills/plugins' `agents` key — a prior planner bug sent MCP `agents` too,
+	// which `setupNeonMcp` doesn't read, so it silently redetected agents instead.
+	test("named MCP-only --agent reaches installMcp with agent (not agents)", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const previousCodeload = process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+		const previousCi = process.env.CI;
+		process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = base;
+		process.env.CI = "true";
+		const { handler } = await import("./bootstrap.js");
+		const installSkills = vi.fn().mockResolvedValue({
+			scope: "global",
+			agents: [],
+			rows: [],
+			failed: [],
+		});
+		const installMcp = vi.fn().mockResolvedValue({
+			scope: "global",
+			rows: [],
+			failedAgents: [],
+			url: "https://mcp.neon.tech/mcp",
+			auth: "oauth",
+		});
+		try {
+			await handler({
+				apiClient: {} as never,
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "table",
+				contextFile: join(dest, ".neon"),
+				directory: dest,
+				force: true,
+				listTemplates: false,
+				template: "hono",
+				default: true,
+				install: false,
+				git: false,
+				link: false,
+				analytics: false,
+				printBanner: false,
+				skipDoneSummary: true,
+				agent: ["windsurf"],
+				operations: { installSkills, installMcp },
+			});
+		} finally {
+			if (previousCodeload === undefined) {
+				delete process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+			} else {
+				process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = previousCodeload;
+			}
+			if (previousCi === undefined) {
+				delete process.env.CI;
+			} else {
+				process.env.CI = previousCi;
+			}
+		}
+
+		expect(installSkills).toHaveBeenCalledWith(
+			expect.objectContaining({ agents: ["windsurf"] }),
+		);
+		expect(installMcp).toHaveBeenCalledWith(
+			expect.objectContaining({ agent: ["windsurf"] }),
+		);
 	});
 
 	test("--list-templates does not record a scaffolded template", async () => {

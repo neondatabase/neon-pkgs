@@ -4,15 +4,14 @@ import {
 	CONFIG_INIT_SERVICES,
 } from "../config_template.js";
 import { initPluginAgents, initSkillsMcpAgents } from "../init/plan.js";
-import { type InitProps, type InitRun, runInit } from "../init/run.js";
+import { type InitProps, runInit } from "../init/run.js";
 import { servicesOption } from "../neon_services.js";
 import { listSkillIds } from "../skills/catalog.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 
-export { initChildEnv } from "../init/run.js";
-export type { InitProps, InitRun };
+export type { InitProps };
 
 export const command = "init";
 export const describe =

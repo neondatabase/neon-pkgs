@@ -7,7 +7,6 @@ import {
 	formatInitBanner,
 	formatInitDone,
 	INIT_BANNER_LINES,
-	initStepLabel,
 	printInitBanner,
 	printInitDone,
 	shouldPrintInitBanner,
@@ -153,18 +152,5 @@ describe("configSummaryLabel", () => {
 		expect(configSummaryLabel("skipped")).toBe("skipped");
 		expect(configSummaryLabel("existing")).toBe("existing Neon config");
 		expect(configSummaryLabel("template")).toBe("provided by template");
-	});
-});
-
-describe("initStepLabel", () => {
-	test("maps child commands to human labels", () => {
-		expect(initStepLabel(["plugins", "-y"])).toBe(
-			"Installing the Neon plugin...",
-		);
-		expect(initStepLabel(["config", "init"])).toBe("Creating neon.ts...");
-		expect(initStepLabel(["env", "pull"])).toBe(
-			"Pulling Neon environment variables...",
-		);
-		expect(initStepLabel(["unknown"])).toBeUndefined();
 	});
 });
