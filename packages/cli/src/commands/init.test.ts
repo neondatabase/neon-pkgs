@@ -405,6 +405,43 @@ describe("init handler", () => {
 		expect(run).not.toHaveBeenCalled();
 	});
 
+	test("project MCP config warns and continues when another agent is supported", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-partial-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const run = vi.fn().mockResolvedValue(true);
+		const stderr = vi
+			.spyOn(process.stderr, "write")
+			.mockImplementation(() => true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				run,
+				yes: true,
+				agent: ["cursor", "windsurf"],
+				skill: ["neon"],
+				mcpAuth: "oauth",
+				mcpConfigLocation: "project",
+				link: false,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(
+			stderr.mock.calls.map((call) => String(call[0])).join(""),
+		).toMatch(
+			/Skipped project-level MCP config for windsurf.*--mcp-config-location global/,
+		);
+		const skills = argvLine(run).find((line) => line.startsWith("skills "));
+		expect(skills).toContain("--agent cursor");
+		expect(skills).toContain("--agent windsurf");
+		const mcp = argvLine(run).find((line) => line.startsWith("mcp "));
+		expect(mcp).toContain("--agent cursor");
+		expect(mcp).not.toContain("--agent windsurf");
+	});
+
 	test("-y --skill is Custom skills, not Recommended plugin", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-skill-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

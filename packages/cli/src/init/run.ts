@@ -72,6 +72,7 @@ import {
 	extraServicesNext,
 	installFailedNext,
 	MCP_SCOPED_NEEDS_PROJECT,
+	mcpConfigLocationSkipped,
 	mcpConfigLocationUnavailable,
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
@@ -331,15 +332,20 @@ const skillsMcpTooling = (
 	};
 };
 
-const assertMcpConfigLocationSupported = (
+const validateMcpConfigLocationSupport = (
 	ids: readonly AgentType[],
 	location: "global" | "project",
 ): void => {
 	const supported = new Set(mcpInstallableAgents(location));
 	const unavailable = ids.filter((id) => !supported.has(id));
-	if (unavailable.length > 0) {
-		throw new Error(mcpConfigLocationUnavailable(unavailable, location));
+	if (unavailable.length === 0) {
+		return;
 	}
+	if (unavailable.length < ids.length) {
+		log.warning(mcpConfigLocationSkipped(unavailable, location));
+		return;
+	}
+	throw new Error(mcpConfigLocationUnavailable(unavailable, location));
 };
 
 const pickOrDetectAgents = async (input: {
@@ -706,7 +712,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 												props.claimable !== true
 											? "api-key"
 											: "oauth");
-						assertMcpConfigLocationSupported(
+						validateMcpConfigLocationSupport(
 							selected,
 							mcpConfigLocation,
 						);

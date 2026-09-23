@@ -106,6 +106,18 @@ export const mcpConfigLocationUnavailable = (
 		? `--agent ${ids.join(", ")} cannot install project-level MCP config. Use --mcp-config-location global, or choose an agent that supports project config.`
 		: `--agent ${ids.join(", ")} cannot install global MCP config. Choose an agent that supports global config.`;
 
+export const mcpConfigLocationSkipped = (
+	ids: readonly string[],
+	location: "global" | "project",
+): string => {
+	const subject = ids.length === 1 ? "that agent does" : "those agents do";
+	const skills = ids.length === 1 ? "Its skills" : "Their skills";
+	const target = ids.length === 1 ? "it" : "them";
+	return location === "project"
+		? `Skipped project-level MCP config for ${ids.join(", ")} because ${subject} not support it. ${skills} will still be installed. Use --mcp-config-location global to configure MCP for ${target}.`
+		: `Skipped global MCP config for ${ids.join(", ")} because ${subject} not support it. ${skills} will still be installed.`;
+};
+
 export const NON_TTY_AGENT_SETUP =
 	"No interactive terminal. Pass -y for Recommended, or pass --skill, --mcp-auth, --agent, or --no-agent-setup.";
 
