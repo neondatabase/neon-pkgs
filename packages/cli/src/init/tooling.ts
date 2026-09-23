@@ -61,7 +61,7 @@ export const runInitSteps = async (
 		const label =
 			options.narrate === "human" ? initStepLabel(step) : undefined;
 		if (label !== undefined) {
-			log.info(label);
+			process.stdout.write(`${label}\n`);
 		} else {
 			log.info("Running `%s %s`", getCliName(), step.join(" "));
 		}

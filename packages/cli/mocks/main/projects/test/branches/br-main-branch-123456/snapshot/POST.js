@@ -13,6 +13,7 @@ export default function (req, res) {
       ...(req.query.lsn ? { lsn: req.query.lsn } : {}),
       ...(req.query.timestamp ? { timestamp: req.query.timestamp } : {}),
       ...(req.query.expires_at ? { expires_at: req.query.expires_at } : {}),
+      ...(req.query.slug ? { slug: req.query.slug } : {}),
       manual: true,
     },
     operations: [

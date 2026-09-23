@@ -77,6 +77,7 @@ import { bundleEntry } from "../utils/esbuild.js";
 import {
 	formatInstallCommand,
 	installArgs,
+	type PackageManager,
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
@@ -236,9 +237,22 @@ const DEPENDENCY_FIELDS = [
 /** Config filenames the runtime loads (mirrors @neon/config's loader). */
 const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
 
+export const neonConfigFilename = (dir: string): string | undefined =>
+	NEON_CONFIG_FILENAMES.find((name) => existsSync(join(dir, name)));
+
 /** Whether `dir` already has a Neon config file the runtime would load. */
 export const hasNeonConfigFile = (dir: string): boolean =>
-	NEON_CONFIG_FILENAMES.some((name) => existsSync(join(dir, name)));
+	neonConfigFilename(dir) !== undefined;
+
+export class ConfigInstallFailed extends Error {
+	readonly command: string;
+
+	constructor(command: string) {
+		super("Could not install the Neon dependencies.");
+		this.name = "ConfigInstallFailed";
+		this.command = command;
+	}
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -280,6 +294,18 @@ export type ConfigInitProps = {
 	install?: boolean;
 	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
 	run?: typeof runCommand;
+	/**
+	 * Package manager to install with. When omitted, {@link resolvePackageManager}
+	 * chooses from the project lockfile, invocation, PATH, then npm.
+	 */
+	packageManager?: PackageManager;
+	/**
+	 * Fail instead of warning when dependency installation fails. `neon init`
+	 * sets this so a failed install cannot print a successful setup.
+	 */
+	requireInstall?: boolean;
+	/** Nested callers print their own progress and next steps. */
+	silent?: boolean;
 	/**
 	 * Raw `--services` values: {@link CONFIG_INIT_SERVICES} names, repeated and/or
 	 * comma-separated, or `none` for the bare starter policy. When omitted,
@@ -411,29 +437,36 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	// 1. Scaffold neon.ts unless the project already has a Neon config file. Resolving the
 	// services (which may prompt) happens only when there is something to write — asking
 	// which services to declare and then declaring nothing would be a lie.
-	const existing = NEON_CONFIG_FILENAMES.find((name) =>
-		existsSync(join(cwd, name)),
-	);
+	const existing = neonConfigFilename(cwd);
 	if (existing) {
-		log.info("Found an existing %s — leaving it untouched.", existing);
+		if (!props.silent) {
+			log.info("Found an existing %s — leaving it untouched.", existing);
+		}
 	} else if (props.fromBranch) {
 		const { source, seeded, branchName } = await seedFromBranch(props);
 		writeFileSync(join(cwd, "neon.ts"), source);
-		if (seeded) {
-			log.info("Created neon.ts from the live state of %s.", branchName);
-		} else {
-			log.info(
-				"%s declares no services and no branch settings — created neon.ts with the starter policy instead.",
-				branchName,
-			);
+		if (!props.silent) {
+			if (seeded) {
+				log.info(
+					"Created neon.ts from the live state of %s.",
+					branchName,
+				);
+			} else {
+				log.info(
+					"%s declares no services and no branch settings — created neon.ts with the starter policy instead.",
+					branchName,
+				);
+			}
 		}
 	} else {
 		const services = await resolveServices(props);
 		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
-		if (services.length === 0) {
-			log.info("Created neon.ts with a starter policy.");
-		} else {
-			log.info("Created neon.ts declaring %s.", services.join(", "));
+		if (!props.silent) {
+			if (services.length === 0) {
+				log.info("Created neon.ts with a starter policy.");
+			} else {
+				log.info("Created neon.ts declaring %s.", services.join(", "));
+			}
 		}
 		if (services.includes("functions")) {
 			scaffoldFunction(cwd);
@@ -443,31 +476,46 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	// 2. Make sure the config packages are installed.
 	const missing = missingConfigDependencies(cwd);
 	if (missing.length === 0) {
-		log.info("%s are already installed.", REQUIRED_PACKAGES.join(" and "));
+		if (!props.silent) {
+			log.info(
+				"%s are already installed.",
+				REQUIRED_PACKAGES.join(" and "),
+			);
+		}
 	} else {
-		const pm = resolvePackageManager(cwd);
+		const pm = props.packageManager ?? resolvePackageManager(cwd);
 		const args = installArgs(pm, missing);
 		if (props.install === false) {
-			log.info(
-				"Install the Neon config packages to use neon.ts: %s",
-				formatInstallCommand(pm, missing),
-			);
+			if (!props.silent) {
+				log.info(
+					"Install the Neon config packages to use neon.ts: %s",
+					formatInstallCommand(pm, missing),
+				);
+			}
 		} else {
 			ensureDirectoryGitignored(join(cwd, "node_modules"));
-			log.info("Installing %s with %s…", missing.join(", "), pm);
+			if (!props.silent) {
+				log.info("Installing %s with %s…", missing.join(", "), pm);
+			}
 			const ok = await run(pm, args, cwd);
 			if (!ok) {
+				const command = formatInstallCommand(pm, missing);
+				if (props.requireInstall) {
+					throw new ConfigInstallFailed(command);
+				}
 				log.warning(
 					"Could not install the config packages automatically. Run by hand: %s",
-					formatInstallCommand(pm, missing),
+					command,
 				);
 			}
 		}
 	}
 
-	log.info(
-		"Next: edit neon.ts, then run `neon config plan` to preview and `neon config apply`.",
-	);
+	if (!props.silent) {
+		log.info(
+			"Next: edit neon.ts, then run `neon config plan` to preview and `neon config apply`.",
+		);
+	}
 };
 
 export const command = "config";

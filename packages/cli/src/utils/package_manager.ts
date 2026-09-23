@@ -191,6 +191,32 @@ export const resolvePackageManager = (cwd: string): PackageManager =>
 export const resolveInvokingPackageManager = (): PackageManager =>
 	detectInvokingPackageManager() ?? installedPackageManagers()[0] ?? "npm";
 
+export const recommendedCliUpgradeCommand = (
+	modulePath: string,
+): string | undefined => {
+	const path = modulePath.replace(/\\/g, "/").toLowerCase();
+
+	if (path.includes("/cellar/neonctl/")) return "brew upgrade neonctl";
+	if (path.includes("/.bun/install/global/node_modules/neon/")) {
+		return "bun i -g neon@latest";
+	}
+	if (
+		path.includes("/pnpm/global/") &&
+		path.includes("/.pnpm/neon@") &&
+		path.includes("/node_modules/neon/")
+	) {
+		return "pnpm i -g neon@latest";
+	}
+	if (
+		path.includes("/lib/node_modules/neon/") ||
+		path.includes("/npm/node_modules/neon/")
+	) {
+		return "npm i -g neon@latest";
+	}
+
+	return undefined;
+};
+
 /** Where an added package lands in `package.json`. */
 export type AddOptions = { dev?: boolean };
 

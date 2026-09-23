@@ -3,6 +3,7 @@ import {
 	chmodSync,
 	existsSync,
 	lstatSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	readlinkSync,
@@ -20,6 +21,7 @@ import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import YAML from "yaml";
 import { takeCommandSuccessExtras } from "../analytics.js";
+import { AGENT_SETUP_MESSAGE } from "../init/copy.js";
 
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
@@ -324,6 +326,13 @@ describe("bootstrap", () => {
 		if (existsSync(spawnHelper)) {
 			chmodSync(spawnHelper, 0o755);
 		}
+		const npxBin = join(dest, "npx-bin");
+		mkdirSync(npxBin);
+		writeFileSync(
+			join(npxBin, "npx"),
+			"#!/usr/bin/env node\nprocess.exit(0);\n",
+		);
+		chmodSync(join(npxBin, "npx"), 0o755);
 		let output = "";
 		const term = spawnPty(
 			process.execPath,
@@ -350,6 +359,7 @@ describe("bootstrap", () => {
 				env: {
 					...process.env,
 					CI: "",
+					PATH: `${npxBin}:${process.env.PATH ?? ""}`,
 					NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
 					NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
 				},
@@ -359,11 +369,7 @@ describe("bootstrap", () => {
 			output += chunk;
 		});
 
-		await waitForText(
-			term,
-			() => output,
-			"How would you like to set up your coding agents?",
-		);
+		await waitForText(term, () => output, AGENT_SETUP_MESSAGE);
 		term.write("\r");
 		await waitForText(
 			term,
@@ -374,16 +380,13 @@ describe("bootstrap", () => {
 		await waitForText(
 			term,
 			() => output,
-			"Install the Neon plugin into these agents?",
-		);
-		term.write("n\r");
-		await waitForText(
-			term,
-			() => output,
 			"Link this project to a Neon project now?",
 		);
 
 		const rendered = stripAnsi(output);
+		expect(rendered).not.toContain(
+			"Install the Neon plugin into these agents?",
+		);
 		expect(
 			rendered.indexOf("Which coding agents should get the Neon plugin?"),
 		).toBeLessThan(

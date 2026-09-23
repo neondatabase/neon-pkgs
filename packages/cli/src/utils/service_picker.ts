@@ -3,9 +3,45 @@ import { CONFIG_INIT_SERVICES } from "../config_template.js";
 import type { NeonService } from "../neon_services.js";
 
 /**
- * The picker's rows, in {@link CONFIG_INIT_SERVICES} order. Titles use the product names from
- * the CLI's README ("Managed Better Auth", "Object Storage") rather than the `neon.ts` field
- * names, since this is the list a user reads before they've seen a policy.
+ * Re-select Postgres after each render. `prompts` lets space unselect a selected
+ * row even when `disabled` is set, and `disabled` also strikethroughs the title.
+ */
+export const keepPostgresSelected = (prompt: unknown): void => {
+	if (typeof prompt !== "object" || prompt === null || !("value" in prompt)) {
+		return;
+	}
+	const rows = prompt.value;
+	if (!Array.isArray(rows)) {
+		return;
+	}
+	for (const row of rows) {
+		if (!isChoiceRow(row) || row.value !== "postgres") {
+			continue;
+		}
+		row.selected = true;
+	}
+};
+
+const isChoiceRow = (
+	row: unknown,
+): row is { value: unknown; selected: boolean } =>
+	typeof row === "object" &&
+	row !== null &&
+	"value" in row &&
+	"selected" in row;
+
+export const POSTGRES_SERVICE_CHOICE = {
+	value: "postgres",
+	title: "Postgres (always included)",
+	description: "Every Neon project includes a Postgres database.",
+	selected: true,
+};
+
+/**
+ * The picker's rows, in {@link CONFIG_INIT_SERVICES} order after the locked Postgres
+ * row. Titles use the product names from the CLI's README ("Managed Better Auth",
+ * "Object Storage") rather than the `neon.ts` field names, since this is the list a
+ * user reads before they've seen a policy.
  */
 const CHOICES: { value: NeonService; title: string; description: string }[] = [
 	{
@@ -48,7 +84,7 @@ const CHOICES: { value: NeonService; title: string; description: string }[] = [
  * Callers guard the TTY themselves (see `initCmd`); this function assumes it may prompt.
  */
 export const pickServicesInteractively = async (): Promise<NeonService[]> => {
-	const { services } = await prompts({
+	const question = {
 		onState: (state: { aborted: boolean }) => {
 			if (state.aborted) {
 				// Restore the cursor prompts hid, then exit — otherwise the terminal is
@@ -58,17 +94,26 @@ export const pickServicesInteractively = async (): Promise<NeonService[]> => {
 				process.exit(1);
 			}
 		},
-		type: "multiselect",
-		name: "services",
+		onRender() {
+			keepPostgresSelected(this);
+		},
+		type: "multiselect" as const,
+		name: "services" as const,
 		message:
 			"Which Neon services should neon.ts declare? (space to toggle, enter to confirm)",
 		instructions: false,
-		choices: CHOICES.map((choice) => ({
-			value: choice.value,
-			title: choice.title,
-			description: choice.description,
-		})),
-	});
+		// prompts starts the highlight here so space toggles Auth, not locked Postgres.
+		cursor: 1,
+		choices: [
+			POSTGRES_SERVICE_CHOICE,
+			...CHOICES.map((choice) => ({
+				value: choice.value,
+				title: choice.title,
+				description: choice.description,
+			})),
+		],
+	};
+	const { services } = await prompts(question);
 
 	if (!Array.isArray(services)) {
 		throw new Error("Aborted: no services selected.");

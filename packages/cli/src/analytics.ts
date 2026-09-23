@@ -350,7 +350,12 @@ export const trackEvent = (
  * init path, and install scope ride on cli_command_success via this
  * process-local slot. Yargs never sees those choices.
  */
-export type CommandAgentSetup = "plugin" | "skills-mcp" | "skip";
+export type CommandAgentSetup =
+	| "plugin"
+	| "skills-mcp"
+	| "skills"
+	| "mixed"
+	| "skip";
 export type CommandInitKind = "empty-template" | "empty-skip" | "existing";
 export type CommandInstallScope = "project" | "global";
 

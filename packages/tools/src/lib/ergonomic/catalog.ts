@@ -1134,6 +1134,7 @@ export const toolFactories = {
 						projectId: input.project_id,
 						branchId: input.branch_id,
 						name: input.name,
+						slug: input.slug,
 						timestamp: input.timestamp,
 						lsn: input.lsn,
 						expiresAt: input.expires_at,

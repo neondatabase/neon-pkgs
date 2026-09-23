@@ -21,7 +21,6 @@ import {
 } from "../mcp/mint.js";
 import { resolveMcpPlan } from "../mcp/plan.js";
 import { mcpInstallableAgents, resolveInstallTargets } from "../mcp/targets.js";
-import { confirmMcpInstall } from "../mcp/wizard.js";
 import type { CommonProps } from "../types.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -148,10 +147,7 @@ export const builder = (argv: yargs.Argv) =>
 				},
 			},
 		})
-		.example(
-			"$0 mcp",
-			"Interactive: config location, agents, auth, then confirm",
-		)
+		.example("$0 mcp", "Interactive: config location, agents, then auth")
 		.example(
 			"$0 mcp -y",
 			"Global config, installed apps else the host CLI agent, reuse or mint an API key",
@@ -248,22 +244,6 @@ export const handler = async (props: McpProps) => {
 			throw new Error(
 				"No interactive terminal. Pass -y to mint into every detected agent, --agent <name> to name them or --oauth to install without minting.",
 			);
-		}
-	}
-
-	if (interactive) {
-		const ok = await confirmMcpInstall({
-			scope: plan.scope,
-			install,
-			skipped,
-			auth: plan.auth,
-			reuse: existing !== undefined,
-			url,
-			mintProjectId: plan.urlProjectId,
-		});
-		if (!ok) {
-			log.info("Aborted. Nothing was written.");
-			return;
 		}
 	}
 

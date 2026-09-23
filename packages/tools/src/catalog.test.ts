@@ -137,6 +137,53 @@ describe("special mappings", () => {
 		);
 	});
 
+	test("forwards snapshot slug on create and omits it when absent", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["snapshots.create"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ snapshot: { id: "snap-id" } });
+			},
+		});
+
+		await tools["snapshots.create"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			name: "Before migration",
+			slug: "before-migration",
+			expires_at: "2026-09-01T00:00:00Z",
+		});
+		await tools["snapshots.create"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			name: "Baseline",
+		});
+
+		const withSlug = new URL(requests[0].url).searchParams;
+		expect(withSlug.get("slug")).toBe("before-migration");
+		expect(withSlug.get("name")).toBe("Before migration");
+		expect(withSlug.get("expires_at")).toBe("2026-09-01T00:00:00Z");
+		expect(new URL(requests[1].url).searchParams.has("slug")).toBe(false);
+
+		const schema = tools["snapshots.create"].inputSchema;
+		expect(
+			schema.safeParse({
+				project_id: "project-id",
+				branch_id: "branch-id",
+				slug: "before-migration",
+			}).success,
+		).toBe(true);
+		expect(
+			schema.safeParse({
+				project_id: "project-id",
+				branch_id: "branch-id",
+				slug: "Before",
+			}).success,
+		).toBe(false);
+	});
+
 	test("maps auth.disable delete_data", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

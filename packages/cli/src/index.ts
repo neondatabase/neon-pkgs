@@ -27,6 +27,7 @@ import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 import { TemplateDownloadError } from "./templates/github.js";
+import { notifyIfUpdateAvailable } from "./update_notifier.js";
 import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
 
@@ -330,6 +331,16 @@ void (async () => {
 			}
 
 			await closeAnalytics();
+			notifyIfUpdateAvailable({
+				commandPath: args._.map(String),
+				configDir:
+					typeof args.configDir === "string"
+						? args.configDir
+						: defaultDir,
+				currentBranch: Boolean(args.currentBranch),
+				currentVersion: pkg.version,
+				output: typeof args.output === "string" ? args.output : "table",
+			});
 			break;
 		} catch (err) {
 			takeCommandSuccessExtras();

@@ -4,6 +4,7 @@ export default function (req, res) {
     snapshot: {
       id: 'snap-first-snapshot-123456',
       name: update.name ?? 'nightly',
+      slug: 'nightly-backup',
       source_branch_id: 'br-main-branch-123456',
       created_at: '2021-01-01T00:00:00.000Z',
       // `null` clears the expiration; a string sets it; `undefined` leaves it.

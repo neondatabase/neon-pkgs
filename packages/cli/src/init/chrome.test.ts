@@ -15,9 +15,15 @@ import {
 
 describe("formatInitBanner", () => {
 	test("is the six-line NEON mark", () => {
+		expect(INIT_BANNER_LINES).toEqual([
+			" ██╗  ██╗██████╗ ██████╗ ██╗  ██╗",
+			" ███╗ ██║██╔═══╝██╔═══██╗███╗ ██║",
+			" ████╗██║██████╗██║   ██║████╗██║",
+			" ██╔████║██╔═══╝██║   ██║██╔████║",
+			" ██║╚███║██████╗╚██████╔╝██║╚███║",
+			" ╚═╝ ╚══╝╚═════╝ ╚═════╝ ╚═╝ ╚══╝",
+		]);
 		expect(formatInitBanner()).toBe(INIT_BANNER_LINES.join("\n"));
-		expect(formatInitBanner().split("\n")).toHaveLength(6);
-		expect(formatInitBanner()).toContain("██████╗");
 	});
 });
 
@@ -44,7 +50,9 @@ describe("printInitBanner", () => {
 		printInitBanner();
 		const out = stdout.mock.calls.map((call) => String(call[0])).join("");
 		expect(strip(out)).toContain("██████╗");
-		expect(strip(out)).toContain("Set up this directory for Neon.");
+		expect(strip(out)).toContain(
+			"Set up coding agents and this directory for Neon.",
+		);
 		expect(stderr).not.toHaveBeenCalled();
 		stdout.mockRestore();
 		stderr.mockRestore();
@@ -151,11 +159,11 @@ describe("configSummaryLabel", () => {
 describe("initStepLabel", () => {
 	test("maps child commands to human labels", () => {
 		expect(initStepLabel(["plugins", "-y"])).toBe(
-			"Installing the Neon plugin…",
+			"Installing the Neon plugin...",
 		);
-		expect(initStepLabel(["config", "init"])).toBe("Setting up neon.ts…");
+		expect(initStepLabel(["config", "init"])).toBe("Creating neon.ts...");
 		expect(initStepLabel(["env", "pull"])).toBe(
-			"Refreshing Neon env vars…",
+			"Pulling Neon environment variables...",
 		);
 		expect(initStepLabel(["unknown"])).toBeUndefined();
 	});
