@@ -236,6 +236,85 @@ describe("cleanup", () => {
 		expect(readContextFile(contextFile).git?.map).toEqual({});
 	});
 
+	test("refuses to delete when the active project differs from the one the map was recorded against", async () => {
+		initRepo(repo, ["main"]);
+		applyContext(contextFile, {
+			projectId: "proj-a",
+			git: { map: { gone: "preview-gone" } },
+		});
+		const { client, deleted } = fakeApiClient([
+			{ id: "br-1", name: "preview-gone" },
+		]);
+
+		const spy = vi.spyOn(process, "cwd").mockReturnValue(repo);
+		try {
+			// `--project-id proj-b` (an override) differs from the `.neon`-recorded `proj-a`.
+			await cleanup({
+				apiClient: client as never,
+				apiKey: "",
+				apiHost: "",
+				output: "json",
+				contextFile,
+				projectId: "proj-b",
+				pruneNeonBranches: true,
+				yes: true,
+			});
+		} finally {
+			spy.mockRestore();
+		}
+
+		expect(deleted).toEqual([]);
+		// Refused before ever calling the API — the mapping is untouched.
+		expect(readContextFile(contextFile).git?.map).toEqual({
+			gone: "preview-gone",
+		});
+	});
+
+	test("persists each successful deletion's mapping removal even when a later deletion fails", async () => {
+		initRepo(repo, ["main"]);
+		applyContext(contextFile, {
+			projectId: "proj",
+			git: { map: { "gone-a": "preview-a", "gone-b": "preview-b" } },
+		});
+		const { client } = fakeApiClient([
+			{ id: "br-a", name: "preview-a" },
+			{ id: "br-b", name: "preview-b" },
+		]);
+		const deleteCalls: string[] = [];
+		client.deleteProjectBranch = async (
+			_projectId: string,
+			branchId: string,
+		) => {
+			deleteCalls.push(branchId);
+			if (branchId === "br-b") throw new Error("network blip");
+		};
+
+		const spy = vi.spyOn(process, "cwd").mockReturnValue(repo);
+		try {
+			await expect(
+				cleanup({
+					apiClient: client as never,
+					apiKey: "",
+					apiHost: "",
+					output: "json",
+					contextFile,
+					projectId: "proj",
+					pruneNeonBranches: true,
+					yes: true,
+				}),
+			).rejects.toThrow(/network blip/);
+		} finally {
+			spy.mockRestore();
+		}
+
+		expect(deleteCalls).toEqual(["br-a", "br-b"]);
+		// br-a deleted successfully -> its mapping is gone. br-b's delete failed -> its
+		// mapping survives for a retry (not permanently lost).
+		expect(readContextFile(contextFile).git?.map).toEqual({
+			"gone-b": "preview-b",
+		});
+	});
+
 	test("keeps a skipped (default/protected) branch's mapping", async () => {
 		initRepo(repo, ["main"]);
 		applyContext(contextFile, {

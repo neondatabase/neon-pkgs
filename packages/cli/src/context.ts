@@ -129,6 +129,32 @@ export const isGitLocalCommand = (args: { _: (string | number)[] }): boolean =>
 		args._[1] === "uninstall" ||
 		args._[1] === "status");
 
+/** The env var the installed `post-checkout` hook sets before invoking `neon git sync`. */
+const GIT_HOOK_ENV_FLAG = "NEON_GIT_HOOK";
+
+/**
+ * True only for a `neon git sync` invocation triggered by the installed `post-checkout`
+ * hook, in a repo that has **not** itself run `neon git install` — the case that must never
+ * touch the network (auth included). Checked before authentication runs at all, since
+ * `core.hooksPath` can point at a directory shared by several repositories: the hook script
+ * firing here does not by itself mean *this* repo opted in.
+ *
+ * The `.neon` read is deliberately **not** the usual walk-up resolution
+ * ({@link currentContextFile}): a `post-checkout` hook always runs with `cwd` at the
+ * repository's top level, and opt-in must be recorded by *this* repo's own `.neon` — an
+ * ancestor directory's `.neon` (found by the walk-up, e.g. a parent monorepo folder that
+ * happens to hold one for an unrelated project) must never authorize it.
+ */
+export const isUnfollowedGitHookSync = (
+	args: { _: (string | number)[] },
+	cwd: string = process.cwd(),
+): boolean => {
+	if (!(args._[0] === "git" && args._[1] === "sync")) return false;
+	if (process.env[GIT_HOOK_ENV_FLAG] !== "1") return false;
+	const context = readContextFile(resolve(cwd, CONTEXT_FILE));
+	return context.git?.follow !== true;
+};
+
 export const isSkillsCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "skills" || args._[0] === "skill";
 

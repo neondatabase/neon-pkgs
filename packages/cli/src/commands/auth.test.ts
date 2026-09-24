@@ -971,6 +971,27 @@ describe("ensureAuth", () => {
 		expect(authSpy).toHaveBeenCalledTimes(1);
 	});
 
+	test("skips global auth for a hook-triggered git sync in a repo that never ran install", async ({
+		runMockServer,
+	}) => {
+		// This is the case a shared `core.hooksPath` can trigger in a repo that never opted
+		// in: auth must never run, regardless of stored credentials.
+		const server = await runMockServer("main");
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+		process.env.NEON_GIT_HOOK = "1";
+		try {
+			await ensureAuth({ ...setupTestProps(server), _: ["git", "sync"] });
+		} finally {
+			delete process.env.NEON_GIT_HOOK;
+		}
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
 	test("should skip global auth for ask command", async ({
 		runMockServer,
 	}) => {

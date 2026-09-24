@@ -6,6 +6,7 @@ import {
 	contextBranch,
 	gitBranchMap,
 	gitBranchMapping,
+	isUnfollowedGitHookSync,
 	readContextFile,
 	setGitBranchMap,
 	setGitBranchMapping,
@@ -192,6 +193,19 @@ export const uninstall = (props: GitProps): void => {
  * migrations, etc.), then records the resulting git → Neon mapping so it stays stable.
  */
 export const sync = async (props: GitProps): Promise<void> => {
+	// `core.hooksPath` can point at a directory shared by several repos, so the *installed
+	// hook script* running here does not by itself mean this repo opted in — only the repo
+	// that ran `install` has `git.follow: true` in its own (repo-root, non-walked-up) `.neon`.
+	// A manual `neon git sync` (no hook env flag) is unaffected: it's an explicit ask, run it
+	// regardless of `follow`. Checked (and mirrored in the global auth middleware, ahead of
+	// authentication) before anything else — no git check, no API call, nothing.
+	if (isUnfollowedGitHookSync({ _: ["git", "sync"] })) {
+		log.debug(
+			"Skipping git sync: this repo has not run `neon git install` (git.follow is not set).",
+		);
+		return;
+	}
+
 	const cwd = process.cwd();
 	if (!isGitRepo(cwd)) {
 		log.error("Not inside a git repository.");
@@ -199,18 +213,6 @@ export const sync = async (props: GitProps): Promise<void> => {
 	}
 
 	const context = readContextFile(props.contextFile);
-	// `core.hooksPath` can point at a directory shared by several repos, so the *installed
-	// hook script* running here does not by itself mean this repo opted in — only the repo
-	// that ran `install` has `git.follow: true` in its own `.neon`. A manual `neon git sync`
-	// (no hook env flag) is unaffected: it's an explicit ask, run it regardless of `follow`.
-	const triggeredByHook = process.env[GIT_HOOK_ENV_FLAG] === "1";
-	if (triggeredByHook && context.git?.follow !== true) {
-		log.debug(
-			"Skipping git sync: this repo has not run `neon git install` (git.follow is not set).",
-		);
-		return;
-	}
-
 	const gitBranch = currentGitBranch(cwd);
 	if (!gitBranch) {
 		log.info("Detached HEAD — no git branch to sync. Skipping.");
@@ -457,6 +459,23 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 		return;
 	}
 
+	// The map was recorded against `context.projectId` (the project `.neon` is actually
+	// linked to). `props.projectId` can differ — an explicit `--project-id` override, or a
+	// stale enrichment — and resolving names against a *different* project than the one the
+	// mapping was built for could match and delete an unrelated same-named branch there.
+	if (context.projectId && context.projectId !== props.projectId) {
+		log.error(
+			"Cannot delete Neon branches: this git → Neon map was recorded against project " +
+				"%s, but the active project is %s. Run `neon link` (or drop --project-id) to " +
+				"target %s, or `neon git cleanup` with no --prune-neon-branches to only prune " +
+				"the local mapping.",
+			context.projectId,
+			props.projectId,
+			context.projectId,
+		);
+		return;
+	}
+
 	if (orphaned.length === 0) {
 		log.info("No orphaned Neon branches to delete.");
 		return;
@@ -495,28 +514,68 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 		return;
 	}
 
+	// Persist each mapping removal right after its branch actually deletes, so a later
+	// failure in the same run never re-orphans an already-completed deletion — the
+	// alternative (batching one write at the end) loses every successful deletion's
+	// mapping the moment a single later one throws, and a retry can't recover them (their
+	// branch is already gone, so a name-based re-match would be lucky at best, wrong at
+	// worst if an unrelated branch reused the name).
+	const failed: { name: string; error: string }[] = [];
+	let survivingKept = { ...kept };
 	for (const branch of toDelete) {
-		await props.apiClient.deleteProjectBranch(props.projectId, branch.id);
-		log.info("Deleted Neon branch %s (%s).", branch.name, branch.id);
+		try {
+			await props.apiClient.deleteProjectBranch(
+				props.projectId,
+				branch.id,
+			);
+			log.info("Deleted Neon branch %s (%s).", branch.name, branch.id);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			log.error(
+				"Failed to delete Neon branch %s: %s",
+				branch.name,
+				message,
+			);
+			failed.push({ name: branch.name, error: message });
+			// Keep this branch's mapping(s) — the branch itself is still there.
+			survivingKept = {
+				...survivingKept,
+				...Object.fromEntries(
+					orphaned.filter(
+						([, neonBranch]) => neonBranch === branch.name,
+					),
+				),
+			};
+		}
 	}
 
-	// Base the final map on `kept` (not the original `entries`): `staleButShared` mappings
-	// were already pruned above and must not be resurrected here. An `orphaned` mapping
-	// survives only when its branch wasn't actually deleted — skipped as default/protected,
-	// or not found on the live list at all.
-	const deletedNeonNames = new Set(toDelete.map((b) => b.name));
-	const survivingOrphaned = orphaned.filter(
-		([, neonBranch]) => !deletedNeonNames.has(neonBranch),
-	);
-	const finalKept = { ...kept, ...Object.fromEntries(survivingOrphaned) };
+	// Every `orphaned` entry not covered by `toDelete` at all (skipped as default/protected,
+	// or simply absent from the live list) also survives — same reasoning as `failed` above.
+	const attempted = new Set(toDelete.map((b) => b.name));
+	const finalKept = {
+		...survivingKept,
+		...Object.fromEntries(
+			orphaned.filter(([, neonBranch]) => !attempted.has(neonBranch)),
+		),
+	};
 	setGitBranchMap(props.contextFile, finalKept);
 
-	const prunedNow = orphaned.filter(([, neonBranch]) =>
-		deletedNeonNames.has(neonBranch),
+	const prunedNow = orphaned.filter(
+		([gitBranch]) => !(gitBranch in finalKept),
 	);
 	log.info("Pruned %d stale mapping(s) from .neon:", prunedNow.length);
 	for (const [gitBranch, neonBranch] of prunedNow) {
 		log.info("  %s → %s", gitBranch, neonBranch);
+	}
+
+	if (failed.length > 0) {
+		throw new Error(
+			`Failed to delete ${failed.length} Neon branch(es): ${failed
+				.map((f) => `${f.name} (${f.error})`)
+				.join(
+					", ",
+				)}. Re-run \`neon git cleanup --prune-neon-branches\` to retry.`,
+		);
 	}
 };
 

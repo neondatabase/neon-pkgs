@@ -62,6 +62,7 @@ import {
 	isPluginsCommand,
 	isProfileCommand,
 	isSkillsCommand,
+	isUnfollowedGitHookSync,
 	readContextFile,
 } from "../context.js";
 import { storeFor } from "../credential_io.js";
@@ -644,6 +645,13 @@ export const ensureAuth = async (
 	// `git install` / `uninstall` / `status` only touch the local hooks directory and
 	// `.neon` — same reasoning as `profile`.
 	if (isGitLocalCommand(props)) {
+		return;
+	}
+
+	// A hook-triggered `git sync` in a repo that never ran `git install` must no-op before
+	// touching the network at all — checked here (ahead of every other branch below) so a
+	// shared `core.hooksPath` can never pop a browser login in a repo that didn't opt in.
+	if (isUnfollowedGitHookSync(props)) {
 		return;
 	}
 

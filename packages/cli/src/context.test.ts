@@ -22,6 +22,7 @@ import {
 	isMcpOauth,
 	isPluginsCommand,
 	isSkillsCommand,
+	isUnfollowedGitHookSync,
 	readContextFile,
 	setGitBranchMap,
 	setGitBranchMapping,
@@ -570,6 +571,80 @@ describe("applyContext", () => {
 		applyContext(file, { projectId: "proj-y", git: { follow: false } });
 
 		expect(readContextFile(file).git).toEqual({ follow: false });
+	});
+});
+
+describe("isUnfollowedGitHookSync", () => {
+	let workspace: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neonctl-unfollowed-sync-"));
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+		delete process.env.NEON_GIT_HOOK;
+	});
+
+	test("false for a manual `git sync` (no hook env flag), regardless of follow", () => {
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			false,
+		);
+	});
+
+	test("false for any command other than `git sync`, even hook-triggered", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		expect(
+			isUnfollowedGitHookSync({ _: ["git", "status"] }, workspace),
+		).toBe(false);
+		expect(isUnfollowedGitHookSync({ _: ["checkout"] }, workspace)).toBe(
+			false,
+		);
+	});
+
+	test("true when hook-triggered and this exact directory has no `.neon` at all", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			true,
+		);
+	});
+
+	test("true when hook-triggered and this directory's own `.neon` lacks git.follow", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "proj" }),
+		);
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			true,
+		);
+	});
+
+	test("false when hook-triggered and this exact directory's `.neon` has git.follow: true", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "proj", git: { follow: true } }),
+		);
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			false,
+		);
+	});
+
+	test("true even when a PARENT directory has git.follow: true (no walk-up)", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		// An ancestor's `.neon` (e.g. a parent monorepo folder) must never authorize a
+		// nested repo that has no `.neon` of its own — the usual walk-up resolution must
+		// not be used for this check.
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "proj", git: { follow: true } }),
+		);
+		const nested = join(workspace, "nested-repo");
+		mkdirSync(nested, { recursive: true });
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, nested)).toBe(
+			true,
+		);
 	});
 });
 
