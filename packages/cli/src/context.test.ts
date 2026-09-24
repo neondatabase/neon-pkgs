@@ -528,6 +528,38 @@ describe("applyContext", () => {
 		});
 	});
 
+	test("drops the git block when the write changes projectId (mappings are project-scoped)", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		// Re-pointing .neon at a different project must not carry the old project's git →
+		// Neon name mappings into the new one (a same-named branch there was never mapped).
+		applyContext(file, { projectId: "proj-z", branch: "main" });
+
+		expect(readContextFile(file)).toEqual({
+			projectId: "proj-z",
+			branch: "main",
+		});
+	});
+
+	test("preserves the git block across a write that keeps the same projectId", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		applyContext(file, { projectId: "proj-y", branch: "other" });
+
+		expect(readContextFile(file).git).toEqual({
+			follow: true,
+			map: { feature: "preview-feature" },
+		});
+	});
+
 	test("replaces the git block when the caller provides one explicitly", () => {
 		const file = join(workspace, ".neon");
 		applyContext(file, {

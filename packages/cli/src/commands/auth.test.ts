@@ -930,6 +930,47 @@ describe("ensureAuth", () => {
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
 	});
 
+	test("should skip global auth for git install/uninstall/status (local-only)", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+
+		for (const argv of [
+			["git", "install"],
+			["git", "uninstall"],
+			["git", "status"],
+		]) {
+			await ensureAuth({ ...setupTestProps(server), _: argv });
+		}
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
+	test("does NOT skip global auth for git sync or cleanup (both can reach the API)", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const credentialsPath = join(configDir, "credentials.json");
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath);
+		}
+
+		await ensureAuth({ ...setupTestProps(server), _: ["git", "sync"] });
+		expect(authSpy).toHaveBeenCalledTimes(1);
+
+		authSpy.mockClear();
+		if (existsSync(credentialsPath)) {
+			rmSync(credentialsPath); // the first call's flow just wrote one — start fresh.
+		}
+		await ensureAuth({ ...setupTestProps(server), _: ["git", "cleanup"] });
+		expect(authSpy).toHaveBeenCalledTimes(1);
+	});
+
 	test("should skip global auth for ask command", async ({
 		runMockServer,
 	}) => {

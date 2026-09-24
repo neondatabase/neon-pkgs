@@ -116,6 +116,19 @@ export const isApiKeysCommand = (args: { _: (string | number)[] }): boolean =>
 export const isMcpCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "mcp";
 
+/**
+ * `neon git install/uninstall/status` only touch the local git hooks directory and `.neon`
+ * — never the Neon API — so they must work (and never pop a browser login) without
+ * credentials, the same reasoning as {@link isProfileCommand}. `sync` and `cleanup` are
+ * excluded: both can reach the API (`sync` always delegates to `checkout`; `cleanup` does
+ * too with `--prune-neon-branches`).
+ */
+export const isGitLocalCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "git" &&
+	(args._[1] === "install" ||
+		args._[1] === "uninstall" ||
+		args._[1] === "status");
+
 export const isSkillsCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "skills" || args._[0] === "skill";
 
@@ -318,12 +331,23 @@ export const updateContextFile = (file: string, context: Context) => {
  * The {@link Context.git} block is additionally **preserved** when the caller doesn't
  * provide one, so a plain `link` / `set-context` / `checkout` never wipes the git → Neon
  * mapping a user (or `neon git sync`) built up. Pass an explicit `git` to replace it.
+ *
+ * That preservation is skipped when `context.projectId` differs from the file's existing
+ * `projectId`: the mapping's Neon branch **names** are only meaningful within the project
+ * they were recorded against, and carrying them into a different project could point
+ * `neon git cleanup --prune-neon-branches` at a same-named branch that was never actually
+ * mapped there.
  */
 export const applyContext = (file: string, context: Context) => {
 	const isNewFile = !existsSync(file);
 	const existing = isNewFile ? {} : readContextFile(file);
+	const projectChanged =
+		existing.projectId !== undefined &&
+		context.projectId !== existing.projectId;
 	const merged: Context =
-		context.git === undefined && existing.git !== undefined
+		context.git === undefined &&
+		existing.git !== undefined &&
+		!projectChanged
 			? { ...context, git: existing.git }
 			: context;
 	updateContextFile(file, merged);

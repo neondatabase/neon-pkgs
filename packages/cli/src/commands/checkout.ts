@@ -7,6 +7,7 @@ import { isNeonApiError } from "../api.js";
 
 import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
+import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import {
@@ -151,6 +152,26 @@ export const handler = async (props: CheckoutProps) => {
 	// (--project-id flag > .neon file > single-project auto-detect); when
 	// nothing resolves, fall back to an interactive `neonctl link`.
 	const projectId = await resolveProjectId(props);
+
+	// `--create` (only) best-effort loads `--env` before hook discovery, not just before the
+	// policy-driven create later in `createBranchFromPolicyOnCheckout`: a neon.ts that reads
+	// `process.env.X` at module-evaluation time — e.g. to build its `experimental.hooks`
+	// block — must see the same environment on both loads, or the checkout.before hook is
+	// silently skipped by a load failure that would have succeeded with the file applied.
+	// Best-effort because `--create` on a name that already exists never creates anything, so
+	// a bogus `--env` path must stay harmless here too — same contract as before hooks
+	// existed. A genuine create with a bad `--env` still fails loudly, just later, from
+	// `createBranchFromPolicyOnCheckout`'s own (unconditional) load.
+	if (props.create && props.env) {
+		try {
+			loadEnvFileIntoProcess(props.env);
+		} catch (err) {
+			log.debug(
+				"checkout: could not preload --env for hook discovery (continuing): %s",
+				err instanceof Error ? err.message : String(err),
+			);
+		}
+	}
 
 	// Lifecycle hooks (Preview): read git facts + load the neon.ts `experimental.hooks` block
 	// once. The `checkout.before` hook may rewrite the branch name (e.g. map a git branch to

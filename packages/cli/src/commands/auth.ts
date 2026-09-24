@@ -55,6 +55,7 @@ import {
 	isClaimCommand,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isGitLocalCommand,
 	isInspectDbUrl,
 	isMcpCommand,
 	isMcpOauth,
@@ -637,6 +638,12 @@ export const ensureAuth = async (
 	// `profile` reads and edits credential files on disk. Authenticating first would mean
 	// a browser login just to list profiles, and would make a lapsed profile unremovable.
 	if (isProfileCommand(props)) {
+		return;
+	}
+
+	// `git install` / `uninstall` / `status` only touch the local hooks directory and
+	// `.neon` — same reasoning as `profile`.
+	if (isGitLocalCommand(props)) {
 		return;
 	}
 

@@ -121,8 +121,7 @@ export const builder = (argv: yargs.Argv) =>
 					},
 				}),
 			(args) => cleanup(args as unknown as GitProps),
-		)
-		.demandCommand(1);
+		);
 
 export const handler = (args: yargs.Argv) => args;
 
@@ -198,6 +197,20 @@ export const sync = async (props: GitProps): Promise<void> => {
 		log.error("Not inside a git repository.");
 		return;
 	}
+
+	const context = readContextFile(props.contextFile);
+	// `core.hooksPath` can point at a directory shared by several repos, so the *installed
+	// hook script* running here does not by itself mean this repo opted in — only the repo
+	// that ran `install` has `git.follow: true` in its own `.neon`. A manual `neon git sync`
+	// (no hook env flag) is unaffected: it's an explicit ask, run it regardless of `follow`.
+	const triggeredByHook = process.env[GIT_HOOK_ENV_FLAG] === "1";
+	if (triggeredByHook && context.git?.follow !== true) {
+		log.debug(
+			"Skipping git sync: this repo has not run `neon git install` (git.follow is not set).",
+		);
+		return;
+	}
+
 	const gitBranch = currentGitBranch(cwd);
 	if (!gitBranch) {
 		log.info("Detached HEAD — no git branch to sync. Skipping.");
@@ -229,7 +242,6 @@ export const sync = async (props: GitProps): Promise<void> => {
 		}
 	}
 
-	const context = readContextFile(props.contextFile);
 	// Resolve the Neon branch name to check out:
 	//   1. a previously-recorded mapping wins (sticky — no duplicate branches), else
 	//   2. a Neon-safe name derived from the git branch (see `neonSafeBranchName`).
@@ -385,22 +397,57 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 		return;
 	}
 
-	// 1) Always prune the stale mappings from .neon (non-destructive to Neon).
 	const kept = Object.fromEntries(
 		entries.filter(([gitBranch]) => local.has(gitBranch)),
 	);
-	setGitBranchMap(props.contextFile, kept);
-	log.info("Pruned %d stale mapping(s) from .neon:", stale.length);
-	for (const [gitBranch, neonBranch] of stale) {
-		log.info("  %s → %s", gitBranch, neonBranch);
+	// A Neon branch name still referenced by a kept mapping (two git branches sharing one
+	// target, e.g. via `checkout.before` or name sanitization) is never orphaned — even
+	// though the *other* mapping to it went stale. That stale mapping is still safe to drop
+	// right away: the Neon branch it pointed at isn't going anywhere.
+	const keptNeonNames = new Set(Object.values(kept));
+	const staleButShared = stale.filter(([, neonBranch]) =>
+		keptNeonNames.has(neonBranch),
+	);
+	const orphaned = stale.filter(
+		([, neonBranch]) => !keptNeonNames.has(neonBranch),
+	);
+
+	if (!props.pruneNeonBranches) {
+		// Mapping-only mode: nothing Neon-side is being touched this run, so pruning every
+		// stale mapping now — shared-target or not — is final and safe either way.
+		setGitBranchMap(props.contextFile, kept);
+		log.info("Pruned %d stale mapping(s) from .neon:", stale.length);
+		for (const [gitBranch, neonBranch] of stale) {
+			log.info("  %s → %s", gitBranch, neonBranch);
+		}
+		if (orphaned.length > 0) {
+			log.info(
+				"Run `neon git cleanup --prune-neon-branches` (before this mapping-only cleanup) " +
+					"to also delete the now-orphaned Neon branch(es): %s.",
+				orphaned.map(([, neonBranch]) => neonBranch).join(", "),
+			);
+		}
+		return;
 	}
 
-	// 2) Optionally delete the orphaned Neon branches.
-	if (!props.pruneNeonBranches) {
+	// `--prune-neon-branches`: a stale mapping whose target Neon branch is a genuine
+	// deletion candidate (`orphaned`) stays on disk until that branch is actually deleted
+	// (or excluded as default/protected), so a declined confirmation or a failed delete
+	// leaves it intact for a later retry. A stale mapping whose target is still shared with
+	// a kept mapping (`staleButShared`) is pruned immediately — nothing about it depends on
+	// the deletion outcome below.
+	if (staleButShared.length > 0) {
+		setGitBranchMap(props.contextFile, {
+			...kept,
+			...Object.fromEntries(orphaned),
+		});
 		log.info(
-			"Re-run with --prune-neon-branches to also delete the orphaned Neon branch(es).",
+			"Pruned %d stale mapping(s) whose Neon branch is still in use elsewhere:",
+			staleButShared.length,
 		);
-		return;
+		for (const [gitBranch, neonBranch] of staleButShared) {
+			log.info("  %s → %s", gitBranch, neonBranch);
+		}
 	}
 
 	if (!props.projectId) {
@@ -410,7 +457,14 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 		return;
 	}
 
-	const orphanNeonNames = new Set(stale.map(([, neonBranch]) => neonBranch));
+	if (orphaned.length === 0) {
+		log.info("No orphaned Neon branches to delete.");
+		return;
+	}
+
+	const orphanNeonNames = new Set(
+		orphaned.map(([, neonBranch]) => neonBranch),
+	);
 	const branches = (
 		await props.apiClient.listProjectBranches({
 			projectId: props.projectId,
@@ -435,13 +489,34 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	}
 
 	if (!(await confirmPrune(props, toDelete))) {
-		log.info("Aborted — no Neon branches were deleted.");
+		log.info(
+			"Aborted — no Neon branches were deleted, and no mappings were pruned.",
+		);
 		return;
 	}
 
 	for (const branch of toDelete) {
 		await props.apiClient.deleteProjectBranch(props.projectId, branch.id);
 		log.info("Deleted Neon branch %s (%s).", branch.name, branch.id);
+	}
+
+	// Base the final map on `kept` (not the original `entries`): `staleButShared` mappings
+	// were already pruned above and must not be resurrected here. An `orphaned` mapping
+	// survives only when its branch wasn't actually deleted — skipped as default/protected,
+	// or not found on the live list at all.
+	const deletedNeonNames = new Set(toDelete.map((b) => b.name));
+	const survivingOrphaned = orphaned.filter(
+		([, neonBranch]) => !deletedNeonNames.has(neonBranch),
+	);
+	const finalKept = { ...kept, ...Object.fromEntries(survivingOrphaned) };
+	setGitBranchMap(props.contextFile, finalKept);
+
+	const prunedNow = orphaned.filter(([, neonBranch]) =>
+		deletedNeonNames.has(neonBranch),
+	);
+	log.info("Pruned %d stale mapping(s) from .neon:", prunedNow.length);
+	for (const [gitBranch, neonBranch] of prunedNow) {
+		log.info("  %s → %s", gitBranch, neonBranch);
 	}
 };
 
