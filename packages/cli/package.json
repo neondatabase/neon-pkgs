@@ -44,7 +44,7 @@
 	"scripts": {
 		"generateParams": "tsx generateOptionsFromSpec.ts",
 		"clean": "rm -rf dist",
-		"build": "pnpm generateParams && tsc --noEmit && tsdown && cp src/*.html ./dist",
+		"build": "pnpm generateParams && tsc --noEmit && tsdown && node scripts/build-callback.mjs",
 		"build:internal": "pnpm build",
 		"bundle": "node pkg.js",
 		"typecheck": "tsc --noEmit",
