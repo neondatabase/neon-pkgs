@@ -911,6 +911,30 @@ export const zOrganizationInvitationsResponse = z.strictObject({
     invitations: z.array(zInvitation)
 });
 
+export const zScimToken = z.strictObject({
+    id: z.uuid(),
+    name: z.string(),
+    created_at: z.iso.datetime(),
+    last_used_at: z.iso.datetime().nullish()
+});
+
+export const zScimTokensListResponse = z.strictObject({
+    tokens: z.array(zScimToken)
+});
+
+export const zScimTokenCreateRequest = z.strictObject({
+    name: z.string().max(64)
+});
+
+export const zScimTokenCreateResponse = z.strictObject({
+    token: z.string(),
+    scim_token: zScimToken
+});
+
+export const zScimTokenRevokeResponse = z.strictObject({
+    id: z.uuid()
+});
+
 export const zOrganizationInviteCreateRequest = z.strictObject({
     email: z.email().min(1).max(256),
     role: zMemberRole
