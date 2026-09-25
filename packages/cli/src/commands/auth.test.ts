@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import {
 	createCredentialStore,
@@ -89,6 +90,72 @@ describe("auth", () => {
 		expect(credentials.access_token).toEqual(expect.any(String));
 		expect(credentials.refresh_token).toEqual(expect.any(String));
 		expect(credentials.user_id).toEqual(expect.any(String));
+	});
+
+	test("stores only the OAuth fields needed after authentication", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		const isolatedConfigDir = mkdtempSync(
+			join(tmpdir(), "neon-keyring-oauth-fields-"),
+		);
+		oauthServer.service.once("beforeResponse", (response) => {
+			response.body.synthetic_padding = "x".repeat(1000);
+			response.body.scope = "synthetic-scope";
+		});
+		const items = new Map<string, string>();
+		const writes: number[] = [];
+		const id = (service: string, account: string) =>
+			`${service}\0${account}`;
+		const keyring: KeyringBackend & {
+			maxPasswordCodeUnits: number;
+		} = {
+			maxPasswordCodeUnits: 1280,
+			get: (service, account) => items.get(id(service, account)) ?? null,
+			set: (service, account, password) => {
+				writes.push(password.length);
+				if (password.length > 1280) {
+					throw new Error("synthetic keyring payload limit exceeded");
+				}
+				items.set(id(service, account), password);
+			},
+			delete: (service, account) => items.delete(id(service, account)),
+		};
+		const storeSpy = vi
+			.spyOn(credentialIo, "storeFor")
+			.mockImplementation((dir: string) =>
+				createCredentialStore(dir, { keyring }),
+			);
+
+		try {
+			await authFlow({
+				_: ["auth"],
+				apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
+				clientId: "test-client-id",
+				configDir: isolatedConfigDir,
+				forceAuth: true,
+				oauthHost: `http://localhost:${oauthServer.address().port}`,
+				allowUnsafeTls: true,
+				keyring: true,
+			});
+
+			const raw = keyring.get(
+				KEYRING_SERVICE,
+				keyringAccount(isolatedConfigDir, "DEFAULT"),
+			);
+			expect(raw).not.toBeNull();
+			expect(JSON.parse(raw ?? "{}")).toEqual({
+				type: "oauth",
+				access_token: expect.any(String),
+				refresh_token: expect.any(String),
+				expires_at: expect.any(Number),
+				user_id: expect.any(String),
+			});
+			expect(writes.every((length) => length <= 1280)).toBe(true);
+		} finally {
+			storeSpy.mockRestore();
+			rmSync(isolatedConfigDir, { recursive: true, force: true });
+		}
 	});
 
 	test("refuses to open a browser when --keyring is set and unavailable", async ({

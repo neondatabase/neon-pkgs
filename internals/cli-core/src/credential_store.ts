@@ -23,6 +23,8 @@ export const KEYRING_SERVICE = "com.neon.neon-cli";
 
 /** The addon collapses missing, locked, and denied states, so callers cannot assume absence. */
 export type KeyringBackend = {
+	/** Maximum UTF-16 code units accepted for one password, when known. */
+	maxPasswordCodeUnits?: number;
 	get(service: string, account: string): string | null;
 	set(service: string, account: string, password: string): void;
 	delete(service: string, account: string): boolean;
@@ -45,6 +47,15 @@ export class KeyringUnavailableError extends Error {
 					: `${loaded} Use --api-key or NEON_API_KEY. If this is a standalone neon binary, use the npm-installed neon instead. To reset the profile: \`neon profile remove ${profile} --yes\`.`,
 		);
 		this.name = "KeyringUnavailableError";
+	}
+}
+
+export class KeyringValueTooLargeError extends Error {
+	constructor(profile: string, actual: number, maximum: number) {
+		super(
+			`Credentials for profile "${profile}" use ${actual} UTF-16 code units, but this OS keyring accepts at most ${maximum}. Retry without \`--keyring\` to keep the credential in an owner-only file. If this profile already uses the keyring, remove it first with \`neon profile remove ${profile} --yes\`.`,
+		);
+		this.name = "KeyringValueTooLargeError";
 	}
 }
 
@@ -162,8 +173,19 @@ export const createCredentialStore = (
 		} catch {
 			previous = null;
 		}
+		const serialized = JSON.stringify(credentials);
+		if (
+			kr.maxPasswordCodeUnits !== undefined &&
+			serialized.length > kr.maxPasswordCodeUnits
+		) {
+			throw new KeyringValueTooLargeError(
+				profile,
+				serialized.length,
+				kr.maxPasswordCodeUnits,
+			);
+		}
 		try {
-			kr.set(KEYRING_SERVICE, account, JSON.stringify(credentials));
+			kr.set(KEYRING_SERVICE, account, serialized);
 		} catch {
 			throw new KeyringUnavailableError();
 		}
