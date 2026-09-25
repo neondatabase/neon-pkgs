@@ -129,15 +129,18 @@ export const builder = (argv: yargs.Argv) =>
 
 export const handler = (args: yargs.Argv) => args;
 
-const requireRepoRoot = (): string | undefined => {
+const requireRepoRoot = (): string => {
 	const cwd = process.cwd();
 	if (!isGitRepo(cwd)) {
-		log.error(
+		throw new Error(
 			"Not inside a git repository. Run `neon git` from a git work tree.",
 		);
-		return undefined;
 	}
-	return gitRepoRoot(cwd);
+	const repoRoot = gitRepoRoot(cwd);
+	if (!repoRoot) {
+		throw new Error("Could not resolve the git repository root.");
+	}
+	return repoRoot;
 };
 
 /**
@@ -163,27 +166,26 @@ const repoRootContextFile = (repoRoot: string): string =>
 
 export const install = (_props: GitProps): void => {
 	const repoRoot = requireRepoRoot();
-	if (!repoRoot) return;
 
 	const gitStateFile = repoRootContextFile(repoRoot);
-	if (!existsSync(gitStateFile)) {
-		log.error(
-			"No project linked at the repository root (%s).\nRun `neon link` or " +
-				"`neon checkout <branch>` from %s first, then re-run `neon git install`.",
-			gitStateFile,
-			repoRoot,
+	// A real `projectId` — not just file presence (`{}` is a valid on-disk state, e.g. after
+	// `neon link --clear`) — since the whole feature is meaningless without a linked project.
+	if (!readContextFile(gitStateFile).projectId) {
+		throw new Error(
+			`No project linked at the repository root (${gitStateFile}).\n` +
+				`Run \`neon link --context-file ${gitStateFile}\` (an explicit path, since a ` +
+				"plain `neon link` walks up and may update a different, ancestor `.neon` " +
+				`instead) or \`neon checkout <branch> --context-file ${gitStateFile}\` first, ` +
+				"then re-run `neon git install`.",
 		);
-		return;
 	}
 
 	const result = installPostCheckoutHook(repoRoot);
 	if (result.status === "conflict") {
-		log.error(
-			"A non-neon `post-checkout` hook already exists at %s.\n" +
+		throw new Error(
+			`A non-neon \`post-checkout\` hook already exists at ${result.hookPath}.\n` +
 				"Remove or rename it first, then re-run `neon git install`.",
-			result.hookPath,
 		);
-		return;
 	}
 	setGitFollow(gitStateFile, true);
 	log.info(
@@ -196,7 +198,6 @@ export const install = (_props: GitProps): void => {
 
 export const uninstall = (_props: GitProps): void => {
 	const repoRoot = requireRepoRoot();
-	if (!repoRoot) return;
 
 	const result = removePostCheckoutHook(repoRoot);
 	const gitStateFile = repoRootContextFile(repoRoot);
@@ -246,8 +247,7 @@ export const sync = async (props: GitProps): Promise<void> => {
 
 	const cwd = process.cwd();
 	if (!isGitRepo(cwd)) {
-		log.error("Not inside a git repository.");
-		return;
+		throw new Error("Not inside a git repository.");
 	}
 	const repoRoot = gitRepoRoot(cwd) ?? cwd;
 	const gitStateFile = repoRootContextFile(repoRoot);
@@ -302,14 +302,22 @@ export const sync = async (props: GitProps): Promise<void> => {
 
 	// Persist the mapping from the branch actually pinned, so subsequent checkouts of this git
 	// branch resolve to the same Neon branch without re-deriving. `checkoutHandler` pins the
-	// branch into `props.contextFile` (the real project context, unaffected by any of this).
-	// Only write the mapping when the repo-root git-state file already exists — same
-	// no-shadowing reasoning as `install` (see `repoRootContextFile`): a first-ever sync in a
-	// repo whose project is linked elsewhere must not plant a bare `.neon` at the root. The
-	// checkout above still succeeded via the normal project resolution; only the
-	// sticky-mapping convenience for the *next* sync is skipped.
-	if (existsSync(gitStateFile)) {
-		const resolved = contextBranch(readContextFile(props.contextFile));
+	// branch into `props.contextFile`, which is normally the SAME file as `gitStateFile` (the
+	// repo-root walk-up finds it immediately) — but an explicit `--context-file` or
+	// `--project-id` can point checkout at a different project. Guard against recording that
+	// project's branch name into the root file's map, which `cleanup` would then read as if
+	// it belonged to the root's own project.
+	const pinnedContext = readContextFile(props.contextFile);
+	const rootProjectId = context.projectId;
+	if (rootProjectId && pinnedContext.projectId !== rootProjectId) {
+		log.warning(
+			"Not persisting the git → Neon mapping: this checkout targeted project %s, not " +
+				"the repo root's linked project %s.",
+			pinnedContext.projectId ?? "(unknown)",
+			rootProjectId,
+		);
+	} else if (existsSync(gitStateFile)) {
+		const resolved = contextBranch(pinnedContext);
 		if (resolved) {
 			setGitBranchMapping(gitStateFile, gitBranch, resolved);
 		}
@@ -430,8 +438,7 @@ export const partitionBranchesToPrune = <B extends PrunableBranch>(
 export const cleanup = async (props: GitProps): Promise<void> => {
 	const cwd = process.cwd();
 	if (!isGitRepo(cwd)) {
-		log.error("Not inside a git repository.");
-		return;
+		throw new Error("Not inside a git repository.");
 	}
 	const repoRoot = gitRepoRoot(cwd) ?? cwd;
 	const gitStateFile = repoRootContextFile(repoRoot);
@@ -508,10 +515,9 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	}
 
 	if (!props.projectId) {
-		log.error(
+		throw new Error(
 			"Cannot delete Neon branches: no project in context. Run `neon link` first.",
 		);
-		return;
 	}
 
 	// The map was recorded against `context.projectId` (the project `.neon` is actually
@@ -519,16 +525,12 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	// stale enrichment — and resolving names against a *different* project than the one the
 	// mapping was built for could match and delete an unrelated same-named branch there.
 	if (context.projectId && context.projectId !== props.projectId) {
-		log.error(
+		throw new Error(
 			"Cannot delete Neon branches: this git → Neon map was recorded against project " +
-				"%s, but the active project is %s. Run `neon link` (or drop --project-id) to " +
-				"target %s, or `neon git cleanup` with no --prune-neon-branches to only prune " +
-				"the local mapping.",
-			context.projectId,
-			props.projectId,
-			context.projectId,
+				`${context.projectId}, but the active project is ${props.projectId}. Run ` +
+				`\`neon link\` (or drop --project-id) to target ${context.projectId}, or ` +
+				"`neon git cleanup` with no --prune-neon-branches to only prune the local mapping.",
 		);
-		return;
 	}
 
 	if (orphaned.length === 0) {
@@ -570,16 +572,12 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	}
 
 	// Start from EVERY surviving mapping — `kept` plus the full `orphaned` set, including
-	// the ones about to be attempted. A `toDelete` branch's mapping is removed from
-	// `currentMap` (in memory) and persisted to disk only once THAT branch's own delete call
-	// has actually succeeded — written inside the loop, never batched to the end — so a
-	// process interruption or a later failure can't lose an already-completed deletion's
-	// mapping-removal, and can't lose a *pending* one either (it's still in `currentMap`
-	// until its own turn). On-disk state always matches what has actually happened on Neon
-	// so far. A retry can't recover a lost mapping on its own (the branch is already gone,
-	// so a name-based re-match on a later run would be lucky at best, wrong at worst if an
-	// unrelated branch reused the name) — which is exactly why nothing here is ever dropped
-	// before its own deletion confirms.
+	// the ones about to be attempted. A branch's mapping is dropped from `currentMap` and
+	// written to disk (every iteration, success or failure) only once ITS OWN delete call
+	// succeeds — never before, never batched to the end — so an interruption can lose
+	// neither an already-completed deletion's mapping-removal nor a still-pending one's
+	// mapping. A lost mapping couldn't be recovered anyway (a later name-based re-match
+	// risks matching an unrelated branch that reused the name).
 	const currentMap = { ...kept, ...Object.fromEntries(orphaned) };
 
 	const failed: { name: string; error: string }[] = [];

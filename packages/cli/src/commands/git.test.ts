@@ -259,16 +259,18 @@ describe("cleanup", () => {
 		const spy = vi.spyOn(process, "cwd").mockReturnValue(repo);
 		try {
 			// `--project-id proj-b` (an override) differs from the `.neon`-recorded `proj-a`.
-			await cleanup({
-				apiClient: client as never,
-				apiKey: "",
-				apiHost: "",
-				output: "json",
-				contextFile,
-				projectId: "proj-b",
-				pruneNeonBranches: true,
-				yes: true,
-			});
+			await expect(
+				cleanup({
+					apiClient: client as never,
+					apiKey: "",
+					apiHost: "",
+					output: "json",
+					contextFile,
+					projectId: "proj-b",
+					pruneNeonBranches: true,
+					yes: true,
+				}),
+			).rejects.toThrow(/recorded against project proj-a/);
 		} finally {
 			spy.mockRestore();
 		}
@@ -470,13 +472,15 @@ describe("sync (git.follow gate)", () => {
 
 			const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(nestedRepo);
 			try {
-				install({
-					apiClient: {} as never,
-					apiKey: "",
-					apiHost: "",
-					output: "json",
-					contextFile: ancestorFile,
-				});
+				expect(() =>
+					install({
+						apiClient: {} as never,
+						apiKey: "",
+						apiHost: "",
+						output: "json",
+						contextFile: ancestorFile,
+					}),
+				).toThrow(/No project linked at the repository root/);
 			} finally {
 				cwdSpy.mockRestore();
 			}
