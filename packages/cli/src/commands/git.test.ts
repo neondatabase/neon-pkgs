@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -319,6 +325,63 @@ describe("cleanup", () => {
 		});
 	});
 
+	test("never removes a not-yet-attempted branch's mapping while an earlier one is still being processed", async () => {
+		// A succeeds, B fails, C hasn't been attempted at all yet when B fails. C's mapping
+		// must still be on disk at that moment — an interruption right after B's failure
+		// (before C ever runs) must not have already lost it.
+		initRepo(repo, ["main"]);
+		applyContext(contextFile, {
+			projectId: "proj",
+			git: {
+				map: {
+					"gone-a": "preview-a",
+					"gone-b": "preview-b",
+					"gone-c": "preview-c",
+				},
+			},
+		});
+		const { client } = fakeApiClient([
+			{ id: "br-a", name: "preview-a" },
+			{ id: "br-b", name: "preview-b" },
+			{ id: "br-c", name: "preview-c" },
+		]);
+		let mapWhenBFailed: Record<string, string> | undefined;
+		client.deleteProjectBranch = async (
+			_projectId: string,
+			branchId: string,
+		) => {
+			if (branchId === "br-b") {
+				mapWhenBFailed = readContextFile(contextFile).git?.map;
+				throw new Error("network blip");
+			}
+		};
+
+		const spy = vi.spyOn(process, "cwd").mockReturnValue(repo);
+		try {
+			await expect(
+				cleanup({
+					apiClient: client as never,
+					apiKey: "",
+					apiHost: "",
+					output: "json",
+					contextFile,
+					projectId: "proj",
+					pruneNeonBranches: true,
+					yes: true,
+				}),
+			).rejects.toThrow(/network blip/);
+		} finally {
+			spy.mockRestore();
+		}
+
+		// At the moment B failed, A (processed first) was already pruned, but C (not yet
+		// attempted) still had its mapping — never dropped ahead of its own outcome.
+		expect(mapWhenBFailed).toEqual({
+			"gone-b": "preview-b",
+			"gone-c": "preview-c",
+		});
+	});
+
 	test("keeps a skipped (default/protected) branch's mapping", async () => {
 		initRepo(repo, ["main"]);
 		applyContext(contextFile, {
@@ -392,6 +455,43 @@ describe("sync (git.follow gate)", () => {
 		expect(errorSpy).not.toHaveBeenCalled();
 	});
 
+	test("install refuses when no project is linked at the repo root (never plants a shadowing .neon)", () => {
+		// The project is linked at an ANCESTOR directory only — this repo has no `.neon` of
+		// its own. `install` must refuse rather than create a bare `{ git: {...} }` file
+		// here: that new, closer file would shadow the ancestor's link for every other
+		// command's normal (walk-up) context resolution.
+		const outer = mkdtempSync(join(tmpdir(), "neon-git-noproject-"));
+		const ancestorFile = join(outer, ".neon");
+		const nestedRepo = join(outer, "nested-repo");
+		try {
+			applyContext(ancestorFile, { projectId: "ancestor-project" });
+			mkdirSync(nestedRepo, { recursive: true });
+			initRepo(nestedRepo, ["main"]);
+
+			const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(nestedRepo);
+			try {
+				install({
+					apiClient: {} as never,
+					apiKey: "",
+					apiHost: "",
+					output: "json",
+					contextFile: ancestorFile,
+				});
+			} finally {
+				cwdSpy.mockRestore();
+			}
+
+			// No `.neon` was created at the repo root, and the ancestor's own file (which
+			// `install` never touches) still resolves normally for other commands.
+			expect(existsSync(join(nestedRepo, ".neon"))).toBe(false);
+			expect(readContextFile(ancestorFile)).toEqual({
+				projectId: "ancestor-project",
+			});
+		} finally {
+			rmSync(outer, { recursive: true, force: true });
+		}
+	});
+
 	test("install writes git.follow to THIS repo's own root .neon, not an ancestor's", () => {
 		// `repo` (the git repository under test) is nested one level inside a dedicated
 		// parent that holds an unrelated `.neon` with `git.follow: true` already set. The
@@ -411,6 +511,11 @@ describe("sync (git.follow gate)", () => {
 			);
 			mkdirSync(nestedRepo, { recursive: true });
 			initRepo(nestedRepo, ["main"]);
+			// A prior `neon link` at the repo root — `install` requires this to exist (never
+			// plants a bare file that could shadow the ancestor's link for other commands).
+			applyContext(join(nestedRepo, ".neon"), {
+				projectId: "nested-project",
+			});
 
 			const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(nestedRepo);
 			try {
