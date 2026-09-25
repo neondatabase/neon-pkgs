@@ -17,6 +17,7 @@ export default defineConfig({
 		"!src/**/*.test-d.*",
 	],
 	format: "esm",
+	sourcemap: true,
 	outDir: "dist",
 	treeshake: true,
 });
