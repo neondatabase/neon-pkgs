@@ -1,8 +1,10 @@
+import { join } from "node:path";
 import chalk from "chalk";
 import prompts from "prompts";
 import type yargs from "yargs";
 
 import {
+	CONTEXT_FILE,
 	contextBranch,
 	gitBranchMap,
 	gitBranchMapping,
@@ -137,7 +139,16 @@ const requireRepoRoot = (): string | undefined => {
 	return gitRepoRoot(cwd);
 };
 
-export const install = (props: GitProps): void => {
+/**
+ * `.neon` at exactly the repo root — never walk-up-resolved. The single source of truth
+ * for the git-follow opt-in: it's where {@link install}/{@link uninstall} write
+ * `git.follow`, and the exact location `isUnfollowedGitHookSync` reads (a `post-checkout`
+ * hook always runs with `cwd` at the repo root, so the two must agree).
+ */
+const repoRootContextFile = (repoRoot: string): string =>
+	join(repoRoot, CONTEXT_FILE);
+
+export const install = (_props: GitProps): void => {
 	const repoRoot = requireRepoRoot();
 	if (!repoRoot) return;
 
@@ -150,7 +161,13 @@ export const install = (props: GitProps): void => {
 		);
 		return;
 	}
-	setGitFollow(props.contextFile, true);
+	// Write `git.follow` to THIS repo's own root `.neon` — not `props.contextFile` (which
+	// can be walk-up-resolved to an ancestor directory's unrelated `.neon`, e.g. a parent
+	// monorepo folder). A `post-checkout` hook always runs with `cwd` at the repo root, and
+	// `isUnfollowedGitHookSync` reads that exact, non-walked-up location: install and the
+	// hook's opt-in check must agree on where `follow` lives, or install can report success
+	// while the hook still refuses to run.
+	setGitFollow(repoRootContextFile(repoRoot), true);
 	log.info(
 		"Git → Neon sync %s. `git checkout <branch>` will now check out the mapped Neon branch.\n" +
 			"Hook: %s",
@@ -159,12 +176,12 @@ export const install = (props: GitProps): void => {
 	);
 };
 
-export const uninstall = (props: GitProps): void => {
+export const uninstall = (_props: GitProps): void => {
 	const repoRoot = requireRepoRoot();
 	if (!repoRoot) return;
 
 	const result = removePostCheckoutHook(repoRoot);
-	setGitFollow(props.contextFile, false);
+	setGitFollow(repoRootContextFile(repoRoot), false);
 	switch (result) {
 		case "removed":
 			log.info(
@@ -211,8 +228,13 @@ export const sync = async (props: GitProps): Promise<void> => {
 		log.error("Not inside a git repository.");
 		return;
 	}
+	const repoRoot = gitRepoRoot(cwd) ?? cwd;
+	// The git → Neon mapping lives at the repo root — same file `install` writes `follow`
+	// to — never `props.contextFile`'s walk-up resolution, which could land on an ancestor
+	// directory's unrelated `.neon`.
+	const gitStateFile = repoRootContextFile(repoRoot);
 
-	const context = readContextFile(props.contextFile);
+	const context = readContextFile(gitStateFile);
 	const gitBranch = currentGitBranch(cwd);
 	if (!gitBranch) {
 		log.info("Detached HEAD — no git branch to sync. Skipping.");
@@ -261,10 +283,12 @@ export const sync = async (props: GitProps): Promise<void> => {
 	});
 
 	// Persist the mapping from the branch actually pinned, so subsequent checkouts of this git
-	// branch resolve to the same Neon branch without re-deriving.
+	// branch resolve to the same Neon branch without re-deriving. `checkoutHandler` pins the
+	// branch into `props.contextFile` (the real project context, unaffected by any of this);
+	// only the mapping bookkeeping lives in the repo-root git-state file.
 	const resolved = contextBranch(readContextFile(props.contextFile));
 	if (resolved) {
-		setGitBranchMapping(props.contextFile, gitBranch, resolved);
+		setGitBranchMapping(gitStateFile, gitBranch, resolved);
 	}
 };
 
@@ -293,7 +317,7 @@ const resolveShouldPull = async (
 	return Boolean(pull);
 };
 
-export const status = (props: GitProps): void => {
+export const status = (_props: GitProps): void => {
 	const cwd = process.cwd();
 	const git = readGitContext(cwd);
 	if (!git.available) {
@@ -304,7 +328,8 @@ export const status = (props: GitProps): void => {
 	const repoRoot = git.repoRoot ?? cwd;
 	const hookPath = postCheckoutHookPath(repoRoot);
 	const installed = isManagedHook(hookPath);
-	const context = readContextFile(props.contextFile);
+	// Same repo-root git-state file `install`/`sync` use — never the walk-up resolution.
+	const context = readContextFile(repoRootContextFile(repoRoot));
 	const mapping = context.git?.map ?? {};
 	const currentBranch = git.branch;
 	const mappedNeon = currentBranch
@@ -380,8 +405,12 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 		log.error("Not inside a git repository.");
 		return;
 	}
+	const repoRoot = gitRepoRoot(cwd) ?? cwd;
+	// Same repo-root git-state file `install`/`sync`/`status` use — never the walk-up
+	// resolution, which could land on an ancestor directory's unrelated `.neon`.
+	const gitStateFile = repoRootContextFile(repoRoot);
 
-	const context = readContextFile(props.contextFile);
+	const context = readContextFile(gitStateFile);
 	const map = gitBranchMap(context);
 	const entries = Object.entries(map);
 	if (entries.length === 0) {
@@ -417,7 +446,7 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	if (!props.pruneNeonBranches) {
 		// Mapping-only mode: nothing Neon-side is being touched this run, so pruning every
 		// stale mapping now — shared-target or not — is final and safe either way.
-		setGitBranchMap(props.contextFile, kept);
+		setGitBranchMap(gitStateFile, kept);
 		log.info("Pruned %d stale mapping(s) from .neon:", stale.length);
 		for (const [gitBranch, neonBranch] of stale) {
 			log.info("  %s → %s", gitBranch, neonBranch);
@@ -439,7 +468,7 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	// a kept mapping (`staleButShared`) is pruned immediately — nothing about it depends on
 	// the deletion outcome below.
 	if (staleButShared.length > 0) {
-		setGitBranchMap(props.contextFile, {
+		setGitBranchMap(gitStateFile, {
 			...kept,
 			...Object.fromEntries(orphaned),
 		});
@@ -514,21 +543,39 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 		return;
 	}
 
-	// Persist each mapping removal right after its branch actually deletes, so a later
-	// failure in the same run never re-orphans an already-completed deletion — the
-	// alternative (batching one write at the end) loses every successful deletion's
-	// mapping the moment a single later one throws, and a retry can't recover them (their
-	// branch is already gone, so a name-based re-match would be lucky at best, wrong at
-	// worst if an unrelated branch reused the name).
+	// Start from every `orphaned` entry NOT covered by `toDelete` at all (skipped as
+	// default/protected, or simply absent from the live list) — those survive
+	// unconditionally, same as `kept`. A `toDelete` branch's mapping is removed on disk
+	// immediately after THAT branch's own delete call succeeds — written inside the loop,
+	// never batched to the end — so a process interruption or a later failure can't lose an
+	// already-completed deletion's mapping-removal: on-disk state always matches what has
+	// actually happened on Neon so far. A retry can't recover a lost mapping on its own
+	// either (the branch is already gone, so a name-based re-match on a later run would be
+	// lucky at best, wrong at worst if an unrelated branch reused the name).
+	const attempted = new Set(toDelete.map((b) => b.name));
+	let currentMap = {
+		...kept,
+		...Object.fromEntries(
+			orphaned.filter(([, neonBranch]) => !attempted.has(neonBranch)),
+		),
+	};
+
 	const failed: { name: string; error: string }[] = [];
-	let survivingKept = { ...kept };
+	let prunedCount = 0;
 	for (const branch of toDelete) {
+		const branchMappings = orphaned.filter(
+			([, neonBranch]) => neonBranch === branch.name,
+		);
 		try {
 			await props.apiClient.deleteProjectBranch(
 				props.projectId,
 				branch.id,
 			);
 			log.info("Deleted Neon branch %s (%s).", branch.name, branch.id);
+			prunedCount += branchMappings.length;
+			for (const [gitBranch, neonBranch] of branchMappings) {
+				log.info("  Pruned %s → %s", gitBranch, neonBranch);
+			}
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			log.error(
@@ -537,35 +584,17 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 				message,
 			);
 			failed.push({ name: branch.name, error: message });
-			// Keep this branch's mapping(s) — the branch itself is still there.
-			survivingKept = {
-				...survivingKept,
-				...Object.fromEntries(
-					orphaned.filter(
-						([, neonBranch]) => neonBranch === branch.name,
-					),
-				),
+			// Keep this branch's mapping(s) on disk — the branch itself is still there.
+			currentMap = {
+				...currentMap,
+				...Object.fromEntries(branchMappings),
 			};
 		}
+		setGitBranchMap(gitStateFile, currentMap);
 	}
 
-	// Every `orphaned` entry not covered by `toDelete` at all (skipped as default/protected,
-	// or simply absent from the live list) also survives — same reasoning as `failed` above.
-	const attempted = new Set(toDelete.map((b) => b.name));
-	const finalKept = {
-		...survivingKept,
-		...Object.fromEntries(
-			orphaned.filter(([, neonBranch]) => !attempted.has(neonBranch)),
-		),
-	};
-	setGitBranchMap(props.contextFile, finalKept);
-
-	const prunedNow = orphaned.filter(
-		([gitBranch]) => !(gitBranch in finalKept),
-	);
-	log.info("Pruned %d stale mapping(s) from .neon:", prunedNow.length);
-	for (const [gitBranch, neonBranch] of prunedNow) {
-		log.info("  %s → %s", gitBranch, neonBranch);
+	if (prunedCount > 0) {
+		log.info("Pruned %d stale mapping(s) from .neon.", prunedCount);
 	}
 
 	if (failed.length > 0) {

@@ -1,11 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { applyContext, readContextFile } from "../context.js";
-import { cleanup, partitionBranchesToPrune, sync } from "./git.js";
+import {
+	applyContext,
+	isUnfollowedGitHookSync,
+	readContextFile,
+} from "../context.js";
+import { cleanup, install, partitionBranchesToPrune, sync } from "./git.js";
 
 const run = (args: string[], cwd: string) =>
 	execFileSync("git", args, { cwd, stdio: "ignore" });
@@ -386,5 +390,55 @@ describe("sync (git.follow gate)", () => {
 		// No INFO/ERROR output at all — the function returned immediately, never touching
 		// git branch resolution, checkout, or the (here-empty, would-throw) apiClient.
 		expect(errorSpy).not.toHaveBeenCalled();
+	});
+
+	test("install writes git.follow to THIS repo's own root .neon, not an ancestor's", () => {
+		// `repo` (the git repository under test) is nested one level inside a dedicated
+		// parent that holds an unrelated `.neon` with `git.follow: true` already set. The
+		// CLI's normal context-enrichment middleware would walk up from `repo` and resolve
+		// `props.contextFile` to *that* ancestor path (simulated here by passing it
+		// explicitly) — install must ignore it and write to this repo's own root instead.
+		const outer = mkdtempSync(join(tmpdir(), "neon-git-ancestor-"));
+		const ancestorFile = join(outer, ".neon");
+		const nestedRepo = join(outer, "nested-repo");
+		try {
+			writeFileSync(
+				ancestorFile,
+				JSON.stringify({
+					projectId: "unrelated-project",
+					git: { follow: true },
+				}),
+			);
+			mkdirSync(nestedRepo, { recursive: true });
+			initRepo(nestedRepo, ["main"]);
+
+			const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(nestedRepo);
+			try {
+				install({
+					apiClient: {} as never,
+					apiKey: "",
+					apiHost: "",
+					output: "json",
+					contextFile: ancestorFile,
+				});
+			} finally {
+				cwdSpy.mockRestore();
+			}
+
+			// install wrote follow into THIS repo's own root .neon (creating it) — never
+			// into the ancestor's file it was handed via `contextFile`.
+			expect(readContextFile(join(nestedRepo, ".neon")).git?.follow).toBe(
+				true,
+			);
+
+			// The opt-in check (and thus the auth middleware) now agrees: a hook-triggered
+			// sync in this repo is no longer unfollowed.
+			process.env.NEON_GIT_HOOK = "1";
+			expect(
+				isUnfollowedGitHookSync({ _: ["git", "sync"] }, nestedRepo),
+			).toBe(false);
+		} finally {
+			rmSync(outer, { recursive: true, force: true });
+		}
 	});
 });

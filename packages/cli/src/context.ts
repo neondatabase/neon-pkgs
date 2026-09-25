@@ -203,7 +203,7 @@ function argvEnablesMcpOauth(argv: readonly string[]): boolean {
 	return false;
 }
 
-const CONTEXT_FILE = ".neon";
+export const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 
 type ResolvePath = (...paths: string[]) => string;
