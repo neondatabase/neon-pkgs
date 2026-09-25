@@ -9,7 +9,12 @@ import {
 	takeCommandSuccessExtras,
 	trackEvent,
 } from "./analytics.js";
-import { isNeonApiError, messageFromBody, type NeonApiClient } from "./api.js";
+import {
+	codeFromBody,
+	isNeonApiError,
+	messageFromBody,
+	type NeonApiClient,
+} from "./api.js";
 import { AuthRefreshError, defaultClientID } from "./auth.js";
 import { getAuthContext } from "./auth_context.js";
 import { recoverFrom401 } from "./auth_recovery.js";
@@ -26,6 +31,7 @@ import { showHelp } from "./help.js";
 import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
+import { recoverFromSSO } from "./sso_recovery.js";
 import { notifyIfUpdateAvailable } from "./update_notifier.js";
 import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
@@ -271,6 +277,21 @@ async function handleError(
 		if (err.code === "ECONNABORTED") {
 			log.error("Request timed out");
 			sendError(err, "REQUEST_TIMEOUT");
+			return false;
+		} else if (
+			codeFromBody(err.data) === "SSO_AUTHORIZATION_REQUIRED" ||
+			codeFromBody(err.data) === "SSO_ORG_CREDS_ONLY"
+		) {
+			// SSO authorization errors are detected by CODE, not HTTP status: Neon masks org
+			// access-denials as 404 (existence-hiding), so these arrive as 403 OR 404 with the
+			// machine code in the body. recoverFromSSO opens the step-up URL and retries for the
+			// recoverable code, or prints terminal guidance for SSO_ORG_CREDS_ONLY.
+			const recovered = await recoverFromSSO(err, canRetry);
+			if (recovered) {
+				return true;
+			}
+			// recoverFromSSO already surfaced the guidance; don't fall through to a generic retry.
+			sendError(err, "AUTH_FAILED");
 			return false;
 		} else if (err.status === 401) {
 			sendError(err, "AUTH_FAILED");
