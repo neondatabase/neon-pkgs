@@ -1,5 +1,11 @@
 # neonctl
 
+## 6.2.1
+
+### Patch Changes
+
+- neon@6.2.1
+
 ## 6.2.0
 
 ### Patch Changes
