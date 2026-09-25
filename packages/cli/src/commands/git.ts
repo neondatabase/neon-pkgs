@@ -33,6 +33,7 @@ import {
 	readGitContext,
 	removePostCheckoutHook,
 } from "../utils/git.js";
+import { writer } from "../writer.js";
 import { handler as checkoutHandler } from "./checkout.js";
 import { quoteFlagValue } from "./link.js";
 
@@ -60,7 +61,11 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"install",
 			"Install a git post-checkout hook that syncs the Neon branch on `git checkout`",
-			(yargs) => yargs,
+			(yargs) =>
+				yargs.epilogue(
+					"Requires a project already linked at the repository root — run " +
+						"`neon link` or `neon checkout <branch>` there first.",
+				),
 			(args) => {
 				install(args as unknown as GitProps);
 			},
@@ -92,7 +97,10 @@ export const builder = (argv: yargs.Argv) =>
 						type: "boolean",
 					},
 					quiet: {
-						describe: "Reduce output (used by the git hook).",
+						describe:
+							"Suppress sync's own routine status lines (git pull result, detached " +
+							"HEAD notice). Warnings and the delegated checkout's own output are " +
+							"unaffected. Used by the installed git hook.",
 						type: "boolean",
 						default: false,
 					},
@@ -235,6 +243,13 @@ export const uninstall = (_props: GitProps): void => {
  * `checkout.before` hook may further map the name and whose `checkout.after` hook runs
  * migrations, etc.), then records the resulting git → Neon mapping so it stays stable.
  */
+/** `sync`'s own routine status lines (pull result, detached HEAD) — skipped under
+ * `--quiet`. Warnings, errors, and the delegated `checkout`'s own output are unaffected. */
+const syncLog = (props: GitProps, ...args: unknown[]): void => {
+	if (props.quiet) return;
+	log.info(...args);
+};
+
 export const sync = async (props: GitProps): Promise<void> => {
 	// See `isUnfollowedGitHookSync`'s doc comment for why this is checked (and mirrored in
 	// the global auth middleware, ahead of authentication) before anything else — no git
@@ -257,7 +272,7 @@ export const sync = async (props: GitProps): Promise<void> => {
 	const context = readContextFile(gitStateFile);
 	const gitBranch = currentGitBranch(cwd);
 	if (!gitBranch) {
-		log.info("Detached HEAD — no git branch to sync. Skipping.");
+		syncLog(props, "Detached HEAD — no git branch to sync. Skipping.");
 		return;
 	}
 
@@ -268,16 +283,23 @@ export const sync = async (props: GitProps): Promise<void> => {
 		const outcome = gitPull(cwd);
 		switch (outcome.status) {
 			case "pulled":
-				log.info(
+				syncLog(
+					props,
 					"%s git pull --ff-only (%s)",
 					chalk.dim("→"),
 					gitBranch,
 				);
 				break;
 			case "no-upstream":
-				log.info("No upstream for %s — skipping git pull.", gitBranch);
+				syncLog(
+					props,
+					"No upstream for %s — skipping git pull.",
+					gitBranch,
+				);
 				break;
 			case "failed":
+				// A pull failure is worth surfacing even under --quiet — sync continues, but
+				// silently skipping a failed fast-forward would hide a real problem.
 				log.warning(
 					"git pull --ff-only failed (continuing with sync): %s",
 					outcome.detail,
@@ -353,48 +375,63 @@ const resolveShouldPull = async (
 	return Boolean(pull);
 };
 
-export const status = (_props: GitProps): void => {
+/** `neon git status` output — a plain record, written through {@link writer} like every
+ * other command's data, so `--output json` / `--output yaml` actually work. */
+type GitStatusView = {
+	gitBranch: string | null;
+	hookInstalled: boolean;
+	followOnCheckout: boolean;
+	mappedNeonBranch: string | null;
+	mappings: Record<string, string>;
+};
+
+const GIT_STATUS_FIELDS = [
+	"gitBranch",
+	"hookInstalled",
+	"followOnCheckout",
+	"mappedNeonBranch",
+	"mappings",
+] as const;
+
+export const status = (props: GitProps): void => {
 	const cwd = process.cwd();
 	const git = readGitContext(cwd);
 	if (!git.available) {
-		log.info("Not inside a git repository.");
-		return;
+		throw new Error("Not inside a git repository.");
 	}
 
 	const repoRoot = git.repoRoot ?? cwd;
 	const hookPath = postCheckoutHookPath(repoRoot);
-	const installed = isManagedHook(hookPath);
 	const context = readContextFile(repoRootContextFile(repoRoot));
-	const mapping = context.git?.map ?? {};
 	const currentBranch = git.branch;
-	const mappedNeon = currentBranch
-		? gitBranchMapping(context, currentBranch)
-		: undefined;
 
-	log.info(
-		"Git branch:        %s",
-		chalk.cyan(currentBranch ?? "(detached)"),
+	writer(props).end<GitStatusView>(
+		{
+			gitBranch: currentBranch ?? null,
+			hookInstalled: isManagedHook(hookPath),
+			followOnCheckout: context.git?.follow === true,
+			mappedNeonBranch: currentBranch
+				? (gitBranchMapping(context, currentBranch) ?? null)
+				: null,
+			mappings: context.git?.map ?? {},
+		},
+		{
+			fields: GIT_STATUS_FIELDS,
+			renderColumns: {
+				gitBranch: (v) => v.gitBranch ?? "(detached)",
+				mappedNeonBranch: (v) =>
+					v.mappedNeonBranch ??
+					"(unmapped — will derive on next sync)",
+				mappings: (v) =>
+					Object.entries(v.mappings)
+						.map(
+							([gitBranch, neonBranch]) =>
+								`${gitBranch} → ${neonBranch}`,
+						)
+						.join("\n") || "(none)",
+			},
+		},
 	);
-	log.info("Hook installed:    %s", installed ? chalk.green("yes") : "no");
-	log.info(
-		"Follow on checkout: %s",
-		context.git?.follow ? chalk.green("yes") : "no",
-	);
-	if (currentBranch) {
-		log.info(
-			"Maps to Neon:      %s",
-			mappedNeon
-				? chalk.cyan(mappedNeon)
-				: chalk.dim("(unmapped — will derive on next sync)"),
-		);
-	}
-	const entries = Object.entries(mapping);
-	if (entries.length > 0) {
-		log.info("Known mappings:");
-		for (const [g, n] of entries) {
-			log.info("  %s → %s", g, n);
-		}
-	}
 };
 
 /** A Neon branch as far as pruning cares (the live list returns more). */
@@ -484,9 +521,13 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 			log.info("  %s → %s", gitBranch, neonBranch);
 		}
 		if (orphaned.length > 0) {
+			// This is the *mapping-only* mode: the entries above are already gone, so a
+			// suggested re-run of `--prune-neon-branches` would now find nothing to delete.
+			// Name the branches directly instead of a next command that would no-op.
 			log.info(
-				"Run `neon git cleanup --prune-neon-branches` (before this mapping-only cleanup) " +
-					"to also delete the now-orphaned Neon branch(es): %s.",
+				"These Neon branch(es) are no longer mapped and were not deleted: %s. Delete " +
+					"them with `neon branches delete <name>`, or run `neon git cleanup " +
+					"--prune-neon-branches` next time before a mapping-only cleanup.",
 				orphaned.map(([, neonBranch]) => neonBranch).join(", "),
 			);
 		}

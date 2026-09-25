@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -15,7 +16,23 @@ import {
 	isUnfollowedGitHookSync,
 	readContextFile,
 } from "../context.js";
-import { cleanup, install, partitionBranchesToPrune, sync } from "./git.js";
+import {
+	cleanup,
+	install,
+	partitionBranchesToPrune,
+	status,
+	sync,
+} from "./git.js";
+
+/** Capture writer output (the writer respects `props.out`). */
+const captureOut = (): { stream: PassThrough; read: () => string } => {
+	const stream = new PassThrough();
+	let buffer = "";
+	stream.on("data", (chunk: Buffer) => {
+		buffer += chunk.toString();
+	});
+	return { stream, read: () => buffer };
+};
 
 const run = (args: string[], cwd: string) =>
 	execFileSync("git", args, { cwd, stdio: "ignore" });
@@ -548,6 +565,91 @@ describe("sync (git.follow gate)", () => {
 			).toBe(false);
 		} finally {
 			rmSync(outer, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("status", () => {
+	let repo: string;
+	let contextFile: string;
+
+	beforeEach(() => {
+		repo = mkdtempSync(join(tmpdir(), "neon-git-status-"));
+		contextFile = join(repo, ".neon");
+		initRepo(repo, ["main"]);
+		applyContext(contextFile, {
+			projectId: "proj",
+			git: { follow: true, map: { "feature-a": "preview-feature-a" } },
+		});
+	});
+
+	afterEach(() => {
+		rmSync(repo, { recursive: true, force: true });
+	});
+
+	test("respects --output json (not just the human table)", () => {
+		const { stream, read } = captureOut();
+		const props = {
+			apiClient: {} as never,
+			apiKey: "",
+			apiHost: "",
+			output: "json" as const,
+			contextFile,
+			out: stream,
+		};
+		const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(repo);
+		try {
+			status(props);
+		} finally {
+			cwdSpy.mockRestore();
+		}
+
+		expect(JSON.parse(read())).toEqual({
+			gitBranch: "main",
+			hookInstalled: false,
+			followOnCheckout: true,
+			mappedNeonBranch: null,
+			mappings: { "feature-a": "preview-feature-a" },
+		});
+	});
+
+	test("respects --output yaml", () => {
+		const { stream, read } = captureOut();
+		const props = {
+			apiClient: {} as never,
+			apiKey: "",
+			apiHost: "",
+			output: "yaml" as const,
+			contextFile,
+			out: stream,
+		};
+		const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(repo);
+		try {
+			status(props);
+		} finally {
+			cwdSpy.mockRestore();
+		}
+
+		expect(read()).toContain("gitBranch: main");
+		expect(read()).toContain("feature-a: preview-feature-a");
+	});
+
+	test("throws when not inside a git repository", () => {
+		const outside = mkdtempSync(join(tmpdir(), "neon-git-status-outside-"));
+		const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(outside);
+		try {
+			expect(() =>
+				status({
+					apiClient: {} as never,
+					apiKey: "",
+					apiHost: "",
+					output: "json",
+					contextFile,
+				}),
+			).toThrow(/Not inside a git repository/);
+		} finally {
+			cwdSpy.mockRestore();
+			rmSync(outside, { recursive: true, force: true });
 		}
 	});
 });
