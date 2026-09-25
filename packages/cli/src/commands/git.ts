@@ -34,6 +34,7 @@ import {
 	removePostCheckoutHook,
 } from "../utils/git.js";
 import { handler as checkoutHandler } from "./checkout.js";
+import { quoteFlagValue } from "./link.js";
 
 type GitProps = CommonProps & {
 	projectId?: string;
@@ -171,12 +172,13 @@ export const install = (_props: GitProps): void => {
 	// A real `projectId` — not just file presence (`{}` is a valid on-disk state, e.g. after
 	// `neon link --clear`) — since the whole feature is meaningless without a linked project.
 	if (!readContextFile(gitStateFile).projectId) {
+		const quoted = quoteFlagValue(gitStateFile);
 		throw new Error(
 			`No project linked at the repository root (${gitStateFile}).\n` +
-				`Run \`neon link --context-file ${gitStateFile}\` (an explicit path, since a ` +
-				"plain `neon link` walks up and may update a different, ancestor `.neon` " +
-				`instead) or \`neon checkout <branch> --context-file ${gitStateFile}\` first, ` +
-				"then re-run `neon git install`.",
+				`Run \`neon link --context-file ${quoted}\` (an explicit path, since a plain ` +
+				"`neon link` walks up and may update a different, ancestor `.neon` instead) " +
+				`or \`neon checkout <branch> --context-file ${quoted}\` first, then re-run ` +
+				"`neon git install`.",
 		);
 	}
 
@@ -303,29 +305,26 @@ export const sync = async (props: GitProps): Promise<void> => {
 	// Persist the mapping from the branch actually pinned, so subsequent checkouts of this git
 	// branch resolve to the same Neon branch without re-deriving. `checkoutHandler` pins the
 	// branch into `props.contextFile`, which is normally the SAME file as `gitStateFile` (the
-	// repo-root walk-up finds it immediately) — but an explicit `--context-file` or
-	// `--project-id` can point checkout at a different project. Guard against recording that
-	// project's branch name into the root file's map, which `cleanup` would then read as if
-	// it belonged to the root's own project.
+	// repo-root walk-up finds it immediately) — in which case re-reading the root here (AFTER
+	// checkout, not the `context` read further above) picks up the `projectId` checkout just
+	// wrote, even starting from an empty `{}` root. An explicit `--context-file` /
+	// `--project-id` can instead point checkout at a different project; that's the case this
+	// guards against recording into the root's map, which `cleanup` would then treat as if it
+	// belonged to the root's own project regardless of which project it actually came from.
+	const rootProjectId = readContextFile(gitStateFile).projectId;
 	const pinnedContext = readContextFile(props.contextFile);
-	const rootProjectId = context.projectId;
-	if (rootProjectId && pinnedContext.projectId !== rootProjectId) {
+	if (!rootProjectId || pinnedContext.projectId !== rootProjectId) {
 		log.warning(
 			"Not persisting the git → Neon mapping: this checkout targeted project %s, not " +
-				"the repo root's linked project %s.",
+				"a project linked at the repo root (%s).",
 			pinnedContext.projectId ?? "(unknown)",
-			rootProjectId,
+			rootProjectId ?? "none",
 		);
-	} else if (existsSync(gitStateFile)) {
+	} else {
 		const resolved = contextBranch(pinnedContext);
 		if (resolved) {
 			setGitBranchMapping(gitStateFile, gitBranch, resolved);
 		}
-	} else {
-		log.debug(
-			"Not persisting the git → Neon mapping: no .neon at the repo root (%s).",
-			gitStateFile,
-		);
 	}
 };
 
@@ -521,10 +520,23 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	}
 
 	// The map was recorded against `context.projectId` (the project `.neon` is actually
-	// linked to). `props.projectId` can differ — an explicit `--project-id` override, or a
-	// stale enrichment — and resolving names against a *different* project than the one the
+	// linked to) — required, not just checked when present: `sync` never writes a mapping
+	// without also confirming/recording the root's `projectId` (see `sync`'s own guard), so
+	// a map entry with no root `projectId` is not a state our own code produces, and must
+	// not be trusted to belong to whatever project happens to be active. `props.projectId`
+	// can differ from a genuine root link — an explicit `--project-id` override, or a stale
+	// enrichment — and resolving names against a *different* project than the one the
 	// mapping was built for could match and delete an unrelated same-named branch there.
-	if (context.projectId && context.projectId !== props.projectId) {
+	if (!context.projectId) {
+		throw new Error(
+			"Cannot delete Neon branches: the git → Neon map has no recorded project (the " +
+				`repo-root .neon at ${gitStateFile} has no projectId). Run ` +
+				`\`neon link --context-file ${quoteFlagValue(gitStateFile)}\` to establish it, ` +
+				"or `neon git cleanup` with no --prune-neon-branches to only prune the local " +
+				"mapping.",
+		);
+	}
+	if (context.projectId !== props.projectId) {
 		throw new Error(
 			"Cannot delete Neon branches: this git → Neon map was recorded against project " +
 				`${context.projectId}, but the active project is ${props.projectId}. Run ` +
