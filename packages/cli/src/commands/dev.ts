@@ -46,6 +46,7 @@ type DevProps = CommonProps & {
 	branch?: string;
 	id?: string;
 	configDir?: string;
+	envFromFile?: string;
 };
 
 export const command = "dev";
@@ -79,6 +80,11 @@ export const builder = (argv: yargs.Argv) =>
 					"Fails if taken. Without it (and without a PORT env var) a free " +
 					"port is chosen automatically.",
 				type: "number",
+			},
+			"env-from-file": {
+				describe:
+					"Load function environment variables from a dotenv file (single-function mode only, with --source). File values override inherited and Neon branch values.",
+				type: "string",
 			},
 		})
 		.epilogue(
@@ -116,20 +122,43 @@ export const builder = (argv: yargs.Argv) =>
  *   last one live — one orphan per restart. `neon-env run` already reads the file for this
  *   reason; `dev` was the one that didn't.
  */
+/**
+ * Read the single local dotenv file a `neon dev` run layers in: the explicit
+ * `--env-from-file`, or the default `.env` / `.env.local` discovery when none is
+ * given. This is the one place the file is parsed, so single-source mode's
+ * function env and the credential-reuse context can never diverge on how they
+ * read it or how they treat a missing one. An explicit `--env-from-file` that
+ * does not exist is a loud error (a typo must not silently load nothing); a
+ * missing default file is silent (there simply isn't one).
+ */
+export const readLocalDevEnvFile = (
+	cwd: string,
+	envFromFile: string | undefined,
+): Record<string, string> => {
+	const path = resolveEnvFilePath(cwd, envFromFile);
+	if (envFromFile !== undefined) return readEnvFile(path);
+	return existsSync(path) ? readEnvFile(path) : {};
+};
+
 export const devEnvContext = (
-	props: Pick<DevProps, "projectId" | "apiKey" | "apiHost" | "configDir"> & {
+	props: Pick<
+		DevProps,
+		"projectId" | "apiKey" | "apiHost" | "configDir" | "envFromFile"
+	> & {
 		contextFile?: string;
 	},
 	branchId: string | undefined,
 	cwd: string,
+	// The already-parsed local dotenv file, when the caller read it (single-source
+	// mode reads it once and threads it through). Omitted callers read it here.
+	fileEnv?: Record<string, string>,
 ) => {
-	const envFile = resolveEnvFilePath(cwd);
 	return {
 		cwd,
 		implyAiGateway: true,
 		env: {
 			...process.env,
-			...(existsSync(envFile) ? readEnvFile(envFile) : {}),
+			...(fileEnv ?? readLocalDevEnvFile(cwd, props.envFromFile)),
 		},
 		...(props.projectId ? { projectId: props.projectId } : {}),
 		...(branchId ? { branchId } : {}),
@@ -178,8 +207,14 @@ export const handler = async (props: DevProps): Promise<void> => {
 		return;
 	}
 
-	// No --source: --port has no single target to bind, so reject it explicitly
-	// rather than silently ignoring it.
+	// No --source: single-target options have nowhere unambiguous to apply, so
+	// reject them explicitly rather than silently ignoring them.
+	if (props.envFromFile !== undefined) {
+		throw new Error(
+			"--env-from-file can only be used with --source. Functions declared in neon.ts " +
+				"should define their environment in the function's `env` block.",
+		);
+	}
 	if (props.port !== undefined) {
 		throw new Error(
 			"--port can only be used with --source. To set ports for the functions " +
@@ -196,13 +231,20 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	if (!existsSync(source)) {
 		throw new Error(`Source file not found: ${source}`);
 	}
+	// Parse the local dotenv file once, here, and reuse it for both the function's
+	// runtime env and the credential-reuse context below. Default discovery (no
+	// --env-from-file) feeds credential reuse only; it is never layered as function env.
+	const fileEnv = readLocalDevEnvFile(process.cwd(), props.envFromFile);
+	const functionEnv = props.envFromFile === undefined ? {} : fileEnv;
 
 	const branchId = await resolveBranchId(props);
 	const {
 		vars: neonEnv,
 		skipped,
 		credential,
-	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	} = await resolveDevEnv(
+		devEnvContext(props, branchId, process.cwd(), fileEnv),
+	);
 	reportDevCredential(credential);
 
 	const match = await findConfigFunctionBySource(process.cwd(), source);
@@ -212,9 +254,19 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 		slug: null,
 		source,
 		bundleDir: devBundleDir(process.cwd()),
-		childEnv: buildChildEnv({ ...neonEnv, ...overlay }, port),
+		// Layer to match manual deployment: Neon branch values, then the explicit
+		// dotenv file, then the authoritative localhost function URL overlay.
+		// buildChildEnv prepends process.env, so inherited values come first.
+		childEnv: buildChildEnv(
+			{ ...neonEnv, ...functionEnv, ...overlay },
+			port,
+		),
 		label: null,
-		envSummary: { neon: Object.keys(neonEnv), fn: [] },
+		envSummary: {
+			neon: Object.keys(neonEnv),
+			fn: Object.keys(functionEnv),
+			...(props.envFromFile ? { fnSource: "env file" as const } : {}),
+		},
 	};
 
 	// No config reload in single-source mode: there's exactly one file to serve, and
@@ -522,7 +574,7 @@ const plannedToUnit = (
  * NEON_DEV_PORT (explicit) or NEON_DEV_PORT_BASE (search).
  */
 const buildChildEnv = (
-	neonEnv: Record<string, string>,
+	neonEnv: NodeJS.ProcessEnv,
 	port: PortSpec,
 ): NodeJS.ProcessEnv => {
 	const env: NodeJS.ProcessEnv = { ...process.env, ...neonEnv };
@@ -562,7 +614,11 @@ export type ServedUnit = {
 	 * banner: `neon` are the Neon branch vars (DATABASE_URL, …), `fn` are the keys from this
 	 * function's `neon.ts` `env` block. Values are intentionally omitted (secrets).
 	 */
-	envSummary?: { neon: string[]; fn: string[] };
+	envSummary?: {
+		neon: string[];
+		fn: string[];
+		fnSource?: "neon.ts" | "env file";
+	};
 };
 
 export type RunningUnit = {
@@ -1097,7 +1153,9 @@ export const formatEnvSummary = (summary: ServedUnit["envSummary"]): string => {
 		parts.push(`env: ${[...summary.neon].sort().join(", ")}`);
 	}
 	if (summary.fn.length > 0) {
-		parts.push(`neon.ts: ${[...summary.fn].sort().join(", ")}`);
+		parts.push(
+			`${summary.fnSource ?? "neon.ts"}: ${[...summary.fn].sort().join(", ")}`,
+		);
 	}
 	return parts.join(" · ");
 };

@@ -26,6 +26,7 @@ import { showHelp } from "./help.js";
 import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
+import { TemplateDownloadError } from "./templates/github.js";
 import { notifyIfUpdateAvailable } from "./update_notifier.js";
 import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
@@ -251,6 +252,17 @@ async function handleError(
 			);
 		}
 		sendError(err, "AUTH_FAILED");
+		return false;
+	}
+
+	// A template archive download that never got a response is a codeload/GitHub
+	// connectivity failure, not a Neon API one. Handle it before `isNetworkError`
+	// (whose `fetch failed` / socket-code match would otherwise walk this error's
+	// `cause` and mislabel it as "Could not reach the Neon API"), and print the
+	// template-specific hint instead.
+	if (err instanceof TemplateDownloadError) {
+		log.error(err.message);
+		sendError(err, "NETWORK_ERROR");
 		return false;
 	}
 

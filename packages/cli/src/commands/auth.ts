@@ -55,6 +55,7 @@ import {
 	isClaimCommand,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isFunctionsTemplateCommand,
 	isInspectDbUrl,
 	isMcpCommand,
 	isMcpOauth,
@@ -631,6 +632,11 @@ export const ensureAuth = async (
 	// `config init` only scaffolds a neon.ts and installs npm packages locally; it
 	// never calls the Neon API, so skip auth entirely — no token refresh, no login.
 	if (isConfigInit(props)) {
+		return;
+	}
+
+	// Function templates are local scaffolding/catalog operations.
+	if (isFunctionsTemplateCommand(props)) {
 		return;
 	}
 

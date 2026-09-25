@@ -262,7 +262,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * (any dependency field). A missing or malformed package.json means none are
  * declared, so all are reported missing.
  */
-const missingDependencies = (cwd: string): string[] => {
+export const missingConfigDependencies = (cwd: string): string[] => {
 	const declared = new Set<string>();
 	const pkgPath = join(cwd, "package.json");
 	if (existsSync(pkgPath)) {
@@ -474,7 +474,7 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	}
 
 	// 2. Make sure the config packages are installed.
-	const missing = missingDependencies(cwd);
+	const missing = missingConfigDependencies(cwd);
 	if (missing.length === 0) {
 		if (!props.silent) {
 			log.info(

@@ -5,7 +5,8 @@
 			"**/*.ts",
 			"**/*.tsx",
 			"!**/*.gen.ts",
-			"!packages/sdk/src/client"
+			"!packages/sdk/src/client",
+			"!registry"
 		]
 	},
 	"vcs": {

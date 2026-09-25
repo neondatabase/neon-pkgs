@@ -73,6 +73,21 @@ export const isConfigInit = (args: {
 	!process.argv.includes("--from-branch");
 
 /**
+ * Function scaffolding and catalog listing are local template operations. They
+ * do not inspect neon.ts, resolve a project, or call the Neon API.
+ */
+export const isFunctionsTemplateCommand = (args: {
+	_: (string | number)[];
+}): boolean => {
+	const root = args._[0];
+	if (root !== "function" && root !== "functions") return false;
+	return (
+		args._[1] === "new" ||
+		(args._[1] === "templates" && args._[2] === "list")
+	);
+};
+
+/**
  * `neon profile …` manages credentials on disk and never calls the Neon API, so the global
  * auth middleware must skip it — mirroring {@link isConfigInit}.
  *

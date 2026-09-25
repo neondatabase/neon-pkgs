@@ -591,6 +591,308 @@ If you'd rather not keep env vars on disk, inject them at runtime instead with `
 
 **`.gitignore` scaffolding**: when `.neon` is **created** for the first time, the CLI also makes sure a `.gitignore` sits alongside it listing `.neon`. If `.gitignore` doesn't exist it's created with a single `.neon` line; if it does exist, `.neon` is appended only when missing (no duplicates, your other entries are left alone). On subsequent updates to an existing `.neon`, `.gitignore` is left untouched — so if you deliberately un-ignore `.neon` (e.g. to commit shared context), the entry is not re-added on every command.
 
+## Functions
+
+### Create a function from a template
+
+`neon functions new` scaffolds a ready-to-run function locally from the **Neon Function
+Registry**. It stays offline: it never authenticates, calls the Neon API, or deploys. By
+default it also registers the new function in your `neon.ts` policy — creating one if you don't
+have it yet — so `neon deploy` can pick it up; `--no-add-to-config` keeps it purely local and
+prints manual deploy steps instead (see [Registering the function in `neon.ts`](#registering-the-function-in-neonts)).
+The built-in templates are `basic` (a minimal JSON handler), `resend` (an email handler using
+Resend's official Node SDK), and `rest-api` (a dependency-free routed REST API):
+
+```bash
+# Browse the registry. Use JSON or YAML for scripts.
+neon functions templates list
+neon functions templates list --output json
+
+# Write functions/basic/
+neon functions new basic
+
+# Keep the resend template, use sendemail as the function slug and directory,
+# and install its exact SDK dependency with the detected package manager.
+neon functions new resend --name sendemail --install
+
+# Scaffold a dependency-free REST API.
+neon functions new rest-api --name api
+
+# Expose a specific set of operations (repeatable), or every one.
+neon functions new resend --operation send-batch --operation get-email
+neon functions new resend --all-operations
+
+# Skip prompts and take the recommended operations.
+neon functions new resend -y
+
+# Choose an exact destination instead of functions/<name>.
+neon functions new basic --name hello --dir src/functions/hello
+
+# Emit a machine-readable result (slug, directory, next steps) for scripts.
+neon functions new basic --output json
+```
+
+A function slug is 1-20 lowercase letters and digits. `--name` sets it explicitly (and is
+validated as given). Without `--name`, the slug is derived from the template id by dropping
+every other character and truncating to 20, so a hyphenated or long id (for example
+`rest-api` → `restapi`) works without one. In `--output json`/`yaml` the command prints a
+structured result instead of the human next steps; `--output table` (the default) keeps the
+human next steps.
+
+A template can offer several **operations**. Selection resolves flags first: `--operation <id>`
+(repeatable) picks an exact set, `--all-operations` takes every one, the two conflict, an
+unknown id fails and lists the valid ones, duplicate ids are de-duplicated, and passing either
+flag to a template that has no operations fails. With no flags:
+
+- **Non-interactively** — under `-y`, in CI, with no TTY on stdin/stdout, or with
+  `--output json`/`yaml` — the recommended set is used and nothing is prompted, so agents and
+  CI are deterministic.
+- **Interactively**, a first prompt (`Use recommended operations for <Provider>?`) offers
+  `Yes, use recommended operations` (the recommended ids shown inline as the choice's
+  description) or `No, customize operations`. Choosing customize opens a checkbox multiselect
+  (`Which <Provider> operations should this function expose?`, hinted `Space to toggle. Enter to
+  confirm.`) whose rows carry a `(recommended)` label; the recommended ones start checked and
+  you must keep at least one. Aborting either prompt exits without touching the destination,
+  downloading anything, writing, or installing.
+
+How the selection is materialized depends on the template's **layout**:
+
+- **`router`** (for example `rest-api`) copies each selected module as `<operation>.ts` and
+  generates an `index.ts` router that dispatches by URL pathname, returning a compact 404
+  (listing the valid routes) for anything else — one folder is one Neon Function. `--name` is
+  the function slug. `--output json`/`yaml` includes the selected `operations` and their
+  `routes`.
+- **`separate`** (for example `resend`) copies each selected module as `<operation>.ts` but
+  generates **no** router: each file is independently deployable as its own Neon Function under
+  the operation's provider-defined `slug` (`send-email` → `sendemail`, …). `--name` chooses only
+  the local destination folder; the slugs are the remote/`neon.ts` function keys. `--operation
+  send-email` therefore scaffolds and registers one function, while recommended/`--all-operations`
+  register several. `--output json`/`yaml` reports `layout` and the operation-to-slug/source
+  mapping.
+
+#### Bundled catalog blocks vs. source templates
+
+The registry delivers entries two ways, and the CLI infers which from the index metadata:
+
+- **Source templates** (`basic`, `resend`, `rest-api`, and any entry with a `layout`) are the
+  unbundled TypeScript flow described above: individual modules copied verbatim, selectable
+  operations, and a normal esbuild/source deploy.
+- **Bundled catalog blocks** are reviewed, prebuilt artifacts (an index entry carrying `zip`,
+  `sha256`, and `bytes`). `neon functions new <block>` downloads the ZIP from the reviewed
+  registry origin (HTTPS-only, allowed-origin and redirect-containment enforced, declared and
+  streamed size caps), **verifies its SHA-256 before extraction**, and extracts it with strict
+  zip-slip, path, per-file, count, and total-byte protections. The archive is treated as
+  immutable prebuilt content — nothing is `npm install`ed or re-bundled — so its `index.mjs`
+  entry, `migrations/`, and supporting files are preserved as shipped. Operation selection does
+  not apply (the operations share one prebuilt entry and cannot be pruned), so `--operation` and
+  `--all-operations` are rejected with a clear message. The block is registered as exactly one
+  `neon.ts` function using its `functionSlug`, a directory `source`, and `bundler: "none"`, and
+  next steps use `neon deploy` / `neon dev` for the prebuilt bundle. A generated
+  `NEON_NEXT_STEPS.md` and the command output list any SQL migrations, triggers, and dependent
+  blocks the artifact ships — these are **not** applied by the CLI yet and must be done by hand.
+
+When the destination is non-empty, an interactive terminal asks before overwriting only
+colliding template paths; unrelated files remain. Declining or aborting makes no changes
+and installs nothing. Non-interactive and CI runs fail safely and name `--force`.
+Pass `--force` to accept overwrites without prompting, or `--no-force` to decline without
+prompting. Templates that declare package dependencies print the project-aware install
+command. Pass `--install` to run it, or use `--no-install` to decline it without an
+interactive question.
+
+The Resend scaffold imports the exact `resend@6.28.0` SDK version declared by the registry,
+never a credential. Instead of a per-function `.env.example`, `neon functions new` sets up the
+template's required variables in a **single project dotenv file**:
+
+- It inspects the project root's `.env` and `.env.local` (the project root is the `neon.ts`
+  config root when registering, else the working directory) and **never overwrites an existing
+  value** — a key already present in either file is left untouched.
+- It picks one target file deterministically: an existing file that already holds the keys,
+  else an existing `.env.local`, else an existing `.env`, else a new `.env.local`. `--env-to
+  <path>` (inside the project root) overrides the choice.
+- In a terminal it prompts for each missing value with a **masked** prompt showing the variable
+  name and its registry description; an empty submission writes a `KEY=` placeholder. Aborting
+  makes no changes. Non-interactive/`-y`/`--output json`/`yaml` runs never prompt and write blank
+  `KEY=` placeholders — ambient `process.env` secrets are never copied to disk.
+- The chosen file is added to `.gitignore`, and the command refuses to write secrets into a
+  git-tracked file (printing how to untrack it). `--no-env` skips this step entirely.
+- `neon.ts` env mapping keeps referencing `process.env.<KEY>`. Structured output reports the env
+  file path and variable names only, never values.
+
+```bash
+# Local dev / manual deploy read the project dotenv file you filled in.
+neon dev --source functions/sendemail --env-from-file .env.local
+neon functions deploy sendemail --src functions/sendemail --env-from-file .env.local
+```
+
+For manual deploy, values from repeated `--env KEY=VALUE` flags override matching values
+from `--env-from-file`. For single-source `dev`, precedence is inherited process variables,
+then Neon branch variables, then `--env-from-file`; the local function URL generated by `dev`
+always wins for the function being served. `dev --env-from-file` requires `--source`.
+Functions declared in `neon.ts` continue to define their per-function environment in the
+policy's `env` block.
+
+### Registering the function in `neon.ts`
+
+By default `neon functions new` also declares the function in a `neon.ts` policy, so `neon
+deploy` (config apply) deploys it without a manual `--src`. This is a **local file edit only** —
+still no network, no auth, no deploy.
+
+- **Where it writes.** With `--config <path>` that file is authoritative (it must be a
+  supported `neon.ts` / `neon.mts` / `neon.js` / `neon.mjs` path, and is created if absent).
+  Otherwise the command searches upward from the current directory for a supported config
+  filename, stopping at the nearest Git/project boundary; the **nearest** file wins. If none is
+  found it creates a minimal `./neon.ts` — just the `@neon/config/v1` import and a `functions`
+  block declaring the scaffolded function. A config file
+  that exists but is not a valid, editable Neon policy stops the search where it is — the command
+  never skips it to edit a farther parent.
+- **What it edits.** Only a `export default defineConfig({ … })` whose argument is a static
+  object literal, with `defineConfig` imported from `@neon/config` / `@neon/config/v1`, is edited
+  in place — the function is inserted as `<slug>: { name, source, env }` with `source` relative to
+  the config file. Anything it cannot prove safe (a spread, computed key, dynamic/imported config,
+  a deprecated `preview.functions` block, an aliased `defineConfig`, multiple candidates in one
+  directory, or a scaffold directory outside the config's project) is left untouched; the command
+  prints a pasteable `functions: { … }` fragment instead. All other policy text, comments, and
+  formatting are preserved, and the file is written atomically.
+- **Flags.** `--add-to-config` forces registration (and fails clearly rather than falling back to
+  a fragment); `--no-add-to-config` opts out and keeps the manual `--source` / `--src` steps.
+  When the config already declares the slug with the **same** source it is a no-op; with a
+  **different** source an interactive run asks before replacing (default no), and a
+  non-interactive `--add-to-config` needs `--force` (or `--name` to pick a new slug). Env vars the
+  template declares are mapped to `process.env.<NAME>`; set them in your shell or pass
+  `neon deploy --env <file>` so the policy resolves them.
+- **Config packages.** Creating a `neon.ts` needs `@neon/config` (and `@neon/env`). Pass
+  `--install` to install them with the detected package manager; otherwise the exact install
+  command is printed so the policy can load.
+- **Structured output.** `--output json`/`yaml` reports a `config` object (`path`, `action`) when
+  registered, and a `neon_ts_fragment` string when it fell back to a fragment.
+
+### The Neon Function Registry
+
+The registry is a folder-backed, shadcn-style directory: a root discovery index plus one
+self-contained folder per template. It follows the directory model documented at
+<https://ui.shadcn.com/docs/registry/registry-index> — a `registry.json` that points at each
+template, and per-template metadata that references its own source files. Source code is never
+inlined in JSON; the CLI fetches the index, each `template.json`, and each referenced source
+file from the reviewed registry origin.
+
+```
+registry.json              # discovery index
+schemas/
+  registry.schema.json     # JSON Schema for the index
+  template.schema.json     # JSON Schema for a template.json
+resend/
+  template.json            # metadata (no inline source)
+  README.md
+  functions/
+    send-email.ts
+    send-batch.ts
+    get-email.ts
+    cancel-email.ts
+rest-api/
+  template.json
+  README.md
+  functions/
+    notes.ts
+    note.ts
+    health.ts
+```
+
+The CLI resolves the registry from, in order: `NEON_FUNCTION_REGISTRY_DIR` (a local directory,
+for development and tests), `NEON_FUNCTION_REGISTRY_URL` (a single index URL override), or the
+defaults `https://neon.com/functions/registry.json` then
+`https://raw.githubusercontent.com/neonsolutions/registry/main/registry.json`. The JSON Schemas
+are hosted at `https://neon.com/functions/schemas/registry.schema.json` and
+`https://neon.com/functions/schemas/template.schema.json`. The reviewed remote registry is
+authoritative: when it loads, a remote/local entry overrides the CLI's bundled copy of the same
+id, so registry updates ship without a CLI release. The built-in templates (`basic`, `resend`,
+`rest-api`) ship compiled into the CLI only as the offline fallback, used when the registry is
+unreachable (or per-item when a matching built-in exists and a single fetch fails), so `neon
+functions new` still works fully offline.
+
+### Contribute a function template
+
+Contributing is a pull request to the Neon Function Registry, analogous to submitting to the
+[shadcn registry directory](https://ui.shadcn.com/docs/registry/registry-index): add one
+template folder and one index entry, and Neon reviews it. There is nothing to publish
+yourself, and the review of the central registry is the trust boundary.
+
+Add a self-contained folder — a `template.json`, the source modules it references under
+`functions/`, and a conventional `README.md`:
+
+```
+sendgrid/
+  template.json
+  README.md
+  functions/
+    send-email.ts
+    send-batch.ts
+```
+
+Its `template.json` declares the metadata and references its source files by paths relative to
+that same folder:
+
+```json
+{
+  "$schema": "https://neon.com/functions/schemas/template.schema.json",
+  "id": "sendgrid",
+  "provider": "SendGrid",
+  "title": "Send email with SendGrid",
+  "description": "Send transactional email through the SendGrid v3 API.",
+  "dependencies": ["@sendgrid/mail@8.1.3"],
+  "environment": [
+    { "name": "SENDGRID_API_KEY", "description": "API key from the SendGrid dashboard." }
+  ],
+  "operations": [
+    { "id": "send-email", "title": "Send an email", "description": "Send a single transactional email.", "source": "functions/send-email.ts", "route": "/send-email", "recommended": true },
+    { "id": "send-batch", "title": "Send a batch of emails", "description": "Send several emails in one API call.", "source": "functions/send-batch.ts", "route": "/send-batch", "recommended": false }
+  ]
+}
+```
+
+Then add one entry to the root `registry.json`, pointing at the folder's `template.json` by a
+safe relative `path`. `logo` is optional display metadata for a future directory/search UI — an
+absolute HTTPS URL that the CLI never fetches, writes, or uses when scaffolding:
+
+```json
+{
+  "$schema": "https://neon.com/functions/schemas/registry.schema.json",
+  "name": "neon-functions",
+  "homepage": "https://neon.com/functions",
+  "templates": [
+    {
+      "id": "sendgrid",
+      "provider": "SendGrid",
+      "title": "Send email with SendGrid",
+      "description": "Send transactional email through the SendGrid v3 API.",
+      "path": "sendgrid/template.json",
+      "logo": "https://sendgrid.com/logo.svg"
+    }
+  ]
+}
+```
+
+Dependency entries must be exact, immutable `name@version` specs — including scoped packages
+(`@scope/pkg@2.0.0`) — never a bare name, a dist-tag (`@latest`), or a range (`@^1.2.3`), so
+the version a reviewer approved is the version installed. Environment names must use uppercase
+dotenv syntax. Each operation `id`, `route`, and `source` must be unique; `source` is a
+relative, contained path to a single module under the template folder (never absolute or
+parent-traversing); `route` is a URL pathname beginning with `/` (it defaults to `/<id>` when
+omitted); and **at least one** operation must be `recommended` — the recommended set is what a
+non-interactive `neon functions new` scaffolds and what the interactive picker preselects. A
+malformed template fails loudly rather than scaffolding a half-trusted folder.
+
+Registry inclusion is a trust boundary, not an open remote-code mechanism. The registry is
+fetched dynamically (so new templates ship without a CLI release), but **the CLI accepts no
+arbitrary registry URL** — only the reviewed Neon/neonsolutions origins (plus an explicit test
+override) — and **runs no hook** from the fetched folder. It resolves the index, each
+`template.json`, and each source file only under the reviewed origin, enforcing
+same-origin/base-path containment: it rejects absolute item/file URLs, `..`, backslashes,
+redirects that escape the allowed origin, duplicate paths, and oversized files or counts. Each
+entry pins exact `name@version` dependencies, so a republished package cannot change what is
+installed. The provider is shown when scaffolding a remote template. Dependencies are never
+installed without `--install` or interactive confirmation; choosing installation invokes the
+normal package manager, including any lifecycle scripts of those reviewed dependencies.
+
 ## Config as code (`config` / `deploy`)
 
 Describe a branch's desired state in a `neon.ts` policy and reconcile it from the CLI — the Neon equivalent of `terraform status` / `plan` / `apply`. A policy splits into a **static** existential set — top-level `auth` / `dataApi` / `aiGateway` / `functions` / `buckets` / `triggers` (`aiGateway`, `functions`, and `buckets` still work under deprecated `preview`) that decide what _exists_ — and a **dynamic** `branch` closure that tunes each branch (compute settings, TTL, protection, `parent`) based on the branch it's evaluated for (`name`, `isDefault`, …):
@@ -1349,7 +1651,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
-| function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
+| function                                                                   | `new`, `templates list`, `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete` | Manage Neon Functions           |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
