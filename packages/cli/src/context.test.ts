@@ -14,12 +14,19 @@ import {
 	currentContextFile,
 	enrichFromContext,
 	ensureGitignored,
+	gitBranchMap,
+	gitBranchMapping,
 	isAskCommand,
 	isCurrentBranchProbe,
 	isInspectDbUrl,
 	isMcpOauth,
 	isPluginsCommand,
 	isSkillsCommand,
+	isUnfollowedGitHookSync,
+	readContextFile,
+	setGitBranchMap,
+	setGitBranchMapping,
+	setGitFollow,
 	walkContextFile,
 } from "./context.js";
 
@@ -502,5 +509,206 @@ describe("applyContext", () => {
 		expect(readFileSync(join(workspace, ".gitignore"), "utf-8")).toBe(
 			"node_modules\n",
 		);
+	});
+
+	test("preserves an existing git block when the caller omits one", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			branch: "main",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		// A plain checkout/set-context write, with no `git` field at all.
+		applyContext(file, { projectId: "proj-y", branch: "other" });
+
+		expect(readContextFile(file)).toEqual({
+			projectId: "proj-y",
+			branch: "other",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+	});
+
+	test("drops the git block when the write changes projectId (mappings are project-scoped)", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		// Re-pointing .neon at a different project must not carry the old project's git →
+		// Neon name mappings into the new one (a same-named branch there was never mapped).
+		applyContext(file, { projectId: "proj-z", branch: "main" });
+
+		expect(readContextFile(file)).toEqual({
+			projectId: "proj-z",
+			branch: "main",
+		});
+	});
+
+	test("preserves the git block across a write that keeps the same projectId", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		applyContext(file, { projectId: "proj-y", branch: "other" });
+
+		expect(readContextFile(file).git).toEqual({
+			follow: true,
+			map: { feature: "preview-feature" },
+		});
+	});
+
+	test("replaces the git block when the caller provides one explicitly", () => {
+		const file = join(workspace, ".neon");
+		applyContext(file, {
+			projectId: "proj-y",
+			git: { follow: true, map: { feature: "preview-feature" } },
+		});
+
+		applyContext(file, { projectId: "proj-y", git: { follow: false } });
+
+		expect(readContextFile(file).git).toEqual({ follow: false });
+	});
+});
+
+describe("isUnfollowedGitHookSync", () => {
+	let workspace: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neonctl-unfollowed-sync-"));
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+		delete process.env.NEON_GIT_HOOK;
+	});
+
+	test("false for a manual `git sync` (no hook env flag), regardless of follow", () => {
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			false,
+		);
+	});
+
+	test("false for any command other than `git sync`, even hook-triggered", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		expect(
+			isUnfollowedGitHookSync({ _: ["git", "status"] }, workspace),
+		).toBe(false);
+		expect(isUnfollowedGitHookSync({ _: ["checkout"] }, workspace)).toBe(
+			false,
+		);
+	});
+
+	test("true when hook-triggered and this exact directory has no `.neon` at all", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			true,
+		);
+	});
+
+	test("true when hook-triggered and this directory's own `.neon` lacks git.follow", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "proj" }),
+		);
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			true,
+		);
+	});
+
+	test("false when hook-triggered and this exact directory's `.neon` has git.follow: true", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "proj", git: { follow: true } }),
+		);
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, workspace)).toBe(
+			false,
+		);
+	});
+
+	test("true even when a PARENT directory has git.follow: true (no walk-up)", () => {
+		process.env.NEON_GIT_HOOK = "1";
+		// An ancestor's `.neon` (e.g. a parent monorepo folder) must never authorize a
+		// nested repo that has no `.neon` of its own — the usual walk-up resolution must
+		// not be used for this check.
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "proj", git: { follow: true } }),
+		);
+		const nested = join(workspace, "nested-repo");
+		mkdirSync(nested, { recursive: true });
+		expect(isUnfollowedGitHookSync({ _: ["git", "sync"] }, nested)).toBe(
+			true,
+		);
+	});
+});
+
+describe("git branch mapping helpers", () => {
+	let workspace: string;
+	let file: string;
+
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), "neonctl-git-map-"));
+		file = join(workspace, ".neon");
+		applyContext(file, { projectId: "proj-y" });
+	});
+
+	afterEach(() => {
+		rmSync(workspace, { recursive: true, force: true });
+	});
+
+	test("gitBranchMapping and gitBranchMap read from the context", () => {
+		expect(gitBranchMapping({}, "feature")).toBeUndefined();
+		expect(gitBranchMap({})).toEqual({});
+
+		const context = { git: { map: { feature: "preview-feature" } } };
+		expect(gitBranchMapping(context, "feature")).toBe("preview-feature");
+		expect(gitBranchMapping(context, "other")).toBeUndefined();
+		expect(gitBranchMap(context)).toEqual({ feature: "preview-feature" });
+	});
+
+	test("setGitBranchMapping records an entry, merging into any existing map", () => {
+		setGitFollow(file, true);
+		setGitBranchMapping(file, "feature-a", "preview-feature-a");
+		setGitBranchMapping(file, "feature-b", "preview-feature-b");
+
+		expect(readContextFile(file)).toEqual({
+			projectId: "proj-y",
+			git: {
+				follow: true,
+				map: {
+					"feature-a": "preview-feature-a",
+					"feature-b": "preview-feature-b",
+				},
+			},
+		});
+	});
+
+	test("setGitBranchMap replaces the whole map, preserving follow", () => {
+		setGitFollow(file, true);
+		setGitBranchMapping(file, "feature-a", "preview-feature-a");
+
+		setGitBranchMap(file, { "feature-c": "preview-feature-c" });
+
+		expect(readContextFile(file).git).toEqual({
+			follow: true,
+			map: { "feature-c": "preview-feature-c" },
+		});
+	});
+
+	test("setGitFollow toggles the flag, preserving the map", () => {
+		setGitBranchMapping(file, "feature-a", "preview-feature-a");
+
+		setGitFollow(file, false);
+
+		expect(readContextFile(file).git).toEqual({
+			follow: false,
+			map: { "feature-a": "preview-feature-a" },
+		});
 	});
 });

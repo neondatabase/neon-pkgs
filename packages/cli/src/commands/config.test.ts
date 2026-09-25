@@ -421,6 +421,13 @@ class ChildBranchNeonApi extends FakeNeonApi {
  * exercised (by `branchIdFromProps`, to resolve the branch name to its id);
  * anything else is absent and would throw if touched.
  */
+/** `apply` always fails partway through — used to prove `deploy.after` does not run then. */
+class RejectAuthNeonApi extends FakeNeonApi {
+	override async enableNeonAuth(): Promise<NeonAuthSnapshot> {
+		throw new Error("Neon Auth enablement rejected (test)");
+	}
+}
+
 const fakeApiClient = {
 	listProjectBranches: async () => ({
 		data: {
@@ -675,6 +682,99 @@ describe("config commands", () => {
 			projectId: PROJECT_ID,
 			branchId: BRANCH_ID,
 		});
+	});
+
+	it("runs deploy.before and deploy.after (Preview lifecycle hooks) around a real apply", async () => {
+		const api = new FakeNeonApi();
+		const { stream } = captureOut();
+		const calls: { phase: string; ctx: unknown }[] = [];
+		(globalThis as Record<string, unknown>).__deployHookCalls = calls;
+
+		const config = writeConfig(`export default {
+			experimental: {
+				hooks: {
+					deploy: {
+						before: (ctx) => { globalThis.__deployHookCalls.push({ phase: "before", ctx }); },
+						after: (ctx) => { globalThis.__deployHookCalls.push({ phase: "after", ctx }); },
+					},
+				},
+			},
+		};\n`);
+
+		try {
+			await applyCmd({
+				...baseProps(api, stream),
+				config,
+				runtimeApi: api,
+			});
+		} finally {
+			delete (globalThis as Record<string, unknown>).__deployHookCalls;
+		}
+
+		expect(calls.map((c) => c.phase)).toEqual(["before", "after"]);
+
+		const before = calls[0].ctx as {
+			branch: { id: string; name: string; created: boolean };
+			event: { type: string };
+		};
+		expect(before.branch).toEqual(
+			expect.objectContaining({
+				id: BRANCH_ID,
+				name: BRANCH_NAME,
+				created: false,
+			}),
+		);
+		expect(before.event).toEqual({ type: "neon-deploy" });
+
+		const after = calls[1].ctx as {
+			branch: { id: string };
+			env: {
+				postgres: { databaseUrl: string; databaseUrlUnpooled: string };
+			};
+			result: { dryRun: boolean };
+			event: { type: string };
+		};
+		expect(after.branch.id).toBe(BRANCH_ID);
+		expect(after.event).toEqual({ type: "neon-deploy" });
+		expect(after.result.dryRun).toBe(false);
+		// Resolved via the injected `runtimeApi` (FakeNeonApi), never a real network call.
+		expect(after.env.postgres.databaseUrl).toContain("neondb_owner");
+		expect(after.env.postgres.databaseUrlUnpooled).toContain(
+			"neondb_owner",
+		);
+	});
+
+	it("does not run deploy.after when apply throws (deploy.before still ran)", async () => {
+		const api = new RejectAuthNeonApi();
+		const { stream } = captureOut();
+		const calls: { phase: string }[] = [];
+		(globalThis as Record<string, unknown>).__deployHookCalls = calls;
+
+		const config = writeConfig(`export default {
+			auth: {},
+			experimental: {
+				hooks: {
+					deploy: {
+						before: (ctx) => { globalThis.__deployHookCalls.push({ phase: "before" }); },
+						after: (ctx) => { globalThis.__deployHookCalls.push({ phase: "after" }); },
+					},
+				},
+			},
+		};\n`);
+
+		try {
+			await expect(
+				applyCmd({
+					...baseProps(api, stream),
+					config,
+					runtimeApi: api,
+				}),
+			).rejects.toThrow();
+		} finally {
+			delete (globalThis as Record<string, unknown>).__deployHookCalls;
+		}
+
+		expect(calls.map((c) => c.phase)).toEqual(["before"]);
 	});
 
 	it("apply deploys a function via neonctl's own bundler", async () => {
