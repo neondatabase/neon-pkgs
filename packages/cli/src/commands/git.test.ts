@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import YAML from "yaml";
 
 import {
 	applyContext,
@@ -630,8 +631,13 @@ describe("status", () => {
 			cwdSpy.mockRestore();
 		}
 
-		expect(read()).toContain("gitBranch: main");
-		expect(read()).toContain("feature-a: preview-feature-a");
+		expect(YAML.parse(read())).toEqual({
+			gitBranch: "main",
+			hookInstalled: false,
+			followOnCheckout: true,
+			mappedNeonBranch: null,
+			mappings: { "feature-a": "preview-feature-a" },
+		});
 	});
 
 	test("throws when not inside a git repository", () => {

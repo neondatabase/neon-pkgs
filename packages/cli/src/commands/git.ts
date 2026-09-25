@@ -420,8 +420,10 @@ export const status = (props: GitProps): void => {
 			renderColumns: {
 				gitBranch: (v) => v.gitBranch ?? "(detached)",
 				mappedNeonBranch: (v) =>
-					v.mappedNeonBranch ??
-					"(unmapped — will derive on next sync)",
+					v.gitBranch === null
+						? "(detached — sync skips detached HEAD)"
+						: (v.mappedNeonBranch ??
+							"(unmapped — will derive on next sync)"),
 				mappings: (v) =>
 					Object.entries(v.mappings)
 						.map(
