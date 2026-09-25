@@ -19,10 +19,25 @@ function extractStepUpUrl(message: string | undefined): string | undefined {
 	return match ? match[1] : undefined;
 }
 
+/**
+ * Whether the invocation opted out of prompts via --yes/-y.
+ *
+ * The skip-prompts flag is per-command in this CLI (link, projects update, init, …), not a global
+ * option, so — exactly like the --help/-h check in the error handler — detect it from argv rather than
+ * a parsed global. A run that documented itself as non-interactive (`neon link -y`) must take the
+ * unattended path, never open a browser or block on a confirm.
+ */
+function promptsSkipped(): boolean {
+	return process.argv.includes("--yes") || process.argv.includes("-y");
+}
+
 /** Whether this process can drive an interactive open-browser-then-confirm-and-retry flow. */
 function canInteract(): boolean {
 	return (
-		!isCi() && Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY)
+		!isCi() &&
+		!promptsSkipped() &&
+		Boolean(process.stdout.isTTY) &&
+		Boolean(process.stdin.isTTY)
 	);
 }
 
@@ -34,8 +49,8 @@ function canInteract(): boolean {
  * body.
  *   - SSO_AUTHORIZATION_REQUIRED: the user must complete a one-time SSO authorization in a browser.
  *     On an interactive terminal we open the step-up URL and wait for the user to confirm they've
- *     finished before signalling a retry. Unattended (CI / no TTY) we print the URL and fail, since
- *     no browser round-trip is possible.
+ *     finished before signalling a retry. Unattended (CI, no TTY, or an explicit --yes/-y that opted
+ *     out of prompts) we print the URL and fail, since no browser round-trip is possible.
  *   - SSO_ORG_CREDS_ONLY: terminal — no browser step resolves it; the user must use an
  *     organization-scoped API key. Return false (no retry).
  *

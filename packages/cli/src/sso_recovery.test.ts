@@ -25,12 +25,15 @@ function fakeChild(): EventEmitter {
 
 const originalStdoutTTY = process.stdout.isTTY;
 const originalStdinTTY = process.stdin.isTTY;
+const originalArgv = process.argv;
 
-/** Put the process in an interactive state (a real TTY on both streams, not CI). */
+/** Put the process in an interactive state (a real TTY on both streams, not CI, no --yes). */
 function makeInteractive() {
 	vi.mocked(isCi).mockReturnValue(false);
 	process.stdout.isTTY = true;
 	process.stdin.isTTY = true;
+	// A clean argv with no skip-prompts flag, so the default state is genuinely interactive.
+	process.argv = ["node", "neon"];
 }
 
 beforeEach(() => {
@@ -44,6 +47,7 @@ afterEach(() => {
 	vi.clearAllMocks();
 	process.stdout.isTTY = originalStdoutTTY;
 	process.stdin.isTTY = originalStdinTTY;
+	process.argv = originalArgv;
 });
 
 // The step-up URL is carried in the message; the HTTP status varies (403, or 404-masked), so
@@ -136,6 +140,27 @@ describe("recoverFromSSO", () => {
 	it("prints the URL and does NOT open a browser or prompt without a TTY", async () => {
 		vi.mocked(isCi).mockReturnValue(false);
 		process.stdout.isTTY = false; // e.g. piped stdout / unattended shell
+
+		const result = await recoverFromSSO(
+			ssoError("SSO_AUTHORIZATION_REQUIRED"),
+			true,
+		);
+
+		expect(result).toBe(false);
+		expect(open).not.toHaveBeenCalled();
+		expect(prompts).not.toHaveBeenCalled();
+		expect(log.error).toHaveBeenCalledWith(
+			expect.stringContaining(STEP_UP_URL),
+		);
+	});
+
+	it.each([
+		["--yes"],
+		["-y"],
+	])("prints the URL and does NOT open a browser or prompt when %s opted out of prompts (even on a TTY)", async (flag) => {
+		// A TTY session, not CI — but the command opted out of prompts (`neon link -y`), so browser
+		// recovery must not run: print the URL and fail so the caller exits non-zero.
+		process.argv = ["node", "neon", "link", flag, "--org-id", "org-1"];
 
 		const result = await recoverFromSSO(
 			ssoError("SSO_AUTHORIZATION_REQUIRED"),
