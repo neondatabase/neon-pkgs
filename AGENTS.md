@@ -473,6 +473,22 @@ CI's Build job runs `pnpm build`, so a regression fails the PR rather than reach
 Don't route around it by relaxing the check — fix the entry globs or move the offending
 file out of them.
 
+**Declarations come from `tsc`, not tsdown.** `build` runs `tsc -p tsconfig.build.json`
+(`emitDeclarationOnly`) after `tsdown` (`dts: false`). rolldown-plugin-dts 0.15, which ships with
+tsdown 0.14, emits `export * as raw` in `src/index.ts` as an import of the JS runtime helper plus an
+undeclared `raw_d_exports`. Every consumer without `skipLibCheck` failed to compile, and with it
+`raw` resolved to `any`. `attw` passed throughout, because it checks resolution, not declaration
+bodies.
+
+**Every published package is compiled as a consumer in CI.** `.github/workflows/dist-typecheck.yml`
+runs `attw` and then `node scripts/check-dist-types.mjs packages/<dir>`, which imports each
+`exports` subpath by package name and runs `tsc --strict` with `skipLibCheck: false`. Add every new
+published package that ships types to that matrix. Run it locally after `pnpm --filter <name> build`:
+
+```bash
+pnpm exec node scripts/check-dist-types.mjs packages/sdk
+```
+
 **Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
 
 The live spec at https://neon.com/api_spec/release/v2.json can drift ahead of the
