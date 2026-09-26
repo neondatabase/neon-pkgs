@@ -73,13 +73,9 @@ describe("getCliAgent", () => {
 	});
 
 	it("does not attribute disabled harness markers", () => {
-		expect(
-			getCliAgent({
-				OPENCODE: "0",
-				GEMINI_CLI: "",
-				COPILOT_CLI: "false",
-			}),
-		).toBeUndefined();
+		expect(getCliAgent({ OPENCODE: "0" })).toBeUndefined();
+		expect(getCliAgent({ GEMINI_CLI: "" })).toBeUndefined();
+		expect(getCliAgent({ COPILOT_CLI: "false" })).toBeUndefined();
 	});
 
 	it("omits attribution when harness markers are nested", () => {
