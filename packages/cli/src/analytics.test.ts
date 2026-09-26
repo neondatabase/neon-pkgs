@@ -246,6 +246,9 @@ describe("getAnalyticsEventProperties", () => {
 		vi.stubEnv("CODEX_THREAD_ID", undefined);
 		vi.stubEnv("CODEX_SESSION_ID", undefined);
 		vi.stubEnv("CURSOR_AGENT", undefined);
+		vi.stubEnv("OPENCODE", undefined);
+		vi.stubEnv("GEMINI_CLI", undefined);
+		vi.stubEnv("COPILOT_CLI", undefined);
 		vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", "1");
 
 		expect(
