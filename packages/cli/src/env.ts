@@ -6,7 +6,13 @@ export const isDebug = () => {
 	return Boolean(process.env.DEBUG);
 };
 
-export type CliAgent = "claude-code" | "codex" | "cursor";
+export type CliAgent =
+	| "claude-code"
+	| "codex"
+	| "cursor"
+	| "opencode"
+	| "gemini-cli"
+	| "github-copilot-cli";
 
 export const getCliAgent = (env: NodeJS.Dict<string>): CliAgent | undefined => {
 	const markers: ReadonlyArray<readonly [CliAgent, boolean]> = [
@@ -21,6 +27,12 @@ export const getCliAgent = (env: NodeJS.Dict<string>): CliAgent | undefined => {
 		// TERM_PROGRAM and CURSOR_TRACE_ID also appear in terminals a person
 		// opens in Cursor, so they never attribute.
 		["cursor", env.CURSOR_AGENT === "1"],
+		// These three set their marker on every command run inside them,
+		// including ones a person types in the harness's `!` shell mode, so
+		// they attribute the harness rather than strictly the agent.
+		["opencode", env.OPENCODE === "1"],
+		["gemini-cli", env.GEMINI_CLI === "1"],
+		["github-copilot-cli", env.COPILOT_CLI === "1"],
 	];
 	const active = markers.filter(([, present]) => present);
 	return active.length === 1 ? active[0][0] : undefined;
