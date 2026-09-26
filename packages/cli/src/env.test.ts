@@ -26,6 +26,32 @@ describe("getCliAgent", () => {
 		).toBe("codex");
 	});
 
+	it("attributes a Cursor agent command", () => {
+		expect(getCliAgent({ CURSOR_AGENT: "1" })).toBe("cursor");
+	});
+
+	it("does not attribute a Cursor terminal a person opened", () => {
+		expect(
+			getCliAgent({
+				TERM_PROGRAM: "vscode",
+				CURSOR_TRACE_ID: "trace-123",
+				VSCODE_GIT_ASKPASS_MAIN:
+					"/Applications/Cursor.app/Contents/Resources/app/extensions/git/dist/askpass-main.js",
+			}),
+		).toBeUndefined();
+	});
+
+	it("does not attribute a disabled Cursor marker", () => {
+		expect(getCliAgent({ CURSOR_AGENT: "0" })).toBeUndefined();
+		expect(getCliAgent({ CURSOR_AGENT: "" })).toBeUndefined();
+	});
+
+	it("omits attribution when Claude Code runs inside a Cursor agent", () => {
+		expect(
+			getCliAgent({ CURSOR_AGENT: "1", CLAUDE_CODE_CHILD_SESSION: "1" }),
+		).toBeUndefined();
+	});
+
 	it("does not attribute a user-initiated Codex shell command", () => {
 		expect(
 			getCliAgent({
