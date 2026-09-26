@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 6.1.2
+
+### Patch Changes
+
+- 68e59c2: Fix the published type declarations. Projects that type-check dependencies (no `skipLibCheck`) failed to compile on `raw.d.ts` (`Cannot find name 'raw_d_exports'`), and with `skipLibCheck` the `raw` namespace from `@neon/sdk` was typed as `any`. `raw` is now fully typed.
+
 ## 6.1.1
 
 ### Patch Changes

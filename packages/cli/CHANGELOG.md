@@ -1,5 +1,14 @@
 # neon
 
+## 6.2.2
+
+### Patch Changes
+
+- Updated dependencies [68e59c2]
+  - @neon/sdk@6.1.2
+  - @neon/config@1.8.2
+  - @neon/config-runtime@1.7.2
+
 ## 6.2.1
 
 ### Patch Changes
