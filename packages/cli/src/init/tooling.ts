@@ -22,7 +22,10 @@ import {
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { CommonProps } from "../types.js";
-import { canPickAgentsInteractively } from "../utils/agent_picker.js";
+import {
+	AgentSelectionSkipped,
+	canPickAgentsInteractively,
+} from "../utils/agent_picker.js";
 import { getCliName } from "../utils/cli_name.js";
 import { type InitAuthOptions, runAuthenticatedMcp } from "./auth.js";
 import { raceSigint } from "./cancelled.js";
@@ -33,6 +36,7 @@ import {
 	chooseYesAgentTooling,
 	collectYesAgents,
 	type InitAgentSetup,
+	type InitAgentSetupResult,
 	initYesSupportedAgents,
 	noDetectedAgentsMessage,
 	planAgentSteps,
@@ -148,8 +152,9 @@ export const runToolingSteps = async (
 		auth: InitAuthOptions;
 		operations?: Partial<ToolingOperations>;
 		narrate?: "command" | "human";
+		allowAgentSkip?: boolean;
 	},
-): Promise<void> => {
+): Promise<ToolingStep["kind"][]> => {
 	const ops: ToolingOperations = {
 		installPlugins,
 		installSkills,
@@ -158,6 +163,11 @@ export const runToolingSteps = async (
 		...options.operations,
 	};
 	const reportProps = { output: options.output };
+	const sharedOptions = {
+		cwd: options.cwd,
+		allowAgentSkip: options.allowAgentSkip,
+	};
+	const completed: ToolingStep["kind"][] = [];
 	for (const step of steps) {
 		const label =
 			options.narrate === "human"
@@ -177,40 +187,63 @@ export const runToolingSteps = async (
 			getCliName(),
 			toolingStepCommandText(step),
 		);
-		switch (step.kind) {
-			case "plugins": {
-				const outcome = await raceSigint(
-					ops.installPlugins({ ...step.options, cwd: options.cwd }),
-				);
-				reportPluginsInstall(reportProps, outcome);
-				const error = pluginsInstallError(outcome);
-				if (error) throw error;
-				break;
+		try {
+			switch (step.kind) {
+				case "plugins": {
+					const outcome = await raceSigint(
+						ops.installPlugins({
+							...step.options,
+							...sharedOptions,
+						}),
+					);
+					reportPluginsInstall(reportProps, outcome);
+					const error = pluginsInstallError(outcome);
+					if (error) throw error;
+					break;
+				}
+				case "skills": {
+					const outcome = await raceSigint(
+						ops.installSkills({
+							...step.options,
+							...sharedOptions,
+						}),
+					);
+					reportSkillsInstall(reportProps, outcome);
+					const error = skillsInstallError(outcome);
+					if (error) throw error;
+					break;
+				}
+				case "mcp": {
+					const outcome = await raceSigint(
+						ops.installMcp({ ...step.options, ...sharedOptions }),
+					);
+					reportMcpInstall(reportProps, outcome);
+					const error = mcpInstallError(outcome);
+					if (error) throw error;
+					break;
+				}
+				default: {
+					const _exhaustive: never = step;
+					return _exhaustive;
+				}
 			}
-			case "skills": {
-				const outcome = await raceSigint(
-					ops.installSkills({ ...step.options, cwd: options.cwd }),
-				);
-				reportSkillsInstall(reportProps, outcome);
-				const error = skillsInstallError(outcome);
-				if (error) throw error;
-				break;
-			}
-			case "mcp": {
-				const outcome = await raceSigint(
-					ops.installMcp({ ...step.options, cwd: options.cwd }),
-				);
-				reportMcpInstall(reportProps, outcome);
-				const error = mcpInstallError(outcome);
-				if (error) throw error;
-				break;
-			}
-			default: {
-				const _exhaustive: never = step;
-				return _exhaustive;
-			}
+			completed.push(step.kind);
+		} catch (error) {
+			if (!(error instanceof AgentSelectionSkipped)) throw error;
 		}
 	}
+	return completed;
+};
+
+const agentSetupResult = (
+	setup: InitAgentSetup,
+	completed: readonly ToolingStep["kind"][],
+): InitAgentSetupResult => {
+	if (completed.length === 0) return "skip";
+	if (setup === "skills-mcp" && completed.length === 1) {
+		return completed[0] === "skills" ? "skills" : "mcp";
+	}
+	return setup;
 };
 
 const yesAgentsFromOptions = async (
@@ -234,24 +267,33 @@ const yesMiss = (): Error =>
 
 export const runAgentTooling = async (
 	options: AgentToolingOptions,
-): Promise<InitAgentSetup> => {
+): Promise<InitAgentSetupResult> => {
 	const yes = options.yes;
 	const named = options.agents ?? [];
+	const runSetup = async (
+		setup: InitAgentSetup,
+		steps: readonly ToolingStep[],
+	): Promise<InitAgentSetupResult> =>
+		agentSetupResult(
+			setup,
+			await runToolingSteps(steps, {
+				...options,
+				allowAgentSkip: !yes,
+			}),
+		);
 	if (named.length > 0) {
 		assertNamedAgentTooling(named, options.command ?? "init");
 		const tooling = chooseYesAgentTooling(named);
-		await runToolingSteps(
+		return runSetup(
+			tooling.setup,
 			planToolingSteps(tooling, { yes, named: true }),
-			options,
 		);
-		return tooling.setup;
 	}
 	if (options.agentSetup !== undefined) {
-		await runToolingSteps(
+		return runSetup(
+			options.agentSetup,
 			planAgentSteps({ yes, agentSetup: options.agentSetup }),
-			options,
 		);
-		return options.agentSetup;
 	}
 	if (yes) {
 		if (options.hasProjectPlugins !== undefined) {
@@ -260,19 +302,17 @@ export const runAgentTooling = async (
 			))
 				? "plugin"
 				: "skills-mcp";
-			await runToolingSteps(
+			return runSetup(
+				agentSetup,
 				planAgentSteps({ yes: true, agentSetup }),
-				options,
 			);
-			return agentSetup;
 		}
 		const agents = await yesAgentsFromOptions(options);
 		const tooling = chooseYesAgentTooling(agents);
 		if (tooling.setup === "skip") {
 			throw yesMiss();
 		}
-		await runToolingSteps(planYesAgentSteps(tooling), options);
-		return tooling.setup;
+		return runSetup(tooling.setup, planYesAgentSteps(tooling));
 	}
 	const interactive =
 		options.pickAgentSetup !== undefined || canPickAgentsInteractively();
@@ -280,6 +320,5 @@ export const runAgentTooling = async (
 		interactive,
 		pick: options.pickAgentSetup ?? pickAgentSetupInteractively,
 	});
-	await runToolingSteps(planAgentSteps({ yes, agentSetup }), options);
-	return agentSetup;
+	return runSetup(agentSetup, planAgentSteps({ yes, agentSetup }));
 };

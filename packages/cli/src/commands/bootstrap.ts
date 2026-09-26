@@ -34,6 +34,7 @@ import {
 	assertNamedAgentTooling,
 	chooseYesAgentTooling,
 	type InitAgentSetup,
+	type InitAgentSetupResult,
 	initPluginAgents,
 	initSkillsMcpAgents,
 	postScaffoldActions,
@@ -120,7 +121,7 @@ export type NestedBootstrapResult = {
 	git: boolean;
 	linked: boolean;
 	skippedLinkForDeps: boolean;
-	agentSetup: InitAgentSetup;
+	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
 };
 
@@ -419,7 +420,7 @@ const nestedResult = (
 		git: boolean;
 		linked: boolean;
 		skippedLinkForDeps: boolean;
-		agentSetup: InitAgentSetup;
+		agentSetup: InitAgentSetupResult;
 		agentsRan: boolean;
 	},
 ): NestedBootstrapResult => ({
@@ -588,7 +589,7 @@ const executePostScaffold = async (
 	git: boolean;
 	linked: boolean;
 	skippedLinkForDeps: boolean;
-	agentSetup: InitAgentSetup;
+	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
 }> => {
 	const kids = {
@@ -607,7 +608,7 @@ const executePostScaffold = async (
 	let git = false;
 	let linked = false;
 	let skippedLinkForDeps = false;
-	let agentSetup = choices.agentSetup;
+	let agentSetup: InitAgentSetupResult = choices.agentSetup;
 	let agentsRan = false;
 	const actions = postScaffoldActions({
 		git: choices.git,
@@ -822,7 +823,7 @@ const printDoneSummary = (input: {
 	installFailed: boolean;
 	gitFailed: boolean;
 	git: boolean;
-	agentSetup: InitAgentSetup;
+	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
 	linked: boolean;
 	skippedLinkForDeps: boolean;

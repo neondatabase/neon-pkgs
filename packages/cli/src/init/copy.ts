@@ -28,6 +28,16 @@ export const AGENT_PICKER_MESSAGE =
 export const AGENT_DETECTED_DESCRIPTION =
 	"Detected on this machine or in this directory.";
 export const AGENT_OTHER_DESCRIPTION = "Install for this agent.";
+export const AGENT_PLUGIN_SKIP_MESSAGE =
+	"No agents selected. Continue without installing the Neon plugin?";
+export const AGENT_SKILLS_PICKER_MESSAGE =
+	"Which coding agents should receive Neon skills? (space to toggle, enter to confirm)";
+export const AGENT_MCP_PICKER_MESSAGE =
+	"Which coding agents should receive the Neon MCP server? (space to toggle, enter to confirm)";
+export const AGENT_SKILLS_SKIP_MESSAGE =
+	"No agents selected. Continue without installing Neon skills?";
+export const AGENT_MCP_SKIP_MESSAGE =
+	"No agents selected. Continue without configuring the Neon MCP server?";
 
 export const SKILLS_PICKER_MESSAGE =
 	"Which Neon skills should be installed? (space to toggle, enter to confirm)";

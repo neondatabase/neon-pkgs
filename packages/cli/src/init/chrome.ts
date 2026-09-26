@@ -15,7 +15,7 @@ import type {
 	InitFunnelConfig,
 	InitFunnelLink,
 } from "./funnel.js";
-import type { InitAgentSetup } from "./plan.js";
+import type { InitAgentSetupResult } from "./plan.js";
 
 export const NEON_GREEN = "#4BB578";
 
@@ -121,18 +121,24 @@ export const printInitDone = (text: string): void => {
 	process.stdout.write(`\n${painted.join("\n")}\n\n`);
 };
 
-export const agentSetupLabel = (setup: InitAgentSetup): string => {
+export const agentSetupLabel = (setup: InitAgentSetupResult): string => {
 	if (setup === "plugin") {
 		return "plugin";
 	}
 	if (setup === "skills-mcp") {
 		return "skills and MCP";
 	}
+	if (setup === "skills") {
+		return "skills";
+	}
+	if (setup === "mcp") {
+		return "MCP";
+	}
 	return "skipped";
 };
 
 export const agentSetupDoneLabel = (input: {
-	setup: InitAgentSetup;
+	setup: InitAgentSetupResult;
 	ran: boolean;
 }): string => {
 	if (!input.ran && input.setup !== "skip") {
@@ -160,6 +166,9 @@ export const agentsRowValue = (input: {
 	}
 	if (input.setup === "skills-mcp") {
 		return ids.length > 0 ? `skills and MCP: ${ids}` : "skills and MCP";
+	}
+	if (input.setup === "mcp") {
+		return ids.length > 0 ? `MCP: ${ids}` : "MCP";
 	}
 	return ids.length > 0
 		? `plugin and skills/MCP: ${ids}`

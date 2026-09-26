@@ -1,7 +1,7 @@
 import type yargs from "yargs";
-
 import { recordCommandSuccessExtras } from "../analytics.js";
 import { getAgentDisplayName } from "../init/agents.js";
+import { AGENT_PLUGIN_SKIP_MESSAGE } from "../init/copy.js";
 import { log } from "../log.js";
 import { NEON_MCP_URL } from "../mcp/install.js";
 import { resolvePluginsPlan } from "../plugins/plan.js";
@@ -15,7 +15,10 @@ import {
 } from "../plugins/run.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
 import type { CommonProps } from "../types.js";
-import { canPickAgentsInteractively } from "../utils/agent_picker.js";
+import {
+	canPickAgentsInteractively,
+	skippableAgentPicker,
+} from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
 import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
@@ -121,6 +124,7 @@ export type InstallPluginsOptions = {
 	yes?: boolean;
 	global?: boolean;
 	agents?: readonly string[];
+	allowAgentSkip?: boolean;
 };
 
 type PluginsInstallFailure = { agents: string[]; message: string };
@@ -148,6 +152,10 @@ export const installPlugins = async (
 		yes,
 		cwd,
 		interactive,
+		pickAgents: skippableAgentPicker(
+			options.allowAgentSkip,
+			AGENT_PLUGIN_SKIP_MESSAGE,
+		),
 	});
 	for (const agent of plan.skipped) {
 		log.warning(

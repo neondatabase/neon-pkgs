@@ -111,15 +111,11 @@ export const inferInitAgentSetup = (input: {
 	if (input.skipAgents) {
 		return { kind: "skip" };
 	}
-	const hasSkills = hasSkillsFlag(input.skills);
-	if (hasSkills && input.hasMcpFlags) {
-		return { kind: "skills-mcp" };
-	}
-	if (hasSkills) {
-		return { kind: "skills" };
-	}
 	if (input.hasMcpFlags) {
 		return { kind: "skills-mcp" };
+	}
+	if (hasSkillsFlag(input.skills)) {
+		return { kind: "skills" };
 	}
 	if (input.namedAgents || input.yes) {
 		return { kind: "auto" };

@@ -503,6 +503,7 @@ describe("init handler", () => {
 			project: true,
 			projectId: "proj-pin",
 		});
+		expect(stepKinds(ops)).toEqual(["skills", "mcp"]);
 	});
 
 	test("project MCP config rejects an unsupported agent", async () => {
@@ -804,7 +805,12 @@ describe("init handler", () => {
 		).rejects.toThrow(namedAgentsUnavailable(["mcporter"]));
 	});
 
-	test("Custom skip plus --no-link plus declining neon.ts writes nothing", async () => {
+	test.each([
+		[[], "skip"],
+		[["skills"], "skills"],
+		[["mcp"], "mcp"],
+		[["skills", "mcp"], "skills-mcp"],
+	] as const)("Custom runs selected steps %j and continues", async (steps, result) => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-skip-all-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const ops = makeOperations();
@@ -820,18 +826,50 @@ describe("init handler", () => {
 				linkProject,
 				initConfig,
 				contextFile: join(cwd, ".neon"),
-				pickAgentSetup: async () => "skip",
+				pickAgentSetup: pickSkillsMcp,
+				pickAgents: async ({
+					setup,
+				}: {
+					setup: "plugin" | "skills" | "mcp";
+				}) =>
+					steps.some((step) => step === setup)
+						? ["opencode"]
+						: undefined,
+				mcpConfigLocation: "global",
+				mcpAuth: "oauth",
 				pickConfig: async () => false,
 			}),
 		);
 
-		expect(ops.calls).toEqual([]);
+		expect(stepKinds(ops)).toEqual(steps);
 		expect(linkProject).not.toHaveBeenCalled();
 		expect(initConfig).not.toHaveBeenCalled();
 		expect(takeCommandSuccessExtras()).toEqual({
 			init_kind: "existing",
-			agent_setup: "skip",
+			agent_setup: result,
 		});
+	});
+
+	test("skipping MCP discards its API-key requirement for claimable setup", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-skip-mcp-"));
+		const ops = makeOperations();
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+		await handler(
+			baseProps({
+				cwd,
+				contextFile: join(cwd, ".neon"),
+				operations: ops,
+				claimable: true,
+				config: false,
+				mcpAuth: "api-key",
+				mcpConfigLocation: "global",
+				pickAgents: async () => undefined,
+				createClaimable,
+			}),
+		);
+		expect(ops.calls).toEqual([]);
+		expect(createClaimable).toHaveBeenCalledOnce();
 	});
 
 	test("Custom unauthenticated can create a claimable project", async () => {

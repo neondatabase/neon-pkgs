@@ -354,6 +354,7 @@ export type CommandAgentSetup =
 	| "plugin"
 	| "skills-mcp"
 	| "skills"
+	| "mcp"
 	| "mixed"
 	| "skip";
 export type CommandInitKind = "empty-template" | "empty-skip" | "existing";

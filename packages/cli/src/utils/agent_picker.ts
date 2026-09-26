@@ -14,10 +14,15 @@ export type AgentChoice = {
 	description?: string;
 };
 
+export class AgentSelectionSkipped extends Error {}
+
 export type PickAgentsOptions = {
 	message: string;
 	choices: readonly AgentChoice[];
 	selected?: readonly AgentType[];
+	/** An empty selection is returned only after confirming this message. */
+	skipMessage?: string;
+	onCancel?: () => never;
 };
 
 export type ResolveAgentSelectionOptions = {
@@ -34,6 +39,14 @@ export type ResolveAgentSelectionOptions = {
 export const canPickAgentsInteractively = (): boolean =>
 	!isCi() && Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
 
+const restoreCursorOnAbort = (state: { aborted: boolean }) => {
+	if (state.aborted) {
+		// prompts leaves the cursor hidden when selection is aborted.
+		process.stdout.write("\x1B[?25h");
+		process.stdout.write("\n");
+	}
+};
+
 export const pickAgentsInteractively = async (
 	options: PickAgentsOptions,
 ): Promise<AgentType[]> => {
@@ -46,43 +59,62 @@ export const pickAgentsInteractively = async (
 		throw new Error("No coding agents are available to pick.");
 	}
 
+	const cancel = options.onCancel ?? (() => process.exit(1));
 	const selected = new Set(options.selected ?? []);
-	const { agents } = await prompts({
-		onState: (state: { aborted: boolean }) => {
-			if (state.aborted) {
-				// prompts leaves the cursor hidden when selection is aborted.
-				process.stdout.write("\x1B[?25h");
-				process.stdout.write("\n");
-				process.exit(1);
-			}
-		},
-		type: "multiselect",
+	const question = {
+		onState: restoreCursorOnAbort,
+		type: "multiselect" as const,
 		name: "agents",
 		message: options.message,
 		instructions: false,
-		min: 1,
+		min: options.skipMessage ? 0 : 1,
 		choices: options.choices.map((choice) => ({
 			value: choice.id,
 			title: choice.title,
 			description: choice.description,
 			selected: selected.has(choice.id),
 		})),
-	});
-
-	if (!Array.isArray(agents)) {
-		throw new Error("Aborted: no agents selected.");
-	}
-
-	const picked: AgentType[] = [];
-	for (const value of agents) {
-		const id = agentIdInChoices(value, options.choices);
-		if (id === undefined) {
-			throw new Error(`Unknown agent: "${String(value)}".`);
+	};
+	while (true) {
+		const { agents } = await prompts(question);
+		if (!Array.isArray(agents)) return cancel();
+		const picked: AgentType[] = [];
+		for (const value of agents) {
+			const id = agentIdInChoices(value, options.choices);
+			if (id === undefined) {
+				throw new Error(`Unknown agent: "${String(value)}".`);
+			}
+			picked.push(id);
 		}
-		picked.push(id);
+		if (picked.length > 0 || !options.skipMessage) {
+			return uniqueAgentIds(picked);
+		}
+		const { skip } = await prompts({
+			onState: restoreCursorOnAbort,
+			type: "confirm",
+			name: "skip",
+			message: options.skipMessage,
+			initial: true,
+		});
+		if (typeof skip !== "boolean") return cancel();
+		if (skip) return [];
 	}
-	return uniqueAgentIds(picked);
 };
+
+export const skippableAgentPicker = (
+	allowed: boolean | undefined,
+	message: string,
+): ((options: PickAgentsOptions) => Promise<AgentType[]>) | undefined =>
+	allowed
+		? async (options) => {
+				const selected = await pickAgentsInteractively({
+					...options,
+					skipMessage: message,
+				});
+				if (selected.length === 0) throw new AgentSelectionSkipped();
+				return selected;
+			}
+		: undefined;
 
 export const resolveAgentSelection = async (
 	options: ResolveAgentSelectionOptions,

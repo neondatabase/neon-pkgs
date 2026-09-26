@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { AgentType } from "../mcp/agents.js";
+import { AgentSelectionSkipped } from "../utils/agent_picker.js";
 import { runAgentTooling, runToolingSteps } from "./tooling.js";
 
 const auth = {
@@ -55,6 +56,31 @@ describe("runAgentTooling", () => {
 			expect.objectContaining({ cwd: "/app" }),
 		);
 		expect(ops.installPlugins).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		[true, false, "mcp"],
+		[false, true, "skills"],
+		[true, true, "skip"],
+	] as const)("skipping skills=%s, MCP=%s reports %s", async (skills, mcp, expected) => {
+		const ops = operations();
+		if (skills)
+			ops.installSkills.mockRejectedValueOnce(
+				new AgentSelectionSkipped(),
+			);
+		if (mcp)
+			ops.installMcp.mockRejectedValueOnce(new AgentSelectionSkipped());
+		const result = await runAgentTooling({
+			cwd: "/app",
+			yes: false,
+			output: "table",
+			auth,
+			operations: ops,
+			agentSetup: "skills-mcp",
+		});
+		expect(result).toBe(expected);
+		expect(ops.installSkills).toHaveBeenCalledOnce();
+		expect(ops.installMcp).toHaveBeenCalledOnce();
 	});
 
 	test("interactive does not run -y detectors", async () => {

@@ -16,8 +16,10 @@ vi.mock("../utils/agent_picker.js", async (importOriginal) => {
 	};
 });
 
+import { InitCancelled } from "./cancelled.js";
 import {
 	pickAgentSetupInteractively,
+	pickInitAgentsInteractively,
 	pickInitConfigInteractively,
 	pickInitLinkInteractively,
 	pickInitModeInteractively,
@@ -25,8 +27,13 @@ import {
 	pickInitServicesInteractively,
 } from "./wizard.js";
 
+const originalStdinIsTTY = process.stdin.isTTY;
+const originalStdoutIsTTY = process.stdout.isTTY;
+
 describe("init pickers", () => {
 	afterEach(() => {
+		process.stdin.isTTY = originalStdinIsTTY;
+		process.stdout.isTTY = originalStdoutIsTTY;
 		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
 		promptsMock.mockReset();
@@ -73,6 +80,33 @@ describe("init pickers", () => {
 		]);
 		expect(question.choices[0]?.title).toBe("Neon plugin");
 		expect(question.choices[2]?.title).toBe("Skip agent setup");
+	});
+
+	test.each([
+		true,
+		false,
+		undefined,
+	])("empty agent confirmation: %s", async (skip) => {
+		canPickMock.mockReturnValue(true);
+		vi.stubEnv("CI", "");
+		process.stdin.isTTY = process.stdout.isTTY = true;
+		promptsMock
+			.mockResolvedValueOnce({ agents: [] })
+			.mockResolvedValueOnce({ skip })
+			.mockResolvedValueOnce({ agents: ["cursor"] });
+		const result = pickInitAgentsInteractively({
+			available: ["cursor"],
+			detected: [],
+			setup: "plugin",
+		});
+		if (skip === undefined) {
+			await expect(result).rejects.toBeInstanceOf(InitCancelled);
+		} else {
+			await expect(result).resolves.toEqual(
+				skip ? undefined : ["cursor"],
+			);
+		}
+		expect(promptsMock).toHaveBeenCalledTimes(skip === false ? 3 : 2);
 	});
 
 	test("mode picker lists Recommended then Custom", async () => {

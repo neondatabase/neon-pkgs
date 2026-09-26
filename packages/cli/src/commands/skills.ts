@@ -1,7 +1,7 @@
 import type yargs from "yargs";
-
 import { recordCommandSuccessExtras } from "../analytics.js";
 import { getAgentDisplayName } from "../init/agents.js";
+import { AGENT_SKILLS_SKIP_MESSAGE } from "../init/copy.js";
 import { log } from "../log.js";
 import { skillsHelpValues, skillsYesHelp } from "../skills/catalog.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
@@ -22,7 +22,10 @@ import {
 } from "../skills/targets.js";
 import { confirmSkillsUpdate } from "../skills/wizard.js";
 import type { CommonProps } from "../types.js";
-import { canPickAgentsInteractively } from "../utils/agent_picker.js";
+import {
+	canPickAgentsInteractively,
+	skippableAgentPicker,
+} from "../utils/agent_picker.js";
 import { noPassthrough } from "../utils/flags.js";
 import { helpCsv, helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
@@ -212,6 +215,7 @@ export type InstallSkillsOptions = {
 	global?: boolean;
 	agents?: readonly string[];
 	skills?: readonly string[];
+	allowAgentSkip?: boolean;
 };
 
 type SkillsInstallFailure = {
@@ -246,6 +250,10 @@ export const installSkills = async (
 		yes,
 		cwd,
 		interactive,
+		pickAgents: skippableAgentPicker(
+			options.allowAgentSkip,
+			AGENT_SKILLS_SKIP_MESSAGE,
+		),
 	});
 	const mapped = mappedSkillsAgentNames(plan.agents);
 	for (const agent of plan.skipped) {

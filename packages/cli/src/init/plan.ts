@@ -19,6 +19,7 @@ import type { InitConfigPlan } from "./choices.js";
 export type { InitConfigPlan };
 
 export type InitAgentSetup = "plugin" | "skills-mcp" | "skip";
+export type InitAgentSetupResult = InitAgentSetup | "skills" | "mcp";
 
 export type YesAgentTooling =
 	| { setup: "plugin"; agents: [AgentType, ...AgentType[]] }
@@ -549,7 +550,12 @@ export const planInitToolingSteps = (input: {
 
 export const funnelAgentSetup = (
 	tooling: InitToolingPlan,
-): "plugin" | "skills-mcp" | "skills" | "mixed" | "skip" => tooling.setup;
+): "plugin" | "skills-mcp" | "skills" | "mcp" | "mixed" | "skip" => {
+	if (tooling.setup !== "skills-mcp") return tooling.setup;
+	if (tooling.skillsAgents.length === 0) return "mcp";
+	if (tooling.mcpAgents.length === 0) return "skills";
+	return "skills-mcp";
+};
 
 export const planYesAgentSteps = (tooling: YesAgentTooling): ToolingStep[] =>
 	planToolingSteps(tooling, { yes: true, named: false });
