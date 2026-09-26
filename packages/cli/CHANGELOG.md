@@ -1,5 +1,11 @@
 # neon
 
+## 6.2.3
+
+### Patch Changes
+
+- CLI usage telemetry now records when a command runs inside Cursor, OpenCode, Gemini CLI or GitHub Copilot CLI, alongside Claude Code and Codex. Commands, flags and output are unchanged.
+
 ## 6.2.2
 
 ### Patch Changes
