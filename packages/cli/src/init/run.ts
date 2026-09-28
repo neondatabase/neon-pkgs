@@ -1162,8 +1162,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							{
 								label: "Agents",
 								value: agentsRowValue({
-									setup: funnel.agentSetup,
-									agents: funnel.agentsInstalled,
+									tooling,
+									installed: funnel.agentsInstalled,
 								}),
 							},
 							{
@@ -1253,8 +1253,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					{
 						label: "Agents",
 						value: agentsRowValue({
-							setup: funnel.agentSetup,
-							agents: funnel.agentsInstalled,
+							tooling,
+							installed: funnel.agentsInstalled,
 						}),
 					},
 					{

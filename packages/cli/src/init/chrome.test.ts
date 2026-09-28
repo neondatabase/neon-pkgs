@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
 	agentSetupDoneLabel,
+	agentsRowValue,
 	configSummaryLabel,
 	formatInitBanner,
 	formatInitDone,
@@ -11,6 +12,76 @@ import {
 	printInitDone,
 	shouldPrintInitBanner,
 } from "./chrome.js";
+
+describe("agentsRowValue", () => {
+	test("names skills and MCP agents separately when they differ", () => {
+		expect(
+			agentsRowValue({
+				tooling: {
+					setup: "skills-mcp",
+					skillsAgents: ["cursor"],
+					mcpAgents: ["claude-code"],
+				},
+				installed: ["cursor", "claude-code"],
+			}),
+		).toBe("skills: cursor; MCP: claude-code");
+	});
+
+	test("keeps one list when skills and MCP go to the same agents", () => {
+		expect(
+			agentsRowValue({
+				tooling: {
+					setup: "skills-mcp",
+					skillsAgents: ["cursor"],
+					mcpAgents: ["cursor"],
+				},
+				installed: ["cursor"],
+			}),
+		).toBe("skills and MCP: cursor");
+	});
+
+	test("names the plugin agents and the skills/MCP agents of a mixed run", () => {
+		expect(
+			agentsRowValue({
+				tooling: {
+					setup: "mixed",
+					pluginAgents: ["claude-code", "codex"],
+					skillsAgents: ["github-copilot-cli"],
+					mcpAgents: ["github-copilot-cli"],
+				},
+				installed: ["claude-code", "codex", "github-copilot-cli"],
+			}),
+		).toBe(
+			"Neon plugin: claude-code, codex; skills and MCP: github-copilot-cli",
+		);
+	});
+
+	test("skills-only names the agents", () => {
+		expect(
+			agentsRowValue({
+				tooling: { setup: "skills", agents: ["cursor"] },
+				installed: ["cursor"],
+			}),
+		).toBe("skills: cursor");
+	});
+
+	test("lists only agents that installed, else the setup label", () => {
+		const tooling = {
+			setup: "skills-mcp",
+			skillsAgents: ["cursor"],
+			mcpAgents: ["claude-code"],
+		} as const;
+		expect(agentsRowValue({ tooling, installed: ["cursor"] })).toBe(
+			"skills: cursor",
+		);
+		expect(agentsRowValue({ tooling, installed: [] })).toBe(
+			"skills and MCP",
+		);
+		expect(
+			agentsRowValue({ tooling: { setup: "skip" }, installed: [] }),
+		).toBe("skipped");
+	});
+});
 
 describe("formatInitBanner", () => {
 	test("is the six-line NEON mark", () => {
