@@ -3,6 +3,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1433,6 +1434,78 @@ describe("init CLI", () => {
 		const rendered = stripAnsi(output);
 		expect(rendered).toContain("Neon setup cancelled.");
 		expect(rendered).not.toContain("InitCancelled:");
+	}, 20_000);
+
+	test("Custom plugin picker does not preselect an agent whose plugin command is missing", async () => {
+		const root = mkdtempSync(join(tmpdir(), "neon-init-preselect-"));
+		mkdirSync(join(root, ".copilot"));
+		mkdirSync(join(root, ".cursor"));
+		const nodeBin = join(root, "node-bin");
+		mkdirSync(nodeBin);
+		symlinkSync(process.execPath, join(nodeBin, "node"));
+		const spawnHelper = join(
+			process.cwd(),
+			"node_modules",
+			"node-pty",
+			"prebuilds",
+			`${process.platform}-${process.arch}`,
+			"spawn-helper",
+		);
+		if (existsSync(spawnHelper)) {
+			chmodSync(spawnHelper, 0o755);
+		}
+		let output = "";
+		const term = spawnPty(
+			process.execPath,
+			[
+				join(process.cwd(), "dist/index.js"),
+				"init",
+				"--no-link",
+				"--no-config",
+				"--no-analytics",
+				"--config-dir",
+				join(root, "config"),
+				"--context-file",
+				join(root, ".neon"),
+			],
+			{
+				name: "xterm-256color",
+				cols: 120,
+				rows: 40,
+				cwd: root,
+				// No XDG_CONFIG_HOME: add-mcp would look for Copilot CLI under it instead of ~/.copilot.
+				env: {
+					...Object.fromEntries(
+						Object.entries(process.env).filter(
+							([key]) => key !== "XDG_CONFIG_HOME",
+						),
+					),
+					CI: "",
+					HOME: root,
+					USERPROFILE: root,
+					PATH: nodeBin,
+				},
+			},
+		);
+		term.onData((chunk) => {
+			output += chunk;
+		});
+
+		await waitForPtyText(
+			term,
+			() => output,
+			"How should Neon be added to your coding agents?",
+		);
+		term.write("\r");
+		await waitForPtyText(term, () => output, "VS Code (vscode)");
+		const rendered = stripAnsi(output);
+		console.log("RENDERED>>>" + rendered.slice(-900));
+		expect(rendered).toMatch(/◉\s+Cursor \(cursor\)/);
+		expect(rendered).toMatch(
+			/◯\s+GitHub Copilot CLI \(github-copilot-cli\)/,
+		);
+		term.write("\x03");
+		expect(await waitForPtyExit(term)).toBe(1);
 	}, 20_000);
 
 	cliTest("rejects --data", async ({ testCliCommand }) => {

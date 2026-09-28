@@ -71,6 +71,25 @@ export const assertPluginsCanRun = (options: {
 	);
 };
 
+const commandLookup = (
+	options: ResolvePluginsPlanOptions,
+): { cwd: string; path?: string } => ({
+	cwd: options.cwd,
+	...(options.commandPath !== undefined ? { path: options.commandPath } : {}),
+});
+
+const withoutMissingPluginsCommands = (
+	agents: readonly AgentType[],
+	options: ResolvePluginsPlanOptions,
+): AgentType[] => {
+	const missing = new Set(
+		missingPluginsCommands(agents, commandLookup(options)).map(
+			(row) => row.agent,
+		),
+	);
+	return agents.filter((id) => !missing.has(id));
+};
+
 export async function resolvePluginsPlan(
 	options: ResolvePluginsPlanOptions,
 ): Promise<PluginsPlan> {
@@ -100,10 +119,15 @@ export async function resolvePluginsPlan(
 						getPluginsTargetName(id) !== undefined,
 				})
 			: scoped;
+	// The picker preselects only agents whose plugin can install; `-y` keeps the full
+	// list so it can warn about the ones it skips.
+	const preselected = prompt
+		? withoutMissingPluginsCommands(detected, options)
+		: detected;
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
-		choices: agentChoicesFrom(available, detected),
-		detected,
+		choices: agentChoicesFrom(available, preselected),
+		detected: preselected,
 		message:
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
 		nonInteractiveMessage: noDetectedAgentsMessage({
@@ -148,12 +172,10 @@ export async function resolvePluginsPlan(
 		agents.push(id);
 	}
 
-	const missingCommands = missingPluginsCommands(agents, {
-		cwd: options.cwd,
-		...(options.commandPath !== undefined
-			? { path: options.commandPath }
-			: {}),
-	});
+	const missingCommands = missingPluginsCommands(
+		agents,
+		commandLookup(options),
+	);
 	if (missingCommands.length > 0) {
 		const detectedOnly = options.agents.length === 0 && !prompt;
 		if (!detectedOnly) {

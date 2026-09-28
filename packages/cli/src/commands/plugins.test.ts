@@ -1,5 +1,6 @@
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -10,8 +11,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn as spawnPty } from "node-pty";
 import strip from "strip-ansi";
-import { afterEach, describe, expect } from "vitest";
+import { afterEach, describe, expect, test as vitestTest } from "vitest";
 
 import { NEON_MCP_URL } from "../mcp/install.js";
 import { PLUGIN_SKILLS } from "../plugins/run.js";
@@ -598,4 +600,68 @@ describe("neon plugins", () => {
 		);
 		expect(star).toMatch(/does not accept --agent \*/);
 	});
+});
+
+describe("neon plugins picker", () => {
+	vitestTest(
+		"does not preselect an agent whose plugin command is missing",
+		async () => {
+			const { home, cwd, bin } = scratch({ projectCursor: false });
+			mkdirSync(join(home, ".copilot"));
+			mkdirSync(join(home, ".cursor"));
+			const spawnHelper = join(
+				process.cwd(),
+				"node_modules",
+				"node-pty",
+				"prebuilds",
+				`${process.platform}-${process.arch}`,
+				"spawn-helper",
+			);
+			if (existsSync(spawnHelper)) {
+				chmodSync(spawnHelper, 0o755);
+			}
+			let output = "";
+			const term = spawnPty(
+				process.execPath,
+				[
+					join(process.cwd(), "dist/index.js"),
+					"plugins",
+					"--global",
+					"--no-analytics",
+				],
+				{
+					name: "xterm-256color",
+					cols: 120,
+					rows: 40,
+					cwd,
+					// No XDG_CONFIG_HOME: add-mcp would look for Copilot CLI under it instead of ~/.copilot.
+					env: {
+						...Object.fromEntries(
+							Object.entries(process.env).filter(
+								([key]) => key !== "XDG_CONFIG_HOME",
+							),
+						),
+						CI: "",
+						HOME: home,
+						PATH: `${bin}:${nodeOnlyBin()}`,
+					},
+				},
+			);
+			term.onData((chunk) => {
+				output += chunk;
+			});
+			const deadline = Date.now() + 15_000;
+			while (
+				!strip(output).includes("VS Code") &&
+				Date.now() < deadline
+			) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			const rendered = strip(output);
+			term.kill();
+			expect(rendered).toMatch(/◉\s+Cursor/);
+			expect(rendered).toMatch(/◯\s+GitHub Copilot CLI/);
+		},
+		20_000,
+	);
 });
