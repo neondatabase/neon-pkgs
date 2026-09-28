@@ -35,8 +35,8 @@ jobs:
             (github.event.pull_request.head.repo.full_name == github.repository &&
             github.actor != 'dependabot[bot]')
         runs-on:
-            group: neondatabase-protected-runner-group
-            labels: linux-ubuntu-latest
+            group: databricks-ghec-public-repos-runner-group-small
+            labels: linux-ubuntu-latest-public-2core-8gb
         timeout-minutes: 20
         steps:
             - name: Harden the runner (Audit all outbound calls)
