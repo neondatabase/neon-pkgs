@@ -14,8 +14,8 @@ jobs:
     typecheck-dist:
         name: Check ${{ matrix.name }} distributed types
         runs-on:
-            group: neondatabase-protected-runner-group
-            labels: linux-ubuntu-latest
+            group: databricks-ghec-public-repos-runner-group-small
+            labels: linux-ubuntu-latest-public-2core-8gb
         strategy:
             matrix:
                 include:
