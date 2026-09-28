@@ -274,6 +274,13 @@ One thing to know: **the CLI does not read `NEON_ORG_ID`.** It takes the org fro
 `--org-id` or a `.neon` context file, so the suite's `orgArgs()` helper translates the
 harness's env var into the flag.
 
+`e2e/plugins.e2e.test.ts` is the exception that never calls Neon: it runs the real
+plugins CLI (`npx plugins add`) for every target in `PLUGINS_TARGET_BY_TYPE`
+(`src/plugins/targets.ts`) in an empty HOME with no agent CLIs on PATH. A target with a
+`command` must fail with ENOENT and one without must install. When it fails, the plugins
+CLI changed how that target installs: update the table, since `neon plugins` and
+`neon init` skip or reroute agents based on it.
+
 ### Linting & Formatting
 
 ```bash
