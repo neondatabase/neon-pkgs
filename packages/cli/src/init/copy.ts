@@ -28,6 +28,8 @@ export const AGENT_PICKER_MESSAGE =
 export const AGENT_DETECTED_DESCRIPTION =
 	"Detected on this machine or in this directory.";
 export const AGENT_OTHER_DESCRIPTION = "Install for this agent.";
+export const agentMissingCommandDescription = (command: string): string =>
+	`Detected, but "${command}" was not found on PATH. Its plugin cannot install.`;
 export const AGENT_PLUGIN_SKIP_MESSAGE =
 	"No agents selected. Continue without installing the Neon plugin?";
 export const AGENT_SKILLS_PICKER_MESSAGE =

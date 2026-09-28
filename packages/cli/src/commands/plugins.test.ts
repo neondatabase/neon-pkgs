@@ -658,9 +658,16 @@ describe("neon plugins picker", () => {
 				await new Promise((resolve) => setTimeout(resolve, 50));
 			}
 			const rendered = strip(output);
+			term.write("\x1b[B");
+			const hint = 'detected, but "copilot" is not on PATH';
+			while (!strip(output).includes(hint) && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			const withHint = strip(output);
 			term.kill();
 			expect(rendered).toMatch(/◉\s+Cursor/);
 			expect(rendered).toMatch(/◯\s+GitHub Copilot CLI/);
+			expect(withHint).toContain(hint);
 		},
 		20_000,
 	);

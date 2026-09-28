@@ -367,6 +367,7 @@ const pickOrDetectAgents = async (input: {
 	pickAgents?: InitProps["pickAgents"];
 	/** What the picker preselects when it differs from what `-y` would install. */
 	preselected?: readonly AgentType[];
+	missingCommands?: readonly MissingPluginsCommand[];
 	interactive: boolean;
 	setup: "plugin" | "skills" | "mcp";
 }): Promise<AgentType[] | undefined> => {
@@ -398,7 +399,11 @@ const pickOrDetectAgents = async (input: {
 	if (input.interactive) {
 		return pickInitAgentsInteractively({
 			available: [...input.available],
-			detected: preselected,
+			detected,
+			preselected,
+			...(input.missingCommands !== undefined
+				? { missingCommands: input.missingCommands }
+				: {}),
 			setup: input.setup,
 		});
 	}
@@ -693,6 +698,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 										preselected: pluginReady(
 											detection.detectedAgents,
 										),
+										missingCommands: missingPluginCommands,
 									}
 								: {}),
 							interactive: detection.interactive,

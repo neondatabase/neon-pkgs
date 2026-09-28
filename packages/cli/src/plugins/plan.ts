@@ -78,18 +78,6 @@ const commandLookup = (
 	...(options.commandPath !== undefined ? { path: options.commandPath } : {}),
 });
 
-const withoutMissingPluginsCommands = (
-	agents: readonly AgentType[],
-	options: ResolvePluginsPlanOptions,
-): AgentType[] => {
-	const missing = new Set(
-		missingPluginsCommands(agents, commandLookup(options)).map(
-			(row) => row.agent,
-		),
-	);
-	return agents.filter((id) => !missing.has(id));
-};
-
 export async function resolvePluginsPlan(
 	options: ResolvePluginsPlanOptions,
 ): Promise<PluginsPlan> {
@@ -119,15 +107,27 @@ export async function resolvePluginsPlan(
 						getPluginsTargetName(id) !== undefined,
 				})
 			: scoped;
-	// The picker preselects only agents whose plugin can install; `-y` keeps the full
-	// list so it can warn about the ones it skips.
-	const preselected = prompt
-		? withoutMissingPluginsCommands(detected, options)
-		: detected;
+	// The picker keeps detected agents first but checks only the ones whose plugin can
+	// install; `-y` keeps the full list so it can warn about the ones it skips.
+	const missingDetected = new Map(
+		(prompt
+			? missingPluginsCommands(detected, commandLookup(options))
+			: []
+		).map((row) => [row.agent, row.command]),
+	);
+	const choices = agentChoicesFrom(available, detected).map((choice) => {
+		const command = missingDetected.get(choice.id);
+		return command === undefined
+			? choice
+			: {
+					...choice,
+					description: `detected, but "${command}" is not on PATH`,
+				};
+	});
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
-		choices: agentChoicesFrom(available, preselected),
-		detected: preselected,
+		choices,
+		detected: detected.filter((id) => !missingDetected.has(id)),
 		message:
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
 		nonInteractiveMessage: noDetectedAgentsMessage({

@@ -1506,6 +1506,12 @@ describe("init CLI", () => {
 			expect(rendered).toMatch(
 				/◯\s+GitHub Copilot CLI \(github-copilot-cli\)/,
 			);
+			term.write("\x1b[B".repeat(4));
+			await waitForPtyText(
+				term,
+				() => output,
+				'Detected, but "copilot" was not found on PATH. Its plugin cannot install.',
+			);
 		} finally {
 			term.kill();
 			await exited;
