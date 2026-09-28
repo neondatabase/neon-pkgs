@@ -1081,8 +1081,11 @@ export type ConsumptionHistoryPerTimeframe = {
      */
     written_data_bytes: number;
     /**
+     * Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.
      * Bytes. The space occupied in Postgres storage. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches.
      *
+     *
+     * @deprecated
      */
     synthetic_storage_size_bytes: number;
     /**
@@ -2535,6 +2538,51 @@ export type OrganizationInvitationsResponse = {
      * List of pending invitations for the organization.
      */
     invitations: Array<Invitation>;
+};
+
+export type ScimToken = {
+    /**
+     * The SCIM token's unique ID. Distinct from the token value.
+     */
+    id: string;
+    /**
+     * The admin-specified token name
+     */
+    name: string;
+    /**
+     * A timestamp indicating when the SCIM token was created
+     */
+    created_at: string;
+    /**
+     * A timestamp indicating when the token was last used to authenticate, if ever
+     */
+    last_used_at?: string | null;
+};
+
+export type ScimTokensListResponse = {
+    tokens: Array<ScimToken>;
+};
+
+export type ScimTokenCreateRequest = {
+    /**
+     * A name to identify the SCIM token
+     */
+    name: string;
+};
+
+export type ScimTokenCreateResponse = {
+    /**
+     * The generated SCIM bearer token. Shown once — store it securely; it cannot be retrieved later.
+     */
+    token: string;
+    scim_token: ScimToken;
+};
+
+export type ScimTokenRevokeResponse = {
+    /**
+     * The revoked SCIM token's unique ID
+     */
+    id: string;
 };
 
 export type OrganizationInviteCreateRequest = {
@@ -10656,12 +10704,12 @@ export type GetConsumptionHistoryPerProjectData = {
         include_v1_metrics?: boolean;
         /**
          * Specify a list of metrics to include in the response.
-         * If omitted, active_time, compute_time, written_data, synthetic_storage_size are returned.
+         * If omitted, active_time, compute_time, written_data are returned.
          * Possible values:
          * - `active_time_seconds`
          * - `compute_time_seconds`
          * - `written_data_bytes`
-         * - `synthetic_storage_size_bytes`
+         * - `synthetic_storage_size_bytes` (deprecated: always returns 0; use the consumption history v2 endpoints instead)
          * - `data_storage_bytes_hour`
          * - `logical_size_bytes`
          * - `logical_size_bytes_hour`

@@ -1,5 +1,46 @@
 # neonctl
 
+## 6.2.4
+
+### Patch Changes
+
+- Updated dependencies [37acc0c]
+  - neon@6.2.4
+
+## 6.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - neon@6.2.3
+
+## 6.2.2
+
+### Patch Changes
+
+- neon@6.2.2
+
+## 6.2.1
+
+### Patch Changes
+
+- neon@6.2.1
+
+## 6.2.0
+
+### Patch Changes
+
+- Updated dependencies [64062a6]
+  - neon@6.2.0
+
+## 6.1.0
+
+### Patch Changes
+
+- Updated dependencies [efb7a99]
+- Updated dependencies [8b2823c]
+  - neon@6.1.0
+
 ## 6.0.0
 
 ### Patch Changes

@@ -70,15 +70,14 @@ describe("planInitToolingSteps", () => {
 				mcpOauth: true,
 			}),
 		).toEqual([
-			[
-				"plugins",
-				"--global",
-				"-y",
-				"--agent",
-				"cursor",
-				"--agent",
-				"codex",
-			],
+			{
+				kind: "plugins",
+				options: {
+					yes: true,
+					global: true,
+					agents: ["cursor", "codex"],
+				},
+			},
 		]);
 	});
 
@@ -91,7 +90,12 @@ describe("planInitToolingSteps", () => {
 				skillsGlobal: true,
 				mcpOauth: true,
 			}),
-		).toEqual([["skills", "-y", "--agent", "cursor", "--agent", "codex"]]);
+		).toEqual([
+			{
+				kind: "skills",
+				options: { yes: true, agents: ["cursor", "codex"] },
+			},
+		]);
 	});
 
 	test("oauth MCP includes --project-id when pinned", () => {
@@ -109,16 +113,20 @@ describe("planInitToolingSteps", () => {
 				mcpProjectId: "proj-pin",
 			}),
 		).toEqual([
-			["skills", "-y", "--agent", "opencode"],
-			[
-				"mcp",
-				"-y",
-				"--oauth",
-				"--project-id",
-				"proj-pin",
-				"--agent",
-				"opencode",
-			],
+			{
+				kind: "skills",
+				options: { yes: true, global: false, agents: ["opencode"] },
+			},
+			{
+				kind: "mcp",
+				options: {
+					yes: true,
+					oauth: true,
+					project: false,
+					projectId: "proj-pin",
+					agent: ["opencode"],
+				},
+			},
 		]);
 	});
 });

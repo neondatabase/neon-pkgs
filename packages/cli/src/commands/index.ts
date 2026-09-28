@@ -17,6 +17,7 @@ import * as dev from "./dev.js";
 import * as diff from "./diff.js";
 import * as env from "./env.js";
 import * as functions from "./functions.js";
+import * as git from "./git.js";
 import * as init from "./init.js";
 import * as inspect from "./inspect.js";
 import * as ipAllow from "./ip_allow.js";
@@ -62,6 +63,7 @@ export default [
 	psql,
 	setContext,
 	checkout,
+	git,
 	link,
 	open,
 	claim,

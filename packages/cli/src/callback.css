@@ -1,0 +1,235 @@
+@font-face {
+	font-family: Inter;
+	src: url("./callback-assets/inter-latin.woff2") format("woff2");
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 104px 24px;
+	background: #000;
+	color: #fff;
+	font-family: Inter, Arial, sans-serif;
+	font-size: 16px;
+	line-height: 1.375;
+	letter-spacing: -0.02em;
+	-webkit-font-smoothing: antialiased;
+}
+
+main {
+	max-width: 651px;
+	margin: 0 auto;
+}
+h1,
+h2,
+p {
+	margin: 0;
+}
+h1,
+h2 {
+	font-weight: 400;
+}
+
+h1,
+h2,
+.success-header p,
+.instructions {
+	letter-spacing: -0.02em;
+}
+img {
+	display: block;
+	flex-shrink: 0;
+}
+
+.card {
+	background: #0c0d0d;
+	border: 1px solid #303236;
+}
+
+.success-header {
+	display: flex;
+	align-items: center;
+	gap: 20px;
+	padding: 32px 32px 28px;
+	border-bottom: 1px solid #303236;
+}
+
+h1 {
+	font-size: 28px;
+}
+
+.success-header p {
+	margin-top: 6px;
+	color: #94979e;
+	font-size: 20px;
+}
+
+.skills {
+	padding: 28px 31px;
+}
+
+.skills-heading {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+h2 {
+	color: #e4e5e7;
+	font-size: 24px;
+}
+.agent-icons {
+	display: flex;
+	gap: 12px;
+}
+
+.instructions {
+	margin-top: 10px;
+	color: #94979e;
+	font-size: 18px;
+}
+
+.actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin-top: 24px;
+}
+
+button,
+.docs-link {
+	font: inherit;
+	font-weight: 500;
+	line-height: 1;
+	letter-spacing: inherit;
+}
+
+button {
+	min-width: 152px;
+	min-height: 40px;
+	padding: 12px 24px;
+	border: 0;
+	border-radius: 33px;
+	background: #fff;
+	color: #000;
+	cursor: pointer;
+}
+
+button:hover {
+	background: #e4e5e7;
+}
+button:disabled {
+	cursor: wait;
+}
+
+.docs-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	color: #fff;
+	text-decoration: none;
+}
+
+.docs-link:hover .arrow {
+	transform: translateX(4px);
+}
+
+.arrow {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 12px;
+	transition: transform 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.arrow {
+		transition: none;
+	}
+}
+
+.arrow img {
+	transform: rotate(90deg);
+}
+
+:focus-visible {
+	outline: 2px solid #34d59a;
+	outline-offset: 4px;
+}
+
+.close-hint {
+	margin-top: 20px;
+	color: #94979e;
+	text-align: center;
+}
+
+.copy-status:not(:empty) {
+	margin-top: 16px;
+	color: #94979e;
+}
+.manual-copy {
+	margin-top: 16px;
+}
+.manual-copy label {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.manual-copy textarea {
+	width: 100%;
+	min-height: 140px;
+	padding: 12px;
+	border: 1px solid #303236;
+	border-radius: 4px;
+	background: #000;
+	color: #e4e5e7;
+	font: 14px/1.5 monospace;
+	resize: vertical;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+	body {
+		padding: 56px 20px;
+	}
+	.success-header {
+		flex-direction: column;
+		align-items: flex-start;
+		padding: 24px;
+		gap: 16px;
+	}
+	.success-header > img {
+		/* Align the artwork, accounting for the SVG's transparent inset. */
+		margin-inline-start: -10px;
+	}
+	h1 {
+		font-size: 26px;
+	}
+	.success-header p {
+		font-size: 18px;
+	}
+	.skills {
+		padding: 24px;
+	}
+	h2 {
+		font-size: 22px;
+	}
+}

@@ -263,6 +263,33 @@ describe("neon plugins", () => {
 		expect([...targets].sort()).toEqual(["claude-code", "cursor"]);
 	});
 
+	test("prints a progress line per target before installing, in spawn order", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch();
+		mkdirSync(join(cwd, ".claude"));
+		const { stderr } = await testCliCommand(
+			["plugins", "-y"],
+			runOptions(home, cwd, bin),
+		);
+		const displayNameByTarget: Record<string, string> = {
+			cursor: "Cursor",
+			"claude-code": "Claude Code",
+		};
+		const spawned: string[][] = JSON.parse(readFileSync(argvFile, "utf8"));
+		expect(spawned).toHaveLength(2);
+		const expectedLines = spawned.map((args, index) => {
+			const target = args[args.indexOf("-t") + 1];
+			const name =
+				target !== undefined ? displayNameByTarget[target] : undefined;
+			return `INFO: Installing the Neon plugin for ${name} (${index + 1}/2)...`;
+		});
+		const progressLines = stderr
+			.split("\n")
+			.filter((line) => line.includes("Installing the Neon plugin for"));
+		expect(progressLines).toEqual(expectedLines);
+	});
+
 	test("rejects unknown options and subcommands", async ({
 		testCliCommand,
 	}) => {

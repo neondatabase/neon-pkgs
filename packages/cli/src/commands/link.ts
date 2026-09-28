@@ -335,7 +335,7 @@ const orgNeedsProjectError = (
 	);
 };
 
-const quoteFlagValue = (value: string): string => {
+export const quoteFlagValue = (value: string): string => {
 	if (/^[A-Za-z0-9_./:@-]+$/.test(value)) {
 		return value;
 	}

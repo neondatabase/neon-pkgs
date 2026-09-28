@@ -756,6 +756,276 @@ export interface Config<
 	preview?: Preview;
 	/** Per-branch tuning closure. Cannot change the static existential set. */
 	branch?: BranchTuningFn<Preview, Functions>;
+	/**
+	 * Experimental (unstable) features, isolated in their own namespace so they can change
+	 * shape or disappear without touching the rest of the policy. See {@link ExperimentalInput}.
+	 */
+	experimental?: ExperimentalInput;
+}
+
+/**
+ * Experimental (unstable) features. Currently just `hooks`. Kept out of the top-level
+ * namespace — rather than a sibling of `auth` / `functions` / `branch` — as a signal that
+ * this shape is still moving and isn't covered by the same stability guarantees as the rest
+ * of the policy.
+ */
+export interface ExperimentalInput {
+	/**
+	 * Imperative lifecycle hooks (Preview) — run side effects (migrations, seeding, …) on the
+	 * real `checkout` / `deploy` commands. The declarative companion to {@link Config.branch}:
+	 * hooks never run during `plan` / `status` / `inspect`, so the diff engine stays sound.
+	 * See {@link Hooks}.
+	 */
+	hooks?: Hooks;
+}
+
+// ─── Lifecycle hooks (Preview) ──────────────────────────────────────────────────
+//
+// Hooks are the **imperative** companion to the pure, declarative `branch` closure.
+// `branch()` answers *"what should this branch look like?"* (and runs during `plan` /
+// `status` / `apply`, so it must stay side-effect free). Hooks answer *"do this when a
+// branch is created / checked out / deployed"* (migrations, seeding, notifications) and
+// run **only** during the real `checkout` / `deploy` commands (and, for `create`,
+// whenever those actually create a branch) — never during `plan` / `status` / `inspect`.
+
+/**
+ * Read-only git facts injected into every hook by the CLI. A hook can *read* the git state
+ * (to name a branch, gate a migration, …) but the hooks never *drive* git — that keeps the
+ * git → Neon relationship a loop-free, one-way edge (`git checkout` syncs Neon, never the
+ * reverse). Populated from the surrounding repository; all fields except `available`,
+ * `isDetached`, and `isDirty` are absent when {@link available} is `false` (not a git repo,
+ * or `git` is not installed).
+ *
+ * What *triggered* this hook invocation — the installed git hook vs. an explicit CLI
+ * command — is a separate concern; see {@link CheckoutEvent} / {@link DeployEvent} on each
+ * hook context's `event` field, not this type.
+ */
+export interface GitContext {
+	/** `false` when the command did not run inside a git work tree (or `git` is missing). */
+	available: boolean;
+	/** Current branch (`git symbolic-ref --short HEAD`). Undefined in detached-HEAD state. */
+	branch?: string;
+	/**
+	 * `branch`, sanitized into a valid Neon branch name: lowercased, each `/`-separated
+	 * segment reduced to `[a-z0-9-]`, empty results fall back to `"branch"`, clamped to 256
+	 * characters. Undefined whenever `branch` is (detached HEAD, not a git repo, or `git` is
+	 * unavailable). Prepend your own prefix with plain string concatenation, e.g.
+	 * `` `preview/${git.neonSafeBranchName}` ``.
+	 */
+	neonSafeBranchName?: string;
+	/** Full commit SHA of `HEAD`. */
+	sha?: string;
+	/** Abbreviated commit SHA of `HEAD`. */
+	shortSha?: string;
+	/** `true` when `HEAD` is detached (no current branch). */
+	isDetached: boolean;
+	/** `true` when the work tree has uncommitted changes (`git status --porcelain`). */
+	isDirty: boolean;
+	/** Default branch the remote points at (`origin/HEAD`), e.g. `"main"`, when resolvable. */
+	defaultBranch?: string;
+	/** `origin` remote URL, when configured. */
+	remoteUrl?: string;
+	/** Absolute path to the repository root (`git rev-parse --show-toplevel`). */
+	repoRoot?: string;
+}
+
+/**
+ * What triggered a `checkout` (and the `create` it may perform). `inputName` — what the user
+ * typed at a Neon prompt, if anything — lives *inside* the event so narrowing on `event.type`
+ * narrows `inputName` too (TypeScript only propagates discriminated-union narrowing within
+ * the object actually holding the discriminant, not to sibling fields of an outer object):
+ *
+ * - `"git-checkout"` — the installed `post-checkout` git hook, via `neon git sync`. Carries
+ *   the git branch that triggered it (`gitBranch`); `inputName` is always `undefined` here —
+ *   nothing was typed at a Neon prompt. The sanitized Neon-safe form of that branch is on the
+ *   sibling `git` context, at `git.neonSafeBranchName`.
+ * - `"neon-checkout"` — an explicit `neon checkout` invocation. `inputName` is the name/id
+ *   the user passed, or `undefined` when they omitted it (interactive picker).
+ */
+export type CheckoutEvent =
+	| { type: "git-checkout"; gitBranch: string; inputName?: undefined }
+	| { type: "neon-checkout"; inputName?: string };
+
+/** What triggered a `deploy`. Currently always `"neon-deploy"` — an explicit `neon deploy` / `config apply` invocation; `deploy` is never triggered by the git hook. */
+export type DeployEvent = { type: "neon-deploy" };
+
+/**
+ * The branch a hook is acting on — a resolved, live branch (unlike the pre-create
+ * {@link BranchTarget} the `branch` closure may receive). Always carries a concrete `id`.
+ */
+export interface HookBranch {
+	/** Neon project id the branch belongs to. */
+	projectId: string;
+	/** Neon branch id (`br-…`). */
+	id: string;
+	/** Branch name. */
+	name: string;
+	/** `true` when **this** operation created the branch (vs selecting an existing one). */
+	created: boolean;
+	/** Whether Neon marks the branch as the project default. */
+	isDefault: boolean;
+	/** Whether Neon marks the branch protected. */
+	isProtected: boolean;
+	/** Parent branch id, when known. */
+	parentId?: string;
+	/** Branch expiration timestamp, when set. */
+	expiresAt?: string;
+}
+
+/**
+ * A resolved branch's env vars, namespaced like `@neon/env`'s `NeonEnv<C>` — but **not**
+ * generic over the policy. `@neon/config` cannot import the real, policy-exact `NeonEnv<C>`
+ * (it lives in a package that itself depends on `@neon/config`, and importing it back would
+ * be a dependency cycle), so every namespace here is optional regardless of what the policy
+ * declares, rather than conditionally present/absent. `postgres` is the only field every
+ * resolved branch actually has, so it stays the one non-optional namespace.
+ */
+export interface HookEnv {
+	postgres: {
+		databaseUrl: string;
+		databaseUrlUnpooled: string;
+	};
+	branch?: { name: string };
+	auth?: { baseUrl: string; jwksUrl: string };
+	dataApi?: { url: string };
+	storage?: {
+		accessKeyId: string;
+		secretAccessKey: string;
+		endpoint: string;
+		region: string;
+	};
+	aiGateway?: { apiKey: string; baseUrl: string };
+	functions?: Record<string, { baseUrl: string }>;
+}
+
+/** Context passed to `hooks.checkout.before` (runs before the branch name is resolved). */
+export interface CheckoutBeforeContext {
+	event: CheckoutEvent;
+	git: GitContext;
+}
+
+/**
+ * Return value of a `hooks.checkout.before` **function** hook. Return `{ name }` to rewrite
+ * the branch that will be checked out / created; return nothing to keep the resolved name.
+ * Throw to abort the checkout. (Shell-command `before` hooks cannot rewrite the name — only
+ * abort via a non-zero exit — since they have no return channel.)
+ */
+export interface CheckoutBeforeResult {
+	/** Overrides the Neon branch name to check out / create. */
+	name?: string;
+}
+
+/**
+ * Context passed to `hooks.checkout.after` (branch resolved + env pulled). `env` is
+ * {@link HookEnv} — every namespace optional; see that type for why it can't be the exact,
+ * policy-typed `NeonEnv<C>`.
+ */
+export interface CheckoutAfterContext {
+	branch: HookBranch;
+	env: HookEnv;
+	git: GitContext;
+	event: CheckoutEvent;
+}
+
+/**
+ * Context passed to `hooks.create.before` (runs before a new branch is created). Fires only
+ * for a genuine creation — never for `checkout` selecting an existing branch. Unlike
+ * `checkout.before`, this cannot rename the branch: by the time a `create` is reached, the
+ * name is already resolved (rename via `checkout.before` if you need that).
+ */
+export interface CreateBeforeContext {
+	/** Name of the branch about to be created. */
+	branchName: string;
+	git: GitContext;
+	/** The event that triggered the enclosing `checkout` — `create` never runs standalone. */
+	event: CheckoutEvent;
+}
+
+/** Context passed to `hooks.create.after` (branch created, policy applied, env pulled). `branch.created` is always `true` here. */
+export interface CreateAfterContext {
+	branch: HookBranch;
+	env: HookEnv;
+	git: GitContext;
+	event: CheckoutEvent;
+}
+
+/** Context passed to `hooks.deploy.before` (branch resolved, policy not yet applied). */
+export interface DeployBeforeContext {
+	branch: HookBranch;
+	git: GitContext;
+	event: DeployEvent;
+}
+
+/** Context passed to `hooks.deploy.after` (policy applied, env pulled). */
+export interface DeployAfterContext {
+	branch: HookBranch;
+	env: HookEnv;
+	/** What the apply changed. */
+	result: PushResult;
+	git: GitContext;
+	event: DeployEvent;
+}
+
+/**
+ * A shell-command hook: a single command string, or a list of commands run sequentially
+ * (each must exit 0 or the operation aborts). Commands run **non-interactively** (stdin is
+ * not a TTY and `CI=1` is set) so an accidental interactive command fails fast instead of
+ * hanging. Resolved Neon env vars are injected into the command's environment.
+ */
+export type ShellHook = string | string[];
+
+/**
+ * A lifecycle hook: either a (possibly async) function receiving a typed `Ctx`, or a
+ * {@link ShellHook}. `before` hooks may influence/abort (functions can return `Result`,
+ * any hook can throw to abort); `after` hooks observe (their return value is ignored).
+ */
+export type Hook<Ctx, Result = void> =
+	| ((ctx: Ctx) => Result | Promise<Result>)
+	| ShellHook;
+
+/** Hooks for the `checkout` command (`neon checkout`). */
+export interface CheckoutHooks {
+	/** Runs before the branch is resolved; may rewrite the name (function form) or abort. */
+	// biome-ignore lint/suspicious/noConfusingVoidType: a `before` hook may return an override or nothing — `void` (not `undefined`) is what lets a no-op `() => {}` validation hook type-check.
+	before?: Hook<CheckoutBeforeContext, CheckoutBeforeResult | void>;
+	/** Runs after checkout + env pull. Use `branch.created` to distinguish new vs existing. */
+	after?: Hook<CheckoutAfterContext>;
+}
+
+/**
+ * Hooks for branch **creation**. Fires only when `checkout` (or another consumer of the
+ * runtime's create operation) actually creates a new branch — not when `checkout` selects
+ * an existing one. Distinct from `checkout`, which brackets the whole `checkout` command
+ * regardless of whether it created or selected a branch: use `create` when you specifically
+ * care about the creation moment.
+ */
+export interface CreateHooks {
+	/** Runs before the branch is created; throw/non-zero exit to abort. */
+	before?: Hook<CreateBeforeContext, void>;
+	/** Runs after the branch is created and the policy applied. */
+	after?: Hook<CreateAfterContext>;
+}
+
+/** Hooks for the `deploy` command (`neon deploy` / `config apply`). */
+export interface DeployHooks {
+	/** Runs before the policy is applied; throw/non-zero exit to abort. */
+	before?: Hook<DeployBeforeContext, void>;
+	/** Runs after a successful apply + env pull. */
+	after?: Hook<DeployAfterContext>;
+}
+
+/**
+ * Imperative lifecycle hooks, keyed by the phase they bracket. Each phase exposes a
+ * `before` (influence/abort) and `after` (observe) hook. Hooks never run during `plan` /
+ * `status` / `inspect`.
+ *
+ * `env` in every `after` hook is the fixed {@link HookEnv}, not a policy-exact type — see
+ * that type's doc comment for why.
+ */
+export interface Hooks {
+	checkout?: CheckoutHooks;
+	create?: CreateHooks;
+	deploy?: DeployHooks;
 }
 
 /**
