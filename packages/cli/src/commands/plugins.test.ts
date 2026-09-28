@@ -5,6 +5,7 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -82,6 +83,14 @@ if (process.env.PLUGINS_CHILD_EXIT) {
 		mkdirSync(join(cwd, ".cursor"));
 	}
 	return { home, cwd, bin, argvFile, envFile };
+}
+
+/** A PATH entry with only `node`, so an agent CLI installed next to it cannot leak in. */
+function nodeOnlyBin(): string {
+	const dir = mkdtempSync(join(tmpdir(), "neon-plugins-node-"));
+	dirs.push(dir);
+	symlinkSync(process.execPath, join(dir, "node"));
+	return dir;
 }
 
 function runOptions(
@@ -332,6 +341,70 @@ describe("neon plugins", () => {
 		);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toContain("user");
 		expect(JSON.parse(stdout)[0].scope).toBe("user");
+	});
+
+	test("-y --global skips detected Copilot CLI and Grok when their commands are not on PATH", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		for (const dir of [".codex", ".copilot", ".grok"]) {
+			mkdirSync(join(home, dir));
+		}
+		const { stdout, stderr } = await testCliCommand(
+			["plugins", "-y", "--global"],
+			runOptions(home, cwd, bin, { PATH: `${bin}:${nodeOnlyBin()}` }),
+		);
+		expect(JSON.parse(stdout)).toEqual([
+			{
+				scope: "user",
+				plugin: "neon-postgres",
+				agent: "codex",
+				status: "installed",
+			},
+		]);
+		expect(
+			JSON.parse(readFileSync(argvFile, "utf8")).map(
+				(argv: string[]) => argv[argv.indexOf("-t") + 1],
+			),
+		).toEqual(["codex"]);
+		expect(strip(stderr)).toContain(
+			'Skipping GitHub Copilot CLI: the plugin installs through "copilot", which was not found on PATH.',
+		);
+		expect(strip(stderr)).toContain(
+			'Skipping Grok Build: the plugin installs through "grok", which was not found on PATH.',
+		);
+	});
+
+	test("-y --global with only command-less agents installs nothing and exits 0", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		mkdirSync(join(home, ".copilot"));
+		const { stdout, stderr } = await testCliCommand(
+			["plugins", "-y", "--global"],
+			runOptions(home, cwd, bin, { PATH: `${bin}:${nodeOnlyBin()}` }),
+		);
+		expect(JSON.parse(stdout)).toEqual([]);
+		expect(strip(stderr)).toContain("No Neon plugins installed.");
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
+	});
+
+	test("-y --global keeps Copilot CLI when copilot is on PATH", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		mkdirSync(join(home, ".copilot"));
+		writeFileSync(join(bin, "copilot"), "#!/bin/sh\nexit 0\n");
+		chmodSync(join(bin, "copilot"), 0o755);
+		await testCliCommand(
+			["plugins", "-y", "--global"],
+			runOptions(home, cwd, bin, { PATH: `${bin}:${nodeOnlyBin()}` }),
+		);
+		expect(
+			JSON.parse(readFileSync(argvFile, "utf8")).map(
+				(argv: string[]) => argv[argv.indexOf("-t") + 1],
+			),
+		).toEqual(["github-copilot"]);
 	});
 
 	test("vscode requires --global", async ({ testCliCommand }) => {

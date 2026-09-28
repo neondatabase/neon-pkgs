@@ -397,50 +397,6 @@ describe("resolvePluginsPlan agent commands", () => {
 		return bin;
 	};
 
-	test("-y --global skips detected Copilot CLI and Grok without their commands", async () => {
-		const cwd = tmpDir();
-		const plan = await resolvePluginsPlan(
-			planOptions(cwd, {
-				agents: [],
-				yes: true,
-				interactive: false,
-				global: true,
-				detectInstalledAgents: async () => [
-					"cursor",
-					"github-copilot-cli",
-					"grok-build",
-				],
-				commandPath: emptyPath(),
-			}),
-		);
-		expect(plan.agents).toEqual(["cursor"]);
-		expect(plan.targets).toEqual([
-			{ agents: ["cursor"], target: "cursor" },
-		]);
-		expect(plan.missingCommands).toEqual([
-			{ agent: "github-copilot-cli", command: "copilot" },
-			{ agent: "grok-build", command: "grok" },
-		]);
-	});
-
-	test("-y --global with only command-less agents plans no installs", async () => {
-		const cwd = tmpDir();
-		const plan = await resolvePluginsPlan(
-			planOptions(cwd, {
-				agents: [],
-				yes: true,
-				interactive: false,
-				global: true,
-				detectInstalledAgents: async () => ["github-copilot-cli"],
-				commandPath: emptyPath(),
-			}),
-		);
-		expect(plan.targets).toEqual([]);
-		expect(plan.missingCommands).toEqual([
-			{ agent: "github-copilot-cli", command: "copilot" },
-		]);
-	});
-
 	test("--agent without the command fails before installing", async () => {
 		const cwd = tmpDir();
 		await expect(
