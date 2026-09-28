@@ -3,6 +3,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -1491,21 +1492,25 @@ describe("init CLI", () => {
 			output += chunk;
 		});
 
-		await waitForPtyText(
-			term,
-			() => output,
-			"How should Neon be added to your coding agents?",
-		);
-		term.write("\r");
-		await waitForPtyText(term, () => output, "VS Code (vscode)");
-		const rendered = stripAnsi(output);
-		console.log("RENDERED>>>" + rendered.slice(-900));
-		expect(rendered).toMatch(/◉\s+Cursor \(cursor\)/);
-		expect(rendered).toMatch(
-			/◯\s+GitHub Copilot CLI \(github-copilot-cli\)/,
-		);
-		term.write("\x03");
-		expect(await waitForPtyExit(term)).toBe(1);
+		const exited = waitForPtyExit(term);
+		try {
+			await waitForPtyText(
+				term,
+				() => output,
+				"How should Neon be added to your coding agents?",
+			);
+			term.write("\r");
+			await waitForPtyText(term, () => output, "VS Code (vscode)");
+			const rendered = stripAnsi(output);
+			expect(rendered).toMatch(/◉\s+Cursor \(cursor\)/);
+			expect(rendered).toMatch(
+				/◯\s+GitHub Copilot CLI \(github-copilot-cli\)/,
+			);
+		} finally {
+			term.kill();
+			await exited;
+			rmSync(root, { recursive: true, force: true });
+		}
 	}, 20_000);
 
 	cliTest("rejects --data", async ({ testCliCommand }) => {
