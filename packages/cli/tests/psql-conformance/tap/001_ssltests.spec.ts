@@ -84,6 +84,7 @@ import {
 	switchServerCertSql,
 	type TlsPgConn,
 	teardownTlsPg,
+	WRONG_SSLPASSWORD,
 } from "../harness/pg-fixture-tls.js";
 
 // ---------------------------------------------------------------------------
@@ -944,7 +945,7 @@ describe.skipIf(!SHOULD_RUN)("tap/001_ssltests", () => {
 				sslrootcert: t.tls.vault.getRootServerBundle(),
 				sslcert: client.cert,
 				sslkey: encryptedKey,
-				sslpassword: "definitely-not-the-password",
+				sslpassword: WRONG_SSLPASSWORD,
 			});
 			expect(conn).toBeNull();
 		});
@@ -1634,7 +1635,7 @@ describe.skipIf(!SHOULD_RUN)("tap/001_ssltests", () => {
 					sslrootcert: t.tls.vault.getRootServerBundle(),
 					sslcert: client.cert,
 					sslkey: encryptedKey,
-					sslpassword: "definitely-not-the-password",
+					sslpassword: WRONG_SSLPASSWORD,
 				}),
 			).rejects.toThrow(/bad decrypt/);
 		});
