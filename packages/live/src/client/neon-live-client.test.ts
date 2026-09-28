@@ -7,6 +7,7 @@ import {
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
 } from "./neon-live-client.js";
+import { defineParsers } from "./postgres/parsers.js";
 
 interface MessageRow {
 	readonly id: number;
@@ -282,6 +283,172 @@ describe("NeonLiveClient", () => {
 		});
 		client.close();
 	});
+
+	it("contains parser failures to one subscription on a shared connection", () => {
+		useFakeWebSocket();
+		const original = new Error("application parser failed");
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			parsers: defineParsers({
+				90000: () => {
+					throw original;
+				},
+			}),
+		});
+		const failed = client.subscribe(authorization("failed"));
+		const surviving = client.subscribe(authorization("surviving"));
+		const socket = FakeWebSocket.instances[0];
+		if (!socket) throw new Error("Missing test WebSocket");
+		socket.open();
+		socket.receive({ type: "ready" });
+		const requests = socket.sent.filter(
+			(message) => message.type === "subscribe",
+		);
+		const failedRequest = requests[0];
+		const survivingRequest = requests[1];
+		if (!failedRequest || !survivingRequest) {
+			throw new Error("Missing subscribe request");
+		}
+		socket.receive({
+			type: "subscribed",
+			request_id: failedRequest.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{
+					name: "value",
+					type_oid: 90000,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		socket.receive({
+			type: "subscribed",
+			request_id: survivingRequest.request_id,
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{ name: "value", type_oid: 25, typmod: -1, codec: "pg_text" },
+			],
+		});
+		emptySnapshot(socket, "41");
+		emptySnapshot(socket, "42");
+
+		socket.receive({ type: "open", publication_id: "shared" });
+		socket.receive({
+			type: "keyed_results",
+			publication_id: "shared",
+			index: 0,
+			txids: ["42"],
+			targets: [
+				{ live_id: "41", epoch: "1", sequence: "1" },
+				{ live_id: "42", epoch: "1", sequence: "1" },
+			],
+			changes: [
+				{ op: "upsert", row_key: ROW_KEY, values: ["private-value"] },
+			],
+		});
+		socket.receive({
+			type: "commit",
+			publication_id: "shared",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+
+		expect(failed.getSnapshot()).toMatchObject({
+			status: "error",
+			data: [],
+			error: {
+				code: "parser_error",
+				retryable: false,
+				cause: original,
+			},
+		});
+		expect(failed.getSnapshot().error?.message).toContain("value");
+		expect(failed.getSnapshot().error?.message).toContain("90000");
+		expect(failed.getSnapshot().error?.message).not.toContain(
+			"private-value",
+		);
+		expect(surviving.getSnapshot()).toEqual({
+			status: "live",
+			error: undefined,
+			data: [{ value: "private-value" }],
+		});
+		expect(socket.sent).toContainEqual({
+			type: "unsubscribe",
+			live_id: "41",
+		});
+		expect(socket.readyState).toBe(1);
+		client.close();
+	});
+
+	it("does not partially apply a batch when a later value fails to parse", () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			parsers: defineParsers({
+				90000: (value) => {
+					if (value === "bad") throw new Error("bad value");
+					return value;
+				},
+			}),
+		});
+		const subscription = client.subscribe(authorization("atomic"), {
+			initialData: [{ id: 7, title: "retained" }],
+		});
+		const socket = FakeWebSocket.instances[0];
+		if (!socket) throw new Error("Missing test WebSocket");
+		socket.open();
+		socket.receive({ type: "ready" });
+		const request = socket.sent.find(
+			(message) => message.type === "subscribe",
+		);
+		if (!request) throw new Error("Missing subscribe request");
+		socket.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{
+					name: "title",
+					type_oid: 90000,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		emptySnapshot(socket, "41");
+		socket.receive({ type: "open", publication_id: "atomic" });
+		socket.receive({
+			type: "keyed_results",
+			publication_id: "atomic",
+			index: 0,
+			txids: ["44"],
+			targets: [{ live_id: "41", epoch: "1", sequence: "1" }],
+			changes: [
+				{ op: "upsert", row_key: ROW_KEY, values: ["good"] },
+				{ op: "upsert", row_key: "b".repeat(64), values: ["bad"] },
+			],
+		});
+		socket.receive({
+			type: "commit",
+			publication_id: "atomic",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "error",
+			data: [],
+			error: { code: "parser_error" },
+		});
+		client.close();
+	});
 });
 
 function useFakeWebSocket(): void {
@@ -336,6 +503,27 @@ function snapshot(
 		epoch,
 		snapshot_attempt: "1",
 		chunk_count: 1,
+	});
+}
+
+function emptySnapshot(
+	socket: FakeWebSocket,
+	liveId: string,
+	epoch = "1",
+): void {
+	socket.receive({
+		type: "snapshot_start",
+		live_id: liveId,
+		epoch,
+		snapshot_attempt: "1",
+		mvcc: { xmin: "1", xmax: "2", xip: [] },
+	});
+	socket.receive({
+		type: "snapshot_end",
+		live_id: liveId,
+		epoch,
+		snapshot_attempt: "1",
+		chunk_count: 0,
 	});
 }
 

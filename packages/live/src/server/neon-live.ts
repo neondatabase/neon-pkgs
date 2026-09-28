@@ -1,4 +1,5 @@
 import type { LiveQueryAuthorization } from "../client/authorization.js";
+import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
@@ -138,6 +139,8 @@ export interface NeonLiveDirectServerOptions<Query>
 	 * `close()` to the returned SDK.
 	 */
 	readonly url: string;
+	/** PostgreSQL result-parser overrides for trusted direct subscriptions. */
+	readonly parsers?: PostgreSQLParsers;
 }
 
 /**
@@ -190,7 +193,10 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 
 	if (!("url" in options)) return Object.freeze({ authorize });
 
-	const directClient = new DirectLiveQueryClient(options.url);
+	const directClient = new DirectLiveQueryClient(
+		options.url,
+		options.parsers,
+	);
 	const subscribe = async <ConcreteQuery extends AuthorizableQuery<Query>>(
 		query: ConcreteQuery,
 		subscriptionOptions?:

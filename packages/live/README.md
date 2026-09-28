@@ -147,6 +147,8 @@ fresh authoritative reset.
 This mode holds the Neon Live secret and can authorize arbitrary queries. Use
 it only in trusted runtimes, never in browser code. The runtime must provide a
 standards-compatible global `WebSocket` implementation.
+`createNeonLive({ url, parsers })` accepts the same OID overrides as the
+low-level client for trusted direct-subscription results.
 
 ## Subscribe in the browser
 
@@ -182,11 +184,68 @@ reconnection or authorization renewal, existing materialized data remains
 available as `stale`. Recoverable connection failures retry with capped
 jittered backoff until the connection recovers or the client is closed.
 
-The current decoder supports PostgreSQL `integer` (`int4`) and `text` result
-columns, including SQL `NULL`. Cast other selected values to a supported result
-type until the corresponding browser codec is available. Parameter support is
-separate: the backend can encode the additional types documented above even
-when they are not yet supported as selected result columns.
+### PostgreSQL result values
+
+The client includes browser-safe parsers that follow the familiar
+node-postgres and Neon Serverless defaults:
+
+| PostgreSQL type | JavaScript value |
+| --- | --- |
+| `bool` | `boolean` |
+| `int2`, `int4`, `oid`, `float4`, `float8` | `number` |
+| `int8`, `numeric` | `string` |
+| `json`, `jsonb` | Parsed JSON value |
+| `date`, `timestamp`, `timestamptz` | `Date` |
+| `time`, `timetz` | `string` |
+| `bytea` | `Uint8Array` |
+| Text, UUID, network, unsupported, and unknown types | PostgreSQL text |
+
+Built-in PostgreSQL arrays using the standard comma delimiter are parsed
+recursively with the corresponding element parser. Arrays with another type
+delimiter, such as `box[]`, remain PostgreSQL text. SQL `NULL` bypasses parsers
+and remains JavaScript `null`.
+`date` and zone-less `timestamp` use the runtime's local timezone, as
+node-postgres does; `timestamptz` represents its absolute instant. PostgreSQL
+microseconds are truncated to JavaScript milliseconds.
+
+Override a parser by OID when the application uses a different representation:
+
+```ts
+import {
+  createNeonLiveClient,
+  pgTypeOids,
+} from "@neon/live/client";
+
+const customTypeOid = 90_000;
+const client = createNeonLiveClient({
+  url: "wss://live.neon.tech/...",
+  parsers: {
+    [pgTypeOids.int8]: (value) => BigInt(value),
+    [customTypeOid]: (value: string) => parseCustomType(value),
+  },
+});
+```
+
+Known OIDs are contextually typed: OID `17` (`pgTypeOids.bytea`) receives
+`Uint8Array`, while other built-in OIDs receive PostgreSQL text. Annotate an
+arbitrary custom OID parser's input as `string`. The client snapshots the
+configuration, so later object mutation has no effect. A scalar override also
+applies inside its known array type.
+
+`nodePostgresParsers` exposes the core preset and is already active by default.
+Spread `postgresJsParsers` into `parsers` to match PostgreSQL.js where it
+differs within the supported set. `@neon/live-drizzle/client` similarly exports
+`drizzleParsers` without importing the Drizzle runtime.
+
+Missing parsers deliberately return exact PostgreSQL text without warning.
+Malformed built-in values or an application parser that throws move only the
+affected subscription to non-retryable `parser_error`; other subscriptions on
+the WebSocket continue. The error identifies the result column and OID, omits
+the value, and preserves the parser's original error as `cause`.
+
+Parser configuration is runtime-only; it does not rewrite the `Row` type in a
+`LiveQueryAuthorization<Row>`. Keep adapter-inferred or explicitly declared
+row types consistent with the selected parser preset and overrides.
 
 Applications obtain a replacement capability through the same backend endpoint
 and call `subscription.renew(replacement)`. The SDK rejects a replacement for a
@@ -215,7 +274,13 @@ key or retain it across resets. Transaction IDs are decimal strings so 64-bit
 values remain exact in JavaScript.
 
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
-available immediately as stale data until the first authoritative reset.
+available immediately as stale data until the first authoritative reset. Neon
+Live does not transform those rows: the application is responsible for making
+their JavaScript representation match the configured live parsers. The core
+defaults align with node-postgres and Neon Serverless for built-in types, while
+the optional presets cover common driver and ORM differences. Framework date
+serialization and server/browser timezone alignment remain application
+concerns.
 
 ## Integrations and examples
 

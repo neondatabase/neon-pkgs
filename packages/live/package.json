@@ -59,6 +59,9 @@
     "test:ci": "npm run generate:check && vitest run --passWithNoTests",
     "tsc": "tsc"
   },
+  "dependencies": {
+    "postgres-array": "^3.0.4"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",

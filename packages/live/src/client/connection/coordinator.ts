@@ -42,6 +42,7 @@ export interface ConnectionCoordinatorOptions {
 
 export interface ConnectionHandle {
 	renew(authorization: ConnectionAuthorization): Promise<void>;
+	fail(error: ConnectionCoordinatorError): void;
 	unsubscribe(): void;
 }
 
@@ -68,8 +69,9 @@ export class ConnectionCoordinatorError extends Error {
 		readonly code: string,
 		readonly retryable: boolean,
 		message: string,
+		options?: ErrorOptions,
 	) {
-		super(message);
+		super(message, options);
 		this.name = "ConnectionCoordinatorError";
 	}
 }
@@ -167,6 +169,8 @@ export class ConnectionCoordinator {
 		return Object.freeze({
 			renew: (replacement: ConnectionAuthorization) =>
 				this.renew(managed, replacement),
+			fail: (error: ConnectionCoordinatorError) =>
+				this.failLocalSubscription(managed, error),
 			unsubscribe: () => this.unsubscribe(managed),
 		});
 	}
@@ -656,6 +660,35 @@ export class ConnectionCoordinator {
 		subscription.liveId = undefined;
 		this.rejectRenewals(subscription, error);
 		subscription.callbacks.failed(error);
+	}
+
+	private failLocalSubscription(
+		subscription: ManagedSubscription,
+		error: ConnectionCoordinatorError,
+	): void {
+		if (subscription.state === "failed" || subscription.state === "closed")
+			return;
+		subscription.state = "failed";
+		this.activeSubscriptions.delete(subscription);
+		const liveId = subscription.liveId;
+		if (liveId) {
+			this.reconciler.deactivate(liveId);
+			this.liveSubscriptions.delete(liveId);
+			this.detachingLiveIds.add(liveId);
+			this.send({ type: "unsubscribe", live_id: liveId });
+		}
+		if (subscription.requestId)
+			this.pendingRequests.delete(subscription.requestId);
+		subscription.requestId = undefined;
+		subscription.requestedCapability = undefined;
+		subscription.acceptedCapability = undefined;
+		subscription.liveId = undefined;
+		this.rejectRenewals(subscription, error);
+		subscription.callbacks.failed(error);
+		if (this.activeSubscriptions.size === 0) {
+			this.cancelReconnectEpisode();
+			this.closeSocket(NORMAL_CLOSE, "no active subscriptions");
+		}
 	}
 
 	private awaitReplacementAuthorization(

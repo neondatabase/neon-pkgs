@@ -1,4 +1,5 @@
 import type { LiveQueryAuthorization } from "./authorization.js";
+import type { PostgreSQLParsers } from "./postgres/parsers.js";
 
 /** An error reported by a Neon Live subscription. */
 export interface LiveQueryError extends Error {
@@ -161,6 +162,13 @@ export interface NeonLiveClientOptions {
 	 * Neon Live proxy WebSocket URL, using `wss:` outside local development.
 	 */
 	readonly url: string;
+	/**
+	 * PostgreSQL result parsers keyed by type OID.
+	 *
+	 * These entries override {@link nodePostgresParsers}. The client snapshots
+	 * the object when it is created, so later mutations have no effect.
+	 */
+	readonly parsers?: PostgreSQLParsers;
 }
 
 /** A client that multiplexes independently disposable subscriptions. */

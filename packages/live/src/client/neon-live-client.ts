@@ -4,8 +4,13 @@ import {
 } from "./authorization.js";
 import {
 	ConnectionCoordinator,
+	ConnectionCoordinatorError,
 	type ConnectionHandle,
 } from "./connection/coordinator.js";
+import {
+	createParserRegistry,
+	type PostgreSQLParserRegistry,
+} from "./postgres/parsers.js";
 import { Subscription } from "./subscription.js";
 import type {
 	MaterializedLiveQueryOptions,
@@ -38,9 +43,11 @@ class NeonLiveClientImpl implements NeonLiveClient {
 		ConnectionHandle
 	>();
 	private disposed = false;
+	private readonly parsers: PostgreSQLParserRegistry;
 
 	constructor(options: NeonLiveClientOptions) {
 		this.coordinator = new ConnectionCoordinator(options);
+		this.parsers = createParserRegistry(options.parsers);
 	}
 
 	subscribe<Row>(
@@ -66,6 +73,7 @@ class NeonLiveClientImpl implements NeonLiveClient {
 			this,
 			authorization,
 			materialized,
+			this.parsers,
 			initialData,
 		);
 		const handle = this.coordinator.subscribe(authorization, {
@@ -95,6 +103,19 @@ class NeonLiveClientImpl implements NeonLiveClient {
 		this.handles.delete(subscription as Subscription<unknown>);
 		subscription.markClosed();
 		handle.unsubscribe();
+	}
+
+	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void {
+		const handle = this.handles.get(subscription as Subscription<unknown>);
+		if (!handle) return;
+		handle.fail(
+			new ConnectionCoordinatorError(
+				"parser_error",
+				false,
+				cause.message,
+				{ cause: cause.cause },
+			),
+		);
 	}
 
 	close(): void {

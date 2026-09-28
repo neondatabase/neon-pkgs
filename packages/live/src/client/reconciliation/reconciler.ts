@@ -23,6 +23,8 @@ export interface ReconciliationTarget {
 	caughtUp(): void;
 	/** Leave `live` while the proxy obtains a replacement snapshot. */
 	resetRequired(): void;
+	/** Fail only this subscription when decoding its values fails. */
+	decodeFailed(error: unknown): void;
 }
 
 export interface AddReconciliationTarget {
@@ -327,7 +329,7 @@ export class SnapshotPublicationReconciler {
 		}
 		this.checkSnapshotBytes(snapshot.bytes + bytes);
 
-		// Fluorine's exact-frontier snapshot contract guarantees that every
+		// The exact-frontier snapshot contract guarantees that every
 		// subsequently delivered publication is newer than the snapshot. Replay
 		// the complete contiguous backlog; interpreting transaction IDs against
 		// the informational MVCC fields can incorrectly discard valid changes.
@@ -335,11 +337,18 @@ export class SnapshotPublicationReconciler {
 		const rows = Object.freeze([...snapshot.rows]);
 		state.snapshot = undefined;
 		this.releaseBacklog(state);
-		state.target.installReset(rows);
-		for (const buffered of replay) {
-			if (buffered.batch.changes.length > 0) {
-				state.target.applyBatch(buffered.batch.changes);
+		try {
+			state.target.installReset(rows);
+			for (const buffered of replay) {
+				if (buffered.batch.changes.length > 0) {
+					state.target.applyBatch(buffered.batch.changes);
+				}
 			}
+		} catch (error) {
+			state.active = false;
+			state.live = false;
+			state.target.decodeFailed(error);
+			return;
 		}
 		state.target.publishReset(rows);
 		for (const buffered of replay)
@@ -501,10 +510,23 @@ export class SnapshotPublicationReconciler {
 
 		// Preserve publication atomicity: mutate every target before invoking any
 		// listener that could inspect another subscription on this connection.
-		for (const { state, batch } of immediate) {
-			state.target.applyBatch(batch.changes);
+		const installed: typeof immediate = [];
+		const failed: Array<{
+			readonly state: TargetState;
+			readonly error: unknown;
+		}> = [];
+		for (const entry of immediate) {
+			try {
+				entry.state.target.applyBatch(entry.batch.changes);
+				installed.push(entry);
+			} catch (error) {
+				entry.state.active = false;
+				entry.state.live = false;
+				failed.push({ state: entry.state, error });
+			}
 		}
-		for (const { state, batch } of immediate) {
+		for (const { state, error } of failed) state.target.decodeFailed(error);
+		for (const { state, batch } of installed) {
 			state.target.publishBatch(batch);
 		}
 	}

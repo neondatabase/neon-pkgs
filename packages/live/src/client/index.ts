@@ -1,6 +1,18 @@
 export type { LiveQueryAuthorization } from "./authorization.js";
 export { createNeonLiveClient } from "./neon-live-client.js";
 export type {
+	PostgreSQLBytesParser,
+	PostgreSQLParserForOid,
+	PostgreSQLParsers,
+	PostgreSQLTextParser,
+} from "./postgres/index.js";
+export {
+	defineParsers,
+	nodePostgresParsers,
+	pgTypeOids,
+	postgresJsParsers,
+} from "./postgres/index.js";
+export type {
 	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQueryError,

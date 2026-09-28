@@ -1,11 +1,16 @@
 import type { LiveQueryAuthorization } from "./authorization.js";
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
+import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
+import {
+	decodeRow,
+	PostgresValueParserError,
+	validateColumns,
+} from "./postgres/value-decoder.js";
 import type { WireChange, WireColumn, WireRow } from "./protocol/messages.js";
 import type {
 	ReconciledBatch,
 	ReconciliationTarget,
 } from "./reconciliation/reconciler.js";
-import { decodeRow, validateColumns } from "./row-codec.js";
 import type {
 	LiveQueryBatchInfo,
 	LiveQueryChange,
@@ -22,6 +27,7 @@ export interface SubscriptionOwner {
 		authorization: LiveQueryAuthorization<Row>,
 	): Promise<void>;
 	unsubscribe<Row>(subscription: Subscription<Row>): void;
+	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void;
 }
 
 export class PublicLiveQueryError extends Error implements LiveQueryError {
@@ -29,8 +35,9 @@ export class PublicLiveQueryError extends Error implements LiveQueryError {
 		readonly code: string,
 		readonly retryable: boolean,
 		message = `Neon Live query failed: ${code}`,
+		options?: ErrorOptions,
 	) {
-		super(message);
+		super(message, options);
 		this.name = "LiveQueryError";
 	}
 }
@@ -43,7 +50,10 @@ export class Subscription<Row>
 	private readonly rows?: Map<string, Row>;
 	private initialized: boolean;
 	private columns?: readonly WireColumn[];
-	private installedReset: readonly RawLiveQueryRow<Row>[] = [];
+	private stagedReset?: {
+		readonly rows: readonly RawLiveQueryRow<Row>[];
+		readonly materializedRows?: Map<string, Row>;
+	};
 	private readonly appliedBatches = new Map<
 		readonly WireChange[],
 		readonly LiveQueryChange<Row>[]
@@ -69,6 +79,7 @@ export class Subscription<Row>
 		private readonly owner: SubscriptionOwner,
 		private authorization: LiveQueryAuthorization<Row>,
 		readonly materialized: boolean,
+		private readonly parsers: PostgreSQLParserRegistry,
 		initialData?: readonly Row[],
 	) {
 		if (materialized) {
@@ -162,13 +173,12 @@ export class Subscription<Row>
 	installReset(wireRows: readonly WireRow[]): void {
 		if (this.closed) return;
 		const rows = this.decodeReset(wireRows);
-		if (this.rows) {
-			this.rows.clear();
-			for (const { rowId, row } of rows) this.rows.set(rowId, row);
-		}
-		this.installedReset = rows;
-		this.initialized = true;
-		this.snapshot = this.makeSnapshot();
+		this.stagedReset = {
+			rows,
+			materializedRows: this.rows
+				? new Map(rows.map(({ rowId, row }) => [rowId, row]))
+				: undefined,
+		};
 	}
 
 	applyBatch(wireChanges: readonly WireChange[]): void {
@@ -176,7 +186,6 @@ export class Subscription<Row>
 		const changes = Object.freeze(
 			wireChanges.map((change): LiveQueryChange<Row> => {
 				if (change.op === "remove") {
-					this.rows?.delete(change.row_key);
 					return Object.freeze({
 						type: "remove",
 						rowId: change.row_key,
@@ -185,8 +194,8 @@ export class Subscription<Row>
 				const row = decodeRow<Row>(
 					change.values,
 					this.requireColumns(),
+					this.requireParsers(),
 				);
-				this.rows?.set(change.row_key, row);
 				return Object.freeze({
 					type: "upsert",
 					rowId: change.row_key,
@@ -194,12 +203,36 @@ export class Subscription<Row>
 				});
 			}),
 		);
+		const targetRows = this.stagedReset?.materializedRows ?? this.rows;
+		for (const change of changes) {
+			if (change.type === "remove") targetRows?.delete(change.rowId);
+			else targetRows?.set(change.rowId, change.row);
+		}
 		this.appliedBatches.set(wireChanges, changes);
-		this.snapshot = this.makeSnapshot();
+		if (!this.stagedReset) this.snapshot = this.makeSnapshot();
+	}
+
+	decodeFailed(error: unknown): void {
+		if (!(error instanceof PostgresValueParserError)) throw error;
+		this.appliedBatches.clear();
+		this.stagedReset = undefined;
+		this.owner.parserFailed(this, error);
 	}
 
 	publishReset(): void {
-		if (!this.closed) notify(this.resetListeners, this.installedReset);
+		if (this.closed) return;
+		const staged = this.stagedReset;
+		if (!staged)
+			throw new Error("Neon Live published an uninstalled reset");
+		if (this.rows && staged.materializedRows) {
+			this.rows.clear();
+			for (const [rowId, row] of staged.materializedRows)
+				this.rows.set(rowId, row);
+		}
+		this.stagedReset = undefined;
+		this.initialized = true;
+		this.snapshot = this.makeSnapshot();
+		notify(this.resetListeners, staged.rows);
 	}
 
 	publishBatch(batch: ReconciledBatch): void {
@@ -233,6 +266,7 @@ export class Subscription<Row>
 	disconnected(): void {
 		this.columns = undefined;
 		this.appliedBatches.clear();
+		this.stagedReset = undefined;
 		this.setLifecycle(staleState(this));
 	}
 
@@ -244,6 +278,7 @@ export class Subscription<Row>
 					error.code,
 					error.retryable,
 					error.message,
+					{ cause: error.cause },
 				),
 			}),
 		);
@@ -274,7 +309,11 @@ export class Subscription<Row>
 				rowIds.add(wireRow.row_key);
 				return Object.freeze({
 					rowId: wireRow.row_key,
-					row: decodeRow<Row>(wireRow.values, columns),
+					row: decodeRow<Row>(
+						wireRow.values,
+						columns,
+						this.requireParsers(),
+					),
 				});
 			}),
 		);
@@ -284,6 +323,10 @@ export class Subscription<Row>
 		if (!this.columns)
 			throw new Error("Neon Live subscription is not admitted");
 		return this.columns;
+	}
+
+	private requireParsers(): PostgreSQLParserRegistry {
+		return this.parsers;
 	}
 
 	private setLifecycle(state: LiveQueryState, publishChange = true): void {

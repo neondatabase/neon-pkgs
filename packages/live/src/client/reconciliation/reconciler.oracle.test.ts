@@ -179,6 +179,9 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 				rows: normalizeTable(rows),
 			}),
 		resetRequired: () => observations.push({ kind: "reset_required" }),
+		decodeFailed: (error) => {
+			throw error;
+		},
 	};
 	const reconciler = new SnapshotPublicationReconciler();
 	reconciler.add({

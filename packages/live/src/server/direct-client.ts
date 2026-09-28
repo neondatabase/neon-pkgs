@@ -1,4 +1,5 @@
 import type { LiveQueryAuthorization } from "../client/authorization.js";
+import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
@@ -22,7 +23,10 @@ export class DirectLiveQueryClient {
 	private clientPromise?: Promise<NeonLiveClient>;
 	private closed = false;
 
-	constructor(private readonly url: string) {
+	constructor(
+		private readonly url: string,
+		private readonly parsers: PostgreSQLParsers | undefined,
+	) {
 		if (!url) throw new Error("Neon Live requires a WebSocket URL");
 	}
 
@@ -71,6 +75,7 @@ export class DirectLiveQueryClient {
 				this.assertOpen();
 				const client = module.createNeonLiveClient({
 					url: this.url,
+					parsers: this.parsers,
 				});
 				this.client = client;
 				return client;

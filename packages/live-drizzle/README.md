@@ -13,8 +13,12 @@ SDK while preserving Drizzle's inferred result-row type.
 npm install @neon/live @neon/live-drizzle drizzle-orm
 ```
 
-> **Requirements:** Node.js >= 20.19, `@neon/live` 0.1, and Drizzle ORM 0.45.
-> The core SDK and Drizzle are peer dependencies.
+> **Requirements:** Node.js >= 20.19 and `@neon/live` 0.1. The backend query
+> adapter additionally requires Drizzle ORM 0.45. The core SDK is a peer
+> dependency; Drizzle is an optional peer so the client-only entry stays light.
+
+The browser-only parser preset does not import Drizzle. Applications using only
+that preset do not need to ship the ORM runtime in their client bundle.
 
 ## Usage
 
@@ -87,3 +91,29 @@ hatch through `rawSql()` from `@neon/live/server`.
 `drizzleAdapter()` returns the adapter passed to `createNeonLive({ adapter })`.
 It has no database connection of its own and never executes the query during
 authorization.
+
+## Match Drizzle result values in the browser
+
+The separate `@neon/live-drizzle/client` entry exports browser-safe result
+parser overrides:
+
+```ts
+import { createNeonLiveClient } from "@neon/live/client";
+import { drizzleParsers } from "@neon/live-drizzle/client";
+
+const client = createNeonLiveClient({
+  url: "wss://live.neon.tech/...",
+  parsers: drizzleParsers,
+});
+```
+
+The preset keeps PostgreSQL `date` as a string and interprets zone-less
+`timestamp` as UTC, matching Drizzle's default PostgreSQL column modes. Other
+values use the core node-postgres-compatible defaults.
+
+Neon Live v1 deliberately selects one parser per PostgreSQL OID. It does not
+carry Drizzle's per-column modes to the browser. Applications using `date({
+mode: "date" })`, string-mode timestamps, `bigint` number/BigInt modes, numeric
+number/BigInt modes, or custom column decoders must register the corresponding
+OID override themselves and ensure SSR-hydrated values use the same
+representation.

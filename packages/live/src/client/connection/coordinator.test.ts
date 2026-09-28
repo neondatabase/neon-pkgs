@@ -604,6 +604,7 @@ function target(): ConnectionCallbacks & {
 		publishBatch: vi.fn(),
 		caughtUp: vi.fn(),
 		resetRequired: vi.fn(),
+		decodeFailed: vi.fn(),
 	};
 	return {
 		reconciliation,

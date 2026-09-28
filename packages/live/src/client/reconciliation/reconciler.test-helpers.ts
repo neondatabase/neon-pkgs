@@ -39,6 +39,9 @@ export function target(events: string[] = [], prefix = ""): MockTarget {
 		),
 		caughtUp: vi.fn(() => events.push(label("caughtUp"))),
 		resetRequired: vi.fn(() => events.push(label("resetRequired"))),
+		decodeFailed: vi.fn((error: unknown) => {
+			throw error;
+		}),
 	};
 }
 
