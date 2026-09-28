@@ -398,8 +398,14 @@ export const splitInitTooling = (
 	agents: readonly AgentType[],
 	pluginScope: "global" | "project",
 	mcpConfigLocation: "global" | "project" = pluginScope,
+	unavailablePluginAgents: readonly AgentType[] = [],
 ): InitToolingPlan => {
-	const pluginSet = new Set(pluginsInstallableAgents(pluginScope));
+	const unavailable = new Set(unavailablePluginAgents);
+	const pluginSet = new Set(
+		pluginsInstallableAgents(pluginScope).filter(
+			(id) => !unavailable.has(id),
+		),
+	);
 	const mcpSet = new Set(mcpInstallableAgents(mcpConfigLocation));
 	const pluginAgents = uniqueAgentIds(
 		agents.filter((id) => pluginSet.has(id)),
@@ -430,8 +436,14 @@ export const splitInitTooling = (
 
 export const recommendedTooling = (
 	detected: readonly AgentType[],
+	unavailablePluginAgents: readonly AgentType[] = [],
 ): InitToolingPlan => {
-	const split = splitInitTooling(detected, "global");
+	const split = splitInitTooling(
+		detected,
+		"global",
+		"global",
+		unavailablePluginAgents,
+	);
 	if (split.setup === "skip") {
 		return { setup: "skills", agents: FALLBACK_SKILLS_AGENTS };
 	}

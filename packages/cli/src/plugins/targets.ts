@@ -1,4 +1,6 @@
+import { delimiter, dirname, join, resolve } from "node:path";
 import { detectProjectAgents } from "add-mcp";
+import which from "which";
 
 import {
 	type AgentType,
@@ -26,6 +28,51 @@ const PLUGINS_TARGET_BY_TYPE: { [K in AgentType]?: string } = {
 };
 
 const USER_SCOPE_ONLY_TARGETS = new Set(["vscode", "github-copilot", "grok"]);
+
+// The plugins CLI installs these targets by running the agent's own CLI, so a config
+// folder without the command fails with ENOENT. Other targets write files directly.
+const PLUGINS_TARGET_COMMANDS: { [target: string]: string } = {
+	"github-copilot": "copilot",
+	grok: "grok",
+};
+
+export type MissingPluginsCommand = { agent: AgentType; command: string };
+
+/** npx runs the plugins CLI with every `node_modules/.bin` from `cwd` up to the root ahead of PATH. */
+const pluginsCommandSearchPath = (cwd: string, path: string): string => {
+	const bins: string[] = [];
+	let dir = resolve(cwd);
+	for (;;) {
+		bins.push(join(dir, "node_modules", ".bin"));
+		const parent = dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+	return [...bins, path].join(delimiter);
+};
+
+export const missingPluginsCommands = (
+	agents: readonly AgentType[],
+	options: { cwd: string; path?: string },
+): MissingPluginsCommand[] => {
+	const searchPath = pluginsCommandSearchPath(
+		options.cwd,
+		options.path ?? process.env.PATH ?? "",
+	);
+	const missing: MissingPluginsCommand[] = [];
+	for (const agent of uniqueAgentIds(agents)) {
+		const target = getPluginsTargetName(agent);
+		const command =
+			target === undefined ? undefined : PLUGINS_TARGET_COMMANDS[target];
+		if (
+			command !== undefined &&
+			which.sync(command, { nothrow: true, path: searchPath }) === null
+		) {
+			missing.push({ agent, command });
+		}
+	}
+	return missing;
+};
 
 export function getPluginsTargetName(agent: string): string | undefined {
 	if (Object.prototype.hasOwnProperty.call(PLUGINS_TARGET_BY_TYPE, agent)) {

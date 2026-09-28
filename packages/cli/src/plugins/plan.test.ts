@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -96,6 +102,7 @@ describe("resolvePluginsPlan", () => {
 			agents: ["cursor"],
 			skipped: [],
 			userScopeSkipped: [],
+			missingCommands: [],
 			targets: [{ agents: ["cursor"], target: "cursor" }],
 		});
 	});
@@ -380,5 +387,91 @@ describe("resolvePluginsPlan", () => {
 			}),
 		);
 		expect(plan.agents).toEqual(["cursor"]);
+	});
+});
+
+describe("resolvePluginsPlan agent commands", () => {
+	const emptyPath = (): string => {
+		const bin = join(tmpDir(), "bin");
+		mkdirSync(bin);
+		return bin;
+	};
+
+	test("-y --global skips detected Copilot CLI and Grok without their commands", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectInstalledAgents: async () => [
+					"cursor",
+					"github-copilot-cli",
+					"grok-build",
+				],
+				commandPath: emptyPath(),
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+		expect(plan.targets).toEqual([
+			{ agents: ["cursor"], target: "cursor" },
+		]);
+		expect(plan.missingCommands).toEqual([
+			{ agent: "github-copilot-cli", command: "copilot" },
+			{ agent: "grok-build", command: "grok" },
+		]);
+	});
+
+	test("-y --global with only command-less agents plans no installs", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				global: true,
+				detectInstalledAgents: async () => ["github-copilot-cli"],
+				commandPath: emptyPath(),
+			}),
+		);
+		expect(plan.targets).toEqual([]);
+		expect(plan.missingCommands).toEqual([
+			{ agent: "github-copilot-cli", command: "copilot" },
+		]);
+	});
+
+	test("--agent without the command fails before installing", async () => {
+		const cwd = tmpDir();
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: ["github-copilot-cli", "grok-build", "codex"],
+					global: true,
+					commandPath: emptyPath(),
+				}),
+			),
+		).rejects.toThrow(
+			'Cannot install the Neon plugin for GitHub Copilot CLI: "copilot" was not found on PATH. Install it or add it to PATH, then retry.\nCannot install the Neon plugin for Grok Build: "grok" was not found on PATH. Install it or add it to PATH, then retry.',
+		);
+	});
+
+	test("--agent with the command on PATH plans the plugin", async () => {
+		const cwd = tmpDir();
+		const bin = emptyPath();
+		const copilot = join(bin, "copilot");
+		writeFileSync(copilot, "#!/bin/sh\nexit 0\n");
+		chmodSync(copilot, 0o755);
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: ["github-copilot-cli"],
+				global: true,
+				commandPath: bin,
+			}),
+		);
+		expect(plan.targets).toEqual([
+			{ agents: ["github-copilot-cli"], target: "github-copilot" },
+		]);
+		expect(plan.missingCommands).toEqual([]);
 	});
 });

@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -7,6 +13,7 @@ import {
 	detectInstallablePluginsAgents,
 	detectPluginsAgents,
 	mappedPluginsTargets,
+	missingPluginsCommands,
 	pluginsInstallableAgents,
 	pluginsMappedAgents,
 } from "./targets.js";
@@ -75,6 +82,73 @@ describe("mappedPluginsTargets", () => {
 		expect(() => mappedPluginsTargets(["mcporter"], "project")).toThrow(
 			/None of the selected agents can install plugins/,
 		);
+	});
+});
+
+describe("missingPluginsCommands", () => {
+	const dirs: string[] = [];
+
+	afterEach(() => {
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	const tmp = (): string => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-plugins-commands-"));
+		dirs.push(dir);
+		return dir;
+	};
+
+	const installCommand = (dir: string, name: string): void => {
+		mkdirSync(dir, { recursive: true });
+		const file = join(dir, name);
+		writeFileSync(file, "#!/bin/sh\nexit 0\n");
+		chmodSync(file, 0o755);
+	};
+
+	test("reports copilot and grok when neither is on PATH", () => {
+		const root = tmp();
+		const emptyBin = join(root, "bin");
+		mkdirSync(emptyBin);
+		expect(
+			missingPluginsCommands(
+				[
+					"cursor",
+					"codex",
+					"claude-code",
+					"github-copilot-cli",
+					"grok-build",
+					"github-copilot-cli",
+				],
+				{ cwd: root, path: emptyBin },
+			),
+		).toEqual([
+			{ agent: "github-copilot-cli", command: "copilot" },
+			{ agent: "grok-build", command: "grok" },
+		]);
+	});
+
+	test("finds a command on PATH", () => {
+		const root = tmp();
+		const bin = join(root, "bin");
+		installCommand(bin, "copilot");
+		expect(
+			missingPluginsCommands(["github-copilot-cli", "grok-build"], {
+				cwd: root,
+				path: bin,
+			}),
+		).toEqual([{ agent: "grok-build", command: "grok" }]);
+	});
+
+	test("finds a command in node_modules/.bin above cwd, like npx", () => {
+		const root = tmp();
+		installCommand(join(root, "node_modules", ".bin"), "grok");
+		const nested = join(root, "apps", "web");
+		mkdirSync(nested, { recursive: true });
+		expect(
+			missingPluginsCommands(["grok-build"], { cwd: nested, path: "" }),
+		).toEqual([]);
 	});
 });
 
