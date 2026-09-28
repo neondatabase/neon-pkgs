@@ -1,5 +1,16 @@
 # neon
 
+## 6.3.0
+
+### Minor Changes
+
+- 1696ac3: Allow interactive init and bootstrap agent setup steps to be skipped, including selecting skills and MCP agents independently in init.
+
+### Patch Changes
+
+- b786ebd: The Neon plugin pickers in `neon init`, `neon plugins`, and `neon bootstrap` no longer preselect GitHub Copilot CLI or Grok Build when `copilot` or `grok` is not on PATH. They are still listed and can be selected.
+- 7687811: `neon init -y` and `neon plugins -y --global` no longer fail on GitHub Copilot CLI or Grok Build when `copilot` or `grok` is not on PATH. `neon plugins` skips them with a warning, and `neon init` installs Neon skills and MCP for them instead.
+
 ## 6.2.4
 
 ### Patch Changes
