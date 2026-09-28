@@ -1,0 +1,121 @@
+{
+  "valid": [
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select id from messages where room_id = $1 and deleted_at is not distinct from $2",
+        "parameters": [
+          { "type_oid": 23, "value": "MQ==" },
+          { "value": null }
+        ],
+        "iat": 1000,
+        "exp": 1060
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 2 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": [],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "claims": {
+        "v": 2,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": [],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": ["MQ=="],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": [{ "type_oid": 23 }],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "typ": "redundant", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": [],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key.1", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "app",
+        "query_fingerprint": "not-a-fingerprint",
+        "sql": "select 1",
+        "parameters": [],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "neon-live-proxy",
+        "iss": "app-server",
+        "database": "contains\u0000nul",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": [],
+        "iat": 1000,
+        "exp": 1060
+      }
+    }
+  ]
+}

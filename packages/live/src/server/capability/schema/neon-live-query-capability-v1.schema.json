@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neon.tech/schemas/live/neon-live-query-capability-v1.schema.json",
+  "title": "Neon Live query capability v1",
+  "description": "Strict decoded JWE protected-header and claims contract. Compact serialization and cryptographic requirements are recorded in x-jweCompact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protected", "claims"],
+  "properties": {
+    "protected": { "$ref": "#/$defs/protectedHeader" },
+    "claims": { "$ref": "#/$defs/claims" }
+  },
+  "x-jweCompact": {
+    "serialization": "compact",
+    "segments": 5,
+    "encryptedKey": "empty",
+    "aad": "ASCII(base64url(protected))",
+    "ivBytes": 12,
+    "tagBytes": 16,
+    "defaultMaxTokenBytes": 262144,
+    "absoluteMaxTokenBytes": 1048576
+  },
+  "$defs": {
+    "identity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^\\x00]+$",
+      "x-maxUtf8Bytes": 255
+    },
+    "databaseName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[^\\x00]+$",
+      "x-maxUtf8Bytes": 63
+    },
+    "protectedHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alg", "enc", "kid", "v"],
+      "properties": {
+        "alg": { "const": "dir" },
+        "enc": { "const": "A256GCM" },
+        "kid": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "maxLength": 64,
+          "x-maxUtf8Bytes": 64
+        },
+        "v": { "const": 1 }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": {
+        "type_oid": {
+          "description": "Optional PostgreSQL type hint. Omission or zero requests SQL-context inference.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "value": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "maxLength": 21848,
+              "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+              "x-maxUtf8Bytes": 21848,
+              "x-decodedMaxBytes": 16384
+            }
+          ]
+        }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "aud",
+        "iss",
+        "database",
+        "query_fingerprint",
+        "sql",
+        "parameters",
+        "iat",
+        "exp"
+      ],
+      "properties": {
+        "v": { "const": 1 },
+        "aud": { "const": "neon-live-proxy" },
+        "iss": { "$ref": "#/$defs/identity" },
+        "database": { "$ref": "#/$defs/databaseName" },
+        "query_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "minLength": 64,
+          "maxLength": 64,
+          "x-maxUtf8Bytes": 64
+        },
+        "sql": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768,
+          "x-maxUtf8Bytes": 32768
+        },
+        "parameters": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/parameter" }
+        },
+        "iat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "exp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "x-invariants": [
+        "0 < exp - iat <= 300",
+        "iat <= now + 30",
+        "now < exp",
+        "complete Subscribe protobuf payload <= 65536 bytes at request_id = uint64::MAX"
+      ]
+    }
+  }
+}
