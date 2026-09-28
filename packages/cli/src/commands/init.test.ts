@@ -22,6 +22,7 @@ import {
 	YES_LINK_NEEDS_AUTH,
 } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
+import type { AgentType } from "../mcp/agents.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
 import { builder } from "./init.js";
@@ -848,6 +849,56 @@ describe("init handler", () => {
 			init_kind: "existing",
 			agent_setup: result,
 		});
+	});
+
+	test("Custom asks MCP location and auth only after MCP agents are picked", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-order-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const asked: string[] = [];
+		const { handler } = await import("./init.js");
+		const run = (mcpAgents: AgentType[] | undefined) =>
+			handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					link: false,
+					contextFile: join(cwd, ".neon"),
+					pickAgentSetup: pickSkillsMcp,
+					pickAgents: async ({
+						setup,
+					}: {
+						setup: "plugin" | "skills" | "mcp";
+					}) => {
+						asked.push(`agents:${setup}`);
+						return setup === "mcp" ? mcpAgents : ["opencode"];
+					},
+					pickSkills: async () => {
+						asked.push("skills");
+						return ["neon-postgres"];
+					},
+					pickMcpConfigLocation: async () => {
+						asked.push("location");
+						return "global";
+					},
+					pickMcpAuth: async () => {
+						asked.push("auth");
+						return "oauth";
+					},
+					pickConfig: async () => false,
+				}),
+			);
+
+		await run(["opencode"]);
+		expect(asked).toEqual([
+			"agents:skills",
+			"skills",
+			"agents:mcp",
+			"location",
+			"auth",
+		]);
+		asked.length = 0;
+		await run(undefined);
+		expect(asked).toEqual(["agents:skills", "skills", "agents:mcp"]);
 	});
 
 	test("skipping MCP discards its API-key requirement for claimable setup", async () => {

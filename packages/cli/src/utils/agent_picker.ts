@@ -39,13 +39,15 @@ export type ResolveAgentSelectionOptions = {
 export const canPickAgentsInteractively = (): boolean =>
 	!isCi() && Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
 
-const restoreCursorOnAbort = (state: { aborted: boolean }) => {
-	if (state.aborted) {
-		// prompts leaves the cursor hidden when selection is aborted.
-		process.stdout.write("\x1B[?25h");
-		process.stdout.write("\n");
-	}
-};
+const restoreCursorOnAbort =
+	(exit: boolean) => (state: { aborted: boolean }) => {
+		if (state.aborted) {
+			// prompts leaves the cursor hidden when selection is aborted.
+			process.stdout.write("\x1B[?25h");
+			process.stdout.write("\n");
+			if (exit) process.exit(1);
+		}
+	};
 
 export const pickAgentsInteractively = async (
 	options: PickAgentsOptions,
@@ -59,10 +61,15 @@ export const pickAgentsInteractively = async (
 		throw new Error("No coding agents are available to pick.");
 	}
 
-	const cancel = options.onCancel ?? (() => process.exit(1));
+	const cancel =
+		options.onCancel ??
+		(() => {
+			throw new Error("Aborted: no agents selected.");
+		});
+	const onState = restoreCursorOnAbort(options.onCancel === undefined);
 	const selected = new Set(options.selected ?? []);
 	const question = {
-		onState: restoreCursorOnAbort,
+		onState,
 		type: "multiselect" as const,
 		name: "agents",
 		message: options.message,
@@ -90,7 +97,7 @@ export const pickAgentsInteractively = async (
 			return uniqueAgentIds(picked);
 		}
 		const { skip } = await prompts({
-			onState: restoreCursorOnAbort,
+			onState,
 			type: "confirm",
 			name: "skip",
 			message: options.skipMessage,

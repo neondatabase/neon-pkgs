@@ -298,16 +298,19 @@ const skillsTooling = (
 const skillsMcpTooling = (
 	skillsSelection: readonly AgentType[] | undefined,
 	mcpSelection: readonly AgentType[] | undefined,
+	mcpConfigLocation: InitMcpConfigLocation,
 	fallback: boolean,
 ): InitToolingPlan => {
-	const selectedSkills =
+	const selectedSkills = (
 		skillsSelection?.length === 0 && fallback
 			? FALLBACK_SKILLS_AGENTS
-			: (skillsSelection ?? []);
-	const selectedMcp =
+			: (skillsSelection ?? [])
+	).filter((id) => skillsInstallableAgents().includes(id));
+	const selectedMcp = (
 		mcpSelection?.length === 0 && fallback
 			? FALLBACK_SKILLS_AGENTS
-			: (mcpSelection ?? []);
+			: (mcpSelection ?? [])
+	).filter((id) => mcpInstallableAgents(mcpConfigLocation).includes(id));
 	if (selectedMcp.length === 0) {
 		return skillsTooling(selectedSkills, false);
 	}
@@ -632,10 +635,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					const pickAgents = (
 						setup: "plugin" | "skills" | "mcp",
 						available: readonly AgentType[],
-						namedAgents: readonly AgentType[] = named,
 					) =>
 						pickOrDetectAgents({
-							named: namedAgents,
+							named,
 							available,
 							detected: detection.detectedAgents,
 							interactive: detection.interactive,
@@ -686,29 +688,31 @@ export const runInit = async (props: InitProps): Promise<void> => {
 										? await pickInitSkillsInteractively()
 										: undefined;
 						}
-						mcpConfigLocation =
-							props.mcpConfigLocation ??
-							(yes
-								? "global"
-								: props.pickMcpConfigLocation !== undefined
-									? await props.pickMcpConfigLocation()
-									: detection.interactive
-										? await pickInitMcpConfigLocationInteractively()
-										: "global");
-						const mcpAvailable =
-							mcpInstallableAgents(mcpConfigLocation);
-						if (named.length > 0) {
-							validateMcpConfigLocationSupport(
-								named,
-								mcpConfigLocation,
-							);
-						}
-						const mcpSelection = await pickAgents(
-							"mcp",
-							mcpAvailable,
-							named.filter((id) => mcpAvailable.includes(id)),
-						);
+						const mcpSelection =
+							named.length > 0
+								? named
+								: await pickAgents(
+										"mcp",
+										mcpInstallableAgents(
+											props.mcpConfigLocation ?? "global",
+										),
+									);
 						if (mcpSelection !== undefined) {
+							mcpConfigLocation =
+								props.mcpConfigLocation ??
+								(yes
+									? "global"
+									: props.pickMcpConfigLocation !== undefined
+										? await props.pickMcpConfigLocation()
+										: detection.interactive
+											? await pickInitMcpConfigLocationInteractively()
+											: "global");
+							if (mcpSelection.length > 0) {
+								validateMcpConfigLocationSupport(
+									mcpSelection,
+									mcpConfigLocation,
+								);
+							}
 							const pickAuth =
 								props.pickMcpAuth ??
 								(detection.interactive
@@ -730,6 +734,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						tooling = skillsMcpTooling(
 							skillsSelection,
 							mcpSelection,
+							mcpConfigLocation,
 							namedFallback,
 						);
 					}
