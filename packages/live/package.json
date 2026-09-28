@@ -1,0 +1,82 @@
+{
+  "name": "@neon/live",
+  "version": "0.0.0",
+  "description": "Typed backend and browser SDKs for Neon Live queries.",
+  "keywords": [
+    "neon",
+    "database",
+    "postgres",
+    "live-query",
+    "realtime",
+    "websocket"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neondatabase/neon-pkgs.git",
+    "directory": "packages/live"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Neon",
+    "url": "https://neon.com"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "default": "./dist/client.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "default": "./dist/server.js"
+    }
+  },
+  "files": [
+    "README.md",
+    "dist/",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "npm run generate:check && tsc --noEmit && tsdown",
+    "generate": "npm run generate:capability && npm run generate:protocol",
+    "generate:capability": "node scripts/generate-capability-types.mjs",
+    "generate:capability:check": "node scripts/generate-capability-types.mjs --check",
+    "generate:check": "npm run generate:capability:check && npm run generate:protocol:check",
+    "generate:protocol": "node scripts/generate-protocol.mjs",
+    "generate:protocol:check": "node scripts/generate-protocol.mjs --check",
+    "prepare": "npm run build",
+    "test": "vitest --passWithNoTests",
+    "test:ci": "npm run generate:check && vitest run --passWithNoTests",
+    "tsc": "tsc"
+  },
+  "dependencies": {
+    "postgres-array": "^3.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "ajv": "^8.20.0",
+    "console-fail-test": "catalog:",
+    "fast-check": "^4.9.0",
+    "json-schema-to-typescript": "^16.0.0",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "provenance": false
+  }
+}

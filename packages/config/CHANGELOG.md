@@ -1,5 +1,25 @@
 # @neondatabase/config
 
+## 1.8.2
+
+### Patch Changes
+
+- Updated dependencies [68e59c2]
+  - @neon/sdk@6.1.2
+
+## 1.8.1
+
+### Patch Changes
+
+- Updated dependencies [7e1b4d2]
+  - @neon/sdk@6.1.1
+
+## 1.8.0
+
+### Minor Changes
+
+- 64062a6: Add experimental lifecycle hooks under `experimental.hooks` in `neon.ts`: `checkout.before`/`checkout.after`, `create.before`/`create.after`, and `deploy.before`/`deploy.after`. Each hook is a function (receiving a typed context with the triggering event, git facts, and — for `after` hooks — the resolved branch env) or a shell command string/array. New exported types: `Hooks`, `CheckoutHooks`, `CreateHooks`, `DeployHooks`, `CheckoutEvent`, `DeployEvent`, `GitContext`, `HookBranch`, `HookEnv`, `Hook`, `ShellHook`, and the per-phase context/result types.
+
 ## 1.7.3
 
 ### Patch Changes

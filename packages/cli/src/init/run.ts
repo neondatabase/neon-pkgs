@@ -22,7 +22,7 @@ import {
 } from "../config_template.js";
 import { contextBranch, readContextFile } from "../context.js";
 import { log } from "../log.js";
-import type { AgentType } from "../mcp/agents.js";
+import { type AgentType, getAgentDisplayName } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import {
 	deprecatedServiceMessage,
@@ -30,7 +30,11 @@ import {
 	parseServices,
 	servicesFlagValue,
 } from "../neon_services.js";
-import { pluginsInstallableAgents } from "../plugins/targets.js";
+import {
+	type MissingPluginsCommand,
+	missingPluginsCommands,
+	pluginsInstallableAgents,
+} from "../plugins/targets.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -265,6 +269,25 @@ const pluginScopeFor = (
 			!project.has(id) && pluginsInstallableAgents("global").includes(id),
 	);
 	return globalOnly ? "global" : "project";
+};
+
+const warnMissingPluginCommands = (
+	missing: readonly MissingPluginsCommand[],
+	tooling: InitToolingPlan,
+): void => {
+	if (tooling.setup !== "skills-mcp" && tooling.setup !== "mixed") {
+		return;
+	}
+	const routed = new Set([...tooling.skillsAgents, ...tooling.mcpAgents]);
+	for (const { agent, command } of missing) {
+		if (routed.has(agent)) {
+			log.warning(
+				'%s: "%s" was not found on PATH, so its plugin cannot install. Installing Neon skills and MCP instead.',
+				getAgentDisplayName(agent),
+				command,
+			);
+		}
+	}
 };
 
 const nonEmptyAgents = (
@@ -571,6 +594,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		const recommended = mode === "recommended";
 		const targets = named.length > 0 ? named : detection.detectedAgents;
+		const missingPluginCommands = missingPluginsCommands(targets, { cwd });
+		const unavailablePluginAgents = missingPluginCommands.map(
+			(row) => row.agent,
+		);
+		const pluginReady = (agents: readonly AgentType[]): AgentType[] =>
+			agents.filter((id) => !unavailablePluginAgents.includes(id));
 
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
@@ -586,11 +615,20 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			pluginScope = "global";
 			tooling =
 				named.length > 0
-					? splitInitTooling(named, "global")
-					: recommendedTooling(detection.detectedAgents);
+					? splitInitTooling(
+							named,
+							"global",
+							"global",
+							unavailablePluginAgents,
+						)
+					: recommendedTooling(
+							detection.detectedAgents,
+							unavailablePluginAgents,
+						);
 			if (named.length === 0 && detection.detectedAgents.length === 0) {
 				printInitProgress(NO_AGENTS_FALLBACK_STATUS);
 			}
+			warnMissingPluginCommands(missingPluginCommands, tooling);
 			mcpAuth =
 				!detection.authenticated &&
 				(tooling.setup === "skills-mcp" || tooling.setup === "mixed")
@@ -611,12 +649,17 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			} else if (inferred.kind === "auto") {
 				const autoAgents =
 					named.length > 0 ? named : detection.detectedAgents;
-				pluginScope = pluginScopeFor(autoAgents, "project");
+				pluginScope = pluginScopeFor(
+					pluginReady(autoAgents),
+					"project",
+				);
 				tooling = splitInitTooling(
 					autoAgents,
 					pluginScope,
 					mcpConfigLocation,
+					unavailablePluginAgents,
 				);
+				warnMissingPluginCommands(missingPluginCommands, tooling);
 				if (tooling.setup === "skip" && yes && named.length === 0) {
 					tooling = recommendedTooling([]);
 					printInitProgress(NO_AGENTS_FALLBACK_STATUS);

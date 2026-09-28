@@ -19,6 +19,7 @@ import type {
 	Config,
 	DataApiInput,
 	DataApiSettings,
+	ExperimentalInput,
 	FunctionDef,
 	FunctionTriggerDef,
 	FunctionTuning,
@@ -190,6 +191,10 @@ export function defineConfig<
 	/** @deprecated Use top-level `aiGateway`, `functions`, and `buckets`. */
 	preview?: Preview & PreviewInput & PreviewAutocomplete<Preview>;
 	branch?: BranchTuningFn<Preview, Functions>;
+	// Experimental (unstable) features — currently just lifecycle hooks. Static — carried
+	// through onto the returned Config and read by the runtime at `checkout` / `deploy` time.
+	// Never evaluated here.
+	experimental?: ExperimentalInput;
 }): Config<Auth, DataApi, Preview, Functions, Buckets, AiGateway> {
 	if (typeof input === "function") {
 		throw new ConfigValidationError([

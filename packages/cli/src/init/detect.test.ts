@@ -42,6 +42,31 @@ describe("splitInitTooling", () => {
 		expect(split.skillsAgents).toContain("opencode");
 	});
 
+	test("agents whose plugin command is missing get skills and MCP", () => {
+		expect(
+			splitInitTooling(
+				["cursor", "github-copilot-cli", "grok-build"],
+				"global",
+				"global",
+				["github-copilot-cli", "grok-build"],
+			),
+		).toEqual({
+			setup: "mixed",
+			pluginAgents: ["cursor"],
+			skillsAgents: ["github-copilot-cli", "grok-build"],
+			mcpAgents: ["github-copilot-cli", "grok-build"],
+		});
+	});
+
+	test("Copilot CLI and Grok stay on the plugin when their commands exist", () => {
+		expect(
+			splitInitTooling(["github-copilot-cli", "grok-build"], "global"),
+		).toEqual({
+			setup: "plugin",
+			agents: ["github-copilot-cli", "grok-build"],
+		});
+	});
+
 	test("vscode is plugin-capable at user scope", () => {
 		expect(splitInitTooling(["vscode"], "global")).toEqual({
 			setup: "plugin",
@@ -55,6 +80,16 @@ describe("recommendedTooling", () => {
 		expect(recommendedTooling([])).toEqual({
 			setup: "skills",
 			agents: FALLBACK_SKILLS_AGENTS,
+		});
+	});
+
+	test("only command-less plugin agents get skills and MCP", () => {
+		expect(
+			recommendedTooling(["github-copilot-cli"], ["github-copilot-cli"]),
+		).toEqual({
+			setup: "skills-mcp",
+			skillsAgents: ["github-copilot-cli"],
+			mcpAgents: ["github-copilot-cli"],
 		});
 	});
 });

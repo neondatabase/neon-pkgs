@@ -153,6 +153,15 @@ export default function (req, res) {
         created_at: '2021-01-01T00:00:00.000Z',
       },
     });
+  } else if (req.body.branch?.name === 'hook-created-branch') {
+    res.send({
+      branch: {
+        id: 'br-hook-created-654321',
+        name: 'hook-created-branch',
+        parent_id: 'br-main-branch-123456',
+        created_at: '2021-01-01T00:00:00.000Z',
+      },
+    });
   } else if (req.body.branch?.name === 'protected_branch') {
     expect(req.body).toMatchObject({
       branch: {

@@ -169,6 +169,13 @@ export const installPlugins = async (
 			getAgentDisplayName(agent),
 		);
 	}
+	for (const { agent, command } of plan.missingCommands) {
+		log.warning(
+			'Skipping %s: the plugin installs through "%s", which was not found on PATH.',
+			getAgentDisplayName(agent),
+			command,
+		);
+	}
 
 	const rows: PluginsInstallRow[] = [];
 	const failed: PluginsInstallFailure[] = [];
@@ -258,7 +265,9 @@ export const reportPluginsInstall = (
 		title: "Plugins",
 	});
 	out.end();
-	if (outcome.failed.length === 0) {
+	if (outcome.rows.length === 0) {
+		log.info("No Neon plugins installed.");
+	} else if (outcome.failed.length === 0) {
 		log.info(
 			outcome.scope === "project"
 				? "Installed the Neon plugin (project)."

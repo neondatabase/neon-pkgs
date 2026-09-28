@@ -6519,7 +6519,7 @@
                     },
                     {
                         "name": "metrics",
-                        "description": "Specify a list of metrics to include in the response.\nIf omitted, active_time, compute_time, written_data, synthetic_storage_size are returned.\nPossible values:\n- `active_time_seconds`\n- `compute_time_seconds`\n- `written_data_bytes`\n- `synthetic_storage_size_bytes`\n- `data_storage_bytes_hour`\n- `logical_size_bytes`\n- `logical_size_bytes_hour`\n\nA list of metrics can be specified as an array of parameter values or as a comma-separated list in a single parameter value.\n- As an array of parameter values: `metrics=cpu_seconds&metrics=ram_bytes`\n- As a comma-separated list in a single parameter value: `metrics=cpu_seconds,ram_bytes`\n",
+                        "description": "Specify a list of metrics to include in the response.\nIf omitted, active_time, compute_time, written_data are returned.\nPossible values:\n- `active_time_seconds`\n- `compute_time_seconds`\n- `written_data_bytes`\n- `synthetic_storage_size_bytes` (deprecated: always returns 0; use the consumption history v2 endpoints instead)\n- `data_storage_bytes_hour`\n- `logical_size_bytes`\n- `logical_size_bytes_hour`\n\nA list of metrics can be specified as an array of parameter values or as a comma-separated list in a single parameter value.\n- As an array of parameter values: `metrics=cpu_seconds&metrics=ram_bytes`\n- As a comma-separated list in a single parameter value: `metrics=cpu_seconds,ram_bytes`\n",
                         "in": "query",
                         "schema": {
                             "$ref": "#/components/schemas/ConsumptionHistoryQueryMetrics"
@@ -12109,7 +12109,7 @@
                             "active_time_seconds": 27853,
                             "compute_time_seconds": 18346,
                             "written_data_bytes": 1073741824,
-                            "synthetic_storage_size_bytes": 5368709120
+                            "synthetic_storage_size_bytes": 0
                         },
                         {
                             "timeframe_start": "2024-03-23T00:00:00Z",
@@ -12117,7 +12117,7 @@
                             "active_time_seconds": 17498,
                             "compute_time_seconds": 3378,
                             "written_data_bytes": 5741824,
-                            "synthetic_storage_size_bytes": 2370912
+                            "synthetic_storage_size_bytes": 0
                         }
                     ]
                 }
@@ -12213,7 +12213,8 @@
                         "format": "uint64"
                     },
                     "synthetic_storage_size_bytes": {
-                        "description": "Bytes. The space occupied in Postgres storage. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches.\n",
+                        "description": "Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.\nBytes. The space occupied in Postgres storage. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches.\n",
+                        "deprecated": true,
                         "type": "integer",
                         "format": "uint64"
                     },
@@ -14388,6 +14389,95 @@
                             "$ref": "#/components/schemas/Invitation"
                         },
                         "description": "List of pending invitations for the organization."
+                    }
+                }
+            },
+            "ScimToken": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "name",
+                    "created_at"
+                ],
+                "properties": {
+                    "id": {
+                        "description": "The SCIM token's unique ID. Distinct from the token value.",
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "name": {
+                        "description": "The admin-specified token name",
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "description": "A timestamp indicating when the SCIM token was created",
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "last_used_at": {
+                        "description": "A timestamp indicating when the token was last used to authenticate, if ever",
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                }
+            },
+            "ScimTokensListResponse": {
+                "type": "object",
+                "required": [
+                    "tokens"
+                ],
+                "properties": {
+                    "tokens": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ScimToken"
+                        }
+                    }
+                }
+            },
+            "ScimTokenCreateRequest": {
+                "type": "object",
+                "required": [
+                    "name"
+                ],
+                "properties": {
+                    "name": {
+                        "description": "A name to identify the SCIM token",
+                        "type": "string",
+                        "maxLength": 64
+                    }
+                }
+            },
+            "ScimTokenCreateResponse": {
+                "type": "object",
+                "required": [
+                    "token",
+                    "scim_token"
+                ],
+                "x-sensitive": [
+                    "token"
+                ],
+                "properties": {
+                    "token": {
+                        "description": "The generated SCIM bearer token. Shown once \u2014 store it securely; it cannot be retrieved later.",
+                        "type": "string"
+                    },
+                    "scim_token": {
+                        "$ref": "#/components/schemas/ScimToken"
+                    }
+                }
+            },
+            "ScimTokenRevokeResponse": {
+                "type": "object",
+                "required": [
+                    "id"
+                ],
+                "properties": {
+                    "id": {
+                        "description": "The revoked SCIM token's unique ID",
+                        "type": "string",
+                        "format": "uuid"
                     }
                 }
             },

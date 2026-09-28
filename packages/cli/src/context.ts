@@ -5,6 +5,19 @@ import type yargs from "yargs";
 
 import { log } from "./log.js";
 
+/**
+ * Git → Neon mapping persisted in `.neon` so `git checkout` can drive `neon checkout`.
+ * The keys are git branch names; the **values are real Neon branch names** (valid slugs, the
+ * same form stored in {@link Context.branch}). The map is built up as branches are resolved,
+ * so a git branch always resolves to the same Neon branch on subsequent checkouts.
+ */
+export type GitContextConfig = {
+	/** When true, the installed git `post-checkout` hook drives `neon git sync`. */
+	follow?: boolean;
+	/** git branch name -> Neon branch name (a valid Neon slug). */
+	map?: Record<string, string>;
+};
+
 export type Context = {
 	orgId?: string;
 	projectId?: string;
@@ -20,6 +33,13 @@ export type Context = {
 	 * dropped the next time the context is written.
 	 */
 	branchId?: string;
+	/**
+	 * Git → Neon workflow state (the branch mapping and `follow` flag). Preserved across
+	 * writes by {@link applyContext} unless a caller explicitly provides a new `git` block,
+	 * so project/org/branch updates (e.g. the deprecated `set-context`, or a plain `checkout`)
+	 * never wipe the mapping.
+	 */
+	git?: GitContextConfig;
 };
 
 /**
@@ -96,6 +116,45 @@ export const isApiKeysCommand = (args: { _: (string | number)[] }): boolean =>
 export const isMcpCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "mcp";
 
+/**
+ * `neon git install/uninstall/status` only touch the local git hooks directory and `.neon`
+ * — never the Neon API — so they must work (and never pop a browser login) without
+ * credentials, the same reasoning as {@link isProfileCommand}. `sync` and `cleanup` are
+ * excluded: both can reach the API (`sync` always delegates to `checkout`; `cleanup` does
+ * too with `--prune-neon-branches`).
+ */
+export const isGitLocalCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "git" &&
+	(args._[1] === "install" ||
+		args._[1] === "uninstall" ||
+		args._[1] === "status");
+
+/** The env var the installed `post-checkout` hook sets before invoking `neon git sync`. */
+const GIT_HOOK_ENV_FLAG = "NEON_GIT_HOOK";
+
+/**
+ * True only for a `neon git sync` invocation triggered by the installed `post-checkout`
+ * hook, in a repo that has **not** itself run `neon git install` — the case that must never
+ * touch the network (auth included). Checked before authentication runs at all, since
+ * `core.hooksPath` can point at a directory shared by several repositories: the hook script
+ * firing here does not by itself mean *this* repo opted in.
+ *
+ * The `.neon` read is deliberately **not** the usual walk-up resolution
+ * ({@link currentContextFile}): a `post-checkout` hook always runs with `cwd` at the
+ * repository's top level, and opt-in must be recorded by *this* repo's own `.neon` — an
+ * ancestor directory's `.neon` (found by the walk-up, e.g. a parent monorepo folder that
+ * happens to hold one for an unrelated project) must never authorize it.
+ */
+export const isUnfollowedGitHookSync = (
+	args: { _: (string | number)[] },
+	cwd: string = process.cwd(),
+): boolean => {
+	if (!(args._[0] === "git" && args._[1] === "sync")) return false;
+	if (process.env[GIT_HOOK_ENV_FLAG] !== "1") return false;
+	const context = readContextFile(resolve(cwd, CONTEXT_FILE));
+	return context.git?.follow !== true;
+};
+
 export const isSkillsCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "skills" || args._[0] === "skill";
 
@@ -144,7 +203,7 @@ function argvEnablesMcpOauth(argv: readonly string[]): boolean {
 	return false;
 }
 
-const CONTEXT_FILE = ".neon";
+export const CONTEXT_FILE = ".neon";
 const GITIGNORE_FILE = ".gitignore";
 
 type ResolvePath = (...paths: string[]) => string;
@@ -294,13 +353,80 @@ export const updateContextFile = (file: string, context: Context) => {
  * `.neon` we never touch `.gitignore`, so a user who deliberately un-ignored
  * the file (e.g. to commit shared context) won't have the entry re-added on
  * every subsequent command.
+ *
+ * The {@link Context.git} block is additionally **preserved** when the caller doesn't
+ * provide one, so a plain `link` / `set-context` / `checkout` never wipes the git → Neon
+ * mapping a user (or `neon git sync`) built up. Pass an explicit `git` to replace it.
+ *
+ * That preservation is skipped when `context.projectId` differs from the file's existing
+ * `projectId`: the mapping's Neon branch **names** are only meaningful within the project
+ * they were recorded against, and carrying them into a different project could point
+ * `neon git cleanup --prune-neon-branches` at a same-named branch that was never actually
+ * mapped there.
  */
 export const applyContext = (file: string, context: Context) => {
 	const isNewFile = !existsSync(file);
-	updateContextFile(file, context);
+	const existing = isNewFile ? {} : readContextFile(file);
+	const projectChanged =
+		existing.projectId !== undefined &&
+		context.projectId !== existing.projectId;
+	const merged: Context =
+		context.git === undefined &&
+		existing.git !== undefined &&
+		!projectChanged
+			? { ...context, git: existing.git }
+			: context;
+	updateContextFile(file, merged);
 	if (isNewFile) {
 		ensureGitignored(file);
 	}
+};
+
+/** Look up the Neon branch a git branch maps to in the persisted `.neon` context. */
+export const gitBranchMapping = (
+	context: Context,
+	gitBranch: string,
+): string | undefined => context.git?.map?.[gitBranch];
+
+/** The full git → Neon mapping from the context (a copy; empty when unset). */
+export const gitBranchMap = (context: Context): Record<string, string> => ({
+	...context.git?.map,
+});
+
+/** Replace the git → Neon mapping in `.neon`, preserving `git.follow` and the rest. */
+export const setGitBranchMap = (
+	file: string,
+	map: Record<string, string>,
+): void => {
+	const context = readContextFile(file);
+	applyContext(file, { ...context, git: { ...context.git, map } });
+};
+
+/**
+ * Record a git branch -> Neon branch mapping in `.neon`, merging into any existing map and
+ * preserving the rest of the context. Passes an explicit `git` so {@link applyContext}
+ * replaces (rather than just preserves) the block with the new entry folded in.
+ */
+export const setGitBranchMapping = (
+	file: string,
+	gitBranch: string,
+	neonBranch: string,
+): void => {
+	const context = readContextFile(file);
+	const git: GitContextConfig = {
+		...context.git,
+		map: { ...context.git?.map, [gitBranch]: neonBranch },
+	};
+	applyContext(file, { ...context, git });
+};
+
+/** Set the `git.follow` flag (whether the post-checkout hook drives `neon git sync`). */
+export const setGitFollow = (file: string, follow: boolean): void => {
+	const context = readContextFile(file);
+	applyContext(file, {
+		...context,
+		git: { ...context.git, follow },
+	});
 };
 
 /**

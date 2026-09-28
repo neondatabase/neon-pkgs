@@ -28,13 +28,32 @@
 
 export type {
 	AppliedChange,
+	CheckoutAfterContext,
+	CheckoutBeforeContext,
+	CheckoutBeforeResult,
+	CheckoutEvent,
+	CheckoutHooks,
 	Config,
 	ConflictReport,
+	CreateAfterContext,
+	CreateBeforeContext,
+	CreateHooks,
+	DeployAfterContext,
+	DeployBeforeContext,
+	DeployEvent,
+	DeployHooks,
+	ExperimentalInput,
 	FunctionBundle,
 	FunctionBundlerInput,
+	GitContext,
+	Hook,
+	HookBranch,
+	HookEnv,
+	Hooks,
 	LoadConfigOptions,
 	NeonApi,
 	PushResult,
+	ShellHook,
 } from "@neon/config";
 // ─── Re-exports from @neon/config for convenience ─────────────────────
 // Runtime callers usually want a few authoring-side symbols alongside the operations
@@ -104,3 +123,6 @@ export type {
 	PushConfirmContext,
 } from "./lib/push-config.js";
 export { pushConfig } from "./lib/push-config.js";
+// ─── Lifecycle hook runner (function | shell; consumed by the CLI) ────────────
+export type { RunHookOptions } from "./lib/run-hook.js";
+export { HookExecutionError, runHook, runShellHook } from "./lib/run-hook.js";

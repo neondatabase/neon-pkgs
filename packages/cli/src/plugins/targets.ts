@@ -1,4 +1,6 @@
+import { delimiter, dirname, join, resolve } from "node:path";
 import { detectProjectAgents } from "add-mcp";
+import which from "which";
 
 import {
 	type AgentType,
@@ -15,25 +17,78 @@ export type PluginsMappedTarget = {
 	target: string;
 };
 
-const PLUGINS_TARGET_BY_TYPE: { [K in AgentType]?: string } = {
-	cursor: "cursor",
-	vscode: "vscode",
-	"claude-code": "claude-code",
-	"claude-desktop": "claude-code",
-	codex: "codex",
-	"github-copilot-cli": "github-copilot",
-	"grok-build": "grok",
+/**
+ * A plugins CLI target and what installing into it needs. With `command`, the plugins CLI
+ * runs that agent CLI and fails with ENOENT when it is missing; without one, it writes
+ * files. `e2e/plugins.e2e.test.ts` checks every entry against the real plugins CLI.
+ */
+export type PluginsTarget = { target: string; command?: string };
+
+const CLAUDE_CODE: PluginsTarget = { target: "claude-code" };
+
+const PLUGINS_TARGET_BY_TYPE: { [K in AgentType]?: PluginsTarget } = {
+	cursor: { target: "cursor" },
+	vscode: { target: "vscode" },
+	"claude-code": CLAUDE_CODE,
+	"claude-desktop": CLAUDE_CODE,
+	codex: { target: "codex" },
+	"github-copilot-cli": { target: "github-copilot", command: "copilot" },
+	"grok-build": { target: "grok", command: "grok" },
 };
+
+export const pluginsTargets = (): PluginsTarget[] => [
+	...new Set(Object.values(PLUGINS_TARGET_BY_TYPE)),
+];
 
 const USER_SCOPE_ONLY_TARGETS = new Set(["vscode", "github-copilot", "grok"]);
 
-export function getPluginsTargetName(agent: string): string | undefined {
+export type MissingPluginsCommand = { agent: AgentType; command: string };
+
+/** npx runs the plugins CLI with every `node_modules/.bin` from `cwd` up to the root ahead of PATH. */
+const pluginsCommandSearchPath = (cwd: string, path: string): string => {
+	const bins: string[] = [];
+	let dir = resolve(cwd);
+	for (;;) {
+		bins.push(join(dir, "node_modules", ".bin"));
+		const parent = dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+	return [...bins, path].join(delimiter);
+};
+
+export const missingPluginsCommands = (
+	agents: readonly AgentType[],
+	options: { cwd: string; path?: string },
+): MissingPluginsCommand[] => {
+	const searchPath = pluginsCommandSearchPath(
+		options.cwd,
+		options.path ?? process.env.PATH ?? "",
+	);
+	const missing: MissingPluginsCommand[] = [];
+	for (const agent of uniqueAgentIds(agents)) {
+		const command = getPluginsTarget(agent)?.command;
+		if (
+			command !== undefined &&
+			which.sync(command, { nothrow: true, path: searchPath }) === null
+		) {
+			missing.push({ agent, command });
+		}
+	}
+	return missing;
+};
+
+function getPluginsTarget(agent: string): PluginsTarget | undefined {
 	if (Object.prototype.hasOwnProperty.call(PLUGINS_TARGET_BY_TYPE, agent)) {
 		return PLUGINS_TARGET_BY_TYPE[agent as AgentType];
 	}
 	const id = tryResolveAddMcpAgentId(agent);
 	if (!id) return undefined;
 	return PLUGINS_TARGET_BY_TYPE[id];
+}
+
+export function getPluginsTargetName(agent: string): string | undefined {
+	return getPluginsTarget(agent)?.target;
 }
 
 export function supportsPlugins(agent: string): boolean {

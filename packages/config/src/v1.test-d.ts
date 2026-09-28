@@ -6,12 +6,20 @@ import type {
 	BranchTuningFn,
 	BucketAccessLevel,
 	BucketDef,
+	CheckoutAfterContext,
+	CheckoutBeforeContext,
+	CheckoutBeforeResult,
+	CheckoutEvent,
+	CheckoutHooks,
 	ComputeSettings,
 	ComputeUnit,
 	ConflictReport,
+	CreateAfterContext,
+	CreateBeforeContext,
 	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
+	CreateHooks,
 	CreateProjectInput,
 	CredentialFeatureFlags,
 	CredentialPrincipalType,
@@ -22,12 +30,17 @@ import type {
 	DataApiInput,
 	DataApiNeonAuthConfig,
 	DataApiSettings,
+	DeployAfterContext,
+	DeployBeforeContext,
+	DeployEvent,
 	DeployFunctionInput,
+	DeployHooks,
 	DiffOptions,
 	DiffResult,
 	DurationString,
 	DurationUnit,
 	EnableDataApiInput,
+	ExperimentalInput,
 	FunctionArchiveEntry,
 	FunctionBundle,
 	FunctionBundler,
@@ -38,6 +51,11 @@ import type {
 	FunctionSourceEntry,
 	FunctionTuning,
 	GetConnectionUriInput,
+	GitContext,
+	Hook,
+	HookBranch,
+	HookEnv,
+	Hooks,
 	LoadConfigOptions,
 	NeonApi,
 	NeonAuthSnapshot,
@@ -70,6 +88,7 @@ import type {
 	ServiceEnabled,
 	ServiceToggle,
 	ServiceToggleInput,
+	ShellHook,
 	UpdateBranchInput,
 } from "./v1.js";
 import { type Config, defineConfig } from "./v1.js";
@@ -125,6 +144,28 @@ describe("config type-export surface", () => {
 		expectTypeOf<ServiceEnabled<true>>().not.toBeAny();
 		expectTypeOf<ServiceToggle>().not.toBeAny();
 		expectTypeOf<ServiceToggleInput>().not.toBeAny();
+	});
+
+	test("every public hooks type is exported (compile-time tripwire)", () => {
+		expectTypeOf<ExperimentalInput>().not.toBeAny();
+		expectTypeOf<Hooks>().not.toBeAny();
+		expectTypeOf<CheckoutHooks>().not.toBeAny();
+		expectTypeOf<CreateHooks>().not.toBeAny();
+		expectTypeOf<DeployHooks>().not.toBeAny();
+		expectTypeOf<CheckoutEvent>().not.toBeAny();
+		expectTypeOf<DeployEvent>().not.toBeAny();
+		expectTypeOf<CheckoutBeforeContext>().not.toBeAny();
+		expectTypeOf<CheckoutBeforeResult>().not.toBeAny();
+		expectTypeOf<CheckoutAfterContext>().not.toBeAny();
+		expectTypeOf<CreateBeforeContext>().not.toBeAny();
+		expectTypeOf<CreateAfterContext>().not.toBeAny();
+		expectTypeOf<DeployBeforeContext>().not.toBeAny();
+		expectTypeOf<DeployAfterContext>().not.toBeAny();
+		expectTypeOf<GitContext>().not.toBeAny();
+		expectTypeOf<HookBranch>().not.toBeAny();
+		expectTypeOf<HookEnv>().not.toBeAny();
+		expectTypeOf<Hook<CheckoutAfterContext>>().not.toBeAny();
+		expectTypeOf<ShellHook>().not.toBeAny();
 	});
 
 	test("every public NeonApi adapter type is exported (compile-time tripwire)", () => {

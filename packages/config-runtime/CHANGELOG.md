@@ -1,5 +1,28 @@
 # @neondatabase/config-runtime
 
+## 1.7.2
+
+### Patch Changes
+
+- @neon/config@1.8.2
+
+## 1.7.1
+
+### Patch Changes
+
+- @neon/config@1.8.1
+
+## 1.7.0
+
+### Minor Changes
+
+- 64062a6: Add `runHook` and `runShellHook` to execute the lifecycle hooks declared under `experimental.hooks` in `neon.ts` (function or shell-command form), plus the `HookExecutionError` class and `RunHookOptions` type.
+
+### Patch Changes
+
+- Updated dependencies [64062a6]
+  - @neon/config@1.8.0
+
 ## 1.6.3
 
 ### Patch Changes

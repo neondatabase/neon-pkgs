@@ -26,6 +26,67 @@ describe("getCliAgent", () => {
 		).toBe("codex");
 	});
 
+	it("attributes a Cursor agent command", () => {
+		expect(getCliAgent({ CURSOR_AGENT: "1" })).toBe("cursor");
+	});
+
+	it("does not attribute a Cursor terminal a person opened", () => {
+		expect(
+			getCliAgent({
+				TERM_PROGRAM: "vscode",
+				CURSOR_TRACE_ID: "trace-123",
+				VSCODE_GIT_ASKPASS_MAIN:
+					"/Applications/Cursor.app/Contents/Resources/app/extensions/git/dist/askpass-main.js",
+			}),
+		).toBeUndefined();
+	});
+
+	it("does not attribute a disabled Cursor marker", () => {
+		expect(getCliAgent({ CURSOR_AGENT: "0" })).toBeUndefined();
+		expect(getCliAgent({ CURSOR_AGENT: "" })).toBeUndefined();
+	});
+
+	it("omits attribution when Claude Code runs inside a Cursor agent", () => {
+		expect(
+			getCliAgent({ CURSOR_AGENT: "1", CLAUDE_CODE_CHILD_SESSION: "1" }),
+		).toBeUndefined();
+	});
+
+	it("attributes a command run inside OpenCode", () => {
+		expect(getCliAgent({ OPENCODE: "1", OPENCODE_PID: "4242" })).toBe(
+			"opencode",
+		);
+	});
+
+	it("attributes a command run inside Gemini CLI", () => {
+		expect(getCliAgent({ GEMINI_CLI: "1" })).toBe("gemini-cli");
+	});
+
+	it("attributes a command run inside GitHub Copilot CLI", () => {
+		expect(
+			getCliAgent({
+				COPILOT_CLI: "1",
+				COPILOT_AGENT_SESSION_ID:
+					"9bdc7889-8f55-4682-9ecd-458e83d44d24",
+			}),
+		).toBe("github-copilot-cli");
+	});
+
+	it("does not attribute disabled harness markers", () => {
+		expect(getCliAgent({ OPENCODE: "0" })).toBeUndefined();
+		expect(getCliAgent({ GEMINI_CLI: "" })).toBeUndefined();
+		expect(getCliAgent({ COPILOT_CLI: "false" })).toBeUndefined();
+	});
+
+	it("omits attribution when harness markers are nested", () => {
+		expect(
+			getCliAgent({ OPENCODE: "1", CLAUDE_CODE_CHILD_SESSION: "1" }),
+		).toBeUndefined();
+		expect(
+			getCliAgent({ GEMINI_CLI: "1", COPILOT_CLI: "1" }),
+		).toBeUndefined();
+	});
+
 	it("does not attribute a user-initiated Codex shell command", () => {
 		expect(
 			getCliAgent({

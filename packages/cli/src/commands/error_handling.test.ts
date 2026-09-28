@@ -252,3 +252,85 @@ describe("401 credential handling", () => {
 		}
 	});
 });
+
+describe("SSO authorization handling", () => {
+	const STEP_UP_URL = "https://console.local/sso-step-up/org-1";
+
+	// Serves SSO_AUTHORIZATION_REQUIRED on every route: detection is by the body `code`, and Neon
+	// masks org denials as 404, so this deliberately returns 403 with the code + step-up URL in the
+	// message (the shape the recovery parses).
+	const ssoRequiredServer = async (): Promise<{
+		port: number;
+		close: () => Promise<void>;
+	}> => {
+		const app = express();
+		app.use((_req, res) =>
+			res.status(403).json({
+				code: "SSO_AUTHORIZATION_REQUIRED",
+				message: `This organization requires SSO authorization. Open ${STEP_UP_URL} in your browser to authorize, then retry.`,
+			}),
+		);
+		const server = await new Promise<Server>((resolve) => {
+			const s = app.listen(0, () => resolve(s));
+		});
+		return {
+			port: (server.address() as AddressInfo).port,
+			close: () =>
+				new Promise<void>((resolve, reject) => {
+					server.close((err) => (err ? reject(err) : resolve()));
+				}),
+		};
+	};
+
+	// The forked CLI has no TTY and runs with CI=true, so this is the unattended path: it must print
+	// the step-up URL and exit non-zero WITHOUT launching a browser or blocking on a prompt (either
+	// would hang this test). Guards Andre's review points end to end through handleError.
+	it("prints the step-up URL and exits 1 unattended (no browser, no hang)", async () => {
+		const server = await ssoRequiredServer();
+		try {
+			const code = await new Promise<number>((resolve, reject) => {
+				let output = "";
+				const cp = fork(
+					join(process.cwd(), "./dist/index.js"),
+					[
+						"--api-host",
+						`http://localhost:${server.port}`,
+						"--output",
+						"yaml",
+						"--api-key",
+						"test-key",
+						"--no-analytics",
+						"projects",
+						"list",
+					],
+					{
+						stdio: "pipe",
+						env: {
+							PATH: `mocks/bin:${process.env.PATH}`,
+							CI: "true",
+						},
+					},
+				);
+				cp.stdout?.on("data", (c) => {
+					output += String(c);
+				});
+				cp.stderr?.on("data", (c) => {
+					output += String(c);
+				});
+				cp.on("error", reject);
+				cp.on("close", (exitCode) => {
+					try {
+						expect(output).toContain(STEP_UP_URL);
+						resolve(exitCode ?? -1);
+					} catch (assertionErr) {
+						reject(assertionErr);
+					}
+				});
+			});
+
+			expect(code).toBe(1);
+		} finally {
+			await server.close();
+		}
+	});
+});

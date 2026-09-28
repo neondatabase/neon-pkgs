@@ -1,5 +1,19 @@
 # @neon/tools
 
+## 1.5.2
+
+### Patch Changes
+
+- Updated dependencies [68e59c2]
+  - @neon/sdk@6.1.2
+
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [7e1b4d2]
+  - @neon/sdk@6.1.1
+
 ## 1.5.0
 
 ### Minor Changes

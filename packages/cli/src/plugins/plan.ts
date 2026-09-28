@@ -15,7 +15,9 @@ import {
 	detectPluginsAgents,
 	getPluginsTargetName,
 	isUserScopeOnlyPluginsTarget,
+	type MissingPluginsCommand,
 	mappedPluginsTargets,
+	missingPluginsCommands,
 	type PluginsInstallScope,
 	type PluginsMappedTarget,
 	pluginsInstallableAgents,
@@ -26,6 +28,8 @@ export type PluginsPlan = {
 	agents: AgentType[];
 	skipped: AgentType[];
 	userScopeSkipped: AgentType[];
+	/** Detected agents left out because the plugins CLI needs their command. */
+	missingCommands: MissingPluginsCommand[];
 	targets: PluginsMappedTarget[];
 };
 
@@ -38,7 +42,21 @@ export type ResolvePluginsPlanOptions = {
 	pickAgents?: (options: PickAgentsOptions) => Promise<AgentType[]>;
 	detectAgent?: () => AgentType | null;
 	detectInstalledAgents?: () => Promise<readonly AgentType[]>;
+	/** PATH to look up agent commands in. Defaults to `process.env.PATH`. */
+	commandPath?: string;
 };
+
+export const missingPluginsCommandsError = (
+	missing: readonly MissingPluginsCommand[],
+): Error =>
+	new Error(
+		missing
+			.map(
+				({ agent, command }) =>
+					`Cannot install the Neon plugin for ${getAgentDisplayName(agent)}: "${command}" was not found on PATH. Install it or add it to PATH, then retry.`,
+			)
+			.join("\n"),
+	);
 
 export const assertPluginsCanRun = (options: {
 	yes: boolean;
@@ -130,6 +148,32 @@ export async function resolvePluginsPlan(
 		agents.push(id);
 	}
 
+	const missingCommands = missingPluginsCommands(agents, {
+		cwd: options.cwd,
+		...(options.commandPath !== undefined
+			? { path: options.commandPath }
+			: {}),
+	});
+	if (missingCommands.length > 0) {
+		const detectedOnly = options.agents.length === 0 && !prompt;
+		if (!detectedOnly) {
+			throw missingPluginsCommandsError(missingCommands);
+		}
+		const missingAgents = new Set(missingCommands.map((row) => row.agent));
+		const installable = agents.filter((id) => !missingAgents.has(id));
+		return {
+			scope,
+			agents: installable,
+			skipped,
+			userScopeSkipped,
+			missingCommands,
+			targets:
+				installable.length === 0
+					? []
+					: mappedPluginsTargets(installable, scope),
+		};
+	}
+
 	if (agents.length === 0) {
 		if (userScopeSkipped.length > 0 && skipped.length === 0) {
 			const names = userScopeSkipped
@@ -149,6 +193,7 @@ export async function resolvePluginsPlan(
 		agents,
 		skipped,
 		userScopeSkipped,
+		missingCommands,
 		targets: mappedPluginsTargets(agents, scope),
 	};
 }

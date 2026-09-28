@@ -1,0 +1,39 @@
+{
+  "valid": [
+    { "type": "subscribe", "request_id": "1", "authorization": "token" },
+    { "type": "renew", "live_id": "1", "authorization": "token" },
+    { "type": "unsubscribe", "live_id": "1" },
+    { "type": "ping", "token": "heartbeat-1" },
+    { "type": "pong", "token": "heartbeat-1" },
+    { "type": "ready" },
+    { "type": "subscribed", "request_id": "1", "live_id": "2", "epoch": "1", "first_sequence": "1", "columns": [{ "name": "id", "type_oid": 23, "typmod": -1, "codec": "pg_text" }] },
+    { "type": "subscribe_rejected", "request_id": "1", "code": "authorization_expired", "message": "expired" },
+    { "type": "renewed", "live_id": "2" },
+    { "type": "unsubscribed", "live_id": "2" },
+    { "type": "snapshot_start", "live_id": "2", "epoch": "1", "snapshot_attempt": "1", "mvcc": { "xmin": "1", "xmax": "2", "xip": ["1"] } },
+    { "type": "snapshot_chunk", "live_id": "2", "epoch": "1", "snapshot_attempt": "1", "index": 0, "rows": [{ "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": ["1", null, { "base64": "AQI=" }] }] },
+    { "type": "snapshot_end", "live_id": "2", "epoch": "1", "snapshot_attempt": "1", "chunk_count": 1 },
+    { "type": "open", "publication_id": "7" },
+    { "type": "keyed_results", "publication_id": "7", "index": 0, "txids": ["9"], "targets": [{ "live_id": "2", "epoch": "1", "sequence": "1" }], "changes": [{ "op": "upsert", "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": ["2"] }] },
+    { "type": "reset_required", "publication_id": "7", "index": 1, "targets": [{ "live_id": "2", "epoch": "2", "first_sequence": "1" }] },
+    { "type": "commit", "publication_id": "7", "body_count": 2, "frontier": { "lsn": "0/10" } },
+    { "type": "subscription_error", "live_id": "2", "code": "authorization_expired", "message": "expired" },
+    { "type": "connection_error", "code": "protocol_error", "message": "invalid sequence" }
+  ],
+  "invalid": [
+    { "type": "hello", "database": "app" },
+    { "type": "hello", "database": "app", "extra": true },
+    { "type": "subscribe", "request_id": "0", "authorization": "token" },
+    { "type": "subscribe", "request_id": 1, "authorization": "token" },
+    { "type": "renew", "live_id": "01", "authorization": "token" },
+    { "type": "ready", "extra": true },
+    { "type": "snapshot_chunk", "live_id": "2", "epoch": "1", "snapshot_attempt": "1", "index": -1, "rows": [] },
+    { "type": "snapshot_chunk", "live_id": "2", "epoch": "1", "snapshot_attempt": "1", "index": 0, "rows": [{ "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": [{ "base64": "AB==" }] }] },
+    { "type": "snapshot_chunk", "live_id": "2", "epoch": "1", "snapshot_attempt": "1", "index": 0, "rows": [{ "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "values": [], "extra": true }] },
+    { "type": "keyed_results", "publication_id": "7", "index": 0, "txids": ["0"], "targets": [], "changes": [] },
+    { "type": "renewed", "live_id": "18446744073709551616" },
+    { "type": "commit", "publication_id": "7", "body_count": 0, "frontier": { "lsn": "0/01" } },
+    { "type": "subscription_error", "live_id": "2", "code": "future", "message": "bad" },
+    { "type": "unknown" }
+  ]
+}
