@@ -734,11 +734,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						const mcpSelection =
 							named.length > 0
 								? named
-								: await pickAgents(
+								: // Unfiltered by location so validateMcpConfigLocationSupport
+									// rejects or warns about agents the location cannot serve.
+									await pickAgents(
 										"mcp",
-										mcpInstallableAgents(
-											props.mcpConfigLocation ?? "global",
-										),
+										mcpInstallableAgents("global"),
 									);
 						if (mcpSelection !== undefined) {
 							mcpConfigLocation =

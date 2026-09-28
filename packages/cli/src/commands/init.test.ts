@@ -646,6 +646,30 @@ describe("init handler", () => {
 		expect(mcp?.options.agent).toEqual(["mcporter"]);
 	});
 
+	test("-y --mcp-config-location project rejects a detected agent without project MCP", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-mcp-location-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					mcpConfigLocation: "project",
+					mcpAuth: "oauth",
+					detectInstalledAgents: async () => ["cline"],
+					link: false,
+					config: false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow("cline cannot install project-level MCP config");
+		expect(stepKinds(ops)).toEqual([]);
+	});
+
 	test("--no-agent-setup with --skill fails", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-skip-skill-"));
 		const { handler } = await import("./init.js");
