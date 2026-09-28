@@ -324,15 +324,15 @@ const skillsMcpTooling = (
 	mcpConfigLocation: InitMcpConfigLocation,
 	fallback: boolean,
 ): InitToolingPlan => {
+	// The fallback is for "no agents detected at all". An MCP-only agent leaves the
+	// skills selection empty, and that must not pull in the fallback skills agents.
+	const useFallback =
+		fallback && skillsSelection?.length === 0 && mcpSelection?.length === 0;
 	const selectedSkills = (
-		skillsSelection?.length === 0 && fallback
-			? FALLBACK_SKILLS_AGENTS
-			: (skillsSelection ?? [])
+		useFallback ? FALLBACK_SKILLS_AGENTS : (skillsSelection ?? [])
 	).filter((id) => skillsInstallableAgents().includes(id));
 	const selectedMcp = (
-		mcpSelection?.length === 0 && fallback
-			? FALLBACK_SKILLS_AGENTS
-			: (mcpSelection ?? [])
+		useFallback ? FALLBACK_SKILLS_AGENTS : (mcpSelection ?? [])
 	).filter((id) => mcpInstallableAgents(mcpConfigLocation).includes(id));
 	if (selectedMcp.length === 0) {
 		return skillsTooling(selectedSkills, false);

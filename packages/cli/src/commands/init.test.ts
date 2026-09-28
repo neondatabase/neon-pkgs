@@ -621,6 +621,31 @@ describe("init handler", () => {
 		expect(mcp?.options).toMatchObject({ oauth: true });
 	});
 
+	test("-y --mcp-auth with only an MCP-only agent detected skips fallback skills", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-mcp-only-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		mkdirSync(join(cwd, "config"));
+		writeFileSync(join(cwd, "config", "mcporter.json"), "{}\n");
+		const ops = makeOperations();
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				mcpAuth: "oauth",
+				link: false,
+				config: false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(stepKinds(ops)).toEqual(["mcp"]);
+		const mcp = ops.calls.find((call) => call.kind === "mcp");
+		expect(mcp?.options.agent).toEqual(["mcporter"]);
+	});
+
 	test("--no-agent-setup with --skill fails", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-skip-skill-"));
 		const { handler } = await import("./init.js");
