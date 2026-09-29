@@ -82,10 +82,11 @@ const todos = createCollection(neonLiveCollectionOptions({
 response. It resolves once the batch has entered TanStack DB's causal sync queue
 and rejects if its timeout elapses.
 
-**Warning:** `awaitTxId()` resolves only when Neon Live includes the transaction
-ID in a live batch for this collection. Neon Live does not currently acknowledge
-transactions that produce no changes to the query result, so those waits time
-out.
+**Warning:** `awaitTxId()` resolves when Neon Live includes the transaction ID in
+a live batch or when the last successfully applied reset snapshot proves it
+visible. Neon Live does not currently acknowledge a no-op transaction after
+that snapshot. It can resolve only if a later reset proves it visible; because
+resets may be infrequent, those waits may time out.
 
 For SSR, use TanStack DB's normal `DbClient`, dehydration, and
 `HydrationBoundary` APIs with stable collection IDs. The server seeds a

@@ -130,10 +130,11 @@ export interface RawLiveQuerySubscription<Row> {
 	 * the batch arrives before the caller receives the mutation response.
 	 *
 	 * @remarks
-	 * This resolves only for transaction IDs included in a live batch for this
-	 * subscription. Neon Live does not currently acknowledge transactions that
-	 * produce no changes to the query result. Waiting for such a transaction
-	 * remains pending until the timeout elapses or the subscription closes.
+	 * This resolves for transaction IDs included in a live batch or proven
+	 * visible by the last successfully applied reset snapshot. Neon Live does
+	 * not currently acknowledge a no-op transaction after that snapshot. It can
+	 * resolve only if a later reset proves it visible; otherwise it remains
+	 * pending until the timeout elapses or the subscription closes.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default the

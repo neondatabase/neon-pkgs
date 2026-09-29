@@ -6,7 +6,12 @@ import {
 	PostgresValueParserError,
 	validateColumns,
 } from "./postgres/value-decoder.js";
-import type { WireChange, WireColumn, WireRow } from "./protocol/messages.js";
+import type {
+	MvccSnapshot,
+	WireChange,
+	WireColumn,
+	WireRow,
+} from "./protocol/messages.js";
 import type {
 	ReconciledBatch,
 	ReconciliationTarget,
@@ -224,7 +229,7 @@ export class Subscription<Row>
 		this.owner.parserFailed(this, error);
 	}
 
-	publishReset(): void {
+	publishReset(_wireRows: readonly WireRow[], mvcc: MvccSnapshot): void {
 		if (this.closed) return;
 		const staged = this.stagedReset;
 		if (!staged)
@@ -237,6 +242,7 @@ export class Subscription<Row>
 		this.stagedReset = undefined;
 		this.initialized = true;
 		this.snapshot = this.makeSnapshot();
+		this.transactions.applySnapshot(mvcc);
 		notify(this.resetListeners, staged.rows);
 	}
 

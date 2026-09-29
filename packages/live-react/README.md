@@ -125,10 +125,12 @@ such as `toggle`. This makes them safe when React rebases a still-pending Action
 over newer authoritative rows. `awaitTxId()` also handles the race where the
 live batch arrives before the mutation response.
 
-**Warning:** `awaitTxId()` resolves only when Neon Live includes the transaction
-ID in a live batch for this query. Neon Live does not currently acknowledge
-transactions that produce no changes to the query result. Pass a timeout or
-avoid waiting when the mutation endpoint reports that no change was made.
+**Warning:** `awaitTxId()` resolves when Neon Live includes the transaction ID in
+a live batch or when the last successfully applied reset snapshot proves it
+visible. Neon Live does not currently acknowledge a no-op transaction after
+that snapshot. It can resolve only if a later reset proves it visible; because
+resets may be infrequent, pass a timeout or avoid waiting when the mutation
+endpoint reports that no change was made.
 
 ## API
 

@@ -1,5 +1,6 @@
 import { ProtocolError } from "../protocol/codec.js";
 import type {
+	MvccSnapshot,
 	ServerMessage,
 	WireChange,
 	WireRow,
@@ -16,7 +17,7 @@ export interface ReconciliationTarget {
 	/** Install changes without notifying application listeners. */
 	applyBatch(changes: readonly WireChange[]): void;
 	/** Notify raw listeners after all state for this publication is installed. */
-	publishReset(rows: readonly WireRow[]): void;
+	publishReset(rows: readonly WireRow[], mvcc: MvccSnapshot): void;
 	/** Notify listeners after all state for this publication is installed. */
 	publishBatch(batch: ReconciledBatch): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
@@ -51,6 +52,7 @@ interface SnapshotVersion {
 
 interface PendingSnapshot {
 	readonly version: SnapshotVersion;
+	readonly mvcc: MvccSnapshot;
 	bytes: number;
 	nextChunk: number;
 	rows: WireRow[];
@@ -253,6 +255,7 @@ export class SnapshotPublicationReconciler {
 		state.latestSnapshot = version;
 		state.snapshot = {
 			version,
+			mvcc: message.mvcc,
 			bytes,
 			nextChunk: 0,
 			rows: [],
@@ -350,7 +353,7 @@ export class SnapshotPublicationReconciler {
 			state.target.decodeFailed(error);
 			return;
 		}
-		state.target.publishReset(rows);
+		state.target.publishReset(rows, snapshot.mvcc);
 		for (const buffered of replay)
 			state.target.publishBatch(buffered.batch);
 		state.live = true;

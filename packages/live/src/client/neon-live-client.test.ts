@@ -213,6 +213,107 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
+	it("confirms transactions visible to an applied MVCC snapshot", async () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(authorization("initial"));
+		const socket = connectAndAdmit();
+		let resolvedBeforeEnd = false;
+		const beforeXmin = subscription.awaitTxId("99").then(() => {
+			resolvedBeforeEnd = true;
+		});
+		const atXmin = subscription.awaitTxId("100");
+		const inProgress = subscription.awaitTxId("103");
+		const atXmax = subscription.awaitTxId("105");
+
+		socket.receive({
+			type: "snapshot_start",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "1",
+			mvcc: { xmin: "100", xmax: "105", xip: ["103"] },
+		});
+		await Promise.resolve();
+		expect(resolvedBeforeEnd).toBe(false);
+		socket.receive({
+			type: "snapshot_end",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "1",
+			chunk_count: 0,
+		});
+
+		await expect(beforeXmin).resolves.toBeUndefined();
+		await expect(atXmin).resolves.toBeUndefined();
+		await expect(subscription.awaitTxId("104")).resolves.toBeUndefined();
+		let inProgressResolved = false;
+		let atXmaxResolved = false;
+		void inProgress.then(
+			() => {
+				inProgressResolved = true;
+			},
+			() => undefined,
+		);
+		void atXmax.then(
+			() => {
+				atXmaxResolved = true;
+			},
+			() => undefined,
+		);
+		await Promise.resolve();
+		expect(inProgressResolved).toBe(false);
+		expect(atXmaxResolved).toBe(false);
+
+		subscription.unsubscribe();
+		await expect(inProgress).rejects.toThrow("subscription is closed");
+		await expect(atXmax).rejects.toThrow("subscription is closed");
+		client.close();
+	});
+
+	it("confirms a transaction when a later reset snapshot proves it visible", async () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(authorization("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+		const confirmation = subscription.awaitTxId("42");
+
+		socket.receive({ type: "open", publication_id: "reset" });
+		socket.receive({
+			type: "reset_required",
+			publication_id: "reset",
+			index: 0,
+			targets: [{ live_id: "41", epoch: "2", first_sequence: "1" }],
+		});
+		socket.receive({
+			type: "commit",
+			publication_id: "reset",
+			body_count: 1,
+			frontier: { lsn: "0/20" },
+		});
+		socket.receive({
+			type: "snapshot_start",
+			live_id: "41",
+			epoch: "2",
+			snapshot_attempt: "1",
+			mvcc: { xmin: "43", xmax: "44", xip: [] },
+		});
+		socket.receive({
+			type: "snapshot_end",
+			live_id: "41",
+			epoch: "2",
+			snapshot_attempt: "1",
+			chunk_count: 0,
+		});
+
+		await expect(confirmation).resolves.toBeUndefined();
+		client.close();
+	});
+
 	it("times out transaction waits and rejects them when closed", async () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({

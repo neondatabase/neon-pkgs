@@ -1,3 +1,5 @@
+import type { MvccSnapshot } from "./protocol/messages.js";
+
 const MAX_RECENT_TXIDS = 1_000;
 
 interface TransactionWaiter {
@@ -10,6 +12,7 @@ export class TransactionTracker {
 	private readonly recent = new Set<string>();
 	private readonly recentOrder: string[] = [];
 	private readonly waiting = new Map<string, Set<TransactionWaiter>>();
+	private appliedSnapshot?: ParsedMvccSnapshot;
 	private closed = false;
 
 	wait = async (txid: string, timeout?: number): Promise<void> => {
@@ -23,7 +26,12 @@ export class TransactionTracker {
 			);
 		}
 		if (this.closed) throw new Error("Neon Live subscription is closed");
-		if (this.recent.has(normalized)) return;
+		if (
+			this.recent.has(normalized.text) ||
+			(this.appliedSnapshot &&
+				isVisible(normalized.value, this.appliedSnapshot))
+		)
+			return;
 
 		return new Promise<void>((resolve, reject) => {
 			const waiter: TransactionWaiter = {
@@ -33,23 +41,23 @@ export class TransactionTracker {
 					timeout === undefined
 						? undefined
 						: setTimeout(() => {
-								this.remove(normalized, waiter);
+								this.remove(normalized.text, waiter);
 								reject(
 									new Error(
-										`Timed out waiting for Neon Live transaction ${normalized}`,
+										`Timed out waiting for Neon Live transaction ${normalized.text}`,
 									),
 								);
 							}, timeout),
 			};
-			const waiters = this.waiting.get(normalized) ?? new Set();
+			const waiters = this.waiting.get(normalized.text) ?? new Set();
 			waiters.add(waiter);
-			this.waiting.set(normalized, waiters);
+			this.waiting.set(normalized.text, waiters);
 		});
 	};
 
 	seen(txid: string): void {
 		if (this.closed) return;
-		const normalized = normalizeTxid(txid);
+		const normalized = normalizeTxid(txid).text;
 		if (!this.recent.has(normalized)) {
 			this.recent.add(normalized);
 			this.recentOrder.push(normalized);
@@ -58,12 +66,16 @@ export class TransactionTracker {
 				if (oldest !== undefined) this.recent.delete(oldest);
 			}
 		}
-		const waiters = this.waiting.get(normalized);
-		if (!waiters) return;
-		this.waiting.delete(normalized);
-		for (const waiter of waiters) {
-			if (waiter.timer !== undefined) clearTimeout(waiter.timer);
-			waiter.resolve();
+		this.resolve(normalized);
+	}
+
+	/** Record the latest applied snapshot and resolve every visible wait. */
+	applySnapshot(snapshot: MvccSnapshot): void {
+		if (this.closed) return;
+		this.appliedSnapshot = parseSnapshot(snapshot);
+		for (const txid of this.waiting.keys()) {
+			if (!isVisible(BigInt(txid), this.appliedSnapshot)) continue;
+			this.resolve(txid);
 		}
 	}
 
@@ -80,6 +92,7 @@ export class TransactionTracker {
 		this.waiting.clear();
 		this.recent.clear();
 		this.recentOrder.length = 0;
+		this.appliedSnapshot = undefined;
 	}
 
 	private remove(txid: string, waiter: TransactionWaiter): void {
@@ -88,9 +101,30 @@ export class TransactionTracker {
 		waiters.delete(waiter);
 		if (waiters.size === 0) this.waiting.delete(txid);
 	}
+
+	private resolve(txid: string): void {
+		const waiters = this.waiting.get(txid);
+		if (!waiters) return;
+		this.waiting.delete(txid);
+		for (const waiter of waiters) {
+			if (waiter.timer !== undefined) clearTimeout(waiter.timer);
+			waiter.resolve();
+		}
+	}
 }
 
-function normalizeTxid(txid: string): string {
+interface ParsedTxid {
+	readonly text: string;
+	readonly value: bigint;
+}
+
+interface ParsedMvccSnapshot {
+	readonly xmin: bigint;
+	readonly xmax: bigint;
+	readonly xip: ReadonlySet<bigint>;
+}
+
+function normalizeTxid(txid: string): ParsedTxid {
 	if (typeof txid !== "string" || !/^\d+$/.test(txid)) {
 		throw new Error("Neon Live transaction ID must be a decimal string");
 	}
@@ -98,5 +132,20 @@ function normalizeTxid(txid: string): string {
 	if (parsed > 18_446_744_073_709_551_615n) {
 		throw new Error("Neon Live transaction ID exceeds uint64");
 	}
-	return parsed.toString();
+	return { text: parsed.toString(), value: parsed };
+}
+
+function parseSnapshot(snapshot: MvccSnapshot): ParsedMvccSnapshot {
+	return {
+		xmin: BigInt(snapshot.xmin),
+		xmax: BigInt(snapshot.xmax),
+		xip: new Set(snapshot.xip.map((txid) => BigInt(txid))),
+	};
+}
+
+function isVisible(txid: bigint, snapshot: ParsedMvccSnapshot): boolean {
+	return (
+		txid < snapshot.xmin ||
+		(txid < snapshot.xmax && !snapshot.xip.has(txid))
+	);
 }

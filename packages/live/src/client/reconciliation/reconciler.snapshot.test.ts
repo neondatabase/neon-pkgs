@@ -88,12 +88,21 @@ describe("snapshot reconciliation", () => {
 	it("supersedes an incomplete snapshot attempt without publishing it", () => {
 		const state = target();
 		const reconciler = subscribed(state);
-		accept(reconciler, snapshotStart("1", "1"));
-		accept(reconciler, snapshotStart("1", "2"));
+		const supersededMvcc = { xmin: "10", xmax: "20", xip: ["15"] };
+		const appliedMvcc = { xmin: "30", xmax: "40", xip: ["35"] };
+		accept(reconciler, {
+			...snapshotStart("1", "1"),
+			mvcc: supersededMvcc,
+		});
+		accept(reconciler, {
+			...snapshotStart("1", "2"),
+			mvcc: appliedMvcc,
+		});
 		accept(reconciler, snapshotChunk(0, [row(ROW_A, "old")], "1", "1"));
 		accept(reconciler, snapshotEnd(0, "1", "2"));
 
-		expect(state.publishReset).toHaveBeenCalledWith([]);
+		expect(state.publishReset).toHaveBeenCalledOnce();
+		expect(state.publishReset).toHaveBeenCalledWith([], appliedMvcc);
 	});
 
 	it("preserves buffered publications across superseded snapshot attempts", () => {
@@ -189,10 +198,10 @@ describe("snapshot reconciliation", () => {
 		accept(reconciler, snapshotChunk(1, [row(ROW_B, "b")]));
 		accept(reconciler, snapshotEnd(2));
 
-		expect(state.publishReset).toHaveBeenCalledWith([
-			row(ROW_A, "a"),
-			row(ROW_B, "b"),
-		]);
+		expect(state.publishReset).toHaveBeenCalledWith(
+			[row(ROW_A, "a"), row(ROW_B, "b")],
+			{ xmin: "1", xmax: "2", xip: [] },
+		);
 	});
 
 	it.each([

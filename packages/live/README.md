@@ -267,11 +267,12 @@ when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
-**Warning:** `awaitTxId()` resolves only when Neon Live includes the transaction
-ID in a live batch for this subscription. Neon Live does not currently
-acknowledge transactions that produce no changes to the query result. Without a
-timeout, waiting for such a transaction remains pending until the subscription
-closes.
+**Warning:** `awaitTxId()` resolves when Neon Live includes the transaction ID in
+a live batch or when the last successfully applied reset snapshot proves it
+visible. Neon Live does not currently acknowledge a no-op transaction after
+that snapshot. It can resolve only if a later reset proves it visible; because
+resets may be infrequent, use a timeout or avoid waiting when the mutation made
+no change.
 
 ### Raw subscriptions
 
