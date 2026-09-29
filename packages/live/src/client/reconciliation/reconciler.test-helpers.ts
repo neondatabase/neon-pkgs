@@ -13,6 +13,7 @@ import {
 
 export const ROW_A = "a".repeat(64);
 export const ROW_B = "b".repeat(64);
+export const ROW_C = "c".repeat(64);
 
 export type MockTarget = ReconciliationTarget & {
 	[Key in keyof ReconciliationTarget]: ReturnType<typeof vi.fn>;

@@ -7,6 +7,7 @@ import {
 	keyedPublication,
 	ROW_A,
 	ROW_B,
+	ROW_C,
 	resetPublication,
 	row,
 	snapshotChunk,
@@ -105,26 +106,31 @@ describe("snapshot reconciliation", () => {
 		expect(state.publishReset).toHaveBeenCalledWith([], appliedMvcc);
 	});
 
-	it("preserves buffered publications across superseded snapshot attempts", () => {
+	it("preserves order and buffered publications across superseded snapshot attempts", () => {
 		const events: string[] = [];
 		const reconciler = subscribed(target(events));
 		accept(reconciler, snapshotStart("1", "1"));
 		accept(reconciler, snapshotChunk(0, [row(ROW_A, "old")], "1", "1"));
-		keyedPublication(reconciler, "p1", "1", "1", [upsert(ROW_B, "change")]);
+		keyedPublication(reconciler, "p1", "1", "1", [upsert(ROW_C, "change")]);
 		accept(reconciler, snapshotStart("1", "2"));
 		accept(
 			reconciler,
-			snapshotChunk(0, [row(ROW_A, "replacement")], "1", "2"),
+			snapshotChunk(
+				0,
+				[row(ROW_B, "replacement-b"), row(ROW_A, "replacement-a")],
+				"1",
+				"2",
+			),
 		);
 		accept(reconciler, snapshotEnd(1, "1", "1"));
 		expect(events).toEqual([]);
 		accept(reconciler, snapshotEnd(1, "1", "2"));
 
 		expect(events).toEqual([
-			"installReset:a",
-			"apply:b",
-			"publishReset:a",
-			"publishBatch:7:b",
+			"installReset:b,a",
+			"apply:c",
+			"publishReset:b,a",
+			"publishBatch:7:c",
 			"caughtUp",
 		]);
 	});
@@ -190,16 +196,19 @@ describe("snapshot reconciliation", () => {
 		);
 	});
 
-	it("assembles multiple snapshot chunks in order", () => {
+	it("preserves wire order within and across snapshot chunks", () => {
 		const state = target();
 		const reconciler = subscribed(state);
 		accept(reconciler, snapshotStart());
-		accept(reconciler, snapshotChunk(0, [row(ROW_A, "a")]));
+		accept(
+			reconciler,
+			snapshotChunk(0, [row(ROW_C, "c"), row(ROW_A, "a")]),
+		);
 		accept(reconciler, snapshotChunk(1, [row(ROW_B, "b")]));
 		accept(reconciler, snapshotEnd(2));
 
 		expect(state.publishReset).toHaveBeenCalledWith(
-			[row(ROW_A, "a"), row(ROW_B, "b")],
+			[row(ROW_C, "c"), row(ROW_A, "a"), row(ROW_B, "b")],
 			{ xmin: "1", xmax: "2", xip: [] },
 		);
 	});
@@ -261,6 +270,16 @@ describe("snapshot reconciliation", () => {
 			accept(
 				duplicate,
 				snapshotChunk(0, [row(ROW_A, "first"), row(ROW_A, "second")]),
+			),
+		).toThrow("snapshot contains a duplicate row key");
+
+		const duplicateAcrossChunks = subscribed(target());
+		accept(duplicateAcrossChunks, snapshotStart());
+		accept(duplicateAcrossChunks, snapshotChunk(0, [row(ROW_A, "first")]));
+		expect(() =>
+			accept(
+				duplicateAcrossChunks,
+				snapshotChunk(1, [row(ROW_A, "second")]),
 			),
 		).toThrow("snapshot contains a duplicate row key");
 	});
