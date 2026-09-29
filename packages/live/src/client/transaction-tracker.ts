@@ -28,8 +28,7 @@ export class TransactionTracker {
 		if (this.closed) throw new Error("Neon Live subscription is closed");
 		if (
 			this.recent.has(normalized.text) ||
-			(this.appliedSnapshot &&
-				isVisible(normalized.value, this.appliedSnapshot))
+			this.appliedSnapshot?.isVisible(normalized.value)
 		)
 			return;
 
@@ -74,8 +73,9 @@ export class TransactionTracker {
 		if (this.closed) return;
 		this.appliedSnapshot = parseSnapshot(snapshot);
 		for (const txid of this.waiting.keys()) {
-			if (!isVisible(BigInt(txid), this.appliedSnapshot)) continue;
-			this.resolve(txid);
+			if (this.appliedSnapshot.isVisible(BigInt(txid))) {
+				this.resolve(txid);
+			}
 		}
 	}
 
@@ -119,9 +119,7 @@ interface ParsedTxid {
 }
 
 interface ParsedMvccSnapshot {
-	readonly xmin: bigint;
-	readonly xmax: bigint;
-	readonly xip: ReadonlySet<bigint>;
+	readonly isVisible: (txid: bigint) => boolean;
 }
 
 function normalizeTxid(txid: string): ParsedTxid {
@@ -136,16 +134,10 @@ function normalizeTxid(txid: string): ParsedTxid {
 }
 
 function parseSnapshot(snapshot: MvccSnapshot): ParsedMvccSnapshot {
+	const xmin = BigInt(snapshot.xmin);
+	const xmax = BigInt(snapshot.xmax);
+	const xip = new Set(snapshot.xip.map((txid) => BigInt(txid)));
 	return {
-		xmin: BigInt(snapshot.xmin),
-		xmax: BigInt(snapshot.xmax),
-		xip: new Set(snapshot.xip.map((txid) => BigInt(txid))),
+		isVisible: (txid) => txid < xmin || (txid < xmax && !xip.has(txid)),
 	};
-}
-
-function isVisible(txid: bigint, snapshot: ParsedMvccSnapshot): boolean {
-	return (
-		txid < snapshot.xmin ||
-		(txid < snapshot.xmax && !snapshot.xip.has(txid))
-	);
 }
