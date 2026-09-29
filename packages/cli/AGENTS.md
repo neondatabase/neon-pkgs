@@ -14,8 +14,9 @@ Human output (`-o table`, the default) is for a terminal. `-o json` and `-o yaml
 
 A command that only groups subcommands prints its own help and exits 0 when run
 without a subcommand, at any depth (`neon snapshots`, `neon config add`). Do not
-add `demandCommand` or a required `<sub-command>` positional to a parent; the help
-middleware in `src/index.ts` handles the bare invocation. Top-level commands that
+add `demandCommand`, a required `<sub-command>` positional, or a `demandOption` to a
+parent; put required options on the subcommands that need them. The help middleware
+in `src/index.ts` handles the bare invocation after yargs validation. Top-level commands that
 perform an action of their own belong in `NO_SUBCOMMANDS_VERBS` and keep that action.
 
 A yargs usage error (missing required option or positional, unknown subcommand,

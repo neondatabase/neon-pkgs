@@ -43,14 +43,13 @@ export const builder = (argv: yargs.Argv) => {
 						"region-id": {
 							describe: `The region ID. Possible values: ${REGIONS.join(", ")}`,
 							type: "string",
-							demandOption: true,
 						},
 					})
 					.middleware(fillSingleOrg as any)
 					.command(
 						"list",
 						"List configured VPC endpoints for this organization.",
-						(yargs) => yargs,
+						(yargs) => yargs.demandOption("region-id"),
 						async (args) => {
 							await listOrg(args as any);
 						},
@@ -62,13 +61,15 @@ export const builder = (argv: yargs.Argv) => {
 							"Add or update a VPC endpoint for this organization.\n" +
 							"Note: Azure regions are not yet supported.",
 						builder: (yargs) =>
-							yargs.options({
-								label: {
-									describe:
-										"An optional descriptive label for the VPC endpoint",
-									type: "string",
-								},
-							}),
+							yargs
+								.options({
+									label: {
+										describe:
+											"An optional descriptive label for the VPC endpoint",
+										type: "string",
+									},
+								})
+								.demandOption("region-id"),
 						handler: async (args) => {
 							await assignOrg(args as any);
 						},
@@ -76,7 +77,7 @@ export const builder = (argv: yargs.Argv) => {
 					.command(
 						"remove <id>",
 						"Remove a VPC endpoint from this organization.",
-						(yargs) => yargs,
+						(yargs) => yargs.demandOption("region-id"),
 						async (args) => {
 							await removeOrg(args as any);
 						},
@@ -84,7 +85,7 @@ export const builder = (argv: yargs.Argv) => {
 					.command(
 						"status <id>",
 						"Get the status of a VPC endpoint for this organization.",
-						(yargs) => yargs,
+						(yargs) => yargs.demandOption("region-id"),
 						async (args) => {
 							await statusOrg(args as any);
 						},

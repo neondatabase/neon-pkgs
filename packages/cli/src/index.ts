@@ -200,20 +200,17 @@ builder = builder
 		default: false,
 	})
 	.alias("help", "h")
-	// Before validation, so a missing required option can't turn `--help` or a bare
-	// nested parent (`neon vpc endpoint`, which demands `--region-id`) into an error.
+	// Before validation, so a missing required option can't turn `--help` into an error.
 	.middleware(async (args) => {
-		if (
-			args.help ||
-			(args._.length > 1 && isBareParentCommand(builder, args._))
-		) {
+		if (args.help) {
 			await showHelp(builder);
 		}
 	}, true)
 	.middleware(async (args) => {
 		if (
-			args._.length === 1 &&
-			!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string)
+			(args._.length === 1 &&
+				!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string)) ||
+			(args._.length > 1 && isBareParentCommand(builder, args._))
 		) {
 			await showHelp(builder);
 		}

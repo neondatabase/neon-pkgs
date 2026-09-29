@@ -100,6 +100,11 @@ const USAGE_ERRORS = [
 		error: "Unknown command: bogus",
 		helpFor: ["config", "add"],
 	},
+	{
+		args: ["config", "add", "--output", "bogus"],
+		error: 'Invalid values:\n  Argument: output, Given: "bogus", Choices: "json", "yaml", "table"',
+		helpFor: ["config", "add"],
+	},
 ] as const;
 
 describe("usage errors print the command's help to stderr", () => {
