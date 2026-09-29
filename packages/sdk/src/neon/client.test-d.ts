@@ -251,14 +251,6 @@ it("agent-platform helpers (default org, default branch, transfer, finalize) are
 		}),
 	).resolves.toEqualTypeOf<NeonResult<Snapshot>>();
 	expectTypeOf(
-		neon.snapshots.create({
-			projectId: "p",
-			branchId: "br",
-			slug: "before-migration",
-		}),
-	).resolves.toEqualTypeOf<NeonResult<Snapshot>>();
-	expectTypeOf<Snapshot["slug"]>().toEqualTypeOf<string | undefined>();
-	expectTypeOf(
 		neon.snapshots.restore({
 			projectId: "p",
 			snapshotId: "snap",

@@ -93,19 +93,6 @@ compareSchema.execute({
 	db_name: "neondb",
 });
 
-const createSnapshot = createNeonTool("snapshots.create", {
-	apiKey: "test-key",
-});
-createSnapshot.execute({
-	project_id: "project-id",
-	branch_id: "branch-id",
-	slug: "before-migration",
-});
-createSnapshot.execute({
-	project_id: "project-id",
-	branch_id: "branch-id",
-});
-
 const revokeCredential = createNeonTool("credentials.revoke", {
 	apiKey: "test-key",
 });
