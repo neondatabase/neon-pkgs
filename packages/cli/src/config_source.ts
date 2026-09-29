@@ -72,8 +72,9 @@ const opensRegex = (
 export const classify = (source: string): SourceKinds => {
 	const kinds = new Uint8Array(source.length);
 	const length = source.length;
-	// One entry per open `${`: the number of `{` opened inside it and not yet closed.
-	const templateDepths: number[] = [];
+	// One entry per open `${`: where it starts, and the number of `{` opened inside it and not
+	// yet closed.
+	const templateDepths: { start: number; depth: number }[] = [];
 
 	const mark = (from: number, to: number, kind: number): void => {
 		kinds.fill(kind, from, to);
@@ -91,7 +92,7 @@ export const classify = (source: string): SourceKinds => {
 				return i + 1;
 			} else if (source[i] === "$" && source[i + 1] === "{") {
 				mark(from, i + 2, LITERAL);
-				templateDepths.push(0);
+				templateDepths.push({ start: i, depth: 0 });
 				return i + 2;
 			} else {
 				i++;
@@ -151,16 +152,18 @@ export const classify = (source: string): SourceKinds => {
 			mark(i, j, LITERAL);
 			i = j;
 		} else if (char === "{" && templateDepths.length > 0) {
-			templateDepths[templateDepths.length - 1]++;
+			templateDepths[templateDepths.length - 1].depth++;
 			i++;
 		} else if (char === "}" && templateDepths.length > 0) {
-			const top = templateDepths.length - 1;
-			if (templateDepths[top] === 0) {
+			const top = templateDepths[templateDepths.length - 1];
+			if (top.depth === 0) {
 				templateDepths.pop();
-				// The `}` that closes `${` belongs to the template, not to the code.
+				// An interpolation is opaque: its commas and brackets must not be read as
+				// the enclosing object's. The `}` that closes it belongs to the template too.
+				mark(top.start, i, LITERAL);
 				i = scanTemplateText(i);
 			} else {
-				templateDepths[top]--;
+				top.depth--;
 				i++;
 			}
 		} else {
@@ -329,13 +332,15 @@ export const entryObject = (
 };
 
 /**
- * The index of the `{` holding the policy: the argument of the first `defineConfig(` call, or
- * the object a bare `export default { … }` exports.
+ * The index of the `{` holding the policy: the argument of the `defineConfig(` call, or the
+ * object a bare `export default { … }` exports. More than one candidate is refused, since
+ * the first one in the text is not necessarily the one exported.
  */
 export const findConfigObject = (
 	source: string,
 	kinds: SourceKinds,
 ): number => {
+	const candidates: number[] = [];
 	for (const call of source.matchAll(/\bdefineConfig\s*\(/g)) {
 		if (kinds[call.index] !== CODE) continue;
 		const arg = skipTrivia(
@@ -344,17 +349,27 @@ export const findConfigObject = (
 			call.index + call[0].length,
 			source.length,
 		);
-		if (source[arg] === "{") return arg;
-		throw new SourceScanError(
-			"defineConfig() is not called with an object literal",
-		);
+		if (source[arg] !== "{") {
+			throw new SourceScanError(
+				"defineConfig() is not called with an object literal",
+			);
+		}
+		candidates.push(arg);
 	}
 	for (const exported of source.matchAll(/\bexport\s+default\s+(?=\{)/g)) {
 		if (kinds[exported.index] === CODE) {
-			return exported.index + exported[0].length;
+			candidates.push(exported.index + exported[0].length);
 		}
 	}
-	throw new SourceScanError("no defineConfig({ … }) call found");
+	if (candidates.length === 0) {
+		throw new SourceScanError("no defineConfig({ … }) call found");
+	}
+	if (candidates.length > 1) {
+		throw new SourceScanError(
+			"found more than one config object, so the exported one is ambiguous",
+		);
+	}
+	return candidates[0];
 };
 
 /** Start index of the line containing `index`. */

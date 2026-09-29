@@ -304,14 +304,24 @@ ${body}
  * named rather than anonymous so a project's linter has nothing to say about it, and takes no
  * parameter because a scaffold shipping an unused `req` fails a `noUnusedParameters` project.
  *
- * The name is the slug when that is a valid identifier (a slug may start with a digit), and
+ * The name is the slug when that is a usable identifier (a slug may start with a digit or be a
+ * reserved word such as `default`), and
  * the return type is dropped for a `.js` config, where it would not parse.
  */
+const RESERVED_WORDS = new Set(
+	"await break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield let static implements interface package private protected public".split(
+		" ",
+	),
+);
+
 export const renderFunctionSource = (
 	slug: string,
 	language: "ts" | "js",
 ): string => {
-	const name = /^[A-Za-z_$][\w$]*$/.test(slug) ? slug : "handler";
+	const name =
+		/^[A-Za-z_$][\w$]*$/.test(slug) && !RESERVED_WORDS.has(slug)
+			? slug
+			: "handler";
 	const returns = language === "ts" ? ": Promise<Response>" : "";
 	return `export default async function ${name}()${returns} {
   return new Response("Hello from Neon Functions");

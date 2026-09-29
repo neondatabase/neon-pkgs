@@ -614,6 +614,10 @@ const planAdd = (target: ConfigAddTarget, configPath: string): PlannedAdd => {
 			if (target.name.length < 1 || target.name.length > 255) {
 				throw new Error("A bucket name must be 1-255 characters.");
 			}
+			// An object literal's `__proto__: {…}` sets the prototype instead of a property.
+			if (target.name === "__proto__") {
+				throw new Error('"__proto__" cannot be used as a bucket name.');
+			}
 			return {
 				edit: {
 					kind: "bucket",

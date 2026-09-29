@@ -21,7 +21,7 @@ import { renderKey } from "./config_template.js";
  *
  * Each edit either declares something new, flips a disabled toggle on, or reports that the
  * file already declares it (`changes` is empty). A file whose layout the scanner cannot
- * place an edit into is refused with the exact lines to add by hand, never written wrong.
+ * place an edit into is refused with the exact lines to add by hand.
  */
 
 export class ConfigEditError extends Error {
@@ -80,7 +80,9 @@ const unsupported = (reason: string, snippet: readonly string[]): never => {
 const parse = (source: string): Parsed => {
 	try {
 		const kinds = classify(source);
-		const root = scanObject(source, kinds, findConfigObject(source, kinds));
+		const root = assertPlain(
+			scanObject(source, kinds, findConfigObject(source, kinds)),
+		);
 		const first = root.entries[0];
 		const base = lineIndent(source, root.open);
 		const firstIndent = first ? lineIndent(source, first.start) : base;
@@ -103,6 +105,34 @@ const parse = (source: string): Parsed => {
 		}
 		throw error;
 	}
+};
+
+/**
+ * A spread, a computed key, or a repeated key can override the property an edit just wrote,
+ * so the effective value cannot be read from the text.
+ */
+const assertPlain = (scan: ObjectScan): ObjectScan => {
+	const seen = new Set<string>();
+	for (const entry of scan.entries) {
+		if (entry.key === undefined || seen.has(entry.key)) {
+			throw new ConfigEditError(
+				"Cannot edit this neon.ts automatically: an object it edits has a spread, computed, or repeated property that could override the edit.",
+			);
+		}
+		seen.add(entry.key);
+	}
+	return scan;
+};
+
+/** The object literal `entry` holds, or `undefined` when its value is anything else. */
+const objectOf = (
+	parsed: Parsed,
+	entry: ObjectEntry,
+): ObjectScan | undefined => {
+	const scan = entry.keyed
+		? entryObject(parsed.source, parsed.kinds, entry)
+		: undefined;
+	return scan && assertPlain(scan);
 };
 
 const startsLine = (source: string, index: number): boolean =>
@@ -185,8 +215,16 @@ const insertEntry = (
 	let lineEnd = source.indexOf("\n", last.end);
 	if (source[lineEnd - 1] === "\r") lineEnd--;
 	let hasComma = false;
-	for (let i = last.end; i < lineEnd; i++) {
-		if (isCodeAt(kinds, i) && source[i] === ",") hasComma = true;
+	for (let i = last.end; i < scan.close; i++) {
+		if (!isCodeAt(kinds, i) || source[i] !== ",") continue;
+		// A separator on a later line would end up after the entry appended before it.
+		if (i >= lineEnd) {
+			return unsupported(
+				"a trailing comma on a line of its own.",
+				snippet,
+			);
+		}
+		hasComma = true;
 	}
 	return (
 		source.slice(0, last.end) +
@@ -213,8 +251,15 @@ const assertNotUnderPreview = (
 ): void => {
 	const preview = findEntry(parsed.root, "preview");
 	if (!preview) return;
-	const scan = entryObject(parsed.source, parsed.kinds, preview);
-	if (scan && findEntry(scan, key)) {
+	const scan = objectOf(parsed, preview);
+	if (!scan) {
+		unsupported(
+			`preview is not an object literal, so it may already declare ${key}.`,
+			snippet,
+		);
+		return;
+	}
+	if (findEntry(scan, key)) {
 		unsupported(
 			`${key} is declared under the deprecated \`preview\` block. Lift it to the top level first.`,
 			snippet,
@@ -232,7 +277,7 @@ const readToggle = (
 	key: string,
 	snippet: readonly string[],
 ): Toggle => {
-	const { source, kinds } = parsed;
+	const { source } = parsed;
 	const value = source.slice(entry.valueStart, entry.valueEnd);
 	if (entry.keyed && value === "true") return { on: true };
 	if (entry.keyed && value === "false") {
@@ -242,7 +287,7 @@ const readToggle = (
 			path: key,
 		};
 	}
-	const object = entry.keyed ? entryObject(source, kinds, entry) : undefined;
+	const object = objectOf(parsed, entry);
 	if (!object) {
 		return unsupported(
 			`${key} is set to an expression, not true or false.`,
@@ -297,9 +342,7 @@ const setToggle = (
 /** Whether `dataApi` verifies a third-party IdP, in which case it does not need Neon Auth. */
 const dataApiIsExternal = (parsed: Parsed): boolean => {
 	const entry = findEntry(parsed.root, "dataApi");
-	const object = entry
-		? entryObject(parsed.source, parsed.kinds, entry)
-		: undefined;
+	const object = entry ? objectOf(parsed, entry) : undefined;
 	const provider = object ? findEntry(object, "authProvider") : undefined;
 	return (
 		provider !== undefined &&
@@ -335,9 +378,7 @@ const addNamed = (
 			change: `added ${container}.${name}`,
 		};
 	}
-	const object = entry.keyed
-		? entryObject(parsed.source, parsed.kinds, entry)
-		: undefined;
+	const object = objectOf(parsed, entry);
 	if (!object) {
 		return unsupported(`${container} is not an object literal.`, block);
 	}

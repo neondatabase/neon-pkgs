@@ -315,6 +315,84 @@ describe("editNeonConfig refusals", () => {
 		).toThrow(/no defineConfig/);
 	});
 
+	// Each of these edits parses as a plain object to a text scanner but changes what the
+	// file evaluates to, or writes a file that no longer parses.
+	it("does not read commas inside a template interpolation as property separators", () => {
+		const source = `export default defineConfig({
+  auth: \`\${true,
+  branch
+}\` === "true",
+});
+`;
+
+		expect(editNeonConfig(source, service("ai-gateway")).source).toBe(
+			source.replace("\n});", "\n  aiGateway: true,\n});"),
+		);
+	});
+
+	it("refuses a trailing comma on a line of its own", () => {
+		const source = `export default defineConfig({
+  auth: false
+  ,
+});
+`;
+
+		expect(() => editNeonConfig(source, service("ai-gateway"))).toThrow(
+			/trailing comma on a line of its own/,
+		);
+	});
+
+	it("refuses a spread or a repeated property that could override the edit", () => {
+		expect(() =>
+			editNeonConfig(
+				`const rest = { auth: false };
+export default defineConfig({
+  auth: false,
+  ...rest,
+});
+`,
+				service("data-api"),
+			),
+		).toThrow(/spread, computed, or repeated property/);
+		expect(() =>
+			editNeonConfig(
+				`export default defineConfig({
+  auth: false,
+  auth: false,
+});
+`,
+				service("auth"),
+			),
+		).toThrow(/spread, computed, or repeated property/);
+	});
+
+	it("refuses a preview that is not an object literal", () => {
+		const source = `const preview = { aiGateway: true };
+export default defineConfig({
+  auth: false,
+  preview,
+});
+`;
+
+		expect(() => editNeonConfig(source, service("ai-gateway"))).toThrow(
+			/preview is not an object literal/,
+		);
+	});
+
+	it("refuses a file with more than one config object", () => {
+		const source = `const unused = defineConfig({
+  auth: false,
+});
+export default defineConfig({
+  auth: false,
+});
+`;
+
+		expect(() => editNeonConfig(source, service("auth"))).toThrow(
+			/more than one config object/,
+		);
+	});
+
 	it("refuses source it cannot scan", () => {
 		expect(() =>
 			editNeonConfig(

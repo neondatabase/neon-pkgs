@@ -85,6 +85,33 @@ describe("config add", () => {
 		);
 	});
 
+	test("names the handler `handler` when the slug is a reserved word", async () => {
+		writeFileSync(join(workspace, "neon.ts"), renderNeonConfig([]));
+
+		await addCmd({
+			cwd: workspace,
+			target: { kind: "function", slug: "default" },
+		});
+
+		expect(read("functions/default.ts")).toContain(
+			"export default async function handler()",
+		);
+	});
+
+	test("rejects __proto__ as a bucket name", async () => {
+		const original = renderNeonConfig([]);
+		writeFileSync(join(workspace, "neon.ts"), original);
+
+		await expect(
+			addCmd({
+				cwd: workspace,
+				target: { kind: "bucket", name: "__proto__" },
+			}),
+		).rejects.toThrow(/"__proto__" cannot be used as a bucket name/);
+
+		expect(read("neon.ts")).toBe(original);
+	});
+
 	test("rejects a slug the platform would reject, before writing anything", async () => {
 		const original = renderNeonConfig([]);
 		writeFileSync(join(workspace, "neon.ts"), original);
@@ -219,7 +246,7 @@ describe("config add", () => {
 		).rejects.toThrow(/Declare it by hand:[\s\S]*sendemail:/);
 
 		expect(read("neon.ts")).toBe(original);
-		// The handler is only written once the declaration is.
+		// A refused edit writes nothing.
 		expect(existsSync(join(workspace, "functions"))).toBe(false);
 	});
 
