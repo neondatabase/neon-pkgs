@@ -41,59 +41,8 @@ describe("snapshots", () => {
 		]);
 	});
 
-	test("get by slug", async ({ testCliCommand }) => {
-		await testCliCommand([
-			"snapshots",
-			"get",
-			"nightly-backup",
-			"--project-id",
-			"test",
-		]);
-	});
-
-	test("get by unique name wins over another snapshot's slug", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"get",
-			"pre-migration",
-			"--project-id",
-			"test",
-		]);
-		expect(stdout).toContain("snap-second-snapshot-123456");
-		expect(stdout).not.toContain("snap-third-snapshot-123456");
-	});
-
-	test("get by exact id wins over another snapshot's slug", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"get",
-			"snap-first-snapshot-123456",
-			"--project-id",
-			"test",
-		]);
-		expect(stdout).toContain("name: nightly");
-		expect(stdout).toContain("id: snap-first-snapshot-123456");
-		expect(stdout).not.toContain("snap-legacy-name-123456");
-	});
-
-	test("get by a name with spaces and uppercase", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand([
-			"snapshots",
-			"get",
-			"Before Migration",
-			"--project-id",
-			"test",
-		]);
-	});
-
 	test("get not found errors", async ({ testCliCommand }) => {
-		const { stderr } = await testCliCommand(
+		await testCliCommand(
 			["snapshots", "get", "does-not-exist", "--project-id", "test"],
 			{
 				code: 1,
@@ -102,11 +51,35 @@ describe("snapshots", () => {
 				),
 			},
 		);
-		expect(stderr).toContain("slug: nightly-backup");
-		expect(stderr).toContain("pre-migration (snap-second-snapshot-123456)");
+	});
+
+	// yargs coerces a numeric-looking positional to a number unless it is declared a string,
+	// which would turn the name "1e3" into 1000 and stop it matching.
+	test("get keeps a numeric-looking name as a string", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["snapshots", "get", "1e3", "--project-id", "test"],
+			{
+				code: 1,
+				stderr: expect.stringContaining('Snapshot "1e3" not found'),
+			},
+		);
 	});
 
 	/* create */
+
+	test("create rejects the removed --slug flag", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["snapshots", "create", "--slug", "x", "--project-id", "test"],
+			{
+				code: 1,
+				stderr: expect.stringContaining("Unknown argument: slug"),
+			},
+		);
+	});
 
 	test("create from default branch", async ({ testCliCommand }) => {
 		await testCliCommand(["snapshots", "create", "--project-id", "test"]);
@@ -123,66 +96,6 @@ describe("snapshots", () => {
 			"--name",
 			"pre-migration",
 		]);
-	});
-
-	test("create with name and slug", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"create",
-			"--project-id",
-			"test",
-			"--branch",
-			"main",
-			"--name",
-			"Before migration",
-			"--slug",
-			"before-migration",
-		]);
-		expect(stdout).toContain("slug: before-migration");
-		expect(stdout).toContain("name: Before migration");
-	});
-
-	test("create accepts a single-letter slug", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"create",
-			"--project-id",
-			"test",
-			"--slug",
-			"a",
-		]);
-		expect(stdout).toContain("slug: a");
-	});
-
-	test("create rejects an invalid slug", async ({ testCliCommand }) => {
-		await testCliCommand(
-			["snapshots", "create", "--project-id", "test", "--slug", "Before"],
-			{
-				code: 1,
-				stderr: expect.stringContaining(
-					'Invalid --slug value: "Before"',
-				),
-			},
-		);
-	});
-
-	test("create rejects a trailing-hyphen slug", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand(
-			[
-				"snapshots",
-				"create",
-				"--project-id",
-				"test",
-				"--slug",
-				"before-",
-			],
-			{
-				code: 1,
-				stderr: expect.stringContaining("Invalid --slug value"),
-			},
-		);
 	});
 
 	test("create at a timestamp", async ({ testCliCommand }) => {
@@ -260,32 +173,6 @@ describe("snapshots", () => {
 			"--name",
 			"renamed",
 		]);
-	});
-
-	test("update by unique name", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"update",
-			"nightly",
-			"--project-id",
-			"test",
-			"--name",
-			"renamed",
-		]);
-		expect(stdout).toContain("id: snap-first-snapshot-123456");
-	});
-
-	test("update by slug", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"update",
-			"nightly-backup",
-			"--project-id",
-			"test",
-			"--name",
-			"renamed",
-		]);
-		expect(stdout).toContain("id: snap-first-snapshot-123456");
 	});
 
 	test("update expiration", async ({ testCliCommand }) => {
@@ -367,17 +254,6 @@ describe("snapshots", () => {
 		]);
 	});
 
-	test("delete by slug", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand([
-			"snapshots",
-			"delete",
-			"nightly-backup",
-			"--project-id",
-			"test",
-		]);
-		expect(stdout).toContain("id: snap-first-snapshot-123456");
-	});
-
 	/* restore */
 
 	test("restore to a new branch", async ({ testCliCommand }) => {
@@ -385,30 +261,6 @@ describe("snapshots", () => {
 			"snapshots",
 			"restore",
 			"snap-first-snapshot-123456",
-			"--project-id",
-			"test",
-			"--name",
-			"recovered",
-		]);
-	});
-
-	test("restore by unique name", async ({ testCliCommand }) => {
-		await testCliCommand([
-			"snapshots",
-			"restore",
-			"nightly",
-			"--project-id",
-			"test",
-			"--name",
-			"recovered",
-		]);
-	});
-
-	test("restore by slug", async ({ testCliCommand }) => {
-		await testCliCommand([
-			"snapshots",
-			"restore",
-			"nightly-backup",
 			"--project-id",
 			"test",
 			"--name",
@@ -547,22 +399,5 @@ describe("snapshots", () => {
 				stderr: expect.stringContaining("valid JSON"),
 			},
 		);
-	});
-
-	test("create --help documents --slug", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand(
-			["snapshots", "create", "--help"],
-			{ snapshot: false },
-		);
-		expect(stdout).toContain("--slug");
-	});
-
-	test("get --help documents lookup order", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand(
-			["snapshots", "get", "--help"],
-			{ snapshot: false },
-		);
-		expect(stdout).toContain("Lookup order:");
-		expect(stdout).toContain("unique name, slug");
 	});
 });

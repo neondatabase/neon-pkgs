@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 2.0.0
+
+### Major Changes
+
+- add1b82: Remove snapshot slugs. The Management API no longer accepts or returns `slug`, so `snapshots.create({ slug })` and `Snapshot.slug` (SDK, tools) and `neon snapshots create --slug` (CLI) are gone; snapshots resolve by id or unique name.
+
+### Patch Changes
+
+- Updated dependencies [add1b82]
+  - @neon/sdk@7.0.0
+
 ## 1.5.2
 
 ### Patch Changes

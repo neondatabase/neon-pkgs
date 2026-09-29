@@ -2540,51 +2540,6 @@ export type OrganizationInvitationsResponse = {
     invitations: Array<Invitation>;
 };
 
-export type ScimToken = {
-    /**
-     * The SCIM token's unique ID. Distinct from the token value.
-     */
-    id: string;
-    /**
-     * The admin-specified token name
-     */
-    name: string;
-    /**
-     * A timestamp indicating when the SCIM token was created
-     */
-    created_at: string;
-    /**
-     * A timestamp indicating when the token was last used to authenticate, if ever
-     */
-    last_used_at?: string | null;
-};
-
-export type ScimTokensListResponse = {
-    tokens: Array<ScimToken>;
-};
-
-export type ScimTokenCreateRequest = {
-    /**
-     * A name to identify the SCIM token
-     */
-    name: string;
-};
-
-export type ScimTokenCreateResponse = {
-    /**
-     * The generated SCIM bearer token. Shown once — store it securely; it cannot be retrieved later.
-     */
-    token: string;
-    scim_token: ScimToken;
-};
-
-export type ScimTokenRevokeResponse = {
-    /**
-     * The revoked SCIM token's unique ID
-     */
-    id: string;
-};
-
 export type OrganizationInviteCreateRequest = {
     /**
      * Email address of the person to invite to the organization.
@@ -3800,10 +3755,6 @@ export type Snapshot = {
      * Human-readable label for the snapshot.
      */
     name: string;
-    /**
-     * Snapshot resource ID, unique within the project. Distinct from the internal snapshot ID and display name.
-     */
-    slug?: string;
     /**
      * WAL position (Log Sequence Number) at which the snapshot was captured, in Postgres LSN format (for example, `0/3000000`).
      */
@@ -12203,13 +12154,6 @@ export type CreateSnapshotData = {
          * A name for the snapshot.
          */
         name?: string;
-        /**
-         * User-defined snapshot resource ID. Must be unique within the project.
-         * Must start with a lowercase letter, contain only lowercase letters, numbers, and hyphens,
-         * and end with a letter or number. If omitted, the control plane generates a value.
-         *
-         */
-        slug?: string;
         /**
          * The time at which the snapshot will be automatically deleted. RFC 3339 format.
          *

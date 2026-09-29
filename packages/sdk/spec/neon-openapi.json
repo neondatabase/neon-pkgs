@@ -8023,18 +8023,6 @@
                         }
                     },
                     {
-                        "name": "slug",
-                        "in": "query",
-                        "description": "User-defined snapshot resource ID. Must be unique within the project.\nMust start with a lowercase letter, contain only lowercase letters, numbers, and hyphens,\nand end with a letter or number. If omitted, the control plane generates a value.\n",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 63,
-                            "pattern": "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$"
-                        }
-                    },
-                    {
                         "name": "expires_at",
                         "in": "query",
                         "description": "The time at which the snapshot will be automatically deleted. RFC 3339 format.\n",
@@ -14392,95 +14380,6 @@
                     }
                 }
             },
-            "ScimToken": {
-                "type": "object",
-                "required": [
-                    "id",
-                    "name",
-                    "created_at"
-                ],
-                "properties": {
-                    "id": {
-                        "description": "The SCIM token's unique ID. Distinct from the token value.",
-                        "type": "string",
-                        "format": "uuid"
-                    },
-                    "name": {
-                        "description": "The admin-specified token name",
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "description": "A timestamp indicating when the SCIM token was created",
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "last_used_at": {
-                        "description": "A timestamp indicating when the token was last used to authenticate, if ever",
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    }
-                }
-            },
-            "ScimTokensListResponse": {
-                "type": "object",
-                "required": [
-                    "tokens"
-                ],
-                "properties": {
-                    "tokens": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ScimToken"
-                        }
-                    }
-                }
-            },
-            "ScimTokenCreateRequest": {
-                "type": "object",
-                "required": [
-                    "name"
-                ],
-                "properties": {
-                    "name": {
-                        "description": "A name to identify the SCIM token",
-                        "type": "string",
-                        "maxLength": 64
-                    }
-                }
-            },
-            "ScimTokenCreateResponse": {
-                "type": "object",
-                "required": [
-                    "token",
-                    "scim_token"
-                ],
-                "x-sensitive": [
-                    "token"
-                ],
-                "properties": {
-                    "token": {
-                        "description": "The generated SCIM bearer token. Shown once \u2014 store it securely; it cannot be retrieved later.",
-                        "type": "string"
-                    },
-                    "scim_token": {
-                        "$ref": "#/components/schemas/ScimToken"
-                    }
-                }
-            },
-            "ScimTokenRevokeResponse": {
-                "type": "object",
-                "required": [
-                    "id"
-                ],
-                "properties": {
-                    "id": {
-                        "description": "The revoked SCIM token's unique ID",
-                        "type": "string",
-                        "format": "uuid"
-                    }
-                }
-            },
             "OrganizationInviteCreateRequest": {
                 "type": "object",
                 "required": [
@@ -16615,10 +16514,6 @@
                     "name": {
                         "type": "string",
                         "description": "Human-readable label for the snapshot."
-                    },
-                    "slug": {
-                        "type": "string",
-                        "description": "Snapshot resource ID, unique within the project. Distinct from the internal snapshot ID and display name."
                     },
                     "lsn": {
                         "type": "string",

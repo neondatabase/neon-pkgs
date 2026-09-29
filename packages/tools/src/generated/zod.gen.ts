@@ -911,30 +911,6 @@ export const zOrganizationInvitationsResponse = z.strictObject({
     invitations: z.array(zInvitation)
 });
 
-export const zScimToken = z.strictObject({
-    id: z.uuid(),
-    name: z.string(),
-    created_at: z.iso.datetime(),
-    last_used_at: z.iso.datetime().nullish()
-});
-
-export const zScimTokensListResponse = z.strictObject({
-    tokens: z.array(zScimToken)
-});
-
-export const zScimTokenCreateRequest = z.strictObject({
-    name: z.string().max(64)
-});
-
-export const zScimTokenCreateResponse = z.strictObject({
-    token: z.string(),
-    scim_token: zScimToken
-});
-
-export const zScimTokenRevokeResponse = z.strictObject({
-    id: z.uuid()
-});
-
 export const zOrganizationInviteCreateRequest = z.strictObject({
     email: z.email().min(1).max(256),
     role: zMemberRole
@@ -1800,7 +1776,6 @@ export const zCursorPaginationResponse = z.strictObject({
 export const zSnapshot = z.strictObject({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     name: z.string(),
-    slug: z.string().optional(),
     lsn: z.string().optional(),
     timestamp: z.string().optional(),
     source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
@@ -3258,7 +3233,6 @@ export const zCreateSnapshotQuery = z.strictObject({
     lsn: z.string().optional(),
     timestamp: z.string().optional(),
     name: z.string().optional(),
-    slug: z.string().min(1).max(63).regex(/^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/).optional(),
     expires_at: z.string().optional()
 });
 

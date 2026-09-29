@@ -7,7 +7,6 @@ import { operationFactories, operationIds } from "./operations.gen.js";
 import {
 	zCreateProjectBody,
 	zCreateProjectBranchBody,
-	zCreateSnapshotQuery,
 	zListProjectsQuery,
 	zRestoreSnapshotQuery,
 	zSetOrganizationSpendingLimitBody,
@@ -150,14 +149,6 @@ describe("generated operation coverage", () => {
 		expect(zRestoreSnapshotQuery.parse({ name: "restored" })).toEqual({
 			name: "restored",
 		});
-		expect(
-			zCreateSnapshotQuery.parse({ slug: "before-migration" }),
-		).toEqual({
-			slug: "before-migration",
-		});
-		expect(zCreateSnapshotQuery.safeParse({ slug: "Before" }).success).toBe(
-			false,
-		);
 	});
 
 	test("generated descriptions are the OpenAPI first sentence", () => {
