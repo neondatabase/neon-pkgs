@@ -69,6 +69,18 @@ describe("snapshots", () => {
 
 	/* create */
 
+	test("create rejects the removed --slug flag", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["snapshots", "create", "--slug", "x", "--project-id", "test"],
+			{
+				code: 1,
+				stderr: expect.stringContaining("Unknown argument: slug"),
+			},
+		);
+	});
+
 	test("create from default branch", async ({ testCliCommand }) => {
 		await testCliCommand(["snapshots", "create", "--project-id", "test"]);
 	});

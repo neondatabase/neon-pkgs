@@ -34,6 +34,8 @@ exports[`snapshots > create rejects an invalid lsn 1`] = `""`;
 
 exports[`snapshots > create rejects both timestamp and lsn 1`] = `""`;
 
+exports[`snapshots > create rejects the removed --slug flag 1`] = `""`;
+
 exports[`snapshots > create with name 1`] = `
 "id: snap-new-snapshot-123456
 name: pre-migration

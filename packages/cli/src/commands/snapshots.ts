@@ -89,6 +89,9 @@ export const builder = (argv: yargs.Argv) =>
 			"Create a snapshot from a branch",
 			(yargs) =>
 				yargs
+					// `--slug` was accepted before the API dropped it; a script still passing it
+					// would otherwise get a snapshot without the identifier it asked for.
+					.strict()
 					.options({
 						branch: {
 							alias: "b",
