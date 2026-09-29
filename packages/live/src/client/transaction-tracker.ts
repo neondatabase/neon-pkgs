@@ -119,6 +119,9 @@ interface ParsedTxid {
 }
 
 interface ParsedMvccSnapshot {
+	readonly xmin: bigint;
+	readonly xmax: bigint;
+	readonly xip: ReadonlySet<bigint>;
 	readonly isVisible: (txid: bigint) => boolean;
 }
 
@@ -138,6 +141,9 @@ function parseSnapshot(snapshot: MvccSnapshot): ParsedMvccSnapshot {
 	const xmax = BigInt(snapshot.xmax);
 	const xip = new Set(snapshot.xip.map((txid) => BigInt(txid)));
 	return {
+		xmin,
+		xmax,
+		xip,
 		isVisible: (txid) => txid < xmin || (txid < xmax && !xip.has(txid)),
 	};
 }
