@@ -49,6 +49,11 @@ const SNAPSHOT_FREQUENCIES = [
 	"monthly",
 ] as const satisfies readonly SnapshotFrequency[];
 
+const SNAPSHOT_REF = {
+	describe: "Snapshot id or name. An id match wins over a name.",
+	type: "string",
+} as const;
+
 /** Narrow an arbitrary string to a supported {@link SnapshotFrequency}. */
 const isSnapshotFrequency = (value: string): value is SnapshotFrequency =>
 	SNAPSHOT_FREQUENCIES.some((frequency) => frequency === value);
@@ -76,7 +81,7 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"get <id>",
 			"Get a snapshot by id or name",
-			(yargs) => yargs,
+			(yargs) => yargs.positional("id", SNAPSHOT_REF),
 			(args) => get(args as any),
 		)
 		.command(
@@ -137,6 +142,7 @@ export const builder = (argv: yargs.Argv) =>
 			"Update a snapshot's name or expiration",
 			(yargs) =>
 				yargs
+					.positional("id", SNAPSHOT_REF)
 					.options({
 						name: {
 							describe: "Rename the snapshot",
@@ -159,7 +165,7 @@ export const builder = (argv: yargs.Argv) =>
 		.command(
 			"delete <id>",
 			"Delete a snapshot by id or name",
-			(yargs) => yargs,
+			(yargs) => yargs.positional("id", SNAPSHOT_REF),
 			(args) => deleteSnapshot(args as any),
 		)
 		.command(
@@ -167,6 +173,7 @@ export const builder = (argv: yargs.Argv) =>
 			"Restore a snapshot into a branch",
 			(yargs) =>
 				yargs
+					.positional("id", SNAPSHOT_REF)
 					.options({
 						name: {
 							describe:

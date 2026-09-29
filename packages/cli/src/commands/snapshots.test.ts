@@ -53,6 +53,20 @@ describe("snapshots", () => {
 		);
 	});
 
+	// yargs coerces a numeric-looking positional to a number unless it is declared a string,
+	// which would turn the name "1e3" into 1000 and stop it matching.
+	test("get keeps a numeric-looking name as a string", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["snapshots", "get", "1e3", "--project-id", "test"],
+			{
+				code: 1,
+				stderr: expect.stringContaining('Snapshot "1e3" not found'),
+			},
+		);
+	});
+
 	/* create */
 
 	test("create from default branch", async ({ testCliCommand }) => {

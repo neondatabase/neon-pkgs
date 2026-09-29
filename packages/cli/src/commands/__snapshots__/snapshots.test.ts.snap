@@ -90,6 +90,8 @@ manual: true
 "
 `;
 
+exports[`snapshots > get keeps a numeric-looking name as a string 1`] = `""`;
+
 exports[`snapshots > get not found errors 1`] = `""`;
 
 exports[`snapshots > list/table output 1`] = `
