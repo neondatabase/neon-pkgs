@@ -601,14 +601,31 @@ type PlannedAdd = {
 	next: string;
 };
 
-const planAdd = (target: ConfigAddTarget, configPath: string): PlannedAdd => {
+const shellQuote = (value: string): string =>
+	/^[\w@%+=:,./-]+$/.test(value)
+		? value
+		: `'${value.replace(/'/g, "'\\''")}'`;
+
+/**
+ * `explicitConfig` is the `--config` the user passed. The commands suggested afterwards must
+ * carry it, or they would act on whichever `neon.ts` a walk up from cwd finds instead.
+ */
+const planAdd = (
+	target: ConfigAddTarget,
+	configPath: string,
+	explicitConfig: string | undefined,
+): PlannedAdd => {
 	const language = TYPESCRIPT_EXTENSION.test(configPath) ? "ts" : "js";
 	const cli = getCliName();
+	const flag = explicitConfig
+		? ` --config ${shellQuote(explicitConfig)}`
+		: "";
+	const provision = `Next: \`${cli} config plan${flag}\` to preview, \`${cli} config apply${flag}\` to provision.`;
 	switch (target.kind) {
 		case "service":
 			return {
 				edit: { kind: "service", service: target.service },
-				next: `Next: \`${cli} config plan\` to preview, \`${cli} config apply\` to provision.`,
+				next: provision,
 			};
 		case "bucket":
 			if (target.name.length < 1 || target.name.length > 255) {
@@ -624,7 +641,7 @@ const planAdd = (target: ConfigAddTarget, configPath: string): PlannedAdd => {
 					name: target.name,
 					access: target.access ?? "private",
 				},
-				next: `Next: \`${cli} config plan\` to preview, \`${cli} config apply\` to provision.`,
+				next: provision,
 			};
 		case "function": {
 			if (!FUNCTION_SLUG_PATTERN.test(target.slug)) {
@@ -656,7 +673,9 @@ const planAdd = (target: ConfigAddTarget, configPath: string): PlannedAdd => {
 					source,
 				},
 				sourceFile: resolve(dirname(configPath), source),
-				next: `Next: \`${cli} dev\` to run it locally, \`${cli} config apply\` to deploy.`,
+				next: explicitConfig
+					? `Next: \`${cli} config apply${flag}\` to deploy.`
+					: `Next: \`${cli} dev\` to run it locally, \`${cli} config apply\` to deploy.`,
 			};
 		}
 	}
@@ -681,7 +700,7 @@ export const addCmd = async (props: ConfigAddProps): Promise<void> => {
 	const configPath = existing ?? join(cwd, "neon.ts");
 	const shown = (path: string) => relative(cwd, path) || path;
 
-	const plan = planAdd(props.target, configPath);
+	const plan = planAdd(props.target, configPath, props.config);
 	const { source, changes } = editNeonConfig(
 		existing ? readFileSync(existing, "utf8") : renderNeonConfig([]),
 		plan.edit,
@@ -746,22 +765,26 @@ export const addCmd = async (props: ConfigAddProps): Promise<void> => {
  * hidden from its help.
  */
 const addSharedOptions = (yargs: yargs.Argv) =>
-	yargs.options({
-		"project-id": { hidden: true },
-		branch: { hidden: true },
-		config: {
-			describe:
-				"Path to the neon.ts to edit (defaults to walking up from cwd; created in cwd when there is none)",
-			type: "string",
-		},
-		install: {
-			describe:
-				"Install @neon/config and @neon/env when creating neon.ts. " +
-				"On by default; use --no-install to just print the command.",
-			type: "boolean",
-			default: true,
-		},
-	});
+	yargs
+		// A misspelled flag such as `--src` for `--source` otherwise falls through silently and
+		// the command declares something other than what was asked for.
+		.strict()
+		.options({
+			"project-id": { hidden: true },
+			branch: { hidden: true },
+			config: {
+				describe:
+					"Path to the neon.ts to edit (defaults to walking up from cwd; created in cwd when there is none)",
+				type: "string",
+			},
+			install: {
+				describe:
+					"Install @neon/config and @neon/env when creating neon.ts. " +
+					"On by default; use --no-install to just print the command.",
+				type: "boolean",
+				default: true,
+			},
+		});
 
 /** The `config add` props for a sub-command's parsed flags. */
 const addProps = (
@@ -861,7 +884,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.command(
 						"data-api",
-						"Enable the Data API (dataApi: true) and Neon Auth, which it requires",
+						"Enable the Data API (dataApi: true) and Neon Auth, which the default provider requires",
 						addSharedOptions,
 						(args) =>
 							addCmd(
@@ -888,6 +911,14 @@ export const builder = (argv: yargs.Argv) =>
 						"Declare a Neon Function and create its handler file",
 						(yargs) =>
 							addSharedOptions(yargs)
+								.example(
+									"$0 config add function sendemail",
+									"Creates functions/sendemail.ts and declares it",
+								)
+								.example(
+									"$0 config add function sendemail --source src/send.ts",
+									"Declares an existing handler",
+								)
 								.positional("slug", {
 									describe:
 										"Function slug: 1-20 lowercase letters and digits",
@@ -926,6 +957,10 @@ export const builder = (argv: yargs.Argv) =>
 						"Declare an Object Storage bucket",
 						(yargs) =>
 							addSharedOptions(yargs)
+								.example(
+									"$0 config add bucket assets --access public_read",
+									"Declares a bucket that allows anonymous reads",
+								)
 								.positional("name", {
 									describe: "Bucket name",
 									type: "string",

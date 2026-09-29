@@ -365,6 +365,36 @@ describe("config add", () => {
 		expect(read("neon.ts")).toBe(renderNeonConfig([]));
 	});
 
+	test("an unknown flag is refused before anything is written", async ({
+		testCliCommand,
+	}) => {
+		writeFileSync(join(workspace, "neon.ts"), renderNeonConfig([]));
+
+		const { stderr } = await testCliCommand(
+			["config", "add", "function", "worker", "--src", "src/worker.ts"],
+			{ unreachableHost: true, code: 1, cwd: workspace, snapshot: false },
+		);
+
+		expect(stderr).toContain("Unknown argument: src");
+		expect(read("neon.ts")).toBe(renderNeonConfig([]));
+		expect(existsSync(join(workspace, "functions"))).toBe(false);
+	});
+
+	test("the suggested next commands carry an explicit --config", async ({
+		testCliCommand,
+	}) => {
+		writeFileSync(join(workspace, "neon.ts"), renderNeonConfig([]));
+		writeFileSync(join(workspace, "my neon.ts"), renderNeonConfig([]));
+
+		const { stderr } = await testCliCommand(
+			["config", "add", "auth", "--config", "my neon.ts", "--no-install"],
+			{ unreachableHost: true, code: 0, cwd: workspace, snapshot: false },
+		);
+
+		expect(stderr).toContain("config plan --config 'my neon.ts'");
+		expect(stderr).toContain("config apply --config 'my neon.ts'");
+	});
+
 	test("init --services on an existing neon.ts points at config add", async ({
 		testCliCommand,
 	}) => {

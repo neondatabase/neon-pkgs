@@ -673,7 +673,7 @@ An existing `neon.ts` (or `hello.ts`) is never overwritten. To change one, use `
 
 ```bash
 neon config add auth                        # auth: true
-neon config add data-api                    # dataApi: true, and auth: true (it needs it)
+neon config add data-api                    # dataApi: true, and auth: true (the default provider needs it)
 neon config add ai-gateway                  # aiGateway: true
 neon config add function sendemail          # functions.sendemail + functions/sendemail.ts
 neon config add function sendemail --name "Send email" --source ./src/send.ts
@@ -691,8 +691,8 @@ INFO: Next: `neon dev` to run it locally, `neon config apply` to deploy.
 ```
 
 - **Functions** take a slug of 1-20 lowercase letters and digits, the same rule `plan` enforces. The handler file is written first and an existing file is never overwritten, so pointing `--source` at code you already have works. A `.js` `neon.ts` gets a `.js` handler.
-- **Idempotent**: adding what `neon.ts` already declares changes nothing and exits 0. Adding a function slug that already exists is an error.
-- `--config <path>` edits a specific file; otherwise the closest `neon.ts` above the current directory is used.
+- Enabling a service that `neon.ts` already enables changes nothing and exits 0. Adding a function slug or bucket name that already exists is an error.
+- `--config <path>` edits a specific file; otherwise the closest `neon.ts` above the current directory is used, and the suggested `plan` / `apply` commands repeat the flag.
 - `--no-install` applies when the command had to create `neon.ts`; editing an existing file never installs anything.
 
 `config add` edits the file as text and checks its own output: it re-applies the edit to the result and fails if that is not a no-op. When the file is in a shape it cannot edit safely (a single-line `defineConfig({ auth: true })`, a service declared under `preview`, a value that is not a literal), it changes nothing and prints the exact lines to paste.
