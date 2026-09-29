@@ -53,6 +53,7 @@ import {
 	currentContextFile,
 	isAskCommand,
 	isClaimCommand,
+	isConfigAdd,
 	isConfigInit,
 	isCurrentBranchProbe,
 	isGitLocalCommand,
@@ -633,6 +634,11 @@ export const ensureAuth = async (
 	// `config init` only scaffolds a neon.ts and installs npm packages locally; it
 	// never calls the Neon API, so skip auth entirely — no token refresh, no login.
 	if (isConfigInit(props)) {
+		return;
+	}
+
+	// `config add` edits the local neon.ts only.
+	if (isConfigAdd(props)) {
 		return;
 	}
 

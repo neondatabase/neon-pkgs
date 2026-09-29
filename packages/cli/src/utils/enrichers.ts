@@ -1,6 +1,6 @@
 import type { Branch, Database } from "@neon/sdk";
 import { isNeonApiError, messageFromBody } from "../api.js";
-import { isConfigInit, isCurrentBranchProbe } from "../context.js";
+import { isConfigAdd, isConfigInit, isCurrentBranchProbe } from "../context.js";
 import type { BranchScopeProps, CommonProps, OrgScopeProps } from "../types.js";
 import { looksLikeBranchId } from "./formats.js";
 
@@ -231,6 +231,11 @@ export const fillSingleProject = async (
 	// `config init` is purely local (scaffold + npm install) and runs with no API
 	// client, so resolving a single project here would dereference a null client.
 	if (isConfigInit(props as any)) {
+		return props;
+	}
+
+	// `config add` edits the local neon.ts and never needs a project either.
+	if (isConfigAdd(props as any)) {
 		return props;
 	}
 	if (props.projectId) {

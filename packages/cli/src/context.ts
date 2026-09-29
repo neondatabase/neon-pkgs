@@ -93,6 +93,13 @@ export const isConfigInit = (args: {
 	!process.argv.includes("--from-branch");
 
 /**
+ * `config add` edits the local `neon.ts` and never calls the Neon API, so the global auth
+ * middleware and the single-project resolver skip it, like {@link isConfigInit}.
+ */
+export const isConfigAdd = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "config" && args._[1] === "add";
+
+/**
  * `neon profile …` manages credentials on disk and never calls the Neon API, so the global
  * auth middleware must skip it — mirroring {@link isConfigInit}.
  *

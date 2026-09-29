@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import {
 	type BranchTarget,
 	type DeployEvent,
@@ -33,6 +34,7 @@ import {
 import chalk from "chalk";
 import type yargs from "yargs";
 import { getApiClient, type NeonApiClient } from "../api.js";
+import { type ConfigEdit, editNeonConfig } from "../config_edit.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import { declaredNeonServices } from "../config_services.js";
 import {
@@ -43,6 +45,7 @@ import {
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
 	REQUIRED_PACKAGES,
+	renderFunctionSource,
 	renderNeonConfig,
 	renderNeonConfigFromView,
 } from "../config_template.js";
@@ -433,6 +436,55 @@ const seedFromBranch = async (
 	return { ...rendered, branchName: live.branch.name };
 };
 
+/** Install the config packages the project is missing, or say how to. */
+const ensureConfigPackages = async (
+	cwd: string,
+	props: Pick<
+		ConfigInitProps,
+		"install" | "run" | "packageManager" | "requireInstall" | "silent"
+	>,
+): Promise<void> => {
+	const run = props.run ?? runCommand;
+	const missing = missingDependencies(cwd);
+	if (missing.length === 0) {
+		if (!props.silent) {
+			log.info(
+				"%s are already installed.",
+				REQUIRED_PACKAGES.join(" and "),
+			);
+		}
+		return;
+	}
+
+	const pm = props.packageManager ?? resolvePackageManager(cwd);
+	const args = installArgs(pm, missing);
+	if (props.install === false) {
+		if (!props.silent) {
+			log.info(
+				"Install the Neon config packages to use neon.ts: %s",
+				formatInstallCommand(pm, missing),
+			);
+		}
+		return;
+	}
+
+	ensureDirectoryGitignored(join(cwd, "node_modules"));
+	if (!props.silent) {
+		log.info("Installing %s with %s…", missing.join(", "), pm);
+	}
+	const ok = await run(pm, args, cwd);
+	if (!ok) {
+		const command = formatInstallCommand(pm, missing);
+		if (props.requireInstall) {
+			throw new ConfigInstallFailed(command);
+		}
+		log.warning(
+			"Could not install the config packages automatically. Run by hand: %s",
+			command,
+		);
+	}
+};
+
 /**
  * Scaffold a `neon.ts` policy and make sure the Neon config packages are
  * installed, so a project can go straight to `neon config plan` / `apply`.
@@ -440,7 +492,6 @@ const seedFromBranch = async (
  */
 export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	const cwd = props.cwd ?? process.cwd();
-	const run = props.run ?? runCommand;
 
 	// 1. Scaffold neon.ts unless the project already has a Neon config file. Resolving the
 	// services (which may prompt) happens only when there is something to write — asking
@@ -449,6 +500,13 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 	if (existing) {
 		if (!props.silent) {
 			log.info("Found an existing %s — leaving it untouched.", existing);
+			if (props.services !== undefined) {
+				log.warning(
+					"--services was ignored. To declare services in the existing %s, use `%s config add`.",
+					existing,
+					getCliName(),
+				);
+			}
 		}
 	} else if (props.fromBranch) {
 		const { source, seeded, branchName } = await seedFromBranch(props);
@@ -481,43 +539,7 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 		}
 	}
 
-	// 2. Make sure the config packages are installed.
-	const missing = missingDependencies(cwd);
-	if (missing.length === 0) {
-		if (!props.silent) {
-			log.info(
-				"%s are already installed.",
-				REQUIRED_PACKAGES.join(" and "),
-			);
-		}
-	} else {
-		const pm = props.packageManager ?? resolvePackageManager(cwd);
-		const args = installArgs(pm, missing);
-		if (props.install === false) {
-			if (!props.silent) {
-				log.info(
-					"Install the Neon config packages to use neon.ts: %s",
-					formatInstallCommand(pm, missing),
-				);
-			}
-		} else {
-			ensureDirectoryGitignored(join(cwd, "node_modules"));
-			if (!props.silent) {
-				log.info("Installing %s with %s…", missing.join(", "), pm);
-			}
-			const ok = await run(pm, args, cwd);
-			if (!ok) {
-				const command = formatInstallCommand(pm, missing);
-				if (props.requireInstall) {
-					throw new ConfigInstallFailed(command);
-				}
-				log.warning(
-					"Could not install the config packages automatically. Run by hand: %s",
-					command,
-				);
-			}
-		}
-	}
+	await ensureConfigPackages(cwd, props);
 
 	if (!props.silent) {
 		log.info(
@@ -525,6 +547,227 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 		);
 	}
 };
+
+// ── `config add` ──────────────────────────────────────────────────────────────
+
+export type ConfigAddTarget =
+	| { kind: "service"; service: "auth" | "data-api" | "ai-gateway" }
+	| { kind: "function"; slug: string; name?: string; source?: string }
+	| { kind: "bucket"; name: string; access?: "private" | "public_read" };
+
+export type ConfigAddProps = {
+	target: ConfigAddTarget;
+	/** Where to start looking for neon.ts, and where to create one. Defaults to cwd. */
+	cwd?: string;
+	/** Edit this file instead of the neon.ts found by walking up from cwd. */
+	config?: string;
+	/** Only used when `config add` has to create neon.ts; see {@link ConfigInitProps}. */
+	install?: boolean;
+	run?: typeof runCommand;
+	packageManager?: PackageManager;
+};
+
+/** The rule the platform enforces on function slugs, so a bad one fails before any write. */
+const FUNCTION_SLUG_PATTERN = /^[a-z0-9]{1,20}$/;
+const SCRIPT_EXTENSION = /\.(?:ts|mts|cts|js|mjs|cjs)$/;
+const TYPESCRIPT_EXTENSION = /\.(?:ts|mts|cts)$/;
+
+/**
+ * The nearest neon.ts, found the way the config loader finds it: walk up from `start`, stop
+ * at the first directory holding `.git` (or at the home directory).
+ */
+const findNeonConfigUpward = (start: string): string | undefined => {
+	let dir = resolve(start);
+	for (;;) {
+		const name = neonConfigFilename(dir);
+		if (name) return join(dir, name);
+		if (existsSync(join(dir, ".git")) || dir === homedir())
+			return undefined;
+		const parent = dirname(dir);
+		if (parent === dir) return undefined;
+		dir = parent;
+	}
+};
+
+const asRelativeModulePath = (path: string): string =>
+	path.startsWith("./") || path.startsWith("../") || path.startsWith("/")
+		? path
+		: `./${path}`;
+
+type PlannedAdd = {
+	edit: ConfigEdit;
+	/** The handler file to create beside neon.ts, for a function. */
+	sourceFile?: string;
+	next: string;
+};
+
+const planAdd = (target: ConfigAddTarget, configPath: string): PlannedAdd => {
+	const language = TYPESCRIPT_EXTENSION.test(configPath) ? "ts" : "js";
+	const cli = getCliName();
+	switch (target.kind) {
+		case "service":
+			return {
+				edit: { kind: "service", service: target.service },
+				next: `Next: \`${cli} config plan\` to preview, \`${cli} config apply\` to provision.`,
+			};
+		case "bucket":
+			if (target.name.length < 1 || target.name.length > 255) {
+				throw new Error("A bucket name must be 1-255 characters.");
+			}
+			return {
+				edit: {
+					kind: "bucket",
+					name: target.name,
+					access: target.access ?? "private",
+				},
+				next: `Next: \`${cli} config plan\` to preview, \`${cli} config apply\` to provision.`,
+			};
+		case "function": {
+			if (!FUNCTION_SLUG_PATTERN.test(target.slug)) {
+				const suggestion = target.slug
+					.toLowerCase()
+					.replace(/[^a-z0-9]/g, "")
+					.slice(0, 20);
+				throw new Error(
+					`"${target.slug}" is not a valid function slug: use 1-20 lowercase letters and digits, no hyphens.` +
+						(suggestion ? ` Try "${suggestion}".` : ""),
+				);
+			}
+			if (
+				target.source !== undefined &&
+				!SCRIPT_EXTENSION.test(target.source)
+			) {
+				throw new Error(
+					`--source must be a .ts or .js file, got "${target.source}". Declare a directory source in neon.ts by hand.`,
+				);
+			}
+			const source = asRelativeModulePath(
+				target.source ?? `functions/${target.slug}.${language}`,
+			);
+			return {
+				edit: {
+					kind: "function",
+					slug: target.slug,
+					name: target.name ?? target.slug,
+					source,
+				},
+				sourceFile: resolve(dirname(configPath), source),
+				next: `Next: \`${cli} dev\` to run it locally, \`${cli} config apply\` to deploy.`,
+			};
+		}
+	}
+};
+
+/**
+ * Declare a service, function, or bucket in the project's `neon.ts` with a text edit that
+ * leaves the rest of the file alone, creating the file (and installing the config packages)
+ * when the project has none. Local only, like `config init`.
+ */
+export const addCmd = async (props: ConfigAddProps): Promise<void> => {
+	const cwd = props.cwd ?? process.cwd();
+	let existing: string | undefined;
+	if (props.config) {
+		existing = resolve(cwd, props.config);
+		if (!existsSync(existing)) {
+			throw new Error(`--config ${props.config} does not exist.`);
+		}
+	} else {
+		existing = findNeonConfigUpward(cwd);
+	}
+	const configPath = existing ?? join(cwd, "neon.ts");
+	const shown = (path: string) => relative(cwd, path) || path;
+
+	const plan = planAdd(props.target, configPath);
+	const { source, changes } = editNeonConfig(
+		existing ? readFileSync(existing, "utf8") : renderNeonConfig([]),
+		plan.edit,
+	);
+
+	if (changes.length === 0) {
+		if (props.target.kind === "service") {
+			log.info(
+				"%s already enables that; nothing to change.",
+				shown(configPath),
+			);
+			return;
+		}
+		throw new Error(
+			`${shown(configPath)} already declares ${props.target.kind} "${
+				props.target.kind === "function"
+					? props.target.slug
+					: props.target.name
+			}". Edit it there, or pick another name.`,
+		);
+	}
+
+	// The handler goes first: a neon.ts pointing at a file that was never written fails at
+	// deploy time, while a handler without a declaration is just a file.
+	if (plan.sourceFile) {
+		if (existsSync(plan.sourceFile)) {
+			log.info(
+				"Found an existing %s — leaving it untouched.",
+				shown(plan.sourceFile),
+			);
+		} else {
+			mkdirSync(dirname(plan.sourceFile), { recursive: true });
+			const slug =
+				props.target.kind === "function" ? props.target.slug : "";
+			writeFileSync(
+				plan.sourceFile,
+				renderFunctionSource(
+					slug,
+					TYPESCRIPT_EXTENSION.test(plan.sourceFile) ? "ts" : "js",
+				),
+			);
+			log.info("Created %s.", shown(plan.sourceFile));
+		}
+	}
+	writeFileSync(configPath, source);
+	log.info(
+		"%s %s: %s.",
+		existing ? "Updated" : "Created",
+		shown(configPath),
+		changes.join(", "),
+	);
+
+	if (!existing) {
+		await ensureConfigPackages(dirname(configPath), props);
+	}
+	log.info("%s", plan.next);
+};
+
+/**
+ * Options every `config add` sub-command takes. `--project-id` and `--branch` are inherited
+ * from `config` but mean nothing to a command that never leaves the working tree, so they are
+ * hidden from its help.
+ */
+const addSharedOptions = (yargs: yargs.Argv) =>
+	yargs.options({
+		"project-id": { hidden: true },
+		branch: { hidden: true },
+		config: {
+			describe:
+				"Path to the neon.ts to edit (defaults to walking up from cwd; created in cwd when there is none)",
+			type: "string",
+		},
+		install: {
+			describe:
+				"Install @neon/config and @neon/env when creating neon.ts. " +
+				"On by default; use --no-install to just print the command.",
+			type: "boolean",
+			default: true,
+		},
+	});
+
+/** The `config add` props for a sub-command's parsed flags. */
+const addProps = (
+	args: { config?: string; install: boolean },
+	target: ConfigAddTarget,
+): ConfigAddProps => ({
+	target,
+	install: args.install,
+	...(args.config !== undefined ? { config: args.config } : {}),
+});
 
 export const command = "config";
 export const describe = "Manage a branch with a neon.ts policy";
@@ -594,6 +837,121 @@ export const builder = (argv: yargs.Argv) =>
 					...envPullFlag,
 				}),
 			(args) => applyCmd(args as any),
+		)
+		.command(
+			"add",
+			"Add a service, function, or bucket to neon.ts (creates it if missing)",
+			(yargs) =>
+				yargs
+					.command(
+						"auth",
+						"Enable Neon Auth (auth: true)",
+						addSharedOptions,
+						(args) =>
+							addCmd(
+								addProps(args, {
+									kind: "service",
+									service: "auth",
+								}),
+							),
+					)
+					.command(
+						"data-api",
+						"Enable the Data API (dataApi: true) and Neon Auth, which it requires",
+						addSharedOptions,
+						(args) =>
+							addCmd(
+								addProps(args, {
+									kind: "service",
+									service: "data-api",
+								}),
+							),
+					)
+					.command(
+						"ai-gateway",
+						"Enable the AI Gateway (aiGateway: true)",
+						addSharedOptions,
+						(args) =>
+							addCmd(
+								addProps(args, {
+									kind: "service",
+									service: "ai-gateway",
+								}),
+							),
+					)
+					.command(
+						"function <slug>",
+						"Declare a Neon Function and create its handler file",
+						(yargs) =>
+							addSharedOptions(yargs)
+								.positional("slug", {
+									describe:
+										"Function slug: 1-20 lowercase letters and digits",
+									type: "string",
+									demandOption: true,
+								})
+								.options({
+									name: {
+										describe:
+											"Display name. Defaults to the slug",
+										type: "string",
+									},
+									source: {
+										describe:
+											"Handler file, relative to neon.ts. Defaults to functions/<slug>.ts. " +
+											"Created when missing, left alone when it exists",
+										type: "string",
+									},
+								}),
+						(args) =>
+							addCmd(
+								addProps(args, {
+									kind: "function",
+									slug: args.slug,
+									...(args.name !== undefined
+										? { name: args.name }
+										: {}),
+									...(args.source !== undefined
+										? { source: args.source }
+										: {}),
+								}),
+							),
+					)
+					.command(
+						"bucket <name>",
+						"Declare an Object Storage bucket",
+						(yargs) =>
+							addSharedOptions(yargs)
+								.positional("name", {
+									describe: "Bucket name",
+									type: "string",
+									demandOption: true,
+								})
+								.options({
+									access: {
+										describe:
+											"Anonymous access: private requires credentials, public_read allows anonymous reads",
+										type: "string",
+										choices: [
+											"private",
+											"public_read",
+										] as const,
+										default: "private" as const,
+									},
+								}),
+						(args) =>
+							addCmd(
+								addProps(args, {
+									kind: "bucket",
+									name: args.name,
+									access: args.access,
+								}),
+							),
+					)
+					.demandCommand(
+						1,
+						"Specify what to add: auth, data-api, ai-gateway, function, or bucket.",
+					),
 		)
 		.command(
 			"init",

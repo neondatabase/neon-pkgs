@@ -665,7 +665,37 @@ export default async function hello(): Promise<Response> {
 }
 ```
 
-An existing `neon.ts` (or `hello.ts`) is never overwritten.
+An existing `neon.ts` (or `hello.ts`) is never overwritten. To change one, use `config add`.
+
+### Editing a `neon.ts` (`config add`)
+
+`neon config add` declares one service in the `neon.ts` you already have and leaves the rest of the file (comments, the `branch` closure, formatting) as it was. It is purely local — no auth, no API calls — and creates the starter `neon.ts` first when there is none.
+
+```bash
+neon config add auth                        # auth: true
+neon config add data-api                    # dataApi: true, and auth: true (it needs it)
+neon config add ai-gateway                  # aiGateway: true
+neon config add function sendemail          # functions.sendemail + functions/sendemail.ts
+neon config add function sendemail --name "Send email" --source ./src/send.ts
+neon config add bucket uploads              # buckets.uploads = { access: 'private' }
+neon config add bucket assets --access public_read
+```
+
+Each command prints what it changed and the next step:
+
+```
+$ neon config add function sendemail
+INFO: Created functions/sendemail.ts.
+INFO: Updated neon.ts: added functions.sendemail.
+INFO: Next: `neon dev` to run it locally, `neon config apply` to deploy.
+```
+
+- **Functions** take a slug of 1-20 lowercase letters and digits, the same rule `plan` enforces. The handler file is written first and an existing file is never overwritten, so pointing `--source` at code you already have works. A `.js` `neon.ts` gets a `.js` handler.
+- **Idempotent**: adding what `neon.ts` already declares changes nothing and exits 0. Adding a function slug that already exists is an error.
+- `--config <path>` edits a specific file; otherwise the closest `neon.ts` above the current directory is used.
+- `--no-install` applies when the command had to create `neon.ts`; editing an existing file never installs anything.
+
+`config add` edits the file as text and checks its own output: it re-applies the edit to the result and fails if that is not a no-op. When the file is in a shape it cannot edit safely (a single-line `defineConfig({ auth: true })`, a service declared under `preview`, a value that is not a literal), it changes nothing and prints the exact lines to paste.
 
 Four sub-commands plus two top-level aliases drive it:
 
