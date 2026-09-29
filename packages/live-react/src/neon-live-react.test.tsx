@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe("Neon Live React integration", () => {
-	it("renders preloaded data and follows materialized snapshots", () => {
+	it("renders preloaded data and exposes materialized subscription utilities", async () => {
 		const client = new TestClient<MessageRow>();
 		let observed: UseLiveQueryResult<MessageRow> | undefined;
 		render(
@@ -51,6 +51,8 @@ describe("Neon Live React integration", () => {
 			UseLiveQueryResult<MessageRow> | undefined
 		>();
 		expect(observed?.utils).not.toHaveProperty("unsubscribe");
+		await expect(observed?.utils.awaitTxId("42")).resolves.toBeUndefined();
+		expect(client.latest().awaitTxId).toHaveBeenCalledWith("42", undefined);
 
 		act(() => {
 			client.latest().publish({
@@ -282,6 +284,11 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		add(this.stateListeners, listener);
+
+	awaitTxId = vi.fn(
+		async (_txid: string, _timeout?: number): Promise<void> =>
+			Promise.resolve(),
+	);
 
 	onChange = (
 		listener: (snapshot: LiveQuerySnapshot<Row>) => void,

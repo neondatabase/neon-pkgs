@@ -1,11 +1,11 @@
 import {
 	AuthorizationRefreshController,
 	type LiveQueryAuthorization,
-	type LiveQueryBatchInfo,
 	type LiveQueryChange,
 	type LiveQueryState,
 	type NeonLiveClient,
 	type RawLiveQueryRow,
+	type RawLiveQuerySubscription,
 } from "@neon/live/client";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
@@ -15,13 +15,19 @@ import type {
 	UtilsRecord,
 } from "@tanstack/db";
 import { withCollectionConfigFactory } from "@tanstack/db";
-import { TransactionTracker } from "./transaction-tracker.js";
+
+const DEFAULT_TXID_TIMEOUT_MS = 5_000;
 
 /** Utilities attached to a Neon Live-backed TanStack DB collection. */
 export interface NeonLiveCollectionUtils extends UtilsRecord {
 	/**
 	 * Wait until the matching PostgreSQL transaction has entered TanStack DB's
 	 * causal sync queue.
+	 *
+	 * @remarks
+	 * This resolves only for transaction IDs included in a live batch for this
+	 * collection. Neon Live does not currently acknowledge transactions that
+	 * produce no changes to the query result, so those waits time out.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Maximum wait in milliseconds; defaults to 5 seconds.
@@ -115,9 +121,25 @@ function createNeonLiveCollectionOptions<
 		refreshAuthorization,
 		...baseConfig
 	} = config;
-	const transactions = new TransactionTracker();
+	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	const utils: NeonLiveCollectionUtils = Object.freeze({
-		awaitTxId: transactions.wait,
+		awaitTxId: async (txid, timeout = DEFAULT_TXID_TIMEOUT_MS) => {
+			const subscription = activeSubscription;
+			if (!subscription) {
+				throw new Error("Neon Live collection is not syncing");
+			}
+			try {
+				await subscription.awaitTxId(txid, timeout);
+			} catch (error) {
+				if (activeSubscription !== subscription) {
+					throw new Error("Neon Live collection was cleaned up", {
+						cause: error,
+					});
+				}
+				throw error;
+			}
+			return true;
+		},
 	});
 
 	const options: NeonLiveCollectionOptions<Row, Key, Schema> = {
@@ -134,13 +156,13 @@ function createNeonLiveCollectionOptions<
 				markReady,
 				markError,
 			}) => {
-				transactions.open();
 				let cleaned = false;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
 				const subscription = client.subscribe(initialAuthorization, {
 					materialize: false,
 				});
+				activeSubscription = subscription;
 
 				const reportError = (error: unknown) => {
 					if (!cleaned) markError(error);
@@ -207,7 +229,6 @@ function createNeonLiveCollectionOptions<
 
 				const applyBatch = (
 					changes: readonly LiveQueryChange<Row>[],
-					batch: LiveQueryBatchInfo,
 				) => {
 					try {
 						const nextRowIds = new Map(rowIds);
@@ -275,10 +296,6 @@ function createNeonLiveCollectionOptions<
 						const receipt = commit();
 						rowIds = nextRowIds;
 						keys = nextKeys;
-						// Record the XID after its sync commit has entered TanStack's causal
-						// queue. Waiting for an asynchronous receipt here would deadlock a
-						// mutation handler that is itself awaiting this XID.
-						for (const txid of batch.txids) transactions.seen(txid);
 						observeReceipt(receipt);
 					} catch (error) {
 						reportError(error);
@@ -305,7 +322,9 @@ function createNeonLiveCollectionOptions<
 					unsubscribeBatch();
 					unsubscribeState();
 					subscription.unsubscribe();
-					transactions.close();
+					if (activeSubscription === subscription) {
+						activeSubscription = undefined;
+					}
 					rowIds.clear();
 					keys.clear();
 				};

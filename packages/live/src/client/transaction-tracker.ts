@@ -1,10 +1,9 @@
-const DEFAULT_TXID_TIMEOUT_MS = 5_000;
-const MAX_SEEN_TXIDS = 1_000;
+const MAX_RECENT_TXIDS = 1_000;
 
 interface TransactionWaiter {
-	readonly resolve: (matched: boolean) => void;
+	readonly resolve: () => void;
 	readonly reject: (error: Error) => void;
-	readonly timer: ReturnType<typeof setTimeout>;
+	readonly timer?: ReturnType<typeof setTimeout>;
 }
 
 export class TransactionTracker {
@@ -13,33 +12,34 @@ export class TransactionTracker {
 	private readonly waiting = new Map<string, Set<TransactionWaiter>>();
 	private closed = false;
 
-	wait = async (
-		txid: string,
-		timeout = DEFAULT_TXID_TIMEOUT_MS,
-	): Promise<boolean> => {
+	wait = async (txid: string, timeout?: number): Promise<void> => {
 		const normalized = normalizeTxid(txid);
-		if (!Number.isFinite(timeout) || timeout < 0) {
+		if (
+			timeout !== undefined &&
+			(!Number.isFinite(timeout) || timeout < 0)
+		) {
 			throw new Error(
 				"Neon Live transaction timeout must be a non-negative number",
 			);
 		}
-		if (this.closed) {
-			throw new Error("Neon Live collection is cleaned up");
-		}
-		if (this.recent.has(normalized)) return true;
+		if (this.closed) throw new Error("Neon Live subscription is closed");
+		if (this.recent.has(normalized)) return;
 
-		return new Promise<boolean>((resolve, reject) => {
+		return new Promise<void>((resolve, reject) => {
 			const waiter: TransactionWaiter = {
 				resolve,
 				reject,
-				timer: setTimeout(() => {
-					this.remove(normalized, waiter);
-					reject(
-						new Error(
-							`Timed out waiting for Neon Live transaction ${normalized}`,
-						),
-					);
-				}, timeout),
+				timer:
+					timeout === undefined
+						? undefined
+						: setTimeout(() => {
+								this.remove(normalized, waiter);
+								reject(
+									new Error(
+										`Timed out waiting for Neon Live transaction ${normalized}`,
+									),
+								);
+							}, timeout),
 			};
 			const waiters = this.waiting.get(normalized) ?? new Set();
 			waiters.add(waiter);
@@ -53,7 +53,7 @@ export class TransactionTracker {
 		if (!this.recent.has(normalized)) {
 			this.recent.add(normalized);
 			this.recentOrder.push(normalized);
-			while (this.recentOrder.length > MAX_SEEN_TXIDS) {
+			while (this.recentOrder.length > MAX_RECENT_TXIDS) {
 				const oldest = this.recentOrder.shift();
 				if (oldest !== undefined) this.recent.delete(oldest);
 			}
@@ -62,22 +62,18 @@ export class TransactionTracker {
 		if (!waiters) return;
 		this.waiting.delete(normalized);
 		for (const waiter of waiters) {
-			clearTimeout(waiter.timer);
-			waiter.resolve(true);
+			if (waiter.timer !== undefined) clearTimeout(waiter.timer);
+			waiter.resolve();
 		}
-	}
-
-	open(): void {
-		this.closed = false;
 	}
 
 	close(): void {
 		if (this.closed) return;
 		this.closed = true;
-		const error = new Error("Neon Live collection was cleaned up");
+		const error = new Error("Neon Live subscription is closed");
 		for (const waiters of this.waiting.values()) {
 			for (const waiter of waiters) {
-				clearTimeout(waiter.timer);
+				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
 				waiter.reject(error);
 			}
 		}

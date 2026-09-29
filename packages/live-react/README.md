@@ -77,9 +77,10 @@ export function Messages(props: MessagesProps) {
 ```
 
 The hook returns `data`, `status`, and `error`, plus stable `utils` for
-`getState()`, `getSnapshot()`, `renew()`, and lower-level event listeners.
-Register listeners in an effect. `utils` omits `unsubscribe()` because React
-owns cleanup when the component unmounts or its authorization changes.
+`getState()`, `getSnapshot()`, `awaitTxId()`, `renew()`, and lower-level event
+listeners. Register listeners in an effect. `utils` omits `unsubscribe()`
+because React owns cleanup when the component unmounts or its authorization
+changes.
 
 When `refreshAuthorization` is present, the integration renews before expiry
 and keeps retrying through capability expiry and transport outages. Existing
@@ -89,6 +90,45 @@ a new logical query; changing only the refresh callback does not.
 For SSR, execute the same query on the server and pass its rows as
 `initialData`. React renders them immediately as stale data, and the first
 authoritative Neon Live reset reconciles any intervening changes.
+
+### Optimistic mutations
+
+React's `useOptimistic()` can overlay application-defined changes while Neon
+Live remains the authoritative source. Keep the optimistic Action pending until
+the subscription has applied the mutation's PostgreSQL transaction:
+
+```tsx
+import { startTransition, useOptimistic } from "react";
+
+const { data = [], utils } = useLiveQuery(authorization);
+const [optimisticTodos, setOptimisticTodo] = useOptimistic(
+  data,
+  (todos, update: { id: string; completed: boolean }) =>
+    todos.map((todo) =>
+      todo.id === update.id
+        ? { ...todo, completed: update.completed }
+        : todo,
+    ),
+);
+
+function setCompleted(id: string, completed: boolean) {
+  startTransition(async () => {
+    setOptimisticTodo({ id, completed });
+    const { txid } = await updateTodo(id, { completed });
+    await utils.awaitTxId(txid);
+  });
+}
+```
+
+Express optimistic changes as desired values rather than relative operations
+such as `toggle`. This makes them safe when React rebases a still-pending Action
+over newer authoritative rows. `awaitTxId()` also handles the race where the
+live batch arrives before the mutation response.
+
+**Warning:** `awaitTxId()` resolves only when Neon Live includes the transaction
+ID in a live batch for this query. Neon Live does not currently acknowledge
+transactions that produce no changes to the query result. Pass a timeout or
+avoid waiting when the mutation endpoint reports that no change was made.
 
 ## API
 

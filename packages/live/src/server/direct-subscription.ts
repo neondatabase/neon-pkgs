@@ -57,6 +57,8 @@ export function manageDirectSubscription<
 		) => subscription.onBatch(listener),
 		onStateChange: (listener: (state: LiveQueryState) => void) =>
 			subscription.onStateChange(listener),
+		awaitTxId: (txid: string, timeout?: number) =>
+			subscription.awaitTxId(txid, timeout),
 		renew: (authorization: LiveQueryAuthorization<Row>) =>
 			refresh.replaceAuthorization(authorization),
 		unsubscribe: () => {

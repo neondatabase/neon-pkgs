@@ -254,6 +254,25 @@ capability has already expired, the subscription remains `stale` and `renew()`
 opens a new subscription behind the same public object. Its next full
 reset replaces the retained rows and returns it to `live`.
 
+After a mutation returns its PostgreSQL transaction ID, use `awaitTxId()` to
+wait until that transaction has been applied to this subscription:
+
+```ts
+const { txid } = await updateMessage(messageId, { body: "Updated" });
+await subscription.awaitTxId(txid);
+```
+
+The subscription remembers recently applied transaction IDs, so this is safe
+when the live batch arrives before the mutation response. An optional timeout
+in milliseconds can bound the wait. Without one, the promise remains pending
+until the transaction arrives or the subscription closes.
+
+**Warning:** `awaitTxId()` resolves only when Neon Live includes the transaction
+ID in a live batch for this subscription. Neon Live does not currently
+acknowledge transactions that produce no changes to the query result. Without a
+timeout, waiting for such a transaction remains pending until the subscription
+closes.
+
 ### Raw subscriptions
 
 The default subscription materializes query rows. Integrations that own their

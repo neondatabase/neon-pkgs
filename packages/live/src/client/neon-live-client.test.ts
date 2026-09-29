@@ -182,6 +182,65 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
+	it("confirms transactions after applying them and remembers early batches", async () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(authorization("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+
+		const confirmation = subscription.awaitTxId("00042").then(() => {
+			expect(subscription.getSnapshot()).toMatchObject({
+				data: [{ id: 1, title: "after" }],
+			});
+		});
+		publication(
+			socket,
+			[
+				{
+					op: "upsert",
+					row_key: ROW_KEY,
+					values: ["1", "after"],
+				},
+			],
+			["42"],
+		);
+
+		await expect(confirmation).resolves.toBeUndefined();
+		await expect(subscription.awaitTxId("42")).resolves.toBeUndefined();
+		client.close();
+	});
+
+	it("times out transaction waits and rejects them when closed", async () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(authorization("initial"));
+
+		await expect(subscription.awaitTxId("9", 1)).rejects.toThrow(
+			"Timed out waiting for Neon Live transaction 9",
+		);
+		await expect(subscription.awaitTxId("not-a-txid")).rejects.toThrow(
+			"decimal string",
+		);
+		await expect(
+			subscription.awaitTxId("18446744073709551616"),
+		).rejects.toThrow("exceeds uint64");
+		await expect(subscription.awaitTxId("12", -1)).rejects.toThrow(
+			"non-negative",
+		);
+		const pending = subscription.awaitTxId("10");
+		subscription.unsubscribe();
+		await expect(pending).rejects.toThrow("subscription is closed");
+		await expect(subscription.awaitTxId("11")).rejects.toThrow(
+			"subscription is closed",
+		);
+		client.close();
+	});
+
 	it("renews only with an authorization for the same query", async () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({

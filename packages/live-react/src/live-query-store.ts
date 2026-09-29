@@ -73,6 +73,7 @@ export class ReactLiveQueryStore<Row> {
 			onBatch: this.onBatch,
 			onStateChange: this.onStateChange,
 			onChange: this.onChange,
+			awaitTxId: this.awaitTxId,
 			renew: this.renew,
 		});
 	}
@@ -121,6 +122,13 @@ export class ReactLiveQueryStore<Row> {
 
 	private onChange = (listener: SnapshotListener<Row>): (() => void) =>
 		listen(this.snapshotListeners, listener);
+
+	private awaitTxId = (txid: string, timeout?: number): Promise<void> => {
+		const subscription = this.subscription;
+		return subscription
+			? subscription.awaitTxId(txid, timeout)
+			: Promise.reject(new Error("Neon Live query is not subscribed"));
+	};
 
 	private renew = (
 		authorization: LiveQueryAuthorization<Row>,

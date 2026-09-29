@@ -124,6 +124,26 @@ export interface RawLiveQuerySubscription<Row> {
 	 */
 	onStateChange(listener: (state: LiveQueryState) => void): () => void;
 	/**
+	 * Wait until this subscription has applied a PostgreSQL transaction.
+	 *
+	 * Recently applied transaction IDs are retained so this also succeeds when
+	 * the batch arrives before the caller receives the mutation response.
+	 *
+	 * @remarks
+	 * This resolves only for transaction IDs included in a live batch for this
+	 * subscription. Neon Live does not currently acknowledge transactions that
+	 * produce no changes to the query result. Waiting for such a transaction
+	 * remains pending until the timeout elapses or the subscription closes.
+	 *
+	 * @param txid - PostgreSQL transaction ID as a decimal string.
+	 * @param timeout - Optional maximum wait in milliseconds. By default the
+	 * promise remains pending until the transaction arrives or the subscription
+	 * closes.
+	 * @throws If the timeout elapses, the transaction ID is invalid, or the
+	 * subscription closes before applying the transaction.
+	 */
+	awaitTxId(txid: string, timeout?: number): Promise<void>;
+	/**
 	 * Renew this logical subscription with a capability for the same exact query.
 	 * If the preceding subscription has expired, the client creates a new
 	 * wire subscription while preserving this object, its listeners, and any
