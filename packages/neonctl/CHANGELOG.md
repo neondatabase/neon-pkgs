@@ -1,5 +1,12 @@
 # neonctl
 
+## 7.0.1
+
+### Patch Changes
+
+- Updated dependencies [8432547]
+  - neon@7.0.1
+
 ## 7.0.0
 
 ### Patch Changes
