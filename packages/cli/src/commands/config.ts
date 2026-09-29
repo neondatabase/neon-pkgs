@@ -986,10 +986,6 @@ export const builder = (argv: yargs.Argv) =>
 									access: args.access,
 								}),
 							),
-					)
-					.demandCommand(
-						1,
-						"Specify what to add: auth, data-api, ai-gateway, function, or bucket.",
 					),
 		)
 		.command(

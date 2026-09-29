@@ -222,7 +222,6 @@ export const builder = (argv: yargs.Argv) =>
 			"Manage custom domains on the branch (beta)",
 			(yargs) =>
 				yargs
-					.demandCommand(1)
 					.command(
 						"list",
 						"List custom domains on the branch",

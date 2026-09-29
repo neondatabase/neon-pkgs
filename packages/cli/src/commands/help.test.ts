@@ -40,19 +40,82 @@ const PARENT_COMMANDS = [
 	"claimable",
 ] as const;
 
+const NESTED_PARENT_COMMANDS = [
+	["vpc", "endpoint"],
+	["vpc", "project"],
+	["neon-auth", "oauth-provider"],
+	["neon-auth", "domain"],
+	["neon-auth", "config"],
+	["neon-auth", "plugins"],
+	["neon-auth", "user"],
+	["snapshots", "schedule"],
+	["inspect", "db"],
+	["functions", "domains"],
+	["config", "add"],
+	["buckets", "object"],
+	["bucket", "object"],
+] as const;
+
 describe("parent commands print help with no subcommand", () => {
-	for (const verb of PARENT_COMMANDS) {
-		test(verb, async ({ testCliCommand }) => {
-			const { stdout: bare } = await testCliCommand([verb], {
+	for (const path of [
+		...PARENT_COMMANDS.map((verb) => [verb]),
+		...NESTED_PARENT_COMMANDS,
+	]) {
+		test(path.join(" "), async ({ testCliCommand }) => {
+			const { stdout: bare, stderr } = await testCliCommand([...path], {
 				snapshot: false,
 			});
-			const { stdout: flagged } = await testCliCommand([verb, "--help"], {
-				snapshot: false,
-			});
+			const { stdout: flagged } = await testCliCommand(
+				[...path, "--help"],
+				{ snapshot: false },
+			);
 			const text = strip(bare);
 			expect(text).toBe(strip(flagged));
 			expect(text).toContain("Commands:");
 			expect(text).not.toMatch(/ERROR:/);
+			expect(stderr).toBe("");
+		});
+	}
+});
+
+const USAGE_ERRORS = [
+	{
+		args: ["roles", "create", "--project-id", "test"],
+		error: "Missing required argument: name",
+	},
+	{
+		args: ["branches", "rename", "--project-id", "test"],
+		error: "Not enough non-option arguments: got 0, need at least 2",
+	},
+	{
+		args: ["config", "add", "function"],
+		error: "Not enough non-option arguments: got 0, need at least 1",
+	},
+	{
+		args: ["vpc", "endpoint", "list"],
+		error: "Missing required argument: region-id",
+	},
+	{
+		args: ["config", "add", "bogus"],
+		error: "Unknown command: bogus",
+		helpFor: ["config", "add"],
+	},
+] as const;
+
+describe("usage errors print the command's help to stderr", () => {
+	for (const { args, error, ...rest } of USAGE_ERRORS) {
+		test(args.join(" "), async ({ testCliCommand }) => {
+			const { stdout, stderr } = await testCliCommand([...args], {
+				snapshot: false,
+				code: 1,
+			});
+			const helpFor = "helpFor" in rest ? rest.helpFor : args;
+			const { stdout: help } = await testCliCommand(
+				[...helpFor, "--help"],
+				{ snapshot: false },
+			);
+			expect(stdout).toBe("");
+			expect(strip(stderr)).toBe(`${strip(help)}ERROR: ${error}\n`);
 		});
 	}
 });

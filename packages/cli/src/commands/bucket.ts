@@ -121,7 +121,7 @@ export const builder = (argv: yargs.Argv) =>
 			handler: (args) => deleteBucket(args as any),
 		})
 		.command(
-			"object <sub-command>",
+			"object",
 			"List, download, upload or delete objects in a bucket",
 			(yargs) =>
 				yargs
@@ -249,7 +249,6 @@ export const builder = (argv: yargs.Argv) =>
 								}),
 						handler: (args) => deleteObject(args as any),
 					})
-					.demandCommand(1, "")
 					.strictCommands(),
 		);
 

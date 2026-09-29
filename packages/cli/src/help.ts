@@ -254,11 +254,9 @@ const formatHelp = (help: string) => {
 	return [...result, ...lines];
 };
 
-export const showHelp = async (argv: yargs.Argv) => {
-	const help = await argv.getHelp();
-	const text = `${formatHelp(help).join("\n")}\n`;
-	await new Promise<void>((resolve, reject) => {
-		process.stdout.write(text, (err) => {
+const writeHelp = (help: string, stream: NodeJS.WriteStream) =>
+	new Promise<void>((resolve, reject) => {
+		stream.write(`${formatHelp(help).join("\n")}\n`, (err) => {
 			if (err) {
 				reject(err);
 				return;
@@ -266,5 +264,94 @@ export const showHelp = async (argv: yargs.Argv) => {
 			resolve();
 		});
 	});
+
+export const showHelp = async (argv: yargs.Argv) => {
+	await writeHelp(await argv.getHelp(), process.stdout);
 	process.exit(0);
+};
+
+/**
+ * A yargs validation failure: a missing required option or positional, an unknown
+ * subcommand, a value outside `choices`. Carries the failing command's help, captured
+ * in `.fail` because yargs has restored the parent's context by the time the error
+ * reaches the caller.
+ */
+export class UsageError extends Error {
+	readonly help: string;
+
+	constructor(message: string, help: string) {
+		super(message);
+		this.help = help;
+	}
+}
+
+/** On stderr, so `-o json` stdout stays empty. */
+export const showUsageErrorHelp = (err: UsageError) =>
+	writeHelp(err.help, process.stderr);
+
+/**
+ * The yargs `.fail` handler. yargs passes its usage instance as the third argument
+ * (`@types/yargs` declares it as `Argv`). Errors thrown by a handler, a `coerce`, or the
+ * parser arrive with their own `err` and are rethrown unchanged.
+ */
+export const failOnUsageError = (
+	msg: string | null,
+	err: Error | null,
+	usage: unknown,
+) => {
+	if (err) {
+		throw err;
+	}
+	if (
+		typeof usage !== "object" ||
+		usage === null ||
+		!("help" in usage) ||
+		typeof usage.help !== "function"
+	) {
+		throw new Error(
+			"yargs no longer passes its usage instance to .fail(); update failOnUsageError for the installed yargs",
+		);
+	}
+	const help: unknown = usage.help();
+	if (typeof help !== "string") {
+		throw new Error("yargs usage.help() did not return a string");
+	}
+	throw new UsageError(msg ?? "Invalid usage", help);
+};
+
+type YargsInternals = {
+	getInternalMethods(): {
+		getContext(): { commands: string[] };
+		getCommandInstance(): { getCommands(): string[] };
+	};
+};
+
+function assertYargsInternals(argv: object): asserts argv is YargsInternals {
+	if (
+		!("getInternalMethods" in argv) ||
+		typeof argv.getInternalMethods !== "function"
+	) {
+		throw new Error(
+			"yargs no longer exposes getInternalMethods(); update isBareParentCommand for the installed yargs",
+		);
+	}
+}
+
+/**
+ * True when the command yargs is running groups subcommands and none was given, at any
+ * depth: `neon config add`, `neon snapshots schedule`. `@types/yargs` doesn't declare the
+ * running command's context, so this reads yargs 17's internals.
+ */
+export const isBareParentCommand = (
+	argv: yargs.Argv,
+	positionals: readonly (string | number)[],
+) => {
+	assertYargsInternals(argv);
+	const internals = argv.getInternalMethods();
+	const path = internals.getContext().commands;
+	return (
+		path.length > 0 &&
+		positionals.length === path.length &&
+		internals.getCommandInstance().getCommands().length > 0
+	);
 };

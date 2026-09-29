@@ -27,7 +27,13 @@ import {
 	matchErrorCode,
 	NETWORK_ERROR_MESSAGE,
 } from "./errors.js";
-import { showHelp } from "./help.js";
+import {
+	failOnUsageError,
+	isBareParentCommand,
+	showHelp,
+	showUsageErrorHelp,
+	UsageError,
+} from "./help.js";
 import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
@@ -194,11 +200,20 @@ builder = builder
 		default: false,
 	})
 	.alias("help", "h")
+	// Before validation, so a missing required option can't turn `--help` or a bare
+	// nested parent (`neon vpc endpoint`, which demands `--region-id`) into an error.
 	.middleware(async (args) => {
 		if (
 			args.help ||
-			(args._.length === 1 &&
-				!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string))
+			(args._.length > 1 && isBareParentCommand(builder, args._))
+		) {
+			await showHelp(builder);
+		}
+	}, true)
+	.middleware(async (args) => {
+		if (
+			args._.length === 1 &&
+			!NO_SUBCOMMANDS_VERBS.includes(args._[0] as string)
 		) {
 			await showHelp(builder);
 		}
@@ -217,7 +232,7 @@ builder = builder
 		"For more information, visit https://neon.com/docs/reference/neon-cli",
 	)
 	.wrap(null)
-	.fail(false);
+	.fail(failOnUsageError);
 
 async function handleError(
 	msg: string,
@@ -227,6 +242,10 @@ async function handleError(
 	if (process.argv.some((arg) => arg === "--help" || arg === "-h")) {
 		await showHelp(builder);
 		process.exit(0);
+	}
+
+	if (err instanceof UsageError) {
+		await showUsageErrorHelp(err);
 	}
 
 	// Log stack trace if available

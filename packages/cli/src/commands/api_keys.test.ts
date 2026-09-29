@@ -109,7 +109,9 @@ describe("api-keys create", () => {
 			],
 			{
 				code: 1,
-				stderr: "ERROR: Arguments org-id and project-id are mutually exclusive",
+				stderr: expect.stringMatching(
+					/ERROR: Arguments org-id and project-id are mutually exclusive$/,
+				),
 			},
 		);
 	});
@@ -159,7 +161,12 @@ describe("api-keys create", () => {
 				"--project_id",
 				"proj-in-org",
 			],
-			{ code: 1, stderr: "ERROR: Unknown argument: project_id" },
+			{
+				code: 1,
+				stderr: expect.stringMatching(
+					/ERROR: Unknown argument: project_id$/,
+				),
+			},
 		);
 	});
 

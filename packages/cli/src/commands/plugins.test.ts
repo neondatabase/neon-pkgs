@@ -316,7 +316,7 @@ describe("neon plugins", () => {
 			code: 1,
 		});
 		expect(update).toMatch(/Unknown command: update/);
-		expect(update).not.toMatch(/neondatabase\/agent-skills/);
+		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 	});
 
 	test("skips auth and context enrichment", async ({ testCliCommand }) => {
