@@ -1,5 +1,11 @@
 # neon
 
+## 6.4.0
+
+### Minor Changes
+
+- 30f98c4: Add `neon config add <auth|data-api|ai-gateway|function <slug>|bucket <name>>`, which declares a service in an existing `neon.ts` (creating the handler file for a function) without rewriting the rest of the file.
+
 ## 6.3.0
 
 ### Minor Changes
