@@ -96,6 +96,15 @@ describe("config add", () => {
 		expect(read("functions/default.ts")).toContain(
 			"export default async function handler()",
 		);
+
+		// Illegal as an ECMAScript module declaration name too.
+		await addCmd({
+			cwd: workspace,
+			target: { kind: "function", slug: "eval" },
+		});
+		expect(read("functions/eval.ts")).toContain(
+			"export default async function handler()",
+		);
 	});
 
 	test("rejects __proto__ as a bucket name", async () => {

@@ -393,6 +393,27 @@ export default defineConfig({
 		);
 	});
 
+	it('reads `authProvider: "external" as const` as external and refuses other expressions', () => {
+		const external = `export default defineConfig({
+  auth: false,
+  dataApi: {
+    authProvider: "external" as const,
+    jwksUrl: "https://idp.test/jwks",
+  },
+});
+`;
+
+		expect(editNeonConfig(external, service("data-api")).changes).toEqual(
+			[],
+		);
+		expect(() =>
+			editNeonConfig(
+				external.replace('"external" as const', "provider"),
+				service("data-api"),
+			),
+		).toThrow(/authProvider is set to an expression/);
+	});
+
 	it("refuses source it cannot scan", () => {
 		expect(() =>
 			editNeonConfig(

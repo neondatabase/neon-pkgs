@@ -339,17 +339,24 @@ const setToggle = (
 	};
 };
 
-/** Whether `dataApi` verifies a third-party IdP, in which case it does not need Neon Auth. */
+/**
+ * Whether `dataApi` verifies a third-party IdP, in which case it does not need Neon Auth. An
+ * `authProvider` that is neither literal is refused rather than assumed to be Neon's.
+ */
 const dataApiIsExternal = (parsed: Parsed): boolean => {
 	const entry = findEntry(parsed.root, "dataApi");
 	const object = entry ? objectOf(parsed, entry) : undefined;
 	const provider = object ? findEntry(object, "authProvider") : undefined;
-	return (
-		provider !== undefined &&
-		/^["']external["']$/.test(
-			parsed.source.slice(provider.valueStart, provider.valueEnd),
-		)
-	);
+	if (!provider) return false;
+	const value = parsed.source
+		.slice(provider.valueStart, provider.valueEnd)
+		.replace(/\s+as\s+const$/, "");
+	if (provider.keyed && /^["']external["']$/.test(value)) return true;
+	if (provider.keyed && /^["']neon["']$/.test(value)) return false;
+	return unsupported("dataApi.authProvider is set to an expression.", [
+		"auth: true,",
+		"dataApi: true,",
+	]);
 };
 
 /** A named entry (a function or a bucket) inside `functions` / `buckets`. */
