@@ -45,7 +45,7 @@ type QueryRow<Query> =
 			? Row
 			: never;
 
-type AuthorizeInput<Query> = { readonly query: Query };
+type SealInput<Query> = { readonly query: Query };
 type AuthorizableQuery<Query> = Query | RawSqlQuery<unknown>;
 
 /**
@@ -60,14 +60,14 @@ export interface NeonLiveServer<Query> {
 	 * Raw queries produced by {@link rawSql} are always accepted. Other query
 	 * objects are prepared by the configured adapter.
 	 *
-	 * @param input - Concrete query to authorize.
+	 * @param input - Concrete query to seal.
 	 * @returns A JSON-compatible bearer capability with its public fingerprint
 	 * and expiry.
 	 * @throws If the query is invalid, no adapter can prepare it, or capability
 	 * encryption fails.
 	 */
-	authorize<ConcreteQuery extends AuthorizableQuery<Query>>(
-		input: AuthorizeInput<ConcreteQuery>,
+	seal<ConcreteQuery extends AuthorizableQuery<Query>>(
+		input: SealInput<ConcreteQuery>,
 	): Promise<LiveQueryAuthorization<QueryRow<ConcreteQuery>>>;
 }
 
@@ -127,7 +127,7 @@ export interface NeonLiveServerOptions<Query> {
 	 * on a WebSocket binds that connection to this database.
 	 */
 	readonly db: string;
-	/** Adapter for ORM-native queries; omit when authorizing only raw SQL. */
+	/** Adapter for ORM-native queries; omit when sealing only raw SQL. */
 	readonly adapter?: NeonLiveAdapter<Query>;
 }
 
@@ -146,7 +146,7 @@ export interface NeonLiveDirectServerOptions<Query>
 /**
  * Create a server-only Neon Live SDK.
  *
- * `authorize()` performs local encryption and no network requests. Supplying a
+ * `seal()` performs local encryption and no network requests. Supplying a
  * WebSocket `url` additionally enables trusted direct subscriptions that mint
  * and refresh their own capabilities. Keep the project secret out of browser
  * bundles.
@@ -186,12 +186,12 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 		prepared: PreparedAuthorizationQuery,
 	): Promise<LiveQueryAuthorization<Row>> =>
 		Object.freeze(await issueCapability(prepared));
-	const authorize = async <ConcreteQuery extends AuthorizableQuery<Query>>(
-		input: AuthorizeInput<ConcreteQuery>,
+	const seal = async <ConcreteQuery extends AuthorizableQuery<Query>>(
+		input: SealInput<ConcreteQuery>,
 	): Promise<LiveQueryAuthorization<QueryRow<ConcreteQuery>>> =>
 		authorizePrepared<QueryRow<ConcreteQuery>>(prepare(input.query));
 
-	if (!("url" in options)) return Object.freeze({ authorize });
+	if (!("url" in options)) return Object.freeze({ seal });
 
 	const directClient = new DirectLiveQueryClient(
 		options.url,
@@ -216,7 +216,7 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 	};
 
 	return Object.freeze({
-		authorize,
+		seal,
 		subscribe,
 		close: () => directClient.close(),
 	});

@@ -36,7 +36,7 @@ export interface RawSqlQuery<Row> extends PreparedAuthorizationQuery {
  * @typeParam Row - Row returned by the query.
  * @param sql - Parameterized SQL using PostgreSQL placeholders such as `$1`.
  * @param parameters - Values in placeholder order.
- * @returns An immutable query descriptor accepted by `authorize()`.
+ * @returns An immutable query descriptor accepted by `seal()`.
  */
 export function rawSql<Row>(
 	sql: string,

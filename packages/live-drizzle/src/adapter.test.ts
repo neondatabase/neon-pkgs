@@ -127,11 +127,9 @@ describe("concrete Drizzle query adapter", () => {
 				),
 			);
 
-		const authorization = await neonLive.authorize({
-			query,
-		});
+		const sealedQuery = await neonLive.seal({ query });
 
-		expectTypeOf(authorization).toEqualTypeOf<
+		expectTypeOf(sealedQuery).toEqualTypeOf<
 			LiveQueryAuthorization<{
 				messageId: number;
 				channelId: string;
@@ -139,8 +137,8 @@ describe("concrete Drizzle query adapter", () => {
 				note: string | null;
 			}>
 		>();
-		expect(JSON.stringify(authorization)).not.toContain(channelId);
-		expect(JSON.stringify(authorization)).not.toContain(viewerId);
+		expect(JSON.stringify(sealedQuery)).not.toContain(channelId);
+		expect(JSON.stringify(sealedQuery)).not.toContain(viewerId);
 
 		expect(fetch).not.toHaveBeenCalled();
 
@@ -172,9 +170,9 @@ describe("concrete Drizzle query adapter", () => {
 				.from(messages)
 				.where(eq(messages.channelId, channelId));
 
-		const first = await neonLive.authorize({ query: query("general") });
-		const repeated = await neonLive.authorize({ query: query("general") });
-		const changed = await neonLive.authorize({ query: query("random") });
+		const first = await neonLive.seal({ query: query("general") });
+		const repeated = await neonLive.seal({ query: query("general") });
+		const changed = await neonLive.seal({ query: query("random") });
 
 		expect(first.queryFingerprint).toBe(repeated.queryFingerprint);
 		expect(first.queryFingerprint).not.toBe(changed.queryFingerprint);

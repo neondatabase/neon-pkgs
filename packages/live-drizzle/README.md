@@ -23,7 +23,7 @@ that preset do not need to ship the ORM runtime in their client bundle.
 ## Usage
 
 Create the backend SDK with the Drizzle adapter, then pass a concrete select
-builder directly to `authorize()`:
+builder directly to `seal()`:
 
 ```ts
 import { createNeonLive } from "@neon/live/server";
@@ -51,11 +51,11 @@ const query = db
   .from(messages)
   .where(eq(messages.channelId, channelId));
 
-const authorization = await neonLive.authorize({ query });
+const sealedQuery = await neonLive.seal({ query });
 // LiveQueryAuthorization<{ id: number; body: string }>
 ```
 
-Authorization performs local encryption and does not execute the query. Keep
+Sealing performs local encryption and does not execute the query. Keep
 this code on the application backend and return the authorization only after
 authenticating the caller and checking that they may observe the requested
 data.

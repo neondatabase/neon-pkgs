@@ -33,7 +33,7 @@ import { createNeonLive } from "@neon/live/server";
 | `@neon/live/client` | Subscribe from a browser and consume materialized or raw changes. |
 | `@neon/live` | Convenience export of both surfaces; prefer the dedicated entry points in application code. |
 
-## Authorize a query on the backend
+## Seal a query on the backend
 
 An authenticated application endpoint constructs the exact query its caller
 may observe and returns the resulting authorization:
@@ -59,11 +59,12 @@ app.post("/api/messages/live", async (request, response) => {
     [channelId],
   );
 
-  response.json(await neonLive.authorize({ query }));
+  const sealedQuery = await neonLive.seal({ query });
+  response.json(sealedQuery);
 });
 ```
 
-`authorize()` performs local Web Crypto work and makes no network request. The
+`seal()` performs local Web Crypto work and makes no network request. The
 application remains responsible for authentication, input validation, access
 checks, and putting every trusted caller-specific restriction into the query.
 Anyone holding the returned capability can subscribe to that exact query until
@@ -144,7 +145,7 @@ with backoff. If the subscription expires, recovery creates a new
 wire subscription behind the same public object and returns to `live` after its
 fresh authoritative reset.
 
-This mode holds the Neon Live secret and can authorize arbitrary queries. Use
+This mode holds the Neon Live secret and can seal arbitrary queries. Use
 it only in trusted runtimes, never in browser code. The runtime must provide a
 standards-compatible global `WebSocket` implementation.
 `createNeonLive({ url, parsers })` accepts the same OID overrides as the
@@ -159,7 +160,7 @@ client:
 import { createNeonLiveClient } from "@neon/live/client";
 
 const response = await fetch("/api/messages/live", { method: "POST" });
-if (!response.ok) throw new Error("Could not authorize messages");
+if (!response.ok) throw new Error("Could not start live messages");
 
 const authorization = await response.json();
 const client = createNeonLiveClient({

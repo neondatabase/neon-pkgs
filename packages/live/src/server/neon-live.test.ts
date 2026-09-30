@@ -27,42 +27,42 @@ afterEach(() => {
 });
 
 describe("Neon Live backend SDK", () => {
-	it("authorizes a typed raw SQL query without an adapter or network request", async () => {
+	it("seals a typed raw SQL query without an adapter or network request", async () => {
 		const fetch = vi.fn();
 		vi.stubGlobal("fetch", fetch);
 		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
 		const query = messagesByOwner("alice");
 
-		const authorization = await neonLive.authorize({ query });
+		const sealedQuery = await neonLive.seal({ query });
 
-		expectTypeOf(authorization).toEqualTypeOf<
+		expectTypeOf(sealedQuery).toEqualTypeOf<
 			LiveQueryAuthorization<MessageRow>
 		>();
-		expect(authorization).toMatchObject({
+		expect(sealedQuery).toMatchObject({
 			capability: expect.any(String),
 			expiresAt: expect.any(Number),
 			queryFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
 		});
-		expect(await capabilityClaims(authorization.capability)).toMatchObject({
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			v: 1,
 			database: "app",
 			parameters: [{ type_oid: 0, value: "YWxpY2U=" }],
 		});
 		expect(fetch).not.toHaveBeenCalled();
-		expectTypeOf<
-			Parameters<typeof neonLive.authorize>[0]
-		>().not.toHaveProperty("params");
+		expectTypeOf<Parameters<typeof neonLive.seal>[0]>().not.toHaveProperty(
+			"params",
+		);
 	});
 
 	it("uses stable query fingerprints but fresh capabilities", async () => {
 		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
-		const first = await neonLive.authorize({
+		const first = await neonLive.seal({
 			query: messagesByOwner("alice"),
 		});
-		const repeated = await neonLive.authorize({
+		const repeated = await neonLive.seal({
 			query: messagesByOwner("alice"),
 		});
-		const changed = await neonLive.authorize({
+		const changed = await neonLive.seal({
 			query: messagesByOwner("bob"),
 		});
 
@@ -75,7 +75,7 @@ describe("Neon Live backend SDK", () => {
 		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
 		const query = rawSql<MessageRow>("select id, body from messages");
 
-		await expect(neonLive.authorize({ query })).resolves.toMatchObject({
+		await expect(neonLive.seal({ query })).resolves.toMatchObject({
 			capability: expect.any(String),
 		});
 	});
@@ -87,9 +87,9 @@ describe("Neon Live backend SDK", () => {
 			[null],
 		);
 
-		const authorization = await neonLive.authorize({ query });
+		const sealedQuery = await neonLive.seal({ query });
 
-		expect(await capabilityClaims(authorization.capability)).toMatchObject({
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			parameters: [{ type_oid: 0, value: null }],
 		});
 	});
@@ -100,9 +100,9 @@ describe("Neon Live backend SDK", () => {
 			pgParam.text("uuid", "8ea9c0cc-6bf1-4d30-b85f-8415106215cf"),
 		]);
 
-		const authorization = await neonLive.authorize({ query });
+		const sealedQuery = await neonLive.seal({ query });
 
-		expect(await capabilityClaims(authorization.capability)).toMatchObject({
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			parameters: [
 				{
 					type_oid: 2950,
@@ -125,8 +125,8 @@ describe("Neon Live backend SDK", () => {
 			adapter: { prepare },
 		});
 
-		await neonLive.authorize({ query: { owner: "adapter" } });
-		const rawAuthorization = await neonLive.authorize({
+		await neonLive.seal({ query: { owner: "adapter" } });
+		const rawAuthorization = await neonLive.seal({
 			query: messagesByOwner("raw"),
 		});
 
@@ -154,7 +154,7 @@ describe("Neon Live backend SDK", () => {
 		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
 		const invalid = rawSql<MessageRow>("delete from messages");
 
-		await expect(neonLive.authorize({ query: invalid })).rejects.toThrow(
+		await expect(neonLive.seal({ query: invalid })).rejects.toThrow(
 			"Invalid Neon Live prepared query",
 		);
 		expect(getRandomValues).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe("Neon Live backend SDK", () => {
 			},
 		});
 
-		await expect(neonLive.authorize({ query: {} })).rejects.toThrow(
+		await expect(neonLive.seal({ query: {} })).rejects.toThrow(
 			"Invalid Neon Live prepared parameter",
 		);
 		expect(getRandomValues).not.toHaveBeenCalled();
