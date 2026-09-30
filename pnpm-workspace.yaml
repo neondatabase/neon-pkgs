@@ -1,5 +1,7 @@
 packages:
     - "packages/*"
+    # Runnable examples that consume packages through workspace links.
+    - "examples/*"
     # Private, never published, bundled into their consumers. Kept out of
     # `packages/` so that folder means exactly one thing: packages we ship.
     - "internals/*"

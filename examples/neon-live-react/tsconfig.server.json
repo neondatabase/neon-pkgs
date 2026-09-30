@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023",
+    "types": ["node"]
+  },
+  "include": [
+    "src/api-types.ts",
+    "src/dev.ts",
+    "src/schema.ts",
+    "src/server.ts",
+    "src/setup.ts"
+  ]
+}
