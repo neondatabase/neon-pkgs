@@ -52,7 +52,7 @@ const query = db
   .where(eq(messages.channelId, channelId));
 
 const sealedQuery = await neonLive.seal({ query });
-// LiveQueryAuthorization<{ id: number; body: string }>
+// SealedLiveQuery<{ id: number; body: string }>
 ```
 
 Sealing performs local encryption and does not execute the query. Keep

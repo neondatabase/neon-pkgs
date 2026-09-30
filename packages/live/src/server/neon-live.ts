@@ -1,4 +1,4 @@
-import type { LiveQueryAuthorization } from "../client/authorization.js";
+import type { SealedLiveQuery } from "../client/authorization.js";
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type {
 	MaterializedLiveQueryOptions,
@@ -22,7 +22,7 @@ import {
 	type RawSqlQuery,
 } from "./raw-sql.js";
 
-export type { LiveQueryAuthorization } from "../client/authorization.js";
+export type { SealedLiveQuery } from "../client/authorization.js";
 export type {
 	NeonLiveAdapter,
 	PreparedAuthorizationQuery,
@@ -68,7 +68,7 @@ export interface NeonLiveServer<Query> {
 	 */
 	seal<ConcreteQuery extends AuthorizableQuery<Query>>(
 		input: SealInput<ConcreteQuery>,
-	): Promise<LiveQueryAuthorization<QueryRow<ConcreteQuery>>>;
+	): Promise<SealedLiveQuery<QueryRow<ConcreteQuery>>>;
 }
 
 /**
@@ -182,14 +182,14 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 		validatePreparedQuery(prepared);
 		return snapshotPreparedQuery(prepared);
 	};
-	const authorizePrepared = async <Row>(
+	const sealPrepared = async <Row>(
 		prepared: PreparedAuthorizationQuery,
-	): Promise<LiveQueryAuthorization<Row>> =>
+	): Promise<SealedLiveQuery<Row>> =>
 		Object.freeze(await issueCapability(prepared));
 	const seal = async <ConcreteQuery extends AuthorizableQuery<Query>>(
 		input: SealInput<ConcreteQuery>,
-	): Promise<LiveQueryAuthorization<QueryRow<ConcreteQuery>>> =>
-		authorizePrepared<QueryRow<ConcreteQuery>>(prepare(input.query));
+	): Promise<SealedLiveQuery<QueryRow<ConcreteQuery>>> =>
+		sealPrepared<QueryRow<ConcreteQuery>>(prepare(input.query));
 
 	if (!("url" in options)) return Object.freeze({ seal });
 
@@ -209,9 +209,9 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 		directClient.assertOpen();
 		const prepared = prepare(query);
 		const authorization =
-			await authorizePrepared<QueryRow<ConcreteQuery>>(prepared);
+			await sealPrepared<QueryRow<ConcreteQuery>>(prepared);
 		return directClient.subscribe(authorization, subscriptionOptions, () =>
-			authorizePrepared<QueryRow<ConcreteQuery>>(prepared),
+			sealPrepared<QueryRow<ConcreteQuery>>(prepared),
 		);
 	};
 

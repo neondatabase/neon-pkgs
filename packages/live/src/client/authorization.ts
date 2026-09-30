@@ -1,12 +1,12 @@
 /**
- * JSON-compatible authorization for one exact live query.
+ * JSON-compatible sealed representation of one exact live query.
  *
  * The authorization is a short-lived bearer credential. Transport it over
  * HTTPS and do not put it in URLs, logs, or persistent browser storage.
  *
- * @typeParam Row - Row produced by the authorized query.
+ * @typeParam Row - Row produced by the sealed query.
  */
-export interface LiveQueryAuthorization<Row> {
+export interface SealedLiveQuery<Row> {
 	/** Opaque encrypted bearer capability. */
 	readonly capability: string;
 	/** Stable identity used to prevent accidentally renewing a different query. */
@@ -18,7 +18,7 @@ export interface LiveQueryAuthorization<Row> {
 }
 
 export function validateAuthorization<Row>(
-	authorization: LiveQueryAuthorization<Row>,
+	authorization: SealedLiveQuery<Row>,
 ): void {
 	if (
 		!authorization ||

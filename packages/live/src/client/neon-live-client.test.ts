@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
-import type { LiveQueryAuthorization } from "./authorization.js";
+import type { SealedLiveQuery } from "./authorization.js";
 import {
 	createNeonLiveClient,
 	type MaterializedLiveQuerySubscription,
@@ -712,7 +712,7 @@ function publication(
 function authorization(
 	capabilityId: string,
 	queryFingerprint = QUERY_FINGERPRINT,
-): LiveQueryAuthorization<MessageRow> {
+): SealedLiveQuery<MessageRow> {
 	return {
 		capability: compactJwe(capabilityId),
 		queryFingerprint,

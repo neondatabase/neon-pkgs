@@ -1,6 +1,5 @@
 import {
 	AuthorizationRefreshController,
-	type LiveQueryAuthorization,
 	type LiveQueryBatchInfo,
 	type LiveQueryChange,
 	type LiveQueryError,
@@ -9,6 +8,7 @@ import {
 	type MaterializedLiveQuerySubscription,
 	type NeonLiveClient,
 	type RawLiveQueryRow,
+	type SealedLiveQuery,
 } from "@neon/live/client";
 import type { UseLiveQueryUtils } from "./types.js";
 
@@ -38,7 +38,7 @@ export class ReactLiveQueryStore<Row> {
 
 	constructor(
 		private readonly client: NeonLiveClient,
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		initialData?: readonly Row[],
 	) {
 		this.initialSnapshot = Object.freeze({
@@ -79,9 +79,7 @@ export class ReactLiveQueryStore<Row> {
 	}
 
 	setRefreshAuthorization(
-		refreshAuthorization:
-			| (() => Promise<LiveQueryAuthorization<Row>>)
-			| undefined,
+		refreshAuthorization: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
 		this.authorizationRefresh.setRefreshAuthorization(refreshAuthorization);
 	}
@@ -130,9 +128,7 @@ export class ReactLiveQueryStore<Row> {
 			: Promise.reject(new Error("Neon Live query is not subscribed"));
 	};
 
-	private renew = (
-		authorization: LiveQueryAuthorization<Row>,
-	): Promise<void> =>
+	private renew = (authorization: SealedLiveQuery<Row>): Promise<void> =>
 		this.authorizationRefresh.replaceAuthorization(authorization);
 
 	private open(): void {

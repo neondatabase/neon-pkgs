@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import type {
-	LiveQueryAuthorization,
 	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQuerySnapshot,
@@ -10,6 +9,7 @@ import type {
 	NeonLiveClient,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	SealedLiveQuery,
 } from "@neon/live/client";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
@@ -178,9 +178,9 @@ function Messages({
 	refreshAuthorization,
 	observe,
 }: {
-	authorization: LiveQueryAuthorization<MessageRow>;
+	authorization: SealedLiveQuery<MessageRow>;
 	initialData?: readonly MessageRow[];
-	refreshAuthorization?: () => Promise<LiveQueryAuthorization<MessageRow>>;
+	refreshAuthorization?: () => Promise<SealedLiveQuery<MessageRow>>;
 	observe?: (result: UseLiveQueryResult<MessageRow>) => void;
 }) {
 	const result = useLiveQuery(currentAuthorization, {
@@ -199,15 +199,15 @@ class TestClient<Row> implements NeonLiveClient {
 	readonly subscriptions: TestSubscription<Row>[] = [];
 
 	subscribe<CurrentRow>(
-		_authorization: LiveQueryAuthorization<CurrentRow>,
+		_authorization: SealedLiveQuery<CurrentRow>,
 		options?: { materialize?: true; initialData?: readonly CurrentRow[] },
 	): MaterializedLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_authorization: LiveQueryAuthorization<CurrentRow>,
+		_authorization: SealedLiveQuery<CurrentRow>,
 		_options: { materialize: false },
 	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_authorization: LiveQueryAuthorization<CurrentRow>,
+		_authorization: SealedLiveQuery<CurrentRow>,
 		options?: {
 			materialize?: boolean;
 			initialData?: readonly CurrentRow[];
@@ -250,7 +250,7 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 			batch: LiveQueryBatchInfo,
 		) => void
 	>();
-	readonly renewals: LiveQueryAuthorization<Row>[] = [];
+	readonly renewals: SealedLiveQuery<Row>[] = [];
 	unsubscribed = false;
 	private snapshot: LiveQuerySnapshot<Row>;
 
@@ -294,9 +294,7 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 		listener: (snapshot: LiveQuerySnapshot<Row>) => void,
 	): (() => void) => add(this.snapshotListeners, listener);
 
-	renew = async (
-		authorization: LiveQueryAuthorization<Row>,
-	): Promise<void> => {
+	renew = async (authorization: SealedLiveQuery<Row>): Promise<void> => {
 		this.renewals.push(authorization);
 		this.publish({ ...this.snapshot, status: "stale", error: undefined });
 	};
@@ -315,7 +313,7 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 function authorization(
 	queryId: string,
 	secondsFromNow = 3_000,
-): LiveQueryAuthorization<MessageRow> {
+): SealedLiveQuery<MessageRow> {
 	return {
 		capability: compactJwe(queryId),
 		queryFingerprint: "11".repeat(32),

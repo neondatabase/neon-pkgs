@@ -1,8 +1,8 @@
 import type {
-	LiveQueryAuthorization,
 	LiveQuerySnapshot,
 	MaterializedLiveQuerySubscription,
 	NeonLiveClient,
+	SealedLiveQuery,
 } from "@neon/live/client";
 import type { ReactNode } from "react";
 
@@ -26,7 +26,7 @@ export interface UseLiveQueryOptions<Row> {
 	 * Obtain a replacement capability for the same exact query before expiry.
 	 * Transient failures are retried while the current capability remains valid.
 	 */
-	readonly refreshAuthorization?: () => Promise<LiveQueryAuthorization<Row>>;
+	readonly refreshAuthorization?: () => Promise<SealedLiveQuery<Row>>;
 }
 
 /**

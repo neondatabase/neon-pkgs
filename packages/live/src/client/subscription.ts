@@ -1,4 +1,4 @@
-import type { LiveQueryAuthorization } from "./authorization.js";
+import type { SealedLiveQuery } from "./authorization.js";
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
@@ -30,7 +30,7 @@ import type {
 export interface SubscriptionOwner {
 	renew<Row>(
 		subscription: Subscription<Row>,
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 	): Promise<void>;
 	unsubscribe<Row>(subscription: Subscription<Row>): void;
 	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void;
@@ -84,7 +84,7 @@ export class Subscription<Row>
 
 	constructor(
 		private readonly owner: SubscriptionOwner,
-		private authorization: LiveQueryAuthorization<Row>,
+		private authorization: SealedLiveQuery<Row>,
 		readonly materialized: boolean,
 		private readonly parsers: PostgreSQLParserRegistry,
 		initialData?: readonly Row[],
@@ -105,11 +105,11 @@ export class Subscription<Row>
 		this.snapshot = this.makeSnapshot();
 	}
 
-	currentAuthorization(): LiveQueryAuthorization<Row> {
+	currentAuthorization(): SealedLiveQuery<Row> {
 		return this.authorization;
 	}
 
-	replaceAuthorization(authorization: LiveQueryAuthorization<Row>): void {
+	replaceAuthorization(authorization: SealedLiveQuery<Row>): void {
 		this.authorization = authorization;
 	}
 
@@ -150,7 +150,7 @@ export class Subscription<Row>
 		return listen(this.changeListeners, listener);
 	};
 
-	renew = (authorization: LiveQueryAuthorization<Row>): Promise<void> => {
+	renew = (authorization: SealedLiveQuery<Row>): Promise<void> => {
 		if (this.closed) {
 			return Promise.reject(
 				new Error("Neon Live subscription is closed"),

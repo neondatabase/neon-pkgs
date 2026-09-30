@@ -1,4 +1,4 @@
-import type { LiveQueryAuthorization } from "@neon/live/client";
+import type { SealedLiveQuery } from "@neon/live/client";
 import { useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import { NeonLiveContext } from "./context.js";
 import { ReactLiveQueryStore } from "./live-query-store.js";
@@ -16,7 +16,7 @@ import type { UseLiveQueryOptions, UseLiveQueryResult } from "./types.js";
  * @throws If used outside a {@link NeonLiveProvider}.
  */
 export function useLiveQuery<Row>(
-	authorization: LiveQueryAuthorization<Row>,
+	authorization: SealedLiveQuery<Row>,
 	options: UseLiveQueryOptions<Row> = {},
 ): UseLiveQueryResult<Row> {
 	const client = useContext(NeonLiveContext);

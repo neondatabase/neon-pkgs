@@ -1,5 +1,4 @@
 import type {
-	LiveQueryAuthorization,
 	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQueryState,
@@ -9,6 +8,7 @@ import type {
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	SealedLiveQuery,
 } from "@neon/live/client";
 import { collectionOptions, createCollection, DbClient } from "@tanstack/db";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -237,7 +237,7 @@ describe("Neon Live TanStack DB collection", () => {
 function createTestCollection(
 	client: TestClient<MessageRow>,
 	currentAuthorization = authorization("query-1"),
-	refreshAuthorization?: () => Promise<LiveQueryAuthorization<MessageRow>>,
+	refreshAuthorization?: () => Promise<SealedLiveQuery<MessageRow>>,
 ) {
 	const collection = createCollection(
 		neonLiveCollectionOptions({
@@ -256,15 +256,15 @@ class TestClient<Row extends object> implements NeonLiveClient {
 	readonly subscriptions: TestRawSubscription<Row>[] = [];
 
 	subscribe<CurrentRow>(
-		_authorization: LiveQueryAuthorization<CurrentRow>,
+		_authorization: SealedLiveQuery<CurrentRow>,
 		_options?: MaterializedLiveQueryOptions<CurrentRow>,
 	): MaterializedLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_authorization: LiveQueryAuthorization<CurrentRow>,
+		_authorization: SealedLiveQuery<CurrentRow>,
 		_options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_authorization: LiveQueryAuthorization<CurrentRow>,
+		_authorization: SealedLiveQuery<CurrentRow>,
 		options?:
 			| MaterializedLiveQueryOptions<CurrentRow>
 			| RawLiveQueryOptions,
@@ -312,7 +312,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	private readonly stateListeners = new Set<
 		(state: LiveQueryState) => void
 	>();
-	readonly renewals: LiveQueryAuthorization<Row>[] = [];
+	readonly renewals: SealedLiveQuery<Row>[] = [];
 	readonly awaitedTransactions: Array<{
 		readonly txid: string;
 		readonly timeout: number | undefined;
@@ -364,9 +364,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 		});
 	};
 
-	renew = async (
-		authorization: LiveQueryAuthorization<Row>,
-	): Promise<void> => {
+	renew = async (authorization: SealedLiveQuery<Row>): Promise<void> => {
 		this.renewals.push(authorization);
 		this.state({ status: "stale", error: undefined });
 	};
@@ -415,7 +413,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 function authorization(
 	queryId: string,
 	secondsFromNow = 3_000,
-): LiveQueryAuthorization<MessageRow> {
+): SealedLiveQuery<MessageRow> {
 	return {
 		capability: compactJwe(queryId),
 		queryFingerprint: "11".repeat(32),

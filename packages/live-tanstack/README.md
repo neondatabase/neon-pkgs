@@ -29,13 +29,13 @@ import { createCollection } from "@tanstack/db";
 const client = createNeonLiveClient({
   url: "wss://live.neon.tech/...",
 });
-const authorization = await authorizeTodos();
+const authorization = await sealTodos();
 
 export const todos = createCollection(neonLiveCollectionOptions({
   id: "todos",
   client,
   authorization,
-  refreshAuthorization: authorizeTodos,
+  refreshAuthorization: sealTodos,
   getKey: (todo) => todo.id,
 }));
 ```

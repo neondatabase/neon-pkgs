@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { LiveQueryAuthorization } from "./authorization.js";
+import type { SealedLiveQuery } from "./authorization.js";
 import { AuthorizationRefreshController } from "./authorization-refresh.js";
 
 afterEach(() => {
@@ -59,12 +59,10 @@ describe("AuthorizationRefreshController", () => {
 	it("ignores an in-flight result after it is stopped", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
-		let resolveRefresh!: (
-			authorization: LiveQueryAuthorization<unknown>,
-		) => void;
+		let resolveRefresh!: (authorization: SealedLiveQuery<unknown>) => void;
 		const refreshAuthorization = vi.fn(
 			() =>
-				new Promise<LiveQueryAuthorization<unknown>>((resolve) => {
+				new Promise<SealedLiveQuery<unknown>>((resolve) => {
 					resolveRefresh = resolve;
 				}),
 		);
@@ -140,7 +138,7 @@ describe("AuthorizationRefreshController", () => {
 	});
 });
 
-function authorization(expiresAt: number): LiveQueryAuthorization<unknown> {
+function authorization(expiresAt: number): SealedLiveQuery<unknown> {
 	return {
 		capability: compactJwe(),
 		queryFingerprint: "11".repeat(32),

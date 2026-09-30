@@ -1,4 +1,4 @@
-import type { LiveQueryAuthorization } from "./authorization.js";
+import type { SealedLiveQuery } from "./authorization.js";
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 
 /** An error reported by a Neon Live subscription. */
@@ -154,7 +154,7 @@ export interface RawLiveQuerySubscription<Row> {
 	 * A subsequent authoritative reset returns the subscription to `live`.
 	 * @throws If the replacement query fingerprint differs or renewal is rejected.
 	 */
-	renew(authorization: LiveQueryAuthorization<Row>): Promise<void>;
+	renew(authorization: SealedLiveQuery<Row>): Promise<void>;
 	/** Permanently close this subscription and remove its listeners. */
 	unsubscribe(): void;
 }
@@ -205,7 +205,7 @@ export interface NeonLiveClient {
 	 * @throws If the authorization is malformed or the client is closed.
 	 */
 	subscribe<Row>(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
 	/**
@@ -219,7 +219,7 @@ export interface NeonLiveClient {
 	 * @throws If the authorization is malformed or the client is closed.
 	 */
 	subscribe<Row>(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
 	/** Permanently close all subscriptions and the underlying WebSocket. */

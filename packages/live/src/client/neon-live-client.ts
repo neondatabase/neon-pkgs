@@ -1,5 +1,5 @@
 import {
-	type LiveQueryAuthorization,
+	type SealedLiveQuery,
 	validateAuthorization,
 } from "./authorization.js";
 import {
@@ -51,15 +51,15 @@ class NeonLiveClientImpl implements NeonLiveClient {
 	}
 
 	subscribe<Row>(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
 	subscribe<Row>(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
 	subscribe<Row>(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
 	): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
 		if (this.disposed) throw new Error("Neon Live client is closed");
@@ -88,7 +88,7 @@ class NeonLiveClientImpl implements NeonLiveClient {
 
 	async renew<Row>(
 		subscription: Subscription<Row>,
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 	): Promise<void> {
 		validateAuthorization(authorization);
 		const handle = this.handles.get(subscription as Subscription<unknown>);

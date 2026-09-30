@@ -3,10 +3,10 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { defined } from "../defined.test-helpers.js";
 import {
 	createNeonLive,
-	type LiveQueryAuthorization,
 	pgParam,
 	type RawSqlQuery,
 	rawSql,
+	type SealedLiveQuery,
 } from "./neon-live.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
@@ -35,9 +35,7 @@ describe("Neon Live backend SDK", () => {
 
 		const sealedQuery = await neonLive.seal({ query });
 
-		expectTypeOf(sealedQuery).toEqualTypeOf<
-			LiveQueryAuthorization<MessageRow>
-		>();
+		expectTypeOf(sealedQuery).toEqualTypeOf<SealedLiveQuery<MessageRow>>();
 		expect(sealedQuery).toMatchObject({
 			capability: expect.any(String),
 			expiresAt: expect.any(Number),
@@ -131,7 +129,7 @@ describe("Neon Live backend SDK", () => {
 		});
 
 		expectTypeOf(rawAuthorization).toEqualTypeOf<
-			LiveQueryAuthorization<MessageRow>
+			SealedLiveQuery<MessageRow>
 		>();
 		expect(prepare).toHaveBeenCalledOnce();
 		expect(prepare).toHaveBeenCalledWith({ owner: "adapter" });

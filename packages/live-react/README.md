@@ -37,7 +37,7 @@ A route loader, Server Component, or parent obtains the authorization from the
 application backend. The hook deliberately does not fetch it:
 
 ```tsx
-import type { LiveQueryAuthorization } from "@neon/live/client";
+import type { SealedLiveQuery } from "@neon/live/client";
 import { useLiveQuery } from "@neon/live-react";
 import { useEffect } from "react";
 
@@ -48,14 +48,14 @@ interface Message {
 
 interface MessagesProps {
   channelId: string;
-  authorization: LiveQueryAuthorization<Message>;
+  authorization: SealedLiveQuery<Message>;
   initialRows?: readonly Message[];
 }
 
 export function Messages(props: MessagesProps) {
   const { data, status, error, utils } = useLiveQuery(props.authorization, {
     initialData: props.initialRows,
-    refreshAuthorization: () => authorizeMessages(props.channelId),
+    refreshAuthorization: () => sealMessages(props.channelId),
   });
 
   useEffect(() => utils.onBatch((_changes, batch) => {

@@ -1,5 +1,5 @@
 import {
-	type LiveQueryAuthorization,
+	type SealedLiveQuery,
 	validateAuthorization,
 } from "./authorization.js";
 
@@ -8,12 +8,12 @@ const REFRESH_RETRY_MS = 1_000;
 
 interface AuthorizationRefreshControllerOptions<Row> {
 	/** Capability from which expiry and query identity are initially read. */
-	readonly authorization: LiveQueryAuthorization<Row>;
+	readonly authorization: SealedLiveQuery<Row>;
 	/** Callback that obtains a replacement capability for the same query. */
-	readonly refreshAuthorization?: () => Promise<LiveQueryAuthorization<Row>>;
+	readonly refreshAuthorization?: () => Promise<SealedLiveQuery<Row>>;
 	/** Install a replacement on the underlying subscription. */
 	readonly applyAuthorization: (
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 	) => Promise<void>;
 	/** Called after a replacement has been installed successfully. */
 	readonly onAuthorizationApplied?: () => void;
@@ -32,8 +32,8 @@ interface AuthorizationRefreshControllerOptions<Row> {
  * @typeParam Row - Row produced by the authorized query.
  */
 export class AuthorizationRefreshController<Row> {
-	private authorization: LiveQueryAuthorization<Row>;
-	private refreshAuthorization?: () => Promise<LiveQueryAuthorization<Row>>;
+	private authorization: SealedLiveQuery<Row>;
+	private refreshAuthorization?: () => Promise<SealedLiveQuery<Row>>;
 	private refreshTimer?: ReturnType<typeof setTimeout>;
 	private refreshInFlight = false;
 	private refreshStopped = false;
@@ -48,7 +48,7 @@ export class AuthorizationRefreshController<Row> {
 	}
 
 	/** Return the capability currently managed by this controller. */
-	currentAuthorization(): LiveQueryAuthorization<Row> {
+	currentAuthorization(): SealedLiveQuery<Row> {
 		return this.authorization;
 	}
 
@@ -59,9 +59,7 @@ export class AuthorizationRefreshController<Row> {
 	 * controller.
 	 */
 	setRefreshAuthorization(
-		refreshAuthorization:
-			| (() => Promise<LiveQueryAuthorization<Row>>)
-			| undefined,
+		refreshAuthorization: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
 		this.refreshAuthorization = refreshAuthorization;
 		this.clearTimer();
@@ -77,7 +75,7 @@ export class AuthorizationRefreshController<Row> {
 	 * applying it to the active subscription fails.
 	 */
 	async replaceAuthorization(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 	): Promise<void> {
 		this.assertSameQuery(authorization);
 		await this.options.applyAuthorization(authorization);
@@ -158,7 +156,7 @@ export class AuthorizationRefreshController<Row> {
 	}
 
 	private async applyRecoverableAuthorization(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		generation: number,
 	): Promise<void> {
 		try {
@@ -177,7 +175,7 @@ export class AuthorizationRefreshController<Row> {
 		}
 	}
 
-	private assertSameQuery(authorization: LiveQueryAuthorization<Row>): void {
+	private assertSameQuery(authorization: SealedLiveQuery<Row>): void {
 		if (
 			authorization.queryFingerprint !==
 			this.authorization.queryFingerprint

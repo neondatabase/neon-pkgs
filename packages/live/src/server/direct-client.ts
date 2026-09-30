@@ -1,4 +1,4 @@
-import type { LiveQueryAuthorization } from "../client/authorization.js";
+import type { SealedLiveQuery } from "../client/authorization.js";
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type {
 	MaterializedLiveQueryOptions,
@@ -35,12 +35,12 @@ export class DirectLiveQueryClient {
 	}
 
 	async subscribe<Row>(
-		authorization: LiveQueryAuthorization<Row>,
+		authorization: SealedLiveQuery<Row>,
 		options:
 			| MaterializedLiveQueryOptions<Row>
 			| RawLiveQueryOptions
 			| undefined,
-		refreshAuthorization: () => Promise<LiveQueryAuthorization<Row>>,
+		refreshAuthorization: () => Promise<SealedLiveQuery<Row>>,
 	): Promise<
 		MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row>
 	> {
@@ -87,7 +87,7 @@ export class DirectLiveQueryClient {
 
 function subscribeClient<Row>(
 	client: NeonLiveClient,
-	authorization: LiveQueryAuthorization<Row>,
+	authorization: SealedLiveQuery<Row>,
 	options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
 ): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
 	if (options?.materialize === false) {

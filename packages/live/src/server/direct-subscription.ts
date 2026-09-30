@@ -1,4 +1,4 @@
-import type { LiveQueryAuthorization } from "../client/authorization.js";
+import type { SealedLiveQuery } from "../client/authorization.js";
 import { AuthorizationRefreshController } from "../client/authorization-refresh.js";
 import type {
 	LiveQueryBatchInfo,
@@ -21,8 +21,8 @@ export function manageDirectSubscription<
 	Subscription extends RawLiveQuerySubscription<Row>,
 >(
 	subscription: Subscription,
-	authorization: LiveQueryAuthorization<Row>,
-	refreshAuthorization: () => Promise<LiveQueryAuthorization<Row>>,
+	authorization: SealedLiveQuery<Row>,
+	refreshAuthorization: () => Promise<SealedLiveQuery<Row>>,
 	removed: () => void,
 ): ManagedDirectSubscription<Subscription> {
 	let stopped = false;
@@ -59,7 +59,7 @@ export function manageDirectSubscription<
 			subscription.onStateChange(listener),
 		awaitTxId: (txid: string, timeout?: number) =>
 			subscription.awaitTxId(txid, timeout),
-		renew: (authorization: LiveQueryAuthorization<Row>) =>
+		renew: (authorization: SealedLiveQuery<Row>) =>
 			refresh.replaceAuthorization(authorization),
 		unsubscribe: () => {
 			stopRefresh();

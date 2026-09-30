@@ -29,7 +29,7 @@ import { createNeonLive } from "@neon/live/server";
 
 | Entry point | Purpose |
 | --- | --- |
-| `@neon/live/server` | Authorize raw SQL or adapter-native queries on an application backend. |
+| `@neon/live/server` | Seal raw SQL or adapter-native queries on an application backend. |
 | `@neon/live/client` | Subscribe from a browser and consume materialized or raw changes. |
 | `@neon/live` | Convenience export of both surfaces; prefer the dedicated entry points in application code. |
 
@@ -245,7 +245,7 @@ the WebSocket continue. The error identifies the result column and OID, omits
 the value, and preserves the parser's original error as `cause`.
 
 Parser configuration is runtime-only; it does not rewrite the `Row` type in a
-`LiveQueryAuthorization<Row>`. Keep adapter-inferred or explicitly declared
+`SealedLiveQuery<Row>`. Keep adapter-inferred or explicitly declared
 row types consistent with the selected parser preset and overrides.
 
 Applications obtain a replacement capability through the same backend endpoint

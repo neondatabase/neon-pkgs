@@ -1,4 +1,4 @@
-import { createNeonLive, type LiveQueryAuthorization } from "@neon/live/server";
+import { createNeonLive, type SealedLiveQuery } from "@neon/live/server";
 import { and, eq, gte, sql } from "drizzle-orm";
 import {
 	bigint,
@@ -130,7 +130,7 @@ describe("concrete Drizzle query adapter", () => {
 		const sealedQuery = await neonLive.seal({ query });
 
 		expectTypeOf(sealedQuery).toEqualTypeOf<
-			LiveQueryAuthorization<{
+			SealedLiveQuery<{
 				messageId: number;
 				channelId: string;
 				body: string;

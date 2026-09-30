@@ -1,11 +1,11 @@
 import {
 	AuthorizationRefreshController,
-	type LiveQueryAuthorization,
 	type LiveQueryChange,
 	type LiveQueryState,
 	type NeonLiveClient,
 	type RawLiveQueryRow,
 	type RawLiveQuerySubscription,
+	type SealedLiveQuery,
 } from "@neon/live/client";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
@@ -59,12 +59,12 @@ export interface NeonLiveCollectionConfig<
 	/** Reusable low-level Neon Live client. */
 	readonly client: NeonLiveClient;
 	/** Initial authorization for the exact query backing this collection. */
-	readonly authorization: LiveQueryAuthorization<Row>;
+	readonly authorization: SealedLiveQuery<Row>;
 	/**
 	 * Obtain a replacement capability for the same exact query before expiry.
 	 * Transient failures are retried while the current capability remains valid.
 	 */
-	readonly refreshAuthorization?: () => Promise<LiveQueryAuthorization<Row>>;
+	readonly refreshAuthorization?: () => Promise<SealedLiveQuery<Row>>;
 	/** Derive the stable unique TanStack DB key for a row. */
 	readonly getKey: (row: Row) => Key;
 }
