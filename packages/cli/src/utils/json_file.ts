@@ -1,11 +1,7 @@
 import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { log } from "../log.js";
 
-/**
- * Replace `path` with `value` as JSON, readable only by the user. Writing a temporary file
- * and renaming it means a concurrent reader sees the old file or the new one, never half of
- * one. Returns false, after a debug log naming `description`, when the write fails.
- */
+/** Renames a temporary file into place so a concurrent reader never sees a partial write. */
 export const writeJsonFile = (
 	path: string,
 	value: unknown,

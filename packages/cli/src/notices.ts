@@ -61,7 +61,6 @@ type ShowNoticeOptions = {
 	now?: number;
 };
 
-/** Print `message` as a warning unless notice `id` was shown within `intervalMs`. */
 export const showNotice = ({
 	configDir,
 	id,
