@@ -7,7 +7,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
 import which from "which";
@@ -224,9 +224,20 @@ const INSTALL_LABELS: Record<CliInstallMethod, string> = {
 };
 
 /**
- * Every distinct `command` executable on `path`, in PATH order. Entries that
- * resolve to the same file (a repeated PATH directory, Homebrew's `bin` and
- * `opt` links) count once.
+ * `npm exec`, `npx`, package scripts, and `dlx` prepend a project's or a cache's
+ * `node_modules/.bin`, which is gone from PATH once the command ends.
+ */
+const isPackageBin = (executable: string): boolean => {
+	const bin = dirname(executable);
+	return (
+		basename(bin) === ".bin" && basename(dirname(bin)) === "node_modules"
+	);
+};
+
+/**
+ * Every distinct `command` executable on `path`, in PATH order, leaving out
+ * package-local `node_modules/.bin` entries. Entries that resolve to the same
+ * file (a repeated PATH directory, Homebrew's `bin` and `opt` links) count once.
  */
 export const findCliInstalls = (
 	command: string,
@@ -239,6 +250,7 @@ export const findCliInstalls = (
 		nothrow: true,
 		path,
 	}) ?? []) {
+		if (isPackageBin(executable)) continue;
 		const target = realpathSync(executable);
 		if (seen.has(target)) continue;
 		seen.add(target);

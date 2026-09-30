@@ -289,6 +289,20 @@ describe("findCliInstalls", () => {
 		).toEqual([{ method: "npm", path: join(npm, "neon") }]);
 	});
 
+	it("leaves out a project's node_modules/.bin", () => {
+		const root = scratch();
+		const brew = install(root, HOMEBREW, "brew/bin");
+		const local = install(
+			root,
+			"project/node_modules/neon/dist/cli.js",
+			"project/node_modules/.bin",
+		);
+
+		expect(findCliInstalls("neon", [local, brew].join(delimiter))).toEqual([
+			{ method: "homebrew", path: join(brew, "neon") },
+		]);
+	});
+
 	it("finds nothing on an empty PATH", () => {
 		expect(findCliInstalls("neon", scratch())).toEqual([]);
 	});
