@@ -115,6 +115,9 @@ describe("trusted direct subscriptions", () => {
 			status: "live",
 			data: [{ id: 1, body: "hello" }],
 		});
+		await expect(
+			subscription.awaitRows((rows) => rows[0]?.body === "hello"),
+		).resolves.toBeUndefined();
 
 		subscription.unsubscribe();
 		expect(subscription.getState().status).toBe("closed");

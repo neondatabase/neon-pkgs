@@ -15,6 +15,7 @@ import type {
 	ReconciledBatch,
 	ReconciliationTarget,
 } from "./reconciliation/reconciler.js";
+import { waitForRows } from "./row-waiter.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 import { TransactionTracker } from "./transaction-tracker.js";
 import type {
@@ -138,6 +139,18 @@ export class Subscription<Row>
 
 	awaitTxId = (txid: string, timeout?: number): Promise<void> =>
 		this.transactions.wait(txid, timeout);
+
+	awaitRows = (
+		matches: (rows: readonly Row[]) => boolean,
+		timeout?: number,
+	): Promise<void> => {
+		if (!this.materialized) {
+			return Promise.reject(
+				new Error("Raw Neon Live subscriptions do not expose rows"),
+			);
+		}
+		return waitForRows(this, matches, timeout);
+	};
 
 	onChange = (
 		listener: (snapshot: LiveQuerySnapshot<Row>) => void,

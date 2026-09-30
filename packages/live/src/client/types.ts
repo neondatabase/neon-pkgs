@@ -169,6 +169,22 @@ export interface MaterializedLiveQuerySubscription<Row>
 	/** Return the current rows and lifecycle state atomically. */
 	getSnapshot(): LiveQuerySnapshot<Row>;
 	/**
+	 * Wait until the materialized rows satisfy a predicate.
+	 *
+	 * The current snapshot is inspected before waiting for later changes, so
+	 * this also succeeds when matching rows arrived before the call.
+	 *
+	 * @param matches - Predicate evaluated against each complete row snapshot.
+	 * @param timeout - Optional maximum wait in milliseconds. By default the
+	 * promise remains pending until the rows match or the subscription closes.
+	 * @throws If a supplied timeout elapses, the predicate throws, or the
+	 * subscription closes or enters a terminal error before the rows match.
+	 */
+	awaitRows(
+		matches: (rows: readonly Row[]) => boolean,
+		timeout?: number,
+	): Promise<void>;
+	/**
 	 * Observe row or lifecycle changes as complete snapshots.
 	 * The listener runs after resets, publication batches, and state transitions.
 	 *
