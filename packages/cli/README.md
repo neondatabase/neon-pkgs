@@ -54,8 +54,8 @@ does not run in CI, for machine-readable output, or from standalone binaries.
 On macOS and Linux, the same terminal commands warn once a day when more than one
 global `neon` install is on PATH, listing each one in PATH order. A project's
 `node_modules/.bin`, which `npx` and package scripts add, doesn't count. When one
-of them is Homebrew, the warning recommends `brew uninstall neonctl` so `neon`
-runs the npm install. While duplicates remain, the update notice is held back;
+of them is Homebrew, the warning recommends `brew uninstall neonctl`, which
+leaves `neon` running the other install, such as npm. While duplicates remain, the update notice is held back;
 `NO_UPDATE_NOTIFIER=1` silences both.
 
 ## Connect
