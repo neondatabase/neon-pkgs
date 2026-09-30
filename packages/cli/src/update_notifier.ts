@@ -286,7 +286,7 @@ export const formatDuplicateInstallNotice = ({
 	const lines = ["Multiple Neon CLI installs found on PATH:", ...rows];
 
 	if (!installs.some(({ method }) => method === "homebrew")) {
-		lines.push("Keep one: uninstall the others or reorder PATH.");
+		lines.push("Keep one and uninstall the others.");
 		return lines.join("\n");
 	}
 

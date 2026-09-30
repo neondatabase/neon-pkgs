@@ -400,7 +400,7 @@ describe("formatDuplicateInstallNotice", () => {
 				"Multiple Neon CLI installs found on PATH:",
 				"  /Users/user/.nvm/versions/node/v24.18.0/bin/neon (npm, first on PATH)",
 				"  /Users/user/.bun/bin/neon (Bun)",
-				"Keep one: uninstall the others or reorder PATH.",
+				"Keep one and uninstall the others.",
 			].join("\n"),
 		);
 	});
