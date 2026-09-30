@@ -30,7 +30,7 @@ export function manageDirectSubscription<
 	const refresh = new QueryRefreshController({
 		query,
 		refreshQuery,
-		applyQuery: (query) => subscription.renew(query),
+		renewSubscription: (query) => subscription.renew(query),
 		onRefreshExhausted: () => undefined,
 	});
 

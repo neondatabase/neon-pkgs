@@ -30,8 +30,8 @@ export function useLiveQuery<Row>(
 		[client, query],
 	);
 	useEffect(() => {
-		store.setRefreshQuery(options.refreshQuery);
-		return () => store.setRefreshQuery(undefined);
+		store.setRefreshCallback(options.refreshQuery);
+		return () => store.setRefreshCallback(undefined);
 	}, [store, options.refreshQuery]);
 	const snapshot = useSyncExternalStore(
 		store.subscribe,

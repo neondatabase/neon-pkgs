@@ -53,9 +53,9 @@ export class ReactLiveQueryStore<Row> {
 		this.hookSnapshot = this.initialSnapshot;
 		this.queryRefresh = new QueryRefreshController({
 			query,
-			applyQuery: (replacement) =>
+			renewSubscription: (replacement) =>
 				this.subscription?.renew(replacement) ?? Promise.resolve(),
-			onQueryApplied: () => {
+			onSubscriptionRenewed: () => {
 				this.refreshError = undefined;
 				const subscription = this.subscription;
 				if (subscription) this.update(subscription.getSnapshot());
@@ -78,10 +78,10 @@ export class ReactLiveQueryStore<Row> {
 		});
 	}
 
-	setRefreshQuery(
+	setRefreshCallback(
 		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
-		this.queryRefresh.setRefreshQuery(refreshQuery);
+		this.queryRefresh.setRefreshCallback(refreshQuery);
 	}
 
 	subscribe = (listener: () => void): (() => void) => {

@@ -8,10 +8,10 @@ interface QueryRefreshControllerOptions<Row> {
 	readonly query: SealedLiveQuery<Row>;
 	/** Callback that obtains a replacement capability for the same query. */
 	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
-	/** Install a replacement on the underlying subscription. */
-	readonly applyQuery: (query: SealedLiveQuery<Row>) => Promise<void>;
-	/** Called after a replacement has been installed successfully. */
-	readonly onQueryApplied?: () => void;
+	/** Renew the underlying subscription with a replacement query. */
+	readonly renewSubscription: (query: SealedLiveQuery<Row>) => Promise<void>;
+	/** Called after the underlying subscription has been renewed successfully. */
+	readonly onSubscriptionRenewed?: () => void;
 	/** Called when invalid replacement data permanently stops automatic refresh. */
 	readonly onRefreshExhausted: (error: unknown) => void;
 }
@@ -51,7 +51,7 @@ export class QueryRefreshController<Row> {
 	 * Passing `undefined` disables scheduled refreshes without stopping the
 	 * controller.
 	 */
-	setRefreshQuery(
+	setRefreshCallback(
 		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
 		this.refreshQuery = refreshQuery;
@@ -69,10 +69,10 @@ export class QueryRefreshController<Row> {
 	 */
 	async replaceSealedQuery(query: SealedLiveQuery<Row>): Promise<void> {
 		this.assertSameQuery(query);
-		await this.options.applyQuery(query);
+		await this.options.renewSubscription(query);
 		this.query = query;
 		this.refreshStopped = false;
-		this.options.onQueryApplied?.();
+		this.options.onSubscriptionRenewed?.();
 		this.scheduleRefresh();
 	}
 
@@ -133,7 +133,7 @@ export class QueryRefreshController<Row> {
 			// the one still waiting for acceptance.
 			this.query = query;
 			this.scheduleRefresh();
-			void this.applyRecoverableQuery(query, generation);
+			void this.renewSubscriptionRecoverably(query, generation);
 		} catch {
 			if (!this.isCurrent(generation)) return;
 			this.scheduleRefresh(REFRESH_RETRY_MS);
@@ -142,14 +142,14 @@ export class QueryRefreshController<Row> {
 		}
 	}
 
-	private async applyRecoverableQuery(
+	private async renewSubscriptionRecoverably(
 		query: SealedLiveQuery<Row>,
 		generation: number,
 	): Promise<void> {
 		try {
-			await this.options.applyQuery(query);
+			await this.options.renewSubscription(query);
 			if (this.isCurrent(generation) && this.query === query)
-				this.options.onQueryApplied?.();
+				this.options.onSubscriptionRenewed?.();
 		} catch {
 			if (this.isCurrent(generation) && this.query === query)
 				this.scheduleRefresh(REFRESH_RETRY_MS);

@@ -167,7 +167,7 @@ function createNeonLiveCollectionOptions<
 				const queryRefresh = new QueryRefreshController({
 					query: initialQuery,
 					refreshQuery,
-					applyQuery: (replacement) =>
+					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
 					onRefreshExhausted: reportError,
 				});

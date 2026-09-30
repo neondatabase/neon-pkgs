@@ -12,13 +12,13 @@ describe("QueryRefreshController", () => {
 		vi.setSystemTime(0);
 		const replacement = query(40);
 		const refreshQuery = vi.fn(async () => replacement);
-		const applyQuery = vi.fn();
-		const onQueryApplied = vi.fn();
+		const renewSubscription = vi.fn();
+		const onSubscriptionRenewed = vi.fn();
 		const controller = new QueryRefreshController({
 			query: query(20),
 			refreshQuery,
-			applyQuery,
-			onQueryApplied,
+			renewSubscription,
+			onSubscriptionRenewed,
 			onRefreshExhausted: vi.fn(),
 		});
 
@@ -27,8 +27,8 @@ describe("QueryRefreshController", () => {
 		expect(refreshQuery).not.toHaveBeenCalled();
 		await vi.advanceTimersByTimeAsync(1);
 
-		expect(applyQuery).toHaveBeenCalledWith(replacement);
-		expect(onQueryApplied).toHaveBeenCalledOnce();
+		expect(renewSubscription).toHaveBeenCalledWith(replacement);
+		expect(onSubscriptionRenewed).toHaveBeenCalledOnce();
 		expect(controller.currentQuery()).toBe(replacement);
 		controller.stop();
 	});
@@ -43,7 +43,7 @@ describe("QueryRefreshController", () => {
 		const controller = new QueryRefreshController({
 			query: query(2),
 			refreshQuery,
-			applyQuery: vi.fn(),
+			renewSubscription: vi.fn(),
 			onRefreshExhausted,
 		});
 
@@ -65,11 +65,11 @@ describe("QueryRefreshController", () => {
 					resolveRefresh = resolve;
 				}),
 		);
-		const applyQuery = vi.fn();
+		const renewSubscription = vi.fn();
 		const controller = new QueryRefreshController({
 			query: query(2),
 			refreshQuery,
-			applyQuery,
+			renewSubscription,
 			onRefreshExhausted: vi.fn(),
 		});
 
@@ -79,7 +79,7 @@ describe("QueryRefreshController", () => {
 		resolveRefresh(query(20));
 		await Promise.resolve();
 
-		expect(applyQuery).not.toHaveBeenCalled();
+		expect(renewSubscription).not.toHaveBeenCalled();
 	});
 
 	it("keeps obtaining capabilities while acceptance is pending", async () => {
@@ -87,21 +87,21 @@ describe("QueryRefreshController", () => {
 		vi.setSystemTime(0);
 		const pending = new Promise<void>(() => undefined);
 		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 20));
-		const applyQuery = vi.fn(() => pending);
+		const renewSubscription = vi.fn(() => pending);
 		const controller = new QueryRefreshController({
 			query: query(20),
 			refreshQuery,
-			applyQuery,
+			renewSubscription,
 			onRefreshExhausted: vi.fn(),
 		});
 
 		controller.start();
 		await vi.advanceTimersByTimeAsync(10_000);
 		expect(refreshQuery).toHaveBeenCalledOnce();
-		expect(applyQuery).toHaveBeenCalledOnce();
+		expect(renewSubscription).toHaveBeenCalledOnce();
 		await vi.advanceTimersByTimeAsync(10_000);
 		expect(refreshQuery).toHaveBeenCalledTimes(2);
-		expect(applyQuery).toHaveBeenCalledTimes(2);
+		expect(renewSubscription).toHaveBeenCalledTimes(2);
 		controller.stop();
 	});
 
@@ -112,12 +112,12 @@ describe("QueryRefreshController", () => {
 			...query(20),
 			queryFingerprint: "22".repeat(32),
 		}));
-		const applyQuery = vi.fn();
+		const renewSubscription = vi.fn();
 		const onRefreshExhausted = vi.fn();
 		const controller = new QueryRefreshController({
 			query: query(2),
 			refreshQuery,
-			applyQuery,
+			renewSubscription,
 			onRefreshExhausted,
 		});
 
@@ -125,7 +125,7 @@ describe("QueryRefreshController", () => {
 		await vi.advanceTimersByTimeAsync(10_000);
 
 		expect(refreshQuery).toHaveBeenCalledOnce();
-		expect(applyQuery).not.toHaveBeenCalled();
+		expect(renewSubscription).not.toHaveBeenCalled();
 		expect(onRefreshExhausted).toHaveBeenCalledWith(
 			expect.objectContaining({
 				message: "Neon Live renewal must be for the same query",
