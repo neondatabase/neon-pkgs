@@ -1,26 +1,23 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import {
-	existsSync,
-	readFileSync,
-	realpathSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
 import which from "which";
 import { isCi } from "./env.js";
 import { log } from "./log.js";
+import { showNotice } from "./notices.js";
+import { writeJsonFile } from "./utils/json_file.js";
 import {
 	type CliInstallMethod,
 	detectCliInstallMethod,
 	recommendedCliUpgradeCommand,
 } from "./utils/package_manager.js";
 
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const NOTIFY_INTERVAL_MS = 3 * CHECK_INTERVAL_MS;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = DAY_MS;
+const UPDATE_NOTICE_INTERVAL_MS = 3 * DAY_MS;
+const DUPLICATE_NOTICE_INTERVAL_MS = DAY_MS;
 const CACHE_FILE = "update-check.json";
 
 export type UpdateSource = "homebrew" | "npm";
@@ -28,7 +25,6 @@ export type UpdateSource = "homebrew" | "npm";
 export type UpdateCheckCache = {
 	checkedAt: number;
 	latestVersion?: string;
-	notifiedAt?: number;
 	source: UpdateSource;
 };
 
@@ -78,10 +74,7 @@ export const parseUpdateCheckCache = (
 			!Number.isFinite(value.checkedAt) ||
 			(value.source !== "homebrew" && value.source !== "npm") ||
 			(value.latestVersion !== undefined &&
-				typeof value.latestVersion !== "string") ||
-			(value.notifiedAt !== undefined &&
-				(typeof value.notifiedAt !== "number" ||
-					!Number.isFinite(value.notifiedAt)))
+				typeof value.latestVersion !== "string")
 		) {
 			return undefined;
 		}
@@ -92,9 +85,6 @@ export const parseUpdateCheckCache = (
 			...(value.latestVersion === undefined
 				? {}
 				: { latestVersion: value.latestVersion }),
-			...(value.notifiedAt === undefined
-				? {}
-				: { notifiedAt: value.notifiedAt }),
 		};
 	} catch {
 		return undefined;
@@ -114,25 +104,7 @@ const readUpdateCheckCache = (
 export const writeUpdateCheckCache = (
 	cachePath: string,
 	cache: UpdateCheckCache,
-): boolean => {
-	const temporaryPath = `${cachePath}.${process.pid}.tmp`;
-	try {
-		writeFileSync(temporaryPath, `${JSON.stringify(cache)}\n`, {
-			mode: 0o600,
-		});
-		renameSync(temporaryPath, cachePath);
-		return true;
-	} catch (error) {
-		try {
-			rmSync(temporaryPath, { force: true });
-		} catch {}
-		log.debug(
-			"Could not write the CLI update cache: %s",
-			error instanceof Error ? error.message : String(error),
-		);
-		return false;
-	}
-};
+): boolean => writeJsonFile(cachePath, cache, "CLI update cache");
 
 export const formatUpdateNotice = ({
 	currentVersion,
@@ -369,11 +341,20 @@ export const notifyIfUpdateAvailable = ({
 
 	// One Windows install puts `neon`, `neon.cmd`, and `neon.ps1` on PATH as separate files,
 	// so file identity can't count installs there.
+	const now = Date.now();
+
 	if (process.platform !== "win32") {
 		const duplicateNotice = duplicateInstallNotice();
 		if (duplicateNotice !== undefined) {
-			// Takes the place of the version notice, which would say `brew upgrade neonctl`.
-			log.warning("%s", duplicateNotice);
+			// Stands in for the version notice, which would say `brew upgrade neonctl`, even
+			// on days the duplicate notice itself is not due.
+			showNotice({
+				configDir,
+				id: "duplicate-installs",
+				intervalMs: DUPLICATE_NOTICE_INTERVAL_MS,
+				message: duplicateNotice,
+				now,
+			});
 			return;
 		}
 	}
@@ -384,36 +365,32 @@ export const notifyIfUpdateAvailable = ({
 	if (command === undefined) return;
 
 	const cachePath = join(configDir, CACHE_FILE);
-	const now = Date.now();
 	const source = updateSource(command);
 	const cache = cacheForUpdateSource(readUpdateCheckCache(cachePath), source);
-	let nextCache = cache;
+
+	const notice =
+		cache?.latestVersion === undefined
+			? undefined
+			: formatUpdateNotice({
+					currentVersion,
+					latestVersion: cache.latestVersion,
+					upgradeCommand: command,
+				});
+	if (notice !== undefined) {
+		showNotice({
+			configDir,
+			id: "update",
+			intervalMs: UPDATE_NOTICE_INTERVAL_MS,
+			message: notice,
+			now,
+		});
+	}
+
+	if (!shouldRefreshUpdateCheck(cache, now)) return;
 
 	if (
-		cache?.latestVersion !== undefined &&
-		(cache.notifiedAt === undefined ||
-			now - cache.notifiedAt >= NOTIFY_INTERVAL_MS)
+		writeUpdateCheckCache(cachePath, { ...cache, checkedAt: now, source })
 	) {
-		const notice = formatUpdateNotice({
-			currentVersion,
-			latestVersion: cache.latestVersion,
-			upgradeCommand: command,
-		});
-		if (notice !== undefined) {
-			log.warning("%s", notice);
-			nextCache = { ...cache, notifiedAt: now };
-		}
-	}
-
-	if (!shouldRefreshUpdateCheck(cache, now)) {
-		if (nextCache !== cache && nextCache !== undefined) {
-			writeUpdateCheckCache(cachePath, nextCache);
-		}
-		return;
-	}
-
-	nextCache = { ...nextCache, checkedAt: now, source };
-	if (writeUpdateCheckCache(cachePath, nextCache)) {
 		spawnUpdateWorker(cachePath, source);
 	}
 };

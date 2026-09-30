@@ -47,16 +47,16 @@ brew upgrade neonctl
 To upgrade a binary version, download the latest binary file, as described above, and replace your old binary with the new one.
 
 Global npm, pnpm, Bun, and Homebrew installs check for updates once per day.
-When an update is available, terminal commands periodically print the matching
-upgrade command. Set `NO_UPDATE_NOTIFIER=1` to disable these checks. The notifier
+When an update is available, terminal commands print the matching upgrade command
+every three days. Set `NO_UPDATE_NOTIFIER=1` to disable these checks. The notifier
 does not run in CI, for machine-readable output, or from standalone binaries.
 
-On macOS and Linux, the same terminal commands warn when more than one global
-`neon` install is on PATH, listing each one in PATH order. A project's
-`node_modules/.bin`, which `npx` and package scripts add, doesn't count. When one of them is Homebrew,
-the warning recommends `brew uninstall neonctl` so `neon` runs the npm install.
-It repeats on every command until one install remains; `NO_UPDATE_NOTIFIER=1`
-silences it too.
+On macOS and Linux, the same terminal commands warn once a day when more than one
+global `neon` install is on PATH, listing each one in PATH order. A project's
+`node_modules/.bin`, which `npx` and package scripts add, doesn't count. When one
+of them is Homebrew, the warning recommends `brew uninstall neonctl` so `neon`
+runs the npm install. While duplicates remain, the update notice is held back;
+`NO_UPDATE_NOTIFIER=1` silences both.
 
 ## Connect
 

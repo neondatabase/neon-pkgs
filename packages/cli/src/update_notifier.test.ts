@@ -114,16 +114,22 @@ describe("parseUpdateCheckCache", () => {
 				JSON.stringify({
 					checkedAt: 100,
 					latestVersion: "5.1.0",
-					notifiedAt: 200,
 					source: "npm",
 				}),
 			),
 		).toEqual({
 			checkedAt: 100,
 			latestVersion: "5.1.0",
-			notifiedAt: 200,
 			source: "npm",
 		});
+	});
+
+	it("reads a cache written by an older CLI, without its notice timestamp", () => {
+		expect(
+			parseUpdateCheckCache(
+				'{"checkedAt":100,"latestVersion":"5.1.0","notifiedAt":200,"source":"npm"}',
+			),
+		).toEqual({ checkedAt: 100, latestVersion: "5.1.0", source: "npm" });
 	});
 
 	it.each([
@@ -133,7 +139,6 @@ describe("parseUpdateCheckCache", () => {
 		'{"checkedAt":"100"}',
 		'{"checkedAt":100,"source":"other"}',
 		'{"checkedAt":100,"latestVersion":1}',
-		'{"checkedAt":100,"notifiedAt":"200"}',
 	])("rejects malformed cache data: %s", (raw) => {
 		expect(parseUpdateCheckCache(raw)).toBeUndefined();
 	});
@@ -166,7 +171,6 @@ describe("cacheForUpdateSource", () => {
 	const cache: UpdateCheckCache = {
 		checkedAt: 100,
 		latestVersion: "5.1.0",
-		notifiedAt: 200,
 		source: "npm",
 	};
 
