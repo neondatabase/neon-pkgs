@@ -5,7 +5,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
-import type { PreparedAuthorizationQuery } from "../adapter.js";
+import type { PreparedLiveQuery } from "../adapter.js";
 import {
 	asBufferSource,
 	concatBytes,
@@ -23,7 +23,7 @@ const SECRET = encodeSecret({
 	iss: "example-app",
 	key: encodeBase64Url(KEY),
 });
-const QUERY: PreparedAuthorizationQuery = {
+const QUERY: PreparedLiveQuery = {
 	sql: "select id, body from messages where channel_id = $1",
 	parameters: [{ typeOid: 23, value: "7" }],
 };
@@ -40,13 +40,13 @@ describe("Neon Live v1 capability issuer", () => {
 	});
 
 	it("emits interoperable dir/A256GCM Compact JWE claims", async () => {
-		const authorization = await createCapabilityIssuer(
+		const sealedQuery = await createCapabilityIssuer(
 			parseNeonLiveSecret(SECRET),
 			"app",
 			() => 1_700_000_000_123,
 		)(QUERY);
 
-		const { header, claims } = await decrypt(authorization.capability, KEY);
+		const { header, claims } = await decrypt(sealedQuery.capability, KEY);
 		expect(
 			validateCapability({ protected: header, claims }),
 			JSON.stringify(validateCapability.errors),
@@ -62,14 +62,14 @@ describe("Neon Live v1 capability issuer", () => {
 			aud: "neon-live-proxy",
 			iss: "example-app",
 			database: "app",
-			query_fingerprint: authorization.queryFingerprint,
+			query_fingerprint: sealedQuery.queryFingerprint,
 			sql: QUERY.sql,
 			parameters: [{ type_oid: 23, value: "Nw==" }],
 			iat: 1_700_000_000,
 			exp: 1_700_000_060,
 		});
 		expect(claims).not.toHaveProperty("branch");
-		expect(authorization.expiresAt).toBe(1_700_000_060_000);
+		expect(sealedQuery.expiresAt).toBe(1_700_000_060_000);
 	});
 
 	it("uses a fresh 96-bit IV without changing the query fingerprint", async () => {

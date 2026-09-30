@@ -1,4 +1,4 @@
-import type { PreparedAuthorizationQuery } from "../adapter.js";
+import type { PreparedLiveQuery } from "../adapter.js";
 import {
 	asBufferSource,
 	concatBytes,
@@ -13,7 +13,7 @@ const FINGERPRINT_DOMAIN = utf8("neon-live-query-fingerprint-v1\0");
 
 /** Compute the stable identity used to reject renewal with a different query. */
 export async function queryFingerprint(
-	query: PreparedAuthorizationQuery,
+	query: PreparedLiveQuery,
 ): Promise<string> {
 	const canonical = {
 		sql: query.sql,

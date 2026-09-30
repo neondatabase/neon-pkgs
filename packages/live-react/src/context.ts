@@ -9,7 +9,7 @@ export const NeonLiveContext = createContext<NeonLiveClient | null>(null);
  * hooks.
  *
  * Create the client once for the browser application. The provider does not
- * fetch query authorizations or close the client when it unmounts.
+ * fetch query sealed queries or close the client when it unmounts.
  *
  * @param props - Shared client and descendant React tree.
  * @returns A context provider for Neon Live hooks.

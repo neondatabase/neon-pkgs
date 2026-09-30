@@ -1,6 +1,6 @@
 import {
 	encodeTextParameter,
-	type PreparedAuthorizationQuery,
+	type PreparedLiveQuery,
 	type PreparedLiveQueryParameter,
 } from "./adapter.js";
 import {
@@ -20,7 +20,7 @@ export type RawSqlParameter =
 	| TypedRawSqlParameter;
 
 /** Parameterized raw PostgreSQL SQL carrying its declared result-row type. */
-export interface RawSqlQuery<Row> extends PreparedAuthorizationQuery {
+export interface RawSqlQuery<Row> extends PreparedLiveQuery {
 	/** @internal Private brand used to distinguish explicit raw SQL. */
 	readonly [RAW_SQL_QUERY]: true;
 	/** @internal Carries the declared row type without adding runtime data. */
@@ -51,7 +51,7 @@ export function rawSql<Row>(
 
 export function prepareRawSqlQuery(
 	query: RawSqlQuery<unknown>,
-): PreparedAuthorizationQuery {
+): PreparedLiveQuery {
 	return Object.freeze({
 		sql: query.sql,
 		parameters: Object.freeze([...query.parameters]),

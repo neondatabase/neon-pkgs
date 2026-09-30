@@ -132,7 +132,7 @@ describe("ConnectionCoordinator", () => {
 		await second;
 	});
 
-	it("reconnects and resubscribes with the newest authorization", async () => {
+	it("reconnects and resubscribes with the newest sealed query", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();
 		const coordinator = createCoordinator();

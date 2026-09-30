@@ -124,11 +124,11 @@ describe("Neon Live backend SDK", () => {
 		});
 
 		await neonLive.seal({ query: { owner: "adapter" } });
-		const rawAuthorization = await neonLive.seal({
+		const rawSealedQuery = await neonLive.seal({
 			query: messagesByOwner("raw"),
 		});
 
-		expectTypeOf(rawAuthorization).toEqualTypeOf<
+		expectTypeOf(rawSealedQuery).toEqualTypeOf<
 			SealedLiveQuery<MessageRow>
 		>();
 		expect(prepare).toHaveBeenCalledOnce();

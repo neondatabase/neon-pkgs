@@ -1,7 +1,7 @@
 {
   "name": "@neon/live-drizzle",
   "version": "0.0.0",
-  "description": "Drizzle adapter for Neon Live query authorization.",
+  "description": "Drizzle adapter for sealing Neon Live queries.",
   "keywords": [
     "neon",
     "database",

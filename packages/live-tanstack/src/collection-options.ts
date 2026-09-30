@@ -1,8 +1,8 @@
 import {
-	AuthorizationRefreshController,
 	type LiveQueryChange,
 	type LiveQueryState,
 	type NeonLiveClient,
+	QueryRefreshController,
 	type RawLiveQueryRow,
 	type RawLiveQuerySubscription,
 	type SealedLiveQuery,
@@ -58,13 +58,13 @@ export interface NeonLiveCollectionConfig<
 	> {
 	/** Reusable low-level Neon Live client. */
 	readonly client: NeonLiveClient;
-	/** Initial authorization for the exact query backing this collection. */
-	readonly authorization: SealedLiveQuery<Row>;
+	/** Initial query for the exact query backing this collection. */
+	readonly query: SealedLiveQuery<Row>;
 	/**
 	 * Obtain a replacement capability for the same exact query before expiry.
 	 * Transient failures are retried while the current capability remains valid.
 	 */
-	readonly refreshAuthorization?: () => Promise<SealedLiveQuery<Row>>;
+	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
 	/** Derive the stable unique TanStack DB key for a row. */
 	readonly getKey: (row: Row) => Key;
 }
@@ -117,12 +117,7 @@ function createNeonLiveCollectionOptions<
 >(
 	config: NeonLiveCollectionConfig<Row, Key, Schema>,
 ): NeonLiveCollectionOptions<Row, Key, Schema> {
-	const {
-		client,
-		authorization: initialAuthorization,
-		refreshAuthorization,
-		...baseConfig
-	} = config;
+	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	const utils: NeonLiveCollectionUtils = Object.freeze({
 		awaitTxId: async (txid, timeout) => {
@@ -161,7 +156,7 @@ function createNeonLiveCollectionOptions<
 				let cleaned = false;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
-				const subscription = client.subscribe(initialAuthorization, {
+				const subscription = client.subscribe(initialQuery, {
 					materialize: false,
 				});
 				activeSubscription = subscription;
@@ -169,15 +164,13 @@ function createNeonLiveCollectionOptions<
 				const reportError = (error: unknown) => {
 					if (!cleaned) markError(error);
 				};
-				const authorizationRefresh = new AuthorizationRefreshController(
-					{
-						authorization: initialAuthorization,
-						refreshAuthorization,
-						applyAuthorization: (replacement) =>
-							subscription.renew(replacement),
-						onRefreshExhausted: reportError,
-					},
-				);
+				const queryRefresh = new QueryRefreshController({
+					query: initialQuery,
+					refreshQuery,
+					applyQuery: (replacement) =>
+						subscription.renew(replacement),
+					onRefreshExhausted: reportError,
+				});
 				const observeReceipt = (
 					receipt: SyncAppliedReceipt,
 					onApplied?: () => void,
@@ -315,11 +308,11 @@ function createNeonLiveCollectionOptions<
 				const unsubscribeBatch = subscription.onBatch(applyBatch);
 				const unsubscribeState =
 					subscription.onStateChange(stateChanged);
-				authorizationRefresh.start();
+				queryRefresh.start();
 
 				return () => {
 					cleaned = true;
-					authorizationRefresh.stop();
+					queryRefresh.stop();
 					unsubscribeReset();
 					unsubscribeBatch();
 					unsubscribeState();

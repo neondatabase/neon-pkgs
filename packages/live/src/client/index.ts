@@ -1,4 +1,3 @@
-export type { SealedLiveQuery } from "./authorization.js";
 export { createNeonLiveClient } from "./neon-live-client.js";
 export type {
 	PostgreSQLBytesParser,
@@ -12,6 +11,7 @@ export {
 	pgTypeOids,
 	postgresJsParsers,
 } from "./postgres/index.js";
+export type { SealedLiveQuery } from "./sealed-query.js";
 export type {
 	LiveQueryBatchInfo,
 	LiveQueryChange,

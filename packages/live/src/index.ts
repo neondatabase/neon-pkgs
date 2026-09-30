@@ -6,7 +6,7 @@ export type {
 	NeonLiveServer,
 	NeonLiveServerOptions,
 	PostgresParameterHelpers,
-	PreparedAuthorizationQuery,
+	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
 	RawSqlParameter,
 	RawSqlQuery,

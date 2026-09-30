@@ -1,4 +1,4 @@
-import type { PreparedAuthorizationQuery } from "../adapter.js";
+import type { PreparedLiveQuery } from "../adapter.js";
 import {
 	asBufferSource,
 	encodeBase64,
@@ -10,12 +10,12 @@ import { queryFingerprint } from "./fingerprint.js";
 import type { NeonLiveQueryCapabilityV1 } from "./schema/neon-live-query-capability-v1.gen.js";
 import type { NeonLiveSecret } from "./secret.js";
 
-const AUTHORIZATION_LIFETIME_SECONDS = 60;
+const SEALED_QUERY_LIFETIME_SECONDS = 60;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const MAX_TOKEN_BYTES = 256 * 1024;
 
-export interface IssuedLiveQueryAuthorization {
+export interface IssuedSealedLiveQuery {
 	readonly capability: string;
 	readonly queryFingerprint: string;
 	/** Capability expiry as Unix milliseconds. */
@@ -30,14 +30,12 @@ export function createCapabilityIssuer(
 	secret: NeonLiveSecret,
 	database: string,
 	clock: () => number = Date.now,
-): (
-	query: PreparedAuthorizationQuery,
-) => Promise<IssuedLiveQueryAuthorization> {
+): (query: PreparedLiveQuery) => Promise<IssuedSealedLiveQuery> {
 	const keyPromise = importAesKey(secret.key);
 	return async (query) => {
 		const queryFingerprintValue = await queryFingerprint(query);
 		const issuedAt = Math.floor(clock() / 1_000);
-		const expiresAt = issuedAt + AUTHORIZATION_LIFETIME_SECONDS;
+		const expiresAt = issuedAt + SEALED_QUERY_LIFETIME_SECONDS;
 		const claims: CapabilityClaims = {
 			v: 1,
 			aud: "neon-live-proxy",

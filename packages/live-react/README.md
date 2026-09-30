@@ -33,7 +33,7 @@ export function Root({ children }: { children: React.ReactNode }) {
 }
 ```
 
-A route loader, Server Component, or parent obtains the authorization from the
+A route loader, Server Component, or parent obtains the sealed query from the
 application backend. The hook deliberately does not fetch it:
 
 ```tsx
@@ -48,14 +48,14 @@ interface Message {
 
 interface MessagesProps {
   channelId: string;
-  authorization: SealedLiveQuery<Message>;
+  query: SealedLiveQuery<Message>;
   initialRows?: readonly Message[];
 }
 
 export function Messages(props: MessagesProps) {
-  const { data, status, error, utils } = useLiveQuery(props.authorization, {
+  const { data, status, error, utils } = useLiveQuery(props.query, {
     initialData: props.initialRows,
-    refreshAuthorization: () => sealMessages(props.channelId),
+    refreshQuery: () => sealMessages(props.channelId),
   });
 
   useEffect(() => utils.onBatch((_changes, batch) => {
@@ -79,12 +79,12 @@ export function Messages(props: MessagesProps) {
 The hook returns `data`, `status`, and `error`, plus stable `utils` for
 `getState()`, `getSnapshot()`, `awaitTxId()`, `renew()`, and lower-level event
 listeners. Register listeners in an effect. `utils` omits `unsubscribe()`
-because React owns cleanup when the component unmounts or its authorization
+because React owns cleanup when the component unmounts or its sealed query
 changes.
 
-When `refreshAuthorization` is present, the integration renews before expiry
+When `refreshQuery` is present, the integration renews before expiry
 and keeps retrying through capability expiry and transport outages. Existing
-data remains available with status `stale`. Changing the authorization starts
+data remains available with status `stale`. Changing the sealed query starts
 a new logical query; changing only the refresh callback does not.
 
 For SSR, execute the same query on the server and pass its rows as
@@ -135,8 +135,8 @@ endpoint reports that no change was made.
 ## API
 
 - `NeonLiveProvider` supplies one existing `NeonLiveClient` to descendant
-  hooks. It does not fetch authorizations or own the client's lifetime.
-- `useLiveQuery(authorization, options)` owns one materialized subscription and
-  cleans it up when the component unmounts or the authorization changes.
+  hooks. It does not fetch sealed queries or own the client's lifetime.
+- `useLiveQuery(query, options)` owns one materialized subscription and
+  cleans it up when the component unmounts or the sealed query changes.
 - `UseLiveQueryOptions`, `UseLiveQueryResult`, and `UseLiveQueryUtils` are
   exported for reusable component and framework typings.

@@ -1,5 +1,4 @@
 import {
-	AuthorizationRefreshController,
 	type LiveQueryBatchInfo,
 	type LiveQueryChange,
 	type LiveQueryError,
@@ -7,6 +6,7 @@ import {
 	type LiveQueryState,
 	type MaterializedLiveQuerySubscription,
 	type NeonLiveClient,
+	QueryRefreshController,
 	type RawLiveQueryRow,
 	type SealedLiveQuery,
 } from "@neon/live/client";
@@ -27,7 +27,7 @@ export class ReactLiveQueryStore<Row> {
 	private readonly resetListeners = new Set<ResetListener<Row>>();
 	private readonly batchListeners = new Set<BatchListener<Row>>();
 	private readonly initialSnapshot: LiveQuerySnapshot<Row>;
-	private readonly authorizationRefresh: AuthorizationRefreshController<Row>;
+	private readonly queryRefresh: QueryRefreshController<Row>;
 	private subscription?: MaterializedLiveQuerySubscription<Row>;
 	private detachForwarders?: () => void;
 	private refreshError?: LiveQueryError;
@@ -38,7 +38,7 @@ export class ReactLiveQueryStore<Row> {
 
 	constructor(
 		private readonly client: NeonLiveClient,
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		initialData?: readonly Row[],
 	) {
 		this.initialSnapshot = Object.freeze({
@@ -51,17 +51,17 @@ export class ReactLiveQueryStore<Row> {
 		});
 		this.snapshot = this.initialSnapshot;
 		this.hookSnapshot = this.initialSnapshot;
-		this.authorizationRefresh = new AuthorizationRefreshController({
-			authorization,
-			applyAuthorization: (replacement) =>
+		this.queryRefresh = new QueryRefreshController({
+			query,
+			applyQuery: (replacement) =>
 				this.subscription?.renew(replacement) ?? Promise.resolve(),
-			onAuthorizationApplied: () => {
+			onQueryApplied: () => {
 				this.refreshError = undefined;
 				const subscription = this.subscription;
 				if (subscription) this.update(subscription.getSnapshot());
 			},
 			onRefreshExhausted: (error) => {
-				this.refreshError = new AuthorizationRefreshError(error);
+				this.refreshError = new QueryRefreshError(error);
 				const subscription = this.subscription;
 				if (subscription) this.update(subscription.getSnapshot());
 			},
@@ -78,10 +78,10 @@ export class ReactLiveQueryStore<Row> {
 		});
 	}
 
-	setRefreshAuthorization(
-		refreshAuthorization: (() => Promise<SealedLiveQuery<Row>>) | undefined,
+	setRefreshQuery(
+		refreshQuery: (() => Promise<SealedLiveQuery<Row>>) | undefined,
 	): void {
-		this.authorizationRefresh.setRefreshAuthorization(refreshAuthorization);
+		this.queryRefresh.setRefreshQuery(refreshQuery);
 	}
 
 	subscribe = (listener: () => void): (() => void) => {
@@ -128,13 +128,13 @@ export class ReactLiveQueryStore<Row> {
 			: Promise.reject(new Error("Neon Live query is not subscribed"));
 	};
 
-	private renew = (authorization: SealedLiveQuery<Row>): Promise<void> =>
-		this.authorizationRefresh.replaceAuthorization(authorization);
+	private renew = (query: SealedLiveQuery<Row>): Promise<void> =>
+		this.queryRefresh.replaceSealedQuery(query);
 
 	private open(): void {
 		if (this.subscription) return;
 		const subscription = this.client.subscribe(
-			this.authorizationRefresh.currentAuthorization(),
+			this.queryRefresh.currentQuery(),
 			{ initialData: this.initialSnapshot.data },
 		);
 		this.subscription = subscription;
@@ -153,11 +153,11 @@ export class ReactLiveQueryStore<Row> {
 		this.detachForwarders = () => {
 			for (const unsubscribe of unsubscribers) unsubscribe();
 		};
-		this.authorizationRefresh.start();
+		this.queryRefresh.start();
 	}
 
 	private close(): void {
-		this.authorizationRefresh.stop();
+		this.queryRefresh.stop();
 		this.detachForwarders?.();
 		this.detachForwarders = undefined;
 		this.subscription?.unsubscribe();
@@ -190,13 +190,13 @@ export class ReactLiveQueryStore<Row> {
 	}
 }
 
-class AuthorizationRefreshError extends Error implements LiveQueryError {
-	readonly code = "AUTH_REFRESH_FAILED";
+class QueryRefreshError extends Error implements LiveQueryError {
+	readonly code = "QUERY_REFRESH_FAILED";
 	readonly retryable = false;
 	readonly traceId = "client";
 
 	constructor(readonly cause: unknown) {
-		super("Neon Live authorization refresh failed");
+		super("Neon Live query refresh failed");
 		this.name = "LiveQueryError";
 	}
 }

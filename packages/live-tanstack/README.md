@@ -18,7 +18,7 @@ npm install @neon/live @neon/live-tanstack @tanstack/db @standard-schema/spec
 
 ## Usage
 
-Create a collection from a shared Neon Live client and an authorization returned
+Create a collection from a shared Neon Live client and a sealed query returned
 by the application backend:
 
 ```ts
@@ -29,18 +29,18 @@ import { createCollection } from "@tanstack/db";
 const client = createNeonLiveClient({
   url: "wss://live.neon.tech/...",
 });
-const authorization = await sealTodos();
+const query = await sealTodos();
 
 export const todos = createCollection(neonLiveCollectionOptions({
   id: "todos",
   client,
-  authorization,
-  refreshAuthorization: sealTodos,
+  query,
+  refreshQuery: sealTodos,
   getKey: (todo) => todo.id,
 }));
 ```
 
-`client`, `authorization`, and `getKey` are required. `getKey` must return a
+`client`, `query`, and `getKey` are required. `getKey` must return a
 stable unique string or number for every row. Standard collection options such
 as `id`, `schema`, garbage collection, collation, and mutation handlers are
 forwarded to TanStack DB.
@@ -61,7 +61,7 @@ transaction, then explicitly wait for Neon Live to observe it:
 const todos = createCollection(neonLiveCollectionOptions({
   id: "todos",
   client,
-  authorization,
+  query,
   getKey: (todo) => todo.id,
   onUpdate: async ({ transaction, collection }) => {
     const todo = transaction.mutations[0].modified;

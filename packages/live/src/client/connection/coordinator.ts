@@ -22,7 +22,7 @@ const SOCKET_CLOSING = 2;
 const NORMAL_CLOSE = 1_000;
 const APPLICATION_CLOSE = 4_000;
 
-export interface ConnectionAuthorization {
+export interface ConnectionSealedQuery {
 	readonly capability: string;
 }
 
@@ -41,7 +41,7 @@ export interface ConnectionCoordinatorOptions {
 }
 
 export interface ConnectionHandle {
-	renew(authorization: ConnectionAuthorization): Promise<void>;
+	renew(query: ConnectionSealedQuery): Promise<void>;
 	fail(error: ConnectionCoordinatorError): void;
 	unsubscribe(): void;
 }
@@ -77,19 +77,19 @@ export class ConnectionCoordinatorError extends Error {
 }
 
 interface Renewal {
-	readonly authorization: ConnectionAuthorization;
+	readonly query: ConnectionSealedQuery;
 	readonly resolve: () => void;
 	readonly reject: (error: Error) => void;
 }
 
 type ManagedSubscriptionState =
 	| "active"
-	| "awaiting_authorization"
+	| "awaiting_query"
 	| "failed"
 	| "closed";
 
 interface ManagedSubscription {
-	authorization: ConnectionAuthorization;
+	query: ConnectionSealedQuery;
 	readonly callbacks: ConnectionCallbacks;
 	state: ManagedSubscriptionState;
 	requestId?: string;
@@ -103,10 +103,10 @@ interface ManagedSubscription {
 /** Owns one multiplexed WebSocket and request/live-ID admission routing. */
 export class ConnectionCoordinator {
 	// All logical subscriptions until they are unsubscribed or the client closes,
-	// including subscriptions awaiting authorization or in a failed state.
+	// including subscriptions awaiting a replacement query or in a failed state.
 	private readonly managedSubscriptions = new Set<ManagedSubscription>();
 	// The managed subset participating in the wire lifecycle. Subscriptions
-	// awaiting replacement authorization, failed, or closed are excluded.
+	// awaiting replacement query, failed, or closed are excluded.
 	private readonly activeSubscriptions = new Set<ManagedSubscription>();
 	private readonly pendingRequests = new Map<string, ManagedSubscription>();
 	private readonly liveSubscriptions = new Map<string, ManagedSubscription>();
@@ -151,13 +151,13 @@ export class ConnectionCoordinator {
 	}
 
 	subscribe(
-		authorization: ConnectionAuthorization,
+		query: ConnectionSealedQuery,
 		callbacks: ConnectionCallbacks,
 	): ConnectionHandle {
 		if (this.disposed) throw new Error("Neon Live client is closed");
-		validateAuthorization(authorization);
+		validateSealedQuery(query);
 		const managed: ManagedSubscription = {
-			authorization,
+			query,
 			callbacks,
 			state: "active",
 			queuedRenewals: [],
@@ -167,7 +167,7 @@ export class ConnectionCoordinator {
 		this.connect();
 		if (this.ready) this.sendSubscribe(managed);
 		return Object.freeze({
-			renew: (replacement: ConnectionAuthorization) =>
+			renew: (replacement: ConnectionSealedQuery) =>
 				this.renew(managed, replacement),
 			fail: (error: ConnectionCoordinatorError) =>
 				this.failLocalSubscription(managed, error),
@@ -194,9 +194,9 @@ export class ConnectionCoordinator {
 
 	private renew(
 		subscription: ManagedSubscription,
-		authorization: ConnectionAuthorization,
+		query: ConnectionSealedQuery,
 	): Promise<void> {
-		validateAuthorization(authorization);
+		validateSealedQuery(query);
 		if (subscription.state === "closed") {
 			return Promise.reject(
 				new Error("Neon Live subscription is closed"),
@@ -207,21 +207,21 @@ export class ConnectionCoordinator {
 				new Error("Neon Live connection cannot recover"),
 			);
 		}
-		subscription.authorization = authorization;
+		subscription.query = query;
 		this.rejectQueuedRenewals(
 			subscription,
 			new Error(
-				"Neon Live renewal was superseded by a newer authorization",
+				"Neon Live renewal was superseded by a newer sealed query",
 			),
 		);
 		const renewal = promiseWithResolvers<void>();
 		const pending: Renewal = {
-			authorization,
+			query,
 			resolve: () => renewal.resolve(),
 			reject: renewal.reject,
 		};
 		subscription.queuedRenewals.push(pending);
-		if (subscription.state === "awaiting_authorization") {
+		if (subscription.state === "awaiting_query") {
 			subscription.state = "active";
 			this.activeSubscriptions.add(subscription);
 			this.connect();
@@ -392,7 +392,7 @@ export class ConnectionCoordinator {
 		const acceptedCapability = subscription.requestedCapability;
 		if (!acceptedCapability) {
 			throw new ProtocolError(
-				"admitted a subscription without an authorization",
+				"admitted a subscription without a sealed query",
 			);
 		}
 		subscription.liveId = message.live_id;
@@ -406,7 +406,7 @@ export class ConnectionCoordinator {
 			columnCount: message.columns.length,
 			target: subscription.callbacks.reconciliation,
 		});
-		if (acceptedCapability === subscription.authorization.capability) {
+		if (acceptedCapability === subscription.query.capability) {
 			this.resolveRenewals(subscription);
 		} else if (subscription.queuedRenewals.length > 0) {
 			this.sendNextRenewal(subscription);
@@ -428,8 +428,8 @@ export class ConnectionCoordinator {
 			false,
 			message.message,
 		);
-		if (requiresReplacementAuthorization(message.code)) {
-			this.awaitReplacementAuthorization(
+		if (requiresReplacementQuery(message.code)) {
+			this.awaitReplacementQuery(
 				subscription,
 				subscription.requestedCapability,
 				error,
@@ -445,7 +445,7 @@ export class ConnectionCoordinator {
 			throw new ProtocolError("unexpected renewal response");
 		const renewal = subscription.renewing;
 		subscription.renewing = undefined;
-		subscription.acceptedCapability = renewal.authorization.capability;
+		subscription.acceptedCapability = renewal.query.capability;
 		renewal.resolve();
 		this.sendNextRenewal(subscription);
 	}
@@ -475,8 +475,8 @@ export class ConnectionCoordinator {
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
 		const error = new ConnectionCoordinatorError(code, false, message);
-		if (requiresReplacementAuthorization(code)) {
-			this.awaitReplacementAuthorization(
+		if (requiresReplacementQuery(code)) {
+			this.awaitReplacementQuery(
 				subscription,
 				subscription.acceptedCapability,
 				error,
@@ -514,13 +514,12 @@ export class ConnectionCoordinator {
 		this.requestId += 1n;
 		const requestId = this.requestId.toString();
 		subscription.requestId = requestId;
-		subscription.requestedCapability =
-			subscription.authorization.capability;
+		subscription.requestedCapability = subscription.query.capability;
 		this.pendingRequests.set(requestId, subscription);
 		this.send({
 			type: "subscribe",
 			request_id: requestId,
-			authorization: subscription.authorization.capability,
+			authorization: subscription.query.capability,
 		});
 	}
 
@@ -538,7 +537,7 @@ export class ConnectionCoordinator {
 		this.send({
 			type: "renew",
 			live_id: subscription.liveId,
-			authorization: renewal.authorization.capability,
+			authorization: renewal.query.capability,
 		});
 	}
 
@@ -691,7 +690,7 @@ export class ConnectionCoordinator {
 		}
 	}
 
-	private awaitReplacementAuthorization(
+	private awaitReplacementQuery(
 		subscription: ManagedSubscription,
 		rejectedCapability: string | undefined,
 		error: ConnectionCoordinatorError,
@@ -715,7 +714,7 @@ export class ConnectionCoordinator {
 
 		if (
 			rejectedCapability !== undefined &&
-			subscription.authorization.capability !== rejectedCapability
+			subscription.query.capability !== rejectedCapability
 		) {
 			subscription.state = "active";
 			this.activeSubscriptions.add(subscription);
@@ -724,7 +723,7 @@ export class ConnectionCoordinator {
 			return;
 		}
 
-		subscription.state = "awaiting_authorization";
+		subscription.state = "awaiting_query";
 		this.rejectRenewals(subscription, error);
 	}
 
@@ -741,7 +740,7 @@ export class ConnectionCoordinator {
 		const subscriptions = [...this.managedSubscriptions].filter(
 			(subscription) =>
 				subscription.state === "active" ||
-				subscription.state === "awaiting_authorization",
+				subscription.state === "awaiting_query",
 		);
 		for (const subscription of subscriptions)
 			this.failSubscription(subscription, error);
@@ -823,17 +822,13 @@ function defaultWebSocketFactory(
 	return new WebSocket(url, protocols);
 }
 
-function validateAuthorization(authorization: ConnectionAuthorization): void {
-	if (
-		!authorization ||
-		typeof authorization.capability !== "string" ||
-		!authorization.capability
-	) {
-		throw new Error("Invalid Neon Live authorization");
+function validateSealedQuery(query: ConnectionSealedQuery): void {
+	if (!query || typeof query.capability !== "string" || !query.capability) {
+		throw new Error("Invalid Neon Live sealed query");
 	}
 }
 
-function requiresReplacementAuthorization(code: string): boolean {
+function requiresReplacementQuery(code: string): boolean {
 	return code === "authorization_expired" || code === "key_retired";
 }
 

@@ -1,5 +1,5 @@
-import type { SealedLiveQuery } from "../client/authorization.js";
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
+import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
@@ -35,23 +35,23 @@ export class DirectLiveQueryClient {
 	}
 
 	async subscribe<Row>(
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		options:
 			| MaterializedLiveQueryOptions<Row>
 			| RawLiveQueryOptions
 			| undefined,
-		refreshAuthorization: () => Promise<SealedLiveQuery<Row>>,
+		refreshQuery: () => Promise<SealedLiveQuery<Row>>,
 	): Promise<
 		MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row>
 	> {
 		this.assertOpen();
 		const client = await this.getClient();
-		const subscription = subscribeClient(client, authorization, options);
+		const subscription = subscribeClient(client, query, options);
 		let managed!: ManagedDirectSubscription<typeof subscription>;
 		managed = manageDirectSubscription(
 			subscription,
-			authorization,
-			refreshAuthorization,
+			query,
+			refreshQuery,
 			() => this.subscriptions.delete(managed as DirectSubscription),
 		);
 		this.subscriptions.add(managed as DirectSubscription);
@@ -87,11 +87,11 @@ export class DirectLiveQueryClient {
 
 function subscribeClient<Row>(
 	client: NeonLiveClient,
-	authorization: SealedLiveQuery<Row>,
+	query: SealedLiveQuery<Row>,
 	options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
 ): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
 	if (options?.materialize === false) {
-		return client.subscribe(authorization, options);
+		return client.subscribe(query, options);
 	}
-	return client.subscribe(authorization, options);
+	return client.subscribe(query, options);
 }

@@ -1,8 +1,4 @@
 import {
-	type SealedLiveQuery,
-	validateAuthorization,
-} from "./authorization.js";
-import {
 	ConnectionCoordinator,
 	ConnectionCoordinatorError,
 	type ConnectionHandle,
@@ -11,6 +7,7 @@ import {
 	createParserRegistry,
 	type PostgreSQLParserRegistry,
 } from "./postgres/parsers.js";
+import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
 import { Subscription } from "./subscription.js";
 import type {
 	MaterializedLiveQueryOptions,
@@ -51,19 +48,19 @@ class NeonLiveClientImpl implements NeonLiveClient {
 	}
 
 	subscribe<Row>(
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
 	subscribe<Row>(
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
 	subscribe<Row>(
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
 	): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
 		if (this.disposed) throw new Error("Neon Live client is closed");
-		validateAuthorization(authorization);
+		validateSealedQuery(query);
 		const materialized = options?.materialize !== false;
 		const initialData = materialized
 			? (options as MaterializedLiveQueryOptions<Row> | undefined)
@@ -71,12 +68,12 @@ class NeonLiveClientImpl implements NeonLiveClient {
 			: undefined;
 		const subscription = new Subscription(
 			this,
-			authorization,
+			query,
 			materialized,
 			this.parsers,
 			initialData,
 		);
-		const handle = this.coordinator.subscribe(authorization, {
+		const handle = this.coordinator.subscribe(query, {
 			reconciliation: subscription,
 			admitted: (columns) => subscription.admit(columns),
 			disconnected: () => subscription.disconnected(),
@@ -88,13 +85,13 @@ class NeonLiveClientImpl implements NeonLiveClient {
 
 	async renew<Row>(
 		subscription: Subscription<Row>,
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 	): Promise<void> {
-		validateAuthorization(authorization);
+		validateSealedQuery(query);
 		const handle = this.handles.get(subscription as Subscription<unknown>);
 		if (!handle) throw new Error("Neon Live subscription is closed");
-		await handle.renew(authorization);
-		subscription.replaceAuthorization(authorization);
+		await handle.renew(query);
+		subscription.replaceSealedQuery(query);
 	}
 
 	unsubscribe<Row>(subscription: Subscription<Row>): void {
@@ -133,7 +130,7 @@ class NeonLiveClientImpl implements NeonLiveClient {
  * WebSocket connection that is bound by its first accepted query capability.
  *
  * The connection carries no user session credential; each subscription sends
- * its own short-lived authorization. Idle connections are heartbeat-probed,
+ * its own short-lived sealed query. Idle connections are heartbeat-probed,
  * and recoverable disconnects retry with capped jittered backoff until the
  * connection recovers or the client is closed.
  *

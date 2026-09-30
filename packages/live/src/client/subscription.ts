@@ -1,4 +1,3 @@
-import type { SealedLiveQuery } from "./authorization.js";
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
@@ -16,6 +15,7 @@ import type {
 	ReconciledBatch,
 	ReconciliationTarget,
 } from "./reconciliation/reconciler.js";
+import type { SealedLiveQuery } from "./sealed-query.js";
 import { TransactionTracker } from "./transaction-tracker.js";
 import type {
 	LiveQueryBatchInfo,
@@ -30,7 +30,7 @@ import type {
 export interface SubscriptionOwner {
 	renew<Row>(
 		subscription: Subscription<Row>,
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 	): Promise<void>;
 	unsubscribe<Row>(subscription: Subscription<Row>): void;
 	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void;
@@ -84,7 +84,7 @@ export class Subscription<Row>
 
 	constructor(
 		private readonly owner: SubscriptionOwner,
-		private authorization: SealedLiveQuery<Row>,
+		private query: SealedLiveQuery<Row>,
 		readonly materialized: boolean,
 		private readonly parsers: PostgreSQLParserRegistry,
 		initialData?: readonly Row[],
@@ -105,12 +105,12 @@ export class Subscription<Row>
 		this.snapshot = this.makeSnapshot();
 	}
 
-	currentAuthorization(): SealedLiveQuery<Row> {
-		return this.authorization;
+	currentQuery(): SealedLiveQuery<Row> {
+		return this.query;
 	}
 
-	replaceAuthorization(authorization: SealedLiveQuery<Row>): void {
-		this.authorization = authorization;
+	replaceSealedQuery(query: SealedLiveQuery<Row>): void {
+		this.query = query;
 	}
 
 	admit(columns: readonly WireColumn[]): void {
@@ -150,16 +150,13 @@ export class Subscription<Row>
 		return listen(this.changeListeners, listener);
 	};
 
-	renew = (authorization: SealedLiveQuery<Row>): Promise<void> => {
+	renew = (query: SealedLiveQuery<Row>): Promise<void> => {
 		if (this.closed) {
 			return Promise.reject(
 				new Error("Neon Live subscription is closed"),
 			);
 		}
-		if (
-			authorization.queryFingerprint !==
-			this.authorization.queryFingerprint
-		) {
+		if (query.queryFingerprint !== this.query.queryFingerprint) {
 			return Promise.reject(
 				new Error("Neon Live renewal must be for the same query"),
 			);
@@ -167,7 +164,7 @@ export class Subscription<Row>
 		const failedState =
 			this.state.status === "error" ? this.state : undefined;
 		if (failedState) this.setLifecycle(staleState(this));
-		return this.owner.renew(this, authorization).catch((error: unknown) => {
+		return this.owner.renew(this, query).catch((error: unknown) => {
 			if (failedState && this.state.status !== "error") {
 				this.setLifecycle(failedState);
 			}

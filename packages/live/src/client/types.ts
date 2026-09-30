@@ -1,11 +1,11 @@
-import type { SealedLiveQuery } from "./authorization.js";
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
+import type { SealedLiveQuery } from "./sealed-query.js";
 
 /** An error reported by a Neon Live subscription. */
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
 	readonly code: string;
-	/** Whether reconnecting or obtaining a fresh authorization may recover it. */
+	/** Whether reconnecting or obtaining a fresh sealed query may recover it. */
 	readonly retryable: boolean;
 }
 
@@ -154,7 +154,7 @@ export interface RawLiveQuerySubscription<Row> {
 	 * A subsequent authoritative reset returns the subscription to `live`.
 	 * @throws If the replacement query fingerprint differs or renewal is rejected.
 	 */
-	renew(authorization: SealedLiveQuery<Row>): Promise<void>;
+	renew(query: SealedLiveQuery<Row>): Promise<void>;
 	/** Permanently close this subscription and remove its listeners. */
 	unsubscribe(): void;
 }
@@ -197,29 +197,29 @@ export interface NeonLiveClient {
 	/**
 	 * Start a materialized subscription, optionally with preloaded rows.
 	 *
-	 * @typeParam Row - Row inferred from the authorization.
-	 * @param authorization - Short-lived capability returned by the application
+	 * @typeParam Row - Row inferred from the query.
+	 * @param query - Short-lived capability returned by the application
 	 * backend.
 	 * @param options - Materialization and optional preloaded-row settings.
 	 * @returns An independently disposable materialized subscription.
-	 * @throws If the authorization is malformed or the client is closed.
+	 * @throws If the query is malformed or the client is closed.
 	 */
 	subscribe<Row>(
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
 	/**
 	 * Start a raw subscription without retaining query rows in the SDK.
 	 *
-	 * @typeParam Row - Row inferred from the authorization.
-	 * @param authorization - Short-lived capability returned by the application
+	 * @typeParam Row - Row inferred from the query.
+	 * @param query - Short-lived capability returned by the application
 	 * backend.
 	 * @param options - Set `materialize` to `false` to consume raw events.
 	 * @returns An independently disposable raw subscription.
-	 * @throws If the authorization is malformed or the client is closed.
+	 * @throws If the query is malformed or the client is closed.
 	 */
 	subscribe<Row>(
-		authorization: SealedLiveQuery<Row>,
+		query: SealedLiveQuery<Row>,
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
 	/** Permanently close all subscriptions and the underlying WebSocket. */

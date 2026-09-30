@@ -17,7 +17,7 @@ export interface NeonLiveProviderProps {
 /**
  * Options for {@link useLiveQuery}.
  *
- * @typeParam Row - Row produced by the authorized query.
+ * @typeParam Row - Row produced by the sealed query.
  */
 export interface UseLiveQueryOptions<Row> {
 	/** Server-rendered or otherwise preloaded rows exposed initially as stale. */
@@ -26,7 +26,7 @@ export interface UseLiveQueryOptions<Row> {
 	 * Obtain a replacement capability for the same exact query before expiry.
 	 * Transient failures are retried while the current capability remains valid.
 	 */
-	readonly refreshAuthorization?: () => Promise<SealedLiveQuery<Row>>;
+	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
 }
 
 /**
@@ -34,7 +34,7 @@ export interface UseLiveQueryOptions<Row> {
  *
  * Cleanup remains owned by React, so `unsubscribe()` is intentionally omitted.
  *
- * @typeParam Row - Row produced by the authorized query.
+ * @typeParam Row - Row produced by the sealed query.
  */
 export type UseLiveQueryUtils<Row> = Omit<
 	MaterializedLiveQuerySubscription<Row>,
@@ -44,7 +44,7 @@ export type UseLiveQueryUtils<Row> = Omit<
 /**
  * React-facing snapshot and lower-level utilities returned by `useLiveQuery()`.
  *
- * @typeParam Row - Row produced by the authorized query.
+ * @typeParam Row - Row produced by the sealed query.
  */
 export type UseLiveQueryResult<Row> = LiveQuerySnapshot<Row> & {
 	/** Stable imperative access to state, renewal, and event listeners. */

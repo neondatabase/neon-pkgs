@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
-import type { SealedLiveQuery } from "./authorization.js";
 import {
 	createNeonLiveClient,
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
 } from "./neon-live-client.js";
 import { defineParsers } from "./postgres/parsers.js";
+import type { SealedLiveQuery } from "./sealed-query.js";
 
 interface MessageRow {
 	readonly id: number;
@@ -83,7 +83,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		expectTypeOf(subscription).toEqualTypeOf<
 			MaterializedLiveQuerySubscription<MessageRow>
 		>();
@@ -111,7 +111,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"), {
+		const subscription = client.subscribe(query("initial"), {
 			initialData: [{ id: 1, title: "server" }],
 		});
 		const changes: unknown[] = [];
@@ -137,7 +137,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"), {
+		const subscription = client.subscribe(query("initial"), {
 			materialize: false,
 		});
 		expectTypeOf(subscription).toEqualTypeOf<
@@ -187,7 +187,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		snapshot(socket, "before");
 
@@ -218,7 +218,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		let resolvedBeforeEnd = false;
 		const beforeXmin = subscription.awaitTxId("99").then(() => {
@@ -277,7 +277,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		snapshot(socket, "before");
 		const confirmation = subscription.awaitTxId("42");
@@ -319,7 +319,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 
 		await expect(subscription.awaitTxId("9", 1)).rejects.toThrow(
 			"Timed out waiting for Neon Live transaction 9",
@@ -342,25 +342,25 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
-	it("renews only with an authorization for the same query", async () => {
+	it("renews only with a sealed query for the same query", async () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		snapshot(socket, "before");
 
-		const renewal = subscription.renew(authorization("replacement"));
+		const renewal = subscription.renew(query("replacement"));
 		expect(socket.sent.at(-1)).toEqual({
 			type: "renew",
 			live_id: "41",
-			authorization: authorization("replacement").capability,
+			authorization: query("replacement").capability,
 		});
 		socket.receive({ type: "renewed", live_id: "41" });
 		await expect(renewal).resolves.toBeUndefined();
 		await expect(
-			subscription.renew(authorization("other", "22".repeat(32))),
+			subscription.renew(query("other", "22".repeat(32))),
 		).rejects.toThrow("same query");
 		client.close();
 	});
@@ -370,7 +370,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		const resets: unknown[] = [];
 		subscription.onReset((rows) => resets.push(rows));
@@ -387,11 +387,11 @@ describe("NeonLiveClient", () => {
 			data: [{ id: 1, title: "before" }],
 		});
 
-		const renewal = subscription.renew(authorization("replacement"));
+		const renewal = subscription.renew(query("replacement"));
 		expect(socket.sent.at(-1)).toEqual({
 			type: "subscribe",
 			request_id: "2",
-			authorization: authorization("replacement").capability,
+			authorization: query("replacement").capability,
 		});
 		socket.receive({
 			type: "subscribed",
@@ -429,7 +429,7 @@ describe("NeonLiveClient", () => {
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
-		const subscription = client.subscribe(authorization("initial"));
+		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		socket.receive({
 			type: "subscription_error",
@@ -455,8 +455,8 @@ describe("NeonLiveClient", () => {
 				},
 			}),
 		});
-		const failed = client.subscribe(authorization("failed"));
-		const surviving = client.subscribe(authorization("surviving"));
+		const failed = client.subscribe(query("failed"));
+		const surviving = client.subscribe(query("surviving"));
 		const socket = FakeWebSocket.instances[0];
 		if (!socket) throw new Error("Missing test WebSocket");
 		socket.open();
@@ -556,7 +556,7 @@ describe("NeonLiveClient", () => {
 				},
 			}),
 		});
-		const subscription = client.subscribe(authorization("atomic"), {
+		const subscription = client.subscribe(query("atomic"), {
 			initialData: [{ id: 7, title: "retained" }],
 		});
 		const socket = FakeWebSocket.instances[0];
@@ -709,7 +709,7 @@ function publication(
 	});
 }
 
-function authorization(
+function query(
 	capabilityId: string,
 	queryFingerprint = QUERY_FINGERPRINT,
 ): SealedLiveQuery<MessageRow> {

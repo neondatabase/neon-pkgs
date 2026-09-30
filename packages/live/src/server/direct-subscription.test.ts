@@ -236,7 +236,7 @@ describe("trusted direct subscriptions", () => {
 		neonLive.close();
 	});
 
-	it("keeps authorization-only instances free of direct client methods", () => {
+	it("keeps sealing-only instances free of direct client methods", () => {
 		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
 
 		expect("subscribe" in neonLive).toBe(false);

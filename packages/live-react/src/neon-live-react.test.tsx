@@ -37,7 +37,7 @@ describe("Neon Live React integration", () => {
 		render(
 			<NeonLiveProvider client={client}>
 				<Messages
-					authorization={authorization("query-1")}
+					query={query("query-1")}
 					initialData={[{ id: 1, title: "server" }]}
 					observe={(result) => {
 						observed = result;
@@ -64,12 +64,12 @@ describe("Neon Live React integration", () => {
 		expect(screen.getByText("live:stream")).toBeTruthy();
 	});
 
-	it("replaces subscriptions when authorization identity changes", () => {
+	it("replaces subscriptions when query identity changes", () => {
 		const client = new TestClient<MessageRow>();
-		const first = authorization("query-1");
+		const first = query("query-1");
 		const view = render(
 			<NeonLiveProvider client={client}>
-				<Messages authorization={first} />
+				<Messages query={first} />
 			</NeonLiveProvider>,
 		);
 		const firstSubscription = client.latest();
@@ -84,7 +84,7 @@ describe("Neon Live React integration", () => {
 
 		view.rerender(
 			<NeonLiveProvider client={client}>
-				<Messages authorization={authorization("query-2")} />
+				<Messages query={query("query-2")} />
 			</NeonLiveProvider>,
 		);
 
@@ -95,14 +95,12 @@ describe("Neon Live React integration", () => {
 
 	it("does not restart when only the refresh callback changes", () => {
 		const client = new TestClient<MessageRow>();
-		const currentAuthorization = authorization("query-1", 3_000);
+		const currentQuery = query("query-1", 3_000);
 		const view = render(
 			<NeonLiveProvider client={client}>
 				<Messages
-					authorization={currentAuthorization}
-					refreshAuthorization={async () =>
-						authorization("refresh-1")
-					}
+					query={currentQuery}
+					refreshQuery={async () => query("refresh-1")}
 				/>
 			</NeonLiveProvider>,
 		);
@@ -110,10 +108,8 @@ describe("Neon Live React integration", () => {
 		view.rerender(
 			<NeonLiveProvider client={client}>
 				<Messages
-					authorization={currentAuthorization}
-					refreshAuthorization={async () =>
-						authorization("refresh-2")
-					}
+					query={currentQuery}
+					refreshQuery={async () => query("refresh-2")}
 				/>
 			</NeonLiveProvider>,
 		);
@@ -121,23 +117,21 @@ describe("Neon Live React integration", () => {
 		expect(client.subscriptions).toHaveLength(1);
 	});
 
-	it("refreshes an expiring authorization through renew", async () => {
+	it("refreshes an expiring query through renew", async () => {
 		const client = new TestClient<MessageRow>();
-		const replacement = authorization("query-2", 3_000);
-		const refreshAuthorization = vi.fn(async () => replacement);
+		const replacement = query("query-2", 3_000);
+		const refreshQuery = vi.fn(async () => replacement);
 		render(
 			<NeonLiveProvider client={client}>
 				<Messages
-					authorization={authorization("query-1", 9)}
-					refreshAuthorization={refreshAuthorization}
+					query={query("query-1", 9)}
+					refreshQuery={refreshQuery}
 				/>
 			</NeonLiveProvider>,
 		);
 
 		await act(async () => {
-			await eventually(() =>
-				expect(refreshAuthorization).toHaveBeenCalledOnce(),
-			);
+			await eventually(() => expect(refreshQuery).toHaveBeenCalledOnce());
 		});
 		expect(client.latest().renewals).toEqual([replacement]);
 		expect(screen.getByText("stale:none")).toBeTruthy();
@@ -147,7 +141,7 @@ describe("Neon Live React integration", () => {
 		const client = new TestClient<MessageRow>();
 		const view = render(
 			<NeonLiveProvider client={client}>
-				<Messages authorization={authorization("query-1")} />
+				<Messages query={query("query-1")} />
 			</NeonLiveProvider>,
 		);
 		const subscription = client.latest();
@@ -160,7 +154,7 @@ describe("Neon Live React integration", () => {
 		const html = renderToString(
 			<NeonLiveProvider client={client}>
 				<Messages
-					authorization={authorization("query-1")}
+					query={query("query-1")}
 					initialData={[{ id: 1, title: "server" }]}
 				/>
 			</NeonLiveProvider>,
@@ -173,19 +167,19 @@ describe("Neon Live React integration", () => {
 });
 
 function Messages({
-	authorization: currentAuthorization,
+	query: currentQuery,
 	initialData,
-	refreshAuthorization,
+	refreshQuery,
 	observe,
 }: {
-	authorization: SealedLiveQuery<MessageRow>;
+	query: SealedLiveQuery<MessageRow>;
 	initialData?: readonly MessageRow[];
-	refreshAuthorization?: () => Promise<SealedLiveQuery<MessageRow>>;
+	refreshQuery?: () => Promise<SealedLiveQuery<MessageRow>>;
 	observe?: (result: UseLiveQueryResult<MessageRow>) => void;
 }) {
-	const result = useLiveQuery(currentAuthorization, {
+	const result = useLiveQuery(currentQuery, {
 		initialData,
-		refreshAuthorization,
+		refreshQuery,
 	});
 	observe?.(result);
 	return (
@@ -199,15 +193,15 @@ class TestClient<Row> implements NeonLiveClient {
 	readonly subscriptions: TestSubscription<Row>[] = [];
 
 	subscribe<CurrentRow>(
-		_authorization: SealedLiveQuery<CurrentRow>,
+		_query: SealedLiveQuery<CurrentRow>,
 		options?: { materialize?: true; initialData?: readonly CurrentRow[] },
 	): MaterializedLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_authorization: SealedLiveQuery<CurrentRow>,
+		_query: SealedLiveQuery<CurrentRow>,
 		_options: { materialize: false },
 	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_authorization: SealedLiveQuery<CurrentRow>,
+		_query: SealedLiveQuery<CurrentRow>,
 		options?: {
 			materialize?: boolean;
 			initialData?: readonly CurrentRow[];
@@ -294,8 +288,8 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 		listener: (snapshot: LiveQuerySnapshot<Row>) => void,
 	): (() => void) => add(this.snapshotListeners, listener);
 
-	renew = async (authorization: SealedLiveQuery<Row>): Promise<void> => {
-		this.renewals.push(authorization);
+	renew = async (query: SealedLiveQuery<Row>): Promise<void> => {
+		this.renewals.push(query);
 		this.publish({ ...this.snapshot, status: "stale", error: undefined });
 	};
 
@@ -310,7 +304,7 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 	}
 }
 
-function authorization(
+function query(
 	queryId: string,
 	secondsFromNow = 3_000,
 ): SealedLiveQuery<MessageRow> {

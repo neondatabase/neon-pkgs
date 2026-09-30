@@ -56,7 +56,7 @@ const sealedQuery = await neonLive.seal({ query });
 ```
 
 Sealing performs local encryption and does not execute the query. Keep
-this code on the application backend and return the authorization only after
+this code on the application backend and return the sealed query only after
 authenticating the caller and checking that they may observe the requested
 data.
 
@@ -90,7 +90,7 @@ hatch through `rawSql()` from `@neon/live/server`.
 
 `drizzleAdapter()` returns the adapter passed to `createNeonLive({ adapter })`.
 It has no database connection of its own and never executes the query during
-authorization.
+sealing.
 
 ## Match Drizzle result values in the browser
 

@@ -2,7 +2,7 @@ const MAX_SQL_BYTES = 32 * 1024;
 const MAX_PARAMETERS = 256;
 const MAX_PARAMETER_BYTES = 16 * 1024;
 
-/** One PostgreSQL text-format Bind parameter in an authorization descriptor. */
+/** One PostgreSQL text-format Bind parameter in a prepared live query. */
 export interface PreparedLiveQueryParameter {
 	/** PostgreSQL type OID hint, or `0` to request SQL-context inference. */
 	readonly typeOid: number;
@@ -11,7 +11,7 @@ export interface PreparedLiveQueryParameter {
 }
 
 /** Adapter-independent query encrypted into a Neon Live capability. */
-export interface PreparedAuthorizationQuery {
+export interface PreparedLiveQuery {
 	/** Parameterized SQL. Adapters must never interpolate runtime values here. */
 	readonly sql: string;
 	/** PostgreSQL text-format Bind values and type hints in placeholder order. */
@@ -31,10 +31,10 @@ export interface NeonLiveAdapter<Query> {
 	 *
 	 * @param query - Concrete, fully bound query to prepare.
 	 */
-	prepare(query: Query): PreparedAuthorizationQuery;
+	prepare(query: Query): PreparedLiveQuery;
 }
 
-export function validatePreparedQuery(query: PreparedAuthorizationQuery): void {
+export function validatePreparedQuery(query: PreparedLiveQuery): void {
 	if (
 		!/^\s*select\b/i.test(query.sql) ||
 		query.sql.includes(";") ||

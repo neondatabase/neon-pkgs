@@ -1,5 +1,5 @@
 /**
- * Synchronize authorized Neon Live queries into TanStack DB collections.
+ * Synchronize sealed Neon Live queries into TanStack DB collections.
  *
  * @module TanStack DB
  */
