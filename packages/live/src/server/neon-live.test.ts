@@ -44,12 +44,29 @@ describe("Neon Live backend SDK", () => {
 		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			v: 1,
 			database: "app",
+			error_details: "safe",
 			parameters: [{ type_oid: 0, value: "YWxpY2U=" }],
 		});
 		expect(fetch).not.toHaveBeenCalled();
 		expectTypeOf<Parameters<typeof neonLive.seal>[0]>().not.toHaveProperty(
 			"params",
 		);
+	});
+
+	it("requests full error details only when debug mode is enabled", async () => {
+		const neonLive = createNeonLive({
+			secret: SECRET,
+			db: "app",
+			debugMode: true,
+		});
+
+		const sealedQuery = await neonLive.seal({
+			query: messagesByOwner("alice"),
+		});
+
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
+			error_details: "full",
+		});
 	});
 
 	it("uses stable query fingerprints but fresh capabilities", async () => {
