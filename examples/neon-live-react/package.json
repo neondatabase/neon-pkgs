@@ -1,0 +1,30 @@
+{
+  "name": "@neon/example-live-react",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm typecheck && vite build",
+    "db:setup": "tsx --tsconfig tsconfig.server.json src/setup.ts",
+    "dev": "tsx watch --tsconfig tsconfig.server.json src/dev.ts",
+    "test:ci": "pnpm build",
+    "typecheck": "tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.server.json --noEmit"
+  },
+  "dependencies": {
+    "@neon/live": "workspace:*",
+    "@neon/live-drizzle": "workspace:*",
+    "@neon/live-react": "workspace:*",
+    "@neondatabase/serverless": "^1.0.1",
+    "dotenv": "^17.2.2",
+    "drizzle-orm": "0.45.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "tsx": "^4.22.3",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

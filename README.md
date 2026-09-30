@@ -41,6 +41,9 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/realtime-drizzle` | Drizzle adapter for type-safe live queries. |
 | `@neon/realtime-kysely` | Kysely adapter for type-safe live queries. |
 
+See the [React optimistic UI example](./examples/neon-live-react) for a complete
+live-query application with optimistic inserts, updates, and deletes.
+
 `neon-new` and `vite-plugin-neon-new` are **deprecated**. Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`. The old alias packages (`get-db`, `neondb`, `vite-plugin-db`, `@neondatabase/vite-plugin-postgres`) still re-export them.
 
 `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.
