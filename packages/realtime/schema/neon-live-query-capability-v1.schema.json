@@ -84,6 +84,7 @@
         "aud",
         "iss",
         "database",
+        "error_details",
         "query_fingerprint",
         "sql",
         "parameters",
@@ -95,6 +96,10 @@
         "aud": { "const": "realtime-proxy" },
         "iss": { "$ref": "#/$defs/identity" },
         "database": { "$ref": "#/$defs/databaseName" },
+        "error_details": {
+          "description": "Controls whether subscription errors use safe client-facing messages or include full database diagnostics.",
+          "enum": ["safe", "full"]
+        },
         "query_fingerprint": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",

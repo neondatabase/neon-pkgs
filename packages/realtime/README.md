@@ -70,6 +70,12 @@ checks, and putting every trusted caller-specific restriction into the query.
 Anyone holding the returned capability can subscribe to that exact query until
 it expires.
 
+By default, subscription errors use safe client-facing messages. During local
+development, pass `debugMode: true` to `createNeonLive()` to include full
+database diagnostics in errors returned by the proxy. Detailed errors can
+expose schema, table, and column names, so never enable this for untrusted
+clients in production.
+
 `db` is embedded in each encrypted capability. The first capability accepted
 on a browser client binds its WebSocket to that database; later subscriptions
 on that client must target the same database.
