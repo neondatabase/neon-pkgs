@@ -898,7 +898,7 @@ export const operationFactories = {
 	"name": zod.zCreateProjectBranchBucketBody.shape["name"],
 	"access_level": zod.zCreateProjectBranchBucketBody.shape["access_level"],
 }),
-				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 				requiresApproval: true,
 				metadata: {
 					method: "POST",

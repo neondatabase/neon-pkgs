@@ -67,20 +67,21 @@ describe("generated operation coverage", () => {
 		}
 	});
 
-	test("published catalog tools are closed-world", () => {
+	test("published catalog marks public-capable bucket creation open-world", () => {
 		for (const id of toolIds) {
 			expect(
 				createNeonTool(id, { apiKey: "test-key" }).annotations
 					.openWorldHint,
 				id,
-			).toBe(false);
+			).toBe(id === "storage.buckets.create");
 		}
 	});
 
-	test("raw operations that send mail are open-world", () => {
+	test("raw operations that reach outside the account are open-world", () => {
 		const client = createNeonClient({ apiKey: "unused" }).client;
 		for (const operationId of [
 			"createOrganizationInvitations",
+			"createProjectBranchBucket",
 			"sendNeonAuthEmailProviderTest",
 			"sendNeonAuthTestEmail",
 			"setOrganizationSpendingLimit",
