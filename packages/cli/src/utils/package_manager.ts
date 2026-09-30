@@ -191,30 +191,47 @@ export const resolvePackageManager = (cwd: string): PackageManager =>
 export const resolveInvokingPackageManager = (): PackageManager =>
 	detectInvokingPackageManager() ?? installedPackageManagers()[0] ?? "npm";
 
-export const recommendedCliUpgradeCommand = (
-	modulePath: string,
-): string | undefined => {
-	const path = modulePath.replace(/\\/g, "/").toLowerCase();
+export type CliInstallMethod = "homebrew" | "bun" | "pnpm" | "npm";
 
-	if (path.includes("/cellar/neonctl/")) return "brew upgrade neonctl";
-	if (path.includes("/.bun/install/global/node_modules/neon/")) {
-		return "bun i -g neon@latest";
+/** How the CLI file at `path` was installed globally, or undefined when it can't be told. */
+export const detectCliInstallMethod = (
+	path: string,
+): CliInstallMethod | undefined => {
+	const normalized = path.replace(/\\/g, "/").toLowerCase();
+
+	if (normalized.includes("/cellar/neonctl/")) return "homebrew";
+	if (normalized.includes("/.bun/install/global/node_modules/neon/")) {
+		return "bun";
 	}
 	if (
-		path.includes("/pnpm/global/") &&
-		path.includes("/.pnpm/neon@") &&
-		path.includes("/node_modules/neon/")
+		normalized.includes("/pnpm/global/") &&
+		normalized.includes("/.pnpm/neon@") &&
+		normalized.includes("/node_modules/neon/")
 	) {
-		return "pnpm i -g neon@latest";
+		return "pnpm";
 	}
 	if (
-		path.includes("/lib/node_modules/neon/") ||
-		path.includes("/npm/node_modules/neon/")
+		normalized.includes("/lib/node_modules/neon/") ||
+		normalized.includes("/npm/node_modules/neon/")
 	) {
-		return "npm i -g neon@latest";
+		return "npm";
 	}
 
 	return undefined;
+};
+
+const CLI_UPGRADE_COMMANDS: Record<CliInstallMethod, string> = {
+	homebrew: "brew upgrade neonctl",
+	bun: "bun i -g neon@latest",
+	pnpm: "pnpm i -g neon@latest",
+	npm: "npm i -g neon@latest",
+};
+
+export const recommendedCliUpgradeCommand = (
+	modulePath: string,
+): string | undefined => {
+	const method = detectCliInstallMethod(modulePath);
+	return method === undefined ? undefined : CLI_UPGRADE_COMMANDS[method];
 };
 
 /** Where an added package lands in `package.json`. */

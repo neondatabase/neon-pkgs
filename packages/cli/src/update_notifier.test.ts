@@ -1,10 +1,18 @@
 import { once } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { delimiter, dirname, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
 	cacheForUpdateSource,
+	findCliInstalls,
+	formatDuplicateInstallNotice,
 	formatUpdateNotice,
 	parseUpdateCheckCache,
 	shouldRefreshUpdateCheck,
@@ -193,6 +201,194 @@ describe("writeUpdateCheckCache", () => {
 		} finally {
 			rmSync(directory, { force: true, recursive: true });
 		}
+	});
+});
+
+describe("findCliInstalls", () => {
+	const roots: string[] = [];
+	afterEach(() => {
+		while (roots.length > 0) {
+			rmSync(roots.pop() ?? "", { force: true, recursive: true });
+		}
+	});
+
+	const scratch = (): string => {
+		const root = mkdtempSync(join(tmpdir(), "neon-installs-"));
+		roots.push(root);
+		return root;
+	};
+
+	/** A real executable at `root/target`, linked from `root/bin/<name>` for each name. */
+	const install = (
+		root: string,
+		target: string,
+		bin: string,
+		names = ["neon"],
+	): string => {
+		const file = join(root, target);
+		mkdirSync(dirname(file), { recursive: true });
+		writeFileSync(file, "#!/bin/sh\n", { mode: 0o755 });
+		const binDir = join(root, bin);
+		mkdirSync(binDir, { recursive: true });
+		for (const name of names) symlinkSync(file, join(binDir, name));
+		return binDir;
+	};
+
+	const HOMEBREW =
+		"brew/Cellar/neonctl/6.3.0/libexec/lib/node_modules/neonctl/bin/cli.js";
+	const NPM = "npm/lib/node_modules/neon/dist/cli.js";
+
+	it("lists each install in PATH order with its installer", () => {
+		const root = scratch();
+		const brew = install(root, HOMEBREW, "brew/bin");
+		const npm = install(root, NPM, "npm/bin");
+
+		expect(findCliInstalls("neon", [brew, npm].join(delimiter))).toEqual([
+			{ method: "homebrew", path: join(brew, "neon") },
+			{ method: "npm", path: join(npm, "neon") },
+		]);
+	});
+
+	it("counts a repeated PATH directory and a second link to one file once", () => {
+		const root = scratch();
+		const brew = install(root, HOMEBREW, "brew/bin");
+		const opt = join(root, "brew/opt/neonctl/bin");
+		mkdirSync(opt, { recursive: true });
+		symlinkSync(join(brew, "neon"), join(opt, "neon"));
+
+		expect(
+			findCliInstalls("neon", [brew, opt, brew].join(delimiter)),
+		).toEqual([{ method: "homebrew", path: join(brew, "neon") }]);
+	});
+
+	it("keeps an install whose installer is unknown", () => {
+		const root = scratch();
+		const npm = install(root, NPM, "npm/bin");
+		const standalone = install(root, "standalone/neon", "usr/local/bin");
+
+		expect(
+			findCliInstalls("neon", [npm, standalone].join(delimiter)),
+		).toEqual([
+			{ method: "npm", path: join(npm, "neon") },
+			{ method: undefined, path: join(standalone, "neon") },
+		]);
+	});
+
+	it("ignores non-executable files and broken links", () => {
+		const root = scratch();
+		const npm = install(root, NPM, "npm/bin");
+		const other = join(root, "other/bin");
+		mkdirSync(other, { recursive: true });
+		writeFileSync(join(other, "neon"), "", { mode: 0o644 });
+		const broken = join(root, "broken/bin");
+		mkdirSync(broken, { recursive: true });
+		symlinkSync(join(root, "missing"), join(broken, "neon"));
+
+		expect(
+			findCliInstalls("neon", [other, broken, npm].join(delimiter)),
+		).toEqual([{ method: "npm", path: join(npm, "neon") }]);
+	});
+
+	it("finds nothing on an empty PATH", () => {
+		expect(findCliInstalls("neon", scratch())).toEqual([]);
+	});
+});
+
+describe("formatDuplicateInstallNotice", () => {
+	const brew = {
+		method: "homebrew",
+		path: "/opt/homebrew/bin/neon",
+	} as const;
+	const npm = {
+		method: "npm",
+		path: "/Users/user/.nvm/versions/node/v24.18.0/bin/neon",
+	} as const;
+
+	it("stays quiet for one install", () => {
+		expect(
+			formatDuplicateInstallNotice({
+				installs: [npm],
+				otherNeonctl: false,
+			}),
+		).toBeUndefined();
+	});
+
+	it("recommends removing Homebrew when it shadows npm", () => {
+		expect(
+			formatDuplicateInstallNotice({
+				installs: [brew, npm],
+				otherNeonctl: false,
+			}),
+		).toBe(
+			[
+				"Multiple Neon CLI installs found on PATH:",
+				"  /opt/homebrew/bin/neon (Homebrew, first on PATH)",
+				"  /Users/user/.nvm/versions/node/v24.18.0/bin/neon (npm)",
+				"Remove the Homebrew install to use npm:",
+				"  brew uninstall neonctl",
+				"This also removes the `neonctl` command; run `neon` instead.",
+				"Then open a new shell.",
+			].join("\n"),
+		);
+	});
+
+	it("recommends removing Homebrew when npm comes first", () => {
+		expect(
+			formatDuplicateInstallNotice({
+				installs: [npm, brew],
+				otherNeonctl: false,
+			}),
+		).toBe(
+			[
+				"Multiple Neon CLI installs found on PATH:",
+				"  /Users/user/.nvm/versions/node/v24.18.0/bin/neon (npm, first on PATH)",
+				"  /opt/homebrew/bin/neon (Homebrew)",
+				"Remove the Homebrew install to use npm:",
+				"  brew uninstall neonctl",
+				"This also removes the `neonctl` command; run `neon` instead.",
+				"Then open a new shell.",
+			].join("\n"),
+		);
+	});
+
+	it("omits the neonctl note when another install provides neonctl", () => {
+		expect(
+			formatDuplicateInstallNotice({
+				installs: [
+					brew,
+					{ method: undefined, path: "/usr/local/bin/neon" },
+				],
+				otherNeonctl: true,
+			}),
+		).toBe(
+			[
+				"Multiple Neon CLI installs found on PATH:",
+				"  /opt/homebrew/bin/neon (Homebrew, first on PATH)",
+				"  /usr/local/bin/neon",
+				"Remove the Homebrew install:",
+				"  brew uninstall neonctl",
+				"Then open a new shell.",
+			].join("\n"),
+		);
+	});
+
+	it("asks to keep one install when Homebrew is not involved", () => {
+		expect(
+			formatDuplicateInstallNotice({
+				installs: [
+					npm,
+					{ method: "bun", path: "/Users/user/.bun/bin/neon" },
+				],
+				otherNeonctl: false,
+			}),
+		).toBe(
+			[
+				"Multiple Neon CLI installs found on PATH:",
+				"  /Users/user/.nvm/versions/node/v24.18.0/bin/neon (npm, first on PATH)",
+				"  /Users/user/.bun/bin/neon (Bun)",
+				"Keep one: uninstall the others or reorder PATH.",
+			].join("\n"),
+		);
 	});
 });
 

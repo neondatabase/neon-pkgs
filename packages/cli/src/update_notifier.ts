@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import {
 	existsSync,
 	readFileSync,
+	realpathSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
@@ -9,9 +10,14 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
+import which from "which";
 import { isCi } from "./env.js";
 import { log } from "./log.js";
-import { recommendedCliUpgradeCommand } from "./utils/package_manager.js";
+import {
+	type CliInstallMethod,
+	detectCliInstallMethod,
+	recommendedCliUpgradeCommand,
+} from "./utils/package_manager.js";
 
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const NOTIFY_INTERVAL_MS = 3 * CHECK_INTERVAL_MS;
@@ -205,6 +211,106 @@ const spawnUpdateWorker = (cachePath: string, source: UpdateSource): void => {
 	}
 };
 
+export type CliInstall = {
+	method: CliInstallMethod | undefined;
+	path: string;
+};
+
+const INSTALL_LABELS: Record<CliInstallMethod, string> = {
+	homebrew: "Homebrew",
+	bun: "Bun",
+	pnpm: "pnpm",
+	npm: "npm",
+};
+
+/**
+ * Every distinct `command` executable on `path`, in PATH order. Entries that
+ * resolve to the same file (a repeated PATH directory, Homebrew's `bin` and
+ * `opt` links) count once.
+ */
+export const findCliInstalls = (
+	command: string,
+	path: string | undefined,
+): CliInstall[] => {
+	const seen = new Set<string>();
+	const installs: CliInstall[] = [];
+	for (const executable of which.sync(command, {
+		all: true,
+		nothrow: true,
+		path,
+	}) ?? []) {
+		const target = realpathSync(executable);
+		if (seen.has(target)) continue;
+		seen.add(target);
+		installs.push({
+			method: detectCliInstallMethod(target),
+			path: executable,
+		});
+	}
+	return installs;
+};
+
+type DuplicateInstallNoticeOptions = {
+	installs: CliInstall[];
+	/** Whether a `neonctl` command outside Homebrew is also on PATH. */
+	otherNeonctl: boolean;
+};
+
+export const formatDuplicateInstallNotice = ({
+	installs,
+	otherNeonctl,
+}: DuplicateInstallNoticeOptions): string | undefined => {
+	if (installs.length < 2) return undefined;
+
+	const rows = installs.map(({ method, path }, index) => {
+		const labels = [
+			...(method === undefined ? [] : [INSTALL_LABELS[method]]),
+			...(index === 0 ? ["first on PATH"] : []),
+		];
+		return labels.length === 0
+			? `  ${path}`
+			: `  ${path} (${labels.join(", ")})`;
+	});
+	const lines = ["Multiple Neon CLI installs found on PATH:", ...rows];
+
+	if (!installs.some(({ method }) => method === "homebrew")) {
+		lines.push("Keep one: uninstall the others or reorder PATH.");
+		return lines.join("\n");
+	}
+
+	lines.push(
+		installs.some(({ method }) => method === "npm")
+			? "Remove the Homebrew install to use npm:"
+			: "Remove the Homebrew install:",
+		"  brew uninstall neonctl",
+	);
+	if (!otherNeonctl) {
+		lines.push(
+			"This also removes the `neonctl` command; run `neon` instead.",
+		);
+	}
+	lines.push("Then open a new shell.");
+	return lines.join("\n");
+};
+
+const duplicateInstallNotice = (): string | undefined => {
+	try {
+		const installs = findCliInstalls("neon", process.env.PATH);
+		return formatDuplicateInstallNotice({
+			installs,
+			otherNeonctl: findCliInstalls("neonctl", process.env.PATH).some(
+				({ method }) => method !== "homebrew",
+			),
+		});
+	} catch (error) {
+		log.debug(
+			"Could not check PATH for other Neon CLI installs: %s",
+			error instanceof Error ? error.message : String(error),
+		);
+		return undefined;
+	}
+};
+
 const isPackagedExecutable = (): boolean => "pkg" in process;
 
 export const shouldRunUpdateNotifier = ({
@@ -247,6 +353,17 @@ export const notifyIfUpdateAvailable = ({
 		})
 	) {
 		return;
+	}
+
+	// One Windows install puts `neon`, `neon.cmd`, and `neon.ps1` on PATH as separate files,
+	// so file identity can't count installs there.
+	if (process.platform !== "win32") {
+		const duplicateNotice = duplicateInstallNotice();
+		if (duplicateNotice !== undefined) {
+			// Takes the place of the version notice, which would say `brew upgrade neonctl`.
+			log.warning("%s", duplicateNotice);
+			return;
+		}
 	}
 
 	const command = recommendedCliUpgradeCommand(
