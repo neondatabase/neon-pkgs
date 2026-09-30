@@ -51,8 +51,9 @@ When an update is available, terminal commands periodically print the matching
 upgrade command. Set `NO_UPDATE_NOTIFIER=1` to disable these checks. The notifier
 does not run in CI, for machine-readable output, or from standalone binaries.
 
-On macOS and Linux, the same terminal commands warn when more than one `neon`
-install is on PATH, listing each one in PATH order. When one of them is Homebrew,
+On macOS and Linux, the same terminal commands warn when more than one global
+`neon` install is on PATH, listing each one in PATH order. A project's
+`node_modules/.bin`, which `npx` and package scripts add, doesn't count. When one of them is Homebrew,
 the warning recommends `brew uninstall neonctl` so `neon` runs the npm install.
 It repeats on every command until one install remains; `NO_UPDATE_NOTIFIER=1`
 silences it too.
