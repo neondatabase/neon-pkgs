@@ -16,8 +16,6 @@ import type {
 } from "@tanstack/db";
 import { withCollectionConfigFactory } from "@tanstack/db";
 
-const DEFAULT_TXID_TIMEOUT_MS = 5_000;
-
 /** Utilities attached to a Neon Live-backed TanStack DB collection. */
 export interface NeonLiveCollectionUtils extends UtilsRecord {
 	/**
@@ -28,12 +26,14 @@ export interface NeonLiveCollectionUtils extends UtilsRecord {
 	 * This resolves for transaction IDs included in a live batch or proven
 	 * visible by the last successfully applied reset snapshot. Neon Live does
 	 * not currently acknowledge a no-op transaction after that snapshot. It can
-	 * resolve only if a later reset proves it visible; otherwise the wait times
-	 * out.
+	 * resolve only if a later reset proves it visible; otherwise it remains
+	 * pending until the optional timeout elapses or the collection is cleaned up.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
-	 * @param timeout - Maximum wait in milliseconds; defaults to 5 seconds.
-	 * @throws If the timeout elapses or the collection is cleaned up.
+	 * @param timeout - Optional maximum wait in milliseconds. By default, the
+	 * promise remains pending until the transaction arrives or the collection is
+	 * cleaned up.
+	 * @throws If a supplied timeout elapses or the collection is cleaned up.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<boolean>;
 }
@@ -125,7 +125,7 @@ function createNeonLiveCollectionOptions<
 	} = config;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
 	const utils: NeonLiveCollectionUtils = Object.freeze({
-		awaitTxId: async (txid, timeout = DEFAULT_TXID_TIMEOUT_MS) => {
+		awaitTxId: async (txid, timeout) => {
 			const subscription = activeSubscription;
 			if (!subscription) {
 				throw new Error("Neon Live collection is not syncing");

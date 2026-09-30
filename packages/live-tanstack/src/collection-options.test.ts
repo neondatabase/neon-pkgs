@@ -48,6 +48,9 @@ describe("Neon Live TanStack DB collection", () => {
 		expect(collection.get(2)).toMatchObject({ id: 2, title: "two" });
 
 		const matched = collection.utils.awaitTxId("42");
+		expect(client.latest().awaitedTransactions).toEqual([
+			{ txid: "42", timeout: undefined },
+		]);
 		client.latest().batch(
 			[
 				{
@@ -310,6 +313,10 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 		(state: LiveQueryState) => void
 	>();
 	readonly renewals: LiveQueryAuthorization<Row>[] = [];
+	readonly awaitedTransactions: Array<{
+		readonly txid: string;
+		readonly timeout: number | undefined;
+	}> = [];
 	unsubscribed = false;
 	private currentState: LiveQueryState = {
 		status: "connecting",
@@ -333,6 +340,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 		add(this.stateListeners, listener);
 
 	awaitTxId = async (txid: string, timeout?: number): Promise<void> => {
+		this.awaitedTransactions.push({ txid, timeout });
 		if (this.appliedTxids.has(txid)) return;
 		return new Promise<void>((resolve, reject) => {
 			const waiter = {
