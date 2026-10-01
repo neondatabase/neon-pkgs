@@ -291,12 +291,15 @@ export const selectCommand = (
 
 /**
  * The command whose builder yargs 17 runs to complete `--get-yargs-completions <words>`: the
- * first word that names a command, at any position (`defaultCompletion` in completion.js).
+ * first word that is a command's canonical name, at any position; aliases don't count there
+ * (`defaultCompletion` in completion.js looks words up in the handler map, keyed by name).
  */
 export const selectCompletionCommand = (
 	words: readonly string[],
 ): CommandEntry | undefined =>
-	words.map((word) => entryByName.get(word)).find((entry) => entry);
+	words
+		.map((word) => commandManifest.find((entry) => verbOf(entry) === word))
+		.find((entry) => entry);
 
 type ParserOptions = Parameters<typeof Parser.detailed>[1];
 
@@ -347,8 +350,9 @@ export const preloadCommand = async (
 
 /**
  * The manifest as yargs command modules. The builder is synchronous when `preloadCommand`
- * already imported the module, which is every invocation it predicts correctly; yargs 17 also
- * accepts a builder that returns a promise, which keeps a mispredicted invocation working.
+ * already imported the module, which is every invocation it predicts correctly. A mispredicted
+ * command still runs, because yargs 17 awaits a builder's promise when it runs a command; shell
+ * completion does not await it, so a mispredicted completion lists no subcommands.
  */
 export const lazyCommands = commandManifest.map((entry) => ({
 	command: entry.command,

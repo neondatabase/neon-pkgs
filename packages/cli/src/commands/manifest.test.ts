@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import yargs from "yargs";
 import commands from "./index.js";
@@ -51,11 +55,24 @@ describe("selectCommand", () => {
 });
 
 describe("selectCompletionCommand", () => {
-	it("selects the first word that names a command, at any position", () => {
+	it("selects the first word that is a command's name, at any position", () => {
 		expect(
 			selectCompletionCommand(["neon", "projects", "list", ""])?.command,
 		).toBe("projects");
 		expect(selectCompletionCommand(["neon", "pro"])).toBeUndefined();
+	});
+
+	it("skips aliases, which yargs' completion does not look up", () => {
+		expect(
+			selectCompletionCommand([
+				"neon",
+				"--profile",
+				"db",
+				"--context-file",
+				"projects",
+				"",
+			])?.command,
+		).toBe("projects");
 	});
 });
 
@@ -109,5 +126,35 @@ describe("preloadCommand", () => {
 				])
 			)?.command,
 		).toBe("branches");
+	});
+});
+
+describe("shell completion through dist/cli.js", () => {
+	it("completes subcommands when an option value is another command's alias", () => {
+		const home = mkdtempSync(join(tmpdir(), "neon-completion-"));
+		try {
+			const stdout = execFileSync(
+				process.execPath,
+				[
+					join(process.cwd(), "dist/cli.js"),
+					"--get-yargs-completions",
+					"neon",
+					"--profile",
+					"db",
+					"--context-file",
+					"projects",
+					"",
+				],
+				{
+					cwd: home,
+					env: { PATH: process.env.PATH, HOME: home, CI: "true" },
+				},
+			).toString();
+			expect(stdout.split("\n")).toEqual(
+				expect.arrayContaining(["list", "create", "get"]),
+			);
+		} finally {
+			rmSync(home, { recursive: true, force: true });
+		}
 	});
 });
