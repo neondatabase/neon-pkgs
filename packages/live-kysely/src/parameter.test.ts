@@ -40,6 +40,25 @@ describe("Kysely PostgreSQL parameter encoding", () => {
 		});
 	});
 
+	it("encodes a single sparse PostgreSQL array element as NULL", () => {
+		const singleHole = Array<unknown>(1);
+
+		expect(encodeKyselyParameter(singleHole)).toEqual({
+			typeOid: 0,
+			value: "{NULL}",
+		});
+	});
+
+	it("encodes a leading sparse PostgreSQL array element as NULL", () => {
+		const leadingHole = Array<unknown>(2);
+		leadingHole[1] = "second";
+
+		expect(encodeKyselyParameter(leadingHole)).toEqual({
+			typeOid: 0,
+			value: '{NULL,"second"}',
+		});
+	});
+
 	it("uses JSON for ordinary objects", () => {
 		expect(
 			encodeKyselyParameter({ enabled: true, nested: [1, null] }),

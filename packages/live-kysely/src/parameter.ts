@@ -55,9 +55,11 @@ function encodeArray(
 ): string {
 	assertNotCircular(values, seen);
 	const nestedSeen = [...seen, values];
-	return `{${values
-		.map((value) => encodeArrayElement(value, nestedSeen))
-		.join(",")}}`;
+	const elements: string[] = [];
+	for (let index = 0; index < values.length; index += 1) {
+		elements.push(encodeArrayElement(values[index], nestedSeen));
+	}
+	return `{${elements.join(",")}}`;
 }
 
 function encodeArrayElement(value: unknown, seen: readonly object[]): string {
