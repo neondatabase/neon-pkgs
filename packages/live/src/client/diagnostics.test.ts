@@ -9,11 +9,18 @@ afterEach(() => {
 
 describe("Neon Live client diagnostics", () => {
 	it("rejects invalid diagnostic configuration", () => {
-		expect(() =>
-			createClientEventSink({
-				logLevel: "verbose" as never,
-			}),
-		).toThrow("Invalid Neon Live log level");
+		for (const logLevel of [
+			"verbose",
+			"constructor",
+			"toString",
+			"__proto__",
+		]) {
+			expect(() =>
+				createClientEventSink({
+					logLevel: logLevel as never,
+				}),
+			).toThrow("Invalid Neon Live log level");
+		}
 		expect(() =>
 			createClientEventSink({
 				logger: {} as never,
