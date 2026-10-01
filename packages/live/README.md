@@ -32,11 +32,6 @@ import { createNeonLive } from "@neon/live/server";
 | `@neon/live/server` | Seal raw SQL or adapter-native queries on an application backend. |
 | `@neon/live/client` | Subscribe from a browser and consume materialized or raw changes. |
 | `@neon/live` | Convenience export of both surfaces; prefer the dedicated entry points in application code. |
-| `@neon/live/schema/neon-live-query-capability-v1.schema.json` | Authoritative JSON Schema for the decoded V1 query capability. |
-
-The query capability schema is published unchanged for proxy implementations
-and other cross-language tooling. Consumers should pin a package version or
-repository commit when vendoring it so builds remain reproducible.
 
 ## Seal a query on the backend
 
