@@ -189,6 +189,22 @@ created_at: 2021-01-01T00:00:00.000Z
 "
 `;
 
+exports[`branches > create/table titles each section for people 1`] = `
+"Branch
+Name        test_branch
+Id          br-new-branch-123456
+Created At  2021-01-01T00:00:00.000Z
+
+Compute
+Id                   Created At
+ep-undefined-123456  2021-01-01T00:00:00.000Z
+
+Connection string
+Connection Uri
+postgres://ep-undefined-123456.example.com:5432/test_project
+"
+`;
+
 exports[`branches > delete by id 1`] = `
 "id: br-sunny-branch-123456
 name: sunny-branch
@@ -197,12 +213,13 @@ created_at: 2021-01-01T00:00:00.000Z
 `;
 
 exports[`branches > get by id 1`] = `
-"name: test_branch
-id: br-sunny-branch-123456
-default: true
+"id: br-sunny-branch-123456
+name: test_branch
 parent_id: br-parent-branch-123456
-created_at: 2019-01-01T00:00:00Z
-updated_at: 2019-01-01T00:00:00Z
+created_at: 2021-01-01T00:00:00.000Z
+updated_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+current_state: ready
 "
 `;
 
@@ -216,22 +233,33 @@ updated_at: 2019-01-01T00:00:00Z
 `;
 
 exports[`branches > get by name 1`] = `
-"name: test_branch
-id: br-sunny-branch-123456
-default: true
+"id: br-sunny-branch-123456
+name: test_branch
 parent_id: br-parent-branch-123456
-created_at: 2019-01-01T00:00:00Z
-updated_at: 2019-01-01T00:00:00Z
+created_at: 2021-01-01T00:00:00.000Z
+updated_at: 2021-01-01T00:00:00.000Z
+expires_at: 2022-01-01T00:00:00.000Z
+current_state: ready
 "
 `;
 
 exports[`branches > get by name with numeric name 1`] = `
-"name: "123"
-id: br-numbered-branch-123456
-default: false
+"id: br-numbered-branch-123456
+name: "123"
 parent_id: br-parent-branch-123456
-created_at: 2019-01-01T00:00:00Z
-updated_at: 2019-01-01T00:00:00Z
+created_at: 2021-01-01T00:00:00.000Z
+updated_at: 2021-01-01T00:00:00.000Z
+current_state: ready
+"
+`;
+
+exports[`branches > get/table shows the branch detail view 1`] = `
+"Name           test_branch
+Id             br-sunny-branch-123456
+Parent Id      br-parent-branch-123456
+Current State  ready
+Expires At     2022-01-01T00:00:00.000Z
+Created At     2021-01-01T00:00:00.000Z
 "
 `;
 

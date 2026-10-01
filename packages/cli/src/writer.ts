@@ -1,6 +1,10 @@
 import YAML from "yaml";
 import { isCi } from "./env.js";
-import { formatHumanChunk, resolveOutputWidth } from "./human_table.js";
+import {
+	formatHumanChunk,
+	resolveOutputWidth,
+	stripAnsi,
+} from "./human_table.js";
 import type { CommonProps } from "./types.js";
 import { toSnakeCase } from "./utils/string.js";
 
@@ -11,8 +15,10 @@ type FullExtract<T> = OnlyStrings<keyof ExtractFromArray<T>>;
 type WriteOutConfig<T> = {
 	// Fields to output in human-readable format
 	fields: readonly FullExtract<T>[];
-	// Title of the output
+	// Title of the output; also the key of this chunk in multi-chunk JSON/YAML
 	title?: string;
+	// Title shown in table output instead of `title`, which stays the JSON/YAML key
+	humanTitle?: string;
 	// Display message if data is empty
 	// does not apply to json and yaml output
 	emptyMessage?: string;
@@ -60,19 +66,21 @@ const writeTable = (
 	out: NodeJS.WritableStream,
 	width: number | undefined,
 ) => {
+	// chalk 5 does not read NO_COLOR (https://no-color.org).
+	const noColor = Boolean(process.env.NO_COLOR);
 	chunks.forEach(({ data, config }, i) => {
-		out.write(
-			formatHumanChunk({
-				data,
-				fields: config.fields,
-				title: config.title,
-				emptyMessage: config.emptyMessage,
-				renderColumns: config.renderColumns,
-				width,
-				colorTitle: !isCi(),
-				leadingBlank: i > 0 && Boolean(config.title),
-			}),
-		);
+		const title = config.humanTitle ?? config.title;
+		const text = formatHumanChunk({
+			data,
+			fields: config.fields,
+			title,
+			emptyMessage: config.emptyMessage,
+			renderColumns: config.renderColumns,
+			width,
+			colorTitle: !isCi(),
+			leadingBlank: i > 0 && Boolean(title),
+		});
+		out.write(noColor ? stripAnsi(text) : text);
 	});
 };
 

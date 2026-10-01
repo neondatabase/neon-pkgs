@@ -27,6 +27,8 @@ export type Scenario = {
 	api?: boolean;
 	/** Runs from a directory linked with a `.neon` file. */
 	linked?: boolean;
+	/** Output format for API scenarios; JSON unless the human table is what's measured. */
+	output?: "json" | "table";
 	expect: { code: number; stdout?: RegExp; stderr?: RegExp };
 };
 
@@ -63,6 +65,47 @@ export const SCENARIOS: Scenario[] = [
 		argv: ["projects", "list"],
 		api: true,
 		expect: { code: 0, stdout: /"id"/ },
+	},
+	{
+		// By name: the listing resolves it and already holds the branch, so no GET follows.
+		name: "branches get test_branch --project-id test",
+		argv: ["branches", "get", "test_branch", "--project-id", "test"],
+		api: true,
+		expect: { code: 0, stdout: /"id": "br-sunny-branch-123456"/ },
+	},
+	{
+		name: "branches reset test_branch --parent --project-id test",
+		argv: [
+			"branches",
+			"reset",
+			"test_branch",
+			"--parent",
+			"--project-id",
+			"test",
+		],
+		api: true,
+		expect: { code: 0, stdout: /"id"/ },
+	},
+	{
+		name: "branches restore test_branch ^parent --project-id test",
+		argv: [
+			"branches",
+			"restore",
+			"test_branch",
+			"^parent",
+			"--project-id",
+			"test",
+		],
+		api: true,
+		expect: { code: 0, stdout: /"id"/ },
+	},
+	{
+		// The default output, which CI runs most for delete.
+		name: "branches delete test_branch --project-id test",
+		argv: ["branches", "delete", "test_branch", "--project-id", "test"],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^Name +sunny-branch$/m },
 	},
 	{
 		name: "branches list --project-id test",
@@ -144,7 +187,7 @@ export const scenarioArgv = (
 				"--api-key",
 				"test-key",
 				"--output",
-				"json",
+				scenario.output ?? "json",
 			]
 		: [];
 	return [...scenario.argv, "--no-analytics", ...api];

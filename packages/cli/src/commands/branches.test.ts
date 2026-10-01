@@ -49,7 +49,63 @@ describe("branches", () => {
 		}
 	});
 
+	test("list/table does not mark [current] when .neon links another project", async ({
+		testCliCommand,
+	}) => {
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-branches-"));
+		const ctx = join(dir, ".neon");
+		writeFileSync(
+			ctx,
+			JSON.stringify({ projectId: "other-project", branch: "main" }),
+		);
+		try {
+			const { stdout } = await testCliCommand(
+				[
+					"branches",
+					"list",
+					"--project-id",
+					"test",
+					"--context-file",
+					ctx,
+				],
+				{ outputTable: true, snapshot: false },
+			);
+			expect(stdout).not.toContain("[current]");
+			expect(stdout).toContain("[default] main");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("get/table shows the branch detail view", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["branches", "get", "test_branch", "--project-id", "test"],
+			{ outputTable: true },
+		);
+	});
+
 	/* create */
+
+	test("create/table titles each section for people", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"branches",
+				"create",
+				"--project-id",
+				"test",
+				"--name",
+				"test_branch",
+			],
+			{ outputTable: true },
+		);
+		expect(stdout).toMatch(/^Branch\n/);
+		expect(stdout).toContain("\nCompute\n");
+		expect(stdout).toContain("\nConnection string\n");
+	});
 
 	test("create by default with r/w endpoint", async ({ testCliCommand }) => {
 		await testCliCommand([
@@ -700,5 +756,24 @@ describe("branches", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("schema-diff/table says when the schemas match", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(
+			[
+				"branches",
+				"schema-diff",
+				"page-one",
+				"page-two",
+				"--project-id",
+				"proj-paged-branches",
+			],
+			{ outputTable: true, snapshot: false },
+		);
+		expect(stderr).toContain(
+			"INFO: No schema differences for database neondb between page-one and page-two.",
+		);
 	});
 });

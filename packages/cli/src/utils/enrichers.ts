@@ -10,11 +10,22 @@ const BRANCHES_LIST_LIMIT = 100;
  * Branch list pages cap at 100. A name stored in `.neon` can live on a later
  * page, so resolution has to walk `pagination.next` before treating it as missing.
  */
-export const listAllProjectBranches = async (
+type BranchAnnotations = Awaited<
+	ReturnType<CommonProps["apiClient"]["listProjectBranches"]>
+>["data"]["annotations"];
+
+/** Every branch of a project, with the annotations the listing returned for them. */
+export type BranchListing = {
+	branches: Branch[];
+	annotations: BranchAnnotations;
+};
+
+export const listAllProjectBranchesWithAnnotations = async (
 	apiClient: CommonProps["apiClient"],
 	projectId: string,
-): Promise<Branch[]> => {
-	const result: Branch[] = [];
+): Promise<BranchListing> => {
+	const branches: Branch[] = [];
+	const annotations: BranchAnnotations = {};
 	let cursor: string | undefined;
 	while (true) {
 		const { data } = await apiClient.listProjectBranches({
@@ -22,30 +33,42 @@ export const listAllProjectBranches = async (
 			limit: BRANCHES_LIST_LIMIT,
 			cursor,
 		});
-		result.push(...data.branches);
+		branches.push(...data.branches);
+		Object.assign(annotations, data.annotations);
 		cursor = data.pagination?.next;
 		if (!cursor || data.branches.length === 0) {
 			break;
 		}
 	}
-	return result;
+	return { branches, annotations };
 };
+
+export const listAllProjectBranches = async (
+	apiClient: CommonProps["apiClient"],
+	projectId: string,
+): Promise<Branch[]> =>
+	(await listAllProjectBranchesWithAnnotations(apiClient, projectId))
+		.branches;
 
 export const branchIdResolve = async ({
 	branch,
 	apiClient,
 	projectId,
+	branches: listed,
 }: {
 	branch: string | number;
 	apiClient: CommonProps["apiClient"];
 	projectId: string;
+	/** A listing this invocation already fetched; resolving by name reuses it. */
+	branches?: Branch[];
 }) => {
 	branch = branch.toString();
 	if (looksLikeBranchId(branch)) {
 		return branch;
 	}
 
-	const branches = await listAllProjectBranches(apiClient, projectId);
+	const branches =
+		listed ?? (await listAllProjectBranches(apiClient, projectId));
 	const branchData = branches.find((b: Branch) => b.name === branch);
 	if (!branchData) {
 		throw new Error(
@@ -87,6 +110,47 @@ const getBranchIdFromProps = async (props: BranchScopeProps) => {
 export const branchIdFromProps = async (props: BranchScopeProps) => {
 	(props as any).branchId = await getBranchIdFromProps(props);
 	return (props as any).branchId;
+};
+
+/**
+ * {@link branchIdFromProps}, plus whatever the resolution already fetched: a name or the
+ * default branch is resolved from a listing, so the branch object and the listing come back
+ * with the id and callers need not fetch them again. An explicit `br-…` id is not listed.
+ */
+export const resolveBranchFromProps = async (
+	props: BranchRefProps,
+	/** A listing this invocation already fetched. */
+	known?: BranchListing,
+): Promise<{ branchId: string; branch?: Branch; listing?: BranchListing }> => {
+	const ref = typeof props.branch === "string" ? props.branch : props.id;
+	const explicit = ref ? String(ref) : undefined;
+
+	if (explicit !== undefined && looksLikeBranchId(explicit)) {
+		(props as any).branchId = explicit;
+		return { branchId: explicit };
+	}
+
+	const listing =
+		known ??
+		(await listAllProjectBranchesWithAnnotations(
+			props.apiClient,
+			props.projectId,
+		));
+	const branch =
+		explicit === undefined
+			? listing.branches.find((b) => b.default)
+			: listing.branches.find((b) => b.name === explicit);
+	if (!branch) {
+		throw new Error(
+			explicit === undefined
+				? "No default branch found"
+				: `Branch ${explicit} not found.\nAvailable branches: ${listing.branches
+						.map((b) => b.name)
+						.join(", ")}`,
+		);
+	}
+	(props as any).branchId = branch.id;
+	return { branchId: branch.id, branch, listing };
 };
 
 /**
