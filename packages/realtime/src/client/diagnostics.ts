@@ -7,7 +7,7 @@ export type {
 } from "./diagnostics/events.js";
 export {
 	createClientEventSink,
-	NOOP_CLIENT_EVENTS,
+	SILENT_CLIENT_EVENTS,
 } from "./diagnostics/projector.js";
 export {
 	registerSubscriptionEvents,

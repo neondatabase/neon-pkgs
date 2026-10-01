@@ -21,7 +21,7 @@ import type {
 
 const noop = (): void => undefined;
 
-const NOOP_REFRESH_EVENTS: QueryRefreshEventSink = Object.freeze({
+const SILENT_REFRESH_EVENTS: QueryRefreshEventSink = Object.freeze({
 	scheduled: noop,
 	callbackStarted: noop,
 	callbackSucceeded: noop,
@@ -29,8 +29,8 @@ const NOOP_REFRESH_EVENTS: QueryRefreshEventSink = Object.freeze({
 	stopped: noop,
 });
 
-export const NOOP_SUBSCRIPTION_EVENTS: SubscriptionEventSink = Object.freeze({
-	refresh: NOOP_REFRESH_EVENTS,
+export const SILENT_SUBSCRIPTION_EVENTS: SubscriptionEventSink = Object.freeze({
+	refresh: SILENT_REFRESH_EVENTS,
 	started: noop,
 	admitted: noop,
 	renewalStarted: noop,
@@ -47,7 +47,7 @@ export const NOOP_SUBSCRIPTION_EVENTS: SubscriptionEventSink = Object.freeze({
 	resetRequired: noop,
 });
 
-const NOOP_CONNECTION_EVENTS: ConnectionEventSink = Object.freeze({
+const SILENT_CONNECTION_EVENTS: ConnectionEventSink = Object.freeze({
 	attemptStarted: noop,
 	ready: noop,
 	lost: noop,
@@ -62,9 +62,9 @@ const NOOP_CONNECTION_EVENTS: ConnectionEventSink = Object.freeze({
 	episodeEnded: noop,
 });
 
-export const NOOP_CLIENT_EVENTS: ClientEventSink = Object.freeze({
-	connection: NOOP_CONNECTION_EVENTS,
-	createSubscription: () => NOOP_SUBSCRIPTION_EVENTS,
+export const SILENT_CLIENT_EVENTS: ClientEventSink = Object.freeze({
+	connection: SILENT_CONNECTION_EVENTS,
+	createSubscription: () => SILENT_SUBSCRIPTION_EVENTS,
 	closed: noop,
 });
 
@@ -79,7 +79,7 @@ export function createClientEventSink(options: {
 	if (options.logger !== undefined && typeof options.logger !== "function") {
 		throw new TypeError("Realtime logger must be a function");
 	}
-	if (level === "silent") return NOOP_CLIENT_EVENTS;
+	if (level === "silent") return SILENT_CLIENT_EVENTS;
 
 	const dispatch = createDiagnosticDispatcher(options.logger ?? logToConsole);
 	const emit = createEmitter(level, dispatch);
