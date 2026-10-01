@@ -1,3 +1,4 @@
+import { diagnosticsForSubscription } from "@neon/live/_internal";
 import {
 	type LiveQueryBatchInfo,
 	type LiveQueryChange,
@@ -65,6 +66,10 @@ export class ReactLiveQueryStore<Row> {
 				const subscription = this.subscription;
 				if (subscription) this.update(subscription.getSnapshot());
 			},
+			diagnostics: () =>
+				this.subscription
+					? diagnosticsForSubscription(this.subscription)
+					: undefined,
 		});
 		this.utils = Object.freeze({
 			getState: this.getState,

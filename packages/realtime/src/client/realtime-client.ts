@@ -4,6 +4,11 @@ import {
 	type ConnectionHandle,
 } from "./connection/coordinator.js";
 import {
+	createRealtimeDiagnostics,
+	type RealtimeDiagnostics,
+	registerSubscriptionDiagnostics,
+} from "./diagnostics.js";
+import {
 	createParserRegistry,
 	type PostgreSQLParserRegistry,
 } from "./postgres/parsers.js";
@@ -31,6 +36,10 @@ export type {
 	RawLiveQuerySubscription,
 	RealtimeClient,
 	RealtimeClientOptions,
+	RealtimeLogEntry,
+	RealtimeLogEvent,
+	RealtimeLogger,
+	RealtimeLogLevel,
 } from "./types.js";
 
 class RealtimeClientImpl implements RealtimeClient {
@@ -41,9 +50,14 @@ class RealtimeClientImpl implements RealtimeClient {
 	>();
 	private disposed = false;
 	private readonly parsers: PostgreSQLParserRegistry;
+	private readonly diagnostics: RealtimeDiagnostics;
 
 	constructor(options: RealtimeClientOptions) {
-		this.coordinator = new ConnectionCoordinator(options);
+		this.diagnostics = createRealtimeDiagnostics(options);
+		this.coordinator = new ConnectionCoordinator({
+			...options,
+			diagnostics: this.diagnostics,
+		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
 
@@ -62,6 +76,7 @@ class RealtimeClientImpl implements RealtimeClient {
 		if (this.disposed) throw new Error("Realtime client is closed");
 		validateSealedQuery(query);
 		const materialized = options?.materialize !== false;
+		const subscriptionId = this.diagnostics.nextSubscriptionId();
 		const initialData = materialized
 			? (options as MaterializedLiveQueryOptions<Row> | undefined)
 					?.initialData
@@ -72,8 +87,15 @@ class RealtimeClientImpl implements RealtimeClient {
 			materialized,
 			this.parsers,
 			initialData,
+			this.diagnostics,
+			subscriptionId,
 		);
+		registerSubscriptionDiagnostics(subscription, {
+			diagnostics: this.diagnostics,
+			subscriptionId,
+		});
 		const handle = this.coordinator.subscribe(query, {
+			subscriptionId,
 			reconciliation: subscription,
 			admitted: (columns) => subscription.admit(columns),
 			disconnected: () => subscription.disconnected(),
@@ -122,6 +144,11 @@ class RealtimeClientImpl implements RealtimeClient {
 			subscription.markClosed();
 		this.handles.clear();
 		this.coordinator.close();
+		this.diagnostics.log(
+			"info",
+			"client_closed",
+			"Realtime client closed",
+		);
 	}
 }
 

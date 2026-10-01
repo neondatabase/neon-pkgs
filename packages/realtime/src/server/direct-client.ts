@@ -6,6 +6,8 @@ import type {
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 	RealtimeClient,
+	RealtimeLogger,
+	RealtimeLogLevel,
 } from "../client/types.js";
 import {
 	type ManagedDirectSubscription,
@@ -26,6 +28,8 @@ export class DirectLiveQueryClient {
 	constructor(
 		private readonly url: string,
 		private readonly parsers: PostgreSQLParsers | undefined,
+		private readonly logLevel: RealtimeLogLevel | undefined,
+		private readonly logger: RealtimeLogger | undefined,
 	) {
 		if (!url) throw new Error("Realtime requires a WebSocket URL");
 	}
@@ -76,6 +80,8 @@ export class DirectLiveQueryClient {
 				const client = module.createRealtimeClient({
 					url: this.url,
 					parsers: this.parsers,
+					logLevel: this.logLevel,
+					logger: this.logger,
 				});
 				this.client = client;
 				return client;

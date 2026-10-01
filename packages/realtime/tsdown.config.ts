@@ -9,6 +9,7 @@ export default defineConfig({
 		"src/index.ts",
 		"src/client.ts",
 		"src/server.ts",
+		"src/integration.ts",
 		"src/client/**/*.ts",
 		"src/server/**/*.ts",
 		"!src/**/*.test.*",

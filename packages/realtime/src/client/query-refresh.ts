@@ -1,4 +1,9 @@
+import type {
+	RealtimeLogMetadata,
+	RealtimeSubscriptionDiagnostics,
+} from "./diagnostics.js";
 import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
+import type { RealtimeLogEvent, RealtimeLogLevel } from "./types.js";
 
 const REFRESH_EARLY_MS = 10_000;
 const REFRESH_RETRY_MS = 1_000;
@@ -14,6 +19,8 @@ interface QueryRefreshControllerOptions<Row> {
 	readonly onSubscriptionRenewed?: () => void;
 	/** Called when invalid replacement data permanently stops automatic refresh. */
 	readonly onRefreshExhausted: (error: unknown) => void;
+	/** Resolve the subscription-scoped diagnostics used by integrations. */
+	readonly diagnostics?: () => RealtimeSubscriptionDiagnostics | undefined;
 }
 
 /**
@@ -69,7 +76,17 @@ export class QueryRefreshController<Row> {
 	 */
 	async replaceSealedQuery(query: SealedLiveQuery<Row>): Promise<void> {
 		this.assertSameQuery(query);
-		await this.options.renewSubscription(query);
+		try {
+			await this.options.renewSubscription(query);
+		} catch (error) {
+			this.log(
+				"warn",
+				"subscription_renewal_failed",
+				"Realtime subscription renewal failed",
+				{ error },
+			);
+			throw error;
+		}
 		this.query = query;
 		this.refreshStopped = false;
 		this.options.onSubscriptionRenewed?.();
@@ -99,6 +116,12 @@ export class QueryRefreshController<Row> {
 		const refreshDelay =
 			delay ??
 			Math.max(0, this.query.expiresAt - Date.now() - REFRESH_EARLY_MS);
+		this.log(
+			"debug",
+			"query_refresh_scheduled",
+			"Realtime query refresh scheduled",
+			{ delayMs: refreshDelay, expiresAt: this.query.expiresAt },
+		);
 		this.refreshTimer = setTimeout(() => {
 			this.refreshTimer = undefined;
 			void this.refresh();
@@ -116,14 +139,30 @@ export class QueryRefreshController<Row> {
 			return;
 		this.refreshInFlight = true;
 		const generation = this.generation;
+		this.log(
+			"debug",
+			"query_refresh_callback_started",
+			"Realtime query refresh callback started",
+		);
 		try {
 			const query = await refreshQuery();
 			if (!this.isCurrent(generation)) return;
+			this.log(
+				"debug",
+				"query_refresh_callback_succeeded",
+				"Realtime query refresh callback succeeded",
+			);
 			try {
 				validateSealedQuery(query);
 				this.assertSameQuery(query);
 			} catch (error) {
 				this.refreshStopped = true;
+				this.log(
+					"error",
+					"query_refresh_stopped",
+					"Realtime query refresh stopped permanently",
+					{ error },
+				);
 				this.options.onRefreshExhausted(error);
 				return;
 			}
@@ -134,8 +173,14 @@ export class QueryRefreshController<Row> {
 			this.query = query;
 			this.scheduleRefresh();
 			void this.renewSubscriptionRecoverably(query, generation);
-		} catch {
+		} catch (error) {
 			if (!this.isCurrent(generation)) return;
+			this.log(
+				"warn",
+				"query_refresh_callback_failed",
+				"Realtime query refresh callback failed; retrying",
+				{ error },
+			);
 			this.scheduleRefresh(REFRESH_RETRY_MS);
 		} finally {
 			if (generation === this.generation) this.refreshInFlight = false;
@@ -150,9 +195,16 @@ export class QueryRefreshController<Row> {
 			await this.options.renewSubscription(query);
 			if (this.isCurrent(generation) && this.query === query)
 				this.options.onSubscriptionRenewed?.();
-		} catch {
-			if (this.isCurrent(generation) && this.query === query)
+		} catch (error) {
+			if (this.isCurrent(generation) && this.query === query) {
+				this.log(
+					"warn",
+					"subscription_renewal_failed",
+					"Realtime subscription renewal failed; retrying",
+					{ error },
+				);
 				this.scheduleRefresh(REFRESH_RETRY_MS);
+			}
 		}
 	}
 
@@ -169,5 +221,18 @@ export class QueryRefreshController<Row> {
 	private clearTimer(): void {
 		if (this.refreshTimer !== undefined) clearTimeout(this.refreshTimer);
 		this.refreshTimer = undefined;
+	}
+
+	private log(
+		level: Exclude<RealtimeLogLevel, "silent">,
+		event: RealtimeLogEvent,
+		message: string,
+		metadata: RealtimeLogMetadata = {},
+	): void {
+		const context = this.options.diagnostics?.();
+		context?.diagnostics.log(level, event, message, {
+			...metadata,
+			subscriptionId: context.subscriptionId,
+		});
 	}
 }

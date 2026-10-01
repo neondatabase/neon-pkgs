@@ -25,4 +25,8 @@ export type {
 	RawLiveQuerySubscription,
 	RealtimeClient,
 	RealtimeClientOptions,
+	RealtimeLogEntry,
+	RealtimeLogEvent,
+	RealtimeLogger,
+	RealtimeLogLevel,
 } from "./types.js";

@@ -80,6 +80,46 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("emits structured diagnostics without exposing query contents", () => {
+		useFakeWebSocket();
+		const entries: unknown[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1?secret=do-not-log",
+			logLevel: "debug",
+			logger: (entry) => entries.push(entry),
+		});
+		const subscription = client.subscribe(query("sensitive-capability"));
+		const delivered = vi.fn();
+		subscription.onChange(() => {
+			throw new Error("listener failed");
+		});
+		subscription.onChange(delivered);
+
+		const socket = connectAndAdmit();
+		baselineSync(socket, "sensitive row value");
+
+		expect(
+			entries.map((entry) => (entry as { event: string }).event),
+		).toEqual(
+			expect.arrayContaining([
+				"subscription_started",
+				"connection_attempt_started",
+				"connection_ready",
+				"subscription_admitted",
+				"subscription_baseline_sync_started",
+				"subscription_baseline_sync_completed",
+				"subscription_live",
+				"subscription_listener_failed",
+			]),
+		);
+		expect(delivered).toHaveBeenCalledOnce();
+		const serialized = JSON.stringify(entries);
+		expect(serialized).not.toContain("sensitive-capability");
+		expect(serialized).not.toContain("sensitive row value");
+		expect(serialized).not.toContain("do-not-log");
+		client.close();
+	});
+
 	it("materializes a baseline sync using the subscribed result schema", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({

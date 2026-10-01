@@ -41,7 +41,12 @@
       "default": "./dist/server.js"
     },
     "./schema/neon-live-query-capability-v1.schema.json": "./schema/neon-live-query-capability-v1.schema.json",
-    "./schema/neon-live-protocol-v1.schema.json": "./schema/neon-live-protocol-v1.schema.json"
+    "./schema/neon-live-protocol-v1.schema.json": "./schema/neon-live-protocol-v1.schema.json",
+    "./_internal": {
+      "types": "./dist/integration.d.ts",
+      "import": "./dist/integration.js",
+      "default": "./dist/integration.js"
+    }
   },
   "files": [
     "README.md",

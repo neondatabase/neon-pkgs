@@ -3,6 +3,8 @@ import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RealtimeLogger,
+	RealtimeLogLevel,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 } from "../client/types.js";
@@ -149,6 +151,10 @@ export interface RealtimeDirectServerOptions<Query>
 	readonly url: string;
 	/** PostgreSQL result-parser overrides for trusted direct subscriptions. */
 	readonly parsers?: PostgreSQLParsers;
+	/** Minimum diagnostic level for the internal direct-subscription client. */
+	readonly logLevel?: RealtimeLogLevel;
+	/** Structured diagnostic sink for the internal direct-subscription client. */
+	readonly logger?: RealtimeLogger;
 }
 
 /**
@@ -204,6 +210,8 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 	const directClient = new DirectLiveQueryClient(
 		options.url,
 		options.parsers,
+		options.logLevel,
+		options.logger,
 	);
 	const subscribe = async <ConcreteQuery extends SealableQuery<Query>>(
 		query: ConcreteQuery,
