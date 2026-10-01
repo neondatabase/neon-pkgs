@@ -1,6 +1,7 @@
 import {
-	createNeonLiveDiagnostics,
-	type NeonLiveDiagnostics,
+	type ClientEventSink,
+	NOOP_CLIENT_EVENTS,
+	type SubscriptionEventSink,
 } from "../diagnostics.js";
 import {
 	decodeServerFrame,
@@ -31,7 +32,7 @@ export interface ConnectionSealedQuery {
 }
 
 export interface ConnectionCallbacks {
-	readonly subscriptionId?: string;
+	readonly events?: SubscriptionEventSink;
 	readonly reconciliation: ReconciliationTarget;
 	admitted(columns: readonly WireColumn[]): void;
 	disconnected(): void;
@@ -43,7 +44,7 @@ export interface ConnectionCoordinatorOptions {
 	readonly webSocketFactory?: WebSocketFactory;
 	readonly reconnect?: boolean | ReconnectOptions;
 	readonly heartbeat?: boolean | HeartbeatOptions;
-	readonly diagnostics?: NeonLiveDiagnostics;
+	readonly events?: ClientEventSink;
 }
 
 export interface ConnectionHandle {
@@ -95,7 +96,7 @@ type ManagedSubscriptionState =
 	| "closed";
 
 interface ManagedSubscription {
-	readonly subscriptionId: string;
+	readonly events: SubscriptionEventSink;
 	query: ConnectionSealedQuery;
 	readonly callbacks: ConnectionCallbacks;
 	state: ManagedSubscriptionState;
@@ -122,7 +123,7 @@ export class ConnectionCoordinator {
 	private readonly webSocketFactory: WebSocketFactory;
 	private readonly reconnect?: ReconnectBackoff;
 	private readonly heartbeat?: ConnectionHeartbeat;
-	private readonly diagnostics: NeonLiveDiagnostics;
+	private readonly events: ClientEventSink;
 	private socket?: WebSocketLike;
 	private reconnectTimer?: unknown;
 	private reconnectDeadlineTimer?: ReturnType<typeof setTimeout>;
@@ -133,14 +134,11 @@ export class ConnectionCoordinator {
 	private ready = false;
 	private disposed = false;
 	private terminalConnection = false;
-	private everReady = false;
-	private outageStartedAt?: number;
-	private lastReconnectAttempt?: ReconnectAttempt;
 	private pendingConnectionError?: ConnectionCoordinatorError;
 
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
 		if (!options.url) throw new Error("Neon Live requires a WebSocket URL");
-		this.diagnostics = options.diagnostics ?? createNeonLiveDiagnostics({});
+		this.events = options.events ?? NOOP_CLIENT_EVENTS;
 		this.webSocketFactory =
 			options.webSocketFactory ?? defaultWebSocketFactory;
 		if (options.reconnect !== false) {
@@ -158,21 +156,11 @@ export class ConnectionCoordinator {
 			this.heartbeat = new ConnectionHeartbeat(heartbeatOptions, {
 				sendPing: (token) => {
 					const sent = this.send({ type: "ping", token });
-					if (sent) {
-						this.diagnostics.log(
-							"debug",
-							"connection_heartbeat_ping_sent",
-							"Neon Live heartbeat ping sent",
-						);
-					}
+					if (sent) this.events.connection.heartbeatPingSent();
 					return sent;
 				},
 				timedOut: () => {
-					this.diagnostics.log(
-						"warn",
-						"connection_heartbeat_timeout",
-						"Neon Live connection heartbeat timed out",
-					);
+					this.events.connection.heartbeatTimedOut();
 					this.pendingConnectionError =
 						new ConnectionCoordinatorError(
 							"heartbeat_timeout",
@@ -192,9 +180,7 @@ export class ConnectionCoordinator {
 		if (this.disposed) throw new Error("Neon Live client is closed");
 		validateSealedQuery(query);
 		const managed: ManagedSubscription = {
-			subscriptionId:
-				callbacks.subscriptionId ??
-				this.diagnostics.nextSubscriptionId(),
+			events: callbacks.events ?? this.events.createSubscription(),
 			query,
 			callbacks,
 			state: "active",
@@ -202,12 +188,7 @@ export class ConnectionCoordinator {
 		};
 		this.managedSubscriptions.add(managed);
 		this.activeSubscriptions.add(managed);
-		this.diagnostics.log(
-			"debug",
-			"subscription_started",
-			"Neon Live subscription started",
-			{ subscriptionId: managed.subscriptionId },
-		);
+		managed.events.started();
 		this.connect();
 		if (this.ready) this.sendSubscribe(managed);
 		return Object.freeze({
@@ -248,13 +229,19 @@ export class ConnectionCoordinator {
 		}
 		if (subscription.state === "failed" || this.terminalConnection) {
 			return Promise.reject(
-				new Error("Neon Live connection cannot recover"),
+				new ConnectionCoordinatorError(
+					"connection_lost",
+					false,
+					"Neon Live connection cannot recover",
+				),
 			);
 		}
 		subscription.query = query;
 		this.rejectQueuedRenewals(
 			subscription,
-			new Error(
+			new ConnectionCoordinatorError(
+				"renewal_superseded",
+				false,
 				"Neon Live renewal was superseded by a newer sealed query",
 			),
 		);
@@ -281,12 +268,7 @@ export class ConnectionCoordinator {
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
-		this.diagnostics.log(
-			"debug",
-			"subscription_unsubscribed",
-			"Neon Live subscription unsubscribed",
-			{ subscriptionId: subscription.subscriptionId },
-		);
+		subscription.events.unsubscribed();
 		this.rejectRenewals(
 			subscription,
 			new Error("Neon Live subscription is closed"),
@@ -313,14 +295,7 @@ export class ConnectionCoordinator {
 			return;
 		this.cancelReconnect();
 		this.ready = false;
-		this.diagnostics.log(
-			"debug",
-			"connection_attempt_started",
-			"Neon Live connection attempt started",
-			this.lastReconnectAttempt
-				? { attempt: this.lastReconnectAttempt.attempt }
-				: undefined,
-		);
+		this.events.connection.attemptStarted();
 		let socket: WebSocketLike;
 		try {
 			socket = this.webSocketFactory(this.options.url, LIVE_SUBPROTOCOL);
@@ -377,27 +352,7 @@ export class ConnectionCoordinator {
 				);
 			}
 			this.ready = true;
-			const recovered =
-				this.everReady && this.outageStartedAt !== undefined;
-			const durationMs =
-				this.outageStartedAt === undefined
-					? undefined
-					: Math.max(0, Date.now() - this.outageStartedAt);
-			this.diagnostics.log(
-				"info",
-				recovered ? "connection_recovered" : "connection_ready",
-				recovered
-					? "Neon Live connection recovered"
-					: "Neon Live connection is ready",
-				{
-					...(this.lastReconnectAttempt
-						? { attempt: this.lastReconnectAttempt.attempt }
-						: {}),
-					...(durationMs === undefined ? {} : { durationMs }),
-				},
-			);
-			this.everReady = true;
-			this.outageStartedAt = undefined;
+			this.events.connection.ready();
 			this.pendingConnectionError = undefined;
 			this.heartbeat?.start();
 			this.armReconnectStability(this.socket);
@@ -436,18 +391,12 @@ export class ConnectionCoordinator {
 				this.send({ type: "pong", token: message.token });
 				return;
 			case "pong":
-				this.diagnostics.log(
-					"debug",
-					"connection_heartbeat_pong_received",
-					"Neon Live heartbeat pong received",
-				);
+				this.events.connection.heartbeatPongReceived();
 				return;
 			case "snapshot_start":
-				this.logForLiveSubscription(
+				this.eventsForLiveSubscription(
 					message.live_id,
-					"subscription_snapshot_started",
-					"Neon Live subscription snapshot started",
-				);
+				)?.snapshotStarted();
 				this.reconciler.accept(message, byteLength);
 				return;
 			case "snapshot_chunk":
@@ -455,12 +404,9 @@ export class ConnectionCoordinator {
 				return;
 			case "snapshot_end":
 				this.reconciler.accept(message, byteLength);
-				this.logForLiveSubscription(
+				this.eventsForLiveSubscription(
 					message.live_id,
-					"subscription_snapshot_completed",
-					"Neon Live subscription snapshot completed",
-					{ chunkCount: message.chunk_count },
-				);
+				)?.snapshotCompleted(message.chunk_count);
 				return;
 			case "open":
 			case "keyed_results":
@@ -469,21 +415,14 @@ export class ConnectionCoordinator {
 			case "reset_required":
 				this.reconciler.accept(message, byteLength);
 				for (const target of message.targets) {
-					this.logForLiveSubscription(
+					this.eventsForLiveSubscription(
 						target.live_id,
-						"subscription_reset_required",
-						"Neon Live subscription requires a new snapshot",
-					);
+					)?.resetRequired();
 				}
 				return;
 			case "commit":
 				this.reconciler.accept(message, byteLength);
-				this.diagnostics.log(
-					"debug",
-					"connection_publication_committed",
-					"Neon Live publication committed",
-					{ bodyCount: message.body_count },
-				);
+				this.events.connection.publicationCommitted(message.body_count);
 				return;
 		}
 	}
@@ -518,12 +457,6 @@ export class ConnectionCoordinator {
 		subscription.liveId = message.live_id;
 		subscription.acceptedCapability = acceptedCapability;
 		this.liveSubscriptions.set(message.live_id, subscription);
-		this.diagnostics.log(
-			"debug",
-			"subscription_admitted",
-			"Neon Live subscription admitted",
-			{ subscriptionId: subscription.subscriptionId },
-		);
 		subscription.callbacks.admitted(message.columns);
 		this.reconciler.add({
 			liveId: message.live_id,
@@ -538,6 +471,7 @@ export class ConnectionCoordinator {
 			this.sendNextRenewal(subscription);
 		}
 		subscription.requestedCapability = undefined;
+		subscription.events.admitted();
 	}
 
 	private rejected(
@@ -574,12 +508,7 @@ export class ConnectionCoordinator {
 		subscription.renewing = undefined;
 		subscription.acceptedCapability = renewal.query.capability;
 		renewal.resolve();
-		this.diagnostics.log(
-			"info",
-			"subscription_renewed",
-			"Neon Live subscription renewed",
-			{ subscriptionId: subscription.subscriptionId },
-		);
+		subscription.events.renewed();
 		this.sendNextRenewal(subscription);
 	}
 
@@ -677,12 +606,7 @@ export class ConnectionCoordinator {
 		const renewal = subscription.queuedRenewals.shift();
 		if (!renewal) return;
 		subscription.renewing = renewal;
-		this.diagnostics.log(
-			"debug",
-			"subscription_renewal_started",
-			"Neon Live subscription renewal started",
-			{ subscriptionId: subscription.subscriptionId },
-		);
+		subscription.events.renewalStarted();
 		this.send({
 			type: "renew",
 			live_id: subscription.liveId,
@@ -740,12 +664,9 @@ export class ConnectionCoordinator {
 			this.reconnectExhausted();
 			return;
 		}
-		this.lastReconnectAttempt = attempt;
-		this.diagnostics.log(
-			"debug",
-			"connection_reconnect_scheduled",
-			"Neon Live connection reconnect scheduled",
-			{ attempt: attempt.attempt, delayMs: attempt.delayMs },
+		this.events.connection.reconnectScheduled(
+			attempt.attempt,
+			attempt.delayMs,
 		);
 		if (
 			this.reconnectDeadlineTimer === undefined &&
@@ -791,31 +712,30 @@ export class ConnectionCoordinator {
 			this.stabilityTimer = undefined;
 			this.reconnect?.reset();
 			this.cancelReconnectDeadline();
-			this.lastReconnectAttempt = undefined;
-			this.diagnostics.log(
-				"debug",
-				"connection_stable",
-				"Neon Live connection is stable",
-			);
+			this.events.connection.stable();
 		}, this.reconnect.stabilityMs);
 	}
 
 	private reconnectExhausted(): void {
+		if (this.terminalConnection) return;
 		const error = new ConnectionCoordinatorError(
 			"connection_lost",
 			false,
 			"Neon Live connection could not be restored",
 		);
-		this.diagnostics.log(
-			"error",
-			"connection_reconnect_exhausted",
-			"Neon Live reconnect policy was exhausted",
-			{ code: error.code, retryable: error.retryable, error },
-		);
-		this.failConnection(error, false);
+		this.events.connection.reconnectExhausted(error);
+		this.terminateConnection(error);
 	}
 
 	private failSubscription(
+		subscription: ManagedSubscription,
+		error: ConnectionCoordinatorError,
+	): void {
+		this.terminateSubscription(subscription, error);
+		subscription.events.failed(error);
+	}
+
+	private terminateSubscription(
 		subscription: ManagedSubscription,
 		error: ConnectionCoordinatorError,
 	): void {
@@ -857,6 +777,7 @@ export class ConnectionCoordinator {
 		subscription.acceptedCapability = undefined;
 		subscription.liveId = undefined;
 		this.rejectRenewals(subscription, error);
+		subscription.events.failed(error);
 		subscription.callbacks.failed(error);
 		if (this.activeSubscriptions.size === 0) {
 			this.cancelReconnectEpisode();
@@ -885,21 +806,7 @@ export class ConnectionCoordinator {
 			subscription.renewing = undefined;
 		}
 		subscription.callbacks.disconnected();
-		this.diagnostics.log(
-			"warn",
-			error.code === "key_retired"
-				? "query_encryption_key_retired"
-				: "query_expired",
-			error.code === "key_retired"
-				? "The query encryption key was retired"
-				: "The query expired",
-			{
-				subscriptionId: subscription.subscriptionId,
-				code: error.code,
-				retryable: error.retryable,
-				error,
-			},
-		);
+		subscription.events.queryUnavailable(error);
 
 		if (
 			rejectedCapability !== undefined &&
@@ -922,28 +829,23 @@ export class ConnectionCoordinator {
 		);
 	}
 
-	private failConnection(
-		error: ConnectionCoordinatorError,
-		logFailure = true,
-	): void {
+	private failConnection(error: ConnectionCoordinatorError): void {
 		if (this.terminalConnection) return;
+		this.events.connection.failed(error);
+		this.terminateConnection(error);
+	}
+
+	private terminateConnection(error: ConnectionCoordinatorError): void {
 		this.terminalConnection = true;
-		if (logFailure) {
-			this.diagnostics.log(
-				"error",
-				"connection_failed",
-				"Neon Live connection failed permanently",
-				{ code: error.code, retryable: error.retryable, error },
-			);
-		}
 		this.cancelReconnectEpisode();
 		const subscriptions = [...this.managedSubscriptions].filter(
 			(subscription) =>
 				subscription.state === "active" ||
 				subscription.state === "awaiting_query",
 		);
-		for (const subscription of subscriptions)
-			this.failSubscription(subscription, error);
+		for (const subscription of subscriptions) {
+			this.terminateSubscription(subscription, error);
+		}
 		this.closeSocket(APPLICATION_CLOSE, "protocol failure");
 	}
 
@@ -973,14 +875,7 @@ export class ConnectionCoordinator {
 		subscription.renewing = undefined;
 		for (const renewal of subscription.queuedRenewals) renewal.resolve();
 		subscription.queuedRenewals = [];
-		if (renewed) {
-			this.diagnostics.log(
-				"info",
-				"subscription_renewed",
-				"Neon Live subscription renewed",
-				{ subscriptionId: subscription.subscriptionId },
-			);
-		}
+		if (renewed) subscription.events.renewed();
 	}
 
 	private send(message: Parameters<typeof encodeClientMessage>[0]): boolean {
@@ -1023,48 +918,18 @@ export class ConnectionCoordinator {
 		this.cancelStabilityTimer();
 		this.cancelReconnectDeadline();
 		this.reconnect?.reset();
-		this.lastReconnectAttempt = undefined;
-		this.outageStartedAt = undefined;
 		this.pendingConnectionError = undefined;
+		this.events.connection.episodeEnded();
 	}
 
 	private noteConnectionLost(error?: unknown): void {
-		if (this.outageStartedAt !== undefined) return;
-		this.outageStartedAt = Date.now();
-		const coordinatorError =
-			error instanceof ConnectionCoordinatorError ? error : undefined;
-		this.diagnostics.log(
-			"warn",
-			"connection_lost",
-			"Neon Live connection was lost; reconnecting",
-			{
-				activeSubscriptionCount: this.activeSubscriptions.size,
-				...(coordinatorError
-					? {
-							code: coordinatorError.code,
-							retryable: coordinatorError.retryable,
-						}
-					: {}),
-				...(error === undefined ? {} : { error }),
-			},
-		);
+		this.events.connection.lost(error, this.activeSubscriptions.size);
 	}
 
-	private logForLiveSubscription(
+	private eventsForLiveSubscription(
 		liveId: string,
-		event:
-			| "subscription_snapshot_started"
-			| "subscription_snapshot_completed"
-			| "subscription_reset_required",
-		message: string,
-		metadata: { readonly chunkCount?: number } = {},
-	): void {
-		const subscription = this.liveSubscriptions.get(liveId);
-		if (!subscription) return;
-		this.diagnostics.log("debug", event, message, {
-			...metadata,
-			subscriptionId: subscription.subscriptionId,
-		});
+	): SubscriptionEventSink | undefined {
+		return this.liveSubscriptions.get(liveId)?.events;
 	}
 }
 

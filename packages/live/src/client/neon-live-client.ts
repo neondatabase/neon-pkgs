@@ -4,9 +4,9 @@ import {
 	type ConnectionHandle,
 } from "./connection/coordinator.js";
 import {
-	createNeonLiveDiagnostics,
-	type NeonLiveDiagnostics,
-	registerSubscriptionDiagnostics,
+	type ClientEventSink,
+	createClientEventSink,
+	registerSubscriptionEvents,
 } from "./diagnostics.js";
 import {
 	createParserRegistry,
@@ -50,13 +50,13 @@ class NeonLiveClientImpl implements NeonLiveClient {
 	>();
 	private disposed = false;
 	private readonly parsers: PostgreSQLParserRegistry;
-	private readonly diagnostics: NeonLiveDiagnostics;
+	private readonly events: ClientEventSink;
 
 	constructor(options: NeonLiveClientOptions) {
-		this.diagnostics = createNeonLiveDiagnostics(options);
+		this.events = createClientEventSink(options);
 		this.coordinator = new ConnectionCoordinator({
-			...options,
-			diagnostics: this.diagnostics,
+			url: options.url,
+			events: this.events,
 		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
@@ -76,7 +76,7 @@ class NeonLiveClientImpl implements NeonLiveClient {
 		if (this.disposed) throw new Error("Neon Live client is closed");
 		validateSealedQuery(query);
 		const materialized = options?.materialize !== false;
-		const subscriptionId = this.diagnostics.nextSubscriptionId();
+		const events = this.events.createSubscription();
 		const initialData = materialized
 			? (options as MaterializedLiveQueryOptions<Row> | undefined)
 					?.initialData
@@ -87,15 +87,11 @@ class NeonLiveClientImpl implements NeonLiveClient {
 			materialized,
 			this.parsers,
 			initialData,
-			this.diagnostics,
-			subscriptionId,
+			events,
 		);
-		registerSubscriptionDiagnostics(subscription, {
-			diagnostics: this.diagnostics,
-			subscriptionId,
-		});
+		registerSubscriptionEvents(subscription, events);
 		const handle = this.coordinator.subscribe(query, {
-			subscriptionId,
+			events,
 			reconciliation: subscription,
 			admitted: (columns) => subscription.admit(columns),
 			disconnected: () => subscription.disconnected(),
@@ -112,8 +108,20 @@ class NeonLiveClientImpl implements NeonLiveClient {
 		validateSealedQuery(query);
 		const handle = this.handles.get(subscription as Subscription<unknown>);
 		if (!handle) throw new Error("Neon Live subscription is closed");
-		await handle.renew(query);
-		subscription.replaceSealedQuery(query);
+		try {
+			await handle.renew(query);
+			subscription.replaceSealedQuery(query);
+		} catch (error) {
+			const state = subscription.getState();
+			if (
+				state.status !== "closed" &&
+				(!(error instanceof ConnectionCoordinatorError) ||
+					error.retryable)
+			) {
+				subscription.renewalFailed(error);
+			}
+			throw error;
+		}
 	}
 
 	unsubscribe<Row>(subscription: Subscription<Row>): void {
@@ -144,11 +152,7 @@ class NeonLiveClientImpl implements NeonLiveClient {
 			subscription.markClosed();
 		this.handles.clear();
 		this.coordinator.close();
-		this.diagnostics.log(
-			"info",
-			"client_closed",
-			"Neon Live client closed",
-		);
+		this.events.closed();
 	}
 }
 

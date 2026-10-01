@@ -1,4 +1,3 @@
-import { diagnosticsForSubscription } from "@neon/live/_internal";
 import {
 	type LiveQueryChange,
 	type LiveQueryState,
@@ -171,7 +170,7 @@ function createNeonLiveCollectionOptions<
 					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
 					onRefreshExhausted: reportError,
-					diagnostics: () => diagnosticsForSubscription(subscription),
+					subscription,
 				});
 				const observeReceipt = (
 					receipt: SyncAppliedReceipt,

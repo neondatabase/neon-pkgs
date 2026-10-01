@@ -1,4 +1,3 @@
-import { diagnosticsForSubscription } from "../client/diagnostics.js";
 import { QueryRefreshController } from "../client/query-refresh.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
@@ -33,7 +32,7 @@ export function manageDirectSubscription<
 		refreshQuery,
 		renewSubscription: (query) => subscription.renew(query),
 		onRefreshExhausted: () => undefined,
-		diagnostics: () => diagnosticsForSubscription(subscription),
+		subscription,
 	});
 
 	const stopRefresh = () => {

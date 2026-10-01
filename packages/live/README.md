@@ -219,9 +219,9 @@ Each entry has a stable `event` name:
 | Minimum level | Events |
 | --- | --- |
 | `error` | `connection_failed`, `connection_reconnect_exhausted`, `subscription_failed`, `subscription_row_decoding_failed`, `query_refresh_stopped` |
-| `warn` | `connection_lost`, `connection_heartbeat_timeout`, `query_expired`, `query_encryption_key_retired`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
+| `warn` | `connection_lost`, `query_expired`, `query_encryption_key_rotated`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
 | `info` | `connection_ready`, `connection_recovered`, `subscription_live`, `subscription_renewed`, `client_closed` |
-| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_snapshot_started`, `subscription_snapshot_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
+| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_heartbeat_timeout`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_snapshot_started`, `subscription_snapshot_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
 
 Supply `logger` to route the same structured entries into an application
 logger. `logLevel` still controls which entries it receives:
@@ -238,14 +238,15 @@ const client = createNeonLiveClient({
 });
 ```
 
-Logger failures are ignored so observability cannot interrupt stream
-delivery. SDK-produced metadata uses client-local opaque subscription IDs and
-does not include sealed capabilities, SQL, parameters, rows, cell values, raw
-wire messages, or endpoint URLs. An entry's `error` may retain an error
-reported by the proxy or thrown by application code, so route it according to
-the application's normal error-logging policy. React and TanStack DB refresh
-callbacks automatically reuse the diagnostics configured on their shared
-client.
+Entries are delivered from a microtask after the state transition that emitted
+them, and logger failures are ignored, so observability cannot re-enter or
+interrupt stream delivery. SDK-produced metadata uses client-local opaque
+subscription IDs and does not include sealed capabilities, SQL, parameters,
+rows, cell values, raw wire messages, or endpoint URLs. An entry's `error` may
+retain an error reported by the proxy or thrown by application or runtime code,
+so route it according to the application's normal error-logging policy. React
+and TanStack DB refresh callbacks automatically reuse the diagnostics
+configured on their shared client.
 
 ### PostgreSQL result values
 

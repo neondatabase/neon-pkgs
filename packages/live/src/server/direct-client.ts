@@ -18,6 +18,13 @@ type DirectSubscription = ManagedDirectSubscription<
 	RawLiveQuerySubscription<unknown>
 >;
 
+interface DirectLiveQueryClientOptions {
+	readonly url: string;
+	readonly parsers?: PostgreSQLParsers;
+	readonly logLevel?: NeonLiveLogLevel;
+	readonly logger?: NeonLiveLogger;
+}
+
 /** Own the lazily loaded low-level client used by trusted subscriptions. */
 export class DirectLiveQueryClient {
 	private readonly subscriptions = new Set<DirectSubscription>();
@@ -25,13 +32,8 @@ export class DirectLiveQueryClient {
 	private clientPromise?: Promise<NeonLiveClient>;
 	private closed = false;
 
-	constructor(
-		private readonly url: string,
-		private readonly parsers: PostgreSQLParsers | undefined,
-		private readonly logLevel: NeonLiveLogLevel | undefined,
-		private readonly logger: NeonLiveLogger | undefined,
-	) {
-		if (!url) throw new Error("Neon Live requires a WebSocket URL");
+	constructor(private readonly options: DirectLiveQueryClientOptions) {
+		if (!options.url) throw new Error("Neon Live requires a WebSocket URL");
 	}
 
 	assertOpen(): void {
@@ -78,10 +80,10 @@ export class DirectLiveQueryClient {
 			(module) => {
 				this.assertOpen();
 				const client = module.createNeonLiveClient({
-					url: this.url,
-					parsers: this.parsers,
-					logLevel: this.logLevel,
-					logger: this.logger,
+					url: this.options.url,
+					parsers: this.options.parsers,
+					logLevel: this.options.logLevel,
+					logger: this.options.logger,
 				});
 				this.client = client;
 				return client;

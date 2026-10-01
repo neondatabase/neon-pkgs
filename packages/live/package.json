@@ -39,11 +39,6 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js",
       "default": "./dist/server.js"
-    },
-    "./_internal": {
-      "types": "./dist/integration.d.ts",
-      "import": "./dist/integration.js",
-      "default": "./dist/integration.js"
     }
   },
   "files": [

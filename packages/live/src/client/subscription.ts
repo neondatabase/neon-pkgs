@@ -1,5 +1,5 @@
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
-import type { NeonLiveDiagnostics } from "./diagnostics.js";
+import type { SubscriptionEventSink } from "./diagnostics.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
 	decodeRow,
@@ -89,9 +89,8 @@ export class Subscription<Row>
 		private query: SealedLiveQuery<Row>,
 		readonly materialized: boolean,
 		private readonly parsers: PostgreSQLParserRegistry,
-		initialData?: readonly Row[],
-		private readonly diagnostics?: NeonLiveDiagnostics,
-		private readonly subscriptionId?: string,
+		initialData: readonly Row[] | undefined,
+		private readonly events: SubscriptionEventSink,
 	) {
 		if (materialized) {
 			this.rows = new Map(
@@ -115,6 +114,10 @@ export class Subscription<Row>
 
 	replaceSealedQuery(query: SealedLiveQuery<Row>): void {
 		this.query = query;
+	}
+
+	renewalFailed(error: unknown): void {
+		this.events.renewalFailed(error);
 	}
 
 	admit(columns: readonly WireColumn[]): void {
@@ -283,12 +286,7 @@ export class Subscription<Row>
 			false,
 		);
 		if (becameLive) {
-			this.diagnostics?.log(
-				"info",
-				"subscription_live",
-				"Neon Live subscription is live",
-				{ subscriptionId: this.subscriptionId },
-			);
+			this.events.live();
 		}
 		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
 	}
@@ -305,21 +303,6 @@ export class Subscription<Row>
 	}
 
 	fail(error: ConnectionCoordinatorError): void {
-		this.diagnostics?.log(
-			"error",
-			error.code === "parser_error"
-				? "subscription_row_decoding_failed"
-				: "subscription_failed",
-			error.code === "parser_error"
-				? "Neon Live could not decode a subscription row"
-				: "Neon Live subscription failed permanently",
-			{
-				subscriptionId: this.subscriptionId,
-				code: error.code,
-				retryable: error.retryable,
-				error,
-			},
-		);
 		this.setLifecycle(
 			Object.freeze({
 				status: "error",
@@ -385,16 +368,7 @@ export class Subscription<Row>
 		const previousStatus = this.state.status;
 		this.state = state;
 		this.snapshot = this.makeSnapshot();
-		this.diagnostics?.log(
-			"debug",
-			"subscription_state_changed",
-			"Neon Live subscription state changed",
-			{
-				subscriptionId: this.subscriptionId,
-				fromStatus: previousStatus,
-				toStatus: state.status,
-			},
-		);
+		this.events.stateChanged(previousStatus, state.status);
 		this.notify(this.stateListeners, this.state);
 		if (publishChange && this.materialized) {
 			this.notify(this.changeListeners, this.snapshot);
@@ -409,12 +383,7 @@ export class Subscription<Row>
 			try {
 				listener(...args);
 			} catch (error) {
-				this.diagnostics?.log(
-					"warn",
-					"subscription_listener_failed",
-					"A Neon Live subscription listener failed",
-					{ subscriptionId: this.subscriptionId, error },
-				);
+				this.events.listenerFailed(error);
 			}
 		}
 	}
