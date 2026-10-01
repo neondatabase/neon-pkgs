@@ -92,6 +92,10 @@ const NO_SUBCOMMANDS_VERBS = [
 	"status",
 ];
 
+const perfProbeEnd = Date.now() + 30;
+let perfProbeSpins = 0;
+while (Date.now() < perfProbeEnd) perfProbeSpins++;
+process.env.NEON_PERF_PROBE = String(perfProbeSpins);
 let builder = yargs(hideBin(process.argv));
 builder = builder
 	.scriptName(pkg.name)
