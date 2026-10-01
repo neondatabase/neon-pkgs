@@ -10,7 +10,10 @@ import { expect, test as originalTest } from "vitest";
 import { log } from "../log";
 
 type Fixtures = {
-	runMockServer: (mockDir: string) => Promise<Server>;
+	runMockServer: (
+		mockDir: string,
+		onRequest?: (request: { method: string; path: string }) => void,
+	) => Promise<Server>;
 	testCliCommand: (
 		args: string[],
 		options?: {
@@ -60,8 +63,14 @@ const reserveClosedPort = (): Promise<string> =>
 export const test = originalTest.extend<Fixtures>({
 	runMockServer: async ({}, use) => {
 		let startedServer: Server | undefined;
-		await use(async (mockDir) => {
+		await use(async (mockDir, onRequest) => {
 			const app = express();
+			if (onRequest) {
+				app.use((req, _res, next) => {
+					onRequest({ method: req.method, path: req.path });
+					next();
+				});
+			}
 			app.use(express.json());
 			app.use(
 				"/",

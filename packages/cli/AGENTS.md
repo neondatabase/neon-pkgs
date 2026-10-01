@@ -38,6 +38,32 @@ Implemented in `src/writer.ts` and `src/human_table.ts`. Every list and get goes
 
 `src/psql/print` emulates psql. `src/help.ts` is the yargs help renderer. Leave both alone.
 
+## Performance budgets
+
+`src/perf_budget.test.ts` runs fixed scenarios (`scripts/perf/scenarios.ts`) through the published entry `dist/cli.js` and compares two exact counts with `perf-budgets.json`:
+
+- **Modules loaded.** Startup time is dominated by how many modules Node loads, not by the code that runs. A failure lists what grew, each with its import chain from `dist/cli.js`. The usual cause is a static import on the startup path of commands that never use it; move the import to where it is used (`await import()` inside the handler).
+- **Neon API requests**, per `METHOD /path`, against the `mocks/main` server with analytics off. A failure lists the request that was added or repeated. Each one is a round trip to console.neon.tech for every user of the command.
+
+Fix and verify:
+
+```bash
+pnpm --filter neon test:perf                        # rebuilds neon and its workspace deps, then checks
+PERF_BUDGETS_UPDATE=1 pnpm --filter neon test:perf  # accept new counts; commit perf-budgets.json
+```
+
+Raise a budget only when the command needs the new module or request, and say why in the PR. When a change lowers a count, the test prints a note; lower the budget in the same PR so the improvement can't silently regress. The test needs Node >= 22.15 (`module.registerHooks`); the CLI itself still runs on 20.19.
+
+Wall time is noisy, so no test gates on it. To compare builds, or to find a slowdown that adds no modules or requests (added computation, sync I/O):
+
+```bash
+pnpm --filter neon perf                                   # median/p90 of the offline scenarios
+pnpm --filter neon perf --cli /abs/base/dist/cli.js --cli /abs/head/dist/cli.js            # interleaved A/B
+pnpm --filter neon perf --cli /abs/base/dist/cli.js --cli /abs/head/dist/cli.js --profile  # CPU self time by module, largest change first
+```
+
+`--cli` paths must be absolute. Pass a scenario as `--scenario=--help`.
+
 ## Reusing another command's behavior
 
 A command reused by another flow (`init`, `bootstrap`) exposes a typed, in-process
