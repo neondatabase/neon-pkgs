@@ -38,6 +38,7 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/live-react` | React provider and hook for Neon Live subscriptions. |
 | `@neon/live-tanstack` | TanStack DB collection integration for Neon Live subscriptions. |
 | `@neon/live-drizzle` | Drizzle adapter for type-safe Neon Live queries. |
+| `@neon/live-kysely` | Kysely adapter for type-safe Neon Live queries. |
 
 `neon-new` and `vite-plugin-neon-new` are **deprecated**. Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`. The old alias packages (`get-db`, `neondb`, `vite-plugin-db`, `@neondatabase/vite-plugin-postgres`) still re-export them.
 

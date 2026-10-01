@@ -107,6 +107,9 @@ query context or an explicit SQL cast.
 For typed Drizzle queries, install `@neon/live-drizzle` and configure its
 adapter when creating the backend SDK.
 
+For typed Kysely queries, install `@neon/live-kysely` and configure its
+adapter in the same way.
+
 ## Subscribe directly from a trusted environment
 
 A trusted, long-lived process can let the SDK hide capability issuance and
@@ -332,6 +335,8 @@ concerns.
 - [`@neon/live-tanstack`](../live-tanstack) synchronizes a query into a TanStack
   DB collection.
 - [`@neon/live-drizzle`](../live-drizzle) prepares typed Drizzle PostgreSQL
+  selects.
+- [`@neon/live-kysely`](../live-kysely) prepares typed Kysely PostgreSQL
   selects.
 
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
