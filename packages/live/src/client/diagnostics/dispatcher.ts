@@ -13,13 +13,27 @@ export function createDiagnosticDispatcher(
 			scheduled = false;
 			for (const queued of entries.splice(0)) {
 				try {
-					logger(queued);
+					const result = (
+						logger as (entry: NeonLiveLogEntry) => unknown
+					)(queued);
+					if (isPromiseLike(result)) {
+						void Promise.resolve(result).catch(ignoreLoggerFailure);
+					}
 				} catch {
 					// Application logging must never interrupt live-query delivery.
 				}
 			}
 		});
 	};
+}
+
+const ignoreLoggerFailure = (): void => undefined;
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+	return (typeof value === "object" && value !== null) ||
+		typeof value === "function"
+		? typeof (value as { readonly then?: unknown }).then === "function"
+		: false;
 }
 
 export function logToConsole(entry: NeonLiveLogEntry): void {

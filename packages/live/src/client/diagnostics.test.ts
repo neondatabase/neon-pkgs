@@ -99,6 +99,26 @@ describe("Neon Live client diagnostics", () => {
 		expect(delivered).toEqual(["thrown", "connection_failed"]);
 	});
 
+	it("ignores rejected async logger calls", async () => {
+		const delivered: string[] = [];
+		const events = createClientEventSink({
+			logLevel: "error",
+			logger: async (entry) => {
+				delivered.push(entry.event);
+				if (delivered.length === 1) {
+					throw new Error("async logger failed");
+				}
+			},
+		});
+
+		events.connection.failed(diagnosticError("first", false));
+		events.connection.failed(diagnosticError("second", false));
+		await flushDiagnostics();
+		await flushDiagnostics();
+
+		expect(delivered).toEqual(["connection_failed", "connection_failed"]);
+	});
+
 	it("uses the matching console method when no logger is supplied", async () => {
 		const warn = vi
 			.spyOn(console, "warn")
