@@ -40,10 +40,12 @@ type QueryRow<Query> =
 	Query extends RawSqlQuery<infer Row>
 		? Row
 		: Query extends {
+					/** Drizzle stores its inferred result rows on this query marker. */
 					readonly _: { readonly result: readonly (infer Row)[] };
 				}
 			? Row
 			: Query extends {
+						/** Kysely exposes its inferred result row through this marker. */
 						readonly expressionType: infer Row | undefined;
 					}
 				? Row

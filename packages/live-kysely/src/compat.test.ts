@@ -25,7 +25,7 @@ describe("Kysely Live compatibility boundary", () => {
 		const lowerVersion = await installedVersion("kysely");
 		const upperVersion = await installedVersion("kysely-0-29");
 
-		expect(integrationPackage.devDependencies.kysely).toBe("catalog:");
+		expect(integrationPackage.devDependencies.kysely).toBe("0.28.17");
 		expect(integrationPackage.devDependencies["kysely-0-29"]).toBe(
 			"npm:kysely@0.29.6",
 		);

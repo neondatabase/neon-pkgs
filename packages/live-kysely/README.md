@@ -72,8 +72,7 @@ Kysely leaves parameter encoding to its database driver. Neon Live instead
 encodes Kysely's raw values using the familiar node-postgres rules. Strings,
 numbers, booleans, bigints, `null`, `undefined`, `Date`, byte arrays,
 PostgreSQL arrays, JSON objects, and values implementing `toPostgres()` work
-directly. Parameters use OID `0`, allowing PostgreSQL to determine their exact
-types from query context.
+directly.
 
 Use `sql.val(array)` when a PostgreSQL array must be one bound value in a
 Kysely expression; a bare array in APIs that accept lists may instead become

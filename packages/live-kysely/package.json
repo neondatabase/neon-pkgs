@@ -47,7 +47,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "console-fail-test": "catalog:",
-    "kysely": "catalog:",
+    "kysely": "0.28.17",
     "kysely-0-29": "npm:kysely@0.29.6",
     "tsdown": "catalog:",
     "typescript": "catalog:",
