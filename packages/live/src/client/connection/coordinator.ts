@@ -1,6 +1,6 @@
 import {
 	type ClientEventSink,
-	NOOP_CLIENT_EVENTS,
+	SILENT_CLIENT_EVENTS,
 	type SubscriptionEventSink,
 } from "../diagnostics.js";
 import {
@@ -138,7 +138,7 @@ export class ConnectionCoordinator {
 
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
 		if (!options.url) throw new Error("Neon Live requires a WebSocket URL");
-		this.events = options.events ?? NOOP_CLIENT_EVENTS;
+		this.events = options.events ?? SILENT_CLIENT_EVENTS;
 		this.webSocketFactory =
 			options.webSocketFactory ?? defaultWebSocketFactory;
 		if (options.reconnect !== false) {
