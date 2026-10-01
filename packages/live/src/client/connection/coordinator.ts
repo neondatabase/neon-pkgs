@@ -577,6 +577,9 @@ export class ConnectionCoordinator {
 		subscription.requestId = requestId;
 		subscription.requestedCapability = subscription.query.capability;
 		this.pendingRequests.set(requestId, subscription);
+		if (subscription.queuedRenewals.length > 0) {
+			subscription.events.renewalStarted();
+		}
 		this.send({
 			type: "subscribe",
 			request_id: requestId,
