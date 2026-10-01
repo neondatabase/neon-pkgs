@@ -46,14 +46,12 @@ type KyselyQuery<Row> = {
 	readonly expressionType: Row | undefined;
 };
 
-type QueryRow<Query> =
-	Query extends RawSqlQuery<infer Row>
-		? Row
-		: Query extends DrizzleQuery<infer Row>
-			? Row
-			: Query extends KyselyQuery<infer Row>
-				? Row
-				: never;
+type QueryRow<Query> = Query extends
+	| RawSqlQuery<infer Row>
+	| DrizzleQuery<infer Row>
+	| KyselyQuery<infer Row>
+	? Row
+	: never;
 
 type SealInput<Query> = { readonly query: Query };
 type SealableQuery<Query> = Query | RawSqlQuery<unknown>;
