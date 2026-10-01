@@ -1,5 +1,11 @@
 # neon
 
+## 7.0.2
+
+### Patch Changes
+
+- ba25f0d: Terminal commands on macOS and Linux warn once a day when more than one `neon` install is on PATH. When one of them is Homebrew, the warning recommends `brew uninstall neonctl`, which leaves `neon` running the other install, such as npm.
+
 ## 7.0.1
 
 ### Patch Changes
