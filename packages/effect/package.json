@@ -1,0 +1,74 @@
+{
+	"name": "@neon/effect",
+	"version": "0.0.0",
+	"description": "Effect v4 bindings for the Neon SDK: every API call as an Effect, every paginated list as a Stream, with tagged errors and interruption.",
+	"keywords": [
+		"neon",
+		"database",
+		"postgres",
+		"api",
+		"sdk",
+		"effect",
+		"effect-ts"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git",
+		"directory": "packages/effect"
+	},
+	"homepage": "https://github.com/neondatabase/neon-pkgs/tree/main/packages/effect#readme",
+	"bugs": {
+		"url": "https://github.com/neondatabase/neon-pkgs/issues"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown && tsc -p tsconfig.build.json",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
+		"tsc": "tsc"
+	},
+	"dependencies": {
+		"@neon/sdk": "workspace:*"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
+	},
+	"devDependencies": {
+		"@neon/e2e-harness": "workspace:*",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
+		"effect": "4.0.0-rc.117",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

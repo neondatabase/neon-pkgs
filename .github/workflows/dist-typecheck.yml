@@ -37,6 +37,8 @@ jobs:
                       dir: tools
                     - name: "@neon/sdk"
                       dir: sdk
+                    - name: "@neon/effect"
+                      dir: effect
                     - name: "@neon/live"
                       dir: live
                     - name: "@neon/live-react"

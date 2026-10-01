@@ -127,7 +127,7 @@ one OIDC-authenticated Codecov upload. Coverage upload errors fail that job.
 ## Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`,
-and `neon` (the CLI) e2e suites against the real Neon API, creating and deleting real projects. The
+`@neon/effect`, and `neon` (the CLI) e2e suites against the real Neon API, creating and deleting real projects. The
 CLI suite spawns the built binary and parses its JSON output. All of them are excluded
 from `pnpm test:ci`, so you only pay for them when you ask for them.
 
@@ -142,8 +142,8 @@ above** — one test protects a branch, which the free plan disallows.
 2. Create an **organization-scoped** API key in that org's settings. Org-scoped matters: the key
    physically cannot see anything outside that org, so the cleanup sweep can't reach your other
    projects. A user-scoped key works too, but then `NEON_ORG_ID` is effectively required.
-3. Copy any package's `.env.example` to a `.env` **at the repository root** and fill it in. All
-   five suites read the root file, so you configure this once:
+3. Copy any package's `.env.example` to a `.env` **at the repository root** and fill it in. Every
+   suite reads the root file, so you configure this once:
 
    ```bash
    cp packages/sdk/.env.example .env
@@ -157,7 +157,7 @@ above** — one test protects a branch, which the free plan disallows.
 4. Run them:
 
    ```bash
-   pnpm test:e2e:live                       # all five suites
+   pnpm test:e2e:live                       # every suite
    pnpm --filter @neon/sdk test:e2e         # just one
    ```
 
