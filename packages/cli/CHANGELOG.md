@@ -1,5 +1,11 @@
 # neon
 
+## 7.0.5
+
+### Patch Changes
+
+- 6ba59b2: `neon connection-string` looks up the branch's endpoints, roles, and databases at the same time, so it returns faster. Its output is unchanged.
+
 ## 7.0.4
 
 ### Patch Changes
