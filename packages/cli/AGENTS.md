@@ -64,6 +64,8 @@ pnpm --filter neon perf --cli /abs/base/dist/cli.js --cli /abs/head/dist/cli.js 
 
 `--cli` paths must be absolute. Pass a scenario as `--scenario=--help`.
 
+On a PR that touches the CLI or what it bundles, the `CLI performance` workflow (`.github/workflows/cli-perf.yml`) builds the PR and its merge base on one runner and times both. Its log and job summary carry a table per scenario and, when a scenario is slower than the threshold, its CPU profile delta and the exact commands to reproduce it locally. It is advisory: it does not fail the PR. When it reports a slowdown on your PR, follow the steps it prints.
+
 ## Reusing another command's behavior
 
 A command reused by another flow (`init`, `bootstrap`) exposes a typed, in-process
