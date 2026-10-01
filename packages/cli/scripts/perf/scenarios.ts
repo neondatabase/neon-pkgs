@@ -108,6 +108,35 @@ export const SCENARIOS: Scenario[] = [
 		expect: { code: 0, stdout: /^Name +sunny-branch$/m },
 	},
 	{
+		// Default output, which scripts capture as DATABASE_URL.
+		name: "connection-string test_branch --project-id test --database-name test_db",
+		argv: [
+			"connection-string",
+			"test_branch",
+			"--project-id",
+			"test",
+			"--database-name",
+			"test_db",
+		],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^postgres(ql)?:\/\/\S+\n$/ },
+	},
+	{
+		name: "connection-string br-sunny-branch-123456 --project-id test --database-name test_db",
+		argv: [
+			"connection-string",
+			"br-sunny-branch-123456",
+			"--project-id",
+			"test",
+			"--database-name",
+			"test_db",
+		],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^postgres(ql)?:\/\/\S+\n$/ },
+	},
+	{
 		name: "branches list --project-id test",
 		argv: ["branches", "list", "--project-id", "test"],
 		api: true,

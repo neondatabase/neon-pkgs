@@ -112,9 +112,28 @@ export const handler = async (
 	}
 	const branchId = await branchIdFromProps(props);
 
+	// Independent lookups start together but are read in the order below, so the first
+	// error is the one a sequential run would report, and an earlier failure doesn't wait
+	// on a later request.
+	const endpointsRequest = props.apiClient.listProjectBranchEndpoints(
+		projectId,
+		branchId,
+	);
+	const rolesRequest = props.roleName
+		? undefined
+		: props.apiClient.listProjectBranchRoles(projectId, branchId);
+	const databasesRequest = props.apiClient.listProjectBranchDatabases(
+		projectId,
+		branchId,
+	);
+	for (const request of [endpointsRequest, rolesRequest, databasesRequest]) {
+		// Read in order below; this only stops an unread rejection from crashing the process.
+		request?.catch(() => undefined);
+	}
+
 	const {
 		data: { endpoints },
-	} = await props.apiClient.listProjectBranchEndpoints(projectId, branchId);
+	} = await endpointsRequest;
 	const matchEndpointType = props.endpointType ?? EndpointType.ReadWrite;
 	let endpoint = endpoints.find(
 		(e: Endpoint) => e.type === matchEndpointType,
@@ -130,11 +149,9 @@ export const handler = async (
 		);
 	}
 
-	const role =
-		props.roleName ||
-		(await props.apiClient
-			.listProjectBranchRoles(projectId, branchId)
-			.then(({ data }) => {
+	const role = !rolesRequest
+		? props.roleName
+		: await rolesRequest.then(({ data }) => {
 				if (data.roles.length === 0) {
 					throw new Error(
 						`No roles found for the branch: ${branchId}`,
@@ -148,11 +165,11 @@ export const handler = async (
 						.map((r: Role) => r.name)
 						.join(", ")}`,
 				);
-			}));
+			});
 
 	const {
 		data: { databases: branchDatabases },
-	} = await props.apiClient.listProjectBranchDatabases(projectId, branchId);
+	} = await databasesRequest;
 
 	const database =
 		props.databaseName ||
