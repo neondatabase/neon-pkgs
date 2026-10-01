@@ -31,6 +31,7 @@
 // shapes. Accessors expose the absolute file paths to the spec.
 
 import { execFileSync } from "node:child_process";
+import { createPrivateKey } from "node:crypto";
 import {
 	existsSync,
 	mkdtempSync,
@@ -153,6 +154,11 @@ export const LONG_CERT_CN = "ssl-" + "1234567890".repeat(6);
 export const LONG_CERT_USER = LONG_CERT_CN.slice(0, 63);
 /** CN of the non-ASCII client cert revoked by the client-CA CRL. */
 export const NONASCII_CERT_CN = "révoqué-Ünïcode-Пользователь";
+/**
+ * Wrong `sslpassword` the specs pass with the encrypted ssltestuser key.
+ * CertVault only keeps an encrypted key that rejects it with "bad decrypt".
+ */
+export const WRONG_SSLPASSWORD = "definitely-not-the-password";
 
 /**
  * Container-side paths the server reads its TLS material from. The init
@@ -278,19 +284,31 @@ export class CertVault {
 		// to exercise the wire-layer passphrase path.
 		const userCert = this.clientCerts.get("ssltestuser");
 		if (!userCert) throw new Error("CertVault: ssltestuser was not minted");
+		// A wrong passphrase still passes the AES-CBC padding check ~1/255 of
+		// the time, and OpenSSL then reports DECODER "unsupported" instead of
+		// "bad decrypt". The salt is random, so re-encrypt until the key gives
+		// "bad decrypt" for WRONG_SSLPASSWORD (upstream commits a fixed key).
 		const encryptedKey = this.path("client-ssltestuser-encrypted.key");
-		runOpenssl([
-			"pkcs8",
-			"-topk8",
-			"-in",
-			userCert.key,
-			"-out",
-			encryptedKey,
-			"-passout",
-			"pass:testpw",
-			"-v2",
-			"aes-256-cbc",
-		]);
+		for (let attempt = 1; ; attempt++) {
+			runOpenssl([
+				"pkcs8",
+				"-topk8",
+				"-in",
+				userCert.key,
+				"-out",
+				encryptedKey,
+				"-passout",
+				"pass:testpw",
+				"-v2",
+				"aes-256-cbc",
+			]);
+			if (failsWithBadDecrypt(encryptedKey, WRONG_SSLPASSWORD)) break;
+			if (attempt === 10) {
+				throw new Error(
+					"CertVault: encrypted ssltestuser key never failed with bad decrypt",
+				);
+			}
+		}
 		userCert.encryptedKey = encryptedKey;
 
 		// 8. CRL bundles. PG and Node both enable OpenSSL's CRL_CHECK_ALL, which
@@ -736,6 +754,15 @@ export class CertVault {
 
 function runOpenssl(args: string[]): void {
 	execFileSync("openssl", args, { stdio: "pipe" });
+}
+
+function failsWithBadDecrypt(keyPath: string, passphrase: string): boolean {
+	try {
+		createPrivateKey({ key: readFileSync(keyPath), passphrase });
+	} catch (err) {
+		return /bad decrypt/.test((err as Error).message);
+	}
+	return false;
 }
 
 function readUtf8(path: string): string {

@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 2.0.1
+
+### Patch Changes
+
+- d644995: Mark public-capable object storage bucket creation as open-world.
+
 ## 2.0.0
 
 ### Major Changes

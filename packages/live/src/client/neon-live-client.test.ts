@@ -16,6 +16,8 @@ interface MessageRow {
 
 const QUERY_FINGERPRINT = "11".repeat(32);
 const ROW_KEY = "a".repeat(64);
+const ROW_KEY_B = "b".repeat(64);
+const ROW_KEY_C = "c".repeat(64);
 
 type FakeWebSocketListener =
 	| (() => void)
@@ -103,6 +105,89 @@ describe("NeonLiveClient", () => {
 			error: undefined,
 			data: [{ id: 1, title: "before" }],
 		});
+		client.close();
+	});
+
+	it("preserves wire order across chunks and replacement resets", () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(query("ordered"));
+		const resets: unknown[] = [];
+		subscription.onReset((rows) => resets.push(rows));
+		const socket = connectAndAdmit();
+
+		snapshotRows(socket, [
+			[
+				{ row_key: ROW_KEY_C, values: ["3", "third"] },
+				{ row_key: ROW_KEY, values: ["1", "first"] },
+			],
+			[{ row_key: ROW_KEY_B, values: ["2", "second"] }],
+		]);
+		expect(subscription.getSnapshot()).toEqual({
+			status: "live",
+			error: undefined,
+			data: [
+				{ id: 3, title: "third" },
+				{ id: 1, title: "first" },
+				{ id: 2, title: "second" },
+			],
+		});
+
+		reset(socket, "2");
+		expect(subscription.getSnapshot()).toEqual({
+			status: "stale",
+			error: undefined,
+			data: [
+				{ id: 3, title: "third" },
+				{ id: 1, title: "first" },
+				{ id: 2, title: "second" },
+			],
+		});
+		snapshotRows(
+			socket,
+			[
+				[{ row_key: ROW_KEY_B, values: ["2", "second replacement"] }],
+				[
+					{ row_key: ROW_KEY_C, values: ["3", "third replacement"] },
+					{ row_key: ROW_KEY, values: ["1", "first replacement"] },
+				],
+			],
+			"41",
+			"2",
+		);
+
+		expect(subscription.getSnapshot()).toEqual({
+			status: "live",
+			error: undefined,
+			data: [
+				{ id: 2, title: "second replacement" },
+				{ id: 3, title: "third replacement" },
+				{ id: 1, title: "first replacement" },
+			],
+		});
+		expect(resets).toEqual([
+			[
+				{ rowId: ROW_KEY_C, row: { id: 3, title: "third" } },
+				{ rowId: ROW_KEY, row: { id: 1, title: "first" } },
+				{ rowId: ROW_KEY_B, row: { id: 2, title: "second" } },
+			],
+			[
+				{
+					rowId: ROW_KEY_B,
+					row: { id: 2, title: "second replacement" },
+				},
+				{
+					rowId: ROW_KEY_C,
+					row: { id: 3, title: "third replacement" },
+				},
+				{
+					rowId: ROW_KEY,
+					row: { id: 1, title: "first replacement" },
+				},
+			],
+		]);
 		client.close();
 	});
 
@@ -642,6 +727,23 @@ function snapshot(
 	liveId = "41",
 	epoch = "1",
 ): void {
+	snapshotRows(
+		socket,
+		[[{ row_key: ROW_KEY, values: ["1", title] }]],
+		liveId,
+		epoch,
+	);
+}
+
+function snapshotRows(
+	socket: FakeWebSocket,
+	chunks: readonly (readonly {
+		readonly row_key: string;
+		readonly values: readonly (string | null)[];
+	}[])[],
+	liveId = "41",
+	epoch = "1",
+): void {
 	socket.receive({
 		type: "snapshot_start",
 		live_id: liveId,
@@ -649,20 +751,38 @@ function snapshot(
 		snapshot_attempt: "1",
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
-	socket.receive({
-		type: "snapshot_chunk",
-		live_id: liveId,
-		epoch,
-		snapshot_attempt: "1",
-		index: 0,
-		rows: [{ row_key: ROW_KEY, values: ["1", title] }],
-	});
+	for (const [index, rows] of chunks.entries()) {
+		socket.receive({
+			type: "snapshot_chunk",
+			live_id: liveId,
+			epoch,
+			snapshot_attempt: "1",
+			index,
+			rows,
+		});
+	}
 	socket.receive({
 		type: "snapshot_end",
 		live_id: liveId,
 		epoch,
 		snapshot_attempt: "1",
-		chunk_count: 1,
+		chunk_count: chunks.length,
+	});
+}
+
+function reset(socket: FakeWebSocket, epoch: string): void {
+	socket.receive({ type: "open", publication_id: `reset-${epoch}` });
+	socket.receive({
+		type: "reset_required",
+		publication_id: `reset-${epoch}`,
+		index: 0,
+		targets: [{ live_id: "41", epoch, first_sequence: "1" }],
+	});
+	socket.receive({
+		type: "commit",
+		publication_id: `reset-${epoch}`,
+		body_count: 1,
+		frontier: { lsn: "0/10" },
 	});
 }
 
