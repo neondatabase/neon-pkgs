@@ -28,12 +28,16 @@ describe("@neon/live package", () => {
 			realpathSync(join(packageRoot, schemaSubpath)),
 		);
 
+		const packOutput = execFileSync(
+			"npm",
+			["pack", "--dry-run", "--json", "--ignore-scripts"],
+			{ cwd: packageRoot, encoding: "utf8" },
+		);
+		// Some npm versions print lifecycle output before the JSON despite
+		// --ignore-scripts. The machine-readable result is always emitted last.
+		const jsonStart = packOutput.lastIndexOf("\n[");
 		const packed = JSON.parse(
-			execFileSync(
-				"npm",
-				["pack", "--dry-run", "--json", "--ignore-scripts"],
-				{ cwd: packageRoot, encoding: "utf8" },
-			),
+			jsonStart === -1 ? packOutput : packOutput.slice(jsonStart + 1),
 		) as readonly PackResult[];
 		expect(packed).toHaveLength(1);
 		expect(packed[0]?.files.map((file) => file.path)).toContain(
