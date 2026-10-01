@@ -325,7 +325,11 @@ export const preloadCommand = async (
 	cli: yargs.Argv,
 	args: readonly string[],
 ): Promise<CommandEntry | undefined> => {
-	const completionAt = args.indexOf(COMPLETION_FLAG);
+	// After `--` the flag is an argument, not a completion request.
+	const doubleDash = args.indexOf("--");
+	const completionAt = (
+		doubleDash === -1 ? args : args.slice(0, doubleDash)
+	).indexOf(COMPLETION_FLAG);
 	let entry: CommandEntry | undefined;
 	if (completionAt >= 0) {
 		entry = selectCompletionCommand(args.slice(completionAt + 1));

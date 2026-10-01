@@ -115,6 +115,20 @@ describe("preloadCommand", () => {
 		).toBe("psql [branch]");
 	});
 
+	it("treats --get-yargs-completions after `--` as an argument", async () => {
+		expect(
+			(
+				await preloadCommand(cli(), [
+					"projects",
+					"get",
+					"--help",
+					"--",
+					"--get-yargs-completions",
+				])
+			)?.command,
+		).toBe("projects");
+	});
+
 	it("follows completion words after --get-yargs-completions", async () => {
 		expect(
 			(
