@@ -55,6 +55,7 @@
 		"test:e2e": "pnpm build && vitest run --config vitest.e2e.config.ts",
 		"test:perf": "pnpm --filter neon... build && vitest run src/perf_budget.test.ts",
 		"perf": "tsx scripts/perf/perf.ts",
+		"perf:ci-report": "tsx scripts/perf/ci-report.ts",
 		"test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
 	},
 	"dependencies": {
