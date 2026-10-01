@@ -73,7 +73,7 @@ export function createClientEventSink(options: {
 	readonly logger?: RealtimeLogger;
 }): ClientEventSink {
 	const level = options.logLevel ?? "silent";
-	if (!(level === "silent" || level in LEVEL_PRIORITY)) {
+	if (!(level === "silent" || Object.hasOwn(LEVEL_PRIORITY, level))) {
 		throw new TypeError(`Invalid Realtime log level: ${String(level)}`);
 	}
 	if (options.logger !== undefined && typeof options.logger !== "function") {

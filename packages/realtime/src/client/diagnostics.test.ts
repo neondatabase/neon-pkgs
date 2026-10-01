@@ -9,11 +9,18 @@ afterEach(() => {
 
 describe("Realtime client diagnostics", () => {
 	it("rejects invalid diagnostic configuration", () => {
-		expect(() =>
-			createClientEventSink({
-				logLevel: "verbose" as never,
-			}),
-		).toThrow("Invalid Realtime log level");
+		for (const logLevel of [
+			"verbose",
+			"constructor",
+			"toString",
+			"__proto__",
+		]) {
+			expect(() =>
+				createClientEventSink({
+					logLevel: logLevel as never,
+				}),
+			).toThrow("Invalid Realtime log level");
+		}
 		expect(() =>
 			createClientEventSink({
 				logger: {} as never,
