@@ -121,6 +121,123 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
+	it("logs only snapshots accepted and installed by reconciliation", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+			parsers: defineParsers({
+				90000: () => {
+					throw new Error("row decoding failed");
+				},
+			}),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const request = defined(
+			socket.sent.find((message) => message.type === "subscribe"),
+		);
+		socket.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{
+					name: "value",
+					type_oid: 90000,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		socket.receive({
+			type: "snapshot_start",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "2",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "snapshot_start",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "snapshot_end",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "1",
+			chunk_count: 0,
+		});
+		socket.receive({
+			type: "snapshot_chunk",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "2",
+			index: 0,
+			rows: [{ row_key: ROW_KEY, values: ["private-value"] }],
+		});
+		socket.receive({
+			type: "snapshot_end",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "2",
+			chunk_count: 1,
+		});
+		await Promise.resolve();
+
+		expect(
+			events.filter((event) => event === "subscription_snapshot_started"),
+		).toHaveLength(1);
+		expect(events).toContain("subscription_row_decoding_failed");
+		expect(events).not.toContain("subscription_snapshot_completed");
+		expect(subscription.getSnapshot().status).toBe("error");
+		client.close();
+	});
+
+	it("logs a reset requirement only after its publication commits", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+		await Promise.resolve();
+		events.length = 0;
+
+		socket.receive({ type: "open", publication_id: "reset" });
+		socket.receive({
+			type: "reset_required",
+			publication_id: "reset",
+			index: 0,
+			targets: [{ live_id: "41", epoch: "2", first_sequence: "1" }],
+		});
+		await Promise.resolve();
+		expect(events).not.toContain("subscription_reset_required");
+
+		socket.receive({
+			type: "commit",
+			publication_id: "reset",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		await Promise.resolve();
+		expect(events).toContain("subscription_reset_required");
+		client.close();
+	});
+
 	it("does not let a logger re-enter subscription admission", async () => {
 		useFakeWebSocket();
 		let subscription!: MaterializedLiveQuerySubscription<MessageRow>;

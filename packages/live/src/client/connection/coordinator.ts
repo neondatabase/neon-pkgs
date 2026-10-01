@@ -394,9 +394,6 @@ export class ConnectionCoordinator {
 				this.events.connection.heartbeatPongReceived();
 				return;
 			case "snapshot_start":
-				this.eventsForLiveSubscription(
-					message.live_id,
-				)?.snapshotStarted();
 				this.reconciler.accept(message, byteLength);
 				return;
 			case "snapshot_chunk":
@@ -404,9 +401,6 @@ export class ConnectionCoordinator {
 				return;
 			case "snapshot_end":
 				this.reconciler.accept(message, byteLength);
-				this.eventsForLiveSubscription(
-					message.live_id,
-				)?.snapshotCompleted(message.chunk_count);
 				return;
 			case "open":
 			case "keyed_results":
@@ -414,11 +408,6 @@ export class ConnectionCoordinator {
 				return;
 			case "reset_required":
 				this.reconciler.accept(message, byteLength);
-				for (const target of message.targets) {
-					this.eventsForLiveSubscription(
-						target.live_id,
-					)?.resetRequired();
-				}
 				return;
 			case "commit":
 				this.reconciler.accept(message, byteLength);
@@ -924,12 +913,6 @@ export class ConnectionCoordinator {
 
 	private noteConnectionLost(error?: unknown): void {
 		this.events.connection.lost(error, this.activeSubscriptions.size);
-	}
-
-	private eventsForLiveSubscription(
-		liveId: string,
-	): SubscriptionEventSink | undefined {
-		return this.liveSubscriptions.get(liveId)?.events;
 	}
 }
 

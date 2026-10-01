@@ -196,6 +196,11 @@ export class Subscription<Row>
 		this.owner.unsubscribe(this);
 	};
 
+	snapshotStarted(): void {
+		if (this.closed) return;
+		this.events.snapshotStarted();
+	}
+
 	installReset(wireRows: readonly WireRow[]): void {
 		if (this.closed) return;
 		const rows = this.decodeReset(wireRows);
@@ -291,7 +296,14 @@ export class Subscription<Row>
 		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
 	}
 
+	snapshotCompleted(chunkCount: number): void {
+		if (this.closed) return;
+		this.events.snapshotCompleted(chunkCount);
+	}
+
 	resetRequired(): void {
+		if (this.closed) return;
+		this.events.resetRequired();
 		this.setLifecycle(staleState(this));
 	}
 
