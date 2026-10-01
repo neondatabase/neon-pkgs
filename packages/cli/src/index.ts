@@ -19,7 +19,7 @@ import { AuthRefreshError, defaultClientID } from "./auth.js";
 import { getAuthContext } from "./auth_context.js";
 import { recoverFrom401 } from "./auth_recovery.js";
 import { ensureAuth } from "./commands/auth.js";
-import commands from "./commands/index.js";
+import { lazyCommands, preloadCommand } from "./commands/manifest.js";
 import { defaultDir, ensureConfigDir } from "./config.js";
 import { currentContextFile, enrichFromContext } from "./context.js";
 import {
@@ -218,7 +218,8 @@ builder = builder
 	.middleware(ensureAuth)
 	.middleware(enrichFromContext as any)
 	.middleware(analyticsMiddleware)
-	.command(commands as any)
+	// @types/yargs declares builders synchronous; yargs 17 awaits a builder's promise.
+	.command(lazyCommands as any)
 	.strictCommands()
 	.version(pkg.version)
 	.group("version", "Global options:")
@@ -344,6 +345,7 @@ void (async () => {
 	let attempts = 0;
 	const MAX_ATTEMPTS = 2;
 
+	await preloadCommand(builder, hideBin(process.argv));
 	while (attempts < MAX_ATTEMPTS) {
 		try {
 			const args = await builder.argv;
