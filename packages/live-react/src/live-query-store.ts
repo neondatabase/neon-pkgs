@@ -69,6 +69,7 @@ export class ReactLiveQueryStore<Row> {
 		this.utils = Object.freeze({
 			getState: this.getState,
 			getSnapshot: this.getSnapshot,
+			awaitRows: this.awaitRows,
 			onReset: this.onReset,
 			onBatch: this.onBatch,
 			onStateChange: this.onStateChange,
@@ -108,6 +109,16 @@ export class ReactLiveQueryStore<Row> {
 	};
 
 	private getSnapshot = (): LiveQuerySnapshot<Row> => this.snapshot;
+
+	private awaitRows = (
+		matches: (rows: readonly Row[]) => boolean,
+		timeout?: number,
+	): Promise<void> => {
+		const subscription = this.subscription;
+		return subscription
+			? subscription.awaitRows(matches, timeout)
+			: Promise.reject(new Error("Neon Live query is not subscribed"));
+	};
 
 	private onReset = (listener: ResetListener<Row>): (() => void) =>
 		listen(this.resetListeners, listener);

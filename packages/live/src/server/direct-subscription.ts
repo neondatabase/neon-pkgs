@@ -69,6 +69,10 @@ export function manageDirectSubscription<
 		? {
 				...base,
 				getSnapshot: () => subscription.getSnapshot(),
+				awaitRows: (
+					matches: (rows: readonly Row[]) => boolean,
+					timeout?: number,
+				) => subscription.awaitRows(matches, timeout),
 				onChange: (
 					listener: (snapshot: LiveQuerySnapshot<Row>) => void,
 				) => subscription.onChange(listener),

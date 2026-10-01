@@ -53,6 +53,14 @@ describe("Neon Live React integration", () => {
 		expect(observed?.utils).not.toHaveProperty("unsubscribe");
 		await expect(observed?.utils.awaitTxId("42")).resolves.toBeUndefined();
 		expect(client.latest().awaitTxId).toHaveBeenCalledWith("42", undefined);
+		const matches = (rows: readonly MessageRow[]) => rows.length > 0;
+		await expect(
+			observed?.utils.awaitRows(matches),
+		).resolves.toBeUndefined();
+		expect(client.latest().awaitRows).toHaveBeenCalledWith(
+			matches,
+			undefined,
+		);
 
 		act(() => {
 			client.latest().publish({
@@ -282,6 +290,13 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 	awaitTxId = vi.fn(
 		async (_txid: string, _timeout?: number): Promise<void> =>
 			Promise.resolve(),
+	);
+
+	awaitRows = vi.fn(
+		async (
+			_matches: (rows: readonly Row[]) => boolean,
+			_timeout?: number,
+		): Promise<void> => Promise.resolve(),
 	);
 
 	onChange = (

@@ -77,10 +77,10 @@ export function Messages(props: MessagesProps) {
 ```
 
 The hook returns `data`, `status`, and `error`, plus stable `utils` for
-`getState()`, `getSnapshot()`, `awaitTxId()`, `renew()`, and lower-level event
-listeners. Register listeners in an effect. `utils` omits `unsubscribe()`
-because React owns cleanup when the component unmounts or its sealed query
-changes.
+`getState()`, `getSnapshot()`, `awaitTxId()`, `awaitRows()`, `renew()`, and
+lower-level event listeners. Register listeners in an effect. `utils` omits
+`unsubscribe()` because React owns cleanup when the component unmounts or its
+sealed query changes.
 
 When `refreshQuery` is present, the integration renews before expiry
 and keeps retrying through capability expiry and transport outages. Existing
@@ -100,7 +100,7 @@ the subscription has applied the mutation's PostgreSQL transaction:
 ```tsx
 import { startTransition, useOptimistic } from "react";
 
-const { data = [], utils } = useLiveQuery(authorization);
+const { data = [], utils } = useLiveQuery(sealedQuery);
 const [optimisticTodos, setOptimisticTodo] = useOptimistic(
   data,
   (todos, update: { id: string; completed: boolean }) =>
@@ -131,6 +131,26 @@ visible. Neon Live does not currently acknowledge a no-op transaction after
 that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, pass a timeout or avoid waiting when the mutation
 endpoint reports that no change was made.
+
+When the mutation endpoint does not return a transaction ID, `awaitRows()` can
+keep the optimistic Action pending until the complete materialized result
+matches the desired state:
+
+```tsx
+await utils.awaitRows(
+  (rows) =>
+    rows.some(
+      (todo) => todo.id === id && todo.completed === completed,
+    ),
+  10_000,
+);
+```
+
+The current snapshot is checked first, so include a unique version, timestamp,
+or mutation identifier when the predicate must confirm one particular
+mutation. Otherwise pre-existing or unrelated data can satisfy it. The timeout
+is optional; without one, the promise waits until the rows match or the
+subscription closes or enters a terminal error.
 
 ## API
 

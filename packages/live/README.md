@@ -275,6 +275,28 @@ that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, use a timeout or avoid waiting when the mutation made
 no change.
 
+Materialized subscriptions can instead wait for their complete rows to satisfy
+an application predicate:
+
+```ts
+await subscription.awaitRows(
+  (rows) =>
+    rows.some(
+      (message) =>
+        message.id === messageId && message.body === "Updated",
+    ),
+  10_000,
+);
+```
+
+`awaitRows()` checks the current snapshot before listening for later changes,
+waits indefinitely when its optional timeout is omitted, and rejects if the
+subscription closes or enters a terminal error. Use a unique version,
+timestamp, or mutation identifier in the predicate when it must confirm a
+specific mutation; pre-existing or unrelated rows can otherwise satisfy it.
+Raw subscriptions do not expose `awaitRows()` because they do not retain the
+complete result.
+
 ### Raw subscriptions
 
 The default subscription materializes query rows. Integrations that own their

@@ -228,6 +228,7 @@ describe("NeonLiveClient", () => {
 		expectTypeOf(subscription).toEqualTypeOf<
 			RawLiveQuerySubscription<MessageRow>
 		>();
+		expectTypeOf(subscription).not.toHaveProperty("awaitRows");
 		const resets: unknown[] = [];
 		const batches: unknown[] = [];
 		subscription.onReset((rows) => resets.push(rows));
@@ -427,6 +428,64 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
+	it("waits for matching materialized rows and handles an existing match", async () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+
+		await expect(
+			subscription.awaitRows((rows) => rows[0]?.title === "before"),
+		).resolves.toBeUndefined();
+		const matchingRows = subscription.awaitRows(
+			(rows) => rows[0]?.title === "after",
+		);
+		publication(
+			socket,
+			[
+				{
+					op: "upsert",
+					row_key: ROW_KEY,
+					values: ["1", "after"],
+				},
+			],
+			["42"],
+		);
+
+		await expect(matchingRows).resolves.toBeUndefined();
+		client.close();
+	});
+
+	it("times out row waits and rejects them when closed", async () => {
+		useFakeWebSocket();
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(query("initial"), {
+			initialData: [{ id: 1, title: "before" }],
+		});
+
+		await expect(subscription.awaitRows(() => false, 1)).rejects.toThrow(
+			"Timed out waiting for Neon Live rows",
+		);
+		await expect(subscription.awaitRows(() => false, -1)).rejects.toThrow(
+			"non-negative",
+		);
+		const predicateError = new Error("predicate failed");
+		await expect(
+			subscription.awaitRows(() => {
+				throw predicateError;
+			}),
+		).rejects.toBe(predicateError);
+		const pending = subscription.awaitRows(() => false);
+		subscription.unsubscribe();
+		await expect(pending).rejects.toThrow("subscription is closed");
+		client.close();
+	});
+
 	it("renews only with a sealed query for the same query", async () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({
@@ -509,13 +568,14 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
-	it("maps permanent subscription failures to error", () => {
+	it("maps permanent subscription failures to error", async () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
+		const matchingRows = subscription.awaitRows(() => false);
 		socket.receive({
 			type: "subscription_error",
 			live_id: "41",
@@ -525,6 +585,10 @@ describe("NeonLiveClient", () => {
 		expect(subscription.getSnapshot()).toMatchObject({
 			status: "error",
 			error: { code: "snapshot_failed", retryable: false },
+		});
+		await expect(matchingRows).rejects.toMatchObject({
+			code: "snapshot_failed",
+			retryable: false,
 		});
 		client.close();
 	});
