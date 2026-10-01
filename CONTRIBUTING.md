@@ -217,6 +217,17 @@ If you bump a dependency that raises the runtime floor, update **every published
 and update the table above. Don't lower a package's `engines` below what its dependency tree
 actually supports.
 
+## Changing `@neon/sdk`
+
+Keep `@neon/tools` and `@neon/effect` in step with every SDK change. For a spec
+update, regenerate the SDK, update its ergonomic layer and verify both dependent
+packages. Publish `@neon/sdk` first, then publish the updated `@neon/tools` and
+`@neon/effect`. After publishing, update downstream consumers such as
+`neondatabase/mcp-server-neon`, which pins exact SDK and tools versions.
+
+See [Keeping `@neon/tools` and `@neon/effect` in step with the SDK](./AGENTS.md#keeping-neontools-and-neoneffect-in-step-with-the-sdk)
+for commands, coverage checks and publish order.
+
 ## Changesets
 
 User-facing changes need a changeset:
