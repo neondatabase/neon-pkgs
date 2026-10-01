@@ -6,20 +6,19 @@ import { looksLikeBranchId } from "./formats.js";
 
 const BRANCHES_LIST_LIMIT = 100;
 
-/**
- * Branch list pages cap at 100. A name stored in `.neon` can live on a later
- * page, so resolution has to walk `pagination.next` before treating it as missing.
- */
 type BranchAnnotations = Awaited<
 	ReturnType<CommonProps["apiClient"]["listProjectBranches"]>
 >["data"]["annotations"];
 
-/** Every branch of a project, with the annotations the listing returned for them. */
 export type BranchListing = {
 	branches: Branch[];
 	annotations: BranchAnnotations;
 };
 
+/**
+ * Branch list pages cap at 100. A name stored in `.neon` can live on a later
+ * page, so resolution has to walk `pagination.next` before treating it as missing.
+ */
 export const listAllProjectBranchesWithAnnotations = async (
 	apiClient: CommonProps["apiClient"],
 	projectId: string,
@@ -127,7 +126,10 @@ export const resolveBranchFromProps = async (
 
 	if (explicit !== undefined && looksLikeBranchId(explicit)) {
 		(props as any).branchId = explicit;
-		return { branchId: explicit };
+		const branch = known?.branches.find((b) => b.id === explicit);
+		return branch
+			? { branchId: explicit, branch, listing: known }
+			: { branchId: explicit };
 	}
 
 	const listing =

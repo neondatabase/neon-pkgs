@@ -758,6 +758,30 @@ describe("branches", () => {
 		}
 	});
 
+	test("NO_COLOR removes colors from branch table and schema-diff output", async ({
+		testCliCommand,
+	}) => {
+		const env = { FORCE_COLOR: "1", NO_COLOR: "1" };
+		const list = await testCliCommand(
+			["branches", "list", "--project-id", "test"],
+			{ outputTable: true, snapshot: false, env },
+		);
+		expect(list.stdout).toContain("[default] main");
+		expect(list.stdout).not.toMatch(/\u001b\[/);
+		const diff = await testCliCommand(
+			[
+				"branches",
+				"schema-diff",
+				"page-one",
+				"page-two",
+				"--project-id",
+				"proj-paged-branches",
+			],
+			{ outputTable: true, snapshot: false, env },
+		);
+		expect(diff.stdout).not.toMatch(/\u001b\[/);
+	});
+
 	test("schema-diff/table says when the schemas match", async ({
 		testCliCommand,
 	}) => {

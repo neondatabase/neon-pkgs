@@ -199,6 +199,10 @@ const colorize = (patch: string) => {
 };
 
 const colorizer = (colorId: ColorId) => {
+	// chalk 5 does not read NO_COLOR (https://no-color.org).
+	if (process.env.NO_COLOR) {
+		return (line: string) => line;
+	}
 	const color = COLORS[colorId];
 	return (line: string) => color(line);
 };

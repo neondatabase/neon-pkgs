@@ -69,7 +69,6 @@ const currentBranchOf = (props: ProjectScopeProps): string | undefined => {
 		: undefined;
 };
 
-/** Word labels before the name, colored so they read as tags: `[default] [current] main`. */
 const branchNameCell = (br: Branch, labels: BranchLabels): string => {
 	const tags: string[] = [];
 	if (br.default) {
@@ -115,7 +114,6 @@ const formatBytes = (bytes: number): string => {
 	return unit === 0 ? `${bytes} bytes` : `${value.toFixed(1)} ${units[unit]}`;
 };
 
-/** Table cells shared by every view of a branch; JSON and YAML never see them. */
 const branchColumns = (labels: BranchLabels) => ({
 	name: (br: Branch) => branchNameCell(br, labels),
 	current_state: (br: Branch) => stateCell(br.current_state),
