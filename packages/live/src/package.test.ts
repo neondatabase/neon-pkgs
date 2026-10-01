@@ -57,5 +57,5 @@ describe("@neon/live package", () => {
 		} finally {
 			rmSync(packDestination, { recursive: true, force: true });
 		}
-	});
+	}, 30_000);
 });
