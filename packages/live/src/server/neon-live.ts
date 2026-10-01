@@ -36,18 +36,22 @@ export { pgParam } from "./raw-parameter.js";
 export type { RawSqlParameter, RawSqlQuery } from "./raw-sql.js";
 export { rawSql } from "./raw-sql.js";
 
+type DrizzleQuery<Row> = {
+	/** Drizzle stores its inferred result rows on this query marker. */
+	readonly _: { readonly result: readonly Row[] };
+};
+
+type KyselyQuery<Row> = {
+	/** Kysely exposes its inferred result row through this marker. */
+	readonly expressionType: Row | undefined;
+};
+
 type QueryRow<Query> =
 	Query extends RawSqlQuery<infer Row>
 		? Row
-		: Query extends {
-					/** Drizzle stores its inferred result rows on this query marker. */
-					readonly _: { readonly result: readonly (infer Row)[] };
-				}
+		: Query extends DrizzleQuery<infer Row>
 			? Row
-			: Query extends {
-						/** Kysely exposes its inferred result row through this marker. */
-						readonly expressionType: infer Row | undefined;
-					}
+			: Query extends KyselyQuery<infer Row>
 				? Row
 				: never;
 
