@@ -210,15 +210,25 @@ function createSubscriptionEventSink(
 			emit("query_refresh_stopped", { ...metadata, error }),
 	};
 	Object.freeze(refresh);
+	let renewalPending = false;
 
 	const subscription: SubscriptionEventSink = {
 		refresh,
 		started: () => emit("subscription_started", metadata),
 		admitted: () => emit("subscription_admitted", metadata),
-		renewalStarted: () => emit("subscription_renewal_started", metadata),
-		renewalFailed: (error) =>
-			emit("subscription_renewal_failed", { ...metadata, error }),
-		renewed: () => emit("subscription_renewed", metadata),
+		renewalStarted: () => {
+			if (renewalPending) return;
+			renewalPending = true;
+			emit("subscription_renewal_started", metadata);
+		},
+		renewalFailed: (error) => {
+			renewalPending = false;
+			emit("subscription_renewal_failed", { ...metadata, error });
+		},
+		renewed: () => {
+			renewalPending = false;
+			emit("subscription_renewed", metadata);
+		},
 		unsubscribed: () => emit("subscription_unsubscribed", metadata),
 		live: () => emit("subscription_live", metadata),
 		failed: (error) =>

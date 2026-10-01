@@ -216,7 +216,13 @@ describe("ConnectionCoordinator", () => {
 	it("reconnects and resubscribes with the newest sealed query", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();
-		const coordinator = createCoordinator();
+		const events: string[] = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "debug",
+				logger: (entry) => events.push(entry.event),
+			}),
+		});
 		const handle = coordinator.subscribe(
 			{ capability: "initial" },
 			callbacks,
@@ -243,9 +249,14 @@ describe("ConnectionCoordinator", () => {
 			columns: [],
 		});
 		await renewal;
+		await vi.runAllTicks();
 		expect(
 			second.sent.filter((message) => message.type === "renew"),
 		).toEqual([]);
+		expect(events.filter((event) => event.includes("renew"))).toEqual([
+			"subscription_renewal_started",
+			"subscription_renewed",
+		]);
 	});
 
 	it("coalesces queued renewals while disconnected", async () => {
@@ -354,7 +365,13 @@ describe("ConnectionCoordinator", () => {
 
 	it("resubscribes with a queued replacement when the active capability expires", async () => {
 		const callbacks = target();
-		const coordinator = createCoordinator();
+		const events: string[] = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "debug",
+				logger: (entry) => events.push(entry.event),
+			}),
+		});
 		const handle = coordinator.subscribe(
 			{ capability: "initial" },
 			callbacks,
@@ -390,7 +407,12 @@ describe("ConnectionCoordinator", () => {
 		});
 
 		await expect(renewal).resolves.toBeUndefined();
+		await Promise.resolve();
 		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(events.filter((event) => event.includes("renew"))).toEqual([
+			"subscription_renewal_started",
+			"subscription_renewed",
+		]);
 	});
 
 	it("waits for a newer replacement when a replacement has also expired", async () => {
