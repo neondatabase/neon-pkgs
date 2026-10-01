@@ -53,6 +53,8 @@
 		"test": "pnpm --filter neonctl... build && vitest run",
 		"test:ci": "pnpm build && vitest run",
 		"test:e2e": "pnpm build && vitest run --config vitest.e2e.config.ts",
+		"test:perf": "pnpm --filter neon... build && vitest run src/perf_budget.test.ts",
+		"perf": "tsx scripts/perf/perf.ts",
 		"test:conformance": "vitest run --config tests/psql-conformance/vitest.config.ts"
 	},
 	"dependencies": {
