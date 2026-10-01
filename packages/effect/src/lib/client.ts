@@ -176,7 +176,9 @@ function adaptMethod(namespace: object, method: Method, path: string) {
 	const optionsIndex = optionsOnly.has(path) ? 0 : 1;
 
 	return (...input: unknown[]) => {
-		const params = input.slice(0, optionsIndex);
+		// Keep the params slot even when the caller omitted it, so the SDK's default
+		// applies and the options land in the SDK's options position.
+		const params = optionsIndex === 0 ? [] : [input[0]];
 		const options = input[optionsIndex];
 		const call = (signal: AbortSignal): unknown =>
 			Reflect.apply(method, namespace, [

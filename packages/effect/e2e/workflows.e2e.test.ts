@@ -11,6 +11,7 @@ import {
 } from "../src/index.js";
 import {
 	config,
+	createProject,
 	DEFAULT_REGION,
 	deleteProjectsNamed,
 	detectApiKeyScope,
@@ -41,48 +42,34 @@ describe.sequential("e2e — @neon/effect against the real API", () => {
 
 	afterAll(() => deleteProjectsNamed(names));
 
-	e2eTest("reads through make, layer, and layerConfig", async () => {
-		const direct = await run(
-			make(config())
-				.projects.list({ limit: 1 })
-				.pipe(Stream.take(1), Stream.runCollect),
-		);
-
-		const viaLayer = await run(
-			Effect.gen(function* () {
-				const neon = yield* Neon;
-				return yield* neon.projects
-					.list()
-					.pipe(Stream.take(1), Stream.runCollect);
-			}).pipe(Effect.provide(layer(config()))),
-		);
-
+	e2eTest("reads through make, layer, and layerConfig", async ({ track }) => {
+		const projectId = await createProject({ name: name("effect-read") });
+		track(projectId);
+		const read = Effect.gen(function* () {
+			const neon = yield* Neon;
+			return yield* neon.projects.get({ projectId });
+		});
 		const { apiKey, orgId } = config();
-		const viaConfig = await run(
-			Effect.gen(function* () {
-				const neon = yield* Neon;
-				return yield* neon.projects
-					.list()
-					.pipe(Stream.take(1), Stream.runCollect);
-			}).pipe(
-				Effect.provide(
-					layerConfig.pipe(
-						Layer.provide(
-							ConfigProvider.layer(
-								ConfigProvider.fromUnknown({
-									NEON_API_KEY: apiKey,
-									...(orgId ? { NEON_ORG_ID: orgId } : {}),
-								}),
-							),
-						),
-					),
+		const fromConfig = layerConfig.pipe(
+			Layer.provide(
+				ConfigProvider.layer(
+					ConfigProvider.fromUnknown({
+						NEON_API_KEY: apiKey,
+						...(orgId ? { NEON_ORG_ID: orgId } : {}),
+					}),
 				),
 			),
 		);
 
-		expect(direct).toHaveLength(1);
-		expect(viaLayer).toHaveLength(1);
-		expect(viaConfig).toHaveLength(1);
+		const direct = await run(make(config()).projects.get({ projectId }));
+		const viaLayer = await run(read.pipe(Effect.provide(layer(config()))));
+		const viaConfig = await run(read.pipe(Effect.provide(fromConfig)));
+
+		expect([direct.id, viaLayer.id, viaConfig.id]).toEqual([
+			projectId,
+			projectId,
+			projectId,
+		]);
 	});
 
 	e2eTest("maps real 404 and 401 responses to tagged errors", async () => {
@@ -124,6 +111,34 @@ describe.sequential("e2e — @neon/effect against the real API", () => {
 			),
 		);
 		expect(projectsTimeout).toBeInstanceOf(NeonRequestTimeoutError);
+
+		const requests: Request[] = [];
+		const recording = make(
+			config({
+				fetch: (input, init) => {
+					const request = new Request(input, init);
+					requests.push(request);
+					return fetch(request);
+				},
+			}),
+		);
+		await run(
+			Effect.gen(function* () {
+				const fiber = yield* Effect.forkChild(
+					recording.projects.list().pipe(Stream.runCollect),
+				);
+				for (let i = 0; i < 200 && requests.length === 0; i++) {
+					yield* Effect.sleep("5 millis");
+				}
+				yield* Fiber.interrupt(fiber);
+			}),
+		);
+		expect(requests).toHaveLength(1);
+		const [listRequest] = requests;
+		expect(new URL(listRequest.url).searchParams.has("throwOnError")).toBe(
+			false,
+		);
+		expect(listRequest.signal.aborted).toBe(true);
 
 		const orgsTimeout = await run(
 			Effect.flip(neon.user.organizations({ requestTimeoutMs: 1 })),

@@ -8,6 +8,7 @@ import { Effect, Stream } from "effect";
 import { make, type NeonEffectConfig } from "../src/index.js";
 
 export {
+	createProject,
 	DEFAULT_REGION,
 	detectApiKeyScope,
 	e2eTest,

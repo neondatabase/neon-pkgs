@@ -53,7 +53,7 @@
 		"@neon/sdk": "workspace:*"
 	},
 	"peerDependencies": {
-		"effect": "^4.0.0"
+		"effect": "^4.0.0-rc.117"
 	},
 	"devDependencies": {
 		"@neon/e2e-harness": "workspace:*",
