@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import {
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,10 +16,6 @@ const packageRoot = dirname(
 	fileURLToPath(new URL("../package.json", import.meta.url)),
 );
 const schemaSubpath = "schema/neon-live-query-capability-v1.schema.json";
-
-interface PackResult {
-	readonly files: readonly { readonly path: string }[];
-}
 
 describe("@neon/live package", () => {
 	it("publishes the canonical query capability schema directly", () => {
@@ -28,20 +31,31 @@ describe("@neon/live package", () => {
 			realpathSync(join(packageRoot, schemaSubpath)),
 		);
 
-		const packOutput = execFileSync(
-			"npm",
-			["pack", "--dry-run", "--json", "--ignore-scripts"],
-			{ cwd: packageRoot, encoding: "utf8" },
-		);
-		// Some npm versions print lifecycle output before the JSON despite
-		// --ignore-scripts. The machine-readable result is always emitted last.
-		const jsonStart = packOutput.lastIndexOf("\n[");
-		const packed = JSON.parse(
-			jsonStart === -1 ? packOutput : packOutput.slice(jsonStart + 1),
-		) as readonly PackResult[];
-		expect(packed).toHaveLength(1);
-		expect(packed[0]?.files.map((file) => file.path)).toContain(
-			schemaSubpath,
-		);
+		const packDestination = mkdtempSync(join(tmpdir(), "neon-live-pack-"));
+		try {
+			execFileSync(
+				"npm",
+				[
+					"pack",
+					"--ignore-scripts",
+					"--pack-destination",
+					packDestination,
+				],
+				{ cwd: packageRoot, stdio: "ignore" },
+			);
+			const tarballs = readdirSync(packDestination).filter((path) =>
+				path.endsWith(".tgz"),
+			);
+			expect(tarballs).toHaveLength(1);
+
+			const files = execFileSync(
+				"tar",
+				["-tf", join(packDestination, tarballs[0] as string)],
+				{ encoding: "utf8" },
+			).split(/\r?\n/);
+			expect(files).toContain(`package/${schemaSubpath}`);
+		} finally {
+			rmSync(packDestination, { recursive: true, force: true });
+		}
 	});
 });
