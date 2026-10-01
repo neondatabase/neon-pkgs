@@ -9,7 +9,8 @@ if (!logPath) {
 	throw new Error("module-hook.mjs: NEON_PERF_MODULE_LOG is not set");
 }
 
-const loaded = [];
+// A Set: Node 22 runs the load hook twice for some CommonJS files.
+const loaded = new Set();
 const parents = {};
 
 registerHooks({
@@ -22,12 +23,12 @@ registerHooks({
 	},
 	load(url, context, nextLoad) {
 		if (url.startsWith("file:")) {
-			loaded.push(url);
+			loaded.add(url);
 		}
 		return nextLoad(url, context);
 	},
 });
 
 process.on("exit", () => {
-	writeFileSync(logPath, JSON.stringify({ loaded, parents }));
+	writeFileSync(logPath, JSON.stringify({ loaded: [...loaded], parents }));
 });

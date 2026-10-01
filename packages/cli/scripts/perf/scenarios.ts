@@ -86,7 +86,7 @@ export type Sandbox = {
  * carries over only PATH, so stored credentials, profiles, `NEON_*` variables, and
  * `NODE_OPTIONS` instrumentation can't change what a scenario loads or requests.
  */
-export const createSandbox = (): Sandbox => {
+export const createSandbox = (apiHost?: string): Sandbox => {
 	const home = realpathSync(mkdtempSync(join(tmpdir(), "neon-perf-")));
 	const linked = join(home, "linked");
 	mkdirSync(linked);
@@ -103,9 +103,30 @@ export const createSandbox = (): Sandbox => {
 			XDG_CONFIG_HOME: join(home, ".config"),
 			CI: "true",
 			NO_COLOR: "1",
+			...(apiHost ? { NEON_API_HOST: apiHost } : {}),
 		},
 		cleanup: () => rmSync(home, { recursive: true, force: true }),
 	};
+};
+
+/** Why a run doesn't count as the scenario succeeding, or undefined when it does. */
+export const scenarioOutputMismatch = (
+	scenario: Scenario,
+	run: CliRun,
+): string | undefined => {
+	const problems = [
+		run.code !== scenario.expect.code &&
+			`exited ${run.code}, expected ${scenario.expect.code}`,
+		scenario.expect.stdout &&
+			!scenario.expect.stdout.test(run.stdout) &&
+			`stdout does not match ${scenario.expect.stdout}`,
+		scenario.expect.stderr &&
+			!scenario.expect.stderr.test(run.stderr) &&
+			`stderr does not match ${scenario.expect.stderr}`,
+	].filter((problem): problem is string => typeof problem === "string");
+	return problems.length > 0
+		? `neon ${scenario.name}: ${problems.join("; ")}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+		: undefined;
 };
 
 /** Flags appended to every scenario except the linked fast path, which only serves its exact argv. */

@@ -13,6 +13,7 @@ import {
 	SCENARIOS,
 	type Scenario,
 	scenarioArgv,
+	scenarioOutputMismatch,
 } from "./scenarios.js";
 
 const USAGE = `Usage: pnpm --filter neon perf [--cli <absolute path to dist/cli.js>]... [--runs N] [--scenario=<name>]... [--profile] [--json]
@@ -90,9 +91,10 @@ const runScenario = async (
 		nodeArgs,
 	});
 	const ms = Number(process.hrtime.bigint() - start) / 1e6;
-	if (run.code !== scenario.expect.code) {
+	const mismatch = scenarioOutputMismatch(scenario, run);
+	if (mismatch) {
 		throw new Error(
-			`${cli} ${scenario.name} exited ${run.code}, expected ${scenario.expect.code}. A failing command can look fast, so no timing is reported.\nstderr: ${run.stderr}`,
+			`${cli}: a command that fails or prints the wrong output can look fast, so no timing is reported.\n${mismatch}`,
 		);
 	}
 	return ms;
@@ -257,6 +259,11 @@ const profile = async (sandbox: Sandbox) => {
 const sandbox = createSandbox();
 try {
 	await (values.profile ? profile(sandbox) : time(sandbox));
+} catch (error) {
+	process.stderr.write(
+		`${error instanceof Error ? error.message : String(error)}\n`,
+	);
+	process.exitCode = 1;
 } finally {
 	sandbox.cleanup();
 }

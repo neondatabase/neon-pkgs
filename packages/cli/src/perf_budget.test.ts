@@ -21,6 +21,7 @@ import {
 	runCliWithModuleLog,
 	SCENARIOS,
 	scenarioArgv,
+	scenarioOutputMismatch,
 } from "../scripts/perf/scenarios.js";
 import { test } from "./test_utils/fixtures.js";
 
@@ -44,21 +45,15 @@ const measured: Record<string, ScenarioMeasurement> = {};
 describe("performance budgets", () => {
 	for (const scenario of SCENARIOS) {
 		test(`neon ${scenario.name}`, async ({ runMockServer }) => {
-			const sandbox = createSandbox();
+			// Every scenario talks to the recording server, so an offline scenario that starts
+			// calling the API fails its zero-request budget instead of reaching production.
+			const requests: string[] = [];
+			const server = await runMockServer("main", (r) =>
+				requests.push(`${r.method} ${r.path}`),
+			);
+			const apiHost = `http://localhost:${(server.address() as AddressInfo).port}`;
+			const sandbox = createSandbox(apiHost);
 			try {
-				const requests: string[] = [];
-				const apiHost = scenario.api
-					? `http://localhost:${
-							(
-								(
-									await runMockServer("main", (r) =>
-										requests.push(`${r.method} ${r.path}`),
-									)
-								).address() as AddressInfo
-							).port
-						}`
-					: undefined;
-
 				const { run, log } = await runCliWithModuleLog({
 					argv: scenarioArgv(scenario, apiHost),
 					cwd: scenario.linked ? sandbox.linked : sandbox.home,
@@ -66,13 +61,11 @@ describe("performance budgets", () => {
 					logDir: sandbox.home,
 				});
 
-				const context = `neon ${scenario.name} must succeed before its budget means anything.\nstdout: ${run.stdout}\nstderr: ${run.stderr}`;
-				expect(run.code, context).toBe(scenario.expect.code);
-				if (scenario.expect.stdout) {
-					expect(run.stdout, context).toMatch(scenario.expect.stdout);
-				}
-				if (scenario.expect.stderr) {
-					expect(run.stderr, context).toMatch(scenario.expect.stderr);
+				const mismatch = scenarioOutputMismatch(scenario, run);
+				if (mismatch) {
+					expect.fail(
+						`The scenario must succeed before its budget means anything. ${mismatch}`,
+					);
 				}
 
 				const measurement: ScenarioMeasurement = {
