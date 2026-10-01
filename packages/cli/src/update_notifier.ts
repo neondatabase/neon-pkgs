@@ -1,20 +1,23 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import {
-	existsSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
+import which from "which";
 import { isCi } from "./env.js";
 import { log } from "./log.js";
-import { recommendedCliUpgradeCommand } from "./utils/package_manager.js";
+import { showNotice } from "./notices.js";
+import { writeJsonFile } from "./utils/json_file.js";
+import {
+	type CliInstallMethod,
+	detectCliInstallMethod,
+	recommendedCliUpgradeCommand,
+} from "./utils/package_manager.js";
 
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const NOTIFY_INTERVAL_MS = 3 * CHECK_INTERVAL_MS;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = DAY_MS;
+const UPDATE_NOTICE_INTERVAL_MS = 3 * DAY_MS;
+const DUPLICATE_NOTICE_INTERVAL_MS = DAY_MS;
 const CACHE_FILE = "update-check.json";
 
 export type UpdateSource = "homebrew" | "npm";
@@ -22,7 +25,6 @@ export type UpdateSource = "homebrew" | "npm";
 export type UpdateCheckCache = {
 	checkedAt: number;
 	latestVersion?: string;
-	notifiedAt?: number;
 	source: UpdateSource;
 };
 
@@ -72,10 +74,7 @@ export const parseUpdateCheckCache = (
 			!Number.isFinite(value.checkedAt) ||
 			(value.source !== "homebrew" && value.source !== "npm") ||
 			(value.latestVersion !== undefined &&
-				typeof value.latestVersion !== "string") ||
-			(value.notifiedAt !== undefined &&
-				(typeof value.notifiedAt !== "number" ||
-					!Number.isFinite(value.notifiedAt)))
+				typeof value.latestVersion !== "string")
 		) {
 			return undefined;
 		}
@@ -86,9 +85,6 @@ export const parseUpdateCheckCache = (
 			...(value.latestVersion === undefined
 				? {}
 				: { latestVersion: value.latestVersion }),
-			...(value.notifiedAt === undefined
-				? {}
-				: { notifiedAt: value.notifiedAt }),
 		};
 	} catch {
 		return undefined;
@@ -108,25 +104,7 @@ const readUpdateCheckCache = (
 export const writeUpdateCheckCache = (
 	cachePath: string,
 	cache: UpdateCheckCache,
-): boolean => {
-	const temporaryPath = `${cachePath}.${process.pid}.tmp`;
-	try {
-		writeFileSync(temporaryPath, `${JSON.stringify(cache)}\n`, {
-			mode: 0o600,
-		});
-		renameSync(temporaryPath, cachePath);
-		return true;
-	} catch (error) {
-		try {
-			rmSync(temporaryPath, { force: true });
-		} catch {}
-		log.debug(
-			"Could not write the CLI update cache: %s",
-			error instanceof Error ? error.message : String(error),
-		);
-		return false;
-	}
-};
+): boolean => writeJsonFile(cachePath, cache, "CLI update cache");
 
 export const formatUpdateNotice = ({
 	currentVersion,
@@ -205,6 +183,118 @@ const spawnUpdateWorker = (cachePath: string, source: UpdateSource): void => {
 	}
 };
 
+export type CliInstall = {
+	method: CliInstallMethod | undefined;
+	path: string;
+};
+
+const INSTALL_LABELS: Record<CliInstallMethod, string> = {
+	homebrew: "Homebrew",
+	bun: "Bun",
+	pnpm: "pnpm",
+	npm: "npm",
+};
+
+/**
+ * `npm exec`, `npx`, package scripts, and `dlx` prepend a project's or a cache's
+ * `node_modules/.bin`, which is gone from PATH once the command ends.
+ */
+const isPackageBin = (executable: string): boolean => {
+	const bin = dirname(executable);
+	return (
+		basename(bin) === ".bin" && basename(dirname(bin)) === "node_modules"
+	);
+};
+
+/**
+ * Every distinct `command` executable on `path`, in PATH order, leaving out
+ * package-local `node_modules/.bin` entries. Entries that resolve to the same
+ * file (a repeated PATH directory, Homebrew's `bin` and `opt` links) count once.
+ */
+export const findCliInstalls = (
+	command: string,
+	path: string | undefined,
+): CliInstall[] => {
+	const seen = new Set<string>();
+	const installs: CliInstall[] = [];
+	for (const executable of which.sync(command, {
+		all: true,
+		nothrow: true,
+		path,
+	}) ?? []) {
+		if (isPackageBin(executable)) continue;
+		const target = realpathSync(executable);
+		if (seen.has(target)) continue;
+		seen.add(target);
+		installs.push({
+			method: detectCliInstallMethod(target),
+			path: executable,
+		});
+	}
+	return installs;
+};
+
+type DuplicateInstallNoticeOptions = {
+	installs: CliInstall[];
+	/** Whether a `neonctl` command outside Homebrew is also on PATH. */
+	otherNeonctl: boolean;
+};
+
+export const formatDuplicateInstallNotice = ({
+	installs,
+	otherNeonctl,
+}: DuplicateInstallNoticeOptions): string | undefined => {
+	if (installs.length < 2) return undefined;
+
+	const rows = installs.map(({ method, path }, index) => {
+		const labels = [
+			...(method === undefined ? [] : [INSTALL_LABELS[method]]),
+			...(index === 0 ? ["first on PATH"] : []),
+		];
+		return labels.length === 0
+			? `  ${path}`
+			: `  ${path} (${labels.join(", ")})`;
+	});
+	const lines = ["Multiple Neon CLI installs found on PATH:", ...rows];
+
+	if (!installs.some(({ method }) => method === "homebrew")) {
+		lines.push("Keep one and uninstall the others.");
+		return lines.join("\n");
+	}
+
+	lines.push(
+		installs.some(({ method }) => method === "npm")
+			? "Remove the Homebrew install to use npm:"
+			: "Remove the Homebrew install:",
+		"  brew uninstall neonctl",
+	);
+	if (!otherNeonctl) {
+		lines.push(
+			"This also removes the `neonctl` command; run `neon` instead.",
+		);
+	}
+	lines.push("Then open a new shell.");
+	return lines.join("\n");
+};
+
+const duplicateInstallNotice = (): string | undefined => {
+	try {
+		const installs = findCliInstalls("neon", process.env.PATH);
+		return formatDuplicateInstallNotice({
+			installs,
+			otherNeonctl: findCliInstalls("neonctl", process.env.PATH).some(
+				({ method }) => method !== "homebrew",
+			),
+		});
+	} catch (error) {
+		log.debug(
+			"Could not check PATH for other Neon CLI installs: %s",
+			error instanceof Error ? error.message : String(error),
+		);
+		return undefined;
+	}
+};
+
 const isPackagedExecutable = (): boolean => "pkg" in process;
 
 export const shouldRunUpdateNotifier = ({
@@ -249,42 +339,58 @@ export const notifyIfUpdateAvailable = ({
 		return;
 	}
 
+	// One Windows install puts `neon`, `neon.cmd`, and `neon.ps1` on PATH as separate files,
+	// so file identity can't count installs there.
+	const now = Date.now();
+
+	if (process.platform !== "win32") {
+		const duplicateNotice = duplicateInstallNotice();
+		if (duplicateNotice !== undefined) {
+			// Stands in for the version notice, which would say `brew upgrade neonctl`, even
+			// on days the duplicate notice itself is not due.
+			showNotice({
+				configDir,
+				id: "duplicate-installs",
+				intervalMs: DUPLICATE_NOTICE_INTERVAL_MS,
+				message: duplicateNotice,
+				now,
+			});
+			return;
+		}
+	}
+
 	const command = recommendedCliUpgradeCommand(
 		fileURLToPath(import.meta.url),
 	);
 	if (command === undefined) return;
 
 	const cachePath = join(configDir, CACHE_FILE);
-	const now = Date.now();
 	const source = updateSource(command);
 	const cache = cacheForUpdateSource(readUpdateCheckCache(cachePath), source);
-	let nextCache = cache;
+
+	const notice =
+		cache?.latestVersion === undefined
+			? undefined
+			: formatUpdateNotice({
+					currentVersion,
+					latestVersion: cache.latestVersion,
+					upgradeCommand: command,
+				});
+	if (notice !== undefined) {
+		showNotice({
+			configDir,
+			id: "update",
+			intervalMs: UPDATE_NOTICE_INTERVAL_MS,
+			message: notice,
+			now,
+		});
+	}
+
+	if (!shouldRefreshUpdateCheck(cache, now)) return;
 
 	if (
-		cache?.latestVersion !== undefined &&
-		(cache.notifiedAt === undefined ||
-			now - cache.notifiedAt >= NOTIFY_INTERVAL_MS)
+		writeUpdateCheckCache(cachePath, { ...cache, checkedAt: now, source })
 	) {
-		const notice = formatUpdateNotice({
-			currentVersion,
-			latestVersion: cache.latestVersion,
-			upgradeCommand: command,
-		});
-		if (notice !== undefined) {
-			log.warning("%s", notice);
-			nextCache = { ...cache, notifiedAt: now };
-		}
-	}
-
-	if (!shouldRefreshUpdateCheck(cache, now)) {
-		if (nextCache !== cache && nextCache !== undefined) {
-			writeUpdateCheckCache(cachePath, nextCache);
-		}
-		return;
-	}
-
-	nextCache = { ...nextCache, checkedAt: now, source };
-	if (writeUpdateCheckCache(cachePath, nextCache)) {
 		spawnUpdateWorker(cachePath, source);
 	}
 };
