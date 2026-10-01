@@ -54,24 +54,20 @@ const regressions = (rows: Row[], thresholds: Thresholds): Row[] =>
 const signed = (n: number, digits = 0): string =>
 	`${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
 
-const setupCommands = (baseSha: string): string =>
+const CLI_PAIR =
+	'--cli "$BASE_ROOT/packages/cli/dist/cli.js" --cli "$HEAD_ROOT/packages/cli/dist/cli.js"';
+
+const reproduceCommands = (baseSha: string, thresholds: Thresholds): string =>
 	[
 		`BASE=${baseSha}`,
 		'HEAD_ROOT="$(git rev-parse --show-toplevel)"',
 		'BASE_ROOT="$(mktemp -d)/neon-pkgs-base"',
-		'git -C "$HEAD_ROOT" worktree add --detach "$BASE_ROOT" "$BASE"',
-		'(cd "$BASE_ROOT" && pnpm install --frozen-lockfile && pnpm --filter neon... build)',
-		'(cd "$HEAD_ROOT" && pnpm --filter neon... build)',
+		'git -C "$HEAD_ROOT" worktree add --detach "$BASE_ROOT" "$BASE" && (cd "$BASE_ROOT" && pnpm install --frozen-lockfile && pnpm --filter neon... build)',
+		verifyCommand(thresholds),
 	].join("\n");
 
-const CLI_PAIR =
-	'--cli "$BASE_ROOT/packages/cli/dist/cli.js" --cli "$HEAD_ROOT/packages/cli/dist/cli.js"';
-
-const verifyCommands = (thresholds: Thresholds): string =>
-	[
-		'(cd "$HEAD_ROOT" && pnpm --filter neon... build)',
-		`(cd "$HEAD_ROOT" && pnpm --silent --filter neon perf --json ${CLI_PAIR} > "$BASE_ROOT/perf.json" && pnpm --silent --filter neon perf:ci-report --input "$BASE_ROOT/perf.json" --base-sha "$BASE" --head-sha "$(git rev-parse HEAD)" --threshold-ms ${thresholds.ms} --threshold-pct ${thresholds.pct})`,
-	].join("\n");
+const verifyCommand = (thresholds: Thresholds): string =>
+	`(cd "$HEAD_ROOT" && pnpm --filter neon... build && pnpm --silent --filter neon perf --json ${CLI_PAIR} > "$BASE_ROOT/perf.json" && pnpm --silent --filter neon perf:ci-report --input "$BASE_ROOT/perf.json" --base-sha "$BASE" --head-sha "$(git rev-parse HEAD)" --threshold-ms ${thresholds.ms} --threshold-pct ${thresholds.pct})`;
 
 const formatReport = (input: {
 	run: PerfRun;
@@ -104,19 +100,22 @@ const formatReport = (input: {
 			.join(", ")}.`,
 		"",
 		"What to do:",
-		"1. Run `pnpm --filter neon test:perf`. If it fails, the module or request it names is the cause; fix that first.",
-		"2. If it passes, the slowdown is work that adds no modules or requests (computation, synchronous I/O, a wait). The CPU profile printed after this report names where the time went. To profile locally, build both revisions from your checkout's repo root, then profile:",
+		"1. Run `pnpm --filter neon test:perf`. A failure there names a module or API request that grew; start with it.",
+		"2. Reproduce the slowdown with the same comparison and thresholds as this job, from your checkout's repo root. The last command exits 1 while a scenario is slower than the threshold:",
 		"",
 		"```sh",
-		setupCommands(input.baseSha),
-		`(cd "$HEAD_ROOT" && pnpm --filter neon perf ${CLI_PAIR} --profile)`,
+		reproduceCommands(input.baseSha, thresholds),
 		"```",
 		"",
-		"3. Fix the hot path, then verify with the same comparison and thresholds as this job; it exits 0 when no scenario is slower than the threshold:",
+		"   If it exits 0, re-run this CI job before changing anything. Do not change the thresholds.",
+		"3. Find the cause in your diff against $BASE. To see where CPU time moved between the two builds:",
 		"",
 		"```sh",
-		verifyCommands(thresholds),
+		`(cd "$HEAD_ROOT" && pnpm --filter neon... build && pnpm --filter neon perf ${CLI_PAIR} --profile)`,
 		"```",
+		"",
+		'   A profile is one run per build, so its deltas, like the profile printed after this report, are leads to check against the diff. Time spent waiting (I/O, timers) shows up as "native, GC, idle".',
+		"4. After the fix, rerun the last command of step 2 until it exits 0.",
 	);
 	return lines.join("\n");
 };
