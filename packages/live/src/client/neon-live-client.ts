@@ -4,6 +4,11 @@ import {
 	type ConnectionHandle,
 } from "./connection/coordinator.js";
 import {
+	createNeonLiveDiagnostics,
+	type NeonLiveDiagnostics,
+	registerSubscriptionDiagnostics,
+} from "./diagnostics.js";
+import {
 	createParserRegistry,
 	type PostgreSQLParserRegistry,
 } from "./postgres/parsers.js";
@@ -28,6 +33,10 @@ export type {
 	MaterializedLiveQuerySubscription,
 	NeonLiveClient,
 	NeonLiveClientOptions,
+	NeonLiveLogEntry,
+	NeonLiveLogEvent,
+	NeonLiveLogger,
+	NeonLiveLogLevel,
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
@@ -41,9 +50,14 @@ class NeonLiveClientImpl implements NeonLiveClient {
 	>();
 	private disposed = false;
 	private readonly parsers: PostgreSQLParserRegistry;
+	private readonly diagnostics: NeonLiveDiagnostics;
 
 	constructor(options: NeonLiveClientOptions) {
-		this.coordinator = new ConnectionCoordinator(options);
+		this.diagnostics = createNeonLiveDiagnostics(options);
+		this.coordinator = new ConnectionCoordinator({
+			...options,
+			diagnostics: this.diagnostics,
+		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
 
@@ -62,6 +76,7 @@ class NeonLiveClientImpl implements NeonLiveClient {
 		if (this.disposed) throw new Error("Neon Live client is closed");
 		validateSealedQuery(query);
 		const materialized = options?.materialize !== false;
+		const subscriptionId = this.diagnostics.nextSubscriptionId();
 		const initialData = materialized
 			? (options as MaterializedLiveQueryOptions<Row> | undefined)
 					?.initialData
@@ -72,8 +87,15 @@ class NeonLiveClientImpl implements NeonLiveClient {
 			materialized,
 			this.parsers,
 			initialData,
+			this.diagnostics,
+			subscriptionId,
 		);
+		registerSubscriptionDiagnostics(subscription, {
+			diagnostics: this.diagnostics,
+			subscriptionId,
+		});
 		const handle = this.coordinator.subscribe(query, {
+			subscriptionId,
 			reconciliation: subscription,
 			admitted: (columns) => subscription.admit(columns),
 			disconnected: () => subscription.disconnected(),
@@ -122,6 +144,11 @@ class NeonLiveClientImpl implements NeonLiveClient {
 			subscription.markClosed();
 		this.handles.clear();
 		this.coordinator.close();
+		this.diagnostics.log(
+			"info",
+			"client_closed",
+			"Neon Live client closed",
+		);
 	}
 }
 

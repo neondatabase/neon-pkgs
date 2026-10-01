@@ -1,6 +1,91 @@
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
+/** Client-side diagnostic verbosity. */
+export type NeonLiveLogLevel = "silent" | "error" | "warn" | "info" | "debug";
+
+/** Stable name for one client diagnostic event. */
+export type NeonLiveLogEvent =
+	| "client_closed"
+	| "connection_attempt_started"
+	| "connection_failed"
+	| "connection_heartbeat_ping_sent"
+	| "connection_heartbeat_pong_received"
+	| "connection_heartbeat_timeout"
+	| "connection_lost"
+	| "connection_publication_committed"
+	| "connection_ready"
+	| "connection_reconnect_exhausted"
+	| "connection_reconnect_scheduled"
+	| "connection_recovered"
+	| "connection_stable"
+	| "query_encryption_key_retired"
+	| "query_expired"
+	| "query_refresh_callback_failed"
+	| "query_refresh_callback_started"
+	| "query_refresh_callback_succeeded"
+	| "query_refresh_scheduled"
+	| "query_refresh_stopped"
+	| "subscription_admitted"
+	| "subscription_failed"
+	| "subscription_listener_failed"
+	| "subscription_live"
+	| "subscription_renewal_failed"
+	| "subscription_renewal_started"
+	| "subscription_renewed"
+	| "subscription_reset_required"
+	| "subscription_row_decoding_failed"
+	| "subscription_snapshot_completed"
+	| "subscription_snapshot_started"
+	| "subscription_started"
+	| "subscription_state_changed"
+	| "subscription_unsubscribed";
+
+/** Structured client diagnostic passed to a configured logger. */
+export interface NeonLiveLogEntry {
+	/** Severity used for level filtering and the default console method. */
+	readonly level: Exclude<NeonLiveLogLevel, "silent">;
+	/** Stable machine-readable event name. */
+	readonly event: NeonLiveLogEvent;
+	/** Human-readable event summary; use {@link event} for program logic. */
+	readonly message: string;
+	/** Unix timestamp in milliseconds at which the event was emitted. */
+	readonly timestamp: number;
+	/** Client-local opaque subscription identifier, when applicable. */
+	readonly subscriptionId?: string;
+	/** Stable machine-readable error code, when applicable. */
+	readonly code?: string;
+	/** Whether the reported condition can be retried. */
+	readonly retryable?: boolean;
+	/** One-based reconnect attempt number. */
+	readonly attempt?: number;
+	/** Delay before the next scheduled action, in milliseconds. */
+	readonly delayMs?: number;
+	/** Duration of the reported condition, in milliseconds. */
+	readonly durationMs?: number;
+	/** Number of subscriptions affected by a connection event. */
+	readonly activeSubscriptionCount?: number;
+	/** Number of chunks in a completed snapshot. */
+	readonly chunkCount?: number;
+	/** Number of bodies in a committed publication. */
+	readonly bodyCount?: number;
+	/** Subscription status before a state transition. */
+	readonly fromStatus?: LiveQueryState["status"];
+	/** Subscription status after a state transition. */
+	readonly toStatus?: LiveQueryState["status"];
+	/** Query expiry as a Unix timestamp in milliseconds. */
+	readonly expiresAt?: number;
+	/**
+	 * Original error, when available. It may contain details from the proxy or
+	 * application code and should be handled according to the application's
+	 * error-logging policy.
+	 */
+	readonly error?: unknown;
+}
+
+/** Receives structured Neon Live client diagnostics. */
+export type NeonLiveLogger = (entry: NeonLiveLogEntry) => void;
+
 /** An error reported by a Neon Live subscription. */
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
@@ -206,6 +291,16 @@ export interface NeonLiveClientOptions {
 	 * the object when it is created, so later mutations have no effect.
 	 */
 	readonly parsers?: PostgreSQLParsers;
+	/**
+	 * Minimum client diagnostic level. The default, `silent`, emits nothing.
+	 * When enabled without {@link logger}, entries are written to `console`.
+	 */
+	readonly logLevel?: NeonLiveLogLevel;
+	/**
+	 * Structured diagnostic sink. It is called only for events enabled by
+	 * {@link logLevel}; exceptions from the sink are ignored.
+	 */
+	readonly logger?: NeonLiveLogger;
 }
 
 /** A client that multiplexes independently disposable subscriptions. */

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
+import { createNeonLiveDiagnostics } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
 import {
 	type ConnectionCallbacks,
@@ -78,6 +79,89 @@ afterEach(() => {
 });
 
 describe("ConnectionCoordinator", () => {
+	it("logs connection recovery once per multiplexed connection", async () => {
+		vi.useFakeTimers();
+		const entries: Array<{ event: string; subscriptionId?: string }> = [];
+		const coordinator = createCoordinator({
+			diagnostics: createNeonLiveDiagnostics({
+				logLevel: "debug",
+				logger: (entry) => entries.push(entry),
+			}),
+		});
+		coordinator.subscribe(
+			{ capability: "one" },
+			{ ...target(), subscriptionId: "s1" },
+		);
+		coordinator.subscribe(
+			{ capability: "two" },
+			{ ...target(), subscriptionId: "s2" },
+		);
+		const first = admit();
+
+		first.disconnect();
+		expect(
+			entries.filter((entry) => entry.event === "connection_lost"),
+		).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+
+		expect(
+			entries.filter((entry) => entry.event === "connection_recovered"),
+		).toHaveLength(1);
+		expect(entries).toContainEqual(
+			expect.objectContaining({
+				event: "connection_reconnect_scheduled",
+			}),
+		);
+	});
+
+	it("distinguishes query expiry from encryption-key retirement", () => {
+		const entries: Array<{ event: string }> = [];
+		const coordinator = createCoordinator({
+			diagnostics: createNeonLiveDiagnostics({
+				logLevel: "warn",
+				logger: (entry) => entries.push(entry),
+			}),
+		});
+		coordinator.subscribe({ capability: "one" }, target());
+		const first = admit();
+		first.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "authorization_expired",
+			message: "expired",
+		});
+
+		coordinator.subscribe({ capability: "two" }, target());
+		const request = defined(
+			first.sent.find(
+				(message) =>
+					message.type === "subscribe" && message.request_id === "2",
+			),
+		);
+		first.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		first.receive({
+			type: "subscription_error",
+			live_id: "42",
+			code: "key_retired",
+			message: "retired",
+		});
+
+		expect(entries.map((entry) => entry.event)).toEqual([
+			"query_expired",
+			"query_encryption_key_retired",
+		]);
+	});
+
 	it("negotiates neon.live.v1, waits for ready, and routes admission", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();

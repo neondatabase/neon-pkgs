@@ -121,6 +121,7 @@ const neonLive = createNeonLive({
   secret: process.env.NEON_LIVE_SECRET!,
   db: "app",
   url: "wss://live.neon.tech/...",
+  logLevel: "warn",
 });
 
 const subscription = await neonLive.subscribe(
@@ -153,6 +154,9 @@ it only in trusted runtimes, never in browser code. The runtime must provide a
 standards-compatible global `WebSocket` implementation.
 `createNeonLive({ url, parsers })` accepts the same OID overrides as the
 low-level client for trusted direct-subscription results.
+It also accepts the client-side `logLevel` and `logger` options described
+below. These diagnostics are independent from any server-side option that
+controls how much error detail the proxy may disclose.
 
 ## Subscribe in the browser
 
@@ -187,6 +191,61 @@ states are `connecting`, `live`, `stale`, `error`, and `closed`. During
 reconnection or sealed-query renewal, existing materialized data remains
 available as `stale`. Recoverable connection failures retry with capped
 jittered backoff until the connection recovers or the client is closed.
+
+### Client diagnostics
+
+Client diagnostics are silent by default. Set `logLevel` to write structured
+entries to the matching `console` method in browsers or Node.js:
+
+```ts
+const client = createNeonLiveClient({
+  url: "wss://live.neon.tech/...",
+  logLevel: "warn",
+});
+```
+
+The levels are cumulative:
+
+| Level | Includes |
+| --- | --- |
+| `silent` | Nothing; this is the default |
+| `error` | Terminal connection, subscription, decoding, and refresh failures |
+| `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
+| `info` | Warnings plus connection, subscription, and renewal milestones |
+| `debug` | All entries, including retry scheduling, heartbeats, snapshots, publications, and state transitions |
+
+Each entry has a stable `event` name:
+
+| Minimum level | Events |
+| --- | --- |
+| `error` | `connection_failed`, `connection_reconnect_exhausted`, `subscription_failed`, `subscription_row_decoding_failed`, `query_refresh_stopped` |
+| `warn` | `connection_lost`, `connection_heartbeat_timeout`, `query_expired`, `query_encryption_key_retired`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
+| `info` | `connection_ready`, `connection_recovered`, `subscription_live`, `subscription_renewed`, `client_closed` |
+| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_snapshot_started`, `subscription_snapshot_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
+
+Supply `logger` to route the same structured entries into an application
+logger. `logLevel` still controls which entries it receives:
+
+```ts
+import type { NeonLiveLogEntry } from "@neon/live/client";
+
+const client = createNeonLiveClient({
+  url: "wss://live.neon.tech/...",
+  logLevel: "info",
+  logger: (entry: NeonLiveLogEntry) => {
+    appLogger[entry.level]({ ...entry });
+  },
+});
+```
+
+Logger failures are ignored so observability cannot interrupt stream
+delivery. SDK-produced metadata uses client-local opaque subscription IDs and
+does not include sealed capabilities, SQL, parameters, rows, cell values, raw
+wire messages, or endpoint URLs. An entry's `error` may retain an error
+reported by the proxy or thrown by application code, so route it according to
+the application's normal error-logging policy. React and TanStack DB refresh
+callbacks automatically reuse the diagnostics configured on their shared
+client.
 
 ### PostgreSQL result values
 

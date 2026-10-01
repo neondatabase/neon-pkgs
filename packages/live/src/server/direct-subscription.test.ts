@@ -89,6 +89,27 @@ afterEach(() => {
 });
 
 describe("trusted direct subscriptions", () => {
+	it("forwards diagnostics to the hidden client", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const neonLive = createNeonLive({
+			secret: SECRET,
+			db: "app",
+			url: "ws://live.test/v1",
+			logLevel: "info",
+			logger: (entry) => events.push(entry.event),
+		});
+
+		await neonLive.subscribe(messagesByOwner("alice"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "hello");
+
+		expect(events).toEqual(
+			expect.arrayContaining(["connection_ready", "subscription_live"]),
+		);
+		neonLive.close();
+	});
+
 	it("returns the existing materialized subscription API", async () => {
 		useFakeWebSocket();
 		const neonLive = createNeonLive({

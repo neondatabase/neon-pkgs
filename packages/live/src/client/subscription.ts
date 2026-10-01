@@ -1,4 +1,5 @@
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
+import type { NeonLiveDiagnostics } from "./diagnostics.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
 	decodeRow,
@@ -89,6 +90,8 @@ export class Subscription<Row>
 		readonly materialized: boolean,
 		private readonly parsers: PostgreSQLParserRegistry,
 		initialData?: readonly Row[],
+		private readonly diagnostics?: NeonLiveDiagnostics,
+		private readonly subscriptionId?: string,
 	) {
 		if (materialized) {
 			this.rows = new Map(
@@ -253,7 +256,7 @@ export class Subscription<Row>
 		this.initialized = true;
 		this.snapshot = this.makeSnapshot();
 		this.transactions.applySnapshot(mvcc);
-		notify(this.resetListeners, staged.rows);
+		this.notify(this.resetListeners, staged.rows);
 	}
 
 	publishBatch(batch: ReconciledBatch): void {
@@ -265,20 +268,29 @@ export class Subscription<Row>
 		if (!changes) throw new Error("Neon Live published an unapplied batch");
 		this.appliedBatches.delete(batch.changes);
 		const info = Object.freeze({ txids: batch.txids });
-		notify(this.batchListeners, changes, info);
+		this.notify(this.batchListeners, changes, info);
 		if (this.materialized && this.state.status === "live") {
-			notify(this.changeListeners, this.snapshot);
+			this.notify(this.changeListeners, this.snapshot);
 		}
 		for (const txid of batch.txids) this.transactions.seen(txid);
 	}
 
 	caughtUp(): void {
 		if (this.closed) return;
+		const becameLive = this.state.status !== "live";
 		this.setLifecycle(
 			Object.freeze({ status: "live", error: undefined }),
 			false,
 		);
-		if (this.materialized) notify(this.changeListeners, this.snapshot);
+		if (becameLive) {
+			this.diagnostics?.log(
+				"info",
+				"subscription_live",
+				"Neon Live subscription is live",
+				{ subscriptionId: this.subscriptionId },
+			);
+		}
+		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
 	}
 
 	resetRequired(): void {
@@ -293,6 +305,21 @@ export class Subscription<Row>
 	}
 
 	fail(error: ConnectionCoordinatorError): void {
+		this.diagnostics?.log(
+			"error",
+			error.code === "parser_error"
+				? "subscription_row_decoding_failed"
+				: "subscription_failed",
+			error.code === "parser_error"
+				? "Neon Live could not decode a subscription row"
+				: "Neon Live subscription failed permanently",
+			{
+				subscriptionId: this.subscriptionId,
+				code: error.code,
+				retryable: error.retryable,
+				error,
+			},
+		);
 		this.setLifecycle(
 			Object.freeze({
 				status: "error",
@@ -355,11 +382,40 @@ export class Subscription<Row>
 	private setLifecycle(state: LiveQueryState, publishChange = true): void {
 		if (this.closed && state.status !== "closed") return;
 		if (sameState(this.state, state)) return;
+		const previousStatus = this.state.status;
 		this.state = state;
 		this.snapshot = this.makeSnapshot();
-		notify(this.stateListeners, this.state);
+		this.diagnostics?.log(
+			"debug",
+			"subscription_state_changed",
+			"Neon Live subscription state changed",
+			{
+				subscriptionId: this.subscriptionId,
+				fromStatus: previousStatus,
+				toStatus: state.status,
+			},
+		);
+		this.notify(this.stateListeners, this.state);
 		if (publishChange && this.materialized) {
-			notify(this.changeListeners, this.snapshot);
+			this.notify(this.changeListeners, this.snapshot);
+		}
+	}
+
+	private notify<Arguments extends readonly unknown[]>(
+		listeners: Set<(...args: Arguments) => void>,
+		...args: Arguments
+	): void {
+		for (const listener of [...listeners]) {
+			try {
+				listener(...args);
+			} catch (error) {
+				this.diagnostics?.log(
+					"warn",
+					"subscription_listener_failed",
+					"A Neon Live subscription listener failed",
+					{ subscriptionId: this.subscriptionId, error },
+				);
+			}
 		}
 	}
 
@@ -396,17 +452,4 @@ function listen<Listener>(
 		active = false;
 		listeners.delete(listener);
 	};
-}
-
-function notify<Arguments extends readonly unknown[]>(
-	listeners: Set<(...args: Arguments) => void>,
-	...args: Arguments
-): void {
-	for (const listener of [...listeners]) {
-		try {
-			listener(...args);
-		} catch {
-			// One application listener cannot interrupt atomic stream delivery.
-		}
-	}
 }

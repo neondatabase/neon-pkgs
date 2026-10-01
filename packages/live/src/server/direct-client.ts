@@ -4,6 +4,8 @@ import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
 	NeonLiveClient,
+	NeonLiveLogger,
+	NeonLiveLogLevel,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 } from "../client/types.js";
@@ -26,6 +28,8 @@ export class DirectLiveQueryClient {
 	constructor(
 		private readonly url: string,
 		private readonly parsers: PostgreSQLParsers | undefined,
+		private readonly logLevel: NeonLiveLogLevel | undefined,
+		private readonly logger: NeonLiveLogger | undefined,
 	) {
 		if (!url) throw new Error("Neon Live requires a WebSocket URL");
 	}
@@ -76,6 +80,8 @@ export class DirectLiveQueryClient {
 				const client = module.createNeonLiveClient({
 					url: this.url,
 					parsers: this.parsers,
+					logLevel: this.logLevel,
+					logger: this.logger,
 				});
 				this.client = client;
 				return client;

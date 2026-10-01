@@ -3,6 +3,8 @@ import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	NeonLiveLogger,
+	NeonLiveLogLevel,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 } from "../client/types.js";
@@ -149,6 +151,10 @@ export interface NeonLiveDirectServerOptions<Query>
 	readonly url: string;
 	/** PostgreSQL result-parser overrides for trusted direct subscriptions. */
 	readonly parsers?: PostgreSQLParsers;
+	/** Minimum diagnostic level for the internal direct-subscription client. */
+	readonly logLevel?: NeonLiveLogLevel;
+	/** Structured diagnostic sink for the internal direct-subscription client. */
+	readonly logger?: NeonLiveLogger;
 }
 
 /**
@@ -204,6 +210,8 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 	const directClient = new DirectLiveQueryClient(
 		options.url,
 		options.parsers,
+		options.logLevel,
+		options.logger,
 	);
 	const subscribe = async <ConcreteQuery extends SealableQuery<Query>>(
 		query: ConcreteQuery,
