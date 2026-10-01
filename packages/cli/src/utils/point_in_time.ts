@@ -1,3 +1,4 @@
+import type { Branch } from "@neon/sdk";
 import type { NeonApiClient } from "../api.js";
 import { branchIdResolve } from "./enrichers.js";
 import { looksLikeLSN, looksLikeTimestamp } from "./formats.js";
@@ -27,6 +28,10 @@ export type PointInTimeProps = {
 	pointInTime: string;
 	projectId: string;
 	api: NeonApiClient;
+	/** A listing this invocation already fetched; a source branch name is resolved from it. */
+	branches?: Branch[];
+	/** The target branch, when already fetched; `^parent` reads its `parent_id`. */
+	targetBranch?: Branch;
 };
 
 export class PointInTimeParseError extends Error {
@@ -69,6 +74,8 @@ export const parsePointInTime = async ({
 	targetBranchId,
 	projectId,
 	api,
+	branches,
+	targetBranch,
 }: PointInTimeProps): Promise<PointInTimeBranchId> => {
 	const parsedPIT = parsePITBranch(pointInTime);
 
@@ -76,8 +83,12 @@ export const parsePointInTime = async ({
 	if (parsedPIT.branch === "^self") {
 		branchId = targetBranchId;
 	} else if (parsedPIT.branch === "^parent") {
-		const { data } = await api.getProjectBranch(projectId, targetBranchId);
-		const { parent_id: parentId } = data.branch;
+		const target =
+			targetBranch?.id === targetBranchId
+				? targetBranch
+				: (await api.getProjectBranch(projectId, targetBranchId)).data
+						.branch;
+		const parentId = target.parent_id;
 		if (parentId == null) {
 			throw new PointInTimeParseError("Branch has no parent");
 		}
@@ -87,6 +98,7 @@ export const parsePointInTime = async ({
 			branch: parsedPIT.branch,
 			projectId,
 			apiClient: api,
+			branches,
 		});
 	}
 

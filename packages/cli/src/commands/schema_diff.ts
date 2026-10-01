@@ -6,8 +6,9 @@ import { isNeonApiError, messageFromBody } from "../api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types";
 import {
-	branchIdFromProps,
-	listAllProjectBranches,
+	type BranchListing,
+	listAllProjectBranchesWithAnnotations,
+	resolveBranchFromProps,
 } from "../utils/enrichers.js";
 import {
 	type PointInTime,
@@ -21,6 +22,8 @@ type SchemaDiffProps = BranchScopeProps & {
 	baseBranch?: string;
 	compareSource: string;
 	database: string;
+	/** The listing `parseSchemaDiffParams` fetched, reused by the handler. */
+	branchListing?: BranchListing;
 };
 
 const COLORS = {
@@ -34,12 +37,18 @@ type ColorId = keyof typeof COLORS;
 
 export const schemaDiff = async (props: SchemaDiffProps) => {
 	props.branch = props.baseBranch || props.branch;
-	const baseBranch = await branchIdFromProps(props);
+	const {
+		branchId: baseBranch,
+		branch: baseBranchData,
+		listing,
+	} = await resolveBranchFromProps(props, props.branchListing);
 	let pointInTime: PointInTimeBranchId = await parsePointInTime({
 		pointInTime: props.compareSource,
 		targetBranchId: baseBranch,
 		projectId: props.projectId,
 		api: props.apiClient,
+		branches: listing?.branches,
+		targetBranch: baseBranchData,
 	});
 
 	// Swap base and compare points if comparing with parent branch
@@ -64,26 +73,66 @@ export const schemaDiff = async (props: SchemaDiffProps) => {
 			);
 		}
 
-		const patch = await createSchemaDiff(
+		const diff = await createSchemaDiff(
 			baseBranchPoint,
 			pointInTime,
 			database,
 			props,
 		);
-		writer(props).text(colorize(patch));
+		writer(props).text(colorize(diff.patch));
+		reportUnchanged(
+			diff,
+			[baseBranchPoint, pointInTime],
+			database,
+			props,
+			listing,
+		);
 		return;
 	}
 
 	await Promise.all(
 		baseDatabases.map(async (database: Database) => {
-			const patch = await createSchemaDiff(
+			const diff = await createSchemaDiff(
 				baseBranchPoint,
 				pointInTime,
 				database,
 				props,
 			);
-			writer(props).text(colorize(patch));
+			writer(props).text(colorize(diff.patch));
+			reportUnchanged(
+				diff,
+				[baseBranchPoint, pointInTime],
+				database,
+				props,
+				listing,
+			);
 		}),
+	);
+};
+
+/** The patch alone is two header lines when nothing differs, which reads like missing output. */
+const reportUnchanged = (
+	diff: { unchanged: boolean },
+	[base, compare]: [PointInTimeBranchId, PointInTimeBranchId],
+	database: Database,
+	props: SchemaDiffProps,
+	listing: BranchListing | undefined,
+) => {
+	if (!diff.unchanged || props.output !== "table") {
+		return;
+	}
+	const label = (point: PointInTimeBranchId) => {
+		const name =
+			listing?.branches.find((b) => b.id === point.branchId)?.name ??
+			point.branchId;
+		return point.tag === "lsn"
+			? `${name} at ${point.lsn}`
+			: point.tag === "timestamp"
+				? `${name} at ${point.timestamp}`
+				: name;
+	};
+	log.info(
+		`No schema differences for database ${database.name} between ${label(base)} and ${label(compare)}.`,
 	);
 };
 
@@ -104,13 +153,16 @@ const createSchemaDiff = async (
 		fetchSchema(pointInTime, database, props),
 	]);
 
-	return createPatch(
-		`Database: ${database.name}`,
-		baseSchema,
-		compareSchema,
-		generateHeader(baseBranch),
-		generateHeader(pointInTime),
-	);
+	return {
+		patch: createPatch(
+			`Database: ${database.name}`,
+			baseSchema,
+			compareSchema,
+			generateHeader(baseBranch),
+			generateHeader(pointInTime),
+		),
+		unchanged: baseSchema === compareSchema,
+	};
 };
 
 const fetchSchema = async (
@@ -147,6 +199,10 @@ const colorize = (patch: string) => {
 };
 
 const colorizer = (colorId: ColorId) => {
+	// chalk 5 does not read NO_COLOR (https://no-color.org).
+	if (process.env.NO_COLOR) {
+		return (line: string) => line;
+	}
 	const color = COLORS[colorId];
 	return (line: string) => color(line);
 };
@@ -190,11 +246,11 @@ export const parseSchemaDiffParams = async (props: SchemaDiffProps) => {
 			props.compareSource = props.baseBranch;
 			props.baseBranch = props.branch;
 		} else if (props.branch) {
-			const branches = await listAllProjectBranches(
+			props.branchListing = await listAllProjectBranchesWithAnnotations(
 				props.apiClient,
 				props.projectId,
 			);
-			const contextBranch = branches.find(
+			const contextBranch = props.branchListing.branches.find(
 				(b: Branch) => b.id === props.branch || b.name === props.branch,
 			);
 
@@ -209,11 +265,13 @@ export const parseSchemaDiffParams = async (props: SchemaDiffProps) => {
 			);
 			props.compareSource = "^parent";
 		} else {
-			const branches = await listAllProjectBranches(
+			props.branchListing = await listAllProjectBranchesWithAnnotations(
 				props.apiClient,
 				props.projectId,
 			);
-			const defaultBranch = branches.find((b: Branch) => b.default);
+			const defaultBranch = props.branchListing.branches.find(
+				(b: Branch) => b.default,
+			);
 
 			if (defaultBranch?.parent_id == undefined) {
 				throw new Error(

@@ -1,4 +1,5 @@
 import type { Branch } from "@neon/sdk";
+import chalk from "chalk";
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 
@@ -9,9 +10,10 @@ import type { IdOrNameProps, ProjectScopeProps } from "../types.js";
 import { EndpointType } from "../utils/api_enums.js";
 import { getComputeUnits } from "../utils/compute_units.js";
 import {
+	type BranchListing,
 	branchIdFromProps,
-	branchIdResolve,
 	fillSingleProject,
+	resolveBranchFromProps,
 } from "../utils/enrichers.js";
 import {
 	looksLikeBranchId,
@@ -32,13 +34,94 @@ export const BRANCH_FIELDS: readonly (keyof Branch)[] = [
 ];
 
 const BRANCH_FIELDS_RESET: readonly (keyof Branch)[] = [
-	"name",
-	"id",
-	"default",
-	"current_state",
-	"created_at",
+	...BRANCH_FIELDS,
 	"last_reset_at",
 ];
+
+const BRANCH_DETAIL_FIELDS: readonly (keyof Branch)[] = [
+	"name",
+	"id",
+	"parent_id",
+	"current_state",
+	"expires_at",
+	"created_at",
+	"created_by",
+	"last_reset_at",
+	"logical_size",
+];
+
+type BranchAnnotations = BranchListing["annotations"];
+
+type BranchLabels = {
+	annotations?: BranchAnnotations;
+	/** The branch pinned in `.neon` for this project, by name or id. */
+	current?: string;
+};
+
+/**
+ * The branch `.neon` pins, by name (preferred) or id, when `.neon` links this same project;
+ * a `--project-id` pointing elsewhere makes its branch not current.
+ */
+const currentBranchOf = (props: ProjectScopeProps): string | undefined => {
+	const context = readContextFile(props.contextFile);
+	return context.projectId === props.projectId
+		? contextBranch(context)
+		: undefined;
+};
+
+const branchNameCell = (br: Branch, labels: BranchLabels): string => {
+	const tags: string[] = [];
+	if (br.default) {
+		tags.push(chalk.cyan("[default]"));
+	}
+	if (br.protected) {
+		tags.push(chalk.yellow("[protected]"));
+	}
+	if (labels.annotations?.[br.id]?.value.anonymized) {
+		tags.push(chalk.dim("[anon]"));
+	}
+	if (
+		labels.current !== undefined &&
+		(br.id === labels.current || br.name === labels.current)
+	) {
+		tags.push(chalk.green("[current]"));
+	}
+	tags.push(br.name);
+	return tags.join(" ");
+};
+
+const stateCell = (state: string | undefined): string => {
+	if (!state) {
+		return "";
+	}
+	if (state === "ready") {
+		return chalk.green(state);
+	}
+	if (state === "init" || state === "resetting") {
+		return chalk.yellow(state);
+	}
+	return chalk.dim(state);
+};
+
+const formatBytes = (bytes: number): string => {
+	const units = ["bytes", "KiB", "MiB", "GiB", "TiB"];
+	let value = bytes;
+	let unit = 0;
+	while (value >= 1024 && unit < units.length - 1) {
+		value /= 1024;
+		unit++;
+	}
+	return unit === 0 ? `${bytes} bytes` : `${value.toFixed(1)} ${units[unit]}`;
+};
+
+const branchColumns = (labels: BranchLabels) => ({
+	name: (br: Branch) => branchNameCell(br, labels),
+	current_state: (br: Branch) => stateCell(br.current_state),
+	expires_at: (br: Branch) => br.expires_at || "never",
+	created_by: (br: Branch) => br.created_by?.name ?? "",
+	logical_size: (br: Branch) =>
+		br.logical_size === undefined ? "" : formatBytes(br.logical_size),
+});
 
 export const command = "branches";
 export const describe = "Manage branches";
@@ -322,39 +405,12 @@ const list = async (props: ProjectScopeProps) => {
 	} = await props.apiClient.listProjectBranches({
 		projectId: props.projectId,
 	});
-	// The branch pinned in the local context (.neon), so we can flag it as `[current]` — the
-	// one commands target by default and that `neonctl env pull` would read. The context
-	// stores the branch by name (preferred) or id, so match against either.
-	const currentBranch = contextBranch(readContextFile(props.contextFile));
 	writer(props).end(branches, {
 		fields: BRANCH_FIELDS,
-		renderColumns: {
-			expires_at: (br) => br.expires_at || "never",
-			// Word labels (not symbols) so they read clearly and match the existing `[anon]`.
-			name: (br) => {
-				const annotation = annotations[br.id];
-				const isAnon = annotation?.value.anonymized;
-				const labels: string[] = [];
-				if (br.default) {
-					labels.push("[default]");
-				}
-				if (br.protected) {
-					labels.push("[protected]");
-				}
-				if (isAnon) {
-					labels.push("[anon]");
-				}
-				if (
-					currentBranch !== undefined &&
-					(br.id === currentBranch || br.name === currentBranch)
-				) {
-					labels.push("[current]");
-				}
-				labels.push(br.name);
-
-				return labels.join(" ");
-			},
-		},
+		renderColumns: branchColumns({
+			annotations,
+			current: currentBranchOf(props),
+		}),
 	});
 };
 
@@ -483,12 +539,15 @@ const create = async (
 		out.write(data.branch, {
 			fields: BRANCH_FIELDS,
 			title: "branch",
+			humanTitle: "Branch",
 			emptyMessage: "No branches have been found.",
+			renderColumns: branchColumns({ current: currentBranchOf(props) }),
 		});
 		if (writeEndpoints) {
 			out.write(endpoints, {
 				fields: ["id", "created_at"],
 				title: "endpoints",
+				humanTitle: "Compute",
 				emptyMessage: "No endpoints have been found.",
 			});
 		}
@@ -496,6 +555,7 @@ const create = async (
 			out.write(connectionUris, {
 				fields: ["connection_uri"],
 				title: "connection_uris",
+				humanTitle: "Connection string",
 				emptyMessage: "No connection uris have been found",
 			});
 		}
@@ -519,7 +579,7 @@ const create = async (
 const rename = async (
 	props: ProjectScopeProps & IdOrNameProps & { newName: string },
 ) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, listing } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.updateProjectBranch(props.projectId, branchId, {
 			branch: {
@@ -529,21 +589,29 @@ const rename = async (
 	);
 	writer(props).end(data.branch, {
 		fields: BRANCH_FIELDS,
+		renderColumns: branchColumns({
+			annotations: listing?.annotations,
+			current: currentBranchOf(props),
+		}),
 	});
 };
 
 const setDefault = async (props: ProjectScopeProps & IdOrNameProps) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, listing } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.setDefaultProjectBranch(props.projectId, branchId),
 	);
 	writer(props).end(data.branch, {
 		fields: BRANCH_FIELDS,
+		renderColumns: branchColumns({
+			annotations: listing?.annotations,
+			current: currentBranchOf(props),
+		}),
 	});
 };
 
 const deleteBranch = async (props: ProjectScopeProps & IdOrNameProps) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, listing } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranch(props.projectId, branchId),
 	);
@@ -551,18 +619,35 @@ const deleteBranch = async (props: ProjectScopeProps & IdOrNameProps) => {
 	if (data) {
 		writer(props).end(data.branch, {
 			fields: BRANCH_FIELDS,
+			renderColumns: branchColumns({
+				annotations: listing?.annotations,
+				current: currentBranchOf(props),
+			}),
 		});
 	}
 };
 
 const get = async (props: ProjectScopeProps & IdOrNameProps) => {
-	const branchId = await branchIdFromProps(props);
-	const { data } = await props.apiClient.getProjectBranch(
-		props.projectId,
-		branchId,
-	);
-	writer(props).end(data.branch, {
-		fields: BRANCH_FIELDS,
+	// A name is resolved from the listing, whose branch objects are the ones GET returns.
+	const resolved = await resolveBranchFromProps(props);
+	let branch = resolved.branch;
+	let annotations = resolved.listing?.annotations;
+	if (!branch) {
+		const { data } = await props.apiClient.getProjectBranch(
+			props.projectId,
+			resolved.branchId,
+		);
+		branch = data.branch;
+		annotations = data.annotation
+			? { [data.branch.id]: data.annotation }
+			: undefined;
+	}
+	writer(props).end(branch, {
+		fields: BRANCH_DETAIL_FIELDS,
+		renderColumns: branchColumns({
+			annotations,
+			current: currentBranchOf(props),
+		}),
 	});
 };
 
@@ -601,12 +686,11 @@ const reset = async (
 	if (!props.parent) {
 		throw new Error("Only resetting to parent is supported for now");
 	}
-	const branchId = await branchIdFromProps(props);
-	const {
-		data: {
-			branch: { parent_id },
-		},
-	} = await props.apiClient.getProjectBranch(props.projectId, branchId);
+	const { branchId, branch, listing } = await resolveBranchFromProps(props);
+	const parent_id =
+		branch?.parent_id ??
+		(await props.apiClient.getProjectBranch(props.projectId, branchId)).data
+			.branch.parent_id;
 	if (!parent_id) {
 		throw new Error("Branch has no parent");
 	}
@@ -620,6 +704,10 @@ const reset = async (
 	writer(props).end(data.branch, {
 		// need to reset types until we expose reset api
 		fields: BRANCH_FIELDS_RESET as any,
+		renderColumns: branchColumns({
+			annotations: listing?.annotations,
+			current: currentBranchOf(props),
+		}),
 	});
 };
 
@@ -627,10 +715,14 @@ const restore = async (
 	props: ProjectScopeProps &
 		IdOrNameProps & { pointInTime: string; preserveUnderName?: string },
 ) => {
-	const targetBranchId = await branchIdResolve({
-		branch: props.id,
-		projectId: props.projectId,
+	const {
+		branchId: targetBranchId,
+		branch: targetBranch,
+		listing,
+	} = await resolveBranchFromProps({
 		apiClient: props.apiClient,
+		projectId: props.projectId,
+		id: props.id,
 	});
 
 	const pointInTime = await parsePointInTime({
@@ -638,18 +730,34 @@ const restore = async (
 		targetBranchId,
 		projectId: props.projectId,
 		api: props.apiClient,
+		branches: listing?.branches,
+		targetBranch,
 	});
 
-	log.info(
-		`Restoring branch ${targetBranchId} to the branch ${pointInTime.branchId} ${
-			(pointInTime.tag === "lsn" && "LSN " + pointInTime.lsn) ||
-			(
-				pointInTime.tag === "timestamp" &&
-					"timestamp " + pointInTime.timestamp
-			) ||
-			"head"
-		}`,
-	);
+	if (props.output === "table") {
+		const nameOf = (id: string) =>
+			listing?.branches.find((b) => b.id === id)?.name ?? id;
+		const point =
+			pointInTime.tag === "lsn"
+				? `LSN ${pointInTime.lsn} of`
+				: pointInTime.tag === "timestamp"
+					? `timestamp ${pointInTime.timestamp} of`
+					: "the head of";
+		log.info(
+			`Restoring ${nameOf(targetBranchId)} to ${point} ${nameOf(pointInTime.branchId)}`,
+		);
+	} else {
+		log.info(
+			`Restoring branch ${targetBranchId} to the branch ${pointInTime.branchId} ${
+				(pointInTime.tag === "lsn" && "LSN " + pointInTime.lsn) ||
+				(
+					pointInTime.tag === "timestamp" &&
+						"timestamp " + pointInTime.timestamp
+				) ||
+				"head"
+			}`,
+		);
+	}
 
 	const { data } = await retryOnLock(() =>
 		props.apiClient.restoreProjectBranch(props.projectId, targetBranchId, {
@@ -662,10 +770,15 @@ const restore = async (
 		}),
 	);
 
+	const labels = {
+		annotations: listing?.annotations,
+		current: currentBranchOf(props),
+	};
 	const writeInst = writer(props).write(data.branch, {
 		title: "Restored branch",
 		fields: ["id", "name", "last_reset_at"],
 		emptyMessage: "No branches have been restored.",
+		renderColumns: branchColumns(labels),
 	});
 	const parentId = data.branch.parent_id;
 	if (props.preserveUnderName && parentId) {
@@ -677,6 +790,7 @@ const restore = async (
 			title: "Backup branch",
 			fields: ["id", "name"],
 			emptyMessage: "Backup branch has not been found.",
+			renderColumns: branchColumns(labels),
 		});
 	}
 	writeInst.end();
@@ -686,7 +800,7 @@ const setExpiration = async (
 	props: ProjectScopeProps & { branchId: string; expiresAt?: string },
 ) => {
 	// Accept either branch name or id
-	const branchId = await branchIdFromProps({
+	const { branchId, listing } = await resolveBranchFromProps({
 		...props,
 		id: props.branchId,
 	});
@@ -704,5 +818,9 @@ const setExpiration = async (
 
 	writer(props).end(data.branch, {
 		fields: BRANCH_FIELDS,
+		renderColumns: branchColumns({
+			annotations: listing?.annotations,
+			current: currentBranchOf(props),
+		}),
 	});
 };

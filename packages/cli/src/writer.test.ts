@@ -19,6 +19,64 @@ const getMockWritable = () => {
 };
 
 describe("writer", () => {
+	describe("humanTitle", () => {
+		it("titles the table section without changing the JSON key", () => {
+			const table = getMockWritable();
+			writer({ output: "table", out: table.stream })
+				.write({ foo: "bar" }, { fields: ["foo"], title: "T1" })
+				.write(
+					{ baz: "xyz" },
+					{
+						fields: ["baz"],
+						title: "machine_key",
+						humanTitle: "For people",
+					},
+				)
+				.end();
+			expect(stripAnsi(table.getData())).toContain("\nFor people\n");
+			expect(stripAnsi(table.getData())).not.toContain("machine_key");
+
+			const json = getMockWritable();
+			writer({ output: "json", out: json.stream })
+				.write({ foo: "bar" }, { fields: ["foo"], title: "T1" })
+				.write(
+					{ baz: "xyz" },
+					{
+						fields: ["baz"],
+						title: "machine_key",
+						humanTitle: "For people",
+					},
+				)
+				.end();
+			expect(JSON.parse(json.getData())).toEqual({
+				t1: { foo: "bar" },
+				machine_key: { baz: "xyz" },
+			});
+		});
+	});
+
+	describe("NO_COLOR", () => {
+		it("writes table output without ANSI escapes", () => {
+			const previous = process.env.NO_COLOR;
+			process.env.NO_COLOR = "1";
+			try {
+				const { stream, getData } = getMockWritable();
+				writer({ output: "table", out: stream }).end(
+					[{ foo: "\u001b[32mbar\u001b[39m" }],
+					{ fields: ["foo"], title: "T" },
+				);
+				expect(getData()).not.toMatch(/\u001b\[/);
+				expect(getData()).toContain("bar");
+			} finally {
+				if (previous === undefined) {
+					delete process.env.NO_COLOR;
+				} else {
+					process.env.NO_COLOR = previous;
+				}
+			}
+		});
+	});
+
 	describe("outputs yaml", () => {
 		it("outputs single data", () => {
 			const { stream, getData } = getMockWritable();

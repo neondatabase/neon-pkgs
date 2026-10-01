@@ -66,8 +66,12 @@ export function parseColumns(value: string | undefined): number | undefined {
 	return n;
 }
 
+export function stripAnsi(s: string): string {
+	return s.replace(ANSI_RE, "");
+}
+
 export function displayWidth(s: string): number {
-	const plain = s.replace(ANSI_RE, "");
+	const plain = stripAnsi(s);
 	let width = 0;
 	for (const char of plain) {
 		const code = char.codePointAt(0);
