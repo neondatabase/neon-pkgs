@@ -12,6 +12,8 @@ export interface ReconciledBatch {
 }
 
 export interface ReconciliationTarget {
+	/** Observe a baseline-sync attempt after reconciliation accepts it. */
+	baselineSyncStarted(): void;
 	/** Install state without notifying application listeners. */
 	installReset(rows: readonly WireRow[]): void;
 	/** Install changes without notifying application listeners. */
@@ -22,6 +24,8 @@ export interface ReconciliationTarget {
 	publishBatch(batch: ReconciledBatch): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
 	caughtUp(): void;
+	/** Observe a baseline sync after it has been installed and published. */
+	baselineSyncCompleted(batchCount: number): void;
 	/** Leave `live` while the proxy obtains a replacement baseline. */
 	resetRequired(): void;
 	/** Fail only this subscription when decoding its values fails. */
@@ -264,6 +268,7 @@ export class BaselineSyncPublicationReconciler {
 			rows: [],
 			rowKeys: new Set(),
 		};
+		state.target.baselineSyncStarted();
 	}
 
 	private baselineSyncBatch(
@@ -364,6 +369,7 @@ export class BaselineSyncPublicationReconciler {
 			state.target.publishBatch(buffered.batch);
 		state.live = true;
 		state.target.caughtUp();
+		state.target.baselineSyncCompleted(message.batch_count);
 	}
 
 	private publicationOpen(publicationId: string, bytes: number): void {

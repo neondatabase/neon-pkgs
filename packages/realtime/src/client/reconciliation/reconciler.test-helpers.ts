@@ -22,6 +22,7 @@ export type MockTarget = ReconciliationTarget & {
 export function target(events: string[] = [], prefix = ""): MockTarget {
 	const label = (value: string) => `${prefix ? `${prefix}:` : ""}${value}`;
 	return {
+		baselineSyncStarted: vi.fn(),
 		installReset: vi.fn((rows: readonly WireRow[]) =>
 			events.push(label(`installReset:${keys(rows)}`)),
 		),
@@ -39,6 +40,7 @@ export function target(events: string[] = [], prefix = ""): MockTarget {
 			),
 		),
 		caughtUp: vi.fn(() => events.push(label("caughtUp"))),
+		baselineSyncCompleted: vi.fn(),
 		resetRequired: vi.fn(() => events.push(label("resetRequired"))),
 		decodeFailed: vi.fn((error: unknown) => {
 			throw error;

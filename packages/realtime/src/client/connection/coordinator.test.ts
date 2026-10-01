@@ -691,11 +691,13 @@ function target(): ConnectionCallbacks & {
 	failed: ReturnType<typeof vi.fn>;
 } {
 	const reconciliation: ReconciliationTarget = {
+		baselineSyncStarted: vi.fn(),
 		installReset: vi.fn(),
 		applyBatch: vi.fn(),
 		publishReset: vi.fn(),
 		publishBatch: vi.fn(),
 		caughtUp: vi.fn(),
+		baselineSyncCompleted: vi.fn(),
 		resetRequired: vi.fn(),
 		decodeFailed: vi.fn(),
 	};
