@@ -54,7 +54,7 @@ const regressions = (rows: Row[], thresholds: Thresholds): Row[] =>
 const signed = (n: number, digits = 0): string =>
 	`${n >= 0 ? "+" : ""}${n.toFixed(digits)}`;
 
-const reproduceCommands = (baseSha: string): string =>
+const setupCommands = (baseSha: string): string =>
 	[
 		`BASE=${baseSha}`,
 		'HEAD_ROOT="$(git rev-parse --show-toplevel)"',
@@ -62,7 +62,15 @@ const reproduceCommands = (baseSha: string): string =>
 		'git -C "$HEAD_ROOT" worktree add --detach "$BASE_ROOT" "$BASE"',
 		'(cd "$BASE_ROOT" && pnpm install --frozen-lockfile && pnpm --filter neon... build)',
 		'(cd "$HEAD_ROOT" && pnpm --filter neon... build)',
-		'(cd "$HEAD_ROOT" && pnpm --filter neon perf --cli "$BASE_ROOT/packages/cli/dist/cli.js" --cli "$HEAD_ROOT/packages/cli/dist/cli.js" --profile)',
+	].join("\n");
+
+const CLI_PAIR =
+	'--cli "$BASE_ROOT/packages/cli/dist/cli.js" --cli "$HEAD_ROOT/packages/cli/dist/cli.js"';
+
+const verifyCommands = (thresholds: Thresholds): string =>
+	[
+		'(cd "$HEAD_ROOT" && pnpm --filter neon... build)',
+		`(cd "$HEAD_ROOT" && pnpm --silent --filter neon perf --json ${CLI_PAIR} > "$BASE_ROOT/perf.json" && pnpm --silent --filter neon perf:ci-report --input "$BASE_ROOT/perf.json" --base-sha "$BASE" --head-sha "$(git rev-parse HEAD)" --threshold-ms ${thresholds.ms} --threshold-pct ${thresholds.pct})`,
 	].join("\n");
 
 const formatReport = (input: {
@@ -97,13 +105,18 @@ const formatReport = (input: {
 		"",
 		"What to do:",
 		"1. Run `pnpm --filter neon test:perf`. If it fails, the module or request it names is the cause; fix that first.",
-		"2. If it passes, the slowdown is work that adds no modules or requests (computation, synchronous I/O, a wait). The CPU profile printed after this report names where the time went. Reproduce it locally from your checkout's repo root:",
+		"2. If it passes, the slowdown is work that adds no modules or requests (computation, synchronous I/O, a wait). The CPU profile printed after this report names where the time went. To profile locally, build both revisions from your checkout's repo root, then profile:",
 		"",
 		"```sh",
-		reproduceCommands(input.baseSha),
+		setupCommands(input.baseSha),
+		`(cd "$HEAD_ROOT" && pnpm --filter neon perf ${CLI_PAIR} --profile)`,
 		"```",
 		"",
-		"3. Fix the hot path the profile names, rebuild, and rerun step 2 until the change is within noise.",
+		"3. Fix the hot path, then verify with the same comparison and thresholds as this job; it exits 0 when no scenario is slower than the threshold:",
+		"",
+		"```sh",
+		verifyCommands(thresholds),
+		"```",
 	);
 	return lines.join("\n");
 };
@@ -155,7 +168,7 @@ const main = () => {
 	if (values["regressed-out"]) {
 		writeFileSync(
 			values["regressed-out"],
-			regressed.map((r) => r.scenario).join("\n"),
+			regressed.map((r) => `${r.scenario}\n`).join(""),
 		);
 	}
 	if (regressed.length > 0) {
