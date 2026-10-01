@@ -183,7 +183,7 @@ mapping.
 
 ### The AI Gateway suite
 
-`pnpm --filter @neon/ai-sdk-provider test:e2e` is the sixth live suite and is **not** part of
+`pnpm --filter @neon/ai-sdk-provider test:e2e` is a separate live suite and is **not** part of
 `test:e2e:live`, because a run calls well over a hundred live models — it exercises every model
 the branch serves on two major AI SDK versions.
 
