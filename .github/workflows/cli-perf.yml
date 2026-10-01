@@ -41,8 +41,10 @@ jobs:
             labels: linux-ubuntu-latest
         timeout-minutes: 30
         env:
-            PERF_THRESHOLD_MS: 20
-            PERF_THRESHOLD_PCT: 15
+            # Calibrated on this runner group: identical builds differed by at most 8ms
+            # (1.9%); a 30ms startup busy-wait measured +24ms to +35ms (3.1% to 5%).
+            PERF_THRESHOLD_MS: 15
+            PERF_THRESHOLD_PCT: 1.5
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -81,25 +83,26 @@ jobs:
             - name: Report
               env:
                   BASE_SHA: ${{ steps.base.outputs.sha }}
-              run: >-
-                  pnpm --silent --filter neon perf:ci-report
-                  --input "$RUNNER_TEMP/perf.json"
-                  --base-sha "$BASE_SHA"
-                  --head-sha "$(git rev-parse HEAD)"
-                  --threshold-ms "$PERF_THRESHOLD_MS"
-                  --threshold-pct "$PERF_THRESHOLD_PCT"
-                  --regressed-out "$RUNNER_TEMP/regressed.txt"
-
-            - name: Profile slower scenarios
               run: |
-                  [ -s "$RUNNER_TEMP/regressed.txt" ] || exit 0
-                  while IFS= read -r scenario; do
-                    pnpm --silent --filter neon perf --profile "--scenario=$scenario" \
-                      --cli "$BASE_ROOT/packages/cli/dist/cli.js" \
-                      --cli "$GITHUB_WORKSPACE/packages/cli/dist/cli.js"
-                  done < "$RUNNER_TEMP/regressed.txt"
+                  status=0
+                  pnpm --silent --filter neon perf:ci-report \
+                    --input "$RUNNER_TEMP/perf.json" \
+                    --base-sha "$BASE_SHA" \
+                    --head-sha "$(git rev-parse HEAD)" \
+                    --threshold-ms "$PERF_THRESHOLD_MS" \
+                    --threshold-pct "$PERF_THRESHOLD_PCT" \
+                    --regressed-out "$RUNNER_TEMP/regressed.txt" || status=$?
+                  if [ -s "$RUNNER_TEMP/regressed.txt" ]; then
+                    while IFS= read -r scenario; do
+                      pnpm --silent --filter neon perf --profile "--scenario=$scenario" \
+                        --cli "$BASE_ROOT/packages/cli/dist/cli.js" \
+                        --cli "$GITHUB_WORKSPACE/packages/cli/dist/cli.js"
+                    done < "$RUNNER_TEMP/regressed.txt"
+                  fi
+                  exit "$status"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: ${{ !cancelled() }}
               with:
                   name: cli-perf
                   path: ${{ runner.temp }}/perf.json

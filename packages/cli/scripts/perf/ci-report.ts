@@ -1,4 +1,5 @@
-// Turns `pnpm --filter neon perf --cli <base> --cli <head> --json` into the CI wall-time report.
+// Turns `pnpm --filter neon perf --cli <base> --cli <head> --json` into the CI wall-time report,
+// exiting 1 when a scenario is slower than both thresholds.
 // Workflow: .github/workflows/cli-perf.yml. Agent workflow: "Performance budgets" in
 // packages/cli/AGENTS.md.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -71,10 +72,9 @@ const formatReport = (input: {
 	thresholds: Thresholds;
 	baseSha: string;
 	headSha: string;
-	blocking: boolean;
 }): string => {
 	const { run, rows, regressed, thresholds } = input;
-	const bar = `${signed(thresholds.ms)}ms and ${signed(thresholds.pct)}%`;
+	const bar = `${signed(thresholds.ms)}ms and ${signed(thresholds.pct, 1)}%`;
 	const lines = [
 		`CLI wall time: base ${input.baseSha.slice(0, 10)} vs head ${input.headSha.slice(0, 10)} (Node ${run.node}, ${run.platform}, ${run.runs} interleaved runs per build)`,
 		"",
@@ -91,13 +91,13 @@ const formatReport = (input: {
 		return lines.join("\n");
 	}
 	lines.push(
-		`Result: ${input.blocking ? "failing this PR" : "advisory, not failing this PR"}. Slower than ${bar}: ${regressed
+		`Result: failing this PR. Slower than ${bar}: ${regressed
 			.map((r) => `\`neon ${r.scenario}\` ${signed(r.deltaMs)}ms`)
 			.join(", ")}.`,
 		"",
 		"What to do:",
 		"1. Run `pnpm --filter neon test:perf`. If it fails, the module or request it names is the cause; fix that first.",
-		"2. If it passes, the slowdown is work that adds no modules or requests (computation, synchronous I/O, a wait). The CPU profile below names where the time went. Reproduce it locally from your checkout's repo root:",
+		"2. If it passes, the slowdown is work that adds no modules or requests (computation, synchronous I/O, a wait). The CPU profile printed after this report names where the time went. Reproduce it locally from your checkout's repo root:",
 		"",
 		"```sh",
 		reproduceCommands(input.baseSha),
@@ -116,7 +116,6 @@ const main = () => {
 			"head-sha": { type: "string" },
 			"threshold-ms": { type: "string" },
 			"threshold-pct": { type: "string" },
-			blocking: { type: "boolean", default: false },
 			"regressed-out": { type: "string" },
 		},
 	});
@@ -148,7 +147,6 @@ const main = () => {
 		thresholds,
 		baseSha: required("base-sha"),
 		headSha: required("head-sha"),
-		blocking: values.blocking,
 	});
 	process.stdout.write(`${report}\n`);
 	if (process.env.GITHUB_STEP_SUMMARY) {
@@ -160,7 +158,7 @@ const main = () => {
 			regressed.map((r) => r.scenario).join("\n"),
 		);
 	}
-	if (values.blocking && regressed.length > 0) {
+	if (regressed.length > 0) {
 		process.exit(1);
 	}
 };
