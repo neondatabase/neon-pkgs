@@ -44,7 +44,7 @@ the pull-request CI sharding layout, and the coverage artifact handoff.
 #### Live Neon e2e tests
 
 `pnpm test:e2e:live` runs the `@neon/sdk`, `@neon/config`, `@neon/config-runtime`,
-`@neon/env`, and `neon` (the CLI) e2e suites against the **real Neon Management API**. They
+`@neon/env`, `@neon/effect`, and `neon` (the CLI) e2e suites against the **real Neon Management API**. They
 create Postgres projects, mutate branches, read connection strings, and delete
 everything again. They are excluded from `pnpm test:ci` (each package's Vitest config
 excludes the e2e files) and only run through their own `test:e2e` script.
@@ -54,7 +54,7 @@ production one. The suite sweeps stale `neon-ts-e2e-*` projects on start, so any
 project matching that prefix in reach of the key is fair game for deletion.
 
 ```bash
-cp packages/sdk/.env.example .env   # repo root: one file for all five suites
+cp packages/sdk/.env.example .env   # repo root: one file for every suite
 # Fill in NEON_API_KEY with an org-scoped key for the throwaway org.
 # Set NEON_ORG_ID too when the key is user-scoped, so the sweep stays inside one org.
 pnpm test:e2e:live
@@ -76,7 +76,7 @@ Every variable the live suites read, and where it comes from:
 
 | Variable | Required | Read by | Meaning |
 | --- | --- | --- | --- |
-| `NEON_API_KEY` | yes | all five suites, via `requireApiKey()` | Org-scoped key for the throwaway org |
+| `NEON_API_KEY` | yes | every suite, via `requireApiKey()` | Org-scoped key for the throwaway org |
 | `NEON_ORG_ID` | recommended | harness `configuredOrgId()`; the CLI suite maps it to `--org-id` | Pins create, list and sweep to one org. **Required in practice for a user-scoped key**, or the sweep ranges over every org the key can see |
 | `NEON_PROJECT_ID` | only for project-scoped keys | harness `detectApiKeyScope()` | Targets a fixed project; create-paths skip themselves |
 | `NEON_API_BASE_URL` | no | harness `api.ts` | Point the harness at a non-production API. Defaults to `https://console.neon.tech/api/v2` |
@@ -88,7 +88,7 @@ Every variable the live suites read, and where it comes from:
    file on disk.
 2. The package's own `.env` (`packages/sdk/.env`, …). Use this only to override one
    suite.
-3. A `.env` at the repository root. The normal place to put credentials — all five
+3. A `.env` at the repository root. The normal place to put credentials — every
    suites read it, so you configure them once.
 
 `.gitignore` covers `.env` and `.env.*` with a `!.env.example` negation, so the
@@ -129,7 +129,7 @@ To wire up a **new** variable end to end:
 1. **Read it through the harness**, not `process.env` scattered across tests. Add an
    accessor in `tests/e2e-harness/src/env.ts` next to `configuredOrgId()` so the
    default and the "missing" error message live in one place.
-2. **Document it in every `.env.example`** — `packages/{sdk,config,config-runtime,env,cli}/.env.example`.
+2. **Document it in every `.env.example`** — `packages/{sdk,config,config-runtime,env,effect,cli}/.env.example`.
    They are near-identical on purpose: a contributor copies whichever one they find.
 3. **Add it to the table above** and, if contributors need it, to `CONTRIBUTING.md`.
 4. **Store it on the repository** (needs admin on `neondatabase/neon-pkgs`):
@@ -156,7 +156,7 @@ in-flight project is never deleted underneath it.
 
 ##### The AI Gateway suite (`@neon/ai-sdk-provider`)
 
-`pnpm --filter @neon/ai-sdk-provider test:e2e` is the sixth live suite. It runs as its own
+`pnpm --filter @neon/ai-sdk-provider test:e2e` is a separate live suite. It runs as its own
 workflow rather than inside `test:e2e:live`:
 
 | | |
