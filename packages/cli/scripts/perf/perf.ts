@@ -165,7 +165,7 @@ const time = async (sandbox: Sandbox) => {
 						: ""
 				}`,
 		);
-		out(`neon ${scenario.name}`.padEnd(32), cells.join("   "));
+		out(`${`neon ${scenario.name}`.padEnd(32)} ${cells.join("   ")}`);
 	}
 };
 
