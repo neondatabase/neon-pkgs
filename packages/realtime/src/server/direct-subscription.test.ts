@@ -103,6 +103,7 @@ describe("trusted direct subscriptions", () => {
 		await realtime.subscribe(messagesByOwner("alice"));
 		const socket = connectAndAdmit();
 		baselineSync(socket, "hello");
+		await Promise.resolve();
 
 		expect(events).toEqual(
 			expect.arrayContaining(["connection_ready", "subscription_live"]),

@@ -16,8 +16,8 @@ npm install @neon/realtime
 ```
 
 > **Requirements:** Node.js >= 20.19 for backend sealing. You also need a
-> PostgreSQL database connected to a compatible Realtime endpoint, a server-only
-> Realtime secret, and the endpoint WebSocket URL.
+> PostgreSQL database connected to a compatible Realtime proxy, a server-only
+> Realtime secret, and the proxy WebSocket URL.
 
 The package has no runtime dependencies. Import browser and backend code from
 their dedicated entry points so server secrets cannot enter a browser bundle:
@@ -47,7 +47,7 @@ interface Message {
 }
 
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
+  secret: process.env.NEON_LIVE_SECRET!,
   db: "app",
 });
 
@@ -118,7 +118,7 @@ pass a concrete query directly to `subscribe()`:
 
 ```ts
 const realtime = createRealtime({
-  secret: process.env.NEON_REALTIME_SECRET!,
+  secret: process.env.NEON_LIVE_SECRET!,
   db: "app",
   url: "wss://live.neon.tech/...",
   logLevel: "warn",
@@ -212,16 +212,16 @@ The levels are cumulative:
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
 | `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
-| `debug` | All entries, including retry scheduling, heartbeats, baseline syncs, publications, and state transitions |
+| `debug` | All entries, including retry scheduling, heartbeats, snapshots, publications, and state transitions |
 
 Each entry has a stable `event` name:
 
 | Minimum level | Events |
 | --- | --- |
 | `error` | `connection_failed`, `connection_reconnect_exhausted`, `subscription_failed`, `subscription_row_decoding_failed`, `query_refresh_stopped` |
-| `warn` | `connection_lost`, `connection_heartbeat_timeout`, `query_expired`, `query_encryption_key_retired`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
+| `warn` | `connection_lost`, `query_expired`, `query_encryption_key_rotated`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
 | `info` | `connection_ready`, `connection_recovered`, `subscription_live`, `subscription_renewed`, `client_closed` |
-| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_baseline_sync_started`, `subscription_baseline_sync_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
+| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_heartbeat_timeout`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_baseline_sync_started`, `subscription_baseline_sync_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
 
 Supply `logger` to route the same structured entries into an application
 logger. `logLevel` still controls which entries it receives:
@@ -238,14 +238,15 @@ const client = createRealtimeClient({
 });
 ```
 
-Logger failures are ignored so observability cannot interrupt stream
-delivery. SDK-produced metadata uses client-local opaque subscription IDs and
-does not include sealed capabilities, SQL, parameters, rows, cell values, raw
-wire messages, or endpoint URLs. An entry's `error` may retain an error
-reported by the proxy or thrown by application code, so route it according to
-the application's normal error-logging policy. React and TanStack DB refresh
-callbacks automatically reuse the diagnostics configured on their shared
-client.
+Entries are delivered from a microtask after the state transition that emitted
+them, and logger failures are ignored, so observability cannot re-enter or
+interrupt stream delivery. SDK-produced metadata uses client-local opaque
+subscription IDs and does not include sealed capabilities, SQL, parameters,
+rows, cell values, raw wire messages, or endpoint URLs. An entry's `error` may
+retain an error reported by the proxy or thrown by application or runtime code,
+so route it according to the application's normal error-logging policy. React
+and TanStack DB refresh callbacks automatically reuse the diagnostics
+configured on their shared client.
 
 ### PostgreSQL result values
 
@@ -330,9 +331,9 @@ when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
-**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
-ID or when the last successfully applied reset snapshot proves it visible. The
-protocol does not currently acknowledge a no-op transaction after
+**Warning:** `awaitTxId()` resolves when Realtime includes the transaction ID in
+a live batch or when the last successfully applied reset snapshot proves it
+visible. Realtime does not currently acknowledge a no-op transaction after
 that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, use a timeout or avoid waiting when the mutation made
 no change.
@@ -379,9 +380,9 @@ key or retain it across resets. Transaction IDs are decimal strings so 64-bit
 values remain exact in JavaScript.
 
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
-available immediately as stale data until the first authoritative reset.
-Realtime does not transform those rows: the application is responsible for
-making their JavaScript representation match the configured live parsers. The core
+available immediately as stale data until the first authoritative reset. Neon
+Live does not transform those rows: the application is responsible for making
+their JavaScript representation match the configured live parsers. The core
 defaults align with node-postgres and Neon Serverless for built-in types, while
 the optional presets cover common driver and ORM differences. Framework date
 serialization and server/browser timezone alignment remain application
@@ -400,4 +401,4 @@ concerns.
 
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
-`NEON_REALTIME_SECRET` to browser code.
+`NEON_LIVE_SECRET` to browser code.

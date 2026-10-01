@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRealtimeDiagnostics } from "./diagnostics.js";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { createClientEventSink } from "./diagnostics.js";
 import type { RealtimeLogEntry } from "./types.js";
 
 afterEach(() => {
@@ -8,30 +8,44 @@ afterEach(() => {
 });
 
 describe("Realtime client diagnostics", () => {
-	it("is silent by default", () => {
-		const logger = vi.fn();
-		const diagnostics = createRealtimeDiagnostics({ logger });
-
-		diagnostics.log("error", "connection_failed", "failed");
-
-		expect(logger).not.toHaveBeenCalled();
+	it("rejects invalid diagnostic configuration", () => {
+		expect(() =>
+			createClientEventSink({
+				logLevel: "verbose" as never,
+			}),
+		).toThrow("Invalid Realtime log level");
+		expect(() =>
+			createClientEventSink({
+				logger: {} as never,
+			}),
+		).toThrow("Realtime logger must be a function");
 	});
 
-	it("filters entries at the configured minimum level", () => {
+	it("is silent by default", async () => {
+		const logger = vi.fn();
+		const events = createClientEventSink({ logger });
+
+		events.connection.failed(diagnosticError("connection_failed", false));
+		await flushDiagnostics();
+
+		expect(logger).not.toHaveBeenCalled();
+		expect(events.createSubscription()).toBe(events.createSubscription());
+	});
+
+	it("filters entries at the configured minimum level", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(123);
 		const entries: RealtimeLogEntry[] = [];
-		const diagnostics = createRealtimeDiagnostics({
+		const events = createClientEventSink({
 			logLevel: "warn",
 			logger: (entry) => entries.push(entry),
 		});
 
-		diagnostics.log("debug", "connection_attempt_started", "attempt");
-		diagnostics.log("info", "connection_ready", "ready");
-		diagnostics.log("warn", "connection_lost", "lost", {
-			activeSubscriptionCount: 2,
-		});
-		diagnostics.log("error", "connection_failed", "failed");
+		events.connection.attemptStarted();
+		events.connection.ready();
+		events.connection.lost(undefined, 2);
+		events.connection.failed(diagnosticError("connection_failed", false));
+		await vi.runAllTicks();
 
 		expect(entries).toEqual([
 			expect.objectContaining({
@@ -49,26 +63,50 @@ describe("Realtime client diagnostics", () => {
 		expect(Object.isFrozen(entries[0])).toBe(true);
 	});
 
-	it("never lets a logger failure interrupt the client", () => {
-		const diagnostics = createRealtimeDiagnostics({
+	it("dispatches after the state transition that emitted the event", async () => {
+		let transitionComplete = false;
+		const observations: boolean[] = [];
+		const events = createClientEventSink({
+			logLevel: "info",
+			logger: () => observations.push(transitionComplete),
+		});
+
+		events.connection.ready();
+		expect(observations).toEqual([]);
+		transitionComplete = true;
+		await flushDiagnostics();
+
+		expect(observations).toEqual([true]);
+	});
+
+	it("never lets a logger failure interrupt later entries", async () => {
+		const delivered: string[] = [];
+		const events = createClientEventSink({
 			logLevel: "error",
-			logger: () => {
-				throw new Error("logger failed");
+			logger: (entry) => {
+				if (delivered.length === 0) {
+					delivered.push("thrown");
+					throw new Error("logger failed");
+				}
+				delivered.push(entry.event);
 			},
 		});
 
-		expect(() =>
-			diagnostics.log("error", "connection_failed", "failed"),
-		).not.toThrow();
+		events.connection.failed(diagnosticError("first", false));
+		events.connection.failed(diagnosticError("second", false));
+		await flushDiagnostics();
+
+		expect(delivered).toEqual(["thrown", "connection_failed"]);
 	});
 
-	it("uses the matching console method when no logger is supplied", () => {
+	it("uses the matching console method when no logger is supplied", async () => {
 		const warn = vi
 			.spyOn(console, "warn")
 			.mockImplementation(() => undefined);
-		const diagnostics = createRealtimeDiagnostics({ logLevel: "warn" });
+		const events = createClientEventSink({ logLevel: "warn" });
 
-		diagnostics.log("warn", "connection_lost", "lost");
+		events.connection.lost(undefined, 0);
+		await flushDiagnostics();
 
 		expect(warn).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -78,10 +116,42 @@ describe("Realtime client diagnostics", () => {
 		);
 	});
 
-	it("allocates opaque client-local subscription IDs", () => {
-		const diagnostics = createRealtimeDiagnostics({});
+	it("allocates opaque client-local subscription IDs", async () => {
+		const entries: RealtimeLogEntry[] = [];
+		const events = createClientEventSink({
+			logLevel: "debug",
+			logger: (entry) => entries.push(entry),
+		});
 
-		expect(diagnostics.nextSubscriptionId()).toBe("s1");
-		expect(diagnostics.nextSubscriptionId()).toBe("s2");
+		events.createSubscription().started();
+		events.createSubscription().started();
+		await flushDiagnostics();
+
+		expect(entries).toEqual([
+			expect.objectContaining({ subscriptionId: "s1" }),
+			expect.objectContaining({ subscriptionId: "s2" }),
+		]);
+	});
+
+	it("narrows event-specific metadata", () => {
+		const assertType = (entry: RealtimeLogEntry) => {
+			if (entry.event === "subscription_baseline_sync_completed") {
+				expectTypeOf(entry.subscriptionId).toEqualTypeOf<string>();
+				expectTypeOf(entry.batchCount).toEqualTypeOf<number>();
+			}
+			if (entry.event === "connection_publication_committed") {
+				expectTypeOf(entry.bodyCount).toEqualTypeOf<number>();
+			}
+		};
+
+		expectTypeOf(assertType).toBeFunction();
 	});
 });
+
+function diagnosticError(code: string, retryable: boolean) {
+	return Object.assign(new Error(code), { code, retryable });
+}
+
+async function flushDiagnostics(): Promise<void> {
+	await new Promise<void>((resolve) => queueMicrotask(resolve));
+}

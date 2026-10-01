@@ -4,89 +4,222 @@ import type { SealedLiveQuery } from "./sealed-query.js";
 /** Client-side diagnostic verbosity. */
 export type RealtimeLogLevel = "silent" | "error" | "warn" | "info" | "debug";
 
-/** Stable name for one client diagnostic event. */
-export type RealtimeLogEvent =
-	| "client_closed"
-	| "connection_attempt_started"
-	| "connection_failed"
-	| "connection_heartbeat_ping_sent"
-	| "connection_heartbeat_pong_received"
-	| "connection_heartbeat_timeout"
-	| "connection_lost"
-	| "connection_publication_committed"
-	| "connection_ready"
-	| "connection_reconnect_exhausted"
-	| "connection_reconnect_scheduled"
-	| "connection_recovered"
-	| "connection_stable"
-	| "query_encryption_key_retired"
-	| "query_expired"
-	| "query_refresh_callback_failed"
-	| "query_refresh_callback_started"
-	| "query_refresh_callback_succeeded"
-	| "query_refresh_scheduled"
-	| "query_refresh_stopped"
-	| "subscription_admitted"
-	| "subscription_failed"
-	| "subscription_listener_failed"
-	| "subscription_live"
-	| "subscription_renewal_failed"
-	| "subscription_renewal_started"
-	| "subscription_renewed"
-	| "subscription_reset_required"
-	| "subscription_row_decoding_failed"
-	| "subscription_baseline_sync_completed"
-	| "subscription_baseline_sync_started"
-	| "subscription_started"
-	| "subscription_state_changed"
-	| "subscription_unsubscribed";
+type EmittedRealtimeLogLevel = Exclude<RealtimeLogLevel, "silent">;
 
-/** Structured client diagnostic passed to a configured logger. */
-export interface RealtimeLogEntry {
-	/** Severity used for level filtering and the default console method. */
-	readonly level: Exclude<RealtimeLogLevel, "silent">;
-	/** Stable machine-readable event name. */
-	readonly event: RealtimeLogEvent;
-	/** Human-readable event summary; use {@link event} for program logic. */
-	readonly message: string;
-	/** Unix timestamp in milliseconds at which the event was emitted. */
-	readonly timestamp: number;
-	/** Client-local opaque subscription identifier, when applicable. */
-	readonly subscriptionId?: string;
-	/** Stable machine-readable error code, when applicable. */
-	readonly code?: string;
-	/** Whether the reported condition can be retried. */
-	readonly retryable?: boolean;
-	/** One-based reconnect attempt number. */
-	readonly attempt?: number;
-	/** Delay before the next scheduled action, in milliseconds. */
-	readonly delayMs?: number;
-	/** Duration of the reported condition, in milliseconds. */
-	readonly durationMs?: number;
-	/** Number of subscriptions affected by a connection event. */
-	readonly activeSubscriptionCount?: number;
-	/** Number of batches in a completed baseline sync. */
-	readonly batchCount?: number;
-	/** Number of bodies in a committed publication. */
-	readonly bodyCount?: number;
-	/** Subscription status before a state transition. */
-	readonly fromStatus?: LiveQueryState["status"];
-	/** Subscription status after a state transition. */
-	readonly toStatus?: LiveQueryState["status"];
-	/** Query expiry as a Unix timestamp in milliseconds. */
-	readonly expiresAt?: number;
-	/**
-	 * Original error, when available. It may contain details from the proxy or
-	 * application code and should be handled according to the application's
-	 * error-logging policy.
-	 */
-	readonly error?: unknown;
+interface SubscriptionLogMetadata {
+	/** Client-local opaque subscription identifier. */
+	readonly subscriptionId: string;
 }
+
+interface ErrorLogMetadata {
+	/** Stable machine-readable error code. */
+	readonly code: string;
+	/** Whether the reported condition can be retried. */
+	readonly retryable: boolean;
+	/**
+	 * Original error. It may contain details from the proxy or application code
+	 * and should be handled according to the application's error-logging policy.
+	 */
+	readonly error: unknown;
+}
+
+/** @internal Type-level catalogue used to derive the public diagnostic union. */
+export interface RealtimeLogEventDefinition {
+	readonly client_closed: {
+		readonly level: "info";
+		readonly metadata: object;
+	};
+	readonly connection_attempt_started: {
+		readonly level: "debug";
+		readonly metadata: { readonly attempt?: number };
+	};
+	readonly connection_failed: {
+		readonly level: "error";
+		readonly metadata: ErrorLogMetadata;
+	};
+	readonly connection_heartbeat_ping_sent: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly connection_heartbeat_pong_received: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly connection_heartbeat_timeout: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly connection_lost: {
+		readonly level: "warn";
+		readonly metadata: {
+			readonly activeSubscriptionCount: number;
+			readonly code?: string;
+			readonly retryable?: boolean;
+			readonly error?: unknown;
+		};
+	};
+	readonly connection_publication_committed: {
+		readonly level: "debug";
+		readonly metadata: { readonly bodyCount: number };
+	};
+	readonly connection_ready: {
+		readonly level: "info";
+		readonly metadata: { readonly attempt?: number };
+	};
+	readonly connection_reconnect_exhausted: {
+		readonly level: "error";
+		readonly metadata: ErrorLogMetadata;
+	};
+	readonly connection_reconnect_scheduled: {
+		readonly level: "debug";
+		readonly metadata: {
+			readonly attempt: number;
+			readonly delayMs: number;
+		};
+	};
+	readonly connection_recovered: {
+		readonly level: "info";
+		readonly metadata: {
+			readonly attempt?: number;
+			readonly durationMs: number;
+		};
+	};
+	readonly connection_stable: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly query_encryption_key_rotated: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly query_expired: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly query_refresh_callback_failed: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly query_refresh_callback_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly query_refresh_callback_succeeded: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly query_refresh_scheduled: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly delayMs: number;
+			readonly expiresAt: number;
+		};
+	};
+	readonly query_refresh_stopped: {
+		readonly level: "error";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly subscription_admitted: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_failed: {
+		readonly level: "error";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly subscription_listener_failed: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly subscription_live: {
+		readonly level: "info";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_renewal_failed: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly subscription_renewal_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_renewed: {
+		readonly level: "info";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_reset_required: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_row_decoding_failed: {
+		readonly level: "error";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly subscription_baseline_sync_completed: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly batchCount: number;
+		};
+	};
+	readonly subscription_baseline_sync_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_state_changed: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly fromStatus: LiveQueryState["status"];
+			readonly toStatus: LiveQueryState["status"];
+		};
+	};
+	readonly subscription_unsubscribed: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+}
+
+/** Stable name for one client diagnostic event. */
+export type RealtimeLogEvent = keyof RealtimeLogEventDefinition;
+
+type RealtimeLogEntryFor<Event extends RealtimeLogEvent> = Readonly<
+	{
+		/** Severity used for level filtering and the default console method. */
+		level: RealtimeLogEventDefinition[Event]["level"] &
+			EmittedRealtimeLogLevel;
+		/** Stable machine-readable event name. */
+		event: Event;
+		/** Human-readable event summary; use `event` for program logic. */
+		message: string;
+		/** Unix timestamp in milliseconds at which the event was emitted. */
+		timestamp: number;
+	} & RealtimeLogEventDefinition[Event]["metadata"]
+>;
+
+/**
+ * Structured client diagnostic passed to a configured logger.
+ *
+ * Narrowing on `event` also narrows the metadata available on the entry.
+ */
+export type RealtimeLogEntry = {
+	[Event in RealtimeLogEvent]: RealtimeLogEntryFor<Event>;
+}[RealtimeLogEvent];
 
 /** Receives structured Realtime client diagnostics. */
 export type RealtimeLogger = (entry: RealtimeLogEntry) => void;
 
-/** An error reported by a live-query subscription. */
+/** An error reported by a Realtime subscription. */
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
 	readonly code: string;
@@ -126,7 +259,7 @@ export interface LiveQueryBatchInfo {
 }
 
 /**
- * A row in a raw reset, paired with its opaque live-query identity.
+ * A row in a raw reset, paired with its opaque Realtime identity.
  *
  * @typeParam Row - Row produced by the subscribed query.
  */
@@ -216,7 +349,7 @@ export interface RawLiveQuerySubscription<Row> {
 	 *
 	 * @remarks
 	 * This resolves for transaction IDs included in a live batch or proven
-	 * visible by the last successfully applied reset snapshot. The protocol does
+	 * visible by the last successfully applied reset snapshot. Realtime does
 	 * not currently acknowledge a no-op transaction after that snapshot. It can
 	 * resolve only if a later reset proves it visible; otherwise it remains
 	 * pending until the timeout elapses or the subscription closes.

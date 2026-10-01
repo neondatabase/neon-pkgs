@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
-import { defineParsers } from "./postgres/parsers.js";
 import {
 	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
 } from "./realtime-client.js";
+import { defineParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
 interface MessageRow {
@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
-	it("emits structured diagnostics without exposing query contents", () => {
+	it("emits structured diagnostics without exposing query contents", async () => {
 		useFakeWebSocket();
 		const entries: unknown[] = [];
 		const client = createRealtimeClient({
@@ -97,6 +97,7 @@ describe("RealtimeClient", () => {
 
 		const socket = connectAndAdmit();
 		baselineSync(socket, "sensitive row value");
+		await Promise.resolve();
 
 		expect(
 			entries.map((entry) => (entry as { event: string }).event),
@@ -117,6 +118,32 @@ describe("RealtimeClient", () => {
 		expect(serialized).not.toContain("sensitive-capability");
 		expect(serialized).not.toContain("sensitive row value");
 		expect(serialized).not.toContain("do-not-log");
+		client.close();
+	});
+
+	it("does not let a logger re-enter subscription admission", async () => {
+		useFakeWebSocket();
+		let subscription!: MaterializedLiveQuerySubscription<MessageRow>;
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => {
+				if (entry.event === "subscription_admitted") {
+					subscription.unsubscribe();
+				}
+			},
+		});
+		subscription = client.subscribe(query("initial"));
+
+		const socket = connectAndAdmit();
+		expect(subscription.getState().status).toBe("connecting");
+		await Promise.resolve();
+
+		expect(subscription.getState().status).toBe("closed");
+		expect(socket.sent.at(-1)).toMatchObject({
+			type: "unsubscribe",
+			live_id: "41",
+		});
 		client.close();
 	});
 
@@ -448,7 +475,7 @@ describe("RealtimeClient", () => {
 		const subscription = client.subscribe(query("initial"));
 
 		await expect(subscription.awaitTxId("9", 1)).rejects.toThrow(
-			"Timed out waiting for live-query transaction 9",
+			"Timed out waiting for Realtime transaction 9",
 		);
 		await expect(subscription.awaitTxId("not-a-txid")).rejects.toThrow(
 			"decimal string",
@@ -509,7 +536,7 @@ describe("RealtimeClient", () => {
 		});
 
 		await expect(subscription.awaitRows(() => false, 1)).rejects.toThrow(
-			"Timed out waiting for live-query rows",
+			"Timed out waiting for Realtime rows",
 		);
 		await expect(subscription.awaitRows(() => false, -1)).rejects.toThrow(
 			"non-negative",
@@ -546,6 +573,47 @@ describe("RealtimeClient", () => {
 		await expect(
 			subscription.renew(query("other", "22".repeat(32))),
 		).rejects.toThrow("same query");
+		client.close();
+	});
+
+	it("reports rejected renewal attempts without warning for superseded ones", async () => {
+		useFakeWebSocket();
+		vi.useFakeTimers();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "warn",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		socket.close();
+
+		const superseded = subscription.renew(query("next"));
+		const newest = subscription.renew(query("newest"));
+		await expect(superseded).rejects.toMatchObject({
+			code: "renewal_superseded",
+		});
+		await vi.runAllTicks();
+		expect(events).not.toContain("subscription_renewal_failed");
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		const replacementSocket = FakeWebSocket.instances.at(-1);
+		expect(replacementSocket).toBeDefined();
+		replacementSocket?.open();
+		replacementSocket?.receive({ type: "ready" });
+		replacementSocket?.receive({
+			type: "subscribe_rejected",
+			request_id: "2",
+			code: "authorization_expired",
+			message: "expired",
+		});
+
+		await expect(newest).rejects.toMatchObject({
+			code: "authorization_expired",
+		});
+		await vi.runAllTicks();
+		expect(events).toContain("subscription_renewal_failed");
 		client.close();
 	});
 
@@ -620,7 +688,7 @@ describe("RealtimeClient", () => {
 			type: "subscription_error",
 			live_id: "41",
 			code: "baseline_sync_failed",
-			message: "baseline sync failed",
+			message: "snapshot failed",
 		});
 		expect(subscription.getSnapshot()).toMatchObject({
 			status: "error",
@@ -683,8 +751,8 @@ describe("RealtimeClient", () => {
 				{ name: "value", type_oid: 25, typmod: -1, codec: "pg_text" },
 			],
 		});
-		completeEmptyBaselineSync(socket, "41");
-		completeEmptyBaselineSync(socket, "42");
+		emptySnapshot(socket, "41");
+		emptySnapshot(socket, "42");
 
 		socket.receive({ type: "open", publication_id: "shared" });
 		socket.receive({
@@ -771,7 +839,7 @@ describe("RealtimeClient", () => {
 				},
 			],
 		});
-		completeEmptyBaselineSync(socket, "41");
+		emptySnapshot(socket, "41");
 		socket.receive({ type: "open", publication_id: "atomic" });
 		socket.receive({
 			type: "keyed_results",
@@ -890,7 +958,7 @@ function reset(socket: FakeWebSocket, epoch: string): void {
 	});
 }
 
-function completeEmptyBaselineSync(
+function emptySnapshot(
 	socket: FakeWebSocket,
 	liveId: string,
 	epoch = "1",

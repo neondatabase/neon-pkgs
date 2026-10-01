@@ -1,4 +1,3 @@
-import { diagnosticsForSubscription } from "@neon/live/_internal";
 import {
 	type LiveQueryBatchInfo,
 	type LiveQueryChange,
@@ -66,10 +65,6 @@ export class ReactLiveQueryStore<Row> {
 				const subscription = this.subscription;
 				if (subscription) this.update(subscription.getSnapshot());
 			},
-			diagnostics: () =>
-				this.subscription
-					? diagnosticsForSubscription(this.subscription)
-					: undefined,
 		});
 		this.utils = Object.freeze({
 			getState: this.getState,
@@ -154,6 +149,7 @@ export class ReactLiveQueryStore<Row> {
 			{ initialData: this.initialSnapshot.data },
 		);
 		this.subscription = subscription;
+		this.queryRefresh.setSubscription(subscription);
 		this.snapshot = subscription.getSnapshot();
 		this.hookSnapshot = this.withRefreshError(this.snapshot);
 		const unsubscribers = [
@@ -178,6 +174,7 @@ export class ReactLiveQueryStore<Row> {
 		this.detachForwarders = undefined;
 		this.subscription?.unsubscribe();
 		this.subscription = undefined;
+		this.queryRefresh.setSubscription(undefined);
 		this.refreshError = undefined;
 		this.snapshot = this.initialSnapshot;
 		this.hookSnapshot = this.initialSnapshot;

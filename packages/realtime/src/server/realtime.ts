@@ -207,12 +207,12 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 
 	if (!("url" in options)) return Object.freeze({ seal });
 
-	const directClient = new DirectLiveQueryClient(
-		options.url,
-		options.parsers,
-		options.logLevel,
-		options.logger,
-	);
+	const directClient = new DirectLiveQueryClient({
+		url: options.url,
+		parsers: options.parsers,
+		logLevel: options.logLevel,
+		logger: options.logger,
+	});
 	const subscribe = async <ConcreteQuery extends SealableQuery<Query>>(
 		query: ConcreteQuery,
 		subscriptionOptions?:

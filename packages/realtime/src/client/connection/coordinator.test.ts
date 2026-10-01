@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
-import { createRealtimeDiagnostics } from "../diagnostics.js";
+import { createClientEventSink } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
 import {
 	type ConnectionCallbacks,
@@ -83,22 +83,17 @@ describe("ConnectionCoordinator", () => {
 		vi.useFakeTimers();
 		const entries: Array<{ event: string; subscriptionId?: string }> = [];
 		const coordinator = createCoordinator({
-			diagnostics: createRealtimeDiagnostics({
+			events: createClientEventSink({
 				logLevel: "debug",
 				logger: (entry) => entries.push(entry),
 			}),
 		});
-		coordinator.subscribe(
-			{ capability: "one" },
-			{ ...target(), subscriptionId: "s1" },
-		);
-		coordinator.subscribe(
-			{ capability: "two" },
-			{ ...target(), subscriptionId: "s2" },
-		);
+		coordinator.subscribe({ capability: "one" }, target());
+		coordinator.subscribe({ capability: "two" }, target());
 		const first = admit();
 
 		first.disconnect();
+		await vi.runAllTicks();
 		expect(
 			entries.filter((entry) => entry.event === "connection_lost"),
 		).toHaveLength(1);
@@ -106,6 +101,7 @@ describe("ConnectionCoordinator", () => {
 		const second = defined(FakeWebSocket.instances[1]);
 		second.open();
 		second.receive({ type: "ready" });
+		await vi.runAllTicks();
 
 		expect(
 			entries.filter((entry) => entry.event === "connection_recovered"),
@@ -117,10 +113,10 @@ describe("ConnectionCoordinator", () => {
 		);
 	});
 
-	it("distinguishes query expiry from encryption-key retirement", () => {
+	it("distinguishes query expiry from encryption-key retirement", async () => {
 		const entries: Array<{ event: string }> = [];
 		const coordinator = createCoordinator({
-			diagnostics: createRealtimeDiagnostics({
+			events: createClientEventSink({
 				logLevel: "warn",
 				logger: (entry) => entries.push(entry),
 			}),
@@ -155,10 +151,11 @@ describe("ConnectionCoordinator", () => {
 			code: "key_retired",
 			message: "retired",
 		});
+		await Promise.resolve();
 
 		expect(entries.map((entry) => entry.event)).toEqual([
 			"query_expired",
-			"query_encryption_key_retired",
+			"query_encryption_key_rotated",
 		]);
 	});
 
@@ -442,18 +439,30 @@ describe("ConnectionCoordinator", () => {
 		await expect(freshRenewal).resolves.toBeUndefined();
 	});
 
-	it("fails every subscription on a malformed connection message", () => {
-		const callbacks = target();
-		const coordinator = createCoordinator();
-		coordinator.subscribe({ capability: "token" }, callbacks);
+	it("reports one connection incident for a malformed message", async () => {
+		const firstCallbacks = target();
+		const secondCallbacks = target();
+		const events: string[] = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "error",
+				logger: (entry) => events.push(entry.event),
+			}),
+		});
+		coordinator.subscribe({ capability: "one" }, firstCallbacks);
+		coordinator.subscribe({ capability: "two" }, secondCallbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
 		socket.open();
 		socket.receive({ type: "ready", unexpected: true });
-		expect(callbacks.failed).toHaveBeenCalledWith(
-			expect.objectContaining({
-				code: "protocol_error",
-			}),
-		);
+		for (const callbacks of [firstCallbacks, secondCallbacks]) {
+			expect(callbacks.failed).toHaveBeenCalledWith(
+				expect.objectContaining({
+					code: "protocol_error",
+				}),
+			);
+		}
+		await Promise.resolve();
+		expect(events).toEqual(["connection_failed"]);
 	});
 
 	it("probes an idle ready connection and times it out without inbound activity", async () => {

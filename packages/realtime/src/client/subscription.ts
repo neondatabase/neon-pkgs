@@ -1,5 +1,5 @@
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
-import type { RealtimeDiagnostics } from "./diagnostics.js";
+import type { SubscriptionEventSink } from "./diagnostics.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
 	decodeRow,
@@ -42,7 +42,7 @@ export class PublicLiveQueryError extends Error implements LiveQueryError {
 	constructor(
 		readonly code: string,
 		readonly retryable: boolean,
-		message = `Live query failed: ${code}`,
+		message = `Realtime query failed: ${code}`,
 		options?: ErrorOptions,
 	) {
 		super(message, options);
@@ -89,9 +89,8 @@ export class Subscription<Row>
 		private query: SealedLiveQuery<Row>,
 		readonly materialized: boolean,
 		private readonly parsers: PostgreSQLParserRegistry,
-		initialData?: readonly Row[],
-		private readonly diagnostics?: RealtimeDiagnostics,
-		private readonly subscriptionId?: string,
+		initialData: readonly Row[] | undefined,
+		private readonly events: SubscriptionEventSink,
 	) {
 		if (materialized) {
 			this.rows = new Map(
@@ -115,6 +114,10 @@ export class Subscription<Row>
 
 	replaceSealedQuery(query: SealedLiveQuery<Row>): void {
 		this.query = query;
+	}
+
+	renewalFailed(error: unknown): void {
+		this.events.renewalFailed(error);
 	}
 
 	admit(columns: readonly WireColumn[]): void {
@@ -149,7 +152,7 @@ export class Subscription<Row>
 	): Promise<void> => {
 		if (!this.materialized) {
 			return Promise.reject(
-				new Error("Raw live-query subscriptions do not expose rows"),
+				new Error("Raw Realtime subscriptions do not expose rows"),
 			);
 		}
 		return waitForRows(this, matches, timeout);
@@ -160,7 +163,7 @@ export class Subscription<Row>
 	): (() => void) => {
 		if (!this.materialized) {
 			throw new Error(
-				"Raw live-query subscriptions do not expose snapshots",
+				"Raw Realtime subscriptions do not expose snapshots",
 			);
 		}
 		return listen(this.changeListeners, listener);
@@ -169,12 +172,12 @@ export class Subscription<Row>
 	renew = (query: SealedLiveQuery<Row>): Promise<void> => {
 		if (this.closed) {
 			return Promise.reject(
-				new Error("Live-query subscription is closed"),
+				new Error("Realtime subscription is closed"),
 			);
 		}
 		if (query.queryFingerprint !== this.query.queryFingerprint) {
 			return Promise.reject(
-				new Error("Live-query renewal must be for the same query"),
+				new Error("Realtime renewal must be for the same query"),
 			);
 		}
 		const failedState =
@@ -245,7 +248,8 @@ export class Subscription<Row>
 	publishReset(_wireRows: readonly WireRow[], mvcc: MvccSnapshot): void {
 		if (this.closed) return;
 		const staged = this.stagedReset;
-		if (!staged) throw new Error("Realtime published an uninstalled reset");
+		if (!staged)
+			throw new Error("Realtime published an uninstalled reset");
 		if (this.rows && staged.materializedRows) {
 			this.rows.clear();
 			for (const [rowId, row] of staged.materializedRows)
@@ -282,12 +286,7 @@ export class Subscription<Row>
 			false,
 		);
 		if (becameLive) {
-			this.diagnostics?.log(
-				"info",
-				"subscription_live",
-				"Realtime subscription is live",
-				{ subscriptionId: this.subscriptionId },
-			);
+			this.events.live();
 		}
 		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
 	}
@@ -304,21 +303,6 @@ export class Subscription<Row>
 	}
 
 	fail(error: ConnectionCoordinatorError): void {
-		this.diagnostics?.log(
-			"error",
-			error.code === "parser_error"
-				? "subscription_row_decoding_failed"
-				: "subscription_failed",
-			error.code === "parser_error"
-				? "Realtime could not decode a subscription row"
-				: "Realtime subscription failed permanently",
-			{
-				subscriptionId: this.subscriptionId,
-				code: error.code,
-				retryable: error.retryable,
-				error,
-			},
-		);
 		this.setLifecycle(
 			Object.freeze({
 				status: "error",
@@ -370,7 +354,7 @@ export class Subscription<Row>
 
 	private requireColumns(): readonly WireColumn[] {
 		if (!this.columns)
-			throw new Error("Live-query subscription is not admitted");
+			throw new Error("Realtime subscription is not admitted");
 		return this.columns;
 	}
 
@@ -384,16 +368,7 @@ export class Subscription<Row>
 		const previousStatus = this.state.status;
 		this.state = state;
 		this.snapshot = this.makeSnapshot();
-		this.diagnostics?.log(
-			"debug",
-			"subscription_state_changed",
-			"Realtime subscription state changed",
-			{
-				subscriptionId: this.subscriptionId,
-				fromStatus: previousStatus,
-				toStatus: state.status,
-			},
-		);
+		this.events.stateChanged(previousStatus, state.status);
 		this.notify(this.stateListeners, this.state);
 		if (publishChange && this.materialized) {
 			this.notify(this.changeListeners, this.snapshot);
@@ -408,12 +383,7 @@ export class Subscription<Row>
 			try {
 				listener(...args);
 			} catch (error) {
-				this.diagnostics?.log(
-					"warn",
-					"subscription_listener_failed",
-					"A Realtime subscription listener failed",
-					{ subscriptionId: this.subscriptionId, error },
-				);
+				this.events.listenerFailed(error);
 			}
 		}
 	}
