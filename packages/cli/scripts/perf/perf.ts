@@ -231,6 +231,9 @@ const profile = async (sandbox: Sandbox) => {
 		return;
 	}
 
+	clis.forEach((cli, i) => {
+		out(`  [${i}] ${cli}`);
+	});
 	for (const scenario of scenarios) {
 		const perCli = report[scenario.name];
 		const keys = [...new Set(perCli.flatMap((r) => Object.keys(r)))];

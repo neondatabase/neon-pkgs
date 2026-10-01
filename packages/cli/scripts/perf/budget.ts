@@ -142,12 +142,20 @@ export const formatRequestFailure = (input: {
 	].join("\n");
 };
 
-/** A note for a scenario that now loads clearly fewer modules than its budget. */
+/** A note for a scenario that now loads fewer modules or sends fewer requests than its budget. */
 export const formatShrinkNote = (
 	scenario: string,
-	budget: number,
-	actual: number,
-): string | undefined =>
-	actual < budget * 0.95
-		? `\`neon ${scenario}\` loaded ${actual} modules, below its budget of ${budget}. Lock in the improvement: ${UPDATE_COMMAND}`
+	budget: ScenarioMeasurement,
+	actual: ScenarioMeasurement,
+): string | undefined => {
+	const lower = [
+		actual.modules < budget.modules &&
+			`modules ${budget.modules} -> ${actual.modules}`,
+		...growth(actual.requests, budget.requests).map(
+			(g) => `${g.identity} ${g.actual} -> ${g.budget}`,
+		),
+	].filter((item): item is string => typeof item === "string");
+	return lower.length > 0
+		? `\`neon ${scenario}\` is below its budget (${lower.join(", ")}). Lock in the improvement so it can't silently regress: ${UPDATE_COMMAND}`
 		: undefined;
+};

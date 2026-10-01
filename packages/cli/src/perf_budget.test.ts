@@ -126,8 +126,8 @@ describe("performance budgets", () => {
 
 				const note = formatShrinkNote(
 					scenario.name,
-					budget.modules,
-					measurement.modules,
+					budget,
+					measurement,
 				);
 				if (note) {
 					process.stderr.write(`${note}\n`);
