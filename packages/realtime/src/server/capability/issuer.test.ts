@@ -75,7 +75,7 @@ describe("Realtime v1 capability issuer", () => {
 
 	it("defaults to safe error details", async () => {
 		const sealedQuery = await createCapabilityIssuer(
-			parseNeonLiveSecret(SECRET),
+			parseRealtimeSecret(SECRET),
 			"app",
 		)(QUERY);
 

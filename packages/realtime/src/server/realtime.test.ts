@@ -54,13 +54,13 @@ describe("Realtime backend SDK", () => {
 	});
 
 	it("requests full error details only when debug mode is enabled", async () => {
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			debugMode: true,
 		});
 
-		const sealedQuery = await neonLive.seal({
+		const sealedQuery = await realtime.seal({
 			query: messagesByOwner("alice"),
 		});
 
