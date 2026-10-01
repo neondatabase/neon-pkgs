@@ -4,6 +4,11 @@
 # "Require review from Code Owners". Replace the individual owners below with a
 # team handle (e.g. @neondatabase/neon-pkgs-maintainers) once one exists.
 
+/packages/live/          @kevin-dp
+/packages/live-react/    @kevin-dp
+/packages/live-tanstack/ @kevin-dp
+/packages/live-drizzle/  @kevin-dp
+
 # CI/CD: workflows, composite actions, Dependabot config, CODEOWNERS itself
 /.github/                @atilafassina @rodneyshibu
 
