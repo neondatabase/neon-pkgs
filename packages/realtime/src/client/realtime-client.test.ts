@@ -238,6 +238,65 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("queues snapshot completion before reentrant reset listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		subscription.onReset(() => subscription.unsubscribe());
+
+		snapshot(connectAndAdmit(), "value");
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining([
+				"subscription_snapshot_completed",
+				"subscription_unsubscribed",
+			]),
+		);
+		expect(events.indexOf("subscription_snapshot_completed")).toBeLessThan(
+			events.indexOf("subscription_unsubscribed"),
+		);
+		client.close();
+	});
+
+	it("queues publication commit before reentrant batch listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+		await Promise.resolve();
+		events.length = 0;
+		subscription.onBatch(() => client.close());
+
+		publication(
+			socket,
+			[{ op: "upsert", row_key: ROW_KEY, values: ["1", "after"] }],
+			["42"],
+		);
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining([
+				"connection_publication_committed",
+				"client_closed",
+			]),
+		);
+		expect(events.indexOf("connection_publication_committed")).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
 	it("does not let a logger re-enter subscription admission", async () => {
 		useFakeWebSocket();
 		let subscription!: MaterializedLiveQuerySubscription<MessageRow>;

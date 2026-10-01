@@ -24,7 +24,7 @@ export interface ReconciliationTarget {
 	publishBatch(batch: ReconciledBatch): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
 	caughtUp(): void;
-	/** Observe a baseline sync after it has been installed and published. */
+	/** Observe a baseline sync after installation and before application callbacks. */
 	baselineSyncCompleted(batchCount: number): void;
 	/** Leave `live` while the proxy obtains a replacement baseline. */
 	resetRequired(): void;
@@ -47,7 +47,14 @@ export interface ReconciliationLimits {
 	readonly maxPublicationBytes: number;
 }
 
+export interface ReconciliationEventSink {
+	publicationCommitted(bodyCount: number): void;
+}
+
 const DEFAULT_STAGING_BYTES = 16 * 1024 * 1024;
+const SILENT_RECONCILIATION_EVENTS: ReconciliationEventSink = Object.freeze({
+	publicationCommitted: () => undefined,
+});
 
 interface BaselineSyncVersion {
 	readonly epoch: bigint;
@@ -128,7 +135,10 @@ export class BaselineSyncPublicationReconciler {
 	private backlogBytes = 0;
 	private publication?: PendingPublication;
 
-	constructor(limits: Partial<ReconciliationLimits> = {}) {
+	constructor(
+		limits: Partial<ReconciliationLimits> = {},
+		private readonly events: ReconciliationEventSink = SILENT_RECONCILIATION_EVENTS,
+	) {
 		this.maxBaselineSyncBytes = positiveLimit(
 			limits.maxBaselineSyncBytes ?? DEFAULT_STAGING_BYTES,
 			"maxBaselineSyncBytes",
@@ -364,12 +374,12 @@ export class BaselineSyncPublicationReconciler {
 			state.target.decodeFailed(error);
 			return;
 		}
+		state.target.baselineSyncCompleted(message.batch_count);
 		state.target.publishReset(rows, baselineSync.mvcc);
 		for (const buffered of replay)
 			state.target.publishBatch(buffered.batch);
 		state.live = true;
 		state.target.caughtUp();
-		state.target.baselineSyncCompleted(message.batch_count);
 	}
 
 	private publicationOpen(publicationId: string, bytes: number): void {
@@ -512,6 +522,7 @@ export class BaselineSyncPublicationReconciler {
 				this.backlogBytes += staged.bytes;
 			}
 		}
+		const resetStates: TargetState[] = [];
 		for (const [liveId, reset] of publication.resets) {
 			const state = this.target(liveId);
 			state.epoch = reset.epoch;
@@ -520,7 +531,7 @@ export class BaselineSyncPublicationReconciler {
 			state.baselineSync = undefined;
 			this.releaseBacklog(state);
 			state.live = false;
-			state.target.resetRequired();
+			resetStates.push(state);
 		}
 
 		// Preserve publication atomicity: mutate every target before invoking any
@@ -540,6 +551,8 @@ export class BaselineSyncPublicationReconciler {
 				failed.push({ state: entry.state, error });
 			}
 		}
+		this.events.publicationCommitted(bodyCount);
+		for (const state of resetStates) state.target.resetRequired();
 		for (const { state, error } of failed) state.target.decodeFailed(error);
 		for (const { state, batch } of installed) {
 			state.target.publishBatch(batch);

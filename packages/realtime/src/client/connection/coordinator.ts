@@ -11,6 +11,7 @@ import {
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
+	type ReconciliationEventSink,
 	type ReconciliationTarget,
 	BaselineSyncPublicationReconciler,
 } from "../reconciliation/reconciler.js";
@@ -119,7 +120,7 @@ export class ConnectionCoordinator {
 	private readonly pendingRequests = new Map<string, ManagedSubscription>();
 	private readonly liveSubscriptions = new Map<string, ManagedSubscription>();
 	private readonly detachingLiveIds = new Set<string>();
-	private readonly reconciler = new BaselineSyncPublicationReconciler();
+	private readonly reconciler: BaselineSyncPublicationReconciler;
 	private readonly webSocketFactory: WebSocketFactory;
 	private readonly reconnect?: ReconnectBackoff;
 	private readonly heartbeat?: ConnectionHeartbeat;
@@ -139,6 +140,13 @@ export class ConnectionCoordinator {
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
 		if (!options.url) throw new Error("Realtime requires a WebSocket URL");
 		this.events = options.events ?? SILENT_CLIENT_EVENTS;
+		this.reconciler =
+			this.events === SILENT_CLIENT_EVENTS
+				? new BaselineSyncPublicationReconciler()
+				: new BaselineSyncPublicationReconciler(
+						{},
+						this.reconciliationEvents(),
+					);
 		this.webSocketFactory =
 			options.webSocketFactory ?? defaultWebSocketFactory;
 		if (options.reconnect !== false) {
@@ -411,7 +419,6 @@ export class ConnectionCoordinator {
 				return;
 			case "commit":
 				this.reconciler.accept(message, byteLength);
-				this.events.connection.publicationCommitted(message.body_count);
 				return;
 		}
 	}
@@ -916,6 +923,13 @@ export class ConnectionCoordinator {
 
 	private noteConnectionLost(error?: unknown): void {
 		this.events.connection.lost(error, this.activeSubscriptions.size);
+	}
+
+	private reconciliationEvents(): ReconciliationEventSink {
+		return {
+			publicationCommitted: (bodyCount) =>
+				this.events.connection.publicationCommitted(bodyCount),
+		};
 	}
 }
 
