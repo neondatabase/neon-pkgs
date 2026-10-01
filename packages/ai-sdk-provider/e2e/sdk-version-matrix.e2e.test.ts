@@ -48,7 +48,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-async function fetchCurrentModelIds(): Promise<string[]> {
+/**
+ * Embedding models report `["embeddings"]` here, and the gateway rejects them on
+ * chat completions. This provider has no embedding model, so they are out of scope.
+ */
+function generatesText(model: Record<string, unknown>): boolean {
+	const outputs = isRecord(model.architecture)
+		? model.architecture.output_modalities
+		: undefined;
+	if (!Array.isArray(outputs)) {
+		throw new Error(
+			`Unexpected /v1/models entry ${String(model.id)}: missing architecture.output_modalities`,
+		);
+	}
+	return outputs.includes("text");
+}
+
+async function fetchCurrentChatModelIds(): Promise<string[]> {
 	assertGatewayEnv();
 	const baseURL = process.env.NEON_AI_GATEWAY_BASE_URL;
 	const token = process.env.NEON_AI_GATEWAY_TOKEN;
@@ -74,11 +90,13 @@ async function fetchCurrentModelIds(): Promise<string[]> {
 	}
 
 	const ids = payload.data.flatMap((model) =>
-		isRecord(model) && typeof model.id === "string" ? [model.id] : [],
+		isRecord(model) && typeof model.id === "string" && generatesText(model)
+			? [model.id]
+			: [],
 	);
 	if (ids.length === 0) {
 		throw new Error(
-			"The gateway /v1/models endpoint returned no model ids",
+			"The gateway /v1/models endpoint returned no text-generating models",
 		);
 	}
 	return [...new Set(ids)].sort();
@@ -116,15 +134,15 @@ async function verifyAllModels(
 	return failures;
 }
 
-describe("e2e — every currently enabled model on AI SDK 6 and 7", () => {
+describe("e2e — every currently enabled chat model on AI SDK 6 and 7", () => {
 	let modelIds: string[] = [];
 
 	beforeAll(async () => {
-		modelIds = await fetchCurrentModelIds();
+		modelIds = await fetchCurrentChatModelIds();
 	});
 
 	for (const runner of SDK_RUNNERS) {
-		it(`generates text with every /v1/models entry using AI SDK ${runner.version}`, async () => {
+		it(`generates text with every text-output /v1/models entry using AI SDK ${runner.version}`, async () => {
 			const failures = await verifyAllModels(modelIds, runner);
 			expect(
 				failures,
