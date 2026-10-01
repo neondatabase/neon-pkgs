@@ -32,7 +32,11 @@ concurrency:
 
 jobs:
     wall-time:
-        name: CLI wall time (base vs head)
+        name: CLI wall time (base vs head) ${{ matrix.repeat }}
+        strategy:
+            fail-fast: false
+            matrix:
+                repeat: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         if: >-
             github.event.pull_request.head.repo.full_name == github.repository &&
             github.actor != 'dependabot[bot]'
@@ -104,5 +108,5 @@ jobs:
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               if: ${{ !cancelled() }}
               with:
-                  name: cli-perf
+                  name: cli-perf-${{ matrix.repeat }}
                   path: ${{ runner.temp }}/perf.json
