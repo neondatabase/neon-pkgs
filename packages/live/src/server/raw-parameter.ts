@@ -136,6 +136,12 @@ export const pgParam: PostgresParameterHelpers = Object.freeze({
 	},
 });
 
+/**
+ * Test whether a value was created by one of the {@link pgParam} helpers.
+ *
+ * This low-level helper is intended for query-adapter authors. Applications
+ * should normally pass the wrapper directly to the adapter or {@link rawSql}.
+ */
 export function isTypedRawSqlParameter(
 	value: unknown,
 ): value is TypedRawSqlParameter {

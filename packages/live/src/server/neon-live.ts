@@ -43,7 +43,11 @@ type QueryRow<Query> =
 					readonly _: { readonly result: readonly (infer Row)[] };
 				}
 			? Row
-			: never;
+			: Query extends {
+						readonly expressionType: infer Row | undefined;
+					}
+				? Row
+				: never;
 
 type SealInput<Query> = { readonly query: Query };
 type SealableQuery<Query> = Query | RawSqlQuery<unknown>;

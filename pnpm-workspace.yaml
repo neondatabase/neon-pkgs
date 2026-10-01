@@ -22,3 +22,4 @@ catalog:
     "@types/node": ^20.19.0
     "@vitest/coverage-v8": ^3.0.9
     console-fail-test: 0.5.0
+    kysely: 0.28.17
