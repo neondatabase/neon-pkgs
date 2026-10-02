@@ -146,6 +146,10 @@ async function fetchCurrentModels(): Promise<CurrentModels> {
 	return { chat: [...chat].sort(), embedding: [...embedding].sort() };
 }
 
+function isNumberArray(value: unknown): value is number[] {
+	return Array.isArray(value) && value.every((v) => typeof v === "number");
+}
+
 function expectVector(vector: number[], dimensions: number) {
 	expect(vector).toHaveLength(dimensions);
 	expect(vector.every((value) => Number.isFinite(value))).toBe(true);
@@ -274,16 +278,37 @@ describe("e2e — every currently enabled embedding model on AI SDK 6 and 7", ()
 		}, 120_000);
 
 		it(`splits embedMany over the 150-input gateway limit using AI SDK ${runner.version}`, async () => {
+			const served = new Map<string, number[]>();
 			const batchSizes: number[] = [];
 			const recording = createNeon({
 				fetch: async (input, init) => {
-					if (typeof init?.body === "string") {
-						const body: unknown = JSON.parse(init.body);
-						if (isRecord(body) && Array.isArray(body.input)) {
-							batchSizes.push(body.input.length);
+					const response = await fetch(input, init);
+					const body: unknown =
+						typeof init?.body === "string"
+							? JSON.parse(init.body)
+							: undefined;
+					const payload: unknown = await response.clone().json();
+					if (
+						isRecord(body) &&
+						Array.isArray(body.input) &&
+						isRecord(payload) &&
+						Array.isArray(payload.data)
+					) {
+						batchSizes.push(body.input.length);
+						for (const item of payload.data) {
+							if (
+								isRecord(item) &&
+								typeof item.index === "number" &&
+								isNumberArray(item.embedding)
+							) {
+								served.set(
+									String(body.input[item.index]),
+									item.embedding,
+								);
+							}
 						}
 					}
-					return fetch(input, init);
+					return response;
 				},
 			});
 			const values = Array.from(
@@ -296,12 +321,9 @@ describe("e2e — every currently enabled embedding model on AI SDK 6 and 7", ()
 			);
 			expect(batchSizes.sort((a, b) => b - a)).toEqual([150, 1]);
 			expect(embeddings).toHaveLength(151);
-			for (const vector of embeddings) expectVector(vector, 1024);
-			const [last] = await runner.embedMany(
-				neon.embeddingModel("qwen3-embedding-0-6b"),
-				["document 150"],
-			);
-			expect(embeddings[150]?.slice(0, 8)).toEqual(last?.slice(0, 8));
+			values.forEach((value, index) => {
+				expect(embeddings[index], value).toEqual(served.get(value));
+			});
 		}, 120_000);
 	}
 
