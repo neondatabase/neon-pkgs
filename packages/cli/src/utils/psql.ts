@@ -13,7 +13,7 @@ export type PsqlOpts = {
 
 const FALLBACK_ENV = "NEONCTL_PSQL_FALLBACK";
 
-/** Max time we wait for the analytics flush before handing off to psql. */
+/** Cap on the analytics flush, counted from when psql launches. */
 const ANALYTICS_FLUSH_TIMEOUT_MS = 3000;
 
 /** Why a given psql implementation was chosen — recorded for analytics. */
@@ -128,7 +128,6 @@ const execTs = async (
 
 const GENERIC_CONNECTING = "Connecting to the database";
 
-/** `Neon connection: <db> as <role> on <host>`, without the password or query string. */
 export const connectionSummary = (connection_uri: string): string => {
 	try {
 		const url = new URL(connection_uri);
