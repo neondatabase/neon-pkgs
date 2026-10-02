@@ -814,6 +814,8 @@ export const ensureAuth = async (
 		log.debug("Using an API key to authorize requests");
 		setAuthContext({
 			source: "api-key",
+			apiKeyFrom:
+				selection.source === "explicit-api-key" ? "flag" : "env",
 			configDir: props.configDir,
 		});
 		props.apiClient = getApiClient({

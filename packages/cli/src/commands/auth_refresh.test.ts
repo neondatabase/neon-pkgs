@@ -155,6 +155,18 @@ describe("an expired session", () => {
 		expect(after.user_id).toBe("user-1");
 	});
 
+	it("names the OAuth profile in the refreshed `me` table", async () => {
+		seedCredentials({ expires_at: Date.now() - 1000 });
+
+		const result = await runCli(["me", "--output", "table"]);
+
+		expect(result.code).toBe(0);
+		expect(oauth.rotations()).toBe(1);
+		expect(result.stdout).toMatch(
+			/^Authentication\s+OAuth \(profile DEFAULT\)$/m,
+		);
+	});
+
 	it("keeps the rotated token even when the command afterwards fails", async () => {
 		const before = seedCredentials({ expires_at: Date.now() - 1000 });
 		api.failUserLookup(true);

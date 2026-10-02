@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`me > keeps JSON as the API response 1`] = `
+"{
+  "id": "1",
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+"
+`;
+
+exports[`me > names the --api-key credential in the table 1`] = `
+"Email           john@example.com
+Name            John Doe
+Authentication  API key (--api-key)
+"
+`;
