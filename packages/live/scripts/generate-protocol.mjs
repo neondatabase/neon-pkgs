@@ -7,7 +7,7 @@ import standaloneCode from "ajv/dist/standalone/index.js";
 import { compile } from "json-schema-to-typescript";
 
 const schemaUrl = new URL(
-  "../src/client/protocol/schema/neon-live-protocol-v1.schema.json",
+  "../schema/neon-live-protocol-v1.schema.json",
   import.meta.url,
 );
 const validatorOutputUrl = new URL(
