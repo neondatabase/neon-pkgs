@@ -468,6 +468,15 @@ const ensureConfigPackages = async (
 		return;
 	}
 
+	// Without a manifest in cwd, package managers install into the nearest
+	// ancestor's package.json instead of next to neon.ts.
+	const pkgPath = join(cwd, "package.json");
+	if (!existsSync(pkgPath)) {
+		writeFileSync(pkgPath, "{}\n");
+		if (!props.silent) {
+			log.info("Created package.json.");
+		}
+	}
 	ensureDirectoryGitignored(join(cwd, "node_modules"));
 	if (!props.silent) {
 		log.info("Installing %s with %s…", missing.join(", "), pm);

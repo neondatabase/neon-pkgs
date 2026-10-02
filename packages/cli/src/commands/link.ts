@@ -50,6 +50,8 @@ export type LinkProps = CommonProps & {
 	envPull: boolean;
 	config?: boolean;
 	cwd?: string;
+	/** Forwarded to the bundled env pull's neon.ts search (`EnvPullProps.configStopAt`). */
+	configStopAt?: string;
 	profile?: string;
 	configDir?: string;
 };

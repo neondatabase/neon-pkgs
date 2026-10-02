@@ -2,6 +2,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -182,6 +183,71 @@ describe("e2e — neon init", () => {
 				);
 				expect(existsSync(dirs.contextFile)).toBe(true);
 				expect(result.stdout).toMatch(/linked/i);
+			} finally {
+				await deleteProject(projectId);
+			}
+		},
+	);
+
+	e2eTest(
+		"sets up an empty directory without touching a parent's neon.ts or package.json",
+		async ({ track }) => {
+			const dirs = scratch();
+			const parentConfig =
+				'throw new Error("init evaluated the parent neon.ts");\n';
+			writeFileSync(join(dirs.home, "neon.ts"), parentConfig);
+			writeFileSync(join(dirs.home, "package.json"), "");
+			const projectId = await createProject({
+				name: uniqueProjectName("cli-init"),
+			});
+			track(projectId);
+			try {
+				const result = await runCli(
+					[
+						"init",
+						"-y",
+						"--no-agent-setup",
+						// pnpm refuses to start under an unparsable package.json at any level.
+						"--package-manager",
+						"npm",
+						"--project-id",
+						projectId,
+						...orgArgs(),
+					],
+					{
+						configDir: dirs.configDir,
+						contextFile: dirs.contextFile,
+						cwd: dirs.cwd,
+						json: false,
+						env: isolatedAgentEnv(dirs.home),
+					},
+				);
+				const output = `${result.stderr}\n${result.stdout}`;
+				expect(result.code, output).toBe(0);
+				expect(output).not.toMatch(/WARNING|ERROR|npm error/);
+
+				const manifest = JSON.parse(
+					readFileSync(join(dirs.cwd, "package.json"), "utf8"),
+				);
+				expect(Object.keys(manifest.dependencies)).toEqual(
+					expect.arrayContaining(["@neon/config", "@neon/env"]),
+				);
+				expect(existsSync(join(dirs.cwd, "neon.ts"))).toBe(true);
+				const envLocal = readFileSync(
+					join(dirs.cwd, ".env.local"),
+					"utf8",
+				);
+				expect(/^DATABASE_URL="postgresql:\/\//m.test(envLocal)).toBe(
+					true,
+				);
+
+				expect(
+					readFileSync(join(dirs.home, "package.json"), "utf8"),
+				).toBe("");
+				expect(readFileSync(join(dirs.home, "neon.ts"), "utf8")).toBe(
+					parentConfig,
+				);
+				expect(existsSync(join(dirs.home, "node_modules"))).toBe(false);
 			} finally {
 				await deleteProject(projectId);
 			}

@@ -1,7 +1,10 @@
+import { execFileSync } from "node:child_process";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -177,6 +180,34 @@ describe("config init", () => {
 		expect(calls).toHaveLength(0);
 		expect(existsSync(join(workspace, "neon.ts"))).toBe(true);
 		expect(existsSync(join(workspace, ".gitignore"))).toBe(false);
+		expect(existsSync(join(workspace, "package.json"))).toBe(false);
+	});
+
+	test("creates package.json before installing so a parent's package.json is never the target", async () => {
+		writeFileSync(join(workspace, "package.json"), "");
+		const app = join(workspace, "app");
+		mkdirSync(app);
+
+		await initCmd({ cwd: app, run: () => Promise.resolve(true) });
+
+		expect(readFileSync(join(app, "package.json"), "utf8")).toBe("{}\n");
+		expect(readFileSync(join(workspace, "package.json"), "utf8")).toBe("");
+		const prefix = execFileSync("npm", ["prefix"], {
+			cwd: app,
+			encoding: "utf8",
+		}).trim();
+		expect(realpathSync(prefix)).toBe(realpathSync(app));
+	});
+
+	test("leaves an existing package.json as is", async () => {
+		const original = '{ "name": "app", "type": "module" }\n';
+		writeFileSync(join(workspace, "package.json"), original);
+
+		await initCmd({ cwd: workspace, run: () => Promise.resolve(true) });
+
+		expect(readFileSync(join(workspace, "package.json"), "utf8")).toBe(
+			original,
+		);
 	});
 
 	test("--services declares the selected services and scaffolds the function source", async () => {
