@@ -194,21 +194,16 @@ describe("resolveContext — .neon file discovery", () => {
 		});
 	});
 
-	test("stops the upward walk at the .git boundary", () => {
-		// `.neon` lives ABOVE the repo root; the walk must not escape past `.git`.
-		const outer = setup({
-			".neon/project.json": JSON.stringify({
-				projectId: "p-outer",
-				branchId: "br-outer",
-			}),
+	test("walks past a nested .git to the linked project's .neon, like the neon CLI", () => {
+		const root = setup({
+			".neon": JSON.stringify({ projectId: "p-root", branch: "main" }),
+			"app/.git/HEAD": "ref: refs/heads/main\n",
 		});
-		// Seed an inner repo with its own `.git` and no context file.
-		const innerRepo = makeTempRepo({ "package.json": "{}" });
-		cleanups.push(innerRepo.cleanup);
-		// The inner repo is a separate temp dir, so walking from it never reaches `outer`.
-		const result = resolveContext({ cwd: innerRepo.root, env: EMPTY_ENV });
-		expect(result.ok).toBe(false);
-		void outer;
+		const result = resolveContext({ cwd: `${root}/app`, env: EMPTY_ENV });
+		expect(result).toMatchObject({
+			ok: true,
+			context: { projectId: "p-root", projectDir: root },
+		});
 	});
 
 	test("treats malformed .neon JSON as absent", () => {

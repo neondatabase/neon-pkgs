@@ -57,8 +57,8 @@ export function stubCleanNeonEnv(): void {
  * `files` is a flat map of relative paths → contents; intermediate directories are created
  * automatically. Directories themselves can be created by passing `null` as the value.
  *
- * A `.git/HEAD` marker is seeded at the root by default so the platform's upward walkers
- * (which stop at `.git`) don't escape the synthetic repo and read the developer's real
+ * A `.git/HEAD` marker is seeded at the root by default so upward walkers that stop at
+ * `.git` (the config loader's) don't escape the synthetic repo and read the developer's real
  * `~/.neon`. Pass an explicit `.git` entry in `files` to override or position it elsewhere
  * (e.g. for tests that exercise the boundary behaviour itself).
  */

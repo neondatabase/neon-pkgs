@@ -760,7 +760,7 @@ const addSharedOptions = (yargs: yargs.Argv) =>
 			branch: { hidden: true },
 			config: {
 				describe:
-					"Path to the neon.ts to edit (defaults to walking up from cwd; created in cwd when there is none)",
+					"Path to the neon.ts to edit (defaults to the neon.ts next to .neon, or in cwd without one; created there when missing)",
 				type: "string",
 			},
 			install: {
@@ -828,7 +828,7 @@ export const builder = (argv: yargs.Argv) =>
 				yargs.options({
 					config: {
 						describe:
-							"Path to a neon.ts policy (defaults to walking up from cwd)",
+							"Path to a neon.ts policy (defaults to the neon.ts next to .neon, or in cwd without one)",
 						type: "string",
 					},
 					...envFlag,
@@ -842,7 +842,7 @@ export const builder = (argv: yargs.Argv) =>
 				yargs.options({
 					config: {
 						describe:
-							"Path to a neon.ts policy (defaults to walking up from cwd)",
+							"Path to a neon.ts policy (defaults to the neon.ts next to .neon, or in cwd without one)",
 						type: "string",
 					},
 					...envFlag,

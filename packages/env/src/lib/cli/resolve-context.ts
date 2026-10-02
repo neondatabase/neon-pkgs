@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 
@@ -84,27 +84,24 @@ interface NeonFile {
 
 /**
  * Walk up from `cwd` looking for `.neon/project.json` (preferred) or `.neon` (neonctl
- * convention). Stops at the first `.git` directory or the home directory. Read-only.
+ * convention), with the same boundaries as the `neon` CLI's walk so both resolve the same
+ * project directory: the home directory and the filesystem root are never checked, and
+ * `.git` is not a boundary. Read-only.
  */
 function findNeonFile(cwd: string): { file: NeonFile; dir: string } | null {
+	const home = resolve(homedir());
 	let current = resolve(cwd);
-	const stop = resolve(homedir());
-	let lastSeen: string | null = null;
 
-	while (true) {
+	while (current !== home) {
+		const parent = dirname(current);
+		if (parent === current) return null;
 		const parsed =
 			readNeonFileAt(resolve(current, ".neon", "project.json")) ??
 			readNeonFileAt(resolve(current, ".neon"));
 		if (parsed) return { file: parsed, dir: current };
-
-		if (current === stop) return null;
-		if (existsSync(resolve(current, ".git"))) return null;
-
-		const parent = dirname(current);
-		if (parent === current || parent === lastSeen) return null;
-		lastSeen = current;
 		current = parent;
 	}
+	return null;
 }
 
 function readNeonFileAt(path: string): NeonFile | null {

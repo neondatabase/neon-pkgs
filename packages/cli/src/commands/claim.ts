@@ -1,6 +1,4 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
 import type { Config, NeonApi } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
@@ -40,6 +38,7 @@ import {
 	servicesFlagValue,
 	servicesOption,
 } from "../neon_services.js";
+import { projectConfigPath } from "../project.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -127,33 +126,10 @@ export const claimableCapabilities = (
 	return CAPABILITY_ORDER.filter((capability) => requested.has(capability));
 };
 
-const CONFIG_FILENAMES = [
-	"neon.ts",
-	"neon.mts",
-	"neon.js",
-	"neon.mjs",
-] as const;
-
-export const findNeonConfig = (cwd = process.cwd()): string | undefined => {
-	let current = resolve(cwd);
-	const stop = resolve(homedir());
-	while (true) {
-		for (const name of CONFIG_FILENAMES) {
-			const candidate = join(current, name);
-			if (existsSync(candidate)) return candidate;
-		}
-		if (existsSync(join(current, ".git")) || current === stop)
-			return undefined;
-		const parent = dirname(current);
-		if (parent === current) return undefined;
-		current = parent;
-	}
-};
-
 const loadCreatePolicy = async (
 	explicitPath: string | undefined,
 ): Promise<{ path: string; config: Config } | undefined> => {
-	const path = explicitPath ?? findNeonConfig();
+	const path = explicitPath ?? projectConfigPath();
 	if (!path) return undefined;
 	const { config } = await loadConfigFromFile({ path });
 	return { path, config };
