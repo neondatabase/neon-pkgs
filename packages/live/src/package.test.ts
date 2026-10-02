@@ -31,9 +31,9 @@ describe("@neon/live package", () => {
 		for (const schemaSubpath of schemaSubpaths) {
 			const exportedPath = manifest.exports[`./${schemaSubpath}`];
 			expect(exportedPath).toBe(`./${schemaSubpath}`);
-			expect(realpathSync(join(packageRoot, exportedPath as string))).toBe(
-				realpathSync(join(packageRoot, schemaSubpath)),
-			);
+			expect(
+				realpathSync(join(packageRoot, exportedPath as string)),
+			).toBe(realpathSync(join(packageRoot, schemaSubpath)));
 		}
 
 		const packDestination = mkdtempSync(join(tmpdir(), "neon-live-pack-"));
