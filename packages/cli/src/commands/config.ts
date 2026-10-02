@@ -432,6 +432,19 @@ const seedFromBranch = async (
 	return { ...rendered, branchName: live.branch.name };
 };
 
+/** The install command to print, prefixed with a `cd` when the project is not the cwd. */
+const installCommandFrom = (
+	dir: string,
+	pm: PackageManager,
+	missing: readonly string[],
+): string => {
+	const command = formatInstallCommand(pm, [...missing]);
+	const rel = relative(process.cwd(), dir);
+	if (rel === "") return command;
+	const target = rel.length <= dir.length ? rel : dir;
+	return `cd ${shellQuote(target)} && ${command}`;
+};
+
 /** Install the config packages the project is missing, or say how to. */
 const ensureConfigPackages = async (
 	cwd: string,
@@ -454,11 +467,12 @@ const ensureConfigPackages = async (
 
 	const pm = props.packageManager ?? resolvePackageManager(cwd);
 	const args = installArgs(pm, missing);
+	const installHint = installCommandFrom(cwd, pm, missing);
 	if (props.install === false) {
 		if (!props.silent) {
 			log.info(
 				"Install the Neon config packages to use neon.ts: %s",
-				formatInstallCommand(pm, missing),
+				installHint,
 			);
 		}
 		return;
@@ -479,13 +493,12 @@ const ensureConfigPackages = async (
 	}
 	const ok = await run(pm, args, cwd);
 	if (!ok) {
-		const command = formatInstallCommand(pm, missing);
 		if (props.requireInstall) {
-			throw new ConfigInstallFailed(command);
+			throw new ConfigInstallFailed(installHint);
 		}
 		log.warning(
 			"Could not install the config packages automatically. Run by hand: %s",
-			command,
+			installHint,
 		);
 	}
 };

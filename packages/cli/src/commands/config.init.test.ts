@@ -200,6 +200,21 @@ describe("config init", () => {
 		expect(realpathSync(prefix)).toBe(realpathSync(app));
 	});
 
+	test("the install command it prints changes into the project directory", async () => {
+		const failed = initCmd({
+			cwd: workspace,
+			requireInstall: true,
+			packageManager: "npm",
+			run: () => Promise.resolve(false),
+		});
+
+		await expect(failed).rejects.toMatchObject({
+			command: expect.stringMatching(
+				/^cd \S*neonctl-config-init-\S+ && npm install @neon\/config @neon\/env$/,
+			),
+		});
+	});
+
 	test("leaves an existing package.json as is", async () => {
 		const original = '{ "name": "app", "type": "module" }\n';
 		writeFileSync(join(workspace, "package.json"), original);
