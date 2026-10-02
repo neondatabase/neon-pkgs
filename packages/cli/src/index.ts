@@ -317,6 +317,17 @@ async function handleError(
 			const serverMessage = messageFromBody(err.data);
 			if (serverMessage) {
 				log.error(serverMessage);
+			} else {
+				// A response without a message (e.g. a 404 for an unknown route) would
+				// otherwise exit 1 with nothing on stderr.
+				log.error(
+					[
+						`HTTP ${err.status ?? ""} ${err.statusText ?? ""}`.trim(),
+						err.requestPath,
+					]
+						.filter(Boolean)
+						.join(" | "),
+				);
 			}
 			log.debug(
 				"status: %d %s | path: %s",

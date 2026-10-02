@@ -4,12 +4,15 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import chalk from "chalk";
 import { describe, expect, it } from "vitest";
 
+import { stripAnsi } from "../human_table";
 import { test } from "../test_utils/fixtures";
 import {
 	buildBody,
 	buildQuery,
+	colorizeJson,
 	parseHeaders,
 	parseKeyValue,
 	parseTypedValue,
@@ -157,6 +160,31 @@ describe("api arg mapping", () => {
 			limit: "10",
 			search: "foo",
 		});
+	});
+
+	it("colors JSON tokens without changing the text", () => {
+		const json = JSON.stringify(
+			{
+				key: 'quoted "value": 12, true, null',
+				count: -1.5e30,
+				ok: false,
+				none: null,
+				list: [1, "two", { nested: true }],
+			},
+			null,
+			2,
+		);
+		const previousLevel = chalk.level;
+		chalk.level = 1;
+		try {
+			const colored = colorizeJson(json);
+			expect(colored).not.toBe(json);
+			expect(stripAnsi(colored)).toBe(json);
+			expect(colored).toContain(`${chalk.cyan('"key"')}:`);
+			expect(colored).toContain(chalk.green('"two"'));
+		} finally {
+			chalk.level = previousLevel;
+		}
 	});
 
 	it("parses headers on the first ':'", () => {
