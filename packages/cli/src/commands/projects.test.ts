@@ -1,10 +1,17 @@
-import { readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect } from "vitest";
 import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
+import { formatDuration } from "./projects";
+
+const contextFile = (context: Record<string, string>) => {
+	const path = join(mkdtempSync(join(tmpdir(), "neon-projects-")), ".neon");
+	writeFileSync(path, JSON.stringify(context));
+	return path;
+};
 
 describe("projects", () => {
 	test("list", async ({ testCliCommand }) => {
@@ -265,5 +272,141 @@ describe("projects", () => {
 
 	test("get", async ({ testCliCommand }) => {
 		await testCliCommand(["projects", "get", "test"]);
+	});
+
+	test("list marks the linked project in the table", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"projects",
+				"list",
+				"--context-file",
+				contextFile({ projectId: "adj-noun-12401747" }),
+			],
+			{ output: "table" },
+		);
+	});
+
+	test("list marks a linked recoverable project", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"projects",
+				"list",
+				"--recoverable-only",
+				"--context-file",
+				contextFile({ projectId: "deleted-project-123456" }),
+			],
+			{ output: "table", snapshot: false },
+		);
+		expect(stdout).toMatch(
+			/deleted-project-123456\s+\[current\] Deleted_Project_1/,
+		);
+		expect(stdout).not.toMatch(/\[current\] Deleted_Project_2/);
+	});
+
+	test("list colors the marker in a color terminal", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"projects",
+				"list",
+				"--context-file",
+				contextFile({ projectId: "adj-noun-12401747" }),
+			],
+			{ output: "table", snapshot: false, env: { FORCE_COLOR: "1" } },
+		);
+		expect(stdout).toContain(
+			"\u001b[32m[current]\u001b[39m Shared Project",
+		);
+	});
+
+	test("list keeps JSON free of the marker", async ({ testCliCommand }) => {
+		const linked = await testCliCommand(
+			[
+				"projects",
+				"list",
+				"--context-file",
+				contextFile({ projectId: "adj-noun-12401747" }),
+			],
+			{ output: "json", snapshot: false },
+		);
+		const unlinked = await testCliCommand(["projects", "list"], {
+			output: "json",
+			snapshot: false,
+		});
+		expect(linked.stdout).toBe(unlinked.stdout);
+	});
+
+	test("list with the org from the context skips shared projects", async ({
+		testCliCommand,
+	}) => {
+		const inherited = await testCliCommand(
+			[
+				"projects",
+				"list",
+				"--context-file",
+				contextFile({ orgId: "org-2" }),
+			],
+			{ snapshot: false },
+		);
+		const explicit = await testCliCommand(
+			["projects", "list", "--org-id", "org-2"],
+			{ snapshot: false },
+		);
+		expect(inherited.stdout).toBe(explicit.stdout);
+		expect(inherited.stdout).not.toContain("Shared Project");
+	});
+
+	test("get shows project details in the table", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "get", "proj-details"], {
+			output: "table",
+		});
+	});
+
+	test("get shows a fixed compute size and zero retention", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "get", "proj-fixed-cu"], {
+			output: "table",
+		});
+	});
+
+	test("get omits details the API did not return", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["projects", "get", "test"], { output: "table" });
+	});
+
+	test("get keeps the full project in JSON", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(
+			["projects", "get", "proj-details"],
+			{ output: "json", snapshot: false },
+		);
+		expect(JSON.parse(stdout)).toEqual(
+			JSON.parse(
+				readFileSync(
+					"mocks/main/projects/proj-details/GET.json",
+					"utf8",
+				),
+			).project,
+		);
+	});
+});
+
+describe("formatDuration", () => {
+	test("uses the largest exact unit", () => {
+		expect(formatDuration(604_800)).toBe("7 days");
+		expect(formatDuration(86_400)).toBe("1 day");
+		expect(formatDuration(7_200)).toBe("2 hours");
+		expect(formatDuration(5_400)).toBe("90 minutes");
+		expect(formatDuration(61)).toBe("61 seconds");
+		expect(formatDuration(1)).toBe("1 second");
+		expect(formatDuration(0)).toBe("0 seconds");
 	});
 });

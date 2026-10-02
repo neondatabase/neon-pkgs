@@ -67,6 +67,13 @@ export const SCENARIOS: Scenario[] = [
 		expect: { code: 0, stdout: /"id"/ },
 	},
 	{
+		name: "projects get test",
+		argv: ["projects", "get", "test"],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^Id\s+test$/m },
+	},
+	{
 		// By name: the listing resolves it and already holds the branch, so no GET follows.
 		name: "branches get test_branch --project-id test",
 		argv: ["branches", "get", "test_branch", "--project-id", "test"],

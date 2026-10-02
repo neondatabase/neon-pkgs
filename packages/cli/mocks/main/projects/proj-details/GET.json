@@ -1,0 +1,16 @@
+{
+  "project": {
+    "id": "proj-details",
+    "name": "application",
+    "region_id": "aws-us-east-2",
+    "pg_version": 17,
+    "org_id": "org-2",
+    "default_endpoint_settings": {
+      "autoscaling_limit_min_cu": 0.25,
+      "autoscaling_limit_max_cu": 2
+    },
+    "history_retention_seconds": 604800,
+    "created_at": "2026-06-01T12:00:00Z",
+    "updated_at": "2026-06-02T12:00:00Z"
+  }
+}

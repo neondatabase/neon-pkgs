@@ -333,8 +333,12 @@ const makeTimedFetch =
 	(requestTimeoutMs: number): typeof fetch =>
 	async (input, init) => {
 		const timeout = AbortSignal.timeout(requestTimeoutMs);
-		const signal = init?.signal
-			? AbortSignal.any([init.signal, timeout])
+		// The SDK passes a `Request` carrying the caller's signal and no `init`.
+		const callerSignal =
+			init?.signal ??
+			(input instanceof Request ? input.signal : undefined);
+		const signal = callerSignal
+			? AbortSignal.any([callerSignal, timeout])
 			: timeout;
 		const method =
 			init?.method ?? (input instanceof Request ? input.method : "GET");
@@ -350,7 +354,7 @@ const makeTimedFetch =
 			// `NeonNetworkError`, and neither its name nor its `cause` chain carries a
 			// string code to recognise. Raise something we own instead of leaving the
 			// classification to guess.
-			if (timeout.aborted && !init?.signal?.aborted) {
+			if (timeout.aborted && !callerSignal?.aborted) {
 				throw new RequestTimeoutError(requestTimeoutMs, err);
 			}
 			throw err;
@@ -602,10 +606,12 @@ export const getApiClient = ({
 		) => call(() => raw.listProjects({ client, query })),
 		listSharedProjects: (
 			query: NonNullable<raw.ListProjectsData["query"]> = {},
+			options: { signal?: AbortSignal } = {},
 		) =>
 			call(() =>
 				raw.listSharedProjects({
 					client,
+					signal: options.signal,
 					query: {
 						...(query.cursor !== undefined
 							? { cursor: query.cursor }
