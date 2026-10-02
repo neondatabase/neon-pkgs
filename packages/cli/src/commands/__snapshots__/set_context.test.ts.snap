@@ -128,8 +128,6 @@ exports[`set_context > should set the context to project > set the branchId and 
 "
 `;
 
-exports[`set_context > should set the context to project > set the branchId and projectId is from context 2`] = `""`;
-
 exports[`set_context > should set the context to project > set-context 1`] = `""`;
 
 exports[`set_context > should set the context to project > set-context 2`] = `
