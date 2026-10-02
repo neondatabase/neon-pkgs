@@ -1,5 +1,5 @@
 ---
-"neon": minor
+"neon": major
 "@neon/env": minor
 ---
 
