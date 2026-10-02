@@ -142,6 +142,12 @@ export const SCENARIOS: Scenario[] = [
 		api: true,
 		expect: { code: 0, stdout: /"id"/ },
 	},
+	{
+		name: "api /projects/test",
+		argv: ["api", "/projects/test"],
+		api: true,
+		expect: { code: 0, stdout: /"id"/ },
+	},
 ];
 
 export type Sandbox = {

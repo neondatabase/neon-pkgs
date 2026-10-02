@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import chalk from "chalk";
 import YAML from "yaml";
 import type yargs from "yargs";
 
-import type { RequestParams } from "../api.js";
+import { codeFromBody, isNeonApiError, type RequestParams } from "../api.js";
 import type { CommonProps } from "../types.js";
 import {
 	DEFAULT_SPEC_URL,
@@ -119,6 +120,35 @@ function assertMethod(method: string): asserts method is HttpMethod {
 	}
 }
 
+const JSON_TOKEN =
+	/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+/** Color the tokens of serialized JSON without changing a byte of the text itself. */
+export function colorizeJson(json: string): string {
+	return json.replace(JSON_TOKEN, (token, string, colon, bool) => {
+		if (string !== undefined) {
+			return colon !== undefined
+				? `${chalk.cyan(string)}${colon}`
+				: chalk.green(string);
+		}
+		if (bool !== undefined) {
+			return chalk.magenta(token);
+		}
+		if (token === "null") {
+			return chalk.dim(token);
+		}
+		return chalk.yellow(token);
+	});
+}
+
+const METHOD_COLORS: Record<string, (text: string) => string> = {
+	GET: chalk.green,
+	POST: chalk.cyan,
+	PUT: chalk.yellow,
+	PATCH: chalk.yellow,
+	DELETE: chalk.red,
+};
+
 // ── I/O helpers ──────────────────────────────────────────────────────────────
 
 async function readStdin(): Promise<string> {
@@ -164,6 +194,7 @@ type ApiArgs = CommonProps & {
 	describe: boolean;
 	refresh: boolean;
 	specUrl: string;
+	color?: boolean;
 };
 
 const toStrings = (values?: (string | number)[]): string[] =>
@@ -190,6 +221,10 @@ async function listEndpoints(args: ApiArgs): Promise<void> {
 		fields: ["method", "path", "summary"],
 		title: `Neon API endpoints (${endpoints.length})`,
 		emptyMessage: "No endpoints found in the spec.",
+		renderColumns: {
+			method: (endpoint) =>
+				(METHOD_COLORS[endpoint.method] ?? String)(endpoint.method),
+		},
 	});
 }
 
@@ -358,25 +393,76 @@ async function runRequest(args: ApiArgs): Promise<void> {
 		...(Object.keys(headers).length > 0 ? { headers } : {}),
 	};
 
-	const response = await args.apiClient.request(params);
-
-	const out = process.stdout;
-	if (args.include) {
-		out.write(`HTTP ${response.status} ${response.statusText}\n`);
-		for (const [key, value] of Object.entries(response.headers)) {
-			out.write(`${key}: ${value}\n`);
+	let response: Awaited<ReturnType<typeof args.apiClient.request>>;
+	try {
+		response = await args.apiClient.request(params);
+	} catch (err) {
+		// 401 and SSO responses may be recovered and retried; printing them would put
+		// two responses on stdout for one successful call.
+		if (
+			args.include &&
+			isNeonApiError(err) &&
+			err.status !== undefined &&
+			err.status !== 401 &&
+			!isSsoCode(codeFromBody(err.data))
+		) {
+			await writeResponse(args, {
+				status: err.status,
+				statusText: err.statusText ?? "",
+				headers: err.headers ?? {},
+				data: err.data,
+			});
 		}
-		out.write("\n");
+		throw err;
 	}
+	await writeResponse(args, response);
+}
 
-	if (response.data === undefined) {
+const isSsoCode = (code: string | undefined) =>
+	code === "SSO_AUTHORIZATION_REQUIRED" || code === "SSO_ORG_CREDS_ONLY";
+
+/** Pipes get plain JSON regardless of FORCE_COLOR, so `neon api … | jq` never sees escapes. */
+const colorJson = (args: ApiArgs): boolean =>
+	process.stdout.isTTY === true &&
+	args.color !== false &&
+	!process.env.NO_COLOR &&
+	chalk.level > 0;
+
+/** Resolves once stdout has taken the text, so a following `process.exit` can't cut it off. */
+async function writeResponse(
+	args: ApiArgs,
+	response: {
+		status: number;
+		statusText: string;
+		headers: Record<string, string>;
+		data: unknown;
+	},
+): Promise<void> {
+	const color = colorJson(args);
+	let text = "";
+	if (args.include) {
+		const status = `HTTP ${response.status} ${response.statusText}`;
+		const statusColor = response.status < 400 ? chalk.green : chalk.red;
+		text += `${color ? statusColor.bold(status) : status}\n`;
+		for (const [key, value] of Object.entries(response.headers)) {
+			text += `${color ? chalk.cyan(key) : key}: ${value}\n`;
+		}
+		text += "\n";
+	}
+	if (response.data !== undefined) {
+		if (args.output === "yaml") {
+			text += YAML.stringify(response.data);
+		} else {
+			const json = JSON.stringify(response.data, null, 2);
+			text += `${color ? colorizeJson(json) : json}\n`;
+		}
+	}
+	if (text === "") {
 		return;
 	}
-	if (args.output === "yaml") {
-		out.write(YAML.stringify(response.data));
-	} else {
-		out.write(`${JSON.stringify(response.data, null, 2)}\n`);
-	}
+	await new Promise<void>((resolve, reject) => {
+		process.stdout.write(text, (err) => (err ? reject(err) : resolve()));
+	});
 }
 
 export const command = "api [path]";
