@@ -5,14 +5,16 @@
  * - `createNeon()` / `neon` — the provider. Routes each model to the best
  *   gateway endpoint (Anthropic → native Messages, OpenAI → native Responses
  *   incl. Codex, everything else → unified MLflow).
+ * - `neon.embeddingModel()` — embedding models on the OpenAI-compatible
+ *   `/v1/embeddings` endpoint.
  */
 export { NeonAnthropicLanguageModel } from "./lib/neon-anthropic-language-model.js";
 export { NeonChatLanguageModel } from "./lib/neon-chat-language-model.js";
-export {
-	NEON_MODELS_DEV_IDS,
-	type NeonChatModelId,
-	type NeonKnownModelId,
+export type {
+	NeonChatModelId,
+	NeonKnownModelId,
 } from "./lib/neon-chat-options.js";
+export type { NeonEmbeddingModelId } from "./lib/neon-embedding-options.js";
 export {
 	getNeonModelCapabilities,
 	getNeonModelRoute,

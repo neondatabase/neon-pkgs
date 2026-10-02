@@ -1,21 +1,37 @@
-import { generateText as generateTextV6 } from "ai";
+import type { EmbeddingModelV3 } from "@ai-sdk/provider";
 import {
+	embedMany as embedManyV6,
+	embed as embedV6,
+	generateText as generateTextV6,
+} from "ai";
+import {
+	embedMany as embedManyV7,
+	embed as embedV7,
 	generateText as generateTextV7,
 	streamText as streamTextV7,
 } from "ai-v7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { neon } from "../src/index.js";
+import { createNeon, neon } from "../src/index.js";
+import { NEON_EMBEDDING_MODEL_IDS } from "../src/lib/neon-embedding-options.js";
 import { assertGatewayEnv, withRateLimitRetry } from "./helpers.js";
 
 const PROMPT = "Reply with exactly the single word pong.";
 const CONCURRENCY = 4;
 
+type EmbeddingProviderOptions = { neon: { dimensions: number } };
+
 interface SdkRunner {
 	version: string;
 	generate(modelId: string): Promise<string>;
+	embed(
+		model: EmbeddingModelV3,
+		value: string,
+		providerOptions?: EmbeddingProviderOptions,
+	): Promise<number[]>;
+	embedMany(model: EmbeddingModelV3, values: string[]): Promise<number[][]>;
 }
 
-const SDK_RUNNERS = [
+const SDK_RUNNERS: readonly [SdkRunner, SdkRunner] = [
 	{
 		version: "6",
 		async generate(modelId) {
@@ -27,6 +43,18 @@ const SDK_RUNNERS = [
 				}),
 			);
 			return result.text;
+		},
+		async embed(model, value, providerOptions) {
+			const result = await withRateLimitRetry(() =>
+				embedV6({ model, value, providerOptions }),
+			);
+			return result.embedding;
+		},
+		async embedMany(model, values) {
+			const result = await withRateLimitRetry(() =>
+				embedManyV6({ model, values }),
+			);
+			return result.embeddings;
 		},
 	},
 	{
@@ -41,18 +69,32 @@ const SDK_RUNNERS = [
 			);
 			return result.text;
 		},
+		async embed(model, value, providerOptions) {
+			const result = await withRateLimitRetry(() =>
+				embedV7({ model, value, providerOptions }),
+			);
+			return result.embedding;
+		},
+		async embedMany(model, values) {
+			const result = await withRateLimitRetry(() =>
+				embedManyV7({ model, values }),
+			);
+			return result.embeddings;
+		},
 	},
-] satisfies SdkRunner[];
+];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/**
- * Embedding models report `["embeddings"]` here, and the gateway rejects them on
- * chat completions. This provider has no embedding model, so they are out of scope.
- */
-function generatesText(model: Record<string, unknown>): boolean {
+interface CurrentModels {
+	chat: string[];
+	embedding: string[];
+}
+
+/** Chat models report `["text"]` here, embedding models `["embeddings"]`. */
+function outputModalities(model: Record<string, unknown>): unknown[] {
 	const outputs = isRecord(model.architecture)
 		? model.architecture.output_modalities
 		: undefined;
@@ -61,10 +103,10 @@ function generatesText(model: Record<string, unknown>): boolean {
 			`Unexpected /v1/models entry ${String(model.id)}: missing architecture.output_modalities`,
 		);
 	}
-	return outputs.includes("text");
+	return outputs;
 }
 
-async function fetchCurrentChatModelIds(): Promise<string[]> {
+async function fetchCurrentModels(): Promise<CurrentModels> {
 	assertGatewayEnv();
 	const baseURL = process.env.NEON_AI_GATEWAY_BASE_URL;
 	const token = process.env.NEON_AI_GATEWAY_TOKEN;
@@ -89,17 +131,29 @@ async function fetchCurrentChatModelIds(): Promise<string[]> {
 		throw new Error("Unexpected /v1/models response: missing data array");
 	}
 
-	const ids = payload.data.flatMap((model) =>
-		isRecord(model) && typeof model.id === "string" && generatesText(model)
-			? [model.id]
-			: [],
-	);
-	if (ids.length === 0) {
+	const chat = new Set<string>();
+	const embedding = new Set<string>();
+	for (const model of payload.data) {
+		if (!isRecord(model) || typeof model.id !== "string") continue;
+		const outputs = outputModalities(model);
+		if (outputs.includes("text")) chat.add(model.id);
+		if (outputs.includes("embeddings")) embedding.add(model.id);
+	}
+	if (chat.size === 0 || embedding.size === 0) {
 		throw new Error(
-			"The gateway /v1/models endpoint returned no text-generating models",
+			`The gateway /v1/models endpoint returned ${chat.size} text and ${embedding.size} embedding models`,
 		);
 	}
-	return [...new Set(ids)].sort();
+	return { chat: [...chat].sort(), embedding: [...embedding].sort() };
+}
+
+function isNumberArray(value: unknown): value is number[] {
+	return Array.isArray(value) && value.every((v) => typeof v === "number");
+}
+
+function expectVector(vector: number[], dimensions: number) {
+	expect(vector).toHaveLength(dimensions);
+	expect(vector.every((value) => Number.isFinite(value))).toBe(true);
 }
 
 async function verifyAllModels(
@@ -138,7 +192,7 @@ describe("e2e — every currently enabled chat model on AI SDK 6 and 7", () => {
 	let modelIds: string[] = [];
 
 	beforeAll(async () => {
-		modelIds = await fetchCurrentChatModelIds();
+		modelIds = (await fetchCurrentModels()).chat;
 	});
 
 	for (const runner of SDK_RUNNERS) {
@@ -185,4 +239,120 @@ describe("e2e — every currently enabled chat model on AI SDK 6 and 7", () => {
 		});
 		expect(gotImage).toBe(true);
 	}, 180_000);
+});
+
+describe("e2e — every currently enabled embedding model on AI SDK 6 and 7", () => {
+	let modelIds: string[] = [];
+
+	beforeAll(async () => {
+		modelIds = (await fetchCurrentModels()).embedding;
+	});
+
+	it("serves every embedding model the provider lists", () => {
+		const missing = NEON_EMBEDDING_MODEL_IDS.filter(
+			(id) => !modelIds.includes(id),
+		);
+		expect(missing, `not served: ${missing.join(", ")}`).toEqual([]);
+	});
+
+	for (const runner of SDK_RUNNERS) {
+		it(`embeds with every embedding /v1/models entry using AI SDK ${runner.version}`, async () => {
+			for (const modelId of modelIds) {
+				const model = neon.embeddingModel(modelId);
+				const single = await runner.embed(
+					model,
+					"Neon branches are copy-on-write.",
+				);
+				const many = await runner.embedMany(model, [
+					"Neon branches are copy-on-write.",
+					"Scale to zero suspends idle computes.",
+				]);
+				const known: readonly string[] = NEON_EMBEDDING_MODEL_IDS;
+				const dimensions = known.includes(modelId)
+					? 1024
+					: single.length;
+				expect(dimensions, modelId).toBeGreaterThan(0);
+				expectVector(single, dimensions);
+				expect(many, modelId).toHaveLength(2);
+				for (const vector of many) expectVector(vector, dimensions);
+			}
+		}, 120_000);
+
+		it(`splits embedMany over the 150-input gateway limit using AI SDK ${runner.version}`, async () => {
+			const served = new Map<string, number[]>();
+			const batchSizes: number[] = [];
+			const recording = createNeon({
+				fetch: async (input, init) => {
+					const response = await fetch(input, init);
+					const body: unknown =
+						typeof init?.body === "string"
+							? JSON.parse(init.body)
+							: undefined;
+					const payload: unknown = await response.clone().json();
+					if (
+						isRecord(body) &&
+						Array.isArray(body.input) &&
+						isRecord(payload) &&
+						Array.isArray(payload.data)
+					) {
+						batchSizes.push(body.input.length);
+						for (const item of payload.data) {
+							if (
+								isRecord(item) &&
+								typeof item.index === "number" &&
+								isNumberArray(item.embedding)
+							) {
+								served.set(
+									String(body.input[item.index]),
+									item.embedding,
+								);
+							}
+						}
+					}
+					return response;
+				},
+			});
+			const values = Array.from(
+				{ length: 151 },
+				(_, i) => `document ${i}`,
+			);
+			const embeddings = await runner.embedMany(
+				recording.embeddingModel("qwen3-embedding-0-6b"),
+				values,
+			);
+			expect(batchSizes.sort((a, b) => b - a)).toEqual([150, 1]);
+			expect(embeddings).toHaveLength(151);
+			values.forEach((value, index) => {
+				expect(embeddings[index], value).toEqual(served.get(value));
+			});
+		}, 120_000);
+	}
+
+	it("passes dimensions through providerOptions.neon", async () => {
+		const [runner] = SDK_RUNNERS;
+		const options = { neon: { dimensions: 256 } };
+		expectVector(
+			await runner.embed(
+				neon.embeddingModel("qwen3-embedding-0-6b"),
+				"branching",
+				options,
+			),
+			256,
+		);
+		expectVector(
+			await runner.embed(
+				neon.embeddingModel("gte-large-en"),
+				"branching",
+				options,
+			),
+			1024,
+		);
+	}, 60_000);
+
+	it("surfaces the gateway's reason for an unknown embedding model", async () => {
+		const [runner] = SDK_RUNNERS;
+		await expect(
+			runner.embed(neon.embeddingModel("nope-embedding"), "branching"),
+		).rejects.toThrow(/unknown model/);
+	}, 60_000);
 });
