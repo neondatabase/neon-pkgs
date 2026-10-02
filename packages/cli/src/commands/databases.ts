@@ -3,7 +3,10 @@ import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 
 import type { BranchScopeProps } from "../types.js";
-import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import {
+	fillSingleProject,
+	resolveBranchFromProps,
+} from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
 export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
@@ -60,13 +63,16 @@ export const handler = (args: yargs.Argv) => {
 };
 
 export const list = async (props: BranchScopeProps) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, branch } = await resolveBranchFromProps(props);
 	const { data } = await props.apiClient.listProjectBranchDatabases(
 		props.projectId,
 		branchId,
 	);
+	const branchLabel = branch?.name ?? branchId;
 	writer(props).end(data.databases, {
 		fields: DATABASE_FIELDS,
+		humanTitle: `Databases on ${branchLabel}`,
+		emptyMessage: `No databases on ${branchLabel}.`,
 	});
 };
 
@@ -76,7 +82,7 @@ export const create = async (
 		ownerName?: string;
 	},
 ) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, branch } = await resolveBranchFromProps(props);
 	const owner =
 		props.ownerName ??
 		(await props.apiClient
@@ -109,13 +115,14 @@ export const create = async (
 
 	writer(props).end(data.database, {
 		fields: DATABASE_FIELDS,
+		humanTitle: `Database created on ${branch?.name ?? branchId}`,
 	});
 };
 
 export const deleteDb = async (
 	props: BranchScopeProps & { database: string },
 ) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, branch } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchDatabase(
 			props.projectId,
@@ -128,6 +135,7 @@ export const deleteDb = async (
 	if (data) {
 		writer(props).end(data.database, {
 			fields: DATABASE_FIELDS,
+			humanTitle: `Database deleted from ${branch?.name ?? branchId}`,
 		});
 	}
 };

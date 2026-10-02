@@ -67,6 +67,29 @@ export const SCENARIOS: Scenario[] = [
 		expect: { code: 0, stdout: /"id"/ },
 	},
 	{
+		// The default branch comes from the branch listing; nothing else may be fetched first.
+		name: "databases list --project-id test",
+		argv: ["databases", "list", "--project-id", "test"],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /No databases on main\./ },
+	},
+	{
+		// An explicit branch id needs no listing.
+		name: "databases list --project-id test --branch br-sunny-branch-123456",
+		argv: [
+			"databases",
+			"list",
+			"--project-id",
+			"test",
+			"--branch",
+			"br-sunny-branch-123456",
+		],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^Databases on br-sunny-branch-123456$/m },
+	},
+	{
 		name: "projects get test",
 		argv: ["projects", "get", "test"],
 		api: true,
