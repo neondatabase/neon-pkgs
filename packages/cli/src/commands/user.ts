@@ -36,7 +36,7 @@ export const userDetails = (
 	login: user.login,
 	email: user.email,
 	name: [user.name, user.last_name].filter(Boolean).join(" "),
-	// Accounts on organization plans report 0 here, which reads as "no projects allowed".
+	// Accounts on organization plans can report 0, which reads as "no projects allowed"; JSON and YAML keep the value.
 	projects_limit: user.projects_limit === 0 ? undefined : user.projects_limit,
 	authentication: auth ? authenticationLabel(auth) : undefined,
 });
