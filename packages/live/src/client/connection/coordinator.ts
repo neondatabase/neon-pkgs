@@ -402,21 +402,11 @@ export class ConnectionCoordinator {
 				this.events.connection.heartbeatPongReceived();
 				return;
 			case "snapshot_start":
-				this.reconciler.accept(message, byteLength);
-				return;
 			case "snapshot_chunk":
-				this.reconciler.accept(message, byteLength);
-				return;
 			case "snapshot_end":
-				this.reconciler.accept(message, byteLength);
-				return;
 			case "open":
 			case "keyed_results":
-				this.reconciler.accept(message, byteLength);
-				return;
 			case "reset_required":
-				this.reconciler.accept(message, byteLength);
-				return;
 			case "commit":
 				this.reconciler.accept(message, byteLength);
 				return;
