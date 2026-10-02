@@ -1,0 +1,15 @@
+{
+  "project": {
+    "id": "proj-fixed-cu",
+    "name": "fixed",
+    "region_id": "aws-us-east-2",
+    "pg_version": 18,
+    "default_endpoint_settings": {
+      "autoscaling_limit_min_cu": 2,
+      "autoscaling_limit_max_cu": 2
+    },
+    "history_retention_seconds": 0,
+    "created_at": "2026-06-01T12:00:00Z",
+    "updated_at": "2026-06-01T12:00:00Z"
+  }
+}

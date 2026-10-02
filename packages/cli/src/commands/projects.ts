@@ -1,13 +1,15 @@
 import type {
 	Organization,
+	Project,
 	ProjectCreateRequest,
 	ProjectListItem,
 	ProjectUpdateRequest,
 } from "@neon/sdk";
+import chalk from "chalk";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import { isNeonApiError, messageFromBody } from "../api.js";
-import { updateContextFile } from "../context.js";
+import { readContextFile, updateContextFile } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
 import {
@@ -248,46 +250,84 @@ export const handler = (args: yargs.Argv) => {
 	return args;
 };
 
+type ProjectPage = {
+	data: {
+		projects: ProjectListItem[];
+		pagination?: { cursor?: string };
+	};
+};
+
+const listAll = async (
+	fetchPage: (cursor: string | undefined) => Promise<ProjectPage>,
+) => {
+	const result: ProjectListItem[] = [];
+	let cursor: string | undefined;
+	let end = false;
+	while (!end) {
+		const { data } = await fetchPage(cursor);
+		result.push(...data.projects);
+		cursor = data.pagination?.cursor;
+		log.debug(
+			"Got %d projects, with cursor: %s",
+			data.projects.length,
+			cursor,
+		);
+		if (data.projects.length < PROJECTS_LIST_LIMIT) {
+			end = true;
+		}
+	}
+
+	return result;
+};
+
+const projectColumns = (props: Pick<CommonProps, "contextFile">) => {
+	const current = readContextFile(props.contextFile).projectId;
+	return {
+		name: (project: ProjectListItem) =>
+			project.id === current
+				? `${chalk.green("[current]")} ${project.name}`
+				: project.name,
+	};
+};
+
 const list = async (
 	props: CommonProps & { orgId?: string; recoverableOnly?: boolean },
 ) => {
-	const getList = async (
-		fn:
-			| typeof props.apiClient.listProjects
-			| typeof props.apiClient.listSharedProjects,
-	) => {
-		const result: ProjectListItem[] = [];
-		let cursor: string | undefined;
-		let end = false;
-		while (!end) {
-			const { data } = await fn({
-				limit: PROJECTS_LIST_LIMIT,
-				org_id: props.orgId,
-				recoverable: props.recoverableOnly,
-				cursor,
-			});
-			result.push(...data.projects);
-			cursor = data.pagination?.cursor;
-			log.debug(
-				"Got %d projects, with cursor: %s",
-				data.projects.length,
-				cursor,
-			);
-			if (data.projects.length < PROJECTS_LIST_LIMIT) {
-				end = true;
-			}
-		}
+	const query = (cursor: string | undefined) => ({
+		limit: PROJECTS_LIST_LIMIT,
+		org_id: props.orgId,
+		recoverable: props.recoverableOnly,
+		cursor,
+	});
+	const includeShared = !props.orgId && !props.recoverableOnly;
 
-		return result;
-	};
+	const ownedRequest = listAll((cursor) =>
+		props.apiClient.listProjects(query(cursor)),
+	);
+	// Aborted when the owned list fails: after org-id recovery the CLI exits only once
+	// every request has settled, so a stalled shared request would hold it open.
+	const sharedAbort = new AbortController();
+	const sharedRequest = includeShared
+		? listAll((cursor) =>
+				props.apiClient.listSharedProjects(query(cursor), {
+					signal: sharedAbort.signal,
+				}),
+			)
+		: undefined;
+	// Read after the owned list; this only stops an unread rejection from crashing the process.
+	sharedRequest?.catch(() => undefined);
 
-	const ownedProjects = await getList(props.apiClient.listProjects);
-	const sharedProjects =
-		props.orgId || props.recoverableOnly
-			? []
-			: await getList(props.apiClient.listSharedProjects);
+	let ownedProjects: ProjectListItem[];
+	try {
+		ownedProjects = await ownedRequest;
+	} catch (err) {
+		sharedAbort.abort();
+		throw err;
+	}
+	const sharedProjects = (await sharedRequest) ?? [];
 
 	const out = writer(props);
+	const renderColumns = projectColumns(props);
 
 	out.write(ownedProjects, {
 		fields: props.recoverableOnly
@@ -297,14 +337,15 @@ const list = async (
 		emptyMessage: props.recoverableOnly
 			? "You don't have any recoverable projects."
 			: "You don't have any projects yet. See how to create a new project:\n> neon projects create --help",
+		renderColumns,
 	});
 
-	if (!props.orgId && !props.recoverableOnly) {
-		// We don't list shared projects when listing recoverable projects
+	if (includeShared) {
 		out.write(sharedProjects, {
 			fields: PROJECT_FIELDS,
 			title: "Shared with you",
 			emptyMessage: "No projects have been shared with you",
+			renderColumns,
 		});
 	}
 
@@ -505,7 +546,73 @@ const recover = async (props: CommonProps & IdOrNameProps) => {
 
 const get = async (props: CommonProps & IdOrNameProps) => {
 	const { data } = await props.apiClient.getProject(props.id);
-	writer(props).end(data.project, { fields: PROJECT_FIELDS });
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data.project, { fields: PROJECT_FIELDS });
+		return;
+	}
+	writer(props).end(projectDetails(data.project), {
+		fields: PROJECT_DETAIL_FIELDS,
+		humanTitle: "Project",
+	});
+};
+
+const PROJECT_DETAIL_FIELDS = [
+	"name",
+	"id",
+	"region_id",
+	"postgres_version",
+	"organization",
+	"default_compute",
+	"history_retention",
+	"created_at",
+	"updated_at",
+] as const;
+
+/** Table-only view of a project; the field names become the row labels. */
+const projectDetails = (
+	project: Project,
+): Partial<
+	Record<(typeof PROJECT_DETAIL_FIELDS)[number], string | number>
+> => ({
+	name: project.name,
+	id: project.id,
+	region_id: project.region_id,
+	postgres_version: project.pg_version,
+	organization: project.org_id,
+	default_compute: formatComputeRange(project.default_endpoint_settings),
+	history_retention:
+		project.history_retention_seconds === undefined
+			? undefined
+			: formatDuration(project.history_retention_seconds),
+	created_at: project.created_at,
+	updated_at: project.updated_at,
+});
+
+const formatComputeRange = (
+	settings: Project["default_endpoint_settings"],
+): string | undefined => {
+	const min = settings?.autoscaling_limit_min_cu;
+	const max = settings?.autoscaling_limit_max_cu;
+	if (min === undefined || max === undefined) {
+		return undefined;
+	}
+	return min === max ? `${min} CU` : `${min}-${max} CU`;
+};
+
+const DURATION_UNITS = [
+	["day", 86_400],
+	["hour", 3_600],
+	["minute", 60],
+] as const;
+
+export const formatDuration = (seconds: number): string => {
+	for (const [unit, size] of DURATION_UNITS) {
+		if (seconds > 0 && seconds % size === 0) {
+			const count = seconds / size;
+			return `${count} ${unit}${count === 1 ? "" : "s"}`;
+		}
+	}
+	return `${seconds} second${seconds === 1 ? "" : "s"}`;
 };
 
 const handleMissingOrgId = async (
