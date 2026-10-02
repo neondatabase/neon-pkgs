@@ -133,6 +133,7 @@ const runList = async (handler: (arrival: Arrival) => void) => {
 describe("projects list", () => {
 	it("starts both listings together and paginates each on its own cursor", async () => {
 		const held: Arrival[] = [];
+		let fallback: NodeJS.Timeout | undefined;
 		const result = await runList((arrival) => {
 			const cursor = arrival.query.get("cursor");
 			if (cursor === "owned-2") {
@@ -142,6 +143,7 @@ describe("projects list", () => {
 			} else {
 				held.push(arrival);
 				if (held.length === 2) {
+					clearTimeout(fallback);
 					const shared = held.find((a) => a.path === SHARED);
 					const owned = held.find((a) => a.path === OWNED);
 					shared?.send(200, page("shared-a", 100, "shared-2"));
@@ -151,7 +153,7 @@ describe("projects list", () => {
 					);
 				} else {
 					// A sequential client never sends the second listing; fail instead of hanging.
-					setTimeout(() => arrival.send(500), 2000);
+					fallback = setTimeout(() => arrival.send(500), 2000);
 				}
 			}
 		});
@@ -225,9 +227,12 @@ describe("projects list", () => {
 
 	it("recovers from a missing org id and exits while the shared listing is stalled", async () => {
 		let sharedClosed: Promise<void> | undefined;
+		// The owned 400 waits for the shared request, so the abort always hits one in flight.
+		let rejectOwned: (() => void) | undefined;
 		const server = await startServer((arrival) => {
 			if (arrival.path === SHARED) {
 				sharedClosed = arrival.closed;
+				rejectOwned?.();
 			} else if (arrival.path === "/users/me/organizations") {
 				arrival.send(200, {
 					organizations: [{ id: "org-picked", name: "Picked" }],
@@ -235,7 +240,11 @@ describe("projects list", () => {
 			} else if (arrival.query.get("org_id") === "org-picked") {
 				arrival.send(200, page("org-project", 1));
 			} else {
-				arrival.send(400, { message: "org_id is required" });
+				rejectOwned = () =>
+					arrival.send(400, { message: "org_id is required" });
+				if (sharedClosed) {
+					rejectOwned();
+				}
 			}
 		});
 		const root = mkdtempSync(join(tmpdir(), "neon-projects-recovery-"));
