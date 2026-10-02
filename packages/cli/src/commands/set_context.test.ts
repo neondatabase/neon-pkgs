@@ -120,10 +120,9 @@ describe("set_context", () => {
 					"--context-file",
 					overrideContextFile,
 				],
-				{
-					code: 1,
-					stderr: "ERROR: Not Found",
-				},
+				// The context's branch belongs to another project, so the default branch (main,
+				// no databases) is listed instead of test_branch.
+				{ snapshot: false, stdout: "[]" },
 			);
 		});
 	});

@@ -5,9 +5,22 @@ exports[`databases > create 1`] = `
 "
 `;
 
+exports[`databases > create names the branch in the table 1`] = `
+"Database created on test_branch
+Name  test_database
+"
+`;
+
 exports[`databases > delete 1`] = `
 "name: test_db
 owner_name: test_owner
+"
+`;
+
+exports[`databases > delete names the branch in the table 1`] = `
+"Database deleted from test_branch
+Name        test_db
+Owner Name  test_owner
 "
 `;
 
@@ -18,5 +31,29 @@ exports[`databases > list 1`] = `
   owner_name: user2
 - name: test_db
   owner_name: test_user
+"
+`;
+
+exports[`databases > list names the default branch, even when it has no databases 1`] = `
+"
+No databases on main.
+"
+`;
+
+exports[`databases > list names the resolved branch in the table 1`] = `
+"Databases on test_branch
+Name     Owner Name
+db1      user1
+db2      user2
+test_db  test_user
+"
+`;
+
+exports[`databases > list shows an explicit branch id as given 1`] = `
+"Databases on br-sunny-branch-123456
+Name     Owner Name
+db1      user1
+db2      user2
+test_db  test_user
 "
 `;
