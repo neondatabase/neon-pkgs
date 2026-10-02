@@ -11,7 +11,7 @@
     },
     "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
     "i32": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
-    "publicationId": { "type": "string", "pattern": "^[\\s\\S]{1,64}$" },
+    "publicationId": { "type": "string", "minLength": 1, "maxLength": 64 },
     "heartbeatToken": {
       "type": "string",
       "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]{1,64}$"
@@ -121,7 +121,7 @@
           "properties": {
             "type": { "const": "subscribe" },
             "request_id": { "$ref": "#/$defs/u64" },
-            "authorization": { "type": "string", "pattern": "^[\\s\\S]{1,262144}$" }
+            "authorization": { "type": "string", "minLength": 1, "maxLength": 262144 }
           },
           "additionalProperties": false
         },
@@ -131,7 +131,7 @@
           "properties": {
             "type": { "const": "renew" },
             "live_id": { "$ref": "#/$defs/u64" },
-            "authorization": { "type": "string", "pattern": "^[\\s\\S]{1,262144}$" }
+            "authorization": { "type": "string", "minLength": 1, "maxLength": 262144 }
           },
           "additionalProperties": false
         },
