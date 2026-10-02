@@ -108,7 +108,7 @@ describe("trusted direct subscriptions", () => {
 			data: undefined,
 		});
 		const socket = connectAndAdmit();
-		snapshot(socket, "hello");
+		baselineSync(socket, "hello");
 		expect(socket.url).toBe("ws://live.test/v1");
 		expect(socket.protocols).toBe("neon.live.v1");
 		expect(subscription.getSnapshot()).toMatchObject({
@@ -204,7 +204,7 @@ describe("trusted direct subscriptions", () => {
 		const initialCapability = defined(
 			first.sent.find((message) => message.type === "subscribe"),
 		).authorization;
-		snapshot(first, "before");
+		baselineSync(first, "before");
 
 		first.close();
 		expect(subscription.getSnapshot()).toEqual({
@@ -228,7 +228,7 @@ describe("trusted direct subscriptions", () => {
 		);
 		expect(request.authorization).not.toBe(initialCapability);
 		admitRequest(recovered, request, "42", "2");
-		snapshot(recovered, "after", "42", "2");
+		baselineSync(recovered, "after", "42", "2");
 
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
@@ -289,33 +289,33 @@ function admitRequest(
 	});
 }
 
-function snapshot(
+function baselineSync(
 	socket: FakeWebSocket,
 	body: string,
 	liveId = "41",
 	epoch = "1",
 ): void {
 	socket.receive({
-		type: "snapshot_start",
+		type: "baseline_sync_start",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
+		baseline_sync_attempt: "1",
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
 	socket.receive({
-		type: "snapshot_chunk",
+		type: "baseline_sync_batch",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
+		baseline_sync_attempt: "1",
 		index: 0,
 		rows: [{ row_key: ROW_KEY, values: ["1", body] }],
 	});
 	socket.receive({
-		type: "snapshot_end",
+		type: "baseline_sync_end",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
-		chunk_count: 1,
+		baseline_sync_attempt: "1",
+		batch_count: 1,
 	});
 }
 
