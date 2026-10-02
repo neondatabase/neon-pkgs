@@ -1,5 +1,7 @@
+import type { CurrentUserInfoResponse } from "@neon/sdk";
 import type yargs from "yargs";
 
+import { type AuthContext, getAuthContext } from "../auth_context.js";
 import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
@@ -15,7 +17,42 @@ export const handler = async (args: CommonProps) => {
 
 const me = async (props: CommonProps) => {
 	const { data } = await props.apiClient.getCurrentUserInfo();
-	writer(props).end(data, {
-		fields: ["login", "email", "name", "projects_limit"],
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data, {
+			fields: ["login", "email", "name", "projects_limit"],
+		});
+		return;
+	}
+	writer(props).end(userDetails(data, getAuthContext()), {
+		fields: ["login", "email", "name", "projects_limit", "authentication"],
 	});
+};
+
+/** Table-only view; the field names become the row labels. */
+export const userDetails = (
+	user: CurrentUserInfoResponse,
+	auth: AuthContext | null,
+) => ({
+	login: user.login,
+	email: user.email,
+	name: [user.name, user.last_name].filter(Boolean).join(" "),
+	// Accounts on organization plans report 0 here, which reads as "no projects allowed".
+	projects_limit: user.projects_limit === 0 ? undefined : user.projects_limit,
+	authentication: auth ? authenticationLabel(auth) : undefined,
+});
+
+export const authenticationLabel = (auth: AuthContext): string => {
+	const profile = auth.profile ? ` (profile ${auth.profile})` : "";
+	switch (auth.source) {
+		case "stored-credentials":
+			return `OAuth${profile}`;
+		case "profile-api-key":
+			return `API key${profile}`;
+		case "api-key":
+			if (auth.apiKeyFrom === "flag") return "API key (--api-key)";
+			if (auth.apiKeyFrom === "env") return "API key (NEON_API_KEY)";
+			return "API key";
+		case "claimable":
+			return "Claimable project";
+	}
 };

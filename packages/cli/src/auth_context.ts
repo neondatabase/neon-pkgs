@@ -12,6 +12,8 @@ export type AuthSource =
 
 export type AuthContext = {
 	source: AuthSource;
+	/** Where an `api-key` source came from: the `--api-key` flag or `NEON_API_KEY`. */
+	apiKeyFrom?: "flag" | "env";
 	configDir: string;
 	/** The selected profile, when one was resolved. */
 	profile?: string;

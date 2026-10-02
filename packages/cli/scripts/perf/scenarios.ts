@@ -61,6 +61,16 @@ export const SCENARIOS: Scenario[] = [
 		expect: { code: 1, stderr: /ERROR: Unknown command: not-a-command/ },
 	},
 	{
+		name: "me",
+		argv: ["me"],
+		api: true,
+		output: "table",
+		expect: {
+			code: 0,
+			stdout: /^Authentication\s+API key \(--api-key\)$/m,
+		},
+	},
+	{
 		name: "projects list",
 		argv: ["projects", "list"],
 		api: true,
