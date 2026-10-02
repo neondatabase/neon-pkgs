@@ -10,8 +10,12 @@
  * `NEON_AI_GATEWAY_TOKEN` emitted by `neonctl env pull` / `neon dev`, or pass
  * `baseURL` / `apiKey` explicitly.
  */
-import type { ProviderErrorStructure } from "@ai-sdk/openai-compatible";
 import {
+	OpenAICompatibleEmbeddingModel,
+	type ProviderErrorStructure,
+} from "@ai-sdk/openai-compatible";
+import {
+	type EmbeddingModelV3,
 	type LanguageModelV3,
 	NoSuchModelError,
 	type ProviderV3,
@@ -28,6 +32,10 @@ import { z } from "zod/v4";
 import { NeonAnthropicLanguageModel } from "./neon-anthropic-language-model.js";
 import { NeonChatLanguageModel } from "./neon-chat-language-model.js";
 import type { NeonChatModelId } from "./neon-chat-options.js";
+import {
+	NEON_MAX_EMBEDDINGS_PER_CALL,
+	type NeonEmbeddingModelId,
+} from "./neon-embedding-options.js";
 import { wrapFetchWithGatewayErrorNormalization } from "./neon-gateway-error.js";
 import { wrapFetchWithHarmonyNormalization } from "./neon-harmony-normalize.js";
 import { getNeonModelRoute } from "./neon-model-capabilities.js";
@@ -122,8 +130,14 @@ export interface NeonProvider extends ProviderV3 {
 	/** OpenAI Responses tools (e.g. `imageGeneration`) for OpenAI-routed models. */
 	tools: typeof neonOpenAITools;
 
+	/**
+	 * Creates a Neon AI Gateway embedding model for `embed()` and `embedMany()`.
+	 * Provider options go under `providerOptions.neon` (`dimensions`, `user`).
+	 */
+	embeddingModel(modelId: NeonEmbeddingModelId): EmbeddingModelV3;
+
 	/** @deprecated Use `embeddingModel` instead. */
-	textEmbeddingModel(modelId: string): never;
+	textEmbeddingModel(modelId: NeonEmbeddingModelId): EmbeddingModelV3;
 }
 
 export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
@@ -209,6 +223,19 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			supportsStructuredOutputs: true,
 		});
 
+	const createEmbeddingModel = (modelId: NeonEmbeddingModelId) =>
+		new OpenAICompatibleEmbeddingModel(modelId, {
+			provider: "neon.embedding",
+			url: ({ path }) => `${getHost()}/v1${path}`,
+			headers: getHeaders,
+			fetch: wrapFetchWithGatewayErrorNormalization(
+				options.fetch,
+				"openai",
+			),
+			errorStructure: neonErrorStructure,
+			maxEmbeddingsPerCall: NEON_MAX_EMBEDDINGS_PER_CALL,
+		});
+
 	const createLanguageModel = (modelId: NeonChatModelId): LanguageModelV3 => {
 		switch (getNeonModelRoute(modelId)) {
 			case "anthropic":
@@ -227,10 +254,8 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 	provider.chat = createLanguageModel;
 	provider.tools = neonOpenAITools;
 
-	provider.embeddingModel = (modelId: string) => {
-		throw new NoSuchModelError({ modelId, modelType: "embeddingModel" });
-	};
-	provider.textEmbeddingModel = provider.embeddingModel;
+	provider.embeddingModel = createEmbeddingModel;
+	provider.textEmbeddingModel = createEmbeddingModel;
 	provider.imageModel = (modelId: string) => {
 		throw new NoSuchModelError({ modelId, modelType: "imageModel" });
 	};

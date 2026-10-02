@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { NEON_MODELS_DEV_IDS } from "./neon-chat-options.js";
+import { NEON_EMBEDDING_MODEL_IDS } from "./neon-embedding-options.js";
 import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
 
 /**
  * Maintainer-only guard against catalog drift. https://neon.com/models.json is
- * the published catalog this package's typed id list must match; this test
- * fails when `NEON_MODELS_DEV_IDS` no longer mirrors it.
+ * the published catalog this package's typed id lists must match; this test
+ * fails when `NEON_MODELS_DEV_IDS` (chat) or `NEON_EMBEDDING_MODEL_IDS`
+ * (`"type": "embedding"` entries) no longer mirror it.
  *
  * It hits the network, so it is opt-in: it runs only when `NEON_DRIFT_CHECK=1`
  * (see the `test:drift` script and the scheduled `catalog-drift` CI workflow),
@@ -44,22 +46,48 @@ function catalogTemperature(entry: unknown): boolean {
 	return entry.temperature;
 }
 
-describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
-	it("keeps NEON_MODELS_DEV_IDS in sync with the published catalog", async () => {
-		const live = new Set(Object.keys(await fetchNeonCatalogModels()));
-		expect(live.size).toBeGreaterThan(0);
+function isEmbeddingEntry(entry: unknown): boolean {
+	return (
+		entry !== null &&
+		typeof entry === "object" &&
+		"type" in entry &&
+		entry.type === "embedding"
+	);
+}
 
-		const declared = new Set<string>(NEON_MODELS_DEV_IDS);
-		const missingFromProvider = [...live]
-			.filter((id) => !declared.has(id))
-			.sort();
-		const removedUpstream = [...declared]
-			.filter((id) => !live.has(id))
-			.sort();
+function compareIds(live: readonly string[], declared: readonly string[]) {
+	const liveSet = new Set(live);
+	const declaredSet = new Set(declared);
+	return {
+		missingFromProvider: live.filter((id) => !declaredSet.has(id)).sort(),
+		removedUpstream: declared.filter((id) => !liveSet.has(id)).sort(),
+	};
+}
+
+describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
+	it("keeps NEON_MODELS_DEV_IDS in sync with the published chat catalog", async () => {
+		const entries = Object.entries(await fetchNeonCatalogModels());
+		const live = entries
+			.filter(([, entry]) => !isEmbeddingEntry(entry))
+			.map(([id]) => id);
+		expect(live.length).toBeGreaterThan(0);
 
 		// `missingFromProvider`: add these to NEON_MODELS_DEV_IDS.
 		// `removedUpstream`: neon.com/models.json dropped these; remove them from the array.
-		expect({ missingFromProvider, removedUpstream }).toEqual({
+		expect(compareIds(live, NEON_MODELS_DEV_IDS)).toEqual({
+			missingFromProvider: [],
+			removedUpstream: [],
+		});
+	});
+
+	it("keeps NEON_EMBEDDING_MODEL_IDS in sync with the published embedding catalog", async () => {
+		const entries = Object.entries(await fetchNeonCatalogModels());
+		const live = entries
+			.filter(([, entry]) => isEmbeddingEntry(entry))
+			.map(([id]) => id);
+		expect(live.length).toBeGreaterThan(0);
+
+		expect(compareIds(live, NEON_EMBEDDING_MODEL_IDS)).toEqual({
 			missingFromProvider: [],
 			removedUpstream: [],
 		});

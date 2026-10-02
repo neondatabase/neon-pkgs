@@ -2,7 +2,7 @@
 
 Community [Vercel AI SDK](https://ai-sdk.dev) provider for the [Neon](https://neon.com) AI Gateway. Supports **AI SDK v6 and v7** (`ai@^6` or `ai@^7`).
 
-The Neon AI Gateway is **branch-scoped**: each Neon project branch gets its own gateway host, and a platform token authorizes requests for that branch. Use the same `neon(modelId)` API across the branch's model catalog; the provider selects Anthropic Messages, OpenAI Responses, or Chat Completions for each model.
+The Neon AI Gateway is **branch-scoped**: each Neon project branch gets its own gateway host, and a platform token authorizes requests for that branch. Use the same `neon(modelId)` API across the branch's text models; the provider selects Anthropic Messages, OpenAI Responses, or Chat Completions for each model. Embedding models use `neon.embeddingModel(modelId)`.
 
 Use canonical model ids such as `gpt-5-mini`, `llama-4-maverick`, and `gemini-3-flash`, matching [neon.com/models](https://neon.com/models). The typed catalog includes the known model ids, and arbitrary strings are accepted so newly available models work before the types update.
 
@@ -59,7 +59,7 @@ Routing matches on the model id.
 
 ## Capabilities
 
-`generateText` and `streamText` work with any model available to your branch. `generateObject`, `streamObject`, and single- or multi-step tool calls work with OpenAI (including Codex), Meta, Alibaba, Zhipu AI, and Thinking Machines models. Gemini currently supports `generateText` and `streamText`; structured output and multi-step tools are not supported. Vision input works on models that accept images.
+`generateText` and `streamText` work with any text model available to your branch. `generateObject`, `streamObject`, and single- or multi-step tool calls work with OpenAI (including Codex), Meta, Alibaba, Zhipu AI, and Thinking Machines models. Gemini currently supports `generateText` and `streamText`; structured output and multi-step tools are not supported. Vision input works on models that accept images.
 
 Claude models use the Messages API. On both that route and Chat Completions the provider removes call options the gateway rejects and reports each one in `result.warnings` instead of failing the request — see [Dropped call options](#dropped-call-options). Unsupported Responses API storage options throw before a request is sent — see [Errors](#errors).
 
@@ -107,6 +107,28 @@ getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 **The rules are per model, not per family.** Two Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash` rejects `temperature` and `topP` outright, so reading a row for "Gemini" is not enough — check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions. `getNeonModelCapabilities('gpt-6-astra').supportsTemperature` is `false` because [neon.com/models.json](https://neon.com/models.json) lists `temperature: false` for that id; it is not a live gateway measurement.
 
 A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess. That is also why the table can lag: an id added since the last release inherits the permissive default until someone measures it.
+
+## Embeddings
+
+`neon.embeddingModel()` calls the gateway's OpenAI-compatible `/v1/embeddings` endpoint with the same base URL and token. It works with `embed()` and `embedMany()`.
+
+```ts
+import { neon } from "@neon/ai-sdk-provider";
+import { embed, embedMany } from "ai";
+
+const { embedding } = await embed({
+  model: neon.embeddingModel("qwen3-embedding-0-6b"), // or "gte-large-en"
+  value: "Neon branches are copy-on-write.",
+});
+
+const { embeddings } = await embedMany({
+  model: neon.embeddingModel("qwen3-embedding-0-6b"),
+  values: ["Scale to zero", "Instant restore", "Read replicas"],
+  providerOptions: { neon: { dimensions: 256 } },
+});
+```
+
+Both models return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` ignores it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NEON_EMBEDDING_MODEL_IDS` lists the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
 
 ## Image generation
 
@@ -211,7 +233,7 @@ So `store` is only refused on the Responses route; the same option is ignored el
 
 ## Limitations
 
-- The gateway does not offer image or embedding model endpoints, so `generateImage()`, `embed()`, and `embedMany()` throw `NoSuchModelError`. Image generation is available through the Responses API's built-in `image_generation` tool with `neon.tools.imageGeneration()`.
+- The gateway does not offer an image model endpoint, so `generateImage()` throws `NoSuchModelError`. Image generation is available through the Responses API's built-in `image_generation` tool with `neon.tools.imageGeneration()`.
 - Results from provider-executed tools (`neon.tools.imageGeneration`, and the other Responses built-ins) are not replayed to the gateway on a later step — see [Edit a generated image](#edit-a-generated-image).
 - The Responses route is stateless, so the provider sends `store: false` and refuses `store: true`, `store: null`, `previousResponseId`, or `conversation` — see [Errors](#errors).
 
@@ -230,4 +252,4 @@ pnpm test:e2e
 
 A run with neither **fails**; it does not skip. The gateway is on every branch and needs no provisioning, so the API-key path is the one CI uses — no gateway token is stored as a secret.
 
-The matrix covers one published catalog model per family (Anthropic, OpenAI, Codex, Gemini, Meta, Alibaba, Zhipu, Thinking Machines) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. `generateObject` and tool calling run on the subset of families where they are verified (see [Capabilities](#capabilities)). A family whose representative id the branch does not serve skips its cases, and a single assertion fails the run listing exactly which pinned ids went missing — so a shrinking catalog is reported rather than silently reducing coverage. Model access is granted per account, so the account behind the key needs every id in `MATRIX_MODELS`. The suite also fetches the live `/v1/models` catalog and calls every currently enabled model with both AI SDK 6 and AI SDK 7.
+The matrix covers one published catalog model per family (Anthropic, OpenAI, Codex, Gemini, Meta, Alibaba, Zhipu, Thinking Machines) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. `generateObject` and tool calling run on the subset of families where they are verified (see [Capabilities](#capabilities)). A family whose representative id the branch does not serve skips its cases, and a single assertion fails the run listing exactly which pinned ids went missing — so a shrinking catalog is reported rather than silently reducing coverage. Model access is granted per account, so the account behind the key needs every id in `MATRIX_MODELS`. The suite also fetches the live `/v1/models` catalog and calls every currently enabled text model with `generateText` and every embedding model with `embed` and `embedMany`, on both AI SDK 6 and AI SDK 7.
