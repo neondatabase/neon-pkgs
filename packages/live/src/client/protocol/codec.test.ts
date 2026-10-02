@@ -24,9 +24,9 @@ const SERVER_TYPES = new Set([
 	"subscribe_rejected",
 	"renewed",
 	"unsubscribed",
-	"snapshot_start",
-	"snapshot_chunk",
-	"snapshot_end",
+	"baseline_sync_start",
+	"baseline_sync_batch",
+	"baseline_sync_end",
 	"open",
 	"keyed_results",
 	"reset_required",
@@ -84,10 +84,10 @@ describe("Neon Live v1 JSON codec", () => {
 		expect(() =>
 			decodeServerMessage(
 				JSON.stringify({
-					type: "snapshot_chunk",
+					type: "baseline_sync_batch",
 					live_id: "1",
 					epoch: "1",
-					snapshot_attempt: "1",
+					baseline_sync_attempt: "1",
 					index: 0,
 					rows: [
 						{
@@ -118,10 +118,10 @@ describe("Neon Live v1 JSON codec", () => {
 		expect(() =>
 			decodeServerMessage(
 				JSON.stringify({
-					type: "snapshot_chunk",
+					type: "baseline_sync_batch",
 					live_id: "9",
 					epoch: "1",
-					snapshot_attempt: "1",
+					baseline_sync_attempt: "1",
 					index: 0,
 					rows: [
 						{ row_key: ROW_KEY, values: ['"key":{[', "\\"] },
@@ -158,11 +158,11 @@ describe("Neon Live v1 JSON codec", () => {
 			targets: [],
 			changes: [],
 		};
-		const snapshotStart = {
-			type: "snapshot_start",
+		const baselineSyncStart = {
+			type: "baseline_sync_start",
 			live_id: "9",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			mvcc: {
 				xmin: "1",
 				xmax: "18446744073709551615",
@@ -173,7 +173,7 @@ describe("Neon Live v1 JSON codec", () => {
 			decodeServerMessage(JSON.stringify(keyedResults)),
 		).not.toThrow();
 		expect(() =>
-			decodeServerMessage(JSON.stringify(snapshotStart)),
+			decodeServerMessage(JSON.stringify(baselineSyncStart)),
 		).not.toThrow();
 		for (const invalid of [
 			"0",
@@ -183,18 +183,18 @@ describe("Neon Live v1 JSON codec", () => {
 		]) {
 			rejectServerMessage({ ...keyedResults, txids: [invalid] });
 			rejectServerMessage({
-				...snapshotStart,
-				mvcc: { ...snapshotStart.mvcc, xip: [invalid] },
+				...baselineSyncStart,
+				mvcc: { ...baselineSyncStart.mvcc, xip: [invalid] },
 			});
 		}
 	});
 
 	it("requires canonical base64 cells, including zero padding bits", () => {
 		const snapshot = (base64: string) => ({
-			type: "snapshot_chunk",
+			type: "baseline_sync_batch",
 			live_id: "9",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [{ base64 }] }],
 		});
@@ -212,26 +212,26 @@ describe("Neon Live v1 JSON codec", () => {
 
 	it("rejects malformed nested rows, cells, changes, and fields", () => {
 		rejectServerMessage({
-			type: "snapshot_chunk",
+			type: "baseline_sync_batch",
 			live_id: "9",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [], extra: true }],
 		});
 		rejectServerMessage({
-			type: "snapshot_chunk",
+			type: "baseline_sync_batch",
 			live_id: "9",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			index: 0,
 			rows: [{ row_key: "zz", values: [] }],
 		});
 		rejectServerMessage({
-			type: "snapshot_chunk",
+			type: "baseline_sync_batch",
 			live_id: "9",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: [123] }],
 		});

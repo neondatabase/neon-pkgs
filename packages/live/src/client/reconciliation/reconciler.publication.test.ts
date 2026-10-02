@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { SnapshotPublicationReconciler } from "./reconciler.js";
+import { BaselineSyncPublicationReconciler } from "./reconciler.js";
 import {
 	accept,
+	baselineSyncStart,
 	commit,
-	completeEmptySnapshot,
+	completeEmptyBaselineSync,
 	keyedPublication,
 	keyedResults,
 	ROW_A,
 	ROW_B,
 	resetRequired,
-	snapshotStart,
 	subscribed,
 	target,
 	upsert,
@@ -21,7 +21,7 @@ describe("publication reconciliation", () => {
 		const observations: string[] = [];
 		const left = target(observations, "left");
 		const right = target(observations, "right");
-		const reconciler = new SnapshotPublicationReconciler();
+		const reconciler = new BaselineSyncPublicationReconciler();
 		reconciler.add({
 			liveId: "1",
 			epoch: "1",
@@ -36,8 +36,8 @@ describe("publication reconciliation", () => {
 			columnCount: 1,
 			target: right,
 		});
-		completeEmptySnapshot(reconciler, "1");
-		completeEmptySnapshot(reconciler, "2");
+		completeEmptyBaselineSync(reconciler, "1");
+		completeEmptyBaselineSync(reconciler, "2");
 		observations.length = 0;
 
 		accept(reconciler, { type: "open", publication_id: "p" });
@@ -76,7 +76,7 @@ describe("publication reconciliation", () => {
 	it("does not publish an incomplete publication", () => {
 		const state = target();
 		const reconciler = subscribed(state);
-		completeEmptySnapshot(reconciler);
+		completeEmptyBaselineSync(reconciler);
 		state.applyBatch.mockClear();
 		state.publishBatch.mockClear();
 
@@ -93,7 +93,7 @@ describe("publication reconciliation", () => {
 	it("counts an empty keyed publication as sequence progress", () => {
 		const state = target();
 		const reconciler = subscribed(state);
-		completeEmptySnapshot(reconciler);
+		completeEmptyBaselineSync(reconciler);
 		state.publishBatch.mockClear();
 
 		keyedPublication(reconciler, "empty", "1", "1", [], []);
@@ -109,35 +109,35 @@ describe("publication reconciliation", () => {
 	it.each([
 		[
 			"an overlapping open",
-			(reconciler: SnapshotPublicationReconciler) => {
+			(reconciler: BaselineSyncPublicationReconciler) => {
 				accept(reconciler, { type: "open", publication_id: "p" });
 				accept(reconciler, { type: "open", publication_id: "other" });
 			},
 		],
 		[
 			"a body for another publication",
-			(reconciler: SnapshotPublicationReconciler) => {
+			(reconciler: BaselineSyncPublicationReconciler) => {
 				accept(reconciler, { type: "open", publication_id: "p" });
 				accept(reconciler, keyedResults("other", 0, "1", "1", []));
 			},
 		],
 		[
 			"a non-contiguous body index",
-			(reconciler: SnapshotPublicationReconciler) => {
+			(reconciler: BaselineSyncPublicationReconciler) => {
 				accept(reconciler, { type: "open", publication_id: "p" });
 				accept(reconciler, keyedResults("p", 1, "1", "1", []));
 			},
 		],
 		[
 			"a commit for another publication",
-			(reconciler: SnapshotPublicationReconciler) => {
+			(reconciler: BaselineSyncPublicationReconciler) => {
 				accept(reconciler, { type: "open", publication_id: "p" });
 				accept(reconciler, commit("other", 0));
 			},
 		],
 		[
 			"a mismatched body count",
-			(reconciler: SnapshotPublicationReconciler) => {
+			(reconciler: BaselineSyncPublicationReconciler) => {
 				accept(reconciler, { type: "open", publication_id: "p" });
 				accept(reconciler, keyedResults("p", 0, "1", "1", []));
 				accept(reconciler, commit("p", 2));
@@ -204,7 +204,7 @@ describe("publication reconciliation", () => {
 	it("validates every target before publishing a shared batch", () => {
 		const left = target();
 		const right = target();
-		const reconciler = new SnapshotPublicationReconciler();
+		const reconciler = new BaselineSyncPublicationReconciler();
 		reconciler.add({
 			liveId: "9",
 			epoch: "1",
@@ -219,8 +219,8 @@ describe("publication reconciliation", () => {
 			columnCount: 0,
 			target: right,
 		});
-		completeEmptySnapshot(reconciler, "9");
-		completeEmptySnapshot(reconciler, "10");
+		completeEmptyBaselineSync(reconciler, "9");
+		completeEmptyBaselineSync(reconciler, "10");
 		left.applyBatch.mockClear();
 		left.publishBatch.mockClear();
 		right.applyBatch.mockClear();
@@ -249,7 +249,7 @@ describe("publication reconciliation", () => {
 	])("finishes a shared publication when one target is deactivated %s", (position) => {
 		const left = target();
 		const right = target();
-		const reconciler = new SnapshotPublicationReconciler();
+		const reconciler = new BaselineSyncPublicationReconciler();
 		reconciler.add({
 			liveId: "9",
 			epoch: "1",
@@ -264,8 +264,8 @@ describe("publication reconciliation", () => {
 			columnCount: 1,
 			target: right,
 		});
-		completeEmptySnapshot(reconciler, "9");
-		completeEmptySnapshot(reconciler, "10");
+		completeEmptyBaselineSync(reconciler, "9");
+		completeEmptyBaselineSync(reconciler, "10");
 		left.publishBatch.mockClear();
 		right.publishBatch.mockClear();
 
@@ -286,12 +286,12 @@ describe("publication reconciliation", () => {
 		expect(right.publishBatch).toHaveBeenCalledOnce();
 	});
 
-	it("rejects a snapshot interleaved into an open publication", () => {
+	it("rejects a baseline sync interleaved into an open publication", () => {
 		const reconciler = subscribed(target());
 		accept(reconciler, { type: "open", publication_id: "p" });
 
-		expect(() => accept(reconciler, snapshotStart())).toThrow(
-			"snapshot interrupted a publication",
+		expect(() => accept(reconciler, baselineSyncStart())).toThrow(
+			"baseline sync interrupted a publication",
 		);
 	});
 

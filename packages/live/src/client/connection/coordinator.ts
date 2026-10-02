@@ -6,8 +6,8 @@ import {
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
+	BaselineSyncPublicationReconciler,
 	type ReconciliationTarget,
-	SnapshotPublicationReconciler,
 } from "../reconciliation/reconciler.js";
 import { ConnectionHeartbeat, type HeartbeatOptions } from "./heartbeat.js";
 import {
@@ -111,7 +111,7 @@ export class ConnectionCoordinator {
 	private readonly pendingRequests = new Map<string, ManagedSubscription>();
 	private readonly liveSubscriptions = new Map<string, ManagedSubscription>();
 	private readonly detachingLiveIds = new Set<string>();
-	private readonly reconciler = new SnapshotPublicationReconciler();
+	private readonly reconciler = new BaselineSyncPublicationReconciler();
 	private readonly webSocketFactory: WebSocketFactory;
 	private readonly reconnect?: ReconnectBackoff;
 	private readonly heartbeat?: ConnectionHeartbeat;
@@ -356,9 +356,9 @@ export class ConnectionCoordinator {
 				return;
 			case "pong":
 				return;
-			case "snapshot_start":
-			case "snapshot_chunk":
-			case "snapshot_end":
+			case "baseline_sync_start":
+			case "baseline_sync_batch":
+			case "baseline_sync_end":
 			case "open":
 			case "keyed_results":
 			case "reset_required":

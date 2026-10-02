@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe("NeonLiveClient", () => {
-	it("materializes a v1 snapshot using the subscribed result schema", () => {
+	it("materializes a baseline sync using the subscribed result schema", () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
@@ -96,7 +96,7 @@ describe("NeonLiveClient", () => {
 		});
 
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 
 		expect(socket.protocols).toBe("neon.live.v1");
 		expect(socket.sent[0]).toMatchObject({ type: "subscribe" });
@@ -108,7 +108,7 @@ describe("NeonLiveClient", () => {
 		client.close();
 	});
 
-	it("preserves wire order across chunks and replacement resets", () => {
+	it("preserves wire order across batches and replacement resets", () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({
 			url: "ws://live.test/v1",
@@ -118,7 +118,7 @@ describe("NeonLiveClient", () => {
 		subscription.onReset((rows) => resets.push(rows));
 		const socket = connectAndAdmit();
 
-		snapshotRows(socket, [
+		baselineSyncRows(socket, [
 			[
 				{ row_key: ROW_KEY_C, values: ["3", "third"] },
 				{ row_key: ROW_KEY, values: ["1", "first"] },
@@ -145,7 +145,7 @@ describe("NeonLiveClient", () => {
 				{ id: 2, title: "second" },
 			],
 		});
-		snapshotRows(
+		baselineSyncRows(
 			socket,
 			[
 				[{ row_key: ROW_KEY_B, values: ["2", "second replacement"] }],
@@ -207,7 +207,7 @@ describe("NeonLiveClient", () => {
 		});
 
 		const socket = connectAndAdmit();
-		snapshot(socket, "live");
+		baselineSync(socket, "live");
 
 		expect(changes).toHaveLength(1);
 		expect(subscription.getSnapshot()).toMatchObject({
@@ -237,7 +237,7 @@ describe("NeonLiveClient", () => {
 		);
 
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 		publication(
 			socket,
 			[
@@ -275,7 +275,7 @@ describe("NeonLiveClient", () => {
 		});
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 
 		const confirmation = subscription.awaitTxId("00042").then(() => {
 			expect(subscription.getSnapshot()).toMatchObject({
@@ -315,20 +315,20 @@ describe("NeonLiveClient", () => {
 		const atXmax = subscription.awaitTxId("105");
 
 		socket.receive({
-			type: "snapshot_start",
+			type: "baseline_sync_start",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			mvcc: { xmin: "100", xmax: "105", xip: ["103"] },
 		});
 		await Promise.resolve();
 		expect(resolvedBeforeEnd).toBe(false);
 		socket.receive({
-			type: "snapshot_end",
+			type: "baseline_sync_end",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "1",
-			chunk_count: 0,
+			baseline_sync_attempt: "1",
+			batch_count: 0,
 		});
 
 		await expect(beforeXmin).resolves.toBeUndefined();
@@ -365,7 +365,7 @@ describe("NeonLiveClient", () => {
 		});
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 		const confirmation = subscription.awaitTxId("42");
 
 		socket.receive({ type: "open", publication_id: "reset" });
@@ -382,18 +382,18 @@ describe("NeonLiveClient", () => {
 			frontier: { lsn: "0/20" },
 		});
 		socket.receive({
-			type: "snapshot_start",
+			type: "baseline_sync_start",
 			live_id: "41",
 			epoch: "2",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			mvcc: { xmin: "43", xmax: "44", xip: [] },
 		});
 		socket.receive({
-			type: "snapshot_end",
+			type: "baseline_sync_end",
 			live_id: "41",
 			epoch: "2",
-			snapshot_attempt: "1",
-			chunk_count: 0,
+			baseline_sync_attempt: "1",
+			batch_count: 0,
 		});
 
 		await expect(confirmation).resolves.toBeUndefined();
@@ -435,7 +435,7 @@ describe("NeonLiveClient", () => {
 		});
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 
 		await expect(
 			subscription.awaitRows((rows) => rows[0]?.title === "before"),
@@ -493,7 +493,7 @@ describe("NeonLiveClient", () => {
 		});
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 
 		const renewal = subscription.renew(query("replacement"));
 		expect(socket.sent.at(-1)).toEqual({
@@ -518,7 +518,7 @@ describe("NeonLiveClient", () => {
 		const socket = connectAndAdmit();
 		const resets: unknown[] = [];
 		subscription.onReset((rows) => resets.push(rows));
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 		socket.receive({
 			type: "subscription_error",
 			live_id: "41",
@@ -551,7 +551,7 @@ describe("NeonLiveClient", () => {
 		await expect(renewal).resolves.toBeUndefined();
 		expect(subscription.getSnapshot().status).toBe("stale");
 
-		snapshot(socket, "after", "42", "2");
+		baselineSync(socket, "after", "42", "2");
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
@@ -579,15 +579,15 @@ describe("NeonLiveClient", () => {
 		socket.receive({
 			type: "subscription_error",
 			live_id: "41",
-			code: "snapshot_failed",
-			message: "snapshot failed",
+			code: "baseline_sync_failed",
+			message: "baseline sync failed",
 		});
 		expect(subscription.getSnapshot()).toMatchObject({
 			status: "error",
-			error: { code: "snapshot_failed", retryable: false },
+			error: { code: "baseline_sync_failed", retryable: false },
 		});
 		await expect(matchingRows).rejects.toMatchObject({
-			code: "snapshot_failed",
+			code: "baseline_sync_failed",
 			retryable: false,
 		});
 		client.close();
@@ -643,8 +643,8 @@ describe("NeonLiveClient", () => {
 				{ name: "value", type_oid: 25, typmod: -1, codec: "pg_text" },
 			],
 		});
-		emptySnapshot(socket, "41");
-		emptySnapshot(socket, "42");
+		completeEmptyBaselineSync(socket, "41");
+		completeEmptyBaselineSync(socket, "42");
 
 		socket.receive({ type: "open", publication_id: "shared" });
 		socket.receive({
@@ -731,7 +731,7 @@ describe("NeonLiveClient", () => {
 				},
 			],
 		});
-		emptySnapshot(socket, "41");
+		completeEmptyBaselineSync(socket, "41");
 		socket.receive({ type: "open", publication_id: "atomic" });
 		socket.receive({
 			type: "keyed_results",
@@ -785,13 +785,13 @@ function connectAndAdmit(): FakeWebSocket {
 	return socket;
 }
 
-function snapshot(
+function baselineSync(
 	socket: FakeWebSocket,
 	title: string,
 	liveId = "41",
 	epoch = "1",
 ): void {
-	snapshotRows(
+	baselineSyncRows(
 		socket,
 		[[{ row_key: ROW_KEY, values: ["1", title] }]],
 		liveId,
@@ -799,9 +799,9 @@ function snapshot(
 	);
 }
 
-function snapshotRows(
+function baselineSyncRows(
 	socket: FakeWebSocket,
-	chunks: readonly (readonly {
+	batches: readonly (readonly {
 		readonly row_key: string;
 		readonly values: readonly (string | null)[];
 	}[])[],
@@ -809,28 +809,28 @@ function snapshotRows(
 	epoch = "1",
 ): void {
 	socket.receive({
-		type: "snapshot_start",
+		type: "baseline_sync_start",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
+		baseline_sync_attempt: "1",
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
-	for (const [index, rows] of chunks.entries()) {
+	for (const [index, rows] of batches.entries()) {
 		socket.receive({
-			type: "snapshot_chunk",
+			type: "baseline_sync_batch",
 			live_id: liveId,
 			epoch,
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			index,
 			rows,
 		});
 	}
 	socket.receive({
-		type: "snapshot_end",
+		type: "baseline_sync_end",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
-		chunk_count: chunks.length,
+		baseline_sync_attempt: "1",
+		batch_count: batches.length,
 	});
 }
 
@@ -850,24 +850,24 @@ function reset(socket: FakeWebSocket, epoch: string): void {
 	});
 }
 
-function emptySnapshot(
+function completeEmptyBaselineSync(
 	socket: FakeWebSocket,
 	liveId: string,
 	epoch = "1",
 ): void {
 	socket.receive({
-		type: "snapshot_start",
+		type: "baseline_sync_start",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
+		baseline_sync_attempt: "1",
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
 	socket.receive({
-		type: "snapshot_end",
+		type: "baseline_sync_end",
 		live_id: liveId,
 		epoch,
-		snapshot_attempt: "1",
-		chunk_count: 0,
+		baseline_sync_attempt: "1",
+		batch_count: 0,
 	});
 }
 
