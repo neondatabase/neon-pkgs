@@ -11,6 +11,11 @@ export interface ResolvedContext {
 	projectId: string;
 	/** Branch ref — a name (preferred for readability) or an id (`br-…`). */
 	branch: string;
+	/**
+	 * Directory holding the `.neon` that was found, else `cwd`. The project's `neon.ts` and
+	 * `.env.local` live here and nowhere else.
+	 */
+	projectDir: string;
 }
 
 export interface ResolveContextOptions {
@@ -31,7 +36,8 @@ export function resolveContext(
 	options: ResolveContextOptions,
 ): { ok: true; context: ResolvedContext } | { ok: false; missing: string[] } {
 	const env = options.env ?? process.env;
-	const file = findNeonFile(options.cwd);
+	const found = findNeonFile(options.cwd);
+	const file = found?.file;
 
 	const projectId =
 		nonEmpty(options.projectId) ??
@@ -62,7 +68,11 @@ export function resolveContext(
 
 	return {
 		ok: true,
-		context: { projectId, branch },
+		context: {
+			projectId,
+			branch,
+			projectDir: found?.dir ?? resolve(options.cwd),
+		},
 	};
 }
 
@@ -76,7 +86,7 @@ interface NeonFile {
  * Walk up from `cwd` looking for `.neon/project.json` (preferred) or `.neon` (neonctl
  * convention). Stops at the first `.git` directory or the home directory. Read-only.
  */
-function findNeonFile(cwd: string): NeonFile | null {
+function findNeonFile(cwd: string): { file: NeonFile; dir: string } | null {
 	let current = resolve(cwd);
 	const stop = resolve(homedir());
 	let lastSeen: string | null = null;
@@ -85,7 +95,7 @@ function findNeonFile(cwd: string): NeonFile | null {
 		const parsed =
 			readNeonFileAt(resolve(current, ".neon", "project.json")) ??
 			readNeonFileAt(resolve(current, ".neon"));
-		if (parsed) return parsed;
+		if (parsed) return { file: parsed, dir: current };
 
 		if (current === stop) return null;
 		if (existsSync(resolve(current, ".git"))) return null;

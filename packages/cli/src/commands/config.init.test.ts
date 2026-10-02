@@ -14,8 +14,9 @@ import { fileURLToPath } from "node:url";
 import { resolveConfig } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { afterEach, beforeEach, describe, expect, vi } from "vitest";
+import { hasNeonConfigFile } from "../project";
 import { test } from "../test_utils/fixtures";
-import { hasNeonConfigFile, initCmd } from "./config";
+import { initCmd } from "./config";
 
 describe("config init", () => {
 	let workspace: string;

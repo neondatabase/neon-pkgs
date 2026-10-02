@@ -146,6 +146,41 @@ describe("runEnvExport", () => {
 		expect(parsed.DATABASE_URL).toMatch(/^postgresql:\/\//);
 	});
 
+	test("uses the neon.ts next to a parent .neon when run from a sub-package", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			".neon": JSON.stringify({ projectId, branch: "main" }),
+			"neon.ts": policy(),
+			"apps/web/package.json": "{}",
+		});
+
+		const result = await runEnvExport(
+			{ format: "json" },
+			{ cwd: join(root, "apps", "web"), api },
+		);
+
+		expect(result.exitCode, result.stderr).toBe(0);
+	});
+
+	test("never reads a neon.ts above the directory holding .neon", async () => {
+		const { api, projectId } = seededFake();
+		const root = setup({
+			"neon.ts": policy(),
+			"apps/web/.neon": JSON.stringify({ projectId, branch: "main" }),
+		});
+		const web = join(root, "apps", "web");
+
+		const result = await runEnvExport(
+			{ format: "json" },
+			{ cwd: web, api },
+		);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr).toContain(
+			`Could not find a Neon config file in ${web}`,
+		);
+	});
+
 	test("fails with a non-zero exit code when no project/branch can be resolved", async () => {
 		const { api } = seededFake();
 		const root = setup({ "package.json": "{}" });

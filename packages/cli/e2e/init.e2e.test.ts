@@ -207,7 +207,7 @@ describe("e2e — neon init", () => {
 						"init",
 						"-y",
 						"--no-agent-setup",
-						// pnpm refuses to start under an unparsable package.json at any level.
+						// Corepack's pnpm shim fails on an unparsable package.json in any parent.
 						"--package-manager",
 						"npm",
 						"--project-id",

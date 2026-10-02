@@ -8,7 +8,7 @@ import type {
 	Hooks,
 	PushResult,
 } from "@neon/config";
-import { loadConfigFromFile, runHook } from "@neon/config-runtime";
+import { runHook } from "@neon/config-runtime";
 import {
 	type FetchEnvKeysOptions,
 	fetchEnvKeys,
@@ -17,6 +17,7 @@ import {
 
 import type { NeonApiClient } from "../api.js";
 import { log } from "../log.js";
+import { loadProjectConfig } from "../project.js";
 
 /**
  * Load the nearest `neon.ts` for hook discovery, or `undefined` when there is none — or when
@@ -33,7 +34,7 @@ export const loadHookConfig = async (
 	cwd: string,
 ): Promise<Config | undefined> => {
 	try {
-		const { config } = await loadConfigFromFile({ cwd });
+		const { config } = await loadProjectConfig({ cwd });
 		return config;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

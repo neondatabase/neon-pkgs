@@ -19,6 +19,7 @@ import {
 } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
+import { hasNeonConfigFile, projectDir } from "../project.js";
 import type { CommonProps } from "../types.js";
 import {
 	createBranch,
@@ -29,7 +30,7 @@ import { listAllProjectBranches } from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
-import { hasNeonConfigFile, initCmd } from "./config.js";
+import { initCmd } from "./config.js";
 import { autoPullEnvAfterPin } from "./env.js";
 import { REGIONS } from "./projects.js";
 
@@ -50,8 +51,6 @@ export type LinkProps = CommonProps & {
 	envPull: boolean;
 	config?: boolean;
 	cwd?: string;
-	/** Forwarded to the bundled env pull's neon.ts search (`EnvPullProps.configStopAt`). */
-	configStopAt?: string;
 	profile?: string;
 	configDir?: string;
 };
@@ -1439,7 +1438,7 @@ const maybeOfferConfigInit = async (
 	props: LinkProps,
 	summary: HumanSummary,
 ): Promise<void> => {
-	const cwd = props.cwd ?? process.cwd();
+	const cwd = projectDir(props.cwd);
 	if (
 		!shouldOfferConfigInit({
 			hasConfig: hasNeonConfigFile(cwd),

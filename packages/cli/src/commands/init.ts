@@ -25,6 +25,9 @@ export const builder = (yargs: yargs.Argv) =>
 		.usage("$0 init [options]")
 		.option("context-file", {
 			hidden: true,
+			type: "string",
+			// Init sets up the directory it runs in, so a parent's .neon never applies.
+			default: ".neon",
 		})
 		.option("yes", {
 			alias: "y",

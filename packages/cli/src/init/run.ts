@@ -7,12 +7,7 @@ import {
 import { DEFAULT_CLAIMABLE_ORIGIN } from "../claimable/api.js";
 import { readLinkedClaimableCredentials } from "../claimable/state.js";
 import { create as createClaimableProject } from "../commands/claim.js";
-import {
-	ConfigInstallFailed,
-	hasNeonConfigFile,
-	initCmd,
-	neonConfigFilename,
-} from "../commands/config.js";
+import { ConfigInstallFailed, initCmd } from "../commands/config.js";
 import type { EnvPullProps, PullOutcome } from "../commands/env.js";
 import { defaultDir } from "../config.js";
 import {
@@ -35,6 +30,7 @@ import {
 	missingPluginsCommands,
 	pluginsInstallableAgents,
 } from "../plugins/targets.js";
+import { hasNeonConfigFile, neonConfigFilename } from "../project.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -950,7 +946,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				envPull: true,
 				config: false,
 				cwd,
-				configStopAt: cwd,
 				...linkInputs,
 				...(props.configDir ? { configDir: props.configDir } : {}),
 				...(props.profile ? { profile: props.profile } : {}),
@@ -1160,7 +1155,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						...auth,
 						output: props.output,
 						cwd,
-						configStopAt: cwd,
 						projectId: context.projectId,
 						branch,
 					}),

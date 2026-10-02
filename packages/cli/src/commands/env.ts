@@ -59,11 +59,6 @@ export type EnvPullProps = BranchScopeProps & {
 	 */
 	config?: string;
 	/**
-	 * Last directory the implicit neon.ts search checks. `init` passes its cwd so the
-	 * pull never evaluates a neon.ts above the directory it is setting up.
-	 */
-	configStopAt?: string;
-	/**
 	 * CLI config directory. Claimable env resolve looks up the assertion file
 	 * here; `.neon` is identifiers only.
 	 */
@@ -315,7 +310,6 @@ export const pull = async (
 		omitUnsetFunctionEnv: true,
 		...(claimable ? { claimable: true } : {}),
 		...(props.config ? { config: props.config } : {}),
-		...(props.configStopAt ? { configStopAt: props.configStopAt } : {}),
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),

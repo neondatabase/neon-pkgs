@@ -4,10 +4,10 @@ import {
 	type Config,
 	type FunctionBundlerInput,
 	type FunctionDevConfig,
-	loadConfigFromFile,
 	type ResolvedFunctionConfig,
 	resolveConfig,
 } from "@neon/config";
+import { loadProjectConfig } from "../project.js";
 
 /**
  * A function from `neon.ts`, resolved into everything `neon dev` needs to serve it
@@ -148,7 +148,7 @@ type LoadedConfig = { config: Config; configDir: string; configPath: string };
  */
 const loadNeonConfig = async (cwd: string): Promise<LoadedConfig | null> => {
 	try {
-		const { config, resolvedPath } = await loadConfigFromFile({ cwd });
+		const { config, resolvedPath } = await loadProjectConfig({ cwd });
 		return {
 			config,
 			configDir: dirname(resolvedPath),

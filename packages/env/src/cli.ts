@@ -30,7 +30,7 @@ const argv = yargs(hideBin(process.argv))
 				.option("config", {
 					type: "string",
 					describe:
-						"Path to neon.ts (defaults to walking up from cwd)",
+						"Path to neon.ts (defaults to the neon.ts next to .neon, or in cwd without one)",
 				})
 				.option("project-id", {
 					type: "string",
@@ -64,7 +64,7 @@ const argv = yargs(hideBin(process.argv))
 				.option("config", {
 					type: "string",
 					describe:
-						"Path to neon.ts (defaults to walking up from cwd)",
+						"Path to neon.ts (defaults to the neon.ts next to .neon, or in cwd without one)",
 				})
 				.option("project-id", {
 					type: "string",

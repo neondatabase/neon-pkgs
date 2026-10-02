@@ -36,7 +36,11 @@ describe("resolveContext — precedence", () => {
 		});
 		expect(result).toEqual({
 			ok: true,
-			context: { projectId: "proj-opt", branch: "br-opt" },
+			context: {
+				projectId: "proj-opt",
+				branch: "br-opt",
+				projectDir: root,
+			},
 		});
 	});
 
@@ -93,6 +97,7 @@ describe("resolveContext — precedence", () => {
 			context: {
 				projectId: "proj-file",
 				branch: "br-file",
+				projectDir: root,
 			},
 		});
 	});
@@ -109,7 +114,11 @@ describe("resolveContext — precedence", () => {
 		const result = resolveContext({ cwd: root, env: EMPTY_ENV });
 		expect(result).toEqual({
 			ok: true,
-			context: { projectId: "proj-file", branch: "main" },
+			context: {
+				projectId: "proj-file",
+				branch: "main",
+				projectDir: root,
+			},
 		});
 	});
 });
@@ -163,7 +172,25 @@ describe("resolveContext — .neon file discovery", () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			context: { projectId: "p-root", branch: "br-root" },
+			context: {
+				projectId: "p-root",
+				branch: "br-root",
+				projectDir: root,
+			},
+		});
+	});
+
+	test("without a .neon, the project directory is cwd", () => {
+		const root = setup({ "packages/db/package.json": "{}" });
+		const result = resolveContext({
+			cwd: `${root}/packages/db`,
+			projectId: "p-flag",
+			branch: "main",
+			env: EMPTY_ENV,
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			context: { projectDir: `${root}/packages/db` },
 		});
 	});
 

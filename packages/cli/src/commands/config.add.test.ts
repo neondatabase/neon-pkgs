@@ -168,7 +168,8 @@ describe("config add", () => {
 		expect(read("neon.ts")).toBe(original);
 	});
 
-	test("edits the neon.ts found by walking up from a subdirectory", async () => {
+	test("edits the linked project's neon.ts from a subdirectory", async () => {
+		writeFileSync(join(workspace, ".neon"), "{}\n");
 		writeFileSync(join(workspace, "neon.ts"), renderNeonConfig([]));
 		const sub = join(workspace, "apps", "web");
 		mkdirSync(sub, { recursive: true });
@@ -182,6 +183,24 @@ describe("config add", () => {
 		expect(existsSync(join(sub, "neon.ts"))).toBe(false);
 		// The handler sits beside the neon.ts that references it, not beside cwd.
 		expect(existsSync(join(workspace, "functions", "hook.ts"))).toBe(true);
+	});
+
+	test("ignores a parent's neon.ts when no .neon links it", async () => {
+		const parentConfig = renderNeonConfig([]);
+		writeFileSync(join(workspace, "neon.ts"), parentConfig);
+		const sub = join(workspace, "apps", "web");
+		mkdirSync(sub, { recursive: true });
+
+		await addCmd({
+			cwd: sub,
+			install: false,
+			target: { kind: "service", service: "ai-gateway" },
+		});
+
+		expect(read("neon.ts")).toBe(parentConfig);
+		expect(readFileSync(join(sub, "neon.ts"), "utf8")).toContain(
+			"aiGateway: true",
+		);
 	});
 
 	test("--config edits the named file", async () => {

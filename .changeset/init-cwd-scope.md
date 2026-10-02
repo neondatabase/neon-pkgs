@@ -1,5 +1,6 @@
 ---
-"neon": patch
+"neon": minor
+"@neon/env": minor
 ---
 
-`neon init` keeps setup inside the current directory: it no longer evaluates a `neon.ts` from a parent directory while pulling env vars, and `neon init` / `neon config init` create a `package.json` before installing so `@neon/config` and `@neon/env` never land in a parent project's `package.json`.
+`neon.ts` and the default `.env` / `.env.local` are now read only from the project directory: the directory holding the nearest `.neon`, or the current directory when there is none. A `neon.ts` in a parent directory no longer applies; pass `--config <path>` to use one. `neon init` always sets up the current directory (its own `.neon`, `neon.ts`, and `package.json`), so a parent's `.neon`, `neon.ts`, or `package.json` never affects it.

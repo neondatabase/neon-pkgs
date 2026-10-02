@@ -3,7 +3,6 @@ import {
 	createNeonApiFromOptions,
 	ErrorCode,
 	isPlatformError,
-	loadConfigFromFile,
 	type NeonApi,
 	type NeonBucketSnapshot,
 	type NeonDataApiSnapshot,
@@ -29,6 +28,7 @@ import {
 } from "../env_services.js";
 import { log } from "../log.js";
 import type { NeonService } from "../neon_services.js";
+import { loadProjectConfig } from "../project.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	formatInstallCommand,
@@ -82,8 +82,6 @@ export type DevEnvContext = {
 	 * uses the same file for registration and the bundled env pull.
 	 */
 	config?: string;
-	/** Last directory the upward neon.ts search checks (inclusive). Defaults to the loader's. */
-	configStopAt?: string;
 	/**
 	 * This request is talking to Claimable Neon. Skip credential minting.
 	 * neon.ts is still the source of truth when it only declares Postgres, Auth,
@@ -948,10 +946,9 @@ const looksLikeMissingDependency = (err: unknown): boolean => {
 
 const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
-		const { config } = await loadConfigFromFile({
+		const { config } = await loadProjectConfig({
 			cwd: ctx.cwd,
 			...(ctx.config ? { path: ctx.config } : {}),
-			...(ctx.configStopAt ? { stopAt: ctx.configStopAt } : {}),
 			...(ctx.omitUnsetFunctionEnv
 				? { unsetFunctionEnv: "omit" as const }
 				: {}),
