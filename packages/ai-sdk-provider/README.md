@@ -128,7 +128,7 @@ const { embeddings } = await embedMany({
 });
 ```
 
-Both models return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` ignores it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NEON_EMBEDDING_MODEL_IDS` lists the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
+Both models return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` ignores it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NeonEmbeddingModelId` autocompletes the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
 
 ## Image generation
 

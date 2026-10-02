@@ -11,7 +11,8 @@ import {
 	streamText as streamTextV7,
 } from "ai-v7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createNeon, NEON_EMBEDDING_MODEL_IDS, neon } from "../src/index.js";
+import { createNeon, neon } from "../src/index.js";
+import { NEON_EMBEDDING_MODEL_IDS } from "../src/lib/neon-embedding-options.js";
 import { assertGatewayEnv, withRateLimitRetry } from "./helpers.js";
 
 const PROMPT = "Reply with exactly the single word pong.";
