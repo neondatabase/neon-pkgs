@@ -98,4 +98,28 @@ describe("psql", () => {
 			},
 		);
 	});
+
+	test("psql keeps the generic line when -- arguments pick another target", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(
+			[
+				"psql",
+				"test_branch",
+				"--project-id",
+				"test",
+				"--database-name",
+				"test_db",
+				"--role-name",
+				"test_role",
+				"--",
+				"-d",
+				"other_db",
+			],
+			{ snapshot: false },
+		);
+		expect(stderr).toMatch(
+			/^INFO: Connecting to the database; launching psql\.\.\.$/m,
+		);
+	});
 });

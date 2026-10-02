@@ -90,7 +90,7 @@ const execNative = async (
 	connection_uri: string,
 	args: string[],
 ): Promise<number> => {
-	log.info(`${connectionSummary(connection_uri)}; launching psql...`);
+	log.info(`${connectionSummary(connection_uri, args)}; launching psql...`);
 	const child = spawn(binary, [connection_uri, ...args], {
 		stdio: "inherit",
 	});
@@ -116,7 +116,7 @@ const execTs = async (
 	args: string[],
 ): Promise<number> => {
 	log.info(
-		`${connectionSummary(connection_uri)}; launching embedded psql (TypeScript)...`,
+		`${connectionSummary(connection_uri, args)}; launching embedded psql (TypeScript)...`,
 	);
 	const { runPsql } = await import("../psql/index.js");
 	return runPsql([connection_uri, ...args], {
@@ -128,7 +128,16 @@ const execTs = async (
 
 const GENERIC_CONNECTING = "Connecting to the database";
 
-export const connectionSummary = (connection_uri: string): string => {
+// psql arguments after `--` that can point the session somewhere other than the URI.
+const CONNECTION_OVERRIDE = /^(-[dhpU]|--(dbname|host|port|username)(=|$))/;
+
+export const connectionSummary = (
+	connection_uri: string,
+	args: string[] = [],
+): string => {
+	if (args.some((arg) => CONNECTION_OVERRIDE.test(arg))) {
+		return GENERIC_CONNECTING;
+	}
 	try {
 		const url = new URL(connection_uri);
 		const part = (value: string) =>
