@@ -17,7 +17,11 @@ interface QueryRefreshControllerOptions<Row> {
 	readonly onSubscriptionRenewed?: () => void;
 	/** Called when invalid replacement data permanently stops automatic refresh. */
 	readonly onRefreshExhausted: (error: unknown) => void;
-	/** Subscription managed by this controller, when already available. */
+	/**
+	 * Subscription whose diagnostic context receives refresh lifecycle events.
+	 * Renewal behavior remains defined by `renewSubscription`, which also
+	 * supports integrations that construct the controller before subscribing.
+	 */
 	readonly subscription?: RawLiveQuerySubscription<Row>;
 }
 
