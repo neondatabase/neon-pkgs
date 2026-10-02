@@ -132,7 +132,7 @@ exports[`projects > get shows a fixed compute size and zero retention 1`] = `
 "Project
 Name               fixed
 Id                 proj-fixed-cu
-Region             aws-us-east-2
+Region Id          aws-us-east-2
 Postgres Version   18
 Default Compute    2 CU
 History Retention  0 seconds
@@ -145,7 +145,7 @@ exports[`projects > get shows project details in the table 1`] = `
 "Project
 Name               application
 Id                 proj-details
-Region             aws-us-east-2
+Region Id          aws-us-east-2
 Postgres Version   17
 Organization       org-2
 Default Compute    0.25-2 CU

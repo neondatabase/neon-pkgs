@@ -559,7 +559,7 @@ const get = async (props: CommonProps & IdOrNameProps) => {
 const PROJECT_DETAIL_FIELDS = [
 	"name",
 	"id",
-	"region",
+	"region_id",
 	"postgres_version",
 	"organization",
 	"default_compute",
@@ -576,7 +576,7 @@ const projectDetails = (
 > => ({
 	name: project.name,
 	id: project.id,
-	region: project.region_id,
+	region_id: project.region_id,
 	postgres_version: project.pg_version,
 	organization: project.org_id,
 	default_compute: formatComputeRange(project.default_endpoint_settings),
