@@ -1438,7 +1438,10 @@ const maybeOfferConfigInit = async (
 	props: LinkProps,
 	summary: HumanSummary,
 ): Promise<void> => {
-	const cwd = projectDir(props.cwd);
+	const cwd = projectDir({
+		...(props.cwd ? { cwd: props.cwd } : {}),
+		contextFile: props.contextFile,
+	});
 	if (
 		!shouldOfferConfigInit({
 			hasConfig: hasNeonConfigFile(cwd),

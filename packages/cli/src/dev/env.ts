@@ -37,6 +37,8 @@ import {
 
 export type DevEnvContext = {
 	cwd: string;
+	/** The effective `--context-file`; its directory is the project directory. */
+	contextFile?: string;
 	projectId?: string;
 	branchId?: string;
 	apiKey?: string;
@@ -948,6 +950,7 @@ const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
 		const { config } = await loadProjectConfig({
 			cwd: ctx.cwd,
+			...(ctx.contextFile ? { contextFile: ctx.contextFile } : {}),
 			...(ctx.config ? { path: ctx.config } : {}),
 			...(ctx.omitUnsetFunctionEnv
 				? { unsetFunctionEnv: "omit" as const }

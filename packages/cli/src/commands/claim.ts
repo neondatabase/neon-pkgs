@@ -128,8 +128,10 @@ export const claimableCapabilities = (
 
 const loadCreatePolicy = async (
 	explicitPath: string | undefined,
+	contextFile: string | undefined,
 ): Promise<{ path: string; config: Config } | undefined> => {
-	const path = explicitPath ?? projectConfigPath();
+	const path =
+		explicitPath ?? projectConfigPath(contextFile ? { contextFile } : {});
 	if (!path) return undefined;
 	const { config } = await loadConfigFromFile({ path });
 	return { path, config };
@@ -240,6 +242,9 @@ export const builder = (argv: yargs.Argv) =>
 					: [];
 				const policy = await loadCreatePolicy(
 					typeof args.config === "string" ? args.config : undefined,
+					typeof args.contextFile === "string"
+						? args.contextFile
+						: undefined,
 				);
 				const configuredServices = policy
 					? declaredNeonServices(policy.config)
@@ -408,7 +413,10 @@ export const create = async (props: CreateProps): Promise<void> => {
 	const contextFileExisted = existsSync(props.contextFile);
 	const cwd = props.cwd ?? process.cwd();
 	const envFile = props.envPull
-		? resolveEnvFilePath(cwd, props.file)
+		? resolveEnvFilePath(
+				{ cwd, contextFile: props.contextFile },
+				props.file,
+			)
 		: undefined;
 	const envFileExisted = envFile ? existsSync(envFile) : false;
 	const previousEnv =

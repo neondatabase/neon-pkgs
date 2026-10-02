@@ -160,23 +160,23 @@ describe("resolveEnvFilePath", () => {
 	});
 
 	it("uses an explicit --file when given", () => {
-		expect(resolveEnvFilePath(cwd, ".env.preview")).toBe(
+		expect(resolveEnvFilePath({ cwd: cwd }, ".env.preview")).toBe(
 			join(cwd, ".env.preview"),
 		);
 	});
 
 	it("keeps an absolute --file instead of joining it onto cwd", () => {
 		const absolute = join(tmpdir(), "neonctl-elsewhere", ".env.prod");
-		expect(resolveEnvFilePath(cwd, absolute)).toBe(absolute);
+		expect(resolveEnvFilePath({ cwd: cwd }, absolute)).toBe(absolute);
 	});
 
 	it("defaults to .env.local when no .env exists", () => {
-		expect(resolveEnvFilePath(cwd)).toBe(join(cwd, ".env.local"));
+		expect(resolveEnvFilePath({ cwd: cwd })).toBe(join(cwd, ".env.local"));
 	});
 
 	it("uses an existing .env when present (vercel-style)", () => {
 		writeFileSync(join(cwd, ".env"), "EXISTING=1\n");
-		expect(resolveEnvFilePath(cwd)).toBe(join(cwd, ".env"));
+		expect(resolveEnvFilePath({ cwd: cwd })).toBe(join(cwd, ".env"));
 	});
 });
 

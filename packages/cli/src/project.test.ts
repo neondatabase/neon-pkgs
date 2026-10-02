@@ -30,7 +30,7 @@ describe("project directory", () => {
 			'throw new Error("parent neon.ts loaded");\n',
 		);
 
-		expect(projectDir(web)).toBe(web);
+		expect(projectDir({ cwd: web })).toBe(web);
 		await expect(loadProjectConfig({ cwd: web })).rejects.toThrow(
 			`Could not find a Neon config file in ${web}.`,
 		);
@@ -40,7 +40,7 @@ describe("project directory", () => {
 		writeFileSync(join(root, ".neon"), "{}\n");
 		writeFileSync(join(root, "neon.ts"), POLICY);
 
-		expect(projectDir(web)).toBe(root);
+		expect(projectDir({ cwd: web })).toBe(root);
 		const { resolvedPath } = await loadProjectConfig({ cwd: web });
 		expect(resolvedPath).toBe(join(root, "neon.ts"));
 	});
@@ -52,6 +52,19 @@ describe("project directory", () => {
 		await expect(loadProjectConfig({ cwd: web })).rejects.toThrow(
 			`Could not find a Neon config file in ${web}.`,
 		);
+	});
+
+	test("follows an explicit --context-file over the nearest .neon", async () => {
+		writeFileSync(join(root, ".neon"), "{}\n");
+		writeFileSync(join(root, "neon.ts"), POLICY);
+		writeFileSync(join(web, "selected.json"), "{}\n");
+		writeFileSync(join(web, "neon.ts"), POLICY);
+
+		const location = { cwd: web, contextFile: "selected.json" };
+		expect(projectDir(location)).toBe(web);
+		const { resolvedPath } = await loadProjectConfig(location);
+		expect(resolvedPath).toBe(join(web, "neon.ts"));
+		expect(resolveEnvFilePath(location)).toBe(join(web, ".env.local"));
 	});
 
 	test("an explicit path wins over the project's neon.ts", async () => {
@@ -67,9 +80,11 @@ describe("project directory", () => {
 	test("holds the default .env.local; an explicit --file stays relative to cwd", () => {
 		writeFileSync(join(root, ".neon"), "{}\n");
 
-		expect(resolveEnvFilePath(web)).toBe(join(root, ".env.local"));
+		expect(resolveEnvFilePath({ cwd: web })).toBe(join(root, ".env.local"));
 		writeFileSync(join(root, ".env"), "");
-		expect(resolveEnvFilePath(web)).toBe(join(root, ".env"));
-		expect(resolveEnvFilePath(web, ".env.dev")).toBe(join(web, ".env.dev"));
+		expect(resolveEnvFilePath({ cwd: web })).toBe(join(root, ".env"));
+		expect(resolveEnvFilePath({ cwd: web }, ".env.dev")).toBe(
+			join(web, ".env.dev"),
+		);
 	});
 });

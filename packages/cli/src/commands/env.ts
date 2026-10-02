@@ -35,7 +35,7 @@ import { getCliName } from "../utils/cli_name.js";
 import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
 
 export type EnvPullProps = BranchScopeProps & {
-	/** Target dotenv file. Defaults to an existing `.env`, else `.env.local`. */
+	/** Target dotenv file, relative to cwd. Defaults to the project directory's `.env`, else `.env.local`. */
 	file?: string;
 	/** Working directory to resolve neon.ts / write the .env file in. Defaults to cwd (tests). */
 	cwd?: string;
@@ -93,9 +93,10 @@ export const builder = (argv: yargs.Argv) =>
 					.options({
 						file: {
 							describe:
-								"Target .env file to write. Defaults to an existing .env, " +
-								"otherwise .env.local. Only Neon variables are updated; other " +
-								"lines are preserved.",
+								"Target .env file to write, relative to cwd. Defaults to an existing " +
+								".env, otherwise .env.local, in the project directory (next to " +
+								".neon, or cwd without one). Only Neon variables are updated; " +
+								"other lines are preserved.",
 							type: "string",
 						},
 						service: servicesOption({
@@ -126,8 +127,9 @@ export const builder = (argv: yargs.Argv) =>
 							"",
 							"What gets pulled, in precedence order:",
 							"  1. --service / --env, when given — their union, ignoring neon.ts.",
-							"  2. neon.ts, when this directory has one — including derived function",
-							"     URLs (the function does not have to be deployed).",
+							"  2. neon.ts, when the project directory (next to .neon, or cwd",
+							"     without one) has one — including derived function URLs (the",
+							"     function does not have to be deployed).",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
 							"     which pulls the default AI Gateway credential.",
 							"",
@@ -292,7 +294,8 @@ export const pull = async (
 	// source. This lets `fetchEnv` reuse secrets that are already on disk — Neon Auth
 	// keys and the platform default (or minted fallback) credential secrets — instead of
 	// revealing or minting on every pull.
-	const targetPath = resolveEnvFilePath(cwd, props.file);
+	const location = { cwd, contextFile: props.contextFile };
+	const targetPath = resolveEnvFilePath(location, props.file);
 	const fileExisted = existsSync(targetPath);
 	const existingEnv = fileExisted ? readEnvFile(targetPath) : {};
 
@@ -300,7 +303,7 @@ export const pull = async (
 	// pullConfig -> fetchEnv). Unlike dev, an unresolved context or failure is surfaced —
 	// `env pull` is an explicit action, so it should error rather than write nothing.
 	const { vars, credential, skipped } = await resolveNeonEnvVars({
-		cwd,
+		...location,
 		projectId: props.projectId,
 		branchId,
 		env: { ...process.env, ...existingEnv },

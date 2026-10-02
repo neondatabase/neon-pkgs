@@ -290,8 +290,10 @@ const missingDependencies = (cwd: string): string[] => {
 };
 
 export type ConfigInitProps = {
-	/** Directory to scaffold into / resolve package.json from. Defaults to cwd. */
+	/** Directory to scaffold into / resolve package.json from. Defaults to the project directory. */
 	cwd?: string;
+	/** The effective `--context-file`; its directory is the default for {@link ConfigInitProps.cwd}. */
+	contextFile?: string;
 	/**
 	 * Install the missing config packages. On by default; `--no-install` just
 	 * prints the command to run by hand.
@@ -494,7 +496,9 @@ const ensureConfigPackages = async (
  * Local-only unless `--from-branch` is set (see {@link isConfigInit}).
  */
 export const initCmd = async (props: ConfigInitProps): Promise<void> => {
-	const cwd = props.cwd ?? projectDir();
+	const cwd =
+		props.cwd ??
+		projectDir(props.contextFile ? { contextFile: props.contextFile } : {});
 
 	// 1. Scaffold neon.ts unless the project already has a Neon config file. Resolving the
 	// services (which may prompt) happens only when there is something to write — asking
@@ -562,6 +566,8 @@ export type ConfigAddProps = {
 	target: ConfigAddTarget;
 	/** Resolves the project (see `projectDir`) whose neon.ts is edited or created. Defaults to cwd. */
 	cwd?: string;
+	/** The effective `--context-file`; its directory is the project directory. */
+	contextFile?: string;
 	/** Edit this file instead of the project's neon.ts. */
 	config?: string;
 	/** Only used when `config add` has to create neon.ts; see {@link ConfigInitProps}. */
@@ -674,6 +680,10 @@ const planAdd = (
  */
 export const addCmd = async (props: ConfigAddProps): Promise<void> => {
 	const cwd = props.cwd ?? process.cwd();
+	const location = {
+		cwd,
+		...(props.contextFile ? { contextFile: props.contextFile } : {}),
+	};
 	let existing: string | undefined;
 	if (props.config) {
 		existing = resolve(cwd, props.config);
@@ -681,9 +691,9 @@ export const addCmd = async (props: ConfigAddProps): Promise<void> => {
 			throw new Error(`--config ${props.config} does not exist.`);
 		}
 	} else {
-		existing = projectConfigPath(cwd);
+		existing = projectConfigPath(location);
 	}
-	const configPath = existing ?? join(projectDir(cwd), "neon.ts");
+	const configPath = existing ?? join(projectDir(location), "neon.ts");
 	const shown = (path: string) => relative(cwd, path) || path;
 
 	const plan = planAdd(props.target, configPath, props.config);
@@ -774,12 +784,15 @@ const addSharedOptions = (yargs: yargs.Argv) =>
 
 /** The `config add` props for a sub-command's parsed flags. */
 const addProps = (
-	args: { config?: string; install: boolean },
+	args: { config?: string; install: boolean; contextFile?: string },
 	target: ConfigAddTarget,
 ): ConfigAddProps => ({
 	target,
 	install: args.install,
 	...(args.config !== undefined ? { config: args.config } : {}),
+	...(args.contextFile !== undefined
+		? { contextFile: args.contextFile }
+		: {}),
 });
 
 export const command = "config";
@@ -1072,6 +1085,7 @@ const loadEnvFileIfGiven = (env?: string): void => {
 const loadConfig = async (props: ConfigProps): Promise<Config> => {
 	loadEnvFileIfGiven(props.env);
 	const { config } = await loadProjectConfig({
+		contextFile: props.contextFile,
 		...(props.config ? { path: props.config } : {}),
 	});
 	return config;
@@ -1546,6 +1560,8 @@ export const applyPolicyOnCreate = async (props: {
 	runtimeApi?: NeonApi;
 	/** Directory the project (`neon.ts`) is resolved from. Defaults to the process cwd. */
 	cwd?: string;
+	/** The effective `--context-file`; its directory is the project directory. */
+	contextFile?: string;
 	/** Global `--color` flag; `false` forces the plain-text diff. */
 	color?: boolean;
 	env?: string;
@@ -1555,6 +1571,7 @@ export const applyPolicyOnCreate = async (props: {
 	try {
 		({ config } = await loadProjectConfig({
 			...(props.cwd ? { cwd: props.cwd } : {}),
+			...(props.contextFile ? { contextFile: props.contextFile } : {}),
 		}));
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -1667,6 +1684,8 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 	runtimeApi?: NeonApi;
 	/** Directory the project (`neon.ts`) is resolved from. Defaults to the process cwd. */
 	cwd?: string;
+	/** The effective `--context-file`; its directory is the project directory. */
+	contextFile?: string;
 	/** Global `--color` flag; `false` forces the plain-text diff. */
 	color?: boolean;
 	env?: string;
@@ -1676,6 +1695,7 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 	try {
 		({ config } = await loadProjectConfig({
 			...(props.cwd ? { cwd: props.cwd } : {}),
+			...(props.contextFile ? { contextFile: props.contextFile } : {}),
 		}));
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

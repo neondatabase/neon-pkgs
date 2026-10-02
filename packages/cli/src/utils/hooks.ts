@@ -32,9 +32,13 @@ import { loadProjectConfig } from "../project.js";
  */
 export const loadHookConfig = async (
 	cwd: string,
+	contextFile?: string,
 ): Promise<Config | undefined> => {
 	try {
-		const { config } = await loadProjectConfig({ cwd });
+		const { config } = await loadProjectConfig({
+			cwd,
+			...(contextFile ? { contextFile } : {}),
+		});
 		return config;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

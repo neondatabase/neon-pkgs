@@ -55,9 +55,11 @@ describe("claimable neon.ts discovery", () => {
 		const nested = join(root, "packages", "app");
 		mkdirSync(nested, { recursive: true });
 
-		expect(projectConfigPath(nested)).toBeUndefined();
+		expect(projectConfigPath({ cwd: nested })).toBeUndefined();
 		writeFileSync(join(nested, "neon.ts"), "export default {};");
-		expect(projectConfigPath(nested)).toBe(join(nested, "neon.ts"));
+		expect(projectConfigPath({ cwd: nested })).toBe(
+			join(nested, "neon.ts"),
+		);
 	});
 });
 

@@ -53,8 +53,9 @@ export type ResolvedConfigFunctions = {
 export const resolveFunctionsFromConfig = async (
 	cwd: string,
 	branchName?: string,
+	contextFile?: string,
 ): Promise<ResolvedConfigFunctions | null> => {
-	const loaded = await loadNeonConfig(cwd);
+	const loaded = await loadNeonConfig(cwd, contextFile);
 	if (!loaded) return null;
 
 	const { config, configDir, configPath } = loaded;
@@ -85,8 +86,9 @@ export const resolveFunctionsFromConfig = async (
 export const findConfigFunctionBySource = async (
 	cwd: string,
 	source: string,
+	contextFile?: string,
 ): Promise<PlannedFunction | undefined> => {
-	const loaded = await loadNeonConfig(cwd);
+	const loaded = await loadNeonConfig(cwd, contextFile);
 	if (!loaded) return undefined;
 
 	const resolved = resolveConfig(loaded.config, {
@@ -146,9 +148,15 @@ type LoadedConfig = { config: Config; configDir: string; configPath: string };
  * to resolve each function's relative `source`). Returns `null` when no config file is
  * found; surfaces real load errors (e.g. a syntax error).
  */
-const loadNeonConfig = async (cwd: string): Promise<LoadedConfig | null> => {
+const loadNeonConfig = async (
+	cwd: string,
+	contextFile: string | undefined,
+): Promise<LoadedConfig | null> => {
 	try {
-		const { config, resolvedPath } = await loadProjectConfig({ cwd });
+		const { config, resolvedPath } = await loadProjectConfig({
+			cwd,
+			...(contextFile ? { contextFile } : {}),
+		});
 		return {
 			config,
 			configDir: dirname(resolvedPath),

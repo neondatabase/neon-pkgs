@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { projectDir } from "./project.js";
+import { type ProjectLocation, projectDir } from "./project.js";
 
 /**
  * Default dotenv file `env pull` writes to: `.env` when one already exists in the project
@@ -8,11 +8,14 @@ import { projectDir } from "./project.js";
  * `vercel env pull` convention. An explicit `--file` always wins over this and is
  * relative to `cwd`.
  */
-export const resolveEnvFilePath = (cwd: string, file?: string): string => {
+export const resolveEnvFilePath = (
+	location: ProjectLocation & { cwd: string },
+	file?: string,
+): string => {
 	// path.join concatenates a later absolute segment onto cwd, so `--file /abs/path`
 	// would write under the working directory. resolve() keeps an absolute path as-is.
-	if (file) return resolve(cwd, file);
-	const dir = projectDir(cwd);
+	if (file) return resolve(location.cwd, file);
+	const dir = projectDir(location);
 	if (existsSync(join(dir, ".env"))) return join(dir, ".env");
 	return join(dir, ".env.local");
 };

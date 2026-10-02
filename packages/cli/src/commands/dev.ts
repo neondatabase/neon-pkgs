@@ -123,9 +123,13 @@ export const devEnvContext = (
 	branchId: string | undefined,
 	cwd: string,
 ) => {
-	const envFile = resolveEnvFilePath(cwd);
-	return {
+	const location = {
 		cwd,
+		...(props.contextFile ? { contextFile: props.contextFile } : {}),
+	};
+	const envFile = resolveEnvFilePath(location);
+	return {
+		...location,
 		implyAiGateway: true,
 		env: {
 			...process.env,
@@ -205,7 +209,11 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
 	reportDevCredential(credential);
 
-	const match = await findConfigFunctionBySource(process.cwd(), source);
+	const match = await findConfigFunctionBySource(
+		process.cwd(),
+		source,
+		props.contextFile,
+	);
 	const { overlay, port } = await sourceFunctionUrlOverlay(match, props.port);
 
 	const unit: ServedUnit = {
@@ -230,7 +238,11 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
  */
 const runFromConfig = async (props: DevProps): Promise<void> => {
 	const branchId = await resolveBranchId(props);
-	const resolved = await resolveFunctionsFromConfig(process.cwd());
+	const resolved = await resolveFunctionsFromConfig(
+		process.cwd(),
+		undefined,
+		props.contextFile,
+	);
 
 	if (resolved === null) {
 		throw new Error(
@@ -264,7 +276,11 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 	// functions without restarting the whole set. searchBase starts pickFreePort above
 	// ports live units are already serving.
 	const replan: Replan = async (searchBase, keepPorts) => {
-		const re = await resolveFunctionsFromConfig(process.cwd());
+		const re = await resolveFunctionsFromConfig(
+			process.cwd(),
+			undefined,
+			props.contextFile,
+		);
 		if (re === null) return null;
 		return planFunctionsToUnits(
 			re.functions,
