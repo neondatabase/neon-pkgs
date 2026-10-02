@@ -22,7 +22,7 @@ export interface ReconciliationTarget {
 	publishBatch(batch: ReconciledBatch): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
 	caughtUp(): void;
-	/** Leave `live` while the proxy obtains a replacement snapshot. */
+	/** Leave `live` while the proxy obtains a replacement baseline. */
 	resetRequired(): void;
 	/** Fail only this subscription when decoding its values fails. */
 	decodeFailed(error: unknown): void;
@@ -37,24 +37,24 @@ export interface AddReconciliationTarget {
 }
 
 export interface ReconciliationLimits {
-	/** Bytes retained while assembling one snapshot. */
-	readonly maxSnapshotBytes: number;
-	/** Bytes retained by one publication or all post-snapshot backlogs. */
+	/** Bytes retained while assembling one baseline sync. */
+	readonly maxBaselineSyncBytes: number;
+	/** Bytes retained by one publication or all post-baseline-sync backlogs. */
 	readonly maxPublicationBytes: number;
 }
 
 const DEFAULT_STAGING_BYTES = 16 * 1024 * 1024;
 
-interface SnapshotVersion {
+interface BaselineSyncVersion {
 	readonly epoch: bigint;
 	readonly attempt: bigint;
 }
 
-interface PendingSnapshot {
-	readonly version: SnapshotVersion;
+interface PendingBaselineSync {
+	readonly version: BaselineSyncVersion;
 	readonly mvcc: MvccSnapshot;
 	bytes: number;
-	nextChunk: number;
+	nextBatch: number;
 	rows: WireRow[];
 	rowKeys: Set<string>;
 }
@@ -70,8 +70,8 @@ interface TargetState {
 	active: boolean;
 	epoch: bigint;
 	nextSequence: bigint;
-	latestSnapshot?: SnapshotVersion;
-	snapshot?: PendingSnapshot;
+	latestBaselineSync?: BaselineSyncVersion;
+	baselineSync?: PendingBaselineSync;
 	backlog: BufferedBatch[];
 	backlogBytes: number;
 	live: boolean;
@@ -101,9 +101,9 @@ type ReconciliationMessage = Extract<
 	ServerMessage,
 	{
 		type:
-			| "snapshot_start"
-			| "snapshot_chunk"
-			| "snapshot_end"
+			| "baseline_sync_start"
+			| "baseline_sync_batch"
+			| "baseline_sync_end"
 			| "open"
 			| "keyed_results"
 			| "reset_required"
@@ -112,22 +112,22 @@ type ReconciliationMessage = Extract<
 >;
 
 /**
- * Reassembles independent snapshots and atomic publications for one socket.
+ * Reassembles independent baseline syncs and atomic publications for one socket.
  *
  * This class owns ordering and visibility only. Connection admission, row
  * decoding, materialization, and application callbacks stay outside it.
  */
-export class SnapshotPublicationReconciler {
+export class BaselineSyncPublicationReconciler {
 	private readonly targets = new Map<string, TargetState>();
-	private readonly maxSnapshotBytes: number;
+	private readonly maxBaselineSyncBytes: number;
 	private readonly maxPublicationBytes: number;
 	private backlogBytes = 0;
 	private publication?: PendingPublication;
 
 	constructor(limits: Partial<ReconciliationLimits> = {}) {
-		this.maxSnapshotBytes = positiveLimit(
-			limits.maxSnapshotBytes ?? DEFAULT_STAGING_BYTES,
-			"maxSnapshotBytes",
+		this.maxBaselineSyncBytes = positiveLimit(
+			limits.maxBaselineSyncBytes ?? DEFAULT_STAGING_BYTES,
+			"maxBaselineSyncBytes",
 		);
 		this.maxPublicationBytes = positiveLimit(
 			limits.maxPublicationBytes ?? DEFAULT_STAGING_BYTES,
@@ -139,7 +139,7 @@ export class SnapshotPublicationReconciler {
 	get stagingBytes(): number {
 		let bytes = this.backlogBytes + (this.publication?.bytes ?? 0);
 		for (const state of this.targets.values()) {
-			bytes += state.snapshot?.bytes ?? 0;
+			bytes += state.baselineSync?.bytes ?? 0;
 		}
 		return bytes;
 	}
@@ -168,7 +168,7 @@ export class SnapshotPublicationReconciler {
 		const state = this.target(liveId);
 		if (!state.active) return;
 		state.active = false;
-		state.snapshot = undefined;
+		state.baselineSync = undefined;
 		this.releaseBacklog(state);
 		state.live = false;
 		this.publication?.batches.delete(liveId);
@@ -194,21 +194,21 @@ export class SnapshotPublicationReconciler {
 		const bytes = messageBytes(byteLength);
 		if (
 			this.publication &&
-			(message.type === "snapshot_start" ||
-				message.type === "snapshot_chunk" ||
-				message.type === "snapshot_end")
+			(message.type === "baseline_sync_start" ||
+				message.type === "baseline_sync_batch" ||
+				message.type === "baseline_sync_end")
 		) {
-			throw new ProtocolError("snapshot interrupted a publication");
+			throw new ProtocolError("baseline sync interrupted a publication");
 		}
 		switch (message.type) {
-			case "snapshot_start":
-				this.snapshotStart(message, bytes);
+			case "baseline_sync_start":
+				this.baselineSyncStart(message, bytes);
 				return;
-			case "snapshot_chunk":
-				this.snapshotChunk(message, bytes);
+			case "baseline_sync_batch":
+				this.baselineSyncBatch(message, bytes);
 				return;
-			case "snapshot_end":
-				this.snapshotEnd(message, bytes);
+			case "baseline_sync_end":
+				this.baselineSyncEnd(message, bytes);
 				return;
 			case "open":
 				this.publicationOpen(message.publication_id, bytes);
@@ -229,116 +229,122 @@ export class SnapshotPublicationReconciler {
 		}
 	}
 
-	private snapshotStart(
-		message: Extract<ReconciliationMessage, { type: "snapshot_start" }>,
+	private baselineSyncStart(
+		message: Extract<
+			ReconciliationMessage,
+			{ type: "baseline_sync_start" }
+		>,
 		bytes: number,
 	): void {
 		const state = this.target(message.live_id);
 		if (!state.active) return;
-		const version = snapshotVersion(
+		const version = baselineSyncVersion(
 			message.epoch,
-			message.snapshot_attempt,
+			message.baseline_sync_attempt,
 		);
 		if (
 			version.epoch < state.epoch ||
-			isOlder(version, state.latestSnapshot)
+			isOlder(version, state.latestBaselineSync)
 		)
 			return;
 		if (
 			version.epoch !== state.epoch ||
-			sameVersion(version, state.latestSnapshot) ||
+			sameVersion(version, state.latestBaselineSync) ||
 			state.live
 		) {
-			throw new ProtocolError("invalid snapshot start");
+			throw new ProtocolError("invalid baseline sync start");
 		}
-		this.checkSnapshotBytes(bytes);
-		state.latestSnapshot = version;
-		state.snapshot = {
+		this.checkBaselineSyncBytes(bytes);
+		state.latestBaselineSync = version;
+		state.baselineSync = {
 			version,
 			mvcc: message.mvcc,
 			bytes,
-			nextChunk: 0,
+			nextBatch: 0,
 			rows: [],
 			rowKeys: new Set(),
 		};
 	}
 
-	private snapshotChunk(
-		message: Extract<ReconciliationMessage, { type: "snapshot_chunk" }>,
+	private baselineSyncBatch(
+		message: Extract<
+			ReconciliationMessage,
+			{ type: "baseline_sync_batch" }
+		>,
 		bytes: number,
 	): void {
 		const state = this.target(message.live_id);
 		if (!state.active) return;
-		const version = snapshotVersion(
+		const version = baselineSyncVersion(
 			message.epoch,
-			message.snapshot_attempt,
+			message.baseline_sync_attempt,
 		);
 		if (
 			version.epoch < state.epoch ||
-			isOlder(version, state.latestSnapshot)
+			isOlder(version, state.latestBaselineSync)
 		)
 			return;
-		const snapshot = state.snapshot;
+		const baselineSync = state.baselineSync;
 		if (
 			version.epoch !== state.epoch ||
-			!snapshot ||
-			!sameVersion(version, snapshot.version) ||
-			message.index !== snapshot.nextChunk
+			!baselineSync ||
+			!sameVersion(version, baselineSync.version) ||
+			message.index !== baselineSync.nextBatch
 		) {
-			throw new ProtocolError("invalid snapshot chunk");
+			throw new ProtocolError("invalid baseline sync batch");
 		}
-		this.checkSnapshotBytes(snapshot.bytes + bytes);
+		this.checkBaselineSyncBytes(baselineSync.bytes + bytes);
 		for (const row of message.rows) {
 			if (row.values.length !== state.columnCount) {
 				throw new ProtocolError(
-					"snapshot row arity does not match columns",
+					"baseline sync row arity does not match columns",
 				);
 			}
-			if (snapshot.rowKeys.has(row.row_key)) {
+			if (baselineSync.rowKeys.has(row.row_key)) {
 				throw new ProtocolError(
-					"snapshot contains a duplicate row key",
+					"baseline sync contains a duplicate row key",
 				);
 			}
-			snapshot.rowKeys.add(row.row_key);
-			snapshot.rows.push(row);
+			baselineSync.rowKeys.add(row.row_key);
+			baselineSync.rows.push(row);
 		}
-		snapshot.bytes += bytes;
-		snapshot.nextChunk += 1;
+		baselineSync.bytes += bytes;
+		baselineSync.nextBatch += 1;
 	}
 
-	private snapshotEnd(
-		message: Extract<ReconciliationMessage, { type: "snapshot_end" }>,
+	private baselineSyncEnd(
+		message: Extract<ReconciliationMessage, { type: "baseline_sync_end" }>,
 		bytes: number,
 	): void {
 		const state = this.target(message.live_id);
 		if (!state.active) return;
-		const version = snapshotVersion(
+		const version = baselineSyncVersion(
 			message.epoch,
-			message.snapshot_attempt,
+			message.baseline_sync_attempt,
 		);
 		if (
 			version.epoch < state.epoch ||
-			isOlder(version, state.latestSnapshot)
+			isOlder(version, state.latestBaselineSync)
 		)
 			return;
-		const snapshot = state.snapshot;
+		const baselineSync = state.baselineSync;
 		if (
 			version.epoch !== state.epoch ||
-			!snapshot ||
-			!sameVersion(version, snapshot.version) ||
-			message.chunk_count !== snapshot.nextChunk
+			!baselineSync ||
+			!sameVersion(version, baselineSync.version) ||
+			message.batch_count !== baselineSync.nextBatch
 		) {
-			throw new ProtocolError("invalid snapshot end");
+			throw new ProtocolError("invalid baseline sync end");
 		}
-		this.checkSnapshotBytes(snapshot.bytes + bytes);
+		this.checkBaselineSyncBytes(baselineSync.bytes + bytes);
 
-		// The exact-frontier snapshot contract guarantees that every
-		// subsequently delivered publication is newer than the snapshot. Replay
+		// The exact-frontier baseline-sync contract guarantees that every
+		// subsequently delivered publication is newer than the baseline. Replay
 		// the complete contiguous backlog; interpreting transaction IDs against
 		// the informational MVCC fields can incorrectly discard valid changes.
 		const replay = state.backlog;
-		const rows = Object.freeze([...snapshot.rows]);
-		state.snapshot = undefined;
+		const rows = Object.freeze([...baselineSync.rows]);
+		state.baselineSync = undefined;
 		this.releaseBacklog(state);
 		try {
 			state.target.installReset(rows);
@@ -353,7 +359,7 @@ export class SnapshotPublicationReconciler {
 			state.target.decodeFailed(error);
 			return;
 		}
-		state.target.publishReset(rows, snapshot.mvcc);
+		state.target.publishReset(rows, baselineSync.mvcc);
 		for (const buffered of replay)
 			state.target.publishBatch(buffered.batch);
 		state.live = true;
@@ -504,8 +510,8 @@ export class SnapshotPublicationReconciler {
 			const state = this.target(liveId);
 			state.epoch = reset.epoch;
 			state.nextSequence = reset.firstSequence;
-			state.latestSnapshot = undefined;
-			state.snapshot = undefined;
+			state.latestBaselineSync = undefined;
+			state.baselineSync = undefined;
 			this.releaseBacklog(state);
 			state.live = false;
 			state.target.resetRequired();
@@ -559,9 +565,9 @@ export class SnapshotPublicationReconciler {
 		state.backlog = [];
 	}
 
-	private checkSnapshotBytes(bytes: number): void {
-		if (bytes > this.maxSnapshotBytes) {
-			throw new ProtocolError("snapshot exceeds the byte limit");
+	private checkBaselineSyncBytes(bytes: number): void {
+		if (bytes > this.maxBaselineSyncBytes) {
+			throw new ProtocolError("baseline sync exceeds the byte limit");
 		}
 	}
 
@@ -594,13 +600,16 @@ function messageBytes(value: number): number {
 	return value;
 }
 
-function snapshotVersion(epoch: string, attempt: string): SnapshotVersion {
+function baselineSyncVersion(
+	epoch: string,
+	attempt: string,
+): BaselineSyncVersion {
 	return { epoch: BigInt(epoch), attempt: BigInt(attempt) };
 }
 
 function sameVersion(
-	left: SnapshotVersion,
-	right: SnapshotVersion | undefined,
+	left: BaselineSyncVersion,
+	right: BaselineSyncVersion | undefined,
 ): boolean {
 	return (
 		right !== undefined &&
@@ -610,8 +619,8 @@ function sameVersion(
 }
 
 function isOlder(
-	candidate: SnapshotVersion,
-	current: SnapshotVersion | undefined,
+	candidate: BaselineSyncVersion,
+	current: BaselineSyncVersion | undefined,
 ): boolean {
 	return (
 		current !== undefined &&
