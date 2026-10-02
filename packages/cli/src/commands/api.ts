@@ -223,7 +223,11 @@ async function listEndpoints(args: ApiArgs): Promise<void> {
 		emptyMessage: "No endpoints found in the spec.",
 		renderColumns: {
 			method: (endpoint) =>
-				(METHOD_COLORS[endpoint.method] ?? String)(endpoint.method),
+				useColor(args)
+					? (METHOD_COLORS[endpoint.method] ?? String)(
+							endpoint.method,
+						)
+					: endpoint.method,
 		},
 	});
 }
@@ -421,8 +425,8 @@ async function runRequest(args: ApiArgs): Promise<void> {
 const isSsoCode = (code: string | undefined) =>
 	code === "SSO_AUTHORIZATION_REQUIRED" || code === "SSO_ORG_CREDS_ONLY";
 
-/** Pipes get plain JSON regardless of FORCE_COLOR, so `neon api … | jq` never sees escapes. */
-const colorJson = (args: ApiArgs): boolean =>
+/** Pipes stay plain regardless of FORCE_COLOR, so `neon api … | jq` never sees escapes. */
+const useColor = (args: ApiArgs): boolean =>
 	process.stdout.isTTY === true &&
 	args.color !== false &&
 	!process.env.NO_COLOR &&
@@ -438,7 +442,7 @@ async function writeResponse(
 		data: unknown;
 	},
 ): Promise<void> {
-	const color = colorJson(args);
+	const color = useColor(args);
 	let text = "";
 	if (args.include) {
 		const status = `HTTP ${response.status} ${response.statusText}`;

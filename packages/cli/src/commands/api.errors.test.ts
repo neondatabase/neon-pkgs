@@ -1,13 +1,13 @@
 import { fork } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-// Error responses that the emocks fixtures can't produce: empty bodies, response
-// headers, and a body large enough to outlast a slow stdout reader.
+// Responses that the emocks fixtures can't produce: empty bodies, response headers, a
+// body large enough to outlast a slow stdout reader, and an OpenAPI spec for --list.
 
 const BIG_ITEMS = Array.from({ length: 40_000 }, (_, i) => `item-${i}`);
 
@@ -17,7 +17,16 @@ let apiHost: string;
 beforeAll(async () => {
 	server = createServer((req, res) => {
 		const path = new URL(req.url ?? "/", "http://localhost").pathname;
-		if (path === "/nope/route") {
+		if (path === "/spec") {
+			res.writeHead(200, { "content-type": "application/json" });
+			res.end(
+				JSON.stringify({
+					paths: {
+						"/projects": { get: { summary: "List projects" } },
+					},
+				}),
+			);
+		} else if (path === "/nope/route") {
 			res.writeHead(404);
 			res.end();
 		} else if (path === "/projects/broken") {
@@ -52,9 +61,13 @@ afterAll(async () => {
 	await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-const run = (args: string[], { slowReader = false } = {}) =>
+const run = (
+	args: string[],
+	{ slowReader = false, env = {} as Record<string, string> } = {},
+) =>
 	new Promise<{ code: number | null; stdout: string; stderr: string }>(
 		(resolve) => {
+			const configDir = mkdtempSync(join(tmpdir(), "neon-api-errors-"));
 			const cp = fork(
 				join(process.cwd(), "dist/index.js"),
 				[
@@ -64,10 +77,10 @@ const run = (args: string[], { slowReader = false } = {}) =>
 					"--api-key",
 					"test-key",
 					"--config-dir",
-					mkdtempSync(join(tmpdir(), "neon-api-errors-")),
+					configDir,
 					"--no-analytics",
 				],
-				{ stdio: "pipe", env: { PATH: process.env.PATH } },
+				{ stdio: "pipe", env: { PATH: process.env.PATH, ...env } },
 			);
 			let stdout = "";
 			let stderr = "";
@@ -81,7 +94,10 @@ const run = (args: string[], { slowReader = false } = {}) =>
 				cp.stdout?.pause();
 				setTimeout(() => cp.stdout?.resume(), 500);
 			}
-			cp.on("close", (code) => resolve({ code, stdout, stderr }));
+			cp.on("close", (code) => {
+				rmSync(configDir, { recursive: true, force: true });
+				resolve({ code, stdout, stderr });
+			});
 		},
 	);
 
@@ -137,5 +153,18 @@ describe("api error output", () => {
 			message: "too big",
 			items: BIG_ITEMS,
 		});
+	});
+
+	it("keeps piped output plain even with FORCE_COLOR", async () => {
+		const result = await run(
+			["api", "--list", "--spec-url", `${apiHost}/spec`],
+			{
+				env: { FORCE_COLOR: "1" },
+			},
+		);
+		expect(result.code).toBe(0);
+		expect(result.stdout).toMatch(/GET\s+\/projects/);
+		const methodCell = result.stdout.match(/^\S*GET\S*/m)?.[0];
+		expect(methodCell).toBe("GET");
 	});
 });
