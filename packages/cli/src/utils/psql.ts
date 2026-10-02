@@ -128,14 +128,13 @@ const execTs = async (
 
 const GENERIC_CONNECTING = "Connecting to the database";
 
-// psql arguments after `--` that can point the session somewhere other than the URI.
-const CONNECTION_OVERRIDE = /^(-[dhpU]|--(dbname|host|port|username)(=|$))/;
-
 export const connectionSummary = (
 	connection_uri: string,
 	args: string[] = [],
 ): string => {
-	if (args.some((arg) => CONNECTION_OVERRIDE.test(arg))) {
+	// psql arguments (-d, -h, clusters like -Xd, extra positionals) can override the URI's
+	// target, so the target is only named when none are passed.
+	if (args.length > 0) {
 		return GENERIC_CONNECTING;
 	}
 	try {

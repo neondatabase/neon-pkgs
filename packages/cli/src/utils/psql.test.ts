@@ -41,25 +41,18 @@ describe("connectionSummary", () => {
 		);
 	});
 
-	it("stays generic when psql arguments can override the target", () => {
+	it("stays generic when psql arguments are passed, since they can override the target", () => {
 		const uri = "postgresql://app:pw@ep-x.neon.tech/app";
 		for (const args of [
 			["-d", "other"],
-			["-dother"],
-			["--dbname=other"],
-			["-h", "localhost"],
-			["--host", "localhost"],
-			["-U", "admin"],
-			["--username=admin"],
-			["-p", "5433"],
-			["--port=5433"],
+			["-Xdother"],
+			["--host=localhost"],
+			["-c", "select 1"],
+			["other_db"],
 		]) {
 			expect(connectionSummary(uri, args)).toBe(
 				"Connecting to the database",
 			);
 		}
-		expect(connectionSummary(uri, ["-X", "-c", "select 1"])).toBe(
-			"Neon connection: app as app on ep-x.neon.tech",
-		);
 	});
 });
