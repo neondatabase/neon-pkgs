@@ -76,7 +76,7 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
-To check which account and credential a command uses, run `neon me`. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`.
+To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`.
 
 ## Create a project without an account
 
