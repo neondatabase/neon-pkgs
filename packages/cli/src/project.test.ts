@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { applyPolicyOnCreate } from "./commands/config";
 import { resolveEnvFilePath } from "./env_file";
 import { loadProjectConfig, projectDir } from "./project";
 
@@ -65,6 +66,30 @@ describe("project directory", () => {
 		const { resolvedPath } = await loadProjectConfig(location);
 		expect(resolvedPath).toBe(join(web, "neon.ts"));
 		expect(resolveEnvFilePath(location)).toBe(join(web, ".env.local"));
+	});
+
+	test("a branch-create policy comes from the --context-file project, not cwd's", async () => {
+		writeFileSync(join(root, ".neon"), "{}\n");
+		writeFileSync(
+			join(root, "neon.ts"),
+			'throw new Error("cwd project neon.ts loaded");\n',
+		);
+		const other = join(root, "..", `${basename(root)}-other`);
+		mkdirSync(other);
+		writeFileSync(join(other, ".neon"), "{}\n");
+
+		try {
+			await expect(
+				applyPolicyOnCreate({
+					projectId: "p",
+					branchId: "br",
+					cwd: root,
+					contextFile: join(other, ".neon"),
+				}),
+			).resolves.toBeUndefined();
+		} finally {
+			rmSync(other, { recursive: true, force: true });
+		}
 	});
 
 	test("an explicit path wins over the project's neon.ts", async () => {

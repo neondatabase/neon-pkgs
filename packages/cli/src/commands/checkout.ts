@@ -232,6 +232,7 @@ export const handler = async (props: CheckoutProps) => {
 					projectId,
 					branchId,
 					branchName,
+					contextFile: props.contextFile,
 					...(props.apiKey ? { apiKey: props.apiKey } : {}),
 					...(props.apiHost ? { apiHost: props.apiHost } : {}),
 					...(props.color !== undefined

@@ -217,7 +217,7 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.option("config", {
 						describe:
-							"Path to neon.ts for registration and the bundled env pull. Defaults to the neon.ts in the current directory",
+							"Path to neon.ts for registration and the bundled env pull. Defaults to the neon.ts in the project directory (next to .neon, or cwd without one)",
 						type: "string",
 					})
 					.option("env-pull", {

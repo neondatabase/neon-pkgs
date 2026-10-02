@@ -10,4 +10,4 @@ Migrating:
 - A `neon.ts` at a repo root with no `.neon` beside it is no longer found from sub-directories: run `neon link` at the root, or pass `--config`.
 - With a root `.neon`, a sub-directory's own `neon.ts` is no longer used: move it next to `.neon`, or pass `--config`.
 - Running `env pull` from a sub-directory of a linked project now writes the project directory's `.env.local`; pass `--file` to keep writing elsewhere.
-- `neon-env` finds `.neon` past a nested `.git`, the same way `neon` does.
+- `neon-env` finds `.neon` past a nested `.git`, the same way `neon` does, and reads `.env.local` from the project directory even when `--config` points elsewhere.
