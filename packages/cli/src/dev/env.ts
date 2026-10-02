@@ -80,7 +80,7 @@ export type DevEnvContext = {
 	omitUnsetFunctionEnv?: boolean;
 	/**
 	 * Explicit neon.ts path. When set, this file is the policy instead of the
-	 * upward search from {@link DevEnvContext.cwd}. `claim create --config`
+	 * project directory's neon.ts. `claim create --config`
 	 * uses the same file for registration and the bundled env pull.
 	 */
 	config?: string;

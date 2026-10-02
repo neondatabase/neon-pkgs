@@ -600,7 +600,7 @@ const shellQuote = (value: string): string =>
 
 /**
  * `explicitConfig` is the `--config` the user passed. The commands suggested afterwards must
- * carry it, or they would act on whichever `neon.ts` a walk up from cwd finds instead.
+ * carry it, or they would act on the project directory's `neon.ts` instead.
  */
 const planAdd = (
 	target: ConfigAddTarget,
