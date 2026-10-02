@@ -182,7 +182,7 @@ export const handler = async (props: CheckoutProps) => {
 	// `event` reflects the raw trigger data (the git branch, or the id/name as typed) — not
 	// anything a hook already rewrote. See `CheckoutEvent` in `@neon/config`.
 	const event = buildCheckoutEvent(git, props.id);
-	const config = await loadHookConfig(cwd);
+	const config = await loadHookConfig(cwd, props.contextFile);
 	const hooks = config?.experimental?.hooks;
 	if (props.id) {
 		const renamed = await runCheckoutBeforeHook({ hooks, event, git, cwd });
@@ -232,6 +232,7 @@ export const handler = async (props: CheckoutProps) => {
 					projectId,
 					branchId,
 					branchName,
+					contextFile: props.contextFile,
 					...(props.apiKey ? { apiKey: props.apiKey } : {}),
 					...(props.apiHost ? { apiHost: props.apiHost } : {}),
 					...(props.color !== undefined
@@ -478,6 +479,7 @@ const createCheckoutBranch = async (
 	const fromPolicy = await createBranchFromPolicyOnCheckout({
 		projectId,
 		branchName: name,
+		contextFile: props.contextFile,
 		...(props.apiKey ? { apiKey: props.apiKey } : {}),
 		...(props.apiHost ? { apiHost: props.apiHost } : {}),
 		...(props.color !== undefined ? { color: props.color } : {}),

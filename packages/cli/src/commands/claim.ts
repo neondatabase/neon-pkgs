@@ -1,6 +1,4 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
 import type { Config, NeonApi } from "@neon/config";
 import { loadConfigFromFile } from "@neon/config-runtime";
 import { credentialInputs } from "@neon-internals/cli-core/auth_selection";
@@ -40,6 +38,7 @@ import {
 	servicesFlagValue,
 	servicesOption,
 } from "../neon_services.js";
+import { projectConfigPath } from "../project.js";
 import type { CommonProps } from "../types.js";
 import { noPassthrough } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -127,33 +126,12 @@ export const claimableCapabilities = (
 	return CAPABILITY_ORDER.filter((capability) => requested.has(capability));
 };
 
-const CONFIG_FILENAMES = [
-	"neon.ts",
-	"neon.mts",
-	"neon.js",
-	"neon.mjs",
-] as const;
-
-export const findNeonConfig = (cwd = process.cwd()): string | undefined => {
-	let current = resolve(cwd);
-	const stop = resolve(homedir());
-	while (true) {
-		for (const name of CONFIG_FILENAMES) {
-			const candidate = join(current, name);
-			if (existsSync(candidate)) return candidate;
-		}
-		if (existsSync(join(current, ".git")) || current === stop)
-			return undefined;
-		const parent = dirname(current);
-		if (parent === current) return undefined;
-		current = parent;
-	}
-};
-
 const loadCreatePolicy = async (
 	explicitPath: string | undefined,
+	contextFile: string | undefined,
 ): Promise<{ path: string; config: Config } | undefined> => {
-	const path = explicitPath ?? findNeonConfig();
+	const path =
+		explicitPath ?? projectConfigPath(contextFile ? { contextFile } : {});
 	if (!path) return undefined;
 	const { config } = await loadConfigFromFile({ path });
 	return { path, config };
@@ -239,7 +217,7 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.option("config", {
 						describe:
-							"Path to neon.ts for registration and the bundled env pull. Defaults to walking up from the current directory",
+							"Path to neon.ts for registration and the bundled env pull. Defaults to the neon.ts in the project directory (next to .neon, or cwd without one)",
 						type: "string",
 					})
 					.option("env-pull", {
@@ -264,6 +242,9 @@ export const builder = (argv: yargs.Argv) =>
 					: [];
 				const policy = await loadCreatePolicy(
 					typeof args.config === "string" ? args.config : undefined,
+					typeof args.contextFile === "string"
+						? args.contextFile
+						: undefined,
 				);
 				const configuredServices = policy
 					? declaredNeonServices(policy.config)
@@ -432,7 +413,10 @@ export const create = async (props: CreateProps): Promise<void> => {
 	const contextFileExisted = existsSync(props.contextFile);
 	const cwd = props.cwd ?? process.cwd();
 	const envFile = props.envPull
-		? resolveEnvFilePath(cwd, props.file)
+		? resolveEnvFilePath(
+				{ cwd, contextFile: props.contextFile },
+				props.file,
+			)
 		: undefined;
 	const envFileExisted = envFile ? existsSync(envFile) : false;
 	const previousEnv =

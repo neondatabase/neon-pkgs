@@ -27,7 +27,7 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			config: {
 				describe:
-					"Path to a neon.ts policy (defaults to walking up from cwd)",
+					"Path to a neon.ts policy (defaults to the neon.ts next to .neon, or in cwd without one)",
 				type: "string",
 			},
 			...envFlag,

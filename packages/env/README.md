@@ -202,6 +202,6 @@ Pass `databaseName` / `roleName` to override the auto-pick.
 
 ## Resolution
 
-The **CLI** (`neon-env run`) resolves project + branch itself: `--project-id` / `--branch` flag → `NEON_PROJECT_ID` / `NEON_BRANCH` (name) / `NEON_BRANCH_ID` (legacy id) env → `.neon[/project.json]` walked up from the working directory (its `branch` field, name or id; legacy `branchId` still read). The API key resolves via `--api-key` → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
+The **CLI** (`neon-env run`) resolves project + branch itself: `--project-id` / `--branch` flag → `NEON_PROJECT_ID` / `NEON_BRANCH` (name) / `NEON_BRANCH_ID` (legacy id) env → `.neon[/project.json]` walked up from the working directory (its `branch` field, name or id; legacy `branchId` still read). The policy is the `neon.ts` in the directory holding that `.neon` (or the working directory without one), and `.env.local` is read from the same directory; `--config <path>` overrides the policy file. The API key resolves via `--api-key` → `NEON_API_KEY` → `~/.config/neonctl/credentials.json`.
 
 The **library functions** do none of this — pass `projectId` / `branch` explicitly. This keeps `.neon` parsing in one place (the CLI / neon) and the functions pure.

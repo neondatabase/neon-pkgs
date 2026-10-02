@@ -4,11 +4,8 @@ import { join } from "node:path";
 import stripAnsi from "strip-ansi";
 import { afterEach, describe, expect, it } from "vitest";
 import { formatHumanChunk } from "../human_table.js";
-import {
-	claimableCapabilities,
-	claimCreateFields,
-	findNeonConfig,
-} from "./claim.js";
+import { projectConfigPath } from "../project.js";
+import { claimableCapabilities, claimCreateFields } from "./claim.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -51,26 +48,18 @@ describe("claimable service requests", () => {
 });
 
 describe("claimable neon.ts discovery", () => {
-	it("finds the closest config while walking to the repository root", () => {
+	it("uses the neon.ts in an unlinked directory, never a parent's", () => {
 		const root = mkdtempSync(join(tmpdir(), "neon-claim-config-"));
 		temporaryDirectories.push(root);
-		writeFileSync(join(root, ".git"), "gitdir: test");
-		const config = join(root, "neon.ts");
-		writeFileSync(config, "export default {};");
+		writeFileSync(join(root, "neon.ts"), "export default {};");
 		const nested = join(root, "packages", "app");
 		mkdirSync(nested, { recursive: true });
 
-		expect(findNeonConfig(nested)).toBe(config);
-	});
-
-	it("does not escape a repository that has no config", () => {
-		const root = mkdtempSync(join(tmpdir(), "neon-claim-config-"));
-		temporaryDirectories.push(root);
-		writeFileSync(join(root, ".git"), "gitdir: test");
-		const nested = join(root, "packages", "app");
-		mkdirSync(nested, { recursive: true });
-
-		expect(findNeonConfig(nested)).toBeUndefined();
+		expect(projectConfigPath({ cwd: nested })).toBeUndefined();
+		writeFileSync(join(nested, "neon.ts"), "export default {};");
+		expect(projectConfigPath({ cwd: nested })).toBe(
+			join(nested, "neon.ts"),
+		);
 	});
 });
 

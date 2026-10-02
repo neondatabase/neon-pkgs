@@ -3,7 +3,6 @@ import {
 	createNeonApiFromOptions,
 	ErrorCode,
 	isPlatformError,
-	loadConfigFromFile,
 	type NeonApi,
 	type NeonBucketSnapshot,
 	type NeonDataApiSnapshot,
@@ -29,6 +28,7 @@ import {
 } from "../env_services.js";
 import { log } from "../log.js";
 import type { NeonService } from "../neon_services.js";
+import { loadProjectConfig } from "../project.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	formatInstallCommand,
@@ -37,6 +37,8 @@ import {
 
 export type DevEnvContext = {
 	cwd: string;
+	/** The effective `--context-file`; its directory is the project directory. */
+	contextFile?: string;
 	projectId?: string;
 	branchId?: string;
 	apiKey?: string;
@@ -78,7 +80,7 @@ export type DevEnvContext = {
 	omitUnsetFunctionEnv?: boolean;
 	/**
 	 * Explicit neon.ts path. When set, this file is the policy instead of the
-	 * upward search from {@link DevEnvContext.cwd}. `claim create --config`
+	 * project directory's neon.ts. `claim create --config`
 	 * uses the same file for registration and the bundled env pull.
 	 */
 	config?: string;
@@ -946,8 +948,9 @@ const looksLikeMissingDependency = (err: unknown): boolean => {
 
 const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 	try {
-		const { config } = await loadConfigFromFile({
+		const { config } = await loadProjectConfig({
 			cwd: ctx.cwd,
+			...(ctx.contextFile ? { contextFile: ctx.contextFile } : {}),
 			...(ctx.config ? { path: ctx.config } : {}),
 			...(ctx.omitUnsetFunctionEnv
 				? { unsetFunctionEnv: "omit" as const }

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
 	ConfigLoadError,
 	ErrorCode,
@@ -15,6 +15,25 @@ import { resolveContext } from "./resolve-context.js";
 
 /** File `env run` reads to layer one-time auth keys. Matches the Vercel/Next.js convention. */
 const DEFAULT_ENV_FILE = ".env.local";
+
+const NEON_CONFIG_FILENAMES = ["neon.ts", "neon.mts", "neon.js", "neon.mjs"];
+
+/** The project's `neon.ts` (or other supported extension). Never searches parent directories. */
+function projectConfigPath(projectDir: string): string {
+	const name = NEON_CONFIG_FILENAMES.find((candidate) =>
+		existsSync(join(projectDir, candidate)),
+	);
+	if (name === undefined) {
+		throw new ConfigLoadError(
+			[
+				`Could not find a Neon config file in ${projectDir}.`,
+				`Looked for: ${NEON_CONFIG_FILENAMES.join(", ")} next to the project's .neon (or in the current directory when there is no .neon).`,
+				"Create one with `neon config init`, or pass `--config <path>`.",
+			].join("\n"),
+		);
+	}
+	return join(projectDir, name);
+}
 
 /**
  * Cross-cutting environment a CLI command is allowed to touch. Injected so tests can drive
@@ -187,13 +206,13 @@ function formatDotenvLine(key: string, value: string): string {
 async function loadConfigAndFetchEnv(
 	options: EnvResolveOptions,
 	ctx: CommandEnv,
-	resolved: { projectId: string; branch: string },
+	resolved: { projectId: string; branch: string; projectDir: string },
 ): Promise<Record<string, string>> {
-	const { config, resolvedPath } = await loadConfigFromFile({
-		...(options.configPath ? { path: options.configPath } : {}),
+	const { config } = await loadConfigFromFile({
+		path: options.configPath ?? projectConfigPath(resolved.projectDir),
 		cwd: ctx.cwd,
 	});
-	const envFileSource = join(dirname(resolvedPath), DEFAULT_ENV_FILE);
+	const envFileSource = join(resolved.projectDir, DEFAULT_ENV_FILE);
 	const fileEnv = existsSync(envFileSource)
 		? parseEnvFile(readFileSync(envFileSource, "utf-8"))
 		: {};

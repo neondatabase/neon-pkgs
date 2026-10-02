@@ -36,7 +36,11 @@ describe("resolveContext — precedence", () => {
 		});
 		expect(result).toEqual({
 			ok: true,
-			context: { projectId: "proj-opt", branch: "br-opt" },
+			context: {
+				projectId: "proj-opt",
+				branch: "br-opt",
+				projectDir: root,
+			},
 		});
 	});
 
@@ -93,6 +97,7 @@ describe("resolveContext — precedence", () => {
 			context: {
 				projectId: "proj-file",
 				branch: "br-file",
+				projectDir: root,
 			},
 		});
 	});
@@ -109,7 +114,11 @@ describe("resolveContext — precedence", () => {
 		const result = resolveContext({ cwd: root, env: EMPTY_ENV });
 		expect(result).toEqual({
 			ok: true,
-			context: { projectId: "proj-file", branch: "main" },
+			context: {
+				projectId: "proj-file",
+				branch: "main",
+				projectDir: root,
+			},
 		});
 	});
 });
@@ -163,25 +172,38 @@ describe("resolveContext — .neon file discovery", () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			context: { projectId: "p-root", branch: "br-root" },
+			context: {
+				projectId: "p-root",
+				branch: "br-root",
+				projectDir: root,
+			},
 		});
 	});
 
-	test("stops the upward walk at the .git boundary", () => {
-		// `.neon` lives ABOVE the repo root; the walk must not escape past `.git`.
-		const outer = setup({
-			".neon/project.json": JSON.stringify({
-				projectId: "p-outer",
-				branchId: "br-outer",
-			}),
+	test("without a .neon, the project directory is cwd", () => {
+		const root = setup({ "packages/db/package.json": "{}" });
+		const result = resolveContext({
+			cwd: `${root}/packages/db`,
+			projectId: "p-flag",
+			branch: "main",
+			env: EMPTY_ENV,
 		});
-		// Seed an inner repo with its own `.git` and no context file.
-		const innerRepo = makeTempRepo({ "package.json": "{}" });
-		cleanups.push(innerRepo.cleanup);
-		// The inner repo is a separate temp dir, so walking from it never reaches `outer`.
-		const result = resolveContext({ cwd: innerRepo.root, env: EMPTY_ENV });
-		expect(result.ok).toBe(false);
-		void outer;
+		expect(result).toMatchObject({
+			ok: true,
+			context: { projectDir: `${root}/packages/db` },
+		});
+	});
+
+	test("walks past a nested .git to the linked project's .neon, like the neon CLI", () => {
+		const root = setup({
+			".neon": JSON.stringify({ projectId: "p-root", branch: "main" }),
+			"app/.git/HEAD": "ref: refs/heads/main\n",
+		});
+		const result = resolveContext({ cwd: `${root}/app`, env: EMPTY_ENV });
+		expect(result).toMatchObject({
+			ok: true,
+			context: { projectId: "p-root", projectDir: root },
+		});
 	});
 
 	test("treats malformed .neon JSON as absent", () => {

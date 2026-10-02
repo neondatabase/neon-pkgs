@@ -19,6 +19,7 @@ import {
 } from "../context.js";
 import { isCi } from "../env.js";
 import { log } from "../log.js";
+import { hasNeonConfigFile, projectDir } from "../project.js";
 import type { CommonProps } from "../types.js";
 import {
 	createBranch,
@@ -29,7 +30,7 @@ import { listAllProjectBranches } from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
-import { hasNeonConfigFile, initCmd } from "./config.js";
+import { initCmd } from "./config.js";
 import { autoPullEnvAfterPin } from "./env.js";
 import { REGIONS } from "./projects.js";
 
@@ -1437,10 +1438,13 @@ const maybeOfferConfigInit = async (
 	props: LinkProps,
 	summary: HumanSummary,
 ): Promise<void> => {
-	const cwd = props.cwd ?? process.cwd();
+	const dir = projectDir({
+		...(props.cwd ? { cwd: props.cwd } : {}),
+		contextFile: props.contextFile,
+	});
 	if (
 		!shouldOfferConfigInit({
-			hasConfig: hasNeonConfigFile(cwd),
+			hasConfig: hasNeonConfigFile(dir),
 			offer: props.config !== false,
 		})
 	) {
@@ -1459,7 +1463,7 @@ const maybeOfferConfigInit = async (
 		return;
 	}
 
-	await initCmd({ cwd, install: true });
+	await initCmd({ cwd: dir, install: true });
 
 	// The neon.ts (and its deps) now exist — pull env again so the local .env
 	// reflects the policy, matching how `link` pulls when a project already ships
@@ -1468,7 +1472,6 @@ const maybeOfferConfigInit = async (
 		const { config: _offerConfig, ...rest } = props;
 		await autoPullEnvAfterPin({
 			...rest,
-			cwd,
 			projectId: summary.projectId,
 			branch: summary.branch,
 			envPull: props.envPull,

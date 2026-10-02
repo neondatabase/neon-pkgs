@@ -594,7 +594,9 @@ If you'd rather not keep env vars on disk, inject them at runtime instead with `
 
 **`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. Each `NEON_FUNCTION_<SLUG>_BASE_URL` this process is serving is rewritten to `http://localhost:<port>`: every neon.ts function, or the matching slug when `--source` names one. `neon env pull` and `neon-env run` write the production URL (`https://<branchId>-<slug>.compute.…`). `dev` writes nothing, but it does *read* your `.env` / `.env.local` to reuse the branch credential behind the AI Gateway and object storage. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
 
-**Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`.
+**Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`. `neon init` always writes `.neon` into the current directory.
+
+**The project directory** is the directory holding that `.neon`, or the current directory when there is none. The project's `neon.ts` and the default `.env` / `.env.local` live there and nowhere else: a `neon.ts` in a parent directory never applies. An explicit `--config` or `--file` path still wins.
 
 **`.gitignore` scaffolding**: when `.neon` is **created** for the first time, the CLI also makes sure a `.gitignore` sits alongside it listing `.neon`. If `.gitignore` doesn't exist it's created with a single `.neon` line; if it does exist, `.neon` is appended only when missing (no duplicates, your other entries are left alone). On subsequent updates to an existing `.neon`, `.gitignore` is left untouched — so if you deliberately un-ignore `.neon` (e.g. to commit shared context), the entry is not re-added on every command.
 
@@ -732,7 +734,7 @@ neon deploy
 2. `projectId` from the closest `.neon` file (found by walking up from the current directory — see "Where `.neon` lives" above)
 3. If still unresolved and the API key maps to exactly one project, that project is auto-detected
 
-The branch is chosen with `--branch <id|name>`; without it the project's default branch is used. The policy itself is found by walking up from the current directory for a `neon.ts`, or pass `--config <path>` to point at one explicitly.
+The branch is chosen with `--branch <id|name>`; without it the project's default branch is used. The policy is the `neon.ts` in the project directory (next to `.neon`, or the current directory without one); pass `--config <path>` to point at another file.
 
 **Apply-only flags** (also available on `deploy`):
 
