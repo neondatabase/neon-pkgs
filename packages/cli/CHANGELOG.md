@@ -1,5 +1,13 @@
 # neon
 
+## 8.0.2
+
+### Patch Changes
+
+- ed8d04d: Add `neon feedback --message` to send anonymous feedback to Neon without logging in.
+- b49ce82: `neon roles list`, `create`, and `delete` name the branch in their table output (for example `Roles on main`), and an empty list prints `No roles on <branch>.`. `neon roles create` now shows the generated password in table output too; the API returns it only once. JSON and YAML output is unchanged.
+- d9a8610: `neon roles create --no-login` now creates a role that cannot log in. Before, the flag was ignored and the role was created with a password; only `--no-login=true` worked.
+
 ## 8.0.1
 
 ### Patch Changes
