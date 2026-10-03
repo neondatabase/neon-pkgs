@@ -16,8 +16,8 @@ jobs:
     drift:
         name: neon.com/models.json catalog drift
         runs-on:
-            group: neondatabase-protected-runner-group
-            labels: linux-ubuntu-latest
+            group: databricks-ghec-public-repos-runner-group-small
+            labels: linux-ubuntu-latest-public-2core-8gb
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
