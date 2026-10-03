@@ -508,6 +508,22 @@ describe("config commands", () => {
 		expect(parsed.config.preview).toBeUndefined();
 	});
 
+	it("status prints a readable summary in table output", async () => {
+		const api = new FakeNeonApi();
+		const { stream, read } = captureOut();
+
+		await status({ ...baseProps(api, stream), output: "table" });
+
+		const text = read();
+		expect(text).toMatch(/^Status$/m);
+		expect(text).toMatch(
+			new RegExp(`^Branch\\s+${BRANCH_NAME} \\(${BRANCH_ID}\\)$`, "m"),
+		);
+		expect(text).toMatch(/^Compute\s+0\.25 CU$/m);
+		expect(text).toMatch(/^Scale To Zero\s+5m$/m);
+		expect(text).not.toContain("{");
+	});
+
 	it("status --config-json prints only the neon.ts-shaped config to stdout", async () => {
 		const api = new FakeNeonApi();
 		const { stream, read } = captureOut();
