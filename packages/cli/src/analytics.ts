@@ -108,7 +108,6 @@ export const telemetryCredential = (
 
 let client: Analytics | undefined;
 let clientInitialized = false;
-let userId = "";
 let errorEventContext: ErrorEventContext | undefined;
 
 type AnalyticsEventArgs = {
@@ -173,12 +172,17 @@ export const initAnalyticsClientMiddleware = (
 };
 
 type Attribution = {
+	userId: string;
 	accountId?: string;
 	authMethod?: string;
 	authData?: string;
 };
 
-let attribution: Attribution = {};
+/**
+ * The attribution of the current attempt. A 401 retry runs the middleware again and starts a
+ * new one; events keep the attempt they were tracked in, even while its lookup is in flight.
+ */
+let attribution: Attribution = { userId: "" };
 
 /**
  * Every event goes out through this chain so events tracked while the account lookup is in
@@ -187,15 +191,18 @@ let attribution: Attribution = {};
 let queue: Promise<void> = Promise.resolve();
 const lookups = new Set<AbortController>();
 
-const enqueue = (send: (analytics: Analytics) => void) => {
+const enqueue = (
+	send: (analytics: Analytics, attempt: Attribution) => void,
+) => {
 	const analytics = client;
 	if (!analytics) {
 		return;
 	}
+	const attempt = attribution;
 	queue = queue.then(() => {
 		// Telemetry must never fail a command.
 		try {
-			send(analytics);
+			send(analytics, attempt);
 		} catch (err) {
 			log.debug("Could not queue a CLI analytics event: %s", err);
 		}
@@ -221,6 +228,9 @@ export const analyticsMiddleware = (args: {
 		return;
 	}
 
+	const attempt: Attribution = { userId: attribution.userId };
+	attribution = attempt;
+
 	const { apiKey: keyToQuery, credentialsPath: fileToRead } =
 		telemetryCredential(
 			getAuthContext(),
@@ -237,7 +247,7 @@ export const analyticsMiddleware = (args: {
 				path: fileToRead,
 			});
 			if (typeof listing.credentials?.user_id === "string") {
-				userId = listing.credentials.user_id;
+				attempt.userId = listing.credentials.user_id;
 			} else {
 				log.debug("No usable credentials at %s", fileToRead);
 			}
@@ -251,7 +261,7 @@ export const analyticsMiddleware = (args: {
 				storage: "keyring",
 			});
 			if (typeof listing.credentials?.user_id === "string") {
-				userId = listing.credentials.user_id;
+				attempt.userId = listing.credentials.user_id;
 			}
 		} catch (err) {
 			log.debug("Could not read the OS keyring item: %s", err);
@@ -271,20 +281,24 @@ export const analyticsMiddleware = (args: {
 				const { data: authDetails } = await apiClient.getAuthDetails({
 					signal: controller.signal,
 				});
-				attribution = {
-					accountId: authDetails.account_id,
-					authMethod: authDetails.auth_method,
-					authData: authDetails.auth_data,
-				};
+				attempt.accountId = authDetails.account_id;
+				attempt.authMethod = authDetails.auth_method;
+				attempt.authData = authDetails.auth_data;
 				// Get user id if not org api key
-				if (!userId && authDetails.auth_method !== "api_key_org") {
+				if (
+					!attempt.userId &&
+					authDetails.auth_method !== "api_key_org"
+				) {
 					const resp = await apiClient.getCurrentUserInfo({
 						signal: controller.signal,
 					});
-					userId = resp.data.id;
+					attempt.userId = resp.data.id;
 				}
 			} else {
-				attribution = storedCredentialAttribution(userId);
+				Object.assign(
+					attempt,
+					storedCredentialAttribution(attempt.userId),
+				);
 			}
 		} catch (err) {
 			log.debug("Failed to get user id from api", err);
@@ -294,7 +308,7 @@ export const analyticsMiddleware = (args: {
 	})();
 
 	queue = queue.then(() => lookup);
-	enqueue((analytics) => {
+	enqueue((analytics, { userId }) => {
 		analytics.identify({
 			userId: analyticsUserId(userId),
 		});
@@ -416,7 +430,7 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 		errCode,
 		errorEventContext,
 	);
-	enqueue((analytics) => {
+	enqueue((analytics, { userId }) => {
 		analytics.track({
 			event: "CLI Error",
 			userId: analyticsUserId(userId),
@@ -433,7 +447,7 @@ export const trackEvent = (
 	if (!client) {
 		return;
 	}
-	enqueue((analytics) => {
+	enqueue((analytics, { userId }) => {
 		analytics.track({
 			event,
 			userId: analyticsUserId(userId),
@@ -454,11 +468,11 @@ export const trackCommandSuccess = (
 		return;
 	}
 	const properties = commandSuccessProperties(args);
-	enqueue((analytics) => {
+	enqueue((analytics, { userId, accountId, authMethod, authData }) => {
 		analytics.track({
 			event: "cli_command_success",
 			userId: analyticsUserId(userId),
-			properties: { ...properties, ...attribution },
+			properties: { ...properties, accountId, authMethod, authData },
 		});
 	});
 };

@@ -219,4 +219,56 @@ describe("analytics account lookup", () => {
 			await api.close();
 		}
 	});
+
+	it("keeps each retry attempt's attribution when an earlier lookup finishes last", async () => {
+		let releaseFirst: (() => void) | undefined;
+		let secondDone = false;
+		const api = await listen((req, res) => {
+			const key = req.headers.authorization?.replace("Bearer ", "");
+			const answer = () =>
+				req.url?.startsWith("/auth")
+					? json(res, {
+							account_id: `acct-${key}`,
+							auth_method: "api_key_user",
+							auth_data: key,
+						})
+					: json(res, { id: `user-${key}` });
+			if (key === "a" && req.url?.startsWith("/auth")) {
+				releaseFirst = answer;
+			} else {
+				answer();
+				if (key === "b" && req.url?.startsWith("/users/me")) {
+					secondDone = true;
+				}
+			}
+		});
+		try {
+			const { analytics, args } = await setup(api.url);
+
+			analytics.analyticsMiddleware({ ...args, apiKey: "a" });
+			analytics.sendError(new Error("token expired"), "AUTH_FAILED");
+			await vi.waitFor(() => expect(releaseFirst).toBeDefined());
+			analytics.analyticsMiddleware({ ...args, apiKey: "b" });
+			analytics.trackCommandSuccess(args);
+			// The retry's lookup finishes first; the stale one answers last.
+			await vi.waitFor(() => expect(secondDone).toBe(true));
+			releaseFirst?.();
+			await analytics.closeAnalytics();
+
+			expect(events.map((e) => [e.event ?? e.type, e.userId])).toEqual([
+				["identify", "user-a"],
+				["CLI Started", "user-a"],
+				["CLI Error", "user-a"],
+				["identify", "user-b"],
+				["CLI Started", "user-b"],
+				["cli_command_success", "user-b"],
+			]);
+			expect(events.at(-1)?.properties).toMatchObject({
+				accountId: "acct-b",
+				authData: "b",
+			});
+		} finally {
+			await api.close();
+		}
+	});
 });
