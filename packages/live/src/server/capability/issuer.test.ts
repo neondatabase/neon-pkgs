@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
-
+import capabilitySchema from "../../../schema/neon-live-query-capability-v1.schema.json";
 import { defined } from "../../defined.test-helpers.js";
 import type { PreparedLiveQuery } from "../adapter.js";
 import {
@@ -13,7 +13,6 @@ import {
 	utf8,
 } from "./crypto.js";
 import { createCapabilityIssuer } from "./issuer.js";
-import capabilitySchema from "./schema/neon-live-query-capability-v1.schema.json";
 import { parseNeonLiveSecret } from "./secret.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);

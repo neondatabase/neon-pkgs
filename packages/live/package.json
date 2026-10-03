@@ -39,12 +39,14 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js",
       "default": "./dist/server.js"
-    }
+    },
+    "./schema/neon-live-query-capability-v1.schema.json": "./schema/neon-live-query-capability-v1.schema.json"
   },
   "files": [
     "README.md",
     "dist/",
-    "package.json"
+    "package.json",
+    "schema/"
   ],
   "scripts": {
     "build": "npm run generate:check && tsc --noEmit && tsdown",

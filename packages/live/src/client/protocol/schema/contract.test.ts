@@ -1,8 +1,8 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
+import capabilitySchema from "../../../../schema/neon-live-query-capability-v1.schema.json";
 import capabilityFixtures from "../../../server/capability/schema/neon-live-query-capability-v1.fixtures.json";
-import capabilitySchema from "../../../server/capability/schema/neon-live-query-capability-v1.schema.json";
 import protocolFixtures from "./neon-live-protocol-v1.fixtures.json";
 import protocolSchema from "./neon-live-protocol-v1.schema.json";
 
