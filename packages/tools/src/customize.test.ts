@@ -6,6 +6,8 @@ import {
 	type NeonToolsClientOptions,
 } from "./index.js";
 
+type TestClientOptions = Omit<NeonToolsClientOptions, "throwOnError">;
+
 const jsonResponse = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), {
 		status,
@@ -26,7 +28,7 @@ const branchWithComputeBody = {
 	],
 };
 
-const getProjectTools = (options: NeonToolsClientOptions = {}) => {
+const getProjectTools = (options: TestClientOptions = {}) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
