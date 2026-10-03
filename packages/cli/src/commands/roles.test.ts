@@ -153,4 +153,27 @@ describe("roles", () => {
 			);
 		}
 	});
+
+	for (const flag of ["--no-login", "--no-login=true"]) {
+		test(`create ${flag} sends no_login and shows no password`, async ({
+			testCliCommand,
+		}) => {
+			const { stdout } = await testCliCommand(
+				[
+					"roles",
+					"create",
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+					"--name",
+					"no_login_role",
+					flag,
+				],
+				{ output: "table", snapshot: false },
+			);
+			expect(stdout).toContain("Role created on test_branch");
+			expect(stdout).not.toContain("Password");
+		});
+	}
 });
