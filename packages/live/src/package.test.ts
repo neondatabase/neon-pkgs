@@ -15,21 +15,26 @@ import { describe, expect, it } from "vitest";
 const packageRoot = dirname(
 	fileURLToPath(new URL("../package.json", import.meta.url)),
 );
-const schemaSubpath = "schema/neon-live-query-capability-v1.schema.json";
+const schemaSubpaths = [
+	"schema/neon-live-query-capability-v1.schema.json",
+	"schema/neon-live-protocol-v1.schema.json",
+] as const;
 
 describe("@neon/live package", () => {
-	it("publishes the canonical query capability schema directly", () => {
+	it("publishes the canonical schemas directly", () => {
 		const manifest = JSON.parse(
 			readFileSync(join(packageRoot, "package.json"), "utf8"),
 		) as {
 			readonly exports: Readonly<Record<string, string>>;
 		};
-		const exportedPath = manifest.exports[`./${schemaSubpath}`];
 
-		expect(exportedPath).toBe(`./${schemaSubpath}`);
-		expect(realpathSync(join(packageRoot, exportedPath as string))).toBe(
-			realpathSync(join(packageRoot, schemaSubpath)),
-		);
+		for (const schemaSubpath of schemaSubpaths) {
+			const exportedPath = manifest.exports[`./${schemaSubpath}`];
+			expect(exportedPath).toBe(`./${schemaSubpath}`);
+			expect(
+				realpathSync(join(packageRoot, exportedPath as string)),
+			).toBe(realpathSync(join(packageRoot, schemaSubpath)));
+		}
 
 		const packDestination = mkdtempSync(join(tmpdir(), "neon-live-pack-"));
 		try {
@@ -53,7 +58,9 @@ describe("@neon/live package", () => {
 				["-tf", join(packDestination, tarballs[0] as string)],
 				{ encoding: "utf8" },
 			).split(/\r?\n/);
-			expect(files).toContain(`package/${schemaSubpath}`);
+			for (const schemaSubpath of schemaSubpaths) {
+				expect(files).toContain(`package/${schemaSubpath}`);
+			}
 		} finally {
 			rmSync(packDestination, { recursive: true, force: true });
 		}

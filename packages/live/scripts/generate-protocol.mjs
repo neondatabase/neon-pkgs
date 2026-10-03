@@ -7,7 +7,7 @@ import standaloneCode from "ajv/dist/standalone/index.js";
 import { compile } from "json-schema-to-typescript";
 
 const schemaUrl = new URL(
-  "../src/client/protocol/schema/neon-live-protocol-v1.schema.json",
+  "../schema/neon-live-protocol-v1.schema.json",
   import.meta.url,
 );
 const validatorOutputUrl = new URL(
@@ -38,10 +38,16 @@ if (typeof schemaId !== "string") {
   throw new Error("Neon Live protocol schema must define $id");
 }
 
+// Ajv delegates Unicode-aware string lengths to a CommonJS runtime helper.
+// Inline that small counter so the generated ESM remains dependency-free.
 const validatorSource = standaloneCode(ajv, {
   validateClientMessage: `${schemaId}#/$defs/clientMessage`,
   validateServerMessage: `${schemaId}#/$defs/serverMessage`,
-});
+}).replace(
+  /const (func\d+) = require\("ajv\/dist\/runtime\/ucs2length"\)\.default;/g,
+  (_, name) =>
+    `const ${name} = (value) => { let length = 0; for (const _codePoint of value) length++; return length; };`,
+);
 if (validatorSource.includes("ajv/dist/runtime") || validatorSource.includes("require(")) {
   throw new Error("standalone validator unexpectedly depends on the Ajv runtime");
 }
