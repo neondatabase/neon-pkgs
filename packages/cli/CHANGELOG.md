@@ -1,5 +1,11 @@
 # neon
 
+## 8.0.4
+
+### Patch Changes
+
+- ed50405: `neon orgs list` marks the organization the directory is linked to with `[current]` and shows each organization's plan in table output. JSON and YAML output is unchanged.
+
 ## 8.0.3
 
 ### Patch Changes
