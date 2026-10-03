@@ -1030,6 +1030,23 @@ describe("ensureAuth", () => {
 		expect(refreshTokenSpy).not.toHaveBeenCalled();
 	});
 
+	test("feedback skips auth even with broken stored credentials", async ({
+		runMockServer,
+	}) => {
+		const server = await runMockServer("main");
+		writeFileSync(join(configDir, "credentials.json"), "invalid json", {
+			mode: 0o700,
+		});
+
+		await ensureAuth({
+			...setupTestProps(server),
+			_: ["feedback"],
+		});
+
+		expect(authSpy).not.toHaveBeenCalled();
+		expect(refreshTokenSpy).not.toHaveBeenCalled();
+	});
+
 	test("should skip global auth for init command", async ({
 		runMockServer,
 	}) => {

@@ -171,6 +171,10 @@ export const isPluginsCommand = (args: { _: (string | number)[] }): boolean =>
 export const isAskCommand = (args: { _: (string | number)[] }): boolean =>
 	args._[0] === "ask";
 
+/** Feedback is anonymous, so it must never read credentials or `.neon` context. */
+export const isFeedbackCommand = (args: { _: (string | number)[] }): boolean =>
+	args._[0] === "feedback";
+
 /**
  * `inspect db --db-url` talks to Postgres with that URI. Skip only when the
  * parsed value is nonempty: empty `--db-url` still goes through project
@@ -321,7 +325,7 @@ export const enrichFromContext = (
 	if (isSkillsCommand(args) || isPluginsCommand(args)) {
 		return;
 	}
-	if (isAskCommand(args)) {
+	if (isAskCommand(args) || isFeedbackCommand(args)) {
 		return;
 	}
 	// Claim commands bypass enrichment so `claim list` never targets the current directory.

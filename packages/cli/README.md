@@ -943,6 +943,17 @@ neon ask --prompt "How do schema-only branches work?" --output json
 
 Default table output is the assistant's text. On a TTY that is a spinner, then the streamed reply. `--output json` and `--output yaml` print `{ "text": "…" }` after the full response.
 
+## Send feedback (`feedback`)
+
+`neon feedback --message` sends feedback to Neon. It does not log in, and it sends only your message, not your account, project, or branch.
+
+```bash
+neon feedback --message "The branch docs were unclear"
+neon feedback --message "The branch docs were unclear" --output json
+```
+
+Default table output is `Feedback received. Thank you!`. `--output json` and `--output yaml` print `{ "received": true }`. Messages are limited to 10,000 characters. Do not include passwords, API keys, connection strings, or other secrets.
+
 ## Install the Neon plugin (`plugins`)
 
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
@@ -1410,6 +1421,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | plugins                                                                    |                                                                                                              | Install the Neon plugin             |
 | skills                                                                     | `update`                                                                                                     | Install Neon agent skills           |
 | ask                                                                        |                                                                                                              | Ask a question about Neon          |
+| feedback                                                                   |                                                                                                              | Send feedback to Neon              |
 | bucket                                                                     | `create`, `list`, `delete`, `object list`, `object get`, `object put`, `object delete` (incl. `--recursive`) | Manage buckets and their objects   |
 | [completion](https://neon.com/docs/reference/cli-completion)               |                                                                                                              | Generate a completion script       |
 

@@ -78,6 +78,8 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"ask",
 
+	"feedback",
+
 	"dev",
 
 	"deploy",

@@ -56,6 +56,7 @@ import {
 	isConfigAdd,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isFeedbackCommand,
 	isGitLocalCommand,
 	isInspectDbUrl,
 	isMcpCommand,
@@ -680,7 +681,7 @@ export const ensureAuth = async (
 		return;
 	}
 
-	if (isAskCommand(props)) {
+	if (isAskCommand(props) || isFeedbackCommand(props)) {
 		return;
 	}
 
