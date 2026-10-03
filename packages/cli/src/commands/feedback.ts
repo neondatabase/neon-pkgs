@@ -42,9 +42,6 @@ export const builder = (argv: yargs.Argv) =>
 		.check((args) => {
 			const message =
 				typeof args.message === "string" ? args.message : "";
-			if (message.trim() === "") {
-				throw new Error("--message needs a value");
-			}
 			if (message.trim().length > MAX_FEEDBACK_LENGTH) {
 				throw new Error(
 					`--message must be ${MAX_FEEDBACK_LENGTH.toLocaleString("en-US")} characters or fewer`,
