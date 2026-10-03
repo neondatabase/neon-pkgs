@@ -3,6 +3,7 @@ import * as z from "zod";
 import {
 	createNeonTool,
 	createNeonTools,
+	type NeonToolInjectOptions,
 	type NeonToolsClientOptions,
 } from "./index.js";
 
@@ -26,7 +27,13 @@ const branchWithComputeBody = {
 	],
 };
 
-const getProjectTools = (options: NeonToolsClientOptions = {}) => {
+const getProjectTools = <
+	const I extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: Omit<NeonToolsClientOptions, "inject"> & {
+		inject?: I;
+	} = {} as Omit<NeonToolsClientOptions, "inject"> & { inject?: I },
+) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
@@ -136,7 +143,7 @@ describe("onExecute", () => {
 	test("observes injection, validation, and fetch failures", async () => {
 		const seen: string[] = [];
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "not valid", omitFromSchema: true },
+			inject: { project_id: "not valid" },
 			onExecute: async ({ execute }) => {
 				seen.push("start");
 				try {
@@ -159,8 +166,7 @@ describe("onExecute", () => {
 	test("does not let mutated event.input change a grant-locked project", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: "granted-project",
-				omitFromSchema: true,
+				project_id: "granted-project",
 			},
 			onExecute: async ({ input, execute }) => {
 				(input as { project_id?: string }).project_id =
@@ -212,7 +218,7 @@ describe("onExecute", () => {
 describe("path injection", () => {
 	test("fills a missing project_id and optionalizes it on the published schema", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
 		await tools["projects.get"].execute({});
@@ -234,10 +240,11 @@ describe("path injection", () => {
 		let getterCalls = 0;
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: () => {
+				project_id: () => {
 					getterCalls += 1;
 					return "granted-project";
 				},
+				mode: "fallback",
 			},
 		});
 
@@ -254,8 +261,7 @@ describe("path injection", () => {
 	test("omits injected keys from the published schema and always uses the injector", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: "granted-project",
-				omitFromSchema: true,
+				project_id: "granted-project",
 			},
 		});
 
@@ -277,8 +283,7 @@ describe("path injection", () => {
 			apiKey: "test-key",
 			tools: ["branches.delete"] as const,
 			inject: {
-				projectId: "granted-project",
-				omitFromSchema: true,
+				project_id: "granted-project",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -304,9 +309,8 @@ describe("path injection", () => {
 			apiKey: "test-key",
 			tools: ["branches.delete"] as const,
 			inject: {
-				projectId: "granted-project",
-				branchId: "granted-branch",
-				omitFromSchema: true,
+				project_id: "granted-project",
+				branch_id: "granted-branch",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -328,7 +332,7 @@ describe("path injection", () => {
 			apiKey: "test-key",
 			tools: ["projects.list"] as const,
 			inject: {
-				projectId: () => {
+				project_id: () => {
 					getterCalls += 1;
 					return "granted-project";
 				},
@@ -355,40 +359,63 @@ describe("path injection", () => {
 			createNeonTools({
 				apiKey: "test-key",
 				tools: ["projects.get"] as const,
-				inject: { projectId: "" },
+				inject: { project_id: "" },
 			}),
-		).toThrow("A projectId inject value is required");
+		).toThrow("A project_id inject value is required");
 	});
 
-	test("rejects omitFromSchema without an injector at construction", () => {
+	test("rejects mode without an injector at construction", () => {
 		expect(() =>
 			createNeonTools({
 				apiKey: "test-key",
 				tools: ["projects.get"] as const,
-				inject: { omitFromSchema: true },
+				// @ts-expect-error mode requires project_id or branch_id
+				inject: { mode: "pin" },
 			}),
-		).toThrow(
-			"omitFromSchema requires inject.projectId or inject.branchId",
-		);
+		).toThrow("inject.mode requires inject.project_id or inject.branch_id");
+	});
+
+	test("rejects a defined inject with no project_id or branch_id", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.get"] as const,
+				// @ts-expect-error inject keys are the field names
+				inject: { projectId: "granted-project" },
+			}),
+		).toThrow("inject requires inject.project_id or inject.branch_id");
+	});
+
+	test("rejects an unknown inject mode at construction", () => {
+		expect(() =>
+			createNeonTools({
+				apiKey: "test-key",
+				tools: ["projects.get"] as const,
+				inject: {
+					project_id: "granted-project",
+					// @ts-expect-error only "pin" and "fallback" are valid
+					mode: "pni",
+				},
+			}),
+		).toThrow('inject.mode must be "pin" or "fallback"');
 	});
 
 	test("fails closed when an omitted injector returns nothing", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: () => undefined,
-				omitFromSchema: true,
+				project_id: () => undefined,
 			},
 		});
 
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
-			"A projectId inject value is required",
+			"A project_id inject value is required",
 		);
 		expect(requests).toHaveLength(0);
 	});
 
 	test("lets the original schema reject an invalid injected id before fetch", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "NOT VALID", omitFromSchema: true },
+			inject: { project_id: "NOT VALID" },
 		});
 
 		await expect(tools["projects.get"].execute({})).rejects.toThrow();
@@ -397,7 +424,7 @@ describe("path injection", () => {
 
 	test("does not normalize a malformed path into a valid request", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project" },
 		});
 
 		await expect(
@@ -409,8 +436,7 @@ describe("path injection", () => {
 	test("resolves async getters", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: async () => "granted-project",
-				omitFromSchema: true,
+				project_id: async () => "granted-project",
 			},
 		});
 
@@ -425,7 +451,7 @@ describe("path injection", () => {
 		const requests: Request[] = [];
 		const tool = createNeonTool("projects.get", {
 			apiKey: "test-key",
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return jsonResponse({ project: { id: "project-id" } });
@@ -559,7 +585,7 @@ describe("onExecute failure and isolation", () => {
 	test("passes the caller input to the hook, not the injected path", async () => {
 		const seen: unknown[] = [];
 		const { tools } = getProjectTools({
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 			onExecute: async ({ input, execute }) => {
 				seen.push(input);
 				return execute();
@@ -573,7 +599,7 @@ describe("onExecute failure and isolation", () => {
 
 	test("does not let a mutated clone change a caller-supplied fill-mode id", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 			onExecute: async ({ input, execute }) => {
 				(input as { project_id: string }).project_id =
 					"mutated-project";
@@ -613,16 +639,13 @@ describe("onExecute failure and isolation", () => {
 });
 
 describe("path injection (fill, omit, and non-path fields)", () => {
-	test("treats inject.projectId: undefined as no injector", async () => {
-		const { requests, tools } = getProjectTools({
-			inject: { projectId: undefined },
-		});
-
-		await expect(tools["projects.get"].execute({})).rejects.toThrow();
-		expect(requests).toHaveLength(0);
-		expect(
-			z.toJSONSchema(tools["projects.get"].inputSchema).required,
-		).toEqual(["project_id"]);
+	test("rejects inject.project_id: undefined at construction", () => {
+		expect(() =>
+			getProjectTools({
+				// @ts-expect-error undefined is not an inject value
+				inject: { project_id: undefined },
+			}),
+		).toThrow("inject requires inject.project_id or inject.branch_id");
 	});
 
 	test("rejects a non-string static inject value at construction", () => {
@@ -630,24 +653,24 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			createNeonTools({
 				apiKey: "test-key",
 				tools: ["projects.get"] as const,
-				inject: { projectId: 1 as unknown as string },
+				inject: { project_id: 1 as unknown as string },
 			}),
-		).toThrow("A projectId inject value is required");
+		).toThrow("A project_id inject value is required");
 	});
 
-	test("rejects an empty static branchId at construction", () => {
+	test("rejects an empty static branch_id at construction", () => {
 		expect(() =>
 			createNeonTools({
 				apiKey: "test-key",
 				tools: ["branches.delete"] as const,
-				inject: { branchId: "" },
+				inject: { branch_id: "" },
 			}),
-		).toThrow("A branchId inject value is required");
+		).toThrow("A branch_id inject value is required");
 	});
 
 	test("in fill mode, a missing getter leaves original schema validation", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: () => undefined },
+			inject: { project_id: () => undefined, mode: "fallback" },
 		});
 
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
@@ -658,11 +681,11 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("rejects an empty getter result before fetch", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: () => "" },
+			inject: { project_id: () => "" },
 		});
 
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
-			"A projectId inject value is required",
+			"A project_id inject value is required",
 		);
 		expect(requests).toHaveLength(0);
 	});
@@ -670,12 +693,12 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 	test("rejects a non-string getter result before fetch", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: () => 1 as unknown as string,
+				project_id: () => 1 as unknown as string,
 			},
 		});
 
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
-			"A projectId inject value is required",
+			"A project_id inject value is required",
 		);
 		expect(requests).toHaveLength(0);
 	});
@@ -683,20 +706,19 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 	test("in omit mode, rejects an empty getter result", async () => {
 		const { requests, tools } = getProjectTools({
 			inject: {
-				projectId: () => "",
-				omitFromSchema: true,
+				project_id: () => "",
 			},
 		});
 
 		await expect(tools["projects.get"].execute({})).rejects.toThrow(
-			"A projectId inject value is required",
+			"A project_id inject value is required",
 		);
 		expect(requests).toHaveLength(0);
 	});
 
 	test("fills path: {} in fill mode", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
 		await tools["projects.get"].execute({});
@@ -708,7 +730,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("does not normalize null, arrays, or non-objects", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project" },
 		});
 
 		await expect(
@@ -725,7 +747,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("still rejects unknown fields after injection", async () => {
 		const { requests, tools } = getProjectTools({
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
 		await expect(
@@ -739,7 +761,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["branches.delete", "branches.createAndConnect"] as const,
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return jsonResponse(branchWithComputeBody);
@@ -773,12 +795,11 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			apiKey: "test-key",
 			tools: ["postgres.connectionString"] as const,
 			inject: {
-				projectId: "granted-project",
-				branchId: () => {
+				project_id: "granted-project",
+				branch_id: () => {
 					branchGetterCalls += 1;
 					return "injected-branch";
 				},
-				omitFromSchema: true,
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -806,8 +827,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			apiKey: "test-key",
 			tools: ["branches.delete"] as const,
 			inject: {
-				branchId: "granted-branch",
-				omitFromSchema: true,
+				branch_id: "granted-branch",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -834,11 +854,12 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			apiKey: "test-key",
 			tools: ["branches.delete"] as const,
 			inject: {
-				projectId: "granted-project",
-				branchId: () => {
+				project_id: "granted-project",
+				branch_id: () => {
 					branchGetterCalls += 1;
 					return "granted-branch";
 				},
+				mode: "fallback",
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
@@ -858,7 +879,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("published omit schema accepts {} and rejects a supplied project_id object", () => {
 		const { tools } = getProjectTools({
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
 		expect(tools["projects.get"].inputSchema.safeParse({}).success).toBe(
@@ -873,7 +894,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("published fill schema accepts omitted and supplied project_id", () => {
 		const { tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project", mode: "fallback" },
 		});
 
 		expect(tools["projects.get"].inputSchema.safeParse({}).success).toBe(
@@ -893,7 +914,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 
 	test("keeps published schemas closed", () => {
 		const { tools } = getProjectTools({
-			inject: { projectId: "granted-project" },
+			inject: { project_id: "granted-project" },
 		});
 
 		expect(
@@ -911,7 +932,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["branches.create"] as const,
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
 		const schema = z.toJSONSchema(tools["branches.create"].inputSchema);
@@ -926,7 +947,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["branches.createAndConnect"] as const,
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
 		const schema = z.toJSONSchema(
@@ -948,8 +969,7 @@ describe("path injection (fill, omit, and non-path fields)", () => {
 			apiKey: "test-key",
 			tools: ["projects.get"] as const,
 			inject: {
-				projectId: () => grant.getStore()?.projectId,
-				omitFromSchema: true,
+				project_id: () => grant.getStore()?.projectId,
 			},
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));

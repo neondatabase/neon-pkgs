@@ -80,8 +80,9 @@ type SelectedTools<T> = T extends {
 	? S
 	: [];
 
+// Tuple so a NeonToolInjectOptions union does not split into both arms.
 type NeonToolsFor<T, Inject> = T extends CreateNeonToolsInput
-	? Inject extends NeonToolInjectOptions
+	? [Inject] extends [NeonToolInjectOptions]
 		? InjectedNeonTools<SelectedTools<T>, Inject>
 		: NeonTools<SelectedTools<T>>
 	: never;
@@ -178,14 +179,14 @@ const bindTools = <T extends CreateNeonToolsInput>(
 
 type NamedNeonTools<Tools extends readonly NeonToolId[], Inject> = {
 	[Tool in Tools[number]]: WithPublishedId<
-		Inject extends NeonToolInjectOptions
+		[Inject] extends [NeonToolInjectOptions]
 			? InjectedNeonTool<ReturnType<ToolFactories[Tool]>, Inject>
 			: ReturnType<ToolFactories[Tool]>
 	>;
 };
 
 type NamedNeonTool<Id extends NeonToolId, Inject> = WithPublishedId<
-	Inject extends NeonToolInjectOptions
+	[Inject] extends [NeonToolInjectOptions]
 		? InjectedNeonTool<ToolForId<Id>, Inject>
 		: ToolForId<Id>
 >;
@@ -236,7 +237,7 @@ export function createNeonTool<
 >(
 	id: Id,
 	options: NeonToolsClientOptions & { inject?: Inject },
-): Inject extends NeonToolInjectOptions
+): [Inject] extends [NeonToolInjectOptions]
 	? InjectedNeonTool<ToolForId<Id>, Inject>
 	: ToolForId<Id>;
 export function createNeonTool<
