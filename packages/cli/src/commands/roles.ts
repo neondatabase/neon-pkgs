@@ -8,6 +8,8 @@ import {
 import { writer } from "../writer.js";
 
 const ROLES_FIELDS = ["name", "created_at"] as const;
+// The API generates the password and returns it only here, so the table must show it.
+const CREATED_ROLE_FIELDS = ["name", "password", "created_at"] as const;
 
 export const command = "roles";
 export const describe = "Manage roles";
@@ -91,7 +93,7 @@ export const create = async (
 		}),
 	);
 	writer(props).end(data.role, {
-		fields: ROLES_FIELDS,
+		fields: CREATED_ROLE_FIELDS,
 		humanTitle: `Role created on ${branch?.name ?? branchId}`,
 	});
 };

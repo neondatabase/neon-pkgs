@@ -2,6 +2,7 @@
 
 exports[`roles > create 1`] = `
 "name: test_role
+password: generated_pwd
 created_at: 2019-01-01T00:00:00.000Z
 "
 `;
@@ -9,6 +10,7 @@ created_at: 2019-01-01T00:00:00.000Z
 exports[`roles > create names the branch in the table 1`] = `
 "Role created on test_branch
 Name        test_role
+Password    generated_pwd
 Created At  2019-01-01T00:00:00.000Z
 "
 `;
