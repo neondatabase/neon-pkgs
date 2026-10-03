@@ -227,12 +227,25 @@ Neon Auth is not configured for this branch
 "
 `;
 
+exports[`neon-auth > status table names the branch 1`] = `
+"
+Neon Auth status
+  Auth Provider:  better_auth
+  Branch:         test_branch (br-sunny-branch-123456)
+  Database:       neondb
+  Base URL:       https://auth.test.neon.tech
+  Created At:     2024-01-01T00:00:00Z
+  JWKS URL:       https://auth.test.neon.tech/.well-known/jwks.json
+
+"
+`;
+
 exports[`neon-auth > user create 1`] = `
 "
 User created
-  ID:      test-user-id
-  Email:   test@example.com
-  Name:    Test User
+  ID:     test-user-id
+  Email:  test@example.com
+  Name:   Test User
 
 "
 `;
@@ -247,8 +260,8 @@ User "test-user-id" deleted
 exports[`neon-auth > user set-role 1`] = `
 "
 Roles updated
-  User ID:   test-user-id
-  Roles:     admin
+  User ID:  test-user-id
+  Roles:    admin
 
 "
 `;
