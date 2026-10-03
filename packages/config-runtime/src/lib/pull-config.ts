@@ -92,15 +92,14 @@ export async function pullConfig(
 	const projectId = options.projectId;
 	const branchId = options.branchId;
 
-	// Every read below needs only the project and branch ids, so all of them start now. They
-	// are awaited in the order they used to run, so the first error reported is the same one
-	// as before (project, then branches/endpoints, then the branch lookup, then databases,
-	// then the preview group).
+	// The first three stages need only the project and branch ids, so they start together.
+	// They are awaited in the order they used to run, so the first error reported is the same
+	// one as before (project, then branches/endpoints, then the branch lookup, then databases).
 	const projectRead = started(() => api.getProject(projectId));
 	const listsRead = started(() =>
 		Promise.all([
-			api.listBranches(projectId),
-			api.listEndpoints(projectId),
+			started(() => api.listBranches(projectId)),
+			started(() => api.listEndpoints(projectId)),
 		]),
 	);
 	// Data API is enabled per branch + database, so resolve a database to probe.
@@ -112,28 +111,38 @@ export async function pullConfig(
 	// `neon env pull`) and `inspect` — an unavailable Preview feature should not break those
 	// (env comes from auth/dataApi/postgres). `pushConfig` is the place that fails on an
 	// unavailable feature, and only when the policy declares it.
+	// The group starts together once databases resolve (the Data API probe needs one), as
+	// before, so which member's error comes first is unchanged.
 	const previewRead = started(() =>
-		Promise.all([
-			degradeUnavailable(
-				() => api.listBranchBuckets(projectId, branchId),
-				[],
-			),
-			degradeUnavailable(
-				() => api.listBranchFunctions(projectId, branchId),
-				[],
-			),
-			degradeUnavailable(
-				() => api.listCredentials(projectId, branchId),
-				[],
-			),
-			api.getNeonAuth(projectId, branchId),
-			databasesRead.then((databases) => {
-				const probeDatabase = pickProbeDatabase(databases);
-				return probeDatabase
-					? api.getNeonDataApi(projectId, branchId, probeDatabase)
-					: null;
-			}),
-		]),
+		databasesRead.then((databases) => {
+			const probeDatabase = pickProbeDatabase(databases);
+			return Promise.all([
+				started(() =>
+					degradeUnavailable(
+						() => api.listBranchBuckets(projectId, branchId),
+						[],
+					),
+				),
+				started(() =>
+					degradeUnavailable(
+						() => api.listBranchFunctions(projectId, branchId),
+						[],
+					),
+				),
+				started(() =>
+					degradeUnavailable(
+						() => api.listCredentials(projectId, branchId),
+						[],
+					),
+				),
+				started(() => api.getNeonAuth(projectId, branchId)),
+				started(() =>
+					probeDatabase
+						? api.getNeonDataApi(projectId, branchId, probeDatabase)
+						: Promise.resolve(null),
+				),
+			]);
+		}),
 	);
 
 	const project = await projectRead;

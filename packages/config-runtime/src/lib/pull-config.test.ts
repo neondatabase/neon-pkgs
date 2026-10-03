@@ -501,7 +501,7 @@ describe("pullConfig", () => {
 			};
 		};
 
-		test("starts every read that needs only the branch id before any answers", async () => {
+		test("starts project, branches, endpoints, and databases together; the rest once databases resolve", async () => {
 			const { api, started, release, flush } = gatedApi();
 			const pulled = pullConfig({
 				api,
@@ -510,17 +510,73 @@ describe("pullConfig", () => {
 			});
 			await flush();
 			expect(new Set(started)).toEqual(
-				new Set(READS.filter((r) => r !== "getNeonDataApi")),
+				new Set([
+					"getProject",
+					"listBranches",
+					"listEndpoints",
+					"listBranchDatabases",
+				]),
 			);
 
 			release("listBranchDatabases");
 			await flush();
-			expect(started).toContain("getNeonDataApi");
+			expect(new Set(started)).toEqual(new Set(READS));
 
 			for (const name of READS) release(name);
 			await expect(pulled).resolves.toMatchObject({
 				branch: { id: "br-main" },
 			});
+		});
+
+		test("reports the first preview error in the order the reads fail", async () => {
+			const { api, release, failures, flush } = gatedApi();
+			failures.set("getNeonDataApi", new Error("data API failed"));
+			failures.set("getNeonAuth", new Error("auth failed"));
+			const pulled = pullConfig({
+				api,
+				projectId: "proj-gate",
+				branchId: "br-main",
+			});
+			await flush();
+			// Auth answers while databases are still pending; it must not get ahead of the probe.
+			release("getNeonAuth");
+			await flush();
+			release("listBranchDatabases");
+			await flush();
+			release("getNeonDataApi");
+			await flush();
+			for (const name of READS) release(name);
+			await expect(pulled).rejects.toThrow("data API failed");
+		});
+
+		test("a synchronous adapter throw leaves no unhandled rejection", async () => {
+			const unhandled: unknown[] = [];
+			const onUnhandled = (reason: unknown) => unhandled.push(reason);
+			process.on("unhandledRejection", onUnhandled);
+			try {
+				const { api, release, failures, flush } = gatedApi();
+				failures.set("getProject", new Error("project failed"));
+				failures.set("listBranches", new Error("branches failed"));
+				Object.assign(api, {
+					listEndpoints: () => {
+						throw new Error("endpoints threw");
+					},
+				});
+				const pulled = pullConfig({
+					api,
+					projectId: "proj-gate",
+					branchId: "br-main",
+				});
+				await flush();
+				release("listBranches");
+				await flush();
+				release("getProject");
+				await expect(pulled).rejects.toThrow("project failed");
+				await flush();
+				expect(unhandled).toEqual([]);
+			} finally {
+				process.off("unhandledRejection", onUnhandled);
+			}
 		});
 
 		test("reports the project error even when a later read fails first", async () => {
