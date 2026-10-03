@@ -9,6 +9,7 @@ import {
 	type NeonToolNameOverrides,
 } from "./lib/customize.js";
 import {
+	assertProvidedApiKey,
 	isNeonToolId,
 	type NeonToolId,
 	type PublishedId,
@@ -135,6 +136,7 @@ const bindTools = <T extends CreateNeonToolsInput>(
 	options: BindableToolsInput<T>,
 ): NeonTools<SelectedTools<T>> => {
 	assertToolCustomizeOptions(options);
+	assertProvidedApiKey(options);
 	const selected = options.tools;
 	if (selected === undefined || selected.length === 0) {
 		throw new TypeError("createNeonTools requires at least one tool");
@@ -257,6 +259,7 @@ export function createNeonTool<
 		throw unpublishedToolError(id);
 	}
 	assertToolCustomizeOptions(options);
+	assertProvidedApiKey(options);
 	const tool = factoryFor(id)(options);
 	assertKnownNameKeys(options.names, [tool]);
 	const customized = hasToolCustomization(options)
