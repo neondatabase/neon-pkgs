@@ -265,15 +265,26 @@ export const analyticsMiddleware = async (args: {
 	});
 };
 
-export const closeAnalytics = async (opts?: { timeout?: number }) => {
-	if (client) {
+let closing: Promise<void> | undefined;
+
+/**
+ * Close the client and flush queued events. Later calls share the first flush: the psql
+ * launcher starts one while psql runs, and a second `closeAndFlush` would only make the SDK
+ * warn about overlapping flushes.
+ */
+export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
+	if (!client) {
+		return Promise.resolve();
+	}
+	if (!closing) {
 		log.debug("Flushing CLI analytics");
 		// `timeout` bounds how long we wait for in-flight events to flush so a
-		// slow / unreachable track.neon.tech can't hang a short-lived command
-		// (e.g. the psql launch path, which flushes here before process.exit).
-		await client.closeAndFlush(opts);
-		log.debug("Flushed CLI analytics");
+		// slow / unreachable track.neon.tech can't hang a short-lived command.
+		closing = client.closeAndFlush(opts).then(() => {
+			log.debug("Flushed CLI analytics");
+		});
 	}
+	return closing;
 };
 
 const getErrorAnalyticsEventContext = (

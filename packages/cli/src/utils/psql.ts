@@ -13,7 +13,7 @@ export type PsqlOpts = {
 
 const FALLBACK_ENV = "NEONCTL_PSQL_FALLBACK";
 
-/** Max time we wait for the analytics flush before handing off to psql. */
+/** Cap on the analytics flush, counted from when psql launches. */
 const ANALYTICS_FLUSH_TIMEOUT_MS = 3000;
 
 /** Why a given psql implementation was chosen — recorded for analytics. */
@@ -85,31 +85,12 @@ const planPsql = async (opts: PsqlOpts): Promise<PsqlPlan> => {
 			};
 };
 
-/**
- * Record which psql implementation is about to run, then flush analytics.
- *
- * Both exec paths below call `process.exit()`, which short-circuits the
- * main loop's `closeAnalytics()` — so without flushing here the event (and
- * any earlier queued events, e.g. `CLI Started`) would be dropped. The
- * flush is bounded by {@link ANALYTICS_FLUSH_TIMEOUT_MS} so a slow or
- * unreachable analytics endpoint can't stall the psql launch. No-ops when
- * analytics is disabled (`--analytics false`), since the client is absent.
- */
-const reportPsqlInvocation = async (plan: PsqlPlan): Promise<void> => {
-	trackEvent("psql_invoked", {
-		implementation: plan.implementation,
-		reason: plan.reason,
-		nativeAvailable: plan.nativeAvailable,
-	});
-	await closeAnalytics({ timeout: ANALYTICS_FLUSH_TIMEOUT_MS });
-};
-
 const execNative = async (
 	binary: string,
 	connection_uri: string,
 	args: string[],
-): Promise<never> => {
-	log.info("Connecting to the database using psql...");
+): Promise<number> => {
+	log.info(`${connectionSummary(connection_uri, args)}; launching psql...`);
 	const child = spawn(binary, [connection_uri, ...args], {
 		stdio: "inherit",
 	});
@@ -122,9 +103,9 @@ const execNative = async (
 		});
 	}
 
-	return new Promise<never>((_, reject) => {
+	return new Promise<number>((resolve, reject) => {
 		child.on("exit", (code: number | null) => {
-			process.exit(code === null ? 1 : code);
+			resolve(code === null ? 1 : code);
 		});
 		child.on("error", reject);
 	});
@@ -133,15 +114,43 @@ const execNative = async (
 const execTs = async (
 	connection_uri: string,
 	args: string[],
-): Promise<never> => {
-	log.info("Connecting to the database using embedded psql (TypeScript)...");
+): Promise<number> => {
+	log.info(
+		`${connectionSummary(connection_uri, args)}; launching embedded psql (TypeScript)...`,
+	);
 	const { runPsql } = await import("../psql/index.js");
-	const code = await runPsql([connection_uri, ...args], {
+	return runPsql([connection_uri, ...args], {
 		stdin: process.stdin,
 		stdout: process.stdout,
 		stderr: process.stderr,
 	});
-	process.exit(code);
+};
+
+const GENERIC_CONNECTING = "Connecting to the database";
+
+export const connectionSummary = (
+	connection_uri: string,
+	args: string[] = [],
+): string => {
+	// psql arguments (-d, -h, clusters like -Xd, extra positionals) can override the URI's
+	// target, so the target is only named when none are passed.
+	if (args.length > 0) {
+		return GENERIC_CONNECTING;
+	}
+	try {
+		const url = new URL(connection_uri);
+		const part = (value: string) =>
+			decodeURIComponent(value).replace(/[\u0000-\u001f\u007f]/g, "");
+		const database = part(url.pathname.replace(/^\//, ""));
+		const role = part(url.username);
+		if (!database || !role || !url.host) {
+			return GENERIC_CONNECTING;
+		}
+		return `Neon connection: ${database} as ${role} on ${url.host}`;
+	} catch {
+		// A URI this summary can't read is still psql's to accept or reject.
+		return GENERIC_CONNECTING;
+	}
 };
 
 export const psql = async (
@@ -151,23 +160,32 @@ export const psql = async (
 ): Promise<never> => {
 	const plan = await planPsql(opts);
 
-	await reportPsqlInvocation(plan);
+	trackEvent("psql_invoked", {
+		implementation: plan.implementation,
+		reason: plan.reason,
+		nativeAvailable: plan.nativeAvailable,
+	});
+	// psql exits through process.exit, which drops unsent events, so the flush is awaited
+	// before exiting. It starts now and runs while psql does; the cap counts from here.
+	const flushed = closeAnalytics({ timeout: ANALYTICS_FLUSH_TIMEOUT_MS });
 
+	let code: number;
 	if (plan.implementation === "ts") {
 		if (plan.reason === "fallback_no_native") {
 			log.info(
 				"psql binary not found on PATH; falling back to embedded TypeScript psql",
 			);
 		}
-		return execTs(connection_uri, args);
-	}
-
-	// implementation === 'native'
-	if (plan.nativePath === null) {
+		code = await execTs(connection_uri, args);
+	} else if (plan.nativePath === null) {
 		// Only reachable when native was explicitly requested (mode: 'native')
 		// but no binary is on PATH.
 		log.error(`psql is not available in the PATH`);
-		process.exit(1);
+		code = 1;
+	} else {
+		code = await execNative(plan.nativePath, connection_uri, args);
 	}
-	return execNative(plan.nativePath, connection_uri, args);
+
+	await flushed;
+	process.exit(code);
 };
