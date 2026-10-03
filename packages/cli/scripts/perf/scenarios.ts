@@ -100,6 +100,27 @@ export const SCENARIOS: Scenario[] = [
 		expect: { code: 0, stdout: /^Databases on br-sunny-branch-123456$/m },
 	},
 	{
+		name: "roles list --project-id test",
+		argv: ["roles", "list", "--project-id", "test"],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /No roles on main\./ },
+	},
+	{
+		name: "roles list --project-id test --branch br-sunny-branch-123456",
+		argv: [
+			"roles",
+			"list",
+			"--project-id",
+			"test",
+			"--branch",
+			"br-sunny-branch-123456",
+		],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^Roles on br-sunny-branch-123456$/m },
+	},
+	{
 		name: "projects get test",
 		argv: ["projects", "get", "test"],
 		api: true,

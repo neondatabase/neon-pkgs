@@ -2,7 +2,16 @@
 
 exports[`roles > create 1`] = `
 "name: test_role
+password: generated_pwd
 created_at: 2019-01-01T00:00:00.000Z
+"
+`;
+
+exports[`roles > create names the branch in the table 1`] = `
+"Role created on test_branch
+Name        test_role
+Password    generated_pwd
+Created At  2019-01-01T00:00:00.000Z
 "
 `;
 
@@ -12,8 +21,35 @@ created_at: 2016-11-16T15:39:18.000Z
 "
 `;
 
+exports[`roles > delete names the branch in the table 1`] = `
+"Role deleted from test_branch
+Name        test_role
+Created At  2016-11-16T15:39:18.000Z
+"
+`;
+
 exports[`roles > list 1`] = `
 "- name: test_role
   created_at: 2016-01-01T00:00:00Z
+"
+`;
+
+exports[`roles > list names the default branch, even when it has no roles 1`] = `
+"
+No roles on main.
+"
+`;
+
+exports[`roles > list names the resolved branch in the table 1`] = `
+"Roles on test_branch
+Name       Created At
+test_role  2016-01-01T00:00:00Z
+"
+`;
+
+exports[`roles > list shows an explicit branch id as given 1`] = `
+"Roles on br-sunny-branch-123456
+Name       Created At
+test_role  2016-01-01T00:00:00Z
 "
 `;

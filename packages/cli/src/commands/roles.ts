@@ -1,10 +1,15 @@
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
 import type { BranchScopeProps } from "../types.js";
-import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import {
+	fillSingleProject,
+	resolveBranchFromProps,
+} from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
 const ROLES_FIELDS = ["name", "created_at"] as const;
+// The API generates the password and returns it only here, so the table must show it.
+const CREATED_ROLE_FIELDS = ["name", "password", "created_at"] as const;
 
 export const command = "roles";
 export const describe = "Manage roles";
@@ -59,13 +64,16 @@ export const handler = (args: yargs.Argv) => {
 };
 
 export const list = async (props: BranchScopeProps) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, branch } = await resolveBranchFromProps(props);
 	const { data } = await props.apiClient.listProjectBranchRoles(
 		props.projectId,
 		branchId,
 	);
+	const branchLabel = branch?.name ?? branchId;
 	writer(props).end(data.roles, {
 		fields: ROLES_FIELDS,
+		humanTitle: `Roles on ${branchLabel}`,
+		emptyMessage: `No roles on ${branchLabel}.`,
 	});
 };
 
@@ -75,7 +83,7 @@ export const create = async (
 		"no-login": boolean;
 	},
 ) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, branch } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.createProjectBranchRole(props.projectId, branchId, {
 			role: {
@@ -85,14 +93,15 @@ export const create = async (
 		}),
 	);
 	writer(props).end(data.role, {
-		fields: ROLES_FIELDS,
+		fields: CREATED_ROLE_FIELDS,
+		humanTitle: `Role created on ${branch?.name ?? branchId}`,
 	});
 };
 
 export const deleteRole = async (
 	props: BranchScopeProps & { role: string },
 ) => {
-	const branchId = await branchIdFromProps(props);
+	const { branchId, branch } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchRole(
 			props.projectId,
@@ -104,6 +113,7 @@ export const deleteRole = async (
 	if (data) {
 		writer(props).end(data.role, {
 			fields: ROLES_FIELDS,
+			humanTitle: `Role deleted from ${branch?.name ?? branchId}`,
 		});
 	}
 };
