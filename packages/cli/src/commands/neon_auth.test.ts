@@ -580,7 +580,13 @@ describe("neon-auth", () => {
 			"--branch",
 			"test_branch",
 		];
-		for (const args of [statusArgs("test_branch"), deleteArgs]) {
+		const branchArgs = ["--project-id", "test", "--branch", "test_branch"];
+		for (const args of [
+			statusArgs("test_branch"),
+			deleteArgs,
+			["neon-auth", "enable", ...branchArgs],
+			["neon-auth", "oauth-provider", "list", ...branchArgs],
+		]) {
 			const colored = await testCliCommand(args, {
 				output: "table",
 				snapshot: false,

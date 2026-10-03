@@ -23,8 +23,11 @@ import { writer } from "../writer.js";
 
 // Shared styled output helpers
 // chalk 5 does not read NO_COLOR (https://no-color.org); writer.ts strips it the same way.
-const writeStyled = (text: string) => {
-	process.stdout.write(process.env.NO_COLOR ? stripAnsi(text) : text);
+const writeStyled = (
+	text: string,
+	stream: NodeJS.WritableStream = process.stdout,
+) => {
+	stream.write(process.env.NO_COLOR ? stripAnsi(text) : text);
 };
 
 const printKvBlock = (
@@ -754,10 +757,10 @@ const enable = async (props: AuthBranchProps & { databaseName?: string }) => {
 		],
 	);
 	if (data.base_url) {
-		process.stdout.write(
+		writeStyled(
 			`  ${chalk.green("Set this environment variable in your application:")}\n`,
 		);
-		process.stdout.write(`  NEON_AUTH_BASE_URL=${data.base_url}\n\n`);
+		writeStyled(`  NEON_AUTH_BASE_URL=${data.base_url}\n\n`);
 	}
 };
 
@@ -827,7 +830,7 @@ const oauthProviderList = async (props: AuthBranchProps) => {
 		(p) => p.type === NeonAuthOauthProviderType.Shared,
 	);
 	if (hasShared && props.output === "table") {
-		process.stdout.write(
+		writeStyled(
 			`\n${chalk.yellow("Caution:")} ${SHARED_PROVIDER_DISCLAIMER}\n\n`,
 		);
 	}
@@ -1281,9 +1284,10 @@ const emailProviderUpdate = async (
 		);
 	}
 	if (warnSharedSender) {
-		process.stderr.write(
+		writeStyled(
 			`${chalk.yellow("Warning:")} --sender-email and --sender-name are ignored for the shared email provider. ` +
 				`These values only take effect with --type standard.\n\n`,
+			process.stderr,
 		);
 	}
 };
