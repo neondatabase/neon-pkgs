@@ -117,7 +117,7 @@ export const buildAiGatewayNotice = ({
 		return {
 			level: "warning",
 			message:
-				"AI Gateway is in public beta and not every model is enabled for your account " +
+				"Not every model is enabled for your account " +
 				"yet, so some models are missing from the catalog. Request access to more " +
 				`models here: ${moreModelsUrl}`,
 		};
