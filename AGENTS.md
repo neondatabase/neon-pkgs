@@ -497,30 +497,42 @@ published package that ships types to that matrix. Run it locally after `pnpm --
 pnpm exec node scripts/check-dist-types.mjs packages/sdk
 ```
 
-**Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
+**Automated spec drift check (`.github/workflows/sdk-spec-refresh.yml`):**
 
-The live spec at https://neon.com/api_spec/release/v2.json can drift ahead of the
-vendored copy on `main`. A scheduled workflow keeps maintainers aware:
+The **SDK Spec Drift** workflow checks the live spec at
+https://neon.com/api_spec/release/v2.json against the committed spec and generated files:
 
 | | |
 | --- | --- |
 | **When** | Daily at 09:00 UTC; also `workflow_dispatch` |
-| **What** | `spec:pull` → `generate` → `build` on `@neon/sdk` |
-| **Output** | Opens or updates a PR on branch `bot/sdk-spec-refresh` titled `chore(@neon/sdk): refresh OpenAPI spec` — **only when something changed** |
-| **Runner** | Protected runner group + JFrog. The spec is pulled from neon.com. |
+| **What** | Pulls the spec, regenerates `@neon/sdk` and `@neon/tools`, then builds both |
+| **Output** | Fails when the spec or generated files drift. Refresh locally and open the PR by hand; the workflow does not open one |
+| **Runner** | Protected runner group + JFrog. The spec is pulled from neon.com |
 
-**The bot PR is a starting point, not merge-ready.** The workflow deliberately does
-not run `test:ci`. CI will fail on `packages/sdk/src/neon/coverage.test.ts` until
-someone updates `packages/sdk/src/neon/coverage.ts`:
+To refresh locally:
+
+```bash
+pnpm --filter @neon/sdk spec:pull
+pnpm --filter @neon/sdk generate
+pnpm --filter @neon/tools generate
+pnpm --filter @neon/sdk --filter @neon/tools build
+```
+
+**Review the generated changes before opening the PR.** The workflow does not run
+`test:ci`. When the operation set changes, `packages/sdk/src/neon/coverage.test.ts`
+fails until `packages/sdk/src/neon/coverage.ts` is updated:
 
 1. Review added/removed operations in `sdk.gen.ts`.
 2. Wrap new ops in the ergonomic layer where warranted (and add them to `WRAPPED`),
    or accept them as raw-only.
 3. Update `EXPECTED_OPERATIONS` to match the new generated set.
-4. **Update `packages/sdk/README.md`** — the API reference section must stay in sync
+4. **Update `packages/sdk/README.md`**. The API reference section must stay in sync
    with every new ergonomic namespace/method (see below).
 5. Run `pnpm --filter @neon/sdk test:ci` locally.
 6. Add a changeset if the refresh should ship a new `@neon/sdk` version.
+
+Before opening the PR, check both dependent packages using
+[the SDK update chain](#keeping-neontools-and-neoneffect-in-step-with-the-sdk).
 
 **Adding or changing ergonomic APIs — always update the README:**
 
@@ -540,6 +552,65 @@ README in the **same PR**:
 `hey-api` does not treat Neon's `x-stability-level` (alpha/beta) differently — beta
 and private-preview endpoints are generated identically to stable ones. Access
 control stays on the API side.
+
+### Keeping `@neon/tools` and `@neon/effect` in step with the SDK
+
+Every `@neon/sdk` change needs a compatibility check in `@neon/tools` and
+`@neon/effect`, including changes made without a spec refresh. Prepare and verify
+the workspace changes together, then publish in dependency order:
+
+1. **Regenerate from the spec when it changes:**
+
+   ```bash
+   pnpm --filter @neon/sdk spec:pull
+   pnpm --filter @neon/sdk generate
+   pnpm --filter @neon/tools generate
+   pnpm --filter @neon/sdk --filter @neon/tools build
+   ```
+
+2. **Update the SDK's ergonomic layer.** Follow the `coverage.ts` and README
+   checklist above, then run `pnpm --filter @neon/sdk build` and
+   `pnpm --filter @neon/sdk test:ci`.
+
+3. **Publish `@neon/sdk` first.** Follow [Release Management](#release-management).
+   Both dependents use `@neon/sdk: workspace:*`; `pnpm changeset version`
+   patch-bumps them through `updateInternalDependencies: "patch"`. After the
+   release PR merges, publish the SDK and confirm its version with
+   `npm view @neon/sdk version`.
+
+4. **Update and publish `@neon/tools` and `@neon/effect` against the new SDK.**
+   Check each package before its publish dispatch:
+
+   - **`@neon/tools`:** `generate` reads `packages/sdk/spec/neon-openapi.json` and
+     regenerates `src/operations.gen.ts`, `src/schemas.ts` and
+     `src/generated/zod.gen.ts` under `packages/tools`. Its `test:ci` runs
+     `generate:check`, which fails on stale output. `src/catalog.test.ts` requires
+     every public `NeonClient` method to have a tool in `src/lib/ergonomic/` or an
+     entry in `hiddenToolIds` in `src/lib/ergonomic/ids.ts`.
+   - **`@neon/effect`:** client types derive from `NeonClient`, so new methods
+     appear automatically. In `packages/effect/src/lib/client.ts`, update
+     `PAGINATED` and `OPTIONS_ONLY` when the SDK adds, removes or reshapes a
+     method returning `Paginated` or taking only call options. Their SDK-derived
+     keys make `tsc` fail until the records match. `_EveryMethodSupported` also
+     fails the build for methods with more than one parameter before options;
+     resolve that adapter incompatibility before release.
+
+   ```bash
+   pnpm --filter @neon/tools --filter @neon/effect build
+   pnpm --filter @neon/tools --filter @neon/effect test:ci
+   pnpm test:e2e:live
+   ```
+
+   The live suite includes `@neon/effect`; use the
+   [throwaway-org setup](CONTRIBUTING.md#live-neon-e2e-tests).
+   Each dependent needs its own publish dispatch through
+   [Release Management](#release-management). Confirm both published versions
+   with `npm view <pkg> version`.
+
+5. **Update downstream consumers such as the Neon MCP server.** After publishing,
+   open a PR in [neondatabase/mcp-server-neon](https://github.com/neondatabase/mcp-server-neon)
+   bumping both exact `@neon/sdk` and `@neon/tools` pins in `package.json`.
+   Verify the consumer against those published versions before merging.
 
 ### Key Implementation Details
 
