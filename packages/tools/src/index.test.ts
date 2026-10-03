@@ -22,9 +22,9 @@ describe("createNeonTools", () => {
 			"projects.list",
 			"projects.createAndConnect",
 		]);
-		expect(tools["projects.list"].id).toBe("list_projects");
+		expect(tools["projects.list"].id).toBe("projects_list");
 		expect(tools["projects.createAndConnect"].id).toBe(
-			"create_and_connect_projects",
+			"projects_create_and_connect",
 		);
 	});
 

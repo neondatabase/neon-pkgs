@@ -44,7 +44,7 @@ const getProjectTools = (options: NeonToolsClientOptions = {}) => {
 };
 
 describe("description overrides", () => {
-	test("replaces by operationId and leaves unmatched tools unchanged", () => {
+	test("replaces by selector and leaves unmatched tools unchanged", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.list", "projects.get"] as const,
@@ -61,12 +61,12 @@ describe("description overrides", () => {
 		);
 	});
 
-	test("replaces by snake-case id when operationId is absent", () => {
+	test("replaces by snake-case id when selector is absent", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.list"] as const,
 			descriptions: {
-				list_projects: "List Neon projects in your account.",
+				projects_list: "List Neon projects in your account.",
 			},
 		});
 
@@ -75,17 +75,17 @@ describe("description overrides", () => {
 		);
 	});
 
-	test("prefers operationId over snake-case id", () => {
+	test("prefers selector over snake-case id", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.list"] as const,
 			descriptions: {
-				"projects.list": "from operationId",
-				list_projects: "from id",
+				"projects.list": "from selector",
+				projects_list: "from id",
 			},
 		});
 
-		expect(tools["projects.list"].description).toBe("from operationId");
+		expect(tools["projects.list"].description).toBe("from selector");
 	});
 
 	test("lets a function alter the generated description", () => {
@@ -116,8 +116,8 @@ describe("onExecute", () => {
 	test("wraps execute so the host can track the call", async () => {
 		const events: string[] = [];
 		const { requests, tools } = getProjectTools({
-			onExecute: async ({ operationId, id, execute }) => {
-				events.push(`start:${operationId}:${id}`);
+			onExecute: async ({ selector, id, execute }) => {
+				events.push(`start:${selector}:${id}`);
 				const result = await execute();
 				events.push("success");
 				return result;
@@ -128,7 +128,7 @@ describe("onExecute", () => {
 			project_id: "project-id",
 		});
 
-		expect(events).toEqual(["start:projects.get:get_projects", "success"]);
+		expect(events).toEqual(["start:projects.get:projects_get", "success"]);
 		expect(result).toEqual({ data: { id: "project-id" } });
 		expect(requests).toHaveLength(1);
 	});
@@ -452,7 +452,7 @@ describe("description overrides (createNeonTool and contracts)", () => {
 		expect(tool.description).toBe("List Neon projects in your account.");
 	});
 
-	test("passes operationId, id, title, and the generated description to a function", () => {
+	test("passes selector, id, title, and the generated description to a function", () => {
 		const generated = createNeonTool("projects.delete", {
 			apiKey: "test-key",
 		});
@@ -469,8 +469,8 @@ describe("description overrides (createNeonTool and contracts)", () => {
 
 		expect(seen).toEqual([
 			{
-				operationId: "projects.delete",
-				id: "delete_projects",
+				selector: "projects.delete",
+				id: "projects_delete",
 				title: generated.title,
 				description: generated.description,
 			},
@@ -607,7 +607,7 @@ describe("onExecute failure and isolation", () => {
 
 		await tool.execute({ project_id: "project-id" });
 
-		expect(events).toEqual(["get_projects"]);
+		expect(events).toEqual(["projects_get"]);
 		expect(requests).toHaveLength(1);
 	});
 });
@@ -985,14 +985,14 @@ describe("tool names", () => {
 		expect(tools["branches.createAndConnect"].id).toBe(
 			"neon_create_branch",
 		);
-		expect(tools["projects.list"].id).toBe("neon_list_projects");
+		expect(tools["projects.list"].id).toBe("neon_projects_list");
 	});
 
 	test("lets a function rename from the generated id", () => {
 		const tool = createNeonTool("branches.createAndConnect", {
 			apiKey: "test-key",
 			names: ({ id }) =>
-				id === "create_and_connect_branches" ? "create_branch" : id,
+				id === "branches_create_and_connect" ? "create_branch" : id,
 		});
 
 		expect(tool.id).toBe("create_branch");
