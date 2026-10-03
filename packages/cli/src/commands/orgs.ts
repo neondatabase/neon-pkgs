@@ -1,9 +1,12 @@
+import type { Organization } from "@neon/sdk";
+import chalk from "chalk";
 import type yargs from "yargs";
 
+import { readContextFile } from "../context.js";
 import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
-const ORG_FIELDS = ["id", "name"] as const;
+const ORG_FIELDS = ["id", "name", "plan"] as const;
 
 export const command = "orgs";
 export const describe = "Manage organizations";
@@ -30,10 +33,29 @@ const list = async (props: CommonProps) => {
 		data: { organizations },
 	} = await props.apiClient.getCurrentUserOrganizations();
 
+	const current = readContextFile(props.contextFile).orgId;
 	out.write(organizations, {
 		fields: ORG_FIELDS,
 		title: "Organizations",
 		emptyMessage: "You are not a member of any organization.",
+		renderColumns: {
+			plan: (org: Organization) => planName(org.plan),
+			name: (org: Organization) =>
+				org.id === current
+					? `${chalk.green("[current]")} ${org.name}`
+					: org.name,
+		},
 	});
 	out.end();
 };
+
+const ACRONYMS: Record<string, string> = { aws: "AWS", pg: "PG" };
+
+/** `free_v3` -> `Free`, `aws_marketplace` -> `AWS Marketplace`; JSON/YAML keep the API id. */
+export const planName = (plan: string | undefined): string =>
+	(plan ?? "")
+		.replace(/_v\d+$/, "")
+		.split("_")
+		.filter(Boolean)
+		.map((word) => ACRONYMS[word] ?? word[0].toUpperCase() + word.slice(1))
+		.join(" ");

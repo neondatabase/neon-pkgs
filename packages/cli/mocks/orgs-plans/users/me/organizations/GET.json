@@ -1,0 +1,6 @@
+{
+  "organizations": [
+    { "id": "org-linked-123", "name": "Linked org", "plan": "launch", "handle": "linked" },
+    { "id": "org-other-456", "name": "Other org", "plan": "free_v3", "handle": "other" }
+  ]
+}

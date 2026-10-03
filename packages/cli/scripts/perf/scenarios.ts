@@ -121,6 +121,13 @@ export const SCENARIOS: Scenario[] = [
 		expect: { code: 0, stdout: /^Roles on br-sunny-branch-123456$/m },
 	},
 	{
+		name: "orgs list",
+		argv: ["orgs", "list"],
+		api: true,
+		output: "table",
+		expect: { code: 0, stdout: /^Organizations$/m },
+	},
+	{
 		name: "projects get test",
 		argv: ["projects", "get", "test"],
 		api: true,
