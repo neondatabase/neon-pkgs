@@ -18,6 +18,7 @@ import {
 	gitBranchMapping,
 	isAskCommand,
 	isCurrentBranchProbe,
+	isFeedbackCommand,
 	isInspectDbUrl,
 	isMcpOauth,
 	isPluginsCommand,
@@ -158,6 +159,14 @@ describe("isAskCommand", () => {
 		expect(isAskCommand({ _: ["skills"] })).toBe(false);
 		expect(isAskCommand({ _: ["mcp"] })).toBe(false);
 		expect(isAskCommand({ _: ["init"] })).toBe(false);
+	});
+});
+
+describe("isFeedbackCommand", () => {
+	test("true only for feedback", () => {
+		expect(isFeedbackCommand({ _: ["feedback"] })).toBe(true);
+		expect(isFeedbackCommand({ _: ["ask"] })).toBe(false);
+		expect(isFeedbackCommand({ _: ["projects"] })).toBe(false);
 	});
 });
 

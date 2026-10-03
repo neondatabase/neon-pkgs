@@ -16,6 +16,7 @@ import * as deploy from "./deploy.js";
 import * as dev from "./dev.js";
 import * as diff from "./diff.js";
 import * as env from "./env.js";
+import * as feedback from "./feedback.js";
 import * as functions from "./functions.js";
 import * as git from "./git.js";
 import * as init from "./init.js";
@@ -72,6 +73,7 @@ export default [
 	plugins,
 	skills,
 	ask,
+	feedback,
 	dataApi,
 	functions,
 	triggers,
