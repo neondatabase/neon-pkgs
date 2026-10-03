@@ -165,6 +165,7 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 	const observations: Observation[] = [];
 	const rows = new Map<string, WireRow["values"]>();
 	const target: ReconciliationTarget = {
+		snapshotStarted: () => undefined,
 		installReset: (reset) => replaceRows(rows, reset),
 		applyBatch: (changes) => applyChanges(rows, changes),
 		publishReset: (reset) =>
@@ -178,6 +179,7 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 				kind: "caught_up",
 				rows: normalizeTable(rows),
 			}),
+		snapshotCompleted: () => undefined,
 		resetRequired: () => observations.push({ kind: "reset_required" }),
 		decodeFailed: (error) => {
 			throw error;

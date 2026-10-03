@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
+import { createClientEventSink } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
 import {
 	type ConnectionCallbacks,
@@ -78,6 +79,86 @@ afterEach(() => {
 });
 
 describe("ConnectionCoordinator", () => {
+	it("logs connection recovery once per multiplexed connection", async () => {
+		vi.useFakeTimers();
+		const entries: Array<{ event: string; subscriptionId?: string }> = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "debug",
+				logger: (entry) => entries.push(entry),
+			}),
+		});
+		coordinator.subscribe({ capability: "one" }, target());
+		coordinator.subscribe({ capability: "two" }, target());
+		const first = admit();
+
+		first.disconnect();
+		await vi.runAllTicks();
+		expect(
+			entries.filter((entry) => entry.event === "connection_lost"),
+		).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		await vi.runAllTicks();
+
+		expect(
+			entries.filter((entry) => entry.event === "connection_recovered"),
+		).toHaveLength(1);
+		expect(entries).toContainEqual(
+			expect.objectContaining({
+				event: "connection_reconnect_scheduled",
+			}),
+		);
+	});
+
+	it("distinguishes query expiry from encryption-key retirement", async () => {
+		const entries: Array<{ event: string }> = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "warn",
+				logger: (entry) => entries.push(entry),
+			}),
+		});
+		coordinator.subscribe({ capability: "one" }, target());
+		const first = admit();
+		first.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "authorization_expired",
+			message: "expired",
+		});
+
+		coordinator.subscribe({ capability: "two" }, target());
+		const request = defined(
+			first.sent.find(
+				(message) =>
+					message.type === "subscribe" && message.request_id === "2",
+			),
+		);
+		first.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		first.receive({
+			type: "subscription_error",
+			live_id: "42",
+			code: "key_retired",
+			message: "retired",
+		});
+		await Promise.resolve();
+
+		expect(entries.map((entry) => entry.event)).toEqual([
+			"query_expired",
+			"query_encryption_key_rotated",
+		]);
+	});
+
 	it("negotiates neon.live.v1, waits for ready, and routes admission", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
@@ -135,7 +216,13 @@ describe("ConnectionCoordinator", () => {
 	it("reconnects and resubscribes with the newest sealed query", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();
-		const coordinator = createCoordinator();
+		const events: string[] = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "debug",
+				logger: (entry) => events.push(entry.event),
+			}),
+		});
 		const handle = coordinator.subscribe(
 			{ capability: "initial" },
 			callbacks,
@@ -162,9 +249,14 @@ describe("ConnectionCoordinator", () => {
 			columns: [],
 		});
 		await renewal;
+		await vi.runAllTicks();
 		expect(
 			second.sent.filter((message) => message.type === "renew"),
 		).toEqual([]);
+		expect(events.filter((event) => event.includes("renew"))).toEqual([
+			"subscription_renewal_started",
+			"subscription_renewed",
+		]);
 	});
 
 	it("coalesces queued renewals while disconnected", async () => {
@@ -273,7 +365,13 @@ describe("ConnectionCoordinator", () => {
 
 	it("resubscribes with a queued replacement when the active capability expires", async () => {
 		const callbacks = target();
-		const coordinator = createCoordinator();
+		const events: string[] = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "debug",
+				logger: (entry) => events.push(entry.event),
+			}),
+		});
 		const handle = coordinator.subscribe(
 			{ capability: "initial" },
 			callbacks,
@@ -309,7 +407,12 @@ describe("ConnectionCoordinator", () => {
 		});
 
 		await expect(renewal).resolves.toBeUndefined();
+		await Promise.resolve();
 		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(events.filter((event) => event.includes("renew"))).toEqual([
+			"subscription_renewal_started",
+			"subscription_renewed",
+		]);
 	});
 
 	it("waits for a newer replacement when a replacement has also expired", async () => {
@@ -358,18 +461,30 @@ describe("ConnectionCoordinator", () => {
 		await expect(freshRenewal).resolves.toBeUndefined();
 	});
 
-	it("fails every subscription on a malformed connection message", () => {
-		const callbacks = target();
-		const coordinator = createCoordinator();
-		coordinator.subscribe({ capability: "token" }, callbacks);
+	it("reports one connection incident for a malformed message", async () => {
+		const firstCallbacks = target();
+		const secondCallbacks = target();
+		const events: string[] = [];
+		const coordinator = createCoordinator({
+			events: createClientEventSink({
+				logLevel: "error",
+				logger: (entry) => events.push(entry.event),
+			}),
+		});
+		coordinator.subscribe({ capability: "one" }, firstCallbacks);
+		coordinator.subscribe({ capability: "two" }, secondCallbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
 		socket.open();
 		socket.receive({ type: "ready", unexpected: true });
-		expect(callbacks.failed).toHaveBeenCalledWith(
-			expect.objectContaining({
-				code: "protocol_error",
-			}),
-		);
+		for (const callbacks of [firstCallbacks, secondCallbacks]) {
+			expect(callbacks.failed).toHaveBeenCalledWith(
+				expect.objectContaining({
+					code: "protocol_error",
+				}),
+			);
+		}
+		await Promise.resolve();
+		expect(events).toEqual(["connection_failed"]);
 	});
 
 	it("probes an idle ready connection and times it out without inbound activity", async () => {
@@ -598,11 +713,13 @@ function target(): ConnectionCallbacks & {
 	failed: ReturnType<typeof vi.fn>;
 } {
 	const reconciliation: ReconciliationTarget = {
+		snapshotStarted: vi.fn(),
 		installReset: vi.fn(),
 		applyBatch: vi.fn(),
 		publishReset: vi.fn(),
 		publishBatch: vi.fn(),
 		caughtUp: vi.fn(),
+		snapshotCompleted: vi.fn(),
 		resetRequired: vi.fn(),
 		decodeFailed: vi.fn(),
 	};

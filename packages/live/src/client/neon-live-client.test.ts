@@ -80,6 +80,249 @@ afterEach(() => {
 });
 
 describe("NeonLiveClient", () => {
+	it("emits structured diagnostics without exposing query contents", async () => {
+		useFakeWebSocket();
+		const entries: unknown[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1?secret=do-not-log",
+			logLevel: "debug",
+			logger: (entry) => entries.push(entry),
+		});
+		const subscription = client.subscribe(query("sensitive-capability"));
+		const delivered = vi.fn();
+		subscription.onChange(() => {
+			throw new Error("listener failed");
+		});
+		subscription.onChange(delivered);
+
+		const socket = connectAndAdmit();
+		snapshot(socket, "sensitive row value");
+		await Promise.resolve();
+
+		expect(
+			entries.map((entry) => (entry as { event: string }).event),
+		).toEqual(
+			expect.arrayContaining([
+				"subscription_started",
+				"connection_attempt_started",
+				"connection_ready",
+				"subscription_admitted",
+				"subscription_snapshot_started",
+				"subscription_snapshot_completed",
+				"subscription_live",
+				"subscription_listener_failed",
+			]),
+		);
+		expect(delivered).toHaveBeenCalledOnce();
+		const serialized = JSON.stringify(entries);
+		expect(serialized).not.toContain("sensitive-capability");
+		expect(serialized).not.toContain("sensitive row value");
+		expect(serialized).not.toContain("do-not-log");
+		client.close();
+	});
+
+	it("logs only snapshots accepted and installed by reconciliation", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+			parsers: defineParsers({
+				90000: () => {
+					throw new Error("row decoding failed");
+				},
+			}),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const request = defined(
+			socket.sent.find((message) => message.type === "subscribe"),
+		);
+		socket.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{
+					name: "value",
+					type_oid: 90000,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		socket.receive({
+			type: "snapshot_start",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "2",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "snapshot_start",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "snapshot_end",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "1",
+			chunk_count: 0,
+		});
+		socket.receive({
+			type: "snapshot_chunk",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "2",
+			index: 0,
+			rows: [{ row_key: ROW_KEY, values: ["private-value"] }],
+		});
+		socket.receive({
+			type: "snapshot_end",
+			live_id: "41",
+			epoch: "1",
+			snapshot_attempt: "2",
+			chunk_count: 1,
+		});
+		await Promise.resolve();
+
+		expect(
+			events.filter((event) => event === "subscription_snapshot_started"),
+		).toHaveLength(1);
+		expect(events).toContain("subscription_row_decoding_failed");
+		expect(events).not.toContain("subscription_snapshot_completed");
+		expect(subscription.getSnapshot().status).toBe("error");
+		client.close();
+	});
+
+	it("logs a reset requirement only after its publication commits", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+		await Promise.resolve();
+		events.length = 0;
+
+		socket.receive({ type: "open", publication_id: "reset" });
+		socket.receive({
+			type: "reset_required",
+			publication_id: "reset",
+			index: 0,
+			targets: [{ live_id: "41", epoch: "2", first_sequence: "1" }],
+		});
+		await Promise.resolve();
+		expect(events).not.toContain("subscription_reset_required");
+
+		socket.receive({
+			type: "commit",
+			publication_id: "reset",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		await Promise.resolve();
+		expect(events).toContain("subscription_reset_required");
+		client.close();
+	});
+
+	it("queues snapshot completion before reentrant reset listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		subscription.onReset(() => subscription.unsubscribe());
+
+		snapshot(connectAndAdmit(), "value");
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining([
+				"subscription_snapshot_completed",
+				"subscription_unsubscribed",
+			]),
+		);
+		expect(events.indexOf("subscription_snapshot_completed")).toBeLessThan(
+			events.indexOf("subscription_unsubscribed"),
+		);
+		client.close();
+	});
+
+	it("queues publication commit before reentrant batch listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		snapshot(socket, "before");
+		await Promise.resolve();
+		events.length = 0;
+		subscription.onBatch(() => client.close());
+
+		publication(
+			socket,
+			[{ op: "upsert", row_key: ROW_KEY, values: ["1", "after"] }],
+			["42"],
+		);
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining([
+				"connection_publication_committed",
+				"client_closed",
+			]),
+		);
+		expect(events.indexOf("connection_publication_committed")).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
+	it("does not let a logger re-enter subscription admission", async () => {
+		useFakeWebSocket();
+		let subscription!: MaterializedLiveQuerySubscription<MessageRow>;
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => {
+				if (entry.event === "subscription_admitted") {
+					subscription.unsubscribe();
+				}
+			},
+		});
+		subscription = client.subscribe(query("initial"));
+
+		const socket = connectAndAdmit();
+		expect(subscription.getState().status).toBe("connecting");
+		await Promise.resolve();
+
+		expect(subscription.getState().status).toBe("closed");
+		expect(socket.sent.at(-1)).toMatchObject({
+			type: "unsubscribe",
+			live_id: "41",
+		});
+		client.close();
+	});
+
 	it("materializes a v1 snapshot using the subscribed result schema", () => {
 		useFakeWebSocket();
 		const client = createNeonLiveClient({
@@ -506,6 +749,47 @@ describe("NeonLiveClient", () => {
 		await expect(
 			subscription.renew(query("other", "22".repeat(32))),
 		).rejects.toThrow("same query");
+		client.close();
+	});
+
+	it("reports rejected renewal attempts without warning for superseded ones", async () => {
+		useFakeWebSocket();
+		vi.useFakeTimers();
+		const events: string[] = [];
+		const client = createNeonLiveClient({
+			url: "ws://live.test/v1",
+			logLevel: "warn",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		socket.close();
+
+		const superseded = subscription.renew(query("next"));
+		const newest = subscription.renew(query("newest"));
+		await expect(superseded).rejects.toMatchObject({
+			code: "renewal_superseded",
+		});
+		await vi.runAllTicks();
+		expect(events).not.toContain("subscription_renewal_failed");
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		const replacementSocket = FakeWebSocket.instances.at(-1);
+		expect(replacementSocket).toBeDefined();
+		replacementSocket?.open();
+		replacementSocket?.receive({ type: "ready" });
+		replacementSocket?.receive({
+			type: "subscribe_rejected",
+			request_id: "2",
+			code: "authorization_expired",
+			message: "expired",
+		});
+
+		await expect(newest).rejects.toMatchObject({
+			code: "authorization_expired",
+		});
+		await vi.runAllTicks();
+		expect(events).toContain("subscription_renewal_failed");
 		client.close();
 	});
 

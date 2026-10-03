@@ -1,6 +1,224 @@
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
+/** Client-side diagnostic verbosity. */
+export type NeonLiveLogLevel = "silent" | "error" | "warn" | "info" | "debug";
+
+type EmittedNeonLiveLogLevel = Exclude<NeonLiveLogLevel, "silent">;
+
+interface SubscriptionLogMetadata {
+	/** Client-local opaque subscription identifier. */
+	readonly subscriptionId: string;
+}
+
+interface ErrorLogMetadata {
+	/** Stable machine-readable error code. */
+	readonly code: string;
+	/** Whether the reported condition can be retried. */
+	readonly retryable: boolean;
+	/**
+	 * Original error. It may contain details from the proxy or application code
+	 * and should be handled according to the application's error-logging policy.
+	 */
+	readonly error: unknown;
+}
+
+/** @internal Type-level catalogue used to derive the public diagnostic union. */
+export interface NeonLiveLogEventDefinition {
+	readonly client_closed: {
+		readonly level: "info";
+		readonly metadata: object;
+	};
+	readonly connection_attempt_started: {
+		readonly level: "debug";
+		readonly metadata: { readonly attempt?: number };
+	};
+	readonly connection_failed: {
+		readonly level: "error";
+		readonly metadata: ErrorLogMetadata;
+	};
+	readonly connection_heartbeat_ping_sent: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly connection_heartbeat_pong_received: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly connection_heartbeat_timeout: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly connection_lost: {
+		readonly level: "warn";
+		readonly metadata: {
+			readonly activeSubscriptionCount: number;
+			readonly code?: string;
+			readonly retryable?: boolean;
+			readonly error?: unknown;
+		};
+	};
+	readonly connection_publication_committed: {
+		readonly level: "debug";
+		readonly metadata: { readonly bodyCount: number };
+	};
+	readonly connection_ready: {
+		readonly level: "info";
+		readonly metadata: { readonly attempt?: number };
+	};
+	readonly connection_reconnect_exhausted: {
+		readonly level: "error";
+		readonly metadata: ErrorLogMetadata;
+	};
+	readonly connection_reconnect_scheduled: {
+		readonly level: "debug";
+		readonly metadata: {
+			readonly attempt: number;
+			readonly delayMs: number;
+		};
+	};
+	readonly connection_recovered: {
+		readonly level: "info";
+		readonly metadata: {
+			readonly attempt?: number;
+			readonly durationMs: number;
+		};
+	};
+	readonly connection_stable: {
+		readonly level: "debug";
+		readonly metadata: object;
+	};
+	readonly query_encryption_key_rotated: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly query_expired: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly query_refresh_callback_failed: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly query_refresh_callback_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly query_refresh_callback_succeeded: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly query_refresh_scheduled: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly delayMs: number;
+			readonly expiresAt: number;
+		};
+	};
+	readonly query_refresh_stopped: {
+		readonly level: "error";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly subscription_admitted: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_failed: {
+		readonly level: "error";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly subscription_listener_failed: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly subscription_live: {
+		readonly level: "info";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_renewal_failed: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly error: unknown;
+		};
+	};
+	readonly subscription_renewal_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_renewed: {
+		readonly level: "info";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_reset_required: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_row_decoding_failed: {
+		readonly level: "error";
+		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
+	};
+	readonly subscription_snapshot_completed: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly chunkCount: number;
+		};
+	};
+	readonly subscription_snapshot_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_started: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_state_changed: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly fromStatus: LiveQueryState["status"];
+			readonly toStatus: LiveQueryState["status"];
+		};
+	};
+	readonly subscription_unsubscribed: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata;
+	};
+}
+
+/** Stable name for one client diagnostic event. */
+export type NeonLiveLogEvent = keyof NeonLiveLogEventDefinition;
+
+type NeonLiveLogEntryFor<Event extends NeonLiveLogEvent> = Readonly<
+	{
+		/** Severity used for level filtering and the default console method. */
+		level: NeonLiveLogEventDefinition[Event]["level"] &
+			EmittedNeonLiveLogLevel;
+		/** Stable machine-readable event name. */
+		event: Event;
+		/** Human-readable event summary; use `event` for program logic. */
+		message: string;
+		/** Unix timestamp in milliseconds at which the event was emitted. */
+		timestamp: number;
+	} & NeonLiveLogEventDefinition[Event]["metadata"]
+>;
+
+/**
+ * Structured client diagnostic passed to a configured logger.
+ *
+ * Narrowing on `event` also narrows the metadata available on the entry.
+ */
+export type NeonLiveLogEntry = {
+	[Event in NeonLiveLogEvent]: NeonLiveLogEntryFor<Event>;
+}[NeonLiveLogEvent];
+
+/** Receives structured Neon Live client diagnostics. */
+export type NeonLiveLogger = (entry: NeonLiveLogEntry) => void;
+
 /** An error reported by a Neon Live subscription. */
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
@@ -206,6 +424,16 @@ export interface NeonLiveClientOptions {
 	 * the object when it is created, so later mutations have no effect.
 	 */
 	readonly parsers?: PostgreSQLParsers;
+	/**
+	 * Minimum client diagnostic level. The default, `silent`, emits nothing.
+	 * When enabled without {@link logger}, entries are written to `console`.
+	 */
+	readonly logLevel?: NeonLiveLogLevel;
+	/**
+	 * Structured diagnostic sink. It is called only for events enabled by
+	 * {@link logLevel}; exceptions from the sink are ignored.
+	 */
+	readonly logger?: NeonLiveLogger;
 }
 
 /** A client that multiplexes independently disposable subscriptions. */

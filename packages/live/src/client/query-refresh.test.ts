@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	createClientEventSink,
+	registerSubscriptionEvents,
+} from "./diagnostics.js";
 import { QueryRefreshController } from "./query-refresh.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
+import type { RawLiveQuerySubscription } from "./types.js";
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -40,11 +45,14 @@ describe("QueryRefreshController", () => {
 			throw new Error("unavailable");
 		});
 		const onRefreshExhausted = vi.fn();
+		const events: string[] = [];
+		const subscription = loggedSubscription(events);
 		const controller = new QueryRefreshController({
 			query: query(2),
 			refreshQuery,
 			renewSubscription: vi.fn(),
 			onRefreshExhausted,
+			subscription,
 		});
 
 		controller.start();
@@ -52,6 +60,11 @@ describe("QueryRefreshController", () => {
 
 		expect(refreshQuery).toHaveBeenCalledTimes(5);
 		expect(onRefreshExhausted).not.toHaveBeenCalled();
+		expect(
+			events.filter((event) => event === "query_refresh_callback_failed"),
+		).toHaveLength(5);
+		expect(events).toContain("query_refresh_callback_started");
+		expect(events).toContain("query_refresh_scheduled");
 		controller.stop();
 	});
 
@@ -105,6 +118,28 @@ describe("QueryRefreshController", () => {
 		controller.stop();
 	});
 
+	it("reports a valid callback result before renewal acceptance", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const events: string[] = [];
+		const subscription = loggedSubscription(events);
+		const controller = new QueryRefreshController({
+			query: query(2),
+			refreshQuery: async () => query(20),
+			renewSubscription: async () => {
+				throw new Error("transport unavailable");
+			},
+			onRefreshExhausted: vi.fn(),
+			subscription,
+		});
+
+		controller.start();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(events).toContain("query_refresh_callback_succeeded");
+		controller.stop();
+	});
+
 	it("stops when a refresh returns a sealed query for another query", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
@@ -114,11 +149,14 @@ describe("QueryRefreshController", () => {
 		}));
 		const renewSubscription = vi.fn();
 		const onRefreshExhausted = vi.fn();
+		const events: string[] = [];
+		const subscription = loggedSubscription(events);
 		const controller = new QueryRefreshController({
 			query: query(2),
 			refreshQuery,
 			renewSubscription,
 			onRefreshExhausted,
+			subscription,
 		});
 
 		controller.start();
@@ -131,9 +169,23 @@ describe("QueryRefreshController", () => {
 				message: "Neon Live renewal must be for the same query",
 			}),
 		);
+		expect(events).not.toContain("query_refresh_callback_succeeded");
+		expect(events).toContain("query_refresh_stopped");
 		controller.stop();
 	});
 });
+
+function loggedSubscription(
+	events: string[],
+): RawLiveQuerySubscription<unknown> {
+	const subscription = {} as RawLiveQuerySubscription<unknown>;
+	const clientEvents = createClientEventSink({
+		logLevel: "debug",
+		logger: (entry) => events.push(entry.event),
+	});
+	registerSubscriptionEvents(subscription, clientEvents.createSubscription());
+	return subscription;
+}
 
 function query(expiresAt: number): SealedLiveQuery<unknown> {
 	return {

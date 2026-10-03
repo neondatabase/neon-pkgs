@@ -1,4 +1,9 @@
 import {
+	type ClientEventSink,
+	SILENT_CLIENT_EVENTS,
+	type SubscriptionEventSink,
+} from "../diagnostics.js";
+import {
 	decodeServerFrame,
 	encodeClientMessage,
 	LIVE_SUBPROTOCOL,
@@ -6,6 +11,7 @@ import {
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
+	type ReconciliationEventSink,
 	type ReconciliationTarget,
 	SnapshotPublicationReconciler,
 } from "../reconciliation/reconciler.js";
@@ -27,6 +33,7 @@ export interface ConnectionSealedQuery {
 }
 
 export interface ConnectionCallbacks {
+	readonly events?: SubscriptionEventSink;
 	readonly reconciliation: ReconciliationTarget;
 	admitted(columns: readonly WireColumn[]): void;
 	disconnected(): void;
@@ -38,6 +45,7 @@ export interface ConnectionCoordinatorOptions {
 	readonly webSocketFactory?: WebSocketFactory;
 	readonly reconnect?: boolean | ReconnectOptions;
 	readonly heartbeat?: boolean | HeartbeatOptions;
+	readonly events?: ClientEventSink;
 }
 
 export interface ConnectionHandle {
@@ -89,6 +97,7 @@ type ManagedSubscriptionState =
 	| "closed";
 
 interface ManagedSubscription {
+	readonly events: SubscriptionEventSink;
 	query: ConnectionSealedQuery;
 	readonly callbacks: ConnectionCallbacks;
 	state: ManagedSubscriptionState;
@@ -111,10 +120,11 @@ export class ConnectionCoordinator {
 	private readonly pendingRequests = new Map<string, ManagedSubscription>();
 	private readonly liveSubscriptions = new Map<string, ManagedSubscription>();
 	private readonly detachingLiveIds = new Set<string>();
-	private readonly reconciler = new SnapshotPublicationReconciler();
+	private readonly reconciler: SnapshotPublicationReconciler;
 	private readonly webSocketFactory: WebSocketFactory;
 	private readonly reconnect?: ReconnectBackoff;
 	private readonly heartbeat?: ConnectionHeartbeat;
+	private readonly events: ClientEventSink;
 	private socket?: WebSocketLike;
 	private reconnectTimer?: unknown;
 	private reconnectDeadlineTimer?: ReturnType<typeof setTimeout>;
@@ -125,9 +135,18 @@ export class ConnectionCoordinator {
 	private ready = false;
 	private disposed = false;
 	private terminalConnection = false;
+	private pendingConnectionError?: ConnectionCoordinatorError;
 
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
 		if (!options.url) throw new Error("Neon Live requires a WebSocket URL");
+		this.events = options.events ?? SILENT_CLIENT_EVENTS;
+		this.reconciler =
+			this.events === SILENT_CLIENT_EVENTS
+				? new SnapshotPublicationReconciler()
+				: new SnapshotPublicationReconciler(
+						{},
+						this.reconciliationEvents(),
+					);
 		this.webSocketFactory =
 			options.webSocketFactory ?? defaultWebSocketFactory;
 		if (options.reconnect !== false) {
@@ -143,9 +162,21 @@ export class ConnectionCoordinator {
 					? {}
 					: options.heartbeat;
 			this.heartbeat = new ConnectionHeartbeat(heartbeatOptions, {
-				sendPing: (token) => this.send({ type: "ping", token }),
-				timedOut: () =>
-					this.closeSocket(APPLICATION_CLOSE, "heartbeat timeout"),
+				sendPing: (token) => {
+					const sent = this.send({ type: "ping", token });
+					if (sent) this.events.connection.heartbeatPingSent();
+					return sent;
+				},
+				timedOut: () => {
+					this.events.connection.heartbeatTimedOut();
+					this.pendingConnectionError =
+						new ConnectionCoordinatorError(
+							"heartbeat_timeout",
+							true,
+							"Neon Live connection heartbeat timed out",
+						);
+					this.closeSocket(APPLICATION_CLOSE, "heartbeat timeout");
+				},
 			});
 		}
 	}
@@ -157,6 +188,7 @@ export class ConnectionCoordinator {
 		if (this.disposed) throw new Error("Neon Live client is closed");
 		validateSealedQuery(query);
 		const managed: ManagedSubscription = {
+			events: callbacks.events ?? this.events.createSubscription(),
 			query,
 			callbacks,
 			state: "active",
@@ -164,6 +196,7 @@ export class ConnectionCoordinator {
 		};
 		this.managedSubscriptions.add(managed);
 		this.activeSubscriptions.add(managed);
+		managed.events.started();
 		this.connect();
 		if (this.ready) this.sendSubscribe(managed);
 		return Object.freeze({
@@ -204,13 +237,19 @@ export class ConnectionCoordinator {
 		}
 		if (subscription.state === "failed" || this.terminalConnection) {
 			return Promise.reject(
-				new Error("Neon Live connection cannot recover"),
+				new ConnectionCoordinatorError(
+					"connection_lost",
+					false,
+					"Neon Live connection cannot recover",
+				),
 			);
 		}
 		subscription.query = query;
 		this.rejectQueuedRenewals(
 			subscription,
-			new Error(
+			new ConnectionCoordinatorError(
+				"renewal_superseded",
+				false,
 				"Neon Live renewal was superseded by a newer sealed query",
 			),
 		);
@@ -237,6 +276,7 @@ export class ConnectionCoordinator {
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
+		subscription.events.unsubscribed();
 		this.rejectRenewals(
 			subscription,
 			new Error("Neon Live subscription is closed"),
@@ -263,10 +303,12 @@ export class ConnectionCoordinator {
 			return;
 		this.cancelReconnect();
 		this.ready = false;
+		this.events.connection.attemptStarted();
 		let socket: WebSocketLike;
 		try {
 			socket = this.webSocketFactory(this.options.url, LIVE_SUBPROTOCOL);
-		} catch {
+		} catch (error) {
+			this.noteConnectionLost(error);
 			this.scheduleReconnect();
 			return;
 		}
@@ -318,6 +360,8 @@ export class ConnectionCoordinator {
 				);
 			}
 			this.ready = true;
+			this.events.connection.ready();
+			this.pendingConnectionError = undefined;
 			this.heartbeat?.start();
 			this.armReconnectStability(this.socket);
 			for (const subscription of this.activeSubscriptions) {
@@ -355,6 +399,7 @@ export class ConnectionCoordinator {
 				this.send({ type: "pong", token: message.token });
 				return;
 			case "pong":
+				this.events.connection.heartbeatPongReceived();
 				return;
 			case "snapshot_start":
 			case "snapshot_chunk":
@@ -412,6 +457,7 @@ export class ConnectionCoordinator {
 			this.sendNextRenewal(subscription);
 		}
 		subscription.requestedCapability = undefined;
+		subscription.events.admitted();
 	}
 
 	private rejected(
@@ -423,12 +469,13 @@ export class ConnectionCoordinator {
 		this.pendingRequests.delete(message.request_id);
 		subscription.requestId = undefined;
 		if (subscription.state === "closed") return;
+		const replacementRequired = requiresReplacementQuery(message.code);
 		const error = new ConnectionCoordinatorError(
 			message.code,
-			false,
+			replacementRequired,
 			message.message,
 		);
-		if (requiresReplacementQuery(message.code)) {
+		if (replacementRequired) {
 			this.awaitReplacementQuery(
 				subscription,
 				subscription.requestedCapability,
@@ -447,6 +494,7 @@ export class ConnectionCoordinator {
 		subscription.renewing = undefined;
 		subscription.acceptedCapability = renewal.query.capability;
 		renewal.resolve();
+		subscription.events.renewed();
 		this.sendNextRenewal(subscription);
 	}
 
@@ -474,8 +522,13 @@ export class ConnectionCoordinator {
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
-		const error = new ConnectionCoordinatorError(code, false, message);
-		if (requiresReplacementQuery(code)) {
+		const replacementRequired = requiresReplacementQuery(code);
+		const error = new ConnectionCoordinatorError(
+			code,
+			replacementRequired,
+			message,
+		);
+		if (replacementRequired) {
 			this.awaitReplacementQuery(
 				subscription,
 				subscription.acceptedCapability,
@@ -496,6 +549,11 @@ export class ConnectionCoordinator {
 			"internal_error",
 		].includes(code);
 		if (retryable) {
+			this.pendingConnectionError = new ConnectionCoordinatorError(
+				code,
+				true,
+				message,
+			);
 			this.closeSocket(APPLICATION_CLOSE, message);
 		} else {
 			this.failConnection(
@@ -516,6 +574,9 @@ export class ConnectionCoordinator {
 		subscription.requestId = requestId;
 		subscription.requestedCapability = subscription.query.capability;
 		this.pendingRequests.set(requestId, subscription);
+		if (subscription.queuedRenewals.length > 0) {
+			subscription.events.renewalStarted();
+		}
 		this.send({
 			type: "subscribe",
 			request_id: requestId,
@@ -534,6 +595,7 @@ export class ConnectionCoordinator {
 		const renewal = subscription.queuedRenewals.shift();
 		if (!renewal) return;
 		subscription.renewing = renewal;
+		subscription.events.renewalStarted();
 		this.send({
 			type: "renew",
 			live_id: subscription.liveId,
@@ -564,6 +626,13 @@ export class ConnectionCoordinator {
 			!this.terminalConnection &&
 			this.activeSubscriptions.size > 0
 		) {
+			this.noteConnectionLost(this.pendingConnectionError);
+		}
+		if (
+			!this.disposed &&
+			!this.terminalConnection &&
+			this.activeSubscriptions.size > 0
+		) {
 			this.scheduleReconnect();
 		}
 	}
@@ -584,6 +653,10 @@ export class ConnectionCoordinator {
 			this.reconnectExhausted();
 			return;
 		}
+		this.events.connection.reconnectScheduled(
+			attempt.attempt,
+			attempt.delayMs,
+		);
 		if (
 			this.reconnectDeadlineTimer === undefined &&
 			Number.isFinite(attempt.remainingMs)
@@ -628,20 +701,30 @@ export class ConnectionCoordinator {
 			this.stabilityTimer = undefined;
 			this.reconnect?.reset();
 			this.cancelReconnectDeadline();
+			this.events.connection.stable();
 		}, this.reconnect.stabilityMs);
 	}
 
 	private reconnectExhausted(): void {
-		this.failConnection(
-			new ConnectionCoordinatorError(
-				"connection_lost",
-				false,
-				"Neon Live connection could not be restored",
-			),
+		if (this.terminalConnection) return;
+		const error = new ConnectionCoordinatorError(
+			"connection_lost",
+			false,
+			"Neon Live connection could not be restored",
 		);
+		this.events.connection.reconnectExhausted(error);
+		this.terminateConnection(error);
 	}
 
 	private failSubscription(
+		subscription: ManagedSubscription,
+		error: ConnectionCoordinatorError,
+	): void {
+		this.terminateSubscription(subscription, error);
+		subscription.events.failed(error);
+	}
+
+	private terminateSubscription(
 		subscription: ManagedSubscription,
 		error: ConnectionCoordinatorError,
 	): void {
@@ -683,6 +766,7 @@ export class ConnectionCoordinator {
 		subscription.acceptedCapability = undefined;
 		subscription.liveId = undefined;
 		this.rejectRenewals(subscription, error);
+		subscription.events.failed(error);
 		subscription.callbacks.failed(error);
 		if (this.activeSubscriptions.size === 0) {
 			this.cancelReconnectEpisode();
@@ -711,6 +795,7 @@ export class ConnectionCoordinator {
 			subscription.renewing = undefined;
 		}
 		subscription.callbacks.disconnected();
+		subscription.events.queryUnavailable(error);
 
 		if (
 			rejectedCapability !== undefined &&
@@ -735,6 +820,11 @@ export class ConnectionCoordinator {
 
 	private failConnection(error: ConnectionCoordinatorError): void {
 		if (this.terminalConnection) return;
+		this.events.connection.failed(error);
+		this.terminateConnection(error);
+	}
+
+	private terminateConnection(error: ConnectionCoordinatorError): void {
 		this.terminalConnection = true;
 		this.cancelReconnectEpisode();
 		const subscriptions = [...this.managedSubscriptions].filter(
@@ -742,8 +832,9 @@ export class ConnectionCoordinator {
 				subscription.state === "active" ||
 				subscription.state === "awaiting_query",
 		);
-		for (const subscription of subscriptions)
-			this.failSubscription(subscription, error);
+		for (const subscription of subscriptions) {
+			this.terminateSubscription(subscription, error);
+		}
 		this.closeSocket(APPLICATION_CLOSE, "protocol failure");
 	}
 
@@ -766,10 +857,14 @@ export class ConnectionCoordinator {
 	}
 
 	private resolveRenewals(subscription: ManagedSubscription): void {
+		const renewed =
+			subscription.renewing !== undefined ||
+			subscription.queuedRenewals.length > 0;
 		subscription.renewing?.resolve();
 		subscription.renewing = undefined;
 		for (const renewal of subscription.queuedRenewals) renewal.resolve();
 		subscription.queuedRenewals = [];
+		if (renewed) subscription.events.renewed();
 	}
 
 	private send(message: Parameters<typeof encodeClientMessage>[0]): boolean {
@@ -812,6 +907,19 @@ export class ConnectionCoordinator {
 		this.cancelStabilityTimer();
 		this.cancelReconnectDeadline();
 		this.reconnect?.reset();
+		this.pendingConnectionError = undefined;
+		this.events.connection.episodeEnded();
+	}
+
+	private noteConnectionLost(error?: unknown): void {
+		this.events.connection.lost(error, this.activeSubscriptions.size);
+	}
+
+	private reconciliationEvents(): ReconciliationEventSink {
+		return {
+			publicationCommitted: (bodyCount) =>
+				this.events.connection.publicationCommitted(bodyCount),
+		};
 	}
 }
 

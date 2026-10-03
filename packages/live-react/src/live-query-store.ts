@@ -149,6 +149,7 @@ export class ReactLiveQueryStore<Row> {
 			{ initialData: this.initialSnapshot.data },
 		);
 		this.subscription = subscription;
+		this.queryRefresh.setSubscription(subscription);
 		this.snapshot = subscription.getSnapshot();
 		this.hookSnapshot = this.withRefreshError(this.snapshot);
 		const unsubscribers = [
@@ -173,6 +174,7 @@ export class ReactLiveQueryStore<Row> {
 		this.detachForwarders = undefined;
 		this.subscription?.unsubscribe();
 		this.subscription = undefined;
+		this.queryRefresh.setSubscription(undefined);
 		this.refreshError = undefined;
 		this.snapshot = this.initialSnapshot;
 		this.hookSnapshot = this.initialSnapshot;

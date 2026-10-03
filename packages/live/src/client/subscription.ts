@@ -1,4 +1,5 @@
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
+import type { SubscriptionEventSink } from "./diagnostics.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
 	decodeRow,
@@ -88,7 +89,8 @@ export class Subscription<Row>
 		private query: SealedLiveQuery<Row>,
 		readonly materialized: boolean,
 		private readonly parsers: PostgreSQLParserRegistry,
-		initialData?: readonly Row[],
+		initialData: readonly Row[] | undefined,
+		private readonly events: SubscriptionEventSink,
 	) {
 		if (materialized) {
 			this.rows = new Map(
@@ -112,6 +114,10 @@ export class Subscription<Row>
 
 	replaceSealedQuery(query: SealedLiveQuery<Row>): void {
 		this.query = query;
+	}
+
+	renewalFailed(error: unknown): void {
+		this.events.renewalFailed(error);
 	}
 
 	admit(columns: readonly WireColumn[]): void {
@@ -190,6 +196,11 @@ export class Subscription<Row>
 		this.owner.unsubscribe(this);
 	};
 
+	snapshotStarted(): void {
+		if (this.closed) return;
+		this.events.snapshotStarted();
+	}
+
 	installReset(wireRows: readonly WireRow[]): void {
 		if (this.closed) return;
 		const rows = this.decodeReset(wireRows);
@@ -253,7 +264,7 @@ export class Subscription<Row>
 		this.initialized = true;
 		this.snapshot = this.makeSnapshot();
 		this.transactions.applySnapshot(mvcc);
-		notify(this.resetListeners, staged.rows);
+		this.notify(this.resetListeners, staged.rows);
 	}
 
 	publishBatch(batch: ReconciledBatch): void {
@@ -265,23 +276,34 @@ export class Subscription<Row>
 		if (!changes) throw new Error("Neon Live published an unapplied batch");
 		this.appliedBatches.delete(batch.changes);
 		const info = Object.freeze({ txids: batch.txids });
-		notify(this.batchListeners, changes, info);
+		this.notify(this.batchListeners, changes, info);
 		if (this.materialized && this.state.status === "live") {
-			notify(this.changeListeners, this.snapshot);
+			this.notify(this.changeListeners, this.snapshot);
 		}
 		for (const txid of batch.txids) this.transactions.seen(txid);
 	}
 
 	caughtUp(): void {
 		if (this.closed) return;
+		const becameLive = this.state.status !== "live";
 		this.setLifecycle(
 			Object.freeze({ status: "live", error: undefined }),
 			false,
 		);
-		if (this.materialized) notify(this.changeListeners, this.snapshot);
+		if (becameLive) {
+			this.events.live();
+		}
+		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
+	}
+
+	snapshotCompleted(chunkCount: number): void {
+		if (this.closed) return;
+		this.events.snapshotCompleted(chunkCount);
 	}
 
 	resetRequired(): void {
+		if (this.closed) return;
+		this.events.resetRequired();
 		this.setLifecycle(staleState(this));
 	}
 
@@ -355,11 +377,26 @@ export class Subscription<Row>
 	private setLifecycle(state: LiveQueryState, publishChange = true): void {
 		if (this.closed && state.status !== "closed") return;
 		if (sameState(this.state, state)) return;
+		const previousStatus = this.state.status;
 		this.state = state;
 		this.snapshot = this.makeSnapshot();
-		notify(this.stateListeners, this.state);
+		this.events.stateChanged(previousStatus, state.status);
+		this.notify(this.stateListeners, this.state);
 		if (publishChange && this.materialized) {
-			notify(this.changeListeners, this.snapshot);
+			this.notify(this.changeListeners, this.snapshot);
+		}
+	}
+
+	private notify<Arguments extends readonly unknown[]>(
+		listeners: Set<(...args: Arguments) => void>,
+		...args: Arguments
+	): void {
+		for (const listener of [...listeners]) {
+			try {
+				listener(...args);
+			} catch (error) {
+				this.events.listenerFailed(error);
+			}
 		}
 	}
 
@@ -396,17 +433,4 @@ function listen<Listener>(
 		active = false;
 		listeners.delete(listener);
 	};
-}
-
-function notify<Arguments extends readonly unknown[]>(
-	listeners: Set<(...args: Arguments) => void>,
-	...args: Arguments
-): void {
-	for (const listener of [...listeners]) {
-		try {
-			listener(...args);
-		} catch {
-			// One application listener cannot interrupt atomic stream delivery.
-		}
-	}
 }

@@ -99,11 +99,32 @@ describe("snapshot reconciliation", () => {
 			...snapshotStart("1", "2"),
 			mvcc: appliedMvcc,
 		});
+		accept(reconciler, snapshotStart("1", "1"));
 		accept(reconciler, snapshotChunk(0, [row(ROW_A, "old")], "1", "1"));
 		accept(reconciler, snapshotEnd(0, "1", "2"));
 
+		expect(state.snapshotStarted).toHaveBeenCalledTimes(2);
+		expect(state.snapshotCompleted).toHaveBeenCalledOnce();
+		expect(state.snapshotCompleted).toHaveBeenCalledWith(0);
 		expect(state.publishReset).toHaveBeenCalledOnce();
 		expect(state.publishReset).toHaveBeenCalledWith([], appliedMvcc);
+	});
+
+	it("does not complete a snapshot whose rows fail to install", () => {
+		const state = target();
+		const reconciler = subscribed(state);
+		const failure = new Error("row decoding failed");
+		state.installReset.mockImplementationOnce(() => {
+			throw failure;
+		});
+		state.decodeFailed.mockImplementationOnce(() => undefined);
+
+		accept(reconciler, snapshotStart());
+		accept(reconciler, snapshotEnd(0));
+
+		expect(state.snapshotStarted).toHaveBeenCalledOnce();
+		expect(state.snapshotCompleted).not.toHaveBeenCalled();
+		expect(state.decodeFailed).toHaveBeenCalledWith(failure);
 	});
 
 	it("preserves order and buffered publications across superseded snapshot attempts", () => {

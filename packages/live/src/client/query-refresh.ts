@@ -1,4 +1,7 @@
+import type { QueryRefreshEventSink } from "./diagnostics.js";
+import { subscriptionEventsFor } from "./diagnostics.js";
 import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
+import type { RawLiveQuerySubscription } from "./types.js";
 
 const REFRESH_EARLY_MS = 10_000;
 const REFRESH_RETRY_MS = 1_000;
@@ -14,6 +17,12 @@ interface QueryRefreshControllerOptions<Row> {
 	readonly onSubscriptionRenewed?: () => void;
 	/** Called when invalid replacement data permanently stops automatic refresh. */
 	readonly onRefreshExhausted: (error: unknown) => void;
+	/**
+	 * Subscription whose diagnostic context receives refresh lifecycle events.
+	 * Renewal behavior remains defined by `renewSubscription`, which also
+	 * supports integrations that construct the controller before subscribing.
+	 */
+	readonly subscription?: RawLiveQuerySubscription<Row>;
 }
 
 /**
@@ -34,10 +43,14 @@ export class QueryRefreshController<Row> {
 	private refreshStopped = false;
 	private active = false;
 	private generation = 0;
+	private refreshEvents: QueryRefreshEventSink;
 
 	constructor(private readonly options: QueryRefreshControllerOptions<Row>) {
 		this.query = options.query;
 		this.refreshQuery = options.refreshQuery;
+		this.refreshEvents = subscriptionEventsFor(
+			options.subscription,
+		).refresh;
 	}
 
 	/** Return the capability currently managed by this controller. */
@@ -59,6 +72,13 @@ export class QueryRefreshController<Row> {
 		if (this.active && !this.refreshInFlight && !this.refreshStopped) {
 			this.scheduleRefresh();
 		}
+	}
+
+	/** Associate the active subscription managed by this controller. */
+	setSubscription(
+		subscription: RawLiveQuerySubscription<Row> | undefined,
+	): void {
+		this.refreshEvents = subscriptionEventsFor(subscription).refresh;
 	}
 
 	/**
@@ -99,6 +119,7 @@ export class QueryRefreshController<Row> {
 		const refreshDelay =
 			delay ??
 			Math.max(0, this.query.expiresAt - Date.now() - REFRESH_EARLY_MS);
+		this.refreshEvents.scheduled(refreshDelay, this.query.expiresAt);
 		this.refreshTimer = setTimeout(() => {
 			this.refreshTimer = undefined;
 			void this.refresh();
@@ -116,6 +137,7 @@ export class QueryRefreshController<Row> {
 			return;
 		this.refreshInFlight = true;
 		const generation = this.generation;
+		this.refreshEvents.callbackStarted();
 		try {
 			const query = await refreshQuery();
 			if (!this.isCurrent(generation)) return;
@@ -124,9 +146,11 @@ export class QueryRefreshController<Row> {
 				this.assertSameQuery(query);
 			} catch (error) {
 				this.refreshStopped = true;
+				this.refreshEvents.stopped(error);
 				this.options.onRefreshExhausted(error);
 				return;
 			}
+			this.refreshEvents.callbackSucceeded();
 
 			// Do not let a pending wire renewal prevent the next capability from
 			// being obtained. During a long outage, each newer capability supersedes
@@ -134,8 +158,9 @@ export class QueryRefreshController<Row> {
 			this.query = query;
 			this.scheduleRefresh();
 			void this.renewSubscriptionRecoverably(query, generation);
-		} catch {
+		} catch (error) {
 			if (!this.isCurrent(generation)) return;
+			this.refreshEvents.callbackFailed(error);
 			this.scheduleRefresh(REFRESH_RETRY_MS);
 		} finally {
 			if (generation === this.generation) this.refreshInFlight = false;
@@ -151,8 +176,9 @@ export class QueryRefreshController<Row> {
 			if (this.isCurrent(generation) && this.query === query)
 				this.options.onSubscriptionRenewed?.();
 		} catch {
-			if (this.isCurrent(generation) && this.query === query)
+			if (this.isCurrent(generation) && this.query === query) {
 				this.scheduleRefresh(REFRESH_RETRY_MS);
+			}
 		}
 	}
 
