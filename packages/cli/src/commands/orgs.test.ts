@@ -44,6 +44,8 @@ describe("orgs", () => {
 		expect(planName("free_v3")).toBe("Free");
 		expect(planName("launch")).toBe("Launch");
 		expect(planName("free_extended")).toBe("Free Extended");
+		expect(planName("aws_marketplace")).toBe("AWS Marketplace");
+		expect(planName("vercel_pg_legacy")).toBe("Vercel PG Legacy");
 		expect(planName(undefined)).toBe("");
 	});
 });

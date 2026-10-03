@@ -49,11 +49,13 @@ const list = async (props: CommonProps) => {
 	out.end();
 };
 
-/** `free_v3` -> `Free`, `free_extended` -> `Free Extended`; JSON/YAML keep the API id. */
+const ACRONYMS: Record<string, string> = { aws: "AWS", pg: "PG" };
+
+/** `free_v3` -> `Free`, `aws_marketplace` -> `AWS Marketplace`; JSON/YAML keep the API id. */
 export const planName = (plan: string | undefined): string =>
 	(plan ?? "")
 		.replace(/_v\d+$/, "")
 		.split("_")
 		.filter(Boolean)
-		.map((word) => word[0].toUpperCase() + word.slice(1))
+		.map((word) => ACRONYMS[word] ?? word[0].toUpperCase() + word.slice(1))
 		.join(" ");
