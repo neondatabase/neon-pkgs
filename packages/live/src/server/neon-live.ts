@@ -129,6 +129,14 @@ export interface NeonLiveServerOptions<Query> {
 	/** Opaque server-only credential issued by Neon Live. */
 	readonly secret: string;
 	/**
+	 * Include full database error details in subscription errors.
+	 *
+	 * Enable this only in development. Detailed errors can expose schema names,
+	 * table names, column names, and other database structure to clients.
+	 * @defaultValue false
+	 */
+	readonly debugMode?: boolean;
+	/**
 	 * PostgreSQL database for this SDK instance.
 	 *
 	 * It is embedded in every query capability. The first capability accepted
@@ -180,6 +188,7 @@ export function createNeonLive<Query = RawSqlQuery<unknown>>(
 	const issueCapability = createCapabilityIssuer(
 		parseNeonLiveSecret(options.secret),
 		options.db,
+		options.debugMode === true ? "full" : "safe",
 	);
 	const prepare = <ConcreteQuery extends SealableQuery<Query>>(
 		query: ConcreteQuery,

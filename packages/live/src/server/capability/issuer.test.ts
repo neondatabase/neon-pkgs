@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
-
+import capabilitySchema from "../../../schema/neon-live-query-capability-v1.schema.json";
 import { defined } from "../../defined.test-helpers.js";
 import type { PreparedLiveQuery } from "../adapter.js";
 import {
@@ -13,7 +13,6 @@ import {
 	utf8,
 } from "./crypto.js";
 import { createCapabilityIssuer } from "./issuer.js";
-import capabilitySchema from "./schema/neon-live-query-capability-v1.schema.json";
 import { parseNeonLiveSecret } from "./secret.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
@@ -43,6 +42,7 @@ describe("Neon Live v1 capability issuer", () => {
 		const sealedQuery = await createCapabilityIssuer(
 			parseNeonLiveSecret(SECRET),
 			"app",
+			"full",
 			() => 1_700_000_000_123,
 		)(QUERY);
 
@@ -62,6 +62,7 @@ describe("Neon Live v1 capability issuer", () => {
 			aud: "neon-live-proxy",
 			iss: "example-app",
 			database: "app",
+			error_details: "full",
 			query_fingerprint: sealedQuery.queryFingerprint,
 			sql: QUERY.sql,
 			parameters: [{ type_oid: 23, value: "Nw==" }],
@@ -70,6 +71,16 @@ describe("Neon Live v1 capability issuer", () => {
 		});
 		expect(claims).not.toHaveProperty("branch");
 		expect(sealedQuery.expiresAt).toBe(1_700_000_060_000);
+	});
+
+	it("defaults to safe error details", async () => {
+		const sealedQuery = await createCapabilityIssuer(
+			parseNeonLiveSecret(SECRET),
+			"app",
+		)(QUERY);
+
+		const { claims } = await decrypt(sealedQuery.capability, KEY);
+		expect(claims).toMatchObject({ error_details: "safe" });
 	});
 
 	it("uses a fresh 96-bit IV without changing the query fingerprint", async () => {
