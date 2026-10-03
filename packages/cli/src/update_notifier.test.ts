@@ -420,6 +420,7 @@ describe("shouldRunUpdateNotifier", () => {
 		output: "table",
 		stderrIsTty: true,
 		stdoutIsTty: true,
+		succeeded: true,
 	};
 
 	it("runs for an interactive human command", () => {
@@ -438,6 +439,7 @@ describe("shouldRunUpdateNotifier", () => {
 		{ commandPath: ["completion"] },
 		{ commandPath: ["status"], currentBranch: true },
 		{ commandPath: ["config", "status"], currentBranch: true },
+		{ commandPath: ["config", "plan"], succeeded: false },
 	])("suppresses $commandPath when ineligible", (override) => {
 		expect(shouldRunUpdateNotifier({ ...eligible, ...override })).toBe(
 			false,
