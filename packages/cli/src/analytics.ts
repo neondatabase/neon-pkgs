@@ -136,6 +136,12 @@ type ErrorEventContext = {
 	agent: ReturnType<typeof getCliAgent>;
 };
 
+/** Lets tests send to a local collector; the CLI itself always uses track.neon.tech. */
+export const useAnalyticsClientForTests = (analytics: Analytics) => {
+	client = analytics;
+	clientInitialized = true;
+};
+
 /**
  * Phase 1: Run before validation so the Segment client exists if any
  * middleware (e.g. auth) fails. Enables sendError() in the fail handler.
@@ -166,11 +172,41 @@ export const initAnalyticsClientMiddleware = (
 	});
 };
 
+type Attribution = {
+	accountId?: string;
+	authMethod?: string;
+	authData?: string;
+};
+
+let attribution: Attribution = {};
+
 /**
- * Phase 2: Run after auth. Resolves user id from credentials,
- * identifies the user, and sends CLI Started.
+ * Every event goes out through this chain so events tracked while the account lookup is in
+ * flight are sent after "CLI Started", with the user id the lookup resolves, in call order.
  */
-export const analyticsMiddleware = async (args: {
+let queue: Promise<void> = Promise.resolve();
+const lookups = new Set<AbortController>();
+
+const enqueue = (send: (analytics: Analytics) => void) => {
+	const analytics = client;
+	if (!analytics) {
+		return;
+	}
+	queue = queue.then(() => {
+		// Telemetry must never fail a command.
+		try {
+			send(analytics);
+		} catch (err) {
+			log.debug("Could not queue a CLI analytics event: %s", err);
+		}
+	});
+};
+
+/**
+ * Phase 2: Run after auth. Starts resolving the user id from credentials and returns; the
+ * command does not wait for it. Identify and CLI Started go out once it settles.
+ */
+export const analyticsMiddleware = (args: {
 	analytics: boolean;
 	apiKey?: string;
 	apiHost?: string;
@@ -222,67 +258,113 @@ export const analyticsMiddleware = async (args: {
 		}
 	}
 
-	try {
-		if (keyToQuery) {
-			const apiClient = getApiClient({
-				apiKey: keyToQuery,
-				apiHost: args.apiHost,
-			});
-
-			// Populating api key details for analytics
-			const authDetailsResponse = await apiClient.getAuthDetails();
-			const authDetails = authDetailsResponse.data;
-			args.accountId = authDetails.account_id;
-			args.authMethod = authDetails.auth_method;
-			args.authData = authDetails.auth_data;
-
-			// Get user id if not org api key
-			if (!userId && authDetails.auth_method !== "api_key_org") {
-				const resp = await apiClient?.getCurrentUserInfo?.();
-				userId = resp?.data?.id;
+	const startedProperties = getAnalyticsEventProperties(args);
+	const controller = new AbortController();
+	lookups.add(controller);
+	const lookup = (async () => {
+		try {
+			if (keyToQuery) {
+				const apiClient = getApiClient({
+					apiKey: keyToQuery,
+					apiHost: args.apiHost,
+				});
+				const { data: authDetails } = await apiClient.getAuthDetails({
+					signal: controller.signal,
+				});
+				attribution = {
+					accountId: authDetails.account_id,
+					authMethod: authDetails.auth_method,
+					authData: authDetails.auth_data,
+				};
+				// Get user id if not org api key
+				if (!userId && authDetails.auth_method !== "api_key_org") {
+					const resp = await apiClient.getCurrentUserInfo({
+						signal: controller.signal,
+					});
+					userId = resp.data.id;
+				}
+			} else {
+				attribution = storedCredentialAttribution(userId);
 			}
-		} else {
-			const { accountId, authMethod } =
-				storedCredentialAttribution(userId);
-			args.accountId = accountId;
-			args.authMethod = authMethod;
+		} catch (err) {
+			log.debug("Failed to get user id from api", err);
+		} finally {
+			lookups.delete(controller);
 		}
-	} catch (err) {
-		log.debug("Failed to get user id from api", err);
-	}
+	})();
 
-	client.identify({
-		userId: analyticsUserId(userId),
-	});
-
-	client.track({
-		userId: analyticsUserId(userId),
-		event: "CLI Started",
-		properties: getAnalyticsEventProperties(args),
-		context: {
-			direct: true,
-		},
+	queue = queue.then(() => lookup);
+	enqueue((analytics) => {
+		analytics.identify({
+			userId: analyticsUserId(userId),
+		});
+		analytics.track({
+			userId: analyticsUserId(userId),
+			event: "CLI Started",
+			properties: startedProperties,
+			context: {
+				direct: true,
+			},
+		});
 	});
 };
+
+/** How long closing waits for an unfinished account lookup before aborting it. */
+const ATTRIBUTION_WAIT_MS = 1000;
 
 let closing: Promise<void> | undefined;
 
 /**
- * Close the client and flush queued events. Later calls share the first flush: the psql
- * launcher starts one while psql runs, and a second `closeAndFlush` would only make the SDK
- * warn about overlapping flushes.
+ * Send queued events, then close the client and flush. Later calls share the first close: the
+ * psql launcher starts one while psql runs, and a second `closeAndFlush` would only make the SDK
+ * warn about overlapping flushes. `timeout` bounds the whole close, lookup wait included.
  */
 export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
-	if (!client) {
+	const analytics = client;
+	if (!analytics) {
 		return Promise.resolve();
 	}
 	if (!closing) {
-		log.debug("Flushing CLI analytics");
-		// `timeout` bounds how long we wait for in-flight events to flush so a
-		// slow / unreachable track.neon.tech can't hang a short-lived command.
-		closing = client.closeAndFlush(opts).then(() => {
+		const started = Date.now();
+		closing = (async () => {
+			// With a caller budget, the lookup gets at most half of it so the flush keeps the rest.
+			const wait = Math.min(
+				ATTRIBUTION_WAIT_MS,
+				(opts?.timeout ?? Infinity) / 2,
+			);
+			let timer: NodeJS.Timeout | undefined;
+			const timedOut = await Promise.race([
+				queue.then(() => false),
+				new Promise<boolean>((resolve) => {
+					timer = setTimeout(() => resolve(true), wait);
+				}),
+			]);
+			clearTimeout(timer);
+			if (timedOut) {
+				log.debug(
+					"Account lookup unfinished; sending events without it",
+				);
+				for (const controller of lookups) {
+					controller.abort();
+				}
+				await queue;
+			}
+			log.debug("Flushing CLI analytics");
+			// `timeout` bounds how long we wait for in-flight events to flush so a
+			// slow / unreachable track.neon.tech can't hang a short-lived command.
+			// The SDK treats a 0 timeout as no limit, so never pass less than 1.
+			const flush =
+				opts?.timeout === undefined
+					? undefined
+					: {
+							timeout: Math.max(
+								1,
+								opts.timeout - (Date.now() - started),
+							),
+						};
+			await analytics.closeAndFlush(flush);
 			log.debug("Flushed CLI analytics");
-		});
+		})();
 	}
 	return closing;
 };
@@ -329,14 +411,17 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 	if (requestId) {
 		log.debug("Failed request ID: %s", requestId);
 	}
-	client.track({
-		event: "CLI Error",
-		userId: analyticsUserId(userId),
-		properties: getErrorAnalyticsEventProperties(
-			err,
-			errCode,
-			errorEventContext,
-		),
+	const properties = getErrorAnalyticsEventProperties(
+		err,
+		errCode,
+		errorEventContext,
+	);
+	enqueue((analytics) => {
+		analytics.track({
+			event: "CLI Error",
+			userId: analyticsUserId(userId),
+			properties,
+		});
 	});
 	log.debug("Sent CLI error event: %s", errCode);
 };
@@ -348,12 +433,34 @@ export const trackEvent = (
 	if (!client) {
 		return;
 	}
-	client.track({
-		event,
-		userId: analyticsUserId(userId),
-		properties,
+	enqueue((analytics) => {
+		analytics.track({
+			event,
+			userId: analyticsUserId(userId),
+			properties,
+		});
 	});
 	log.debug("Sent CLI event: %s", event);
+};
+
+/**
+ * Tracks cli_command_success. The account fields come from the lookup, which may still be in
+ * flight when the command finishes, so they are read when the event is sent.
+ */
+export const trackCommandSuccess = (
+	args: Parameters<typeof commandSuccessProperties>[0],
+) => {
+	if (!client) {
+		return;
+	}
+	const properties = commandSuccessProperties(args);
+	enqueue((analytics) => {
+		analytics.track({
+			event: "cli_command_success",
+			userId: analyticsUserId(userId),
+			properties: { ...properties, ...attribution },
+		});
+	});
 };
 
 /**
