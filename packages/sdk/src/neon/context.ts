@@ -28,8 +28,22 @@ export interface ResolvedConfig {
 	orgId?: string;
 }
 
-/** Per-call overrides accepted by every ergonomic method. */
-export interface CallOptions<Throw extends boolean = boolean> {
+/**
+ * Per-call overrides accepted by every ergonomic method.
+ *
+ * `Throw` defaults to `false` to match `NeonConfig.throwOnError`. A `CallOptions`
+ * variable keeps the `{ data, error }` envelope. For throwing behaviour, write
+ * `CallOptions<true>`:
+ *
+ * ```ts
+ * const opts: CallOptions = { signal };
+ * await neon.projects.get(id, opts); // NeonResult<Project>
+ *
+ * const throwing: CallOptions<true> = { throwOnError: true };
+ * await neon.projects.get(id, throwing); // Project
+ * ```
+ */
+export interface CallOptions<Throw extends boolean = false> {
 	/** Override the client's `throwOnError` for this call. */
 	throwOnError?: Throw;
 	/** Override the client's `waitForReadiness` for this call (mutations only). */
@@ -94,7 +108,7 @@ export class RequestContext {
 	 * `requestTimeoutMs: NaN` meaning *unbounded* and a value past `setTimeout`'s range
 	 * meaning *1ms*, both silently.
 	 */
-	deadlineFor(opts: CallOptions | undefined): Deadline {
+	deadlineFor(opts: CallOptions<boolean> | undefined): Deadline {
 		const timeoutMs =
 			opts?.requestTimeoutMs === undefined
 				? this.#config.requestTimeoutMs
@@ -104,7 +118,7 @@ export class RequestContext {
 
 	/** Per-call, then client, then the method's own default. */
 	resolveWait(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		methodDefault: boolean,
 	): boolean {
 		return (
@@ -115,13 +129,13 @@ export class RequestContext {
 	}
 
 	/** The `throwOnError` policy for one call: the per-call override if given, else the client's. */
-	shouldThrow(opts: CallOptions | undefined): boolean {
+	shouldThrow(opts: CallOptions<boolean> | undefined): boolean {
 		return opts?.throwOnError ?? this.#config.throwOnError;
 	}
 
 	/** Run a raw call and map its body; applies the resolved `throwOnError` policy. */
 	async run<D, T>(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		exec: Exec<D>,
 		map: (data: D) => T,
 	): Promise<T | NeonResult<T>> {
@@ -133,7 +147,7 @@ export class RequestContext {
 
 	/** Like {@link run} but for endpoints that may return an empty (204) body. */
 	async runVoid<D>(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		exec: Exec<D>,
 	): Promise<void | NeonResult<void>> {
 		const shouldThrow = this.shouldThrow(opts);
@@ -152,7 +166,7 @@ export class RequestContext {
 	 * throw). Used by `run` and by workflows that post-process the result.
 	 */
 	async execute<D, T>(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		exec: Exec<D>,
 		map: (data: D) => T,
 	): Promise<NeonResult<T>> {
@@ -172,7 +186,7 @@ export class RequestContext {
 	 * budget cannot cut short the separate `wait` budget.
 	 */
 	async #request<D>(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		exec: Exec<D>,
 	): Promise<Requested<D>> {
 		const invalid = validateCallOptions(opts);
@@ -210,7 +224,7 @@ export class RequestContext {
 
 	/** Poll provisioning operations when `waitForReadiness` is on and the body has any. */
 	async #maybeWait(
-		opts: CallOptions | undefined,
+		opts: CallOptions<boolean> | undefined,
 		data: unknown,
 	): Promise<NeonResult<void> | undefined> {
 		const wait = opts?.waitForReadiness ?? this.#config.waitForReadiness;
