@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures";
 
@@ -523,5 +524,81 @@ describe("neon-auth", () => {
 			"--roles",
 			"admin",
 		]);
+	});
+
+	// --- Human output ---
+
+	const statusArgs = (branch: string) => [
+		"neon-auth",
+		"status",
+		"--project-id",
+		"test",
+		"--branch",
+		branch,
+	];
+
+	test("status table names the branch", async ({ testCliCommand }) => {
+		await testCliCommand(statusArgs("test_branch"), { output: "table" });
+	});
+
+	test("status table shows an explicit branch id as given", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			statusArgs("br-sunny-branch-123456"),
+			{ output: "table", snapshot: false },
+		);
+		expect(stdout).toMatch(/^ {2}Branch:\s+br-sunny-branch-123456$/m);
+	});
+
+	test("status JSON is the integration as returned", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(statusArgs("test_branch"), {
+			output: "json",
+			snapshot: false,
+		});
+		expect(JSON.parse(stdout)).toMatchObject(
+			JSON.parse(
+				readFileSync(
+					"mocks/main/projects/test/branches/br-sunny-branch-123456/auth/GET.json",
+					"utf8",
+				),
+			),
+		);
+	});
+
+	test("blocks and messages honor NO_COLOR", async ({ testCliCommand }) => {
+		const deleteArgs = [
+			"neon-auth",
+			"oauth-provider",
+			"delete",
+			"--provider-id",
+			"google",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		];
+		const branchArgs = ["--project-id", "test", "--branch", "test_branch"];
+		for (const args of [
+			statusArgs("test_branch"),
+			deleteArgs,
+			["neon-auth", "enable", ...branchArgs],
+			["neon-auth", "oauth-provider", "list", ...branchArgs],
+		]) {
+			const colored = await testCliCommand(args, {
+				output: "table",
+				snapshot: false,
+				env: { FORCE_COLOR: "1" },
+			});
+			expect(colored.stdout).toContain("\u001b[");
+			const plain = await testCliCommand(args, {
+				output: "table",
+				snapshot: false,
+				env: { FORCE_COLOR: "1", NO_COLOR: "1" },
+			});
+			expect(plain.stdout).not.toContain("\u001b[");
+		}
 	});
 });

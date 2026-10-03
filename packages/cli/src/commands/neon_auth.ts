@@ -5,6 +5,7 @@ import type {
 import chalk from "chalk";
 import type yargs from "yargs";
 import { codeFromBody, isNeonApiError, retryOnLock } from "../api.js";
+import { stripAnsi } from "../human_table.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	NeonAuthEmailVerificationMethod,
@@ -12,24 +13,38 @@ import {
 	NeonAuthOauthProviderType,
 	NeonAuthSupportedAuthProvider,
 } from "../utils/api_enums.js";
-import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import {
+	branchIdFromProps,
+	fillSingleProject,
+	resolveBranchFromProps,
+} from "../utils/enrichers.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 // Shared styled output helpers
+// chalk 5 does not read NO_COLOR (https://no-color.org); writer.ts strips it the same way.
+const writeStyled = (
+	text: string,
+	stream: NodeJS.WritableStream = process.stdout,
+) => {
+	stream.write(process.env.NO_COLOR ? stripAnsi(text) : text);
+};
+
 const printKvBlock = (
 	title: string,
 	entries: [string, string | undefined][],
 ) => {
-	process.stdout.write(`\n${chalk.green(title)}\n`);
-	for (const [key, value] of entries) {
-		process.stdout.write(`  ${chalk.green(key)}  ${value ?? ""}\n`);
-	}
-	process.stdout.write("\n");
+	const labels = entries.map(([key]) => key.trimEnd());
+	const width = Math.max(0, ...labels.map((label) => label.length));
+	let text = `\n${chalk.green(title)}\n`;
+	entries.forEach(([, value], i) => {
+		text += `  ${chalk.green(labels[i].padEnd(width))}  ${value ?? ""}\n`;
+	});
+	writeStyled(`${text}\n`);
 };
 
 const printMessage = (message: string) => {
-	process.stdout.write(`\n${chalk.green(message)}\n\n`);
+	writeStyled(`\n${chalk.green(message)}\n\n`);
 };
 
 const INTEGRATION_RESPONSE_FIELDS = [
@@ -683,6 +698,17 @@ const resolveBranch = async (props: AuthBranchProps) => {
 	return props.branchId ?? (await branchIdFromProps(props));
 };
 
+/** The branch name is only known when it was resolved from a listing, not from an id. */
+const resolveBranchWithName = async (
+	props: AuthBranchProps,
+): Promise<{ branchId: string; branchName?: string }> => {
+	if (props.branchId) {
+		return { branchId: props.branchId };
+	}
+	const { branchId, branch } = await resolveBranchFromProps(props);
+	return { branchId, branchName: branch?.name };
+};
+
 const enable = async (props: AuthBranchProps & { databaseName?: string }) => {
 	const branchId = await resolveBranch(props);
 	let data: NeonAuthCreateIntegrationResponse | NeonAuthIntegration;
@@ -718,28 +744,28 @@ const enable = async (props: AuthBranchProps & { databaseName?: string }) => {
 		[
 			["Auth Provider:", data.auth_provider],
 			...(d.db_name
-				? [["Database:     ", d.db_name] as [string, string]]
+				? [["Database:", d.db_name] as [string, string]]
 				: []),
-			["Base URL:     ", data.base_url],
+			["Base URL:", data.base_url],
 			...(d.schema_name
-				? [["Schema Name:  ", d.schema_name] as [string, string]]
+				? [["Schema Name:", d.schema_name] as [string, string]]
 				: []),
 			...(d.table_name
-				? [["Table Name:   ", d.table_name] as [string, string]]
+				? [["Table Name:", d.table_name] as [string, string]]
 				: []),
-			["JWKS URL:     ", data.jwks_url],
+			["JWKS URL:", data.jwks_url],
 		],
 	);
 	if (data.base_url) {
-		process.stdout.write(
+		writeStyled(
 			`  ${chalk.green("Set this environment variable in your application:")}\n`,
 		);
-		process.stdout.write(`  NEON_AUTH_BASE_URL=${data.base_url}\n\n`);
+		writeStyled(`  NEON_AUTH_BASE_URL=${data.base_url}\n\n`);
 	}
 };
 
 const status = async (props: AuthBranchProps) => {
-	const branchId = await resolveBranch(props);
+	const { branchId, branchName } = await resolveBranchWithName(props);
 	let data: NeonAuthIntegration;
 	try {
 		({ data } = await props.apiClient.getNeonAuth(
@@ -761,11 +787,14 @@ const status = async (props: AuthBranchProps) => {
 
 	printKvBlock("Neon Auth status", [
 		["Auth Provider:", data.auth_provider],
-		["Branch ID:    ", data.branch_id],
-		["Database:     ", data.db_name],
-		["Base URL:     ", data.base_url],
-		["Created At:   ", data.created_at],
-		["JWKS URL:     ", data.jwks_url],
+		[
+			"Branch:",
+			branchName ? `${branchName} (${data.branch_id})` : data.branch_id,
+		],
+		["Database:", data.db_name],
+		["Base URL:", data.base_url],
+		["Created At:", data.created_at],
+		["JWKS URL:", data.jwks_url],
 	]);
 };
 
@@ -801,7 +830,7 @@ const oauthProviderList = async (props: AuthBranchProps) => {
 		(p) => p.type === NeonAuthOauthProviderType.Shared,
 	);
 	if (hasShared && props.output === "table") {
-		process.stdout.write(
+		writeStyled(
 			`\n${chalk.yellow("Caution:")} ${SHARED_PROVIDER_DISCLAIMER}\n\n`,
 		);
 	}
@@ -815,6 +844,7 @@ const oauthProviderAdd = async (
 	},
 ) => {
 	const branchId = await resolveBranch(props);
+	const baseUrlRequest = callbackBaseUrl(props, branchId, props.providerId);
 	let data: Awaited<
 		ReturnType<typeof props.apiClient.addBranchNeonAuthOauthProvider>
 	>["data"];
@@ -845,14 +875,14 @@ const oauthProviderAdd = async (
 		writer(props).end(data, { fields: OAUTH_PROVIDER_FIELDS });
 	} else {
 		printKvBlock("OAuth provider added", [
-			["ID:         ", data.id],
-			["Type:       ", data.type],
+			["ID:", data.id],
+			["Type:", data.type],
 			...(data.client_id
-				? [["Client ID:  ", data.client_id] as [string, string]]
+				? [["Client ID:", data.client_id] as [string, string]]
 				: []),
 		]);
 	}
-	await printCallbackInstructions(props, branchId, props.providerId);
+	printCallbackInstructions(props.providerId, await baseUrlRequest);
 };
 
 const oauthProviderUpdate = async (
@@ -863,6 +893,7 @@ const oauthProviderUpdate = async (
 	},
 ) => {
 	const branchId = await resolveBranch(props);
+	const baseUrlRequest = callbackBaseUrl(props, branchId, props.providerId);
 	let data: Awaited<
 		ReturnType<typeof props.apiClient.updateBranchNeonAuthOauthProvider>
 	>["data"];
@@ -893,14 +924,14 @@ const oauthProviderUpdate = async (
 		writer(props).end(data, { fields: OAUTH_PROVIDER_FIELDS });
 	} else {
 		printKvBlock("OAuth provider updated", [
-			["ID:         ", data.id],
-			["Type:       ", data.type],
+			["ID:", data.id],
+			["Type:", data.type],
 			...(data.client_id
-				? [["Client ID:  ", data.client_id] as [string, string]]
+				? [["Client ID:", data.client_id] as [string, string]]
 				: []),
 		]);
 	}
-	await printCallbackInstructions(props, branchId, props.providerId);
+	printCallbackInstructions(props.providerId, await baseUrlRequest);
 };
 
 const CALLBACK_INSTRUCTIONS: Record<
@@ -921,29 +952,34 @@ const CALLBACK_INSTRUCTIONS: Record<
 	},
 };
 
-const printCallbackInstructions = async (
+/**
+ * Starts the base-URL read for the callback instructions, or resolves to undefined when none
+ * apply. It runs alongside the provider write (adding a provider does not change the base URL)
+ * and never rejects: a failed read prints no instructions, as before.
+ */
+const callbackBaseUrl = (
 	props: AuthBranchProps,
 	branchId: string,
 	providerId: string,
+): Promise<string | undefined> => {
+	if (!CALLBACK_INSTRUCTIONS[providerId]) return Promise.resolve(undefined);
+	if (props.output === "json" || props.output === "yaml") {
+		return Promise.resolve(undefined);
+	}
+	return props.apiClient.getNeonAuth(props.projectId, branchId).then(
+		({ data }) => data.base_url,
+		() => undefined,
+	);
+};
+
+const printCallbackInstructions = (
+	providerId: string,
+	baseUrl: string | undefined,
 ) => {
 	const instructions = CALLBACK_INSTRUCTIONS[providerId];
-	if (!instructions) return;
-	if (props.output === "json" || props.output === "yaml") return;
-
-	let baseUrl: string | undefined;
-	try {
-		const { data } = await props.apiClient.getNeonAuth(
-			props.projectId,
-			branchId,
-		);
-		baseUrl = data.base_url;
-	} catch {
-		return;
-	}
-	if (!baseUrl) return;
-
+	if (!instructions || !baseUrl) return;
 	const callbackUrl = `${baseUrl.replace(/\/$/, "")}/${instructions.urlLabel}`;
-	printKvBlock(instructions.lead, [["URL:  ", callbackUrl]]);
+	printKvBlock(instructions.lead, [["URL:", callbackUrl]]);
 };
 
 const oauthProviderDelete = async (
@@ -1079,9 +1115,9 @@ const printEmailPasswordEntries = (data: {
 	send_verification_email_on_sign_in: boolean;
 	disable_sign_up: boolean;
 }): [string, string][] => [
-	["Enabled:                    ", String(data.enabled)],
-	["Verification Method:        ", data.email_verification_method],
-	["Require Verification:       ", String(data.require_email_verification)],
+	["Enabled:", String(data.enabled)],
+	["Verification Method:", data.email_verification_method],
+	["Require Verification:", String(data.require_email_verification)],
 	[
 		"Auto Sign In After Verify:  ",
 		String(data.auto_sign_in_after_verification),
@@ -1094,7 +1130,7 @@ const printEmailPasswordEntries = (data: {
 		"Send Email On Sign In:      ",
 		String(data.send_verification_email_on_sign_in),
 	],
-	["Disable Sign Up:            ", String(data.disable_sign_up)],
+	["Disable Sign Up:", String(data.disable_sign_up)],
 ];
 
 const emailPasswordGet = async (props: AuthBranchProps) => {
@@ -1161,19 +1197,19 @@ const printEmailProviderEntries = (data: {
 	sender_email?: string;
 	sender_name?: string;
 }): [string, string | undefined][] => [
-	["Type:          ", data.type],
+	["Type:", data.type],
 	...(data.type === "standard"
 		? ([
-				["Host:          ", data.host],
+				["Host:", data.host],
 				[
 					"Port:          ",
 					data.port != null ? String(data.port) : undefined,
 				],
-				["Username:      ", data.username],
+				["Username:", data.username],
 			] as [string, string | undefined][])
 		: []),
-	["Sender Email:  ", data.sender_email],
-	["Sender Name:   ", data.sender_name],
+	["Sender Email:", data.sender_email],
+	["Sender Name:", data.sender_name],
 ];
 
 const emailProviderGet = async (props: AuthBranchProps) => {
@@ -1248,9 +1284,10 @@ const emailProviderUpdate = async (
 		);
 	}
 	if (warnSharedSender) {
-		process.stderr.write(
+		writeStyled(
 			`${chalk.yellow("Warning:")} --sender-email and --sender-name are ignored for the shared email provider. ` +
 				`These values only take effect with --type standard.\n\n`,
+			process.stderr,
 		);
 	}
 };
@@ -1307,9 +1344,9 @@ const printOrganizationEntries = (data: {
 	organization_limit: number;
 	creator_role: string;
 }): [string, string][] => [
-	["Enabled:          ", String(data.enabled)],
-	["Org Limit:        ", String(data.organization_limit)],
-	["Creator Role:     ", data.creator_role],
+	["Enabled:", String(data.enabled)],
+	["Org Limit:", String(data.organization_limit)],
+	["Creator Role:", data.creator_role],
 ];
 
 const organizationGet = async (props: AuthBranchProps) => {
@@ -1371,9 +1408,9 @@ const printWebhookEntries = (data: {
 	enabled_events?: string[];
 	timeout_seconds?: number;
 }): [string, string][] => [
-	["Enabled:        ", String(data.enabled)],
-	["URL:            ", data.webhook_url ?? ""],
-	["Events:         ", (data.enabled_events ?? []).join(", ")],
+	["Enabled:", String(data.enabled)],
+	["URL:", data.webhook_url ?? ""],
+	["Events:", (data.enabled_events ?? []).join(", ")],
 	[
 		"Timeout (sec):  ",
 		data.timeout_seconds != null ? String(data.timeout_seconds) : "",
@@ -1468,7 +1505,7 @@ const pluginsList = async (props: AuthBranchProps) => {
 		return JSON.stringify(value);
 	};
 	const entries: [string, string][] = Object.entries(data).map(
-		([key, value]) => [key.padEnd(24), summarize(value)],
+		([key, value]) => [key, summarize(value)],
 	);
 	printKvBlock("Neon Auth plugins", entries);
 };
@@ -1500,18 +1537,18 @@ const pluginsGet = async (props: AuthBranchProps & { pluginName: string }) => {
 		plugin != null
 	) {
 		const entries: [string, string][] = Object.entries(plugin).map(
-			([k, v]) => [`${k}:`.padEnd(18), formatValue(v)],
+			([k, v]) => [`${k}:`, formatValue(v)],
 		);
 		printKvBlock(pluginTitle(props.pluginName), entries);
 	} else if (Array.isArray(plugin)) {
 		const entries: [string, string][] = plugin.map((item, i) => [
-			`[${i}]:`.padEnd(18),
+			`[${i}]:`,
 			typeof item === "object" ? JSON.stringify(item) : String(item),
 		]);
 		printKvBlock(pluginTitle(props.pluginName), entries);
 	} else {
 		printKvBlock(pluginTitle(props.pluginName), [
-			["Value:".padEnd(18), String(plugin)],
+			["Value:", String(plugin)],
 		]);
 	}
 };
@@ -1534,9 +1571,9 @@ const userCreate = async (
 	const displayName =
 		requestBody.name !== props.email ? requestBody.name : undefined;
 	printKvBlock("User created", [
-		["ID:    ", data.id],
-		["Email: ", requestBody.email],
-		...(displayName ? [["Name:  ", displayName] as [string, string]] : []),
+		["ID:", data.id],
+		["Email:", requestBody.email],
+		...(displayName ? [["Name:", displayName] as [string, string]] : []),
 	]);
 };
 
@@ -1561,7 +1598,7 @@ const userSetRole = async (
 		{ roles: props.roles },
 	);
 	printKvBlock("Roles updated", [
-		["User ID: ", data.id],
-		["Roles:   ", props.roles.join(", ")],
+		["User ID:", data.id],
+		["Roles:", props.roles.join(", ")],
 	]);
 };
