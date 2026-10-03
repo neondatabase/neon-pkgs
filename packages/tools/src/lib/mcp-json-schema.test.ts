@@ -1,25 +1,17 @@
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
-import { compactJsonSchema, toMcpInputSchema } from "./mcp-json-schema.js";
+import { toMcpInputSchema, toMcpJsonSchema } from "./mcp-json-schema.js";
 
-describe("compactJsonSchema", () => {
+describe("toMcpJsonSchema", () => {
 	test("drops root $schema and keeps field descriptions", () => {
-		const schema = {
-			$schema: "https://json-schema.org/draft/2020-12/schema",
-			type: "object",
-			description: "Create a record.",
-			properties: {
-				description: {
-					type: "string",
-					description: "Human-readable summary.",
-				},
-				name: { type: "string", description: "Display name." },
-			},
-			required: ["description"],
-			additionalProperties: false,
-		};
+		const schema = z
+			.strictObject({
+				description: z.string().describe("Human-readable summary."),
+				name: z.string().describe("Display name.").optional(),
+			})
+			.describe("Create a record.");
 
-		expect(compactJsonSchema(schema)).toEqual({
+		expect(toMcpJsonSchema(schema)).toEqual({
 			type: "object",
 			description: "Create a record.",
 			properties: {
@@ -32,6 +24,7 @@ describe("compactJsonSchema", () => {
 			required: ["description"],
 			additionalProperties: false,
 		});
+		expect(toMcpJsonSchema(schema)).not.toHaveProperty("$schema");
 	});
 });
 
