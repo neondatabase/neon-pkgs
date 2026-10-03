@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
+import { planName } from "./orgs";
 
 describe("orgs", () => {
 	test("list", async ({ testCliCommand }) => {
@@ -37,5 +38,12 @@ describe("orgs", () => {
 		});
 		expect(linked.stdout).toBe(unlinked.stdout);
 		expect(linked.stdout).not.toContain("[current]");
+	});
+
+	test("planName turns plan ids into names", () => {
+		expect(planName("free_v3")).toBe("Free");
+		expect(planName("launch")).toBe("Launch");
+		expect(planName("free_extended")).toBe("Free Extended");
+		expect(planName(undefined)).toBe("");
 	});
 });

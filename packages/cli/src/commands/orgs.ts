@@ -39,6 +39,7 @@ const list = async (props: CommonProps) => {
 		title: "Organizations",
 		emptyMessage: "You are not a member of any organization.",
 		renderColumns: {
+			plan: (org: Organization) => planName(org.plan),
 			name: (org: Organization) =>
 				org.id === current
 					? `${chalk.green("[current]")} ${org.name}`
@@ -47,3 +48,12 @@ const list = async (props: CommonProps) => {
 	});
 	out.end();
 };
+
+/** `free_v3` -> `Free`, `free_extended` -> `Free Extended`; JSON/YAML keep the API id. */
+export const planName = (plan: string | undefined): string =>
+	(plan ?? "")
+		.replace(/_v\d+$/, "")
+		.split("_")
+		.filter(Boolean)
+		.map((word) => word[0].toUpperCase() + word.slice(1))
+		.join(" ");
