@@ -80,15 +80,18 @@ export const list = async (props: BranchScopeProps) => {
 export const create = async (
 	props: BranchScopeProps & {
 		name: string;
-		"no-login": boolean;
+		"no-login"?: boolean;
+		login?: boolean;
 	},
 ) => {
+	// yargs reads bare `--no-login` as `login: false`; `--no-login=<value>` sets `no-login`.
+	const noLogin = props["no-login"] === true || props.login === false;
 	const { branchId, branch } = await resolveBranchFromProps(props);
 	const { data } = await retryOnLock(() =>
 		props.apiClient.createProjectBranchRole(props.projectId, branchId, {
 			role: {
 				name: props.name,
-				no_login: props["no-login"],
+				...(noLogin ? { no_login: true } : {}),
 			},
 		}),
 	);
