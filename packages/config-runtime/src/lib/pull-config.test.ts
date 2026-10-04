@@ -372,4 +372,260 @@ describe("pullConfig", () => {
 		expect(pulled.config.auth).toBe(true);
 		expect(pulled.preview?.buckets ?? []).toEqual([]);
 	});
+
+	describe("request scheduling", () => {
+		const READS = [
+			"getProject",
+			"listBranches",
+			"listEndpoints",
+			"listBranchDatabases",
+			"listBranchBuckets",
+			"listBranchFunctions",
+			"listCredentials",
+			"getNeonAuth",
+			"getNeonDataApi",
+		] as const;
+		type Read = (typeof READS)[number];
+
+		/** A fake whose reads wait until the test releases them, recording when each starts. */
+		class GatedNeonApi extends FakeNeonApi {
+			readonly started: Read[] = [];
+			readonly failures = new Map<Read, Error>();
+			private readonly gates = new Map<Read, () => void>();
+
+			release(name: Read) {
+				this.gates.get(name)?.();
+			}
+
+			private gate<T>(name: Read, read: () => Promise<T>): Promise<T> {
+				this.started.push(name);
+				return new Promise<void>((resolve) =>
+					this.gates.set(name, resolve),
+				).then(() => {
+					const failure = this.failures.get(name);
+					if (failure) throw failure;
+					return read();
+				});
+			}
+
+			override getProject(
+				...args: Parameters<FakeNeonApi["getProject"]>
+			) {
+				return this.gate("getProject", () => super.getProject(...args));
+			}
+			override listBranches(
+				...args: Parameters<FakeNeonApi["listBranches"]>
+			) {
+				return this.gate("listBranches", () =>
+					super.listBranches(...args),
+				);
+			}
+			override listEndpoints(
+				...args: Parameters<FakeNeonApi["listEndpoints"]>
+			) {
+				return this.gate("listEndpoints", () =>
+					super.listEndpoints(...args),
+				);
+			}
+			override listBranchDatabases(
+				...args: Parameters<FakeNeonApi["listBranchDatabases"]>
+			) {
+				return this.gate("listBranchDatabases", () =>
+					super.listBranchDatabases(...args),
+				);
+			}
+			override listBranchBuckets(
+				...args: Parameters<FakeNeonApi["listBranchBuckets"]>
+			) {
+				return this.gate("listBranchBuckets", () =>
+					super.listBranchBuckets(...args),
+				);
+			}
+			override listBranchFunctions(
+				...args: Parameters<FakeNeonApi["listBranchFunctions"]>
+			) {
+				return this.gate("listBranchFunctions", () =>
+					super.listBranchFunctions(...args),
+				);
+			}
+			override listCredentials(
+				...args: Parameters<FakeNeonApi["listCredentials"]>
+			) {
+				return this.gate("listCredentials", () =>
+					super.listCredentials(...args),
+				);
+			}
+			override getNeonAuth(
+				...args: Parameters<FakeNeonApi["getNeonAuth"]>
+			) {
+				return this.gate("getNeonAuth", () =>
+					super.getNeonAuth(...args),
+				);
+			}
+			override getNeonDataApi(
+				...args: Parameters<FakeNeonApi["getNeonDataApi"]>
+			) {
+				return this.gate("getNeonDataApi", () =>
+					super.getNeonDataApi(...args),
+				);
+			}
+		}
+
+		const gatedApi = () => {
+			const api = new GatedNeonApi();
+			api.seedProject({
+				project: {
+					id: "proj-gate",
+					name: "gate",
+					regionId: "aws-us-east-1",
+					pgVersion: 17,
+				},
+				branches: [
+					{
+						branch: {
+							id: "br-main",
+							name: "main",
+							isDefault: true,
+						},
+					},
+				],
+			});
+			const flush = () =>
+				new Promise((resolve) => setTimeout(resolve, 0));
+			return {
+				api,
+				started: api.started,
+				failures: api.failures,
+				release: (name: Read) => api.release(name),
+				flush,
+			};
+		};
+
+		test("starts project, branches, endpoints, and databases together; the rest once databases resolve", async () => {
+			const { api, started, release, flush } = gatedApi();
+			const pulled = pullConfig({
+				api,
+				projectId: "proj-gate",
+				branchId: "br-main",
+			});
+			await flush();
+			expect(new Set(started)).toEqual(
+				new Set([
+					"getProject",
+					"listBranches",
+					"listEndpoints",
+					"listBranchDatabases",
+				]),
+			);
+
+			release("listBranchDatabases");
+			await flush();
+			expect(new Set(started)).toEqual(new Set(READS));
+
+			for (const name of READS) release(name);
+			await expect(pulled).resolves.toMatchObject({
+				branch: { id: "br-main" },
+			});
+		});
+
+		test("reports the first preview error in the order the reads fail", async () => {
+			const { api, release, failures, flush } = gatedApi();
+			failures.set("getNeonDataApi", new Error("data API failed"));
+			failures.set("getNeonAuth", new Error("auth failed"));
+			const pulled = pullConfig({
+				api,
+				projectId: "proj-gate",
+				branchId: "br-main",
+			});
+			await flush();
+			// Auth answers while databases are still pending; it must not get ahead of the probe.
+			release("getNeonAuth");
+			await flush();
+			release("listBranchDatabases");
+			await flush();
+			release("getNeonDataApi");
+			await flush();
+			for (const name of READS) release(name);
+			await expect(pulled).rejects.toThrow("data API failed");
+		});
+
+		test("a synchronous adapter throw leaves no unhandled rejection", async () => {
+			const unhandled: unknown[] = [];
+			const onUnhandled = (reason: unknown) => unhandled.push(reason);
+			process.on("unhandledRejection", onUnhandled);
+			try {
+				const { api, release, failures, flush } = gatedApi();
+				failures.set("getProject", new Error("project failed"));
+				failures.set("listBranches", new Error("branches failed"));
+				Object.assign(api, {
+					listEndpoints: () => {
+						throw new Error("endpoints threw");
+					},
+				});
+				const pulled = pullConfig({
+					api,
+					projectId: "proj-gate",
+					branchId: "br-main",
+				});
+				await flush();
+				release("listBranches");
+				await flush();
+				release("getProject");
+				await expect(pulled).rejects.toThrow("project failed");
+				await flush();
+				expect(unhandled).toEqual([]);
+			} finally {
+				process.off("unhandledRejection", onUnhandled);
+			}
+		});
+
+		test("reports the project error even when a later read fails first", async () => {
+			const { api, release, failures, flush } = gatedApi();
+			failures.set("getProject", new Error("project failed"));
+			failures.set("listBranches", new Error("branches failed"));
+			failures.set("getNeonAuth", new Error("auth failed"));
+			const pulled = pullConfig({
+				api,
+				projectId: "proj-gate",
+				branchId: "br-main",
+			});
+			await flush();
+			release("getNeonAuth");
+			release("listBranches");
+			await flush();
+			release("getProject");
+			await expect(pulled).rejects.toThrow("project failed");
+		});
+
+		test("reports a missing branch before any preview read error", async () => {
+			const { api, release, failures, flush } = gatedApi();
+			failures.set("listBranchBuckets", new Error("buckets failed"));
+			const pulled = pullConfig({
+				api,
+				projectId: "proj-gate",
+				branchId: "br-gone",
+			});
+			await flush();
+			for (const name of READS) release(name);
+			await expect(pulled).rejects.toMatchObject({
+				code: ErrorCode.BranchNotFound,
+			});
+		});
+
+		test("reports a databases error before the preview group's", async () => {
+			const { api, release, failures, flush } = gatedApi();
+			failures.set("listBranchDatabases", new Error("databases failed"));
+			failures.set("getNeonAuth", new Error("auth failed"));
+			const pulled = pullConfig({
+				api,
+				projectId: "proj-gate",
+				branchId: "br-main",
+			});
+			await flush();
+			release("getNeonAuth");
+			await flush();
+			for (const name of READS) release(name);
+			await expect(pulled).rejects.toThrow("databases failed");
+		});
+	});
 });

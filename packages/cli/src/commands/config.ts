@@ -1143,12 +1143,113 @@ export const status = async (props: ConfigProps): Promise<void> => {
 		return;
 	}
 
-	// Default: the live project/branch tables, but with the unhelpful raw `config` replaced
-	// by the resolved neon.ts-shaped view so the user sees enabled infra + branch tuning.
-	writer(props).end(
-		{ project: live.project, branch: live.branch, config: configView },
-		{ fields: INSPECT_FIELDS },
+	// Machine output: the live project/branch with the raw `config` replaced by the resolved
+	// neon.ts-shaped view.
+	if (props.output !== "table") {
+		writer(props).end(
+			{ project: live.project, branch: live.branch, config: configView },
+			{ fields: INSPECT_FIELDS },
+		);
+		return;
+	}
+	writeStatusTables(props, live, configView);
+};
+
+const STATUS_FIELDS = [
+	"project",
+	"region",
+	"postgres_version",
+	"organization",
+	"branch",
+	"parent",
+	"default",
+	"protected",
+	"expires_at",
+	"auth",
+	"data_api",
+	"compute",
+	"scale_to_zero",
+	"ttl",
+] as const;
+
+const formatComputeUnits = (
+	settings: NonNullable<
+		NonNullable<NeonConfigView["branch"]>["postgres"]
+	>["computeSettings"],
+): string | undefined => {
+	const min = settings?.autoscalingLimitMinCu;
+	const max = settings?.autoscalingLimitMaxCu;
+	if (min === undefined && max === undefined) return undefined;
+	if (min === undefined) return `max ${max} CU`;
+	if (max === undefined) return `min ${min} CU`;
+	return min === max ? `${min} CU` : `${min}-${max} CU`;
+};
+
+/** Human `status`: one summary block, then a table per reported resource kind. */
+const writeStatusTables = (
+	props: ConfigProps,
+	live: Awaited<ReturnType<typeof inspect>>,
+	view: NeonConfigView,
+) => {
+	const compute = view.branch?.postgres?.computeSettings;
+	const suspend = compute?.suspendTimeout;
+	const out = writer(props);
+	out.write(
+		{
+			project: `${live.project.name} (${live.project.id})`,
+			region: live.project.region,
+			postgres_version: live.project.pgVersion,
+			organization: live.project.orgId,
+			branch: `${live.branch.name} (${live.branch.id})`,
+			parent: live.branch.parent,
+			default: live.branch.isDefault ? "yes" : "no",
+			protected: live.branch.protected ? "yes" : "no",
+			expires_at: live.branch.expiresAt,
+			// Only an enabled toggle is reported; absence is not proof a service is off.
+			auth: view.auth ? "enabled" : undefined,
+			data_api: view.dataApi ? "enabled" : undefined,
+			compute: formatComputeUnits(compute),
+			scale_to_zero:
+				suspend === undefined
+					? undefined
+					: suspend === false
+						? "off"
+						: String(suspend),
+			ttl: view.branch?.ttl,
+		},
+		{ fields: STATUS_FIELDS, humanTitle: "Status" },
 	);
+	const functions = Object.entries(view.preview?.functions ?? {}).map(
+		([slug, fn]) => ({ slug, name: fn.name }),
+	);
+	if (functions.length > 0) {
+		out.write(functions, {
+			fields: ["slug", "name"],
+			humanTitle: "Functions",
+		});
+	}
+	const buckets = Object.entries(view.preview?.buckets ?? {}).map(
+		([name, bucket]) => ({ name, access: bucket.access }),
+	);
+	if (buckets.length > 0) {
+		out.write(buckets, {
+			fields: ["name", "access"],
+			humanTitle: "Buckets",
+		});
+	}
+	const credentials = (view.preview?.credentials ?? []).map((credential) => ({
+		id: credential.id,
+		name: credential.name,
+		scopes: credential.scopes.join(", "),
+		last_used_at: credential.lastUsedAt,
+	}));
+	if (credentials.length > 0) {
+		out.write(credentials, {
+			fields: ["id", "name", "scopes", "last_used_at"],
+			humanTitle: "Credentials",
+		});
+	}
+	out.end();
 };
 
 export const planCmd = async (props: ConfigProps): Promise<void> => {

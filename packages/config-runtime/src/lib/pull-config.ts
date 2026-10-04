@@ -90,40 +90,69 @@ export async function pullConfig(
 ): Promise<PulledBranchConfig> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
-	const project = await api.getProject(projectId);
-	const [branches, endpoints] = await Promise.all([
-		api.listBranches(projectId),
-		api.listEndpoints(projectId),
-	]);
-	const branch = resolveBranch(options.branchId, branches);
-	const endpoint = endpoints.find(
-		(ep) => ep.type === "read_write" && ep.branchId === branch.id,
+	const branchId = options.branchId;
+
+	// The first three stages need only the project and branch ids, so they start together.
+	// They are awaited in the order they used to run, so the first error reported is the same
+	// one as before (project, then branches/endpoints, then the branch lookup, then databases).
+	const projectRead = started(() => api.getProject(projectId));
+	const listsRead = started(() =>
+		Promise.all([
+			started(() => api.listBranches(projectId)),
+			started(() => api.listEndpoints(projectId)),
+		]),
 	);
-
 	// Data API is enabled per branch + database, so resolve a database to probe.
-	const databases = await api.listBranchDatabases(projectId, branch.id);
-	const probeDatabase = pickProbeDatabase(databases);
-
+	const databasesRead = started(() =>
+		api.listBranchDatabases(projectId, branchId),
+	);
 	// Preview reads degrade to "none / disabled" when the feature isn't available for the
 	// project/region. `pullConfig` mirrors the branch for env resolution (`neon dev`,
 	// `neon env pull`) and `inspect` — an unavailable Preview feature should not break those
 	// (env comes from auth/dataApi/postgres). `pushConfig` is the place that fails on an
 	// unavailable feature, and only when the policy declares it.
-	const [buckets, functions, credentials, auth, dataApi] = await Promise.all([
-		degradeUnavailable(
-			() => api.listBranchBuckets(projectId, branch.id),
-			[],
-		),
-		degradeUnavailable(
-			() => api.listBranchFunctions(projectId, branch.id),
-			[],
-		),
-		degradeUnavailable(() => api.listCredentials(projectId, branch.id), []),
-		api.getNeonAuth(projectId, branch.id),
-		probeDatabase
-			? api.getNeonDataApi(projectId, branch.id, probeDatabase)
-			: Promise.resolve(null),
-	]);
+	// The group starts together once databases resolve (the Data API probe needs one), as
+	// before, so which member's error comes first is unchanged.
+	const previewRead = started(() =>
+		databasesRead.then((databases) => {
+			const probeDatabase = pickProbeDatabase(databases);
+			return Promise.all([
+				started(() =>
+					degradeUnavailable(
+						() => api.listBranchBuckets(projectId, branchId),
+						[],
+					),
+				),
+				started(() =>
+					degradeUnavailable(
+						() => api.listBranchFunctions(projectId, branchId),
+						[],
+					),
+				),
+				started(() =>
+					degradeUnavailable(
+						() => api.listCredentials(projectId, branchId),
+						[],
+					),
+				),
+				started(() => api.getNeonAuth(projectId, branchId)),
+				started(() =>
+					probeDatabase
+						? api.getNeonDataApi(projectId, branchId, probeDatabase)
+						: Promise.resolve(null),
+				),
+			]);
+		}),
+	);
+
+	const project = await projectRead;
+	const [branches, endpoints] = await listsRead;
+	const branch = resolveBranch(branchId, branches);
+	const endpoint = endpoints.find(
+		(ep) => ep.type === "read_write" && ep.branchId === branch.id,
+	);
+	await databasesRead;
+	const [buckets, functions, credentials, auth, dataApi] = await previewRead;
 
 	return buildPulledBranchConfig(project, branch, branches, endpoint, {
 		buckets,
@@ -132,6 +161,17 @@ export async function pullConfig(
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
 	});
+}
+
+/**
+ * Starts a read now and keeps an unread rejection from crashing the process; the caller
+ * awaits it (and sees the error) when its turn comes. Also turns a synchronous throw from
+ * a custom adapter into a rejection.
+ */
+function started<T>(read: () => Promise<T>): Promise<T> {
+	const promise = Promise.resolve().then(read);
+	promise.catch(() => undefined);
+	return promise;
 }
 
 /**
