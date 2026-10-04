@@ -1,5 +1,11 @@
 # neon
 
+## 8.0.7
+
+### Patch Changes
+
+- b335209: `neon auth` ends with `Auth complete (profile <name>)`, so you can see which profile the new sign-in was saved to.
+
 ## 8.0.6
 
 ### Patch Changes
