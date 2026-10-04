@@ -2432,6 +2432,27 @@ describe("pushConfig request scheduling", () => {
 		).rejects.toThrow("endpoints failed");
 	});
 
+	test("reports an endpoint read's synchronous throw over an already-rejected branch read, as when called directly", async () => {
+		const { api, projectId } = seededFake();
+		const branchesFailed = Promise.reject(new Error("branches failed"));
+		branchesFailed.catch(() => undefined);
+		Object.assign(api, {
+			listBranches: () => branchesFailed,
+			listEndpoints: () => {
+				throw new Error("endpoints threw");
+			},
+		});
+
+		await expect(
+			pushConfig(defineConfig({}), {
+				api,
+				projectId,
+				branchId: "br-main",
+				dryRun: true,
+			}),
+		).rejects.toThrow("endpoints threw");
+	});
+
 	test("reports a service error before a Preview error that arrives first", async () => {
 		const { api, pushed } = gatedPush();
 		api.failures.set("listBranchDatabases", new Error("databases failed"));

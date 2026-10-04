@@ -23,7 +23,6 @@ import {
 	type UpdateTriggerInput,
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
-import { started } from "./started.js";
 
 // Eager loading would evaluate esbuild for callers that provide their own bundler.
 const makeDefaultBundleFunction =
@@ -167,8 +166,8 @@ export async function pushConfig(
 	const projectRead = started(() => api.getProject(projectId));
 	const listsRead = started(() =>
 		Promise.all([
-			started(() => api.listBranches(projectId)),
-			started(() => api.listEndpoints(projectId)),
+			handled(api.listBranches(projectId)),
+			handled(api.listEndpoints(projectId)),
 		]),
 	);
 	const remoteProject = await projectRead;
@@ -466,6 +465,32 @@ function resolveRemoteBranch(
 /**
  * Pre-fetch the current state of branch-scoped integrations on the selected branch.
  */
+/**
+ * Starts a read now and keeps an unread rejection from crashing the process; the caller
+ * awaits it (and sees the error) when its turn comes. The read is called synchronously and
+ * its own promise returned, so errors surface in the same order as a direct call; a
+ * synchronous throw becomes the returned rejection.
+ */
+function started<T>(read: () => Promise<T>): Promise<T> {
+	let promise: Promise<T>;
+	try {
+		promise = read();
+	} catch (error) {
+		promise = Promise.reject(error);
+	}
+	promise.catch(() => undefined);
+	return promise;
+}
+
+/**
+ * Marks a `Promise.all` member's rejection as handled, so a later member's synchronous
+ * throw cannot leave it unobserved. `Promise.all` still reports it.
+ */
+function handled<T>(promise: Promise<T>): Promise<T> {
+	promise.catch(() => undefined);
+	return promise;
+}
+
 async function resolveServiceState(args: {
 	api: NeonApi;
 	projectId: string;
@@ -490,12 +515,10 @@ async function resolveServiceState(args: {
 
 	const [auth, dataApi] = await Promise.all([
 		wantsAuth
-			? started(() => api.getNeonAuth(projectId, branch.id))
+			? handled(api.getNeonAuth(projectId, branch.id))
 			: Promise.resolve(null),
 		wantsDataApi
-			? started(() =>
-					api.getNeonDataApi(projectId, branch.id, databaseName),
-				)
+			? handled(api.getNeonDataApi(projectId, branch.id, databaseName))
 			: Promise.resolve(null),
 	]);
 	const result: RemoteServiceState = {
@@ -538,16 +561,16 @@ async function resolvePreviewState(args: {
 		: undefined;
 	const [buckets, functions, triggers, customDomains] = await Promise.all([
 		desired.buckets.length > 0
-			? started(() => api.listBranchBuckets(projectId, branchId))
+			? handled(api.listBranchBuckets(projectId, branchId))
 			: Promise.resolve([]),
 		desired.functions.length > 0
-			? started(() => api.listBranchFunctions(projectId, branchId))
+			? handled(api.listBranchFunctions(projectId, branchId))
 			: Promise.resolve([]),
 		wantsTriggers
-			? started(() => api.listBranchTriggers(projectId, branchId))
+			? handled(api.listBranchTriggers(projectId, branchId))
 			: Promise.resolve([]),
 		customDomainApi
-			? started(() =>
+			? handled(
 					customDomainApi.listBranchCustomDomains(
 						projectId,
 						branchId,
