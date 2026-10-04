@@ -566,11 +566,14 @@ export const getApiClient = ({
 		request,
 
 		// ─── Account / user ──────────────────────────────────────────────────
-		getCurrentUserInfo: () =>
-			call(() => raw.getCurrentUserInfo({ client })),
+		getCurrentUserInfo: (options: { signal?: AbortSignal } = {}) =>
+			call(() =>
+				raw.getCurrentUserInfo({ client, signal: options.signal }),
+			),
 		getCurrentUserOrganizations: () =>
 			call(() => raw.getCurrentUserOrganizations({ client })),
-		getAuthDetails: () => call(() => raw.getAuthDetails({ client })),
+		getAuthDetails: (options: { signal?: AbortSignal } = {}) =>
+			call(() => raw.getAuthDetails({ client, signal: options.signal })),
 		getActiveRegions: () => call(() => raw.getActiveRegions({ client })),
 
 		// ─── API keys ────────────────────────────────────────────────────────
