@@ -1,6 +1,6 @@
 {
 	"name": "neon",
-	"version": "8.0.7",
+	"version": "8.0.8",
 	"description": "CLI tool for Neon, the cloud backend primitives built around Lakebase Postgres",
 	"keywords": [
 		"neon",
