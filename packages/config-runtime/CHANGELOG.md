@@ -1,5 +1,11 @@
 # @neondatabase/config-runtime
 
+## 1.7.4
+
+### Patch Changes
+
+- be16e76: `neon status` / `neon config status` start the project, branch, endpoint, and database reads together, so they return faster, and the table output shows a readable summary plus function, bucket, and credential tables instead of raw JSON. `inspect()` and `pullConfig()` in `@neon/config-runtime` start those reads together; their results and errors are unchanged. JSON, YAML, and `--config-json` output is unchanged.
+
 ## 1.7.3
 
 ### Patch Changes
