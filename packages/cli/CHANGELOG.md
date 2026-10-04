@@ -1,5 +1,11 @@
 # neon
 
+## 8.0.5
+
+### Patch Changes
+
+- 38234f7: With analytics on, commands no longer wait for the CLI's account lookup before they start, so they reach the Neon API about 180ms sooner. Analytics events are unchanged.
+
 ## 8.0.4
 
 ### Patch Changes
