@@ -2,4 +2,4 @@
 "neon": patch
 ---
 
-`neon auth` ends with `Auth complete: signed in as <email> (profile <name>)`, so you can see which account and profile the new sign-in belongs to.
+`neon auth` ends with `Auth complete (profile <name>)`, so you can see which profile the new sign-in was saved to.

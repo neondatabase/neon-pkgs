@@ -90,9 +90,7 @@ describe("auth", () => {
 		expect(credentials.access_token).toEqual(expect.any(String));
 		expect(credentials.refresh_token).toEqual(expect.any(String));
 		expect(credentials.user_id).toEqual(expect.any(String));
-		expect(info).toHaveBeenCalledWith(
-			"Auth complete: signed in as john@example.com (profile DEFAULT)",
-		);
+		expect(info).toHaveBeenCalledWith("Auth complete (profile DEFAULT)");
 		info.mockRestore();
 	});
 
