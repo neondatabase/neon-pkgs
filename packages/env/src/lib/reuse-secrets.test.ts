@@ -273,6 +273,21 @@ describe("fetchEnvReusingSecrets", () => {
 		);
 	});
 
+	test.each([
+		["no credential-backed key", defineConfig({})],
+		["a credential-backed key", storagePolicy],
+	])("lists the project's branches once with %s", async (_, policy) => {
+		const { api, projectId } = seededFake();
+
+		await fetchEnvReusingSecrets(policy, {
+			api,
+			projectId,
+			branch: "main",
+		});
+
+		expect(callsTo(api, "listBranches")).toBe(1);
+	});
+
 	test("touches no credential endpoint when the policy enables neither feature", async () => {
 		const { api, projectId } = seededFake();
 

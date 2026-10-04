@@ -161,12 +161,17 @@ export async function pushConfig(
 	const updateExisting = options.updateExisting === true;
 	const allowProtectedBranch = options.allowProtectedBranch === true;
 
-	const remoteProject = await api.getProject(projectId);
-
-	const [branches, endpoints] = await Promise.all([
-		api.listBranches(remoteProject.id),
-		api.listEndpoints(remoteProject.id),
-	]);
+	// Same scheduling as `pullConfig`: independent reads start together and are awaited in
+	// the order they used to run, so the first error reported is unchanged.
+	const projectRead = started(() => api.getProject(projectId));
+	const listsRead = started(() =>
+		Promise.all([
+			handled(api.listBranches(projectId)),
+			handled(api.listEndpoints(projectId)),
+		]),
+	);
+	const remoteProject = await projectRead;
+	const [branches, endpoints] = await listsRead;
 	const branch = resolveRemoteBranch(options.branchId, branches);
 	const resolved = resolveConfig(config, {
 		name: branch.name,
@@ -177,14 +182,34 @@ export async function pushConfig(
 		isProtected: branch.protected,
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 	});
-	const services = await resolveServiceState({
-		api,
-		projectId: remoteProject.id,
-		branch,
-		wantsAuth: resolved.authEnabled,
-		wantsDataApi:
-			resolved.dataApiEnabled || resolved.dataApiPolicy === "disabled",
-	});
+	const servicesRead = started(() =>
+		resolveServiceState({
+			api,
+			projectId: remoteProject.id,
+			branch,
+			wantsAuth: resolved.authEnabled,
+			wantsDataApi:
+				resolved.dataApiEnabled ||
+				resolved.dataApiPolicy === "disabled",
+		}),
+	);
+	// Only fetch Preview state when the policy actually uses it — and within that, only the
+	// specific features the policy declares. So a policy that uses functions never probes
+	// the AI Gateway, and `apply`/`plan` only fail on a Preview feature being unavailable
+	// (404/503) when the policy actually asks for it.
+	const desiredPreview = resolved.preview;
+	const previewRead = desiredPreview
+		? started(() =>
+				resolvePreviewState({
+					api,
+					projectId: remoteProject.id,
+					branchId: branch.id,
+					desired: desiredPreview,
+					wantsTriggers: (resolved.triggers?.length ?? 0) > 0,
+				}),
+			)
+		: undefined;
+	const services = await servicesRead;
 	const remote: RemoteState = {
 		projectId: remoteProject.id,
 		branch,
@@ -193,18 +218,8 @@ export async function pushConfig(
 		),
 		services,
 	};
-	// Only fetch Preview state when the policy actually uses it — and within that, only the
-	// specific features the policy declares. So a policy that uses functions never probes
-	// the AI Gateway, and `apply`/`plan` only fail on a Preview feature being unavailable
-	// (404/503) when the policy actually asks for it.
-	if (resolved.preview) {
-		remote.preview = await resolvePreviewState({
-			api,
-			projectId: remoteProject.id,
-			branchId: branch.id,
-			desired: resolved.preview,
-			wantsTriggers: (resolved.triggers?.length ?? 0) > 0,
-		});
+	if (previewRead) {
+		remote.preview = await previewRead;
 	}
 
 	// Always compute the plan with `updateExisting: true` so we can see what *would* be
@@ -448,6 +463,32 @@ function resolveRemoteBranch(
 }
 
 /**
+ * Starts a read now and keeps an unread rejection from crashing the process; the caller
+ * awaits it (and sees the error) when its turn comes. The read is called synchronously and
+ * its own promise returned, so errors surface in the same order as a direct call; a
+ * synchronous throw becomes the returned rejection.
+ */
+function started<T>(read: () => Promise<T>): Promise<T> {
+	let promise: Promise<T>;
+	try {
+		promise = read();
+	} catch (error) {
+		promise = Promise.reject(error);
+	}
+	promise.catch(() => undefined);
+	return promise;
+}
+
+/**
+ * Marks a `Promise.all` member's rejection as handled, so a later member's synchronous
+ * throw cannot leave it unobserved. `Promise.all` still reports it.
+ */
+function handled<T>(promise: Promise<T>): Promise<T> {
+	promise.catch(() => undefined);
+	return promise;
+}
+
+/**
  * Pre-fetch the current state of branch-scoped integrations on the selected branch.
  */
 async function resolveServiceState(args: {
@@ -474,10 +515,10 @@ async function resolveServiceState(args: {
 
 	const [auth, dataApi] = await Promise.all([
 		wantsAuth
-			? api.getNeonAuth(projectId, branch.id)
+			? handled(api.getNeonAuth(projectId, branch.id))
 			: Promise.resolve(null),
 		wantsDataApi
-			? api.getNeonDataApi(projectId, branch.id, databaseName)
+			? handled(api.getNeonDataApi(projectId, branch.id, databaseName))
 			: Promise.resolve(null),
 	]);
 	const result: RemoteServiceState = {
@@ -520,16 +561,21 @@ async function resolvePreviewState(args: {
 		: undefined;
 	const [buckets, functions, triggers, customDomains] = await Promise.all([
 		desired.buckets.length > 0
-			? api.listBranchBuckets(projectId, branchId)
+			? handled(api.listBranchBuckets(projectId, branchId))
 			: Promise.resolve([]),
 		desired.functions.length > 0
-			? api.listBranchFunctions(projectId, branchId)
+			? handled(api.listBranchFunctions(projectId, branchId))
 			: Promise.resolve([]),
 		wantsTriggers
-			? api.listBranchTriggers(projectId, branchId)
+			? handled(api.listBranchTriggers(projectId, branchId))
 			: Promise.resolve([]),
 		customDomainApi
-			? customDomainApi.listBranchCustomDomains(projectId, branchId)
+			? handled(
+					customDomainApi.listBranchCustomDomains(
+						projectId,
+						branchId,
+					),
+				)
 			: Promise.resolve([]),
 	]);
 	const preview: RemotePreviewState = { buckets, functions, triggers };
