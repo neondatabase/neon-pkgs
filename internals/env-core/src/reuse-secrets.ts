@@ -2,6 +2,7 @@ import {
 	type Config,
 	type CredentialScope,
 	credentialScopesSatisfied,
+	type NeonBranchSnapshot,
 	type NeonCredentialMeta,
 } from "@neon/config/v1";
 
@@ -130,16 +131,24 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
 		functionUrls?: FunctionUrlMode;
 		listedFunctions?: FetchEnvKeysOptions["listedFunctions"];
+		/** The target branch, when the caller listed it already. */
+		resolvedBranch?: NeonBranchSnapshot;
 	},
 ): Promise<ReusedBranchEnv> {
 	const {
 		env: source = process.env,
 		keys: requestedKeys,
 		revokeSuperseded = true,
+		resolvedBranch,
 		...fetchOptions
 	} = options;
 	const api = options.api ?? createApiFromOptions(options);
-	const { branch, desired } = await resolveBranchPolicy(config, options, api);
+	const { branch, desired } = await resolveBranchPolicy(
+		config,
+		options,
+		api,
+		resolvedBranch,
+	);
 
 	const allPolicyKeys = policyEnvKeys(desired);
 	const requested = requestedKeys ? new Set(requestedKeys) : null;

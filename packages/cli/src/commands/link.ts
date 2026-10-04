@@ -8,6 +8,7 @@ import type {
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import { isNeonApiError, messageFromBody } from "../api.js";
+import { isClaimableEnvTarget } from "../claimable/state.js";
 import { defaultDir } from "../config.js";
 import {
 	applyContext,
@@ -26,7 +27,10 @@ import {
 	pickBranchInteractively,
 } from "../utils/branch_picker.js";
 import { getCliName } from "../utils/cli_name.js";
-import { listAllProjectBranches } from "../utils/enrichers.js";
+import {
+	listAllProjectBranches,
+	type ResolvedBranchRef,
+} from "../utils/enrichers.js";
 import { looksLikeBranchId } from "../utils/formats.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
@@ -539,17 +543,38 @@ const listAllBranches = async (
 ): Promise<Branch[]> => listAllProjectBranches(props.apiClient, projectId);
 
 /**
+ * The branch listing for {@link resolvePinnedBranch}, started alongside the project check
+ * except on Claimable Neon, which does not complete concurrent Management API reads. Only
+ * the listing starts early: branch selection, which can prompt or create a branch, still
+ * waits for the check, and a listing error is reported only after the check passes.
+ */
+const branchListing = (
+	props: LinkProps,
+	projectId: string,
+): (() => Promise<Branch[]>) => {
+	const claimable = isClaimableEnvTarget({
+		apiHost: props.apiHost,
+		contextFile: props.contextFile,
+		configDir: props.configDir ?? "",
+	});
+	if (claimable) return () => listAllBranches(props, projectId);
+	const listing = listAllBranches(props, projectId);
+	listing.catch(() => undefined);
+	return () => listing;
+};
+
+/**
  * Resolve a branch reference (name *or* id) to the matching branch, while
  * confirming it actually exists in the project. Unlike the shared
  * `branchIdResolve`, this also verifies references that already look like ids
  * (so a typo'd `br-…` doesn't silently get written).
  */
-const resolveBranchRef = async (
+const resolveBranchRef = (
 	props: LinkProps,
 	projectId: string,
 	branchRef: string,
-): Promise<Branch> => {
-	const branches = await listAllBranches(props, projectId);
+	branches: Branch[],
+): Branch => {
 	const match =
 		branches.find((b: Branch) => b.id === branchRef) ??
 		branches.find((b: Branch) => b.name === branchRef);
@@ -617,7 +642,23 @@ const resolveOrgForProject = async (
 
 type BranchResolution = {
 	branch: string;
+	/** The same branch for the bundled env pull, so it does not list branches again. */
+	ref: ResolvedBranchRef;
 };
+
+const pinnedRef = (branch: {
+	id: string;
+	name?: string;
+}): ResolvedBranchRef => ({
+	branchId: branch.id,
+	branchName: branch.name ?? branch.id,
+	usedDefault: false,
+});
+
+const resolution = (branch: Branch): BranchResolution => ({
+	branch: branchPersistValue(branch),
+	ref: pinnedRef(branch),
+});
 
 /**
  * Keep a same-project pin only after it still resolves on the project.
@@ -627,26 +668,30 @@ const resolvePinnedBranch = async (
 	inputs: Inputs,
 	existing: Context,
 	projectId: string,
+	listBranches: () => Promise<Branch[]>,
 ): Promise<BranchResolution> => {
+	const branches = await listBranches();
 	if (inputs.branch) {
-		const branch = await resolveBranchRef(props, projectId, inputs.branch);
-		return { branch: branchPersistValue(branch) };
+		return resolution(
+			resolveBranchRef(props, projectId, inputs.branch, branches),
+		);
 	}
 	if (projectId === existing.projectId) {
 		const pinned = contextBranch(existing);
 		if (pinned) {
-			const branch = await resolveBranchRef(props, projectId, pinned);
-			return { branch: branchPersistValue(branch) };
+			return resolution(
+				resolveBranchRef(props, projectId, pinned, branches),
+			);
 		}
 	}
-	return resolveBranchFromList(props, projectId);
+	return resolveBranchFromList(props, projectId, branches);
 };
 
 const resolveBranchFromList = async (
 	props: LinkProps,
 	projectId: string,
+	branches: Branch[],
 ): Promise<BranchResolution> => {
-	const branches = await listAllBranches(props, projectId);
 	if (branches.length === 0) {
 		throw new LinkInputError(
 			`Project '${projectId}' has no branches to link. Create or restore a branch before retrying, or select another project with --project-id.`,
@@ -659,7 +704,7 @@ const resolveBranchFromList = async (
 				`Project '${projectId}' has no branches to link. Create or restore a branch before retrying, or select another project with --project-id.`,
 			);
 		}
-		return { branch: branchPersistValue(only) };
+		return resolution(only);
 	}
 	if (props.yes) {
 		const def = branches.find((b: Branch) => b.default);
@@ -671,7 +716,7 @@ const resolveBranchFromList = async (
 				`Project '${projectId}' has no default branch. Pass --branch with a name or ID from the list:`,
 			);
 		}
-		return { branch: branchPersistValue(def) };
+		return resolution(def);
 	}
 	if (canPromptInteractively()) {
 		const picked = await pickBranchInteractively(branches, {
@@ -684,11 +729,12 @@ const resolveBranchFromList = async (
 			const existing = branches.find(
 				(b: Branch) => b.id === picked.branchId,
 			);
-			return {
-				branch: existing
-					? branchPersistValue(existing)
-					: picked.branchId,
-			};
+			return existing
+				? resolution(existing)
+				: {
+						branch: picked.branchId,
+						ref: pinnedRef({ id: picked.branchId }),
+					};
 		}
 		const created = await createBranch(
 			props.apiClient,
@@ -696,11 +742,10 @@ const resolveBranchFromList = async (
 			picked.name,
 			branches,
 		);
+		const createdBranch = { id: created, name: picked.name };
 		return {
-			branch: branchPersistValue({
-				id: created,
-				name: picked.name,
-			}),
+			branch: branchPersistValue(createdBranch),
+			ref: pinnedRef(createdBranch),
 		};
 	}
 	return failWithBranchCandidates(
@@ -739,6 +784,10 @@ const runNonInteractive = async (
 			orgId,
 			projectId: created.project.id,
 			branch: created.branchName,
+			branchRef: pinnedRef({
+				id: created.branchId,
+				name: created.branchName,
+			}),
 			created: true,
 			projectName: created.project.name,
 			regionId: created.project.region_id,
@@ -748,6 +797,7 @@ const runNonInteractive = async (
 
 	// Link an explicitly named existing project.
 	if (inputs.projectId) {
+		const listBranches = branchListing(props, inputs.projectId);
 		const orgId = await resolveOrgForProject(
 			props,
 			inputs,
@@ -758,6 +808,7 @@ const runNonInteractive = async (
 			inputs,
 			existing,
 			inputs.projectId,
+			listBranches,
 		);
 		applyContext(props.contextFile, {
 			orgId,
@@ -769,6 +820,7 @@ const runNonInteractive = async (
 			orgId,
 			projectId: inputs.projectId,
 			branch: resolved.branch,
+			branchRef: resolved.ref,
 			created: false,
 		});
 		return;
@@ -777,12 +829,14 @@ const runNonInteractive = async (
 	// Pin a branch in the already-linked project.
 	if (inputs.branch && existing.projectId) {
 		const projectId = existing.projectId;
+		const listBranches = branchListing(props, projectId);
 		const orgId = await resolveOrgForProject(props, inputs, projectId);
 		const resolved = await resolvePinnedBranch(
 			props,
 			inputs,
 			existing,
 			projectId,
+			listBranches,
 		);
 		applyContext(props.contextFile, {
 			orgId,
@@ -794,6 +848,7 @@ const runNonInteractive = async (
 			orgId,
 			projectId,
 			branch: resolved.branch,
+			branchRef: resolved.ref,
 			created: false,
 		});
 		return;
@@ -854,6 +909,10 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			orgId,
 			projectId: created.project.id,
 			branch: created.branchName,
+			branchRef: pinnedRef({
+				id: created.branchId,
+				name: created.branchName,
+			}),
 			created: true,
 			projectName: created.project.name,
 			regionId: created.project.region_id,
@@ -874,6 +933,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			inputs,
 			existing,
 			action.projectId,
+			() => listAllBranches(props, action.projectId),
 		);
 		applyContext(props.contextFile, {
 			orgId,
@@ -885,6 +945,7 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 			orgId,
 			projectId: action.projectId,
 			branch: resolved.branch,
+			branchRef: resolved.ref,
 			created: false,
 			projectName: action.name,
 			regionId: action.regionId,
@@ -916,6 +977,10 @@ const runInteractive = async (props: LinkProps, inputs: Inputs) => {
 		orgId,
 		projectId: created.project.id,
 		branch: created.branchName,
+		branchRef: pinnedRef({
+			id: created.branchId,
+			name: created.branchName,
+		}),
 		created: true,
 		projectName: created.project.name,
 		regionId: created.project.region_id,
@@ -1358,6 +1423,8 @@ type HumanSummary = {
 	orgId?: string;
 	projectId: string;
 	branch: string;
+	/** The pinned branch as resolved while linking; absent when nothing was verified. */
+	branchRef?: ResolvedBranchRef;
 	created: boolean;
 	projectName?: string;
 	regionId?: string;
@@ -1401,13 +1468,16 @@ const finalizeLink = async (
 		return;
 	}
 	const { config: _offerConfig, ...rest } = props;
-	await autoPullEnvAfterPin({
-		...rest,
-		...(props.cwd ? { cwd: props.cwd } : {}),
-		projectId: summary.projectId,
-		branch: summary.branch,
-		envPull: props.envPull,
-	});
+	await autoPullEnvAfterPin(
+		{
+			...rest,
+			...(props.cwd ? { cwd: props.cwd } : {}),
+			projectId: summary.projectId,
+			branch: summary.branch,
+			envPull: props.envPull,
+		},
+		summary.branchRef,
+	);
 };
 
 /**
@@ -1470,12 +1540,15 @@ const maybeOfferConfigInit = async (
 	// a neon.ts. Only meaningful when a branch was pinned (same guard as finalize).
 	if (summary.branch && summary.projectId) {
 		const { config: _offerConfig, ...rest } = props;
-		await autoPullEnvAfterPin({
-			...rest,
-			projectId: summary.projectId,
-			branch: summary.branch,
-			envPull: props.envPull,
-		});
+		await autoPullEnvAfterPin(
+			{
+				...rest,
+				projectId: summary.projectId,
+				branch: summary.branch,
+				envPull: props.envPull,
+			},
+			summary.branchRef,
+		);
 	}
 };
 

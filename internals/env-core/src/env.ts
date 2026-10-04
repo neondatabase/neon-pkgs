@@ -867,6 +867,17 @@ export async function fetchEnvKeysState(
 		selectedFunctionKeys,
 		wants,
 	});
+	const wantsAnyFunctionUrl =
+		selection === null || selectedFunctionKeys.length > 0;
+	// Depends on nothing below, so it starts now; it is awaited where its result is used, so
+	// an error from an earlier read is still the one reported.
+	const functionsRead =
+		functionUrlMode === "all-live" &&
+		wantsAnyFunctionUrl &&
+		options.listedFunctions === undefined
+			? listFunctionInvocationUrls(api, projectId, branch.id)
+			: null;
+	functionsRead?.catch(() => undefined);
 	const needsUnpooled =
 		wantsUnpooled ||
 		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
@@ -1085,15 +1096,13 @@ export async function fetchEnvKeysState(
 		}
 	}
 
-	const wantsAnyFunctionUrl =
-		selection === null || selectedFunctionKeys.length > 0;
 	const functions: Record<string, NeonFunctionUrlEnv> = {};
 	let functionUrlsUnavailable = false;
 
 	if (functionUrlMode === "all-live" && wantsAnyFunctionUrl) {
 		const listed =
 			options.listedFunctions === undefined
-				? await listFunctionInvocationUrls(api, projectId, branch.id)
+				? await requiredValue(functionsRead, "function listing")
 				: listedFromSnapshots(options.listedFunctions);
 		if (listed.status === "unavailable") {
 			if (selection === null) functionUrlsUnavailable = true;
@@ -1216,7 +1225,26 @@ export async function resolveBranchPolicy(
 	config: Config,
 	options: Pick<FetchEnvOptions, "projectId" | "branch" | "branchId">,
 	api: NeonApi,
+	/** The target branch, when the caller listed it already. */
+	resolved?: NeonBranchSnapshot,
 ): Promise<BranchPolicy> {
+	const branch = resolved ?? (await listAndResolveBranch(options, api));
+	const desired = resolveConfig(config, {
+		name: branch.name,
+		id: branch.id,
+		exists: true,
+		...(branch.parentId ? { parentId: branch.parentId } : {}),
+		isDefault: branch.isDefault,
+		isProtected: branch.protected,
+		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+	});
+	return { branch, desired };
+}
+
+async function listAndResolveBranch(
+	options: Pick<FetchEnvOptions, "projectId" | "branch" | "branchId">,
+	api: NeonApi,
+): Promise<NeonBranchSnapshot> {
 	const projectId = options.projectId;
 	const branches = await api.listBranches(projectId);
 	if (branches.length === 0) {
@@ -1241,17 +1269,7 @@ export async function resolveBranchPolicy(
 			{ details: { projectId } },
 		);
 	}
-	const branch = resolveBranch(branchRef, branches);
-	const desired = resolveConfig(config, {
-		name: branch.name,
-		id: branch.id,
-		exists: true,
-		...(branch.parentId ? { parentId: branch.parentId } : {}),
-		isDefault: branch.isDefault,
-		isProtected: branch.protected,
-		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
-	});
-	return { branch, desired };
+	return resolveBranch(branchRef, branches);
 }
 
 /**
