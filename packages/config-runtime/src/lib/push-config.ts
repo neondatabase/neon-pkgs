@@ -490,10 +490,12 @@ async function resolveServiceState(args: {
 
 	const [auth, dataApi] = await Promise.all([
 		wantsAuth
-			? api.getNeonAuth(projectId, branch.id)
+			? started(() => api.getNeonAuth(projectId, branch.id))
 			: Promise.resolve(null),
 		wantsDataApi
-			? api.getNeonDataApi(projectId, branch.id, databaseName)
+			? started(() =>
+					api.getNeonDataApi(projectId, branch.id, databaseName),
+				)
 			: Promise.resolve(null),
 	]);
 	const result: RemoteServiceState = {
@@ -536,16 +538,21 @@ async function resolvePreviewState(args: {
 		: undefined;
 	const [buckets, functions, triggers, customDomains] = await Promise.all([
 		desired.buckets.length > 0
-			? api.listBranchBuckets(projectId, branchId)
+			? started(() => api.listBranchBuckets(projectId, branchId))
 			: Promise.resolve([]),
 		desired.functions.length > 0
-			? api.listBranchFunctions(projectId, branchId)
+			? started(() => api.listBranchFunctions(projectId, branchId))
 			: Promise.resolve([]),
 		wantsTriggers
-			? api.listBranchTriggers(projectId, branchId)
+			? started(() => api.listBranchTriggers(projectId, branchId))
 			: Promise.resolve([]),
 		customDomainApi
-			? customDomainApi.listBranchCustomDomains(projectId, branchId)
+			? started(() =>
+					customDomainApi.listBranchCustomDomains(
+						projectId,
+						branchId,
+					),
+				)
 			: Promise.resolve([]),
 	]);
 	const preview: RemotePreviewState = { buckets, functions, triggers };

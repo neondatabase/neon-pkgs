@@ -2369,6 +2369,49 @@ describe("pushConfig request scheduling", () => {
 		expect(api.started).not.toContain("listBranchBuckets");
 	});
 
+	test("a synchronous Preview adapter throw leaves no unhandled rejection while services are pending", async () => {
+		const unhandled: unknown[] = [];
+		const onUnhandled = (reason: unknown) => unhandled.push(reason);
+		process.on("unhandledRejection", onUnhandled);
+		try {
+			const { api, projectId } = seededFake();
+			Object.assign(api, {
+				listBranchDatabases: () =>
+					new Promise((_, reject) =>
+						setTimeout(
+							() => reject(new Error("service failed")),
+							20,
+						),
+					),
+				listBranchBuckets: () =>
+					Promise.reject(new Error("buckets failed")),
+				listBranchFunctions: () => {
+					throw new Error("functions threw");
+				},
+			});
+			const config = defineConfig({
+				auth: {},
+				preview: {
+					buckets: { uploads: {} },
+					functions: { fn1: { name: "Hello", source: fnSource } },
+				},
+			});
+
+			await expect(
+				pushConfig(config, {
+					api,
+					projectId,
+					branchId: "br-main",
+					dryRun: true,
+				}),
+			).rejects.toThrow("service failed");
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", onUnhandled);
+		}
+	});
+
 	test("reports a service error before a Preview error that arrives first", async () => {
 		const { api, pushed } = gatedPush();
 		api.failures.set("listBranchDatabases", new Error("databases failed"));
