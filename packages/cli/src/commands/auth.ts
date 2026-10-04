@@ -327,7 +327,7 @@ export const authFlow = async ({
 			at.storage === "keyring" ? KEYRING_CREDENTIALS : at.path,
 		);
 	}
-	log.info("Auth complete");
+	log.info(`Auth complete (profile ${profileName})`);
 	return tokenSet.access_token || "";
 };
 
