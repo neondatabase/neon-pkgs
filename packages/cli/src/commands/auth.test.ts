@@ -73,6 +73,7 @@ describe("auth", () => {
 
 	test("should auth", async ({ runMockServer }) => {
 		const server = await runMockServer("main");
+		const info = vi.spyOn(log, "info");
 		await authFlow({
 			_: ["auth"],
 			apiHost: `http://localhost:${(server.address() as AddressInfo).port}`,
@@ -89,6 +90,10 @@ describe("auth", () => {
 		expect(credentials.access_token).toEqual(expect.any(String));
 		expect(credentials.refresh_token).toEqual(expect.any(String));
 		expect(credentials.user_id).toEqual(expect.any(String));
+		expect(info).toHaveBeenCalledWith(
+			"Auth complete: signed in as john@example.com (profile DEFAULT)",
+		);
+		info.mockRestore();
 	});
 
 	test("refuses to open a browser when --keyring is set and unavailable", async ({
