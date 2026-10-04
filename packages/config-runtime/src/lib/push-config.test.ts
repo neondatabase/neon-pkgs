@@ -2412,6 +2412,26 @@ describe("pushConfig request scheduling", () => {
 		}
 	});
 
+	test("reports whichever of the branch and endpoint reads rejects first, as when called directly", async () => {
+		const { api, projectId } = seededFake();
+		Object.assign(api, {
+			listBranches: () =>
+				new Promise((_, reject) =>
+					queueMicrotask(() => reject(new Error("branches failed"))),
+				),
+			listEndpoints: () => Promise.reject(new Error("endpoints failed")),
+		});
+
+		await expect(
+			pushConfig(defineConfig({}), {
+				api,
+				projectId,
+				branchId: "br-main",
+				dryRun: true,
+			}),
+		).rejects.toThrow("endpoints failed");
+	});
+
 	test("reports a service error before a Preview error that arrives first", async () => {
 		const { api, pushed } = gatedPush();
 		api.failures.set("listBranchDatabases", new Error("databases failed"));
