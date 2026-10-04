@@ -463,9 +463,6 @@ function resolveRemoteBranch(
 }
 
 /**
- * Pre-fetch the current state of branch-scoped integrations on the selected branch.
- */
-/**
  * Starts a read now and keeps an unread rejection from crashing the process; the caller
  * awaits it (and sees the error) when its turn comes. The read is called synchronously and
  * its own promise returned, so errors surface in the same order as a direct call; a
@@ -491,6 +488,9 @@ function handled<T>(promise: Promise<T>): Promise<T> {
 	return promise;
 }
 
+/**
+ * Pre-fetch the current state of branch-scoped integrations on the selected branch.
+ */
 async function resolveServiceState(args: {
 	api: NeonApi;
 	projectId: string;
