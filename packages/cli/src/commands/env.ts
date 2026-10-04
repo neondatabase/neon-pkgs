@@ -32,7 +32,11 @@ import type { BranchScopeProps } from "../types.js";
 import { warnAiGateway } from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
 import { getCliName } from "../utils/cli_name.js";
-import { fillSingleProject, resolveBranchRef } from "../utils/enrichers.js";
+import {
+	fillSingleProject,
+	type ResolvedBranchRef,
+	resolveBranchRef,
+} from "../utils/enrichers.js";
 
 export type EnvPullProps = BranchScopeProps & {
 	/** Target dotenv file, relative to cwd. Defaults to the project directory's `.env`, else `.env.local`. */
@@ -260,7 +264,12 @@ export type PullOutcome =
 
 export const pull = async (
 	props: EnvPullProps,
-	opts: { announce?: boolean; implyAiGateway?: boolean } = {},
+	opts: {
+		announce?: boolean;
+		implyAiGateway?: boolean;
+		/** Skips the branch lookup when the caller resolved this same branch already. */
+		branch?: ResolvedBranchRef;
+	} = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
 	const claimable = isClaimableEnvTarget({
@@ -284,7 +293,7 @@ export const pull = async (
 		props.services !== undefined || props.envKeys !== undefined
 			? envKeysForSelection(selectionServices, selectionEnvKeys)
 			: undefined;
-	const branch = await resolveBranchRef(props);
+	const branch = opts.branch ?? (await resolveBranchRef(props));
 	if (opts.announce) {
 		announceTargetBranch(props, branch, "Pulling env from branch");
 	}
@@ -538,13 +547,14 @@ export type AutoPullResult =
  */
 export const autoPullEnvAfterPin = async (
 	props: EnvPullProps & { envPull: boolean },
+	branch?: ResolvedBranchRef,
 ): Promise<AutoPullResult> => {
 	if (!props.envPull) {
 		log.info(chalk.dim(ENV_PULL_SKIPPED_HINT));
 		return { status: "skipped" };
 	}
 	try {
-		return await pull(props);
+		return await pull(props, branch ? { branch } : {});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.warning(

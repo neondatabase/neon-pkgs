@@ -15,6 +15,7 @@ import {
 	type NeonProjectSnapshot,
 	PlatformError,
 } from "@neon/config";
+import { started } from "./started.js";
 
 export interface PullConfigOptions {
 	/** Neon project id (`<project>`). Required — the API addresses branches by project. */
@@ -161,17 +162,6 @@ export async function pullConfig(
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
 	});
-}
-
-/**
- * Starts a read now and keeps an unread rejection from crashing the process; the caller
- * awaits it (and sees the error) when its turn comes. Also turns a synchronous throw from
- * a custom adapter into a rejection.
- */
-function started<T>(read: () => Promise<T>): Promise<T> {
-	const promise = Promise.resolve().then(read);
-	promise.catch(() => undefined);
-	return promise;
 }
 
 /**

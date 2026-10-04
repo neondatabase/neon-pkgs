@@ -826,14 +826,20 @@ export type FetchEnvKeysOptions = FetchEnvOptions & {
 	listedFunctions?: ReadonlyArray<{ slug: string; invocationUrl: string }>;
 };
 
+/**
+ * `policy` is the {@link resolveBranchPolicy} result for this same `config` and branch, when
+ * the caller already has it.
+ */
 export async function fetchEnvKeysState(
 	config: Config,
 	options: FetchEnvKeysOptions,
 	keys: readonly string[] | null,
+	policy?: BranchPolicy,
 ): Promise<FetchEnvKeysState> {
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
-	const { branch, desired } = await resolveBranchPolicy(config, options, api);
+	const { branch, desired } =
+		policy ?? (await resolveBranchPolicy(config, options, api));
 
 	const selection = keys ? new Set<string>(keys) : null;
 	const omitted = new Set(options.omitKeys ?? []);
@@ -1196,6 +1202,11 @@ async function listFunctionInvocationUrls(
 	}
 }
 
+export type BranchPolicy = {
+	branch: NeonBranchSnapshot;
+	desired: ReturnType<typeof resolveConfig>;
+};
+
 /**
  * Resolve the target branch and evaluate the policy against it — the first thing any
  * branch-scoped operation needs. Shared by {@link fetchEnv} and {@link fetchEnvReusingSecrets}
@@ -1205,10 +1216,7 @@ export async function resolveBranchPolicy(
 	config: Config,
 	options: Pick<FetchEnvOptions, "projectId" | "branch" | "branchId">,
 	api: NeonApi,
-): Promise<{
-	branch: NeonBranchSnapshot;
-	desired: ReturnType<typeof resolveConfig>;
-}> {
+): Promise<BranchPolicy> {
 	const projectId = options.projectId;
 	const branches = await api.listBranches(projectId);
 	if (branches.length === 0) {

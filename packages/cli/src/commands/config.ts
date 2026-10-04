@@ -1462,7 +1462,10 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	// the same bundled convenience as `link` / `checkout`, so the branch is immediately
 	// usable for local dev. `--no-env-pull` opts out; a pull failure degrades to a warning
 	// (the apply already succeeded). See autoPullEnvAfterPin.
-	await autoPullEnvAfterPin({ ...props, envPull: props.envPull !== false });
+	await autoPullEnvAfterPin(
+		{ ...props, envPull: props.envPull !== false },
+		branch,
+	);
 
 	// `deploy.after` (Preview): runs once the apply has succeeded. Env is resolved in-memory
 	// here regardless of `--no-env-pull`, so a migration hook always has a connection string.

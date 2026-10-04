@@ -2224,3 +2224,163 @@ describe("pushConfig", () => {
 		).toBe(false);
 	});
 });
+
+describe("pushConfig request scheduling", () => {
+	const READS = [
+		"getProject",
+		"listBranches",
+		"listEndpoints",
+		"listBranchDatabases",
+		"getNeonAuth",
+		"listBranchBuckets",
+	] as const;
+	type Read = (typeof READS)[number];
+
+	/** A fake whose reads wait until the test releases them, recording when each starts. */
+	class GatedNeonApi extends FakeNeonApi {
+		readonly started: Read[] = [];
+		readonly failures = new Map<Read, Error>();
+		private readonly gates = new Map<Read, () => void>();
+
+		release(name: Read) {
+			this.gates.get(name)?.();
+		}
+
+		private gate<T>(name: Read, read: () => Promise<T>): Promise<T> {
+			this.started.push(name);
+			return new Promise<void>((resolve) =>
+				this.gates.set(name, resolve),
+			).then(() => {
+				const failure = this.failures.get(name);
+				if (failure) throw failure;
+				return read();
+			});
+		}
+
+		override getProject(...args: Parameters<FakeNeonApi["getProject"]>) {
+			return this.gate("getProject", () => super.getProject(...args));
+		}
+		override listBranches(
+			...args: Parameters<FakeNeonApi["listBranches"]>
+		) {
+			return this.gate("listBranches", () => super.listBranches(...args));
+		}
+		override listEndpoints(
+			...args: Parameters<FakeNeonApi["listEndpoints"]>
+		) {
+			return this.gate("listEndpoints", () =>
+				super.listEndpoints(...args),
+			);
+		}
+		override listBranchDatabases(
+			...args: Parameters<FakeNeonApi["listBranchDatabases"]>
+		) {
+			return this.gate("listBranchDatabases", () =>
+				super.listBranchDatabases(...args),
+			);
+		}
+		override getNeonAuth(...args: Parameters<FakeNeonApi["getNeonAuth"]>) {
+			return this.gate("getNeonAuth", () => super.getNeonAuth(...args));
+		}
+		override listBranchBuckets(
+			...args: Parameters<FakeNeonApi["listBranchBuckets"]>
+		) {
+			return this.gate("listBranchBuckets", () =>
+				super.listBranchBuckets(...args),
+			);
+		}
+	}
+
+	const config = defineConfig({
+		auth: {},
+		preview: { buckets: { uploads: {} } },
+	});
+
+	const gatedPush = (branchId = "br-main") => {
+		const api = new GatedNeonApi();
+		api.seedProject({
+			project: {
+				id: "proj-gate",
+				name: "gate",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		const pushed = pushConfig(config, {
+			api,
+			projectId: "proj-gate",
+			branchId,
+			dryRun: true,
+		});
+		pushed.catch(() => undefined);
+		return { api, pushed };
+	};
+	const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	test("starts project, branches, and endpoints together; services and Preview together once the branch resolves", async () => {
+		const { api, pushed } = gatedPush();
+		await flush();
+		expect(new Set(api.started)).toEqual(
+			new Set(["getProject", "listBranches", "listEndpoints"]),
+		);
+
+		api.release("getProject");
+		api.release("listBranches");
+		api.release("listEndpoints");
+		await flush();
+		expect(new Set(api.started)).toEqual(
+			new Set([
+				"getProject",
+				"listBranches",
+				"listEndpoints",
+				"listBranchDatabases",
+				"listBranchBuckets",
+			]),
+		);
+
+		for (const name of READS) api.release(name);
+		await flush();
+		for (const name of READS) api.release(name);
+		await expect(pushed).resolves.toMatchObject({ branchName: "main" });
+	});
+
+	test("reports the project error even when the branch listing fails first", async () => {
+		const { api, pushed } = gatedPush();
+		api.failures.set("getProject", new Error("project failed"));
+		api.failures.set("listBranches", new Error("branches failed"));
+		await flush();
+		api.release("listBranches");
+		await flush();
+		api.release("getProject");
+		await expect(pushed).rejects.toThrow("project failed");
+	});
+
+	test("reports a missing branch before starting any service or Preview read", async () => {
+		const { api, pushed } = gatedPush("br-gone");
+		await flush();
+		for (const name of READS) api.release(name);
+		await expect(pushed).rejects.toMatchObject({
+			code: ErrorCode.BranchNotFound,
+		});
+		expect(api.started).not.toContain("listBranchDatabases");
+		expect(api.started).not.toContain("listBranchBuckets");
+	});
+
+	test("reports a service error before a Preview error that arrives first", async () => {
+		const { api, pushed } = gatedPush();
+		api.failures.set("listBranchDatabases", new Error("databases failed"));
+		api.failures.set("listBranchBuckets", new Error("buckets failed"));
+		await flush();
+		api.release("getProject");
+		api.release("listBranches");
+		api.release("listEndpoints");
+		await flush();
+		api.release("listBranchBuckets");
+		await flush();
+		api.release("listBranchDatabases");
+		await expect(pushed).rejects.toThrow("databases failed");
+	});
+});

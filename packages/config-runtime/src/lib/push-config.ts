@@ -23,6 +23,7 @@ import {
 	type UpdateTriggerInput,
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
+import { started } from "./started.js";
 
 // Eager loading would evaluate esbuild for callers that provide their own bundler.
 const makeDefaultBundleFunction =
@@ -161,12 +162,17 @@ export async function pushConfig(
 	const updateExisting = options.updateExisting === true;
 	const allowProtectedBranch = options.allowProtectedBranch === true;
 
-	const remoteProject = await api.getProject(projectId);
-
-	const [branches, endpoints] = await Promise.all([
-		api.listBranches(remoteProject.id),
-		api.listEndpoints(remoteProject.id),
-	]);
+	// Same scheduling as `pullConfig`: independent reads start together and are awaited in
+	// the order they used to run, so the first error reported is unchanged.
+	const projectRead = started(() => api.getProject(projectId));
+	const listsRead = started(() =>
+		Promise.all([
+			started(() => api.listBranches(projectId)),
+			started(() => api.listEndpoints(projectId)),
+		]),
+	);
+	const remoteProject = await projectRead;
+	const [branches, endpoints] = await listsRead;
 	const branch = resolveRemoteBranch(options.branchId, branches);
 	const resolved = resolveConfig(config, {
 		name: branch.name,
@@ -177,14 +183,34 @@ export async function pushConfig(
 		isProtected: branch.protected,
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 	});
-	const services = await resolveServiceState({
-		api,
-		projectId: remoteProject.id,
-		branch,
-		wantsAuth: resolved.authEnabled,
-		wantsDataApi:
-			resolved.dataApiEnabled || resolved.dataApiPolicy === "disabled",
-	});
+	const servicesRead = started(() =>
+		resolveServiceState({
+			api,
+			projectId: remoteProject.id,
+			branch,
+			wantsAuth: resolved.authEnabled,
+			wantsDataApi:
+				resolved.dataApiEnabled ||
+				resolved.dataApiPolicy === "disabled",
+		}),
+	);
+	// Only fetch Preview state when the policy actually uses it — and within that, only the
+	// specific features the policy declares. So a policy that uses functions never probes
+	// the AI Gateway, and `apply`/`plan` only fail on a Preview feature being unavailable
+	// (404/503) when the policy actually asks for it.
+	const desiredPreview = resolved.preview;
+	const previewRead = desiredPreview
+		? started(() =>
+				resolvePreviewState({
+					api,
+					projectId: remoteProject.id,
+					branchId: branch.id,
+					desired: desiredPreview,
+					wantsTriggers: (resolved.triggers?.length ?? 0) > 0,
+				}),
+			)
+		: undefined;
+	const services = await servicesRead;
 	const remote: RemoteState = {
 		projectId: remoteProject.id,
 		branch,
@@ -193,18 +219,8 @@ export async function pushConfig(
 		),
 		services,
 	};
-	// Only fetch Preview state when the policy actually uses it — and within that, only the
-	// specific features the policy declares. So a policy that uses functions never probes
-	// the AI Gateway, and `apply`/`plan` only fail on a Preview feature being unavailable
-	// (404/503) when the policy actually asks for it.
-	if (resolved.preview) {
-		remote.preview = await resolvePreviewState({
-			api,
-			projectId: remoteProject.id,
-			branchId: branch.id,
-			desired: resolved.preview,
-			wantsTriggers: (resolved.triggers?.length ?? 0) > 0,
-		});
+	if (previewRead) {
+		remote.preview = await previewRead;
 	}
 
 	// Always compute the plan with `updateExisting: true` so we can see what *would* be

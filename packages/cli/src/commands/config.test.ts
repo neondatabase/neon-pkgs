@@ -1320,6 +1320,44 @@ describe("config commands", () => {
 		expect(readFileSync(envPath, "utf8")).toContain("DATABASE_URL=");
 	});
 
+	it("lists the project's branches once per step of an apply with its env pull", async () => {
+		let runtimeBranchListings = 0;
+		const api = new (class extends FakeNeonApi {
+			override async listBranches(
+				projectId: string,
+			): Promise<NeonBranchSnapshot[]> {
+				runtimeBranchListings += 1;
+				return super.listBranches(projectId);
+			}
+		})();
+		const { stream } = captureOut();
+		const config = writeConfig("export default {};\n");
+		let cliBranchListings = 0;
+		const apiClient = {
+			listProjectBranches: async () => {
+				cliBranchListings += 1;
+				return fakeApiClient.listProjectBranches();
+			},
+		};
+
+		await applyCmd({
+			...baseProps(api, stream),
+			apiClient: apiClient as never,
+			output: "table",
+			config,
+			cwd,
+			envPull: true,
+		});
+
+		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toContain(
+			"DATABASE_URL=",
+		);
+		// The CLI resolves the branch once, for the apply; the env pull reuses it.
+		expect(cliBranchListings).toBe(1);
+		// The apply, the env pull's policy check, and its env fetch.
+		expect(runtimeBranchListings).toBe(3);
+	});
+
 	it("skips the env pull after apply when --no-env-pull is set", async () => {
 		const api = new FakeNeonApi();
 		const { stream } = captureOut();

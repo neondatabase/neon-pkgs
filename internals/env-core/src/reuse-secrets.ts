@@ -171,6 +171,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			config,
 			fetchOptions,
 			requested === null ? null : selectedPolicyKeys,
+			{ branch, desired },
 		);
 		return {
 			vars: preferPersisted(toEntries(fetched.env), source),
@@ -236,17 +237,17 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			: selectedPolicyKeys.filter((key) => !keptSecretKeys.includes(key));
 	const fetched = await fetchEnvKeysState(
 		config,
-		// Pass the resolved id so `fetchEnv` targets the same branch this call verified against,
-		// even if `options.branch` was a name that has since been reused.
 		{
 			...fetchOptions,
-			branchId: branch.id,
 			api,
 			...(keptSecretKeys.length > 0 && requested === null
 				? { omitKeys: keptSecretKeys }
 				: {}),
 		},
 		fetchKeys,
+		// The branch this call verified credentials against, even if `options.branch` was a
+		// name that has since been reused.
+		{ branch, desired },
 	);
 
 	const vars = preferPersisted(toEntries(fetched.env), source);
