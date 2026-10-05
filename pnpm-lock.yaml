@@ -511,7 +511,7 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/live:
+  packages/realtime:
     dependencies:
       postgres-array:
         specifier: ^3.0.4
@@ -545,11 +545,11 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/live-drizzle:
+  packages/realtime-drizzle:
     devDependencies:
-      '@neon/live':
+      '@neon/realtime':
         specifier: workspace:*
-        version: link:../live
+        version: link:../realtime
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -572,11 +572,11 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/live-kysely:
+  packages/realtime-kysely:
     devDependencies:
-      '@neon/live':
+      '@neon/realtime':
         specifier: workspace:*
-        version: link:../live
+        version: link:../realtime
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -602,11 +602,11 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/live-react:
+  packages/realtime-react:
     devDependencies:
-      '@neon/live':
+      '@neon/realtime':
         specifier: workspace:*
-        version: link:../live
+        version: link:../realtime
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -644,11 +644,11 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.30.1)(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/live-tanstack:
+  packages/realtime-tanstack:
     devDependencies:
-      '@neon/live':
+      '@neon/realtime':
         specifier: workspace:*
-        version: link:../live
+        version: link:../realtime
       '@standard-schema/spec':
         specifier: ^1.1.0
         version: 1.1.0
