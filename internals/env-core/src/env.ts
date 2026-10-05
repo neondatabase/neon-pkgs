@@ -778,6 +778,23 @@ function assertStorageCredentialKeyPair(keys: readonly string[]): void {
 	);
 }
 
+/**
+ * Starts a read now and keeps an unread rejection from crashing the process; the caller
+ * awaits it (and sees the error) when its turn comes. The read is called synchronously and
+ * its own promise returned, so errors surface in the same order as a direct call; a
+ * synchronous throw becomes the returned rejection.
+ */
+function started<T>(read: () => Promise<T>): Promise<T> {
+	let promise: Promise<T>;
+	try {
+		promise = read();
+	} catch (error) {
+		promise = Promise.reject(error);
+	}
+	promise.catch(() => undefined);
+	return promise;
+}
+
 /** Fail loudly when selected-key dependency planning and execution disagree. */
 function requiredValue<T>(value: T | null, description: string): T {
 	if (value === null) {
@@ -869,8 +886,15 @@ export async function fetchEnvKeysState(
 	});
 	const wantsAnyFunctionUrl =
 		selection === null || selectedFunctionKeys.length > 0;
-	// Depends on nothing below, so it starts now; it is awaited where its result is used, so
-	// an error from an earlier read is still the one reported.
+	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
+	const wantsStorage =
+		storageEnabled &&
+		(wants(K.storage.accessKeyId) ||
+			wants(K.storage.secretAccessKey) ||
+			wants(K.storage.endpoint) ||
+			wants(K.storage.region));
+	// These depend on nothing below, so they start now; each is awaited where its result is
+	// used, so an error from an earlier read is still the one reported.
 	const functionsRead =
 		functionUrlMode === "all-live" &&
 		wantsAnyFunctionUrl &&
@@ -878,6 +902,9 @@ export async function fetchEnvKeysState(
 			? listFunctionInvocationUrls(api, projectId, branch.id)
 			: null;
 	functionsRead?.catch(() => undefined);
+	const storageRead = wantsStorage
+		? started(() => api.getProjectBranchStorage(projectId, branch.id))
+		: null;
 	const needsUnpooled =
 		wantsUnpooled ||
 		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
@@ -1010,13 +1037,6 @@ export async function fetchEnvKeysState(
 	// has them; functions never force a credential. None of this runs when the policy enables
 	// neither, so the Postgres / Auth / Data API path never touches the credentials/storage
 	// endpoints (and keeps working where those endpoints do not exist).
-	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
-	const wantsStorage =
-		storageEnabled &&
-		(wants(K.storage.accessKeyId) ||
-			wants(K.storage.secretAccessKey) ||
-			wants(K.storage.endpoint) ||
-			wants(K.storage.region));
 	const wantsGateway =
 		gatewayEnabled &&
 		(wants(K.aiGateway.apiKey) || wants(K.aiGateway.baseUrl));
@@ -1035,7 +1055,7 @@ export async function fetchEnvKeysState(
 		// resolve that cannot succeed.
 		let storage: NeonBranchStorageSnapshot | null = null;
 		if (wantsStorage) {
-			storage = await api.getProjectBranchStorage(projectId, branch.id);
+			storage = await requiredValue(storageRead, "storage read");
 			if (!storage) {
 				throw new PlatformError(
 					ErrorCode.NotFound,
@@ -1423,21 +1443,35 @@ async function resolveBranchCredentialSecrets(args: {
 		apiToken: "",
 	};
 
-	if (needsStorage && storageDefault) {
-		const revealed = await args.api.revealCredential(
-			args.projectId,
-			args.branchId,
-			storageDefault.tokenId,
-		);
+	// The two reveals are independent, so they run together; storage is awaited first so its
+	// error is still the one reported when both fail.
+	const storageReveal =
+		needsStorage && storageDefault
+			? started(() =>
+					args.api.revealCredential(
+						args.projectId,
+						args.branchId,
+						storageDefault.tokenId,
+					),
+				)
+			: null;
+	const gatewayReveal =
+		needsGateway && gatewayDefault
+			? started(() =>
+					args.api.revealCredential(
+						args.projectId,
+						args.branchId,
+						gatewayDefault.tokenId,
+					),
+				)
+			: null;
+	if (storageReveal) {
+		const revealed = await storageReveal;
 		secrets.accessKeyId = revealed.tokenId;
 		secrets.secretAccessKey = revealed.s3SecretAccessKey;
 	}
-	if (needsGateway && gatewayDefault) {
-		const revealed = await args.api.revealCredential(
-			args.projectId,
-			args.branchId,
-			gatewayDefault.tokenId,
-		);
+	if (gatewayReveal) {
+		const revealed = await gatewayReveal;
 		secrets.apiToken = revealed.apiToken;
 	}
 

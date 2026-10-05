@@ -212,15 +212,16 @@ export const warnAiGateway = async (params: {
 	branchId: string;
 	gateway?: { baseUrl: string; token: string };
 }): Promise<void> => {
+	// Independent of the project read, and it settles to `null` rather than rejecting.
+	const modelsRead = params.gateway
+		? fetchGatewayModelIds(params.gateway.baseUrl, params.gateway.token)
+		: null;
 	try {
 		const { data } = await params.apiClient.getProject(params.projectId);
 		const subscriptionType = data.project.owner?.subscription_type;
 		const orgId = data.project.org_id ?? undefined;
-		const modelIds = params.gateway
-			? ((await fetchGatewayModelIds(
-					params.gateway.baseUrl,
-					params.gateway.token,
-				)) ?? undefined)
+		const modelIds = modelsRead
+			? ((await modelsRead) ?? undefined)
 			: undefined;
 		const notice = buildAiGatewayNotice({
 			subscriptionType,

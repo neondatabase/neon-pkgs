@@ -480,6 +480,26 @@ describe("env pull", () => {
 		expect(branchListings).toBe(1);
 	});
 
+	it("reports on stderr and writes nothing to stdout, which callers keep for JSON and YAML", async () => {
+		const written: string[] = [];
+		const stdout = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				written.push(String(chunk));
+				return true;
+			});
+		let logged: string;
+		try {
+			logged = await captureLog(() =>
+				pull(baseProps(new FakeNeonApi(), cwd)).then(() => undefined),
+			);
+		} finally {
+			stdout.mockRestore();
+		}
+		expect(written.join("")).toBe("");
+		expect(logged).toContain("Pulled 3 Neon variables into .env.local");
+	});
+
 	it("writes Neon vars into .env.local when no .env exists", async () => {
 		await pull(baseProps(new FakeNeonApi(), cwd));
 
@@ -633,8 +653,8 @@ describe("env pull", () => {
 		// The placeholder named no credential, so there was nothing of ours to revoke.
 		expect(api.credentials.filter((c) => c.revokedAt).length).toBe(0);
 		// And the user is told which values are new, so they can update anything holding the old ones.
-		expect(logged).toContain("Wrote credential secrets");
-		expect(logged).toContain("AWS_ACCESS_KEY_ID");
+		expect(logged).toContain("* new credential value");
+		expect(logged).toContain("AWS_ACCESS_KEY_ID*");
 	});
 
 	it("does not mint a second credential when the pulled one still verifies", async () => {
@@ -712,7 +732,7 @@ describe("env pull", () => {
 			api.credentials.find((c) => c.tokenId === STORAGE_DEFAULT_TOKEN_ID)
 				?.revokedAt,
 		).toBeUndefined();
-		expect(logged).toContain("Wrote credential secrets");
+		expect(logged).toContain("* new credential value");
 		expect(logged).toContain("Revoked the credential it replaced");
 	});
 
@@ -829,7 +849,7 @@ describe("env pull --service", () => {
 			});
 		});
 
-		expect(logged).toContain("Wrote credential secrets");
+		expect(logged).toContain("* new credential value");
 		expect(logged).not.toContain("Left the credential it replaced live");
 	});
 
