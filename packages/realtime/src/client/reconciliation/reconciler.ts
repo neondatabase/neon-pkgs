@@ -1,3 +1,4 @@
+import { type ParsedMvccSnapshot, parseMvccSnapshot } from "../mvcc.js";
 import { ProtocolError } from "../protocol/codec.js";
 import type {
 	MvccSnapshot,
@@ -22,6 +23,8 @@ export interface ReconciliationTarget {
 	publishReset(rows: readonly WireRow[], mvcc: MvccSnapshot): void;
 	/** Notify listeners after all state for this publication is installed. */
 	publishBatch(batch: ReconciledBatch): void;
+	/** Confirm installed progress without notifying row listeners. */
+	applyProgress(mvcc: ParsedMvccSnapshot): void;
 	/** Publish the one fully caught-up materialized view and enter `live`. */
 	caughtUp(): void;
 	/** Observe a baseline sync after installation and before application callbacks. */
@@ -118,7 +121,8 @@ type ReconciliationMessage = Extract<
 			| "open"
 			| "keyed_results"
 			| "reset_required"
-			| "commit";
+			| "commit"
+			| "progress";
 	}
 >;
 
@@ -204,7 +208,11 @@ export class BaselineSyncPublicationReconciler {
 		this.backlogBytes = 0;
 	}
 
-	accept(message: ReconciliationMessage, byteLength: number): void {
+	accept(
+		message: ReconciliationMessage,
+		byteLength: number,
+		mvcc?: ParsedMvccSnapshot,
+	): void {
 		const bytes = messageBytes(byteLength);
 		if (
 			this.publication &&
@@ -215,6 +223,9 @@ export class BaselineSyncPublicationReconciler {
 			throw new ProtocolError("baseline sync interrupted a publication");
 		}
 		switch (message.type) {
+			case "progress":
+				this.progress(mvcc ?? parseMvccSnapshot(message.mvcc));
+				return;
 			case "baseline_sync_start":
 				this.baselineSyncStart(message, bytes);
 				return;
@@ -240,6 +251,18 @@ export class BaselineSyncPublicationReconciler {
 					bytes,
 				);
 				return;
+		}
+	}
+
+	private progress(mvcc: ParsedMvccSnapshot): void {
+		if (this.publication) {
+			throw new ProtocolError("progress interrupted a publication");
+		}
+		// Only ready targets have installed all preceding changes. The server
+		// replays an ordered proof after each baseline finishes, even when idle.
+		// Never cache a connection proof for a later admission or reset epoch.
+		for (const state of this.targets.values()) {
+			if (state.active && state.live) state.target.applyProgress(mvcc);
 		}
 	}
 

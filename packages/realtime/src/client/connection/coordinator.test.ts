@@ -718,6 +718,7 @@ function target(): ConnectionCallbacks & {
 		applyBatch: vi.fn(),
 		publishReset: vi.fn(),
 		publishBatch: vi.fn(),
+		applyProgress: vi.fn(),
 		caughtUp: vi.fn(),
 		baselineSyncCompleted: vi.fn(),
 		resetRequired: vi.fn(),

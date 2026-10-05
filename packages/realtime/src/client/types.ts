@@ -348,11 +348,12 @@ export interface RawLiveQuerySubscription<Row> {
 	 * the batch arrives before the caller receives the mutation response.
 	 *
 	 * @remarks
-	 * This resolves for transaction IDs included in a live batch or proven
-	 * visible by the last successfully applied reset snapshot. Realtime does
-	 * not currently acknowledge a no-op transaction after that snapshot. It can
-	 * resolve only if a later reset proves it visible; otherwise it remains
-	 * pending until the timeout elapses or the subscription closes.
+	 * Pass an ID from a transaction already known to have committed. This is
+	 * not a check of whether a transaction committed or rolled back.
+	 * Live batches, applied baselines, and ordered MVCC progress can confirm the
+	 * transaction, including mutations that produce no result changes. Progress
+	 * is periodic and size-bounded: excluded transactions and conservative
+	 * truncation can delay confirmation. Use a timeout to bound the wait.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default the

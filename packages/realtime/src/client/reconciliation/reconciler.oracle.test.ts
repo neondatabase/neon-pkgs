@@ -174,6 +174,7 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 				rows: normalizeRows(reset),
 			}),
 		publishBatch: (batch) => observations.push(batchObservation(batch)),
+		applyProgress: () => {},
 		caughtUp: () =>
 			observations.push({
 				kind: "caught_up",

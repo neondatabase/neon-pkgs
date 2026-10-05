@@ -33,6 +33,89 @@ afterEach(async () => {
 });
 
 describe("Realtime TanStack DB collection", () => {
+	it("confirms real-client no-op progress after queuing preceding authoritative changes", async () => {
+		const wire = wireClient();
+		let startMutation!: () => void;
+		const mutationStarted = new Promise<void>((resolve) => {
+			startMutation = resolve;
+		});
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				id: "progress-messages",
+				client: wire.client,
+				query: query("progress"),
+				getKey: (message) => message.id,
+				onUpdate: async ({ collection: current }) => {
+					startMutation();
+					await current.utils.awaitTxId("44");
+				},
+			}),
+		);
+		cleanups.push(async () => {
+			await collection.cleanup();
+			wire.client.close();
+		});
+		const preload = collection.preload();
+		wire.baseline();
+		await preload;
+		const changes = vi.fn();
+		const listener = collection.subscribeChanges(changes, {
+			includeInitialState: false,
+		});
+
+		const noOp = collection.utils.awaitTxId("42");
+		wire.receive({
+			type: "progress",
+			mvcc: { xmin: "43", xmax: "43", xip: [] },
+		});
+		await expect(noOp).resolves.toBe(true);
+		await expect(collection.utils.awaitTxId("41")).resolves.toBe(true);
+		expect(changes).not.toHaveBeenCalled();
+		expect(collection.get(1)).toMatchObject({ title: "before" });
+
+		const mutation = collection.update(1, (draft) => {
+			draft.title = "optimistic";
+		});
+		await mutationStarted;
+		expect(collection.get(1)).toMatchObject({ title: "optimistic" });
+		wire.receive({ type: "open", publication_id: "change" });
+		wire.receive({
+			type: "keyed_results",
+			publication_id: "change",
+			index: 0,
+			txids: ["43"],
+			targets: [{ live_id: "1", epoch: "1", sequence: "1" }],
+			changes: [
+				{
+					op: "upsert",
+					row_key: "a".repeat(64),
+					values: ["1", "authoritative"],
+				},
+			],
+		});
+		wire.receive({
+			type: "commit",
+			publication_id: "change",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		wire.receive({
+			type: "progress",
+			mvcc: { xmin: "45", xmax: "45", xip: [] },
+		});
+		await mutation.isPersisted.promise;
+		await eventually(() =>
+			expect(collection.get(1)).toMatchObject({ title: "authoritative" }),
+		);
+
+		const cancelled = expect(
+			collection.utils.awaitTxId("100"),
+		).rejects.toThrow("cleaned up");
+		listener.unsubscribe();
+		await collection.cleanup();
+		await cancelled;
+	});
+
 	it("installs resets and transactions as authoritative collection state", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
@@ -306,6 +389,74 @@ function createTestCollection(
 	);
 	cleanups.push(() => collection.cleanup());
 	return collection;
+}
+
+/** Fake transport only: subscriptions, decoding, and reconciliation are real. */
+function wireClient() {
+	const listeners = new Map<
+		string,
+		(event: { readonly data: unknown }) => void
+	>();
+	class FakeWebSocket {
+		readyState = 1;
+		addEventListener(
+			type: string,
+			listener: (event: { readonly data: unknown }) => void,
+		) {
+			listeners.set(type, listener);
+		}
+		send = vi.fn();
+		close() {
+			this.readyState = 3;
+		}
+	}
+	vi.stubGlobal("WebSocket", FakeWebSocket);
+	const client = createRealtimeClient({
+		url: "ws://live.test",
+	});
+	const receive = (message: object) => {
+		listeners.get("message")?.({ data: JSON.stringify(message) });
+	};
+	return {
+		client,
+		receive,
+		baseline: () => {
+			receive({ type: "ready" });
+			receive({
+				type: "subscribed",
+				request_id: "1",
+				live_id: "1",
+				epoch: "1",
+				first_sequence: "1",
+				columns: [
+					{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+					{
+						name: "title",
+						type_oid: 25,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+			const target = {
+				live_id: "1",
+				epoch: "1",
+				baseline_sync_attempt: "1",
+			};
+			receive({
+				type: "baseline_sync_start",
+				...target,
+				mvcc: { xmin: "1", xmax: "2", xip: [] },
+			});
+			receive({
+				type: "baseline_sync_batch",
+				...target,
+				index: 0,
+				rows: [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+			});
+			receive({ type: "baseline_sync_end", ...target, batch_count: 1 });
+		},
+	};
 }
 
 class TestClient<Row extends object> implements RealtimeClient {

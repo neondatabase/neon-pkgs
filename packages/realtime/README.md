@@ -331,12 +331,14 @@ when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
-**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
-ID or when the last successfully applied reset snapshot proves it visible. The
-protocol does not currently acknowledge a no-op transaction after
-that snapshot. It can resolve only if a later reset proves it visible; because
-resets may be infrequent, use a timeout or avoid waiting when the mutation made
-no change.
+Pass an ID from a transaction already known to have committed; this is not a
+check of commit or rollback status. Live batches, installed baselines, and
+ordered MVCC progress can confirm the transaction. Progress also covers
+mutations that produce no result changes, without notifying row listeners.
+
+Progress reports are periodic and size-bounded. Large exclusion lists are
+conservatively truncated, which can delay acknowledgement but never confirm a
+transaction too early. Use a timeout when the application needs a bounded wait.
 
 Materialized subscriptions can instead wait for their complete rows to satisfy
 an application predicate:

@@ -19,15 +19,15 @@ import { withCollectionConfigFactory } from "@tanstack/db";
 /** Utilities attached to a Realtime-backed TanStack DB collection. */
 export interface RealtimeCollectionUtils extends UtilsRecord {
 	/**
-	 * Wait until the matching PostgreSQL transaction has entered TanStack DB's
-	 * causal sync queue.
+	 * Wait until this query has processed a known committed PostgreSQL transaction.
+	 * Covered row changes enter TanStack DB's causal sync queue before this resolves.
 	 *
 	 * @remarks
-	 * This resolves for transaction IDs included in a live batch or proven
-	 * visible by the last successfully applied reset snapshot. The protocol does
-	 * not currently acknowledge a no-op transaction after that snapshot. It can
-	 * resolve only if a later reset proves it visible; otherwise it remains
-	 * pending until the optional timeout elapses or the collection is cleaned up.
+	 * This is not a check of whether a transaction committed or rolled back.
+	 * Live batches, applied baselines, and ordered MVCC progress can confirm the
+	 * transaction, including mutations that produce no result changes. Progress
+	 * is periodic and size-bounded: excluded transactions and conservative
+	 * truncation can delay confirmation. Use a timeout to bound the wait.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default, the

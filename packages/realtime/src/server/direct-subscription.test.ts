@@ -146,6 +146,32 @@ describe("trusted direct subscriptions", () => {
 		realtime.close();
 	});
 
+	it("inherits no-op transaction confirmations from progress", async () => {
+		useFakeWebSocket();
+		const realtime = createRealtime({
+			secret: SECRET,
+			db: "app",
+			url: "ws://live.test/v1",
+		});
+		const subscription = await realtime.subscribe(messagesByOwner("alice"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "unchanged");
+		const listener = vi.fn();
+		subscription.onChange(listener);
+		const confirmation = subscription.awaitTxId("42");
+		socket.receive({
+			type: "progress",
+			mvcc: { xmin: "1", xmax: "43", xip: [] },
+		});
+		await expect(confirmation).resolves.toBeUndefined();
+		await expect(subscription.awaitTxId("42")).resolves.toBeUndefined();
+		expect(listener).not.toHaveBeenCalled();
+		expect(subscription.getSnapshot().data).toEqual([
+			{ id: 1, body: "unchanged" },
+		]);
+		realtime.close();
+	});
+
 	it("supports raw subscriptions and closes the shared client", async () => {
 		useFakeWebSocket();
 		const realtime = createRealtime({
