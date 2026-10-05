@@ -1,5 +1,15 @@
 # neon
 
+## 8.0.10
+
+### Patch Changes
+
+- 6ee6bb5: `neon env pull`, and the env pull bundled into `checkout`, `deploy`, and `config apply`, now print the written variables grouped by service, with new credential values marked `*`, replacing the single long `INFO:` line. A pull that writes object storage or AI Gateway credentials also finishes sooner: the storage read, both credential reveals, and the AI Gateway model check now run concurrently.
+- Updated dependencies [d1ddfe5]
+  - @neon/sdk@7.0.1
+  - @neon/config@1.8.4
+  - @neon/config-runtime@1.7.6
+
 ## 8.0.9
 
 ### Patch Changes
