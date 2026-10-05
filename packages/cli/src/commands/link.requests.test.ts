@@ -127,12 +127,55 @@ describe("link request scheduling", () => {
 });
 
 describe("link with the bundled env pull", () => {
-	test("does not list branches again to resolve the branch it just pinned", async () => {
+	test("writes the env file without listing branches again after link and pullConfig", async () => {
 		const seen: string[] = [];
 		const app = express();
 		app.use((req, _res, next) => {
 			seen.push(`${req.method} ${req.path}`);
 			next();
+		});
+		// The shared fixtures lack the compute settings and Preview listings the env pull
+		// reads; serve what the API returns for a branch with none of those features.
+		app.get("/projects/test/endpoints", (_req, res) => {
+			res.send({
+				endpoints: [
+					{
+						id: "ep-sunny-123456",
+						branch_id: "br-sunny-branch-123456",
+						type: "read_write",
+						autoscaling_limit_min_cu: 0.25,
+						autoscaling_limit_max_cu: 2,
+						suspend_timeout_seconds: 0,
+					},
+				],
+			});
+		});
+		app.get(
+			/^\/projects\/test\/branches\/br-sunny-branch-123456\/(buckets|functions|credentials)$/,
+			(req, res) => {
+				res.send({ [req.params[0] ?? ""]: [] });
+			},
+		);
+		app.get(
+			"/projects/test/branches/br-sunny-branch-123456/databases",
+			(_req, res) => {
+				res.send({
+					databases: [{ name: "neondb", owner_name: "neondb_owner" }],
+				});
+			},
+		);
+		app.get(
+			"/projects/test/branches/br-sunny-branch-123456/roles",
+			(_req, res) => {
+				res.send({ roles: [{ name: "neondb_owner" }] });
+			},
+		);
+		app.get("/projects/test/connection_uri", (req, res) => {
+			const host =
+				req.query.pooled === "true" ? "ep-sunny-pooler" : "ep-sunny";
+			res.send({
+				uri: `postgresql://neondb_owner:pw@${host}.test/neondb`,
+			});
 		});
 		app.use(
 			"/",
@@ -147,7 +190,10 @@ describe("link with the bundled env pull", () => {
 		servers.push(server);
 		const dir = tempDir();
 
-		const code = await new Promise<number | null>((resolve, reject) => {
+		const result = await new Promise<{
+			code: number | null;
+			stderr: string;
+		}>((resolve, reject) => {
 			const cp = fork(
 				join(process.cwd(), "./dist/index.js"),
 				[
@@ -165,18 +211,26 @@ describe("link with the bundled env pull", () => {
 					join(dir, ".neon"),
 				],
 				{
-					stdio: "ignore",
+					stdio: "pipe",
 					cwd: dir,
 					env: { PATH: process.env.PATH, CI: "true" },
 				},
 			);
+			let stderr = "";
+			cp.stderr?.on("data", (data: Buffer) => {
+				stderr += data.toString();
+			});
 			cp.on("error", reject);
-			cp.on("close", resolve);
+			cp.on("close", (code) => resolve({ code, stderr }));
 		});
 
-		expect(code).toBe(0);
-		// Link's own listing and the env pull's branch read-back; the pull reuses link's
-		// resolved branch instead of listing a third time.
+		expect(result.code).toBe(0);
+		expect(result.stderr).not.toContain("pulling its Neon env vars failed");
+		expect(readFileSync(join(dir, ".env.local"), "utf8")).toMatch(
+			/^DATABASE_URL=/m,
+		);
+		// Link's listing and pullConfig's. The env pull reuses link's branch, and env resolution
+		// reuses pullConfig's, so neither lists again.
 		expect(
 			seen.filter((r) => r === "GET /projects/test/branches"),
 		).toHaveLength(2);
