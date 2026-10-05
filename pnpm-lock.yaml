@@ -57,17 +57,17 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
-  examples/neon-live-react:
+  examples/realtime-react:
     dependencies:
-      '@neon/live':
+      '@neon/realtime':
         specifier: workspace:*
-        version: link:../../packages/live
-      '@neon/live-drizzle':
+        version: link:../../packages/realtime
+      '@neon/realtime-drizzle':
         specifier: workspace:*
-        version: link:../../packages/live-drizzle
-      '@neon/live-react':
+        version: link:../../packages/realtime-drizzle
+      '@neon/realtime-react':
         specifier: workspace:*
-        version: link:../../packages/live-react
+        version: link:../../packages/realtime-react
       '@neondatabase/serverless':
         specifier: ^1.0.1
         version: 1.0.1

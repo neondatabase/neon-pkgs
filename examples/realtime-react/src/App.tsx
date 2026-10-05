@@ -1,4 +1,4 @@
-import { useLiveQuery } from "@neon/live-react";
+import { useLiveQuery } from "@neon/realtime-react";
 import {
 	type FormEvent,
 	startTransition,
@@ -8,8 +8,8 @@ import {
 
 import type {
 	CreateTodoRequest,
+	SealedTodosQuery,
 	TodoMutationResponse,
-	TodosAuthorization,
 	UpdateTodoRequest,
 } from "./api-types.js";
 import type { Todo } from "./schema.js";
@@ -35,19 +35,19 @@ type OptimisticTodo = Omit<Todo, "id"> & {
 const EMPTY_TODOS: readonly OptimisticTodo[] = Object.freeze([]);
 
 export function TodoApp({
-	authorization,
-	refreshAuthorization,
+	sealedQuery,
+	refreshQuery,
 }: {
-	readonly authorization: TodosAuthorization;
-	readonly refreshAuthorization: () => Promise<TodosAuthorization>;
+	readonly sealedQuery: SealedTodosQuery;
+	readonly refreshQuery: () => Promise<SealedTodosQuery>;
 }) {
 	const {
 		data: todos,
 		status,
 		error,
 		utils,
-	} = useLiveQuery(authorization, {
-		refreshAuthorization,
+	} = useLiveQuery(sealedQuery, {
+		refreshQuery,
 	});
 	const [optimisticTodos, applyOptimistic] = useOptimistic<
 		readonly OptimisticTodo[],
@@ -140,7 +140,7 @@ export function TodoApp({
 			<header>
 				<div>
 					<p className="eyebrow">React</p>
-					<h1>Neon Live Todos</h1>
+					<h1>Realtime Todos</h1>
 				</div>
 				<output className={`status ${status}`}>{status}</output>
 			</header>

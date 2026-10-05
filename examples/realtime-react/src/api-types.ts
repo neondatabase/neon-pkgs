@@ -1,8 +1,8 @@
-import type { LiveQueryAuthorization } from "@neon/live/client";
+import type { SealedLiveQuery } from "@neon/realtime/client";
 
 import type { Todo } from "./schema.js";
 
-export type TodosAuthorization = LiveQueryAuthorization<Todo>;
+export type SealedTodosQuery = SealedLiveQuery<Todo>;
 
 export interface CreateTodoRequest {
 	readonly title: string;

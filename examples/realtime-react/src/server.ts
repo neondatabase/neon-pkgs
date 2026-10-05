@@ -6,8 +6,8 @@ import {
 	type ServerResponse,
 } from "node:http";
 
-import { createNeonLive } from "@neon/live/server";
-import { drizzleAdapter } from "@neon/live-drizzle";
+import { createRealtime } from "@neon/realtime/server";
+import { drizzleAdapter } from "@neon/realtime-drizzle";
 import { Pool } from "@neondatabase/serverless";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
@@ -22,9 +22,9 @@ import { todos } from "./schema.js";
 
 const pool = new Pool({ connectionString: required("DATABASE_URL") });
 const db = drizzle(pool);
-const neonLive = createNeonLive({
-	secret: required("NEON_LIVE_SECRET"),
-	db: required("NEON_LIVE_DATABASE"),
+const realtime = createRealtime({
+	secret: required("NEON_REALTIME_SECRET"),
+	db: required("NEON_REALTIME_DATABASE"),
 	adapter: drizzleAdapter(),
 });
 
@@ -38,10 +38,10 @@ const server = createServer(async (request, response) => {
 		const url = new URL(request.url ?? "/", "http://localhost");
 
 		if (request.method === "GET" && url.pathname === "/api/todos/live") {
-			const authorization = await neonLive.authorize({
+			const sealedQuery = await realtime.seal({
 				query: allTodos(),
 			});
-			return json(response, 200, authorization);
+			return json(response, 200, sealedQuery);
 		}
 
 		if (request.method === "POST" && url.pathname === "/api/todos") {

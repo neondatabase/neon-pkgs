@@ -1,5 +1,5 @@
 {
-  "name": "@neon/example-live-react",
+  "name": "@neon/example-realtime-react",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,9 @@
     "typecheck": "tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
-    "@neon/live": "workspace:*",
-    "@neon/live-drizzle": "workspace:*",
-    "@neon/live-react": "workspace:*",
+    "@neon/realtime": "workspace:*",
+    "@neon/realtime-drizzle": "workspace:*",
+    "@neon/realtime-react": "workspace:*",
     "@neondatabase/serverless": "^1.0.1",
     "dotenv": "^17.2.2",
     "drizzle-orm": "0.45.2",
