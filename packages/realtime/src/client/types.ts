@@ -348,12 +348,9 @@ export interface RawLiveQuerySubscription<Row> {
 	 * the batch arrives before the caller receives the mutation response.
 	 *
 	 * @remarks
-	 * Pass an ID from a transaction already known to have committed. This is
-	 * not a check of whether a transaction committed or rolled back.
-	 * Live batches, applied baselines, and ordered MVCC progress can confirm the
-	 * transaction, including mutations that produce no result changes. Progress
-	 * is periodic and size-bounded: excluded transactions and conservative
-	 * truncation can delay confirmation. Use a timeout to bound the wait.
+	 * This does not determine whether a transaction committed, so pass only IDs
+	 * from transactions known to have committed. Mutations that do not change
+	 * the query result are supported.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default the

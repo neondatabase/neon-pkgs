@@ -331,14 +331,9 @@ when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
-Pass an ID from a transaction already known to have committed; this is not a
-check of commit or rollback status. Live batches, installed baselines, and
-ordered MVCC progress can confirm the transaction. Progress also covers
-mutations that produce no result changes, without notifying row listeners.
-
-Progress reports are periodic and size-bounded. Large exclusion lists are
-conservatively truncated, which can delay acknowledgement but never confirm a
-transaction too early. Use a timeout when the application needs a bounded wait.
+`awaitTxId()` does not determine whether a transaction committed, so pass only
+the ID of a transaction known to have committed. It also supports mutations
+that do not change the query result.
 
 Materialized subscriptions can instead wait for their complete rows to satisfy
 an application predicate:

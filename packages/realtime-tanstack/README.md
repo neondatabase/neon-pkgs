@@ -84,14 +84,9 @@ response. It resolves after covered row changes enter TanStack DB's causal sync
 queue and waits indefinitely by default. Pass an optional timeout in milliseconds
 to bound the wait.
 
-Pass an ID from a transaction already known to have committed; this is not a
-check of commit or rollback status. Live batches, installed baselines, and
-ordered MVCC progress can confirm the transaction. Progress also covers
-mutations that produce no result changes, without notifying row listeners.
-
-Progress reports are periodic and size-bounded. Large exclusion lists are
-conservatively truncated, which can delay acknowledgement but never confirm a
-transaction too early. Use a timeout when the application needs a bounded wait.
+`awaitTxId()` does not determine whether a transaction committed, so pass only
+the ID of a transaction known to have committed. It also supports mutations
+that do not change the query result.
 
 For SSR, use TanStack DB's normal `DbClient`, dehydration, and
 `HydrationBoundary` APIs with stable collection IDs. The server seeds a
