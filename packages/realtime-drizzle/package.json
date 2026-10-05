@@ -1,0 +1,75 @@
+{
+  "name": "@neon/realtime-drizzle",
+  "version": "0.0.0",
+  "description": "Drizzle adapter for defining live queries.",
+  "keywords": [
+    "neon",
+    "database",
+    "postgres",
+    "live-query",
+    "drizzle"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neondatabase/neon-pkgs.git",
+    "directory": "packages/realtime-drizzle"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Neon",
+    "url": "https://neon.com"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "README.md",
+    "dist/",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsdown",
+    "prepare": "npm run build",
+    "test": "vitest --passWithNoTests",
+    "test:ci": "vitest run --passWithNoTests",
+    "tsc": "tsc"
+  },
+  "devDependencies": {
+    "@neon/realtime": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "console-fail-test": "catalog:",
+    "drizzle-orm": "0.45.2",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@neon/realtime": "^0.0.0",
+    "drizzle-orm": ">=0.45.2 <0.46.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "provenance": false
+  }
+}
