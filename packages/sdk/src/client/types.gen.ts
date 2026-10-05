@@ -505,9 +505,12 @@ export type ProjectListItem = {
 
 export type Project = {
     /**
+     * Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.
      * Bytes-Hour. Project consumed that much Postgres storage hourly during the billing period. The value has some lag.
      * The value is reset at the beginning of each billing period.
      *
+     *
+     * @deprecated
      */
     data_storage_bytes_hour: number;
     /**
@@ -1089,10 +1092,13 @@ export type ConsumptionHistoryPerTimeframe = {
      */
     synthetic_storage_size_bytes: number;
     /**
+     * Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.
      * Bytes-Hour. The amount of Postgres storage consumed hourly.
      *
+     *
+     * @deprecated
      */
-    data_storage_bytes_hour?: number;
+    data_storage_bytes_hour: number;
     /**
      * Bytes. The amount of logical size consumed.
      *
@@ -10643,11 +10649,9 @@ export type GetConsumptionHistoryPerProjectData = {
          */
         org_id?: string;
         /**
-         * The field is deprecated. Please use `metrics` instead.
+         * The field is deprecated and no longer has any effect: the only metric it used to add
+         * (`data_storage_bytes_hour`) is retired and always returns 0. Please use `metrics` instead.
          * If `metrics` is specified, this field is ignored.
-         * Include metrics utilized in previous pricing models.
-         * - **data_storage_bytes_hour**: The sum of the maximum observed storage values for each hour,
-         * which never decreases.
          *
          *
          * @deprecated
@@ -10661,7 +10665,7 @@ export type GetConsumptionHistoryPerProjectData = {
          * - `compute_time_seconds`
          * - `written_data_bytes`
          * - `synthetic_storage_size_bytes` (deprecated: always returns 0; use the consumption history v2 endpoints instead)
-         * - `data_storage_bytes_hour`
+         * - `data_storage_bytes_hour` (deprecated: always returns 0; use the consumption history v2 endpoints instead)
          * - `logical_size_bytes`
          * - `logical_size_bytes_hour`
          *
