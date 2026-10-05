@@ -335,7 +335,7 @@ export const zConsumptionHistoryPerTimeframe = z.strictObject({
     compute_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
     written_data_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
     synthetic_storage_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
-    data_storage_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).optional(),
+    data_storage_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
     logical_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).optional(),
     logical_size_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).optional()
 });
