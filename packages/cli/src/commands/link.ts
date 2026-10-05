@@ -35,12 +35,8 @@ import { looksLikeBranchId } from "../utils/formats.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 import { initCmd } from "./config.js";
-import { type AutoPullResult, autoPullEnvAfterPin } from "./env.js";
-import {
-	formatLinkSummary,
-	formatPulledEnv,
-	type LinkSummaryView,
-} from "./link_output.js";
+import { autoPullEnvAfterPin } from "./env.js";
+import { formatLinkSummary, type LinkSummaryView } from "./link_output.js";
 import { REGIONS } from "./projects.js";
 
 const PROJECTS_LIST_LIMIT = 100;
@@ -1438,12 +1434,6 @@ const printSummary = (props: LinkProps, summary: HumanSummary): void => {
 	);
 };
 
-/** The env block `link` prints under its summary, once the bundled pull has written the file. */
-const printPulledEnv = (props: LinkProps, result: AutoPullResult): void => {
-	if (result.status !== "written") return;
-	process.stdout.write(formatPulledEnv(result, props.cwd ?? process.cwd()));
-};
-
 /**
  * Print the link summary, then run the bundled `env pull` so a completed `link` ends with
  * the pinned branch's connection string on disk. `--no-checks` skips the pull because
@@ -1459,7 +1449,7 @@ const finalizeLink = async (
 		return;
 	}
 	const { config: _offerConfig, ...rest } = props;
-	const pulled = await autoPullEnvAfterPin(
+	await autoPullEnvAfterPin(
 		{
 			...rest,
 			...(props.cwd ? { cwd: props.cwd } : {}),
@@ -1468,9 +1458,7 @@ const finalizeLink = async (
 			envPull: props.envPull,
 		},
 		summary.branchRef,
-		{ report: false },
 	);
-	printPulledEnv(props, pulled);
 };
 
 /**
@@ -1533,7 +1521,7 @@ const maybeOfferConfigInit = async (
 	// a neon.ts. Only meaningful when a branch was pinned (same guard as finalize).
 	if (summary.branch && summary.projectId) {
 		const { config: _offerConfig, ...rest } = props;
-		const pulled = await autoPullEnvAfterPin(
+		await autoPullEnvAfterPin(
 			{
 				...rest,
 				projectId: summary.projectId,
@@ -1541,9 +1529,7 @@ const maybeOfferConfigInit = async (
 				envPull: props.envPull,
 			},
 			summary.branchRef,
-			{ report: false },
 		);
-		printPulledEnv(props, pulled);
 	}
 };
 

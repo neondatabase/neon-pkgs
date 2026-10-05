@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +10,7 @@ import {
 	freePlanBlockMessage,
 	hasFlagshipModels,
 	isFreePlan,
+	warnAiGateway,
 } from "./ai_gateway_notice";
 
 const MODELS_URL = aiGatewayModelsUrl("proj-123", "br-abc");
@@ -191,5 +194,43 @@ describe("extractEnabledModelIds", () => {
 
 	it("returns null for a non-list body", () => {
 		expect(extractEnabledModelIds({ object: "model" })).toBeNull();
+	});
+});
+
+describe("warnAiGateway", () => {
+	it("probes the gateway's models while the plan lookup is in flight", async () => {
+		let modelsRequested = false;
+		const server = createServer((_req, res) => {
+			modelsRequested = true;
+			res.setHeader("content-type", "application/json");
+			res.end(JSON.stringify({ data: [] }));
+		});
+		await new Promise<void>((resolve) => server.listen(0, resolve));
+		const port = (server.address() as AddressInfo).port;
+		let modelsSeenDuringPlanLookup = false;
+		const apiClient = {
+			getProject: async () => {
+				for (let i = 0; i < 50 && !modelsRequested; i++) {
+					await new Promise((resolve) => setTimeout(resolve, 10));
+				}
+				modelsSeenDuringPlanLookup = modelsRequested;
+				return {
+					data: {
+						project: { owner: { subscription_type: "scale" } },
+					},
+				};
+			},
+		};
+		try {
+			await warnAiGateway({
+				apiClient: apiClient as never,
+				projectId: "proj-123",
+				branchId: "br-abc",
+				gateway: { baseUrl: `http://localhost:${port}`, token: "t" },
+			});
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+		expect(modelsSeenDuringPlanLookup).toBe(true);
 	});
 });

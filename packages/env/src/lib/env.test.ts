@@ -791,6 +791,98 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		expect("aiGateway" in env).toBe(false);
 	});
 
+	test("reads branch storage alongside the Postgres reads", async () => {
+		const { api, projectId } = seededFake();
+		let releaseRoles: () => void = () => undefined;
+		const rolesGate = new Promise<void>((resolve) => {
+			releaseRoles = resolve;
+		});
+		const listRoles = api.listBranchRoles.bind(api);
+		api.listBranchRoles = async (...args) => {
+			await rolesGate;
+			return listRoles(...args);
+		};
+
+		const env = fetchEnv(
+			defineConfig({ preview: { buckets: { uploads: {} } } }),
+			{ api, projectId, branchId: "br-main" },
+		);
+		await new Promise((resolve) => setImmediate(resolve));
+		expect(callsTo(api, "getProjectBranchStorage")).toBe(1);
+		releaseRoles();
+		await expect(env).resolves.toMatchObject({
+			storage: { region: "us-east-1" },
+		});
+	});
+
+	test("reports a Postgres read error over a storage read error that came first", async () => {
+		const { api, projectId } = seededFake();
+		api.getProjectBranchStorage = () =>
+			Promise.reject(new Error("storage failed"));
+		api.listBranchDatabases = () =>
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error("databases failed")), 10),
+			);
+
+		await expect(
+			fetchEnv(defineConfig({ preview: { buckets: { uploads: {} } } }), {
+				api,
+				projectId,
+				branchId: "br-main",
+			}),
+		).rejects.toThrow("databases failed");
+	});
+
+	test("reveals the storage and AI Gateway defaults together", async () => {
+		const { api, projectId } = seededFake();
+		let inFlight = 0;
+		let maxInFlight = 0;
+		const reveal = api.revealCredential.bind(api);
+		api.revealCredential = async (...args) => {
+			inFlight += 1;
+			maxInFlight = Math.max(maxInFlight, inFlight);
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			inFlight -= 1;
+			return reveal(...args);
+		};
+
+		await fetchEnv(
+			defineConfig({
+				preview: { buckets: { uploads: {} }, aiGateway: true },
+			}),
+			{ api, projectId, branchId: "br-main" },
+		);
+
+		expect(callsTo(api, "revealCredential")).toBe(2);
+		expect(maxInFlight).toBe(2);
+	});
+
+	test("reports the storage reveal error when both reveals fail", async () => {
+		const { api, projectId } = seededFake();
+		const live = await api.listCredentials(projectId, "br-main");
+		const storageToken = live.find((c) =>
+			c.scopes.includes("storage:read"),
+		)?.tokenId;
+		api.revealCredential = (_projectId, _branchId, tokenId) =>
+			tokenId === storageToken
+				? new Promise((_, reject) =>
+						setTimeout(
+							() => reject(new Error("storage reveal failed")),
+							10,
+						),
+					)
+				: Promise.reject(new Error("gateway reveal failed"));
+
+		await expect(
+			fetchEnv(
+				defineConfig({
+					preview: { buckets: { uploads: {} }, aiGateway: true },
+				}),
+				{ api, projectId, branchId: "br-main" },
+			),
+		).rejects.toThrow("storage reveal failed");
+	});
+
 	test("aiGateway policy surfaces the Neon AI Gateway env (token + bare base URL)", async () => {
 		const { api, projectId } = seededFake();
 		const env = await fetchEnv(

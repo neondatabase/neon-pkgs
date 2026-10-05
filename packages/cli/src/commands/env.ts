@@ -37,6 +37,7 @@ import {
 	type ResolvedBranchRef,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
+import { formatPulledEnv } from "./env_output.js";
 
 export type EnvPullProps = BranchScopeProps & {
 	/** Target dotenv file, relative to cwd. Defaults to the project directory's `.env`, else `.env.local`. */
@@ -271,8 +272,6 @@ export const pull = async (
 		implyAiGateway?: boolean;
 		/** Skips the branch lookup when the caller resolved this same branch already. */
 		branch?: ResolvedBranchRef;
-		/** `false` leaves reporting what was written to the caller, which gets it in the outcome. */
-		report?: boolean;
 	} = {},
 ): Promise<PullOutcome> => {
 	const cwd = props.cwd ?? process.cwd();
@@ -363,51 +362,20 @@ export const pull = async (
 			props.envKeys !== undefined ? selectionEnvKeys : undefined,
 		),
 	});
-	if (opts.report !== false) {
-		log.info(
-			"Pulled %d Neon variable%s into %s: %s",
-			written.length,
-			written.length === 1 ? "" : "s",
-			targetPath,
-			written.join(", "),
-		);
-		if (removed.length > 0) {
-			log.info(
-				"Removed %d stale Neon variable%s not enabled on this branch: %s",
-				removed.length,
-				removed.length === 1 ? "" : "s",
-				removed.join(", "),
-			);
-		}
-		// A new credential means the values that back object storage / the AI Gateway just
-		// changed, so anything else holding the old ones (a deployed preview, a second checkout)
-		// needs the new values. Name the keys rather than leaving the user to diff the file.
-		if (credential?.issued) {
-			log.info(
-				"Wrote credential secrets — these now hold fresh values: %s",
-				credential.keys.join(", "),
-			);
-			if (credential.revoked.length > 0) {
-				log.info(
-					"Revoked the credential it replaced (%s).",
-					credential.revoked.join(", "),
-				);
-			} else if (credential.superseded.length > 0) {
-				// An unscoped pull revokes what it supersedes and says so above. A scoped one
-				// cannot — it may not be the only service on that credential — so it leaves the
-				// old one live. Say that too, rather than letting the identical-looking output
-				// imply the branch is not accumulating credentials. Driven by what the resolver
-				// actually declined to revoke, so a first pull (which supersedes nothing) does
-				// not send the user hunting for a credential that was never there.
-				log.info(
-					"Left the credential it replaced live (%s): an explicitly scoped pull " +
-						"can't tell which other variables still use it. Revoke it in the Neon " +
-						"Console if nothing does.",
-					credential.superseded.join(", "),
-				);
-			}
-		}
-	}
+	process.stdout.write(
+		formatPulledEnv(
+			{
+				status: "written",
+				written,
+				removed,
+				file: targetPath,
+				...(credential && credential.keys.length > 0
+					? { credential }
+					: {}),
+			},
+			cwd,
+		),
+	);
 
 	// A dotenv file *we* create holds live branch credentials (DATABASE_URL, Auth keys, service
 	// tokens), so ignore it the same way the `.neon` context file is — otherwise a fresh repo is
@@ -555,17 +523,13 @@ export type AutoPullResult =
 export const autoPullEnvAfterPin = async (
 	props: EnvPullProps & { envPull: boolean },
 	branch?: ResolvedBranchRef,
-	opts: { report?: boolean } = {},
 ): Promise<AutoPullResult> => {
 	if (!props.envPull) {
 		log.info(chalk.dim(ENV_PULL_SKIPPED_HINT));
 		return { status: "skipped" };
 	}
 	try {
-		return await pull(props, {
-			...(branch ? { branch } : {}),
-			...(opts.report === false ? { report: false } : {}),
-		});
+		return await pull(props, branch ? { branch } : {});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.warning(

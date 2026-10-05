@@ -401,17 +401,19 @@ class DefaultCredsNeonApi extends FakeNeonApi {
 }
 
 /** Capture what the command wrote to stderr for the duration of `run`. */
+/** Everything a run prints: the pulled-env report on stdout and log lines on stderr. */
 const captureLog = async (run: () => Promise<void>): Promise<string> => {
 	const chunks: string[] = [];
-	const stderr = vi
-		.spyOn(process.stderr, "write")
-		.mockImplementation((chunk: string | Uint8Array) => {
-			chunks.push(String(chunk));
-			return true;
-		});
+	const record = (chunk: string | Uint8Array) => {
+		chunks.push(String(chunk));
+		return true;
+	};
+	const stdout = vi.spyOn(process.stdout, "write").mockImplementation(record);
+	const stderr = vi.spyOn(process.stderr, "write").mockImplementation(record);
 	try {
 		await run();
 	} finally {
+		stdout.mockRestore();
 		stderr.mockRestore();
 	}
 	return chunks.join("");
@@ -633,8 +635,8 @@ describe("env pull", () => {
 		// The placeholder named no credential, so there was nothing of ours to revoke.
 		expect(api.credentials.filter((c) => c.revokedAt).length).toBe(0);
 		// And the user is told which values are new, so they can update anything holding the old ones.
-		expect(logged).toContain("Wrote credential secrets");
-		expect(logged).toContain("AWS_ACCESS_KEY_ID");
+		expect(logged).toContain("* new credential value");
+		expect(logged).toContain("AWS_ACCESS_KEY_ID*");
 	});
 
 	it("does not mint a second credential when the pulled one still verifies", async () => {
@@ -712,7 +714,7 @@ describe("env pull", () => {
 			api.credentials.find((c) => c.tokenId === STORAGE_DEFAULT_TOKEN_ID)
 				?.revokedAt,
 		).toBeUndefined();
-		expect(logged).toContain("Wrote credential secrets");
+		expect(logged).toContain("* new credential value");
 		expect(logged).toContain("Revoked the credential it replaced");
 	});
 
@@ -829,7 +831,7 @@ describe("env pull --service", () => {
 			});
 		});
 
-		expect(logged).toContain("Wrote credential secrets");
+		expect(logged).toContain("* new credential value");
 		expect(logged).not.toContain("Left the credential it replaced live");
 	});
 
