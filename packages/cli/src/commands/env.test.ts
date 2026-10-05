@@ -401,19 +401,17 @@ class DefaultCredsNeonApi extends FakeNeonApi {
 }
 
 /** Capture what the command wrote to stderr for the duration of `run`. */
-/** Everything a run prints: the pulled-env report on stdout and log lines on stderr. */
 const captureLog = async (run: () => Promise<void>): Promise<string> => {
 	const chunks: string[] = [];
-	const record = (chunk: string | Uint8Array) => {
-		chunks.push(String(chunk));
-		return true;
-	};
-	const stdout = vi.spyOn(process.stdout, "write").mockImplementation(record);
-	const stderr = vi.spyOn(process.stderr, "write").mockImplementation(record);
+	const stderr = vi
+		.spyOn(process.stderr, "write")
+		.mockImplementation((chunk: string | Uint8Array) => {
+			chunks.push(String(chunk));
+			return true;
+		});
 	try {
 		await run();
 	} finally {
-		stdout.mockRestore();
 		stderr.mockRestore();
 	}
 	return chunks.join("");
@@ -480,6 +478,26 @@ describe("env pull", () => {
 			/^DATABASE_URL=/m,
 		);
 		expect(branchListings).toBe(1);
+	});
+
+	it("reports on stderr and writes nothing to stdout, which callers keep for JSON and YAML", async () => {
+		const written: string[] = [];
+		const stdout = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				written.push(String(chunk));
+				return true;
+			});
+		let logged: string;
+		try {
+			logged = await captureLog(() =>
+				pull(baseProps(new FakeNeonApi(), cwd)).then(() => undefined),
+			);
+		} finally {
+			stdout.mockRestore();
+		}
+		expect(written.join("")).toBe("");
+		expect(logged).toContain("Pulled 3 Neon variables into .env.local");
 	});
 
 	it("writes Neon vars into .env.local when no .env exists", async () => {

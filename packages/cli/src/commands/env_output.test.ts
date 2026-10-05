@@ -41,7 +41,7 @@ describe("formatPulledEnv", () => {
 				"  Functions       NEON_FUNCTION_HELLO_BASE_URL, NEON_FUNCTION_WEBHOOK_BASE_URL",
 				"  Object Storage  AWS_ACCESS_KEY_ID, AWS_REGION",
 				"  AI Gateway      NEON_AI_GATEWAY_TOKEN*, NEON_AI_GATEWAY_BASE_URL",
-				"  Removed         NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL (not enabled on this branch)",
+				"  Removed         NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL (not produced by this pull)",
 				"  * new credential value",
 				"Revoked the credential it replaced (neon-env-old).",
 				"",

@@ -883,6 +883,42 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		).rejects.toThrow("storage reveal failed");
 	});
 
+	test("leaves no unhandled rejection when the storage reveal fails before the gateway reveal", async () => {
+		const unhandled: unknown[] = [];
+		const onUnhandled = (reason: unknown) => unhandled.push(reason);
+		process.on("unhandledRejection", onUnhandled);
+		try {
+			const { api, projectId } = seededFake();
+			const live = await api.listCredentials(projectId, "br-main");
+			const storageToken = live.find((c) =>
+				c.scopes.includes("storage:read"),
+			)?.tokenId;
+			api.revealCredential = (_projectId, _branchId, tokenId) =>
+				tokenId === storageToken
+					? Promise.reject(new Error("storage reveal failed"))
+					: new Promise((_, reject) =>
+							setTimeout(
+								() =>
+									reject(new Error("gateway reveal failed")),
+								10,
+							),
+						);
+
+			await expect(
+				fetchEnv(
+					defineConfig({
+						preview: { buckets: { uploads: {} }, aiGateway: true },
+					}),
+					{ api, projectId, branchId: "br-main" },
+				),
+			).rejects.toThrow("storage reveal failed");
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", onUnhandled);
+		}
+	});
+
 	test("aiGateway policy surfaces the Neon AI Gateway env (token + bare base URL)", async () => {
 		const { api, projectId } = seededFake();
 		const env = await fetchEnv(

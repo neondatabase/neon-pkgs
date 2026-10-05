@@ -86,7 +86,7 @@ export const formatPulledEnv = (
 		lines.push(
 			row(
 				"Removed",
-				`${outcome.removed.join(", ")} (not enabled on this branch)`,
+				`${outcome.removed.join(", ")} (not produced by this pull)`,
 			),
 		);
 	}

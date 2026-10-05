@@ -362,7 +362,9 @@ export const pull = async (
 			props.envKeys !== undefined ? selectionEnvKeys : undefined,
 		),
 	});
-	process.stdout.write(
+	// stderr, like the log lines it replaces: commands that bundle a pull (`config apply -o json`,
+	// `claim create -o yaml`) print machine-readable output on stdout.
+	process.stderr.write(
 		formatPulledEnv(
 			{
 				status: "written",
