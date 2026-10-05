@@ -7,8 +7,9 @@
 // `databricks-` prefixed form, which still resolves via the `(string & {})`
 // fallback on `NeonChatModelId`.
 //
-// `NEON_MODELS_DEV_IDS` mirrors neon.com/models.json `neon.models` exactly —
-// `neon-catalog-drift.test.ts` fails if the two diverge. A branch's live list
+// `NEON_MODELS_DEV_IDS` mirrors the `released: true` entries of
+// neon.com/models.json `neon.models` exactly — `neon-catalog-drift.test.ts`
+// fails if the two diverge. A branch's live list
 // is `GET $NEON_AI_GATEWAY_BASE_URL/v1/models`. There is deliberately no second
 // list for ids the gateway serves ahead of the published catalog: such an id
 // already works because `NeonChatModelId` accepts any string.
@@ -25,6 +26,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"claude-opus-4-7",
 	"claude-opus-4-8",
 	"claude-opus-5",
+	"claude-opus-5-5",
 	"claude-sonnet-4-5",
 	"claude-sonnet-4-6",
 	"claude-sonnet-5",

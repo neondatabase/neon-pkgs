@@ -46,6 +46,18 @@ function catalogTemperature(entry: unknown): boolean {
 	return entry.temperature;
 }
 
+// `released: false` marks a model cataloged ahead of its announcement. The typed
+// id lists only carry announced models.
+function isReleased(entry: unknown): boolean {
+	if (entry === null || typeof entry !== "object") {
+		throw new Error("neon.com/models.json model entry is not an object");
+	}
+	if (!("released" in entry) || typeof entry.released !== "boolean") {
+		throw new Error("neon.com/models.json released is not a boolean");
+	}
+	return entry.released;
+}
+
 function isEmbeddingEntry(entry: unknown): boolean {
 	return (
 		entry !== null &&
@@ -68,12 +80,15 @@ describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
 	it("keeps NEON_MODELS_DEV_IDS in sync with the published chat catalog", async () => {
 		const entries = Object.entries(await fetchNeonCatalogModels());
 		const live = entries
-			.filter(([, entry]) => !isEmbeddingEntry(entry))
+			.filter(
+				([, entry]) => isReleased(entry) && !isEmbeddingEntry(entry),
+			)
 			.map(([id]) => id);
 		expect(live.length).toBeGreaterThan(0);
 
 		// `missingFromProvider`: add these to NEON_MODELS_DEV_IDS.
-		// `removedUpstream`: neon.com/models.json dropped these; remove them from the array.
+		// `removedUpstream`: neon.com/models.json dropped these or marks them
+		// `released: false`; remove them from the array.
 		expect(compareIds(live, NEON_MODELS_DEV_IDS)).toEqual({
 			missingFromProvider: [],
 			removedUpstream: [],
@@ -83,7 +98,7 @@ describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
 	it("keeps NEON_EMBEDDING_MODEL_IDS in sync with the published embedding catalog", async () => {
 		const entries = Object.entries(await fetchNeonCatalogModels());
 		const live = entries
-			.filter(([, entry]) => isEmbeddingEntry(entry))
+			.filter(([, entry]) => isReleased(entry) && isEmbeddingEntry(entry))
 			.map(([id]) => id);
 		expect(live.length).toBeGreaterThan(0);
 

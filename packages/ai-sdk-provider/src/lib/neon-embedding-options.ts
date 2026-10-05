@@ -1,7 +1,7 @@
 // Embedding models served on the Neon AI Gateway's OpenAI-compatible
-// `/v1/embeddings` endpoint. Mirrors the `"type": "embedding"` entries of
-// https://neon.com/models.json — `neon-catalog-drift.test.ts` fails if the two
-// diverge.
+// `/v1/embeddings` endpoint. Mirrors the released `"type": "embedding"` entries
+// of https://neon.com/models.json — `neon-catalog-drift.test.ts` fails if the
+// two diverge.
 
 /** Published embedding model ids from https://neon.com/models.json. */
 export const NEON_EMBEDDING_MODEL_IDS = [
