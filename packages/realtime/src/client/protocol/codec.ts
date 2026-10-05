@@ -1,3 +1,4 @@
+import { type ParsedMvccSnapshot, parseMvccSnapshot } from "../mvcc.js";
 import type { ClientMessage, ServerMessage } from "./messages.js";
 import {
 	validateClientMessage as generatedClientMessageValidator,
@@ -38,6 +39,8 @@ export class ProtocolError extends Error {
 export interface DecodedServerFrame {
 	readonly message: ServerMessage;
 	readonly byteLength: number;
+	/** Parsed once so connection-wide progress can share immutable evidence. */
+	readonly mvcc?: ParsedMvccSnapshot;
 }
 
 /** Serialize one validated client command to a WebSocket text frame. */
@@ -78,7 +81,21 @@ export function decodeServerFrame(text: string): DecodedServerFrame {
 	assertSchema(validateServerMessage, value);
 	const message = value as ServerMessage;
 	validateServerUtf8Limits(message as WireRecord);
-	return Object.freeze({ message: freezeWireValue(message), byteLength });
+	let mvcc: ParsedMvccSnapshot | undefined;
+	if (message.type === "baseline_sync_start" || message.type === "progress") {
+		try {
+			mvcc = parseMvccSnapshot(message.mvcc);
+		} catch (error) {
+			throw new ProtocolError(
+				error instanceof Error ? error.message : "invalid MVCC proof",
+			);
+		}
+	}
+	return Object.freeze({
+		message: freezeWireValue(message),
+		byteLength,
+		mvcc,
+	});
 }
 
 function freezeWireValue<Value>(value: Value): Value {
