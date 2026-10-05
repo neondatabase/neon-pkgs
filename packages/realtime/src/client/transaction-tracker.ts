@@ -17,7 +17,7 @@ export class TransactionTracker {
 	private readonly recent = new Set<string>();
 	private readonly recentOrder: string[] = [];
 	private readonly waiting = new Map<string, Set<TransactionWaiter>>();
-	private appliedVisibility?: ParsedMvccSnapshot;
+	private visibility?: ParsedMvccSnapshot;
 	private closed = false;
 
 	wait = async (txid: string, timeout?: number): Promise<void> => {
@@ -33,7 +33,7 @@ export class TransactionTracker {
 		if (this.closed) throw new Error("Live-query subscription is closed");
 		if (
 			this.recent.has(normalized.text) ||
-			this.appliedVisibility?.isVisible(normalized.value)
+			this.visibility?.isVisible(normalized.value)
 		)
 			return;
 
@@ -82,11 +82,11 @@ export class TransactionTracker {
 	/** Record progress only after every covered change has been installed. */
 	applyProgress(snapshot: ParsedMvccSnapshot): void {
 		if (this.closed) return;
-		this.appliedVisibility = this.appliedVisibility
-			? mergeMvccSnapshots(this.appliedVisibility, snapshot)
+		this.visibility = this.visibility
+			? mergeMvccSnapshots(this.visibility, snapshot)
 			: snapshot;
 		for (const txid of this.waiting.keys()) {
-			if (this.appliedVisibility.isVisible(BigInt(txid))) {
+			if (this.visibility.isVisible(BigInt(txid))) {
 				this.resolve(txid);
 			}
 		}
@@ -105,7 +105,7 @@ export class TransactionTracker {
 		this.waiting.clear();
 		this.recent.clear();
 		this.recentOrder.length = 0;
-		this.appliedVisibility = undefined;
+		this.visibility = undefined;
 	}
 
 	private remove(txid: string, waiter: TransactionWaiter): void {
