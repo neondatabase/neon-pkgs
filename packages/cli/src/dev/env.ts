@@ -143,6 +143,7 @@ const CLAIMABLE_RESOLVE_ORDER = ["postgres", "auth", "data-api"] as const;
 const emptyClaimableCredential = (): CredentialOutcome => ({
 	issued: false,
 	keys: [],
+	fresh: [],
 	revoked: [],
 	superseded: [],
 });

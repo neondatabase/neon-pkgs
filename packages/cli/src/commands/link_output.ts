@@ -103,9 +103,7 @@ export const formatPulledEnv = (
 	outcome: Extract<PullOutcome, { status: "written" }>,
 	cwd: string,
 ): string => {
-	const fresh = new Set(
-		outcome.credential?.issued ? outcome.credential.keys : [],
-	);
+	const fresh = new Set(outcome.credential?.fresh ?? []);
 	const count = outcome.written.length;
 	const lines = [
 		`Pulled ${count} Neon variable${count === 1 ? "" : "s"} into ${displayPath(outcome.file, cwd)}`,

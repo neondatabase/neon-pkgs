@@ -40,6 +40,8 @@ export interface CredentialOutcome {
 	 * enables. Empty when the policy enables neither object storage nor the AI Gateway.
 	 */
 	keys: string[];
+	/** The subset of {@link CredentialOutcome.keys} whose values this call revealed or minted. */
+	fresh: string[];
 	/**
 	 * `tokenId`s revoked because this call superseded them. Only ever credentials the persisted
 	 * secrets named *and* that this tool issued; empty otherwise.
@@ -187,6 +189,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			credential: {
 				issued: false,
 				keys: [],
+				fresh: [],
 				revoked: [],
 				superseded: [],
 			},
@@ -277,6 +280,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			credential: {
 				issued: false,
 				keys: secretKeys,
+				fresh: [],
 				revoked: [],
 				superseded: [],
 			},
@@ -314,6 +318,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		credential: {
 			issued: true,
 			keys: secretKeys,
+			fresh: secretKeys.filter((key) => !keptSecretKeys.includes(key)),
 			revoked: revokeSuperseded ? [...ours] : [],
 			superseded: revokeSuperseded ? [] : [...ours],
 		},

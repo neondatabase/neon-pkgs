@@ -10,7 +10,7 @@ import {
 const cwd = "/work/my-app";
 
 describe("formatPulledEnv", () => {
-	test("groups keys by service in canonical order and marks new credential values", () => {
+	test("groups keys by service in canonical order and marks only freshly issued values", () => {
 		const out = formatPulledEnv(
 			{
 				status: "written",
@@ -30,6 +30,7 @@ describe("formatPulledEnv", () => {
 				credential: {
 					issued: true,
 					keys: ["AWS_ACCESS_KEY_ID", "NEON_AI_GATEWAY_TOKEN"],
+					fresh: ["NEON_AI_GATEWAY_TOKEN"],
 					revoked: ["neon-env-old"],
 					superseded: [],
 				},
@@ -42,7 +43,7 @@ describe("formatPulledEnv", () => {
 				"  Postgres        DATABASE_URL, DATABASE_URL_UNPOOLED",
 				"  Branch          NEON_BRANCH",
 				"  Functions       NEON_FUNCTION_HELLO_BASE_URL, NEON_FUNCTION_WEBHOOK_BASE_URL",
-				"  Object Storage  AWS_ACCESS_KEY_ID*, AWS_REGION",
+				"  Object Storage  AWS_ACCESS_KEY_ID, AWS_REGION",
 				"  AI Gateway      NEON_AI_GATEWAY_TOKEN*, NEON_AI_GATEWAY_BASE_URL",
 				"  Removed         NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL (not enabled on this branch)",
 				"  * new credential value",
