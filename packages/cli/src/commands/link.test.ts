@@ -1219,9 +1219,9 @@ describe("link", () => {
 				["link", "-y", "--no-env-pull", "--context-file", ctx],
 				{ mockDir: "link-yes-one", snapshot: false },
 			);
-			expect(stdout).toContain("orgId:     org-alpha");
-			expect(stdout).toContain("projectId: project-api");
-			expect(stdout).toContain("branch:    main");
+			expect(stdout).toMatch(/^ {2}Project +\S.* \(project-api\)$/m);
+			expect(stdout).toMatch(/^ {2}Branch +main$/m);
+			expect(stdout).toMatch(/^ {2}Org +org-alpha$/m);
 			expect(JSON.parse(readFile(ctx))).toEqual({
 				orgId: "org-alpha",
 				projectId: "project-api",
@@ -1611,7 +1611,12 @@ describe("link", () => {
 				],
 				{ mockDir: "link-yes-one", snapshot: false },
 			);
-			expect(stdout).toContain("Created project new-project-123456");
+			expect(stdout).toContain(
+				"Created project test_project in aws-us-east-2",
+			);
+			expect(stdout).toMatch(
+				/^ {2}Project +test_project \(new-project-123456\)$/m,
+			);
 			expect(JSON.parse(readFile(ctx))).toEqual({
 				orgId: "org-alpha",
 				projectId: "new-project-123456",

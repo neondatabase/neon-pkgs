@@ -5,10 +5,10 @@ exports[`link > --no-checks (offline write) > fails when branch is missing 1`] =
 exports[`link > --no-checks (offline write) > fails when org-id or project-id is missing 1`] = `""`;
 
 exports[`link > --no-checks (offline write) > writes org+project+branch when a branch is given 1`] = `
-"Linked <TMP>/nochecks_branch/.neon:
-  orgId:     org-anything
-  projectId: ghost-project
-  branch:    br-anything
+"Linked <TMP>/nochecks_branch/.neon
+  Project         ghost-project
+  Branch          br-anything
+  Org             org-anything
 
 Written offline (--no-checks): nothing was verified.
 
@@ -24,10 +24,10 @@ exports[`link > --no-checks (offline write) > writes org+project+branch when a b
 `;
 
 exports[`link > --no-checks (offline write) > writes org+project+branch with no API verification 1`] = `
-"Linked <TMP>/nochecks_basic/.neon:
-  orgId:     org-anything
-  projectId: ghost-project
-  branch:    main
+"Linked <TMP>/nochecks_basic/.neon
+  Project         ghost-project
+  Branch          main
+  Org             org-anything
 
 Written offline (--no-checks): nothing was verified.
 
@@ -43,25 +43,25 @@ exports[`link > --no-checks (offline write) > writes org+project+branch with no 
 `;
 
 exports[`link > gitignore scaffolding > appends .neon to an existing .gitignore without duplicating 1`] = `
-"Linked <TMP>/gi_appends/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/gi_appends/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;
 
 exports[`link > gitignore scaffolding > appends .neon to an existing .gitignore without duplicating 2`] = `
-"Linked <TMP>/gi_appends/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/gi_appends/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;
 
 exports[`link > gitignore scaffolding > creates a .gitignore listing .neon next to the context file 1`] = `
-"Linked <TMP>/gi_creates/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/gi_creates/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;
@@ -71,10 +71,10 @@ exports[`link > gitignore scaffolding > set-context also scaffolds .gitignore vi
 exports[`link > input verification > --org-id that does not match the project fails with a mismatch error 1`] = `""`;
 
 exports[`link > input verification > branch names on later list pages still resolve 1`] = `
-"Linked <TMP>/verify_paged_branch/.neon:
-  orgId:     org-7
-  projectId: proj-paged-branches
-  branch:    page-two
+"Linked <TMP>/verify_paged_branch/.neon
+  Project         Paged Branches (proj-paged-branches)
+  Branch          page-two
+  Org             org-7
 
 "
 `;
@@ -86,9 +86,9 @@ exports[`link > non-interactive flag mode > conflicting inputs (--project-id wit
 exports[`link > non-interactive flag mode > conflicting inputs (--project-name with --branch-id) fails 1`] = `""`;
 
 exports[`link > non-interactive flag mode > link --branch-id pins the branch in an existing project 1`] = `
-"Linked <TMP>/flag_branch/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/flag_branch/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;
@@ -108,9 +108,9 @@ exports[`link > non-interactive flag mode > link --clear empties the context fil
 exports[`link > non-interactive flag mode > link --clear empties the context file 2`] = `"{}"`;
 
 exports[`link > non-interactive flag mode > link --params JSON behaves like flags 1`] = `
-"Linked <TMP>/flag_params/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/flag_params/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;
@@ -123,9 +123,9 @@ exports[`link > non-interactive flag mode > link --params JSON behaves like flag
 `;
 
 exports[`link > non-interactive flag mode > link --project-id -y on a personal project omits orgId and pins the default branch 1`] = `
-"Linked <TMP>/flag_existing/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/flag_existing/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;
@@ -138,10 +138,10 @@ exports[`link > non-interactive flag mode > link --project-id -y on a personal p
 `;
 
 exports[`link > non-interactive flag mode > link --project-id -y pins the default branch, not the first listed 1`] = `
-"Linked <TMP>/flag_yes_default/.neon:
-  orgId:     org-7
-  projectId: proj-in-org
-  branch:    main
+"Linked <TMP>/flag_yes_default/.neon
+  Project         Org Project (proj-in-org)
+  Branch          main
+  Org             org-7
 
 "
 `;
@@ -155,10 +155,10 @@ exports[`link > non-interactive flag mode > link --project-id -y pins the defaul
 `;
 
 exports[`link > non-interactive flag mode > link --project-id alone infers the org from the project 1`] = `
-"Linked <TMP>/flag_infer_org/.neon:
-  orgId:     org-7
-  projectId: proj-in-org
-  branch:    main
+"Linked <TMP>/flag_infer_org/.neon
+  Project         Org Project (proj-in-org)
+  Branch          main
+  Org             org-7
 
 "
 `;
@@ -172,10 +172,10 @@ exports[`link > non-interactive flag mode > link --project-id alone infers the o
 `;
 
 exports[`link > non-interactive flag mode > link --project-id pins the only branch 1`] = `
-"Linked <TMP>/flag_one_branch/.neon:
-  orgId:     org-7
-  projectId: proj-one-branch
-  branch:    main
+"Linked <TMP>/flag_one_branch/.neon
+  Project         One Branch (proj-one-branch)
+  Branch          main
+  Org             org-7
 
 "
 `;
@@ -189,11 +189,11 @@ exports[`link > non-interactive flag mode > link --project-id pins the only bran
 `;
 
 exports[`link > non-interactive flag mode > link creates a new project and writes .neon 1`] = `
-"Created project new-project-789012 ("test_project").
-Linked <TMP>/flag_create/.neon:
-  orgId:     org-2
-  projectId: new-project-789012
-  branch:    test_branch
+"Created project test_project
+Linked <TMP>/flag_create/.neon
+  Project         test_project (new-project-789012)
+  Branch          test_branch
+  Org             org-2
 
 "
 `;
@@ -207,9 +207,9 @@ exports[`link > non-interactive flag mode > link creates a new project and write
 `;
 
 exports[`link > non-interactive flag mode > re-linking the same project keeps the already-pinned branch 1`] = `
-"Linked <TMP>/flag_keep_branch/.neon:
-  projectId: test
-  branch:    test_branch
+"Linked <TMP>/flag_keep_branch/.neon
+  Project         test_project (test)
+  Branch          test_branch
 
 "
 `;
@@ -222,9 +222,9 @@ exports[`link > non-interactive flag mode > re-linking the same project keeps th
 `;
 
 exports[`link > non-interactive flag mode > re-linking the same project with -y keeps the already-pinned branch 1`] = `
-"Linked <TMP>/flag_keep_branch_yes/.neon:
-  projectId: test
-  branch:    test_branch
+"Linked <TMP>/flag_keep_branch_yes/.neon
+  Project         test_project (test)
+  Branch          test_branch
 
 "
 `;
@@ -237,10 +237,10 @@ exports[`link > non-interactive flag mode > re-linking the same project with -y 
 `;
 
 exports[`link > org-scoped API key behavior > links an existing project when org listing is forbidden 1`] = `
-"Linked <TMP>/orgkey_project/.neon:
-  orgId:     org-detected-99887766
-  projectId: detected-project-12345
-  branch:    main
+"Linked <TMP>/orgkey_project/.neon
+  Project         detected_project (detected-project-12345)
+  Branch          main
+  Org             org-detected-99887766
 
 "
 `;
@@ -254,9 +254,9 @@ exports[`link > org-scoped API key behavior > links an existing project when org
 `;
 
 exports[`link > overwrites an existing .neon when re-linking non-interactively 1`] = `
-"Linked <TMP>/overwrite/.neon:
-  projectId: test
-  branch:    main
+"Linked <TMP>/overwrite/.neon
+  Project         test_project (test)
+  Branch          main
 
 "
 `;

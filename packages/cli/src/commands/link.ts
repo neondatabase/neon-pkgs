@@ -35,7 +35,12 @@ import { looksLikeBranchId } from "../utils/formats.js";
 import { helpEpilogue } from "../utils/help_text.js";
 import { writer } from "../writer.js";
 import { initCmd } from "./config.js";
-import { autoPullEnvAfterPin } from "./env.js";
+import { type AutoPullResult, autoPullEnvAfterPin } from "./env.js";
+import {
+	formatLinkSummary,
+	formatPulledEnv,
+	type LinkSummaryView,
+} from "./link_output.js";
 import { REGIONS } from "./projects.js";
 
 const PROJECTS_LIST_LIMIT = 100;
@@ -616,9 +621,10 @@ const resolveOrgForProject = async (
 	props: CommonProps,
 	inputs: Inputs,
 	projectId: string,
-): Promise<string | undefined> => {
+): Promise<{ orgId: string | undefined; projectName: string }> => {
 	const project = await fetchProjectOrThrow(props, projectId);
 	const projectOrg = project.org_id ?? undefined;
+	const projectName = project.name;
 
 	if (inputs.orgId) {
 		if (projectOrg && projectOrg !== inputs.orgId) {
@@ -631,13 +637,10 @@ const resolveOrgForProject = async (
 				`Project '${projectId}' does not report an organization matching --org-id ${inputs.orgId}. Omit --org-id to link using the project's own context.`,
 			);
 		}
-		return inputs.orgId;
+		return { orgId: inputs.orgId, projectName };
 	}
 
-	if (projectOrg) {
-		return projectOrg;
-	}
-	return undefined;
+	return { orgId: projectOrg, projectName };
 };
 
 type BranchResolution = {
@@ -798,7 +801,7 @@ const runNonInteractive = async (
 	// Link an explicitly named existing project.
 	if (inputs.projectId) {
 		const listBranches = branchListing(props, inputs.projectId);
-		const orgId = await resolveOrgForProject(
+		const { orgId, projectName } = await resolveOrgForProject(
 			props,
 			inputs,
 			inputs.projectId,
@@ -819,6 +822,7 @@ const runNonInteractive = async (
 			contextFile: props.contextFile,
 			orgId,
 			projectId: inputs.projectId,
+			projectName,
 			branch: resolved.branch,
 			branchRef: resolved.ref,
 			created: false,
@@ -830,7 +834,11 @@ const runNonInteractive = async (
 	if (inputs.branch && existing.projectId) {
 		const projectId = existing.projectId;
 		const listBranches = branchListing(props, projectId);
-		const orgId = await resolveOrgForProject(props, inputs, projectId);
+		const { orgId, projectName } = await resolveOrgForProject(
+			props,
+			inputs,
+			projectId,
+		);
 		const resolved = await resolvePinnedBranch(
 			props,
 			inputs,
@@ -847,6 +855,7 @@ const runNonInteractive = async (
 			contextFile: props.contextFile,
 			orgId,
 			projectId,
+			projectName,
 			branch: resolved.branch,
 			branchRef: resolved.ref,
 			created: false,
@@ -1418,39 +1427,21 @@ const createProject = async (
 // Output helpers
 // ----------------------------------------------------------------------------
 
-type HumanSummary = {
-	contextFile: string;
-	orgId?: string;
-	projectId: string;
-	branch: string;
+type HumanSummary = LinkSummaryView & {
 	/** The pinned branch as resolved while linking; absent when nothing was verified. */
 	branchRef?: ResolvedBranchRef;
-	created: boolean;
-	projectName?: string;
-	regionId?: string;
-	/** True for the `--no-checks` path: written offline, so suppress env pull. */
-	noChecks?: boolean;
 };
 
-const printSummary = (_props: LinkProps, summary: HumanSummary): void => {
-	const lines: string[] = [];
-	if (summary.created) {
-		lines.push(
-			`Created project ${summary.projectId}${summary.projectName ? ` ("${summary.projectName}")` : ""}${summary.regionId ? ` in ${summary.regionId}` : ""}.`,
-		);
-	}
-	lines.push(`Linked ${summary.contextFile}:`);
-	if (summary.orgId) {
-		lines.push(`  orgId:     ${summary.orgId}`);
-	}
-	lines.push(`  projectId: ${summary.projectId}`);
-	lines.push(`  branch:    ${summary.branch}`);
-	if (summary.noChecks) {
-		lines.push("");
-		lines.push("Written offline (--no-checks): nothing was verified.");
-	}
-	lines.push("");
-	process.stdout.write(`${lines.join("\n")}\n`);
+const printSummary = (props: LinkProps, summary: HumanSummary): void => {
+	process.stdout.write(
+		`${formatLinkSummary(summary, props.cwd ?? process.cwd())}\n`,
+	);
+};
+
+/** The env block `link` prints under its summary, once the bundled pull has written the file. */
+const printPulledEnv = (props: LinkProps, result: AutoPullResult): void => {
+	if (result.status !== "written") return;
+	process.stdout.write(formatPulledEnv(result, props.cwd ?? process.cwd()));
 };
 
 /**
@@ -1468,7 +1459,7 @@ const finalizeLink = async (
 		return;
 	}
 	const { config: _offerConfig, ...rest } = props;
-	await autoPullEnvAfterPin(
+	const pulled = await autoPullEnvAfterPin(
 		{
 			...rest,
 			...(props.cwd ? { cwd: props.cwd } : {}),
@@ -1477,7 +1468,9 @@ const finalizeLink = async (
 			envPull: props.envPull,
 		},
 		summary.branchRef,
+		{ report: false },
 	);
+	printPulledEnv(props, pulled);
 };
 
 /**
@@ -1540,7 +1533,7 @@ const maybeOfferConfigInit = async (
 	// a neon.ts. Only meaningful when a branch was pinned (same guard as finalize).
 	if (summary.branch && summary.projectId) {
 		const { config: _offerConfig, ...rest } = props;
-		await autoPullEnvAfterPin(
+		const pulled = await autoPullEnvAfterPin(
 			{
 				...rest,
 				projectId: summary.projectId,
@@ -1548,7 +1541,9 @@ const maybeOfferConfigInit = async (
 				envPull: props.envPull,
 			},
 			summary.branchRef,
+			{ report: false },
 		);
+		printPulledEnv(props, pulled);
 	}
 };
 

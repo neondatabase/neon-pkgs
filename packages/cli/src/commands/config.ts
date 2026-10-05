@@ -58,6 +58,7 @@ import { loadEnvFileIntoProcess } from "../env_file.js";
 import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
+	NEON_SERVICE_LABELS,
 	type NeonService,
 	parseServices,
 	servicesFlagValue,
@@ -1503,20 +1504,12 @@ type ReportMode = "plan" | "apply";
  * mistaken for being silently dropped. Service enablement is static top-level config (it never
  * lives in the per-branch closure), so reading it straight off `config` is accurate.
  */
-const utilizedServices = (config: Config): string[] => {
-	const labels: Record<NeonService, string> = {
-		postgres: "Postgres",
-		auth: "Neon Auth",
-		"data-api": "Data API",
-		"object-storage": "Object Storage",
-		functions: "Functions",
-		"ai-gateway": "AI Gateway",
-	};
-	return [
-		labels.postgres,
-		...declaredNeonServices(config).map((service) => labels[service]),
-	];
-};
+const utilizedServices = (config: Config): string[] => [
+	NEON_SERVICE_LABELS.postgres,
+	...declaredNeonServices(config).map(
+		(service) => NEON_SERVICE_LABELS[service],
+	),
+];
 
 /**
  * Render a {@link PushResult}. JSON/YAML output emits the raw result (plus a `services`
