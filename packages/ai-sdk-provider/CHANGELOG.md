@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.0.1
+
+### Patch Changes
+
+- 4acdfdb: `claude-opus-5-5` (Claude Opus 5.5) is now a known model id and autocompletes in `neon("…")`.
+
 ## 1.0.0
 
 ### Major Changes
