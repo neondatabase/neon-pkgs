@@ -1,30 +1,30 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	BaselineSyncPublicationReconciler,
 	type ReconciliationLimits,
-	SnapshotPublicationReconciler,
 } from "./reconciler.js";
 import {
 	accept,
-	completeEmptySnapshot,
+	baselineSyncBatch,
+	baselineSyncEnd,
+	baselineSyncStart,
+	completeEmptyBaselineSync,
 	keyedPublication,
 	publicationMessages,
 	ROW_A,
 	row,
-	snapshotChunk,
-	snapshotEnd,
-	snapshotStart,
 	target,
 	upsert,
 	wireBytes,
 } from "./reconciler.test-helpers.js";
 
 describe("reconciliation resource bounds", () => {
-	it("counts every snapshot frame against an exact UTF-8 byte limit", () => {
+	it("counts every baseline-sync frame against an exact UTF-8 byte limit", () => {
 		const messages = [
-			snapshotStart(),
-			snapshotChunk(0, [row(ROW_A, "é")]),
-			snapshotEnd(1),
+			baselineSyncStart(),
+			baselineSyncBatch(0, [row(ROW_A, "é")]),
+			baselineSyncEnd(1),
 		];
 		const size = messages.reduce(
 			(total, message) => total + wireBytes(message),
@@ -32,18 +32,18 @@ describe("reconciliation resource bounds", () => {
 		);
 
 		const exact = subscribed({
-			maxSnapshotBytes: size,
+			maxBaselineSyncBytes: size,
 			maxPublicationBytes: 10_000,
 		});
 		for (const message of messages) accept(exact, message);
 
 		const over = subscribed({
-			maxSnapshotBytes: size - 1,
+			maxBaselineSyncBytes: size - 1,
 			maxPublicationBytes: 10_000,
 		});
 		expect(() => {
 			for (const message of messages) accept(over, message);
-		}).toThrow("snapshot exceeds the byte limit");
+		}).toThrow("baseline sync exceeds the byte limit");
 	});
 
 	it("counts open, bodies, and commit against the publication limit", () => {
@@ -59,28 +59,28 @@ describe("reconciliation resource bounds", () => {
 			0,
 		);
 		const exact = subscribed({
-			maxSnapshotBytes: 10_000,
+			maxBaselineSyncBytes: 10_000,
 			maxPublicationBytes: size,
 		});
-		completeEmptySnapshot(exact);
+		completeEmptyBaselineSync(exact);
 		for (const message of messages) accept(exact, message);
 
 		const over = subscribed({
-			maxSnapshotBytes: 10_000,
+			maxBaselineSyncBytes: 10_000,
 			maxPublicationBytes: size - 1,
 		});
-		completeEmptySnapshot(over);
+		completeEmptyBaselineSync(over);
 		expect(() => {
 			for (const message of messages) accept(over, message);
 		}).toThrow("publication exceeds the byte limit");
 	});
 
-	it("bounds accumulated post-snapshot backlog and releases all staging", () => {
+	it("bounds accumulated post-baseline-sync backlog and releases all staging", () => {
 		const reconciler = subscribed({
-			maxSnapshotBytes: 10_000,
+			maxBaselineSyncBytes: 10_000,
 			maxPublicationBytes: 600,
 		});
-		accept(reconciler, snapshotStart());
+		accept(reconciler, baselineSyncStart());
 
 		let failure: unknown;
 		for (let sequence = 1; sequence <= 10; sequence += 1) {
@@ -110,10 +110,13 @@ describe("reconciliation resource bounds", () => {
 
 	it("rejects invalid limits and message byte counts", () => {
 		expect(
-			() => new SnapshotPublicationReconciler({ maxSnapshotBytes: 0 }),
-		).toThrow("maxSnapshotBytes must be a positive safe integer");
+			() =>
+				new BaselineSyncPublicationReconciler({
+					maxBaselineSyncBytes: 0,
+				}),
+		).toThrow("maxBaselineSyncBytes must be a positive safe integer");
 		const reconciler = subscribed();
-		expect(() => reconciler.accept(snapshotStart(), 0)).toThrow(
+		expect(() => reconciler.accept(baselineSyncStart(), 0)).toThrow(
 			"message byte length must be a positive safe integer",
 		);
 	});
@@ -121,8 +124,8 @@ describe("reconciliation resource bounds", () => {
 
 function subscribed(
 	limits: Partial<ReconciliationLimits> = {},
-): SnapshotPublicationReconciler {
-	const reconciler = new SnapshotPublicationReconciler(limits);
+): BaselineSyncPublicationReconciler {
+	const reconciler = new BaselineSyncPublicationReconciler(limits);
 	reconciler.add({
 		liveId: "9",
 		epoch: "1",

@@ -202,24 +202,24 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "snapshot_attempt", "mvcc"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "mvcc"],
           "properties": {
-            "type": { "const": "snapshot_start" },
+            "type": { "const": "baseline_sync_start" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
-            "snapshot_attempt": { "$ref": "#/$defs/u64" },
+            "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
             "mvcc": { "$ref": "#/$defs/mvcc" }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "snapshot_attempt", "index", "rows"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "index", "rows"],
           "properties": {
-            "type": { "const": "snapshot_chunk" },
+            "type": { "const": "baseline_sync_batch" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
-            "snapshot_attempt": { "$ref": "#/$defs/u64" },
+            "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
             "index": { "$ref": "#/$defs/u32" },
             "rows": { "type": "array", "items": { "$ref": "#/$defs/row" } }
           },
@@ -227,13 +227,13 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "snapshot_attempt", "chunk_count"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "batch_count"],
           "properties": {
-            "type": { "const": "snapshot_end" },
+            "type": { "const": "baseline_sync_end" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
-            "snapshot_attempt": { "$ref": "#/$defs/u64" },
-            "chunk_count": { "$ref": "#/$defs/u32" }
+            "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
+            "batch_count": { "$ref": "#/$defs/u32" }
           },
           "additionalProperties": false
         },
@@ -295,7 +295,7 @@
             "type": { "const": "subscription_error" },
             "live_id": { "$ref": "#/$defs/u64" },
             "code": {
-              "enum": ["authorization_expired", "renewal_failed", "key_retired", "upstream_cancelled", "snapshot_failed", "protocol_error"]
+              "enum": ["authorization_expired", "renewal_failed", "key_retired", "upstream_cancelled", "baseline_sync_failed", "protocol_error"]
             },
             "message": { "type": "string" }
           },

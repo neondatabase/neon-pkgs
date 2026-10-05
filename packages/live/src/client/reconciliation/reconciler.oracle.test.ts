@@ -3,20 +3,20 @@ import { describe, expect, it } from "vitest";
 
 import type { WireChange, WireRow } from "../protocol/messages.js";
 import {
+	BaselineSyncPublicationReconciler,
 	type ReconciledBatch,
 	type ReconciliationTarget,
-	SnapshotPublicationReconciler,
 } from "./reconciler.js";
 import {
 	accept,
+	baselineSyncBatch,
+	baselineSyncEnd,
+	baselineSyncStart,
 	commit,
-	snapshotChunk,
-	snapshotEnd,
-	snapshotStart,
 } from "./reconciler.test-helpers.js";
 
 const LIVE_ID = "9";
-type Message = Parameters<SnapshotPublicationReconciler["accept"]>[0];
+type Message = Parameters<BaselineSyncPublicationReconciler["accept"]>[0];
 type Operation =
 	| { readonly kind: "publication"; readonly changes: readonly WireChange[] }
 	| { readonly kind: "reset"; readonly rows: readonly WireRow[] };
@@ -88,15 +88,15 @@ function render(scenario: Scenario): Message[] {
 	let sequence = 1;
 	let publication = 1;
 
-	const snapshot = (rows: readonly WireRow[]): void => {
-		messages.push(snapshotStart(String(epoch)));
+	const baselineSync = (rows: readonly WireRow[]): void => {
+		messages.push(baselineSyncStart(String(epoch)));
 		rows.forEach((row, index) => {
-			messages.push(snapshotChunk(index, [row], String(epoch)));
+			messages.push(baselineSyncBatch(index, [row], String(epoch)));
 		});
-		messages.push(snapshotEnd(rows.length, String(epoch)));
+		messages.push(baselineSyncEnd(rows.length, String(epoch)));
 	};
 
-	snapshot(scenario.initial);
+	baselineSync(scenario.initial);
 	for (const operation of scenario.operations) {
 		const publicationId = String(publication++);
 		messages.push({ type: "open", publication_id: publicationId });
@@ -132,23 +132,23 @@ function render(scenario: Scenario): Message[] {
 			});
 		}
 		messages.push(commit(publicationId, 1));
-		if (operation.kind === "reset") snapshot(operation.rows);
+		if (operation.kind === "reset") baselineSync(operation.rows);
 	}
 
-	movePublicationsAcrossSnapshots(messages, scenario.delivery);
+	movePublicationsAcrossBaselineSyncs(messages, scenario.delivery);
 	return messages;
 }
 
-function movePublicationsAcrossSnapshots(
+function movePublicationsAcrossBaselineSyncs(
 	messages: Message[],
 	delivery: Scenario["delivery"],
 ): void {
 	if (delivery === "after") return;
 	for (let index = 0; index < messages.length; index += 1) {
-		if (messages[index]?.type !== "snapshot_start") continue;
+		if (messages[index]?.type !== "baseline_sync_start") continue;
 		const end = messages.findIndex(
 			(message, position) =>
-				position >= index && message.type === "snapshot_end",
+				position >= index && message.type === "baseline_sync_end",
 		);
 		if (
 			messages[end + 1]?.type !== "open" ||
@@ -183,7 +183,7 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 			throw error;
 		},
 	};
-	const reconciler = new SnapshotPublicationReconciler();
+	const reconciler = new BaselineSyncPublicationReconciler();
 	reconciler.add({
 		liveId: LIVE_ID,
 		epoch: "1",
@@ -200,7 +200,7 @@ function reduceIndependently(
 ): readonly Observation[] {
 	const observations: Observation[] = [];
 	const rows = new Map<string, WireRow["values"]>();
-	let snapshot: WireRow[] = [];
+	let baseline: WireRow[] = [];
 	let pendingChanges: WireChange[] = [];
 	let pendingTxids: string[] = [];
 	let backlog: ReconciledBatch[] = [];
@@ -210,18 +210,18 @@ function reduceIndependently(
 
 	for (const message of messages) {
 		switch (message.type) {
-			case "snapshot_start":
-				snapshot = [];
+			case "baseline_sync_start":
+				baseline = [];
 				break;
-			case "snapshot_chunk":
-				snapshot.push(...message.rows);
+			case "baseline_sync_batch":
+				baseline.push(...message.rows);
 				break;
-			case "snapshot_end":
-				replaceRows(rows, snapshot);
+			case "baseline_sync_end":
+				replaceRows(rows, baseline);
 				for (const batch of backlog) applyChanges(rows, batch.changes);
 				observations.push({
 					kind: "reset",
-					rows: normalizeRows(snapshot),
+					rows: normalizeRows(baseline),
 				});
 				observations.push(...backlog.map(batchObservation));
 				backlog = [];

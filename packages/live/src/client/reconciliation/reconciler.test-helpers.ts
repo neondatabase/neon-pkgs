@@ -6,9 +6,9 @@ import type {
 	WireRow,
 } from "../protocol/messages.js";
 import {
+	BaselineSyncPublicationReconciler,
 	type ReconciledBatch,
 	type ReconciliationTarget,
-	SnapshotPublicationReconciler,
 } from "./reconciler.js";
 
 export const ROW_A = "a".repeat(64);
@@ -48,8 +48,8 @@ export function target(events: string[] = [], prefix = ""): MockTarget {
 
 export function subscribed(
 	targetState: ReconciliationTarget,
-): SnapshotPublicationReconciler {
-	const reconciler = new SnapshotPublicationReconciler();
+): BaselineSyncPublicationReconciler {
+	const reconciler = new BaselineSyncPublicationReconciler();
 	reconciler.add({
 		liveId: "9",
 		epoch: "1",
@@ -60,16 +60,16 @@ export function subscribed(
 	return reconciler;
 }
 
-export function completeEmptySnapshot(
-	reconciler: SnapshotPublicationReconciler,
+export function completeEmptyBaselineSync(
+	reconciler: BaselineSyncPublicationReconciler,
 	liveId = "9",
 ): void {
-	accept(reconciler, { ...snapshotStart(), live_id: liveId });
-	accept(reconciler, { ...snapshotEnd(0), live_id: liveId });
+	accept(reconciler, { ...baselineSyncStart(), live_id: liveId });
+	accept(reconciler, { ...baselineSyncEnd(0), live_id: liveId });
 }
 
 export function keyedPublication(
-	reconciler: SnapshotPublicationReconciler,
+	reconciler: BaselineSyncPublicationReconciler,
 	publicationId: string,
 	epoch: string,
 	sequence: string,
@@ -93,7 +93,7 @@ export function publicationMessages(
 	sequence: string,
 	changes: readonly WireChange[],
 	txids: readonly string[] = ["7"],
-): Parameters<SnapshotPublicationReconciler["accept"]>[0][] {
+): Parameters<BaselineSyncPublicationReconciler["accept"]>[0][] {
 	return [
 		{ type: "open", publication_id: publicationId },
 		keyedResults(publicationId, 0, epoch, sequence, changes, txids),
@@ -102,7 +102,7 @@ export function publicationMessages(
 }
 
 export function resetPublication(
-	reconciler: SnapshotPublicationReconciler,
+	reconciler: BaselineSyncPublicationReconciler,
 	publicationId: string,
 	epoch: string,
 ): void {
@@ -111,46 +111,46 @@ export function resetPublication(
 	accept(reconciler, commit(publicationId, 1));
 }
 
-export function snapshotStart(
+export function baselineSyncStart(
 	epoch = "1",
 	attempt = "1",
-): Extract<ServerMessage, { type: "snapshot_start" }> {
+): Extract<ServerMessage, { type: "baseline_sync_start" }> {
 	return {
-		type: "snapshot_start",
+		type: "baseline_sync_start",
 		live_id: "9",
 		epoch,
-		snapshot_attempt: attempt,
+		baseline_sync_attempt: attempt,
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	};
 }
 
-export function snapshotChunk(
+export function baselineSyncBatch(
 	index: number,
 	rows: readonly WireRow[],
 	epoch = "1",
 	attempt = "1",
-): Extract<ServerMessage, { type: "snapshot_chunk" }> {
+): Extract<ServerMessage, { type: "baseline_sync_batch" }> {
 	return {
-		type: "snapshot_chunk",
+		type: "baseline_sync_batch",
 		live_id: "9",
 		epoch,
-		snapshot_attempt: attempt,
+		baseline_sync_attempt: attempt,
 		index,
 		rows: [...rows],
 	};
 }
 
-export function snapshotEnd(
-	chunkCount: number,
+export function baselineSyncEnd(
+	batchCount: number,
 	epoch = "1",
 	attempt = "1",
-): Extract<ServerMessage, { type: "snapshot_end" }> {
+): Extract<ServerMessage, { type: "baseline_sync_end" }> {
 	return {
-		type: "snapshot_end",
+		type: "baseline_sync_end",
 		live_id: "9",
 		epoch,
-		snapshot_attempt: attempt,
-		chunk_count: chunkCount,
+		baseline_sync_attempt: attempt,
+		batch_count: batchCount,
 	};
 }
 
@@ -206,8 +206,8 @@ export function upsert(rowKey: string, value: string): WireChange {
 }
 
 export function accept(
-	reconciler: SnapshotPublicationReconciler,
-	message: Parameters<SnapshotPublicationReconciler["accept"]>[0],
+	reconciler: BaselineSyncPublicationReconciler,
+	message: Parameters<BaselineSyncPublicationReconciler["accept"]>[0],
 ): void {
 	reconciler.accept(message, wireBytes(message));
 }
