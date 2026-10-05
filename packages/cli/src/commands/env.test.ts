@@ -457,6 +457,29 @@ describe("env pull", () => {
 		rmSync(cwd, { recursive: true, force: true });
 	});
 
+	it.each([
+		["the branch read-back", {}],
+		[
+			"the branch read-back with the implied AI Gateway",
+			{ implyAiGateway: true },
+		],
+	])("lists the project's branches once to resolve %s", async (_, opts) => {
+		let branchListings = 0;
+		const api = new (class extends FakeNeonApi {
+			override async listBranches(): Promise<NeonBranchSnapshot[]> {
+				branchListings += 1;
+				return super.listBranches();
+			}
+		})();
+
+		await pull(baseProps(api, cwd), opts);
+
+		expect(readFileSync(join(cwd, ".env.local"), "utf8")).toMatch(
+			/^DATABASE_URL=/m,
+		);
+		expect(branchListings).toBe(1);
+	});
+
 	it("writes Neon vars into .env.local when no .env exists", async () => {
 		await pull(baseProps(new FakeNeonApi(), cwd));
 

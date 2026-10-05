@@ -2,6 +2,7 @@ import {
 	type Config,
 	type CredentialScope,
 	credentialScopesSatisfied,
+	type NeonBranchSnapshot,
 	type NeonCredentialMeta,
 } from "@neon/config/v1";
 
@@ -39,6 +40,8 @@ export interface CredentialOutcome {
 	 * enables. Empty when the policy enables neither object storage nor the AI Gateway.
 	 */
 	keys: string[];
+	/** The subset of {@link CredentialOutcome.keys} whose values this call revealed or minted. */
+	fresh: string[];
 	/**
 	 * `tokenId`s revoked because this call superseded them. Only ever credentials the persisted
 	 * secrets named *and* that this tool issued; empty otherwise.
@@ -130,16 +133,24 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
 		functionUrls?: FunctionUrlMode;
 		listedFunctions?: FetchEnvKeysOptions["listedFunctions"];
+		/** The target branch, when the caller listed it already. */
+		resolvedBranch?: NeonBranchSnapshot;
 	},
 ): Promise<ReusedBranchEnv> {
 	const {
 		env: source = process.env,
 		keys: requestedKeys,
 		revokeSuperseded = true,
+		resolvedBranch,
 		...fetchOptions
 	} = options;
 	const api = options.api ?? createApiFromOptions(options);
-	const { branch, desired } = await resolveBranchPolicy(config, options, api);
+	const { branch, desired } = await resolveBranchPolicy(
+		config,
+		options,
+		api,
+		resolvedBranch,
+	);
 
 	const allPolicyKeys = policyEnvKeys(desired);
 	const requested = requestedKeys ? new Set(requestedKeys) : null;
@@ -178,6 +189,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			credential: {
 				issued: false,
 				keys: [],
+				fresh: [],
 				revoked: [],
 				superseded: [],
 			},
@@ -268,6 +280,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			credential: {
 				issued: false,
 				keys: secretKeys,
+				fresh: [],
 				revoked: [],
 				superseded: [],
 			},
@@ -305,6 +318,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		credential: {
 			issued: true,
 			keys: secretKeys,
+			fresh: secretKeys.filter((key) => !keptSecretKeys.includes(key)),
 			revoked: revokeSuperseded ? [...ours] : [],
 			superseded: revokeSuperseded ? [] : [...ours],
 		},

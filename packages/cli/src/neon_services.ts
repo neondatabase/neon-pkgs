@@ -28,6 +28,16 @@ export const NEON_SERVICES = [
 ] as const;
 export type NeonService = (typeof NEON_SERVICES)[number];
 
+/** How output names each service. */
+export const NEON_SERVICE_LABELS: Readonly<Record<NeonService, string>> = {
+	postgres: "Postgres",
+	auth: "Neon Auth",
+	"data-api": "Data API",
+	"object-storage": "Object Storage",
+	functions: "Functions",
+	"ai-gateway": "AI Gateway",
+};
+
 /**
  * Spellings that used to be canonical, and the service they now mean. Accepted so a scripted
  * `--services storage` keeps working, warned about so it does not quietly become a second

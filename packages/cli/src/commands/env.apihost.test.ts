@@ -13,6 +13,7 @@ vi.mock("../dev/env.js", async (importOriginal) => {
 				credential: {
 					issued: false,
 					keys: [],
+					fresh: [],
 					revoked: [],
 					superseded: [],
 				},

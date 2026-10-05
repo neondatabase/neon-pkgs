@@ -4,6 +4,7 @@ import {
 	ErrorCode,
 	isPlatformError,
 	type NeonApi,
+	type NeonBranchSnapshot,
 	type NeonBucketSnapshot,
 	type NeonDataApiSnapshot,
 } from "@neon/config";
@@ -142,6 +143,7 @@ const CLAIMABLE_RESOLVE_ORDER = ["postgres", "auth", "data-api"] as const;
 const emptyClaimableCredential = (): CredentialOutcome => ({
 	issued: false,
 	keys: [],
+	fresh: [],
 	revoked: [],
 	superseded: [],
 });
@@ -412,16 +414,29 @@ export const resolveNeonEnvVars = async (
 			branchId: ctx.branchId,
 			...apiOptions(ctx),
 		});
+		// The read-back config's branch closure ignores its argument, so the snapshot does
+		// not need the parent id that `pullConfig` reports only as a name.
+		const resolvedBranch: NeonBranchSnapshot = {
+			id: pulled.branch.id,
+			name: pulled.branch.name,
+			isDefault: pulled.branch.isDefault,
+			protected: pulled.branch.protected,
+			...(pulled.branch.expiresAt
+				? { expiresAt: pulled.branch.expiresAt }
+				: {}),
+		};
 		// pullConfig cannot represent function declarations, so branch read-back must list all
 		// live URLs. The AI Gateway remains separate because it has no read-back state.
 		if (!ctx.implyAiGateway) {
 			return await fetchAndProject(pulled.config, ctx, {
 				functionUrls: "all-live",
+				resolvedBranch,
 			});
 		}
 		return await resolveWithImpliedGateway(pulled.config, ctx, {
 			projectId: ctx.projectId,
 			branchId: ctx.branchId,
+			resolvedBranch,
 		});
 	}
 
@@ -463,12 +478,17 @@ const resolveWithImpliedGateway = async (
 	config: Config,
 	ctx: DevEnvContext,
 	/** Resolved by the caller, which is the branch this env belongs to. */
-	branch: { projectId: string; branchId: string },
+	branch: {
+		projectId: string;
+		branchId: string;
+		resolvedBranch: NeonBranchSnapshot;
+	},
 ): Promise<ResolvedNeonEnvVars> => {
 	const unreachable = await credentialsUnreachable(ctx, branch);
 	if (unreachable === null) {
 		return await fetchAndProject(withAiGateway(config), ctx, {
 			functionUrls: "all-live",
+			resolvedBranch: branch.resolvedBranch,
 		});
 	}
 	// Deliberately does not assert that the project lacks the gateway: a read can also fail
@@ -486,6 +506,7 @@ const resolveWithImpliedGateway = async (
 	);
 	const pulled = await fetchAndProject(config, ctx, {
 		functionUrls: "all-live",
+		resolvedBranch: branch.resolvedBranch,
 	});
 	return {
 		...pulled,
@@ -888,6 +909,7 @@ const fetchAndProject = async (
 			slug: string;
 			invocationUrl: string;
 		}>;
+		resolvedBranch?: NeonBranchSnapshot;
 	} = {},
 ): Promise<ResolvedNeonEnvVars> => {
 	const result = await fetchEnvReusingSecrets(config, {
@@ -901,6 +923,7 @@ const fetchAndProject = async (
 		...(opts.listedFunctions
 			? { listedFunctions: opts.listedFunctions }
 			: {}),
+		...(opts.resolvedBranch ? { resolvedBranch: opts.resolvedBranch } : {}),
 	});
 	return {
 		vars: result.vars,

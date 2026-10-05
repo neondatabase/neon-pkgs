@@ -77,6 +77,7 @@ describe("neon dev's resolver context", () => {
 			reportDevCredential({
 				issued: true,
 				keys: ["NEON_AI_GATEWAY_TOKEN"],
+				fresh: ["NEON_AI_GATEWAY_TOKEN"],
 				revoked: [],
 				superseded: [],
 			}),
@@ -93,6 +94,7 @@ describe("neon dev's resolver context", () => {
 				reportDevCredential({
 					issued: false,
 					keys: ["NEON_AI_GATEWAY_TOKEN"],
+					fresh: [],
 					revoked: [],
 					superseded: [],
 				}),
@@ -106,6 +108,7 @@ describe("neon dev's resolver context", () => {
 			reportDevCredential({
 				issued: true,
 				keys: ["NEON_AI_GATEWAY_TOKEN"],
+				fresh: ["NEON_AI_GATEWAY_TOKEN"],
 				revoked: ["cred-old-0001"],
 				superseded: [],
 			}),

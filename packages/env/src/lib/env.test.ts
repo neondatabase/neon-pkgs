@@ -1160,6 +1160,58 @@ describe("function invocation URLs", () => {
 		expect(env.functions?.hello?.baseUrl).toBe(helloUrl);
 	});
 
+	test("all-live lists functions alongside the Postgres reads", async () => {
+		const { api, projectId } = seededFake();
+		let releaseRoles: () => void = () => undefined;
+		const rolesGate = new Promise<void>((resolve) => {
+			releaseRoles = resolve;
+		});
+		const listRoles = api.listBranchRoles.bind(api);
+		api.listBranchRoles = async (...args) => {
+			await rolesGate;
+			return listRoles(...args);
+		};
+		let functionsListed = false;
+		const listFunctions = api.listBranchFunctions.bind(api);
+		api.listBranchFunctions = (...args) => {
+			functionsListed = true;
+			return listFunctions(...args);
+		};
+
+		const env = fetchEnvKeys(
+			defineConfig({}),
+			{ api, projectId, branchId: "br-main", functionUrls: "all-live" },
+			null,
+		);
+		await new Promise((resolve) => setImmediate(resolve));
+		expect(functionsListed).toBe(true);
+		releaseRoles();
+		await expect(env).resolves.toMatchObject({ postgres: {} });
+	});
+
+	test("all-live reports a Postgres read error over a function listing error that came first", async () => {
+		const { api, projectId } = seededFake();
+		api.listBranchFunctions = () =>
+			Promise.reject(new Error("functions failed"));
+		api.listBranchDatabases = () =>
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error("databases failed")), 10),
+			);
+
+		await expect(
+			fetchEnvKeys(
+				defineConfig({}),
+				{
+					api,
+					projectId,
+					branchId: "br-main",
+					functionUrls: "all-live",
+				},
+				null,
+			),
+		).rejects.toThrow("databases failed");
+	});
+
 	test("all-live writes the origin of a listed URL that has a path", async () => {
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {

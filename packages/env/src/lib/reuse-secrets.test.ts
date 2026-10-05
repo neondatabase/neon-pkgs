@@ -59,6 +59,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(credential).toEqual({
 			issued: true,
 			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			fresh: ["NEON_AI_GATEWAY_TOKEN"],
 			revoked: [],
 			superseded: [],
 		});
@@ -91,6 +92,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(second.credential).toEqual({
 			issued: false,
 			keys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+			fresh: [],
 			revoked: [],
 			superseded: [],
 		});
@@ -149,6 +151,7 @@ describe("fetchEnvReusingSecrets", () => {
 				"AWS_SECRET_ACCESS_KEY",
 				"NEON_AI_GATEWAY_TOKEN",
 			],
+			fresh: ["NEON_AI_GATEWAY_TOKEN"],
 			revoked: [],
 			superseded: [],
 		});
@@ -177,6 +180,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(gatewayOnly.credential).toEqual({
 			issued: true,
 			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			fresh: ["NEON_AI_GATEWAY_TOKEN"],
 			revoked: [],
 			superseded: [],
 		});
@@ -302,6 +306,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(credential).toEqual({
 			issued: false,
 			keys: [],
+			fresh: [],
 			revoked: [],
 			superseded: [],
 		});
@@ -336,6 +341,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(second.credential).toEqual({
 			issued: false,
 			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			fresh: [],
 			revoked: [],
 			superseded: [],
 		});
@@ -361,6 +367,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(result.credential).toEqual({
 			issued: true,
 			keys: ["NEON_AI_GATEWAY_TOKEN"],
+			fresh: ["NEON_AI_GATEWAY_TOKEN"],
 			revoked: [],
 			superseded: [storageOnly.tokenId],
 		});
@@ -390,6 +397,7 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(credential).toEqual({
 			issued: false,
 			keys: [],
+			fresh: [],
 			revoked: [],
 			superseded: [],
 		});
