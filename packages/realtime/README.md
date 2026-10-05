@@ -332,8 +332,7 @@ in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
-the ID of a transaction known to have committed. It also supports mutations
-that do not change the query result.
+the ID of a transaction known to have committed.
 
 Materialized subscriptions can instead wait for their complete rows to satisfy
 an application predicate:

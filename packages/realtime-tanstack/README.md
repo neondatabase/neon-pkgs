@@ -85,8 +85,7 @@ queue and waits indefinitely by default. Pass an optional timeout in millisecond
 to bound the wait.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
-the ID of a transaction known to have committed. It also supports mutations
-that do not change the query result.
+the ID of a transaction known to have committed.
 
 For SSR, use TanStack DB's normal `DbClient`, dehydration, and
 `HydrationBoundary` APIs with stable collection IDs. The server seeds a

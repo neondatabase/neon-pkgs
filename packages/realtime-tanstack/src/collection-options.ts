@@ -24,8 +24,7 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 *
 	 * @remarks
 	 * This does not determine whether a transaction committed, so pass only IDs
-	 * from transactions known to have committed. Mutations that do not change
-	 * the query result are supported.
+	 * from transactions known to have committed.
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default, the

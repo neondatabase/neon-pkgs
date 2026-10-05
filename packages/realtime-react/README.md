@@ -126,9 +126,8 @@ over newer authoritative rows. `awaitTxId()` also handles the race where the
 live batch arrives before the mutation response.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
-the ID of a transaction known to have committed. It also supports mutations
-that do not change the query result. Use a timeout when the application needs
-a bounded wait.
+the ID of a transaction known to have committed. Use a timeout when the
+application needs a bounded wait.
 
 When the mutation endpoint does not return a transaction ID, `awaitRows()` can
 keep the optimistic Action pending until the complete materialized result
