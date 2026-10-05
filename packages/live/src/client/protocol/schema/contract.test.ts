@@ -6,7 +6,7 @@ import capabilitySchema from "../../../../schema/neon-live-query-capability-v1.s
 import capabilityFixtures from "../../../server/capability/schema/neon-live-query-capability-v1.fixtures.json";
 import protocolFixtures from "./neon-live-protocol-v1.fixtures.json";
 
-describe("Neon Live protocol contracts", () => {
+describe("Realtime protocol contracts", () => {
 	it("accepts every public protocol fixture marked valid", () => {
 		const validate = validator(protocolSchema);
 		for (const fixture of protocolFixtures.valid) {

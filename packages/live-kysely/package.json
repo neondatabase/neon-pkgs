@@ -1,7 +1,7 @@
 {
   "name": "@neon/live-kysely",
   "version": "0.0.0",
-  "description": "Kysely adapter for defining Neon Live queries.",
+  "description": "Kysely adapter for defining live queries.",
   "keywords": [
     "neon",
     "database",

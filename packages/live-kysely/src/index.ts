@@ -1,5 +1,5 @@
 /**
- * Define Neon Live queries from Kysely select builders.
+ * Define live queries from Kysely select builders.
  *
  * @module Kysely
  */

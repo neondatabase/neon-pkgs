@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import type { NeonLiveClientOptions } from "../types.js";
+import type { RealtimeClientOptions } from "../types.js";
 import { pgTypeOids } from "./oids.js";
 import {
 	createParserRegistry,
@@ -21,7 +21,7 @@ const TEXT_COLUMN = {
 describe("PostgreSQL result parsers", () => {
 	it("accepts parser objects passed directly to the client", () => {
 		const customTypeOid = 90_000;
-		const options: NeonLiveClientOptions = {
+		const options: RealtimeClientOptions = {
 			url: "wss://live.neon.tech/example",
 			parsers: {
 				[pgTypeOids.int8]: (value) => {

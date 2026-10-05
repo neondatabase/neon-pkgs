@@ -27,7 +27,7 @@ export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {
 		!Number.isSafeInteger(query.expiresAt) ||
 		query.expiresAt <= 0
 	) {
-		throw new Error("Invalid Neon Live sealed query");
+		throw new Error("Invalid sealed live query");
 	}
 }
 

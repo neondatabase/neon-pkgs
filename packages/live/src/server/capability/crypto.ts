@@ -1,6 +1,6 @@
 export function webCrypto(): Crypto {
 	if (!globalThis.crypto?.subtle) {
-		throw new Error("Neon Live query sealing requires Web Crypto");
+		throw new Error("Live-query sealing requires Web Crypto");
 	}
 	return globalThis.crypto;
 }

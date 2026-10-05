@@ -6,16 +6,16 @@ import type {
 	LiveQuerySnapshot,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
-	NeonLiveClient,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RealtimeClient,
 	SealedLiveQuery,
 } from "@neon/live/client";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
-	NeonLiveProvider,
+	RealtimeProvider,
 	type UseLiveQueryResult,
 	useLiveQuery,
 } from "./index.js";
@@ -30,12 +30,12 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe("Neon Live React integration", () => {
+describe("Realtime React integration", () => {
 	it("renders preloaded data and exposes materialized subscription utilities", async () => {
 		const client = new TestClient<MessageRow>();
 		let observed: UseLiveQueryResult<MessageRow> | undefined;
 		render(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages
 					query={query("query-1")}
 					initialData={[{ id: 1, title: "server" }]}
@@ -43,7 +43,7 @@ describe("Neon Live React integration", () => {
 						observed = result;
 					}}
 				/>
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 
 		expect(screen.getByText("stale:server")).toBeTruthy();
@@ -76,9 +76,9 @@ describe("Neon Live React integration", () => {
 		const client = new TestClient<MessageRow>();
 		const first = query("query-1");
 		const view = render(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages query={first} />
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 		const firstSubscription = client.latest();
 		act(() => {
@@ -91,9 +91,9 @@ describe("Neon Live React integration", () => {
 		expect(screen.getByText("live:first")).toBeTruthy();
 
 		view.rerender(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages query={query("query-2")} />
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 
 		expect(firstSubscription.unsubscribed).toBe(true);
@@ -105,21 +105,21 @@ describe("Neon Live React integration", () => {
 		const client = new TestClient<MessageRow>();
 		const currentQuery = query("query-1", 3_000);
 		const view = render(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages
 					query={currentQuery}
 					refreshQuery={async () => query("refresh-1")}
 				/>
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 
 		view.rerender(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages
 					query={currentQuery}
 					refreshQuery={async () => query("refresh-2")}
 				/>
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 
 		expect(client.subscriptions).toHaveLength(1);
@@ -130,12 +130,12 @@ describe("Neon Live React integration", () => {
 		const replacement = query("query-2", 3_000);
 		const refreshQuery = vi.fn(async () => replacement);
 		render(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages
 					query={query("query-1", 9)}
 					refreshQuery={refreshQuery}
 				/>
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 
 		await act(async () => {
@@ -148,9 +148,9 @@ describe("Neon Live React integration", () => {
 	it("owns subscription cleanup", () => {
 		const client = new TestClient<MessageRow>();
 		const view = render(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages query={query("query-1")} />
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 		const subscription = client.latest();
 		view.unmount();
@@ -160,12 +160,12 @@ describe("Neon Live React integration", () => {
 	it("renders preloaded server snapshots without opening a subscription", () => {
 		const client = new TestClient<MessageRow>();
 		const html = renderToString(
-			<NeonLiveProvider client={client}>
+			<RealtimeProvider client={client}>
 				<Messages
 					query={query("query-1")}
 					initialData={[{ id: 1, title: "server" }]}
 				/>
-			</NeonLiveProvider>,
+			</RealtimeProvider>,
 		);
 
 		expect(html).toContain("stale");
@@ -197,7 +197,7 @@ function Messages({
 	);
 }
 
-class TestClient<Row> implements NeonLiveClient {
+class TestClient<Row> implements RealtimeClient {
 	readonly subscriptions: TestSubscription<Row>[] = [];
 
 	subscribe<CurrentRow>(

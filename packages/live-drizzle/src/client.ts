@@ -15,7 +15,7 @@ import {
  *
  * PostgreSQL `date` remains a string and zone-less `timestamp` is interpreted
  * as UTC, matching Drizzle's default PostgreSQL column modes. Spread this
- * preset into `createNeonLiveClient({ parsers })`. Per-column Drizzle modes are
+ * preset into `createRealtimeClient({ parsers })`. Per-column Drizzle modes are
  * intentionally outside this OID-only compatibility layer.
  */
 export const drizzleParsers: PostgreSQLParsers = defineParsers({

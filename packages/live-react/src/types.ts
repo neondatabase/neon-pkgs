@@ -1,15 +1,15 @@
 import type {
 	LiveQuerySnapshot,
 	MaterializedLiveQuerySubscription,
-	NeonLiveClient,
+	RealtimeClient,
 	SealedLiveQuery,
 } from "@neon/live/client";
 import type { ReactNode } from "react";
 
-/** Props accepted by {@link NeonLiveProvider}. */
-export interface NeonLiveProviderProps {
+/** Props accepted by {@link RealtimeProvider}. */
+export interface RealtimeProviderProps {
 	/** Shared browser client made available to descendant hooks. */
-	readonly client: NeonLiveClient;
+	readonly client: RealtimeClient;
 	/** React subtree that may call {@link useLiveQuery}. */
 	readonly children: ReactNode;
 }

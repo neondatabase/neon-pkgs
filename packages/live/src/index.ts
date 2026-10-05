@@ -1,19 +1,19 @@
 export * from "./client.js";
 export type {
-	NeonLiveAdapter,
-	NeonLiveDirectServer,
-	NeonLiveDirectServerOptions,
-	NeonLiveServer,
-	NeonLiveServerOptions,
 	PostgresParameterHelpers,
 	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
 	RawSqlParameter,
 	RawSqlQuery,
+	RealtimeAdapter,
+	RealtimeDirectServer,
+	RealtimeDirectServerOptions,
+	RealtimeServer,
+	RealtimeServerOptions,
 	TypedRawSqlParameter,
 } from "./server.js";
 export {
-	createNeonLive,
+	createRealtime,
 	pgParam,
 	rawSql,
 } from "./server.js";

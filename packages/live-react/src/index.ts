@@ -1,12 +1,12 @@
 /**
- * Consume materialized Neon Live subscriptions from React components.
+ * Consume materialized live-query subscriptions from React components.
  *
  * @module React
  */
 
-export { NeonLiveProvider } from "./context.js";
+export { RealtimeProvider } from "./context.js";
 export type {
-	NeonLiveProviderProps,
+	RealtimeProviderProps,
 	UseLiveQueryOptions,
 	UseLiveQueryResult,
 	UseLiveQueryUtils,

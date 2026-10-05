@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
+import { defineParsers } from "./postgres/parsers.js";
 import {
-	createNeonLiveClient,
+	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
-} from "./neon-live-client.js";
-import { defineParsers } from "./postgres/parsers.js";
+} from "./realtime-client.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
 interface MessageRow {
@@ -79,10 +79,10 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe("NeonLiveClient", () => {
+describe("RealtimeClient", () => {
 	it("materializes a baseline sync using the subscribed result schema", () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -110,7 +110,7 @@ describe("NeonLiveClient", () => {
 
 	it("preserves wire order across batches and replacement resets", () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("ordered"));
@@ -193,7 +193,7 @@ describe("NeonLiveClient", () => {
 
 	it("starts hydrated data as stale and replaces it atomically", () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"), {
@@ -219,7 +219,7 @@ describe("NeonLiveClient", () => {
 
 	it("exposes raw resets and atomic batches with every transaction ID", () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"), {
@@ -270,7 +270,7 @@ describe("NeonLiveClient", () => {
 
 	it("confirms transactions after applying them and remembers early batches", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -301,7 +301,7 @@ describe("NeonLiveClient", () => {
 
 	it("confirms transactions visible to an applied MVCC snapshot", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -360,7 +360,7 @@ describe("NeonLiveClient", () => {
 
 	it("confirms a transaction when a later reset snapshot proves it visible", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -402,13 +402,13 @@ describe("NeonLiveClient", () => {
 
 	it("times out transaction waits and rejects them when closed", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
 
 		await expect(subscription.awaitTxId("9", 1)).rejects.toThrow(
-			"Timed out waiting for Neon Live transaction 9",
+			"Timed out waiting for live-query transaction 9",
 		);
 		await expect(subscription.awaitTxId("not-a-txid")).rejects.toThrow(
 			"decimal string",
@@ -430,7 +430,7 @@ describe("NeonLiveClient", () => {
 
 	it("waits for matching materialized rows and handles an existing match", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -461,7 +461,7 @@ describe("NeonLiveClient", () => {
 
 	it("times out row waits and rejects them when closed", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"), {
@@ -469,7 +469,7 @@ describe("NeonLiveClient", () => {
 		});
 
 		await expect(subscription.awaitRows(() => false, 1)).rejects.toThrow(
-			"Timed out waiting for Neon Live rows",
+			"Timed out waiting for live-query rows",
 		);
 		await expect(subscription.awaitRows(() => false, -1)).rejects.toThrow(
 			"non-negative",
@@ -488,7 +488,7 @@ describe("NeonLiveClient", () => {
 
 	it("renews only with a sealed query for the same query", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -511,7 +511,7 @@ describe("NeonLiveClient", () => {
 
 	it("recovers the same logical subscription after its capability expires", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -570,7 +570,7 @@ describe("NeonLiveClient", () => {
 
 	it("maps permanent subscription failures to error", async () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("initial"));
@@ -596,7 +596,7 @@ describe("NeonLiveClient", () => {
 	it("contains parser failures to one subscription on a shared connection", () => {
 		useFakeWebSocket();
 		const original = new Error("application parser failed");
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			parsers: defineParsers({
 				90000: () => {
@@ -696,7 +696,7 @@ describe("NeonLiveClient", () => {
 
 	it("does not partially apply a batch when a later value fails to parse", () => {
 		useFakeWebSocket();
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			parsers: defineParsers({
 				90000: (value) => {

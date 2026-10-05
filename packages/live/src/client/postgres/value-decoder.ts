@@ -10,7 +10,7 @@ export class PostgresValueParserError extends Error {
 
 	constructor(column: WireColumn, cause: unknown) {
 		super(
-			`Neon Live could not parse result column ${JSON.stringify(column.name)} (PostgreSQL type OID ${column.type_oid})`,
+			`Realtime could not parse result column ${JSON.stringify(column.name)} (PostgreSQL type OID ${column.type_oid})`,
 			{ cause },
 		);
 		this.name = "PostgresValueParserError";
@@ -21,13 +21,13 @@ export class PostgresValueParserError extends Error {
 
 export function validateColumns(columns: readonly WireColumn[]): void {
 	if (columns.length === 0) {
-		throw new ProtocolError("Neon Live query has no result columns");
+		throw new ProtocolError("Live query has no result columns");
 	}
 	const names = new Set<string>();
 	for (const column of columns) {
 		if (!column.name || names.has(column.name)) {
 			throw new ProtocolError(
-				"Neon Live result columns must have unique names",
+				"Realtime result columns must have unique names",
 			);
 		}
 		const requiredCodec =
@@ -48,7 +48,7 @@ export function decodeRow<Row>(
 ): Row {
 	if (values.length !== columns.length) {
 		throw new ProtocolError(
-			"Neon Live row does not match its result columns",
+			"Realtime row does not match its result columns",
 		);
 	}
 	return Object.freeze(
@@ -57,7 +57,7 @@ export function decodeRow<Row>(
 				const column = columns[index];
 				if (!column) {
 					throw new ProtocolError(
-						"Neon Live row does not match its result columns",
+						"Realtime row does not match its result columns",
 					);
 				}
 				return [column.name, decodeCell(cell, column, parsers)];
@@ -76,14 +76,14 @@ function decodeCell(
 	if (column.codec === "pg_text") {
 		if (typeof cell !== "string") {
 			throw new ProtocolError(
-				"Neon Live received bytes for a text column",
+				"Realtime received bytes for a text column",
 			);
 		}
 		input = cell;
 	} else {
 		if (typeof cell === "string") {
 			throw new ProtocolError(
-				"Neon Live received text for a binary column",
+				"Realtime received text for a binary column",
 			);
 		}
 		try {

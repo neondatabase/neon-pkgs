@@ -1,28 +1,28 @@
 /**
- * Seal application-defined PostgreSQL queries as Neon Live capabilities.
+ * Seal application-defined PostgreSQL live queries on an application backend.
  *
  * @module Backend
  */
 
 export { encodeTextParameter } from "./server/adapter.js";
+export { validateLiveSelectSql } from "./server/query-validation.js";
+export { isTypedRawSqlParameter } from "./server/raw-parameter.js";
 export type {
-	NeonLiveAdapter,
-	NeonLiveDirectServer,
-	NeonLiveDirectServerOptions,
-	NeonLiveServer,
-	NeonLiveServerOptions,
 	PostgresParameterHelpers,
 	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
 	RawSqlParameter,
 	RawSqlQuery,
+	RealtimeAdapter,
+	RealtimeDirectServer,
+	RealtimeDirectServerOptions,
+	RealtimeServer,
+	RealtimeServerOptions,
 	SealedLiveQuery,
 	TypedRawSqlParameter,
-} from "./server/neon-live.js";
+} from "./server/realtime.js";
 export {
-	createNeonLive,
+	createRealtime,
 	pgParam,
 	rawSql,
-} from "./server/neon-live.js";
-export { validateLiveSelectSql } from "./server/query-validation.js";
-export { isTypedRawSqlParameter } from "./server/raw-parameter.js";
+} from "./server/realtime.js";

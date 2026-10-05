@@ -5,9 +5,9 @@ import {
 	type LiveQuerySnapshot,
 	type LiveQueryState,
 	type MaterializedLiveQuerySubscription,
-	type NeonLiveClient,
 	QueryRefreshController,
 	type RawLiveQueryRow,
+	type RealtimeClient,
 	type SealedLiveQuery,
 } from "@neon/live/client";
 import type { UseLiveQueryUtils } from "./types.js";
@@ -37,7 +37,7 @@ export class ReactLiveQueryStore<Row> {
 	readonly utils: UseLiveQueryUtils<Row>;
 
 	constructor(
-		private readonly client: NeonLiveClient,
+		private readonly client: RealtimeClient,
 		query: SealedLiveQuery<Row>,
 		initialData?: readonly Row[],
 	) {
@@ -117,7 +117,7 @@ export class ReactLiveQueryStore<Row> {
 		const subscription = this.subscription;
 		return subscription
 			? subscription.awaitRows(matches, timeout)
-			: Promise.reject(new Error("Neon Live query is not subscribed"));
+			: Promise.reject(new Error("Live query is not subscribed"));
 	};
 
 	private onReset = (listener: ResetListener<Row>): (() => void) =>
@@ -136,7 +136,7 @@ export class ReactLiveQueryStore<Row> {
 		const subscription = this.subscription;
 		return subscription
 			? subscription.awaitTxId(txid, timeout)
-			: Promise.reject(new Error("Neon Live query is not subscribed"));
+			: Promise.reject(new Error("Live query is not subscribed"));
 	};
 
 	private renew = (query: SealedLiveQuery<Row>): Promise<void> =>
@@ -207,7 +207,7 @@ class QueryRefreshError extends Error implements LiveQueryError {
 	readonly traceId = "client";
 
 	constructor(readonly cause: unknown) {
-		super("Neon Live query refresh failed");
+		super("Live query refresh failed");
 		this.name = "LiveQueryError";
 	}
 }

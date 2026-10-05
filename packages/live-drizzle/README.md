@@ -1,10 +1,10 @@
 # @neon/live-drizzle
 
 Drizzle ORM adapter for [`@neon/live`](../live). It turns a concrete Drizzle
-PostgreSQL select into the parameterized SQL accepted by the Neon Live backend
+PostgreSQL select into the parameterized SQL accepted by the Realtime backend
 SDK while preserving Drizzle's inferred result-row type.
 
-> **Status:** Neon Live is experimental. Its APIs may change before a stable
+> **Status:** Realtime is experimental. Its APIs may change before a stable
 > release.
 
 ## Install
@@ -26,7 +26,7 @@ Create the backend SDK with the Drizzle adapter, then pass a concrete select
 builder directly to `seal()`:
 
 ```ts
-import { createNeonLive } from "@neon/live/server";
+import { createRealtime } from "@neon/live/server";
 import { drizzleAdapter } from "@neon/live-drizzle";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
@@ -39,8 +39,8 @@ const messages = pgTable("messages", {
 });
 
 const db = drizzle(process.env.DATABASE_URL!);
-const neonLive = createNeonLive({
-  secret: process.env.NEON_LIVE_SECRET!,
+const realtime = createRealtime({
+  secret: process.env.NEON_REALTIME_SECRET!,
   db: "app",
   adapter: drizzleAdapter(),
 });
@@ -51,7 +51,7 @@ const query = db
   .from(messages)
   .where(eq(messages.channelId, channelId));
 
-const sealedQuery = await neonLive.seal({ query });
+const sealedQuery = await realtime.seal({ query });
 // SealedLiveQuery<{ id: number; body: string }>
 ```
 
@@ -67,7 +67,7 @@ the adapter to Drizzle's private parameter metadata.
 
 ## Result names and aliases
 
-Neon Live receives PostgreSQL result-column names, while Drizzle can map a
+Realtime receives PostgreSQL result-column names, while Drizzle can map a
 different TypeScript key without changing the SQL alias. When a selected key
 differs from its database column name, give it an explicit SQL alias matching
 the key:
@@ -88,7 +88,7 @@ hatch through `rawSql()` from `@neon/live/server`.
 
 ## API
 
-`drizzleAdapter()` returns the adapter passed to `createNeonLive({ adapter })`.
+`drizzleAdapter()` returns the adapter passed to `createRealtime({ adapter })`.
 It has no database connection of its own and never executes the query during
 sealing.
 
@@ -98,10 +98,10 @@ The separate `@neon/live-drizzle/client` entry exports browser-safe result
 parser overrides:
 
 ```ts
-import { createNeonLiveClient } from "@neon/live/client";
+import { createRealtimeClient } from "@neon/live/client";
 import { drizzleParsers } from "@neon/live-drizzle/client";
 
-const client = createNeonLiveClient({
+const client = createRealtimeClient({
   url: "wss://live.neon.tech/...",
   parsers: drizzleParsers,
 });
@@ -111,7 +111,7 @@ The preset keeps PostgreSQL `date` as a string and interprets zone-less
 `timestamp` as UTC, matching Drizzle's default PostgreSQL column modes. Other
 values use the core node-postgres-compatible defaults.
 
-Neon Live v1 deliberately selects one parser per PostgreSQL OID. It does not
+Realtime v1 deliberately selects one parser per PostgreSQL OID. It does not
 carry Drizzle's per-column modes to the browser. Applications using `date({
 mode: "date" })`, string-mode timestamps, `bigint` number/BigInt modes, numeric
 number/BigInt modes, or custom column decoders must register the corresponding

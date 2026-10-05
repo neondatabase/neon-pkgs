@@ -1,5 +1,5 @@
 /**
- * Subscribe to sealed Neon Live queries without a UI framework.
+ * Subscribe to sealed live queries without a UI framework.
  *
  * @module Client
  */

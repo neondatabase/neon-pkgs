@@ -8,7 +8,7 @@ import {
 } from "./crypto.js";
 import { queryFingerprint } from "./fingerprint.js";
 import type { NeonLiveQueryCapabilityV1 } from "./schema/neon-live-query-capability-v1.gen.js";
-import type { NeonLiveSecret } from "./secret.js";
+import type { RealtimeSecret } from "./secret.js";
 
 const SEALED_QUERY_LIFETIME_SECONDS = 60;
 const IV_BYTES = 12;
@@ -25,9 +25,9 @@ export interface IssuedSealedLiveQuery {
 type ProtectedHeader = NeonLiveQueryCapabilityV1["protected"];
 type CapabilityClaims = NeonLiveQueryCapabilityV1["claims"];
 
-/** Create a local Compact-JWE issuer backed by an opaque Neon Live secret. */
+/** Create a local Compact-JWE issuer backed by an opaque Realtime secret. */
 export function createCapabilityIssuer(
-	secret: NeonLiveSecret,
+	secret: RealtimeSecret,
 	database: string,
 	clock: () => number = Date.now,
 ): (query: PreparedLiveQuery) => Promise<IssuedSealedLiveQuery> {
@@ -101,7 +101,7 @@ async function encryptCompactJwe(
 		encodeBase64Url(tag),
 	].join(".");
 	if (utf8(token).length > MAX_TOKEN_BYTES) {
-		throw new Error("Neon Live query capability exceeds the size limit");
+		throw new Error("Live-query capability exceeds the size limit");
 	}
 	return token;
 }

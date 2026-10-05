@@ -1,5 +1,5 @@
 import {
-	createNeonLive,
+	createRealtime,
 	pgParam,
 	type SealedLiveQuery,
 } from "@neon/live/server";
@@ -40,7 +40,7 @@ const SECRET =
 describe("Kysely query adapter", () => {
 	it("seals a concrete select while preserving its inferred row type", async () => {
 		const db = createDatabase<Database>();
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			adapter: kyselyAdapter(),
@@ -51,7 +51,7 @@ describe("Kysely query adapter", () => {
 			.select(["id", "body", "note"])
 			.where("channel_id", "=", channelId);
 
-		const sealedQuery = await neonLive.seal({ query });
+		const sealedQuery = await realtime.seal({ query });
 
 		expectTypeOf(sealedQuery).toEqualTypeOf<
 			SealedLiveQuery<{

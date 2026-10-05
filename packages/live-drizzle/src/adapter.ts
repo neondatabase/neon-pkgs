@@ -1,7 +1,7 @@
 import {
 	encodeTextParameter,
-	type NeonLiveAdapter,
 	type PreparedLiveQueryParameter,
+	type RealtimeAdapter,
 	validateLiveSelectSql,
 } from "@neon/live/server";
 import {
@@ -9,15 +9,15 @@ import {
 	type ConcretePgSelectQuery,
 } from "./compat.js";
 /**
- * Prepare concrete Drizzle PostgreSQL selects for Neon Live.
+ * Prepare concrete Drizzle PostgreSQL selects as live queries.
  *
  * Drizzle supplies parameterized SQL and driver-ready values. Every parameter
  * uses OID `0`, allowing PostgreSQL to infer its type from SQL context. The
  * proxy returns result metadata when it accepts the subscription.
  *
- * @returns An adapter to pass to `createNeonLive()` on the application backend.
+ * @returns An adapter to pass to `createRealtime()` on the application backend.
  */
-export function drizzleAdapter(): NeonLiveAdapter<ConcretePgSelectQuery> {
+export function drizzleAdapter(): RealtimeAdapter<ConcretePgSelectQuery> {
 	return Object.freeze({
 		prepare(query: ConcretePgSelectQuery) {
 			const compiled = query.toSQL();

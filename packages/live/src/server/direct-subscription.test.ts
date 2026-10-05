@@ -4,7 +4,7 @@ import type {
 	RawLiveQuerySubscription,
 } from "../client/types.js";
 import { defined } from "../defined.test-helpers.js";
-import { createNeonLive, type RawSqlQuery, rawSql } from "./neon-live.js";
+import { createRealtime, type RawSqlQuery, rawSql } from "./realtime.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
 const SECRET = encodeSecret({
@@ -91,13 +91,13 @@ afterEach(() => {
 describe("trusted direct subscriptions", () => {
 	it("returns the existing materialized subscription API", async () => {
 		useFakeWebSocket();
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			url: "ws://live.test/v1",
 		});
 
-		const subscription = await neonLive.subscribe(messagesByOwner("alice"));
+		const subscription = await realtime.subscribe(messagesByOwner("alice"));
 
 		expectTypeOf(subscription).toEqualTypeOf<
 			MaterializedLiveQuerySubscription<MessageRow>
@@ -121,30 +121,30 @@ describe("trusted direct subscriptions", () => {
 
 		subscription.unsubscribe();
 		expect(subscription.getState().status).toBe("closed");
-		neonLive.close();
+		realtime.close();
 	});
 
 	it("supports raw subscriptions and closes the shared client", async () => {
 		useFakeWebSocket();
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			url: "ws://live.test/v1",
 		});
-		const materialized = await neonLive.subscribe(messagesByOwner("alice"));
-		const raw = await neonLive.subscribe(messagesByOwner("bob"), {
+		const materialized = await realtime.subscribe(messagesByOwner("alice"));
+		const raw = await realtime.subscribe(messagesByOwner("bob"), {
 			materialize: false,
 		});
 
 		expectTypeOf(raw).toEqualTypeOf<RawLiveQuerySubscription<MessageRow>>();
 		expect(FakeWebSocket.instances).toHaveLength(1);
-		neonLive.close();
-		neonLive.close();
+		realtime.close();
+		realtime.close();
 
 		expect(materialized.getState().status).toBe("closed");
 		expect(raw.getState().status).toBe("closed");
 		await expect(
-			neonLive.subscribe(messagesByOwner("carol")),
+			realtime.subscribe(messagesByOwner("carol")),
 		).rejects.toThrow("direct client is closed");
 	});
 
@@ -158,13 +158,13 @@ describe("trusted direct subscriptions", () => {
 		const prepare = vi.fn((query: AdapterQuery) =>
 			messagesByOwner(query.owner),
 		);
-		const neonLive = createNeonLive<AdapterQuery>({
+		const realtime = createRealtime<AdapterQuery>({
 			secret: SECRET,
 			db: "app",
 			url: "ws://live.test/v1",
 			adapter: { prepare },
 		});
-		const subscription = await neonLive.subscribe({ owner: "alice" });
+		const subscription = await realtime.subscribe({ owner: "alice" });
 		const socket = connectAndAdmit();
 		const initialCapability = defined(
 			socket.sent.find((message) => message.type === "subscribe"),
@@ -187,19 +187,19 @@ describe("trusted direct subscriptions", () => {
 		expect(
 			socket.sent.filter((message) => message.type === "renew"),
 		).toHaveLength(renewals.length);
-		neonLive.close();
+		realtime.close();
 	});
 
 	it("recovers one logical subscription after an outage spanning multiple capabilities", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
 		useFakeWebSocket();
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			url: "ws://live.test/v1",
 		});
-		const subscription = await neonLive.subscribe(messagesByOwner("alice"));
+		const subscription = await realtime.subscribe(messagesByOwner("alice"));
 		const first = connectAndAdmit();
 		const initialCapability = defined(
 			first.sent.find((message) => message.type === "subscribe"),
@@ -236,21 +236,21 @@ describe("trusted direct subscriptions", () => {
 			data: [{ id: 1, body: "after" }],
 		});
 		subscription.unsubscribe();
-		neonLive.close();
+		realtime.close();
 	});
 
 	it("keeps sealing-only instances free of direct client methods", () => {
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
 
-		expect("subscribe" in neonLive).toBe(false);
-		expect("close" in neonLive).toBe(false);
-		expectTypeOf(neonLive).not.toHaveProperty("subscribe");
-		expectTypeOf(neonLive).not.toHaveProperty("close");
+		expect("subscribe" in realtime).toBe(false);
+		expect("close" in realtime).toBe(false);
+		expectTypeOf(realtime).not.toHaveProperty("subscribe");
+		expectTypeOf(realtime).not.toHaveProperty("close");
 	});
 
 	it("requires a WebSocket URL when direct subscriptions are enabled", () => {
 		expect(() =>
-			createNeonLive({ secret: SECRET, db: "app", url: "" }),
+			createRealtime({ secret: SECRET, db: "app", url: "" }),
 		).toThrow("requires a WebSocket URL");
 	});
 });

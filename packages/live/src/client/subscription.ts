@@ -41,7 +41,7 @@ export class PublicLiveQueryError extends Error implements LiveQueryError {
 	constructor(
 		readonly code: string,
 		readonly retryable: boolean,
-		message = `Neon Live query failed: ${code}`,
+		message = `Live query failed: ${code}`,
 		options?: ErrorOptions,
 	) {
 		super(message, options);
@@ -146,7 +146,7 @@ export class Subscription<Row>
 	): Promise<void> => {
 		if (!this.materialized) {
 			return Promise.reject(
-				new Error("Raw Neon Live subscriptions do not expose rows"),
+				new Error("Raw live-query subscriptions do not expose rows"),
 			);
 		}
 		return waitForRows(this, matches, timeout);
@@ -157,7 +157,7 @@ export class Subscription<Row>
 	): (() => void) => {
 		if (!this.materialized) {
 			throw new Error(
-				"Raw Neon Live subscriptions do not expose snapshots",
+				"Raw live-query subscriptions do not expose snapshots",
 			);
 		}
 		return listen(this.changeListeners, listener);
@@ -166,12 +166,12 @@ export class Subscription<Row>
 	renew = (query: SealedLiveQuery<Row>): Promise<void> => {
 		if (this.closed) {
 			return Promise.reject(
-				new Error("Neon Live subscription is closed"),
+				new Error("Live-query subscription is closed"),
 			);
 		}
 		if (query.queryFingerprint !== this.query.queryFingerprint) {
 			return Promise.reject(
-				new Error("Neon Live renewal must be for the same query"),
+				new Error("Live-query renewal must be for the same query"),
 			);
 		}
 		const failedState =
@@ -242,8 +242,7 @@ export class Subscription<Row>
 	publishReset(_wireRows: readonly WireRow[], mvcc: MvccSnapshot): void {
 		if (this.closed) return;
 		const staged = this.stagedReset;
-		if (!staged)
-			throw new Error("Neon Live published an uninstalled reset");
+		if (!staged) throw new Error("Realtime published an uninstalled reset");
 		if (this.rows && staged.materializedRows) {
 			this.rows.clear();
 			for (const [rowId, row] of staged.materializedRows)
@@ -262,7 +261,7 @@ export class Subscription<Row>
 			batch.changes.length === 0
 				? (Object.freeze([]) as readonly LiveQueryChange<Row>[])
 				: this.appliedBatches.get(batch.changes);
-		if (!changes) throw new Error("Neon Live published an unapplied batch");
+		if (!changes) throw new Error("Realtime published an unapplied batch");
 		this.appliedBatches.delete(batch.changes);
 		const info = Object.freeze({ txids: batch.txids });
 		notify(this.batchListeners, changes, info);
@@ -327,7 +326,7 @@ export class Subscription<Row>
 		return Object.freeze(
 			wireRows.map((wireRow) => {
 				if (rowIds.has(wireRow.row_key)) {
-					throw new Error("Duplicate Neon Live row ID");
+					throw new Error("Duplicate Realtime row ID");
 				}
 				rowIds.add(wireRow.row_key);
 				return Object.freeze({
@@ -344,7 +343,7 @@ export class Subscription<Row>
 
 	private requireColumns(): readonly WireColumn[] {
 		if (!this.columns)
-			throw new Error("Neon Live subscription is not admitted");
+			throw new Error("Live-query subscription is not admitted");
 		return this.columns;
 	}
 

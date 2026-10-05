@@ -85,5 +85,5 @@ function encodeRawSqlParameter(
 	) {
 		return encodeTextParameter(parameter);
 	}
-	throw new Error("Invalid Neon Live raw SQL parameter");
+	throw new Error("Invalid Realtime raw SQL parameter");
 }

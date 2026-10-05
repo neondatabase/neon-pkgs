@@ -3,4 +3,4 @@ export {
 	createCapabilityIssuer,
 	type IssuedSealedLiveQuery,
 } from "./issuer.js";
-export { type NeonLiveSecret, parseNeonLiveSecret } from "./secret.js";
+export { parseRealtimeSecret, type RealtimeSecret } from "./secret.js";

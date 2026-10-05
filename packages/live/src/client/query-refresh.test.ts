@@ -128,7 +128,7 @@ describe("QueryRefreshController", () => {
 		expect(renewSubscription).not.toHaveBeenCalled();
 		expect(onRefreshExhausted).toHaveBeenCalledWith(
 			expect.objectContaining({
-				message: "Neon Live renewal must be for the same query",
+				message: "Live-query renewal must be for the same query",
 			}),
 		);
 		controller.stop();

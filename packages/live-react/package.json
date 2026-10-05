@@ -1,7 +1,7 @@
 {
   "name": "@neon/live-react",
   "version": "0.0.0",
-  "description": "React integration for Neon Live queries.",
+  "description": "React integration for live queries.",
   "keywords": [
     "neon",
     "database",

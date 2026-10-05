@@ -1,12 +1,12 @@
 # @neon/live
 
-Experimental typed SDK for sealing Neon Live queries on an application
+Experimental typed Realtime SDK for sealing live queries on an application
 backend and consuming them from browser applications. The backend turns a
 parameterized query into a short-lived encrypted bearer capability. The
 browser presents that capability over a multiplexed WebSocket and receives an
 authoritative result followed by atomic change batches.
 
-> **Status:** Neon Live is experimental. Its APIs and wire protocol may change
+> **Status:** Realtime is experimental. Its APIs and wire protocol may change
 > before a stable release.
 
 ## Install
@@ -16,15 +16,15 @@ npm install @neon/live
 ```
 
 > **Requirements:** Node.js >= 20.19 for backend sealing. You also need a
-> PostgreSQL database connected to a compatible Neon Live proxy, a server-only
-> Neon Live secret, and the proxy WebSocket URL.
+> PostgreSQL database connected to a compatible Realtime endpoint, a server-only
+> Realtime secret, and the endpoint WebSocket URL.
 
 The package has no runtime dependencies. Import browser and backend code from
 their dedicated entry points so server secrets cannot enter a browser bundle:
 
 ```ts
-import { createNeonLiveClient } from "@neon/live/client";
-import { createNeonLive } from "@neon/live/server";
+import { createRealtimeClient } from "@neon/live/client";
+import { createRealtime } from "@neon/live/server";
 ```
 
 | Entry point | Purpose |
@@ -39,15 +39,15 @@ An authenticated application endpoint constructs the exact query its caller
 may observe and returns the resulting sealed query:
 
 ```ts
-import { createNeonLive, rawSql } from "@neon/live/server";
+import { createRealtime, rawSql } from "@neon/live/server";
 
 interface Message {
   id: number;
   body: string;
 }
 
-const neonLive = createNeonLive({
-  secret: process.env.NEON_LIVE_SECRET!,
+const realtime = createRealtime({
+  secret: process.env.NEON_REALTIME_SECRET!,
   db: "app",
 });
 
@@ -59,7 +59,7 @@ app.post("/api/messages/live", async (request, response) => {
     [channelId],
   );
 
-  const sealedQuery = await neonLive.seal({ query });
+  const sealedQuery = await realtime.seal({ query });
   response.json(sealedQuery);
 });
 ```
@@ -113,27 +113,27 @@ adapter in the same way.
 ## Subscribe directly from a trusted environment
 
 A trusted, long-lived process can let the SDK hide capability issuance and
-renewal. Add the same WebSocket URL accepted by `createNeonLiveClient()`, then
+renewal. Add the same WebSocket URL accepted by `createRealtimeClient()`, then
 pass a concrete query directly to `subscribe()`:
 
 ```ts
-const neonLive = createNeonLive({
-  secret: process.env.NEON_LIVE_SECRET!,
+const realtime = createRealtime({
+  secret: process.env.NEON_REALTIME_SECRET!,
   db: "app",
   url: "wss://live.neon.tech/...",
 });
 
-const subscription = await neonLive.subscribe(
+const subscription = await realtime.subscribe(
   rawSql<Message>("select id, body from messages"),
 );
 
 const stop = subscription.onChange(({ data, status, error }) => {
-  // The same subscription API returned by createNeonLiveClient().
+  // The same subscription API returned by createRealtimeClient().
 });
 
 stop();
 subscription.unsubscribe(); // Stop this query.
-neonLive.close(); // Stop every query and close the shared WebSocket.
+realtime.close(); // Stop every query and close the shared WebSocket.
 ```
 
 Use `{ materialize: false }` as the second argument to consume raw resets and
@@ -148,10 +148,10 @@ with backoff. If the subscription expires, recovery creates a new
 wire subscription behind the same public object and returns to `live` after its
 fresh authoritative reset.
 
-This mode holds the Neon Live secret and can seal arbitrary queries. Use
+This mode holds the Realtime secret and can seal arbitrary queries. Use
 it only in trusted runtimes, never in browser code. The runtime must provide a
 standards-compatible global `WebSocket` implementation.
-`createNeonLive({ url, parsers })` accepts the same OID overrides as the
+`createRealtime({ url, parsers })` accepts the same OID overrides as the
 low-level client for trusted direct-subscription results.
 
 ## Subscribe in the browser
@@ -160,13 +160,13 @@ Fetch the sealed query from the application backend and pass it to one shared
 client:
 
 ```ts
-import { createNeonLiveClient } from "@neon/live/client";
+import { createRealtimeClient } from "@neon/live/client";
 
 const response = await fetch("/api/messages/live", { method: "POST" });
 if (!response.ok) throw new Error("Could not start live messages");
 
 const sealedQuery = await response.json();
-const client = createNeonLiveClient({
+const client = createRealtimeClient({
   url: "wss://live.neon.tech/...",
 });
 const subscription = client.subscribe(sealedQuery);
@@ -216,12 +216,12 @@ Override a parser by OID when the application uses a different representation:
 
 ```ts
 import {
-  createNeonLiveClient,
+  createRealtimeClient,
   pgTypeOids,
 } from "@neon/live/client";
 
 const customTypeOid = 90_000;
-const client = createNeonLiveClient({
+const client = createRealtimeClient({
   url: "wss://live.neon.tech/...",
   parsers: {
     [pgTypeOids.int8]: (value) => BigInt(value),
@@ -271,9 +271,9 @@ when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
-**Warning:** `awaitTxId()` resolves when Neon Live includes the transaction ID in
-a live batch or when the last successfully applied reset snapshot proves it
-visible. Neon Live does not currently acknowledge a no-op transaction after
+**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
+ID or when the last successfully applied reset snapshot proves it visible. The
+protocol does not currently acknowledge a no-op transaction after
 that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, use a timeout or avoid waiting when the mutation made
 no change.
@@ -320,9 +320,9 @@ key or retain it across resets. Transaction IDs are decimal strings so 64-bit
 values remain exact in JavaScript.
 
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
-available immediately as stale data until the first authoritative reset. Neon
-Live does not transform those rows: the application is responsible for making
-their JavaScript representation match the configured live parsers. The core
+available immediately as stale data until the first authoritative reset.
+Realtime does not transform those rows: the application is responsible for
+making their JavaScript representation match the configured live parsers. The core
 defaults align with node-postgres and Neon Serverless for built-in types, while
 the optional presets cover common driver and ORM differences. Framework date
 serialization and server/browser timezone alignment remain application
@@ -330,7 +330,7 @@ concerns.
 
 ## Integrations and examples
 
-- [`@neon/live-react`](../live-react) provides `NeonLiveProvider` and
+- [`@neon/live-react`](../live-react) provides `RealtimeProvider` and
   `useLiveQuery()`.
 - [`@neon/live-tanstack`](../live-tanstack) synchronizes a query into a TanStack
   DB collection.
@@ -341,4 +341,4 @@ concerns.
 
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
-`NEON_LIVE_SECRET` to browser code.
+`NEON_REALTIME_SECRET` to browser code.

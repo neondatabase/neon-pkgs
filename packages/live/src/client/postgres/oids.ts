@@ -1,4 +1,4 @@
-/** Stable PostgreSQL type OIDs used by the built-in Neon Live parsers. */
+/** Stable PostgreSQL type OIDs used by the built-in Realtime parsers. */
 export const pgTypeOids = Object.freeze({
 	bool: 16,
 	bytea: 17,
