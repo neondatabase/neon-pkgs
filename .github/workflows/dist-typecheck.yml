@@ -39,16 +39,16 @@ jobs:
                       dir: sdk
                     - name: "@neon/effect"
                       dir: effect
-                    - name: "@neon/live"
-                      dir: live
-                    - name: "@neon/live-react"
-                      dir: live-react
-                    - name: "@neon/live-tanstack"
-                      dir: live-tanstack
-                    - name: "@neon/live-drizzle"
-                      dir: live-drizzle
-                    - name: "@neon/live-kysely"
-                      dir: live-kysely
+                    - name: "@neon/realtime"
+                      dir: realtime
+                    - name: "@neon/realtime-react"
+                      dir: realtime-react
+                    - name: "@neon/realtime-tanstack"
+                      dir: realtime-tanstack
+                    - name: "@neon/realtime-drizzle"
+                      dir: realtime-drizzle
+                    - name: "@neon/realtime-kysely"
+                      dir: realtime-kysely
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
