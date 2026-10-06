@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
+import { defineParsers } from "./postgres/parsers.js";
 import {
 	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
 } from "./realtime-client.js";
-import { defineParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
 interface MessageRow {
@@ -121,10 +121,10 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
-	it("logs only snapshots accepted and installed by reconciliation", async () => {
+	it("logs only baseline syncs accepted and installed by reconciliation", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			logLevel: "debug",
 			logger: (entry) => events.push(entry.event),
@@ -157,48 +157,50 @@ describe("RealtimeClient", () => {
 			],
 		});
 		socket.receive({
-			type: "snapshot_start",
+			type: "baseline_sync_start",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "2",
+			baseline_sync_attempt: "2",
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
 		socket.receive({
-			type: "snapshot_start",
+			type: "baseline_sync_start",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
 		socket.receive({
-			type: "snapshot_end",
+			type: "baseline_sync_end",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "1",
+			baseline_sync_attempt: "1",
 			batch_count: 0,
 		});
 		socket.receive({
-			type: "snapshot_chunk",
+			type: "baseline_sync_batch",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "2",
+			baseline_sync_attempt: "2",
 			index: 0,
 			rows: [{ row_key: ROW_KEY, values: ["private-value"] }],
 		});
 		socket.receive({
-			type: "snapshot_end",
+			type: "baseline_sync_end",
 			live_id: "41",
 			epoch: "1",
-			snapshot_attempt: "2",
+			baseline_sync_attempt: "2",
 			batch_count: 1,
 		});
 		await Promise.resolve();
 
 		expect(
-			events.filter((event) => event === "subscription_snapshot_started"),
+			events.filter(
+				(event) => event === "subscription_baseline_sync_started",
+			),
 		).toHaveLength(1);
 		expect(events).toContain("subscription_row_decoding_failed");
-		expect(events).not.toContain("subscription_snapshot_completed");
+		expect(events).not.toContain("subscription_baseline_sync_completed");
 		expect(subscription.getSnapshot().status).toBe("error");
 		client.close();
 	});
@@ -206,14 +208,14 @@ describe("RealtimeClient", () => {
 	it("logs a reset requirement only after its publication commits", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			logLevel: "debug",
 			logger: (entry) => events.push(entry.event),
 		});
 		client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 		await Promise.resolve();
 		events.length = 0;
 
@@ -238,10 +240,10 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
-	it("queues snapshot completion before reentrant reset listeners", async () => {
+	it("queues baseline-sync completion before reentrant reset listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			logLevel: "debug",
 			logger: (entry) => events.push(entry.event),
@@ -249,32 +251,32 @@ describe("RealtimeClient", () => {
 		const subscription = client.subscribe(query("initial"));
 		subscription.onReset(() => subscription.unsubscribe());
 
-		snapshot(connectAndAdmit(), "value");
+		baselineSync(connectAndAdmit(), "value");
 		await Promise.resolve();
 
 		expect(events).toEqual(
 			expect.arrayContaining([
-				"subscription_snapshot_completed",
+				"subscription_baseline_sync_completed",
 				"subscription_unsubscribed",
 			]),
 		);
-		expect(events.indexOf("subscription_snapshot_completed")).toBeLessThan(
-			events.indexOf("subscription_unsubscribed"),
-		);
+		expect(
+			events.indexOf("subscription_baseline_sync_completed"),
+		).toBeLessThan(events.indexOf("subscription_unsubscribed"));
 		client.close();
 	});
 
 	it("queues publication commit before reentrant batch listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
-		const client = createNeonLiveClient({
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			logLevel: "debug",
 			logger: (entry) => events.push(entry.event),
 		});
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
-		snapshot(socket, "before");
+		baselineSync(socket, "before");
 		await Promise.resolve();
 		events.length = 0;
 		subscription.onBatch(() => client.close());
@@ -651,7 +653,7 @@ describe("RealtimeClient", () => {
 		const subscription = client.subscribe(query("initial"));
 
 		await expect(subscription.awaitTxId("9", 1)).rejects.toThrow(
-			"Timed out waiting for Realtime transaction 9",
+			"Timed out waiting for live-query transaction 9",
 		);
 		await expect(subscription.awaitTxId("not-a-txid")).rejects.toThrow(
 			"decimal string",
@@ -712,7 +714,7 @@ describe("RealtimeClient", () => {
 		});
 
 		await expect(subscription.awaitRows(() => false, 1)).rejects.toThrow(
-			"Timed out waiting for Realtime rows",
+			"Timed out waiting for live-query rows",
 		);
 		await expect(subscription.awaitRows(() => false, -1)).rejects.toThrow(
 			"non-negative",

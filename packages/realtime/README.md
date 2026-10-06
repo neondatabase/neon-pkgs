@@ -16,8 +16,8 @@ npm install @neon/realtime
 ```
 
 > **Requirements:** Node.js >= 20.19 for backend sealing. You also need a
-> PostgreSQL database connected to a compatible Realtime proxy, a server-only
-> Realtime secret, and the proxy WebSocket URL.
+> PostgreSQL database connected to a compatible Realtime endpoint, a server-only
+> Realtime secret, and the endpoint WebSocket URL.
 
 The package has no runtime dependencies. Import browser and backend code from
 their dedicated entry points so server secrets cannot enter a browser bundle:
@@ -47,7 +47,7 @@ interface Message {
 }
 
 const realtime = createRealtime({
-  secret: process.env.NEON_LIVE_SECRET!,
+  secret: process.env.NEON_REALTIME_SECRET!,
   db: "app",
 });
 
@@ -118,7 +118,7 @@ pass a concrete query directly to `subscribe()`:
 
 ```ts
 const realtime = createRealtime({
-  secret: process.env.NEON_LIVE_SECRET!,
+  secret: process.env.NEON_REALTIME_SECRET!,
   db: "app",
   url: "wss://live.neon.tech/...",
   logLevel: "warn",
@@ -212,7 +212,7 @@ The levels are cumulative:
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
 | `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
-| `debug` | All entries, including retry scheduling, heartbeats, snapshots, publications, and state transitions |
+| `debug` | All entries, including retry scheduling, heartbeats, baseline syncs, publications, and state transitions |
 
 Each entry has a stable `event` name:
 
@@ -331,9 +331,9 @@ when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
 until the transaction arrives or the subscription closes.
 
-**Warning:** `awaitTxId()` resolves when Realtime includes the transaction ID in
-a live batch or when the last successfully applied reset snapshot proves it
-visible. Realtime does not currently acknowledge a no-op transaction after
+**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
+ID or when the last successfully applied reset snapshot proves it visible. The
+protocol does not currently acknowledge a no-op transaction after
 that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, use a timeout or avoid waiting when the mutation made
 no change.
@@ -380,8 +380,8 @@ key or retain it across resets. Transaction IDs are decimal strings so 64-bit
 values remain exact in JavaScript.
 
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
-available immediately as stale data until the first authoritative reset. Neon
-Live does not transform those rows: the application is responsible for making
+available immediately as stale data until the first authoritative reset.
+Realtime does not transform those rows: the application is responsible for making
 their JavaScript representation match the configured live parsers. The core
 defaults align with node-postgres and Neon Serverless for built-in types, while
 the optional presets cover common driver and ORM differences. Framework date
@@ -401,4 +401,4 @@ concerns.
 
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
-`NEON_LIVE_SECRET` to browser code.
+`NEON_REALTIME_SECRET` to browser code.

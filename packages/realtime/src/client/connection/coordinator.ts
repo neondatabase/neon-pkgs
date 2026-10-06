@@ -11,9 +11,9 @@ import {
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
+	BaselineSyncPublicationReconciler,
 	type ReconciliationEventSink,
 	type ReconciliationTarget,
-	BaselineSyncPublicationReconciler,
 } from "../reconciliation/reconciler.js";
 import { ConnectionHeartbeat, type HeartbeatOptions } from "./heartbeat.js";
 import {
@@ -232,7 +232,7 @@ export class ConnectionCoordinator {
 		validateSealedQuery(query);
 		if (subscription.state === "closed") {
 			return Promise.reject(
-				new Error("Realtime subscription is closed"),
+				new Error("Live-query subscription is closed"),
 			);
 		}
 		if (subscription.state === "failed" || this.terminalConnection) {
@@ -250,7 +250,7 @@ export class ConnectionCoordinator {
 			new ConnectionCoordinatorError(
 				"renewal_superseded",
 				false,
-				"Realtime renewal was superseded by a newer sealed query",
+				"Live-query renewal was superseded by a newer sealed query",
 			),
 		);
 		const renewal = promiseWithResolvers<void>();
@@ -279,7 +279,7 @@ export class ConnectionCoordinator {
 		subscription.events.unsubscribed();
 		this.rejectRenewals(
 			subscription,
-			new Error("Realtime subscription is closed"),
+			new Error("Live-query subscription is closed"),
 		);
 		if (subscription.liveId) {
 			this.reconciler.deactivate(subscription.liveId);
@@ -932,7 +932,7 @@ function defaultWebSocketFactory(
 
 function validateSealedQuery(query: ConnectionSealedQuery): void {
 	if (!query || typeof query.capability !== "string" || !query.capability) {
-		throw new Error("Invalid Realtime sealed query");
+		throw new Error("Invalid sealed live query");
 	}
 }
 

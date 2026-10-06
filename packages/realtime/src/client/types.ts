@@ -219,7 +219,7 @@ export type RealtimeLogEntry = {
 /** Receives structured Realtime client diagnostics. */
 export type RealtimeLogger = (entry: RealtimeLogEntry) => void;
 
-/** An error reported by a Realtime subscription. */
+/** An error reported by a live-query subscription. */
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
 	readonly code: string;

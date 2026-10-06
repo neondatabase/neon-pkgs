@@ -253,7 +253,8 @@ function createSubscriptionEventSink(
 				fromStatus,
 				toStatus,
 			}),
-		baselineSyncStarted: () => emit("subscription_baseline_sync_started", metadata),
+		baselineSyncStarted: () =>
+			emit("subscription_baseline_sync_started", metadata),
 		baselineSyncCompleted: (batchCount) =>
 			emit("subscription_baseline_sync_completed", {
 				...metadata,

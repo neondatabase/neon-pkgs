@@ -184,7 +184,7 @@ export class QueryRefreshController<Row> {
 
 	private assertSameQuery(query: SealedLiveQuery<Row>): void {
 		if (query.queryFingerprint !== this.query.queryFingerprint) {
-			throw new Error("Realtime renewal must be for the same query");
+			throw new Error("Live-query renewal must be for the same query");
 		}
 	}
 

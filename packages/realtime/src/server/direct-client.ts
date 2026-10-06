@@ -3,11 +3,11 @@ import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawLiveQueryOptions,
+	RawLiveQuerySubscription,
 	RealtimeClient,
 	RealtimeLogger,
 	RealtimeLogLevel,
-	RawLiveQueryOptions,
-	RawLiveQuerySubscription,
 } from "../client/types.js";
 import {
 	type ManagedDirectSubscription,

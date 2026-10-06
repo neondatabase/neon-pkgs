@@ -17,10 +17,10 @@ import { Subscription } from "./subscription.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
-	RealtimeClient,
-	RealtimeClientOptions,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
+	RealtimeClient,
+	RealtimeClientOptions,
 } from "./types.js";
 
 export type {
@@ -31,15 +31,15 @@ export type {
 	LiveQueryState,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawLiveQueryOptions,
+	RawLiveQueryRow,
+	RawLiveQuerySubscription,
 	RealtimeClient,
 	RealtimeClientOptions,
 	RealtimeLogEntry,
 	RealtimeLogEvent,
 	RealtimeLogger,
 	RealtimeLogLevel,
-	RawLiveQueryOptions,
-	RawLiveQueryRow,
-	RawLiveQuerySubscription,
 } from "./types.js";
 
 class RealtimeClientImpl implements RealtimeClient {
@@ -107,7 +107,7 @@ class RealtimeClientImpl implements RealtimeClient {
 	): Promise<void> {
 		validateSealedQuery(query);
 		const handle = this.handles.get(subscription as Subscription<unknown>);
-		if (!handle) throw new Error("Realtime subscription is closed");
+		if (!handle) throw new Error("Live-query subscription is closed");
 		try {
 			await handle.renew(query);
 			subscription.replaceSealedQuery(query);

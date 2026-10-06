@@ -166,7 +166,7 @@ describe("QueryRefreshController", () => {
 		expect(renewSubscription).not.toHaveBeenCalled();
 		expect(onRefreshExhausted).toHaveBeenCalledWith(
 			expect.objectContaining({
-				message: "Realtime renewal must be for the same query",
+				message: "Live-query renewal must be for the same query",
 			}),
 		);
 		expect(events).not.toContain("query_refresh_callback_succeeded");
