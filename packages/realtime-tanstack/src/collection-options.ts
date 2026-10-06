@@ -1,5 +1,6 @@
 import {
 	type LiveQueryChange,
+	type LiveQueryInvalidation,
 	type LiveQueryState,
 	QueryRefreshController,
 	type RawLiveQueryRow,
@@ -19,6 +20,11 @@ import { withCollectionConfigFactory } from "@tanstack/db";
 /** Utilities attached to a Realtime-backed TanStack DB collection. */
 export interface RealtimeCollectionUtils extends UtilsRecord {
 	/**
+	 * Observe loss of continuity with previously synchronized authoritative state.
+	 * Use this to discard optimistic state not managed through `awaitTxId()`.
+	 */
+	onInvalidate(listener: (event: LiveQueryInvalidation) => void): () => void;
+	/**
 	 * Wait until this query has processed a known committed PostgreSQL transaction.
 	 * Covered row changes enter TanStack DB's causal sync queue before this resolves.
 	 *
@@ -30,7 +36,8 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * @param timeout - Optional maximum wait in milliseconds. By default, the
 	 * promise remains pending until the transaction arrives or the collection is
 	 * cleaned up.
-	 * @throws If a supplied timeout elapses or the collection is cleaned up.
+	 * @throws If a supplied timeout elapses, continuity is lost, or the
+	 * collection is cleaned up.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<boolean>;
 }
@@ -116,7 +123,14 @@ function createRealtimeCollectionOptions<
 ): RealtimeCollectionOptions<Row, Key, Schema> {
 	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
+	const invalidationListeners = new Set<
+		(event: LiveQueryInvalidation) => void
+	>();
 	const utils: RealtimeCollectionUtils = Object.freeze({
+		onInvalidate: (listener) => {
+			invalidationListeners.add(listener);
+			return () => invalidationListeners.delete(listener);
+		},
 		awaitTxId: async (txid, timeout) => {
 			const subscription = activeSubscription;
 			if (!subscription) {
@@ -306,6 +320,17 @@ function createRealtimeCollectionOptions<
 				const unsubscribeBatch = subscription.onBatch(applyBatch);
 				const unsubscribeState =
 					subscription.onStateChange(stateChanged);
+				const unsubscribeInvalidation = subscription.onInvalidate(
+					(event) => {
+						for (const listener of [...invalidationListeners]) {
+							try {
+								listener(event);
+							} catch {
+								// One collection listener cannot interrupt synchronization.
+							}
+						}
+					},
+				);
 				queryRefresh.start();
 
 				return () => {
@@ -314,6 +339,7 @@ function createRealtimeCollectionOptions<
 					unsubscribeReset();
 					unsubscribeBatch();
 					unsubscribeState();
+					unsubscribeInvalidation();
 					subscription.unsubscribe();
 					if (activeSubscription === subscription) {
 						activeSubscription = undefined;

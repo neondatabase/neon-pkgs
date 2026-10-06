@@ -84,6 +84,11 @@ response. It resolves after covered row changes enter TanStack DB's causal sync
 queue and waits indefinitely by default. Pass an optional timeout in milliseconds
 to bound the wait.
 
+Brief reconnects preserve pending waits. If a replacement baseline no longer
+continues from the previously observed state, pending waits reject. Use
+`collection.utils.onInvalidate()` to discard any other application-managed
+optimistic state before the replacement rows are applied.
+
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.
 
@@ -97,5 +102,6 @@ starts ordinary Realtime synchronization. Do not pass `initialData` to
 
 `realtimeCollectionOptions(config)` returns ordinary TanStack DB collection
 options with a Realtime-owned `sync` implementation and an additional
-`utils.awaitTxId()` method. The package also exports the corresponding config,
-options, and utilities types for reusable collection factories.
+`utils.awaitTxId()` method and `utils.onInvalidate()` event. The package also
+exports the corresponding config, options, and utilities types for reusable
+collection factories.

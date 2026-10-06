@@ -2,6 +2,7 @@ import {
 	type LiveQueryBatchInfo,
 	type LiveQueryChange,
 	type LiveQueryError,
+	type LiveQueryInvalidation,
 	type LiveQuerySnapshot,
 	type LiveQueryState,
 	type MaterializedLiveQuerySubscription,
@@ -14,6 +15,7 @@ import type { UseLiveQueryUtils } from "./types.js";
 
 type SnapshotListener<Row> = (snapshot: LiveQuerySnapshot<Row>) => void;
 type StateListener = (state: LiveQueryState) => void;
+type InvalidationListener = (event: LiveQueryInvalidation) => void;
 type ResetListener<Row> = (rows: readonly RawLiveQueryRow<Row>[]) => void;
 type BatchListener<Row> = (
 	changes: readonly LiveQueryChange<Row>[],
@@ -24,6 +26,7 @@ export class ReactLiveQueryStore<Row> {
 	private readonly reactListeners = new Set<() => void>();
 	private readonly snapshotListeners = new Set<SnapshotListener<Row>>();
 	private readonly stateListeners = new Set<StateListener>();
+	private readonly invalidationListeners = new Set<InvalidationListener>();
 	private readonly resetListeners = new Set<ResetListener<Row>>();
 	private readonly batchListeners = new Set<BatchListener<Row>>();
 	private readonly initialSnapshot: LiveQuerySnapshot<Row>;
@@ -73,6 +76,7 @@ export class ReactLiveQueryStore<Row> {
 			onReset: this.onReset,
 			onBatch: this.onBatch,
 			onStateChange: this.onStateChange,
+			onInvalidate: this.onInvalidate,
 			onChange: this.onChange,
 			awaitTxId: this.awaitTxId,
 			renew: this.renew,
@@ -129,6 +133,9 @@ export class ReactLiveQueryStore<Row> {
 	private onStateChange = (listener: StateListener): (() => void) =>
 		listen(this.stateListeners, listener);
 
+	private onInvalidate = (listener: InvalidationListener): (() => void) =>
+		listen(this.invalidationListeners, listener);
+
 	private onChange = (listener: SnapshotListener<Row>): (() => void) =>
 		listen(this.snapshotListeners, listener);
 
@@ -156,6 +163,9 @@ export class ReactLiveQueryStore<Row> {
 			subscription.onChange((snapshot) => this.update(snapshot)),
 			subscription.onStateChange((state) =>
 				notify(this.stateListeners, state),
+			),
+			subscription.onInvalidate((event) =>
+				notify(this.invalidationListeners, event),
 			),
 			subscription.onReset((rows) => notify(this.resetListeners, rows)),
 			subscription.onBatch((changes, batch) =>
@@ -202,7 +212,6 @@ export class ReactLiveQueryStore<Row> {
 			: snapshot;
 	}
 }
-
 class QueryRefreshError extends Error implements LiveQueryError {
 	readonly code = "QUERY_REFRESH_FAILED";
 	readonly retryable = false;

@@ -47,6 +47,7 @@ export interface SubscriptionEventSink {
 	baselineSyncStarted(): void;
 	baselineSyncCompleted(batchCount: number): void;
 	resetRequired(): void;
+	invalidated(reason: "continuity_lost"): void;
 }
 
 export interface ClientEventSink {

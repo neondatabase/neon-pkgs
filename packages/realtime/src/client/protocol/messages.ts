@@ -19,6 +19,7 @@ export type {
 	ChangeTarget,
 	ClientMessage,
 	Column as WireColumn,
+	ContinuityCursor,
 	Mvcc as MvccSnapshot,
 	ResetTarget,
 	Row as WireRow,

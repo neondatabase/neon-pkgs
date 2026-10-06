@@ -92,10 +92,21 @@ export class TransactionTracker {
 		}
 	}
 
+	/** Reject current waits and discard evidence without closing future waits. */
+	invalidate(error: Error): void {
+		if (this.closed) return;
+		this.rejectAll(error);
+		this.clearEvidence();
+	}
+
 	close(): void {
 		if (this.closed) return;
 		this.closed = true;
-		const error = new Error("Live-query subscription is closed");
+		this.rejectAll(new Error("Live-query subscription is closed"));
+		this.clearEvidence();
+	}
+
+	private rejectAll(error: Error): void {
 		for (const waiters of this.waiting.values()) {
 			for (const waiter of waiters) {
 				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
@@ -103,6 +114,9 @@ export class TransactionTracker {
 			}
 		}
 		this.waiting.clear();
+	}
+
+	private clearEvidence(): void {
 		this.recent.clear();
 		this.recentOrder.length = 0;
 		this.visibility = undefined;

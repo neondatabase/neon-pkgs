@@ -3,6 +3,7 @@
 import type {
 	LiveQueryBatchInfo,
 	LiveQueryChange,
+	LiveQueryInvalidation,
 	LiveQuerySnapshot,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
@@ -146,6 +147,12 @@ describe("Realtime React integration", () => {
 			matches,
 			undefined,
 		);
+		const invalidated = vi.fn();
+		observed?.utils.onInvalidate(invalidated);
+		act(() => client.latest().invalidate({ reason: "continuity_lost" }));
+		expect(invalidated).toHaveBeenCalledWith({
+			reason: "continuity_lost",
+		});
 
 		act(() => {
 			client.latest().publish({
@@ -391,6 +398,7 @@ function wireClient() {
 			receive({
 				type: "baseline_sync_start",
 				...target,
+				continuity: { history: "1".repeat(64), lsn: "0/1" },
 				mvcc: { xmin: "1", xmax: "2", xip: [] },
 			});
 			receive({
@@ -450,6 +458,9 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 		(snapshot: LiveQuerySnapshot<Row>) => void
 	>();
 	private stateListeners = new Set<(state: LiveQueryState) => void>();
+	private invalidationListeners = new Set<
+		(event: LiveQueryInvalidation) => void
+	>();
 	private resetListeners = new Set<
 		(rows: readonly RawLiveQueryRow<Row>[]) => void
 	>();
@@ -494,6 +505,10 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		add(this.stateListeners, listener);
 
+	onInvalidate = (
+		listener: (event: LiveQueryInvalidation) => void,
+	): (() => void) => add(this.invalidationListeners, listener);
+
 	awaitTxId = vi.fn(
 		async (_txid: string, _timeout?: number): Promise<void> =>
 			Promise.resolve(),
@@ -523,6 +538,10 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 		this.snapshot = snapshot;
 		for (const listener of this.stateListeners) listener(this.getState());
 		for (const listener of this.snapshotListeners) listener(snapshot);
+	}
+
+	invalidate(event: LiveQueryInvalidation): void {
+		for (const listener of this.invalidationListeners) listener(event);
 	}
 }
 

@@ -348,6 +348,7 @@ function baselineSync(
 		live_id: liveId,
 		epoch,
 		baseline_sync_attempt: "1",
+		continuity: { history: "1".repeat(64), lsn: "0/1" },
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
 	socket.receive({

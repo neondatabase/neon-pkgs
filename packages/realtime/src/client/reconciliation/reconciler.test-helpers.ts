@@ -14,6 +14,7 @@ import {
 export const ROW_A = "a".repeat(64);
 export const ROW_B = "b".repeat(64);
 export const ROW_C = "c".repeat(64);
+export const HISTORY_A = "1".repeat(64);
 
 export type MockTarget = ReconciliationTarget & {
 	[Key in keyof ReconciliationTarget]: ReturnType<typeof vi.fn>;
@@ -29,6 +30,8 @@ export function target(events: string[] = [], prefix = ""): MockTarget {
 		applyBatch: vi.fn((changes: readonly WireChange[]) =>
 			events.push(label(`apply:${changeKeys(changes)}`)),
 		),
+		installContinuity: vi.fn(),
+		advanceContinuity: vi.fn(),
 		publishReset: vi.fn((rows: readonly WireRow[]) =>
 			events.push(label(`publishReset:${keys(rows)}`)),
 		),
@@ -123,6 +126,7 @@ export function baselineSyncStart(
 		live_id: "9",
 		epoch,
 		baseline_sync_attempt: attempt,
+		continuity: { history: HISTORY_A, lsn: "0/1" },
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	};
 }
@@ -191,12 +195,13 @@ export function resetRequired(
 export function commit(
 	publicationId: string,
 	bodyCount: number,
+	lsn = "0/10",
 ): Extract<ServerMessage, { type: "commit" }> {
 	return {
 		type: "commit",
 		publication_id: publicationId,
 		body_count: bodyCount,
-		frontier: { lsn: "0/10" },
+		frontier: { lsn },
 	};
 }
 

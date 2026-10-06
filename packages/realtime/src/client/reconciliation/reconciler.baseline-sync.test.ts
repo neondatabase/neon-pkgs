@@ -7,6 +7,7 @@ import {
 	baselineSyncEnd,
 	baselineSyncStart,
 	completeEmptyBaselineSync,
+	HISTORY_A,
 	keyedPublication,
 	ROW_A,
 	ROW_B,
@@ -19,15 +20,37 @@ import {
 } from "./reconciler.test-helpers.js";
 
 describe("baseline-sync reconciliation", () => {
+	it("installs baseline continuity before exposing its authoritative reset", () => {
+		const state = target();
+		const reconciler = subscribed(state);
+		accept(reconciler, {
+			...baselineSyncStart(),
+			continuity: { history: HISTORY_A, lsn: "0/5" },
+		});
+		keyedPublication(reconciler, "p", "1", "1", [
+			upsert(ROW_A, "after-baseline"),
+		]);
+		accept(reconciler, baselineSyncEnd(0));
+
+		expect(state.installContinuity).toHaveBeenCalledWith({
+			history: HISTORY_A,
+			lsn: "0/5",
+		});
+		expect(state.advanceContinuity).toHaveBeenCalledWith("0/10");
+		expect(
+			state.installContinuity.mock.invocationCallOrder[0],
+		).toBeLessThan(state.publishReset.mock.invocationCallOrder[0] ?? 0);
+		expect(
+			state.advanceContinuity.mock.invocationCallOrder[0],
+		).toBeLessThan(state.publishReset.mock.invocationCallOrder[0] ?? 0);
+	});
+
 	it("replays every publication delivered after an exact-frontier baseline", () => {
 		const events: string[] = [];
 		const reconciler = subscribed(target(events));
 
 		accept(reconciler, {
-			type: "baseline_sync_start",
-			live_id: "9",
-			epoch: "1",
-			baseline_sync_attempt: "1",
+			...baselineSyncStart(),
 			mvcc: { xmin: "100", xmax: "105", xip: ["103"] },
 		});
 		keyedPublication(
@@ -197,10 +220,7 @@ describe("baseline-sync reconciliation", () => {
 	it("does not reinterpret a contiguous publication using snapshot MVCC metadata", () => {
 		const reconciler = subscribed(target());
 		accept(reconciler, {
-			type: "baseline_sync_start",
-			live_id: "9",
-			epoch: "1",
-			baseline_sync_attempt: "1",
+			...baselineSyncStart(),
 			mvcc: { xmin: "100", xmax: "105", xip: [] },
 		});
 		keyedPublication(reconciler, "p", "1", "1", [], ["99", "105"]);

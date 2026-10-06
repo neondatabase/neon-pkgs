@@ -17,6 +17,28 @@ import {
 } from "./reconciler.test-helpers.js";
 
 describe("publication reconciliation", () => {
+	it("advances every live target at an ordered publication frontier", () => {
+		const changed = target();
+		const unchanged = target();
+		const reconciler = subscribed(changed);
+		reconciler.add({
+			liveId: "10",
+			epoch: "1",
+			firstSequence: "1",
+			columnCount: 1,
+			target: unchanged,
+		});
+		completeEmptyBaselineSync(reconciler, "9");
+		completeEmptyBaselineSync(reconciler, "10");
+		changed.advanceContinuity.mockClear();
+		unchanged.advanceContinuity.mockClear();
+
+		keyedPublication(reconciler, "p", "1", "1", [upsert(ROW_A, "changed")]);
+
+		expect(changed.advanceContinuity).toHaveBeenCalledWith("0/10");
+		expect(unchanged.advanceContinuity).toHaveBeenCalledWith("0/10");
+	});
+
 	it("joins fragments, advances a target sequence once, and installs atomically", () => {
 		const observations: string[] = [];
 		const left = target(observations, "left");

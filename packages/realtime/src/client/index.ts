@@ -1,4 +1,9 @@
 export type {
+	LiveQueryInvalidation,
+	LiveQueryInvalidationReason,
+} from "./invalidation.js";
+export { LiveQueryInvalidatedError } from "./invalidation.js";
+export type {
 	PostgreSQLBytesParser,
 	PostgreSQLParserForOid,
 	PostgreSQLParsers,

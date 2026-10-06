@@ -45,6 +45,7 @@ export const SILENT_SUBSCRIPTION_EVENTS: SubscriptionEventSink = Object.freeze({
 	baselineSyncStarted: noop,
 	baselineSyncCompleted: noop,
 	resetRequired: noop,
+	invalidated: noop,
 });
 
 const SILENT_CONNECTION_EVENTS: ConnectionEventSink = Object.freeze({
@@ -261,6 +262,8 @@ function createSubscriptionEventSink(
 				batchCount,
 			}),
 		resetRequired: () => emit("subscription_reset_required", metadata),
+		invalidated: (reason) =>
+			emit("subscription_invalidated", { ...metadata, reason }),
 	};
 	return Object.freeze(subscription);
 }
