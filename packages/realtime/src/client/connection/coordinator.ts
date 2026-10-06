@@ -366,8 +366,8 @@ export class ConnectionCoordinator {
 			this.disconnected();
 		});
 		socket.addEventListener("error", () => {
-			if (this.socket === socket && socket.readyState < SOCKET_CLOSING) {
-				socket.close(APPLICATION_CLOSE, "connection failed");
+			if (this.socket === socket) {
+				this.closeSocket(APPLICATION_CLOSE, "connection failed");
 			}
 		});
 	}
@@ -992,8 +992,15 @@ export class ConnectionCoordinator {
 	private closeSocket(code: number, reason: string): void {
 		this.heartbeat?.stop();
 		const socket = this.socket;
-		if (socket && socket.readyState < SOCKET_CLOSING)
-			socket.close(code, reason);
+		if (!socket) return;
+		// Detach before close(): it can synchronously emit error, and a failed
+		// handshake may never emit close. Retire the wire attempt ourselves.
+		this.socket = undefined;
+		try {
+			if (socket.readyState < SOCKET_CLOSING) socket.close(code, reason);
+		} finally {
+			this.disconnected();
+		}
 	}
 
 	private cancelReconnect(): void {

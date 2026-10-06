@@ -20,6 +20,8 @@ class FakeWebSocket implements WebSocketLike {
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
 	onSend?: (message: Record<string, unknown>) => void;
+	onClose?: () => void;
+	emitCloseOnClose = true;
 	private readonly listeners = new Map<string, Set<FakeWebSocketListener>>();
 
 	constructor(_url: string, protocols: string | string[]) {
@@ -48,8 +50,9 @@ class FakeWebSocket implements WebSocketLike {
 
 	close(): void {
 		if (this.readyState >= 2) return;
+		this.onClose?.();
 		this.readyState = 3;
-		this.emit("close", {});
+		if (this.emitCloseOnClose) this.emit("close", {});
 	}
 
 	open(): void {
@@ -66,6 +69,10 @@ class FakeWebSocket implements WebSocketLike {
 		this.emit("close", {});
 	}
 
+	error(): void {
+		this.emit("error", {});
+	}
+
 	private emit(type: string, event: unknown): void {
 		for (const listener of this.listeners.get(type) ?? []) {
 			(listener as (value: unknown) => void)(event);
@@ -79,6 +86,91 @@ afterEach(() => {
 });
 
 describe("ConnectionCoordinator", () => {
+	it("recovers from a handshake error without waiting for a close event", async () => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = defined(FakeWebSocket.instances[0]);
+		first.emitCloseOnClose = false;
+		first.onClose = () => first.error();
+		const close = vi.spyOn(first, "close");
+
+		first.error();
+
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const second = admit();
+		// A late close/error from the retired socket cannot retire its replacement.
+		first.disconnect();
+		first.error();
+		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(1);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(second.readyState).toBe(1);
+		coordinator.close();
+	});
+
+	it.each([
+		"connecting",
+		"admitted",
+	])("reconnects after a %s socket emits an error synchronously from close", async (state) => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = defined(FakeWebSocket.instances[0]);
+		if (state === "admitted") admit();
+		// Node's WebSocket can emit error before close updates readyState.
+		first.onClose = () => first.error();
+		const close = vi.spyOn(first, "close");
+
+		first.error();
+
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const second = admit();
+		expect(second.sent).toEqual([
+			expect.objectContaining({
+				type: "subscribe",
+				authorization: "token",
+			}),
+		]);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(
+			state === "admitted" ? 2 : 1,
+		);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
+		expect(second.readyState).toBe(3);
+	});
+
+	it.each([
+		"connecting",
+		"admitted",
+	])("closes a %s socket without reconnecting when close emits a synchronous error", async (state) => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		if (state === "admitted") admit();
+		socket.onClose = () => socket.error();
+		const close = vi.spyOn(socket, "close");
+
+		coordinator.close();
+
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(socket.readyState).toBe(3);
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("logs connection recovery once per multiplexed connection", async () => {
 		vi.useFakeTimers();
 		const entries: Array<{ event: string; subscriptionId?: string }> = [];
