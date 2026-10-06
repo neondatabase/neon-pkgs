@@ -720,13 +720,15 @@ export class ConnectionCoordinator {
 		subscription: ManagedSubscription,
 		error: ConnectionCoordinatorError,
 	): void {
-		this.terminateSubscription(subscription, error);
-		subscription.events.failed(error);
+		this.terminateSubscription(subscription, error, () =>
+			subscription.events.failed(error),
+		);
 	}
 
 	private terminateSubscription(
 		subscription: ManagedSubscription,
 		error: ConnectionCoordinatorError,
+		beforeCallbacks?: () => void,
 	): void {
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
@@ -741,6 +743,7 @@ export class ConnectionCoordinator {
 		subscription.acceptedCapability = undefined;
 		subscription.liveId = undefined;
 		this.rejectRenewals(subscription, error);
+		beforeCallbacks?.();
 		subscription.callbacks.failed(error);
 	}
 

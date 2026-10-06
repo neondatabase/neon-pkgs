@@ -288,10 +288,8 @@ export class Subscription<Row>
 		this.setLifecycle(
 			Object.freeze({ status: "live", error: undefined }),
 			false,
+			becameLive ? () => this.events.live() : undefined,
 		);
-		if (becameLive) {
-			this.events.live();
-		}
 		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
 	}
 
@@ -373,13 +371,18 @@ export class Subscription<Row>
 		return this.parsers;
 	}
 
-	private setLifecycle(state: LiveQueryState, publishChange = true): void {
+	private setLifecycle(
+		state: LiveQueryState,
+		publishChange = true,
+		beforeListeners?: () => void,
+	): void {
 		if (this.closed && state.status !== "closed") return;
 		if (sameState(this.state, state)) return;
 		const previousStatus = this.state.status;
 		this.state = state;
 		this.snapshot = this.makeSnapshot();
 		this.events.stateChanged(previousStatus, state.status);
+		beforeListeners?.();
 		this.notify(this.stateListeners, this.state);
 		if (publishChange && this.materialized) {
 			this.notify(this.changeListeners, this.snapshot);

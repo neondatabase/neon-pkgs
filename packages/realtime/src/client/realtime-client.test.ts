@@ -266,6 +266,60 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("queues the live diagnostic before reentrant state listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		subscription.onStateChange((state) => {
+			if (state.status === "live") client.close();
+		});
+
+		baselineSync(connectAndAdmit(), "value");
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining(["subscription_live", "client_closed"]),
+		);
+		expect(events.indexOf("subscription_live")).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
+	it("queues the failure diagnostic before reentrant state listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		subscription.onStateChange((state) => {
+			if (state.status === "error") client.close();
+		});
+		const socket = connectAndAdmit();
+
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "baseline_sync_failed",
+			message: "snapshot failed",
+		});
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining(["subscription_failed", "client_closed"]),
+		);
+		expect(events.indexOf("subscription_failed")).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
 	it("queues publication commit before reentrant batch listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
