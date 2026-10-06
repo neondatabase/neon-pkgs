@@ -202,17 +202,15 @@ jittered backoff until the connection recovers or the client is closed.
 Some subscription errors also retry automatically:
 
 - `backend_overloaded` (`subscribe_rejected` or `subscription_error`): the
-  service is shedding load. The response carries `retry_after_ms`, the time
-  until the service admits that database again.
-- `subscribe_rejected` with `resource_exhausted`: the service instance is full.
-  It usually carries `retry_after_ms` as well.
-- `subscribe_rejected` with `backend_unavailable`, and `subscription_error` with
+  service instance is shedding load or is full. The response carries
+  `retry_after_ms`, the time until it admits that database again.
+- `subscribe_rejected` with `backend_unavailable` or `resource_exhausted` (a
+  service limit on this connection or process), and `subscription_error` with
   `upstream_cancelled`.
 
-After `backend_overloaded` or `resource_exhausted`, the service may also close a
-connection that has no other subscriptions, so the client can reconnect to
-another instance. The client reconnects on its own backoff and resubscribes once
-the hint has passed.
+After `backend_overloaded`, the service may also close a connection that has no
+other subscriptions, so the client can reconnect to another instance. The
+client reconnects on its own backoff and resubscribes once the hint has passed.
 
 Only the affected subscription is retried, using the current socket and latest
 sealed query; other subscriptions keep receiving updates. Its last complete
