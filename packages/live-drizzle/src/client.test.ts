@@ -1,11 +1,11 @@
-import { createNeonLiveClient, pgTypeOids } from "@neon/live/client";
+import { createRealtimeClient, pgTypeOids } from "@neon/live/client";
 import { describe, expect, it } from "vitest";
 
 import { drizzleParsers } from "./client.js";
 
 describe("drizzleParsers", () => {
-	it("is accepted by the public Neon Live client API", () => {
-		const client = createNeonLiveClient({
+	it("is accepted by the public Realtime client API", () => {
+		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 			parsers: drizzleParsers,
 		});

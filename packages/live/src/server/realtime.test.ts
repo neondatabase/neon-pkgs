@@ -2,12 +2,12 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
 import {
-	createNeonLive,
+	createRealtime,
 	pgParam,
 	type RawSqlQuery,
 	rawSql,
 	type SealedLiveQuery,
-} from "./neon-live.js";
+} from "./realtime.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
 const SECRET = encodeSecret({
@@ -26,14 +26,14 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe("Neon Live backend SDK", () => {
+describe("Realtime backend SDK", () => {
 	it("seals a typed raw SQL query without an adapter or network request", async () => {
 		const fetch = vi.fn();
 		vi.stubGlobal("fetch", fetch);
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
 		const query = messagesByOwner("alice");
 
-		const sealedQuery = await neonLive.seal({ query });
+		const sealedQuery = await realtime.seal({ query });
 
 		expectTypeOf(sealedQuery).toEqualTypeOf<SealedLiveQuery<MessageRow>>();
 		expect(sealedQuery).toMatchObject({
@@ -47,20 +47,20 @@ describe("Neon Live backend SDK", () => {
 			parameters: [{ type_oid: 0, value: "YWxpY2U=" }],
 		});
 		expect(fetch).not.toHaveBeenCalled();
-		expectTypeOf<Parameters<typeof neonLive.seal>[0]>().not.toHaveProperty(
+		expectTypeOf<Parameters<typeof realtime.seal>[0]>().not.toHaveProperty(
 			"params",
 		);
 	});
 
 	it("uses stable query fingerprints but fresh capabilities", async () => {
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
-		const first = await neonLive.seal({
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
+		const first = await realtime.seal({
 			query: messagesByOwner("alice"),
 		});
-		const repeated = await neonLive.seal({
+		const repeated = await realtime.seal({
 			query: messagesByOwner("alice"),
 		});
-		const changed = await neonLive.seal({
+		const changed = await realtime.seal({
 			query: messagesByOwner("bob"),
 		});
 
@@ -70,22 +70,22 @@ describe("Neon Live backend SDK", () => {
 	});
 
 	it("supports raw SQL without bind parameters", async () => {
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
 		const query = rawSql<MessageRow>("select id, body from messages");
 
-		await expect(neonLive.seal({ query })).resolves.toMatchObject({
+		await expect(realtime.seal({ query })).resolves.toMatchObject({
 			capability: expect.any(String),
 		});
 	});
 
 	it("encodes JavaScript null as PostgreSQL NULL", async () => {
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
 		const query = rawSql<{ readonly value: string | null }>(
 			"select $1::text as value",
 			[null],
 		);
 
-		const sealedQuery = await neonLive.seal({ query });
+		const sealedQuery = await realtime.seal({ query });
 
 		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			parameters: [{ type_oid: 0, value: null }],
@@ -93,12 +93,12 @@ describe("Neon Live backend SDK", () => {
 	});
 
 	it("includes explicit raw parameter OIDs in the capability", async () => {
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
 		const query = rawSql<{ readonly id: string }>("select $1::uuid as id", [
 			pgParam.text("uuid", "8ea9c0cc-6bf1-4d30-b85f-8415106215cf"),
 		]);
 
-		const sealedQuery = await neonLive.seal({ query });
+		const sealedQuery = await realtime.seal({ query });
 
 		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			parameters: [
@@ -117,14 +117,14 @@ describe("Neon Live backend SDK", () => {
 		const prepare = vi.fn((query: AdapterQuery) =>
 			messagesByOwner(query.owner),
 		);
-		const neonLive = createNeonLive<AdapterQuery>({
+		const realtime = createRealtime<AdapterQuery>({
 			secret: SECRET,
 			db: "app",
 			adapter: { prepare },
 		});
 
-		await neonLive.seal({ query: { owner: "adapter" } });
-		const rawSealedQuery = await neonLive.seal({
+		await realtime.seal({ query: { owner: "adapter" } });
+		const rawSealedQuery = await realtime.seal({
 			query: messagesByOwner("raw"),
 		});
 
@@ -149,18 +149,18 @@ describe("Neon Live backend SDK", () => {
 
 	it("validates raw SQL metadata before encrypting", async () => {
 		const getRandomValues = vi.spyOn(globalThis.crypto, "getRandomValues");
-		const neonLive = createNeonLive({ secret: SECRET, db: "app" });
+		const realtime = createRealtime({ secret: SECRET, db: "app" });
 		const invalid = rawSql<MessageRow>("delete from messages");
 
-		await expect(neonLive.seal({ query: invalid })).rejects.toThrow(
-			"Invalid Neon Live prepared query",
+		await expect(realtime.seal({ query: invalid })).rejects.toThrow(
+			"Invalid Realtime prepared query",
 		);
 		expect(getRandomValues).not.toHaveBeenCalled();
 	});
 
 	it("rejects invalid adapter OID hints before encrypting", async () => {
 		const getRandomValues = vi.spyOn(globalThis.crypto, "getRandomValues");
-		const neonLive = createNeonLive<object>({
+		const realtime = createRealtime<object>({
 			secret: SECRET,
 			db: "app",
 			adapter: {
@@ -171,21 +171,21 @@ describe("Neon Live backend SDK", () => {
 			},
 		});
 
-		await expect(neonLive.seal({ query: {} })).rejects.toThrow(
-			"Invalid Neon Live prepared parameter",
+		await expect(realtime.seal({ query: {} })).rejects.toThrow(
+			"Invalid Realtime prepared parameter",
 		);
 		expect(getRandomValues).not.toHaveBeenCalled();
 	});
 
-	it("requires a valid opaque Neon Live secret", () => {
+	it("requires a valid opaque Realtime secret", () => {
 		for (const secret of [
 			"",
 			"server-secret",
 			`${SECRET}=`,
 			`+${SECRET.slice(1)}`,
 		]) {
-			expect(() => createNeonLive({ secret, db: "app" })).toThrow(
-				"Invalid Neon Live secret",
+			expect(() => createRealtime({ secret, db: "app" })).toThrow(
+				"Invalid Realtime secret",
 			);
 		}
 	});

@@ -22,10 +22,10 @@ export class TransactionTracker {
 			(!Number.isFinite(timeout) || timeout < 0)
 		) {
 			throw new Error(
-				"Neon Live transaction timeout must be a non-negative number",
+				"Live-query transaction timeout must be a non-negative number",
 			);
 		}
-		if (this.closed) throw new Error("Neon Live subscription is closed");
+		if (this.closed) throw new Error("Live-query subscription is closed");
 		if (
 			this.recent.has(normalized.text) ||
 			this.appliedSnapshot?.isVisible(normalized.value)
@@ -43,7 +43,7 @@ export class TransactionTracker {
 								this.remove(normalized.text, waiter);
 								reject(
 									new Error(
-										`Timed out waiting for Neon Live transaction ${normalized.text}`,
+										`Timed out waiting for live-query transaction ${normalized.text}`,
 									),
 								);
 							}, timeout),
@@ -82,7 +82,7 @@ export class TransactionTracker {
 	close(): void {
 		if (this.closed) return;
 		this.closed = true;
-		const error = new Error("Neon Live subscription is closed");
+		const error = new Error("Live-query subscription is closed");
 		for (const waiters of this.waiting.values()) {
 			for (const waiter of waiters) {
 				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
@@ -127,11 +127,11 @@ interface ParsedMvccSnapshot {
 
 function normalizeTxid(txid: string): ParsedTxid {
 	if (typeof txid !== "string" || !/^\d+$/.test(txid)) {
-		throw new Error("Neon Live transaction ID must be a decimal string");
+		throw new Error("Live-query transaction ID must be a decimal string");
 	}
 	const parsed = BigInt(txid);
 	if (parsed > 18_446_744_073_709_551_615n) {
-		throw new Error("Neon Live transaction ID exceeds uint64");
+		throw new Error("Live-query transaction ID exceeds uint64");
 	}
 	return { text: parsed.toString(), value: parsed };
 }

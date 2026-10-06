@@ -3,9 +3,9 @@ import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
-	NeonLiveClient,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
+	RealtimeClient,
 } from "../client/types.js";
 import {
 	type ManagedDirectSubscription,
@@ -19,19 +19,19 @@ type DirectSubscription = ManagedDirectSubscription<
 /** Own the lazily loaded low-level client used by trusted subscriptions. */
 export class DirectLiveQueryClient {
 	private readonly subscriptions = new Set<DirectSubscription>();
-	private client?: NeonLiveClient;
-	private clientPromise?: Promise<NeonLiveClient>;
+	private client?: RealtimeClient;
+	private clientPromise?: Promise<RealtimeClient>;
 	private closed = false;
 
 	constructor(
 		private readonly url: string,
 		private readonly parsers: PostgreSQLParsers | undefined,
 	) {
-		if (!url) throw new Error("Neon Live requires a WebSocket URL");
+		if (!url) throw new Error("Realtime requires a WebSocket URL");
 	}
 
 	assertOpen(): void {
-		if (this.closed) throw new Error("Neon Live direct client is closed");
+		if (this.closed) throw new Error("Realtime direct client is closed");
 	}
 
 	async subscribe<Row>(
@@ -68,12 +68,12 @@ export class DirectLiveQueryClient {
 		this.client?.close();
 	}
 
-	private getClient(): Promise<NeonLiveClient> {
+	private getClient(): Promise<RealtimeClient> {
 		this.assertOpen();
-		this.clientPromise ??= import("../client/neon-live-client.js").then(
+		this.clientPromise ??= import("../client/realtime-client.js").then(
 			(module) => {
 				this.assertOpen();
-				const client = module.createNeonLiveClient({
+				const client = module.createRealtimeClient({
 					url: this.url,
 					parsers: this.parsers,
 				});
@@ -86,7 +86,7 @@ export class DirectLiveQueryClient {
 }
 
 function subscribeClient<Row>(
-	client: NeonLiveClient,
+	client: RealtimeClient,
 	query: SealedLiveQuery<Row>,
 	options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
 ): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {

@@ -1,7 +1,7 @@
 {
   "name": "@neon/live-tanstack",
   "version": "0.0.0",
-  "description": "TanStack DB integration for Neon Live queries.",
+  "description": "TanStack DB integration for live queries.",
   "keywords": [
     "neon",
     "database",

@@ -1,7 +1,7 @@
 {
   "name": "@neon/live",
   "version": "0.0.0",
-  "description": "Typed backend and browser SDKs for Neon Live queries.",
+  "description": "Typed backend and browser SDKs for live queries.",
   "keywords": [
     "neon",
     "database",

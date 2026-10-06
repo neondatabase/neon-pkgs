@@ -1,10 +1,10 @@
 # @neon/live-react
 
 React integration for [`@neon/live`](../live). It provides one shared
-`NeonLiveClient` through context and exposes materialized subscriptions through
+`RealtimeClient` through context and exposes materialized subscriptions through
 `useLiveQuery()`.
 
-> **Status:** Neon Live is experimental. Its APIs may change before a stable
+> **Status:** Realtime is experimental. Its APIs may change before a stable
 > release.
 
 ## Install
@@ -21,15 +21,15 @@ npm install @neon/live @neon/live-react react
 Create one client for the browser application and provide it near the root:
 
 ```tsx
-import { createNeonLiveClient } from "@neon/live/client";
-import { NeonLiveProvider } from "@neon/live-react";
+import { createRealtimeClient } from "@neon/live/client";
+import { RealtimeProvider } from "@neon/live-react";
 
-const client = createNeonLiveClient({
+const client = createRealtimeClient({
   url: "wss://live.neon.tech/...",
 });
 
 export function Root({ children }: { children: React.ReactNode }) {
-  return <NeonLiveProvider client={client}>{children}</NeonLiveProvider>;
+  return <RealtimeProvider client={client}>{children}</RealtimeProvider>;
 }
 ```
 
@@ -89,13 +89,13 @@ a new logical query; changing only the refresh callback does not.
 
 For SSR, execute the same query on the server and pass its rows as
 `initialData`. React renders them immediately as stale data, and the first
-authoritative Neon Live reset reconciles any intervening changes.
+authoritative live-query reset reconciles any intervening changes.
 
 ### Optimistic mutations
 
-React's `useOptimistic()` can overlay application-defined changes while Neon
-Live remains the authoritative source. Keep the optimistic Action pending until
-the subscription has applied the mutation's PostgreSQL transaction:
+React's `useOptimistic()` can overlay application-defined changes while
+Realtime remains the authoritative source. Keep the optimistic Action pending
+until the subscription has applied the mutation's PostgreSQL transaction:
 
 ```tsx
 import { startTransition, useOptimistic } from "react";
@@ -125,9 +125,9 @@ such as `toggle`. This makes them safe when React rebases a still-pending Action
 over newer authoritative rows. `awaitTxId()` also handles the race where the
 live batch arrives before the mutation response.
 
-**Warning:** `awaitTxId()` resolves when Neon Live includes the transaction ID in
-a live batch or when the last successfully applied reset snapshot proves it
-visible. Neon Live does not currently acknowledge a no-op transaction after
+**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
+ID or when the last successfully applied reset snapshot proves it visible. The
+protocol does not currently acknowledge a no-op transaction after
 that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, pass a timeout or avoid waiting when the mutation
 endpoint reports that no change was made.
@@ -154,7 +154,7 @@ subscription closes or enters a terminal error.
 
 ## API
 
-- `NeonLiveProvider` supplies one existing `NeonLiveClient` to descendant
+- `RealtimeProvider` supplies one existing `RealtimeClient` to descendant
   hooks. It does not fetch sealed queries or own the client's lifetime.
 - `useLiveQuery(query, options)` owns one materialized subscription and
   cleans it up when the component unmounts or the sealed query changes.

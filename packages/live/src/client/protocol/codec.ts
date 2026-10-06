@@ -30,7 +30,7 @@ const validateServerMessage =
 
 export class ProtocolError extends Error {
 	constructor(message: string) {
-		super(`Invalid Neon Live protocol message: ${message}`);
+		super(`Invalid Realtime protocol message: ${message}`);
 		this.name = "ProtocolError";
 	}
 }

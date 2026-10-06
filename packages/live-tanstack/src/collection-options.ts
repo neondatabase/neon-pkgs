@@ -1,10 +1,10 @@
 import {
 	type LiveQueryChange,
 	type LiveQueryState,
-	type NeonLiveClient,
 	QueryRefreshController,
 	type RawLiveQueryRow,
 	type RawLiveQuerySubscription,
+	type RealtimeClient,
 	type SealedLiveQuery,
 } from "@neon/live/client";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
@@ -16,15 +16,15 @@ import type {
 } from "@tanstack/db";
 import { withCollectionConfigFactory } from "@tanstack/db";
 
-/** Utilities attached to a Neon Live-backed TanStack DB collection. */
-export interface NeonLiveCollectionUtils extends UtilsRecord {
+/** Utilities attached to a Realtime-backed TanStack DB collection. */
+export interface RealtimeCollectionUtils extends UtilsRecord {
 	/**
 	 * Wait until the matching PostgreSQL transaction has entered TanStack DB's
 	 * causal sync queue.
 	 *
 	 * @remarks
 	 * This resolves for transaction IDs included in a live batch or proven
-	 * visible by the last successfully applied reset snapshot. Neon Live does
+	 * visible by the last successfully applied reset snapshot. The protocol does
 	 * not currently acknowledge a no-op transaction after that snapshot. It can
 	 * resolve only if a later reset proves it visible; otherwise it remains
 	 * pending until the optional timeout elapses or the collection is cleaned up.
@@ -39,7 +39,7 @@ export interface NeonLiveCollectionUtils extends UtilsRecord {
 }
 
 /**
- * Configuration for a Neon Live-backed TanStack DB collection.
+ * Configuration for a Realtime-backed TanStack DB collection.
  *
  * The adapter owns `sync`, uses eager synchronization, and supplies its own
  * collection utilities.
@@ -48,16 +48,16 @@ export interface NeonLiveCollectionUtils extends UtilsRecord {
  * @typeParam Key - Stable key returned by `getKey`.
  * @typeParam Schema - Optional Standard Schema used by TanStack DB.
  */
-export interface NeonLiveCollectionConfig<
+export interface RealtimeCollectionConfig<
 	Row extends object,
 	Key extends string | number = string | number,
 	Schema extends StandardSchemaV1 = never,
 > extends Omit<
-		BaseCollectionConfig<Row, Key, Schema, NeonLiveCollectionUtils, void>,
+		BaseCollectionConfig<Row, Key, Schema, RealtimeCollectionUtils, void>,
 		"syncMode" | "utils"
 	> {
-	/** Reusable low-level Neon Live client. */
-	readonly client: NeonLiveClient;
+	/** Reusable low-level Realtime client. */
+	readonly client: RealtimeClient;
 	/** Initial query for the exact query backing this collection. */
 	readonly query: SealedLiveQuery<Row>;
 	/**
@@ -70,66 +70,66 @@ export interface NeonLiveCollectionConfig<
 }
 
 /**
- * TanStack DB collection options produced by {@link neonLiveCollectionOptions}.
+ * TanStack DB collection options produced by {@link realtimeCollectionOptions}.
  *
  * @typeParam Row - Object row synchronized into the collection.
  * @typeParam Key - Stable key for a collection row.
  * @typeParam Schema - Optional Standard Schema used by TanStack DB.
  */
-export type NeonLiveCollectionOptions<
+export type RealtimeCollectionOptions<
 	Row extends object,
 	Key extends string | number,
 	Schema extends StandardSchemaV1,
 > = Omit<
-	CollectionConfig<Row, Key, Schema, NeonLiveCollectionUtils>,
+	CollectionConfig<Row, Key, Schema, RealtimeCollectionUtils>,
 	"utils"
 > & {
-	/** Neon Live-specific transaction-confirmation utility. */
-	readonly utils: NeonLiveCollectionUtils;
+	/** Realtime-specific transaction-confirmation utility. */
+	readonly utils: RealtimeCollectionUtils;
 };
 
 /**
- * Create TanStack DB collection options backed by a raw Neon Live subscription.
+ * Create TanStack DB collection options backed by a raw live-query subscription.
  * Resets and committed publication batches are applied atomically.
  *
  * @typeParam Row - Object row synchronized into the collection.
  * @typeParam Key - Stable key returned by `getKey`.
  * @typeParam Schema - Optional Standard Schema used by TanStack DB.
- * @param config - Neon Live subscription settings and ordinary TanStack DB
+ * @param config - Live-query subscription settings and ordinary TanStack DB
  * collection options.
  * @returns Collection options to pass to TanStack DB's `createCollection()`.
  */
-export function neonLiveCollectionOptions<
+export function realtimeCollectionOptions<
 	Row extends object,
 	Key extends string | number = string | number,
 	Schema extends StandardSchemaV1 = never,
 >(
-	config: NeonLiveCollectionConfig<Row, Key, Schema>,
-): NeonLiveCollectionOptions<Row, Key, Schema> {
-	const createOptions = () => createNeonLiveCollectionOptions(config);
+	config: RealtimeCollectionConfig<Row, Key, Schema>,
+): RealtimeCollectionOptions<Row, Key, Schema> {
+	const createOptions = () => createRealtimeCollectionOptions(config);
 	return withCollectionConfigFactory(createOptions(), createOptions);
 }
 
-function createNeonLiveCollectionOptions<
+function createRealtimeCollectionOptions<
 	Row extends object,
 	Key extends string | number,
 	Schema extends StandardSchemaV1,
 >(
-	config: NeonLiveCollectionConfig<Row, Key, Schema>,
-): NeonLiveCollectionOptions<Row, Key, Schema> {
+	config: RealtimeCollectionConfig<Row, Key, Schema>,
+): RealtimeCollectionOptions<Row, Key, Schema> {
 	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
-	const utils: NeonLiveCollectionUtils = Object.freeze({
+	const utils: RealtimeCollectionUtils = Object.freeze({
 		awaitTxId: async (txid, timeout) => {
 			const subscription = activeSubscription;
 			if (!subscription) {
-				throw new Error("Neon Live collection is not syncing");
+				throw new Error("Realtime collection is not syncing");
 			}
 			try {
 				await subscription.awaitTxId(txid, timeout);
 			} catch (error) {
 				if (activeSubscription !== subscription) {
-					throw new Error("Neon Live collection was cleaned up", {
+					throw new Error("Realtime collection was cleaned up", {
 						cause: error,
 					});
 				}
@@ -139,7 +139,7 @@ function createNeonLiveCollectionOptions<
 		},
 	});
 
-	const options: NeonLiveCollectionOptions<Row, Key, Schema> = {
+	const options: RealtimeCollectionOptions<Row, Key, Schema> = {
 		...baseConfig,
 		syncMode: "eager",
 		utils,
@@ -197,7 +197,7 @@ function createNeonLiveCollectionOptions<
 							const key = config.getKey(row);
 							if (nextRowIds.has(rowId)) {
 								throw new Error(
-									`Duplicate Neon Live row ID: ${rowId}`,
+									`Duplicate Realtime row ID: ${rowId}`,
 								);
 							}
 							if (nextKeys.has(key)) {
@@ -245,7 +245,7 @@ function createNeonLiveCollectionOptions<
 									keyOwner !== change.rowId
 								) {
 									throw new Error(
-										`Neon Live upserted an existing key: ${String(key)}`,
+										`Realtime upserted an existing key: ${String(key)}`,
 									);
 								}
 								if (previousKey === undefined) {
@@ -277,7 +277,7 @@ function createNeonLiveCollectionOptions<
 								const key = nextRowIds.get(change.rowId);
 								if (key === undefined) {
 									throw new Error(
-										`Neon Live deleted an unknown row ID: ${change.rowId}`,
+										`Realtime deleted an unknown row ID: ${change.rowId}`,
 									);
 								}
 								nextRowIds.delete(change.rowId);

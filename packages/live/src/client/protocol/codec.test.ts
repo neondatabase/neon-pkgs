@@ -43,7 +43,7 @@ function rejectServerMessage(value: unknown): void {
 	expect(() => decodeServerMessage(text)).toThrow(ProtocolError);
 }
 
-describe("Neon Live v1 JSON codec", () => {
+describe("Realtime v1 JSON codec", () => {
 	it("decodes every valid server fixture", () => {
 		const validServerFixtures = fixtures.valid.filter(({ type }) =>
 			SERVER_TYPES.has(type),

@@ -1,6 +1,6 @@
 import {
-	type NeonLiveAdapter,
 	type PreparedLiveQuery,
+	type RealtimeAdapter,
 	validateLiveSelectSql,
 } from "@neon/live/server";
 import {
@@ -19,15 +19,15 @@ interface KyselySelectQuery {
 }
 
 /**
- * Prepare concrete Kysely selects for Neon Live.
+ * Prepare concrete Kysely selects as live queries.
  *
  * The adapter compiles Kysely's operation tree with its PostgreSQL compiler,
  * then encodes the raw parameters using node-postgres-compatible rules. It
  * never connects to or executes against the configured Kysely database.
  *
- * @returns An adapter to pass to `createNeonLive()` on the application backend.
+ * @returns An adapter to pass to `createRealtime()` on the application backend.
  */
-export function kyselyAdapter(): NeonLiveAdapter<KyselySelectQuery> {
+export function kyselyAdapter(): RealtimeAdapter<KyselySelectQuery> {
 	return Object.freeze({
 		prepare(query: KyselySelectQuery): PreparedLiveQuery {
 			const queryNode = query.toOperationNode();

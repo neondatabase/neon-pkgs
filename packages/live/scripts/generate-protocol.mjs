@@ -35,7 +35,7 @@ ajv.addSchema(schema);
 
 const schemaId = schema.$id;
 if (typeof schemaId !== "string") {
-  throw new Error("Neon Live protocol schema must define $id");
+  throw new Error("Realtime protocol schema must define $id");
 }
 
 // Ajv delegates Unicode-aware string lengths to a CommonJS runtime helper.
@@ -59,7 +59,7 @@ const schemaPatterns = {
   u64: schema.$defs?.u64?.pattern,
 };
 if (Object.values(schemaPatterns).some((pattern) => typeof pattern !== "string")) {
-  throw new Error("Neon Live protocol schema is missing a generated error pattern");
+  throw new Error("Realtime protocol schema is missing a generated error pattern");
 }
 
 const validatorGeneratedSource = [

@@ -1,5 +1,5 @@
 /**
- * Define Neon Live queries from Drizzle PostgreSQL select builders.
+ * Define live queries from Drizzle PostgreSQL select builders.
  *
  * @module Drizzle
  */

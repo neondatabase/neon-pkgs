@@ -1,4 +1,4 @@
-import { createNeonLive, type SealedLiveQuery } from "@neon/live/server";
+import { createRealtime, type SealedLiveQuery } from "@neon/live/server";
 import { and, eq, gte, sql } from "drizzle-orm";
 import {
 	bigint,
@@ -103,7 +103,7 @@ describe("concrete Drizzle query adapter", () => {
 	it("uses Drizzle's SQL and driver-ready values with OID zero", async () => {
 		const fetch = vi.fn();
 		vi.stubGlobal("fetch", fetch);
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			adapter: drizzleAdapter(),
@@ -127,7 +127,7 @@ describe("concrete Drizzle query adapter", () => {
 				),
 			);
 
-		const sealedQuery = await neonLive.seal({ query });
+		const sealedQuery = await realtime.seal({ query });
 
 		expectTypeOf(sealedQuery).toEqualTypeOf<
 			SealedLiveQuery<{
@@ -159,7 +159,7 @@ describe("concrete Drizzle query adapter", () => {
 	});
 
 	it("fingerprints the separately bound values", async () => {
-		const neonLive = createNeonLive({
+		const realtime = createRealtime({
 			secret: SECRET,
 			db: "app",
 			adapter: drizzleAdapter(),
@@ -170,9 +170,9 @@ describe("concrete Drizzle query adapter", () => {
 				.from(messages)
 				.where(eq(messages.channelId, channelId));
 
-		const first = await neonLive.seal({ query: query("general") });
-		const repeated = await neonLive.seal({ query: query("general") });
-		const changed = await neonLive.seal({ query: query("random") });
+		const first = await realtime.seal({ query: query("general") });
+		const repeated = await realtime.seal({ query: query("general") });
+		const changed = await realtime.seal({ query: query("random") });
 
 		expect(first.queryFingerprint).toBe(repeated.queryFingerprint);
 		expect(first.queryFingerprint).not.toBe(changed.queryFingerprint);

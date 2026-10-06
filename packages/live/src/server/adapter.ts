@@ -10,7 +10,7 @@ export interface PreparedLiveQueryParameter {
 	readonly value: string | null;
 }
 
-/** Adapter-independent query encrypted into a Neon Live capability. */
+/** Adapter-independent query encrypted into a live-query capability. */
 export interface PreparedLiveQuery {
 	/** Parameterized SQL. Adapters must never interpolate runtime values here. */
 	readonly sql: string;
@@ -19,11 +19,11 @@ export interface PreparedLiveQuery {
 }
 
 /**
- * Converts an ORM-native query into Neon Live's prepared representation.
+ * Converts an ORM-native query into the prepared live-query representation.
  *
  * @typeParam Query - Query object accepted by the adapter.
  */
-export interface NeonLiveAdapter<Query> {
+export interface RealtimeAdapter<Query> {
 	/**
 	 * Convert an adapter-native query into parameterized SQL and text-format
 	 * parameter values. Adapters may supply PostgreSQL type OID hints; `0`
@@ -41,7 +41,7 @@ export function validatePreparedQuery(query: PreparedLiveQuery): void {
 		utf8(query.sql).length > MAX_SQL_BYTES ||
 		query.parameters.length > MAX_PARAMETERS
 	) {
-		throw new Error("Invalid Neon Live prepared query");
+		throw new Error("Invalid Realtime prepared query");
 	}
 	for (const parameter of query.parameters) {
 		if (
@@ -56,7 +56,7 @@ export function validatePreparedQuery(query: PreparedLiveQuery): void {
 					utf8(parameter.value).length <= MAX_PARAMETER_BYTES)
 			)
 		) {
-			throw new Error("Invalid Neon Live prepared parameter");
+			throw new Error("Invalid Realtime prepared parameter");
 		}
 	}
 }

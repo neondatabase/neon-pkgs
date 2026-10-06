@@ -1,10 +1,10 @@
 # @neon/live-tanstack
 
-TanStack DB integration for [`@neon/live`](../live). It consumes raw Neon Live
+TanStack DB integration for [`@neon/live`](../live). It consumes raw live-query
 events while TanStack DB owns collection materialization and local reactive
 queries.
 
-> **Status:** Neon Live is experimental. Its APIs may change before a stable
+> **Status:** Realtime is experimental. Its APIs may change before a stable
 > release.
 
 ## Install
@@ -18,20 +18,20 @@ npm install @neon/live @neon/live-tanstack @tanstack/db @standard-schema/spec
 
 ## Usage
 
-Create a collection from a shared Neon Live client and a sealed query returned
+Create a collection from a shared Realtime client and a sealed query returned
 by the application backend:
 
 ```ts
-import { createNeonLiveClient } from "@neon/live/client";
-import { neonLiveCollectionOptions } from "@neon/live-tanstack";
+import { createRealtimeClient } from "@neon/live/client";
+import { realtimeCollectionOptions } from "@neon/live-tanstack";
 import { createCollection } from "@tanstack/db";
 
-const client = createNeonLiveClient({
+const client = createRealtimeClient({
   url: "wss://live.neon.tech/...",
 });
 const query = await sealTodos();
 
-export const todos = createCollection(neonLiveCollectionOptions({
+export const todos = createCollection(realtimeCollectionOptions({
   id: "todos",
   client,
   query,
@@ -46,7 +46,7 @@ as `id`, `schema`, garbage collection, collation, and mutation handlers are
 forwarded to TanStack DB.
 
 The integration synchronizes eagerly. It applies each authoritative reset or
-Neon Live publication batch as one TanStack sync transaction. Neon Live
+live-query publication batch as one TanStack sync transaction. Realtime
 `connecting` maps to a loading collection and `live` maps to ready. A stale
 subscription keeps its usable collection ready during recovery; terminal errors
 put the collection into its error state.
@@ -55,10 +55,10 @@ put the collection into its error state.
 
 Use TanStack DB mutation handlers normally. Have the application mutation
 endpoint return the PostgreSQL transaction ID captured inside the write
-transaction, then explicitly wait for Neon Live to observe it:
+transaction, then explicitly wait for the live query to observe it:
 
 ```ts
-const todos = createCollection(neonLiveCollectionOptions({
+const todos = createCollection(realtimeCollectionOptions({
   id: "todos",
   client,
   query,
@@ -83,9 +83,9 @@ response. It resolves once the batch has entered TanStack DB's causal sync queue
 and waits indefinitely by default. Pass an optional timeout in milliseconds to
 bound the wait.
 
-**Warning:** `awaitTxId()` resolves when Neon Live includes the transaction ID in
-a live batch or when the last successfully applied reset snapshot proves it
-visible. Neon Live does not currently acknowledge a no-op transaction after
+**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
+ID or when the last successfully applied reset snapshot proves it visible. The
+protocol does not currently acknowledge a no-op transaction after
 that snapshot. It can resolve only if a later reset proves it visible; because
 resets may be infrequent, pass a timeout when an indefinitely pending wait would
 be undesirable.
@@ -93,12 +93,12 @@ be undesirable.
 For SSR, use TanStack DB's normal `DbClient`, dehydration, and
 `HydrationBoundary` APIs with stable collection IDs. The server seeds a
 request-scoped collection with the initial rows; the browser hydrates it and
-starts ordinary Neon Live synchronization. Do not pass `initialData` to
-`neonLiveCollectionOptions()` because TanStack DB owns collection hydration.
+starts ordinary Realtime synchronization. Do not pass `initialData` to
+`realtimeCollectionOptions()` because TanStack DB owns collection hydration.
 
 ## API
 
-`neonLiveCollectionOptions(config)` returns ordinary TanStack DB collection
-options with a Neon Live-owned `sync` implementation and an additional
+`realtimeCollectionOptions(config)` returns ordinary TanStack DB collection
+options with a Realtime-owned `sync` implementation and an additional
 `utils.awaitTxId()` method. The package also exports the corresponding config,
 options, and utilities types for reusable collection factories.

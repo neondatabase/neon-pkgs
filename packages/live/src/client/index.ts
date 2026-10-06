@@ -1,4 +1,3 @@
-export { createNeonLiveClient } from "./neon-live-client.js";
 export type {
 	PostgreSQLBytesParser,
 	PostgreSQLParserForOid,
@@ -11,6 +10,7 @@ export {
 	pgTypeOids,
 	postgresJsParsers,
 } from "./postgres/index.js";
+export { createRealtimeClient } from "./realtime-client.js";
 export type { SealedLiveQuery } from "./sealed-query.js";
 export type {
 	LiveQueryBatchInfo,
@@ -20,9 +20,9 @@ export type {
 	LiveQueryState,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
-	NeonLiveClient,
-	NeonLiveClientOptions,
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RealtimeClient,
+	RealtimeClientOptions,
 } from "./types.js";

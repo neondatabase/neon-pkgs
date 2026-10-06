@@ -1,7 +1,7 @@
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
-/** An error reported by a Neon Live subscription. */
+/** An error reported by a live-query subscription. */
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
 	readonly code: string;
@@ -41,7 +41,7 @@ export interface LiveQueryBatchInfo {
 }
 
 /**
- * A row in a raw reset, paired with its opaque Neon Live identity.
+ * A row in a raw reset, paired with its opaque live-query identity.
  *
  * @typeParam Row - Row produced by the subscribed query.
  */
@@ -131,7 +131,7 @@ export interface RawLiveQuerySubscription<Row> {
 	 *
 	 * @remarks
 	 * This resolves for transaction IDs included in a live batch or proven
-	 * visible by the last successfully applied reset snapshot. Neon Live does
+	 * visible by the last successfully applied reset snapshot. The protocol does
 	 * not currently acknowledge a no-op transaction after that snapshot. It can
 	 * resolve only if a later reset proves it visible; otherwise it remains
 	 * pending until the timeout elapses or the subscription closes.
@@ -193,10 +193,10 @@ export interface MaterializedLiveQuerySubscription<Row>
 	onChange(listener: (snapshot: LiveQuerySnapshot<Row>) => void): () => void;
 }
 
-/** Configuration for a reusable Neon Live browser client. */
-export interface NeonLiveClientOptions {
+/** Configuration for a reusable Realtime browser client. */
+export interface RealtimeClientOptions {
 	/**
-	 * Neon Live proxy WebSocket URL, using `wss:` outside local development.
+	 * Realtime proxy WebSocket URL, using `wss:` outside local development.
 	 */
 	readonly url: string;
 	/**
@@ -209,7 +209,7 @@ export interface NeonLiveClientOptions {
 }
 
 /** A client that multiplexes independently disposable subscriptions. */
-export interface NeonLiveClient {
+export interface RealtimeClient {
 	/**
 	 * Start a materialized subscription, optionally with preloaded rows.
 	 *

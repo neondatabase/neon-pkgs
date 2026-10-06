@@ -7,13 +7,13 @@ import type {
 	RawLiveQuerySubscription,
 } from "../client/types.js";
 import {
-	type NeonLiveAdapter,
 	type PreparedLiveQuery,
+	type RealtimeAdapter,
 	validatePreparedQuery,
 } from "./adapter.js";
 import {
 	createCapabilityIssuer,
-	parseNeonLiveSecret,
+	parseRealtimeSecret,
 } from "./capability/index.js";
 import { DirectLiveQueryClient } from "./direct-client.js";
 import {
@@ -24,9 +24,9 @@ import {
 
 export type { SealedLiveQuery } from "../client/sealed-query.js";
 export type {
-	NeonLiveAdapter,
 	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
+	RealtimeAdapter,
 } from "./adapter.js";
 export type {
 	PostgresParameterHelpers,
@@ -57,11 +57,11 @@ type SealInput<Query> = { readonly query: Query };
 type SealableQuery<Query> = Query | RawSqlQuery<unknown>;
 
 /**
- * Server-only Neon Live capability issuer.
+ * Server-only Realtime capability issuer.
  *
  * @typeParam Query - Query object accepted by the configured adapter.
  */
-export interface NeonLiveServer<Query> {
+export interface RealtimeServer<Query> {
 	/**
 	 * Encrypt a concrete query as a short-lived sealed query.
 	 *
@@ -89,7 +89,7 @@ export interface NeonLiveServer<Query> {
  *
  * @typeParam Query - Query object accepted by the configured adapter.
  */
-export interface NeonLiveDirectServer<Query> extends NeonLiveServer<Query> {
+export interface RealtimeDirectServer<Query> extends RealtimeServer<Query> {
 	/**
 	 * Subscribe to a query and retain its current materialized rows.
 	 *
@@ -121,12 +121,12 @@ export interface NeonLiveDirectServer<Query> extends NeonLiveServer<Query> {
 }
 
 /**
- * Configuration for a server-only Neon Live capability issuer.
+ * Configuration for a server-only Realtime capability issuer.
  *
  * @typeParam Query - Query object accepted by the optional adapter.
  */
-export interface NeonLiveServerOptions<Query> {
-	/** Opaque server-only credential issued by Neon Live. */
+export interface RealtimeServerOptions<Query> {
+	/** Opaque server-only credential issued by Realtime. */
 	readonly secret: string;
 	/**
 	 * PostgreSQL database for this SDK instance.
@@ -136,14 +136,14 @@ export interface NeonLiveServerOptions<Query> {
 	 */
 	readonly db: string;
 	/** Adapter for ORM-native queries; omit when sealing only raw SQL. */
-	readonly adapter?: NeonLiveAdapter<Query>;
+	readonly adapter?: RealtimeAdapter<Query>;
 }
 
 /** Configuration that enables trusted direct-query subscriptions. */
-export interface NeonLiveDirectServerOptions<Query>
-	extends NeonLiveServerOptions<Query> {
+export interface RealtimeDirectServerOptions<Query>
+	extends RealtimeServerOptions<Query> {
 	/**
-	 * Neon Live WebSocket endpoint URL. Supplying it adds `subscribe()` and
+	 * Realtime WebSocket endpoint URL. Supplying it adds `subscribe()` and
 	 * `close()` to the returned SDK.
 	 */
 	readonly url: string;
@@ -152,7 +152,7 @@ export interface NeonLiveDirectServerOptions<Query>
 }
 
 /**
- * Create a server-only Neon Live SDK.
+ * Create a server-only Realtime SDK.
  *
  * `seal()` performs local encryption and no network requests. Supplying a
  * WebSocket `url` additionally enables trusted direct subscriptions that mint
@@ -166,19 +166,19 @@ export interface NeonLiveDirectServerOptions<Query>
  * when `url` is present.
  * @throws If the secret or database name is invalid.
  */
-export function createNeonLive<Query = RawSqlQuery<unknown>>(
-	options: NeonLiveDirectServerOptions<Query>,
-): NeonLiveDirectServer<Query>;
-export function createNeonLive<Query = RawSqlQuery<unknown>>(
-	options: NeonLiveServerOptions<Query>,
-): NeonLiveServer<Query>;
-export function createNeonLive<Query = RawSqlQuery<unknown>>(
-	options: NeonLiveServerOptions<Query> | NeonLiveDirectServerOptions<Query>,
-): NeonLiveServer<Query> | NeonLiveDirectServer<Query> {
+export function createRealtime<Query = RawSqlQuery<unknown>>(
+	options: RealtimeDirectServerOptions<Query>,
+): RealtimeDirectServer<Query>;
+export function createRealtime<Query = RawSqlQuery<unknown>>(
+	options: RealtimeServerOptions<Query>,
+): RealtimeServer<Query>;
+export function createRealtime<Query = RawSqlQuery<unknown>>(
+	options: RealtimeServerOptions<Query> | RealtimeDirectServerOptions<Query>,
+): RealtimeServer<Query> | RealtimeDirectServer<Query> {
 	const adapter = options.adapter;
 	validateDatabaseName(options.db);
 	const issueCapability = createCapabilityIssuer(
-		parseNeonLiveSecret(options.secret),
+		parseRealtimeSecret(options.secret),
 		options.db,
 	);
 	const prepare = <ConcreteQuery extends SealableQuery<Query>>(
@@ -244,17 +244,17 @@ function snapshotPreparedQuery(query: PreparedLiveQuery): PreparedLiveQuery {
 function validateDatabaseName(database: string): void {
 	const bytes = new TextEncoder().encode(database);
 	if (bytes.length === 0 || bytes.length > 63 || database.includes("\0")) {
-		throw new Error("Invalid Neon Live database name");
+		throw new Error("Invalid Realtime database name");
 	}
 }
 
 function prepareWithConfiguredAdapter<Query>(
 	query: Query,
-	adapter: NeonLiveAdapter<Query> | undefined,
+	adapter: RealtimeAdapter<Query> | undefined,
 ) {
 	if (adapter === undefined) {
 		throw new Error(
-			"Neon Live requires an adapter for queries not created with rawSql()",
+			"Realtime requires an adapter for queries not created with rawSql()",
 		);
 	}
 	return adapter.prepare(query);

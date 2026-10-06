@@ -15,7 +15,7 @@ export function waitForRows<Row>(
 ): Promise<void> {
 	if (timeout !== undefined && (!Number.isFinite(timeout) || timeout < 0)) {
 		return Promise.reject(
-			new Error("Neon Live row timeout must be a non-negative number"),
+			new Error("Live-query row timeout must be a non-negative number"),
 		);
 	}
 
@@ -53,14 +53,14 @@ export function waitForRows<Row>(
 
 			if (snapshot.status === "error") fail(snapshot.error);
 			else if (snapshot.status === "closed") {
-				fail(new Error("Neon Live subscription is closed"));
+				fail(new Error("Live-query subscription is closed"));
 			}
 		};
 
 		unsubscribe = subscription.onChange(inspect);
 		if (timeout !== undefined) {
 			timer = setTimeout(
-				() => fail(new Error("Timed out waiting for Neon Live rows")),
+				() => fail(new Error("Timed out waiting for live-query rows")),
 				timeout,
 			);
 		}

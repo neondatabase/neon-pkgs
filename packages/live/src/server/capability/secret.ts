@@ -2,20 +2,20 @@ const SECRET_PREFIX = "neon_live_v1_";
 const KEY_BYTES = 32;
 const KID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-export interface NeonLiveSecret {
+export interface RealtimeSecret {
 	readonly key: Uint8Array;
 	readonly keyId: string;
 	readonly issuer: string;
 }
 
 /**
- * Decode the opaque credential issued for one Neon Live project.
+ * Decode the opaque credential issued for one Realtime project.
  *
  * The credential deliberately packages key-selection metadata with the key so
  * applications configure one server-only value. Its representation is not a
  * public application data format and may only be interpreted by this SDK.
  */
-export function parseNeonLiveSecret(secret: string): NeonLiveSecret {
+export function parseRealtimeSecret(secret: string): RealtimeSecret {
 	try {
 		if (!secret.startsWith(SECRET_PREFIX)) throw new Error();
 		const payload = JSON.parse(
@@ -45,7 +45,7 @@ export function parseNeonLiveSecret(secret: string): NeonLiveSecret {
 			issuer: payload.iss,
 		});
 	} catch {
-		throw new Error("Invalid Neon Live secret");
+		throw new Error("Invalid Realtime secret");
 	}
 }
 

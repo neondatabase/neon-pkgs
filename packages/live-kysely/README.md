@@ -1,10 +1,10 @@
 # @neon/live-kysely
 
 Kysely adapter for [`@neon/live`](../live). It turns a concrete Kysely select
-builder into the parameterized PostgreSQL query accepted by the Neon Live
+builder into the parameterized PostgreSQL query accepted by the Realtime
 backend SDK while preserving Kysely's inferred result-row type.
 
-> **Status:** Neon Live is experimental. Its APIs may change before a stable
+> **Status:** Realtime is experimental. Its APIs may change before a stable
 > release.
 
 ## Install
@@ -23,7 +23,7 @@ Create the backend SDK with the Kysely adapter, then pass a concrete select
 builder directly to `seal()`:
 
 ```ts
-import { createNeonLive } from "@neon/live/server";
+import { createRealtime } from "@neon/live/server";
 import { kyselyAdapter } from "@neon/live-kysely";
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
@@ -44,8 +44,8 @@ const db = new Kysely<Database>({
   }),
 });
 
-const neonLive = createNeonLive({
-  secret: process.env.NEON_LIVE_SECRET!,
+const realtime = createRealtime({
+  secret: process.env.NEON_REALTIME_SECRET!,
   db: "app",
   adapter: kyselyAdapter(),
 });
@@ -56,7 +56,7 @@ const query = db
   .select(["id", "body"])
   .where("channel_id", "=", channelId);
 
-const sealedQuery = await neonLive.seal({ query });
+const sealedQuery = await realtime.seal({ query });
 // SealedLiveQuery<{ id: number; body: string }>
 ```
 
@@ -68,7 +68,7 @@ returning the sealed query.
 
 ## Parameters
 
-Kysely leaves parameter encoding to its database driver. Neon Live instead
+Kysely leaves parameter encoding to its database driver. Realtime instead
 encodes Kysely's raw values using the familiar node-postgres rules. Strings,
 numbers, booleans, bigints, `null`, `undefined`, `Date`, byte arrays,
 PostgreSQL arrays, JSON objects, and values implementing `toPostgres()` work
@@ -101,7 +101,7 @@ context to infer the parameter type.
 
 ## Result names and plugins
 
-Neon Live builds row objects from PostgreSQL's result-column names. Use SQL
+Realtime builds row objects from PostgreSQL's result-column names. Use SQL
 aliases when a result key should differ from its column name, and ensure every
 result name is unique:
 
@@ -112,7 +112,7 @@ const query = db
 ```
 
 Query-transforming Kysely plugins run normally. Result-transforming plugins
-are not supported because Neon Live does not execute queries through Kysely's
+are not supported because Realtime does not execute queries through Kysely's
 driver and therefore cannot call `transformResult()`. In particular,
 `CamelCasePlugin` would make Kysely infer camel-case keys while PostgreSQL
 still returns snake-case names. Define live-query result keys that already
@@ -121,5 +121,5 @@ match their PostgreSQL names instead.
 ## API
 
 `kyselyAdapter()` returns the adapter passed to
-`createNeonLive({ adapter })`. It has no database connection of its own and
+`createRealtime({ adapter })`. It has no database connection of its own and
 never executes the query during sealing.

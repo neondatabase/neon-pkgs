@@ -15,7 +15,7 @@ export type PostgreSQLBytesParser<Value = unknown> = (
 	value: Uint8Array,
 ) => Value;
 
-/** Parser input selected by the fixed Neon Live protocol v1 OID/codec mapping. */
+/** Parser input selected by the fixed Realtime protocol v1 OID/codec mapping. */
 export type PostgreSQLParserForOid<Oid extends number> =
 	Oid extends typeof pgTypeOids.bytea
 		? PostgreSQLBytesParser
@@ -135,7 +135,7 @@ function addParsers(
 		typeof source !== "object" ||
 		Array.isArray(source)
 	) {
-		throw new TypeError("Neon Live parsers must be an OID-keyed object");
+		throw new TypeError("Realtime parsers must be an OID-keyed object");
 	}
 	for (const [key, parser] of Object.entries(source)) {
 		if (!/^[1-9][0-9]*$/.test(key)) {

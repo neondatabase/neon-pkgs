@@ -1,12 +1,12 @@
 /**
- * Synchronize sealed Neon Live queries into TanStack DB collections.
+ * Synchronize sealed live queries into TanStack DB collections.
  *
  * @module TanStack DB
  */
 
 export type {
-	NeonLiveCollectionConfig,
-	NeonLiveCollectionOptions,
-	NeonLiveCollectionUtils,
+	RealtimeCollectionConfig,
+	RealtimeCollectionOptions,
+	RealtimeCollectionUtils,
 } from "./collection-options.js";
-export { neonLiveCollectionOptions } from "./collection-options.js";
+export { realtimeCollectionOptions } from "./collection-options.js";

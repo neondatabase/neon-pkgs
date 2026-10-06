@@ -167,7 +167,7 @@ function typedParameter(
 function iso(value: Date): string {
 	if (!Number.isFinite(value.getTime())) {
 		throw new Error(
-			"Invalid Date passed to a Neon Live PostgreSQL parameter",
+			"Invalid Date passed to a Realtime PostgreSQL parameter",
 		);
 	}
 	return value.toISOString();
@@ -188,7 +188,7 @@ function encodeJson(value: unknown): string {
 		return encoded;
 	} catch {
 		throw new Error(
-			"Value cannot be encoded as a Neon Live PostgreSQL JSON parameter",
+			"Value cannot be encoded as a Realtime PostgreSQL JSON parameter",
 		);
 	}
 }
@@ -227,7 +227,7 @@ function encodeArrayValue(
 		encoded = String(value);
 	} else {
 		throw new Error(
-			`Value cannot be encoded as a Neon Live PostgreSQL ${elementType} array element`,
+			`Value cannot be encoded as a Realtime PostgreSQL ${elementType} array element`,
 		);
 	}
 
@@ -244,7 +244,7 @@ function encodeArrayDate(value: Date, elementType: string): string {
 	}
 	if (elementType.startsWith("timestamp")) return isoTimestamp(value);
 	throw new Error(
-		`Date cannot be encoded as a Neon Live PostgreSQL ${elementType} array element`,
+		`Date cannot be encoded as a Realtime PostgreSQL ${elementType} array element`,
 	);
 }
 

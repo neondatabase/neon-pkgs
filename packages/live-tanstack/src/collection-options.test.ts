@@ -4,17 +4,17 @@ import type {
 	LiveQueryState,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
-	NeonLiveClient,
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RealtimeClient,
 	SealedLiveQuery,
 } from "@neon/live/client";
 import { collectionOptions, createCollection, DbClient } from "@tanstack/db";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
-	type NeonLiveCollectionUtils,
-	neonLiveCollectionOptions,
+	type RealtimeCollectionUtils,
+	realtimeCollectionOptions,
 } from "./index.js";
 
 interface MessageRow {
@@ -29,11 +29,11 @@ afterEach(async () => {
 	vi.restoreAllMocks();
 });
 
-describe("Neon Live TanStack DB collection", () => {
+describe("Realtime TanStack DB collection", () => {
 	it("installs resets and transactions as authoritative collection state", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
-		expectTypeOf(collection.utils).toEqualTypeOf<NeonLiveCollectionUtils>();
+		expectTypeOf(collection.utils).toEqualTypeOf<RealtimeCollectionUtils>();
 		const preload = collection.preload();
 		expect(collection.status).toBe("loading");
 
@@ -101,7 +101,7 @@ describe("Neon Live TanStack DB collection", () => {
 			handlerStarted = resolve;
 		});
 		const collection = createCollection(
-			neonLiveCollectionOptions({
+			realtimeCollectionOptions({
 				id: "mutable-messages",
 				client,
 				query: query("query-1"),
@@ -138,7 +138,7 @@ describe("Neon Live TanStack DB collection", () => {
 		});
 	});
 
-	it("keeps a ready collection ready while Neon Live is stale", async () => {
+	it("keeps a ready collection ready while Realtime is stale", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
 		const preload = collection.preload();
@@ -182,7 +182,7 @@ describe("Neon Live TanStack DB collection", () => {
 	it("hydrates provisional rows and replaces them with the first reset", async () => {
 		const client = new TestClient<MessageRow>();
 		const descriptor = collectionOptions(
-			neonLiveCollectionOptions({
+			realtimeCollectionOptions({
 				id: "hydrated-messages",
 				client,
 				query: query("query-1"),
@@ -223,7 +223,7 @@ describe("Neon Live TanStack DB collection", () => {
 		void collection.preload();
 
 		await expect(collection.utils.awaitTxId("9", 1)).rejects.toThrow(
-			"Timed out waiting for Neon Live transaction 9",
+			"Timed out waiting for live-query transaction 9",
 		);
 		const pending = collection.utils.awaitTxId("10", 10_000);
 		await collection.cleanup();
@@ -238,7 +238,7 @@ function createTestCollection(
 	refreshQuery?: () => Promise<SealedLiveQuery<MessageRow>>,
 ) {
 	const collection = createCollection(
-		neonLiveCollectionOptions({
+		realtimeCollectionOptions({
 			id: "messages",
 			client,
 			query: currentQuery,
@@ -250,7 +250,7 @@ function createTestCollection(
 	return collection;
 }
 
-class TestClient<Row extends object> implements NeonLiveClient {
+class TestClient<Row extends object> implements RealtimeClient {
 	readonly subscriptions: TestRawSubscription<Row>[] = [];
 
 	subscribe<CurrentRow>(
@@ -351,7 +351,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 								this.txWaiters.get(txid)?.delete(waiter);
 								reject(
 									new Error(
-										`Timed out waiting for Neon Live transaction ${txid}`,
+										`Timed out waiting for live-query transaction ${txid}`,
 									),
 								);
 							}, timeout),
@@ -373,7 +373,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 		for (const waiters of this.txWaiters.values()) {
 			for (const waiter of waiters) {
 				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
-				waiter.reject(new Error("Neon Live subscription is closed"));
+				waiter.reject(new Error("Live-query subscription is closed"));
 			}
 		}
 		this.txWaiters.clear();
@@ -432,7 +432,7 @@ function compactJwe(payload: string): string {
 }
 
 function liveError(code: string) {
-	return Object.assign(new Error(`Neon Live error: ${code}`), {
+	return Object.assign(new Error(`Realtime error: ${code}`), {
 		code,
 		retryable: false,
 	});

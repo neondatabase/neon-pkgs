@@ -127,7 +127,7 @@ export class ConnectionCoordinator {
 	private terminalConnection = false;
 
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
-		if (!options.url) throw new Error("Neon Live requires a WebSocket URL");
+		if (!options.url) throw new Error("Realtime requires a WebSocket URL");
 		this.webSocketFactory =
 			options.webSocketFactory ?? defaultWebSocketFactory;
 		if (options.reconnect !== false) {
@@ -154,7 +154,7 @@ export class ConnectionCoordinator {
 		query: ConnectionSealedQuery,
 		callbacks: ConnectionCallbacks,
 	): ConnectionHandle {
-		if (this.disposed) throw new Error("Neon Live client is closed");
+		if (this.disposed) throw new Error("Realtime client is closed");
 		validateSealedQuery(query);
 		const managed: ManagedSubscription = {
 			query,
@@ -179,7 +179,7 @@ export class ConnectionCoordinator {
 		if (this.disposed) return;
 		this.disposed = true;
 		this.cancelReconnectEpisode();
-		const error = new Error("Neon Live client is closed");
+		const error = new Error("Realtime client is closed");
 		for (const subscription of this.managedSubscriptions) {
 			this.rejectRenewals(subscription, error);
 		}
@@ -199,19 +199,19 @@ export class ConnectionCoordinator {
 		validateSealedQuery(query);
 		if (subscription.state === "closed") {
 			return Promise.reject(
-				new Error("Neon Live subscription is closed"),
+				new Error("Live-query subscription is closed"),
 			);
 		}
 		if (subscription.state === "failed" || this.terminalConnection) {
 			return Promise.reject(
-				new Error("Neon Live connection cannot recover"),
+				new Error("Realtime connection cannot recover"),
 			);
 		}
 		subscription.query = query;
 		this.rejectQueuedRenewals(
 			subscription,
 			new Error(
-				"Neon Live renewal was superseded by a newer sealed query",
+				"Live-query renewal was superseded by a newer sealed query",
 			),
 		);
 		const renewal = promiseWithResolvers<void>();
@@ -239,7 +239,7 @@ export class ConnectionCoordinator {
 		this.activeSubscriptions.delete(subscription);
 		this.rejectRenewals(
 			subscription,
-			new Error("Neon Live subscription is closed"),
+			new Error("Live-query subscription is closed"),
 		);
 		if (subscription.liveId) {
 			this.reconciler.deactivate(subscription.liveId);
@@ -636,7 +636,7 @@ export class ConnectionCoordinator {
 			new ConnectionCoordinatorError(
 				"connection_lost",
 				false,
-				"Neon Live connection could not be restored",
+				"Realtime connection could not be restored",
 			),
 		);
 	}
@@ -824,7 +824,7 @@ function defaultWebSocketFactory(
 
 function validateSealedQuery(query: ConnectionSealedQuery): void {
 	if (!query || typeof query.capability !== "string" || !query.capability) {
-		throw new Error("Invalid Neon Live sealed query");
+		throw new Error("Invalid sealed live query");
 	}
 }
 

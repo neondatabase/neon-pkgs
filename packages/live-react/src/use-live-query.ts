@@ -1,6 +1,6 @@
 import type { SealedLiveQuery } from "@neon/live/client";
 import { useContext, useEffect, useMemo, useSyncExternalStore } from "react";
-import { NeonLiveContext } from "./context.js";
+import { RealtimeContext } from "./context.js";
 import { ReactLiveQueryStore } from "./live-query-store.js";
 import type { UseLiveQueryOptions, UseLiveQueryResult } from "./types.js";
 
@@ -13,14 +13,14 @@ import type { UseLiveQueryOptions, UseLiveQueryResult } from "./types.js";
  * @param options - Optional preloaded rows and capability-refresh callback.
  * @returns The current rows and lifecycle state plus stable subscription
  * utilities.
- * @throws If used outside a {@link NeonLiveProvider}.
+ * @throws If used outside a {@link RealtimeProvider}.
  */
 export function useLiveQuery<Row>(
 	query: SealedLiveQuery<Row>,
 	options: UseLiveQueryOptions<Row> = {},
 ): UseLiveQueryResult<Row> {
-	const client = useContext(NeonLiveContext);
-	if (!client) throw new Error("useLiveQuery requires a NeonLiveProvider");
+	const client = useContext(RealtimeContext);
+	if (!client) throw new Error("useLiveQuery requires a RealtimeProvider");
 
 	// A new query prop represents a new logical query. Callback changes
 	// update the existing store and do not restart its subscription.

@@ -13,7 +13,7 @@ import {
 	utf8,
 } from "./crypto.js";
 import { createCapabilityIssuer } from "./issuer.js";
-import { parseNeonLiveSecret } from "./secret.js";
+import { parseRealtimeSecret } from "./secret.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
 const SECRET = encodeSecret({
@@ -28,9 +28,9 @@ const QUERY: PreparedLiveQuery = {
 };
 const validateCapability = capabilityValidator();
 
-describe("Neon Live v1 capability issuer", () => {
+describe("Realtime v1 capability issuer", () => {
 	it("extracts key-selection metadata from one opaque secret", () => {
-		const parsed = parseNeonLiveSecret(SECRET);
+		const parsed = parseRealtimeSecret(SECRET);
 		expect(parsed).toEqual({
 			key: KEY,
 			keyId: "current",
@@ -40,7 +40,7 @@ describe("Neon Live v1 capability issuer", () => {
 
 	it("emits interoperable dir/A256GCM Compact JWE claims", async () => {
 		const sealedQuery = await createCapabilityIssuer(
-			parseNeonLiveSecret(SECRET),
+			parseRealtimeSecret(SECRET),
 			"app",
 			() => 1_700_000_000_123,
 		)(QUERY);
@@ -73,7 +73,7 @@ describe("Neon Live v1 capability issuer", () => {
 
 	it("uses a fresh 96-bit IV without changing the query fingerprint", async () => {
 		const issue = createCapabilityIssuer(
-			parseNeonLiveSecret(SECRET),
+			parseRealtimeSecret(SECRET),
 			"app",
 		);
 		const first = await issue(QUERY);
@@ -86,7 +86,7 @@ describe("Neon Live v1 capability issuer", () => {
 
 	it("includes parameter OID hints in the query fingerprint", async () => {
 		const issue = createCapabilityIssuer(
-			parseNeonLiveSecret(SECRET),
+			parseRealtimeSecret(SECRET),
 			"app",
 		);
 		const int4 = await issue(QUERY);
@@ -120,8 +120,8 @@ describe("Neon Live v1 capability issuer", () => {
 			key: encodeBase64Url(KEY),
 		}),
 	])("rejects malformed opaque secrets", (secret) =>
-		expect(() => parseNeonLiveSecret(secret)).toThrow(
-			"Invalid Neon Live secret",
+		expect(() => parseRealtimeSecret(secret)).toThrow(
+			"Invalid Realtime secret",
 		));
 });
 
