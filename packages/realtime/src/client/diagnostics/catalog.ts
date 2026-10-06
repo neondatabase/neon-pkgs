@@ -109,6 +109,10 @@ export const EVENT_CATALOG = {
 		level: "debug",
 		message: "Realtime subscription requires a new baseline sync",
 	},
+	subscription_retry_scheduled: {
+		level: "debug",
+		message: "Realtime subscription retry scheduled",
+	},
 	subscription_row_decoding_failed: {
 		level: "error",
 		message: "Realtime could not decode a subscription row",

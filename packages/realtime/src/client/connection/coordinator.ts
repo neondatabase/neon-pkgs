@@ -21,7 +21,9 @@ import {
 	type ReconnectAttempt,
 	ReconnectBackoff,
 	type ReconnectOptions,
+	type ReconnectTimer,
 } from "./reconnect.js";
+import { SubscriptionRecovery } from "./subscription-recovery.js";
 
 const SOCKET_CONNECTING = 0;
 const SOCKET_OPEN = 1;
@@ -104,27 +106,34 @@ type ManagedSubscriptionState =
 	| "failed"
 	| "closed";
 
-interface SubscriptionRetry {
-	readonly backoff: ReconnectBackoff;
-	error: ConnectionCoordinatorError;
-	waiting: boolean;
-	timer?: unknown;
-	stabilityTimer?: unknown;
-	deadlineTimer?: ReturnType<typeof setTimeout>;
-}
-
-interface ManagedSubscription {
-	readonly events: SubscriptionEventSink;
-	query: ConnectionSealedQuery;
-	readonly callbacks: ConnectionCallbacks;
-	state: ManagedSubscriptionState;
+class ManagedSubscription {
+	state: ManagedSubscriptionState = "active";
 	requestId?: string;
 	requestedCapability?: string;
 	acceptedCapability?: string;
 	liveId?: string;
 	renewing?: Renewal;
-	queuedRenewals: Renewal[];
-	retry?: SubscriptionRetry;
+	queuedRenewals: Renewal[] = [];
+
+	constructor(
+		public query: ConnectionSealedQuery,
+		readonly callbacks: ConnectionCallbacks,
+		readonly events: SubscriptionEventSink,
+		readonly recovery: SubscriptionRecovery,
+	) {}
+
+	/** Forget a detached wire attempt, preserving renewals for re-admission. */
+	resetWire(): void {
+		this.recovery.interrupted();
+		this.requestId = undefined;
+		this.requestedCapability = undefined;
+		this.acceptedCapability = undefined;
+		this.liveId = undefined;
+		if (this.renewing) {
+			this.queuedRenewals.unshift(this.renewing);
+			this.renewing = undefined;
+		}
+	}
 }
 
 /** Owns one multiplexed WebSocket and request/live-ID admission routing. */
@@ -144,9 +153,9 @@ export class ConnectionCoordinator {
 	private readonly heartbeat?: ConnectionHeartbeat;
 	private readonly events: ClientEventSink;
 	private socket?: WebSocketLike;
-	private reconnectTimer?: unknown;
+	private reconnectTimer?: ReconnectTimer;
 	private reconnectDeadlineTimer?: ReturnType<typeof setTimeout>;
-	private stabilityTimer?: unknown;
+	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
 	private requestId = 0n;
@@ -205,13 +214,19 @@ export class ConnectionCoordinator {
 	): ConnectionHandle {
 		if (this.disposed) throw new Error("Realtime client is closed");
 		validateSealedQuery(query);
-		const managed: ManagedSubscription = {
-			events: callbacks.events ?? this.events.createSubscription(),
+		const events = callbacks.events ?? this.events.createSubscription();
+		const managed: ManagedSubscription = new ManagedSubscription(
 			query,
 			callbacks,
-			state: "active",
-			queuedRenewals: [],
-		};
+			events,
+			new SubscriptionRecovery(this.options.reconnect, {
+				resubscribe: () => this.sendSubscribe(managed),
+				exhausted: (error) =>
+					this.failLocalSubscription(managed, error),
+				scheduled: (code, attempt, delayMs) =>
+					events.retryScheduled(code, attempt, delayMs),
+			}),
+		);
 		this.managedSubscriptions.add(managed);
 		this.activeSubscriptions.add(managed);
 		managed.events.started();
@@ -232,7 +247,7 @@ export class ConnectionCoordinator {
 		this.cancelReconnectEpisode();
 		const error = new Error("Realtime client is closed");
 		for (const subscription of this.managedSubscriptions) {
-			this.cancelSubscriptionRetry(subscription);
+			subscription.recovery.cancel();
 			this.rejectRenewals(subscription, error);
 		}
 		this.managedSubscriptions.clear();
@@ -292,7 +307,7 @@ export class ConnectionCoordinator {
 
 	private unsubscribe(subscription: ManagedSubscription): void {
 		if (subscription.state === "closed") return;
-		this.cancelSubscriptionRetry(subscription);
+		subscription.recovery.cancel();
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
@@ -595,37 +610,14 @@ export class ConnectionCoordinator {
 		this.failSubscription(subscription, error);
 	}
 
-	/** Both existing overload signals end an attempt, not the logical subscription. */
+	/** Retry subscribe_rejected/backend_unavailable and subscription_error/upstream_cancelled. */
 	private retrySubscription(
 		subscription: ManagedSubscription,
 		code: string,
 		message: string,
 	): void {
 		const error = new ConnectionCoordinatorError(code, false, message);
-		if (!this.reconnect) {
-			this.failSubscription(subscription, error);
-			return;
-		}
-		this.cancelSubscriptionStability(subscription);
-		let retry: SubscriptionRetry;
-		let attempt: ReconnectAttempt | undefined;
-		try {
-			retry = subscription.retry ??= {
-				backoff: new ReconnectBackoff(
-					typeof this.options.reconnect === "object"
-						? this.options.reconnect
-						: {},
-				),
-				error,
-				waiting: false,
-			};
-			retry.error = error;
-			attempt = retry.backoff.next();
-		} catch {
-			this.failSubscription(subscription, error);
-			return;
-		}
-		if (!attempt) {
+		if (!subscription.recovery.retry(error)) {
 			this.failSubscription(subscription, error);
 			return;
 		}
@@ -635,35 +627,7 @@ export class ConnectionCoordinator {
 			this.liveSubscriptions.delete(subscription.liveId);
 			this.reconciler.remove(subscription.liveId);
 		}
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
-		if (subscription.renewing) {
-			subscription.queuedRenewals.unshift(subscription.renewing);
-			subscription.renewing = undefined;
-		}
-		retry.waiting = true;
-		if (
-			retry.deadlineTimer === undefined &&
-			Number.isFinite(attempt.remainingMs)
-		) {
-			// Match connection recovery: custom backoff timers cannot disable the
-			// absolute elapsed-time bound, including while waiting for a baseline.
-			retry.deadlineTimer = setTimeout(() => {
-				if (subscription.retry === retry) {
-					this.failLocalSubscription(subscription, retry.error);
-				}
-			}, attempt.remainingMs);
-		}
-		retry.timer = retry.backoff.setTimer(() => {
-			if (subscription.retry !== retry || !retry.waiting) return;
-			retry.timer = undefined;
-			retry.waiting = false;
-			// Socket recovery owns reconnecting. The ready handler will retry if
-			// this delay finishes before the socket becomes usable.
-			this.sendSubscribe(subscription);
-		}, attempt.delayMs);
+		subscription.resetWire();
 		subscription.callbacks.disconnected();
 	}
 
@@ -681,51 +645,14 @@ export class ConnectionCoordinator {
 				target.baselineSyncCompleted(count),
 			decodeFailed: (error) => target.decodeFailed(error),
 			caughtUp: () => {
-				this.armSubscriptionStability(subscription);
+				subscription.recovery.baselineCompleted();
 				target.caughtUp();
 			},
 			resetRequired: () => {
-				this.cancelSubscriptionStability(subscription);
+				subscription.recovery.interrupted();
 				target.resetRequired();
 			},
 		};
-	}
-
-	private armSubscriptionStability(subscription: ManagedSubscription): void {
-		const retry = subscription.retry;
-		if (!retry || subscription.state !== "active" || !subscription.liveId)
-			return;
-		this.cancelSubscriptionStability(subscription);
-		const liveId = subscription.liveId;
-		retry.stabilityTimer = retry.backoff.setTimer(() => {
-			if (
-				subscription.retry === retry &&
-				subscription.liveId === liveId &&
-				this.ready
-			) {
-				this.cancelSubscriptionRetry(subscription);
-			}
-		}, retry.backoff.stabilityMs);
-	}
-
-	private cancelSubscriptionStability(
-		subscription: ManagedSubscription,
-	): void {
-		const retry = subscription.retry;
-		if (retry?.stabilityTimer !== undefined) {
-			retry.backoff.clearTimer(retry.stabilityTimer);
-			retry.stabilityTimer = undefined;
-		}
-	}
-
-	private cancelSubscriptionRetry(subscription: ManagedSubscription): void {
-		const retry = subscription.retry;
-		if (!retry) return;
-		this.cancelSubscriptionStability(subscription);
-		if (retry.timer !== undefined) retry.backoff.clearTimer(retry.timer);
-		if (retry.deadlineTimer !== undefined)
-			clearTimeout(retry.deadlineTimer);
-		subscription.retry = undefined;
 	}
 
 	private connectionError(code: string, message: string): void {
@@ -755,7 +682,7 @@ export class ConnectionCoordinator {
 		if (
 			subscription.state !== "active" ||
 			!this.ready ||
-			subscription.retry?.waiting ||
+			subscription.recovery.waiting ||
 			subscription.requestId ||
 			subscription.liveId
 		)
@@ -809,15 +736,7 @@ export class ConnectionCoordinator {
 			this.noteConnectionLost(this.pendingConnectionError);
 		}
 		for (const subscription of this.activeSubscriptions) {
-			this.cancelSubscriptionStability(subscription);
-			subscription.requestId = undefined;
-			subscription.requestedCapability = undefined;
-			subscription.acceptedCapability = undefined;
-			subscription.liveId = undefined;
-			if (subscription.renewing) {
-				subscription.queuedRenewals.unshift(subscription.renewing);
-				subscription.renewing = undefined;
-			}
+			subscription.resetWire();
 			subscription.callbacks.disconnected();
 		}
 		if (
@@ -922,7 +841,7 @@ export class ConnectionCoordinator {
 		error: ConnectionCoordinatorError,
 		beforeCallbacks?: () => void,
 	): void {
-		this.cancelSubscriptionRetry(subscription);
+		subscription.recovery.cancel();
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		if (subscription.requestId)
@@ -931,10 +850,7 @@ export class ConnectionCoordinator {
 			this.liveSubscriptions.delete(subscription.liveId);
 			this.reconciler.remove(subscription.liveId);
 		}
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
+		subscription.resetWire();
 		this.rejectRenewals(subscription, error);
 		beforeCallbacks?.();
 		subscription.callbacks.failed(error);
@@ -946,7 +862,7 @@ export class ConnectionCoordinator {
 	): void {
 		if (subscription.state === "failed" || subscription.state === "closed")
 			return;
-		this.cancelSubscriptionRetry(subscription);
+		subscription.recovery.cancel();
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		const liveId = subscription.liveId;
@@ -958,10 +874,7 @@ export class ConnectionCoordinator {
 		}
 		// A local retry deadline can expire while admission is in flight. Keep
 		// its correlation until the reply so a late acceptance is unsubscribed.
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
+		subscription.resetWire();
 		this.rejectRenewals(subscription, error);
 		subscription.events.failed(error);
 		subscription.callbacks.failed(error);
@@ -976,7 +889,6 @@ export class ConnectionCoordinator {
 		rejectedCapability: string | undefined,
 		error: ConnectionCoordinatorError,
 	): void {
-		this.cancelSubscriptionStability(subscription);
 		this.activeSubscriptions.delete(subscription);
 		if (subscription.requestId)
 			this.pendingRequests.delete(subscription.requestId);
@@ -984,14 +896,7 @@ export class ConnectionCoordinator {
 			this.liveSubscriptions.delete(subscription.liveId);
 			this.reconciler.remove(subscription.liveId);
 		}
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
-		if (subscription.renewing) {
-			subscription.queuedRenewals.unshift(subscription.renewing);
-			subscription.renewing = undefined;
-		}
+		subscription.resetWire();
 		subscription.events.queryUnavailable(error);
 		subscription.callbacks.disconnected();
 

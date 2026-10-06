@@ -714,6 +714,41 @@ describe("subscription load-shedding recovery", () => {
 		});
 	}
 
+	it("logs each subscription retry with its server code, attempt, and delay", async () => {
+		vi.useFakeTimers();
+		const logger = vi.fn();
+		const coordinator = recoveryCoordinator({
+			events: createClientEventSink({ logLevel: "debug", logger }),
+		});
+		coordinator.subscribe({ capability: "secret-query" }, target());
+		const socket = admit();
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(50);
+		reject(socket, "2");
+		await vi.runAllTicks();
+		const entries = logger.mock.calls
+			.map(([entry]) => entry)
+			.filter((entry) => entry.event === "subscription_retry_scheduled");
+		expect(entries).toEqual([
+			expect.objectContaining({
+				level: "debug",
+				subscriptionId: "s1",
+				code: "upstream_cancelled",
+				attempt: 1,
+				delayMs: 50,
+			}),
+			expect.objectContaining({
+				level: "debug",
+				subscriptionId: "s1",
+				code: "backend_unavailable",
+				attempt: 2,
+				delayMs: 100,
+			}),
+		]);
+		expect(JSON.stringify(entries)).not.toContain("secret-query");
+		coordinator.close();
+	});
+
 	it.each([
 		"backend_unavailable",
 		"upstream_cancelled",
@@ -750,55 +785,6 @@ describe("subscription load-shedding recovery", () => {
 		expect(healthy.disconnected).not.toHaveBeenCalled();
 		expect(healthy.failed).not.toHaveBeenCalled();
 		expect(FakeWebSocket.instances).toHaveLength(1);
-		coordinator.close();
-	});
-
-	it("shares capped exponential backoff across cancellations and admission rejections", async () => {
-		vi.useFakeTimers();
-		const coordinator = recoveryCoordinator();
-		const callbacks = target();
-		coordinator.subscribe({ capability: "token" }, callbacks);
-		const socket = admit();
-		shed(socket);
-		await vi.advanceTimersByTimeAsync(50);
-		reject(socket, "2");
-		await vi.advanceTimersByTimeAsync(99);
-		expect(socket.sent).toHaveLength(2);
-		await vi.advanceTimersByTimeAsync(1);
-		accepted(socket, "3", "42");
-		// Admission alone, even a long-lived one, must not reset the episode.
-		await vi.advanceTimersByTimeAsync(2_000);
-		shed(socket, "42");
-		await vi.advanceTimersByTimeAsync(199);
-		expect(socket.sent).toHaveLength(3);
-		await vi.advanceTimersByTimeAsync(1);
-		reject(socket, "4");
-		await vi.advanceTimersByTimeAsync(200);
-		expect(socket.sent.at(-1)).toMatchObject({ request_id: "5" });
-		expect(callbacks.failed).not.toHaveBeenCalled();
-		coordinator.close();
-	});
-
-	it("resets subscription backoff only after a completed baseline stays stable", async () => {
-		vi.useFakeTimers();
-		const coordinator = recoveryCoordinator();
-		coordinator.subscribe({ capability: "token" }, target());
-		const socket = admit();
-		shed(socket);
-		await vi.advanceTimersByTimeAsync(50);
-		accepted(socket, "2", "42");
-		baseline(socket, "42");
-		await vi.advanceTimersByTimeAsync(999);
-		shed(socket, "42");
-		await vi.advanceTimersByTimeAsync(100);
-		accepted(socket, "3", "43");
-		baseline(socket, "43");
-		await vi.advanceTimersByTimeAsync(1_000);
-		shed(socket, "43");
-		await vi.advanceTimersByTimeAsync(49);
-		expect(socket.sent).toHaveLength(3);
-		await vi.advanceTimersByTimeAsync(1);
-		expect(socket.sent.at(-1)).toMatchObject({ request_id: "4" });
 		coordinator.close();
 	});
 
