@@ -6,7 +6,7 @@ import {
 	postgresTypeOid,
 } from "./postgres-type.js";
 
-const TYPED_RAW_SQL_PARAMETER = Symbol("neon-live.typed-raw-sql-parameter");
+const TYPED_RAW_SQL_PARAMETER = Symbol("neon-realtime.typed-raw-sql-parameter");
 
 /** A raw SQL parameter with an explicit PostgreSQL text encoder and type hint. */
 export interface TypedRawSqlParameter extends PreparedLiveQueryParameter {

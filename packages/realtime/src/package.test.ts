@@ -16,8 +16,8 @@ const packageRoot = dirname(
 	fileURLToPath(new URL("../package.json", import.meta.url)),
 );
 const schemaSubpaths = [
-	"schema/neon-live-query-capability-v1.schema.json",
-	"schema/neon-live-protocol-v1.schema.json",
+	"schema/realtime-query-capability-v1.schema.json",
+	"schema/realtime-protocol-v1.schema.json",
 ] as const;
 
 describe("@neon/realtime package", () => {

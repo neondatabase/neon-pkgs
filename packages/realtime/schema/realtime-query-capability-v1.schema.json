@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neon.tech/schemas/live/neon-live-query-capability-v1.schema.json",
-  "title": "Neon Live query capability v1",
+  "$id": "https://neon.tech/schemas/realtime/realtime-query-capability-v1.schema.json",
+  "title": "Neon Realtime query capability v1",
   "description": "Strict decoded JWE protected-header and claims contract. Compact serialization and cryptographic requirements are recorded in x-jweCompact.",
   "type": "object",
   "additionalProperties": false,

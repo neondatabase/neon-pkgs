@@ -7,7 +7,7 @@ import {
 	webCrypto,
 } from "./crypto.js";
 import { queryFingerprint } from "./fingerprint.js";
-import type { NeonLiveQueryCapabilityV1 } from "./schema/neon-live-query-capability-v1.gen.js";
+import type { RealtimeQueryCapabilityV1 } from "./schema/realtime-query-capability-v1.gen.js";
 import type { RealtimeSecret } from "./secret.js";
 
 const SEALED_QUERY_LIFETIME_SECONDS = 60;
@@ -22,8 +22,8 @@ export interface IssuedSealedLiveQuery {
 	readonly expiresAt: number;
 }
 
-type ProtectedHeader = NeonLiveQueryCapabilityV1["protected"];
-type CapabilityClaims = NeonLiveQueryCapabilityV1["claims"];
+type ProtectedHeader = RealtimeQueryCapabilityV1["protected"];
+type CapabilityClaims = RealtimeQueryCapabilityV1["claims"];
 
 /** Create a local Compact-JWE issuer backed by an opaque Realtime secret. */
 export function createCapabilityIssuer(
