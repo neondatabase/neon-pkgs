@@ -1134,6 +1134,58 @@ describe("subscription load-shedding recovery", () => {
 		coordinator.close();
 	});
 
+	it("paces a hinted resource_exhausted rejection by its hint", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: "1",
+			code: "resource_exhausted",
+			message: "resource exhausted",
+			retry_after_ms: 300,
+		});
+		await vi.advanceTimersByTimeAsync(299);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("waits for the hint after the proxy closes an idle socket", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		overloaded(socket, "subscribe_rejected", "1", 300);
+		socket.receive({
+			type: "connection_error",
+			code: "resource_exhausted",
+			message: "resource exhausted",
+		});
+		// The socket reconnects on its own backoff, possibly to another instance,
+		// but the subscription waits for the proxy's hint before resubscribing.
+		await vi.advanceTimersByTimeAsync(100);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		expect(second.sent).toEqual([]);
+		await vi.advanceTimersByTimeAsync(199);
+		expect(second.sent).toEqual([]);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(second.sent).toEqual([
+			{ type: "subscribe", request_id: "2", authorization: "token" },
+		]);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
+	});
+
 	it("retries resource_exhausted rejections with exponential backoff", async () => {
 		vi.useFakeTimers();
 		const coordinator = recoveryCoordinator();

@@ -204,20 +204,26 @@ Some subscription errors also retry automatically:
 - `backend_overloaded` (`subscribe_rejected` or `subscription_error`): the
   service is shedding load. The response carries `retry_after_ms`, the time
   until the service admits that database again.
-- `subscribe_rejected` with `backend_unavailable` or `resource_exhausted`, and
-  `subscription_error` with `upstream_cancelled`.
+- `subscribe_rejected` with `resource_exhausted`: the service instance is full.
+  It usually carries `retry_after_ms` as well.
+- `subscribe_rejected` with `backend_unavailable`, and `subscription_error` with
+  `upstream_cancelled`.
+
+After `backend_overloaded` or `resource_exhausted`, the service may also close a
+connection that has no other subscriptions, so the client can reconnect to
+another instance. The client reconnects on its own backoff and resubscribes once
+the hint has passed.
 
 Only the affected subscription is retried, using the current socket and latest
 sealed query; other subscriptions keep receiving updates. Its last complete
 result remains `stale` (or `connecting` if no result has arrived). Re-admission
 uses a fresh request and live ID and installs a new baseline.
 
-A `backend_overloaded` retry never runs before its hint. With the hint `h`
-(at least 100 ms), the SDK waits a random time in `[h, max(h, min(2h, cap))]`,
-which spreads clients across the service's ramp-up. `cap` defaults to 30
-seconds and is set with `reconnect.overloadJitterCapMs`. Without a hint, and for
-the other codes, retries use equal-jitter delays that start at 0.5–1 second,
-grow exponentially, and cap at 30–60 seconds.
+A retry with a hint never runs before it. With the hint `h` (at least 100 ms),
+the SDK waits a random time in `[h, max(h, min(2h, cap))]`, which spreads
+clients across the service's ramp-up. `cap` defaults to 30 seconds and is set
+with `reconnect.overloadJitterCapMs`. Without a hint, retries use equal-jitter
+delays that start at 0.5–1 second, grow exponentially, and cap at 30–60 seconds.
 
 All retries of a subscription share one recovery episode: hint-paced retries
 count toward the attempt and elapsed-time bounds but do not grow the
