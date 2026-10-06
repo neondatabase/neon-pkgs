@@ -1,3 +1,4 @@
+import type { LiveQueryInvalidation } from "../client/invalidation.js";
 import { QueryRefreshController } from "../client/query-refresh.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
@@ -57,6 +58,8 @@ export function manageDirectSubscription<
 		) => subscription.onBatch(listener),
 		onStateChange: (listener: (state: LiveQueryState) => void) =>
 			subscription.onStateChange(listener),
+		onInvalidate: (listener: (event: LiveQueryInvalidation) => void) =>
+			subscription.onInvalidate(listener),
 		awaitTxId: (txid: string, timeout?: number) =>
 			subscription.awaitTxId(txid, timeout),
 		renew: (query: SealedLiveQuery<Row>) =>

@@ -1,6 +1,7 @@
 import { type ParsedMvccSnapshot, parseMvccSnapshot } from "../mvcc.js";
 import { ProtocolError } from "../protocol/codec.js";
 import type {
+	ContinuityCursor,
 	MvccSnapshot,
 	ServerMessage,
 	WireChange,
@@ -19,6 +20,10 @@ export interface ReconciliationTarget {
 	installReset(rows: readonly WireRow[]): void;
 	/** Install changes without notifying application listeners. */
 	applyBatch(changes: readonly WireChange[]): void;
+	/** Compare and install the replacement baseline's continuity cursor. */
+	installContinuity(cursor: ContinuityCursor): void;
+	/** Advance the installed cursor after an ordered publication commit. */
+	advanceContinuity(lsn: string): void;
 	/** Notify raw listeners after all state for this publication is installed. */
 	publishReset(rows: readonly WireRow[], mvcc: MvccSnapshot): void;
 	/** Notify listeners after all state for this publication is installed. */
@@ -66,6 +71,7 @@ interface BaselineSyncVersion {
 
 interface PendingBaselineSync {
 	readonly version: BaselineSyncVersion;
+	readonly continuity: ContinuityCursor;
 	readonly mvcc: MvccSnapshot;
 	bytes: number;
 	nextBatch: number;
@@ -88,6 +94,7 @@ interface TargetState {
 	baselineSync?: PendingBaselineSync;
 	backlog: BufferedBatch[];
 	backlogBytes: number;
+	pendingFrontier?: string;
 	live: boolean;
 }
 
@@ -248,6 +255,7 @@ export class BaselineSyncPublicationReconciler {
 				this.publicationCommit(
 					message.publication_id,
 					message.body_count,
+					message.frontier.lsn,
 					bytes,
 				);
 				return;
@@ -295,6 +303,7 @@ export class BaselineSyncPublicationReconciler {
 		state.latestBaselineSync = version;
 		state.baselineSync = {
 			version,
+			continuity: message.continuity,
 			mvcc: message.mvcc,
 			bytes,
 			nextBatch: 0,
@@ -396,6 +405,11 @@ export class BaselineSyncPublicationReconciler {
 			state.live = false;
 			state.target.decodeFailed(error);
 			return;
+		}
+		state.target.installContinuity(baselineSync.continuity);
+		if (state.pendingFrontier !== undefined) {
+			state.target.advanceContinuity(state.pendingFrontier);
+			state.pendingFrontier = undefined;
 		}
 		state.target.baselineSyncCompleted(message.batch_count);
 		state.target.publishReset(rows, baselineSync.mvcc);
@@ -501,6 +515,7 @@ export class BaselineSyncPublicationReconciler {
 	private publicationCommit(
 		publicationId: string,
 		bodyCount: number,
+		frontier: string,
 		bytes: number,
 	): void {
 		const publication = this.publication;
@@ -577,6 +592,11 @@ export class BaselineSyncPublicationReconciler {
 		this.events.publicationCommitted(bodyCount);
 		for (const state of resetStates) state.target.resetRequired();
 		for (const { state, error } of failed) state.target.decodeFailed(error);
+		for (const state of this.targets.values()) {
+			if (!state.active) continue;
+			if (state.live) state.target.advanceContinuity(frontier);
+			else state.pendingFrontier = frontier;
+		}
 		for (const { state, batch } of installed) {
 			state.target.publishBatch(batch);
 		}

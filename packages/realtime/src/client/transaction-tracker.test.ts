@@ -92,6 +92,34 @@ describe("transaction confirmation", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it("invalidates pending waits and evidence while permitting future waits", async () => {
+		vi.useFakeTimers();
+		const tracker = new TransactionTracker();
+		tracker.seen("41");
+		tracker.applySnapshot({ xmin: "1", xmax: "43", xip: [] });
+		const error = new Error("continuity lost");
+		const pending = expect(tracker.wait("44", 10_000)).rejects.toBe(error);
+
+		tracker.invalidate(error);
+		await pending;
+		expect(vi.getTimerCount()).toBe(0);
+
+		const previouslyExact = tracker.wait("41");
+		const previouslyVisible = tracker.wait("42");
+		let settled = false;
+		void Promise.all([previouslyExact, previouslyVisible]).then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		expect(settled).toBe(false);
+
+		tracker.applySnapshot({ xmin: "1", xmax: "43", xip: [] });
+		await expect(
+			Promise.all([previouslyExact, previouslyVisible]),
+		).resolves.toEqual([undefined, undefined]);
+		tracker.close();
+	});
+
 	it("preserves exact transaction IDs and validates wait inputs", async () => {
 		const tracker = new TransactionTracker();
 		tracker.seen("18446744073709551615");

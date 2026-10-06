@@ -147,7 +147,14 @@ The current snapshot is checked first, so include a unique version, timestamp,
 or mutation identifier when the predicate must confirm one particular
 mutation. Otherwise pre-existing or unrelated data can satisfy it. The timeout
 is optional; without one, the promise waits until the rows match or the
-subscription closes or enters a terminal error.
+subscription closes, enters a terminal error, or loses continuity.
+
+Brief reconnects preserve pending optimistic Actions. If Realtime must install
+a replacement baseline that no longer continues from the previously observed
+state, pending `awaitTxId()` and `awaitRows()` calls reject so React can discard
+their optimistic state. For optimism managed outside those waits, subscribe to
+`utils.onInvalidate()` in an effect; it fires before the replacement rows are
+published.
 
 ## API
 

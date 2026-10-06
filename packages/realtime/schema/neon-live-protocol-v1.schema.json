@@ -17,6 +17,20 @@
       "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]{1,64}$"
     },
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "pgLsn": {
+      "type": "string",
+      "pattern": "^(0|[1-9A-F][0-9A-F]{0,7})/(0|[1-9A-F][0-9A-F]{0,7})$"
+    },
+    "continuityCursor": {
+      "type": "object",
+      "$comment": "Opaque database-history identity and the exact frontier at which a baseline was taken.",
+      "required": ["history", "lsn"],
+      "properties": {
+        "history": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lsn": { "$ref": "#/$defs/pgLsn" }
+      },
+      "additionalProperties": false
+    },
     "base64Cell": {
       "type": "object",
       "required": ["base64"],
@@ -203,12 +217,13 @@
         },
         {
           "type": "object",
-          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "mvcc"],
+          "required": ["type", "live_id", "epoch", "baseline_sync_attempt", "continuity", "mvcc"],
           "properties": {
             "type": { "const": "baseline_sync_start" },
             "live_id": { "$ref": "#/$defs/u64" },
             "epoch": { "$ref": "#/$defs/u64" },
             "baseline_sync_attempt": { "$ref": "#/$defs/u64" },
+            "continuity": { "$ref": "#/$defs/continuityCursor" },
             "mvcc": { "$ref": "#/$defs/mvcc" }
           },
           "additionalProperties": false
@@ -281,9 +296,7 @@
             "frontier": {
               "type": "object",
               "required": ["lsn"],
-              "properties": {
-                "lsn": { "type": "string", "pattern": "^(0|[1-9A-F][0-9A-F]{0,7})/(0|[1-9A-F][0-9A-F]{0,7})$" }
-              },
+              "properties": { "lsn": { "$ref": "#/$defs/pgLsn" } },
               "additionalProperties": false
             }
           },

@@ -1,3 +1,4 @@
+import type { LiveQueryInvalidation } from "./invalidation.js";
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
@@ -140,6 +141,10 @@ export interface RealtimeLogEventDefinition {
 	readonly subscription_live: {
 		readonly level: "info";
 		readonly metadata: SubscriptionLogMetadata;
+	};
+	readonly subscription_invalidated: {
+		readonly level: "warn";
+		readonly metadata: SubscriptionLogMetadata & LiveQueryInvalidation;
 	};
 	readonly subscription_renewal_failed: {
 		readonly level: "warn";
@@ -342,6 +347,16 @@ export interface RawLiveQuerySubscription<Row> {
 	 */
 	onStateChange(listener: (state: LiveQueryState) => void): () => void;
 	/**
+	 * Observe loss of continuity with previously published authoritative state.
+	 * The event is emitted before the replacement reset is exposed.
+	 *
+	 * Use this to discard optimistic state that is not managed through
+	 * {@link awaitTxId} or, for materialized subscriptions, `awaitRows()`.
+	 *
+	 * @returns A function that removes this listener.
+	 */
+	onInvalidate(listener: (event: LiveQueryInvalidation) => void): () => void;
+	/**
 	 * Wait until this subscription has applied a PostgreSQL transaction.
 	 *
 	 * Recently applied transaction IDs are retained so this also succeeds when
@@ -356,7 +371,7 @@ export interface RawLiveQuerySubscription<Row> {
 	 * promise remains pending until the transaction arrives or the subscription
 	 * closes.
 	 * @throws If the timeout elapses, the transaction ID is invalid, or the
-	 * subscription closes before applying the transaction.
+	 * subscription closes, or continuity is lost before applying the transaction.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<void>;
 	/**
@@ -393,7 +408,8 @@ export interface MaterializedLiveQuerySubscription<Row>
 	 * @param timeout - Optional maximum wait in milliseconds. By default the
 	 * promise remains pending until the rows match or the subscription closes.
 	 * @throws If a supplied timeout elapses, the predicate throws, or the
-	 * subscription closes or enters a terminal error before the rows match.
+	 * subscription closes, enters a terminal error, or loses continuity before
+	 * the rows match.
 	 */
 	awaitRows(
 		matches: (rows: readonly Row[]) => boolean,

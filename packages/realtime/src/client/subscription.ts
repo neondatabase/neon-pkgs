@@ -1,5 +1,10 @@
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
+import { ContinuityTracker } from "./continuity.js";
 import type { SubscriptionEventSink } from "./diagnostics.js";
+import {
+	LiveQueryInvalidatedError,
+	type LiveQueryInvalidation,
+} from "./invalidation.js";
 import type { ParsedMvccSnapshot } from "./mvcc.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
@@ -8,6 +13,7 @@ import {
 	validateColumns,
 } from "./postgres/value-decoder.js";
 import type {
+	ContinuityCursor,
 	MvccSnapshot,
 	WireChange,
 	WireColumn,
@@ -17,7 +23,7 @@ import type {
 	ReconciledBatch,
 	ReconciliationTarget,
 } from "./reconciliation/reconciler.js";
-import { waitForRows } from "./row-waiter.js";
+import { RowWaiter } from "./row-waiter.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 import { TransactionTracker } from "./transaction-tracker.js";
 import type {
@@ -82,7 +88,12 @@ export class Subscription<Row>
 	private readonly changeListeners = new Set<
 		(snapshot: LiveQuerySnapshot<Row>) => void
 	>();
+	private readonly invalidationListeners = new Set<
+		(event: LiveQueryInvalidation) => void
+	>();
+	private readonly continuity = new ContinuityTracker();
 	private readonly transactions = new TransactionTracker();
+	private readonly rowWaiter: RowWaiter<Row>;
 	closed = false;
 
 	constructor(
@@ -107,6 +118,7 @@ export class Subscription<Row>
 			error: undefined,
 		});
 		this.snapshot = this.makeSnapshot();
+		this.rowWaiter = new RowWaiter(() => this.snapshot);
 	}
 
 	currentQuery(): SealedLiveQuery<Row> {
@@ -144,6 +156,10 @@ export class Subscription<Row>
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		listen(this.stateListeners, listener);
 
+	onInvalidate = (
+		listener: (event: LiveQueryInvalidation) => void,
+	): (() => void) => listen(this.invalidationListeners, listener);
+
 	awaitTxId = (txid: string, timeout?: number): Promise<void> =>
 		this.transactions.wait(txid, timeout);
 
@@ -156,7 +172,7 @@ export class Subscription<Row>
 				new Error("Raw live-query subscriptions do not expose rows"),
 			);
 		}
-		return waitForRows(this, matches, timeout);
+		return this.rowWaiter.wait(matches, timeout);
 	};
 
 	onChange = (
@@ -244,6 +260,22 @@ export class Subscription<Row>
 		if (!this.stagedReset) this.snapshot = this.makeSnapshot();
 	}
 
+	installContinuity(cursor: ContinuityCursor): void {
+		if (this.closed || this.continuity.installBaseline(cursor)) return;
+		const event = Object.freeze({
+			reason: "continuity_lost" as const,
+		});
+		const error = new LiveQueryInvalidatedError(event.reason);
+		this.transactions.invalidate(error);
+		this.rowWaiter.invalidate(error);
+		this.events.invalidated(event.reason);
+		this.notify(this.invalidationListeners, event);
+	}
+
+	advanceContinuity(lsn: string): void {
+		if (!this.closed) this.continuity.advance(lsn);
+	}
+
 	decodeFailed(error: unknown): void {
 		if (!(error instanceof PostgresValueParserError)) throw error;
 		this.appliedBatches.clear();
@@ -278,6 +310,7 @@ export class Subscription<Row>
 		const info = Object.freeze({ txids: batch.txids });
 		this.notify(this.batchListeners, changes, info);
 		if (this.materialized && this.state.status === "live") {
+			this.rowWaiter.changed(this.snapshot);
 			this.notify(this.changeListeners, this.snapshot);
 		}
 		for (const txid of batch.txids) this.transactions.seen(txid);
@@ -295,7 +328,10 @@ export class Subscription<Row>
 			false,
 			becameLive ? () => this.events.live() : undefined,
 		);
-		if (this.materialized) this.notify(this.changeListeners, this.snapshot);
+		if (this.materialized) {
+			this.rowWaiter.changed(this.snapshot);
+			this.notify(this.changeListeners, this.snapshot);
+		}
 	}
 
 	baselineSyncCompleted(batchCount: number): void {
@@ -334,6 +370,7 @@ export class Subscription<Row>
 		if (this.closed) return;
 		this.closed = true;
 		this.transactions.close();
+		this.rowWaiter.close();
 		this.setLifecycle(
 			Object.freeze({ status: "closed", error: undefined }),
 		);
@@ -390,6 +427,7 @@ export class Subscription<Row>
 		beforeListeners?.();
 		this.notify(this.stateListeners, this.state);
 		if (publishChange && this.materialized) {
+			this.rowWaiter.changed(this.snapshot);
 			this.notify(this.changeListeners, this.snapshot);
 		}
 	}

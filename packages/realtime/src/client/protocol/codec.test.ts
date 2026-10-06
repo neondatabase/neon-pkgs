@@ -38,6 +38,10 @@ const SERVER_TYPES = new Set([
 	"pong",
 ]);
 const ROW_KEY = "a".repeat(64);
+const CONTINUITY = {
+	history: "1".repeat(64),
+	lsn: "0/1",
+};
 
 function rejectServerMessage(value: unknown): void {
 	const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -164,6 +168,7 @@ describe("Realtime v1 JSON codec", () => {
 			live_id: "9",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			continuity: CONTINUITY,
 			mvcc: {
 				xmin: "1",
 				xmax: "18446744073709551615",
@@ -215,6 +220,7 @@ describe("Realtime v1 JSON codec", () => {
 				live_id: "1",
 				epoch: "1",
 				baseline_sync_attempt: "1",
+				continuity: CONTINUITY,
 			},
 		];
 		for (const envelope of envelopes) {

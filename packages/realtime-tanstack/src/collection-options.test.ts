@@ -1,6 +1,7 @@
 import type {
 	LiveQueryBatchInfo,
 	LiveQueryChange,
+	LiveQueryInvalidation,
 	LiveQueryState,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
@@ -132,6 +133,12 @@ describe("Realtime TanStack DB collection", () => {
 		expect(collection.status).toBe("ready");
 		expect(collection.get(1)).toMatchObject({ id: 1, title: "one" });
 		expect(collection.get(2)).toMatchObject({ id: 2, title: "two" });
+		const invalidated = vi.fn();
+		collection.utils.onInvalidate(invalidated);
+		client.latest().invalidate({ reason: "continuity_lost" });
+		expect(invalidated).toHaveBeenCalledWith({
+			reason: "continuity_lost",
+		});
 
 		const matched = collection.utils.awaitTxId("42");
 		expect(client.latest().awaitedTransactions).toEqual([
@@ -446,6 +453,7 @@ function wireClient() {
 			receive({
 				type: "baseline_sync_start",
 				...target,
+				continuity: { history: "1".repeat(64), lsn: "0/1" },
 				mvcc: { xmin: "1", xmax: "2", xip: [] },
 			});
 			receive({
@@ -519,6 +527,9 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	private readonly stateListeners = new Set<
 		(state: LiveQueryState) => void
 	>();
+	private readonly invalidationListeners = new Set<
+		(event: LiveQueryInvalidation) => void
+	>();
 	readonly renewals: SealedLiveQuery<Row>[] = [];
 	readonly awaitedTransactions: Array<{
 		readonly txid: string;
@@ -545,6 +556,14 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		add(this.stateListeners, listener);
+
+	onInvalidate = (
+		listener: (event: LiveQueryInvalidation) => void,
+	): (() => void) => add(this.invalidationListeners, listener);
+
+	invalidate(event: LiveQueryInvalidation): void {
+		for (const listener of this.invalidationListeners) listener(event);
+	}
 
 	awaitTxId = async (txid: string, timeout?: number): Promise<void> => {
 		this.awaitedTransactions.push({ txid, timeout });

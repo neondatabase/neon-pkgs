@@ -166,6 +166,8 @@ function driveReconciler(messages: readonly Message[]): readonly Observation[] {
 	const rows = new Map<string, WireRow["values"]>();
 	const target: ReconciliationTarget = {
 		baselineSyncStarted: () => undefined,
+		installContinuity: () => undefined,
+		advanceContinuity: () => undefined,
 		installReset: (reset) => replaceRows(rows, reset),
 		applyBatch: (changes) => applyChanges(rows, changes),
 		publishReset: (reset) =>

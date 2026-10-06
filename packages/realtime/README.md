@@ -210,7 +210,7 @@ The levels are cumulative:
 | --- | --- |
 | `silent` | Nothing; this is the default |
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
-| `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
+| `warn` | Errors plus recoverable outages, continuity loss, expiry, refresh-callback failures, and renewal failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
 | `debug` | All entries, including retry scheduling, heartbeats, baseline syncs, publications, and state transitions |
 
@@ -219,7 +219,7 @@ Each entry has a stable `event` name:
 | Minimum level | Events |
 | --- | --- |
 | `error` | `connection_failed`, `connection_reconnect_exhausted`, `subscription_failed`, `subscription_row_decoding_failed`, `query_refresh_stopped` |
-| `warn` | `connection_lost`, `query_expired`, `query_encryption_key_rotated`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
+| `warn` | `connection_lost`, `query_expired`, `query_encryption_key_rotated`, `query_refresh_callback_failed`, `subscription_invalidated`, `subscription_renewal_failed`, `subscription_listener_failed` |
 | `info` | `connection_ready`, `connection_recovered`, `subscription_live`, `subscription_renewed`, `client_closed` |
 | `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_heartbeat_timeout`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_baseline_sync_started`, `subscription_baseline_sync_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
 
@@ -329,7 +329,7 @@ await subscription.awaitTxId(txid);
 The subscription remembers recently applied transaction IDs, so this is safe
 when the live batch arrives before the mutation response. An optional timeout
 in milliseconds can bound the wait. Without one, the promise remains pending
-until the transaction arrives or the subscription closes.
+until the transaction arrives, the subscription closes, or continuity is lost.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.
@@ -350,11 +350,19 @@ await subscription.awaitRows(
 
 `awaitRows()` checks the current snapshot before listening for later changes,
 waits indefinitely when its optional timeout is omitted, and rejects if the
-subscription closes or enters a terminal error. Use a unique version,
-timestamp, or mutation identifier in the predicate when it must confirm a
-specific mutation; pre-existing or unrelated rows can otherwise satisfy it.
+subscription closes, enters a terminal error, or loses continuity. Use a unique
+version, timestamp, or mutation identifier in the predicate when it must
+confirm a specific mutation; pre-existing or unrelated rows can otherwise
+satisfy it.
 Raw subscriptions do not expose `awaitRows()` because they do not retain the
 complete result.
+
+An ordinary reconnect preserves pending waits. If a replacement baseline no
+longer continues from the state previously observed by the subscription,
+pending `awaitTxId()` and `awaitRows()` calls reject with
+`LiveQueryInvalidatedError` and retained transaction evidence is discarded.
+Use `subscription.onInvalidate()` to discard any other application-managed
+optimistic state. The event is emitted before the replacement reset is exposed.
 
 ### Raw subscriptions
 

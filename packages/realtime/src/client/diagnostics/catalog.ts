@@ -97,6 +97,10 @@ export const EVENT_CATALOG = {
 		level: "info",
 		message: "Realtime subscription is live",
 	},
+	subscription_invalidated: {
+		level: "warn",
+		message: "Realtime subscription continuity was lost",
+	},
 	subscription_renewal_failed: {
 		level: "warn",
 		message: "Realtime subscription renewal failed",

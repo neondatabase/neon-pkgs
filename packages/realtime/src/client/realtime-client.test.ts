@@ -18,6 +18,14 @@ const QUERY_FINGERPRINT = "11".repeat(32);
 const ROW_KEY = "a".repeat(64);
 const ROW_KEY_B = "b".repeat(64);
 const ROW_KEY_C = "c".repeat(64);
+const HISTORY_A = "1".repeat(64);
+const DEFAULT_CONTINUITY: {
+	readonly history: string;
+	readonly lsn: string;
+} = Object.freeze({
+	history: HISTORY_A,
+	lsn: "0/1",
+});
 
 type FakeWebSocketListener =
 	| (() => void)
@@ -162,6 +170,7 @@ describe("RealtimeClient", () => {
 			live_id: "41",
 			epoch: "1",
 			baseline_sync_attempt: "2",
+			continuity: DEFAULT_CONTINUITY,
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
 		socket.receive({
@@ -169,6 +178,7 @@ describe("RealtimeClient", () => {
 			live_id: "41",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			continuity: DEFAULT_CONTINUITY,
 			mvcc: { xmin: "1", xmax: "2", xip: [] },
 		});
 		socket.receive({
@@ -820,6 +830,118 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it("preserves optimistic waits when a reconnect baseline preserves continuity", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			const invalidated = vi.fn();
+			subscription.onInvalidate(invalidated);
+			const first = connectAndAdmit();
+			baselineSync(first, "before", "41", "1", {
+				history: HISTORY_A,
+				lsn: "0/20",
+			});
+
+			const rows = subscription.awaitRows(
+				(current) => current[0]?.title === "after",
+			);
+			const tx = subscription.awaitTxId("42");
+			first.close();
+			await vi.advanceTimersByTimeAsync(1_000);
+			const second = connectAndAdmit();
+			baselineSync(second, "after", "41", "1", {
+				history: HISTORY_A,
+				lsn: "0/20",
+			});
+
+			await expect(rows).resolves.toBeUndefined();
+			expect(invalidated).not.toHaveBeenCalled();
+			second.receive({
+				type: "progress",
+				mvcc: { xmin: "1", xmax: "43", xip: [] },
+			});
+			await expect(tx).resolves.toBeUndefined();
+		} finally {
+			client.close();
+		}
+	});
+
+	it.each([
+		{
+			case: "an older position",
+			continuity: { history: HISTORY_A, lsn: "0/10" },
+		},
+		{
+			case: "another database history",
+			continuity: { history: "2".repeat(64), lsn: "0/30" },
+		},
+	])("invalidates optimistic assumptions before exposing $case", async ({
+		continuity,
+	}) => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			const order: string[] = [];
+			subscription.onInvalidate((event) =>
+				order.push(`invalidate:${event.reason}`),
+			);
+			subscription.onReset(() => order.push("reset"));
+			const first = connectAndAdmit();
+			baselineSync(first, "before", "41", "1", {
+				history: HISTORY_A,
+				lsn: "0/20",
+			});
+			publication(
+				first,
+				[
+					{
+						op: "upsert",
+						row_key: ROW_KEY,
+						values: ["1", "committed"],
+					},
+				],
+				["42"],
+			);
+			await expect(subscription.awaitTxId("42")).resolves.toBeUndefined();
+			order.length = 0;
+
+			const tx = subscription.awaitTxId("99");
+			const rows = subscription.awaitRows(
+				(current) => current[0]?.title === "replacement",
+			);
+			first.close();
+			await vi.advanceTimersByTimeAsync(1_000);
+			const second = connectAndAdmit();
+			baselineSync(second, "replacement", "41", "1", continuity);
+
+			await expect(tx).rejects.toMatchObject({
+				name: "LiveQueryInvalidatedError",
+				reason: "continuity_lost",
+			});
+			await expect(rows).rejects.toMatchObject({
+				name: "LiveQueryInvalidatedError",
+				reason: "continuity_lost",
+			});
+			expect(order).toEqual(["invalidate:continuity_lost", "reset"]);
+			const forgottenTransaction = expect(
+				subscription.awaitTxId("42", 1),
+			).rejects.toThrow("Timed out");
+			await vi.advanceTimersByTimeAsync(1);
+			await forgottenTransaction;
+			await expect(
+				subscription.awaitRows(
+					(current) => current[0]?.title === "replacement",
+				),
+			).resolves.toBeUndefined();
+		} finally {
+			client.close();
+		}
+	});
+
 	it("confirms transactions visible to an applied MVCC snapshot", async () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
@@ -840,6 +962,7 @@ describe("RealtimeClient", () => {
 			live_id: "41",
 			epoch: "1",
 			baseline_sync_attempt: "1",
+			continuity: DEFAULT_CONTINUITY,
 			mvcc: { xmin: "100", xmax: "105", xip: ["103"] },
 		});
 		await Promise.resolve();
@@ -907,6 +1030,7 @@ describe("RealtimeClient", () => {
 			live_id: "41",
 			epoch: "2",
 			baseline_sync_attempt: "1",
+			continuity: { history: HISTORY_A, lsn: "0/20" },
 			mvcc: { xmin: "43", xmax: "44", xip: [] },
 		});
 		socket.receive({
@@ -1352,12 +1476,14 @@ function baselineSync(
 	title: string,
 	liveId = "41",
 	epoch = "1",
+	continuity = DEFAULT_CONTINUITY,
 ): void {
 	baselineSyncRows(
 		socket,
 		[[{ row_key: ROW_KEY, values: ["1", title] }]],
 		liveId,
 		epoch,
+		continuity,
 	);
 }
 
@@ -1369,12 +1495,14 @@ function baselineSyncRows(
 	}[])[],
 	liveId = "41",
 	epoch = "1",
+	continuity = DEFAULT_CONTINUITY,
 ): void {
 	socket.receive({
 		type: "baseline_sync_start",
 		live_id: liveId,
 		epoch,
 		baseline_sync_attempt: "1",
+		continuity,
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
 	for (const [index, rows] of batches.entries()) {
@@ -1416,12 +1544,14 @@ function emptySnapshot(
 	socket: FakeWebSocket,
 	liveId: string,
 	epoch = "1",
+	continuity = DEFAULT_CONTINUITY,
 ): void {
 	socket.receive({
 		type: "baseline_sync_start",
 		live_id: liveId,
 		epoch,
 		baseline_sync_attempt: "1",
+		continuity,
 		mvcc: { xmin: "1", xmax: "2", xip: [] },
 	});
 	socket.receive({
