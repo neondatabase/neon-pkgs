@@ -32,6 +32,7 @@ export interface SubscriptionEventSink {
 	readonly refresh: QueryRefreshEventSink;
 	started(): void;
 	admitted(): void;
+	retryScheduled(code: string, attempt: number, delayMs: number): void;
 	renewalStarted(): void;
 	renewalFailed(error: unknown): void;
 	renewed(): void;

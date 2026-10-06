@@ -4,6 +4,9 @@ export const DEFAULT_RECONNECT_STABILITY_MS = 30_000;
 export const DEFAULT_RECONNECT_MAX_ATTEMPTS = 20;
 export const DEFAULT_RECONNECT_MAX_ELAPSED_MS = 15 * 60_000;
 
+/** Timer handle shared by the default scheduler and injected test schedulers. */
+export type ReconnectTimer = ReturnType<typeof setTimeout>;
+
 export interface ReconnectOptions {
 	readonly baseMs?: number;
 	readonly capMs?: number;
@@ -17,8 +20,11 @@ export interface ReconnectOptions {
 	readonly maxElapsedMs?: number;
 	readonly random?: () => number;
 	readonly now?: () => number;
-	readonly setTimer?: (callback: () => void, delayMs: number) => unknown;
-	readonly clearTimer?: (handle: unknown) => void;
+	readonly setTimer?: (
+		callback: () => void,
+		delayMs: number,
+	) => ReconnectTimer;
+	readonly clearTimer?: (handle: ReconnectTimer) => void;
 }
 
 export interface ReconnectAttempt {
@@ -41,8 +47,8 @@ export class ReconnectBackoff {
 	private readonly setTimerImpl: (
 		callback: () => void,
 		delayMs: number,
-	) => unknown;
-	private readonly clearTimerImpl: (handle: unknown) => void;
+	) => ReconnectTimer;
+	private readonly clearTimerImpl: (handle: ReconnectTimer) => void;
 	private attempt = 0;
 	private startedAt?: number;
 
@@ -103,8 +109,7 @@ export class ReconnectBackoff {
 			options.setTimer ??
 			((callback, delayMs) => setTimeout(callback, delayMs));
 		this.clearTimerImpl =
-			options.clearTimer ??
-			((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+			options.clearTimer ?? ((handle) => clearTimeout(handle));
 	}
 
 	get active(): boolean {
@@ -143,11 +148,11 @@ export class ReconnectBackoff {
 		this.startedAt = undefined;
 	}
 
-	setTimer(callback: () => void, delayMs: number): unknown {
+	setTimer(callback: () => void, delayMs: number): ReconnectTimer {
 		return this.setTimerImpl(callback, delayMs);
 	}
 
-	clearTimer(handle: unknown): void {
+	clearTimer(handle: ReconnectTimer): void {
 		this.clearTimerImpl(handle);
 	}
 }
