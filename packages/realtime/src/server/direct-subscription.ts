@@ -32,6 +32,7 @@ export function manageDirectSubscription<
 		refreshQuery,
 		renewSubscription: (query) => subscription.renew(query),
 		onRefreshExhausted: () => undefined,
+		subscription,
 	});
 
 	const stopRefresh = () => {

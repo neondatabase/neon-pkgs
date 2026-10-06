@@ -6,6 +6,8 @@ import type {
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 	RealtimeClient,
+	RealtimeLogger,
+	RealtimeLogLevel,
 } from "../client/types.js";
 import {
 	type ManagedDirectSubscription,
@@ -16,6 +18,13 @@ type DirectSubscription = ManagedDirectSubscription<
 	RawLiveQuerySubscription<unknown>
 >;
 
+interface DirectLiveQueryClientOptions {
+	readonly url: string;
+	readonly parsers?: PostgreSQLParsers;
+	readonly logLevel?: RealtimeLogLevel;
+	readonly logger?: RealtimeLogger;
+}
+
 /** Own the lazily loaded low-level client used by trusted subscriptions. */
 export class DirectLiveQueryClient {
 	private readonly subscriptions = new Set<DirectSubscription>();
@@ -23,11 +32,8 @@ export class DirectLiveQueryClient {
 	private clientPromise?: Promise<RealtimeClient>;
 	private closed = false;
 
-	constructor(
-		private readonly url: string,
-		private readonly parsers: PostgreSQLParsers | undefined,
-	) {
-		if (!url) throw new Error("Realtime requires a WebSocket URL");
+	constructor(private readonly options: DirectLiveQueryClientOptions) {
+		if (!options.url) throw new Error("Realtime requires a WebSocket URL");
 	}
 
 	assertOpen(): void {
@@ -74,8 +80,10 @@ export class DirectLiveQueryClient {
 			(module) => {
 				this.assertOpen();
 				const client = module.createRealtimeClient({
-					url: this.url,
-					parsers: this.parsers,
+					url: this.options.url,
+					parsers: this.options.parsers,
+					logLevel: this.options.logLevel,
+					logger: this.options.logger,
 				});
 				this.client = client;
 				return client;

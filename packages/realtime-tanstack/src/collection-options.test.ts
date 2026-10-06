@@ -8,8 +8,10 @@ import type {
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
 	RealtimeClient,
+	RealtimeLogEntry,
 	SealedLiveQuery,
 } from "@neon/realtime/client";
+import { createRealtimeClient } from "@neon/realtime/client";
 import { collectionOptions, createCollection, DbClient } from "@tanstack/db";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -27,6 +29,7 @@ const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
 	for (const cleanup of cleanups.splice(0)) await cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 describe("Realtime TanStack DB collection", () => {
@@ -177,6 +180,61 @@ describe("Realtime TanStack DB collection", () => {
 		await eventually(() => expect(refreshQuery).toHaveBeenCalledOnce());
 
 		expect(client.latest().renewals).toEqual([replacement]);
+	});
+
+	it("uses the subscription diagnostic context for query refreshes", async () => {
+		vi.stubGlobal("WebSocket", SilentWebSocket);
+		const entries: RealtimeLogEntry[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => entries.push(entry),
+		});
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				id: "diagnostic-messages",
+				client,
+				query: query("query-1", 9),
+				refreshQuery: async () => query("query-2"),
+				getKey: (message) => message.id,
+			}),
+		);
+		cleanups.push(async () => {
+			await collection.cleanup();
+			client.close();
+		});
+		void collection.preload();
+
+		await eventually(() =>
+			expect(
+				entries.some(
+					(entry) =>
+						entry.event === "query_refresh_callback_succeeded",
+				),
+			).toBe(true),
+		);
+		const started = entries.find(
+			(entry) => entry.event === "subscription_started",
+		);
+		if (started?.event !== "subscription_started") {
+			throw new Error("Missing subscription diagnostics");
+		}
+		expect(entries).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					event: "query_refresh_scheduled",
+					subscriptionId: started.subscriptionId,
+				}),
+				expect.objectContaining({
+					event: "query_refresh_callback_started",
+					subscriptionId: started.subscriptionId,
+				}),
+				expect.objectContaining({
+					event: "query_refresh_callback_succeeded",
+					subscriptionId: started.subscriptionId,
+				}),
+			]),
+		);
 	});
 
 	it("hydrates provisional rows and replaces them with the first reset", async () => {
@@ -405,6 +463,18 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	state(state: LiveQueryState): void {
 		this.currentState = state;
 		for (const listener of this.stateListeners) listener(state);
+	}
+}
+
+class SilentWebSocket {
+	readyState = 0;
+
+	addEventListener(): void {}
+
+	send(): void {}
+
+	close(): void {
+		this.readyState = 3;
 	}
 }
 

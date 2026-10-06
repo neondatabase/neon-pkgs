@@ -99,11 +99,32 @@ describe("baseline-sync reconciliation", () => {
 			...baselineSyncStart("1", "2"),
 			mvcc: appliedMvcc,
 		});
+		accept(reconciler, baselineSyncStart("1", "1"));
 		accept(reconciler, baselineSyncBatch(0, [row(ROW_A, "old")], "1", "1"));
 		accept(reconciler, baselineSyncEnd(0, "1", "2"));
 
+		expect(state.baselineSyncStarted).toHaveBeenCalledTimes(2);
+		expect(state.baselineSyncCompleted).toHaveBeenCalledOnce();
+		expect(state.baselineSyncCompleted).toHaveBeenCalledWith(0);
 		expect(state.publishReset).toHaveBeenCalledOnce();
 		expect(state.publishReset).toHaveBeenCalledWith([], appliedMvcc);
+	});
+
+	it("does not complete a baseline sync whose rows fail to install", () => {
+		const state = target();
+		const reconciler = subscribed(state);
+		const failure = new Error("row decoding failed");
+		state.installReset.mockImplementationOnce(() => {
+			throw failure;
+		});
+		state.decodeFailed.mockImplementationOnce(() => undefined);
+
+		accept(reconciler, baselineSyncStart());
+		accept(reconciler, baselineSyncEnd(0));
+
+		expect(state.baselineSyncStarted).toHaveBeenCalledOnce();
+		expect(state.baselineSyncCompleted).not.toHaveBeenCalled();
+		expect(state.decodeFailed).toHaveBeenCalledWith(failure);
 	});
 
 	it("preserves order and buffered publications across superseded baseline-sync attempts", () => {

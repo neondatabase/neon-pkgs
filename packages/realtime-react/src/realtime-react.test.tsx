@@ -9,8 +9,10 @@ import type {
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
 	RealtimeClient,
+	RealtimeLogEntry,
 	SealedLiveQuery,
 } from "@neon/realtime/client";
+import { createRealtimeClient } from "@neon/realtime/client";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -28,6 +30,7 @@ interface MessageRow {
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 describe("Realtime React integration", () => {
@@ -143,6 +146,60 @@ describe("Realtime React integration", () => {
 		});
 		expect(client.latest().renewals).toEqual([replacement]);
 		expect(screen.getByText("stale:none")).toBeTruthy();
+	});
+
+	it("uses the subscription diagnostic context for query refreshes", async () => {
+		vi.stubGlobal("WebSocket", SilentWebSocket);
+		const entries: RealtimeLogEntry[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => entries.push(entry),
+		});
+		const view = render(
+			<RealtimeProvider client={client}>
+				<Messages
+					query={query("query-1", 9)}
+					refreshQuery={async () => query("query-2")}
+				/>
+			</RealtimeProvider>,
+		);
+
+		await act(async () => {
+			await eventually(() =>
+				expect(
+					entries.some(
+						(entry) =>
+							entry.event === "query_refresh_callback_succeeded",
+					),
+				).toBe(true),
+			);
+		});
+		const started = entries.find(
+			(entry) => entry.event === "subscription_started",
+		);
+		if (started?.event !== "subscription_started") {
+			throw new Error("Missing subscription diagnostics");
+		}
+		expect(entries).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					event: "query_refresh_scheduled",
+					subscriptionId: started.subscriptionId,
+				}),
+				expect.objectContaining({
+					event: "query_refresh_callback_started",
+					subscriptionId: started.subscriptionId,
+				}),
+				expect.objectContaining({
+					event: "query_refresh_callback_succeeded",
+					subscriptionId: started.subscriptionId,
+				}),
+			]),
+		);
+
+		view.unmount();
+		client.close();
 	});
 
 	it("owns subscription cleanup", () => {
@@ -316,6 +373,18 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 		this.snapshot = snapshot;
 		for (const listener of this.stateListeners) listener(this.getState());
 		for (const listener of this.snapshotListeners) listener(snapshot);
+	}
+}
+
+class SilentWebSocket {
+	readyState = 0;
+
+	addEventListener(): void {}
+
+	send(): void {}
+
+	close(): void {
+		this.readyState = 3;
 	}
 }
 

@@ -4,6 +4,11 @@ import {
 	type ConnectionHandle,
 } from "./connection/coordinator.js";
 import {
+	type ClientEventSink,
+	createClientEventSink,
+	registerSubscriptionEvents,
+} from "./diagnostics.js";
+import {
 	createParserRegistry,
 	type PostgreSQLParserRegistry,
 } from "./postgres/parsers.js";
@@ -31,6 +36,10 @@ export type {
 	RawLiveQuerySubscription,
 	RealtimeClient,
 	RealtimeClientOptions,
+	RealtimeLogEntry,
+	RealtimeLogEvent,
+	RealtimeLogger,
+	RealtimeLogLevel,
 } from "./types.js";
 
 class RealtimeClientImpl implements RealtimeClient {
@@ -41,9 +50,14 @@ class RealtimeClientImpl implements RealtimeClient {
 	>();
 	private disposed = false;
 	private readonly parsers: PostgreSQLParserRegistry;
+	private readonly events: ClientEventSink;
 
 	constructor(options: RealtimeClientOptions) {
-		this.coordinator = new ConnectionCoordinator(options);
+		this.events = createClientEventSink(options);
+		this.coordinator = new ConnectionCoordinator({
+			url: options.url,
+			events: this.events,
+		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
 
@@ -62,6 +76,7 @@ class RealtimeClientImpl implements RealtimeClient {
 		if (this.disposed) throw new Error("Realtime client is closed");
 		validateSealedQuery(query);
 		const materialized = options?.materialize !== false;
+		const events = this.events.createSubscription();
 		const initialData = materialized
 			? (options as MaterializedLiveQueryOptions<Row> | undefined)
 					?.initialData
@@ -72,8 +87,11 @@ class RealtimeClientImpl implements RealtimeClient {
 			materialized,
 			this.parsers,
 			initialData,
+			events,
 		);
+		registerSubscriptionEvents(subscription, events);
 		const handle = this.coordinator.subscribe(query, {
+			events,
 			reconciliation: subscription,
 			admitted: (columns) => subscription.admit(columns),
 			disconnected: () => subscription.disconnected(),
@@ -90,16 +108,28 @@ class RealtimeClientImpl implements RealtimeClient {
 		validateSealedQuery(query);
 		const handle = this.handles.get(subscription as Subscription<unknown>);
 		if (!handle) throw new Error("Live-query subscription is closed");
-		await handle.renew(query);
-		subscription.replaceSealedQuery(query);
+		try {
+			await handle.renew(query);
+			subscription.replaceSealedQuery(query);
+		} catch (error) {
+			const state = subscription.getState();
+			if (
+				state.status !== "closed" &&
+				(!(error instanceof ConnectionCoordinatorError) ||
+					error.retryable)
+			) {
+				subscription.renewalFailed(error);
+			}
+			throw error;
+		}
 	}
 
 	unsubscribe<Row>(subscription: Subscription<Row>): void {
 		const handle = this.handles.get(subscription as Subscription<unknown>);
 		if (!handle) return;
 		this.handles.delete(subscription as Subscription<unknown>);
-		subscription.markClosed();
 		handle.unsubscribe();
+		subscription.markClosed();
 	}
 
 	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void {
@@ -122,6 +152,7 @@ class RealtimeClientImpl implements RealtimeClient {
 			subscription.markClosed();
 		this.handles.clear();
 		this.coordinator.close();
+		this.events.closed();
 	}
 }
 

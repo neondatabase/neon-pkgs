@@ -89,6 +89,28 @@ afterEach(() => {
 });
 
 describe("trusted direct subscriptions", () => {
+	it("forwards diagnostics to the hidden client", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const realtime = createRealtime({
+			secret: SECRET,
+			db: "app",
+			url: "ws://live.test/v1",
+			logLevel: "info",
+			logger: (entry) => events.push(entry.event),
+		});
+
+		await realtime.subscribe(messagesByOwner("alice"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "hello");
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining(["connection_ready", "subscription_live"]),
+		);
+		realtime.close();
+	});
+
 	it("returns the existing materialized subscription API", async () => {
 		useFakeWebSocket();
 		const realtime = createRealtime({

@@ -170,6 +170,7 @@ function createRealtimeCollectionOptions<
 					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
 					onRefreshExhausted: reportError,
+					subscription,
 				});
 				const observeReceipt = (
 					receipt: SyncAppliedReceipt,
