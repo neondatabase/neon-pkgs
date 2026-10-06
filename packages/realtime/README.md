@@ -199,20 +199,32 @@ reconnection or sealed-query renewal, existing materialized data remains
 available as `stale`. Recoverable connection failures retry with capped
 jittered backoff until the connection recovers or the client is closed.
 
-The existing `subscribe_rejected` / `backend_unavailable` and
-`subscription_error` / `upstream_cancelled` responses also retry automatically.
+Some subscription errors also retry automatically:
+
+- `backend_overloaded` (`subscribe_rejected` or `subscription_error`): the
+  service is shedding load. The response carries `retry_after_ms`, the time
+  until the service admits that database again.
+- `subscribe_rejected` with `backend_unavailable` or `resource_exhausted`, and
+  `subscription_error` with `upstream_cancelled`.
+
 Only the affected subscription is retried, using the current socket and latest
 sealed query; other subscriptions keep receiving updates. Its last complete
 result remains `stale` (or `connecting` if no result has arrived). Re-admission
 uses a fresh request and live ID and installs a new baseline.
 
-Both responses share one recovery episode per subscription: equal-jitter delays
-start at 0.5–1 second, grow exponentially, and cap at 30–60 seconds. Admission
-rejections, brief re-admissions, and socket reconnects do not reset the delay.
-Backoff resets after a complete baseline remains live for 30 seconds.
-Unsubscribing or closing the client cancels pending retries. These existing
-codes also cover backend unavailability and cancellations unrelated to shedding;
-they do not identify the underlying cause.
+A `backend_overloaded` retry never runs before its hint. With the hint `h`
+(at least 100 ms), the SDK waits a random time in `[h, max(h, min(2h, cap))]`,
+which spreads clients across the service's ramp-up. `cap` defaults to 30
+seconds and is set with `reconnect.overloadJitterCapMs`. Without a hint, and for
+the other codes, retries use equal-jitter delays that start at 0.5–1 second,
+grow exponentially, and cap at 30–60 seconds.
+
+All retries of a subscription share one recovery episode: hint-paced retries
+count toward the attempt and elapsed-time bounds but do not grow the
+exponential delay. Admission rejections, brief re-admissions, and socket
+reconnects do not reset the episode. It resets after a complete baseline
+remains live for 30 seconds. Unsubscribing or closing the client cancels
+pending retries.
 
 ### Client diagnostics
 

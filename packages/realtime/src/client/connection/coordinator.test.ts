@@ -989,6 +989,194 @@ describe("subscription load-shedding recovery", () => {
 		expect(socket.sent).toHaveLength(3);
 		coordinator.close();
 	});
+
+	function overloaded(
+		socket: FakeWebSocket,
+		type: "subscribe_rejected" | "subscription_error",
+		id: string,
+		retryAfterMs?: number,
+	) {
+		const hint =
+			retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs };
+		socket.receive(
+			type === "subscribe_rejected"
+				? {
+						type,
+						request_id: id,
+						code: "backend_overloaded",
+						message: "backend overloaded",
+						...hint,
+					}
+				: {
+						type,
+						live_id: id,
+						code: "backend_overloaded",
+						message: "backend overloaded",
+						...hint,
+					},
+		);
+	}
+
+	it.each([
+		"subscribe_rejected",
+		"subscription_error",
+	] as const)("retries %s(backend_overloaded) after its hint without disturbing another subscription", async (type) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "shed" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const healthy = target();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		accepted(socket, "2", "42");
+		baseline(socket, "42");
+		if (type === "subscribe_rejected") overloaded(socket, type, "1", 300);
+		else {
+			accepted(socket, "1", "41");
+			overloaded(socket, type, "41", 300);
+		}
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(callbacks.disconnected).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(299);
+		expect(socket.sent).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "3",
+			authorization: "shed",
+		});
+		accepted(socket, "3", "43");
+		baseline(socket, "43");
+		expect(callbacks.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		expect(healthy.disconnected).not.toHaveBeenCalled();
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		coordinator.close();
+	});
+
+	it.each([
+		[0, 150],
+		[2_000, 3_000],
+		[20_000, 25_000],
+		[45_000, 45_000],
+	])("waits at least the %ims hint, jittered to %ims", async (hint, delay) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator({
+			reconnect: { baseMs: 100, capMs: 400, random: () => 0.5 },
+		});
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41", hint);
+		await vi.advanceTimersByTimeAsync(delay - 1);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("falls back to exponential backoff when backend_overloaded has no hint", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41");
+		await vi.advanceTimersByTimeAsync(49);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("does not advance exponential backoff for hint-paced retries", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41", 300);
+		await vi.advanceTimersByTimeAsync(300);
+		expect(socket.sent).toHaveLength(2);
+		reject(socket, "2");
+		// The first exponential step (base 100, equal jitter at 0) is still 50ms.
+		await vi.advanceTimersByTimeAsync(49);
+		expect(socket.sent).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent).toHaveLength(3);
+		coordinator.close();
+	});
+
+	it("fails an overloaded subscription once when hint-paced retries reach the attempt limit", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 100,
+				maxAttempts: 1,
+				random: () => 0,
+			},
+		});
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41", 300);
+		await vi.advanceTimersByTimeAsync(300);
+		overloaded(socket, "subscribe_rejected", "2", 300);
+		expect(callbacks.failed).toHaveBeenCalledOnce();
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "backend_overloaded",
+				retryable: false,
+			}),
+		);
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("retries resource_exhausted rejections with exponential backoff", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: "1",
+			code: "resource_exhausted",
+			message: "resource exhausted",
+		});
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(callbacks.disconnected).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(49);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "2",
+			authorization: "token",
+		});
+		coordinator.close();
+	});
+
+	it.each([
+		"unsubscribe",
+		"close",
+	])("cancels a pending hint-paced retry on %s", async (action) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const handle = coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41", 300);
+		if (action === "unsubscribe") handle.unsubscribe();
+		else coordinator.close();
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(socket.sent).toHaveLength(1);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		expect(vi.getTimerCount()).toBe(0);
+	});
 });
 
 function createCoordinator(
