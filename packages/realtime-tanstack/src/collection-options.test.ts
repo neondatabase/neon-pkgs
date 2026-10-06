@@ -2,8 +2,10 @@ import type {
 	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQueryState,
+	MaterializedArrayLiveQueryOptions,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawArrayLiveQueryOptions,
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
@@ -462,6 +464,10 @@ function wireClient() {
 class TestClient<Row extends object> implements RealtimeClient {
 	readonly subscriptions: TestRawSubscription<Row>[] = [];
 
+	subscribe<CurrentRow extends readonly unknown[]>(
+		_query: SealedLiveQuery<CurrentRow>,
+		_options: MaterializedArrayLiveQueryOptions<CurrentRow>,
+	): MaterializedLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
 		_query: SealedLiveQuery<CurrentRow>,
 		_options?: MaterializedLiveQueryOptions<CurrentRow>,
@@ -470,11 +476,17 @@ class TestClient<Row extends object> implements RealtimeClient {
 		_query: SealedLiveQuery<CurrentRow>,
 		_options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<CurrentRow>;
+	subscribe<CurrentRow extends readonly unknown[]>(
+		_query: SealedLiveQuery<CurrentRow>,
+		_options: RawArrayLiveQueryOptions,
+	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
 		_query: SealedLiveQuery<CurrentRow>,
 		options?:
+			| MaterializedArrayLiveQueryOptions<readonly unknown[]>
 			| MaterializedLiveQueryOptions<CurrentRow>
-			| RawLiveQueryOptions,
+			| RawLiveQueryOptions
+			| RawArrayLiveQueryOptions,
 	):
 		| MaterializedLiveQuerySubscription<CurrentRow>
 		| RawLiveQuerySubscription<CurrentRow> {

@@ -19,7 +19,7 @@ export interface RealtimeProviderProps {
  *
  * @typeParam Row - Row produced by the sealed query.
  */
-export interface UseLiveQueryOptions<Row> {
+interface UseLiveQueryBaseOptions<Row> {
 	/** Server-rendered or otherwise preloaded rows exposed initially as stale. */
 	readonly initialData?: readonly Row[];
 	/**
@@ -28,6 +28,18 @@ export interface UseLiveQueryOptions<Row> {
 	 */
 	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
 }
+
+/** Select object rows by default or positional tuples explicitly. */
+export type UseLiveQueryOptions<Row> = UseLiveQueryBaseOptions<Row> &
+	(Row extends readonly unknown[]
+		? {
+				/** Decode each row as a tuple in result-column order. */
+				readonly rowMode: "array";
+			}
+		: {
+				/** Decode each row as an object keyed by result-column name. */
+				readonly rowMode?: "object";
+			});
 
 /**
  * Stable imperative access to the hook's underlying materialized subscription.

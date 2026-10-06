@@ -1,8 +1,10 @@
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
+	MaterializedArrayLiveQueryOptions,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawArrayLiveQueryOptions,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 	RealtimeLogger,
@@ -55,6 +57,17 @@ type QueryRow<Query> = Query extends
 	? Row
 	: never;
 
+type ObjectModeQuery<Query> = [QueryRow<Query>] extends [never]
+	? Query
+	: QueryRow<Query> extends readonly unknown[]
+		? never
+		: Query;
+
+type ArrayModeQuery<Query> =
+	QueryRow<Query> extends readonly unknown[] ? Query : never;
+
+type ArrayQueryRow<Query> = Extract<QueryRow<Query>, readonly unknown[]>;
+
 type SealInput<Query> = { readonly query: Query };
 type SealableQuery<Query> = Query | RawSqlQuery<unknown>;
 
@@ -93,6 +106,15 @@ export interface RealtimeServer<Query> {
  */
 export interface RealtimeDirectServer<Query> extends RealtimeServer<Query> {
 	/**
+	 * Subscribe to a query as positional tuples in result-column order.
+	 */
+	subscribe<ConcreteQuery extends SealableQuery<Query>>(
+		query: ArrayModeQuery<ConcreteQuery>,
+		options: MaterializedArrayLiveQueryOptions<
+			ArrayQueryRow<ConcreteQuery>
+		>,
+	): Promise<MaterializedLiveQuerySubscription<ArrayQueryRow<ConcreteQuery>>>;
+	/**
 	 * Subscribe to a query and retain its current materialized rows.
 	 *
 	 * @param query - Concrete raw SQL or adapter-native query.
@@ -102,7 +124,7 @@ export interface RealtimeDirectServer<Query> extends RealtimeServer<Query> {
 	 * @throws If the query is invalid or the direct client has been closed.
 	 */
 	subscribe<ConcreteQuery extends SealableQuery<Query>>(
-		query: ConcreteQuery,
+		query: ObjectModeQuery<ConcreteQuery>,
 		options?: MaterializedLiveQueryOptions<QueryRow<ConcreteQuery>>,
 	): Promise<MaterializedLiveQuerySubscription<QueryRow<ConcreteQuery>>>;
 	/**
@@ -115,9 +137,14 @@ export interface RealtimeDirectServer<Query> extends RealtimeServer<Query> {
 	 * @throws If the query is invalid or the direct client has been closed.
 	 */
 	subscribe<ConcreteQuery extends SealableQuery<Query>>(
-		query: ConcreteQuery,
+		query: ObjectModeQuery<ConcreteQuery>,
 		options: RawLiveQueryOptions,
 	): Promise<RawLiveQuerySubscription<QueryRow<ConcreteQuery>>>;
+	/** Subscribe to raw positional tuples in result-column order. */
+	subscribe<ConcreteQuery extends SealableQuery<Query>>(
+		query: ArrayModeQuery<ConcreteQuery>,
+		options: RawArrayLiveQueryOptions,
+	): Promise<RawLiveQuerySubscription<ArrayQueryRow<ConcreteQuery>>>;
 	/** Permanently close every direct subscription and the shared WebSocket. */
 	close(): void;
 }
@@ -226,7 +253,9 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 		query: ConcreteQuery,
 		subscriptionOptions?:
 			| MaterializedLiveQueryOptions<QueryRow<ConcreteQuery>>
-			| RawLiveQueryOptions,
+			| MaterializedArrayLiveQueryOptions<readonly unknown[]>
+			| RawLiveQueryOptions
+			| RawArrayLiveQueryOptions,
 	): Promise<
 		| MaterializedLiveQuerySubscription<QueryRow<ConcreteQuery>>
 		| RawLiveQuerySubscription<QueryRow<ConcreteQuery>>

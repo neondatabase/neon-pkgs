@@ -28,6 +28,7 @@ import type {
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
 	RawLiveQueryRow,
+	RealtimeRowMode,
 } from "./types.js";
 
 export interface SubscriptionOwner {
@@ -96,6 +97,7 @@ export class Subscription<Row>
 		private readonly owner: SubscriptionOwner,
 		private query: SealedLiveQuery<Row>,
 		readonly materialized: boolean,
+		private readonly rowMode: RealtimeRowMode,
 		private readonly parsers: PostgreSQLParserRegistry,
 		initialData: readonly Row[] | undefined,
 		private readonly events: SubscriptionEventSink,
@@ -129,7 +131,7 @@ export class Subscription<Row>
 	}
 
 	admit(columns: readonly WireColumn[]): void {
-		validateColumns(columns);
+		validateColumns(columns, this.rowMode);
 		this.columns = columns;
 	}
 
@@ -234,6 +236,7 @@ export class Subscription<Row>
 					change.values,
 					this.requireColumns(),
 					this.requireParsers(),
+					this.rowMode,
 				);
 				return Object.freeze({
 					type: "upsert",
@@ -367,6 +370,7 @@ export class Subscription<Row>
 						wireRow.values,
 						columns,
 						this.requireParsers(),
+						this.rowMode,
 					),
 				});
 			}),

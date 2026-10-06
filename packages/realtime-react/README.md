@@ -91,6 +91,19 @@ For SSR, execute the same query on the server and pass its rows as
 `initialData`. React renders them immediately as stale data, and the first
 authoritative live-query reset reconciles any intervening changes.
 
+Queries with duplicate result-column names can use positional tuples. Declare
+the tuple on the sealed query and opt into array rows; the hook preserves the
+exact tuple type:
+
+```tsx
+type ItemValues = readonly [id: number, score: string];
+
+const { data } = useLiveQuery<ItemValues>(sealedQuery, {
+  rowMode: "array",
+});
+// data: readonly ItemValues[] | undefined
+```
+
 ### Optimistic mutations
 
 React's `useOptimistic()` can overlay application-defined changes while

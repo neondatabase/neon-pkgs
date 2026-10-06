@@ -293,19 +293,52 @@ export type LiveQueryChange<Row> =
 			readonly rowId: string;
 	  };
 
-/** Options for the default materialized subscription. */
+/** Representation used for each decoded query result row. */
+export type RealtimeRowMode = "object" | "array";
+
+/** Options for a materialized object-row subscription. */
 export interface MaterializedLiveQueryOptions<Row> {
 	/** Select materialization; omitted and `true` are equivalent. */
 	readonly materialize?: true;
 	/** Preloaded rows exposed as stale data until the first authoritative reset. */
 	readonly initialData?: readonly Row[];
+	/** Decode each row as an object keyed by its unique result-column names. */
+	readonly rowMode?: "object";
 }
 
-/** Options for a raw, non-materializing subscription. */
+/** Options for a materialized positional-row subscription. */
+export interface MaterializedArrayLiveQueryOptions<
+	Row extends readonly unknown[],
+> {
+	/** Select materialization; omitted and `true` are equivalent. */
+	readonly materialize?: true;
+	/** Preloaded tuples exposed as stale data until the first reset. */
+	readonly initialData?: readonly Row[];
+	/** Decode each row as a tuple in result-column order. */
+	readonly rowMode: "array";
+}
+
+/** Options for a raw, non-materializing object-row subscription. */
 export interface RawLiveQueryOptions {
 	/** Disable SDK materialization and consume resets and batches directly. */
 	readonly materialize: false;
+	/** Decode each row as an object keyed by its unique result-column names. */
+	readonly rowMode?: "object";
 }
+
+/** Options for a raw, non-materializing positional-row subscription. */
+export interface RawArrayLiveQueryOptions {
+	/** Disable SDK materialization and consume resets and batches directly. */
+	readonly materialize: false;
+	/** Decode each row as a tuple in result-column order. */
+	readonly rowMode: "array";
+}
+
+type ObjectModeSealedQuery<Row> = [Row] extends [never]
+	? SealedLiveQuery<Row>
+	: Row extends readonly unknown[]
+		? never
+		: SealedLiveQuery<Row>;
 
 /**
  * A live-query subscription that exposes raw reset and publication events.
@@ -438,7 +471,18 @@ export interface RealtimeClientOptions {
 /** A client that multiplexes independently disposable subscriptions. */
 export interface RealtimeClient {
 	/**
-	 * Start a materialized subscription, optionally with preloaded rows.
+	 * Start a materialized positional-row subscription.
+	 *
+	 * Declare the query row as a tuple. Tuple elements follow result-column
+	 * order, so duplicate result names are supported.
+	 */
+	subscribe<Row extends readonly unknown[]>(
+		query: SealedLiveQuery<Row>,
+		options: MaterializedArrayLiveQueryOptions<Row>,
+	): MaterializedLiveQuerySubscription<Row>;
+	/**
+	 * Start a materialized object-row subscription, optionally with preloaded
+	 * rows. This is the default row mode.
 	 *
 	 * @typeParam Row - Row inferred from the query.
 	 * @param query - Short-lived capability returned by the application
@@ -448,7 +492,7 @@ export interface RealtimeClient {
 	 * @throws If the query is malformed or the client is closed.
 	 */
 	subscribe<Row>(
-		query: SealedLiveQuery<Row>,
+		query: ObjectModeSealedQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
 	/**
@@ -462,8 +506,13 @@ export interface RealtimeClient {
 	 * @throws If the query is malformed or the client is closed.
 	 */
 	subscribe<Row>(
-		query: SealedLiveQuery<Row>,
+		query: ObjectModeSealedQuery<Row>,
 		options: RawLiveQueryOptions,
+	): RawLiveQuerySubscription<Row>;
+	/** Start a raw positional-row subscription. */
+	subscribe<Row extends readonly unknown[]>(
+		query: SealedLiveQuery<Row>,
+		options: RawArrayLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
 	/** Permanently close all subscriptions and the underlying WebSocket. */
 	close(): void;

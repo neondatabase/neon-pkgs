@@ -141,6 +141,7 @@ describe("PostgreSQL result parsers", () => {
 			[{ base64: "AP+A" }],
 			[{ ...TEXT_COLUMN, type_oid: pgTypeOids.bytea, codec: "bytes" }],
 			parsers,
+			"object",
 		);
 		expect(row.value).toEqual([0, 255, 128]);
 		expect(bytes).toHaveBeenCalledWith(new Uint8Array([0, 255, 128]));
@@ -204,6 +205,7 @@ describe("PostgreSQL result parsers", () => {
 			[null],
 			[{ ...TEXT_COLUMN, type_oid: 90000 }],
 			createParserRegistry({ 90000: parser }),
+			"object",
 		);
 		expect(row.value).toBeNull();
 		expect(parser).not.toHaveBeenCalled();
@@ -249,6 +251,7 @@ describe("PostgreSQL result parsers", () => {
 				["secret-personal-value"],
 				[{ ...TEXT_COLUMN, name: "private_column", type_oid: 90000 }],
 				parsers,
+				"object",
 			);
 		} catch (error) {
 			caught = error;
@@ -268,13 +271,38 @@ describe("PostgreSQL result parsers", () => {
 
 	it("enforces the protocol v1 OID/codec mapping", () => {
 		expect(() =>
-			validateColumns([{ ...TEXT_COLUMN, type_oid: pgTypeOids.bytea }]),
+			validateColumns(
+				[{ ...TEXT_COLUMN, type_oid: pgTypeOids.bytea }],
+				"object",
+			),
 		).toThrow("requires the bytes codec");
 		expect(() =>
-			validateColumns([
-				{ ...TEXT_COLUMN, type_oid: pgTypeOids.text, codec: "bytes" },
-			]),
+			validateColumns(
+				[{ ...TEXT_COLUMN, type_oid: pgTypeOids.text, codec: "bytes" }],
+				"object",
+			),
 		).toThrow("requires the pg_text codec");
+	});
+
+	it("requires unique object keys but permits duplicate names for tuples", () => {
+		const columns = [
+			{ ...TEXT_COLUMN, name: "value", type_oid: pgTypeOids.int4 },
+			{ ...TEXT_COLUMN, name: "value", type_oid: pgTypeOids.text },
+		] as const;
+		expect(() => validateColumns(columns, "object")).toThrow(
+			"unique result column names",
+		);
+		expect(() => validateColumns(columns, "array")).not.toThrow();
+
+		const row = decodeRow<readonly [number, string]>(
+			["42", "answer"],
+			columns,
+			createParserRegistry(undefined),
+			"array",
+		);
+		expectTypeOf(row).toEqualTypeOf<readonly [number, string]>();
+		expect(row).toEqual([42, "answer"]);
+		expect(Object.isFrozen(row)).toBe(true);
 	});
 
 	it("validates parser configuration eagerly", () => {

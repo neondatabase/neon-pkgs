@@ -10,7 +10,7 @@ import {
 	type RealtimeClient,
 	type SealedLiveQuery,
 } from "@neon/realtime/client";
-import type { UseLiveQueryUtils } from "./types.js";
+import type { UseLiveQueryOptions, UseLiveQueryUtils } from "./types.js";
 
 type SnapshotListener<Row> = (snapshot: LiveQuerySnapshot<Row>) => void;
 type StateListener = (state: LiveQueryState) => void;
@@ -39,8 +39,9 @@ export class ReactLiveQueryStore<Row> {
 	constructor(
 		private readonly client: RealtimeClient,
 		query: SealedLiveQuery<Row>,
-		initialData?: readonly Row[],
+		private readonly options: UseLiveQueryOptions<Row>,
 	) {
+		const initialData = options.initialData;
 		this.initialSnapshot = Object.freeze({
 			status: initialData === undefined ? "connecting" : "stale",
 			error: undefined,
@@ -144,9 +145,18 @@ export class ReactLiveQueryStore<Row> {
 
 	private open(): void {
 		if (this.subscription) return;
-		const subscription = this.client.subscribe(
+		const subscriptionOptions = {
+			initialData: this.initialSnapshot.data,
+			rowMode: this.options.rowMode,
+		};
+		type Subscribe = (
+			query: SealedLiveQuery<Row>,
+			options: typeof subscriptionOptions,
+		) => MaterializedLiveQuerySubscription<Row>;
+		// The hook overloads have already paired the query row type and row mode.
+		const subscription = (this.client.subscribe as unknown as Subscribe)(
 			this.queryRefresh.currentQuery(),
-			{ initialData: this.initialSnapshot.data },
+			subscriptionOptions,
 		);
 		this.subscription = subscription;
 		this.queryRefresh.setSubscription(subscription);

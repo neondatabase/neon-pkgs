@@ -18,8 +18,10 @@ export type {
 	LiveQueryError,
 	LiveQuerySnapshot,
 	LiveQueryState,
+	MaterializedArrayLiveQueryOptions,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawArrayLiveQueryOptions,
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
@@ -29,4 +31,5 @@ export type {
 	RealtimeLogEvent,
 	RealtimeLogger,
 	RealtimeLogLevel,
+	RealtimeRowMode,
 } from "./types.js";
