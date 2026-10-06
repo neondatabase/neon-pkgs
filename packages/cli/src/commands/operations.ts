@@ -5,8 +5,6 @@ import { writer } from "../writer.js";
 
 const OPERATIONS_FIELDS = ["id", "action", "status", "created_at"] as const;
 
-// Human table only: what happened, to which branch, and how long it took come first; the
-// id stays available last for investigation.
 const OPERATIONS_TABLE_FIELDS = [
 	"action",
 	"status",
