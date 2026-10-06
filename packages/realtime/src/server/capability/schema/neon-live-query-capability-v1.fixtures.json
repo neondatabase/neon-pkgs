@@ -4,7 +4,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -23,7 +23,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 2 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -37,7 +37,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
       "claims": {
         "v": 2,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -51,7 +51,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -65,7 +65,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -79,7 +79,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "typ": "redundant", "v": 1 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -93,7 +93,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key.1", "v": 1 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "app",
         "query_fingerprint": "not-a-fingerprint",
@@ -107,7 +107,7 @@
       "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
       "claims": {
         "v": 1,
-        "aud": "neon-live-proxy",
+        "aud": "realtime-proxy",
         "iss": "app-server",
         "database": "contains\u0000nul",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

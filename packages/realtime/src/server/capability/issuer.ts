@@ -38,7 +38,7 @@ export function createCapabilityIssuer(
 		const expiresAt = issuedAt + SEALED_QUERY_LIFETIME_SECONDS;
 		const claims: CapabilityClaims = {
 			v: 1,
-			aud: "neon-live-proxy",
+			aud: "realtime-proxy",
 			iss: secret.issuer,
 			database,
 			query_fingerprint: queryFingerprintValue,

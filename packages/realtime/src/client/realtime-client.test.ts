@@ -497,7 +497,7 @@ describe("RealtimeClient", () => {
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
 
-		expect(socket.protocols).toBe("neon.live.v1");
+		expect(socket.protocols).toBe("neon.realtime.v1");
 		expect(socket.sent[0]).toMatchObject({ type: "subscribe" });
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",

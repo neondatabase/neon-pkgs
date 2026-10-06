@@ -58,7 +58,7 @@ describe("Realtime v1 capability issuer", () => {
 		});
 		expect(claims).toMatchObject({
 			v: 1,
-			aud: "neon-live-proxy",
+			aud: "realtime-proxy",
 			iss: "example-app",
 			database: "app",
 			query_fingerprint: sealedQuery.queryFingerprint,
