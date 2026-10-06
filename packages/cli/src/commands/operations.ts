@@ -5,6 +5,17 @@ import { writer } from "../writer.js";
 
 const OPERATIONS_FIELDS = ["id", "action", "status", "created_at"] as const;
 
+// Human table only: what happened, to which branch, and how long it took come first; the
+// id stays available last for investigation.
+const OPERATIONS_TABLE_FIELDS = [
+	"action",
+	"status",
+	"branch_id",
+	"duration",
+	"created_at",
+	"id",
+] as const;
+
 export const command = "operations";
 export const describe = "Manage operations";
 export const aliases = ["operation"];
@@ -34,7 +45,24 @@ export const list = async (props: ProjectScopeProps & { limit: number }) => {
 		projectId: props.projectId,
 		limit: props.limit,
 	});
-	writer(props).end(data.operations, {
-		fields: OPERATIONS_FIELDS,
-	});
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data.operations, {
+			fields: OPERATIONS_FIELDS,
+		});
+		return;
+	}
+	writer(props).end(
+		data.operations.map((op) => ({
+			action: op.action,
+			status: op.status,
+			branch_id: op.branch_id ?? "-",
+			duration: `${op.total_duration_ms} ms`,
+			created_at: op.created_at,
+			id: op.id,
+		})),
+		{
+			fields: OPERATIONS_TABLE_FIELDS,
+			emptyMessage: "No operations found in this project.",
+		},
+	);
 };

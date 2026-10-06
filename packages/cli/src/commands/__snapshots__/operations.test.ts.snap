@@ -1,5 +1,59 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`operations > list (json) prints the operations as the API returned them 1`] = `
+"[
+  {
+    "id": "c77d8c55-d907-48f6-90cc-9833601aed80",
+    "project_id": "ops-table",
+    "branch_id": "br-sunny-branch-123456",
+    "endpoint_id": "ep-sunny-endpoint-123456",
+    "action": "suspend_compute",
+    "status": "finished",
+    "failures_count": 0,
+    "created_at": "2026-10-05T22:33:30Z",
+    "updated_at": "2026-10-05T22:33:31Z",
+    "total_duration_ms": 774
+  },
+  {
+    "id": "37a00598-ee4b-4ffb-ad0d-84169151a27d",
+    "project_id": "ops-table",
+    "action": "check_availability",
+    "status": "running",
+    "failures_count": 0,
+    "created_at": "2026-10-05T22:32:00Z",
+    "updated_at": "2026-10-05T22:32:00Z",
+    "total_duration_ms": 0
+  },
+  {
+    "id": "bc2c0012-751c-4b13-95b5-1618721224bd",
+    "project_id": "ops-table",
+    "branch_id": "br-sunny-branch-123456",
+    "action": "apply_config",
+    "status": "failed",
+    "failures_count": 3,
+    "error": "compute unavailable",
+    "created_at": "2026-10-05T22:28:18Z",
+    "updated_at": "2026-10-05T22:28:20Z",
+    "total_duration_ms": 2150
+  }
+]
+"
+`;
+
+exports[`operations > list (table) leads with action, status, branch, and duration, and ends with the id 1`] = `
+"Action              Status    Branch Id               Duration  Created At            Id
+suspend_compute     finished  br-sunny-branch-123456  774 ms    2026-10-05T22:33:30Z  c77d8c55-d907-48f6-90cc-9833601aed80
+check_availability  running   -                       0 ms      2026-10-05T22:32:00Z  37a00598-ee4b-4ffb-ad0d-84169151a27d
+apply_config        failed    br-sunny-branch-123456  2150 ms   2026-10-05T22:28:18Z  bc2c0012-751c-4b13-95b5-1618721224bd
+"
+`;
+
+exports[`operations > list (table) with no operations says so 1`] = `
+"
+No operations found in this project.
+"
+`;
+
 exports[`operations > list 1`] = `
 "- id: "1"
   action: suspend
