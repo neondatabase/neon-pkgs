@@ -433,6 +433,7 @@ export class ConnectionCoordinator {
 					message.code,
 					message.message,
 					message.sqlstate,
+					message.retry_after_ms,
 				);
 				return;
 			case "connection_error":
@@ -527,8 +528,17 @@ export class ConnectionCoordinator {
 		subscription.requestId = undefined;
 		if (subscription.state === "closed" || subscription.state === "failed")
 			return;
-		if (message.code === "backend_unavailable") {
-			this.retrySubscription(subscription, message.code, message.message);
+		if (
+			message.code === "backend_overloaded" ||
+			message.code === "backend_unavailable" ||
+			message.code === "resource_exhausted"
+		) {
+			this.retrySubscription(
+				subscription,
+				message.code,
+				message.message,
+				message.retry_after_ms,
+			);
 			return;
 		}
 		const replacementRequired = requiresReplacementQuery(message.code);
@@ -582,14 +592,15 @@ export class ConnectionCoordinator {
 		code: string,
 		message: string,
 		sqlState?: string,
+		retryAfterMs?: number,
 	): void {
 		// Cancellation can already be queued when we unsubscribe a late admission.
 		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
-		if (code === "upstream_cancelled") {
-			this.retrySubscription(subscription, code, message);
+		if (code === "backend_overloaded" || code === "upstream_cancelled") {
+			this.retrySubscription(subscription, code, message, retryAfterMs);
 			return;
 		}
 		const replacementRequired = requiresReplacementQuery(code);
@@ -610,14 +621,15 @@ export class ConnectionCoordinator {
 		this.failSubscription(subscription, error);
 	}
 
-	/** Retry subscribe_rejected/backend_unavailable and subscription_error/upstream_cancelled. */
+	/** Retry subscribe_rejected and subscription_error with optional hint. */
 	private retrySubscription(
 		subscription: ManagedSubscription,
 		code: string,
 		message: string,
+		retryAfterMs?: number,
 	): void {
 		const error = new ConnectionCoordinatorError(code, false, message);
-		if (!subscription.recovery.retry(error)) {
+		if (!subscription.recovery.retry(error, retryAfterMs)) {
 			this.failSubscription(subscription, error);
 			return;
 		}

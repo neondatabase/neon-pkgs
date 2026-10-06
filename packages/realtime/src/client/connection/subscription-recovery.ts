@@ -36,21 +36,24 @@ export class SubscriptionRecovery {
 	}
 
 	/** Returns false when recovery is disabled or its policy is exhausted. */
-	retry(error: DiagnosticError): boolean {
+	retry(error: DiagnosticError, retryAfterMs?: number): boolean {
 		if (this.options === false) return false;
 		this.interrupted();
 		let episode: RecoveryEpisode;
 		let attempt: ReconnectAttempt | undefined;
 		try {
+			const options =
+				typeof this.options === "object" ? this.options : {};
 			episode = this.episode ??= {
-				backoff: new ReconnectBackoff(
-					typeof this.options === "object" ? this.options : {},
-				),
+				backoff: new ReconnectBackoff(options),
 				error,
 				waiting: false,
 			};
 			episode.error = error;
-			attempt = episode.backoff.next();
+			attempt =
+				retryAfterMs !== undefined
+					? episode.backoff.nextAfterHint(retryAfterMs)
+					: episode.backoff.next();
 		} catch {
 			this.cancel();
 			return false;

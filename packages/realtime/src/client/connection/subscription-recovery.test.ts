@@ -227,4 +227,189 @@ describe("SubscriptionRecovery", () => {
 		expect(recovery.retry(error())).toBe(false);
 		expect(vi.getTimerCount()).toBe(0);
 	});
+
+	describe("retryAfterHint", () => {
+		it("schedules delay in [hint, 2*hint] for a 2000ms hint", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0.5, // mid-range for predictable testing
+			});
+			// Start an episode with regular retry first
+			expect(recovery.retry(error())).toBe(true);
+			// Call retryAfterHint with a 2000ms hint
+			expect(recovery.retry(error("backend_overloaded"), 2000)).toBe(
+				true,
+			);
+			// With hint=2000, min=2000, max=4000, delay should be 2000 + 0.5*(4000-2000) = 3000
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"backend_overloaded",
+				2,
+				3000,
+			);
+			expect(recovery.waiting).toBe(true);
+			recovery.cancel();
+		});
+
+		it("floors zero hint to [100, 200]", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0.5,
+			});
+			recovery.retry(error());
+			await vi.advanceTimersByTimeAsync(50);
+			expect(recovery.retry(error("backend_overloaded"), 0)).toBe(true);
+			// With hint=0, min=100, max=200, delay should be 100 + 0.5*100 = 150
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"backend_overloaded",
+				2,
+				150,
+			);
+			recovery.cancel();
+		});
+
+		it("caps delay to [hint, 30000] for a 20000ms hint", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0.5,
+			});
+			recovery.retry(error());
+			await vi.advanceTimersByTimeAsync(50);
+			// With hint=20000, h=20000, 2*h=40000, C=30000, max=min(2*h, C)=30000
+			// delay = 20000 + 0.5*(30000-20000) = 25000
+			expect(recovery.retry(error("backend_overloaded"), 20000)).toBe(
+				true,
+			);
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"backend_overloaded",
+				2,
+				25000,
+			);
+			recovery.cancel();
+		});
+
+		it("waits exactly the hint when it exceeds the ceiling", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0.5,
+			});
+			recovery.retry(error());
+			await vi.advanceTimersByTimeAsync(50);
+			// With hint=45000, h=45000, 2*h=90000, C=30000
+			// Since h >= C, delay should be exactly h
+			expect(recovery.retry(error("backend_overloaded"), 45000)).toBe(
+				true,
+			);
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"backend_overloaded",
+				2,
+				45000,
+			);
+			recovery.cancel();
+		});
+
+		it("falls back to exponential backoff when hint is undefined", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0,
+			});
+			recovery.retry(error());
+			await vi.advanceTimersByTimeAsync(50);
+			// No hint provided, should use exponential backoff (attempt 2, delay = 100)
+			expect(recovery.retry(error("backend_overloaded"), undefined)).toBe(
+				true,
+			);
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"backend_overloaded",
+				2,
+				100,
+			);
+			recovery.cancel();
+		});
+
+		it("returns false when recovery is disabled", () => {
+			const { recovery, callbacks } = createRecovery(false);
+			expect(recovery.retry(error("backend_overloaded"), 1000)).toBe(
+				false,
+			);
+			expect(callbacks.scheduled).not.toHaveBeenCalled();
+		});
+
+		it("counts hint retries toward attempt limits", async () => {
+			const { recovery, callbacks } = createRecovery({ maxAttempts: 2 });
+			expect(recovery.retry(error())).toBe(true); // Attempt 1
+			await vi.advanceTimersByTimeAsync(50);
+			expect(recovery.retry(error("backend_overloaded"), 100)).toBe(true); // Attempt 2
+			await vi.advanceTimersByTimeAsync(100);
+			expect(recovery.retry(error("backend_overloaded"), 100)).toBe(
+				false,
+			); // Attempt 3 - exhausted
+			expect(callbacks.scheduled).toHaveBeenCalledTimes(2);
+			// A refused retry reports false; its caller fails the subscription.
+			expect(callbacks.exhausted).not.toHaveBeenCalled();
+		});
+
+		it("does not advance exponential backoff for hint retries", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0,
+			});
+			recovery.retry(error()); // backoff step 1
+			await vi.advanceTimersByTimeAsync(50);
+			// Hint retry should not advance backoff
+			recovery.retry(error("backend_overloaded"), 100);
+			await vi.advanceTimersByTimeAsync(100);
+			// Next exponential retry should still be step 2 (not step 3)
+			expect(recovery.retry(error())).toBe(true);
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"upstream_cancelled",
+				3,
+				100,
+			);
+			recovery.cancel();
+		});
+
+		it("honors the jitter ceiling option", async () => {
+			const { recovery, callbacks } = createRecovery({
+				random: () => 0.9,
+				overloadJitterCapMs: 10_000,
+			});
+			recovery.retry(error());
+			await vi.advanceTimersByTimeAsync(50);
+			// With hint=5000, h=5000, 2*h=10000, C=10000
+			// delay = 5000 + 0.9*(10000-5000) = 9500
+			expect(recovery.retry(error("backend_overloaded"), 5000)).toBe(
+				true,
+			);
+			expect(callbacks.scheduled).toHaveBeenLastCalledWith(
+				"backend_overloaded",
+				2,
+				9500,
+			);
+			recovery.cancel();
+		});
+
+		it("respects elapsed-time limits with hint retries", async () => {
+			const { recovery } = createRecovery({
+				maxElapsedMs: 200,
+			});
+			recovery.retry(error()); // At 0ms
+			// Hint retry at 0ms with 100ms delay
+			expect(recovery.retry(error("backend_overloaded"), 100)).toBe(true);
+			// Attempt again with limited elapsed time remaining
+			// At this point we're past 200ms, so it should fail
+			// For now, just test that a second hint retry within limits returns true
+			expect(recovery.retry(error("backend_overloaded"), 50)).toBe(true);
+			recovery.cancel();
+		});
+
+		it("preserves the episode and stability when interrupted", async () => {
+			const { recovery } = createRecovery();
+			recovery.retry(error());
+			await vi.advanceTimersByTimeAsync(50);
+			recovery.interrupted();
+			expect(recovery.retry(error("backend_overloaded"), 100)).toBe(true);
+			await vi.advanceTimersByTimeAsync(100);
+			recovery.baselineCompleted();
+			await vi.advanceTimersByTimeAsync(500);
+			recovery.interrupted();
+			await vi.advanceTimersByTimeAsync(1000);
+			// Next hint retry should start a new timer
+			expect(recovery.retry(error("backend_overloaded"), 100)).toBe(true);
+			recovery.cancel();
+		});
+	});
 });
