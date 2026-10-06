@@ -187,10 +187,11 @@
             "type": { "const": "subscribe_rejected" },
             "request_id": { "$ref": "#/$defs/u64" },
             "code": {
-              "enum": ["authorization_failed", "authorization_expired", "backend_unavailable", "upstream_rejected", "resource_exhausted", "service_unavailable"]
+              "enum": ["authorization_failed", "authorization_expired", "backend_unavailable", "backend_overloaded", "upstream_rejected", "resource_exhausted", "service_unavailable"]
             },
             "message": { "type": "string" },
-            "sqlstate": { "$ref": "#/$defs/sqlstate" }
+            "sqlstate": { "$ref": "#/$defs/sqlstate" },
+            "retry_after_ms": { "$ref": "#/$defs/u32" }
           },
           "additionalProperties": false
         },
@@ -298,10 +299,11 @@
             "type": { "const": "subscription_error" },
             "live_id": { "$ref": "#/$defs/u64" },
             "code": {
-              "enum": ["authorization_expired", "renewal_failed", "upstream_cancelled", "baseline_sync_failed", "protocol_error"]
+              "enum": ["authorization_expired", "renewal_failed", "upstream_cancelled", "backend_overloaded", "baseline_sync_failed", "protocol_error"]
             },
             "message": { "type": "string" },
-            "sqlstate": { "$ref": "#/$defs/sqlstate" }
+            "sqlstate": { "$ref": "#/$defs/sqlstate" },
+            "retry_after_ms": { "$ref": "#/$defs/u32" }
           },
           "additionalProperties": false
         },
