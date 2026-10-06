@@ -7,11 +7,14 @@ import { join } from "node:path";
 import emocks from "emocks";
 import express, { type RequestHandler } from "express";
 import { afterEach, describe, expect, test } from "vitest";
+import { clearAuthContext, setAuthContext } from "../auth_context.js";
+import { handler } from "./checkout.js";
 
 const dirs: string[] = [];
 const servers: Server[] = [];
 
 afterEach(async () => {
+	clearAuthContext();
 	for (const server of servers.splice(0)) {
 		server.closeAllConnections();
 		await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -174,5 +177,50 @@ describe("checkout requests", () => {
 		expect(
 			seen.filter((r) => r === "GET /projects/test/branches"),
 		).toHaveLength(2);
+	});
+
+	test("on Claimable Neon, reads the project only after the branch resolves", async () => {
+		setAuthContext({ source: "claimable", configDir: "" });
+		const dir = mkdtempSync(join(tmpdir(), "neonctl-checkout-claimable-"));
+		dirs.push(dir);
+		const started: string[] = [];
+		let releaseBranches: () => void = () => undefined;
+		const branchesHeld = new Promise<void>((resolve) => {
+			releaseBranches = resolve;
+		});
+		const apiClient = {
+			listProjectBranches: async () => {
+				started.push("branches");
+				await branchesHeld;
+				return {
+					data: {
+						branches: [
+							{ id: "br-dev-123456", name: "dev", default: true },
+						],
+					},
+				};
+			},
+			getProject: async () => {
+				started.push("project");
+				return { data: { project: { id: "test", org_id: "org-1" } } };
+			},
+		};
+
+		const checkedOut = handler({
+			apiClient: apiClient as never,
+			apiKey: "test-key",
+			apiHost: "https://console.neon.tech/api/v2",
+			output: "yaml",
+			contextFile: join(dir, ".neon"),
+			projectId: "test",
+			id: "dev",
+			envPull: false,
+		});
+		await new Promise((resolve) => setImmediate(resolve));
+		expect(started).toEqual(["branches"]);
+
+		releaseBranches();
+		await checkedOut;
+		expect(started).toEqual(["branches", "project"]);
 	});
 });

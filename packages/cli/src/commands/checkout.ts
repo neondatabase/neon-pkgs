@@ -4,6 +4,7 @@ import chalk from "chalk";
 import prompts from "prompts";
 import type yargs from "yargs";
 import { isNeonApiError } from "../api.js";
+import { isClaimableEnvTarget } from "../claimable/state.js";
 
 import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
@@ -47,6 +48,7 @@ type CheckoutProps = CommonProps & {
 	create?: boolean;
 	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
 	color?: boolean;
+	configDir?: string;
 };
 
 // The positional is optional: omitting it in an interactive terminal opens a
@@ -198,13 +200,19 @@ export const handler = async (props: CheckoutProps) => {
 	}
 
 	// The org lookup needs only the project, so it runs while the branch resolves (which can
-	// prompt or create a branch); it is awaited where it always was.
-	const orgRead = resolveOrgId(props, projectId);
-	orgRead.catch(() => undefined);
+	// prompt or create a branch) and is awaited where it always was. Claimable Neon does not
+	// complete concurrent Management API reads, so there it still waits for the branch.
+	const claimable = isClaimableEnvTarget({
+		apiHost: props.apiHost,
+		contextFile: props.contextFile,
+		configDir: props.configDir ?? "",
+	});
+	const orgRead = claimable ? undefined : resolveOrgId(props, projectId);
+	orgRead?.catch(() => undefined);
 	const { branchId, branchName, created, policyApplied, policyFailure } =
 		await resolveBranchId(props, projectId, { hooks, git, event, cwd });
 
-	const orgId = await orgRead;
+	const orgId = await (orgRead ?? resolveOrgId(props, projectId));
 
 	// `checkout` is a thin helper over `link`. It fully "heals" the context file:
 	// it always (re)writes `projectId`, `branch`, and `orgId` (when the project
