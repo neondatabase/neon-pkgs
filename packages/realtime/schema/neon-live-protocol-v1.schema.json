@@ -58,6 +58,7 @@
     },
     "mvcc": {
       "type": "object",
+      "$comment": "Visibility evidence for known committed transactions. Semantic validation requires xmin <= xmax and every xip entry in [xmin, xmax).",
       "required": ["xmin", "xmax", "xip"],
       "properties": {
         "xmin": { "$ref": "#/$defs/u64" },
@@ -319,6 +320,16 @@
           "properties": {
             "type": { "enum": ["ping", "pong"] },
             "token": { "$ref": "#/$defs/heartbeatToken" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "$comment": "Ordered installed-processing progress, shared by the connection's subscriptions. Covered changes must precede this message; subscriptions may apply the proof only after their baseline and covered changes are installed.",
+          "required": ["type", "mvcc"],
+          "properties": {
+            "type": { "const": "progress" },
+            "mvcc": { "$ref": "#/$defs/mvcc" }
           },
           "additionalProperties": false
         }

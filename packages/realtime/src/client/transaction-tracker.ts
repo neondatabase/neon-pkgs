@@ -1,3 +1,8 @@
+import {
+	mergeMvccSnapshots,
+	type ParsedMvccSnapshot,
+	parseMvccSnapshot,
+} from "./mvcc.js";
 import type { MvccSnapshot } from "./protocol/messages.js";
 
 const MAX_RECENT_TXIDS = 1_000;
@@ -12,7 +17,7 @@ export class TransactionTracker {
 	private readonly recent = new Set<string>();
 	private readonly recentOrder: string[] = [];
 	private readonly waiting = new Map<string, Set<TransactionWaiter>>();
-	private appliedSnapshot?: ParsedMvccSnapshot;
+	private visibility?: ParsedMvccSnapshot;
 	private closed = false;
 
 	wait = async (txid: string, timeout?: number): Promise<void> => {
@@ -28,7 +33,7 @@ export class TransactionTracker {
 		if (this.closed) throw new Error("Live-query subscription is closed");
 		if (
 			this.recent.has(normalized.text) ||
-			this.appliedSnapshot?.isVisible(normalized.value)
+			this.visibility?.isVisible(normalized.value)
 		)
 			return;
 
@@ -68,12 +73,20 @@ export class TransactionTracker {
 		this.resolve(normalized);
 	}
 
-	/** Record the latest applied snapshot and resolve every visible wait. */
+	/** Record an installed snapshot and resolve every visible wait. */
 	applySnapshot(snapshot: MvccSnapshot): void {
 		if (this.closed) return;
-		this.appliedSnapshot = parseSnapshot(snapshot);
+		this.applyProgress(parseMvccSnapshot(snapshot));
+	}
+
+	/** Record progress only after every covered change has been installed. */
+	applyProgress(snapshot: ParsedMvccSnapshot): void {
+		if (this.closed) return;
+		this.visibility = this.visibility
+			? mergeMvccSnapshots(this.visibility, snapshot)
+			: snapshot;
 		for (const txid of this.waiting.keys()) {
-			if (this.appliedSnapshot.isVisible(BigInt(txid))) {
+			if (this.visibility.isVisible(BigInt(txid))) {
 				this.resolve(txid);
 			}
 		}
@@ -92,7 +105,7 @@ export class TransactionTracker {
 		this.waiting.clear();
 		this.recent.clear();
 		this.recentOrder.length = 0;
-		this.appliedSnapshot = undefined;
+		this.visibility = undefined;
 	}
 
 	private remove(txid: string, waiter: TransactionWaiter): void {
@@ -118,13 +131,6 @@ interface ParsedTxid {
 	readonly value: bigint;
 }
 
-interface ParsedMvccSnapshot {
-	readonly xmin: bigint;
-	readonly xmax: bigint;
-	readonly xip: ReadonlySet<bigint>;
-	readonly isVisible: (txid: bigint) => boolean;
-}
-
 function normalizeTxid(txid: string): ParsedTxid {
 	if (typeof txid !== "string" || !/^\d+$/.test(txid)) {
 		throw new Error("Live-query transaction ID must be a decimal string");
@@ -134,16 +140,4 @@ function normalizeTxid(txid: string): ParsedTxid {
 		throw new Error("Live-query transaction ID exceeds uint64");
 	}
 	return { text: parsed.toString(), value: parsed };
-}
-
-function parseSnapshot(snapshot: MvccSnapshot): ParsedMvccSnapshot {
-	const xmin = BigInt(snapshot.xmin);
-	const xmax = BigInt(snapshot.xmax);
-	const xip = new Set(snapshot.xip.map((txid) => BigInt(txid)));
-	return {
-		xmin,
-		xmax,
-		xip,
-		isVisible: (txid) => txid < xmin || (txid < xmax && !xip.has(txid)),
-	};
 }

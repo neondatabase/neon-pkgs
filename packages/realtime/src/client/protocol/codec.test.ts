@@ -20,6 +20,7 @@ const CLIENT_TYPES = new Set([
 ]);
 const SERVER_TYPES = new Set([
 	"ready",
+	"progress",
 	"subscribed",
 	"subscribe_rejected",
 	"renewed",
@@ -186,6 +187,67 @@ describe("Realtime v1 JSON codec", () => {
 				...baselineSyncStart,
 				mvcc: { ...baselineSyncStart.mvcc, xip: [invalid] },
 			});
+		}
+	});
+
+	it("parses immutable MVCC evidence once for progress frames", () => {
+		const message = {
+			type: "progress",
+			mvcc: { xmin: "100", xmax: "110", xip: ["103"] },
+		};
+		const frame = decodeServerFrame(JSON.stringify(message));
+		expect(frame.message).toEqual(message);
+		expect(frame.mvcc).toMatchObject({
+			xmin: 100n,
+			xmax: 110n,
+			xip: [103n],
+		});
+		expect(frame.mvcc?.isVisible(103n)).toBe(false);
+		expect(frame.mvcc?.isVisible(109n)).toBe(true);
+		expect(Object.isFrozen(frame.mvcc)).toBe(true);
+	});
+
+	it("validates MVCC semantics identically for baselines and progress", () => {
+		const envelopes = [
+			{ type: "progress" },
+			{
+				type: "baseline_sync_start",
+				live_id: "1",
+				epoch: "1",
+				baseline_sync_attempt: "1",
+			},
+		];
+		for (const envelope of envelopes) {
+			for (const mvcc of [
+				{ xmin: "20", xmax: "10", xip: [] },
+				{ xmin: "10", xmax: "20", xip: ["9"] },
+				{ xmin: "10", xmax: "20", xip: ["20"] },
+			]) {
+				expect(() =>
+					decodeServerMessage(JSON.stringify({ ...envelope, mvcc })),
+				).toThrow(/MVCC/);
+			}
+			for (const invalid of ["0", "01", "18446744073709551616"]) {
+				for (const mvcc of [
+					{ xmin: invalid, xmax: "20", xip: [] },
+					{ xmin: "10", xmax: invalid, xip: [] },
+					{ xmin: "10", xmax: "20", xip: [invalid] },
+				]) {
+					rejectServerMessage({ ...envelope, mvcc });
+				}
+			}
+			expect(() =>
+				decodeServerMessage(
+					JSON.stringify({
+						...envelope,
+						mvcc: {
+							xmin: "18446744073709551615",
+							xmax: "18446744073709551615",
+							xip: [],
+						},
+					}),
+				),
+			).not.toThrow();
 		}
 	});
 
