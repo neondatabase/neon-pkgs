@@ -329,6 +329,32 @@ describe("functions", () => {
 		);
 	});
 
+	test("deploy (table) polls on the default schedule and prints one result without a completed line", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"functions",
+				"deploy",
+				"tablefunc",
+				"--src",
+				fnDir,
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main",
+			],
+			{
+				mockDir: "single_org",
+				outputTable: true,
+				// No interval override: the default schedule polls through `building` to
+				// `completed` well inside the test timeout.
+				env: { NEON_ESBUILD_PATH: esbuildBin },
+				stderr: "INFO: Function deployment triggered for function tablefunc.",
+			},
+		);
+	});
+
 	test("deploy --wait on first deploy (no prior active version)", async ({
 		testCliCommand,
 	}) => {

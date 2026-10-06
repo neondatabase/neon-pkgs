@@ -50,21 +50,13 @@ const CUSTOM_DOMAIN_FIELDS = [
 	"cname_target",
 ] as const;
 
-// Table columns for `functions list`. `status` is a derived field (the
-// table writer reads flat fields only): the current deployment's status.
+// Table columns for `functions list`. `status` (the current deployment's status) and `URL`
+// are derived fields: the table writer reads flat fields only.
 const LIST_TABLE_FIELDS = [
 	"slug",
 	"name",
 	"status",
-	"invocation_url",
-	"created_at",
-] as const;
-
-const DEPLOYMENT_FIELDS = [
-	"id",
-	"status",
-	"runtime",
-	"memory_mib",
+	"URL",
 	"created_at",
 ] as const;
 
@@ -79,7 +71,26 @@ const DEPLOY_RESULT_FIELDS = [
 	"created_at",
 ] as const;
 
-// In table mode a failed build's reason gets its own "deployment error"
+// Human tables only: the deployment id named as such and memory with its unit.
+const DEPLOYMENT_TABLE_FIELDS = [
+	"deployment_id",
+	"status",
+	"runtime",
+	"memory",
+	"created_at",
+] as const;
+
+const deploymentTableView = (dep: NeonFunctionDeployment) => ({
+	deployment_id: dep.id,
+	status: dep.status,
+	runtime: dep.runtime,
+	memory: `${dep.memory_mib} MiB`,
+	created_at: dep.created_at,
+});
+
+const FUNCTION_TABLE_FIELDS = ["slug", "name", "URL", "created_at"] as const;
+
+// In table mode a failed build's reason gets its own "Deployment error"
 // section after the deployment table; json/yaml carry the raw `error` field.
 const writeDeploymentErrorSection = (
 	out: ReturnType<typeof writer>,
@@ -88,7 +99,7 @@ const writeDeploymentErrorSection = (
 	if (dep.status === "failed" && dep.error) {
 		out.write(
 			{ reason: dep.error },
-			{ fields: ["reason"], title: "deployment error" },
+			{ fields: ["reason"], title: "Deployment error" },
 		);
 	}
 };
@@ -97,9 +108,22 @@ const SLUG_PATTERN = /^[a-z0-9]{1,20}$/;
 const SLUG_HELP =
 	"Use 1-20 lowercase letters and digits (no hyphens or other characters).";
 
-// Overridable so tests can poll fast; defaults to 2s in real use.
-const POLL_INTERVAL_MS =
-	Number(process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS) || 2000;
+// A fixed delay for every poll, so tests can poll fast.
+const POLL_INTERVAL_OVERRIDE_MS =
+	Number(process.env.NEON_FUNCTIONS_POLL_INTERVAL_MS) || undefined;
+const FIRST_POLL_DELAY_MS = 200;
+const POLL_INTERVAL_MS = 2000;
+
+/**
+ * Delay before poll `attempt` (zero-based). A small function's deployment is usually done
+ * within a few hundred milliseconds of the POST, so the first check comes soon and longer
+ * builds back off to the steady interval.
+ */
+export const deploymentPollDelay = (
+	attempt: number,
+	override: number | undefined = POLL_INTERVAL_OVERRIDE_MS,
+): number =>
+	override ?? Math.min(FIRST_POLL_DELAY_MS * 2 ** attempt, POLL_INTERVAL_MS);
 
 // Upper bound on --wait polling so the CLI never hangs (e.g. if our deployment
 // never shows up as current_deployment). Overridable so tests can time out fast;
@@ -302,13 +326,23 @@ const emitDeployResult = (
 	deployment: NeonFunctionDeployment,
 	fn: NeonFunction | undefined,
 ) => {
-	const out = writer(props).write(
-		{ ...deployment, invocation_url: fn?.invocation_url },
-		{ fields: DEPLOY_RESULT_FIELDS },
-	);
-	if (props.output !== "json" && props.output !== "yaml") {
-		writeDeploymentErrorSection(out, deployment);
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props)
+			.write(
+				{ ...deployment, invocation_url: fn?.invocation_url },
+				{ fields: DEPLOY_RESULT_FIELDS },
+			)
+			.end();
+		return;
 	}
+	const out = writer(props).write(
+		{ URL: fn?.invocation_url, ...deploymentTableView(deployment) },
+		{
+			fields: ["URL", ...DEPLOYMENT_TABLE_FIELDS],
+			title: `Function ${props.slug}`,
+		},
+	);
+	writeDeploymentErrorSection(out, deployment);
 	out.end();
 };
 
@@ -432,9 +466,13 @@ const deploy = async (props: DeployProps) => {
 	// current_deployment) so we can surface that URL on success.
 	let resolvedFn: NeonFunction | undefined;
 	const deadline = Date.now() + POLL_TIMEOUT_MS;
+	let attempt = 0;
 	try {
 		while (!interrupted && Date.now() < deadline) {
-			await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+			await new Promise((r) =>
+				setTimeout(r, deploymentPollDelay(attempt)),
+			);
+			attempt += 1;
 			if (interrupted) break;
 			// The deploy already succeeded server-side; tolerate transient poll
 			// failures and retry on the next interval. Surface anything else.
@@ -486,7 +524,12 @@ const deploy = async (props: DeployProps) => {
 		return;
 	}
 	if (resolved.status === "completed") {
-		log.info(`Function deployment ${props.slug}/${resolved.id} completed.`);
+		// The table already shows the completed status.
+		if (props.output === "json" || props.output === "yaml") {
+			log.info(
+				`Function deployment ${props.slug}/${resolved.id} completed.`,
+			);
+		}
 		return;
 	}
 	if (resolved.status === "failed") {
@@ -518,32 +561,32 @@ const get = async (
 		return;
 	}
 
-	const out = writer(props).write(fn, {
-		fields: FUNCTION_FIELDS,
-		title: "function",
-	});
+	const out = writer(props).write(
+		{ ...fn, URL: fn.invocation_url },
+		{ fields: FUNCTION_TABLE_FIELDS, title: "Function" },
+	);
 	const current = fn.current_deployment;
 	const active = fn.active_deployment;
 	if (current && active && current.id === active.id) {
-		out.write(current, {
-			fields: DEPLOYMENT_FIELDS,
-			title: "deployment (current, active)",
+		out.write(deploymentTableView(current), {
+			fields: DEPLOYMENT_TABLE_FIELDS,
+			title: "Deployment (current, active)",
 		});
 		writeDeploymentErrorSection(out, current);
 	} else {
 		if (current) {
-			out.write(current, {
-				fields: DEPLOYMENT_FIELDS,
-				title: "current deployment",
+			out.write(deploymentTableView(current), {
+				fields: DEPLOYMENT_TABLE_FIELDS,
+				title: "Current deployment",
 			});
 			// The failure reason is shown only for the current deployment;
 			// the active one completed successfully by definition.
 			writeDeploymentErrorSection(out, current);
 		}
 		if (active) {
-			out.write(active, {
-				fields: DEPLOYMENT_FIELDS,
-				title: "active deployment",
+			out.write(deploymentTableView(active), {
+				fields: DEPLOYMENT_TABLE_FIELDS,
+				title: "Active deployment",
 			});
 		}
 	}
@@ -552,7 +595,7 @@ const get = async (
 			(fn.active_deployment?.environment ?? []).map((name) => ({ name })),
 			{
 				fields: ["name"],
-				title: "environment",
+				title: "Environment",
 				emptyMessage:
 					"No environment variables on the active deployment.",
 			},
@@ -615,6 +658,7 @@ const list = async (props: BranchScopeProps) => {
 		functions.map((fn) => ({
 			...fn,
 			status: fn.current_deployment?.status ?? "",
+			URL: fn.invocation_url,
 		})),
 		{
 			fields: LIST_TABLE_FIELDS,
