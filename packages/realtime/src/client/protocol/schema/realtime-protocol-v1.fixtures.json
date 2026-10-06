@@ -10,6 +10,8 @@
     { "type": "progress", "mvcc": { "xmin": "100", "xmax": "103", "xip": [] } },
     { "type": "subscribed", "request_id": "1", "live_id": "2", "epoch": "1", "first_sequence": "1", "columns": [{ "name": "id", "type_oid": 23, "typmod": -1, "codec": "pg_text" }] },
     { "type": "subscribe_rejected", "request_id": "1", "code": "authorization_expired", "message": "expired", "sqlstate": "42601" },
+    { "type": "subscribe_rejected", "request_id": "1", "code": "backend_overloaded", "message": "backend overloaded", "retry_after_ms": 2000 },
+    { "type": "subscribe_rejected", "request_id": "1", "code": "backend_overloaded", "message": "backend overloaded", "retry_after_ms": 0 },
     { "type": "renewed", "live_id": "2" },
     { "type": "unsubscribed", "live_id": "2" },
     { "type": "baseline_sync_start", "live_id": "2", "epoch": "1", "baseline_sync_attempt": "1", "mvcc": { "xmin": "1", "xmax": "2", "xip": ["1"] } },
@@ -20,6 +22,7 @@
     { "type": "reset_required", "publication_id": "7", "index": 1, "targets": [{ "live_id": "2", "epoch": "2", "first_sequence": "1" }] },
     { "type": "commit", "publication_id": "7", "body_count": 2, "frontier": { "lsn": "0/10" } },
     { "type": "subscription_error", "live_id": "2", "code": "authorization_expired", "message": "expired", "sqlstate": "22023" },
+    { "type": "subscription_error", "live_id": "2", "code": "backend_overloaded", "message": "backend overloaded", "retry_after_ms": 2000 },
     { "type": "connection_error", "code": "protocol_error", "message": "invalid sequence" }
   ],
   "invalid": [
@@ -45,6 +48,9 @@
     { "type": "subscription_error", "live_id": "2", "code": "snapshot_failed", "message": "failed" },
     { "type": "subscription_error", "live_id": "2", "code": "baseline_sync_failed", "message": "failed", "sqlstate": "2202" },
     { "type": "subscription_error", "live_id": "2", "code": "future", "message": "bad" },
+    { "type": "subscribe_rejected", "request_id": "1", "code": "backend_overloaded", "message": "bad", "retry_after_ms": -1 },
+    { "type": "subscribe_rejected", "request_id": "1", "code": "backend_overloaded", "message": "bad", "retry_after_ms": "2000" },
+    { "type": "subscription_error", "live_id": "2", "code": "backend_overloaded", "message": "bad", "retry_after_ms": 4294967296 },
     { "type": "unknown" }
   ]
 }
