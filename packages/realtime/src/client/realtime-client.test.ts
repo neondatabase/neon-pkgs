@@ -81,6 +81,77 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("keeps rows stale through shedding and admission rejection, then installs a fresh baseline", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			const socket = connectAndAdmit();
+			baselineSync(socket, "before");
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "upstream_cancelled",
+				message: "upstream cancelled",
+			});
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "stale",
+				data: [{ id: 1, title: "before" }],
+				error: undefined,
+			});
+			await vi.advanceTimersByTimeAsync(499);
+			expect(
+				socket.sent.filter((message) => message.type === "subscribe"),
+			).toHaveLength(1);
+			await vi.advanceTimersByTimeAsync(501);
+			const retry = defined(socket.sent.at(-1));
+			expect(retry).toMatchObject({ type: "subscribe", request_id: "2" });
+			socket.receive({
+				type: "subscribe_rejected",
+				request_id: "2",
+				code: "backend_unavailable",
+				message: "backend unavailable",
+			});
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "stale",
+				data: [{ id: 1, title: "before" }],
+				error: undefined,
+			});
+			await vi.advanceTimersByTimeAsync(999);
+			expect(
+				socket.sent.filter((message) => message.type === "subscribe"),
+			).toHaveLength(2);
+			await vi.advanceTimersByTimeAsync(1_001);
+			socket.receive({
+				type: "subscribed",
+				request_id: "3",
+				live_id: "42",
+				epoch: "1",
+				first_sequence: "1",
+				columns: [
+					{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+					{
+						name: "title",
+						type_oid: 25,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+			baselineSync(socket, "after", "42");
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "live",
+				data: [{ id: 1, title: "after" }],
+				error: undefined,
+			});
+			expect(FakeWebSocket.instances).toHaveLength(1);
+		} finally {
+			client.close();
+			vi.useRealTimers();
+		}
+	});
+
 	it("emits structured diagnostics without exposing query contents", async () => {
 		useFakeWebSocket();
 		const entries: unknown[] = [];

@@ -104,6 +104,15 @@ type ManagedSubscriptionState =
 	| "failed"
 	| "closed";
 
+interface SubscriptionRetry {
+	readonly backoff: ReconnectBackoff;
+	error: ConnectionCoordinatorError;
+	waiting: boolean;
+	timer?: unknown;
+	stabilityTimer?: unknown;
+	deadlineTimer?: ReturnType<typeof setTimeout>;
+}
+
 interface ManagedSubscription {
 	readonly events: SubscriptionEventSink;
 	query: ConnectionSealedQuery;
@@ -115,6 +124,7 @@ interface ManagedSubscription {
 	liveId?: string;
 	renewing?: Renewal;
 	queuedRenewals: Renewal[];
+	retry?: SubscriptionRetry;
 }
 
 /** Owns one multiplexed WebSocket and request/live-ID admission routing. */
@@ -222,6 +232,7 @@ export class ConnectionCoordinator {
 		this.cancelReconnectEpisode();
 		const error = new Error("Realtime client is closed");
 		for (const subscription of this.managedSubscriptions) {
+			this.cancelSubscriptionRetry(subscription);
 			this.rejectRenewals(subscription, error);
 		}
 		this.managedSubscriptions.clear();
@@ -281,6 +292,7 @@ export class ConnectionCoordinator {
 
 	private unsubscribe(subscription: ManagedSubscription): void {
 		if (subscription.state === "closed") return;
+		this.cancelSubscriptionRetry(subscription);
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
@@ -443,7 +455,20 @@ export class ConnectionCoordinator {
 		}
 		this.pendingRequests.delete(message.request_id);
 		subscription.requestId = undefined;
-		if (subscription.state === "closed") {
+		if (
+			subscription.state === "closed" ||
+			subscription.state === "failed"
+		) {
+			// Baseline/publication frames may already follow this admission on
+			// the wire. Keep an inactive target until Unsubscribe is acknowledged.
+			this.reconciler.add({
+				liveId: message.live_id,
+				epoch: message.epoch,
+				firstSequence: message.first_sequence,
+				columnCount: message.columns.length,
+				target: subscription.callbacks.reconciliation,
+			});
+			this.reconciler.deactivate(message.live_id);
 			this.detachingLiveIds.add(message.live_id);
 			this.send({ type: "unsubscribe", live_id: message.live_id });
 			return;
@@ -466,7 +491,7 @@ export class ConnectionCoordinator {
 			epoch: message.epoch,
 			firstSequence: message.first_sequence,
 			columnCount: message.columns.length,
-			target: subscription.callbacks.reconciliation,
+			target: this.subscriptionReconciliation(subscription),
 		});
 		if (acceptedCapability === subscription.query.capability) {
 			this.resolveRenewals(subscription);
@@ -485,7 +510,12 @@ export class ConnectionCoordinator {
 			throw new ProtocolError("unknown subscribe request ID");
 		this.pendingRequests.delete(message.request_id);
 		subscription.requestId = undefined;
-		if (subscription.state === "closed") return;
+		if (subscription.state === "closed" || subscription.state === "failed")
+			return;
+		if (message.code === "backend_unavailable") {
+			this.retrySubscription(subscription, message.code, message.message);
+			return;
+		}
 		const replacementRequired = requiresReplacementQuery(message.code);
 		const error = new ConnectionCoordinatorError(
 			message.code,
@@ -538,9 +568,15 @@ export class ConnectionCoordinator {
 		message: string,
 		sqlState?: string,
 	): void {
+		// Cancellation can already be queued when we unsubscribe a late admission.
+		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
+		if (code === "upstream_cancelled") {
+			this.retrySubscription(subscription, code, message);
+			return;
+		}
 		const replacementRequired = requiresReplacementQuery(code);
 		const error = new ConnectionCoordinatorError(
 			code,
@@ -557,6 +593,139 @@ export class ConnectionCoordinator {
 			return;
 		}
 		this.failSubscription(subscription, error);
+	}
+
+	/** Both existing overload signals end an attempt, not the logical subscription. */
+	private retrySubscription(
+		subscription: ManagedSubscription,
+		code: string,
+		message: string,
+	): void {
+		const error = new ConnectionCoordinatorError(code, false, message);
+		if (!this.reconnect) {
+			this.failSubscription(subscription, error);
+			return;
+		}
+		this.cancelSubscriptionStability(subscription);
+		let retry: SubscriptionRetry;
+		let attempt: ReconnectAttempt | undefined;
+		try {
+			retry = subscription.retry ??= {
+				backoff: new ReconnectBackoff(
+					typeof this.options.reconnect === "object"
+						? this.options.reconnect
+						: {},
+				),
+				error,
+				waiting: false,
+			};
+			retry.error = error;
+			attempt = retry.backoff.next();
+		} catch {
+			this.failSubscription(subscription, error);
+			return;
+		}
+		if (!attempt) {
+			this.failSubscription(subscription, error);
+			return;
+		}
+		if (subscription.requestId)
+			this.pendingRequests.delete(subscription.requestId);
+		if (subscription.liveId) {
+			this.liveSubscriptions.delete(subscription.liveId);
+			this.reconciler.remove(subscription.liveId);
+		}
+		subscription.requestId = undefined;
+		subscription.requestedCapability = undefined;
+		subscription.acceptedCapability = undefined;
+		subscription.liveId = undefined;
+		if (subscription.renewing) {
+			subscription.queuedRenewals.unshift(subscription.renewing);
+			subscription.renewing = undefined;
+		}
+		retry.waiting = true;
+		if (
+			retry.deadlineTimer === undefined &&
+			Number.isFinite(attempt.remainingMs)
+		) {
+			// Match connection recovery: custom backoff timers cannot disable the
+			// absolute elapsed-time bound, including while waiting for a baseline.
+			retry.deadlineTimer = setTimeout(() => {
+				if (subscription.retry === retry) {
+					this.failLocalSubscription(subscription, retry.error);
+				}
+			}, attempt.remainingMs);
+		}
+		retry.timer = retry.backoff.setTimer(() => {
+			if (subscription.retry !== retry || !retry.waiting) return;
+			retry.timer = undefined;
+			retry.waiting = false;
+			// Socket recovery owns reconnecting. The ready handler will retry if
+			// this delay finishes before the socket becomes usable.
+			this.sendSubscribe(subscription);
+		}, attempt.delayMs);
+		subscription.callbacks.disconnected();
+	}
+
+	private subscriptionReconciliation(
+		subscription: ManagedSubscription,
+	): ReconciliationTarget {
+		const target = subscription.callbacks.reconciliation;
+		return {
+			baselineSyncStarted: () => target.baselineSyncStarted(),
+			installReset: (rows) => target.installReset(rows),
+			applyBatch: (batch) => target.applyBatch(batch),
+			publishReset: (rows, mvcc) => target.publishReset(rows, mvcc),
+			publishBatch: (batch) => target.publishBatch(batch),
+			baselineSyncCompleted: (count) =>
+				target.baselineSyncCompleted(count),
+			decodeFailed: (error) => target.decodeFailed(error),
+			caughtUp: () => {
+				this.armSubscriptionStability(subscription);
+				target.caughtUp();
+			},
+			resetRequired: () => {
+				this.cancelSubscriptionStability(subscription);
+				target.resetRequired();
+			},
+		};
+	}
+
+	private armSubscriptionStability(subscription: ManagedSubscription): void {
+		const retry = subscription.retry;
+		if (!retry || subscription.state !== "active" || !subscription.liveId)
+			return;
+		this.cancelSubscriptionStability(subscription);
+		const liveId = subscription.liveId;
+		retry.stabilityTimer = retry.backoff.setTimer(() => {
+			if (
+				subscription.retry === retry &&
+				subscription.liveId === liveId &&
+				this.ready
+			) {
+				this.cancelSubscriptionRetry(subscription);
+			}
+		}, retry.backoff.stabilityMs);
+	}
+
+	private cancelSubscriptionStability(
+		subscription: ManagedSubscription,
+	): void {
+		const retry = subscription.retry;
+		if (retry?.stabilityTimer !== undefined) {
+			retry.backoff.clearTimer(retry.stabilityTimer);
+			retry.stabilityTimer = undefined;
+		}
+	}
+
+	private cancelSubscriptionRetry(subscription: ManagedSubscription): void {
+		const retry = subscription.retry;
+		if (!retry) return;
+		this.cancelSubscriptionStability(subscription);
+		if (retry.timer !== undefined) retry.backoff.clearTimer(retry.timer);
+		if (retry.deadlineTimer !== undefined)
+			clearTimeout(retry.deadlineTimer);
+		subscription.retry = undefined;
 	}
 
 	private connectionError(code: string, message: string): void {
@@ -585,6 +754,8 @@ export class ConnectionCoordinator {
 	private sendSubscribe(subscription: ManagedSubscription): void {
 		if (
 			subscription.state !== "active" ||
+			!this.ready ||
+			subscription.retry?.waiting ||
 			subscription.requestId ||
 			subscription.liveId
 		)
@@ -638,6 +809,7 @@ export class ConnectionCoordinator {
 			this.noteConnectionLost(this.pendingConnectionError);
 		}
 		for (const subscription of this.activeSubscriptions) {
+			this.cancelSubscriptionStability(subscription);
 			subscription.requestId = undefined;
 			subscription.requestedCapability = undefined;
 			subscription.acceptedCapability = undefined;
@@ -750,6 +922,7 @@ export class ConnectionCoordinator {
 		error: ConnectionCoordinatorError,
 		beforeCallbacks?: () => void,
 	): void {
+		this.cancelSubscriptionRetry(subscription);
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		if (subscription.requestId)
@@ -773,6 +946,7 @@ export class ConnectionCoordinator {
 	): void {
 		if (subscription.state === "failed" || subscription.state === "closed")
 			return;
+		this.cancelSubscriptionRetry(subscription);
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		const liveId = subscription.liveId;
@@ -782,8 +956,8 @@ export class ConnectionCoordinator {
 			this.detachingLiveIds.add(liveId);
 			this.send({ type: "unsubscribe", live_id: liveId });
 		}
-		if (subscription.requestId)
-			this.pendingRequests.delete(subscription.requestId);
+		// A local retry deadline can expire while admission is in flight. Keep
+		// its correlation until the reply so a late acceptance is unsubscribed.
 		subscription.requestId = undefined;
 		subscription.requestedCapability = undefined;
 		subscription.acceptedCapability = undefined;
@@ -802,6 +976,7 @@ export class ConnectionCoordinator {
 		rejectedCapability: string | undefined,
 		error: ConnectionCoordinatorError,
 	): void {
+		this.cancelSubscriptionStability(subscription);
 		this.activeSubscriptions.delete(subscription);
 		if (subscription.requestId)
 			this.pendingRequests.delete(subscription.requestId);

@@ -199,6 +199,21 @@ reconnection or sealed-query renewal, existing materialized data remains
 available as `stale`. Recoverable connection failures retry with capped
 jittered backoff until the connection recovers or the client is closed.
 
+The existing `subscribe_rejected` / `backend_unavailable` and
+`subscription_error` / `upstream_cancelled` responses also retry automatically.
+Only the affected subscription is retried, using the current socket and latest
+sealed query; other subscriptions keep receiving updates. Its last complete
+result remains `stale` (or `connecting` if no result has arrived). Re-admission
+uses a fresh request and live ID and installs a new baseline.
+
+Both responses share one recovery episode per subscription: equal-jitter delays
+start at 0.5–1 second, grow exponentially, and cap at 30–60 seconds. Admission
+rejections, brief re-admissions, and socket reconnects do not reset the delay.
+Backoff resets after a complete baseline remains live for 30 seconds.
+Unsubscribing or closing the client cancels pending retries. These existing
+codes also cover backend unavailability and cancellations unrelated to shedding;
+they do not identify the underlying cause.
+
 ### Client diagnostics
 
 Client diagnostics are silent by default. Set `logLevel` to write structured
