@@ -610,6 +610,13 @@ export class ConnectionCoordinator {
 		this.liveSubscriptions.clear();
 		this.detachingLiveIds.clear();
 		this.reconciler.clear();
+		if (
+			!this.disposed &&
+			!this.terminalConnection &&
+			this.activeSubscriptions.size > 0
+		) {
+			this.noteConnectionLost(this.pendingConnectionError);
+		}
 		for (const subscription of this.activeSubscriptions) {
 			subscription.requestId = undefined;
 			subscription.requestedCapability = undefined;
@@ -620,13 +627,6 @@ export class ConnectionCoordinator {
 				subscription.renewing = undefined;
 			}
 			subscription.callbacks.disconnected();
-		}
-		if (
-			!this.disposed &&
-			!this.terminalConnection &&
-			this.activeSubscriptions.size > 0
-		) {
-			this.noteConnectionLost(this.pendingConnectionError);
 		}
 		if (
 			!this.disposed &&
@@ -797,8 +797,8 @@ export class ConnectionCoordinator {
 			subscription.queuedRenewals.unshift(subscription.renewing);
 			subscription.renewing = undefined;
 		}
-		subscription.callbacks.disconnected();
 		subscription.events.queryUnavailable(error);
+		subscription.callbacks.disconnected();
 
 		if (
 			rejectedCapability !== undefined &&

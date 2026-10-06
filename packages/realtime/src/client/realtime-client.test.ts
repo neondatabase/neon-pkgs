@@ -320,6 +320,106 @@ describe("RealtimeClient", () => {
 		);
 	});
 
+	it("queues the unsubscribe diagnostic before reentrant state listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		subscription.onStateChange((state) => {
+			if (state.status === "closed") client.close();
+		});
+
+		subscription.unsubscribe();
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining([
+				"subscription_unsubscribed",
+				"client_closed",
+			]),
+		);
+		expect(events.indexOf("subscription_unsubscribed")).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
+	it.each([
+		{
+			code: "authorization_expired",
+			event: "query_expired",
+		},
+		{
+			code: "key_retired",
+			event: "query_encryption_key_rotated",
+		},
+	] as const)("queues $event before reentrant state listeners", async ({
+		code,
+		event,
+	}) => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "value");
+		await Promise.resolve();
+		events.length = 0;
+		subscription.onStateChange((state) => {
+			if (state.status === "stale") client.close();
+		});
+
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code,
+			message: "query unavailable",
+		});
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining([event, "client_closed"]),
+		);
+		expect(events.indexOf(event)).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
+	it("queues connection loss before reentrant state listeners", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+		});
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "value");
+		await Promise.resolve();
+		events.length = 0;
+		subscription.onStateChange((state) => {
+			if (state.status === "stale") client.close();
+		});
+
+		socket.close();
+		await Promise.resolve();
+
+		expect(events).toEqual(
+			expect.arrayContaining(["connection_lost", "client_closed"]),
+		);
+		expect(events.indexOf("connection_lost")).toBeLessThan(
+			events.indexOf("client_closed"),
+		);
+	});
+
 	it("queues publication commit before reentrant batch listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];

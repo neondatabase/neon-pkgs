@@ -128,8 +128,8 @@ class RealtimeClientImpl implements RealtimeClient {
 		const handle = this.handles.get(subscription as Subscription<unknown>);
 		if (!handle) return;
 		this.handles.delete(subscription as Subscription<unknown>);
-		subscription.markClosed();
 		handle.unsubscribe();
+		subscription.markClosed();
 	}
 
 	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void {
