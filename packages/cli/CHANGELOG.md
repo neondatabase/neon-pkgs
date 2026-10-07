@@ -1,5 +1,11 @@
 # neon
 
+## 8.0.12
+
+### Patch Changes
+
+- 7a99284: `neon checkout` makes one fewer request and reads the project while it resolves the branch, so it finishes sooner. Output, `.neon`, and `.env.local` are unchanged.
+
 ## 8.0.11
 
 ### Patch Changes
