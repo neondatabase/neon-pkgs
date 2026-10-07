@@ -21,13 +21,6 @@
     "absoluteMaxTokenBytes": 1048576
   },
   "$defs": {
-    "identity": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 255,
-      "pattern": "^[^\\x00]+$",
-      "x-maxUtf8Bytes": 255
-    },
     "databaseName": {
       "type": "string",
       "minLength": 1,
@@ -38,16 +31,10 @@
     "protectedHeader": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["alg", "enc", "kid", "v"],
+      "required": ["alg", "enc", "v"],
       "properties": {
         "alg": { "const": "dir" },
         "enc": { "const": "A256GCM" },
-        "kid": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,64}$",
-          "maxLength": 64,
-          "x-maxUtf8Bytes": 64
-        },
         "v": { "const": 1 }
       }
     },
@@ -82,7 +69,6 @@
       "required": [
         "v",
         "aud",
-        "iss",
         "database",
         "error_details",
         "query_fingerprint",
@@ -94,7 +80,6 @@
       "properties": {
         "v": { "const": 1 },
         "aud": { "const": "realtime-proxy" },
-        "iss": { "$ref": "#/$defs/identity" },
         "database": { "$ref": "#/$defs/databaseName" },
         "error_details": {
           "description": "Controls whether subscription errors use safe client-facing messages or include full database diagnostics.",

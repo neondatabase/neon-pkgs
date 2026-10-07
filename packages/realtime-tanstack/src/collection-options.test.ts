@@ -645,7 +645,6 @@ function compactJwe(payload: string): string {
 		JSON.stringify({
 			alg: "dir",
 			enc: "A256GCM",
-			kid: "current",
 			v: 1,
 		}),
 	).toString("base64url");

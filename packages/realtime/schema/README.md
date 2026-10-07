@@ -28,5 +28,5 @@ title, and audience now already match the proxy's Realtime identity.
 
 The naming cleanup preserves live-query API names such as `useLiveQuery` and
 `SealedLiveQuery`, the `live` lifecycle state, and the `live_id` wire field.
-The opaque secret prefix `neon_live_v1_` and fingerprint domain
+The opaque secret prefix `nrt_live_1` and fingerprint domain
 `neon-live-query-fingerprint-v1\0` also retain their existing representations.

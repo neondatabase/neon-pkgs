@@ -960,7 +960,7 @@ function validateSealedQuery(query: ConnectionSealedQuery): void {
 }
 
 function requiresReplacementQuery(code: string): boolean {
-	return code === "authorization_expired" || code === "key_retired";
+	return code === "authorization_expired";
 }
 
 function promiseWithResolvers<Value>(): {

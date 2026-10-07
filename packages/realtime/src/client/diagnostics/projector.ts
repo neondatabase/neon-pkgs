@@ -239,12 +239,7 @@ function createSubscriptionEventSink(
 				{ ...metadata, ...errorMetadata(error) },
 			),
 		queryUnavailable: (error) =>
-			emit(
-				error.code === "key_retired"
-					? "query_encryption_key_rotated"
-					: "query_expired",
-				{ ...metadata, ...errorMetadata(error) },
-			),
+			emit("query_expired", { ...metadata, ...errorMetadata(error) }),
 		listenerFailed: (error) =>
 			emit("subscription_listener_failed", { ...metadata, error }),
 		stateChanged: (fromStatus, toStatus) =>

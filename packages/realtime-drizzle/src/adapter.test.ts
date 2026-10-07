@@ -92,8 +92,7 @@ const parameterTypes = pgTable("adapter_parameter_types", {
 });
 
 const db = drizzle(async () => ({ rows: [] }));
-const SECRET =
-	"neon_live_v1_eyJ2IjoxLCJraWQiOiJjdXJyZW50IiwiaXNzIjoidGVzdCIsImtleSI6IkJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2MifQ";
+const SECRET = "nrt_live_1BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc";
 
 afterEach(() => {
 	vi.unstubAllGlobals();

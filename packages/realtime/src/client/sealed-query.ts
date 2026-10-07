@@ -49,11 +49,9 @@ function validCompactJweHeader(capability: string): boolean {
 		) as unknown;
 		return (
 			isRecord(header) &&
-			Object.keys(header).sort().join(",") === "alg,enc,kid,v" &&
+			Object.keys(header).sort().join(",") === "alg,enc,v" &&
 			header.alg === "dir" &&
 			header.enc === "A256GCM" &&
-			typeof header.kid === "string" &&
-			/^[A-Za-z0-9_-]{1,64}$/.test(header.kid) &&
 			header.v === 1
 		);
 	} catch {

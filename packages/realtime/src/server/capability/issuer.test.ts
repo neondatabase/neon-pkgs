@@ -16,12 +16,7 @@ import { createCapabilityIssuer } from "./issuer.js";
 import { parseRealtimeSecret } from "./secret.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
-const SECRET = encodeSecret({
-	v: 1,
-	kid: "current",
-	iss: "example-app",
-	key: encodeBase64Url(KEY),
-});
+const SECRET = encodeSecret(KEY);
 const QUERY: PreparedLiveQuery = {
 	sql: "select id, body from messages where channel_id = $1",
 	parameters: [{ typeOid: 23, value: "7" }],
@@ -29,13 +24,9 @@ const QUERY: PreparedLiveQuery = {
 const validateCapability = capabilityValidator();
 
 describe("Realtime v1 capability issuer", () => {
-	it("extracts key-selection metadata from one opaque secret", () => {
+	it("extracts the encryption key from one opaque secret", () => {
 		const parsed = parseRealtimeSecret(SECRET);
-		expect(parsed).toEqual({
-			key: KEY,
-			keyId: "current",
-			issuer: "example-app",
-		});
+		expect(parsed).toEqual({ key: KEY });
 	});
 
 	it("emits interoperable dir/A256GCM Compact JWE claims", async () => {
@@ -54,13 +45,11 @@ describe("Realtime v1 capability issuer", () => {
 		expect(header).toEqual({
 			alg: "dir",
 			enc: "A256GCM",
-			kid: "current",
 			v: 1,
 		});
 		expect(claims).toMatchObject({
 			v: 1,
 			aud: "realtime-proxy",
-			iss: "example-app",
 			database: "app",
 			error_details: "full",
 			query_fingerprint: sealedQuery.queryFingerprint,
@@ -125,12 +114,9 @@ describe("Realtime v1 capability issuer", () => {
 	it.each([
 		"",
 		"old-raw-key",
-		encodeSecret({
-			v: 1,
-			kid: "bad.kid",
-			iss: "app",
-			key: encodeBase64Url(KEY),
-		}),
+		"nrt_live_1",
+		`nrt_live_1${encodeBase64Url(KEY)}=`,
+		`nrt_live_1${encodeBase64Url(KEY.subarray(1))}`,
 	])("rejects malformed opaque secrets", (secret) =>
 		expect(() => parseRealtimeSecret(secret)).toThrow(
 			"Invalid Realtime secret",
@@ -175,8 +161,8 @@ async function decrypt(token: string, rawKey: Uint8Array) {
 	};
 }
 
-function encodeSecret(value: object): string {
-	return `neon_live_v1_${encodeBase64Url(utf8(JSON.stringify(value)))}`;
+function encodeSecret(key: Uint8Array): string {
+	return `nrt_live_1${encodeBase64Url(key)}`;
 }
 
 function base64UrlDecode(value: string): Uint8Array {

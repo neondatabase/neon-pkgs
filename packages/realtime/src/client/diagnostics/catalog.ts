@@ -56,10 +56,6 @@ export const EVENT_CATALOG = {
 		level: "debug",
 		message: "Realtime connection is stable",
 	},
-	query_encryption_key_rotated: {
-		level: "warn",
-		message: "The query encryption key was rotated",
-	},
 	query_expired: { level: "warn", message: "The query expired" },
 	query_refresh_callback_failed: {
 		level: "warn",

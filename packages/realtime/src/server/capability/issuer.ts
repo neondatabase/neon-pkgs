@@ -40,7 +40,6 @@ export function createCapabilityIssuer(
 		const claims: CapabilityClaims = {
 			v: 1,
 			aud: "realtime-proxy",
-			iss: secret.issuer,
 			database,
 			error_details: errorDetails,
 			query_fingerprint: queryFingerprintValue,
@@ -58,7 +57,6 @@ export function createCapabilityIssuer(
 		const protectedHeader: ProtectedHeader = {
 			alg: "dir",
 			enc: "A256GCM",
-			kid: secret.keyId,
 			v: 1,
 		};
 		const capability = await encryptCompactJwe(

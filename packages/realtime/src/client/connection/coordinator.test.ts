@@ -113,7 +113,7 @@ describe("ConnectionCoordinator", () => {
 		);
 	});
 
-	it("distinguishes query expiry from encryption-key retirement", async () => {
+	it("reports query expiry", async () => {
 		const entries: Array<{ event: string }> = [];
 		const coordinator = createCoordinator({
 			events: createClientEventSink({
@@ -130,33 +130,9 @@ describe("ConnectionCoordinator", () => {
 			message: "expired",
 		});
 
-		coordinator.subscribe({ capability: "two" }, target());
-		const request = defined(
-			first.sent.find(
-				(message) =>
-					message.type === "subscribe" && message.request_id === "2",
-			),
-		);
-		first.receive({
-			type: "subscribed",
-			request_id: request.request_id,
-			live_id: "42",
-			epoch: "1",
-			first_sequence: "1",
-			columns: [],
-		});
-		first.receive({
-			type: "subscription_error",
-			live_id: "42",
-			code: "key_retired",
-			message: "retired",
-		});
 		await Promise.resolve();
 
-		expect(entries.map((entry) => entry.event)).toEqual([
-			"query_expired",
-			"query_encryption_key_rotated",
-		]);
+		expect(entries.map((entry) => entry.event)).toEqual(["query_expired"]);
 	});
 
 	it("negotiates neon.realtime.v1, waits for ready, and routes admission", () => {

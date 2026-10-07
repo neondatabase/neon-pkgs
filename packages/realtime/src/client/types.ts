@@ -88,10 +88,6 @@ export interface RealtimeLogEventDefinition {
 		readonly level: "debug";
 		readonly metadata: object;
 	};
-	readonly query_encryption_key_rotated: {
-		readonly level: "warn";
-		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
-	};
 	readonly query_expired: {
 		readonly level: "warn";
 		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;
