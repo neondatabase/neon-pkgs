@@ -1,0 +1,64 @@
+# Live Neon Auth e2e for @neon/auth.
+#
+# The suite provisions a throwaway project from the NEON_TEST_API_KEY secret, enables
+# Neon Auth on its default branch with email verification off (so headless signups
+# succeed), and deletes both afterwards. It runs as its own path-filtered workflow
+# rather than inside the shared e2e-live job: that job runs on every pull request under
+# one budget, and auth provisioning plus real signups should only spend that budget when
+# the auth package (or the harness) changes.
+#
+# Fork and Dependabot pull requests skip the job: GitHub does not expose repository secrets
+# to untrusted pull request code, so the suite could only fail there.
+name: e2e (live Neon Auth)
+
+on:
+    pull_request:
+        paths:
+            - "packages/auth/**"
+            - "tests/e2e-harness/**"
+            - ".github/workflows/e2e-auth.yml"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
+    push:
+        branches:
+            - main
+        paths:
+            - "packages/auth/**"
+            - "tests/e2e-harness/**"
+            - ".github/workflows/e2e-auth.yml"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
+    workflow_dispatch: ~
+
+permissions:
+    contents: read
+    id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
+
+concurrency:
+    group: e2e-auth-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    auth:
+        name: Live Neon Auth e2e
+        if: >-
+            github.event_name != 'pull_request' ||
+            (github.event.pull_request.head.repo.full_name == github.repository &&
+            github.actor != 'dependabot[bot]')
+        runs-on:
+            group: neondatabase-protected-runner-group
+            labels: linux-ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+            - uses: ./.github/actions/prepare
+            - name: Run live Neon Auth e2e
+              env:
+                  NEON_API_KEY: ${{ secrets.NEON_TEST_API_KEY }}
+                  NEON_ORG_ID: ${{ vars.NEON_TEST_ORG_ID }}
+              run: pnpm --filter @neon/auth test:e2e
