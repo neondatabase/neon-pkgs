@@ -3,7 +3,7 @@
 Internal, **never published**. Shared plumbing for the live Neon e2e suites in
 `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`, and `neon` (the CLI) — the
 ones `pnpm test:e2e:live` runs against a real Neon organization — plus
-`@neon/ai-sdk-provider`, whose gateway suite runs on its own.
+`@neon/ai-sdk-provider`, `@neon/auth`, whose suites run on their own.
 
 It exists because that plumbing is dangerous to get wrong. Every suite creates real
 projects and deletes them again, and cleanup is the part with teeth: a sweep that is
@@ -22,15 +22,17 @@ are written down once.
 | `createProject()`, `deleteProject()` | Project lifecycle, org-scoped |
 | `waitForProjectReady()` | Poll until no operation is still in flight |
 | `sweepOrphans()` | Reclaim leftovers from previous failed runs |
+| `provisionNeonAuth()`, `releaseNeonAuth()` | Enable Neon Auth on a throwaway branch, headless-signup enabled, and take it back down |
 | `e2eTest` | Vitest fixture with a `track(id)` cleanup hook |
 | `installSuiteSetup()` | `beforeAll` that probes the key and sweeps |
 | `apiRequest()`, `ApiError`, `statusOf()`, `describeError()`, `sleep()` | The `fetch` layer |
 
-Everything is available from the package root, and the three modules that touch no Vitest API
-are also exported by subpath — `@neon/e2e-harness/api`, `/env`, `/projects`. Import by subpath
-from anything Vitest runs **outside** a worker: the root export pulls in `e2eTest`, which
-imports `vitest`, and `globalSetup` throws on that. `@neon/ai-sdk-provider`'s gateway setup is
-the case in point.
+Everything is available from the package root, and the modules that touch no Vitest API
+are also exported by subpath — `@neon/e2e-harness/api`, `/auth`, `/env`, `/projects`. Import
+by subpath from anything Vitest runs **outside** a worker: the root export pulls in
+`e2eTest`, which imports `vitest`, and `globalSetup` throws on that.
+`@neon/ai-sdk-provider`'s gateway setup and `@neon/auth`'s auth provisioning are the case
+in point.
 
 ## It does not use `@neon/sdk`
 
