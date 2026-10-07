@@ -1,6 +1,6 @@
 import type { Column, ServerMessage } from "./wire-types.gen.js";
 
-export const LIVE_SUBPROTOCOL = "neon.realtime.v1";
+export const REALTIME_SUBPROTOCOL = "neon.realtime.v1";
 
 type ServerVariant<Type extends ServerMessage["type"]> = Extract<
 	ServerMessage,

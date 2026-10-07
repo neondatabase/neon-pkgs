@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neon.tech/schemas/live/neon-live-protocol-v1.schema.json",
-  "title": "Neon Live protocol v1",
+  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v1.schema.json",
+  "title": "Neon Realtime protocol v1",
   "type": "object",
   "$defs": {
     "u64": {

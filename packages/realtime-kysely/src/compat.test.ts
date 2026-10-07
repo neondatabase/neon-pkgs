@@ -14,7 +14,7 @@ interface Database {
 	};
 }
 
-describe("Kysely Live compatibility boundary", () => {
+describe("Kysely Realtime compatibility boundary", () => {
 	it("declares the tested Kysely peer range", async () => {
 		const integrationPackage = JSON.parse(
 			await readFile(new URL("../package.json", import.meta.url), "utf8"),

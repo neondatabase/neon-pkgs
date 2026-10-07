@@ -9,7 +9,7 @@ import {
 	ProtocolError,
 } from "./index.js";
 import type { ClientMessage } from "./messages.js";
-import fixtures from "./schema/neon-live-protocol-v1.fixtures.json";
+import fixtures from "./schema/realtime-protocol-v1.fixtures.json";
 
 const CLIENT_TYPES = new Set([
 	"subscribe",
