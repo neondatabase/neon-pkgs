@@ -10,6 +10,10 @@
 /packages/realtime-drizzle/  @kevin-dp
 /packages/realtime-kysely/   @kevin-dp
 
+/packages/auth/              @Shridhad
+/packages/postgrest-js/      @Shridhad
+/internals/internal/         @Shridhad
+
 # CI/CD: workflows, composite actions, Dependabot config, CODEOWNERS itself
 /.github/                @atilafassina @rodneyshibu
 
