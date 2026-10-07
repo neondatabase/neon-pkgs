@@ -30,6 +30,26 @@ describe("neon-auth", () => {
 		);
 	});
 
+	test("enable reports a provisioning conflict on a branch without Neon Auth", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"enable",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				mockDir: "neon-auth-schema-conflict",
+				code: 1,
+				stderr: "ERROR: The `neon_auth` schema already exists and cannot be automatically provisioned. Please drop the existing `neon_auth` schema before provisioning Neon Auth.",
+			},
+		);
+	});
+
 	test("status", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"neon-auth",

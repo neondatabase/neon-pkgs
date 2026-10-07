@@ -721,15 +721,19 @@ const enable = async (props: AuthBranchProps & { databaseName?: string }) => {
 			}),
 		));
 	} catch (err) {
-		if (isNeonApiError(err) && err.status === 409) {
-			alreadyEnabled = true;
+		if (!(isNeonApiError(err) && err.status === 409)) throw err;
+		try {
 			({ data } = await props.apiClient.getNeonAuth(
 				props.projectId,
 				branchId,
 			));
-		} else {
-			throw err;
+		} catch (readErr) {
+			// No integration to show: the 409 was a provisioning conflict (for example an
+			// existing `neon_auth` schema), and its message says what to do.
+			if (isNeonApiError(readErr) && readErr.status === 404) throw err;
+			throw readErr;
 		}
+		alreadyEnabled = true;
 	}
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data as any, { fields: INTEGRATION_RESPONSE_FIELDS });
