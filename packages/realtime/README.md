@@ -74,7 +74,8 @@ By default, subscription errors use safe client-facing messages. During local
 development, pass `debugMode: true` to `createRealtime()` to include full
 database diagnostics in errors returned by the Realtime endpoint. Detailed
 errors can expose schema, table, and column names, so never enable this for
-untrusted clients in production.
+untrusted clients in production. When PostgreSQL supplies a SQLSTATE, it is
+available as `error.sqlState` on the subscription error.
 
 `db` is embedded in each encrypted capability. The first capability accepted
 on a browser client binds its WebSocket to that database; later subscriptions
