@@ -940,6 +940,18 @@ export const ensureAuth = async (
 		return;
 	}
 
+	// `me` is how scripts and agents check who is signed in. Signing in to answer that
+	// changes the answer, and leaves the caller waiting on a browser it may not see.
+	if (props._[0] === "me") {
+		const state =
+			loaded === null
+				? "has no stored credential"
+				: "holds a session that has expired";
+		throw new Error(
+			`Not signed in: profile "${selection.profile}" ${state}. Run \`${getCliName()} auth --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`,
+		);
+	}
+
 	// Use the resolved profile so `NEON_PROFILE` cannot overwrite `DEFAULT`.
 	const apiKey = await authFlow({ ...props, profile: selection.profile });
 	props.apiKey = apiKey;
