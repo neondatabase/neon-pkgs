@@ -39,6 +39,10 @@ export interface SubscriptionOwner {
 	parserFailed<Row>(subscription: Subscription<Row>, cause: Error): void;
 }
 
+interface PublicLiveQueryErrorOptions extends ErrorOptions {
+	readonly sqlState?: string;
+}
+
 export class PublicLiveQueryError extends Error implements LiveQueryError {
 	readonly sqlState?: string;
 
@@ -46,7 +50,7 @@ export class PublicLiveQueryError extends Error implements LiveQueryError {
 		readonly code: string,
 		readonly retryable: boolean,
 		message = `Live query failed: ${code}`,
-		options?: ErrorOptions & { readonly sqlState?: string },
+		options?: PublicLiveQueryErrorOptions,
 	) {
 		super(message, options);
 		this.name = "LiveQueryError";

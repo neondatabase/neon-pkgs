@@ -73,6 +73,10 @@ export type WebSocketFactory = (
 	protocols: string | string[],
 ) => WebSocketLike;
 
+interface ConnectionCoordinatorErrorOptions extends ErrorOptions {
+	readonly sqlState?: string;
+}
+
 export class ConnectionCoordinatorError extends Error {
 	readonly sqlState?: string;
 
@@ -80,7 +84,7 @@ export class ConnectionCoordinatorError extends Error {
 		readonly code: string,
 		readonly retryable: boolean,
 		message: string,
-		options?: ErrorOptions & { readonly sqlState?: string },
+		options?: ConnectionCoordinatorErrorOptions,
 	) {
 		super(message, options);
 		this.name = "ConnectionCoordinatorError";
