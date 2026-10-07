@@ -7,8 +7,8 @@ import type { ParsedMvccSnapshot } from "../mvcc.js";
 import {
 	decodeServerFrame,
 	encodeClientMessage,
-	LIVE_SUBPROTOCOL,
 	ProtocolError,
+	REALTIME_SUBPROTOCOL,
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
@@ -314,7 +314,10 @@ export class ConnectionCoordinator {
 		this.events.connection.attemptStarted();
 		let socket: WebSocketLike;
 		try {
-			socket = this.webSocketFactory(this.options.url, LIVE_SUBPROTOCOL);
+			socket = this.webSocketFactory(
+				this.options.url,
+				REALTIME_SUBPROTOCOL,
+			);
 		} catch (error) {
 			this.noteConnectionLost(error);
 			this.scheduleReconnect();

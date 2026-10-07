@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
-import capabilitySchema from "../../../schema/neon-live-query-capability-v1.schema.json";
+import capabilitySchema from "../../../schema/realtime-query-capability-v1.schema.json";
 import { defined } from "../../defined.test-helpers.js";
 import type { PreparedLiveQuery } from "../adapter.js";
 import {

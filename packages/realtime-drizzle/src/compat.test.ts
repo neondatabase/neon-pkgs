@@ -15,7 +15,7 @@ const accounts = pgTable("compat_accounts", {
 	name: text("name").notNull(),
 });
 
-describe("Drizzle Live compatibility boundary", () => {
+describe("Drizzle Realtime compatibility boundary", () => {
 	it("pins the tested version and declares its optional peer range", async () => {
 		const integrationPackage = JSON.parse(
 			await readFile(new URL("../package.json", import.meta.url), "utf8"),

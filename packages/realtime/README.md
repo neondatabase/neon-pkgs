@@ -234,7 +234,7 @@ Supply `logger` to route the same structured entries into an application
 logger. `logLevel` still controls which entries it receives:
 
 ```ts
-import type { RealtimeLogEntry } from "@neon/live/client";
+import type { RealtimeLogEntry } from "@neon/realtime/client";
 
 const client = createRealtimeClient({
   url: "wss://live.neon.tech/...",
@@ -405,3 +405,11 @@ concerns.
 Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
 `NEON_REALTIME_SECRET` to browser code.
+
+## Protocol schemas
+
+The package exports its versioned protocol and decoded capability schemas at
+`@neon/realtime/schema/realtime-protocol-v1.schema.json` and
+`@neon/realtime/schema/realtime-query-capability-v1.schema.json`.
+See the [schema maintenance notes](schema/README.md) for generation and
+downstream synchronization.

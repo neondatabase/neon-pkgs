@@ -8,7 +8,7 @@ import {
 	type TypedRawSqlParameter,
 } from "./raw-parameter.js";
 
-const RAW_SQL_QUERY = Symbol("neon-live.raw-sql-query");
+const RAW_SQL_QUERY = Symbol("neon-realtime.raw-sql-query");
 
 /** A JavaScript value accepted as a PostgreSQL text-format parameter. */
 export type RawSqlParameter =

@@ -4,6 +4,7 @@ import chalk from "chalk";
 import prompts from "prompts";
 import type yargs from "yargs";
 import { isNeonApiError } from "../api.js";
+import { isClaimableEnvTarget } from "../claimable/state.js";
 
 import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
@@ -47,6 +48,7 @@ type CheckoutProps = CommonProps & {
 	create?: boolean;
 	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
 	color?: boolean;
+	configDir?: string;
 };
 
 // The positional is optional: omitting it in an interactive terminal opens a
@@ -197,10 +199,20 @@ export const handler = async (props: CheckoutProps) => {
 		}
 	}
 
+	// The org lookup needs only the project, so it runs while the branch resolves (which can
+	// prompt or create a branch) and is awaited where it always was. Claimable Neon does not
+	// complete concurrent Management API reads, so there it still waits for the branch.
+	const claimable = isClaimableEnvTarget({
+		apiHost: props.apiHost,
+		contextFile: props.contextFile,
+		configDir: props.configDir ?? "",
+	});
+	const orgRead = claimable ? undefined : resolveOrgId(props, projectId);
+	orgRead?.catch(() => undefined);
 	const { branchId, branchName, created, policyApplied, policyFailure } =
 		await resolveBranchId(props, projectId, { hooks, git, event, cwd });
 
-	const orgId = await resolveOrgId(props, projectId);
+	const orgId = await (orgRead ?? resolveOrgId(props, projectId));
 
 	// `checkout` is a thin helper over `link`. It fully "heals" the context file:
 	// it always (re)writes `projectId`, `branch`, and `orgId` (when the project
@@ -244,12 +256,15 @@ export const handler = async (props: CheckoutProps) => {
 
 	// Bundle `env pull` so the branch-first loop is just link + checkout: the branch you
 	// checked out is immediately usable for local dev. `--no-env-pull` opts out.
-	await autoPullEnvAfterPin({
-		...props,
-		projectId,
-		branch: branchId,
-		envPull: props.envPull,
-	});
+	await autoPullEnvAfterPin(
+		{
+			...props,
+			projectId,
+			branch: branchId,
+			envPull: props.envPull,
+		},
+		{ branchId, branchName, usedDefault: false },
+	);
 
 	// `checkout.after` / `create.after` hooks (Preview): run once the branch is pinned and env
 	// is resolved, regardless of a policy-apply failure above (the branch is checked out

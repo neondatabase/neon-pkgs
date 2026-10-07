@@ -3,7 +3,7 @@ import type { ClientMessage, ServerMessage } from "./messages.js";
 import {
 	validateClientMessage as generatedClientMessageValidator,
 	validateServerMessage as generatedServerMessageValidator,
-	neonLiveSchemaPatterns,
+	realtimeSchemaPatterns,
 } from "./schema-validator.gen.js";
 
 const MAX_SERVER_MESSAGE_BYTES = 1024 * 1024;
@@ -115,7 +115,7 @@ function formatSchemaError(
 	errors: readonly SchemaValidationError[] | null,
 ): string {
 	const base64Error = errors?.find(
-		(error) => schemaPattern(error) === neonLiveSchemaPatterns.base64Cell,
+		(error) => schemaPattern(error) === realtimeSchemaPatterns.base64Cell,
 	);
 	if (base64Error !== undefined) {
 		return `${jsonPointerPath(base64Error.instancePath)} is not canonical base64`;
@@ -147,13 +147,13 @@ function formatSchemaError(
 	if (error.keyword === "additionalProperties") {
 		return `${path} has unexpected field ${String(error.params.additionalProperty)}`;
 	}
-	if (schemaPattern(error) === neonLiveSchemaPatterns.u64) {
+	if (schemaPattern(error) === realtimeSchemaPatterns.u64) {
 		return `${path} is not a canonical positive uint64`;
 	}
-	if (schemaPattern(error) === neonLiveSchemaPatterns.rowKey) {
+	if (schemaPattern(error) === realtimeSchemaPatterns.rowKey) {
 		return `${path} is not a lowercase 32-byte hex digest`;
 	}
-	if (schemaPattern(error) === neonLiveSchemaPatterns.heartbeatToken) {
+	if (schemaPattern(error) === realtimeSchemaPatterns.heartbeatToken) {
 		return `${path} is not a valid heartbeat token`;
 	}
 	if (path.endsWith("frontier.lsn")) {
