@@ -92,7 +92,7 @@
       ],
       "properties": {
         "v": { "const": 1 },
-        "aud": { "const": "neon-live-proxy" },
+        "aud": { "const": "realtime-proxy" },
         "iss": { "$ref": "#/$defs/identity" },
         "database": { "$ref": "#/$defs/databaseName" },
         "query_fingerprint": {

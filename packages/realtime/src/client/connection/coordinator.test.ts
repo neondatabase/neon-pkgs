@@ -159,12 +159,12 @@ describe("ConnectionCoordinator", () => {
 		]);
 	});
 
-	it("negotiates neon.live.v1, waits for ready, and routes admission", () => {
+	it("negotiates neon.realtime.v1, waits for ready, and routes admission", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.live.v1");
+		expect(socket.protocols).toBe("neon.realtime.v1");
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
