@@ -10,7 +10,10 @@ import type { ReactNode } from "react";
 export interface RealtimeProviderProps {
 	/** Shared browser client made available to descendant hooks. */
 	readonly client: RealtimeClient;
-	/** React subtree that may call {@link useLiveQuery}. */
+	/**
+	 * React subtree that may call {@link useLiveQuery} or
+	 * {@link useRealtimeClient}.
+	 */
 	readonly children: ReactNode;
 }
 

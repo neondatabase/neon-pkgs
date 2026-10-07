@@ -155,5 +155,9 @@ subscription closes or enters a terminal error.
   hooks. It does not fetch sealed queries or own the client's lifetime.
 - `useLiveQuery(query, options)` owns one materialized subscription and
   cleans it up when the component unmounts or the sealed query changes.
+- `useRealtimeClient()` returns the provider's `RealtimeClient`, to pass to
+  `realtimeCollectionOptions()` from `@neon/realtime-tanstack` or to call
+  `subscribe()` directly. Subscriptions opened that way are not owned by
+  React.
 - `UseLiveQueryOptions`, `UseLiveQueryResult`, and `UseLiveQueryUtils` are
   exported for reusable component and framework typings.

@@ -20,6 +20,7 @@ import {
 	RealtimeProvider,
 	type UseLiveQueryResult,
 	useLiveQuery,
+	useRealtimeClient,
 } from "./index.js";
 
 interface MessageRow {
@@ -311,7 +312,88 @@ describe("Realtime React integration", () => {
 		expect(html).toContain("server");
 		expect(client.subscriptions).toHaveLength(0);
 	});
+
+	it("throws outside a provider", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+
+		expect(() => render(<Messages query={query("query-1")} />)).toThrow(
+			"useLiveQuery requires a RealtimeProvider",
+		);
+	});
 });
+
+describe("useRealtimeClient", () => {
+	it("returns the client passed to the provider", () => {
+		const client = new TestClient<MessageRow>();
+		const observe = vi.fn();
+		render(
+			<RealtimeProvider client={client}>
+				<ClientReader observe={observe} />
+			</RealtimeProvider>,
+		);
+
+		expect(observe).toHaveBeenCalledOnce();
+		expect(observe.mock.lastCall?.[0]).toBe(client);
+	});
+
+	it("reads the nearest provider", () => {
+		const outer = new TestClient<MessageRow>();
+		const inner = new TestClient<MessageRow>();
+		const observeOuter = vi.fn();
+		const observeInner = vi.fn();
+		render(
+			<RealtimeProvider client={outer}>
+				<ClientReader observe={observeOuter} />
+				<RealtimeProvider client={inner}>
+					<ClientReader observe={observeInner} />
+				</RealtimeProvider>
+			</RealtimeProvider>,
+		);
+
+		expect(observeOuter.mock.lastCall?.[0]).toBe(outer);
+		expect(observeInner.mock.lastCall?.[0]).toBe(inner);
+	});
+
+	it("returns the same client across re-renders", () => {
+		const client = new TestClient<MessageRow>();
+		const observe = vi.fn();
+		const view = render(
+			<RealtimeProvider client={client}>
+				<ClientReader observe={observe} label="first" />
+			</RealtimeProvider>,
+		);
+		view.rerender(
+			<RealtimeProvider client={client}>
+				<ClientReader observe={observe} label="second" />
+			</RealtimeProvider>,
+		);
+
+		expect(screen.getByText("second")).toBeTruthy();
+		expect(observe).toHaveBeenCalledTimes(2);
+		for (const [observed] of observe.mock.calls) {
+			expect(observed).toBe(client);
+		}
+	});
+
+	it("throws outside a provider", () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+
+		expect(() => render(<ClientReader observe={vi.fn()} />)).toThrow(
+			"useRealtimeClient requires a RealtimeProvider",
+		);
+	});
+});
+
+function ClientReader({
+	observe,
+	label = "client",
+}: {
+	observe: (client: RealtimeClient) => void;
+	label?: string;
+}) {
+	observe(useRealtimeClient());
+	return <span>{label}</span>;
+}
 
 function Messages({
 	query: currentQuery,
