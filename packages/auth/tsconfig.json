@@ -16,5 +16,12 @@
 			"@/*": ["./src/*"]
 		}
 	},
-	"include": ["src", "build", "tsdown.config.ts", "vitest.config.ts"]
+	"include": [
+		"src",
+		"build",
+		"e2e",
+		"tsdown.config.ts",
+		"vitest.config.ts",
+		"vitest.e2e.config.ts"
+	]
 }

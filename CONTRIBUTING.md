@@ -194,14 +194,28 @@ account behind the key needs every id in `packages/ai-sdk-provider/e2e/helpers.t
 against a branch you already have instead, set `NEON_AI_GATEWAY_BASE_URL` and
 `NEON_AI_GATEWAY_TOKEN` (both, or neither) from `neon env pull`.
 
+### The Neon Auth suite
+
+`pnpm --filter @neon/auth test:e2e` is a separate live suite, **not** part of
+`test:e2e:live`, for the same budget reason as the gateway suite: it provisions a real
+project and signs real users up, which belongs on changes that can affect it rather than on
+every pull request.
+
+It takes the same `NEON_API_KEY` and provisions everything itself: a throwaway project,
+Neon Auth enabled on its default branch with email verification off — the only way a
+headless signup can succeed — and both removed when the run ends. The suite is small on
+purpose (see `packages/auth/e2e/`): a headless run covers the endpoint table the
+server-side proxy depends on and the password session and JWT handshake; everything that
+needs a browser or an outside party — OAuth, magic link, OTP delivery — is out of scope.
+
 ### In CI
 
 These run as the `e2e (live Neon)` workflow on every pull request from this repository, using a
-maintained throwaway org. The gateway suite runs as `e2e (live AI Gateway)`, path-filtered to
-changes under `packages/ai-sdk-provider/` and `tests/e2e-harness/` so its model spend tracks
-the code it covers. Both workflows map the repository secret `NEON_TEST_API_KEY` onto
-`NEON_API_KEY` and the repository variable `NEON_TEST_ORG_ID` onto `NEON_ORG_ID`, so the
-contract is identical to your local one.
+maintained throwaway org. The gateway suite runs as `e2e (live AI Gateway)` and the auth suite
+as `e2e (live Neon Auth)`, both path-filtered to their package and `tests/e2e-harness/` so
+their spend tracks the code they cover. All three workflows map the repository secret
+`NEON_TEST_API_KEY` onto `NEON_API_KEY` and the repository variable `NEON_TEST_ORG_ID` onto
+`NEON_ORG_ID`, so the contract is identical to your local one.
 
 Fork and Dependabot PRs skip the job, because GitHub does not expose repository secrets to
 untrusted pull request code. **You do not need credentials to contribute** — open the PR and a

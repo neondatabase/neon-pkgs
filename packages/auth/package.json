@@ -86,10 +86,12 @@
 		"test": "vitest",
 		"test:node": "node --run test",
 		"test:ci": "vitest run --passWithNoTests",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts",
 		"tsc": "tsc"
 	},
 	"devDependencies": {
 		"@neon-internals/internal": "workspace:*",
+		"@neon/e2e-harness": "workspace:*",
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"msw": "2.6.8",
