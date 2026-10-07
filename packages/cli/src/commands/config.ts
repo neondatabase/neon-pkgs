@@ -222,6 +222,13 @@ export const applyFlags = {
 		type: "boolean",
 		default: false,
 	},
+	yes: {
+		alias: "y",
+		describe:
+			"No effect: this command never prompts. Overriding remote settings still needs --update-existing",
+		type: "boolean",
+		default: false,
+	},
 } as const;
 
 /**
