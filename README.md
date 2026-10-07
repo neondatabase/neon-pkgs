@@ -41,6 +41,13 @@ If you're looking for a single package's docs, see its own `README.md` under `pa
 | `@neon/realtime-drizzle` | Drizzle adapter for type-safe live queries. |
 | `@neon/realtime-kysely` | Kysely adapter for type-safe live queries. |
 
+### Auth & data access
+
+| Package | Description |
+| --- | --- |
+| `@neon/auth` | Authentication adapters for Neon Auth (Supabase-compatible and Better Auth APIs), with React, Next.js, and framework-agnostic server toolkit entrypoints. |
+| `@neon/postgrest-js` | Generic PostgreSQL client for the Neon Data API without built-in authentication. |
+
 `neon-new` and `vite-plugin-neon-new` are **deprecated**. Use Claimable Neon in the Neon CLI: `npx neon@latest claim create`. The old alias packages (`get-db`, `neondb`, `vite-plugin-db`, `@neondatabase/vite-plugin-postgres`) still re-export them.
 
 `neonctl` is not deprecated: it is a supported compatibility package that installs and runs `neon`.

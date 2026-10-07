@@ -49,6 +49,16 @@ jobs:
                       dir: realtime-drizzle
                     - name: "@neon/realtime-kysely"
                       dir: realtime-kysely
+                    - name: "@neon/auth"
+                      dir: auth
+                      # The consumer compile is skipped: better-auth's own published
+                      # .d.ts files do not survive a skipLibCheck:false compile, and
+                      # Next ships no exports map, so `next/server` is unresolvable
+                      # under moduleResolution=nodenext. Neither reflects a defect in
+                      # this package's emitted declarations. See issue #765.
+                      skipConsumerCompile: true
+                    - name: "@neon/postgrest-js"
+                      dir: postgrest-js
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -66,4 +76,5 @@ jobs:
               run: pnpm exec attw --pack packages/${{ matrix.dir }} --profile esm-only
 
             - name: Compile declarations as a consumer
+              if: ${{ !matrix.skipConsumerCompile }}
               run: pnpm exec node scripts/check-dist-types.mjs packages/${{ matrix.dir }}
