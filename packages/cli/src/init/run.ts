@@ -11,20 +11,14 @@ import { ConfigInstallFailed, initCmd } from "../commands/config.js";
 import type { EnvPullProps, PullOutcome } from "../commands/env.js";
 import { defaultDir } from "../config.js";
 import {
-	CONFIG_INIT_NONE_MEANS,
 	CONFIG_INIT_SERVICES,
-	CONFIG_INIT_UNAVAILABLE,
+	parseConfigInitServices,
 } from "../config_template.js";
 import { contextBranch, readContextFile } from "../context.js";
 import { log } from "../log.js";
 import { type AgentType, getAgentDisplayName } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
-import {
-	deprecatedServiceMessage,
-	type NeonService,
-	parseServices,
-	servicesFlagValue,
-} from "../neon_services.js";
+import { type NeonService, servicesFlagValue } from "../neon_services.js";
 import {
 	type MissingPluginsCommand,
 	missingPluginsCommands,
@@ -47,7 +41,6 @@ import { InitCancelled, raceSigint, restoreCursor } from "./cancelled.js";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
-	isBareInitServices,
 	resolveInitConfigChoice,
 	shouldPullEnvAfterInitConfig,
 } from "./choices.js";
@@ -215,21 +208,6 @@ export type InitProps = CommonProps & {
 const isLinked = (contextFile: string): boolean => {
 	const projectId = readContextFile(contextFile).projectId;
 	return typeof projectId === "string" && projectId.length > 0;
-};
-
-const parsedInitServices = (raw: unknown): readonly string[] | undefined => {
-	const values = servicesFlagValue(raw);
-	if (values === undefined) {
-		return undefined;
-	}
-	return parseServices(values, {
-		allowed: CONFIG_INIT_SERVICES,
-		whyUnavailable: CONFIG_INIT_UNAVAILABLE,
-		flag: "--services",
-		noneMeans: CONFIG_INIT_NONE_MEANS,
-		onDeprecated: (used, canonical) =>
-			log.warning(deprecatedServiceMessage(used, canonical)),
-	});
 };
 
 const expandTelemetryServices = (
@@ -476,9 +454,14 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			? { allowUnsafeTls: props.allowUnsafeTls }
 			: {}),
 	};
-	const servicesFlag = parsedInitServices(props.services);
+	// Raw values, because `config init` parses them again and warns about retired spellings.
+	// Parsed here only so a bad value fails before any setup step runs.
+	const servicesFlag = servicesFlagValue(props.services);
 	if (props.config === false && servicesFlag !== undefined) {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
+	}
+	if (servicesFlag !== undefined) {
+		parseConfigInitServices(servicesFlag);
 	}
 	const linkInputs: InitLinkInputs = {
 		...(props.orgId ? { orgId: props.orgId } : {}),
@@ -1038,14 +1021,14 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			)();
 			configPlan = {
 				kind: "write",
-				services: picked.length === 0 ? ["none"] : picked,
+				services: picked.length === 0 ? ["postgres"] : picked,
 			};
 		}
 
 		if (recommended && configPlan.kind === "write" && !existingConfig) {
 			configPlan = {
 				kind: "write",
-				services: servicesFlag ?? ["none"],
+				services: servicesFlag ?? ["postgres"],
 			};
 		}
 
@@ -1055,18 +1038,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		if (configPlan.kind === "write") {
 			const planned = existingConfig
 				? undefined
-				: (configPlan.services ?? ["none"]);
+				: (configPlan.services ?? ["postgres"]);
 			if (planned !== undefined) {
-				extraServices = !isBareInitServices(planned);
-				selectedServices = extraServices
-					? expandTelemetryServices(
-							parseServices(planned, {
-								allowed: CONFIG_INIT_SERVICES,
-								flag: "--services",
-								noneMeans: CONFIG_INIT_NONE_MEANS,
-							}),
-						)
-					: [];
+				const declared = parseConfigInitServices(planned);
+				extraServices = declared.length > 0;
+				selectedServices = expandTelemetryServices(declared);
 				funnel.services = selectedServices;
 				wroteNewFile = true;
 			} else {

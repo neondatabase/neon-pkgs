@@ -1,5 +1,9 @@
 import type { NeonConfigView } from "./config_format.js";
-import { NEON_SERVICES, type NeonService } from "./neon_services.js";
+import {
+	NEON_SERVICES,
+	type NeonService,
+	parseServices,
+} from "./neon_services.js";
 
 /**
  * The published npm packages a `neon.ts` project needs — the `@neon/*` org names.
@@ -28,17 +32,20 @@ export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
 );
 
 /**
- * What `config init --services none` produces. One constant because it is both the help text
- * and what tells the parser `none` is a value here — passing the literal at each call site
- * lets the two drift into documenting something the parser does not accept.
+ * Parse `--services` on `init` and `config init` into the services to declare. `postgres` is
+ * accepted, alone or with others, and declares nothing: `--services postgres` is how a
+ * script asks for the Postgres-only starter policy. `none` is the old spelling of that.
  */
-export const CONFIG_INIT_NONE_MEANS = "the bare starter policy";
-
-/** Why a policy cannot declare a real Neon service, for the refusal message. */
-export const CONFIG_INIT_UNAVAILABLE: Partial<Record<NeonService, string>> = {
-	postgres:
-		"every branch has Postgres, so a policy has nothing to declare for it",
-};
+export const parseConfigInitServices = (
+	raw: readonly string[],
+	onDeprecated?: (used: string, canonical: NeonService) => void,
+): NeonService[] =>
+	parseServices(raw, {
+		allowed: NEON_SERVICES,
+		flag: "--services",
+		deprecatedAliases: { none: "postgres" },
+		...(onDeprecated ? { onDeprecated } : {}),
+	}).filter((service) => service !== "postgres");
 
 /** Slug, display name, and source path of the function scaffolded for `functions`. */
 export const FUNCTION_SLUG = "hello";

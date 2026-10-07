@@ -195,12 +195,12 @@ describe("planConfigInitStep", () => {
 		expect(planConfigInitStep({ yes: false })).toEqual(["config", "init"]);
 	});
 
-	test("-y uses none", () => {
+	test("-y selects postgres", () => {
 		expect(planConfigInitStep({ yes: true })).toEqual([
 			"config",
 			"init",
 			"--services",
-			"none",
+			"postgres",
 		]);
 	});
 
@@ -213,12 +213,12 @@ describe("planConfigInitStep", () => {
 		]);
 	});
 
-	test("empty selection is the none token, not an empty --services value", () => {
+	test("empty selection is postgres, not an empty --services value", () => {
 		expect(planConfigInitStep({ yes: false, services: [] })).toEqual([
 			"config",
 			"init",
 			"--services",
-			"none",
+			"postgres",
 		]);
 	});
 });

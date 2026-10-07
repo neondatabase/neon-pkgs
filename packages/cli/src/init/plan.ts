@@ -4,7 +4,6 @@ import type { InstallPluginsOptions } from "../commands/plugins.js";
 import type { InstallSkillsOptions } from "../commands/skills.js";
 import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
-import { NO_SERVICES } from "../neon_services.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import { agentArgv } from "../utils/agent_flag.js";
@@ -699,13 +698,11 @@ export const planConfigInitStep = (input: {
 			"config",
 			"init",
 			"--services",
-			input.services.length === 0
-				? NO_SERVICES
-				: input.services.join(","),
+			input.services.length === 0 ? "postgres" : input.services.join(","),
 		];
 	}
 	if (input.yes) {
-		return ["config", "init", "--services", NO_SERVICES];
+		return ["config", "init", "--services", "postgres"];
 	}
 	return ["config", "init"];
 };

@@ -48,9 +48,6 @@ const DEPRECATED_SERVICE_ALIASES: Readonly<Record<string, NeonService>> = {
 	storage: "object-storage",
 };
 
-/** An explicit empty selection, for commands where "declare nothing" is a real answer. */
-export const NO_SERVICES = "none";
-
 /**
  * What to tell someone still using a retired spelling. A message rather than a log call, so
  * the parser stays free of the CLI's writer and each command can surface it in its own voice.
@@ -68,17 +65,10 @@ export type ParseServicesOptions = {
 	/** The flag being parsed, for error messages. */
 	flag: string;
 	/**
-	 * What {@link NO_SERVICES} produces here, e.g. "the bare starter policy". Present means
-	 * the command accepts it; absent means `none` is not a value it knows.
+	 * Retired spellings only this command accepts, on top of the CLI-wide ones. Same
+	 * treatment: resolved, warned about, and never listed as a supported value.
 	 */
-	noneMeans?: string;
-	/**
-	 * Why a service outside {@link ParseServicesOptions.allowed} is not selectable here. The
-	 * refusal is otherwise a fact with no reason attached, and the user's belief ("I have
-	 * functions, give me their env") is coherent — the missing piece is knowledge only the
-	 * command has. Optional per service; without one the refusal is still specific, just terse.
-	 */
-	whyUnavailable?: Partial<Record<NeonService, string>>;
+	deprecatedAliases?: Readonly<Record<string, NeonService>>;
 	/** Called once per deprecated spelling used, so the command can warn in its own voice. */
 	onDeprecated?: (used: string, canonical: NeonService) => void;
 };
@@ -93,23 +83,16 @@ export type ParseServicesOptions = {
  *
  * An unrecognized name is rejected rather than dropped: a typo would otherwise act on
  * everything *except* the service that was asked for, and report success. A name that is a
- * real service but not one this command supports says so specifically — "postgres is on
- * every branch" is a different problem from a typo, and has a different fix.
+ * real service but not one this command supports says so, since that is a different problem
+ * from a typo.
  */
 export const parseServices = (
 	raw: readonly string[],
 	options: ParseServicesOptions,
 ): NeonService[] => {
-	const {
-		allowed,
-		flag,
-		noneMeans,
-		whyUnavailable = {},
-		onDeprecated,
-	} = options;
-	const supported = `Supported values: ${allowed.join(", ")}${
-		noneMeans !== undefined ? `, ${NO_SERVICES}` : ""
-	}.`;
+	const { allowed, flag, deprecatedAliases, onDeprecated } = options;
+	const aliases = { ...DEPRECATED_SERVICE_ALIASES, ...deprecatedAliases };
+	const supported = `Supported values: ${allowed.join(", ")}.`;
 
 	const names = raw
 		.flatMap((value) => value.split(","))
@@ -120,22 +103,11 @@ export const parseServices = (
 		throw new Error(`${flag} needs at least one service. ${supported}`);
 	}
 
-	if (noneMeans !== undefined && names.includes(NO_SERVICES)) {
-		// Deduplicate before deciding it was combined with something: a repeated value is
-		// a no-op everywhere else in this parser, so `-s none -s none` must be too.
-		if (new Set(names).size > 1) {
-			throw new Error(
-				`${flag} ${NO_SERVICES} cannot be combined with other services.`,
-			);
-		}
-		return [];
-	}
-
 	// Canonicalize first and unconditionally, so a retired spelling is reported against the
 	// service it means rather than as a word nobody recognizes.
 	const deprecated = new Map<string, NeonService>();
 	const resolved = names.map((name) => {
-		const canonical = DEPRECATED_SERVICE_ALIASES[name];
+		const canonical = aliases[name];
 		if (canonical === undefined) return name;
 		deprecated.set(name, canonical);
 		return canonical;
@@ -146,7 +118,7 @@ export const parseServices = (
 	);
 	if (unsupported.length > 0) {
 		throw new Error(
-			`${unsupportedMessage(unsupported, flag, whyUnavailable)} ${supported}`,
+			`${unsupportedMessage(unsupported, flag)} ${supported}`,
 		);
 	}
 
@@ -162,13 +134,11 @@ export const parseServices = (
 /**
  * The sentences explaining why a selection was refused. A real Neon service this command
  * cannot act on is a different mistake from a typo — different cause, different fix — so the
- * two are never answered with the same word, and each service carries its reason where the
- * command supplied one.
+ * two are never answered with the same word.
  */
 const unsupportedMessage = (
 	unsupported: readonly string[],
 	flag: string,
-	whyUnavailable: Partial<Record<NeonService, string>>,
 ): string => {
 	const known = unsupported.filter((name): name is NeonService =>
 		NEON_SERVICES.some((service) => service === name),
@@ -180,10 +150,9 @@ const unsupportedMessage = (
 		unknown.length > 0
 			? `Unknown service${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}.`
 			: undefined,
-		...known.map((service) => {
-			const why = whyUnavailable[service];
-			return `${service} is not something ${flag} can select${why ? `: ${why}` : ""}.`;
-		}),
+		...known.map(
+			(service) => `${service} is not something ${flag} can select.`,
+		),
 	]
 		.filter((part): part is string => part !== undefined)
 		.join(" ");
@@ -206,17 +175,12 @@ export const servicesOption = (params: {
 	 * ("Services the scaffolded neon.ts declares"), not a clause. Put the rest in `also`.
 	 */
 	describe: string;
-	/** What {@link NO_SERVICES} produces here. Present means the command accepts it. */
-	noneMeans?: string;
 	/** Anything to say after the value syntax, e.g. what happens when the flag is omitted. */
 	also?: string;
 }): Options => ({
 	alias: SERVICE_FLAG_NAMES.filter((name) => name !== params.key),
 	describe: [
 		`${params.describe}: ${params.allowed.join(", ")}.`,
-		params.noneMeans !== undefined
-			? `Pass "${NO_SERVICES}" for ${params.noneMeans}.`
-			: undefined,
 		"Repeat the flag or comma-separate.",
 		params.also,
 	]
