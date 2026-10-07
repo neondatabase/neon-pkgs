@@ -1,5 +1,6 @@
 import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
 import type { SubscriptionEventSink } from "./diagnostics.js";
+import type { ParsedMvccSnapshot } from "./mvcc.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
 import {
 	decodeRow,
@@ -280,6 +281,10 @@ export class Subscription<Row>
 			this.notify(this.changeListeners, this.snapshot);
 		}
 		for (const txid of batch.txids) this.transactions.seen(txid);
+	}
+
+	applyProgress(mvcc: ParsedMvccSnapshot): void {
+		this.transactions.applyProgress(mvcc);
 	}
 
 	caughtUp(): void {

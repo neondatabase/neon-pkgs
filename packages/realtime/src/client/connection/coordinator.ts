@@ -3,6 +3,7 @@ import {
 	SILENT_CLIENT_EVENTS,
 	type SubscriptionEventSink,
 } from "../diagnostics.js";
+import type { ParsedMvccSnapshot } from "../mvcc.js";
 import {
 	decodeServerFrame,
 	encodeClientMessage,
@@ -338,7 +339,7 @@ export class ConnectionCoordinator {
 		try {
 			const frame = decodeServerFrame(text);
 			this.heartbeat?.received();
-			this.route(frame.message, frame.byteLength);
+			this.route(frame.message, frame.byteLength, frame.mvcc);
 		} catch (error) {
 			this.protocolFailure(
 				error instanceof Error
@@ -348,7 +349,11 @@ export class ConnectionCoordinator {
 		}
 	}
 
-	private route(message: ServerMessage, byteLength: number): void {
+	private route(
+		message: ServerMessage,
+		byteLength: number,
+		mvcc?: ParsedMvccSnapshot,
+	): void {
 		if (!this.ready) {
 			if (message.type === "ping") {
 				this.send({ type: "pong", token: message.token });
@@ -408,7 +413,8 @@ export class ConnectionCoordinator {
 			case "keyed_results":
 			case "reset_required":
 			case "commit":
-				this.reconciler.accept(message, byteLength);
+			case "progress":
+				this.reconciler.accept(message, byteLength, mvcc);
 				return;
 		}
 	}

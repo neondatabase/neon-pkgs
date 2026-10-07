@@ -77,6 +77,7 @@ class FakeWebSocket {
 afterEach(() => {
 	FakeWebSocket.instances = [];
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 describe("RealtimeClient", () => {
@@ -696,6 +697,127 @@ describe("RealtimeClient", () => {
 		await expect(confirmation).resolves.toBeUndefined();
 		await expect(subscription.awaitTxId("42")).resolves.toBeUndefined();
 		client.close();
+	});
+
+	it.each([
+		false,
+		true,
+	])("confirms no-op progress without row events (raw: %s)", async (raw) => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = raw
+			? client.subscribe(query("initial"), { materialize: false })
+			: client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		const batches = vi.fn();
+		const resets = vi.fn();
+		const states = vi.fn();
+		subscription.onBatch(batches);
+		subscription.onReset(resets);
+		subscription.onStateChange(states);
+		const confirmation = subscription.awaitTxId("42");
+		socket.receive({
+			type: "progress",
+			mvcc: { xmin: "10", xmax: "100", xip: ["10", "80"] },
+		});
+		await expect(confirmation).resolves.toBeUndefined();
+		await expect(subscription.awaitTxId("70")).resolves.toBeUndefined();
+		// A smaller proof cannot erase the earlier evidence for a late waiter.
+		socket.receive({
+			type: "progress",
+			mvcc: { xmin: "10", xmax: "20", xip: ["10"] },
+		});
+		await expect(subscription.awaitTxId("70")).resolves.toBeUndefined();
+		expect(batches).not.toHaveBeenCalled();
+		expect(resets).not.toHaveBeenCalled();
+		expect(states).not.toHaveBeenCalled();
+		await expect(subscription.awaitTxId("80", 1)).rejects.toThrow(
+			"Timed out",
+		);
+		client.close();
+	});
+
+	it("requires a post-catch-up progress marker after initial and reset baselines", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		let confirmations = 0;
+		const pending = subscription.awaitTxId("42").then(() => {
+			confirmations++;
+		});
+		const proof = {
+			type: "progress",
+			mvcc: { xmin: "1", xmax: "43", xip: [] },
+		};
+		socket.receive(proof);
+		baselineSync(socket, "baseline");
+		await Promise.resolve();
+		expect(confirmations).toBe(0);
+		socket.receive(proof);
+		await pending;
+		expect(confirmations).toBe(1);
+
+		reset(socket, "2");
+		const afterReset = subscription.awaitTxId("44").then(() => {
+			confirmations++;
+		});
+		const nextProof = {
+			type: "progress",
+			mvcc: { xmin: "1", xmax: "45", xip: [] },
+		};
+		socket.receive(nextProof);
+		baselineSync(socket, "replacement", "41", "2");
+		await Promise.resolve();
+		expect(confirmations).toBe(1);
+		socket.receive(nextProof);
+		await afterReset;
+		expect(confirmations).toBe(2);
+		client.close();
+	});
+
+	it("keeps pending waits through reconnect and accepts only caught-up socket progress", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			const first = connectAndAdmit();
+			baselineSync(first, "before");
+			let confirmed = false;
+			const confirmation = subscription.awaitTxId("42").then(() => {
+				confirmed = true;
+				expect(subscription.getSnapshot()).toMatchObject({
+					status: "live",
+					data: [{ id: 1, title: "after" }],
+				});
+			});
+			const proof = {
+				type: "progress",
+				mvcc: { xmin: "43", xmax: "43", xip: [] },
+			};
+			first.close();
+			expect(subscription.getState().status).toBe("stale");
+			first.receive(proof);
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(FakeWebSocket.instances).toHaveLength(2);
+			const second = connectAndAdmit();
+			second.receive(proof);
+			await Promise.resolve();
+			expect(confirmed).toBe(false);
+
+			baselineSync(second, "after");
+			// Reused live IDs must not let a message from the old socket confirm.
+			first.receive(proof);
+			await Promise.resolve();
+			expect(confirmed).toBe(false);
+			second.receive(proof);
+			await confirmation;
+			await expect(subscription.awaitTxId("42")).resolves.toBeUndefined();
+		} finally {
+			client.close();
+		}
 	});
 
 	it("confirms transactions visible to an applied MVCC snapshot", async () => {

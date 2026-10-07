@@ -34,6 +34,88 @@ afterEach(() => {
 });
 
 describe("Realtime React integration", () => {
+	it("confirms no-op progress through the real client without notifying row listeners", async () => {
+		const wire = wireClient();
+		let observed: UseLiveQueryResult<MessageRow> | undefined;
+		const observe = vi.fn((result: UseLiveQueryResult<MessageRow>) => {
+			observed = result;
+		});
+		try {
+			const view = render(
+				<RealtimeProvider client={wire.client}>
+					<Messages query={query("progress")} observe={observe} />
+				</RealtimeProvider>,
+			);
+			act(() => wire.baseline());
+			if (!observed)
+				throw new Error("Expected the live query hook to render");
+			const { utils } = observed;
+			const onBatch = vi.fn();
+			const onChange = vi.fn();
+			utils.onBatch(onBatch);
+			utils.onChange(onChange);
+			observe.mockClear();
+			const pending = utils.awaitTxId("42");
+			await act(async () => {
+				wire.receive({
+					type: "progress",
+					mvcc: { xmin: "43", xmax: "43", xip: [] },
+				});
+				await pending;
+			});
+			await expect(utils.awaitTxId("41")).resolves.toBeUndefined();
+			expect(onBatch).not.toHaveBeenCalled();
+			expect(onChange).not.toHaveBeenCalled();
+			expect(observe).not.toHaveBeenCalled();
+			expect(screen.getByText("live:before")).toBeTruthy();
+
+			const followingNoOp = utils.awaitTxId("44").then(() => {
+				expect(utils.getSnapshot().data).toEqual([
+					{ id: 1, title: "after" },
+				]);
+			});
+			await act(async () => {
+				wire.receive({ type: "open", publication_id: "change" });
+				wire.receive({
+					type: "keyed_results",
+					publication_id: "change",
+					index: 0,
+					txids: ["43"],
+					targets: [{ live_id: "1", epoch: "1", sequence: "1" }],
+					changes: [
+						{
+							op: "upsert",
+							row_key: "a".repeat(64),
+							values: ["1", "after"],
+						},
+					],
+				});
+				wire.receive({
+					type: "commit",
+					publication_id: "change",
+					body_count: 1,
+					frontier: { lsn: "0/10" },
+				});
+				wire.receive({
+					type: "progress",
+					mvcc: { xmin: "45", xmax: "45", xip: [] },
+				});
+				await followingNoOp;
+			});
+			expect(screen.getByText("live:after")).toBeTruthy();
+			expect(onBatch).toHaveBeenCalledOnce();
+			expect(onChange).toHaveBeenCalledOnce();
+
+			const cancelled = expect(utils.awaitTxId("100")).rejects.toThrow(
+				"subscription is closed",
+			);
+			view.unmount();
+			await cancelled;
+		} finally {
+			act(() => wire.client.close());
+		}
+	});
+
 	it("renders preloaded data and exposes materialized subscription utilities", async () => {
 		const client = new TestClient<MessageRow>();
 		let observed: UseLiveQueryResult<MessageRow> | undefined;
@@ -252,6 +334,74 @@ function Messages({
 			{result.status}:{result.data?.[0]?.title ?? "none"}
 		</span>
 	);
+}
+
+/** Fake transport only: subscriptions, decoding, and reconciliation are real. */
+function wireClient() {
+	const listeners = new Map<
+		string,
+		(event: { readonly data: unknown }) => void
+	>();
+	class FakeWebSocket {
+		readyState = 1;
+		addEventListener(
+			type: string,
+			listener: (event: { readonly data: unknown }) => void,
+		) {
+			listeners.set(type, listener);
+		}
+		send = vi.fn();
+		close() {
+			this.readyState = 3;
+		}
+	}
+	vi.stubGlobal("WebSocket", FakeWebSocket);
+	const client = createRealtimeClient({
+		url: "ws://live.test",
+	});
+	const receive = (message: object) => {
+		listeners.get("message")?.({ data: JSON.stringify(message) });
+	};
+	return {
+		client,
+		receive,
+		baseline: () => {
+			receive({ type: "ready" });
+			receive({
+				type: "subscribed",
+				request_id: "1",
+				live_id: "1",
+				epoch: "1",
+				first_sequence: "1",
+				columns: [
+					{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+					{
+						name: "title",
+						type_oid: 25,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+			const target = {
+				live_id: "1",
+				epoch: "1",
+				baseline_sync_attempt: "1",
+			};
+			receive({
+				type: "baseline_sync_start",
+				...target,
+				mvcc: { xmin: "1", xmax: "2", xip: [] },
+			});
+			receive({
+				type: "baseline_sync_batch",
+				...target,
+				index: 0,
+				rows: [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+			});
+			receive({ type: "baseline_sync_end", ...target, batch_count: 1 });
+		},
+	};
 }
 
 class TestClient<Row> implements RealtimeClient {

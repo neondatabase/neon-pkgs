@@ -125,12 +125,9 @@ such as `toggle`. This makes them safe when React rebases a still-pending Action
 over newer authoritative rows. `awaitTxId()` also handles the race where the
 live batch arrives before the mutation response.
 
-**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
-ID or when the last successfully applied reset snapshot proves it visible. The
-protocol does not currently acknowledge a no-op transaction after
-that snapshot. It can resolve only if a later reset proves it visible; because
-resets may be infrequent, pass a timeout or avoid waiting when the mutation
-endpoint reports that no change was made.
+`awaitTxId()` does not determine whether a transaction committed, so pass only
+the ID of a transaction known to have committed. Use a timeout when the
+application needs a bounded wait.
 
 When the mutation endpoint does not return a transaction ID, `awaitRows()` can
 keep the optimistic Action pending until the complete materialized result

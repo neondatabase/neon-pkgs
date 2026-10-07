@@ -80,16 +80,12 @@ const todos = createCollection(realtimeCollectionOptions({
 ```
 
 `awaitTxId()` also handles the race where the live batch arrives before the HTTP
-response. It resolves once the batch has entered TanStack DB's causal sync queue
-and waits indefinitely by default. Pass an optional timeout in milliseconds to
-bound the wait.
+response. It resolves after covered row changes enter TanStack DB's causal sync
+queue and waits indefinitely by default. Pass an optional timeout in milliseconds
+to bound the wait.
 
-**Warning:** `awaitTxId()` resolves when a live batch includes the transaction
-ID or when the last successfully applied reset snapshot proves it visible. The
-protocol does not currently acknowledge a no-op transaction after
-that snapshot. It can resolve only if a later reset proves it visible; because
-resets may be infrequent, pass a timeout when an indefinitely pending wait would
-be undesirable.
+`awaitTxId()` does not determine whether a transaction committed, so pass only
+the ID of a transaction known to have committed.
 
 For SSR, use TanStack DB's normal `DbClient`, dehydration, and
 `HydrationBoundary` APIs with stable collection IDs. The server seeds a
