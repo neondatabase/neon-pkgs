@@ -18,6 +18,8 @@ import type {
 	MaterializedArrayLiveQueryOptions,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	ObjectModeSealedQuery,
+	PositionalRow,
 	RawArrayLiveQueryOptions,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
@@ -68,26 +70,18 @@ class RealtimeClientImpl implements RealtimeClient {
 	}
 
 	subscribe<Row>(
-		query: [Row] extends [never]
-			? SealedLiveQuery<Row>
-			: Row extends readonly unknown[]
-				? never
-				: SealedLiveQuery<Row>,
+		query: ObjectModeSealedQuery<Row>,
 		options?: MaterializedLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
-	subscribe<Row extends readonly unknown[]>(
+	subscribe<Row extends PositionalRow>(
 		query: SealedLiveQuery<Row>,
 		options: MaterializedArrayLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
 	subscribe<Row>(
-		query: [Row] extends [never]
-			? SealedLiveQuery<Row>
-			: Row extends readonly unknown[]
-				? never
-				: SealedLiveQuery<Row>,
+		query: ObjectModeSealedQuery<Row>,
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
-	subscribe<Row extends readonly unknown[]>(
+	subscribe<Row extends PositionalRow>(
 		query: SealedLiveQuery<Row>,
 		options: RawArrayLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
@@ -95,7 +89,7 @@ class RealtimeClientImpl implements RealtimeClient {
 		query: SealedLiveQuery<Row>,
 		options?:
 			| MaterializedLiveQueryOptions<Row>
-			| MaterializedArrayLiveQueryOptions<readonly unknown[]>
+			| MaterializedArrayLiveQueryOptions<PositionalRow>
 			| RawLiveQueryOptions
 			| RawArrayLiveQueryOptions,
 	): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
@@ -109,9 +103,7 @@ class RealtimeClientImpl implements RealtimeClient {
 				? (
 						options as
 							| MaterializedLiveQueryOptions<Row>
-							| MaterializedArrayLiveQueryOptions<
-									readonly unknown[]
-							  >
+							| MaterializedArrayLiveQueryOptions<PositionalRow>
 							| undefined
 					)?.initialData
 				: undefined

@@ -296,6 +296,9 @@ export type LiveQueryChange<Row> =
 /** Representation used for each decoded query result row. */
 export type RealtimeRowMode = "object" | "array";
 
+/** A query result row decoded by result-column position. */
+export type PositionalRow = readonly unknown[];
+
 /** Options for a materialized object-row subscription. */
 export interface MaterializedLiveQueryOptions<Row> {
 	/** Select materialization; omitted and `true` are equivalent. */
@@ -307,9 +310,7 @@ export interface MaterializedLiveQueryOptions<Row> {
 }
 
 /** Options for a materialized positional-row subscription. */
-export interface MaterializedArrayLiveQueryOptions<
-	Row extends readonly unknown[],
-> {
+export interface MaterializedArrayLiveQueryOptions<Row extends PositionalRow> {
 	/** Select materialization; omitted and `true` are equivalent. */
 	readonly materialize?: true;
 	/** Preloaded tuples exposed as stale data until the first reset. */
@@ -334,11 +335,18 @@ export interface RawArrayLiveQueryOptions {
 	readonly rowMode: "array";
 }
 
-type ObjectModeSealedQuery<Row> = [Row] extends [never]
-	? SealedLiveQuery<Row>
-	: Row extends readonly unknown[]
-		? never
-		: SealedLiveQuery<Row>;
+/** Detect `never` without triggering distributive conditional types. */
+type IsNever<Value> = [Value] extends [never] ? true : false;
+
+/** A sealed query valid for the default object row mode. */
+export type ObjectModeSealedQuery<Row> =
+	// Untyped queries use `never` as their default row type and remain valid.
+	IsNever<Row> extends true
+		? SealedLiveQuery<Row>
+		: // Positional rows must explicitly opt into `rowMode: "array"`.
+			Row extends PositionalRow
+			? never
+			: SealedLiveQuery<Row>;
 
 /**
  * A live-query subscription that exposes raw reset and publication events.
@@ -476,7 +484,7 @@ export interface RealtimeClient {
 	 * Declare the query row as a tuple. Tuple elements follow result-column
 	 * order, so duplicate result names are supported.
 	 */
-	subscribe<Row extends readonly unknown[]>(
+	subscribe<Row extends PositionalRow>(
 		query: SealedLiveQuery<Row>,
 		options: MaterializedArrayLiveQueryOptions<Row>,
 	): MaterializedLiveQuerySubscription<Row>;
@@ -510,7 +518,7 @@ export interface RealtimeClient {
 		options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
 	/** Start a raw positional-row subscription. */
-	subscribe<Row extends readonly unknown[]>(
+	subscribe<Row extends PositionalRow>(
 		query: SealedLiveQuery<Row>,
 		options: RawArrayLiveQueryOptions,
 	): RawLiveQuerySubscription<Row>;
