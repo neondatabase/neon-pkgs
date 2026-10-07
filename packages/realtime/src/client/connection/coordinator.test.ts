@@ -307,6 +307,7 @@ describe("ConnectionCoordinator", () => {
 			request_id: "1",
 			code: "authorization_failed",
 			message: "invalid",
+			sqlstate: "42601",
 		});
 		socket.receive({
 			type: "subscribed",
@@ -320,6 +321,7 @@ describe("ConnectionCoordinator", () => {
 			expect.objectContaining({
 				code: "authorization_failed",
 				retryable: false,
+				sqlState: "42601",
 			}),
 		);
 		expect(accepted.admitted).toHaveBeenCalledOnce();

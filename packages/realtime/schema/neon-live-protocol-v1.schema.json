@@ -11,6 +11,7 @@
     },
     "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
     "i32": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+    "sqlstate": { "type": "string", "pattern": "^[0-9A-Z]{5}$" },
     "publicationId": { "type": "string", "minLength": 1, "maxLength": 64 },
     "heartbeatToken": {
       "type": "string",
@@ -188,7 +189,8 @@
             "code": {
               "enum": ["authorization_failed", "authorization_expired", "backend_unavailable", "upstream_rejected", "resource_exhausted", "service_unavailable"]
             },
-            "message": { "type": "string" }
+            "message": { "type": "string" },
+            "sqlstate": { "$ref": "#/$defs/sqlstate" }
           },
           "additionalProperties": false
         },
@@ -298,7 +300,8 @@
             "code": {
               "enum": ["authorization_expired", "renewal_failed", "key_retired", "upstream_cancelled", "baseline_sync_failed", "protocol_error"]
             },
-            "message": { "type": "string" }
+            "message": { "type": "string" },
+            "sqlstate": { "$ref": "#/$defs/sqlstate" }
           },
           "additionalProperties": false
         },

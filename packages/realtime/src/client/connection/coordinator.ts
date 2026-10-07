@@ -73,15 +73,22 @@ export type WebSocketFactory = (
 	protocols: string | string[],
 ) => WebSocketLike;
 
+interface ConnectionCoordinatorErrorOptions extends ErrorOptions {
+	readonly sqlState?: string;
+}
+
 export class ConnectionCoordinatorError extends Error {
+	readonly sqlState?: string;
+
 	constructor(
 		readonly code: string,
 		readonly retryable: boolean,
 		message: string,
-		options?: ErrorOptions,
+		options?: ConnectionCoordinatorErrorOptions,
 	) {
 		super(message, options);
 		this.name = "ConnectionCoordinatorError";
+		this.sqlState = options?.sqlState;
 	}
 }
 
@@ -395,6 +402,7 @@ export class ConnectionCoordinator {
 					message.live_id,
 					message.code,
 					message.message,
+					message.sqlstate,
 				);
 				return;
 			case "connection_error":
@@ -480,6 +488,7 @@ export class ConnectionCoordinator {
 			message.code,
 			replacementRequired,
 			message.message,
+			{ sqlState: message.sqlstate },
 		);
 		if (replacementRequired) {
 			this.awaitReplacementQuery(
@@ -524,6 +533,7 @@ export class ConnectionCoordinator {
 		liveId: string,
 		code: string,
 		message: string,
+		sqlState?: string,
 	): void {
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
@@ -533,6 +543,7 @@ export class ConnectionCoordinator {
 			code,
 			replacementRequired,
 			message,
+			{ sqlState },
 		);
 		if (replacementRequired) {
 			this.awaitReplacementQuery(

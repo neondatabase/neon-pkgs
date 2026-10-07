@@ -29,6 +29,7 @@ type CapabilityClaims = NeonLiveQueryCapabilityV1["claims"];
 export function createCapabilityIssuer(
 	secret: RealtimeSecret,
 	database: string,
+	errorDetails: CapabilityClaims["error_details"] = "safe",
 	clock: () => number = Date.now,
 ): (query: PreparedLiveQuery) => Promise<IssuedSealedLiveQuery> {
 	const keyPromise = importAesKey(secret.key);
@@ -41,6 +42,7 @@ export function createCapabilityIssuer(
 			aud: "realtime-proxy",
 			iss: secret.issuer,
 			database,
+			error_details: errorDetails,
 			query_fingerprint: queryFingerprintValue,
 			sql: query.sql,
 			parameters: query.parameters.map((parameter) => ({

@@ -1142,15 +1142,22 @@ describe("RealtimeClient", () => {
 			type: "subscription_error",
 			live_id: "41",
 			code: "baseline_sync_failed",
-			message: "snapshot failed",
+			message: "invalid input syntax for type integer",
+			sqlstate: "22P02",
 		});
 		expect(subscription.getSnapshot()).toMatchObject({
 			status: "error",
-			error: { code: "baseline_sync_failed", retryable: false },
+			error: {
+				code: "baseline_sync_failed",
+				retryable: false,
+				sqlState: "22P02",
+				message: "invalid input syntax for type integer",
+			},
 		});
 		await expect(matchingRows).rejects.toMatchObject({
 			code: "baseline_sync_failed",
 			retryable: false,
+			sqlState: "22P02",
 		});
 		client.close();
 	});

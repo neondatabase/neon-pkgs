@@ -223,6 +223,8 @@ export type RealtimeLogger = (entry: RealtimeLogEntry) => void;
 export interface LiveQueryError extends Error {
 	/** Stable machine-readable error code. */
 	readonly code: string;
+	/** PostgreSQL SQLSTATE supplied for an authenticated debug query failure. */
+	readonly sqlState?: string;
 	/** Whether reconnecting or obtaining a fresh sealed query may recover it. */
 	readonly retryable: boolean;
 }

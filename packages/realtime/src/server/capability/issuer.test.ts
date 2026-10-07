@@ -42,6 +42,7 @@ describe("Realtime v1 capability issuer", () => {
 		const sealedQuery = await createCapabilityIssuer(
 			parseRealtimeSecret(SECRET),
 			"app",
+			"full",
 			() => 1_700_000_000_123,
 		)(QUERY);
 
@@ -61,6 +62,7 @@ describe("Realtime v1 capability issuer", () => {
 			aud: "realtime-proxy",
 			iss: "example-app",
 			database: "app",
+			error_details: "full",
 			query_fingerprint: sealedQuery.queryFingerprint,
 			sql: QUERY.sql,
 			parameters: [{ type_oid: 23, value: "Nw==" }],
@@ -69,6 +71,16 @@ describe("Realtime v1 capability issuer", () => {
 		});
 		expect(claims).not.toHaveProperty("branch");
 		expect(sealedQuery.expiresAt).toBe(1_700_000_060_000);
+	});
+
+	it("defaults to safe error details", async () => {
+		const sealedQuery = await createCapabilityIssuer(
+			parseRealtimeSecret(SECRET),
+			"app",
+		)(QUERY);
+
+		const { claims } = await decrypt(sealedQuery.capability, KEY);
+		expect(claims).toMatchObject({ error_details: "safe" });
 	});
 
 	it("uses a fresh 96-bit IV without changing the query fingerprint", async () => {
