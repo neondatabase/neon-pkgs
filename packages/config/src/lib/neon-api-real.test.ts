@@ -474,7 +474,7 @@ describe("enableNeonAuth", () => {
 				code: ErrorCode.Conflict,
 			});
 			await expect(failure).rejects.toThrow(
-				`enableNeonAuth(proj-1/br-1) failed: Neon Auth is not enabled on this branch and could not be provisioned. Neon API said: "${apiMessage}" (request id req-1).`,
+				`enableNeonAuth(proj-1/br-1) failed: Neon API said: "${apiMessage}" (request id req-1).`,
 			);
 			await expect(failure).rejects.not.toThrow("name collision");
 		} finally {

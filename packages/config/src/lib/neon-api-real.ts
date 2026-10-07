@@ -2016,15 +2016,15 @@ function neonAuthProvisioningConflict(
 	branchId: string,
 ): PlatformError {
 	const { neonMessage, requestId } = err.details;
-	const apiSummary =
-		typeof neonMessage === "string"
-			? `Neon API said: "${neonMessage}"`
-			: "HTTP 409";
 	const requestIdSuffix =
 		typeof requestId === "string" ? ` (request id ${requestId})` : "";
+	const reason =
+		typeof neonMessage === "string"
+			? `Neon API said: "${neonMessage}"${requestIdSuffix}.`
+			: `Neon Auth is not enabled on this branch and could not be provisioned (HTTP 409)${requestIdSuffix}.`;
 	return new PlatformError(
 		ErrorCode.Conflict,
-		`enableNeonAuth(${projectId}/${branchId}) failed: Neon Auth is not enabled on this branch and could not be provisioned. ${apiSummary}${requestIdSuffix}.`,
+		`enableNeonAuth(${projectId}/${branchId}) failed: ${reason}`,
 		{ cause: err, details: err.details },
 	);
 }
