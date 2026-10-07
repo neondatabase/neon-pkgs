@@ -132,6 +132,8 @@ jwks_url: https://auth.test.neon.tech/.well-known/jwks.json
 "
 `;
 
+exports[`neon-auth > enable reports a provisioning conflict on a branch without Neon Auth 1`] = `""`;
+
 exports[`neon-auth > oauth-provider add 1`] = `
 "id: google
 type: shared
