@@ -2,7 +2,7 @@
 
 [![npm downloads](https://img.shields.io/npm/dm/@neon/auth.svg)](https://www.npmjs.com/package/@neon/auth)
 
-A Next.js integration for **Neon Auth** (`@neon/auth`). This guide demonstrates how to integrate Neon's authentication system with a modern Next.js 15+ application.
+A Next.js integration for **Neon Auth** (`@neon/auth`). This guide demonstrates how to integrate Neon's authentication system with a modern Next.js 16+ application.
 
 ## Features
 
@@ -24,6 +24,11 @@ pnpm add @neon/auth @neondatabase/auth-ui
 # or
 yarn add @neon/auth @neondatabase/auth-ui
 ```
+
+> **Note:** `@neondatabase/auth-ui` still depends on the legacy `@neondatabase/auth`
+> release (an exact peer dependency, imported at runtime). Installing it alongside
+> `@neon/auth` also installs `@neondatabase/auth`, and the UI provider's types resolve
+> against that legacy package until `@neondatabase/auth-ui` is updated to accept `@neon/auth`.
 
 ### 2. Set Environment Variables
 

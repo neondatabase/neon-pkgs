@@ -305,11 +305,8 @@ compatibility re-exports that older `@neondatabase/auth` releases carried —
 install and import from `@neondatabase/auth-ui` directly.
 
 If you're migrating off those deprecated re-export paths on an older
-`@neondatabase/auth` release, run:
-
-```bash
-npx -p @neondatabase/auth neon-auth-codemod --write <path>
-```
+`@neondatabase/auth` release, change imports from `@neondatabase/auth/react/ui`
+(and `@neondatabase/auth/ui/*`) to the matching `@neondatabase/auth-ui` paths.
 
 ### 1. Import CSS
 
@@ -318,6 +315,11 @@ Install the UI package alongside `@neon/auth`:
 ```bash
 npm install @neondatabase/auth-ui
 ```
+
+> **Note:** `@neondatabase/auth-ui` still depends on the legacy `@neondatabase/auth`
+> release (an exact peer dependency, imported at runtime). Installing it alongside
+> `@neon/auth` also installs `@neondatabase/auth`, and the UI provider's types resolve
+> against that legacy package until `@neondatabase/auth-ui` is updated to accept `@neon/auth`.
 
 **Without Tailwind CSS:**
 ```typescript
@@ -380,7 +382,7 @@ For full documentation and theming, see [`@neondatabase/auth-ui`](https://github
 
 ## Related Packages
 
-- [`@neondatabase/neon-js`](https://github.com/neondatabase/neon-js/tree/main/packages/neon-js) - Full SDK with database and auth integration
+- [`@neondatabase/neon-js`](https://github.com/neondatabase/neon-js/tree/main/packages/neon-js) - Legacy all-in-one SDK built on the `@neondatabase/*` packages (it does not use `@neon/auth`)
 - [`@neon/postgrest-js`](../postgrest-js) - PostgREST client without auth
 
 ## Resources

@@ -9,7 +9,7 @@
 | Use Case | Package |
 |----------|---------|
 | Auth only (no database queries) | `@neon/auth` |
-| Auth + Database queries | `@neondatabase/neon-js` (includes this package) |
+| Auth + Database queries | `@neon/auth` + `@neon/postgrest-js` |
 | Pre-built UI components | Add `@neondatabase/auth-ui` |
 
 ## Installation
@@ -270,7 +270,7 @@ export const auth = createNeonAuth({
 import { auth } from '@/lib/auth/server';
 export const { GET, POST } = auth.handler();
 
-// middleware.ts - Route protection
+// proxy.ts - Route protection
 import { auth } from '@/lib/auth/server';
 export default auth.middleware({ loginUrl: '/auth/sign-in' });
 
@@ -326,5 +326,5 @@ Never import both paths - causes duplicate styles.
 
 ## Optional
 
-- [Next.js Integration](./NEXT-JS.md): Setup guide for Next.js 15+ with middleware and RSC support
+- [Next.js Integration](./NEXT-JS.md): Setup guide for Next.js 16+ with middleware and RSC support
 - [Better Auth Documentation](https://www.better-auth.com/docs): Underlying auth library documentation

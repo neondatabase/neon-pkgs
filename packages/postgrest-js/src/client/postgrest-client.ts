@@ -22,7 +22,7 @@ export type DefaultSchemaName<Database> = "public" extends keyof Database
  * Neon PostgreSQL client for querying the Neon Data API
  *
  * This is a generic PostgreSQL client without authentication built-in.
- * For auth-integrated clients, use @neondatabase/neon-js instead.
+ * For auth-integrated clients, pair this with `@neon/auth`, or supply your own token via `fetchWithToken`.
  *
  * Extends the upstream PostgrestClient with Neon-specific configuration.
  */

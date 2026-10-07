@@ -85,7 +85,7 @@ export type { NeonAuthServerApiError } from "@/server/types";
  *
  * @example
  * ```typescript
- * // middleware.ts - Route protection
+ * // proxy.ts - Route protection
  * import { auth } from '@/lib/auth';
  *
  * export default auth.middleware({ loginUrl: '/auth/sign-in' });
@@ -179,7 +179,7 @@ export function createNeonAuth(config: NeonAuthConfig) {
 	 *
 	 * @example
 	 * ```typescript
-	 * // middleware.ts
+	 * // proxy.ts
 	 * import { auth } from '@/lib/auth';
 	 *
 	 * export default auth.middleware({ loginUrl: '/auth/sign-in' });

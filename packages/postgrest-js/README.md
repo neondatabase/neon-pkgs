@@ -15,7 +15,7 @@ Generic PostgreSQL client for Neon Data API without built-in authentication.
 - You want to bring your own token management
 - You need a minimal client without auth dependencies
 
-For auth-integrated clients, use [`@neondatabase/neon-js`](https://github.com/neondatabase/neon-js/tree/main/packages/neon-js) instead.
+For auth-integrated clients, pair this with [`@neon/auth`](../auth), or supply your own token via `fetchWithToken`.
 
 ## Installation
 
@@ -263,7 +263,7 @@ const { data } = await client.from('users').select();
 
 ## Related Packages
 
-- [`@neondatabase/neon-js`](https://github.com/neondatabase/neon-js/tree/main/packages/neon-js) - Full SDK with Neon Auth integration
+- [`@neondatabase/neon-js`](https://github.com/neondatabase/neon-js/tree/main/packages/neon-js) - Legacy all-in-one SDK built on the `@neondatabase/*` packages
 - [`@neon/auth`](../auth) - Standalone auth adapters
 
 ## Support
