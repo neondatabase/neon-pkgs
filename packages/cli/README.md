@@ -740,10 +740,17 @@ neon deploy
 
 The branch is chosen with `--branch <id|name>`; without it the project's default branch is used. The policy is the `neon.ts` in the project directory (next to `.neon`, or the current directory without one); pass `--config <path>` to point at another file.
 
-**Apply-only flags** (also available on `deploy`):
+**Confirmations** (also on `deploy`). Two things need a yes before `apply` changes anything: applying to a branch Neon marks as protected, and overriding settings the branch already has (compute, TTL, `protected`, Data API settings, custom-domain targets). Adding services and deploying functions never asks. In a terminal, `apply` shows the settings it would override and asks once, default No. Without a terminal (CI, agents, pipes) or with `-o json|yaml`, it exits 1 before changing anything and names the flag to pass:
 
-- `--update-existing` (`-y`, `--yes`) — auto-confirm overriding existing remote settings on the branch. Without it, drift on settings already present remotely (compute, TTL, `protected`) is reported as a **conflict** and `apply` makes no changes until you resolve it or pass this flag.
-- `--allow-protected` — auto-confirm applying to a branch Neon marks as protected. Without it, `apply` refuses to touch a protected branch.
+- `--update-existing` — override settings that differ from `neon.ts`.
+- `--allow-protected` — apply to a protected branch.
+- `-y`, `--yes` — both.
+
+```bash
+neon deploy --env .env.prod --allow-protected   # production main is protected, no drift expected
+neon deploy -y                                   # protected branch and drift, no questions
+```
+
 **Output**: `status` prints the project, branch, and reverse-engineered config. `plan` / `apply` render a **`git diff`-style report** (matching [`neon diff`](#diff)): service changes (Neon Auth, Data API, buckets, functions) list as green `+` additions, while **branch setting changes** (TTL, `protected`, compute) show grouped under a `~ <branch>` header, one sorted `field → value` line each. A bare `apply` that hits drift on settings already present remotely prints those as a sorted **before→after** diff (`current → desired`, old in red / new in green) and exits non-zero until you pass `--update-existing`. Pass `--output json` (or `--output yaml`) to emit the full machine-readable result (`PushResult`) instead, for piping into other tools or CI.
 
 **`config status --current-branch`** (alias `neon status --current-branch`) prints _only_ the branch pinned in the local `.neon` file — no network, no auth, no analytics — and exits non-zero when none is pinned. This behavior lets it safely drive a shell prompt. Example [starship](https://starship.rs) segment:

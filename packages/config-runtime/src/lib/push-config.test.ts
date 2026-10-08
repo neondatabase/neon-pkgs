@@ -487,6 +487,96 @@ describe("pushConfig", () => {
 		).toBe(true);
 	});
 
+	test("confirm receives the drift it is asked to override", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		const config = defineConfig({
+			branch: () => ({
+				postgres: { computeSettings: { autoscalingLimitMaxCu: 4 } },
+			}),
+		});
+
+		let overrides: readonly unknown[] = [];
+		await pushConfig(config, {
+			api,
+			projectId,
+			branchId: "br-main",
+			confirm: (ctx) => {
+				overrides = ctx.overrides;
+				return true;
+			},
+		});
+
+		expect(overrides).toEqual([
+			expect.objectContaining({
+				kind: "branch",
+				identifier: "main",
+				field: "computeSettings",
+				current: { autoscalingLimitMaxCu: 0.25 },
+				desired: { autoscalingLimitMaxCu: 4 },
+			}),
+		]);
+	});
+
+	test("protected-only confirm carries no overrides", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		let overrides: readonly unknown[] | undefined;
+		await pushConfig(defineConfig({ auth: {} }), {
+			api,
+			projectId,
+			branchId: "br-main",
+			confirm: (ctx) => {
+				overrides = ctx.overrides;
+				return true;
+			},
+		});
+
+		expect(overrides).toEqual([]);
+	});
+
+	test("beforeMutations runs after an approved confirm and before any mutation", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		const order: string[] = [];
+		let enabledBeforeHook = true;
+		await pushConfig(defineConfig({ auth: {} }), {
+			api,
+			projectId,
+			branchId: "br-main",
+			confirm: () => {
+				order.push("confirm");
+				return true;
+			},
+			beforeMutations: () => {
+				order.push("beforeMutations");
+				enabledBeforeHook = api.history.some(
+					(h) => h.method === "enableNeonAuth",
+				);
+			},
+		});
+
+		expect(order).toEqual(["confirm", "beforeMutations"]);
+		expect(enabledBeforeHook).toBe(false);
+		expect(api.history.some((h) => h.method === "enableNeonAuth")).toBe(
+			true,
+		);
+	});
+
+	test("beforeMutations does not run when confirm declines", async () => {
+		const { api, projectId } = seededFake({ protected: true });
+		let ran = false;
+		await expect(
+			pushConfig(defineConfig({ auth: {} }), {
+				api,
+				projectId,
+				branchId: "br-main",
+				confirm: () => false,
+				beforeMutations: () => {
+					ran = true;
+				},
+			}),
+		).rejects.toMatchObject({ code: ErrorCode.PushAborted });
+		expect(ran).toBe(false);
+	});
+
 	test("protected branch + drift collapses into a single confirm call", async () => {
 		const { api, projectId } = seededFake({ protected: true });
 		const config = defineConfig({

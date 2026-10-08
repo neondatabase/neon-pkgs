@@ -50,6 +50,10 @@ export interface ApplyOptions extends ConfigOperationOptions {
 	updateExisting?: boolean;
 	/** Auto-confirm applying to a branch marked `protected` on Neon. */
 	allowProtectedBranch?: boolean;
+	/** Asked before a protected-branch push or an override. See {@link PushConfigOptions.confirm}. */
+	confirm?: PushConfigOptions["confirm"];
+	/** Runs after confirmation, before any change. See {@link PushConfigOptions.beforeMutations}. */
+	beforeMutations?: PushConfigOptions["beforeMutations"];
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 }
@@ -119,6 +123,10 @@ export async function apply(
 		...(options.apiHost ? { apiHost: options.apiHost } : {}),
 		...(options.updateExisting ? { updateExisting: true } : {}),
 		...(options.allowProtectedBranch ? { allowProtectedBranch: true } : {}),
+		...(options.confirm ? { confirm: options.confirm } : {}),
+		...(options.beforeMutations
+			? { beforeMutations: options.beforeMutations }
+			: {}),
 		...(options.bundleFunction
 			? { bundleFunction: options.bundleFunction }
 			: {}),
