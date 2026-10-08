@@ -212,6 +212,7 @@ export const envFlag = {
 /** Apply-only flags, exported so `deploy` can reuse the exact same surface. */
 export const applyFlags = {
 	"update-existing": {
+		alias: ["y", "yes"],
 		describe:
 			"Auto-confirm overriding existing remote settings on the branch",
 		type: "boolean",
@@ -219,13 +220,6 @@ export const applyFlags = {
 	},
 	"allow-protected": {
 		describe: "Auto-confirm applying to a branch marked protected on Neon",
-		type: "boolean",
-		default: false,
-	},
-	yes: {
-		alias: "y",
-		describe:
-			"No effect: this command never prompts. Overriding remote settings still needs --update-existing",
 		type: "boolean",
 		default: false,
 	},

@@ -15,9 +15,30 @@ describe.sequential("e2e — neon deploy against the real API", () => {
 	let branchId: string;
 	let cwd: string;
 
+	const writePolicy = (minCu: number) =>
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			`export default { branch: () => ({ postgres: { computeSettings: { autoscalingLimitMinCu: ${minCu} } } }) };\n`,
+		);
+
+	const deploy = (...flags: string[]) =>
+		runCli(
+			[
+				"deploy",
+				...flags,
+				"--project-id",
+				projectId,
+				"--branch",
+				branchId,
+				"--config",
+				join(cwd, "neon.ts"),
+				"--no-env-pull",
+			],
+			{ cwd },
+		);
+
 	beforeAll(async () => {
 		cwd = mkdtempSync(join(tmpdir(), "neon-deploy-e2e-"));
-		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
 		projectId = await createProject({
 			name: uniqueProjectName("cli-deploy"),
 		});
@@ -34,21 +55,22 @@ describe.sequential("e2e — neon deploy against the real API", () => {
 		if (cwd) rmSync(cwd, { recursive: true, force: true });
 	});
 
-	it.each([["-y"], ["--yes"]])("accepts %s", async (flag) => {
-		const result = await runCli(
-			[
-				"deploy",
-				flag,
-				"--project-id",
-				projectId,
-				"--branch",
-				branchId,
-				"--config",
-				join(cwd, "neon.ts"),
-				"--no-env-pull",
-			],
-			{ cwd },
-		);
+	it("refuses to override drifted settings without a flag", async () => {
+		writePolicy(0.5);
+
+		const result = await deploy();
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("--update-existing");
+	});
+
+	it.each([
+		["-y", 0.5],
+		["--yes", 0.25],
+	])("%s overrides drifted settings like --update-existing", async (flag, minCu) => {
+		writePolicy(minCu);
+
+		const result = await deploy(flag);
 
 		expect(result.code, result.stderr).toBe(0);
 		expect(JSON.parse(result.stdout).dryRun).toBe(false);

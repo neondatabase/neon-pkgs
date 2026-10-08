@@ -740,10 +740,8 @@ The branch is chosen with `--branch <id|name>`; without it the project's default
 
 **Apply-only flags** (also available on `deploy`):
 
-- `--update-existing` — auto-confirm overriding existing remote settings on the branch. Without it, drift on settings already present remotely (compute, TTL, `protected`) is reported as a **conflict** and `apply` makes no changes until you resolve it or pass this flag.
+- `--update-existing` (`-y`, `--yes`) — auto-confirm overriding existing remote settings on the branch. Without it, drift on settings already present remotely (compute, TTL, `protected`) is reported as a **conflict** and `apply` makes no changes until you resolve it or pass this flag.
 - `--allow-protected` — auto-confirm applying to a branch Neon marks as protected. Without it, `apply` refuses to touch a protected branch.
-- `-y` / `--yes` — accepted so a script that passes it to `init` and `link` can pass it here too. It has no effect: `apply` and `deploy` never prompt, and `-y` does not imply `--update-existing` or `--allow-protected`.
-
 **Output**: `status` prints the project, branch, and reverse-engineered config. `plan` / `apply` render a **`git diff`-style report** (matching [`neon diff`](#diff)): service changes (Neon Auth, Data API, buckets, functions) list as green `+` additions, while **branch setting changes** (TTL, `protected`, compute) show grouped under a `~ <branch>` header, one sorted `field → value` line each. A bare `apply` that hits drift on settings already present remotely prints those as a sorted **before→after** diff (`current → desired`, old in red / new in green) and exits non-zero until you pass `--update-existing`. Pass `--output json` (or `--output yaml`) to emit the full machine-readable result (`PushResult`) instead, for piping into other tools or CI.
 
 **`config status --current-branch`** (alias `neon status --current-branch`) prints _only_ the branch pinned in the local `.neon` file — no network, no auth, no analytics — and exits non-zero when none is pinned. This behavior lets it safely drive a shell prompt. Example [starship](https://starship.rs) segment:
