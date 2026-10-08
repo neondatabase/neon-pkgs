@@ -62,7 +62,6 @@ const groupKeys = (keys: readonly string[]): Map<string, string[]> => {
 	return groups;
 };
 
-/** `branch dev (br-…)`, with `, project default` when no branch was named. */
 export const pulledBranch = (branch: ResolvedBranchRef): string =>
 	`branch ${chalk.cyan.bold(branch.branchName)} ${chalk.dim(
 		`(${branch.branchId}${branch.usedDefault ? ", project default" : ""})`,
