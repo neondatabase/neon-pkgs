@@ -452,7 +452,7 @@ const resolveBranchId = async (
 		throw new Error(missingName);
 	}
 
-	log.error(missingName);
+	log.info(missingName);
 	const { create } = await prompts({
 		type: "confirm",
 		name: "create",
@@ -596,7 +596,7 @@ const resolveProjectId = async (props: CheckoutProps): Promise<string> => {
 		throw new Error(missingProjectMessage);
 	}
 
-	log.error(missingProjectMessage);
+	log.info(missingProjectMessage);
 
 	const { runLink } = await prompts({
 		type: "confirm",

@@ -62,7 +62,7 @@ describe("vpc-endpoints", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: VPC endpoint configuration is not supported for Azure regions",
+				stderr: "VPC endpoint configuration is not supported for Azure regions",
 			},
 		);
 	});

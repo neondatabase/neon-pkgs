@@ -949,8 +949,8 @@ export const ensureAuth = async (
 			loaded === null
 				? "has no stored credential"
 				: "holds a session that has expired";
-		process.stderr.write(
-			`Not signed in: profile "${selection.profile}" ${state}. Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.\n`,
+		log.info(
+			`Not signed in: profile "${selection.profile}" ${state}. Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.`,
 		);
 		process.exitCode = 1;
 		return;

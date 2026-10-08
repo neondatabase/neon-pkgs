@@ -16,7 +16,7 @@ describe("data-api", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Data API deleted for db1 on branch br-main-branch-123456",
+				stderr: "Data API deleted for db1 on branch br-main-branch-123456",
 			},
 		);
 	});
@@ -93,7 +93,7 @@ describe("data-api", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Data API settings updated for db1 on branch br-main-branch-123456",
+				stderr: "Data API settings updated for db1 on branch br-main-branch-123456",
 			},
 		);
 	});
@@ -114,7 +114,7 @@ describe("data-api", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Data API settings updated for db1 on branch br-main-branch-123456",
+				stderr: "Data API settings updated for db1 on branch br-main-branch-123456",
 			},
 		);
 	});
@@ -156,7 +156,7 @@ describe("data-api", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Data API schema cache refreshed for db1 on branch br-main-branch-123456",
+				stderr: "Data API schema cache refreshed for db1 on branch br-main-branch-123456",
 			},
 		);
 	});
@@ -175,7 +175,7 @@ describe("data-api", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Data API deleted for db1 on branch br-main-branch-123456",
+				stderr: "Data API deleted for db1 on branch br-main-branch-123456",
 			},
 		);
 	});
@@ -191,7 +191,7 @@ describe("data-api", () => {
 	}) => {
 		await testCliCommand(["data-api", "update", "--db-max-rows", "9999"], {
 			mockDir: "single_org",
-			stderr: "INFO: Data API settings updated for db1 on branch br-main-branch-123456",
+			stderr: "Data API settings updated for db1 on branch br-main-branch-123456",
 		});
 	});
 

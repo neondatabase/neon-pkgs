@@ -797,7 +797,7 @@ describe("branches", () => {
 			{ outputTable: true, snapshot: false },
 		);
 		expect(stderr).toContain(
-			"INFO: No schema differences for database neondb between page-one and page-two.",
+			"No schema differences for database neondb between page-one and page-two.",
 		);
 	});
 });

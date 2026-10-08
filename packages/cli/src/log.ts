@@ -10,8 +10,9 @@ export const log = {
 	warning: (...args: unknown[]) => {
 		process.stderr.write(`WARNING: ${format(...args)}\n`);
 	},
+	// No prefix: a label marks lines that need attention (WARNING, ERROR). See CONTRIBUTING.md.
 	info: (...args: unknown[]) => {
-		process.stderr.write(`INFO: ${format(...args)}\n`);
+		process.stderr.write(`${format(...args)}\n`);
 	},
 	error: (...args: unknown[]) => {
 		process.stderr.write(`ERROR: ${format(...args)}\n`);

@@ -114,9 +114,9 @@ describe("checkout", () => {
 			["checkout", "test_branch", "--no-env-pull", "--context-file", ctx],
 			{
 				stderr:
-					`INFO: → Currently on branch main ` +
-					`INFO: Checked out branch br-sunny-branch-123456 on project test. Updated ${ctx}. ` +
-					`INFO: ${ENV_PULL_SKIPPED_HINT}`,
+					`→ Currently on branch main ` +
+					`Checked out branch br-sunny-branch-123456 on project test. Updated ${ctx}. ` +
+					`${ENV_PULL_SKIPPED_HINT}`,
 			},
 		);
 		removeFile(ctx);
@@ -558,7 +558,7 @@ describe("checkout lifecycle hooks (Preview)", () => {
 				cwd: dir,
 				snapshot: false,
 				code: 1,
-				stderr: `INFO: → Currently on branch main ERROR: create.before saw branchName=hook-created-branch event.type=neon-checkout`,
+				stderr: `→ Currently on branch main ERROR: create.before saw branchName=hook-created-branch event.type=neon-checkout`,
 			},
 		);
 	});

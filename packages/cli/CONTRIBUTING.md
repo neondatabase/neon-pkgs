@@ -16,6 +16,29 @@ alignment is gone. Do not add `cli-table` or any other box drawer.
 All list and get commands go through `writer` in `src/writer.ts`. Change the
 layout there, not in a command.
 
+## Message prefixes
+
+A prefix tells the reader a line needs attention. Only two lines get one:
+
+| Prefix | When | How |
+| --- | --- | --- |
+| `ERROR:` | The command did not do what was asked, and exits non-zero | Throw; the error handler prints it |
+| `WARNING:` | The command did it, but something needs the user to act | `log.warning` |
+
+Everything else prints plain on stderr through `log.info`: the result line ("Bucket
+"assets" deleted from branch main"), a negative answer ("Not signed in", "No branch
+pinned"), progress ("Installing @neon/config with npm…"), and next steps.
+
+Rule of thumb: if the user asked a question and the line is the answer, it has no
+prefix, even when the answer is "no" and the exit code is 1.
+
+```console
+$ neon config status --current-branch
+No branch pinned. Run `neon checkout <branch>` to pin a branch and pull its env vars.
+$ echo $?
+1
+```
+
 ## Parent commands
 
 When a command only groups subcommands, running it without a subcommand prints

@@ -56,8 +56,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function nowaitfunc. " +
-					"INFO: Check status with: neon function get nowaitfunc " +
+					"Function deployment triggered for function nowaitfunc. " +
+					"Check status with: neon function get nowaitfunc " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -323,8 +323,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function redeploy. " +
-					"INFO: Function deployment redeploy/2 completed.",
+					"Function deployment triggered for function redeploy. " +
+					"Function deployment redeploy/2 completed.",
 			},
 		);
 	});
@@ -350,7 +350,7 @@ describe("functions", () => {
 				// No interval override: the default schedule polls through `building` to
 				// `completed` well inside the test timeout.
 				env: { NEON_ESBUILD_PATH: esbuildBin },
-				stderr: "INFO: Function deployment triggered for function tablefunc.",
+				stderr: "Function deployment triggered for function tablefunc.",
 			},
 		);
 	});
@@ -377,8 +377,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function newfunc. " +
-					"INFO: Function deployment newfunc/1 completed.",
+					"Function deployment triggered for function newfunc. " +
+					"Function deployment newfunc/1 completed.",
 			},
 		);
 	});
@@ -407,7 +407,7 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function failfunc. " +
+					"Function deployment triggered for function failfunc. " +
 					"ERROR: Function deployment failfunc/1 failed.",
 			},
 		);
@@ -437,8 +437,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function stuckstart. " +
-					"INFO: Check status with: neon function get stuckstart " +
+					"Function deployment triggered for function stuckstart. " +
+					"Check status with: neon function get stuckstart " +
 					"--project-id test-project-123456 --branch br-main-branch-123456 " +
 					"ERROR: Timed out waiting for the deployment of stuckstart to start. " +
 					"It may still be in progress.",
@@ -470,8 +470,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function stuckbuild. " +
-					"INFO: Check status with: neon function get stuckbuild " +
+					"Function deployment triggered for function stuckbuild. " +
+					"Check status with: neon function get stuckbuild " +
 					"--project-id test-project-123456 --branch br-main-branch-123456 " +
 					"ERROR: Timed out waiting for function deployment stuckbuild/1 to finish. " +
 					"It may still be building.",
@@ -506,8 +506,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function envfunc. " +
-					"INFO: Check status with: neon function get envfunc " +
+					"Function deployment triggered for function envfunc. " +
+					"Check status with: neon function get envfunc " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -594,7 +594,7 @@ describe("functions", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Function my-func deleted from branch br-main-branch-123456",
+				stderr: "Function my-func deleted from branch br-main-branch-123456",
 			},
 		);
 	});
@@ -681,7 +681,7 @@ describe("functions", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: CNAME docs.example.com to abc.custom.neon.tech",
+				stderr: "CNAME docs.example.com to abc.custom.neon.tech",
 			},
 		);
 	});
@@ -724,7 +724,7 @@ describe("functions", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: "INFO: Custom domain docs.example.com deleted from branch br-main-branch-123456",
+				stderr: "Custom domain docs.example.com deleted from branch br-main-branch-123456",
 			},
 		);
 	});
@@ -826,8 +826,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function tsoverjs. " +
-					"INFO: Check status with: neon function get tsoverjs " +
+					"Function deployment triggered for function tsoverjs. " +
+					"Check status with: neon function get tsoverjs " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -859,8 +859,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function jsovermjs. " +
-					"INFO: Check status with: neon function get jsovermjs " +
+					"Function deployment triggered for function jsovermjs. " +
+					"Check status with: neon function get jsovermjs " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -892,8 +892,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function jsonly. " +
-					"INFO: Check status with: neon function get jsonly " +
+					"Function deployment triggered for function jsonly. " +
+					"Check status with: neon function get jsonly " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -928,8 +928,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function srcfile. " +
-					"INFO: Check status with: neon function get srcfile " +
+					"Function deployment triggered for function srcfile. " +
+					"Check status with: neon function get srcfile " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -966,8 +966,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: join(tmpdir(), "no-such-esbuild"),
 				},
 				stderr:
-					"INFO: Function deployment triggered for function nobundle. " +
-					"INFO: Check status with: neon function get nobundle " +
+					"Function deployment triggered for function nobundle. " +
+					"Check status with: neon function get nobundle " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -1002,8 +1002,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: join(tmpdir(), "no-such-esbuild"),
 				},
 				stderr:
-					"INFO: Function deployment triggered for function nbcwd. " +
-					"INFO: Check status with: neon function get nbcwd " +
+					"Function deployment triggered for function nbcwd. " +
+					"Check status with: neon function get nbcwd " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -1040,8 +1040,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: join(tmpdir(), "no-such-esbuild"),
 				},
 				stderr:
-					"INFO: Function deployment triggered for function nbfile. " +
-					"INFO: Check status with: neon function get nbfile " +
+					"Function deployment triggered for function nbfile. " +
+					"Check status with: neon function get nbfile " +
 					"--project-id test-project-123456 --branch br-main-branch-123456",
 			},
 		);
@@ -1251,8 +1251,8 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function flaky. " +
-					"INFO: Function deployment flaky/1 completed.",
+					"Function deployment triggered for function flaky. " +
+					"Function deployment flaky/1 completed.",
 			},
 		);
 	});
@@ -1280,7 +1280,7 @@ describe("functions", () => {
 					NEON_ESBUILD_PATH: esbuildBin,
 				},
 				stderr:
-					"INFO: Function deployment triggered for function denied. " +
+					"Function deployment triggered for function denied. " +
 					"ERROR: Forbidden",
 			},
 		);

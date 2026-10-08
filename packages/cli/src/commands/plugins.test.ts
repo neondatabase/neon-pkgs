@@ -293,7 +293,7 @@ describe("neon plugins", () => {
 			const target = args[args.indexOf("-t") + 1];
 			const name =
 				target !== undefined ? displayNameByTarget[target] : undefined;
-			return `INFO: Installing the Neon plugin for ${name} (${index + 1}/2)...`;
+			return `Installing the Neon plugin for ${name} (${index + 1}/2)...`;
 		});
 		const progressLines = stderr
 			.split("\n")
