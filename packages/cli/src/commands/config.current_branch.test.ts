@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect } from "vitest";
+import { afterEach, beforeEach, describe } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
@@ -66,7 +66,7 @@ describe("config status --current-branch (offline, end to end)", () => {
 				// grep-style: "no branch pinned" is a non-zero "no result", so a shell
 				// prompt can guard on it directly. Empty stdout; hint on stderr.
 				code: 1,
-				stderr: expect.stringContaining("Run `neon checkout <branch>`"),
+				stderr: "No branch pinned. Run `neon checkout <branch>` to pin a branch and pull its env vars.",
 			},
 		);
 	});

@@ -39,7 +39,7 @@ describe("bucket", () => {
 	test("create with default access level", async ({ testCliCommand }) => {
 		await testCliCommand(["bucket", "create", "my-bucket", ...SCOPE], {
 			mockDir: "single_org",
-			stderr: 'INFO: Bucket "my-bucket" (private) created on branch br-main-branch-123456',
+			stderr: 'Bucket "my-bucket" (private) created on branch br-main-branch-123456',
 		});
 	});
 
@@ -55,7 +55,7 @@ describe("bucket", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: 'INFO: Bucket "my-bucket" (public_read) created on branch br-main-branch-123456',
+				stderr: 'Bucket "my-bucket" (public_read) created on branch br-main-branch-123456',
 			},
 		);
 	});
@@ -88,14 +88,14 @@ describe("bucket", () => {
 	test("delete", async ({ testCliCommand }) => {
 		await testCliCommand(["bucket", "delete", "my-bucket", ...SCOPE], {
 			mockDir: "single_org",
-			stderr: 'INFO: Bucket "my-bucket" deleted from branch br-main-branch-123456',
+			stderr: 'Bucket "my-bucket" deleted from branch br-main-branch-123456',
 		});
 	});
 
 	test("rm alias deletes a bucket", async ({ testCliCommand }) => {
 		await testCliCommand(["bucket", "rm", "my-bucket", ...SCOPE], {
 			mockDir: "single_org",
-			stderr: 'INFO: Bucket "my-bucket" deleted from branch br-main-branch-123456',
+			stderr: 'Bucket "my-bucket" deleted from branch br-main-branch-123456',
 		});
 	});
 
@@ -265,7 +265,7 @@ describe("bucket", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: `INFO: Object "hello.txt" downloaded from bucket "my-bucket" on branch br-main-branch-123456 to ${dest}`,
+				stderr: `Object "hello.txt" downloaded from bucket "my-bucket" on branch br-main-branch-123456 to ${dest}`,
 			},
 		);
 		expect(readFileSync(dest, "utf8")).toEqual("hello world\n");
@@ -285,7 +285,7 @@ describe("bucket", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: `INFO: Object "dir/file.txt" downloaded from bucket "my-bucket" on branch br-main-branch-123456 to ${dest}`,
+				stderr: `Object "dir/file.txt" downloaded from bucket "my-bucket" on branch br-main-branch-123456 to ${dest}`,
 			},
 		);
 		expect(readFileSync(dest, "utf8")).toEqual("nested file contents\n");
@@ -351,7 +351,7 @@ describe("bucket", () => {
 			{
 				mockDir: "single_org",
 				stderr:
-					'INFO: File "' +
+					'File "' +
 					src +
 					'" uploaded to "upload.txt" in bucket "my-bucket" on branch br-main-branch-123456',
 			},
@@ -557,7 +557,7 @@ describe("bucket", () => {
 			["bucket", "object", "delete", "my-bucket/hello.txt", ...SCOPE],
 			{
 				mockDir: "single_org",
-				stderr: 'INFO: Object "hello.txt" deleted from bucket "my-bucket" on branch br-main-branch-123456',
+				stderr: 'Object "hello.txt" deleted from bucket "my-bucket" on branch br-main-branch-123456',
 			},
 		);
 	});
@@ -567,7 +567,7 @@ describe("bucket", () => {
 			["bucket", "object", "delete", "my-bucket/dir/file.txt", ...SCOPE],
 			{
 				mockDir: "single_org",
-				stderr: 'INFO: Object "dir/file.txt" deleted from bucket "my-bucket" on branch br-main-branch-123456',
+				stderr: 'Object "dir/file.txt" deleted from bucket "my-bucket" on branch br-main-branch-123456',
 			},
 		);
 	});
@@ -577,7 +577,7 @@ describe("bucket", () => {
 			["bucket", "object", "rm", "my-bucket/hello.txt", ...SCOPE],
 			{
 				mockDir: "single_org",
-				stderr: 'INFO: Object "hello.txt" deleted from bucket "my-bucket" on branch br-main-branch-123456',
+				stderr: 'Object "hello.txt" deleted from bucket "my-bucket" on branch br-main-branch-123456',
 			},
 		);
 	});
@@ -609,7 +609,7 @@ describe("bucket", () => {
 			],
 			{
 				mockDir: "single_org",
-				stderr: 'INFO: Deleted 3 object(s) under prefix "logs/" from bucket "my-bucket" on branch br-main-branch-123456',
+				stderr: 'Deleted 3 object(s) under prefix "logs/" from bucket "my-bucket" on branch br-main-branch-123456',
 			},
 		);
 	});

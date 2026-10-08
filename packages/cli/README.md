@@ -474,11 +474,11 @@ The resolved branch is then written (by name) to the same `.neon` file `link` us
 
 ```bash
 $ neon checkout main --project-id polished-snowflake-12345678
-INFO: Checked out branch br-main-branch-87654321 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
+Checked out branch br-main-branch-87654321 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
 
 $ neon checkout dev --create --project-id polished-snowflake-12345678
-INFO: Created branch dev (br-dev-branch-12345678).
-INFO: Checked out branch br-dev-branch-12345678 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
+Created branch dev (br-dev-branch-12345678).
+Checked out branch br-dev-branch-12345678 on project polished-snowflake-12345678. Updated /path/to/cwd/.neon.
 
 $ cat .neon
 {
@@ -698,9 +698,9 @@ Each command prints what it changed and the next step:
 
 ```
 $ neon config add function sendemail
-INFO: Created functions/sendemail.ts.
-INFO: Updated neon.ts: added functions.sendemail.
-INFO: Next: `neon dev` to run it locally, `neon config apply` to deploy.
+Created functions/sendemail.ts.
+Updated neon.ts: added functions.sendemail.
+Next: `neon dev` to run it locally, `neon config apply` to deploy.
 ```
 
 - **Functions** take a slug of 1-20 lowercase letters and digits, the same rule `plan` enforces. The handler file is written first and an existing file is never overwritten, so pointing `--source` at code you already have works. A `.js` `neon.ts` gets a `.js` handler.
@@ -1342,7 +1342,7 @@ Project  proj-in-org
 
 napi_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 WARNING: Store this key now: it is not shown again.
-INFO: Limited to proj-in-org: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.
+Limited to proj-in-org: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.
 ```
 
 `--org-id` and `--project-id` are mutually exclusive. A project-scoped key *is* an organization key, and its organization is looked up from the project rather than chosen separately. With neither flag you get an account key.

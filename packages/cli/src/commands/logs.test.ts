@@ -503,7 +503,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				outputTable: true,
-				stderr: "INFO: More logs matched than were returned. Re-run with the same filters plus --cursor=eyJvZmZzZXQiOjEwMH0 to fetch the next page.",
+				stderr: "More logs matched than were returned. Re-run with the same filters plus --cursor=eyJvZmZzZXQiOjEwMH0 to fetch the next page.",
 			},
 		);
 	});
@@ -775,7 +775,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				outputTable: true,
-				stderr: 'INFO: More values exist than were returned for "service_name". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.',
+				stderr: 'More values exist than were returned for "service_name". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.',
 			},
 		);
 	});
@@ -794,7 +794,7 @@ describe("logs", () => {
 			{
 				mockDir: "single_org",
 				outputTable: true,
-				stderr: 'INFO: More values exist than were returned for "\\u001b]52;c;ZXZpbA==\\u0007service\\u000aname". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.',
+				stderr: 'More values exist than were returned for "\\u001b]52;c;ZXZpbA==\\u0007service\\u000aname". Narrow the window with --since or --start-time, restrict --source, or raise --limit, then run it again.',
 			},
 		);
 	});

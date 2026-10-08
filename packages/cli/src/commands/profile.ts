@@ -916,11 +916,15 @@ const createByMinting = async (props: CreateProps) => {
 	} finally {
 		// A key minted but never written is unreachable, so it must not be left live.
 		if (minted !== undefined && !keyIsReachable) {
-			log.info(
-				(await withdrawKey(session, mintedScope, minted.id))
-					? `Revoked the key that was minted but not stored (id ${minted.id}).`
-					: `Minted key ${minted.id} could be neither stored nor revoked, and may still be live. Remove it with: neon api-keys revoke ${minted.id}${mintedScope.orgId ? ` --org-id ${mintedScope.orgId}` : ""}`,
-			);
+			if (await withdrawKey(session, mintedScope, minted.id)) {
+				log.info(
+					`Revoked the key that was minted but not stored (id ${minted.id}).`,
+				);
+			} else {
+				log.warning(
+					`Minted key ${minted.id} could be neither stored nor revoked, and may still be live. Remove it with: neon api-keys revoke ${minted.id}${mintedScope.orgId ? ` --org-id ${mintedScope.orgId}` : ""}`,
+				);
+			}
 		}
 		const revoked = await revokeToken(oauthProps, tokenSet);
 		log.info(
@@ -1212,11 +1216,13 @@ const remove = async (props: ProfileProps & { name: string; yes: boolean }) => {
 				apiKey: stored.apiKey,
 				apiHost: props.apiHost,
 			});
-			log.info(
-				(await withdrawKey(client, scope, keyId))
-					? `Revoked the API key (id ${keyId})`
-					: `Could not revoke the API key (id ${keyId}) — it may still be live. Remove it with: neon api-keys revoke ${keyId}${scope.orgId ? ` --org-id ${scope.orgId}` : ""}`,
-			);
+			if (await withdrawKey(client, scope, keyId)) {
+				log.info(`Revoked the API key (id ${keyId})`);
+			} else {
+				log.warning(
+					`Could not revoke the API key (id ${keyId}) — it may still be live. Remove it with: neon api-keys revoke ${keyId}${scope.orgId ? ` --org-id ${scope.orgId}` : ""}`,
+				);
+			}
 		}
 	} else if (stored !== null) {
 		const revoked = await revokeTokenSet(stored.tokens, props);

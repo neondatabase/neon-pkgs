@@ -8,6 +8,8 @@
 
 Coding-agent targeting is `--agent <name>` (repeatable) on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; detection on `-y` (global config, project folders, and the host CLI); or omit `-y` in a terminal to pick. Standalone plugin, skills, and MCP commands require at least one agent. Interactive init/bootstrap agent pickers can confirm an empty selection to skip that setup step and continue; Custom init selects skills and MCP agents independently. `init` Recommended may install the plugin and skills/MCP in one run when detected agents need both; `bootstrap` still refuses that mix. Interactive Custom init finishes agent setup before project setup, then calls link or `claim create` in process. `--no-link` skips linking without prompting. `link` has no `--agent`. `neon init -y` is Recommended: it sets up the current directory in place, links only when authenticated, and writes a default `neon.ts` unless `--no-config`. `-y` with `--skill`, MCP flags, `--no-agent-setup`, or `--claimable` is Custom. `--skill` selects skills; MCP flags select skills and MCP. neon.ts flags on `init` are `--config` / `--no-config` / `--services`. Init suppresses link's own neon.ts offer.
 
+Message prefixes: `ERROR:` only when the command failed (throw), `WARNING:` only when it succeeded but the user must act (`log.warning`). Results, negative answers ("Not signed in"), progress, and next steps go through `log.info`, which prints no prefix. See [CONTRIBUTING.md](./CONTRIBUTING.md#message-prefixes).
+
 Human output (`-o table`, the default) is for a terminal. `-o json` and `-o yaml` are for scripts. Never parse the human format in a script, a test that is checking a machine contract, or an agent workflow that needs a field.
 
 ## Parent commands

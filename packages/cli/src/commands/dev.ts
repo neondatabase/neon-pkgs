@@ -866,8 +866,8 @@ const reconcileOnce = async (
 			keepPortsFromRunning(running),
 		);
 	} catch (err) {
-		log.info(
-			chalk.red("neon.ts change ignored: ") +
+		log.warning(
+			"neon.ts change ignored: " +
 				(err instanceof Error ? err.message : String(err)) +
 				chalk.dim(" (fix it and save again)"),
 		);

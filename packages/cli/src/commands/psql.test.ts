@@ -71,7 +71,7 @@ describe("psql", () => {
 			{ snapshot: false },
 		);
 		expect(stderr).toMatch(
-			/^INFO: Neon connection: test_db as test_role on \S+; launching psql\.\.\.$/m,
+			/^Neon connection: test_db as test_role on \S+; launching psql\.\.\.$/m,
 		);
 		expect(stderr).not.toContain("test_pwd");
 	});
@@ -119,7 +119,7 @@ describe("psql", () => {
 			{ snapshot: false },
 		);
 		expect(stderr).toMatch(
-			/^INFO: Connecting to the database; launching psql\.\.\.$/m,
+			/^Connecting to the database; launching psql\.\.\.$/m,
 		);
 	});
 });

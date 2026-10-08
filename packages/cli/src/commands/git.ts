@@ -223,7 +223,7 @@ export const uninstall = (_props: GitProps): void => {
 			);
 			break;
 		case "foreign":
-			log.warning(
+			log.info(
 				"Left the existing `post-checkout` hook in place (not managed by neon). " +
 					"Git → Neon sync flag cleared.",
 			);
@@ -607,7 +607,7 @@ export const cleanup = async (props: GitProps): Promise<void> => {
 	);
 
 	for (const { name, reason } of skipped) {
-		log.warning(
+		log.info(
 			"Keeping Neon branch %s (%s) — never auto-deleted.",
 			name,
 			reason,

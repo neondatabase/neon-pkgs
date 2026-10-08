@@ -51,7 +51,7 @@ describe("ip-allow", () => {
 
 	test("Reset IP allow", async ({ testCliCommand }) => {
 		await testCliCommand(["ip-allow", "reset", "--project-id", "test"], {
-			stderr: `INFO: The IP allowlist has been reset. All databases on project "test_project" are now exposed to the internet`,
+			stderr: `The IP allowlist has been reset. All databases on project "test_project" are now exposed to the internet`,
 		});
 	});
 
