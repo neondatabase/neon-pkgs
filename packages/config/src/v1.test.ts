@@ -118,6 +118,8 @@ describe("@neon/config public value surface", () => {
 			  "hooks",
 			  "postgres",
 			  "preview",
+			  "realtime",
+			  "realtimeInput",
 			  "service",
 			  "serviceInput",
 			]

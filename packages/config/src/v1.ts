@@ -64,6 +64,8 @@ import {
 	hooksSchema,
 	postgresConfigSchema,
 	previewInputSchema,
+	realtimeConfigSchema,
+	realtimeInputSchema,
 	serviceToggleInputSchema,
 	serviceToggleSchema,
 } from "./lib/schema.js";
@@ -101,6 +103,8 @@ export const schemas = {
 	hooks: hooksSchema,
 	postgres: postgresConfigSchema,
 	preview: previewInputSchema,
+	realtime: realtimeConfigSchema,
+	realtimeInput: realtimeInputSchema,
 	service: serviceToggleSchema,
 	serviceInput: serviceToggleInputSchema,
 } as const;
@@ -250,6 +254,8 @@ export type {
 	PreviewInput,
 	PreviewTuning,
 	PushResult,
+	RealtimeConfig,
+	RealtimeInput,
 	ResolvedBranchConfig,
 	ResolvedBucketConfig,
 	ResolvedDataApiConfig,

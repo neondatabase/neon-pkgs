@@ -119,14 +119,19 @@ const renderGaServices = (services: readonly NeonService[]): string => {
  * `data-api` writes `dataApi: true` and forces `auth: true`. The default provider is Neon
  * Auth; omitting auth is a `defineConfig` type error rather than a deploy-time surprise.
  */
-export const renderNeonConfig = (services: readonly NeonService[]): string => {
+export const renderNeonConfig = (
+	services: readonly NeonService[],
+	realtime?: boolean,
+): string => {
 	const auth = services.includes("auth") || services.includes("data-api");
 	const dataApi = services.includes("data-api") ? "  dataApi: true,\n" : "";
+	const realtimeDeclaration =
+		realtime === undefined ? "" : `  realtime: ${realtime},\n`;
 	return `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
 
 export default defineConfig({
   // Declare your Neon services here
-  auth: ${auth},
+${realtimeDeclaration}  auth: ${auth},
 ${dataApi}${renderGaServices(services)}  // Branch policy: per-branch tuning
   branch: (branch) => {
     if (branch.isDefault) {

@@ -24,6 +24,7 @@ import type {
 	FunctionTriggerDef,
 	FunctionTuning,
 	PreviewInput,
+	RealtimeInput,
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
@@ -135,6 +136,7 @@ type BucketsAutocomplete<Buckets> =
  * import { defineConfig } from "@neon/config/v1";
  *
  * export default defineConfig({
+ *   realtime: { allowedOrigins: ["https://app.example.com"] },
  *   auth: true,
  *   functions: {
  *     hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
@@ -143,8 +145,9 @@ type BucketsAutocomplete<Buckets> =
  * });
  * ```
  *
- * The policy is split into a **static** existential set (top-level `auth` / `dataApi` /
- * `aiGateway` / `functions` / `buckets` / `triggers`, plus the deprecated `preview` aliases) and a
+ * The policy is split into a **static** existential set (top-level `realtime` / `auth` /
+ * `dataApi` / `aiGateway` / `functions` / `buckets` / `triggers`, plus the deprecated
+ * `preview` aliases) and a
  * **dynamic** per-branch `branch` closure. The static half determines which secrets exist —
  * so `NeonEnv<typeof config>` and `parseEnv` are exact — while the closure can only *tune*
  * a branch (lifecycle, compute, per-function deploy settings), never change what exists.
@@ -166,6 +169,7 @@ export function defineConfig<
 	const Buckets extends Record<string, BucketDef> | undefined = undefined,
 	const AiGateway extends ServiceToggleInput | undefined = undefined,
 >(input: {
+	realtime?: RealtimeInput;
 	// Each field is intersected with its concrete interface (not just typed as the bare
 	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
 	// complete against in the object-literal position (they see `{} | undefined`), so you

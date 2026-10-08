@@ -330,6 +330,8 @@ export type ConfigInitProps = {
 	 * policy otherwise.
 	 */
 	services?: readonly string[];
+	/** Declare Realtime explicitly. Omission leaves it unmanaged. */
+	realtime?: boolean;
 	/** Injected service picker (tests). Wins over the TTY check; production omits it. */
 	pickServices?: () => Promise<NeonService[]>;
 	/**
@@ -532,6 +534,15 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 					getCliName(),
 				);
 			}
+			if (props.realtime !== undefined) {
+				log.warning(
+					"--%srealtime was ignored. Edit %s directly, or use `%s realtime %s`.",
+					props.realtime ? "" : "no-",
+					existing,
+					getCliName(),
+					props.realtime ? "enable" : "disable",
+				);
+			}
 		}
 	} else if (props.fromBranch) {
 		const { source, seeded, branchName } = await seedFromBranch(props);
@@ -551,12 +562,19 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 		}
 	} else {
 		const services = await resolveServices(props);
-		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			renderNeonConfig(services, props.realtime),
+		);
 		if (!props.silent) {
-			if (services.length === 0) {
+			if (services.length === 0 && props.realtime !== true) {
 				log.info("Created neon.ts with a starter policy.");
 			} else {
-				log.info("Created neon.ts declaring %s.", services.join(", "));
+				const declared = [
+					...services,
+					...(props.realtime === true ? ["Realtime"] : []),
+				];
+				log.info("Created neon.ts declaring %s.", declared.join(", "));
 			}
 		}
 		if (services.includes("functions")) {
@@ -577,6 +595,12 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 
 export type ConfigAddTarget =
 	| { kind: "service"; service: "auth" | "data-api" | "ai-gateway" }
+	| {
+			kind: "realtime";
+			enabled: true;
+			allowedOrigins?: readonly string[];
+	  }
+	| { kind: "realtime"; enabled: false }
 	| { kind: "function"; slug: string; name?: string; source?: string }
 	| { kind: "bucket"; name: string; access?: "private" | "public_read" };
 
@@ -632,6 +656,17 @@ const planAdd = (
 		: "";
 	const provision = `Next: \`${cli} config plan${flag}\` to preview, \`${cli} config apply${flag}\` to provision.`;
 	switch (target.kind) {
+		case "realtime":
+			return {
+				edit: {
+					kind: "realtime",
+					enabled: target.enabled,
+					...(target.enabled && target.allowedOrigins !== undefined
+						? { allowedOrigins: target.allowedOrigins }
+						: {}),
+				},
+				next: provision,
+			};
 		case "service":
 			return {
 				edit: { kind: "service", service: target.service },
@@ -721,9 +756,12 @@ export const addCmd = async (props: ConfigAddProps): Promise<void> => {
 	);
 
 	if (changes.length === 0) {
-		if (props.target.kind === "service") {
+		if (
+			props.target.kind === "service" ||
+			props.target.kind === "realtime"
+		) {
 			log.info(
-				"%s already enables that; nothing to change.",
+				"%s already has the requested configuration; nothing to change.",
 				shown(configPath),
 			);
 			return;
@@ -1026,6 +1064,11 @@ export const builder = (argv: yargs.Argv) =>
 							"Omitted: pick interactively on a terminal, starter policy in " +
 							"CI or without a TTY.",
 					}),
+					realtime: {
+						describe:
+							"Declare Realtime in the scaffolded neon.ts. Use --no-realtime to declare it disabled",
+						type: "boolean",
+					},
 					"from-branch": {
 						describe:
 							"Seed neon.ts from a branch's live Neon state instead of asking. Uses the " +
@@ -1034,7 +1077,7 @@ export const builder = (argv: yargs.Argv) =>
 						type: "boolean",
 						// No `default`: yargs counts a defaulted key as provided, so
 						// `default: false` makes `conflicts` reject every `--services` run.
-						conflicts: "services",
+						conflicts: ["services", "realtime"],
 					},
 				}),
 			(args) =>

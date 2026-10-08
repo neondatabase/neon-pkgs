@@ -205,6 +205,11 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./data_api.js"),
 	},
 	{
+		command: "realtime",
+		describe: "Manage Neon Realtime in neon.ts",
+		load: () => import("./realtime.js"),
+	},
+	{
 		command: "functions",
 		aliases: ["function"],
 		describe: "Manage Neon Functions",

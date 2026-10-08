@@ -77,6 +77,8 @@ import type {
 	PreviewInput,
 	PreviewTuning,
 	PushResult,
+	RealtimeConfig,
+	RealtimeInput,
 	RemotePreviewState,
 	RemoteServiceState,
 	RemoteState,
@@ -136,6 +138,8 @@ describe("config type-export surface", () => {
 		expectTypeOf<PreviewInput>().not.toBeAny();
 		expectTypeOf<PreviewTuning>().not.toBeAny();
 		expectTypeOf<PushResult>().not.toBeAny();
+		expectTypeOf<RealtimeConfig>().not.toBeAny();
+		expectTypeOf<RealtimeInput>().not.toBeAny();
 		expectTypeOf<ResolvedBranchConfig>().not.toBeAny();
 		expectTypeOf<ResolvedBucketConfig>().not.toBeAny();
 		expectTypeOf<ResolvedDataApiConfig>().not.toBeAny();

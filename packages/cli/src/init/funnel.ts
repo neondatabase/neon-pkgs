@@ -60,6 +60,8 @@ const FLAG_ALIASES: Readonly<Record<string, string>> = {
 	"--no-config": "--no-config",
 	"--config": "--config",
 	"--services": "--services",
+	"--realtime": "--realtime",
+	"--no-realtime": "--no-realtime",
 	"--org-id": "--org-id",
 	"--project-id": "--project-id",
 	"--project-name": "--project-name",
