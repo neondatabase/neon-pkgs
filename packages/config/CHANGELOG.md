@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.8.5
+
+### Patch Changes
+
+- 755e04c: `neon login` is the sign-in command, and `neon auth` still works as its alias. Help, errors, and docs now say `neon login`. `neon login --profile <name>` creates a new profile the way `neon auth --profile <name>` did, instead of failing with `Unknown profile`.
+
 ## 1.8.4
 
 ### Patch Changes

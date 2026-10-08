@@ -1,5 +1,20 @@
 # neon
 
+## 8.1.0
+
+### Minor Changes
+
+- 755e04c: `neon login` is the sign-in command, and `neon auth` still works as its alias. Help, errors, and docs now say `neon login`. `neon login --profile <name>` creates a new profile the way `neon auth --profile <name>` did, instead of failing with `Unknown profile`.
+
+### Patch Changes
+
+- c97f8ce: `neon deploy` and `neon config apply` accept `-y` / `--yes` as aliases of `--update-existing`, instead of failing with `Unknown argument: y`.
+- 4a76d51: `neon init --services` and `neon config init --services` accept `postgres` for a Postgres-only `neon.ts`, alone or next to other services. `none` is no longer accepted; use `postgres`.
+- 3c36034: `neon me` with no usable credential exits 1 with `Not signed in` and the `neon login` command to run, instead of opening a browser sign-in and waiting up to 60 seconds.
+- Updated dependencies [755e04c]
+  - @neon/config@1.8.5
+  - @neon/config-runtime@1.7.7
+
 ## 8.0.12
 
 ### Patch Changes
