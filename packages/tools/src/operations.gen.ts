@@ -64,6 +64,8 @@ export const operationIds = [
 	"deleteProjectVPCEndpoint",
 	"deleteSnapshot",
 	"disableNeonAuth",
+	"disableProjectBranchRealtime",
+	"enableProjectBranchRealtime",
 	"finalizeRestoreBranch",
 	"getActiveRegions",
 	"getAnonymizedBranchStatus",
@@ -98,6 +100,8 @@ export const operationIds = [
 	"getProjectBranchDataAPI",
 	"getProjectBranchDatabase",
 	"getProjectBranchFunction",
+	"getProjectBranchRealtime",
+	"getProjectBranchRealtimeSecret",
 	"getProjectBranchRole",
 	"getProjectBranchRolePassword",
 	"getProjectBranchSchema",
@@ -154,6 +158,7 @@ export const operationIds = [
 	"revokeOrgApiKey",
 	"revokePermissionFromProject",
 	"rotateCredential",
+	"rotateProjectBranchRealtimeSecret",
 	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
 	"setDefaultProjectBranch",
@@ -788,6 +793,7 @@ export const operationFactories = {
 				inputSchema: z.strictObject({
 	"settings": zod.zCreateProjectBody.shape["project"].shape["settings"],
 	"name": zod.zCreateProjectBody.shape["project"].shape["name"],
+	"realtime": zod.zCreateProjectBody.shape["project"].shape["realtime"],
 	"branch": zod.zCreateProjectBody.shape["project"].shape["branch"],
 	"autoscaling_limit_min_cu": zod.zCreateProjectBody.shape["project"].shape["autoscaling_limit_min_cu"],
 	"autoscaling_limit_max_cu": zod.zCreateProjectBody.shape["project"].shape["autoscaling_limit_max_cu"],
@@ -810,7 +816,7 @@ export const operationFactories = {
 				},
 				invoke: (client, input, signal) =>
 					raw.createProject({
-			body: optionalGroup({ "project": optionalGroup({ "settings": input["settings"], "name": input["name"], "branch": input["branch"], "autoscaling_limit_min_cu": input["autoscaling_limit_min_cu"], "autoscaling_limit_max_cu": input["autoscaling_limit_max_cu"], "provisioner": input["provisioner"], "region_id": input["region_id"], "default_endpoint_settings": input["default_endpoint_settings"], "pg_version": input["pg_version"], "store_passwords": input["store_passwords"], "history_retention_seconds": input["history_retention_seconds"], "org_id": input["org_id"] }, true) }, true),
+			body: optionalGroup({ "project": optionalGroup({ "settings": input["settings"], "name": input["name"], "realtime": input["realtime"], "branch": input["branch"], "autoscaling_limit_min_cu": input["autoscaling_limit_min_cu"], "autoscaling_limit_max_cu": input["autoscaling_limit_max_cu"], "provisioner": input["provisioner"], "region_id": input["region_id"], "default_endpoint_settings": input["default_endpoint_settings"], "pg_version": input["pg_version"], "store_passwords": input["store_passwords"], "history_retention_seconds": input["history_retention_seconds"], "org_id": input["org_id"] }, true) }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -1971,6 +1977,68 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"disableProjectBranchRealtime": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "disableProjectBranchRealtime",
+				id: "disable_project_branch_realtime",
+				title: "Disable Realtime",
+				description: "Disables Realtime for the branch and discards its shared secret.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zDisableProjectBranchRealtimePath.shape["project_id"],
+	"branch_id": zod.zDisableProjectBranchRealtimePath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "DELETE",
+					path: "/projects/{project_id}/branches/{branch_id}/realtime",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Realtime"],
+				},
+				invoke: (client, input, signal) =>
+					raw.disableProjectBranchRealtime({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"enableProjectBranchRealtime": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "enableProjectBranchRealtime",
+				id: "enable_project_branch_realtime",
+				title: "Enable Realtime",
+				description: "Enables Realtime for the branch, or applies new options to an enabled branch.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zEnableProjectBranchRealtimePath.shape["project_id"],
+	"branch_id": zod.zEnableProjectBranchRealtimePath.shape["branch_id"],
+	"allowed_origins": zod.zEnableProjectBranchRealtimeBody.shape["allowed_origins"].optional(),
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/realtime",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Realtime"],
+				},
+				invoke: (client, input, signal) =>
+					raw.enableProjectBranchRealtime({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: optionalGroup({ "allowed_origins": input["allowed_origins"] }, false),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"finalizeRestoreBranch": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -3012,6 +3080,66 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.getProjectBranchFunction({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "slug": input["slug"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"getProjectBranchRealtime": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "getProjectBranchRealtime",
+				id: "get_project_branch_realtime",
+				title: "Retrieve Realtime state",
+				description: "Retrieves whether Realtime is enabled for the branch, whether a change is still being applied, and, once provisioned, its invocation URL and allowed origins.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zGetProjectBranchRealtimePath.shape["project_id"],
+	"branch_id": zod.zGetProjectBranchRealtimePath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/realtime",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Realtime"],
+				},
+				invoke: (client, input, signal) =>
+					raw.getProjectBranchRealtime({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"getProjectBranchRealtimeSecret": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "getProjectBranchRealtimeSecret",
+				id: "get_project_branch_realtime_secret",
+				title: "Retrieve the Realtime shared secret",
+				description: "Retrieves the secret the application backend issues Realtime tokens with.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zGetProjectBranchRealtimeSecretPath.shape["project_id"],
+	"branch_id": zod.zGetProjectBranchRealtimeSecretPath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/realtime/secret",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Realtime"],
+				},
+				invoke: (client, input, signal) =>
+					raw.getProjectBranchRealtimeSecret({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -4769,6 +4897,36 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.rotateCredential({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "token_id": input["token_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"rotateProjectBranchRealtimeSecret": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "rotateProjectBranchRealtimeSecret",
+				id: "rotate_project_branch_realtime_secret",
+				title: "Rotate the Realtime shared secret",
+				description: "Replaces the branch's Realtime shared secret.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zRotateProjectBranchRealtimeSecretPath.shape["project_id"],
+	"branch_id": zod.zRotateProjectBranchRealtimeSecretPath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/realtime/rotate_secret",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Realtime"],
+				},
+				invoke: (client, input, signal) =>
+					raw.rotateProjectBranchRealtimeSecret({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
