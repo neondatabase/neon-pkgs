@@ -76,6 +76,30 @@ const scrubFrame = (frame: StackFrame): StackFrame => {
 	};
 };
 
+/**
+ * V8 messages whose only variable part is an identifier from the code. Any other message can
+ * quote user input (`JSON.parse` echoes what it failed on, Node's argument errors print the
+ * received value), so it is replaced rather than sent.
+ */
+const SAFE_MESSAGES = [
+	/^Cannot read properties of (undefined|null) \(reading '[\w$]+'\)$/,
+	/^Cannot set properties of (undefined|null) \(setting '[\w$]+'\)$/,
+	/^[\w$.()]+ is not a function$/,
+	/^[\w$.()]+ is not iterable$/,
+	/^[\w$]+ is not defined$/,
+	/^Cannot access '[\w$]+' before initialization$/,
+	/^Assignment to constant variable\.$/,
+	/^Invalid time value$/,
+	/^Maximum call stack size exceeded$/,
+];
+
+const OMITTED_MESSAGE = "(message omitted)";
+
+const safeMessage = (message: string): string =>
+	SAFE_MESSAGES.some((pattern) => pattern.test(message))
+		? message
+		: OMITTED_MESSAGE;
+
 const scrubEvent = (
 	event: ErrorEvent,
 	redact: (text: string) => string,
@@ -89,7 +113,11 @@ const scrubEvent = (
 						values: event.exception.values.map((exception) => ({
 							...exception,
 							...(exception.value !== undefined
-								? { value: redact(exception.value) }
+								? {
+										value: redact(
+											safeMessage(exception.value),
+										),
+									}
 								: {}),
 							...(exception.stacktrace?.frames
 								? {

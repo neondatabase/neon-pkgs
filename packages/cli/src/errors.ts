@@ -32,8 +32,9 @@ export const matchErrorCode = (message?: string): ErrorCode => {
 };
 
 /**
- * The CLI reports user-facing failures by throwing a plain `Error` with the message to print,
- * so only JavaScript's own error types point at a bug in the CLI.
+ * The CLI reports failures it handles by throwing a plain `Error` with the message to print.
+ * One of JavaScript's own error types is a case it did not handle: a bug, or input it never
+ * validated.
  */
 export const isUnexpectedError = (err: unknown): err is Error =>
 	err instanceof TypeError ||

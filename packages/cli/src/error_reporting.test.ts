@@ -66,14 +66,19 @@ const eventsFromEnvelope = (body: string): SentryEvent[] => {
 };
 
 let events: SentryEvent[];
+let stallEnvelopes: boolean;
 let collector: Awaited<ReturnType<typeof listen>>;
 
 beforeEach(async () => {
 	vi.resetModules();
 	events = [];
+	stallEnvelopes = false;
 	collector = await listen(async (req, res) => {
 		const body = await readBody(req);
 		if (req.url?.startsWith("/api/1/envelope/")) {
+			if (stallEnvelopes) {
+				return;
+			}
 			events.push(...eventsFromEnvelope(body));
 		}
 		res.writeHead(200, { "content-type": "application/json" });
@@ -130,7 +135,9 @@ describe("error reporting", () => {
 		const analytics = await setup();
 
 		analytics.sendError(
-			new TypeError("Cannot read nak_live_0123abcd of undefined"),
+			new TypeError(
+				"Cannot read properties of undefined (reading 'nak_live_0123abcd')",
+			),
 			"UNKNOWN_ERROR",
 		);
 		await analytics.closeAnalytics();
@@ -143,7 +150,7 @@ describe("error reporting", () => {
 		const [exception] = event?.exception?.values ?? [];
 		expect(exception?.type).toBe("TypeError");
 		expect(exception?.value).toBe(
-			"Cannot read nak_live_<redacted> of undefined",
+			"Cannot read properties of undefined (reading 'nak_live_<redacted>')",
 		);
 		const frames = exception?.stacktrace?.frames ?? [];
 		expect(frames.length).toBeGreaterThan(0);
@@ -152,6 +159,48 @@ describe("error reporting", () => {
 			expect(frame.abs_path ?? "").not.toContain(homedir());
 		}
 		expect(Object.keys(event?.tags ?? {}).sort()).toEqual(["agent", "ci"]);
+	});
+
+	it("omits a message that can carry user input", async () => {
+		const analytics = await setup();
+		let parseError: unknown;
+		try {
+			JSON.parse("private-token-123");
+		} catch (err) {
+			parseError = err;
+		}
+		if (!(parseError instanceof SyntaxError)) {
+			throw new Error("JSON.parse did not throw a SyntaxError");
+		}
+
+		analytics.sendError(parseError, "UNKNOWN_ERROR");
+		await analytics.closeAnalytics();
+
+		const [exception] = events[0]?.exception?.values ?? [];
+		expect(exception?.type).toBe("SyntaxError");
+		expect(exception?.value).toBe("(message omitted)");
+		expect(JSON.stringify(events)).not.toContain("private-token-123");
+	});
+
+	it("sends a report queued after analytics already started closing", async () => {
+		const analytics = await setup();
+
+		await analytics.closeAnalytics();
+		analytics.sendError(new TypeError("after close"), "UNKNOWN_ERROR");
+		await analytics.closeAnalytics();
+
+		expect(events).toHaveLength(1);
+	});
+
+	it("keeps an unresponsive Sentry within the caller's close timeout", async () => {
+		const analytics = await setup();
+		stallEnvelopes = true;
+
+		analytics.sendError(new TypeError("stalled"), "UNKNOWN_ERROR");
+		const started = Date.now();
+		await analytics.closeAnalytics({ timeout: 100 });
+
+		expect(Date.now() - started).toBeLessThan(1000);
 	});
 
 	it("does not report an error the CLI wrote for the user", async () => {

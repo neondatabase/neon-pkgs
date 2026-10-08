@@ -13,7 +13,7 @@ import {
 	fillSingleProject,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
-import { looksLikeLSN, looksLikeTimestamp } from "../utils/formats.js";
+import { looksLikeLSN, looksLikeTimestamp, toIso } from "../utils/formats.js";
 import { writer } from "../writer.js";
 import { BRANCH_FIELDS } from "./branches.js";
 
@@ -310,17 +310,6 @@ export const handler = (args: yargs.Argv) => {
 /** Narrow an unknown parsed JSON value to a plain object without type casting. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** Normalize a user-supplied date to an ISO 8601 string, or throw a friendly error. */
-const toIso = (value: string, flag: string): string => {
-	const ms = Date.parse(value);
-	if (Number.isNaN(ms)) {
-		throw new Error(
-			`Invalid ${flag} value: "${value}". Use an RFC 3339 timestamp, e.g. 2025-12-31T23:59:59Z.`,
-		);
-	}
-	return new Date(ms).toISOString();
-};
 
 /**
  * Resolve a snapshot from an id **or** a name. Snapshot names are not guaranteed

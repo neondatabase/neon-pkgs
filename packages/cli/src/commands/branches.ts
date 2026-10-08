@@ -19,6 +19,7 @@ import {
 	looksLikeBranchId,
 	looksLikeLSN,
 	looksLikeTimestamp,
+	toIso,
 } from "../utils/formats.js";
 import { parsePointInTime } from "../utils/point_in_time.js";
 import { psql } from "../utils/psql.js";
@@ -414,6 +415,15 @@ const list = async (props: ProjectScopeProps) => {
 	});
 };
 
+const parseAnnotation = (value: string) => {
+	try {
+		return JSON.parse(value);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		throw new Error(`Failed to parse --annotation JSON: ${message}`);
+	}
+};
+
 const create = async (
 	props: ProjectScopeProps & {
 		name: string;
@@ -464,6 +474,10 @@ const create = async (
 		return { parent_id: branch.id };
 	})();
 
+	const annotationValue = props.annotation
+		? parseAnnotation(props.annotation)
+		: undefined;
+
 	// Validate schema-only branch requirements
 	if (props.schemaOnly) {
 		if (!props.compute) {
@@ -483,11 +497,7 @@ const create = async (
 				...parentProps,
 				...(props.schemaOnly ? { init_source: "schema-only" } : {}),
 				...(props["expires-at"]
-					? {
-							expires_at: new Date(
-								props["expires-at"],
-							).toISOString(),
-						}
+					? { expires_at: toIso(props["expires-at"], "--expires-at") }
 					: {}),
 				...(props.protected !== undefined
 					? { protected: props.protected }
@@ -507,9 +517,7 @@ const create = async (
 						},
 					]
 				: [],
-			annotation_value: props.annotation
-				? JSON.parse(props.annotation)
-				: undefined,
+			annotation_value: annotationValue,
 		}),
 	);
 
@@ -806,7 +814,7 @@ const setExpiration = async (
 	});
 	const expiresAt =
 		typeof props.expiresAt === "string"
-			? new Date(props.expiresAt).toISOString()
+			? toIso(props.expiresAt, "--expires-at")
 			: null;
 	const { data } = await retryOnLock(() =>
 		props.apiClient.updateProjectBranch(props.projectId, branchId, {

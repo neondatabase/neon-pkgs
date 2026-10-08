@@ -653,6 +653,66 @@ describe("branches", () => {
 		]);
 	});
 
+	test("set expiration rejects a value that is not a date", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"branches",
+				"set-expiration",
+				"br-sunny-branch-123456",
+				"--project-id",
+				"test",
+				"--expires-at",
+				"not-a-date",
+			],
+			{
+				code: 1,
+				stderr: 'ERROR: Invalid --expires-at value: "not-a-date". Use an RFC 3339 timestamp, e.g. 2025-12-31T23:59:59Z.',
+			},
+		);
+	});
+
+	test("create rejects an --expires-at that is not a date", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"branches",
+				"create",
+				"--project-id",
+				"test",
+				"--expires-at",
+				"not-a-date",
+			],
+			{
+				code: 1,
+				stderr: 'ERROR: Invalid --expires-at value: "not-a-date". Use an RFC 3339 timestamp, e.g. 2025-12-31T23:59:59Z.',
+			},
+		);
+	});
+
+	test("create rejects an --annotation that is not JSON", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"branches",
+				"create",
+				"--project-id",
+				"test",
+				"--annotation",
+				"not-json",
+			],
+			{
+				code: 1,
+				stderr: expect.stringContaining(
+					"ERROR: Failed to parse --annotation JSON:",
+				),
+			},
+		);
+	});
+
 	test("set expiration fails on default branch", async ({
 		testCliCommand,
 	}) => {

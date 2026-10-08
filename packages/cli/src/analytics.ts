@@ -378,11 +378,31 @@ export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
 							),
 						};
 			await analytics.closeAndFlush(flush);
-			await Promise.all(errorReports);
+			await settleErrorReports(
+				opts?.timeout === undefined
+					? undefined
+					: started + opts.timeout,
+			);
 			log.debug("Flushed CLI analytics");
 		})();
 	}
 	return closing;
+};
+
+const settleErrorReports = async (deadline: number | undefined) => {
+	const reports = Promise.all(errorReports);
+	if (deadline === undefined) {
+		await reports;
+		return;
+	}
+	let timer: NodeJS.Timeout | undefined;
+	await Promise.race([
+		reports,
+		new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+		}),
+	]);
+	clearTimeout(timer);
 };
 
 const getErrorAnalyticsEventContext = (
@@ -441,18 +461,21 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 	});
 	log.debug("Sent CLI error event: %s", errCode);
 	if (errCode === "UNKNOWN_ERROR" && isUnexpectedError(err)) {
-		errorReports.push(
-			import("./error_reporting.js")
-				.then(({ reportUnexpectedError }) =>
-					reportUnexpectedError(err, redactCredentialTokenIds),
-				)
-				.catch((reportError: unknown) => {
-					log.debug(
-						"Could not report the error to Sentry: %s",
-						reportError,
-					);
-				}),
-		);
+		const report = import("./error_reporting.js")
+			.then(({ reportUnexpectedError }) =>
+				reportUnexpectedError(err, redactCredentialTokenIds),
+			)
+			.catch((reportError: unknown) => {
+				log.debug(
+					"Could not report the error to Sentry: %s",
+					reportError,
+				);
+			});
+		errorReports.push(report);
+		// The psql launcher starts closing before psql runs; a later close must still wait for this.
+		if (closing) {
+			closing = closing.then(() => report);
+		}
 	}
 };
 

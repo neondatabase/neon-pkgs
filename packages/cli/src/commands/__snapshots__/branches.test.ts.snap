@@ -84,6 +84,10 @@ created_at: 2021-01-01T00:00:00.000Z
 "
 `;
 
+exports[`branches > create rejects an --annotation that is not JSON 1`] = `""`;
+
+exports[`branches > create rejects an --expires-at that is not a date 1`] = `""`;
+
 exports[`branches > create schema-only branch 1`] = `
 "branch:
   id: br-new-branch-123456
@@ -413,3 +417,5 @@ exports[`branches > set expiration fails on default branch by name 1`] = `""`;
 exports[`branches > set expiration fails on protected branch 1`] = `""`;
 
 exports[`branches > set expiration fails on protected branch by name 1`] = `""`;
+
+exports[`branches > set expiration rejects a value that is not a date 1`] = `""`;
