@@ -940,6 +940,22 @@ export const ensureAuth = async (
 		return;
 	}
 
+	// `me` is how scripts and agents check who is signed in. Signing in to answer that
+	// changes the answer, and leaves the caller waiting on a browser it may not see.
+	// Signed out is a valid answer, so no ERROR prefix; the non-zero exit keeps
+	// `neon me && …` usable as a check. The handler sees no client and prints nothing.
+	if (props._[0] === "me") {
+		const state =
+			loaded === null
+				? "has no stored credential"
+				: "holds a session that has expired";
+		process.stderr.write(
+			`Not signed in: profile "${selection.profile}" ${state}. Run \`${getCliName()} login --profile ${selection.profile}\` to sign in, or use an API key with --api-key or NEON_API_KEY.\n`,
+		);
+		process.exitCode = 1;
+		return;
+	}
+
 	// Use the resolved profile so `NEON_PROFILE` cannot overwrite `DEFAULT`.
 	const apiKey = await authFlow({ ...props, profile: selection.profile });
 	props.apiKey = apiKey;

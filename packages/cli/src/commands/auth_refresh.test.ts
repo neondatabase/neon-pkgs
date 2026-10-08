@@ -278,6 +278,41 @@ describe("a 401 from the Neon API", () => {
 	});
 });
 
+describe("no usable credential", () => {
+	it("makes `me` report signed out instead of starting a sign-in", async () => {
+		const result = await runCli();
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toBe(
+			'Not signed in: profile "DEFAULT" has no stored credential. Run `neon login --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.\n',
+		);
+		expect(result.stdout).toBe("");
+	});
+
+	it("makes `me` report an expired session that cannot be refreshed", async () => {
+		seedCredentials({
+			expires_at: Date.now() - 1000,
+			refresh_token: undefined,
+		});
+
+		const result = await runCli();
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			'Not signed in: profile "DEFAULT" holds a session that has expired.',
+		);
+		expect(oauth.refreshAttempts()).toBe(0);
+		expect(existsSync(credentialsFile())).toBe(true);
+	});
+
+	it("still sends other commands to the sign-in flow", async () => {
+		const result = await runCli(["projects", "list"]);
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Cannot run interactive auth in CI");
+	});
+});
+
 describe("a damaged credentials file", () => {
 	it("is reported rather than silently replaced with a new sign-in", async () => {
 		writeFileSync(credentialsFile(), '{"access_token": "abc', {

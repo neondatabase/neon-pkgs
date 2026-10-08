@@ -16,6 +16,8 @@ export const handler = async (args: CommonProps) => {
 };
 
 const me = async (props: CommonProps) => {
+	// No client means `ensureAuth` found no credential and already reported it.
+	if (!props.apiClient) return;
 	const { data } = await props.apiClient.getCurrentUserInfo();
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, {

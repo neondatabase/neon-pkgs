@@ -66,7 +66,7 @@ Run the following command to authenticate a connection to Neon:
 neon login
 ```
 
-`neon auth` is an alias of `neon login`. The `login` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon login](https://neon.com/docs/cli/auth) automatically launches the browser authentication process.
+`neon auth` is an alias of `neon login`. The `login` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon login](https://neon.com/docs/cli/auth) automatically launches the browser authentication process, except for `neon me`, which reports that you are not signed in.
 
 Alternatively, you can authenticate a connection with a Neon API key using the `--api-key` option when running a Neon CLI command. For example, an API key is used with the following `neon projects list` command:
 
@@ -76,7 +76,7 @@ neon projects list --api-key <neon_api_key>
 
 For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
-To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`.
+To check which account and credential a command uses, run `neon me` with the same `--profile` or `--api-key` option and environment as that command. The `Authentication` row names the source, such as `OAuth (profile DEFAULT)`, `API key (profile work)`, `API key (--api-key)`, or `API key (NEON_API_KEY)`. When no credential is usable, `neon me` exits 1 with `Not signed in` and the `neon login` command to run; it never starts a sign-in itself.
 
 ## Create a project without an account
 
