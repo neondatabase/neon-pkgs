@@ -1,6 +1,7 @@
 import {
 	type AppliedChange,
 	type Config,
+	type ConflictReport,
 	type CreateTriggerInput,
 	createNeonApiFromOptions,
 	diffConfig,
@@ -99,6 +100,12 @@ export interface PushConfigOptions {
 	 * Never invoked on `dryRun`.
 	 */
 	confirm?: (context: PushConfirmContext) => boolean | Promise<boolean>;
+	/**
+	 * Runs once after {@link confirm} approves (or was not needed) and before the first
+	 * mutation or function bundle. A throw aborts the push with nothing changed by it.
+	 * Never invoked on `dryRun`.
+	 */
+	beforeMutations?: () => void | Promise<void>;
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
@@ -135,6 +142,11 @@ export interface PushConfirmContext {
 	 * prompt.
 	 */
 	overrideUpdates: boolean;
+	/**
+	 * The settings that would be overridden, as current → desired, so the caller can show
+	 * what it is asking about. Empty when only {@link protectedBranch} applies.
+	 */
+	overrides: readonly ConflictReport[];
 }
 
 /**
@@ -240,6 +252,12 @@ export async function pushConfig(
 				branchName: branch.name,
 				protectedBranch: needsProtectedConfirm,
 				overrideUpdates: needsOverrideConfirm,
+				// The non-overriding diff reports exactly the drift as conflicts; the
+				// override-able plan above has already ruled out every other conflict.
+				overrides: needsOverrideConfirm
+					? diffConfig(resolved, remote, { updateExisting: false })
+							.conflicts
+					: [],
 			});
 			if (!ok) {
 				const reasons: ("protected-branch" | "override-updates")[] = [];
@@ -259,6 +277,8 @@ export async function pushConfig(
 		// Protected branch + no confirm callback: legacy default proceeds without
 		// any extra check (no programmatic regression).
 	}
+
+	if (!dryRun) await options.beforeMutations?.();
 
 	const applied: AppliedChange[] = [
 		{ kind: "branch", action: "noop", identifier: branch.name },

@@ -22,6 +22,8 @@ import {
 	inspect,
 	isPartialBranchCreateError,
 	type NeonApi,
+	PushAbortedError,
+	type PushConfirmContext,
 	PushConflictError,
 	type PushResult,
 	plan,
@@ -170,6 +172,8 @@ export type ConfigProps = BranchScopeProps & {
 	updateExisting?: boolean;
 	/** Auto-confirm applying to a protected branch (apply only). */
 	allowProtected?: boolean;
+	/** Both of the above (apply only). */
+	yes?: boolean;
 	/** `status` only: print just the neon.ts-shaped config JSON to stdout. */
 	configJson?: boolean;
 	/**
@@ -210,14 +214,20 @@ export const envFlag = {
 /** Apply-only flags, exported so `deploy` can reuse the exact same surface. */
 export const applyFlags = {
 	"update-existing": {
-		alias: ["y", "yes"],
 		describe:
-			"Auto-confirm overriding existing remote settings on the branch",
+			"Override branch settings that differ from neon.ts without asking",
 		type: "boolean",
 		default: false,
 	},
 	"allow-protected": {
-		describe: "Auto-confirm applying to a branch marked protected on Neon",
+		describe: "Apply to a branch marked protected on Neon without asking",
+		type: "boolean",
+		default: false,
+	},
+	yes: {
+		alias: "y",
+		describe:
+			"Answer yes to every confirmation: --update-existing and --allow-protected",
 		type: "boolean",
 		default: false,
 	},
@@ -1420,9 +1430,8 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 		...(branch.parentId ? { parentId: branch.parentId } : {}),
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 	};
-	await runDeployBeforeHook({ hooks, branch: hookBranch, git, event, cwd });
-
 	let result: PushResult;
+	let declined = false;
 	try {
 		result = await apply(config, {
 			projectId: props.projectId,
@@ -1430,23 +1439,46 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 			...(props.apiKey ? { apiKey: props.apiKey } : {}),
 			...(props.apiHost ? { apiHost: props.apiHost } : {}),
 			...(props.runtimeApi ? { api: props.runtimeApi } : {}),
-			...(props.updateExisting ? { updateExisting: true } : {}),
-			...(props.allowProtected ? { allowProtectedBranch: true } : {}),
+			...(props.updateExisting || props.yes
+				? { updateExisting: true }
+				: {}),
+			...(props.allowProtected || props.yes
+				? { allowProtectedBranch: true }
+				: {}),
+			confirm: async (context) => {
+				if (context.overrides.length > 0) {
+					reportConflicts(props, context.overrides);
+				}
+				if (!canPromptForApply(props)) return false;
+				const proceed = await askToApply(context);
+				declined = !proceed;
+				return proceed;
+			},
+			// After the confirmation, so a declined deploy does not run the hook either.
+			beforeMutations: () =>
+				runDeployBeforeHook({
+					hooks,
+					branch: hookBranch,
+					git,
+					event,
+					cwd,
+				}),
 			bundleFunction: neonctlBundler,
 		});
 	} catch (err) {
-		// Drift without `--update-existing` throws with the conflicting fields attached.
-		// Render them as the same git-style before→after diff, then fail with a concise
-		// message (the detailed diff above replaces the library's long multi-line text).
+		if (err instanceof PushAbortedError) {
+			throw new Error(
+				declined
+					? `Aborted: nothing was applied to branch "${err.branchName}".`
+					: abortedApplyMessage(err),
+			);
+		}
+		// With a `confirm` callback, only conflicts `--update-existing` cannot resolve throw
+		// here; drift goes through `confirm` and aborts above.
 		if (err instanceof PushConflictError) {
 			reportConflicts(props, err.conflicts);
-			const overrideable = err.conflicts.every((c) =>
-				reasonAllowsUpdateExisting(c.reason),
-			);
 			throw new Error(
-				overrideable
-					? "Branch settings conflict with the policy. Re-run with --update-existing to apply the changes shown above."
-					: "The policy conflicts with remote state. --update-existing will not resolve every conflict shown above.",
+				"The policy conflicts with remote state. --update-existing will not resolve every conflict shown above.",
 			);
 		}
 		throw err;
@@ -1592,6 +1624,46 @@ const reportPushResult = (
 		);
 	}
 	out.text(`\nUtilized services: ${services.join(", ")}\n`);
+};
+
+/** A prompt needs both ends of a terminal, and would corrupt `-o json|yaml` on stdout. */
+const canPromptForApply = (props: ConfigProps): boolean =>
+	!isCi() &&
+	Boolean(process.stdin.isTTY) &&
+	Boolean(process.stdout.isTTY) &&
+	props.output !== "json" &&
+	props.output !== "yaml";
+
+const askToApply = async (context: PushConfirmContext): Promise<boolean> => {
+	const branch = JSON.stringify(context.branchName);
+	const message =
+		context.protectedBranch && context.overrideUpdates
+			? `Branch ${branch} is protected, and this overrides the settings shown above. Apply anyway?`
+			: context.protectedBranch
+				? `Branch ${branch} is protected. Apply to it anyway?`
+				: `Override the settings shown above on branch ${branch}?`;
+	const { default: prompts } = await import("prompts");
+	const { proceed } = await prompts({
+		type: "confirm",
+		name: "proceed",
+		message,
+		initial: false,
+	});
+	return proceed === true;
+};
+
+/** Without a terminal there is no one to ask, so name the flags that answer the question. */
+const abortedApplyMessage = (err: PushAbortedError): string => {
+	const branch = JSON.stringify(err.branchName);
+	const isProtected = err.reasons.includes("protected-branch");
+	const overrides = err.reasons.includes("override-updates");
+	if (isProtected && overrides) {
+		return `Branch ${branch} is protected and its settings differ from the policy. Re-run with -y (or --allow-protected --update-existing) to apply the changes shown above.`;
+	}
+	if (isProtected) {
+		return `Branch ${branch} is protected. Re-run with --allow-protected (or -y) to apply to it.`;
+	}
+	return "Branch settings conflict with the policy. Re-run with --update-existing (or -y) to apply the changes shown above.";
 };
 
 /**

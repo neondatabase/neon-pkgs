@@ -35,9 +35,7 @@ describe("renderBranchSettingConflicts", () => {
 
 		const text = renderBranchSettingConflicts(conflicts, { color: false });
 		const lines = text.split("\n");
-		expect(lines[0]).toBe(
-			"Branch settings differ (re-run with --update-existing to apply)",
-		);
+		expect(lines[0]).toBe("Branch settings differ");
 		expect(lines[1]).toBe("  ~ feature/x");
 		// Fields are sorted alphabetically: protected before ttl.
 		expect(lines[2]).toMatch(/^ {6}protected\s+false → true$/);
@@ -75,9 +73,7 @@ describe("renderBranchSettingConflicts", () => {
 			],
 			{ color: false },
 		);
-		expect(text).toContain(
-			"Branch settings differ (re-run with --update-existing to apply)",
-		);
+		expect(text).toContain("Branch settings differ");
 		expect(text).toMatch(/customDomain docs\.example\.com\s+old → new/);
 	});
 

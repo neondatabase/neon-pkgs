@@ -428,6 +428,19 @@ class RejectAuthNeonApi extends FakeNeonApi {
 	}
 }
 
+class ProtectedBranchNeonApi extends FakeNeonApi {
+	override async listBranches(): Promise<NeonBranchSnapshot[]> {
+		return [
+			{
+				id: BRANCH_ID,
+				name: BRANCH_NAME,
+				isDefault: true,
+				protected: true,
+			},
+		];
+	}
+}
+
 const fakeApiClient = {
 	listProjectBranches: async () => ({
 		data: {
@@ -758,6 +771,36 @@ describe("config commands", () => {
 		expect(after.env.postgres.databaseUrlUnpooled).toContain(
 			"neondb_owner",
 		);
+	});
+
+	it("does not run deploy.before when a protected-branch apply is refused", async () => {
+		const api = new ProtectedBranchNeonApi();
+		const { stream } = captureOut();
+		const calls: string[] = [];
+		(globalThis as Record<string, unknown>).__deployHookCalls = calls;
+		const config = writeConfig(`export default {
+			auth: {},
+			experimental: {
+				hooks: { deploy: { before: () => { globalThis.__deployHookCalls.push("before"); } } },
+			},
+		};\n`);
+
+		try {
+			await expect(
+				applyCmd({
+					...baseProps(api, stream),
+					config,
+					runtimeApi: api,
+				}),
+			).rejects.toThrow(
+				`Branch "${BRANCH_NAME}" is protected. Re-run with --allow-protected (or -y) to apply to it.`,
+			);
+		} finally {
+			delete (globalThis as Record<string, unknown>).__deployHookCalls;
+		}
+
+		expect(calls).toEqual([]);
+		expect(api.enableNeonAuthCalls).toEqual([]);
 	});
 
 	it("does not run deploy.after when apply throws (deploy.before still ran)", async () => {

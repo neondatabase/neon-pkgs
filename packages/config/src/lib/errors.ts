@@ -227,7 +227,7 @@ export class PushAbortedError extends PlatformError {
 				reasons.length > 0
 					? `Reason${reasons.length === 1 ? "" : "s"}: ${reasons.join(", ")}.`
 					: undefined,
-				"Re-run with `--update-existing` (override existing settings) or `--allow-protected-branch` (push to a protected branch) to skip the prompt.",
+				"Re-run with `--update-existing` (override existing settings) or `--allow-protected` (push to a protected branch) to skip the prompt.",
 			]
 				.filter(Boolean)
 				.join(" "),

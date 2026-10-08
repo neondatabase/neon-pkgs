@@ -230,11 +230,6 @@ export const renderAppliedChanges = (
 	return lines.join("\n");
 };
 
-// Hostnames are user-controlled; matching /updateExisting/i classified
-// updateexisting.example.com as overrideable.
-const isOverrideableConflict = (conflict: ConflictReport): boolean =>
-	conflict.reason.includes("Pass `updateExisting: true`");
-
 const CUSTOM_DOMAIN_REASON = /^custom domain "([^"]+)"/;
 
 const labeledConflictField = (conflict: ConflictReport): string => {
@@ -265,11 +260,8 @@ export const renderBranchSettingConflicts = (
 		]);
 	}
 
-	const heading = conflicts.every(isOverrideableConflict)
-		? "Branch settings differ (re-run with --update-existing to apply)"
-		: "Branch settings differ";
 	const lines: string[] = [
-		paint.title(heading),
+		paint.title("Branch settings differ"),
 		...renderBranchGroups(byBranch, paint),
 	];
 	return lines.join("\n");
