@@ -6,6 +6,7 @@ import {
 	formatHumanChunk,
 	parseColumns,
 	resolveOutputWidth,
+	titleCaseField,
 } from "./human_table.js";
 
 const plain = (s: string) => stripAnsi(s);
@@ -130,6 +131,26 @@ describe("displayWidth", () => {
 	});
 });
 
+describe("titleCaseField", () => {
+	it("spells abbreviations the way people write them", () => {
+		expect(
+			[
+				"project_id",
+				"invocation_url",
+				"memory_mib",
+				"blocking_pids",
+				"created_at",
+			].map(titleCaseField),
+		).toEqual([
+			"Project ID",
+			"Invocation URL",
+			"Memory MiB",
+			"Blocking PIDs",
+			"Created At",
+		]);
+	});
+});
+
 describe("formatHumanChunk", () => {
 	it("stacks a single object", () => {
 		const out = formatHumanChunk({
@@ -151,7 +172,7 @@ describe("formatHumanChunk", () => {
 			title: "Items",
 			colorTitle: false,
 		});
-		expect(plain(out)).toBe("Items\nId  Name\na   alpha\nb   beta\n");
+		expect(plain(out)).toBe("Items\nID  Name\na   alpha\nb   beta\n");
 		expect(out).not.toMatch(BOX);
 	});
 

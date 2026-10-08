@@ -12,7 +12,7 @@ exports[`orgs > list 1`] = `
 
 exports[`orgs > list marks the linked org and shows plans in the table 1`] = `
 "Organizations
-Id              Name                  Plan
+ID              Name                  Plan
 org-linked-123  [current] Linked org  Launch
 org-other-456   Other org             Free
 "

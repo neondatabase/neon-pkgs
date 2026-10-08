@@ -76,12 +76,12 @@ compact JSON. `renderColumns` goes through the same flattening.
 
 ```
 Projects
-Id                       Name                        Region Id      Created At
+ID                       Name                        Region ID      Created At
 wandering-haze-25754674  claimable-neon-local-state  aws-us-east-2  2026-08-11T16:42:59Z
 ```
 
 ```
-Id      wandering-haze-25754674
+ID      wandering-haze-25754674
 Name    claimable-neon-local-state
 Region  aws-us-east-2
 ```

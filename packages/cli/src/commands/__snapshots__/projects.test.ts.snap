@@ -123,7 +123,7 @@ settings:
 exports[`projects > get omits details the API did not return 1`] = `
 "Project
 Name        test_project
-Id          test
+ID          test
 Created At  2019-01-01T00:00:00Z
 "
 `;
@@ -131,8 +131,8 @@ Created At  2019-01-01T00:00:00Z
 exports[`projects > get shows a fixed compute size and zero retention 1`] = `
 "Project
 Name               fixed
-Id                 proj-fixed-cu
-Region Id          aws-us-east-2
+ID                 proj-fixed-cu
+Region ID          aws-us-east-2
 Postgres Version   18
 Default Compute    2 CU
 History Retention  0 seconds
@@ -144,8 +144,8 @@ Updated At         2026-06-01T12:00:00Z
 exports[`projects > get shows project details in the table 1`] = `
 "Project
 Name               application
-Id                 proj-details
-Region Id          aws-us-east-2
+ID                 proj-details
+Region ID          aws-us-east-2
 Postgres Version   17
 Organization       org-2
 Default Compute    0.25-2 CU
@@ -180,13 +180,13 @@ shared_with_you:
 
 exports[`projects > list marks the linked project in the table 1`] = `
 "Projects
-Id  Name       Created At
+ID  Name       Created At
 1   Project_1  2019-01-01T00:00:00.000Z
 2   Project_2  2019-01-01T00:00:00.000Z
 3   Project_3  2019-01-01T00:00:00.000Z
 
 Shared with you
-Id                 Name                      Region Id      Created At
+ID                 Name                      Region ID      Created At
 adj-noun-12401747  [current] Shared Project  aws-us-east-2  2024-04-03T04:45:46Z
 "
 `;

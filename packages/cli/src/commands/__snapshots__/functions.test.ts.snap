@@ -7,7 +7,7 @@ exports[`functions > delete reports a friendly error when the function is missin
 exports[`functions > deploy (table) polls on the default schedule and prints one result without a completed line 1`] = `
 "Function tablefunc
 URL            https://tablefunc.functions.neon.tech
-Deployment Id  2
+Deployment ID  2
 Status         completed
 Runtime        nodejs24
 Memory         256 MiB
@@ -84,7 +84,7 @@ invocation_url: https://srcfile.functions.neon.tech
 exports[`functions > deploy --wait exits 1 when the deployment fails 1`] = `
 "Function failfunc
 URL            https://failfunc.functions.neon.tech
-Deployment Id  1
+Deployment ID  1
 Status         failed
 Runtime        nodejs24
 Memory         256 MiB
@@ -204,7 +204,7 @@ exports[`functions > domains delete 1`] = `""`;
 exports[`functions > domains delete reports a friendly error when the domain is missing 1`] = `""`;
 
 exports[`functions > domains list (table) 1`] = `
-"Domain            Entity Type  Entity Id  Cname Target
+"Domain            Entity Type  Entity ID  CNAME Target
 docs.example.com  function     api        abc.custom.neon.tech
 app.example.com   function     app        abc.custom.neon.tech
 "
@@ -240,7 +240,7 @@ URL         https://my-func.functions.neon.tech
 Created At  2026-06-03T00:00:00Z
 
 Deployment (current, active)
-Deployment Id  1
+Deployment ID  1
 Status         completed
 Runtime        nodejs24
 Memory         256 MiB
@@ -256,7 +256,7 @@ URL         https://failednoerr.functions.neon.tech
 Created At  2026-06-03T00:00:00Z
 
 Current deployment
-Deployment Id  2
+Deployment ID  2
 Status         failed
 Runtime        nodejs24
 Memory         256 MiB
@@ -272,7 +272,7 @@ URL         https://brokenfunc.functions.neon.tech
 Created At  2026-06-03T00:00:00Z
 
 Current deployment
-Deployment Id  3
+Deployment ID  3
 Status         failed
 Runtime        nodejs24
 Memory         256 MiB
@@ -282,7 +282,7 @@ Deployment error
 Reason  Build failed: cannot resolve module left-pad
 
 Active deployment
-Deployment Id  2
+Deployment ID  2
 Status         completed
 Runtime        nodejs24
 Memory         256 MiB
@@ -298,7 +298,7 @@ URL         https://activeonly.functions.neon.tech
 Created At  2026-06-03T00:00:00Z
 
 Active deployment
-Deployment Id  1
+Deployment ID  1
 Status         completed
 Runtime        nodejs24
 Memory         256 MiB
@@ -411,7 +411,7 @@ URL         https://envnames.functions.neon.tech
 Created At  2026-06-03T00:00:00Z
 
 Deployment (current, active)
-Deployment Id  1
+Deployment ID  1
 Status         completed
 Runtime        nodejs24
 Memory         256 MiB
@@ -443,7 +443,7 @@ URL         https://my-func.functions.neon.tech
 Created At  2026-06-03T00:00:00Z
 
 Deployment (current, active)
-Deployment Id  1
+Deployment ID  1
 Status         completed
 Runtime        nodejs24
 Memory         256 MiB
