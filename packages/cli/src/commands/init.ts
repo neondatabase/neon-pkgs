@@ -72,6 +72,11 @@ export const builder = (yargs: yargs.Argv) =>
 					"Implies creating neon.ts. Cannot be combined with --no-config.",
 			}),
 		)
+		.option("realtime", {
+			type: "boolean",
+			describe:
+				"Declare Realtime in neon.ts. Use --no-realtime to declare it disabled. Implies creating neon.ts and cannot be combined with --no-config",
+		})
 		.option("org-id", {
 			describe: "Forwarded to link: organization ID to link to",
 			type: "string",

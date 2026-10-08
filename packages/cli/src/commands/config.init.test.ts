@@ -247,6 +247,14 @@ describe("config init", () => {
 		);
 	});
 
+	test("--realtime declares Realtime separately from services", async () => {
+		await initCmd({ cwd: workspace, install: false, realtime: true });
+
+		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
+		expect(content).toContain("realtime: true");
+		expect(content).toContain("auth: false");
+	});
+
 	test("--services object-storage declares the bucket with its default visibility", async () => {
 		await initCmd({
 			cwd: workspace,
@@ -539,5 +547,18 @@ describe("config init", () => {
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain("aiGateway: true");
 		expect(content).toContain('assets: { access: "private" }');
+	});
+
+	test("--realtime runs offline end to end", async ({ testCliCommand }) => {
+		await testCliCommand(["config", "init", "--no-install", "--realtime"], {
+			unreachableHost: true,
+			code: 0,
+			cwd: workspace,
+			snapshot: false,
+		});
+
+		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
+			"realtime: true",
+		);
 	});
 });

@@ -148,6 +148,41 @@ describe("computeSettingsSchema", () => {
 });
 
 describe("configInputSchema", () => {
+	test("accepts Realtime enable, disable, and allowed origins", () => {
+		for (const realtime of [
+			true,
+			false,
+			{},
+			{ allowedOrigins: [] },
+			{ allowedOrigins: ["*"] },
+			{
+				allowedOrigins: [
+					"https://app.example.com",
+					"http://localhost:3000",
+				],
+			},
+		]) {
+			expect(configInputSchema.safeParse({ realtime }).success).toBe(
+				true,
+			);
+		}
+	});
+
+	test("rejects invalid Realtime settings", () => {
+		for (const realtime of [
+			{ allowedOrigins: ["ftp://app.example.com"] },
+			{ allowedOrigins: ["https://app.example.com/path"] },
+			{ allowedOrigins: [`https://${"a".repeat(2041)}`] },
+			{ allowedOrigins: ["*", "https://app.example.com"] },
+			{ allowedOrigins: Array(17).fill("https://app.example.com") },
+			{ allowed_origins: ["https://app.example.com"] },
+		]) {
+			expect(configInputSchema.safeParse({ realtime }).success).toBe(
+				false,
+			);
+		}
+	});
+
 	test("accepts top-level services, a preview block, and a branch closure", () => {
 		const result = configInputSchema.safeParse({
 			auth: true,

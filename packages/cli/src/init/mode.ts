@@ -26,6 +26,7 @@ export type InitModeInput = {
 	namedAgents: boolean;
 	configFlag?: boolean;
 	services?: readonly string[];
+	realtime?: boolean;
 	noLink: boolean;
 	hasLinkInputs: boolean;
 };
@@ -65,6 +66,7 @@ const hasExistingSetupFlags = (input: InitModeInput): boolean =>
 	input.noLink ||
 	input.configFlag !== undefined ||
 	input.services !== undefined ||
+	input.realtime !== undefined ||
 	input.hasLinkInputs;
 
 export const resolveInitMode = (input: InitModeInput): InitModeResolution => {

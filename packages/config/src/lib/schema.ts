@@ -99,6 +99,46 @@ export const serviceToggleInputSchema = z.union([
 	serviceToggleSchema,
 ]);
 
+const realtimeAllowedOriginSchema = z
+	.string()
+	.max(2048)
+	.superRefine((value, ctx) => {
+		if (value === "*") return;
+		try {
+			const url = new URL(value);
+			if (
+				(url.protocol !== "http:" && url.protocol !== "https:") ||
+				url.username !== "" ||
+				url.password !== "" ||
+				url.pathname !== "/" ||
+				url.search !== "" ||
+				url.hash !== ""
+			) {
+				throw new Error("not an HTTP origin");
+			}
+		} catch {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					'expected "*" or an http(s) origin with no path, query, or fragment',
+			});
+		}
+	});
+
+/** Realtime object form (`{ allowedOrigins?: string[] }`). */
+export const realtimeConfigSchema = z.strictObject({
+	allowedOrigins: z
+		.array(realtimeAllowedOriginSchema)
+		.max(16)
+		.refine((origins) => !(origins.length > 1 && origins.includes("*")), {
+			message: '"*" cannot be combined with other allowed origins',
+		})
+		.optional(),
+});
+
+/** Realtime as written in a policy: a boolean or its settings object. */
+export const realtimeInputSchema = z.union([z.boolean(), realtimeConfigSchema]);
+
 /**
  * Reusable Data API runtime settings (camelCase mirror of the Neon API `DataAPISettings`).
  * `strictObject` so a typo / snake_case key fails loudly instead of being silently dropped.
@@ -592,6 +632,7 @@ export const experimentalInputSchema = z.strictObject({
  */
 export const configInputSchema = z
 	.strictObject({
+		realtime: realtimeInputSchema.optional(),
 		auth: serviceToggleInputSchema.optional(),
 		dataApi: dataApiInputSchema.optional(),
 		aiGateway: serviceToggleInputSchema.optional(),

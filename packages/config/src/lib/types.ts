@@ -164,6 +164,25 @@ export interface ServiceToggle {
 export type ServiceToggleInput = boolean | ServiceToggle;
 
 /**
+ * Realtime settings for a branch. The object's presence enables Realtime; omit
+ * `allowedOrigins` to leave the inherited/current allowlist unchanged.
+ */
+export interface RealtimeConfig {
+	/** Browser origins allowed to connect. `[]` or `["*"]` allows every origin. */
+	allowedOrigins?: readonly string[];
+}
+
+/**
+ * How Realtime is managed by a policy.
+ *
+ * - `true` — enable Realtime without changing allowed origins.
+ * - `{ allowedOrigins?: [...] }` — enable Realtime and optionally configure origins.
+ * - `false` — disable Realtime.
+ * - omitted (`undefined`) — leave Realtime unmanaged.
+ */
+export type RealtimeInput = boolean | RealtimeConfig;
+
+/**
  * Resolve a **static** service toggle (`true` / `false` / `{ enabled?: boolean }` / object /
  * `undefined`) to a type-level boolean. The tuple wrapping (`[T] extends […]`) disables
  * distribution so a union/`undefined` is judged as a single unit:
@@ -723,6 +742,8 @@ export interface Config<
 		| ServiceToggleInput
 		| undefined,
 > {
+	/** Enable, configure, or disable Realtime on every branch this policy is applied to. */
+	realtime?: RealtimeInput;
 	/** Neon Auth integration toggle (GA). Static — drives `NeonEnv.auth`. */
 	auth?: Auth;
 	/**

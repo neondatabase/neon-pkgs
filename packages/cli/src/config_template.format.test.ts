@@ -143,9 +143,11 @@ describe("the scaffolded neon.ts is already formatted", () => {
 	it.each(
 		serviceSubsets().map((s) => [s.join("+") || "none", s] as const),
 	)("services: %s", (_label, services) => {
-		const source = renderNeonConfig([...services]);
-		expect(format(source)).toBe(source);
-		expectCleanWhitespace(source);
+		for (const realtime of [undefined, true, false]) {
+			const source = renderNeonConfig([...services], realtime);
+			expect(format(source)).toBe(source);
+			expectCleanWhitespace(source);
+		}
 	});
 
 	it("the scaffolded function handler", () => {

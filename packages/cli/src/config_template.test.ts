@@ -76,6 +76,12 @@ export default defineConfig({
 		expect(rendered).not.toContain("preview");
 	});
 
+	it("declares Realtime separately from services", () => {
+		expect(renderNeonConfig([], true)).toContain("  realtime: true,");
+		expect(renderNeonConfig([], false)).toContain("  realtime: false,");
+		expect(renderNeonConfig([])).not.toContain("realtime:");
+	});
+
 	it("declares data-api with auth, because the default provider requires it", () => {
 		const rendered = renderNeonConfig(["data-api"]);
 		expect(rendered).toContain("auth: true,");

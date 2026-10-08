@@ -274,6 +274,31 @@ describe("init handler", () => {
 		);
 	});
 
+	test("--realtime is passed separately to config init", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-realtime-"));
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				realtime: true,
+				contextFile: join(cwd, ".neon"),
+				initConfig,
+			}),
+		);
+
+		expect(initConfig).toHaveBeenCalledWith(
+			expect.objectContaining({
+				services: ["postgres"],
+				realtime: true,
+			}),
+		);
+	});
+
 	test("empty -y without auth skips link and prints the next step", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-unauth-"));
 		const ops = makeOperations();
@@ -1961,6 +1986,19 @@ describe("init CLI", () => {
 		},
 	);
 
+	cliTest(
+		"rejects --no-config with --realtime",
+		async ({ testCliCommand }) => {
+			const { stderr } = await testCliCommand(
+				["init", "--no-config", "--realtime"],
+				{ snapshot: false, code: 1, outputTable: true },
+			);
+			expect(stderr).toMatch(
+				/--no-config cannot be combined with --realtime/,
+			);
+		},
+	);
+
 	cliTest("rejects removed template flags", async ({ testCliCommand }) => {
 		for (const flag of ["--template", "--skip-template"]) {
 			const { stderr } = await testCliCommand(
@@ -2093,12 +2131,19 @@ describe("init flag parsing", () => {
 			config?: boolean;
 			link?: boolean;
 			agentSetup?: boolean;
+			realtime?: boolean;
 		};
 
 	test("--config is a three-state flag", async () => {
 		expect((await parse([])).config).toBeUndefined();
 		expect((await parse(["--config"])).config).toBe(true);
 		expect((await parse(["--no-config"])).config).toBe(false);
+	});
+
+	test("--realtime is a three-state flag", async () => {
+		expect((await parse([])).realtime).toBeUndefined();
+		expect((await parse(["--realtime"])).realtime).toBe(true);
+		expect((await parse(["--no-realtime"])).realtime).toBe(false);
 	});
 
 	test("--no-link skips project linking", async () => {

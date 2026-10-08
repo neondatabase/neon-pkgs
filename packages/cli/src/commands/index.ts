@@ -33,6 +33,7 @@ import * as plugins from "./plugins.js";
 import * as profile from "./profile.js";
 import * as projects from "./projects.js";
 import * as psql from "./psql.js";
+import * as realtime from "./realtime.js";
 import * as roles from "./roles.js";
 import * as setContext from "./set_context.js";
 import * as skills from "./skills.js";
@@ -75,6 +76,7 @@ export default [
 	ask,
 	feedback,
 	dataApi,
+	realtime,
 	functions,
 	triggers,
 	credentials,
