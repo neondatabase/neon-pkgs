@@ -653,6 +653,7 @@ export class ConnectionCoordinator {
 			applyBatch: (batch) => target.applyBatch(batch),
 			publishReset: (rows, mvcc) => target.publishReset(rows, mvcc),
 			publishBatch: (batch) => target.publishBatch(batch),
+			applyProgress: (mvcc) => target.applyProgress(mvcc),
 			baselineSyncCompleted: (count) =>
 				target.baselineSyncCompleted(count),
 			decodeFailed: (error) => target.decodeFailed(error),
