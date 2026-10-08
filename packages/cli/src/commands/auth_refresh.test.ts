@@ -283,11 +283,8 @@ describe("no usable credential", () => {
 		const result = await runCli();
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain(
-			'Not signed in: profile "DEFAULT" has no stored credential. Run `neon auth --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.',
-		);
-		expect(result.stderr).not.toContain(
-			"Cannot run interactive auth in CI",
+		expect(result.stderr).toBe(
+			'Not signed in: profile "DEFAULT" has no stored credential. Run `neon auth --profile DEFAULT` to sign in, or use an API key with --api-key or NEON_API_KEY.\n',
 		);
 		expect(result.stdout).toBe("");
 	});
