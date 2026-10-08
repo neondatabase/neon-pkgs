@@ -153,7 +153,7 @@ export const interpretCredentials = (
  * Missing and unparseable both return `null`, because both are recoverable by authenticating
  * again and the callers already treat "no credentials" as "log in". A file that parses but
  * contradicts itself is different — {@link credentialKind} throws for that, since re-running
- * `auth` would paper over a mistake rather than fix it.
+ * `login` would paper over a mistake rather than fix it.
  */
 export type CredentialsRead =
 	| { kind: "ok"; credentials: StoredCredentials }
