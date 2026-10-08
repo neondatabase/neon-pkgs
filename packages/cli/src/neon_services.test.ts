@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-	CONFIG_INIT_SERVICE_OPTIONS,
 	CONFIG_INIT_SERVICES,
-	parseConfigInitSelection,
 	parseConfigInitServices,
 } from "./config_template.js";
 import {
@@ -44,7 +42,9 @@ describe("the service vocabulary", () => {
 
 	it("offers each command only what it can act on", () => {
 		expect(ENV_PULL_SERVICES).toContain("functions");
+		expect(ENV_PULL_SERVICES).not.toContain("realtime");
 		expect(CONFIG_INIT_SERVICES).toContain("data-api");
+		expect(CONFIG_INIT_SERVICES).toContain("realtime");
 		// Every branch has Postgres, so a policy has nothing to declare for it.
 		expect(CONFIG_INIT_SERVICES).not.toContain("postgres");
 	});
@@ -103,6 +103,9 @@ describe("parseServices", () => {
 	it("says a real service is not selectable here, rather than calling it unknown", () => {
 		expect(() => parseServices(["postgres"], addOnsOnly)).toThrow(
 			/postgres is not something --services can select\./,
+		);
+		expect(() => parseServices(["realtime"], envPull)).toThrow(
+			/realtime is not something --service can select\./,
 		);
 	});
 
@@ -179,43 +182,20 @@ describe("parseConfigInitServices", () => {
 	});
 
 	it("accepts postgres next to add-ons, since every branch has it", () => {
-		expect(parseConfigInitServices(["postgres,auth", "data-api"])).toEqual([
-			"auth",
-			"data-api",
-		]);
+		expect(
+			parseConfigInitServices(["postgres,auth", "data-api,realtime"]),
+		).toEqual(["auth", "data-api", "realtime"]);
 	});
 
 	it("rejects none, which is not a service", () => {
 		expect(() => parseConfigInitServices(["none"])).toThrow(
-			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway.",
+			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime.",
 		);
 	});
 
 	it("rejects an empty selection rather than reading it as Postgres-only", () => {
 		expect(() => parseConfigInitServices([" "])).toThrow(
 			/--services needs at least one service/,
-		);
-	});
-});
-
-describe("parseConfigInitSelection", () => {
-	it("accepts Realtime alongside services", () => {
-		expect(parseConfigInitSelection(["realtime", "auth"])).toEqual({
-			services: ["auth"],
-			realtime: true,
-		});
-	});
-
-	it("accepts Realtime on its own", () => {
-		expect(parseConfigInitSelection(["realtime"])).toEqual({
-			services: [],
-			realtime: true,
-		});
-	});
-
-	it("includes Realtime in the supported values when validation fails", () => {
-		expect(() => parseConfigInitSelection(["none"])).toThrow(
-			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime.",
 		);
 	});
 });
@@ -232,7 +212,7 @@ describe("servicesOption", () => {
 		expect(
 			servicesOption({
 				key: "services",
-				allowed: CONFIG_INIT_SERVICE_OPTIONS,
+				allowed: NEON_SERVICES,
 				describe: "Declare these",
 			}).alias,
 		).toEqual(["s", "service"]);
@@ -252,7 +232,7 @@ describe("servicesOption", () => {
 		expect(
 			servicesOption({
 				key: "services",
-				allowed: CONFIG_INIT_SERVICE_OPTIONS,
+				allowed: NEON_SERVICES,
 				describe: "Declare these",
 				also: "Omitted: ask.",
 			}).describe,

@@ -13,7 +13,7 @@ import { quoteFlagValue, runLink } from "../commands/link.js";
 import { defaultDir } from "../config.js";
 import {
 	CONFIG_INIT_SERVICES,
-	parseConfigInitSelection,
+	parseConfigInitServices,
 } from "../config_template.js";
 import { contextBranch, readContextFile } from "../context.js";
 import { log } from "../log.js";
@@ -510,7 +510,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
 	}
 	if (servicesFlag !== undefined) {
-		parseConfigInitSelection(servicesFlag);
+		parseConfigInitServices(servicesFlag);
 	}
 	const linkInputs: InitLinkInputs = {
 		...(props.orgId ? { orgId: props.orgId } : {}),
@@ -1176,11 +1176,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? undefined
 				: (configPlan.services ?? ["postgres"]);
 			if (planned !== undefined) {
-				const selection = parseConfigInitSelection(planned);
-				extraServices =
-					selection.services.length > 0 ||
-					selection.realtime === true;
-				selectedServices = expandTelemetryServices(selection.services);
+				const services = parseConfigInitServices(planned);
+				extraServices = services.length > 0;
+				selectedServices = expandTelemetryServices(services);
 				funnel.services = selectedServices;
 				wroteNewFile = true;
 			} else {

@@ -56,7 +56,7 @@ type ClaimProps = {
 };
 
 type CreateProps = ClaimProps & {
-	services?: readonly NeonService[];
+	services?: readonly ClaimableService[];
 	config?: string;
 	file?: string;
 	envPull: boolean;
@@ -77,8 +77,16 @@ type DeleteProps = ClaimProps & {
 	yes: boolean;
 };
 
+type ClaimableService = Exclude<NeonService, "realtime">;
+
+const isClaimableService = (
+	service: NeonService,
+): service is ClaimableService => service !== "realtime";
+
+const CLAIMABLE_SERVICES = NEON_SERVICES.filter(isClaimableService);
+
 const CAPABILITY_FOR_SERVICE: Readonly<
-	Record<NeonService, ClaimableCapability>
+	Record<ClaimableService, ClaimableCapability>
 > = {
 	postgres: "postgres",
 	auth: "auth",
@@ -98,7 +106,7 @@ const CAPABILITY_ORDER: readonly ClaimableCapability[] = [
 ];
 
 const SERVICE_FOR_CAPABILITY: Readonly<
-	Record<ClaimableCapability, NeonService>
+	Record<ClaimableCapability, ClaimableService>
 > = {
 	postgres: "postgres",
 	auth: "auth",
@@ -117,7 +125,7 @@ const cliServiceName = (capability: string): string =>
 		: capability;
 
 export const claimableCapabilities = (
-	services: readonly NeonService[],
+	services: readonly ClaimableService[],
 ): ClaimableCapability[] => {
 	const requested = new Set<ClaimableCapability>(["postgres"]);
 	for (const service of services) {
@@ -204,7 +212,7 @@ export const builder = (argv: yargs.Argv) =>
 						"service",
 						servicesOption({
 							key: "service",
-							allowed: NEON_SERVICES,
+							allowed: CLAIMABLE_SERVICES,
 							describe:
 								"Services to request for the claimable project",
 							also: "Postgres is always included. Services unavailable before claim are recorded and reported.",
@@ -232,7 +240,7 @@ export const builder = (argv: yargs.Argv) =>
 				const rawServices = servicesFlagValue(args.service);
 				const services = rawServices
 					? parseServices(rawServices, {
-							allowed: NEON_SERVICES,
+							allowed: CLAIMABLE_SERVICES,
 							flag: "--service",
 							onDeprecated: (used, canonical) =>
 								log.warning(
@@ -247,7 +255,9 @@ export const builder = (argv: yargs.Argv) =>
 						: undefined,
 				);
 				const configuredServices = policy
-					? declaredNeonServices(policy.config)
+					? declaredNeonServices(policy.config).filter(
+							isClaimableService,
+						)
 					: [];
 				const dataApi = policy
 					? claimableDataApiCreateBody(policy.config)

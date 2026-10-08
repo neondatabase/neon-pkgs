@@ -7,7 +7,9 @@ import {
 
 import { NEON_SERVICES, type NeonService } from "./neon_services.js";
 
-export const ENV_PULL_SERVICES = NEON_SERVICES;
+export const ENV_PULL_SERVICES = NEON_SERVICES.filter(
+	(service) => service !== "realtime",
+);
 
 export const ENV_PULL_KEYS = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
@@ -26,6 +28,7 @@ const SERVICE_ENV_KEYS: Record<NeonService, readonly EnvPullKey[]> = {
 	postgres: Object.values(NEON_ENV_VAR_KEYS.postgres),
 	auth: Object.values(NEON_ENV_VAR_KEYS.auth),
 	"data-api": Object.values(NEON_ENV_VAR_KEYS.dataApi),
+	realtime: [],
 	"object-storage": Object.values(NEON_ENV_VAR_KEYS.storage),
 	"ai-gateway": Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 	// Live slugs are not known until the branch is listed.

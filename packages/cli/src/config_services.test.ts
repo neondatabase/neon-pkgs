@@ -19,6 +19,7 @@ describe("declaredNeonServices", () => {
 				},
 				aiGateway: true,
 			},
+			realtime: { allowedOrigins: ["https://app.example.com"] },
 			branch: () => ({}),
 		});
 
@@ -28,6 +29,7 @@ describe("declaredNeonServices", () => {
 			"object-storage",
 			"functions",
 			"ai-gateway",
+			"realtime",
 		]);
 	});
 
@@ -40,6 +42,7 @@ describe("declaredNeonServices", () => {
 				functions: {},
 				aiGateway: { enabled: false },
 			},
+			realtime: false,
 			branch: () => ({}),
 		});
 

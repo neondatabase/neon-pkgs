@@ -1,8 +1,7 @@
 import type yargs from "yargs";
-import { CONFIG_INIT_SERVICE_OPTIONS } from "../config_template.js";
 import { initPluginAgents, initSkillsMcpAgents } from "../init/plan.js";
 import { type InitProps, runInit } from "../init/run.js";
-import { servicesOption } from "../neon_services.js";
+import { NEON_SERVICES, servicesOption } from "../neon_services.js";
 import { listSkillIds } from "../skills/catalog.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -66,7 +65,7 @@ export const builder = (yargs: yargs.Argv) =>
 			"services",
 			servicesOption({
 				key: "services",
-				allowed: CONFIG_INIT_SERVICE_OPTIONS,
+				allowed: NEON_SERVICES,
 				describe: "Services to declare in neon.ts",
 				also:
 					"postgres alone writes the starter policy; every branch has Postgres. " +
