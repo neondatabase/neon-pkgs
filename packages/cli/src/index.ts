@@ -271,7 +271,7 @@ async function handleError(
 		if (err.terminal) {
 			const context = getAuthContext();
 			log.error(
-				`Run \`neon auth --profile ${context?.profile ?? "DEFAULT"}\` to sign in again.`,
+				`Run \`neon login --profile ${context?.profile ?? "DEFAULT"}\` to sign in again.`,
 			);
 		}
 		sendError(err, "AUTH_FAILED");

@@ -56,7 +56,7 @@ export function wrapNeonError(
 			[
 				`${context.op} failed: this capability requires a claimed project.`,
 				apiSummaryWithRequestId,
-				"Run `npx neon claim accept`, complete the sign-in, then `npx neon claim status` to drop the local assertion, then `npx neon auth` or `npx neon link` and re-run.",
+				"Run `npx neon claim accept`, complete the sign-in, then `npx neon claim status` to drop the local assertion, then `npx neon login` or `npx neon link` and re-run.",
 			].join(" "),
 			{ cause: err, details: httpDetails(context, httpInfo) },
 		);
@@ -69,7 +69,7 @@ export function wrapNeonError(
 				[
 					`${context.op} failed: the Bearer token sent to the Neon API was rejected.`,
 					apiSummaryWithRequestId,
-					"Either (a) generate or rotate an API key at https://console.neon.tech/app/settings/api-keys and set NEON_API_KEY / pass --api-key, or (b) re-run `npx neon auth` to refresh the OAuth token in `~/.config/neonctl/credentials.json` (OAuth tokens expire).",
+					"Either (a) generate or rotate an API key at https://console.neon.tech/app/settings/api-keys and set NEON_API_KEY / pass --api-key, or (b) re-run `npx neon login` to refresh the OAuth token in `~/.config/neonctl/credentials.json` (OAuth tokens expire).",
 				].join(" "),
 				{ cause: err, details: httpDetails(context, httpInfo) },
 			);

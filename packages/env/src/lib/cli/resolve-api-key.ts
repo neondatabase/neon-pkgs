@@ -132,7 +132,7 @@ function readStoredCredential(
 	const token = loaded.credentials.access_token;
 	if (typeof token === "string" && token.trim() !== "") return token.trim();
 	throw new Error(
-		`Profile "${profile}" holds a browser sign-in with no usable token at ${credentialLabel(at)}. Sign in again with \`neon auth --profile ${profile}\`.`,
+		`Profile "${profile}" holds a browser sign-in with no usable token at ${credentialLabel(at)}. Sign in again with \`neon login --profile ${profile}\`.`,
 	);
 }
 

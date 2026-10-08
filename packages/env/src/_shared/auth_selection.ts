@@ -30,8 +30,8 @@
  * the environment. It warns instead of staying silent, because a disregarded account
  * selection is precisely what nobody noticed last time.
  *
- * `auth` and the `profile` subcommands do not use any of this. They read the same flags with
- * different meanings — `neon auth --profile work` names where to *write* a credential, and
+ * `login` and the `profile` subcommands do not use any of this. They read the same flags with
+ * different meanings — `neon login --profile work` names where to *write* a credential, and
  * `neon profile create work --api-key …` names one to *store* — so their callers skip
  * selection entirely rather than passing exemptions down here.
  */

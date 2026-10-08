@@ -63,10 +63,10 @@ leaves `neon` running the other install, such as npm. While duplicates remain, t
 Run the following command to authenticate a connection to Neon:
 
 ```bash
-neon auth
+neon login
 ```
 
-The `auth` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon auth](https://neon.com/docs/cli/auth) automatically launches the browser authentication process.
+`neon auth` is an alias of `neon login`. The `login` command launches a browser window where you can authorize the Neon CLI to access your Neon account. Running a Neon CLI command without authenticating with [neon login](https://neon.com/docs/cli/auth) automatically launches the browser authentication process.
 
 Alternatively, you can authenticate a connection with a Neon API key using the `--api-key` option when running a Neon CLI command. For example, an API key is used with the following `neon projects list` command:
 
@@ -831,7 +831,7 @@ The target directory must be empty unless you pass `--force` (a lone `.git` is i
 
 Recommended installs the Neon plugin for every detected agent (global config, project folders, and the host CLI). Plugin-capable agents get the plugin; the rest get skills and MCP. If none are detected, it installs the default Neon skills for Cursor and Codex in this directory (`./.agents/skills`) and does not configure MCP. It then links a project when the CLI is authenticated, and writes a default `neon.ts` (Postgres only) using the package manager already in the directory.
 
-Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon auth`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser. `-y` with `--project-id` or other account flags links when the CLI is already signed in; otherwise it errors and names `neon auth` or `--claimable`.
+Unauthenticated `-y` skips linking and prints the next step: sign up at https://neon.com/signup, then `neon login`, `neon link`, or `neon claim create` (no account, expires in 72 hours unless claimed). `-y` never opens a browser. `-y` with `--project-id` or other account flags links when the CLI is already signed in; otherwise it errors and names `neon login` or `--claimable`.
 
 Custom asks how to add Neon to coding agents (plugin, skills and MCP separately, or skip), then how to get a project (sign in and link, or a claimable project when you are not signed in), then which services `neon.ts` should declare. Skills and MCP use separate agent pickers, and either can be skipped. Postgres is listed first as always included. The package manager is inferred from the directory; Custom asks only when none is detected. `--skill` selects skills (not the plugin) and skips that picker. MCP flags (`--mcp-config-location`, `--mcp-auth`, `--mcp-project-scoped`) select skills and MCP. `--mcp-config-location` is where the config is written: `global` maps to `neon mcp`, and `project` maps to `neon mcp --project`. With `-y`, the location defaults to `global`; interactive Custom asks. If some selected agents cannot write that location, init warns and skips MCP for those agents while continuing with the supported agents. It fails when none of the selected agents support the location. `--mcp-project-scoped` limits MCP tools to the linked Neon project by passing its ID to `neon mcp --project-id`. Omitted is false, including in Custom; there is no prompt. `--no-agent-setup` skips agent setup.
 
@@ -1198,18 +1198,18 @@ Credential Manager, Linux Secret Service) only when its `profiles.json` pointer 
 That is per profile. Reads never migrate.
 
 ```bash
-neon auth --keyring                         # sign DEFAULT into the OS keyring
-neon auth --keyring --profile work          # sign work into the OS keyring
+neon login --keyring                         # sign DEFAULT into the OS keyring
+neon login --keyring --profile work          # sign work into the OS keyring
 neon profile create work --keyring          # create a named profile in the keyring
 neon profile remove work --yes              # drop a keyring profile, then create it again as a file
 ```
 
-File to keyring is `neon auth --keyring` or `neon profile create … --keyring`: a new
+File to keyring is `neon login --keyring` or `neon profile create … --keyring`: a new
 sign-in, then the previous credential is revoked and the owned file is deleted.
-`create` on an existing name always revokes after a successful write. `auth` revokes
+`create` on an existing name always revokes after a successful write. `login` revokes
 when it writes to the keyring, including a re-login that follows an existing pointer.
-`auth` that overwrites a file does not. Keyring to file is `remove`, then create or
-auth again. `create` and `auth` without `--keyring` follow an existing `"keyring"`
+`login` that overwrites a file does not. Keyring to file is `remove`, then create or
+log in again. `create` and `login` without `--keyring` follow an existing `"keyring"`
 pointer, so a keyring profile cannot leave the OS store until `remove` succeeds.
 
 `--api-key` and `NEON_API_KEY` skip both stores. A GitHub-release `neon-<platform>`
@@ -1218,7 +1218,7 @@ Use the npm-installed `neon`. Older releases treat the sentinel as a relative pa
 
 A `"keyring"` pointer whose OS item cannot be read is not treated as signed-out. Commands that
 would otherwise open a browser fail: could not read the OS keyring item. Unlock it and
-retry, or run `neon auth --profile DEFAULT`. To reset the profile: `neon profile remove DEFAULT --yes`.
+retry, or run `neon login --profile DEFAULT`. To reset the profile: `neon profile remove DEFAULT --yes`.
 A missing `credentials.json` with no `profiles.json` is still
 signed-out, and those commands start OAuth.
 
@@ -1258,7 +1258,7 @@ the key never leaves the CLI.
 **A profile is one kind or the other, never both.** `type` in the credentials file states which:
 
 ```json
-// oauth: what a plain `create` (or `neon auth --profile`) writes. An absent `type` means this.
+// oauth: what a plain `create` (or `neon login --profile`) writes. An absent `type` means this.
 { "access_token": "…", "refresh_token": "…", "expires_at": 1786…, "user_id": "…" }
 
 // api_key: what `--api-key` writes
@@ -1299,7 +1299,7 @@ Passing both flags fails rather than picking a winner: `--api-key` supplies a cr
 
 When both are only environment variables the key wins, which keeps a CI pipeline that injects `NEON_API_KEY` working even if a `NEON_PROFILE` leaks into the environment — but the disregarded profile is named on stderr rather than passed over silently.
 
-`neon auth` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon auth --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
+`neon login` and the `profile` subcommands are outside all of this, because they read the same flags to mean something else: `neon login --profile work` names where to write a credential, and `neon profile create work --api-key …` names one to store.
 
 `neon init` forwards `--profile` and `--config-dir` to agent and config children and uses them directly for its link flow. An explicit `--api-key` is passed to authenticated children through `NEON_API_KEY`, not argv.
 
@@ -1449,7 +1449,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="config-dir"></a>`--config-dir`
 
-  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon auth` and, when a second profile exists or DEFAULT is keyring, `profiles.json`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
+  Specifies the path to the `neon` configuration directory, which holds the `credentials.json` written by `neon login` and, when a second profile exists or DEFAULT is keyring, `profiles.json`. The default is `$XDG_CONFIG_HOME/neon`, or `~/.config/neon`; run `neon --help` to see the resolved path. This option is only necessary if you keep your configuration somewhere else.
 
   The directory was called `neonctl` before the CLI was renamed. An existing one is still read, and is used **in place** — nothing is moved or copied, so there is never a second credentials file to go stale. A directory you pass explicitly is used exactly as given and never falls back to the legacy name, so pointing a CI run at a scratch directory cannot pick up local credentials.
 
@@ -1462,7 +1462,7 @@ Global options are supported with any Neon CLI command.
   Selects a named set of credentials, for holding more than one Neon account at a time. A profile is a pointer to a credentials file, recorded in `profiles.json` next to it.
 
   ```bash
-  neon auth --profile work        # create it, or sign in again
+  neon login --profile work        # create it, or sign in again
   neon profile list               # names, accounts, and where each one's credentials live
   neon projects list --profile work
   NEON_PROFILE=work neon projects list
@@ -1472,7 +1472,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="api-key"></a>`--api-key`
 
-  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon auth`. For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
+  Specifies your Neon API key. You can authenticate using a Neon API key when running a Neon CLI command instead of using `neon login`. For information about obtaining an Neon API key, see [Authentication](https://neon.com/docs/reference/api/get-started), in the _Neon API Reference_.
 
   ```bash
   neon <command> --api-key <neon_api_key>

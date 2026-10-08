@@ -263,7 +263,7 @@ describe("init handler", () => {
 		const out = stdoutText(stdout);
 		expect(out).toContain("Neon setup needs a next step.");
 		expect(out).toContain("https://neon.com/signup");
-		expect(out).toMatch(/neon auth/);
+		expect(out).toMatch(/neon login/);
 		expect(out).toMatch(/neon link/);
 		expect(out).toMatch(/neon claim create/);
 	});

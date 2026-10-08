@@ -197,7 +197,7 @@ describe("createCredentialStore — keyring", () => {
 			/Unlock the keyring and retry/,
 		);
 		expect(() => store.read(keyringAt())).toThrow(
-			"`neon auth --profile DEFAULT`",
+			"`neon login --profile DEFAULT`",
 		);
 		expect(() => store.read(keyringAt())).toThrow(
 			"`neon profile remove DEFAULT --yes`",
@@ -284,7 +284,7 @@ describe("createCredentialStore — keyring", () => {
 		const store = createCredentialStore(dir, { keyring });
 		expect(() => store.read(keyringAt())).toThrow(KeyringUnreadableError);
 		expect(() => store.read(keyringAt())).toThrow(
-			"`neon auth --profile DEFAULT`",
+			"`neon login --profile DEFAULT`",
 		);
 	});
 

@@ -24,8 +24,8 @@ export type CommandEntry = {
  */
 export const commandManifest: CommandEntry[] = [
 	{
-		command: "auth",
-		aliases: ["login"],
+		command: "login",
+		aliases: ["auth"],
 		describe:
 			"Sign in with a browser. See --help for API keys and profiles",
 		load: () => import("./auth.js"),

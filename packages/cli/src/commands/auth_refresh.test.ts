@@ -205,7 +205,7 @@ describe("an expired session", () => {
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("invalid_grant");
-		expect(result.stderr).toContain("neon auth --profile");
+		expect(result.stderr).toContain("neon login --profile");
 		expect(result.stderr).not.toContain(
 			"Cannot run interactive auth in CI",
 		);
