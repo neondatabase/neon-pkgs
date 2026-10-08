@@ -219,8 +219,8 @@ uses a fresh request and live ID and installs a new baseline.
 
 A retry with a hint never runs before it. With the hint `h` (at least 100 ms),
 the SDK waits a random time in `[h, max(h, min(2h, cap))]`, which spreads
-clients across the service's ramp-up. `cap` defaults to 30 seconds and is set
-with `reconnect.overloadJitterCapMs`. Without a hint, retries use equal-jitter
+clients across the service's ramp-up. `cap` is 30 seconds. Hints support the full
+unsigned 32-bit millisecond range. Without a hint, retries use equal-jitter
 delays that start at 0.5–1 second, grow exponentially, and cap at 30–60 seconds.
 
 All retries of a subscription share one recovery episode: hint-paced retries

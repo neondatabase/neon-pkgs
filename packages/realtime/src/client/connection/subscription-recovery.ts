@@ -5,6 +5,7 @@ import {
 	type ReconnectOptions,
 	type ReconnectTimer,
 } from "./reconnect.js";
+import { setDeadlineTimer } from "./timer.js";
 
 interface RecoveryEpisode {
 	readonly backoff: ReconnectBackoff;
@@ -12,7 +13,7 @@ interface RecoveryEpisode {
 	waiting: boolean;
 	delayTimer?: ReconnectTimer;
 	stabilityTimer?: ReconnectTimer;
-	deadlineTimer?: ReturnType<typeof setTimeout>;
+	deadlineTimer?: ReconnectTimer;
 }
 
 export interface SubscriptionRecoveryCallbacks {
@@ -50,10 +51,7 @@ export class SubscriptionRecovery {
 				waiting: false,
 			};
 			episode.error = error;
-			attempt =
-				retryAfterMs !== undefined
-					? episode.backoff.nextAfterHint(retryAfterMs)
-					: episode.backoff.next();
+			attempt = episode.backoff.next(retryAfterMs);
 		} catch {
 			this.cancel();
 			return false;
@@ -71,7 +69,7 @@ export class SubscriptionRecovery {
 		) {
 			// Custom backoff timers cannot disable the absolute elapsed-time bound,
 			// including while admission or a complete baseline is still pending.
-			episode.deadlineTimer = setTimeout(() => {
+			episode.deadlineTimer = setDeadlineTimer(() => {
 				if (this.episode !== episode) return;
 				this.cancel();
 				this.callbacks.exhausted(episode.error);
@@ -121,7 +119,6 @@ export class SubscriptionRecovery {
 		this.episode = undefined;
 		if (episode.delayTimer !== undefined)
 			episode.backoff.clearTimer(episode.delayTimer);
-		if (episode.deadlineTimer !== undefined)
-			clearTimeout(episode.deadlineTimer);
+		if (episode.deadlineTimer !== undefined) episode.deadlineTimer();
 	}
 }

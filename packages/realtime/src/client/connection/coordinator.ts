@@ -24,6 +24,7 @@ import {
 	type ReconnectTimer,
 } from "./reconnect.js";
 import { SubscriptionRecovery } from "./subscription-recovery.js";
+import { setDeadlineTimer } from "./timer.js";
 
 const SOCKET_CONNECTING = 0;
 const SOCKET_OPEN = 1;
@@ -154,7 +155,7 @@ export class ConnectionCoordinator {
 	private readonly events: ClientEventSink;
 	private socket?: WebSocketLike;
 	private reconnectTimer?: ReconnectTimer;
-	private reconnectDeadlineTimer?: ReturnType<typeof setTimeout>;
+	private reconnectDeadlineTimer?: ReconnectTimer;
 	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
@@ -428,13 +429,7 @@ export class ConnectionCoordinator {
 				this.unsubscribed(message.live_id);
 				return;
 			case "subscription_error":
-				this.subscriptionError(
-					message.live_id,
-					message.code,
-					message.message,
-					message.sqlstate,
-					message.retry_after_ms,
-				);
+				this.subscriptionError(message);
 				return;
 			case "connection_error":
 				this.connectionError(message.code, message.message);
@@ -507,7 +502,8 @@ export class ConnectionCoordinator {
 			epoch: message.epoch,
 			firstSequence: message.first_sequence,
 			columnCount: message.columns.length,
-			target: this.subscriptionReconciliation(subscription),
+			target: subscription.callbacks.reconciliation,
+			lifecycle: subscription.recovery,
 		});
 		if (acceptedCapability === subscription.query.capability) {
 			this.resolveRenewals(subscription);
@@ -533,12 +529,7 @@ export class ConnectionCoordinator {
 			message.code === "backend_unavailable" ||
 			message.code === "resource_exhausted"
 		) {
-			this.retrySubscription(
-				subscription,
-				message.code,
-				message.message,
-				message.retry_after_ms,
-			);
+			this.retrySubscription(subscription, message);
 			return;
 		}
 		const replacementRequired = requiresReplacementQuery(message.code);
@@ -588,26 +579,23 @@ export class ConnectionCoordinator {
 	}
 
 	private subscriptionError(
-		liveId: string,
-		code: string,
-		message: string,
-		sqlState?: string,
-		retryAfterMs?: number,
+		message: Extract<ServerMessage, { type: "subscription_error" }>,
 	): void {
+		const { live_id: liveId, code, sqlstate: sqlState } = message;
 		// Cancellation can already be queued when we unsubscribe a late admission.
 		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
 		if (code === "backend_overloaded" || code === "upstream_cancelled") {
-			this.retrySubscription(subscription, code, message, retryAfterMs);
+			this.retrySubscription(subscription, message);
 			return;
 		}
 		const replacementRequired = requiresReplacementQuery(code);
 		const error = new ConnectionCoordinatorError(
 			code,
 			replacementRequired,
-			message,
+			message.message,
 			{ sqlState },
 		);
 		if (replacementRequired) {
@@ -624,12 +612,18 @@ export class ConnectionCoordinator {
 	/** Retry subscribe_rejected and subscription_error with optional hint. */
 	private retrySubscription(
 		subscription: ManagedSubscription,
-		code: string,
-		message: string,
-		retryAfterMs?: number,
+		message: Extract<
+			ServerMessage,
+			{ type: "subscribe_rejected" | "subscription_error" }
+		>,
 	): void {
-		const error = new ConnectionCoordinatorError(code, false, message);
-		if (!subscription.recovery.retry(error, retryAfterMs)) {
+		const error = new ConnectionCoordinatorError(
+			message.code,
+			false,
+			message.message,
+			{ sqlState: message.sqlstate },
+		);
+		if (!subscription.recovery.retry(error, message.retry_after_ms)) {
 			this.failSubscription(subscription, error);
 			return;
 		}
@@ -641,30 +635,6 @@ export class ConnectionCoordinator {
 		}
 		subscription.resetWire();
 		subscription.callbacks.disconnected();
-	}
-
-	private subscriptionReconciliation(
-		subscription: ManagedSubscription,
-	): ReconciliationTarget {
-		const target = subscription.callbacks.reconciliation;
-		return {
-			baselineSyncStarted: () => target.baselineSyncStarted(),
-			installReset: (rows) => target.installReset(rows),
-			applyBatch: (batch) => target.applyBatch(batch),
-			publishReset: (rows, mvcc) => target.publishReset(rows, mvcc),
-			publishBatch: (batch) => target.publishBatch(batch),
-			baselineSyncCompleted: (count) =>
-				target.baselineSyncCompleted(count),
-			decodeFailed: (error) => target.decodeFailed(error),
-			caughtUp: () => {
-				subscription.recovery.baselineCompleted();
-				target.caughtUp();
-			},
-			resetRequired: () => {
-				subscription.recovery.interrupted();
-				target.resetRequired();
-			},
-		};
 	}
 
 	private connectionError(code: string, message: string): void {
@@ -787,7 +757,7 @@ export class ConnectionCoordinator {
 			const episodeGeneration = ++this.reconnectEpisodeGeneration;
 			// Keep the absolute safety bound on the host clock. An injected,
 			// accelerated backoff timer must not disable or distort it.
-			this.reconnectDeadlineTimer = setTimeout(() => {
+			this.reconnectDeadlineTimer = setDeadlineTimer(() => {
 				this.reconnectDeadlineTimer = undefined;
 				if (
 					episodeGeneration === this.reconnectEpisodeGeneration &&
@@ -1019,7 +989,7 @@ export class ConnectionCoordinator {
 	private cancelReconnectDeadline(): void {
 		this.reconnectEpisodeGeneration += 1;
 		if (this.reconnectDeadlineTimer !== undefined) {
-			clearTimeout(this.reconnectDeadlineTimer);
+			this.reconnectDeadlineTimer();
 		}
 		this.reconnectDeadlineTimer = undefined;
 	}

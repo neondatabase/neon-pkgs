@@ -81,19 +81,34 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
-	it("keeps rows stale through shedding and admission rejection, then installs a fresh baseline", async () => {
+	it.each([
+		"upstream_cancelled",
+		"backend_overloaded",
+	])("keeps rows and transaction waits through %s and admission rejection", async (code) => {
 		vi.useFakeTimers();
 		useFakeWebSocket();
+		const random = vi.spyOn(Math, "random").mockReturnValue(0);
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
 		try {
 			const subscription = client.subscribe(query("initial"));
 			const socket = connectAndAdmit();
 			baselineSync(socket, "before");
+			let confirmed = false;
+			const confirmation = subscription.awaitTxId("42").then(() => {
+				confirmed = true;
+			});
+			const proof = {
+				type: "progress",
+				mvcc: { xmin: "43", xmax: "43", xip: [] },
+			};
 			socket.receive({
 				type: "subscription_error",
 				live_id: "41",
-				code: "upstream_cancelled",
-				message: "upstream cancelled",
+				code,
+				message: code,
+				...(code === "backend_overloaded"
+					? { retry_after_ms: 500 }
+					: {}),
 			});
 			expect(subscription.getSnapshot()).toMatchObject({
 				status: "stale",
@@ -104,25 +119,28 @@ describe("RealtimeClient", () => {
 			expect(
 				socket.sent.filter((message) => message.type === "subscribe"),
 			).toHaveLength(1);
-			await vi.advanceTimersByTimeAsync(501);
+			socket.receive(proof);
+			await vi.advanceTimersByTimeAsync(1);
+			expect(confirmed).toBe(false);
 			const retry = defined(socket.sent.at(-1));
 			expect(retry).toMatchObject({ type: "subscribe", request_id: "2" });
 			socket.receive({
 				type: "subscribe_rejected",
 				request_id: "2",
-				code: "backend_unavailable",
-				message: "backend unavailable",
+				code: "backend_overloaded",
+				message: "backend overloaded",
+				retry_after_ms: 2_000,
 			});
 			expect(subscription.getSnapshot()).toMatchObject({
 				status: "stale",
 				data: [{ id: 1, title: "before" }],
 				error: undefined,
 			});
-			await vi.advanceTimersByTimeAsync(999);
+			await vi.advanceTimersByTimeAsync(1_999);
 			expect(
 				socket.sent.filter((message) => message.type === "subscribe"),
 			).toHaveLength(2);
-			await vi.advanceTimersByTimeAsync(1_001);
+			await vi.advanceTimersByTimeAsync(1);
 			socket.receive({
 				type: "subscribed",
 				request_id: "3",
@@ -139,15 +157,23 @@ describe("RealtimeClient", () => {
 					},
 				],
 			});
+			socket.receive(proof);
 			baselineSync(socket, "after", "42");
 			expect(subscription.getSnapshot()).toMatchObject({
 				status: "live",
 				data: [{ id: 1, title: "after" }],
 				error: undefined,
 			});
+			await Promise.resolve();
+			expect(confirmed).toBe(false);
+			socket.receive(proof);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(confirmed).toBe(true);
+			await confirmation;
 			expect(FakeWebSocket.instances).toHaveLength(1);
 		} finally {
 			client.close();
+			random.mockRestore();
 			vi.useRealTimers();
 		}
 	});

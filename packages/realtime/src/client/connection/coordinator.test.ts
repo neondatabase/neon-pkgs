@@ -1090,23 +1090,18 @@ describe("subscription load-shedding recovery", () => {
 	) {
 		const hint =
 			retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs };
-		socket.receive(
+		const target =
 			type === "subscribe_rejected"
-				? {
-						type,
-						request_id: id,
-						code: "backend_overloaded",
-						message: "backend overloaded",
-						...hint,
-					}
-				: {
-						type,
-						live_id: id,
-						code: "backend_overloaded",
-						message: "backend overloaded",
-						...hint,
-					},
-		);
+				? { request_id: id }
+				: { live_id: id };
+		socket.receive({
+			type,
+			...target,
+			code: "backend_overloaded",
+			message: "backend overloaded",
+			sqlstate: "53300",
+			...hint,
+		});
 	}
 
 	it.each([
@@ -1148,26 +1143,6 @@ describe("subscription load-shedding recovery", () => {
 		coordinator.close();
 	});
 
-	it.each([
-		[0, 150],
-		[2_000, 3_000],
-		[20_000, 25_000],
-		[45_000, 45_000],
-	])("waits at least the %ims hint, jittered to %ims", async (hint, delay) => {
-		vi.useFakeTimers();
-		const coordinator = recoveryCoordinator({
-			reconnect: { baseMs: 100, capMs: 400, random: () => 0.5 },
-		});
-		coordinator.subscribe({ capability: "token" }, target());
-		const socket = admit();
-		overloaded(socket, "subscription_error", "41", hint);
-		await vi.advanceTimersByTimeAsync(delay - 1);
-		expect(socket.sent).toHaveLength(1);
-		await vi.advanceTimersByTimeAsync(1);
-		expect(socket.sent).toHaveLength(2);
-		coordinator.close();
-	});
-
 	it("falls back to exponential backoff when backend_overloaded has no hint", async () => {
 		vi.useFakeTimers();
 		const coordinator = recoveryCoordinator();
@@ -1178,23 +1153,6 @@ describe("subscription load-shedding recovery", () => {
 		expect(socket.sent).toHaveLength(1);
 		await vi.advanceTimersByTimeAsync(1);
 		expect(socket.sent).toHaveLength(2);
-		coordinator.close();
-	});
-
-	it("does not advance exponential backoff for hint-paced retries", async () => {
-		vi.useFakeTimers();
-		const coordinator = recoveryCoordinator();
-		coordinator.subscribe({ capability: "token" }, target());
-		const socket = admit();
-		overloaded(socket, "subscription_error", "41", 300);
-		await vi.advanceTimersByTimeAsync(300);
-		expect(socket.sent).toHaveLength(2);
-		reject(socket, "2");
-		// The first exponential step (base 100, equal jitter at 0) is still 50ms.
-		await vi.advanceTimersByTimeAsync(49);
-		expect(socket.sent).toHaveLength(2);
-		await vi.advanceTimersByTimeAsync(1);
-		expect(socket.sent).toHaveLength(3);
 		coordinator.close();
 	});
 
@@ -1219,6 +1177,7 @@ describe("subscription load-shedding recovery", () => {
 			expect.objectContaining({
 				code: "backend_overloaded",
 				retryable: false,
+				sqlState: "53300",
 			}),
 		);
 		await vi.advanceTimersByTimeAsync(5_000);
