@@ -1,5 +1,18 @@
 # neon
 
+## 8.2.0
+
+### Minor Changes
+
+- 615f02a: `neon deploy` and `neon config apply` ask before applying to a protected branch or overriding settings the branch already has, and show the settings they would override. Without a terminal, or with `-o json|yaml`, they exit 1 before changing anything and name the flag to pass: `--allow-protected`, `--update-existing`, or `-y` for both. Applying to a protected branch now needs that confirmation; before, `--allow-protected` had no effect and the apply went ahead. `-y` / `--yes` now covers both confirmations instead of only `--update-existing`.
+
+### Patch Changes
+
+- e6f18cc: Informational lines on stderr no longer start with `INFO:`. Results, negative answers such as `neon config status --current-branch` printing "No branch pinned", progress, and next steps print plain; only `WARNING:` and `ERROR:` keep a prefix. A failed best-effort API key revocation (for example during `neon profile remove`) now prints `WARNING:` with the command to revoke it by hand, and `neon checkout` in a terminal no longer prints `ERROR:` before asking whether to create a missing branch or link a project.
+- Updated dependencies [615f02a]
+  - @neon/config-runtime@1.8.0
+  - @neon/config@1.8.6
+
 ## 8.1.0
 
 ### Minor Changes
