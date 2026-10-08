@@ -1,5 +1,16 @@
 # @neondatabase/config-runtime
 
+## 1.8.0
+
+### Minor Changes
+
+- 615f02a: `apply()` accepts `confirm` and `beforeMutations`, and the `confirm` context carries `overrides`: the settings that would be overridden, as current → desired. `beforeMutations` runs once after confirmation and before the first change. `PushAbortedError` names the `--allow-protected` flag.
+
+### Patch Changes
+
+- Updated dependencies [615f02a]
+  - @neon/config@1.8.6
+
 ## 1.7.7
 
 ### Patch Changes
