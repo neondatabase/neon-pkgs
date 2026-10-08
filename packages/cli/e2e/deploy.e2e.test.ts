@@ -13,6 +13,7 @@ import {
 	requireApiKey,
 } from "@neon/e2e-harness";
 import { spawn as spawnPty } from "node-pty";
+import stripAnsi from "strip-ansi";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
 	createProject,
@@ -116,10 +117,12 @@ describe.sequential("e2e — neon deploy confirmations against the real API", ()
 				cols: 200,
 				rows: 40,
 				cwd,
-				env: { ...process.env, CI: "", NO_COLOR: "1" } as Record<
-					string,
-					string
-				>,
+				env: {
+					...process.env,
+					CI: "",
+					NO_COLOR: "1",
+					FORCE_COLOR: "0",
+				} as Record<string, string>,
 			},
 		);
 		return new Promise((resolvePromise, reject) => {
@@ -131,14 +134,14 @@ describe.sequential("e2e — neon deploy confirmations against the real API", ()
 			}, 120_000);
 			term.onData((data) => {
 				output += data;
-				if (!answered && /\? .*› /.test(output)) {
+				if (!answered && /\? .*› /.test(stripAnsi(output))) {
 					answered = true;
 					term.write(answer);
 				}
 			});
 			term.onExit(({ exitCode }) => {
 				clearTimeout(timer);
-				resolvePromise({ code: exitCode, output });
+				resolvePromise({ code: exitCode, output: stripAnsi(output) });
 			});
 		});
 	};
