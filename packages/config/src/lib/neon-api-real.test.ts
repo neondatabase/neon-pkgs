@@ -1,9 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { ErrorCode, PlatformError } from "./errors.js";
 import {
 	buildFunctionDeployForm,
 	collectCursorPages,
 	createNeonAuthRestInput,
+	createRealNeonApi,
 	customDomainsUnavailableError,
 	isPreviewFeatureUnavailable,
 	previewUnavailableError,
@@ -12,6 +13,87 @@ import {
 } from "./neon-api-real.js";
 
 const FAST_CONFIG = { maxAttempts: 5, initialDelayMs: 1, maxDelayMs: 4 };
+
+describe("Realtime adapter", () => {
+	test("maps the generated GET/POST/DELETE operations", async () => {
+		const requests: Array<{
+			method: string;
+			url: string;
+			body: unknown;
+		}> = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+				const request =
+					input instanceof Request ? input : new Request(input, init);
+				const text = await request.clone().text();
+				requests.push({
+					method: request.method,
+					url: request.url,
+					body: text === "" ? undefined : JSON.parse(text),
+				});
+				if (request.method === "GET") {
+					return new Response(
+						JSON.stringify({
+							enabled: true,
+							pending: false,
+							invocation_url:
+								"https://br-main.realtime.example.com",
+							revision: 3,
+							allowed_origins: ["https://app.example.com"],
+						}),
+						{
+							status: 200,
+							headers: { "Content-Type": "application/json" },
+						},
+					);
+				}
+				return new Response(null, { status: 202 });
+			}),
+		);
+		try {
+			const api = createRealNeonApi({
+				apiKey: "test-key",
+				baseUrl: "https://api.example.test/api/v2",
+			});
+			await expect(
+				api.getProjectBranchRealtime?.("proj-one", "br-main"),
+			).resolves.toEqual({
+				enabled: true,
+				pending: false,
+				invocationUrl: "https://br-main.realtime.example.com",
+				revision: 3,
+				allowedOrigins: ["https://app.example.com"],
+			});
+			await api.enableProjectBranchRealtime?.("proj-one", "br-main", {
+				allowedOrigins: ["https://app.example.com"],
+			});
+			await api.disableProjectBranchRealtime?.("proj-one", "br-main");
+
+			expect(requests).toEqual([
+				{
+					method: "GET",
+					url: "https://api.example.test/api/v2/projects/proj-one/branches/br-main/realtime",
+					body: undefined,
+				},
+				{
+					method: "POST",
+					url: "https://api.example.test/api/v2/projects/proj-one/branches/br-main/realtime",
+					body: {
+						allowed_origins: ["https://app.example.com"],
+					},
+				},
+				{
+					method: "DELETE",
+					url: "https://api.example.test/api/v2/projects/proj-one/branches/br-main/realtime",
+					body: undefined,
+				},
+			]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+});
 
 describe("retryOnLocked", () => {
 	test("returns the value when the call succeeds on the first try", async () => {

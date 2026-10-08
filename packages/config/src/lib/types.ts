@@ -1139,6 +1139,10 @@ export interface ResolvedBranchConfig {
 	ttlSeconds?: number;
 	protected?: boolean;
 	postgres?: PostgresConfig;
+	/** Optional for compatibility with hand-built configs. */
+	realtimePolicy?: "omitted" | "enabled" | "disabled";
+	/** Realtime options to apply when {@link realtimePolicy} is `"enabled"`. */
+	realtime?: RealtimeConfig;
 	authEnabled: boolean;
 	dataApiEnabled: boolean;
 	/** Optional for compatibility with hand-built configs. */

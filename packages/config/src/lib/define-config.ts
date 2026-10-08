@@ -24,6 +24,7 @@ import type {
 	FunctionTriggerDef,
 	FunctionTuning,
 	PreviewInput,
+	RealtimeConfig,
 	RealtimeInput,
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
@@ -241,6 +242,12 @@ export function resolveConfig(
 	const tuning = evaluateBranchTuning(config.branch, branch);
 
 	const resolved: ResolvedBranchConfig = {
+		realtimePolicy:
+			config.realtime === undefined
+				? "omitted"
+				: isRealtimeEnabled(config.realtime)
+					? "enabled"
+					: "disabled",
 		authEnabled: isServiceEnabled(config.auth),
 		dataApiEnabled: isDataApiEnabled(config.dataApi),
 		dataApiPolicy:
@@ -250,6 +257,8 @@ export function resolveConfig(
 					? "enabled"
 					: "disabled",
 	};
+	const realtime = resolveRealtime(config.realtime);
+	if (realtime) resolved.realtime = realtime;
 	const dataApi = resolveDataApi(config.dataApi);
 	if (dataApi) resolved.dataApi = dataApi;
 	if (tuning.parent !== undefined) resolved.parent = tuning.parent;
@@ -307,6 +316,25 @@ function isServiceEnabled(toggle: ServiceToggleInput | undefined): boolean {
 	if (toggle === undefined) return false;
 	if (typeof toggle === "boolean") return toggle;
 	return toggle.enabled !== false;
+}
+
+/** Whether a {@link RealtimeInput} is enabled (present object or `true`). */
+function isRealtimeEnabled(input: RealtimeInput | undefined): boolean {
+	if (input === undefined) return false;
+	if (typeof input === "boolean") return input;
+	return true;
+}
+
+/** Copy the options from an object-form {@link RealtimeInput}. */
+function resolveRealtime(
+	input: RealtimeInput | undefined,
+): RealtimeConfig | undefined {
+	if (typeof input !== "object") return undefined;
+	return {
+		...(input.allowedOrigins !== undefined
+			? { allowedOrigins: [...input.allowedOrigins] }
+			: {}),
+	};
 }
 
 /** Whether a {@link DataApiInput} is enabled (present object/`true` unless `enabled: false`). */
