@@ -112,11 +112,13 @@ export const retirePreviousCredential = async (
 			apiKey: existing.apiKey,
 			apiHost: props.apiHost,
 		});
-		log.info(
-			(await withdrawKey(client, existing.scope, existing.keyId))
-				? `Revoked the key it replaces (id ${existing.keyId})`
-				: `Could not revoke the key it replaces (id ${existing.keyId}); it may still be live. Remove it with: neon api-keys revoke ${existing.keyId}`,
-		);
+		if (await withdrawKey(client, existing.scope, existing.keyId)) {
+			log.info(`Revoked the key it replaces (id ${existing.keyId})`);
+		} else {
+			log.warning(
+				`Could not revoke the key it replaces (id ${existing.keyId}); it may still be live. Remove it with: neon api-keys revoke ${existing.keyId}`,
+			);
+		}
 		return;
 	}
 
@@ -142,7 +144,7 @@ export const withdrawKey = async (
 		// A true response for another id does not prove this key was revoked.
 		return data.revoked === true && data.id === keyId;
 	} catch (err) {
-		log.error(
+		log.warning(
 			"Failed to revoke API key %d: %s",
 			keyId,
 			err instanceof Error ? err.message : String(err),

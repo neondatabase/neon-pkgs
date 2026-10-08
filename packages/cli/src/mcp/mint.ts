@@ -37,7 +37,7 @@ const withdraw = async (
 			: await client.revokeApiKey(keyId);
 		return data.revoked === true && data.id === keyId;
 	} catch (err) {
-		log.error(
+		log.warning(
 			"Failed to revoke API key %d: %s",
 			keyId,
 			err instanceof Error ? err.message : String(err),

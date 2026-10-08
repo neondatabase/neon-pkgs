@@ -18,7 +18,10 @@ layout there, not in a command.
 
 ## Message prefixes
 
-A prefix tells the reader a line needs attention. Only two lines get one:
+This covers diagnostic messages on stderr. Command results that go through `writer` stay on
+stdout, and `DEBUG:` lines only appear when the `DEBUG` environment variable is set.
+
+A prefix tells the reader a line needs attention. Only two kinds of line get one:
 
 | Prefix | When | How |
 | --- | --- | --- |
