@@ -30,7 +30,7 @@ export const resolveInitConfigChoice = (input: {
 		return { kind: "write", services: input.services };
 	}
 	if (input.yes) {
-		return { kind: "write", services: ["none"] };
+		return { kind: "write", services: ["postgres"] };
 	}
 	if (input.flag === true) {
 		return { kind: "write" };
@@ -52,15 +52,6 @@ export const configPlanFromResolution = (
 		return { kind: "skip" };
 	}
 	return resolution;
-};
-
-export const isBareInitServices = (
-	services: readonly string[] | undefined,
-): boolean => {
-	if (services === undefined || services.length === 0) {
-		return true;
-	}
-	return services.every((service) => service === "none");
 };
 
 export const shouldRefreshEnvAfterNewConfig = (input: {

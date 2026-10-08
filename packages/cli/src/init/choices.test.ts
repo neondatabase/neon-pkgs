@@ -97,7 +97,7 @@ describe("resolveInitConfigChoice", () => {
 				canAsk: false,
 				existingConfig: false,
 			}),
-		).toEqual({ kind: "write", services: ["none"] });
+		).toEqual({ kind: "write", services: ["postgres"] });
 	});
 
 	test("-y writes starter policy", () => {
@@ -108,7 +108,7 @@ describe("resolveInitConfigChoice", () => {
 				canAsk: false,
 				existingConfig: false,
 			}),
-		).toEqual({ kind: "write", services: ["none"] });
+		).toEqual({ kind: "write", services: ["postgres"] });
 	});
 
 	test("omitted in a TTY asks once", () => {
@@ -159,10 +159,10 @@ describe("configPlanFromResolution", () => {
 		});
 		expect(
 			configPlanFromResolution(
-				{ kind: "write", services: ["none"] },
+				{ kind: "write", services: ["postgres"] },
 				false,
 			),
-		).toEqual({ kind: "write", services: ["none"] });
+		).toEqual({ kind: "write", services: ["postgres"] });
 	});
 });
 

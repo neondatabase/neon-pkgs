@@ -3,6 +3,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -227,7 +228,7 @@ describe("init handler", () => {
 			expect.objectContaining({
 				cwd,
 				install: true,
-				services: ["none"],
+				services: ["postgres"],
 			}),
 		);
 		expect(stdoutText(stdout)).toContain(
@@ -239,6 +240,38 @@ describe("init handler", () => {
 			init_kind: "empty-skip",
 			agent_setup: "skills",
 		});
+	});
+
+	test("--services postgres writes the starter neon.ts through config init", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-services-"));
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { initCmd } = await import("./config.js");
+		const { renderNeonConfig } = await import("../config_template.js");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				services: ["postgres"],
+				contextFile: join(cwd, ".neon"),
+				initConfig: async (input: {
+					cwd: string;
+					services?: readonly string[];
+				}) =>
+					initCmd({
+						cwd: input.cwd,
+						install: false,
+						silent: true,
+						...(input.services ? { services: input.services } : {}),
+					}),
+			}),
+		);
+
+		expect(readFileSync(join(cwd, "neon.ts"), "utf8")).toBe(
+			renderNeonConfig([]),
+		);
 	});
 
 	test("empty -y without auth skips link and prints the next step", async () => {
@@ -1762,10 +1795,10 @@ describe("init flag parsing", () => {
 		).toBe(false);
 	});
 
-	test("--services none is the raw none token", async () => {
+	test("--services postgres is the raw postgres token", async () => {
 		const argv = (await builder(
 			yargs().scriptName("neon").exitProcess(false),
-		).parseAsync(["--services", "none"])) as { services?: unknown };
-		expect(argv.services).toEqual(["none"]);
+		).parseAsync(["--services", "postgres"])) as { services?: unknown };
+		expect(argv.services).toEqual(["postgres"]);
 	});
 });

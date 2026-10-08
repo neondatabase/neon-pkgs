@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-	CONFIG_INIT_NONE_MEANS,
 	CONFIG_INIT_SERVICES,
-	CONFIG_INIT_UNAVAILABLE,
+	parseConfigInitServices,
 } from "./config_template.js";
 import {
 	ENV_PULL_SERVICES,
@@ -22,12 +21,10 @@ const envPull = {
 	allowed: ENV_PULL_SERVICES,
 	flag: "--service",
 };
-/** The config-init selection, which is the one that accepts `none`. */
-const configInit = {
+/** A command that offers fewer services than env pull, to exercise refusals. */
+const addOnsOnly = {
 	allowed: CONFIG_INIT_SERVICES,
-	whyUnavailable: CONFIG_INIT_UNAVAILABLE,
 	flag: "--services",
-	noneMeans: CONFIG_INIT_NONE_MEANS,
 };
 
 describe("the service vocabulary", () => {
@@ -102,18 +99,14 @@ describe("parseServices", () => {
 	});
 
 	it("says a real service is not selectable here, rather than calling it unknown", () => {
-		expect(() => parseServices(["postgres"], configInit)).toThrow(
-			/postgres is not something --services can select: every branch has Postgres/,
+		expect(() => parseServices(["postgres"], addOnsOnly)).toThrow(
+			/postgres is not something --services can select\./,
 		);
 	});
 
-	it("accepts data-api on config init", () => {
-		expect(parseServices(["data-api"], configInit)).toEqual(["data-api"]);
-	});
-
 	it("reports a typo and an unselectable service separately in one message", () => {
-		expect(() => parseServices(["nope", "postgres"], configInit)).toThrow(
-			/Unknown service nope\. postgres is not something --services can select:/,
+		expect(() => parseServices(["nope", "postgres"], addOnsOnly)).toThrow(
+			/Unknown service nope\. postgres is not something --services can select\./,
 		);
 	});
 
@@ -122,7 +115,7 @@ describe("parseServices", () => {
 			const onDeprecated = vi.fn();
 			expect(
 				parseServices(["storage", "auth"], {
-					...configInit,
+					...addOnsOnly,
 					onDeprecated,
 				}),
 			).toEqual(["auth", "object-storage"]);
@@ -161,49 +154,45 @@ describe("parseServices", () => {
 				parseServices(["storage"], {
 					allowed: ["postgres"],
 					flag: "--service",
-					whyUnavailable: {
-						"object-storage": "this command does not touch buckets",
-					},
 				}),
-			).toThrow(
-				/object-storage is not something --service can select: this command does not touch buckets\./,
-			);
+			).toThrow(/object-storage is not something --service can select\./);
 		});
 
 		it("does not claim it still works when the run fails anyway", () => {
 			const onDeprecated = vi.fn();
 			expect(() =>
 				parseServices(["storage", "vectors"], {
-					...configInit,
+					...addOnsOnly,
 					onDeprecated,
 				}),
 			).toThrow(/Unknown service vectors/);
 			expect(onDeprecated).not.toHaveBeenCalled();
 		});
 	});
+});
 
-	describe("none", () => {
-		it("reads as an explicit empty selection where it is offered", () => {
-			expect(parseServices(["none"], configInit)).toEqual([]);
-		});
+describe("parseConfigInitServices", () => {
+	it("reads postgres alone as the starter policy, which declares nothing", () => {
+		expect(parseConfigInitServices(["postgres"])).toEqual([]);
+	});
 
-		it("cannot be combined with a real service", () => {
-			expect(() => parseServices(["none", "auth"], configInit)).toThrow(
-				/cannot be combined with other services/,
-			);
-		});
+	it("accepts postgres next to add-ons, since every branch has it", () => {
+		expect(parseConfigInitServices(["postgres,auth", "data-api"])).toEqual([
+			"auth",
+			"data-api",
+		]);
+	});
 
-		it("deduplicates like any other value, so repeating it is still none", () => {
-			expect(parseServices(["none", "none"], configInit)).toEqual([]);
-			expect(parseServices(["none,none"], configInit)).toEqual([]);
-		});
+	it("rejects none, which is not a service", () => {
+		expect(() => parseConfigInitServices(["none"])).toThrow(
+			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway.",
+		);
+	});
 
-		it("is not a service where it is not offered", () => {
-			// Pulling nothing is not a thing to ask for, so `env pull` does not accept it.
-			expect(() => parseServices(["none"], envPull)).toThrow(
-				/Unknown service none\./,
-			);
-		});
+	it("rejects an empty selection rather than reading it as Postgres-only", () => {
+		expect(() => parseConfigInitServices([" "])).toThrow(
+			/--services needs at least one service/,
+		);
 	});
 });
 
@@ -235,28 +224,16 @@ describe("servicesOption", () => {
 		expect(option.string).toBe(true);
 	});
 
-	it("documents the values it accepts, and only mentions none where it is accepted", () => {
-		expect(
-			servicesOption({
-				key: "service",
-				allowed: ENV_PULL_SERVICES,
-				describe: "Pull these",
-			}).describe,
-		).toBe(
-			"Pull these: postgres, auth, data-api, functions, object-storage, ai-gateway. " +
-				"Repeat the flag or comma-separate.",
-		);
+	it("documents the values it accepts", () => {
 		expect(
 			servicesOption({
 				key: "services",
 				allowed: CONFIG_INIT_SERVICES,
-				noneMeans: "the bare starter policy",
 				describe: "Declare these",
 				also: "Omitted: ask.",
 			}).describe,
 		).toBe(
 			"Declare these: auth, data-api, functions, object-storage, ai-gateway. " +
-				'Pass "none" for the bare starter policy. ' +
 				"Repeat the flag or comma-separate. Omitted: ask.",
 		);
 	});

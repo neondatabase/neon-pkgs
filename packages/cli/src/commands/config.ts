@@ -36,12 +36,10 @@ import { type ConfigEdit, editNeonConfig } from "../config_edit.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import { declaredNeonServices } from "../config_services.js";
 import {
-	CONFIG_INIT_NONE_MEANS,
-	CONFIG_INIT_SERVICES,
-	CONFIG_INIT_UNAVAILABLE,
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
+	parseConfigInitServices,
 	REQUIRED_PACKAGES,
 	renderFunctionSource,
 	renderNeonConfig,
@@ -59,8 +57,8 @@ import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
 	NEON_SERVICE_LABELS,
+	NEON_SERVICES,
 	type NeonService,
-	parseServices,
 	servicesFlagValue,
 	servicesOption,
 } from "../neon_services.js";
@@ -316,8 +314,8 @@ export type ConfigInitProps = {
 	/** Nested callers print their own progress and next steps. */
 	silent?: boolean;
 	/**
-	 * Raw `--services` values: {@link CONFIG_INIT_SERVICES} names, repeated and/or
-	 * comma-separated, or `none` for the bare starter policy. When omitted,
+	 * Raw `--services` values, repeated and/or comma-separated, as
+	 * {@link parseConfigInitServices} reads them. When omitted,
 	 * {@link resolveServices} picks interactively on a TTY and falls back to the starter
 	 * policy otherwise.
 	 */
@@ -354,14 +352,9 @@ const resolveServices = async (
 	props: ConfigInitProps,
 ): Promise<NeonService[]> => {
 	if (props.services !== undefined) {
-		return parseServices(props.services, {
-			allowed: CONFIG_INIT_SERVICES,
-			whyUnavailable: CONFIG_INIT_UNAVAILABLE,
-			flag: "--services",
-			noneMeans: CONFIG_INIT_NONE_MEANS,
-			onDeprecated: (used, canonical) =>
-				log.warning(deprecatedServiceMessage(used, canonical)),
-		});
+		return parseConfigInitServices(props.services, (used, canonical) =>
+			log.warning(deprecatedServiceMessage(used, canonical)),
+		);
 	}
 	if (props.pickServices) {
 		return props.pickServices();
@@ -1016,10 +1009,10 @@ export const builder = (argv: yargs.Argv) =>
 					},
 					services: servicesOption({
 						key: "services",
-						allowed: CONFIG_INIT_SERVICES,
-						noneMeans: CONFIG_INIT_NONE_MEANS,
+						allowed: NEON_SERVICES,
 						describe: "Services the scaffolded neon.ts declares",
 						also:
+							"postgres alone writes the starter policy; every branch has Postgres. " +
 							"Omitted: pick interactively on a terminal, starter policy in " +
 							"CI or without a TTY.",
 					}),

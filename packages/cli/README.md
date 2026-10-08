@@ -658,12 +658,14 @@ neon config init --services data-api
 # Repeat the flag instead, and shorten it — every services flag takes all three spellings
 neon config init -s auth -s functions
 
-# Explicitly ask for the bare starter policy
-neon config init --services none
+# Postgres only: the starter policy, with no prompt
+neon config init --services postgres
 
 # Scaffold but print the install command instead of running it
 neon config init --no-install
 ```
+
+`postgres` declares nothing, since every branch has Postgres, so it can stand alone or sit next to other services. `neon init --services` takes the same values.
 
 Object storage is spelled `object-storage` here, matching [`env pull --service`](#env-pull) and the rest of the CLI. The old `storage` still works and warns; it will be removed.
 
