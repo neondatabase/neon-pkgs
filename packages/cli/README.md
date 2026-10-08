@@ -667,7 +667,7 @@ neon config init --no-install
 
 `postgres` declares nothing, since every branch has Postgres, so it can stand alone or sit next to other services. `neon init --services` takes the same values.
 
-Object storage is spelled `object-storage` here, matching [`env pull --service`](#env-pull) and the rest of the CLI. The old `storage` still works and warns; it will be removed. The same goes for `none`, the old spelling of `postgres`.
+Object storage is spelled `object-storage` here, matching [`env pull --service`](#env-pull) and the rest of the CLI. The old `storage` still works and warns; it will be removed.
 
 Choosing **Functions** also writes the handler the policy points at, since `source` is only resolved when `apply` bundles it — a declared function with no file on disk fails at deploy:
 

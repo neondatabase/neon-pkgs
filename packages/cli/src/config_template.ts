@@ -34,7 +34,7 @@ export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
 /**
  * Parse `--services` on `init` and `config init` into the services to declare. `postgres` is
  * accepted, alone or with others, and declares nothing: `--services postgres` is how a
- * script asks for the Postgres-only starter policy. `none` is the old spelling of that.
+ * script asks for the Postgres-only starter policy.
  */
 export const parseConfigInitServices = (
 	raw: readonly string[],
@@ -43,7 +43,6 @@ export const parseConfigInitServices = (
 	parseServices(raw, {
 		allowed: NEON_SERVICES,
 		flag: "--services",
-		deprecatedAliases: { none: "postgres" },
 		...(onDeprecated ? { onDeprecated } : {}),
 	}).filter((service) => service !== "postgres");
 

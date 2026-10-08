@@ -64,11 +64,6 @@ export type ParseServicesOptions = {
 	allowed: readonly NeonService[];
 	/** The flag being parsed, for error messages. */
 	flag: string;
-	/**
-	 * Retired spellings only this command accepts, on top of the CLI-wide ones. Same
-	 * treatment: resolved, warned about, and never listed as a supported value.
-	 */
-	deprecatedAliases?: Readonly<Record<string, NeonService>>;
 	/** Called once per deprecated spelling used, so the command can warn in its own voice. */
 	onDeprecated?: (used: string, canonical: NeonService) => void;
 };
@@ -90,8 +85,7 @@ export const parseServices = (
 	raw: readonly string[],
 	options: ParseServicesOptions,
 ): NeonService[] => {
-	const { allowed, flag, deprecatedAliases, onDeprecated } = options;
-	const aliases = { ...DEPRECATED_SERVICE_ALIASES, ...deprecatedAliases };
+	const { allowed, flag, onDeprecated } = options;
 	const supported = `Supported values: ${allowed.join(", ")}.`;
 
 	const names = raw
@@ -107,7 +101,7 @@ export const parseServices = (
 	// service it means rather than as a word nobody recognizes.
 	const deprecated = new Map<string, NeonService>();
 	const resolved = names.map((name) => {
-		const canonical = aliases[name];
+		const canonical = DEPRECATED_SERVICE_ALIASES[name];
 		if (canonical === undefined) return name;
 		deprecated.set(name, canonical);
 		return canonical;

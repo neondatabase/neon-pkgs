@@ -169,12 +169,6 @@ describe("parseServices", () => {
 			expect(onDeprecated).not.toHaveBeenCalled();
 		});
 	});
-
-	it("is not a service where no command-scoped alias offers it", () => {
-		expect(() => parseServices(["none"], envPull)).toThrow(
-			/Unknown service none\./,
-		);
-	});
 });
 
 describe("parseConfigInitServices", () => {
@@ -189,18 +183,9 @@ describe("parseConfigInitServices", () => {
 		]);
 	});
 
-	it("still accepts the retired none, and warns once", () => {
-		const onDeprecated = vi.fn();
-		expect(parseConfigInitServices(["none", "none"], onDeprecated)).toEqual(
-			[],
-		);
-		expect(onDeprecated).toHaveBeenCalledTimes(1);
-		expect(onDeprecated).toHaveBeenCalledWith("none", "postgres");
-	});
-
-	it("lists postgres, and not none, as a supported value", () => {
-		expect(() => parseConfigInitServices(["nope"])).toThrow(
-			"Unknown service nope. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway.",
+	it("rejects none, which is not a service", () => {
+		expect(() => parseConfigInitServices(["none"])).toThrow(
+			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway.",
 		);
 	});
 

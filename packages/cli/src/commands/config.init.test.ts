@@ -314,13 +314,13 @@ describe("config init", () => {
 		expect(content).toContain("aiGateway: true");
 	});
 
-	test("--services none writes the same file as a non-interactive run", async () => {
+	test("--services postgres writes the same file as a non-interactive run", async () => {
 		const bare = mkdtempSync(join(tmpdir(), "neonctl-config-init-bare-"));
 		try {
 			await initCmd({
 				cwd: workspace,
 				install: false,
-				services: ["none"],
+				services: ["postgres"],
 			});
 			await initCmd({ cwd: bare, install: false });
 
@@ -417,7 +417,7 @@ describe("config init", () => {
 			expected: Record<string, unknown>;
 		}[] = [
 			{
-				services: ["none"],
+				services: ["postgres"],
 				expected: {
 					authEnabled: false,
 					dataApiEnabled: false,

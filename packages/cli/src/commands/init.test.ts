@@ -242,10 +242,7 @@ describe("init handler", () => {
 		});
 	});
 
-	test.each([
-		"postgres",
-		"none",
-	])("--services %s writes the starter neon.ts through config init", async (value) => {
+	test("--services postgres writes the starter neon.ts through config init", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-services-"));
 		vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { initCmd } = await import("./config.js");
@@ -257,7 +254,7 @@ describe("init handler", () => {
 				cwd,
 				operations: makeOperations(),
 				yes: true,
-				services: [value],
+				services: ["postgres"],
 				contextFile: join(cwd, ".neon"),
 				initConfig: async (input: {
 					cwd: string;
