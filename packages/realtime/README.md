@@ -199,6 +199,37 @@ reconnection or sealed-query renewal, existing materialized data remains
 available as `stale`. Recoverable connection failures retry with capped
 jittered backoff until the connection recovers or the client is closed.
 
+Some subscription errors also retry automatically:
+
+- `backend_overloaded` (`subscribe_rejected` or `subscription_error`): the
+  service instance is shedding load or is full. The response carries
+  `retry_after_ms`, the time until it admits that database again.
+- `subscribe_rejected` with `backend_unavailable` or `resource_exhausted` (a
+  service limit on this connection or process), and `subscription_error` with
+  `upstream_cancelled`.
+
+After `backend_overloaded`, the service may also close a connection that has no
+other subscriptions, so the client can reconnect to another instance. The
+client reconnects on its own backoff and resubscribes once the hint has passed.
+
+Only the affected subscription is retried, using the current socket and latest
+sealed query; other subscriptions keep receiving updates. Its last complete
+result remains `stale` (or `connecting` if no result has arrived). Re-admission
+uses a fresh request and live ID and installs a new baseline.
+
+A retry with a hint never runs before it. With the hint `h` (at least 100 ms),
+the SDK waits a random time in `[h, max(h, min(2h, cap))]`, which spreads
+clients across the service's ramp-up. `cap` is 30 seconds. Hints support the full
+unsigned 32-bit millisecond range. Without a hint, retries use equal-jitter
+delays that start at 0.5–1 second, grow exponentially, and cap at 30–60 seconds.
+
+All retries of a subscription share one recovery episode: hint-paced retries
+count toward the attempt and elapsed-time bounds but do not grow the
+exponential delay. Admission rejections, brief re-admissions, and socket
+reconnects do not reset the episode. It resets after a complete baseline
+remains live for 30 seconds. Unsubscribing or closing the client cancels
+pending retries.
+
 ### Client diagnostics
 
 Client diagnostics are silent by default. Set `logLevel` to write structured
@@ -228,7 +259,11 @@ Each entry has a stable `event` name:
 | `error` | `connection_failed`, `connection_reconnect_exhausted`, `subscription_failed`, `subscription_row_decoding_failed`, `query_refresh_stopped` |
 | `warn` | `connection_lost`, `query_expired`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
 | `info` | `connection_ready`, `connection_recovered`, `subscription_live`, `subscription_renewed`, `client_closed` |
-| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_heartbeat_timeout`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_baseline_sync_started`, `subscription_baseline_sync_completed`, `subscription_reset_required`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
+| `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_heartbeat_timeout`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_baseline_sync_started`, `subscription_baseline_sync_completed`, `subscription_reset_required`, `subscription_retry_scheduled`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
+
+`subscription_retry_scheduled` includes the server `code`, the one-based
+`attempt` within the recovery episode, and the next `delayMs`, so repeated
+admission rejections remain visible while a subscription stays stale.
 
 Supply `logger` to route the same structured entries into an application
 logger. `logLevel` still controls which entries it receives:

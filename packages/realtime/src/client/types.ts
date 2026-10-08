@@ -155,6 +155,14 @@ export interface RealtimeLogEventDefinition {
 		readonly level: "debug";
 		readonly metadata: SubscriptionLogMetadata;
 	};
+	readonly subscription_retry_scheduled: {
+		readonly level: "debug";
+		readonly metadata: SubscriptionLogMetadata & {
+			readonly code: string;
+			readonly attempt: number;
+			readonly delayMs: number;
+		};
+	};
 	readonly subscription_row_decoding_failed: {
 		readonly level: "error";
 		readonly metadata: SubscriptionLogMetadata & ErrorLogMetadata;

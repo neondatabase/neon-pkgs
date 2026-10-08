@@ -1,8 +1,17 @@
+import {
+	monotonicNow,
+	type ReconnectTimer,
+	setDeadlineTimer,
+} from "./timer.js";
+
+export type { ReconnectTimer } from "./timer.js";
+
 export const DEFAULT_RECONNECT_BASE_MS = 1_000;
 export const DEFAULT_RECONNECT_CAP_MS = 60_000;
 export const DEFAULT_RECONNECT_STABILITY_MS = 30_000;
 export const DEFAULT_RECONNECT_MAX_ATTEMPTS = 20;
 export const DEFAULT_RECONNECT_MAX_ELAPSED_MS = 15 * 60_000;
+export const DEFAULT_OVERLOAD_JITTER_CAP_MS = 30_000;
 
 export interface ReconnectOptions {
 	readonly baseMs?: number;
@@ -15,6 +24,12 @@ export interface ReconnectOptions {
 	readonly unbounded?: boolean;
 	readonly maxAttempts?: number;
 	readonly maxElapsedMs?: number;
+	/**
+	 * Maximum jitter ceiling for `backend_overloaded` hint-paced retries.
+	 * Applied as the cap in [hint, min(2*hint, overloadJitterCapMs)].
+	 * Default: 30 seconds.
+	 */
+	readonly overloadJitterCapMs?: number;
 	readonly random?: () => number;
 	readonly now?: () => number;
 	readonly setTimer?: (callback: () => void, delayMs: number) => unknown;
@@ -36,14 +51,15 @@ export class ReconnectBackoff {
 	private readonly maxAttempts: number;
 	private readonly maxElapsedMs: number;
 	private readonly unbounded: boolean;
+	private readonly overloadJitterCapMs: number;
 	private readonly random: () => number;
 	private readonly now: () => number;
 	private readonly setTimerImpl: (
 		callback: () => void,
 		delayMs: number,
-	) => unknown;
-	private readonly clearTimerImpl: (handle: unknown) => void;
+	) => ReconnectTimer;
 	private attempt = 0;
+	private exponent = 0;
 	private startedAt?: number;
 
 	constructor(options: ReconnectOptions = {}) {
@@ -76,6 +92,10 @@ export class ReconnectBackoff {
 			options.maxElapsedMs ?? DEFAULT_RECONNECT_MAX_ELAPSED_MS,
 			"reconnect.maxElapsedMs",
 		);
+		this.overloadJitterCapMs = positiveSafeInteger(
+			options.overloadJitterCapMs ?? DEFAULT_OVERLOAD_JITTER_CAP_MS,
+			"reconnect.overloadJitterCapMs",
+		);
 
 		const configuredRandom = options.random ?? Math.random;
 		let firstRandom: number | undefined = unitInterval(
@@ -91,7 +111,7 @@ export class ReconnectBackoff {
 			return unitInterval(configuredRandom(), "reconnect.random");
 		};
 
-		const configuredNow = options.now ?? defaultNow;
+		const configuredNow = options.now ?? monotonicNow;
 		let lastNow = nonnegativeFinite(configuredNow(), "reconnect.now");
 		this.now = () => {
 			const sampled = nonnegativeFinite(configuredNow(), "reconnect.now");
@@ -99,19 +119,32 @@ export class ReconnectBackoff {
 			lastNow = Math.max(lastNow, sampled);
 			return lastNow;
 		};
-		this.setTimerImpl =
-			options.setTimer ??
-			((callback, delayMs) => setTimeout(callback, delayMs));
-		this.clearTimerImpl =
+		const clearTimer =
 			options.clearTimer ??
-			((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+			((handle: unknown) =>
+				clearTimeout(handle as ReturnType<typeof setTimeout>));
+		this.setTimerImpl = (callback, delayMs) => {
+			if (!options.setTimer)
+				return setDeadlineTimer(callback, delayMs, clearTimer);
+			let active = true;
+			const handle = options.setTimer(() => {
+				if (!active) return;
+				active = false;
+				callback();
+			}, delayMs);
+			return () => {
+				if (!active) return;
+				active = false;
+				clearTimer(handle);
+			};
+		};
 	}
 
 	get active(): boolean {
 		return this.startedAt !== undefined;
 	}
 
-	next(): ReconnectAttempt | undefined {
+	next(retryAfterMs?: number): ReconnectAttempt | undefined {
 		const now = this.now();
 		this.startedAt ??= now;
 		const elapsedMs = now - this.startedAt;
@@ -121,34 +154,49 @@ export class ReconnectBackoff {
 		) {
 			return undefined;
 		}
-		const delayMs = equalJitterDelayMs(
-			this.attempt,
-			this.baseMs,
-			this.capMs,
-			this.random,
-		);
-		this.attempt += 1;
 		const remainingMs = this.unbounded
 			? Number.POSITIVE_INFINITY
 			: this.maxElapsedMs - elapsedMs;
+		let delayMs: number;
+		if (retryAfterMs === undefined) {
+			delayMs = Math.min(
+				equalJitterDelayMs(
+					this.exponent,
+					this.baseMs,
+					this.capMs,
+					this.random,
+				),
+				remainingMs,
+			);
+			this.exponent += 1;
+		} else {
+			const hint = Math.max(retryAfterMs, 100);
+			const ceiling = Math.max(
+				hint,
+				Math.min(2 * hint, this.overloadJitterCapMs),
+			);
+			delayMs = hint + this.random() * (ceiling - hint);
+		}
+		this.attempt += 1;
 		return Object.freeze({
 			attempt: this.attempt,
-			delayMs: Math.min(delayMs, remainingMs),
+			delayMs,
 			remainingMs,
 		});
 	}
 
 	reset(): void {
 		this.attempt = 0;
+		this.exponent = 0;
 		this.startedAt = undefined;
 	}
 
-	setTimer(callback: () => void, delayMs: number): unknown {
+	setTimer(callback: () => void, delayMs: number): ReconnectTimer {
 		return this.setTimerImpl(callback, delayMs);
 	}
 
-	clearTimer(handle: unknown): void {
-		this.clearTimerImpl(handle);
+	clearTimer(handle: ReconnectTimer): void {
+		handle();
 	}
 }
 
@@ -185,8 +233,4 @@ function nonnegativeFinite(value: number, name: string): number {
 		);
 	}
 	return value;
-}
-
-function defaultNow(): number {
-	return typeof performance === "undefined" ? Date.now() : performance.now();
 }

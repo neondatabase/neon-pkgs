@@ -20,6 +20,8 @@ class FakeWebSocket implements WebSocketLike {
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
 	onSend?: (message: Record<string, unknown>) => void;
+	onClose?: () => void;
+	emitCloseOnClose = true;
 	private readonly listeners = new Map<string, Set<FakeWebSocketListener>>();
 
 	constructor(_url: string, protocols: string | string[]) {
@@ -48,8 +50,9 @@ class FakeWebSocket implements WebSocketLike {
 
 	close(): void {
 		if (this.readyState >= 2) return;
+		this.onClose?.();
 		this.readyState = 3;
-		this.emit("close", {});
+		if (this.emitCloseOnClose) this.emit("close", {});
 	}
 
 	open(): void {
@@ -66,6 +69,10 @@ class FakeWebSocket implements WebSocketLike {
 		this.emit("close", {});
 	}
 
+	error(): void {
+		this.emit("error", {});
+	}
+
 	private emit(type: string, event: unknown): void {
 		for (const listener of this.listeners.get(type) ?? []) {
 			(listener as (value: unknown) => void)(event);
@@ -79,6 +86,91 @@ afterEach(() => {
 });
 
 describe("ConnectionCoordinator", () => {
+	it("recovers from a handshake error without waiting for a close event", async () => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = defined(FakeWebSocket.instances[0]);
+		first.emitCloseOnClose = false;
+		first.onClose = () => first.error();
+		const close = vi.spyOn(first, "close");
+
+		first.error();
+
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const second = admit();
+		// A late close/error from the retired socket cannot retire its replacement.
+		first.disconnect();
+		first.error();
+		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(1);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(second.readyState).toBe(1);
+		coordinator.close();
+	});
+
+	it.each([
+		"connecting",
+		"admitted",
+	])("reconnects after a %s socket emits an error synchronously from close", async (state) => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = defined(FakeWebSocket.instances[0]);
+		if (state === "admitted") admit();
+		// Node's WebSocket can emit error before close updates readyState.
+		first.onClose = () => first.error();
+		const close = vi.spyOn(first, "close");
+
+		first.error();
+
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const second = admit();
+		expect(second.sent).toEqual([
+			expect.objectContaining({
+				type: "subscribe",
+				authorization: "token",
+			}),
+		]);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(
+			state === "admitted" ? 2 : 1,
+		);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
+		expect(second.readyState).toBe(3);
+	});
+
+	it.each([
+		"connecting",
+		"admitted",
+	])("closes a %s socket without reconnecting when close emits a synchronous error", async (state) => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		if (state === "admitted") admit();
+		socket.onClose = () => socket.error();
+		const close = vi.spyOn(socket, "close");
+
+		coordinator.close();
+
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(socket.readyState).toBe(3);
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("logs connection recovery once per multiplexed connection", async () => {
 		vi.useFakeTimers();
 		const entries: Array<{ event: string; subscriptionId?: string }> = [];
@@ -646,6 +738,547 @@ describe("ConnectionCoordinator", () => {
 				code: "connection_lost",
 			}),
 		);
+	});
+});
+
+describe("subscription load-shedding recovery", () => {
+	function recoveryCoordinator(
+		options: Partial<ConnectionCoordinatorOptions> = {},
+	) {
+		return createCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 400,
+				stabilityMs: 1_000,
+				random: () => 0,
+			},
+			...options,
+		});
+	}
+
+	function reject(socket: FakeWebSocket, requestId: string) {
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: requestId,
+			code: "backend_unavailable",
+			message: "backend unavailable",
+		});
+	}
+
+	function shed(socket: FakeWebSocket, liveId = "41") {
+		socket.receive({
+			type: "subscription_error",
+			live_id: liveId,
+			code: "upstream_cancelled",
+			message: "upstream cancelled",
+		});
+	}
+
+	function accepted(
+		socket: FakeWebSocket,
+		requestId: string,
+		liveId: string,
+	) {
+		socket.receive({
+			type: "subscribed",
+			request_id: requestId,
+			live_id: liveId,
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+	}
+
+	function baseline(socket: FakeWebSocket, liveId: string) {
+		socket.receive({
+			type: "baseline_sync_start",
+			live_id: liveId,
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "baseline_sync_end",
+			live_id: liveId,
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			batch_count: 0,
+		});
+	}
+
+	it("logs each subscription retry with its server code, attempt, and delay", async () => {
+		vi.useFakeTimers();
+		const logger = vi.fn();
+		const coordinator = recoveryCoordinator({
+			events: createClientEventSink({ logLevel: "debug", logger }),
+		});
+		coordinator.subscribe({ capability: "secret-query" }, target());
+		const socket = admit();
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(50);
+		reject(socket, "2");
+		await vi.runAllTicks();
+		const entries = logger.mock.calls
+			.map(([entry]) => entry)
+			.filter((entry) => entry.event === "subscription_retry_scheduled");
+		expect(entries).toEqual([
+			expect.objectContaining({
+				level: "debug",
+				subscriptionId: "s1",
+				code: "upstream_cancelled",
+				attempt: 1,
+				delayMs: 50,
+			}),
+			expect.objectContaining({
+				level: "debug",
+				subscriptionId: "s1",
+				code: "backend_unavailable",
+				attempt: 2,
+				delayMs: 100,
+			}),
+		]);
+		expect(JSON.stringify(entries)).not.toContain("secret-query");
+		coordinator.close();
+	});
+
+	it.each([
+		"backend_unavailable",
+		"upstream_cancelled",
+	])("retries %s on the same socket without disturbing another subscription", async (code) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "shed" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const healthy = target();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		accepted(socket, "2", "42");
+		baseline(socket, "42");
+		if (code === "backend_unavailable") reject(socket, "1");
+		else {
+			accepted(socket, "1", "41");
+			shed(socket);
+		}
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(callbacks.disconnected).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(49);
+		expect(socket.sent).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "3",
+			authorization: "shed",
+		});
+		accepted(socket, "3", "43");
+		baseline(socket, "43");
+		expect(callbacks.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		expect(healthy.disconnected).not.toHaveBeenCalled();
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		coordinator.close();
+	});
+
+	it("does not bypass a subscription delay on socket ready or duplicate its retry", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(50);
+		reject(socket, "2"); // Next subscription attempt is due in 100ms.
+		socket.disconnect(); // The socket reconnects in 50ms.
+		await vi.advanceTimersByTimeAsync(50);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		expect(second.sent).toEqual([]);
+		await vi.advanceTimersByTimeAsync(50);
+		expect(second.sent).toEqual([
+			{ type: "subscribe", request_id: "3", authorization: "token" },
+		]);
+		reject(second, "3");
+		await vi.advanceTimersByTimeAsync(199);
+		expect(second.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(second.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("waits for socket ready when subscription backoff expires first", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		shed(socket);
+		socket.disconnect();
+		await vi.advanceTimersByTimeAsync(500);
+		const second = defined(FakeWebSocket.instances[1]);
+		expect(second.sent).toEqual([]);
+		second.open();
+		second.receive({ type: "ready" });
+		await vi.advanceTimersByTimeAsync(500);
+		expect(second.sent).toEqual([
+			{ type: "subscribe", request_id: "2", authorization: "token" },
+		]);
+		coordinator.close();
+	});
+
+	it.each([
+		"unsubscribe",
+		"close",
+	])("cancels pending subscription retries on %s", async (action) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const handle = coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		shed(socket);
+		if (action === "unsubscribe") handle.unsubscribe();
+		else coordinator.close();
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(socket.sent).toHaveLength(1);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("uses the latest capability and completes an interrupted renewal after readmission", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const handle = coordinator.subscribe({ capability: "old" }, target());
+		const socket = admit();
+		const renewal = handle.renew({ capability: "new" });
+		void renewal.catch(() => undefined);
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(50);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "2",
+			authorization: "new",
+		});
+		accepted(socket, "2", "42");
+		await renewal;
+		coordinator.close();
+	});
+
+	it.each([
+		"baseline",
+		"upstream_cancelled",
+	])("isolates late admission %s frames after the recovery deadline", async (lateFrame) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 100,
+				maxElapsedMs: 200,
+				random: () => 0,
+			},
+		});
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+		const healthy = target();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		accepted(socket, "2", "42");
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(50);
+		expect(socket.sent.at(-1)).toMatchObject({ request_id: "3" });
+		await vi.advanceTimersByTimeAsync(150);
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "upstream_cancelled",
+				retryable: false,
+			}),
+		);
+		accepted(socket, "3", "43");
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "43",
+		});
+		// These frames can already be queued before Unsubscribe reaches the proxy.
+		if (lateFrame === "baseline") baseline(socket, "43");
+		else shed(socket, "43");
+		expect(callbacks.reconciliation.caughtUp).not.toHaveBeenCalled();
+		socket.receive({ type: "unsubscribed", live_id: "43" });
+		baseline(socket, "42");
+		expect(healthy.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(socket.readyState).toBe(1);
+		coordinator.close();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("does not let socket loss count toward stable subscription recovery", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const first = admit();
+		shed(first);
+		await vi.advanceTimersByTimeAsync(50);
+		accepted(first, "2", "42");
+		baseline(first, "42");
+		await vi.advanceTimersByTimeAsync(500);
+		first.disconnect();
+		await vi.advanceTimersByTimeAsync(50);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		accepted(second, "3", "43");
+		await vi.advanceTimersByTimeAsync(1_000);
+		shed(second, "43");
+		await vi.advanceTimersByTimeAsync(99);
+		expect(second.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(second.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("honors disabled recovery", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator({ reconnect: false });
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(socket.sent).toHaveLength(1);
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "upstream_cancelled",
+				retryable: false,
+			}),
+		);
+		coordinator.close();
+	});
+
+	it("honors the subscription attempt limit without failing its healthy peer", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 100,
+				maxAttempts: 1,
+				random: () => 0,
+			},
+		});
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+		const healthy = target();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		accepted(socket, "2", "42");
+		shed(socket);
+		await vi.advanceTimersByTimeAsync(50);
+		reject(socket, "3");
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "backend_unavailable",
+				retryable: false,
+			}),
+		);
+		expect(healthy.failed).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(socket.sent).toHaveLength(3);
+		coordinator.close();
+	});
+
+	function overloaded(
+		socket: FakeWebSocket,
+		type: "subscribe_rejected" | "subscription_error",
+		id: string,
+		retryAfterMs?: number,
+	) {
+		const hint =
+			retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs };
+		const target =
+			type === "subscribe_rejected"
+				? { request_id: id }
+				: { live_id: id };
+		socket.receive({
+			type,
+			...target,
+			code: "backend_overloaded",
+			message: "backend overloaded",
+			sqlstate: "53300",
+			...hint,
+		});
+	}
+
+	it.each([
+		"subscribe_rejected",
+		"subscription_error",
+	] as const)("retries %s(backend_overloaded) after its hint without disturbing another subscription", async (type) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "shed" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const healthy = target();
+		coordinator.subscribe({ capability: "healthy" }, healthy);
+		accepted(socket, "2", "42");
+		baseline(socket, "42");
+		if (type === "subscribe_rejected") overloaded(socket, type, "1", 300);
+		else {
+			accepted(socket, "1", "41");
+			overloaded(socket, type, "41", 300);
+		}
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(callbacks.disconnected).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(299);
+		expect(socket.sent).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "3",
+			authorization: "shed",
+		});
+		accepted(socket, "3", "43");
+		baseline(socket, "43");
+		expect(callbacks.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		expect(healthy.disconnected).not.toHaveBeenCalled();
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		coordinator.close();
+	});
+
+	it("falls back to exponential backoff when backend_overloaded has no hint", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41");
+		await vi.advanceTimersByTimeAsync(49);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("fails an overloaded subscription once when hint-paced retries reach the attempt limit", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator({
+			reconnect: {
+				baseMs: 100,
+				capMs: 100,
+				maxAttempts: 1,
+				random: () => 0,
+			},
+		});
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41", 300);
+		await vi.advanceTimersByTimeAsync(300);
+		overloaded(socket, "subscribe_rejected", "2", 300);
+		expect(callbacks.failed).toHaveBeenCalledOnce();
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "backend_overloaded",
+				retryable: false,
+				sqlState: "53300",
+			}),
+		);
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("paces a hinted resource_exhausted rejection by its hint", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: "1",
+			code: "resource_exhausted",
+			message: "resource exhausted",
+			retry_after_ms: 300,
+		});
+		await vi.advanceTimersByTimeAsync(299);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent).toHaveLength(2);
+		coordinator.close();
+	});
+
+	it("waits for the hint after the proxy closes an idle socket", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		overloaded(socket, "subscribe_rejected", "1", 300);
+		socket.receive({
+			type: "connection_error",
+			code: "resource_exhausted",
+			message: "resource exhausted",
+		});
+		// The socket reconnects on its own backoff, possibly to another instance,
+		// but the subscription waits for the proxy's hint before resubscribing.
+		await vi.advanceTimersByTimeAsync(100);
+		const second = defined(FakeWebSocket.instances[1]);
+		second.open();
+		second.receive({ type: "ready" });
+		expect(second.sent).toEqual([]);
+		await vi.advanceTimersByTimeAsync(199);
+		expect(second.sent).toEqual([]);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(second.sent).toEqual([
+			{ type: "subscribe", request_id: "2", authorization: "token" },
+		]);
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
+	});
+
+	it("retries resource_exhausted rejections with exponential backoff", async () => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "subscribe_rejected",
+			request_id: "1",
+			code: "resource_exhausted",
+			message: "resource exhausted",
+		});
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(callbacks.disconnected).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(49);
+		expect(socket.sent).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(socket.sent.at(-1)).toEqual({
+			type: "subscribe",
+			request_id: "2",
+			authorization: "token",
+		});
+		coordinator.close();
+	});
+
+	it.each([
+		"unsubscribe",
+		"close",
+	])("cancels a pending hint-paced retry on %s", async (action) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const handle = coordinator.subscribe({ capability: "token" }, target());
+		const socket = admit();
+		overloaded(socket, "subscription_error", "41", 300);
+		if (action === "unsubscribe") handle.unsubscribe();
+		else coordinator.close();
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(socket.sent).toHaveLength(1);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		expect(vi.getTimerCount()).toBe(0);
 	});
 });
 

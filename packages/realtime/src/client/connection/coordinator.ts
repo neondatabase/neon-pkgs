@@ -21,7 +21,10 @@ import {
 	type ReconnectAttempt,
 	ReconnectBackoff,
 	type ReconnectOptions,
+	type ReconnectTimer,
 } from "./reconnect.js";
+import { SubscriptionRecovery } from "./subscription-recovery.js";
+import { setDeadlineTimer } from "./timer.js";
 
 const SOCKET_CONNECTING = 0;
 const SOCKET_OPEN = 1;
@@ -104,17 +107,34 @@ type ManagedSubscriptionState =
 	| "failed"
 	| "closed";
 
-interface ManagedSubscription {
-	readonly events: SubscriptionEventSink;
-	query: ConnectionSealedQuery;
-	readonly callbacks: ConnectionCallbacks;
-	state: ManagedSubscriptionState;
+class ManagedSubscription {
+	state: ManagedSubscriptionState = "active";
 	requestId?: string;
 	requestedCapability?: string;
 	acceptedCapability?: string;
 	liveId?: string;
 	renewing?: Renewal;
-	queuedRenewals: Renewal[];
+	queuedRenewals: Renewal[] = [];
+
+	constructor(
+		public query: ConnectionSealedQuery,
+		readonly callbacks: ConnectionCallbacks,
+		readonly events: SubscriptionEventSink,
+		readonly recovery: SubscriptionRecovery,
+	) {}
+
+	/** Forget a detached wire attempt, preserving renewals for re-admission. */
+	resetWire(): void {
+		this.recovery.interrupted();
+		this.requestId = undefined;
+		this.requestedCapability = undefined;
+		this.acceptedCapability = undefined;
+		this.liveId = undefined;
+		if (this.renewing) {
+			this.queuedRenewals.unshift(this.renewing);
+			this.renewing = undefined;
+		}
+	}
 }
 
 /** Owns one multiplexed WebSocket and request/live-ID admission routing. */
@@ -134,9 +154,9 @@ export class ConnectionCoordinator {
 	private readonly heartbeat?: ConnectionHeartbeat;
 	private readonly events: ClientEventSink;
 	private socket?: WebSocketLike;
-	private reconnectTimer?: unknown;
-	private reconnectDeadlineTimer?: ReturnType<typeof setTimeout>;
-	private stabilityTimer?: unknown;
+	private reconnectTimer?: ReconnectTimer;
+	private reconnectDeadlineTimer?: ReconnectTimer;
+	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
 	private requestId = 0n;
@@ -195,13 +215,19 @@ export class ConnectionCoordinator {
 	): ConnectionHandle {
 		if (this.disposed) throw new Error("Realtime client is closed");
 		validateSealedQuery(query);
-		const managed: ManagedSubscription = {
-			events: callbacks.events ?? this.events.createSubscription(),
+		const events = callbacks.events ?? this.events.createSubscription();
+		const managed: ManagedSubscription = new ManagedSubscription(
 			query,
 			callbacks,
-			state: "active",
-			queuedRenewals: [],
-		};
+			events,
+			new SubscriptionRecovery(this.options.reconnect, {
+				resubscribe: () => this.sendSubscribe(managed),
+				exhausted: (error) =>
+					this.failLocalSubscription(managed, error),
+				scheduled: (code, attempt, delayMs) =>
+					events.retryScheduled(code, attempt, delayMs),
+			}),
+		);
 		this.managedSubscriptions.add(managed);
 		this.activeSubscriptions.add(managed);
 		managed.events.started();
@@ -222,6 +248,7 @@ export class ConnectionCoordinator {
 		this.cancelReconnectEpisode();
 		const error = new Error("Realtime client is closed");
 		for (const subscription of this.managedSubscriptions) {
+			subscription.recovery.cancel();
 			this.rejectRenewals(subscription, error);
 		}
 		this.managedSubscriptions.clear();
@@ -281,6 +308,7 @@ export class ConnectionCoordinator {
 
 	private unsubscribe(subscription: ManagedSubscription): void {
 		if (subscription.state === "closed") return;
+		subscription.recovery.cancel();
 		subscription.state = "closed";
 		this.managedSubscriptions.delete(subscription);
 		this.activeSubscriptions.delete(subscription);
@@ -339,8 +367,8 @@ export class ConnectionCoordinator {
 			this.disconnected();
 		});
 		socket.addEventListener("error", () => {
-			if (this.socket === socket && socket.readyState < SOCKET_CLOSING) {
-				socket.close(APPLICATION_CLOSE, "connection failed");
+			if (this.socket === socket) {
+				this.closeSocket(APPLICATION_CLOSE, "connection failed");
 			}
 		});
 	}
@@ -401,12 +429,7 @@ export class ConnectionCoordinator {
 				this.unsubscribed(message.live_id);
 				return;
 			case "subscription_error":
-				this.subscriptionError(
-					message.live_id,
-					message.code,
-					message.message,
-					message.sqlstate,
-				);
+				this.subscriptionError(message);
 				return;
 			case "connection_error":
 				this.connectionError(message.code, message.message);
@@ -443,7 +466,20 @@ export class ConnectionCoordinator {
 		}
 		this.pendingRequests.delete(message.request_id);
 		subscription.requestId = undefined;
-		if (subscription.state === "closed") {
+		if (
+			subscription.state === "closed" ||
+			subscription.state === "failed"
+		) {
+			// Baseline/publication frames may already follow this admission on
+			// the wire. Keep an inactive target until Unsubscribe is acknowledged.
+			this.reconciler.add({
+				liveId: message.live_id,
+				epoch: message.epoch,
+				firstSequence: message.first_sequence,
+				columnCount: message.columns.length,
+				target: subscription.callbacks.reconciliation,
+			});
+			this.reconciler.deactivate(message.live_id);
 			this.detachingLiveIds.add(message.live_id);
 			this.send({ type: "unsubscribe", live_id: message.live_id });
 			return;
@@ -467,6 +503,7 @@ export class ConnectionCoordinator {
 			firstSequence: message.first_sequence,
 			columnCount: message.columns.length,
 			target: subscription.callbacks.reconciliation,
+			lifecycle: subscription.recovery,
 		});
 		if (acceptedCapability === subscription.query.capability) {
 			this.resolveRenewals(subscription);
@@ -485,7 +522,16 @@ export class ConnectionCoordinator {
 			throw new ProtocolError("unknown subscribe request ID");
 		this.pendingRequests.delete(message.request_id);
 		subscription.requestId = undefined;
-		if (subscription.state === "closed") return;
+		if (subscription.state === "closed" || subscription.state === "failed")
+			return;
+		if (
+			message.code === "backend_overloaded" ||
+			message.code === "backend_unavailable" ||
+			message.code === "resource_exhausted"
+		) {
+			this.retrySubscription(subscription, message);
+			return;
+		}
 		const replacementRequired = requiresReplacementQuery(message.code);
 		const error = new ConnectionCoordinatorError(
 			message.code,
@@ -533,19 +579,23 @@ export class ConnectionCoordinator {
 	}
 
 	private subscriptionError(
-		liveId: string,
-		code: string,
-		message: string,
-		sqlState?: string,
+		message: Extract<ServerMessage, { type: "subscription_error" }>,
 	): void {
+		const { live_id: liveId, code, sqlstate: sqlState } = message;
+		// Cancellation can already be queued when we unsubscribe a late admission.
+		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
+		if (code === "backend_overloaded" || code === "upstream_cancelled") {
+			this.retrySubscription(subscription, message);
+			return;
+		}
 		const replacementRequired = requiresReplacementQuery(code);
 		const error = new ConnectionCoordinatorError(
 			code,
 			replacementRequired,
-			message,
+			message.message,
 			{ sqlState },
 		);
 		if (replacementRequired) {
@@ -557,6 +607,34 @@ export class ConnectionCoordinator {
 			return;
 		}
 		this.failSubscription(subscription, error);
+	}
+
+	/** Retry subscribe_rejected and subscription_error with optional hint. */
+	private retrySubscription(
+		subscription: ManagedSubscription,
+		message: Extract<
+			ServerMessage,
+			{ type: "subscribe_rejected" | "subscription_error" }
+		>,
+	): void {
+		const error = new ConnectionCoordinatorError(
+			message.code,
+			false,
+			message.message,
+			{ sqlState: message.sqlstate },
+		);
+		if (!subscription.recovery.retry(error, message.retry_after_ms)) {
+			this.failSubscription(subscription, error);
+			return;
+		}
+		if (subscription.requestId)
+			this.pendingRequests.delete(subscription.requestId);
+		if (subscription.liveId) {
+			this.liveSubscriptions.delete(subscription.liveId);
+			this.reconciler.remove(subscription.liveId);
+		}
+		subscription.resetWire();
+		subscription.callbacks.disconnected();
 	}
 
 	private connectionError(code: string, message: string): void {
@@ -585,6 +663,8 @@ export class ConnectionCoordinator {
 	private sendSubscribe(subscription: ManagedSubscription): void {
 		if (
 			subscription.state !== "active" ||
+			!this.ready ||
+			subscription.recovery.waiting ||
 			subscription.requestId ||
 			subscription.liveId
 		)
@@ -638,14 +718,7 @@ export class ConnectionCoordinator {
 			this.noteConnectionLost(this.pendingConnectionError);
 		}
 		for (const subscription of this.activeSubscriptions) {
-			subscription.requestId = undefined;
-			subscription.requestedCapability = undefined;
-			subscription.acceptedCapability = undefined;
-			subscription.liveId = undefined;
-			if (subscription.renewing) {
-				subscription.queuedRenewals.unshift(subscription.renewing);
-				subscription.renewing = undefined;
-			}
+			subscription.resetWire();
 			subscription.callbacks.disconnected();
 		}
 		if (
@@ -684,7 +757,7 @@ export class ConnectionCoordinator {
 			const episodeGeneration = ++this.reconnectEpisodeGeneration;
 			// Keep the absolute safety bound on the host clock. An injected,
 			// accelerated backoff timer must not disable or distort it.
-			this.reconnectDeadlineTimer = setTimeout(() => {
+			this.reconnectDeadlineTimer = setDeadlineTimer(() => {
 				this.reconnectDeadlineTimer = undefined;
 				if (
 					episodeGeneration === this.reconnectEpisodeGeneration &&
@@ -750,6 +823,7 @@ export class ConnectionCoordinator {
 		error: ConnectionCoordinatorError,
 		beforeCallbacks?: () => void,
 	): void {
+		subscription.recovery.cancel();
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		if (subscription.requestId)
@@ -758,10 +832,7 @@ export class ConnectionCoordinator {
 			this.liveSubscriptions.delete(subscription.liveId);
 			this.reconciler.remove(subscription.liveId);
 		}
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
+		subscription.resetWire();
 		this.rejectRenewals(subscription, error);
 		beforeCallbacks?.();
 		subscription.callbacks.failed(error);
@@ -773,6 +844,7 @@ export class ConnectionCoordinator {
 	): void {
 		if (subscription.state === "failed" || subscription.state === "closed")
 			return;
+		subscription.recovery.cancel();
 		subscription.state = "failed";
 		this.activeSubscriptions.delete(subscription);
 		const liveId = subscription.liveId;
@@ -782,12 +854,9 @@ export class ConnectionCoordinator {
 			this.detachingLiveIds.add(liveId);
 			this.send({ type: "unsubscribe", live_id: liveId });
 		}
-		if (subscription.requestId)
-			this.pendingRequests.delete(subscription.requestId);
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
+		// A local retry deadline can expire while admission is in flight. Keep
+		// its correlation until the reply so a late acceptance is unsubscribed.
+		subscription.resetWire();
 		this.rejectRenewals(subscription, error);
 		subscription.events.failed(error);
 		subscription.callbacks.failed(error);
@@ -809,14 +878,7 @@ export class ConnectionCoordinator {
 			this.liveSubscriptions.delete(subscription.liveId);
 			this.reconciler.remove(subscription.liveId);
 		}
-		subscription.requestId = undefined;
-		subscription.requestedCapability = undefined;
-		subscription.acceptedCapability = undefined;
-		subscription.liveId = undefined;
-		if (subscription.renewing) {
-			subscription.queuedRenewals.unshift(subscription.renewing);
-			subscription.renewing = undefined;
-		}
+		subscription.resetWire();
 		subscription.events.queryUnavailable(error);
 		subscription.callbacks.disconnected();
 
@@ -900,8 +962,15 @@ export class ConnectionCoordinator {
 	private closeSocket(code: number, reason: string): void {
 		this.heartbeat?.stop();
 		const socket = this.socket;
-		if (socket && socket.readyState < SOCKET_CLOSING)
-			socket.close(code, reason);
+		if (!socket) return;
+		// Detach before close(): it can synchronously emit error, and a failed
+		// handshake may never emit close. Retire the wire attempt ourselves.
+		this.socket = undefined;
+		try {
+			if (socket.readyState < SOCKET_CLOSING) socket.close(code, reason);
+		} finally {
+			this.disconnected();
+		}
 	}
 
 	private cancelReconnect(): void {
@@ -920,7 +989,7 @@ export class ConnectionCoordinator {
 	private cancelReconnectDeadline(): void {
 		this.reconnectEpisodeGeneration += 1;
 		if (this.reconnectDeadlineTimer !== undefined) {
-			clearTimeout(this.reconnectDeadlineTimer);
+			this.reconnectDeadlineTimer();
 		}
 		this.reconnectDeadlineTimer = undefined;
 	}

@@ -41,6 +41,13 @@ export interface AddReconciliationTarget {
 	readonly firstSequence: string;
 	readonly columnCount: number;
 	readonly target: ReconciliationTarget;
+	readonly lifecycle?: ReconciliationLifecycle;
+}
+
+/** Observe reconciliation milestones without wrapping the delivery target. */
+export interface ReconciliationLifecycle {
+	baselineCompleted(): void;
+	interrupted(): void;
 }
 
 export interface ReconciliationLimits {
@@ -80,6 +87,7 @@ interface BufferedBatch {
 
 interface TargetState {
 	readonly target: ReconciliationTarget;
+	readonly lifecycle?: ReconciliationLifecycle;
 	readonly columnCount: number;
 	active: boolean;
 	epoch: bigint;
@@ -168,6 +176,7 @@ export class BaselineSyncPublicationReconciler {
 		}
 		this.targets.set(input.liveId, {
 			target: input.target,
+			lifecycle: input.lifecycle,
 			columnCount: input.columnCount,
 			active: true,
 			epoch: BigInt(input.epoch),
@@ -402,6 +411,7 @@ export class BaselineSyncPublicationReconciler {
 		for (const buffered of replay)
 			state.target.publishBatch(buffered.batch);
 		state.live = true;
+		state.lifecycle?.baselineCompleted();
 		state.target.caughtUp();
 	}
 
@@ -575,7 +585,10 @@ export class BaselineSyncPublicationReconciler {
 			}
 		}
 		this.events.publicationCommitted(bodyCount);
-		for (const state of resetStates) state.target.resetRequired();
+		for (const state of resetStates) {
+			state.lifecycle?.interrupted();
+			state.target.resetRequired();
+		}
 		for (const { state, error } of failed) state.target.decodeFailed(error);
 		for (const { state, batch } of installed) {
 			state.target.publishBatch(batch);

@@ -33,6 +33,7 @@ export const SILENT_SUBSCRIPTION_EVENTS: SubscriptionEventSink = Object.freeze({
 	refresh: SILENT_REFRESH_EVENTS,
 	started: noop,
 	admitted: noop,
+	retryScheduled: noop,
 	renewalStarted: noop,
 	renewalFailed: noop,
 	renewed: noop,
@@ -216,6 +217,13 @@ function createSubscriptionEventSink(
 		refresh,
 		started: () => emit("subscription_started", metadata),
 		admitted: () => emit("subscription_admitted", metadata),
+		retryScheduled: (code, attempt, delayMs) =>
+			emit("subscription_retry_scheduled", {
+				...metadata,
+				code,
+				attempt,
+				delayMs,
+			}),
 		renewalStarted: () => {
 			if (renewalPending) return;
 			renewalPending = true;
