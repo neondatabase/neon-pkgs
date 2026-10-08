@@ -1,11 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { NO_AGENT_SETUP_CONFLICT, NON_TTY_AGENT_SETUP } from "./copy.js";
+import {
+	INIT_NEEDS_YES,
+	NO_AGENT_SETUP_CONFLICT,
+	NON_TTY_AGENT_SETUP,
+} from "./copy.js";
 import {
 	assertAgentSetupFlags,
 	inferInitAgentSetup,
 	resolveInitMode,
 } from "./mode.js";
-import { INIT_NEEDS_YES_OR_TERMINAL } from "./plan.js";
 
 const base = {
 	yes: false,
@@ -119,9 +122,7 @@ describe("resolveInitMode", () => {
 	});
 
 	test("non-TTY with no flags fails", () => {
-		expect(() => resolveInitMode({ ...base })).toThrow(
-			INIT_NEEDS_YES_OR_TERMINAL,
-		);
+		expect(() => resolveInitMode({ ...base })).toThrow(INIT_NEEDS_YES);
 	});
 });
 

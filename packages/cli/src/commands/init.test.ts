@@ -19,6 +19,7 @@ import { takeCommandSuccessExtras } from "../analytics.js";
 import {
 	CLAIMABLE_ALREADY_LINKED,
 	CLAIMABLE_MCP_API_KEY,
+	INIT_NEEDS_YES,
 	MCP_SCOPED_NEEDS_PROJECT,
 	NO_AGENT_SETUP_CONFLICT,
 	namedAgentsUnavailable,
@@ -176,7 +177,7 @@ describe("init handler", () => {
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(/Pass -y to use defaults/);
+		).rejects.toThrow(INIT_NEEDS_YES);
 		expect(ops.calls).toEqual([]);
 	});
 
@@ -194,7 +195,7 @@ describe("init handler", () => {
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(/Pass -y to use defaults/);
+		).rejects.toThrow(INIT_NEEDS_YES);
 		expect(ops.calls).toEqual([]);
 	});
 

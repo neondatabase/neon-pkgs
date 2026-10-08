@@ -98,6 +98,9 @@ export const NO_AGENTS_FALLBACK_STATUS =
 export const NO_AGENT_SETUP_CONFLICT =
 	"--no-agent-setup cannot be combined with --agent, --skill, or MCP flags.";
 
+export const INIT_NEEDS_YES =
+	"No interactive terminal. Re-run with -y to set up this directory with Recommended defaults: `neon init -y`. To pick each step instead, run `neon init` in a terminal.";
+
 export const NON_TTY_LINK_NEEDS_AUTH =
 	"No interactive terminal. Sign in with `neon login`, then re-run, or pass --claimable.";
 
