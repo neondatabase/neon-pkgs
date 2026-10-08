@@ -1387,7 +1387,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
-| [auth](https://neon.com/docs/reference/cli-auth)                           |                                                                                                              | Authenticate                       |
+| [login](https://neon.com/docs/reference/cli-auth) (`auth`)                 |                                                                                                              | Authenticate                       |
 | claim (`claimable`)                                                        | `create`, `status`, `accept`, `list`, `delete`                                                               | Manage claimable projects          |
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |

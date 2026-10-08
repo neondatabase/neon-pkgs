@@ -201,7 +201,7 @@ export const authFlow = async ({
 	keyring,
 }: AuthProps) => {
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
-	// auth --profile work` is how you make one, so it must work before there is anything
+	// login --profile work` is how you make one, so it must work before there is anything
 	// to look up.
 	const profileName = selectProfileName(profile);
 	const isNamed = profileName !== DEFAULT_PROFILE;
