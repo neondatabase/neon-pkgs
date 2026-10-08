@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+	CONFIG_INIT_SERVICE_OPTIONS,
 	CONFIG_INIT_SERVICES,
+	parseConfigInitSelection,
 	parseConfigInitServices,
 } from "./config_template.js";
 import {
@@ -196,6 +198,28 @@ describe("parseConfigInitServices", () => {
 	});
 });
 
+describe("parseConfigInitSelection", () => {
+	it("accepts Realtime alongside services", () => {
+		expect(parseConfigInitSelection(["realtime", "auth"])).toEqual({
+			services: ["auth"],
+			realtime: true,
+		});
+	});
+
+	it("accepts Realtime on its own", () => {
+		expect(parseConfigInitSelection(["realtime"])).toEqual({
+			services: [],
+			realtime: true,
+		});
+	});
+
+	it("includes Realtime in the supported values when validation fails", () => {
+		expect(() => parseConfigInitSelection(["none"])).toThrow(
+			"Unknown service none. Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime.",
+		);
+	});
+});
+
 describe("servicesOption", () => {
 	it("gives every command the same three spellings", () => {
 		expect(
@@ -208,7 +232,7 @@ describe("servicesOption", () => {
 		expect(
 			servicesOption({
 				key: "services",
-				allowed: CONFIG_INIT_SERVICES,
+				allowed: CONFIG_INIT_SERVICE_OPTIONS,
 				describe: "Declare these",
 			}).alias,
 		).toEqual(["s", "service"]);
@@ -228,12 +252,12 @@ describe("servicesOption", () => {
 		expect(
 			servicesOption({
 				key: "services",
-				allowed: CONFIG_INIT_SERVICES,
+				allowed: CONFIG_INIT_SERVICE_OPTIONS,
 				describe: "Declare these",
 				also: "Omitted: ask.",
 			}).describe,
 		).toBe(
-			"Declare these: auth, data-api, functions, object-storage, ai-gateway. " +
+			"Declare these: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime. " +
 				"Repeat the flag or comma-separate. Omitted: ask.",
 		);
 	});

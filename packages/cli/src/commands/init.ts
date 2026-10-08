@@ -1,7 +1,8 @@
 import type yargs from "yargs";
+import { CONFIG_INIT_SERVICE_OPTIONS } from "../config_template.js";
 import { initPluginAgents, initSkillsMcpAgents } from "../init/plan.js";
 import { type InitProps, runInit } from "../init/run.js";
-import { NEON_SERVICES, servicesOption } from "../neon_services.js";
+import { servicesOption } from "../neon_services.js";
 import { listSkillIds } from "../skills/catalog.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -65,18 +66,13 @@ export const builder = (yargs: yargs.Argv) =>
 			"services",
 			servicesOption({
 				key: "services",
-				allowed: NEON_SERVICES,
+				allowed: CONFIG_INIT_SERVICE_OPTIONS,
 				describe: "Services to declare in neon.ts",
 				also:
 					"postgres alone writes the starter policy; every branch has Postgres. " +
 					"Implies creating neon.ts. Cannot be combined with --no-config.",
 			}),
 		)
-		.option("realtime", {
-			type: "boolean",
-			describe:
-				"Declare Realtime in neon.ts. Use --no-realtime to declare it disabled. Implies creating neon.ts and cannot be combined with --no-config",
-		})
 		.option("org-id", {
 			describe: "Forwarded to link: organization ID to link to",
 			type: "string",

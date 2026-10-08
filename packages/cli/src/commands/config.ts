@@ -38,10 +38,12 @@ import { type ConfigEdit, editNeonConfig } from "../config_edit.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import { declaredNeonServices } from "../config_services.js";
 import {
+	CONFIG_INIT_SERVICE_OPTIONS,
+	type ConfigInitSelection,
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
-	parseConfigInitServices,
+	parseConfigInitSelection,
 	REQUIRED_PACKAGES,
 	renderFunctionSource,
 	renderNeonConfig,
@@ -59,7 +61,6 @@ import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
 	NEON_SERVICE_LABELS,
-	NEON_SERVICES,
 	type NeonService,
 	servicesFlagValue,
 	servicesOption,
@@ -325,13 +326,11 @@ export type ConfigInitProps = {
 	silent?: boolean;
 	/**
 	 * Raw `--services` values, repeated and/or comma-separated, as
-	 * {@link parseConfigInitServices} reads them. When omitted,
-	 * {@link resolveServices} picks interactively on a TTY and falls back to the starter
+	 * {@link parseConfigInitSelection} reads them. When omitted,
+	 * {@link resolveInitSelection} picks interactively on a TTY and falls back to the starter
 	 * policy otherwise.
 	 */
 	services?: readonly string[];
-	/** Declare Realtime explicitly. Omission leaves it unmanaged. */
-	realtime?: boolean;
 	/** Injected service picker (tests). Wins over the TTY check; production omits it. */
 	pickServices?: () => Promise<NeonService[]>;
 	/**
@@ -360,21 +359,27 @@ export type ConfigInitProps = {
  * picker only runs on an interactive terminal outside CI. Everything else scaffolds the
  * starter policy, which is what `config init` has always written.
  */
-const resolveServices = async (
+const resolveInitSelection = async (
 	props: ConfigInitProps,
-): Promise<NeonService[]> => {
+): Promise<ConfigInitSelection> => {
 	if (props.services !== undefined) {
-		return parseConfigInitServices(props.services, (used, canonical) =>
-			log.warning(deprecatedServiceMessage(used, canonical)),
+		const parsed = parseConfigInitSelection(
+			props.services,
+			(used, canonical) =>
+				log.warning(deprecatedServiceMessage(used, canonical)),
 		);
+		return {
+			services: parsed.services,
+			...(parsed.realtime ? { realtime: true } : {}),
+		};
 	}
 	if (props.pickServices) {
-		return props.pickServices();
+		return { services: await props.pickServices() };
 	}
 	if (isCi() || !process.stdout.isTTY) {
-		return [];
+		return { services: [] };
 	}
-	return pickServicesInteractively();
+	return { services: await pickServicesInteractively() };
 };
 
 /**
@@ -534,15 +539,6 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 					getCliName(),
 				);
 			}
-			if (props.realtime !== undefined) {
-				log.warning(
-					"--%srealtime was ignored. Edit %s directly, or use `%s realtime %s`.",
-					props.realtime ? "" : "no-",
-					existing,
-					getCliName(),
-					props.realtime ? "enable" : "disable",
-				);
-			}
 		}
 	} else if (props.fromBranch) {
 		const { source, seeded, branchName } = await seedFromBranch(props);
@@ -561,18 +557,18 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 			}
 		}
 	} else {
-		const services = await resolveServices(props);
+		const { services, realtime } = await resolveInitSelection(props);
 		writeFileSync(
 			join(cwd, "neon.ts"),
-			renderNeonConfig(services, props.realtime),
+			renderNeonConfig(services, realtime),
 		);
 		if (!props.silent) {
-			if (services.length === 0 && props.realtime !== true) {
+			if (services.length === 0 && realtime !== true) {
 				log.info("Created neon.ts with a starter policy.");
 			} else {
 				const declared = [
 					...services,
-					...(props.realtime === true ? ["Realtime"] : []),
+					...(realtime === true ? ["Realtime"] : []),
 				];
 				log.info("Created neon.ts declaring %s.", declared.join(", "));
 			}
@@ -1047,7 +1043,7 @@ export const builder = (argv: yargs.Argv) =>
 			"init",
 			"Scaffold a neon.ts policy and install the Neon config packages",
 			(yargs) =>
-				yargs.options({
+				yargs.strict().options({
 					install: {
 						describe:
 							"Install @neon/config and @neon/env if they're missing. " +
@@ -1057,18 +1053,13 @@ export const builder = (argv: yargs.Argv) =>
 					},
 					services: servicesOption({
 						key: "services",
-						allowed: NEON_SERVICES,
+						allowed: CONFIG_INIT_SERVICE_OPTIONS,
 						describe: "Services the scaffolded neon.ts declares",
 						also:
 							"postgres alone writes the starter policy; every branch has Postgres. " +
 							"Omitted: pick interactively on a terminal, starter policy in " +
 							"CI or without a TTY.",
 					}),
-					realtime: {
-						describe:
-							"Declare Realtime in the scaffolded neon.ts. Use --no-realtime to declare it disabled",
-						type: "boolean",
-					},
 					"from-branch": {
 						describe:
 							"Seed neon.ts from a branch's live Neon state instead of asking. Uses the " +
@@ -1077,7 +1068,7 @@ export const builder = (argv: yargs.Argv) =>
 						type: "boolean",
 						// No `default`: yargs counts a defaulted key as provided, so
 						// `default: false` makes `conflicts` reject every `--services` run.
-						conflicts: ["services", "realtime"],
+						conflicts: "services",
 					},
 				}),
 			(args) =>

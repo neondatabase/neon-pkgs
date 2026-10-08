@@ -274,10 +274,10 @@ describe("init handler", () => {
 		);
 	});
 
-	test("--realtime is passed separately to config init", async () => {
+	test("--services realtime writes realtime to neon.ts", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-realtime-"));
 		vi.spyOn(process.stdout, "write").mockReturnValue(true);
-		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const { initCmd } = await import("./config.js");
 		const { handler } = await import("./init.js");
 
 		await handler(
@@ -285,17 +285,23 @@ describe("init handler", () => {
 				cwd,
 				operations: makeOperations(),
 				yes: true,
-				realtime: true,
+				services: ["realtime"],
 				contextFile: join(cwd, ".neon"),
-				initConfig,
+				initConfig: async (input: {
+					cwd: string;
+					services?: readonly string[];
+				}) =>
+					initCmd({
+						cwd: input.cwd,
+						install: false,
+						silent: true,
+						...(input.services ? { services: input.services } : {}),
+					}),
 			}),
 		);
 
-		expect(initConfig).toHaveBeenCalledWith(
-			expect.objectContaining({
-				services: ["postgres"],
-				realtime: true,
-			}),
+		expect(readFileSync(join(cwd, "neon.ts"), "utf8")).toContain(
+			"realtime: true",
 		);
 	});
 
@@ -1986,19 +1992,6 @@ describe("init CLI", () => {
 		},
 	);
 
-	cliTest(
-		"rejects --no-config with --realtime",
-		async ({ testCliCommand }) => {
-			const { stderr } = await testCliCommand(
-				["init", "--no-config", "--realtime"],
-				{ snapshot: false, code: 1, outputTable: true },
-			);
-			expect(stderr).toMatch(
-				/--no-config cannot be combined with --realtime/,
-			);
-		},
-	);
-
 	cliTest("rejects removed template flags", async ({ testCliCommand }) => {
 		for (const flag of ["--template", "--skip-template"]) {
 			const { stderr } = await testCliCommand(
@@ -2131,7 +2124,7 @@ describe("init flag parsing", () => {
 			config?: boolean;
 			link?: boolean;
 			agentSetup?: boolean;
-			realtime?: boolean;
+			services?: string[];
 		};
 
 	test("--config is a three-state flag", async () => {
@@ -2140,10 +2133,10 @@ describe("init flag parsing", () => {
 		expect((await parse(["--no-config"])).config).toBe(false);
 	});
 
-	test("--realtime is a three-state flag", async () => {
-		expect((await parse([])).realtime).toBeUndefined();
-		expect((await parse(["--realtime"])).realtime).toBe(true);
-		expect((await parse(["--no-realtime"])).realtime).toBe(false);
+	test("--services accepts realtime", async () => {
+		expect((await parse(["--services", "realtime"])).services).toEqual([
+			"realtime",
+		]);
 	});
 
 	test("--no-link skips project linking", async () => {

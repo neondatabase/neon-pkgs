@@ -247,8 +247,12 @@ describe("config init", () => {
 		);
 	});
 
-	test("--realtime declares Realtime separately from services", async () => {
-		await initCmd({ cwd: workspace, install: false, realtime: true });
+	test("--services realtime writes realtime: true", async () => {
+		await initCmd({
+			cwd: workspace,
+			install: false,
+			services: ["realtime"],
+		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain("realtime: true");
@@ -549,13 +553,18 @@ describe("config init", () => {
 		expect(content).toContain('assets: { access: "private" }');
 	});
 
-	test("--realtime runs offline end to end", async ({ testCliCommand }) => {
-		await testCliCommand(["config", "init", "--no-install", "--realtime"], {
-			unreachableHost: true,
-			code: 0,
-			cwd: workspace,
-			snapshot: false,
-		});
+	test("--services realtime runs offline end to end", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			["config", "init", "--no-install", "--services", "realtime"],
+			{
+				unreachableHost: true,
+				code: 0,
+				cwd: workspace,
+				snapshot: false,
+			},
+		);
 
 		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
 			"realtime: true",

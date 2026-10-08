@@ -13,7 +13,7 @@ import { quoteFlagValue, runLink } from "../commands/link.js";
 import { defaultDir } from "../config.js";
 import {
 	CONFIG_INIT_SERVICES,
-	parseConfigInitServices,
+	parseConfigInitSelection,
 } from "../config_template.js";
 import { contextBranch, readContextFile } from "../context.js";
 import { log } from "../log.js";
@@ -140,7 +140,6 @@ import {
 export type InitConfigFn = (input: {
 	cwd: string;
 	services?: readonly string[];
-	realtime?: boolean;
 	packageManager?: PackageManager;
 	install: boolean;
 }) => Promise<void>;
@@ -170,7 +169,6 @@ export type InitProps = CommonProps & {
 	link?: boolean;
 	config?: boolean;
 	services?: unknown;
-	realtime?: boolean;
 	orgId?: string;
 	projectId?: string;
 	projectName?: string;
@@ -442,7 +440,6 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 		silent: true,
 		requireInstall: true,
 		...(input.services !== undefined ? { services: input.services } : {}),
-		...(input.realtime !== undefined ? { realtime: input.realtime } : {}),
 		...(input.packageManager !== undefined
 			? { packageManager: input.packageManager }
 			: {}),
@@ -512,11 +509,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	if (props.config === false && servicesFlag !== undefined) {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
 	}
-	if (props.config === false && props.realtime !== undefined) {
-		throw new Error("--no-config cannot be combined with --realtime.");
-	}
 	if (servicesFlag !== undefined) {
-		parseConfigInitServices(servicesFlag);
+		parseConfigInitSelection(servicesFlag);
 	}
 	const linkInputs: InitLinkInputs = {
 		...(props.orgId ? { orgId: props.orgId } : {}),
@@ -591,9 +585,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				: {}),
 			...(props.config !== undefined ? { configFlag: props.config } : {}),
 			...(servicesFlag !== undefined ? { services: servicesFlag } : {}),
-			...(props.realtime !== undefined
-				? { realtime: props.realtime }
-				: {}),
 		};
 		resolveInitMode(modeArgs);
 
@@ -1141,10 +1132,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const canAskConfig =
 			props.pickConfig !== undefined || detection.interactive;
 		const configResolution = resolveInitConfigChoice({
-			flag: recommended
-				? (props.config ?? true)
-				: (props.config ??
-					(props.realtime !== undefined ? true : undefined)),
+			flag: recommended ? (props.config ?? true) : props.config,
 			yes: recommended || yes,
 			canAsk: canAskConfig,
 			existingConfig,
@@ -1188,9 +1176,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? undefined
 				: (configPlan.services ?? ["postgres"]);
 			if (planned !== undefined) {
-				const declared = parseConfigInitServices(planned);
-				extraServices = declared.length > 0 || props.realtime === true;
-				selectedServices = expandTelemetryServices(declared);
+				const selection = parseConfigInitSelection(planned);
+				extraServices =
+					selection.services.length > 0 ||
+					selection.realtime === true;
+				selectedServices = expandTelemetryServices(selection.services);
 				funnel.services = selectedServices;
 				wroteNewFile = true;
 			} else {
@@ -1226,9 +1216,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					install: true,
 					packageManager: pm,
 					...(planned !== undefined ? { services: planned } : {}),
-					...(props.realtime !== undefined
-						? { realtime: props.realtime }
-						: {}),
 				});
 			} catch (error) {
 				if (error instanceof ConfigInstallFailed) {
