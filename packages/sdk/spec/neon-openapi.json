@@ -98,6 +98,10 @@
             "description": "These methods allow you to create and manage functions on your Neon branches."
         },
         {
+            "name": "Realtime",
+            "description": "These methods allow you to enable and manage Realtime on your branches."
+        },
+        {
             "name": "AI Gateway",
             "description": "These methods allow you to inspect the AI Gateway endpoint for your Neon branches."
         },
@@ -5498,6 +5502,194 @@
                                 }
                             }
                         }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/realtime": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "Retrieve Realtime state",
+                "description": "Retrieves whether Realtime is enabled for the branch, whether a change is still being applied,\nand, once provisioned, its invocation URL and allowed origins. The shared secret is returned by\n`GET /projects/{project_id}/branches/{branch_id}/realtime/secret`.\n",
+                "tags": [
+                    "Realtime"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "getProjectBranchRealtime",
+                "responses": {
+                    "200": {
+                        "description": "Realtime state of the branch",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Realtime"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "post": {
+                "summary": "Enable Realtime",
+                "description": "Enables Realtime for the branch, or applies new options to an enabled branch. Provisioning is\nasynchronous; poll the Realtime state until it is no longer pending.\n",
+                "tags": [
+                    "Realtime"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "enableProjectBranchRealtime",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RealtimeOptions"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "Realtime provisioning is queued"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "delete": {
+                "summary": "Disable Realtime",
+                "description": "Disables Realtime for the branch and discards its shared secret. Deprovisioning is asynchronous.",
+                "tags": [
+                    "Realtime"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "disableProjectBranchRealtime",
+                "responses": {
+                    "202": {
+                        "description": "Realtime deprovisioning is queued"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/realtime/secret": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "Retrieve the Realtime shared secret",
+                "description": "Retrieves the secret the application backend issues Realtime tokens with. Requires permission to\nread the project's credentials. Returns 404 while Realtime is disabled or before the secret is\nprovisioned. After a rotation, this returns the previous secret until `pending` is false.\n",
+                "tags": [
+                    "Realtime"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "getProjectBranchRealtimeSecret",
+                "responses": {
+                    "200": {
+                        "description": "The branch's Realtime shared secret",
+                        "headers": {
+                            "Cache-Control": {
+                                "description": "Prevents caches from storing the shared secret.",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RealtimeSecret"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/realtime/rotate_secret": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "post": {
+                "summary": "Rotate the Realtime shared secret",
+                "description": "Replaces the branch's Realtime shared secret. Rotation is asynchronous: once the Realtime state is\nno longer pending, the previous secret stops working and\n`GET /projects/{project_id}/branches/{branch_id}/realtime/secret` returns the new one.\n",
+                "tags": [
+                    "Realtime"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "rotateProjectBranchRealtimeSecret",
+                "responses": {
+                    "202": {
+                        "description": "Realtime secret rotation is queued"
                     },
                     "default": {
                         "$ref": "#/components/responses/GeneralError"
@@ -11115,7 +11307,8 @@
                         "format": "date-time"
                     },
                     "synthetic_storage_size": {
-                        "description": "The current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.\n",
+                        "description": "Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.\nThe current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.\n",
+                        "deprecated": true,
                         "type": "integer",
                         "format": "int64"
                     },
@@ -11332,7 +11525,8 @@
                         "format": "date-time"
                     },
                     "synthetic_storage_size": {
-                        "description": "The current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.\n",
+                        "description": "Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.\nThe current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.\n",
+                        "deprecated": true,
                         "type": "integer",
                         "format": "int64"
                     },
@@ -11444,6 +11638,10 @@
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 256
+                            },
+                            "realtime": {
+                                "description": "Enable Realtime for the default branch with these options.",
+                                "$ref": "#/components/schemas/RealtimeOptions"
                             },
                             "branch": {
                                 "type": "object",
@@ -12690,6 +12888,10 @@
                                 "type": "boolean",
                                 "default": false
                             },
+                            "realtime": {
+                                "description": "Enable Realtime for the branch with these options. A child of a Realtime branch is enabled\neven when this is omitted.\n",
+                                "$ref": "#/components/schemas/RealtimeOptions"
+                            },
                             "archived": {
                                 "description": "Whether to create the branch in the archived state. When omitted, the branch is created as a normal (non-archived) branch.\n",
                                 "type": "boolean"
@@ -13660,6 +13862,75 @@
                     }
                 }
             },
+            "RealtimeOptions": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "allowed_origins": {
+                        "description": "The browser origins allowed to connect, each `http` or `https` with a host and optional port\nand no path. An empty list, or `*` alone, allows any origin. Omitted keeps the current or\ninherited value.\n",
+                        "type": "array",
+                        "maxItems": 16,
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048,
+                            "pattern": "^(\\*|https?://[^/?#@,*\\s]+)$"
+                        }
+                    }
+                }
+            },
+            "Realtime": {
+                "type": "object",
+                "required": [
+                    "enabled",
+                    "pending"
+                ],
+                "properties": {
+                    "enabled": {
+                        "description": "Whether Realtime is enabled for the branch.",
+                        "type": "boolean"
+                    },
+                    "pending": {
+                        "description": "Whether a provisioning, settings, rotation or deprovisioning change is still being applied.",
+                        "type": "boolean"
+                    },
+                    "invocation_url": {
+                        "type": "string"
+                    },
+                    "revision": {
+                        "type": "integer",
+                        "format": "int32",
+                        "minimum": 1
+                    },
+                    "allowed_origins": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "RealtimeSecret": {
+                "type": "object",
+                "x-sensitive": [
+                    "secret"
+                ],
+                "required": [
+                    "secret",
+                    "pending"
+                ],
+                "properties": {
+                    "secret": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The key the application backend issues Realtime tokens with, `nrt_live_1` followed by the unpadded base64url 32-byte AES-256-GCM key."
+                    },
+                    "pending": {
+                        "description": "Whether a change is still being applied. After a rotation, the secret changes when this becomes false.",
+                        "type": "boolean"
+                    }
+                }
+            },
             "Role": {
                 "type": "object",
                 "required": [
@@ -13690,7 +13961,7 @@
                         "type": "boolean"
                     },
                     "authentication_method": {
-                        "description": "Authentication method configured for this role: `password`, `oauth`, or `no_login`.\n",
+                        "description": "Authentication method configured for this role: `password`, `oauth`, `oidc`, or `no_login`.\n",
                         "type": "string",
                         "example": "password"
                     },
@@ -14008,6 +14279,7 @@
                     "aws_marketplace",
                     "free_v2",
                     "free_v3",
+                    "build",
                     "launch",
                     "launch_v3",
                     "scale",
@@ -15075,6 +15347,11 @@
                         },
                         "nullable": true,
                         "description": "List of available database schemas (SubZero only)"
+                    },
+                    "observed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When `settings` and `available_schemas` were read from the database. While the\ncompute is suspended they are served from that read, so a change made directly in\nthe database since then shows up in the first response served while the compute is\nactive.\n"
                     }
                 }
             },
@@ -18278,7 +18555,7 @@
                     "zip": {
                         "type": "string",
                         "format": "binary",
-                        "description": "Optional ZIP archive of the function source code. Omit to reuse the\nlatest version's bundle (a config-only change). Required for the\nfirst deployment of a function.\n"
+                        "description": "Optional ZIP archive of the function source code. Omit to reuse the\nlatest version's bundle (a config-only change). Required for the\nfirst deployment of a function.\n\nPlace `index.mjs` or `index.js` at the archive root, without a\ncontaining directory. If both exist, `index.mjs` is loaded. Export a\nrequest handler function or an object with a `fetch` method. Use\n`export default` for ESM or `module.exports` for CommonJS; prefer\n`index.mjs` for ESM.\n\nUpload JavaScript ready to run on Node.js 24. Compile TypeScript\nbefore uploading. Bundle dependencies into the entry module, or\ninclude the required modules and assets in the archive with their\nrelative paths preserved (including `node_modules` for external\npackages). Node.js built-in modules do not need to be bundled.\nThe API does not transpile, bundle, or install dependencies.\nThe ZIP is limited to 32 MiB compressed and 128 MiB extracted, with\nat most 32,768 entries and 64 MiB per file. Bundle large dependency\ntrees to keep the archive small. ZIPs larger than 32 MiB are rejected\nwith HTTP 413 before creating a deployment. The extracted-size,\nentry-count, and per-file limits are enforced during the asynchronous\nbuild; an accepted upload that exceeds them fails the build.\n\nFor example, a self-contained ESM bundle needs only `index.mjs`\nat the ZIP root. The Neon CLI bundles source into this layout by\ndefault; `neon function deploy --no-bundle` packages a prebuilt\ndirectory or an entry file named `index.mjs` or `index.js`.\n"
                     },
                     "runtime": {
                         "type": "string",

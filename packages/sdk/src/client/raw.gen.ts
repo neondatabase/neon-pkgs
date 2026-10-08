@@ -58,6 +58,8 @@ import {
 	deleteProjectVpcEndpoint as _deleteProjectVpcEndpoint,
 	deleteSnapshot as _deleteSnapshot,
 	disableNeonAuth as _disableNeonAuth,
+	disableProjectBranchRealtime as _disableProjectBranchRealtime,
+	enableProjectBranchRealtime as _enableProjectBranchRealtime,
 	finalizeRestoreBranch as _finalizeRestoreBranch,
 	getActiveRegions as _getActiveRegions,
 	getAnonymizedBranchStatus as _getAnonymizedBranchStatus,
@@ -92,6 +94,8 @@ import {
 	getProjectBranchDataApi as _getProjectBranchDataApi,
 	getProjectBranchDatabase as _getProjectBranchDatabase,
 	getProjectBranchFunction as _getProjectBranchFunction,
+	getProjectBranchRealtime as _getProjectBranchRealtime,
+	getProjectBranchRealtimeSecret as _getProjectBranchRealtimeSecret,
 	getProjectBranchRole as _getProjectBranchRole,
 	getProjectBranchRolePassword as _getProjectBranchRolePassword,
 	getProjectBranchSchema as _getProjectBranchSchema,
@@ -148,6 +152,7 @@ import {
 	revokeOrgApiKey as _revokeOrgApiKey,
 	revokePermissionFromProject as _revokePermissionFromProject,
 	rotateCredential as _rotateCredential,
+	rotateProjectBranchRealtimeSecret as _rotateProjectBranchRealtimeSecret,
 	sendNeonAuthEmailProviderTest as _sendNeonAuthEmailProviderTest,
 	sendNeonAuthTestEmail as _sendNeonAuthTestEmail,
 	setDefaultProjectBranch as _setDefaultProjectBranch,
@@ -239,6 +244,8 @@ export const deleteProjectJwks = wrapRaw(_deleteProjectJwks);
 export const deleteProjectVpcEndpoint = wrapRaw(_deleteProjectVpcEndpoint);
 export const deleteSnapshot = wrapRaw(_deleteSnapshot);
 export const disableNeonAuth = wrapRaw(_disableNeonAuth);
+export const disableProjectBranchRealtime = wrapRaw(_disableProjectBranchRealtime);
+export const enableProjectBranchRealtime = wrapRaw(_enableProjectBranchRealtime);
 export const finalizeRestoreBranch = wrapRaw(_finalizeRestoreBranch);
 export const getActiveRegions = wrapRaw(_getActiveRegions);
 export const getAnonymizedBranchStatus = wrapRaw(_getAnonymizedBranchStatus);
@@ -273,6 +280,8 @@ export const getProjectBranchBucketObject = wrapRaw(_getProjectBranchBucketObjec
 export const getProjectBranchDataApi = wrapRaw(_getProjectBranchDataApi);
 export const getProjectBranchDatabase = wrapRaw(_getProjectBranchDatabase);
 export const getProjectBranchFunction = wrapRaw(_getProjectBranchFunction);
+export const getProjectBranchRealtime = wrapRaw(_getProjectBranchRealtime);
+export const getProjectBranchRealtimeSecret = wrapRaw(_getProjectBranchRealtimeSecret);
 export const getProjectBranchRole = wrapRaw(_getProjectBranchRole);
 export const getProjectBranchRolePassword = wrapRaw(_getProjectBranchRolePassword);
 export const getProjectBranchSchema = wrapRaw(_getProjectBranchSchema);
@@ -329,6 +338,7 @@ export const revokeCredential = wrapRaw(_revokeCredential);
 export const revokeOrgApiKey = wrapRaw(_revokeOrgApiKey);
 export const revokePermissionFromProject = wrapRaw(_revokePermissionFromProject);
 export const rotateCredential = wrapRaw(_rotateCredential);
+export const rotateProjectBranchRealtimeSecret = wrapRaw(_rotateProjectBranchRealtimeSecret);
 export const sendNeonAuthEmailProviderTest = wrapRaw(_sendNeonAuthEmailProviderTest);
 export const sendNeonAuthTestEmail = wrapRaw(_sendNeonAuthTestEmail);
 export const setDefaultProjectBranch = wrapRaw(_setDefaultProjectBranch);
