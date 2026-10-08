@@ -348,19 +348,7 @@ describe("RealtimeClient", () => {
 		);
 	});
 
-	it.each([
-		{
-			code: "authorization_expired",
-			event: "query_expired",
-		},
-		{
-			code: "key_retired",
-			event: "query_encryption_key_rotated",
-		},
-	] as const)("queues $event before reentrant state listeners", async ({
-		code,
-		event,
-	}) => {
+	it("queues query expiry before reentrant state listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
 		const client = createRealtimeClient({
@@ -380,15 +368,15 @@ describe("RealtimeClient", () => {
 		socket.receive({
 			type: "subscription_error",
 			live_id: "41",
-			code,
+			code: "authorization_expired",
 			message: "query unavailable",
 		});
 		await Promise.resolve();
 
 		expect(events).toEqual(
-			expect.arrayContaining([event, "client_closed"]),
+			expect.arrayContaining(["query_expired", "client_closed"]),
 		);
-		expect(events.indexOf(event)).toBeLessThan(
+		expect(events.indexOf("query_expired")).toBeLessThan(
 			events.indexOf("client_closed"),
 		);
 	});
@@ -1478,7 +1466,6 @@ function compactJwe(payload: string): string {
 		JSON.stringify({
 			alg: "dir",
 			enc: "A256GCM",
-			kid: "current",
 			v: 1,
 		}),
 	).toString("base64url");

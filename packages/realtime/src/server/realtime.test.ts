@@ -10,12 +10,7 @@ import {
 } from "./realtime.js";
 
 const KEY = Uint8Array.from({ length: 32 }, (_, index) => index);
-const SECRET = encodeSecret({
-	v: 1,
-	kid: "current",
-	iss: "example-app",
-	key: base64Url(KEY),
-});
+const SECRET = encodeSecret(KEY);
 interface MessageRow {
 	readonly id: number;
 	readonly body: string;
@@ -250,8 +245,8 @@ async function capabilityClaims(
 	return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
-function encodeSecret(value: object): string {
-	return `neon_live_v1_${base64Url(new TextEncoder().encode(JSON.stringify(value)))}`;
+function encodeSecret(key: Uint8Array): string {
+	return `nrt_live_1${base64Url(key)}`;
 }
 
 function base64UrlDecode(value: string): Uint8Array {

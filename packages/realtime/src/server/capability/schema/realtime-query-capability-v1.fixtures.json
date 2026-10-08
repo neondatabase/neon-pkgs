@@ -1,11 +1,10 @@
 {
   "valid": [
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 1 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -21,11 +20,10 @@
   ],
   "invalid": [
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 2 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 2 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -36,11 +34,10 @@
       }
     },
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 1 },
       "claims": {
         "v": 2,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -51,11 +48,10 @@
       }
     },
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 1 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -66,11 +62,10 @@
       }
     },
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 1 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -81,11 +76,10 @@
       }
     },
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "typ": "redundant", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "typ": "redundant", "v": 1 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -96,14 +90,13 @@
       }
     },
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key.1", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "legacy-key", "v": 1 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
         "database": "app",
         "error_details": "safe",
-        "query_fingerprint": "not-a-fingerprint",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "sql": "select 1",
         "parameters": [],
         "iat": 1000,
@@ -111,11 +104,25 @@
       }
     },
     {
-      "protected": { "alg": "dir", "enc": "A256GCM", "kid": "key-1", "v": 1 },
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 1 },
       "claims": {
         "v": 1,
         "aud": "realtime-proxy",
-        "iss": "app-server",
+        "iss": "legacy-issuer",
+        "database": "app",
+        "error_details": "safe",
+        "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sql": "select 1",
+        "parameters": [],
+        "iat": 1000,
+        "exp": 1060
+      }
+    },
+    {
+      "protected": { "alg": "dir", "enc": "A256GCM", "v": 1 },
+      "claims": {
+        "v": 1,
+        "aud": "realtime-proxy",
         "database": "contains\u0000nul",
         "error_details": "safe",
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
