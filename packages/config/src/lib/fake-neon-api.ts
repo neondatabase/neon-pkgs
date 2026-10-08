@@ -1,4 +1,5 @@
 import type {
+	ConfigureRealtimeInput,
 	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
@@ -21,6 +22,7 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
 	UpdateBranchInput,
@@ -60,6 +62,8 @@ export class FakeNeonApi implements NeonApi {
 	private readonly neonAuth = new Map<string, NeonAuthSnapshot>();
 	/** Keyed by `${projectId}:${branchId}:${databaseName}`. */
 	private readonly neonDataApi = new Map<string, NeonDataApiSnapshot>();
+	/** Branch-level Realtime state, keyed by `${projectId}:${branchId}`. */
+	private readonly realtime = new Map<string, NeonRealtimeSnapshot>();
 	/** Preview buckets, keyed by `${projectId}:${branchId}`. */
 	private readonly buckets = new Map<string, NeonBucketSnapshot[]>();
 	/** Object-storage connection overrides, keyed by `${projectId}:${branchId}`. */
@@ -367,6 +371,22 @@ export class FakeNeonApi implements NeonApi {
 			parentRoles.length > 0 ? parentRoles : undefined,
 			parentDatabases.length > 0 ? parentDatabases : undefined,
 		);
+		const parentRealtime = branch.parentId
+			? this.realtime.get(`${projectId}:${branch.parentId}`)
+			: undefined;
+		if (parentRealtime?.enabled) {
+			this.realtime.set(`${projectId}:${branch.id}`, {
+				enabled: true,
+				pending: false,
+				invocationUrl: `https://${branch.id}.fake.neon.tech/realtime`,
+				...(parentRealtime.revision !== undefined
+					? { revision: parentRealtime.revision }
+					: {}),
+				...(parentRealtime.allowedOrigins !== undefined
+					? { allowedOrigins: [...parentRealtime.allowedOrigins] }
+					: {}),
+			});
+		}
 
 		this.seedDefaultBranchCredentials(projectId, branch.id);
 
@@ -617,6 +637,63 @@ export class FakeNeonApi implements NeonApi {
 		this.neonDataApi.delete(`${projectId}:${branchId}:${databaseName}`);
 	}
 
+	async getProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSnapshot> {
+		this.history.push({
+			method: "getProjectBranchRealtime",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return clone(
+			this.realtime.get(`${projectId}:${branchId}`) ?? {
+				enabled: false,
+				pending: false,
+			},
+		);
+	}
+
+	async enableProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+		input?: ConfigureRealtimeInput,
+	): Promise<void> {
+		this.history.push({
+			method: "enableProjectBranchRealtime",
+			args: [projectId, branchId, input],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const key = `${projectId}:${branchId}`;
+		const current = this.realtime.get(key);
+		this.realtime.set(key, {
+			enabled: true,
+			pending: false,
+			invocationUrl: `https://${branchId}.fake.neon.tech/realtime`,
+			revision: (current?.revision ?? 0) + 1,
+			...(input?.allowedOrigins !== undefined
+				? { allowedOrigins: [...input.allowedOrigins] }
+				: current?.allowedOrigins !== undefined
+					? { allowedOrigins: [...current.allowedOrigins] }
+					: {}),
+		});
+	}
+
+	async disableProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+	): Promise<void> {
+		this.history.push({
+			method: "disableProjectBranchRealtime",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		this.realtime.delete(`${projectId}:${branchId}`);
+	}
+
 	/** Test helper: attach a Neon Auth integration to a branch. */
 	seedNeonAuth(
 		projectId: string,
@@ -636,6 +713,15 @@ export class FakeNeonApi implements NeonApi {
 		this.neonDataApi.set(`${projectId}:${branchId}:${databaseName}`, {
 			...snapshot,
 		});
+	}
+
+	/** Test helper: set a branch's Realtime state. */
+	seedRealtime(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonRealtimeSnapshot,
+	): void {
+		this.realtime.set(`${projectId}:${branchId}`, clone(snapshot));
 	}
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────

@@ -201,6 +201,118 @@ describe("diffConfig", () => {
 		expect(diff.conflicts).toEqual([]);
 	});
 
+	test("plans Realtime enablement and leaves it unmanaged when omitted", () => {
+		const enabled = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				realtimePolicy: "enabled",
+				realtime: {
+					allowedOrigins: ["https://app.example.com"],
+				},
+			},
+			{
+				...remote,
+				realtime: { enabled: false, pending: false },
+			},
+			{ updateExisting: false },
+		);
+		expect(enabled.plan).toEqual([
+			{
+				kind: "enable-realtime",
+				projectId: "proj",
+				branchId: "br-main",
+				branchName: "main",
+				input: { allowedOrigins: ["https://app.example.com"] },
+			},
+		]);
+
+		const omitted = diffConfig(
+			{ authEnabled: false, dataApiEnabled: false },
+			{
+				...remote,
+				realtime: { enabled: true, pending: false },
+			},
+			{ updateExisting: true },
+		);
+		expect(omitted).toEqual({ plan: [], conflicts: [] });
+	});
+
+	test("Realtime origin drift and disablement require updateExisting", () => {
+		const enabledRemote: RemoteState = {
+			...remote,
+			realtime: {
+				enabled: true,
+				pending: false,
+				allowedOrigins: ["https://old.example.com"],
+			},
+		};
+		const originPolicy = {
+			authEnabled: false,
+			dataApiEnabled: false,
+			realtimePolicy: "enabled" as const,
+			realtime: { allowedOrigins: ["https://app.example.com"] },
+		};
+		expect(
+			diffConfig(originPolicy, enabledRemote, {
+				updateExisting: false,
+			}).conflicts[0],
+		).toMatchObject({ field: "realtime.allowedOrigins" });
+		expect(
+			diffConfig(originPolicy, enabledRemote, {
+				updateExisting: true,
+			}).plan[0],
+		).toMatchObject({
+			kind: "update-realtime",
+			input: { allowedOrigins: ["https://app.example.com"] },
+		});
+
+		const disabledPolicy = {
+			authEnabled: false,
+			dataApiEnabled: false,
+			realtimePolicy: "disabled" as const,
+		};
+		expect(
+			diffConfig(disabledPolicy, enabledRemote, {
+				updateExisting: false,
+			}).conflicts[0],
+		).toMatchObject({ field: "realtime", desired: false });
+		expect(
+			diffConfig(disabledPolicy, enabledRemote, {
+				updateExisting: true,
+			}).plan[0],
+		).toMatchObject({ kind: "disable-realtime" });
+	});
+
+	test("does not update Realtime when allowed origins only differ in order", () => {
+		const diff = diffConfig(
+			{
+				authEnabled: false,
+				dataApiEnabled: false,
+				realtimePolicy: "enabled",
+				realtime: {
+					allowedOrigins: [
+						"https://app.example.com",
+						"http://localhost:3000",
+					],
+				},
+			},
+			{
+				...remote,
+				realtime: {
+					enabled: true,
+					pending: false,
+					allowedOrigins: [
+						"http://localhost:3000",
+						"https://app.example.com",
+					],
+				},
+			},
+			{ updateExisting: true },
+		);
+		expect(diff).toEqual({ plan: [], conflicts: [] });
+	});
+
 	test("reports compute drift unless updateExisting is set", () => {
 		const diff = diffConfig(
 			{

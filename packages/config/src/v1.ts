@@ -168,6 +168,7 @@ export type { LoadConfigOptions } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────
 export type {
+	ConfigureRealtimeInput,
 	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
@@ -191,6 +192,7 @@ export type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonScheduleTriggerSnapshot,
 	NeonStorageObjectCreatedTriggerSnapshot,

@@ -1,10 +1,12 @@
 import type {
+	ConfigureRealtimeInput,
 	EnableDataApiInput,
 	NeonBranchSnapshot,
 	NeonBucketSnapshot,
 	NeonCustomDomainSnapshot,
 	NeonEndpointSnapshot,
 	NeonFunctionSnapshot,
+	NeonRealtimeSnapshot,
 	NeonTriggerSnapshot,
 } from "./neon-api.js";
 import type {
@@ -23,6 +25,26 @@ import type {
  * produces a list of these for `pushConfig` to execute (or report).
  */
 export type PlanStep =
+	| {
+			kind: "enable-realtime";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			input?: ConfigureRealtimeInput;
+	  }
+	| {
+			kind: "update-realtime";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+			input: Required<ConfigureRealtimeInput>;
+	  }
+	| {
+			kind: "disable-realtime";
+			projectId: string;
+			branchId: string;
+			branchName: string;
+	  }
 	| {
 			kind: "update-branch-ttl";
 			projectId: string;
@@ -162,6 +184,8 @@ export interface RemoteState {
 	projectId: string;
 	branch: NeonBranchSnapshot;
 	endpoint?: NeonEndpointSnapshot;
+	/** Present when the policy manages Realtime. */
+	realtime?: NeonRealtimeSnapshot;
 	services: RemoteServiceState;
 	preview?: RemotePreviewState;
 }
@@ -190,9 +214,95 @@ export function diffConfig(
 	const conflicts: ConflictReport[] = [];
 	const plan: PlanStep[] = [];
 	diffBranchConfig({ config, remote, options, plan, conflicts });
+	diffRealtime({ config, remote, options, plan, conflicts });
 	diffServices({ config, remote, options, plan, conflicts });
 	diffPreview({ config, remote, options, plan, conflicts });
 	return { plan, conflicts };
+}
+
+function diffRealtime(args: {
+	config: ResolvedBranchConfig;
+	remote: RemoteState;
+	options: DiffOptions;
+	plan: PlanStep[];
+	conflicts: ConflictReport[];
+}): void {
+	const { config, remote, options, plan, conflicts } = args;
+	const policy = config.realtimePolicy ?? "omitted";
+	if (policy === "omitted") return;
+	const state = remote.realtime ?? { enabled: false, pending: false };
+
+	if (policy === "disabled") {
+		if (!state.enabled) return;
+		if (options.updateExisting) {
+			plan.push({
+				kind: "disable-realtime",
+				projectId: remote.projectId,
+				branchId: remote.branch.id,
+				branchName: remote.branch.name,
+			});
+		} else {
+			conflicts.push({
+				kind: "branch",
+				identifier: remote.branch.name,
+				field: "realtime",
+				current: true,
+				desired: false,
+				reason: "Existing Realtime would be disabled. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
+			});
+		}
+		return;
+	}
+
+	const allowedOrigins = config.realtime?.allowedOrigins;
+	if (!state.enabled) {
+		plan.push({
+			kind: "enable-realtime",
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
+			...(allowedOrigins !== undefined
+				? { input: { allowedOrigins: [...allowedOrigins] } }
+				: {}),
+		});
+		return;
+	}
+
+	if (
+		allowedOrigins === undefined ||
+		originsEqual(allowedOrigins, state.allowedOrigins)
+	) {
+		return;
+	}
+	if (options.updateExisting) {
+		plan.push({
+			kind: "update-realtime",
+			projectId: remote.projectId,
+			branchId: remote.branch.id,
+			branchName: remote.branch.name,
+			input: { allowedOrigins: [...allowedOrigins] },
+		});
+	} else {
+		conflicts.push({
+			kind: "branch",
+			identifier: remote.branch.name,
+			field: "realtime.allowedOrigins",
+			current: state.allowedOrigins,
+			desired: allowedOrigins,
+			reason: "Existing Realtime has different allowed origins. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
+		});
+	}
+}
+
+function originsEqual(
+	desired: readonly string[],
+	current: readonly string[] | undefined,
+): boolean {
+	if (current === undefined || desired.length !== current.length)
+		return false;
+	const left = [...desired].sort();
+	const right = [...current].sort();
+	return left.every((origin, index) => origin === right[index]);
 }
 
 /**

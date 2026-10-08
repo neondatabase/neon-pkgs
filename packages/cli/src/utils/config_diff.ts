@@ -133,6 +133,7 @@ const serviceLabel = (
 ): string => {
 	if (identifier === "auth") return "Neon Auth";
 	if (identifier === "dataApi") return "Data API";
+	if (identifier === "realtime") return "Realtime";
 	if (identifier.startsWith("bucket:")) {
 		return `bucket ${identifier.slice("bucket:".length)}`;
 	}

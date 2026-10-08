@@ -17,6 +17,7 @@ import {
 	type RemotePreviewState,
 	type RemoteServiceState,
 	type RemoteState,
+	type ResolvedBranchConfig,
 	type ResolvedFunctionConfig,
 	type ResolvedFunctionTrigger,
 	type ResolvedPreviewConfig,
@@ -194,6 +195,17 @@ export async function pushConfig(
 		isProtected: branch.protected,
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 	});
+	const realtimeApi = hasRealtimePolicy(resolved)
+		? requireRealtimeApi(api)
+		: undefined;
+	const realtimeRead = realtimeApi
+		? started(() =>
+				realtimeApi.getProjectBranchRealtime(
+					remoteProject.id,
+					branch.id,
+				),
+			)
+		: undefined;
 	const servicesRead = started(() =>
 		resolveServiceState({
 			api,
@@ -230,6 +242,9 @@ export async function pushConfig(
 		),
 		services,
 	};
+	if (realtimeRead) {
+		remote.realtime = await realtimeRead;
+	}
 	if (previewRead) {
 		remote.preview = await previewRead;
 	}
@@ -343,6 +358,8 @@ function isOverrideStep(step: PlanStep): boolean {
 		step.kind === "update-branch-ttl" ||
 		step.kind === "update-branch-protected" ||
 		step.kind === "update-endpoint" ||
+		step.kind === "update-realtime" ||
+		step.kind === "disable-realtime" ||
 		step.kind === "update-data-api" ||
 		step.kind === "disable-data-api" ||
 		step.kind === "retarget-custom-domain"
@@ -357,6 +374,31 @@ function isOverrideStep(step: PlanStep): boolean {
  */
 function synthesizeAppliedChange(step: PlanStep): AppliedChange {
 	switch (step.kind) {
+		case "enable-realtime":
+			return {
+				kind: "service",
+				action: "create",
+				identifier: "realtime",
+				...(step.input?.allowedOrigins !== undefined
+					? { details: { allowedOrigins: step.input.allowedOrigins } }
+					: {}),
+			};
+		case "update-realtime":
+			return {
+				kind: "service",
+				action: "update",
+				identifier: "realtime",
+				details: {
+					field: "allowedOrigins",
+					allowedOrigins: step.input.allowedOrigins,
+				},
+			};
+		case "disable-realtime":
+			return {
+				kind: "service",
+				action: "delete",
+				identifier: "realtime",
+			};
 		case "update-branch-ttl":
 			return {
 				kind: "branch",
@@ -635,6 +677,22 @@ async function applyStep(
 	ctx: ApplyContext,
 ): Promise<AppliedChange> {
 	switch (step.kind) {
+		case "enable-realtime":
+		case "update-realtime": {
+			await requireRealtimeApi(ctx.api).enableProjectBranchRealtime(
+				ctx.remoteProjectId,
+				step.branchId,
+				step.input,
+			);
+			return synthesizeAppliedChange(step);
+		}
+		case "disable-realtime": {
+			await requireRealtimeApi(ctx.api).disableProjectBranchRealtime(
+				ctx.remoteProjectId,
+				step.branchId,
+			);
+			return synthesizeAppliedChange(step);
+		}
 		case "update-branch-ttl": {
 			const updated = await ctx.api.updateBranch(
 				ctx.remoteProjectId,
@@ -911,6 +969,38 @@ async function applyStep(
 			};
 		}
 	}
+}
+
+function hasRealtimePolicy(resolved: ResolvedBranchConfig): boolean {
+	return (
+		resolved.realtimePolicy !== undefined &&
+		resolved.realtimePolicy !== "omitted"
+	);
+}
+
+function requireRealtimeApi(api: NeonApi): {
+	getProjectBranchRealtime: NonNullable<NeonApi["getProjectBranchRealtime"]>;
+	enableProjectBranchRealtime: NonNullable<
+		NeonApi["enableProjectBranchRealtime"]
+	>;
+	disableProjectBranchRealtime: NonNullable<
+		NeonApi["disableProjectBranchRealtime"]
+	>;
+} {
+	const get = api.getProjectBranchRealtime;
+	const enable = api.enableProjectBranchRealtime;
+	const disable = api.disableProjectBranchRealtime;
+	if (!get || !enable || !disable) {
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"This NeonApi adapter does not implement Realtime. Implement getProjectBranchRealtime, enableProjectBranchRealtime, and disableProjectBranchRealtime, or remove realtime from neon.ts.",
+		);
+	}
+	return {
+		getProjectBranchRealtime: get.bind(api),
+		enableProjectBranchRealtime: enable.bind(api),
+		disableProjectBranchRealtime: disable.bind(api),
+	};
 }
 
 /**

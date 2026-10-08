@@ -139,6 +139,21 @@ export interface EnableDataApiInput {
 	settings?: DataApiSettings;
 }
 
+/** Branch-level Realtime state returned by the Neon management API. */
+export interface NeonRealtimeSnapshot {
+	enabled: boolean;
+	pending: boolean;
+	invocationUrl?: string;
+	revision?: number;
+	allowedOrigins?: string[];
+}
+
+/** Options accepted when enabling Realtime or updating its allowed origins. */
+export interface ConfigureRealtimeInput {
+	/** Omit to preserve the current or inherited origins. */
+	allowedOrigins?: string[];
+}
+
 /**
  * A branchable object-storage bucket (Preview). Backed by Neon's
  * branchable-storage service.
@@ -485,6 +500,27 @@ export interface NeonApi {
 		projectId: string,
 		branchId: string,
 		databaseName: string,
+	): Promise<void>;
+
+	// ─── Realtime ──────────────────────────────────────────────────────────────
+
+	/** Read the branch's Realtime enablement and options. */
+	getProjectBranchRealtime?(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSnapshot>;
+
+	/** Enable Realtime, or update its options when it is already enabled. */
+	enableProjectBranchRealtime?(
+		projectId: string,
+		branchId: string,
+		input?: ConfigureRealtimeInput,
+	): Promise<void>;
+
+	/** Disable Realtime and discard its shared secret. */
+	disableProjectBranchRealtime?(
+		projectId: string,
+		branchId: string,
 	): Promise<void>;
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────

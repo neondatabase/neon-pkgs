@@ -115,6 +115,37 @@ describe("resolveConfig", () => {
 		expect(resolved.dataApiPolicy).toBe("omitted");
 	});
 
+	test("normalizes Realtime enablement, options, disablement, and omission", () => {
+		expect(
+			resolveConfig(defineConfig({ realtime: true }), {
+				name: "main",
+				exists: true,
+			}),
+		).toMatchObject({ realtimePolicy: "enabled" });
+		expect(
+			resolveConfig(
+				defineConfig({
+					realtime: {
+						allowedOrigins: ["https://app.example.com"],
+					},
+				}),
+				{ name: "main", exists: true },
+			),
+		).toMatchObject({
+			realtimePolicy: "enabled",
+			realtime: { allowedOrigins: ["https://app.example.com"] },
+		});
+		expect(
+			resolveConfig(defineConfig({ realtime: false }), {
+				name: "main",
+				exists: true,
+			}),
+		).toMatchObject({ realtimePolicy: "disabled" });
+		expect(
+			resolveConfig(defineConfig({}), { name: "main", exists: true }),
+		).toMatchObject({ realtimePolicy: "omitted" });
+	});
+
 	test("treats `auth: true` as enabled", () => {
 		const config = defineConfig({ auth: true });
 		expect(
