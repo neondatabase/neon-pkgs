@@ -212,6 +212,7 @@ export const envFlag = {
 /** Apply-only flags, exported so `deploy` can reuse the exact same surface. */
 export const applyFlags = {
 	"update-existing": {
+		alias: ["y", "yes"],
 		describe:
 			"Auto-confirm overriding existing remote settings on the branch",
 		type: "boolean",
