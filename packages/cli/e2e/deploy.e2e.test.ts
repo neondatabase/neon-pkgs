@@ -164,7 +164,7 @@ describe.sequential("e2e — neon deploy confirmations against the real API", ()
 		if (cwd) rmSync(cwd, { recursive: true, force: true });
 	});
 
-	it("applies additive changes without asking", async () => {
+	it("applies a policy that changes nothing without asking", async () => {
 		writePolicy();
 		const result = await deploy();
 		expect(result.code, result.stderr).toBe(0);

@@ -422,6 +422,12 @@ class ChildBranchNeonApi extends FakeNeonApi {
  * anything else is absent and would throw if touched.
  */
 /** `apply` always fails partway through — used to prove `deploy.after` does not run then. */
+class RejectAuthNeonApi extends FakeNeonApi {
+	override async enableNeonAuth(): Promise<NeonAuthSnapshot> {
+		throw new Error("Neon Auth enablement rejected (test)");
+	}
+}
+
 class ProtectedBranchNeonApi extends FakeNeonApi {
 	override async listBranches(): Promise<NeonBranchSnapshot[]> {
 		return [
@@ -432,12 +438,6 @@ class ProtectedBranchNeonApi extends FakeNeonApi {
 				protected: true,
 			},
 		];
-	}
-}
-
-class RejectAuthNeonApi extends FakeNeonApi {
-	override async enableNeonAuth(): Promise<NeonAuthSnapshot> {
-		throw new Error("Neon Auth enablement rejected (test)");
 	}
 }
 
