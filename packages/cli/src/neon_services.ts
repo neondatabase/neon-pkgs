@@ -27,6 +27,7 @@ export const NEON_SERVICES = [
 	"ai-gateway",
 ] as const;
 export type NeonService = (typeof NEON_SERVICES)[number];
+export type ServiceFlagValue = NeonService | "realtime";
 
 /** How output names each service. */
 export const NEON_SERVICE_LABELS: Readonly<Record<NeonService, string>> = {
@@ -62,6 +63,8 @@ export const deprecatedServiceMessage = (
 export type ParseServicesOptions = {
 	/** The subset this command supports. In {@link NEON_SERVICES} order. */
 	allowed: readonly NeonService[];
+	/** Values to list in errors when a caller also handles non-service selections. */
+	supportedValues?: readonly ServiceFlagValue[];
 	/** The flag being parsed, for error messages. */
 	flag: string;
 	/** Called once per deprecated spelling used, so the command can warn in its own voice. */
@@ -85,8 +88,8 @@ export const parseServices = (
 	raw: readonly string[],
 	options: ParseServicesOptions,
 ): NeonService[] => {
-	const { allowed, flag, onDeprecated } = options;
-	const supported = `Supported values: ${allowed.join(", ")}.`;
+	const { allowed, flag, onDeprecated, supportedValues = allowed } = options;
+	const supported = `Supported values: ${supportedValues.join(", ")}.`;
 
 	const names = raw
 		.flatMap((value) => value.split(","))
@@ -162,7 +165,7 @@ const SERVICE_FLAG_NAMES = ["s", "service", "services"] as const;
  */
 export const servicesOption = (params: {
 	key: "service" | "services";
-	allowed: readonly NeonService[];
+	allowed: readonly ServiceFlagValue[];
 	/**
 	 * A noun phrase for what these services are, in this command — the value list is
 	 * appended to it after a colon, so it has to be something a list can attach to

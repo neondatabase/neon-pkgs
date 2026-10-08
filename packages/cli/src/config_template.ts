@@ -31,6 +31,12 @@ export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
 	(service) => service !== "postgres",
 );
 
+/** Values accepted by `--services` during init. Internally, Realtime is a feature, not a service. */
+export const CONFIG_INIT_SERVICE_OPTIONS = [
+	...NEON_SERVICES,
+	"realtime",
+] as const;
+
 /**
  * Parse `--services` on `init` and `config init` into the services to declare. `postgres` is
  * accepted, alone or with others, and declares nothing: `--services postgres` is how a
@@ -45,6 +51,42 @@ export const parseConfigInitServices = (
 		flag: "--services",
 		...(onDeprecated ? { onDeprecated } : {}),
 	}).filter((service) => service !== "postgres");
+
+export type ConfigInitSelection = {
+	services: NeonService[];
+	realtime?: boolean;
+};
+
+/**
+ * Split the init command's outward `--services` vocabulary into actual Neon services and
+ * the Realtime branch feature. The rest of config initialization therefore continues to
+ * model Realtime independently from {@link NeonService}.
+ */
+export const parseConfigInitSelection = (
+	raw: readonly string[],
+	onDeprecated?: (used: string, canonical: NeonService) => void,
+): ConfigInitSelection => {
+	const names = raw
+		.flatMap((value) => value.split(","))
+		.map((name) => name.trim())
+		.filter((name) => name !== "");
+	const realtime = names.includes("realtime");
+	const serviceNames = names.filter((name) => name !== "realtime");
+
+	if (serviceNames.length === 0 && realtime) {
+		return { services: [], realtime: true };
+	}
+
+	return {
+		services: parseServices(serviceNames, {
+			allowed: NEON_SERVICES,
+			flag: "--services",
+			supportedValues: CONFIG_INIT_SERVICE_OPTIONS,
+			...(onDeprecated ? { onDeprecated } : {}),
+		}).filter((service) => service !== "postgres"),
+		realtime,
+	};
+};
 
 /** Slug, display name, and source path of the function scaffolded for `functions`. */
 export const FUNCTION_SLUG = "hello";
