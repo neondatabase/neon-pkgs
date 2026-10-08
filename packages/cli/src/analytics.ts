@@ -6,7 +6,7 @@ import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { storeFor } from "./credential_io.js";
 import { getCliAgent, getGithubEnvVars, isCi } from "./env.js";
-import type { ErrorCode } from "./errors.js";
+import { type ErrorCode, isUnexpectedError } from "./errors.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 
@@ -327,6 +327,7 @@ export const analyticsMiddleware = (args: {
 const ATTRIBUTION_WAIT_MS = 1000;
 
 let closing: Promise<void> | undefined;
+const errorReports: Promise<void>[] = [];
 
 /**
  * Send queued events, then close the client and flush. Later calls share the first close: the
@@ -337,6 +338,9 @@ export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
 	const analytics = client;
 	if (!analytics) {
 		return Promise.resolve();
+	}
+	if (closing && opts?.timeout !== undefined) {
+		return untilDeadline(closing, Date.now() + opts.timeout);
 	}
 	if (!closing) {
 		const started = Date.now();
@@ -377,10 +381,35 @@ export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
 							),
 						};
 			await analytics.closeAndFlush(flush);
+			await settleErrorReports(
+				opts?.timeout === undefined
+					? undefined
+					: started + opts.timeout,
+			);
 			log.debug("Flushed CLI analytics");
 		})();
 	}
 	return closing;
+};
+
+const untilDeadline = async (work: Promise<unknown>, deadline: number) => {
+	let timer: NodeJS.Timeout | undefined;
+	await Promise.race([
+		work,
+		new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+		}),
+	]);
+	clearTimeout(timer);
+};
+
+const settleErrorReports = async (deadline: number | undefined) => {
+	const reports = Promise.all(errorReports);
+	if (deadline === undefined) {
+		await reports;
+		return;
+	}
+	await untilDeadline(reports, deadline);
 };
 
 const getErrorAnalyticsEventContext = (
@@ -438,6 +467,23 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 		});
 	});
 	log.debug("Sent CLI error event: %s", errCode);
+	if (errCode === "UNKNOWN_ERROR" && isUnexpectedError(err)) {
+		const report = import("./error_reporting.js")
+			.then(({ reportUnexpectedError }) =>
+				reportUnexpectedError(err, redactCredentialTokenIds),
+			)
+			.catch((reportError: unknown) => {
+				log.debug(
+					"Could not report the error to Sentry: %s",
+					reportError,
+				);
+			});
+		errorReports.push(report);
+		// The psql launcher starts closing before psql runs; a later close must still wait for this.
+		if (closing) {
+			closing = closing.then(() => report);
+		}
+	}
 };
 
 export const trackEvent = (

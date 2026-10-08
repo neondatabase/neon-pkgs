@@ -7,6 +7,17 @@ const LSN_REGEX = /^[a-fA-F0-9]{1,8}\/[a-fA-F0-9]{1,8}$/;
 
 export const looksLikeLSN = (lsn: string) => LSN_REGEX.test(lsn);
 
+/** Normalize a user-supplied date to an ISO 8601 string, or throw a friendly error. */
+export const toIso = (value: string, flag: string): string => {
+	const ms = Date.parse(value);
+	if (Number.isNaN(ms)) {
+		throw new Error(
+			`Invalid ${flag} value: "${value}". Use an RFC 3339 timestamp, e.g. 2025-12-31T23:59:59Z.`,
+		);
+	}
+	return new Date(ms).toISOString();
+};
+
 export const looksLikeTimestamp = (timestamp: string) => {
 	if (isNaN(Date.parse(timestamp))) return false;
 
