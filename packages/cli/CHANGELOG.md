@@ -1,5 +1,18 @@
 # neon
 
+## 8.3.0
+
+### Minor Changes
+
+- ba93268: The CLI reports internal bugs (a `TypeError`, `ReferenceError`, `RangeError`, or `SyntaxError` that ends a command) to Neon's Sentry. Errors the CLI prints for you to act on are not reported. `--no-analytics` turns error reports off along with analytics.
+
+  `neon branches create --expires-at` and `neon branches set-expiration --expires-at` now reject a value that is not a date with `Invalid --expires-at value: "<value>". Use an RFC 3339 timestamp, e.g. 2025-12-31T23:59:59Z.` instead of `Invalid time value`.
+
+### Patch Changes
+
+- 5ee1da6: `neon env pull` names the branch in its summary (`Pulled 6 Neon variables into .env.local from branch dev (br-…)`) instead of printing a separate `→ Pulling env from branch` line first.
+- 900128c: `neon init` without a terminal and without `-y` now prints the command to run instead, `neon init -y`, ahead of the option to run it in a terminal, and points to `neon init --help` for the flag that sets each step.
+
 ## 8.2.0
 
 ### Minor Changes
