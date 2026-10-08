@@ -451,8 +451,11 @@ export type ProjectListItem = {
      */
     updated_at: string;
     /**
+     * Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.
      * The current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.
      *
+     *
+     * @deprecated
      */
     synthetic_storage_size?: number;
     /**
@@ -617,8 +620,11 @@ export type Project = {
      */
     updated_at: string;
     /**
+     * Deprecated: always returns 0. Use the consumption history v2 endpoints (`/consumption_history/v2/projects`, `/consumption_history/v2/branches`) instead.
      * The current space occupied by the project in Postgres storage, in bytes. Synthetic Postgres storage size combines the logical data size and Write-Ahead Log (WAL) size for all branches in a project.
      *
+     *
+     * @deprecated
      */
     synthetic_storage_size?: number;
     /**
@@ -676,6 +682,7 @@ export type ProjectCreateRequest = {
          * The project name. If not specified, the name will be identical to the generated project ID
          */
         name?: string;
+        realtime?: RealtimeOptions;
         /**
          * Configuration for the initial branch created with the project.
          */
@@ -1452,6 +1459,7 @@ export type BranchCreateRequest = {
          *
          */
         protected?: boolean;
+        realtime?: RealtimeOptions;
         /**
          * Whether to create the branch in the archived state. When omitted, the branch is created as a normal (non-archived) branch.
          *
@@ -2106,6 +2114,41 @@ export type EndpointsOptionalResponse = {
     endpoints?: Array<Endpoint>;
 };
 
+export type RealtimeOptions = {
+    /**
+     * The browser origins allowed to connect, each `http` or `https` with a host and optional port
+     * and no path. An empty list, or `*` alone, allows any origin. Omitted keeps the current or
+     * inherited value.
+     *
+     */
+    allowed_origins?: Array<string>;
+};
+
+export type Realtime = {
+    /**
+     * Whether Realtime is enabled for the branch.
+     */
+    enabled: boolean;
+    /**
+     * Whether a provisioning, settings, rotation or deprovisioning change is still being applied.
+     */
+    pending: boolean;
+    invocation_url?: string;
+    revision?: number;
+    allowed_origins?: Array<string>;
+};
+
+export type RealtimeSecret = {
+    /**
+     * The key the application backend issues Realtime tokens with, `nrt_live_1` followed by the unpadded base64url 32-byte AES-256-GCM key.
+     */
+    secret: string;
+    /**
+     * Whether a change is still being applied. After a rotation, the secret changes when this becomes false.
+     */
+    pending: boolean;
+};
+
 export type Role = {
     /**
      * The ID of the branch this role belongs to.
@@ -2127,7 +2170,7 @@ export type Role = {
      */
     protected?: boolean;
     /**
-     * Authentication method configured for this role: `password`, `oauth`, or `no_login`.
+     * Authentication method configured for this role: `password`, `oauth`, `oidc`, or `no_login`.
      *
      */
     authentication_method?: string;
@@ -2330,7 +2373,7 @@ export type BillingAccountState = 'UNKNOWN' | 'active' | 'suspended' | 'deactiva
  * Notice that for users without billing account this will be "UNKNOWN"
  *
  */
-export type BillingSubscriptionType = 'UNKNOWN' | 'direct_sales' | 'direct_sales_v3' | 'aws_marketplace' | 'free_v2' | 'free_v3' | 'launch' | 'launch_v3' | 'scale' | 'scale_v3' | 'business' | 'vercel_pg_legacy';
+export type BillingSubscriptionType = 'UNKNOWN' | 'direct_sales' | 'direct_sales_v3' | 'aws_marketplace' | 'free_v2' | 'free_v3' | 'build' | 'launch' | 'launch_v3' | 'scale' | 'scale_v3' | 'business' | 'vercel_pg_legacy';
 
 /**
  * Indicates whether and how an account makes payments.
@@ -2979,6 +3022,14 @@ export type DataApiReponse = {
      * List of available database schemas (SubZero only)
      */
     available_schemas?: Array<string> | null;
+    /**
+     * When `settings` and `available_schemas` were read from the database. While the
+     * compute is suspended they are served from that read, so a change made directly in
+     * the database since then shows up in the first response served while the compute is
+     * active.
+     *
+     */
+    observed_at?: string;
 };
 
 /**
@@ -5007,6 +5058,30 @@ export type FunctionDeployRequest = {
      * Optional ZIP archive of the function source code. Omit to reuse the
      * latest version's bundle (a config-only change). Required for the
      * first deployment of a function.
+     *
+     * Place `index.mjs` or `index.js` at the archive root, without a
+     * containing directory. If both exist, `index.mjs` is loaded. Export a
+     * request handler function or an object with a `fetch` method. Use
+     * `export default` for ESM or `module.exports` for CommonJS; prefer
+     * `index.mjs` for ESM.
+     *
+     * Upload JavaScript ready to run on Node.js 24. Compile TypeScript
+     * before uploading. Bundle dependencies into the entry module, or
+     * include the required modules and assets in the archive with their
+     * relative paths preserved (including `node_modules` for external
+     * packages). Node.js built-in modules do not need to be bundled.
+     * The API does not transpile, bundle, or install dependencies.
+     * The ZIP is limited to 32 MiB compressed and 128 MiB extracted, with
+     * at most 32,768 entries and 64 MiB per file. Bundle large dependency
+     * trees to keep the archive small. ZIPs larger than 32 MiB are rejected
+     * with HTTP 413 before creating a deployment. The extracted-size,
+     * entry-count, and per-file limits are enforced during the asynchronous
+     * build; an accepted upload that exceeds them fails the build.
+     *
+     * For example, a self-contained ESM bundle needs only `index.mjs`
+     * at the ZIP root. The Neon CLI bundles source into this layout by
+     * default; `neon function deploy --no-bundle` packages a prebuilt
+     * directory or an entry file named `index.mjs` or `index.js`.
      *
      */
     zip?: Blob | File;
@@ -10020,6 +10095,240 @@ export type GetProjectBranchRolePasswordResponses = {
 };
 
 export type GetProjectBranchRolePasswordResponse = GetProjectBranchRolePasswordResponses[keyof GetProjectBranchRolePasswordResponses];
+
+export type DisableProjectBranchRealtimeData = {
+    body?: never;
+    path: {
+        /**
+         * The project ID
+         */
+        project_id: string;
+        /**
+         * The branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/realtime';
+};
+
+export type DisableProjectBranchRealtimeErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DisableProjectBranchRealtimeError = DisableProjectBranchRealtimeErrors[keyof DisableProjectBranchRealtimeErrors];
+
+export type DisableProjectBranchRealtimeResponses = {
+    /**
+     * Realtime deprovisioning is queued
+     */
+    202: unknown;
+};
+
+export type GetProjectBranchRealtimeData = {
+    body?: never;
+    path: {
+        /**
+         * The project ID
+         */
+        project_id: string;
+        /**
+         * The branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/realtime';
+};
+
+export type GetProjectBranchRealtimeErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchRealtimeError = GetProjectBranchRealtimeErrors[keyof GetProjectBranchRealtimeErrors];
+
+export type GetProjectBranchRealtimeResponses = {
+    /**
+     * Realtime state of the branch
+     */
+    200: Realtime;
+};
+
+export type GetProjectBranchRealtimeResponse = GetProjectBranchRealtimeResponses[keyof GetProjectBranchRealtimeResponses];
+
+export type EnableProjectBranchRealtimeData = {
+    body?: RealtimeOptions;
+    path: {
+        /**
+         * The project ID
+         */
+        project_id: string;
+        /**
+         * The branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/realtime';
+};
+
+export type EnableProjectBranchRealtimeErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type EnableProjectBranchRealtimeError = EnableProjectBranchRealtimeErrors[keyof EnableProjectBranchRealtimeErrors];
+
+export type EnableProjectBranchRealtimeResponses = {
+    /**
+     * Realtime provisioning is queued
+     */
+    202: unknown;
+};
+
+export type GetProjectBranchRealtimeSecretData = {
+    body?: never;
+    path: {
+        /**
+         * The project ID
+         */
+        project_id: string;
+        /**
+         * The branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/realtime/secret';
+};
+
+export type GetProjectBranchRealtimeSecretErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetProjectBranchRealtimeSecretError = GetProjectBranchRealtimeSecretErrors[keyof GetProjectBranchRealtimeSecretErrors];
+
+export type GetProjectBranchRealtimeSecretResponses = {
+    /**
+     * The branch's Realtime shared secret
+     */
+    200: RealtimeSecret;
+};
+
+export type GetProjectBranchRealtimeSecretResponse = GetProjectBranchRealtimeSecretResponses[keyof GetProjectBranchRealtimeSecretResponses];
+
+export type RotateProjectBranchRealtimeSecretData = {
+    body?: never;
+    path: {
+        /**
+         * The project ID
+         */
+        project_id: string;
+        /**
+         * The branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/realtime/rotate_secret';
+};
+
+export type RotateProjectBranchRealtimeSecretErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RotateProjectBranchRealtimeSecretError = RotateProjectBranchRealtimeSecretErrors[keyof RotateProjectBranchRealtimeSecretErrors];
+
+export type RotateProjectBranchRealtimeSecretResponses = {
+    /**
+     * Realtime secret rotation is queued
+     */
+    202: unknown;
+};
 
 export type ResetProjectBranchRolePasswordData = {
     body?: never;
