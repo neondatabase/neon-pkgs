@@ -16,9 +16,9 @@ export function setDeadlineTimer(
 ): ReconnectTimer {
 	const deadline = monotonicNow() + delayMs;
 	let active = true;
-	let handle: ReturnType<typeof setTimeout>;
+	let cancelInterval: ReconnectTimer = () => {};
 	const schedule = (remainingMs: number) => {
-		handle = setTimeout(
+		const handle = setTimeout(
 			() => {
 				if (!active) return;
 				const remaining = deadline - monotonicNow();
@@ -30,11 +30,12 @@ export function setDeadlineTimer(
 			},
 			Math.min(MAX_TIMEOUT_MS, Math.ceil(remainingMs)),
 		);
+		cancelInterval = () => clearTimer(handle);
 	};
 	schedule(delayMs);
 	return () => {
 		if (!active) return;
 		active = false;
-		clearTimer(handle);
+		cancelInterval();
 	};
 }
