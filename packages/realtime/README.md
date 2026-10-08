@@ -218,17 +218,16 @@ result remains `stale` (or `connecting` if no result has arrived). Re-admission
 uses a fresh request and live ID and installs a new baseline.
 
 A retry with a hint never runs before it. With the hint `h` (at least 100 ms),
-the SDK waits a random time in `[h, max(h, min(2h, cap))]`, which spreads
-clients across the service's ramp-up. `cap` defaults to 30 seconds and is set
-with `reconnect.overloadJitterCapMs`. Without a hint, retries use equal-jitter
-delays that start at 0.5–1 second, grow exponentially, and cap at 30–60 seconds.
+the SDK waits a random time in `[h, max(h, min(2h, 30 seconds))]`, which spreads
+clients across the service's ramp-up. Hints of at least 30 seconds are waited
+exactly. Without a hint, retries use equal-jitter delays that start at 0.5–1
+second, grow exponentially, and cap at 30–60 seconds.
 
-All retries of a subscription share one recovery episode: hint-paced retries
-count toward the attempt and elapsed-time bounds but do not grow the
-exponential delay. Admission rejections, brief re-admissions, and socket
-reconnects do not reset the episode. It resets after a complete baseline
-remains live for 30 seconds. Unsubscribing or closing the client cancels
-pending retries.
+All retries of a subscription share one recovery episode. Hint-paced retries do
+not grow the exponential delay. Admission rejections, brief re-admissions, and
+socket reconnects do not reset the episode. It resets after a complete baseline
+remains live for 30 seconds. Unsubscribing or closing the client cancels pending
+retries.
 
 ### Client diagnostics
 
