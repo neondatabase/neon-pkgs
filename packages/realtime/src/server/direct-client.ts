@@ -1,8 +1,10 @@
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
+	MaterializedArrayLiveQueryOptions,
 	MaterializedLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawArrayLiveQueryOptions,
 	RawLiveQueryOptions,
 	RawLiveQuerySubscription,
 	RealtimeClient,
@@ -44,7 +46,9 @@ export class DirectLiveQueryClient {
 		query: SealedLiveQuery<Row>,
 		options:
 			| MaterializedLiveQueryOptions<Row>
+			| MaterializedArrayLiveQueryOptions<readonly unknown[]>
 			| RawLiveQueryOptions
+			| RawArrayLiveQueryOptions
 			| undefined,
 		refreshQuery: () => Promise<SealedLiveQuery<Row>>,
 	): Promise<
@@ -96,10 +100,20 @@ export class DirectLiveQueryClient {
 function subscribeClient<Row>(
 	client: RealtimeClient,
 	query: SealedLiveQuery<Row>,
-	options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
+	options?:
+		| MaterializedLiveQueryOptions<Row>
+		| MaterializedArrayLiveQueryOptions<readonly unknown[]>
+		| RawLiveQueryOptions
+		| RawArrayLiveQueryOptions,
 ): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
-	if (options?.materialize === false) {
-		return client.subscribe(query, options);
-	}
-	return client.subscribe(query, options);
+	type Subscribe = (
+		query: SealedLiveQuery<Row>,
+		options?:
+			| MaterializedLiveQueryOptions<Row>
+			| MaterializedArrayLiveQueryOptions<readonly unknown[]>
+			| RawLiveQueryOptions
+			| RawArrayLiveQueryOptions,
+	) => MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row>;
+	// Public direct-server overloads have already paired the row type and mode.
+	return (client.subscribe as unknown as Subscribe)(query, options);
 }

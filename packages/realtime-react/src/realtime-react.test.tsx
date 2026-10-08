@@ -5,7 +5,10 @@ import type {
 	LiveQueryChange,
 	LiveQuerySnapshot,
 	LiveQueryState,
+	MaterializedArrayLiveQueryOptions,
 	MaterializedLiveQuerySubscription,
+	RawArrayLiveQueryOptions,
+	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
 	RealtimeClient,
@@ -26,6 +29,8 @@ interface MessageRow {
 	readonly id: number;
 	readonly title: string;
 }
+
+type MessageTuple = readonly [id: number, title: string];
 
 afterEach(() => {
 	cleanup();
@@ -311,6 +316,34 @@ describe("Realtime React integration", () => {
 		expect(html).toContain("server");
 		expect(client.subscriptions).toHaveLength(0);
 	});
+
+	it("preserves exact tuple types and forwards array row mode", () => {
+		const client = new TestClient<MessageTuple>();
+		let observed: UseLiveQueryResult<MessageTuple> | undefined;
+		render(
+			<RealtimeProvider client={client}>
+				<TupleMessages
+					query={query<MessageTuple>("tuple-query")}
+					observe={(result) => {
+						observed = result;
+					}}
+				/>
+			</RealtimeProvider>,
+		);
+
+		expectTypeOf(observed).toEqualTypeOf<
+			UseLiveQueryResult<MessageTuple> | undefined
+		>();
+		expect(client.rowModes).toEqual(["array"]);
+		act(() => {
+			client.latest().publish({
+				status: "live",
+				error: undefined,
+				data: [[1, "stream"]],
+			});
+		});
+		expect(screen.getByText("live:stream")).toBeTruthy();
+	});
 });
 
 function Messages({
@@ -404,22 +437,48 @@ function wireClient() {
 	};
 }
 
+function TupleMessages({
+	query: currentQuery,
+	observe,
+}: {
+	query: SealedLiveQuery<MessageTuple>;
+	observe?: (result: UseLiveQueryResult<MessageTuple>) => void;
+}) {
+	const result = useLiveQuery(currentQuery, { rowMode: "array" });
+	observe?.(result);
+	return (
+		<span>
+			{result.status}:{result.data?.[0]?.[1] ?? "none"}
+		</span>
+	);
+}
+
 class TestClient<Row> implements RealtimeClient {
 	readonly subscriptions: TestSubscription<Row>[] = [];
+	readonly rowModes: Array<"object" | "array" | undefined> = [];
 
+	subscribe<CurrentRow extends readonly unknown[]>(
+		_query: SealedLiveQuery<CurrentRow>,
+		options: MaterializedArrayLiveQueryOptions<CurrentRow>,
+	): MaterializedLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
 		_query: SealedLiveQuery<CurrentRow>,
 		options?: { materialize?: true; initialData?: readonly CurrentRow[] },
 	): MaterializedLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
 		_query: SealedLiveQuery<CurrentRow>,
-		_options: { materialize: false },
+		_options: RawLiveQueryOptions,
+	): RawLiveQuerySubscription<CurrentRow>;
+	subscribe<CurrentRow extends readonly unknown[]>(
+		_query: SealedLiveQuery<CurrentRow>,
+		_options: RawArrayLiveQueryOptions,
 	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
 		_query: SealedLiveQuery<CurrentRow>,
 		options?: {
 			materialize?: boolean;
 			initialData?: readonly CurrentRow[];
+			rowMode?: "object" | "array";
 		},
 	):
 		| MaterializedLiveQuerySubscription<CurrentRow>
@@ -429,6 +488,7 @@ class TestClient<Row> implements RealtimeClient {
 				"Test client only supports materialized subscriptions",
 			);
 		}
+		this.rowModes.push(options?.rowMode);
 		const subscription = new TestSubscription(options?.initialData);
 		this.subscriptions.push(
 			subscription as unknown as TestSubscription<Row>,
@@ -538,10 +598,10 @@ class SilentWebSocket {
 	}
 }
 
-function query(
+function query<Row = MessageRow>(
 	queryId: string,
 	secondsFromNow = 3_000,
-): SealedLiveQuery<MessageRow> {
+): SealedLiveQuery<Row> {
 	return {
 		capability: compactJwe(queryId),
 		queryFingerprint: "11".repeat(32),

@@ -199,6 +199,35 @@ reconnection or sealed-query renewal, existing materialized data remains
 available as `stale`. Recoverable connection failures retry with capped
 jittered backoff until the connection recovers or the client is closed.
 
+### Row modes
+
+Subscriptions decode rows as objects by default. Result-column names must be
+unique because each name becomes an object key. PostgreSQL also permits
+duplicate output names; for those queries, declare a positional tuple and set
+`rowMode: "array"`:
+
+```ts
+type ItemValues = readonly [id: number, score: string];
+
+const query = rawSql<ItemValues>(
+  "select id as value, score as value from items",
+);
+const sealedQuery = await realtime.seal({ query });
+
+const subscription = client.subscribe(sealedQuery, {
+  rowMode: "array",
+});
+
+subscription.onChange(({ data }) => {
+  const first = data?.[0]; // readonly [number, string] | undefined
+});
+```
+
+Array rows follow result-column order and are frozen. The same option works for
+raw subscriptions with `{ materialize: false, rowMode: "array" }`, trusted
+direct subscriptions, and `useLiveQuery()`. Omitting `rowMode` keeps the
+existing object-row behavior.
+
 ### Client diagnostics
 
 Client diagnostics are silent by default. Set `logLevel` to write structured

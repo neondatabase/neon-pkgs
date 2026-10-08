@@ -153,7 +153,15 @@ function createRealtimeCollectionOptions<
 				let cleaned = false;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
-				const subscription = client.subscribe(initialQuery, {
+				// TanStack collections deliberately expose object rows only.
+				type SubscribeObjectRows = (
+					query: SealedLiveQuery<Row>,
+					options: { readonly materialize: false },
+				) => RawLiveQuerySubscription<Row>;
+				const subscribeObjectRows = client.subscribe.bind(
+					client,
+				) as unknown as SubscribeObjectRows;
+				const subscription = subscribeObjectRows(initialQuery, {
 					materialize: false,
 				});
 				activeSubscription = subscription;

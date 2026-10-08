@@ -20,6 +20,8 @@ interface MessageRow {
 	readonly body: string;
 }
 
+type MessageTuple = readonly [id: number, body: string];
+
 type FakeWebSocketListener =
 	| (() => void)
 	| ((event: { readonly data: unknown }) => void);
@@ -172,6 +174,32 @@ describe("trusted direct subscriptions", () => {
 		realtime.close();
 	});
 
+	it("preserves exact tuple types for direct positional subscriptions", async () => {
+		useFakeWebSocket();
+		const realtime = createRealtime({
+			secret: SECRET,
+			db: "app",
+			url: "ws://live.test/v1",
+		});
+		const query = rawSql<MessageTuple>(
+			"select id as value, body as value from messages",
+		);
+		const subscription = await realtime.subscribe(query, {
+			rowMode: "array",
+		});
+		expectTypeOf(subscription).toEqualTypeOf<
+			MaterializedLiveQuerySubscription<MessageTuple>
+		>();
+
+		const socket = connectAndAdmit([
+			{ name: "value", type_oid: 23, typmod: -1, codec: "pg_text" },
+			{ name: "value", type_oid: 25, typmod: -1, codec: "pg_text" },
+		]);
+		baselineSync(socket, "hello");
+		expect(subscription.getSnapshot().data).toEqual([[1, "hello"]]);
+		realtime.close();
+	});
+
 	it("supports raw subscriptions and closes the shared client", async () => {
 		useFakeWebSocket();
 		const realtime = createRealtime({
@@ -307,14 +335,19 @@ function useFakeWebSocket(): void {
 	vi.stubGlobal("WebSocket", FakeWebSocket);
 }
 
-function connectAndAdmit(): FakeWebSocket {
+function connectAndAdmit(
+	columns: readonly object[] = [
+		{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+		{ name: "body", type_oid: 25, typmod: -1, codec: "pg_text" },
+	],
+): FakeWebSocket {
 	const socket = defined(FakeWebSocket.instances.at(-1));
 	socket.open();
 	socket.receive({ type: "ready" });
 	const request = defined(
 		socket.sent.find((message) => message.type === "subscribe"),
 	);
-	admitRequest(socket, request, "41", "1");
+	admitRequest(socket, request, "41", "1", columns);
 	return socket;
 }
 
@@ -323,6 +356,10 @@ function admitRequest(
 	request: Record<string, unknown>,
 	liveId: string,
 	epoch: string,
+	columns: readonly object[] = [
+		{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+		{ name: "body", type_oid: 25, typmod: -1, codec: "pg_text" },
+	],
 ): void {
 	socket.receive({
 		type: "subscribed",
@@ -330,10 +367,7 @@ function admitRequest(
 		live_id: liveId,
 		epoch,
 		first_sequence: "1",
-		columns: [
-			{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
-			{ name: "body", type_oid: 25, typmod: -1, codec: "pg_text" },
-		],
+		columns,
 	});
 }
 

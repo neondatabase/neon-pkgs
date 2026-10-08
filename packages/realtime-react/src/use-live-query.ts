@@ -17,7 +17,15 @@ import type { UseLiveQueryOptions, UseLiveQueryResult } from "./types.js";
  */
 export function useLiveQuery<Row>(
 	query: SealedLiveQuery<Row>,
-	options: UseLiveQueryOptions<Row> = {},
+	options: UseLiveQueryOptions<Row>,
+): UseLiveQueryResult<Row>;
+export function useLiveQuery<Row>(
+	query: Row extends readonly unknown[] ? never : SealedLiveQuery<Row>,
+	options?: UseLiveQueryOptions<Row>,
+): UseLiveQueryResult<Row>;
+export function useLiveQuery<Row>(
+	query: SealedLiveQuery<Row>,
+	options: UseLiveQueryOptions<Row> = {} as UseLiveQueryOptions<Row>,
 ): UseLiveQueryResult<Row> {
 	const client = useContext(RealtimeContext);
 	if (!client) throw new Error("useLiveQuery requires a RealtimeProvider");
@@ -26,8 +34,8 @@ export function useLiveQuery<Row>(
 	// update the existing store and do not restart its subscription.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: initialData only seeds a new logical query; changing it must not restart an active subscription.
 	const store = useMemo(
-		() => new ReactLiveQueryStore(client, query, options.initialData),
-		[client, query],
+		() => new ReactLiveQueryStore(client, query, options),
+		[client, query, options.rowMode],
 	);
 	useEffect(() => {
 		store.setRefreshCallback(options.refreshQuery);

@@ -14,6 +14,8 @@ interface MessageRow {
 	readonly title: string;
 }
 
+type MessageTuple = readonly [id: number, title: string];
+
 const QUERY_FINGERPRINT = "11".repeat(32);
 const ROW_KEY = "a".repeat(64);
 const ROW_KEY_B = "b".repeat(64);
@@ -508,6 +510,40 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("materializes exact positional tuples with duplicate column names", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query<MessageTuple>("tuple"), {
+			rowMode: "array",
+		});
+		expectTypeOf(subscription).toEqualTypeOf<
+			MaterializedLiveQuerySubscription<MessageTuple>
+		>();
+
+		const socket = connectAndAdmit([
+			{ name: "value", type_oid: 23, typmod: -1, codec: "pg_text" },
+			{ name: "value", type_oid: 25, typmod: -1, codec: "pg_text" },
+		]);
+		baselineSync(socket, "before");
+		publication(
+			socket,
+			[
+				{
+					op: "upsert",
+					row_key: ROW_KEY,
+					values: ["1", "after"],
+				},
+			],
+			["42"],
+		);
+
+		const row = subscription.getSnapshot().data?.[0];
+		expectTypeOf(row).toEqualTypeOf<MessageTuple | undefined>();
+		expect(row).toEqual([1, "after"]);
+		expect(Object.isFrozen(row)).toBe(true);
+		client.close();
+	});
+
 	it("preserves wire order across batches and replacement resets", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
@@ -665,6 +701,52 @@ describe("RealtimeClient", () => {
 				batch: { txids: ["42", "43"] },
 			},
 		]);
+		client.close();
+	});
+
+	it("exposes raw resets and batches as positional tuples", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(
+			query<MessageTuple>("raw-tuple"),
+			{
+				materialize: false,
+				rowMode: "array",
+			},
+		);
+		expectTypeOf(subscription).toEqualTypeOf<
+			RawLiveQuerySubscription<MessageTuple>
+		>();
+		const resets: MessageTuple[][] = [];
+		const batches: MessageTuple[][] = [];
+		subscription.onReset((rows) => resets.push(rows.map(({ row }) => row)));
+		subscription.onBatch((changes) =>
+			batches.push(
+				changes.flatMap((change) =>
+					change.type === "upsert" ? [change.row] : [],
+				),
+			),
+		);
+
+		const socket = connectAndAdmit([
+			{ name: "value", type_oid: 23, typmod: -1, codec: "pg_text" },
+			{ name: "value", type_oid: 25, typmod: -1, codec: "pg_text" },
+		]);
+		baselineSync(socket, "before");
+		publication(
+			socket,
+			[
+				{
+					op: "upsert",
+					row_key: ROW_KEY,
+					values: ["1", "after"],
+				},
+			],
+			["42"],
+		);
+
+		expect(resets).toEqual([[[1, "before"]]]);
+		expect(batches).toEqual([[[1, "after"]]]);
 		client.close();
 	});
 
@@ -1333,7 +1415,12 @@ function useFakeWebSocket(): void {
 	vi.stubGlobal("WebSocket", FakeWebSocket);
 }
 
-function connectAndAdmit(): FakeWebSocket {
+function connectAndAdmit(
+	columns: readonly object[] = [
+		{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+		{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
+	],
+): FakeWebSocket {
 	const socket = defined(FakeWebSocket.instances.at(-1));
 	socket.open();
 	socket.receive({ type: "ready" });
@@ -1346,10 +1433,7 @@ function connectAndAdmit(): FakeWebSocket {
 		live_id: "41",
 		epoch: "1",
 		first_sequence: "1",
-		columns: [
-			{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
-			{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
-		],
+		columns,
 	});
 	return socket;
 }
@@ -1462,10 +1546,10 @@ function publication(
 	});
 }
 
-function query(
+function query<Row = MessageRow>(
 	capabilityId: string,
 	queryFingerprint = QUERY_FINGERPRINT,
-): SealedLiveQuery<MessageRow> {
+): SealedLiveQuery<Row> {
 	return {
 		capability: compactJwe(capabilityId),
 		queryFingerprint,
