@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import stripAnsi from "strip-ansi";
 import { describe, expect, test } from "vitest";
 import { displayPath, formatPulledEnv } from "./env_output.js";
 
@@ -47,6 +48,34 @@ describe("formatPulledEnv", () => {
 				"",
 			].join("\n"),
 		);
+	});
+});
+
+describe("formatPulledEnv with a branch", () => {
+	const outcome = {
+		status: "written" as const,
+		file: "/work/my-app/.env.local",
+		written: ["DATABASE_URL"],
+		removed: [],
+	};
+	const branch = {
+		branchId: "br-dev-1",
+		branchName: "dev",
+		usedDefault: false,
+	};
+
+	test("names the branch in the heading", () => {
+		expect(stripAnsi(formatPulledEnv(outcome, cwd, branch))).toBe(
+			"Pulled 1 Neon variable into .env.local from branch dev (br-dev-1)\n  Postgres        DATABASE_URL\n",
+		);
+	});
+
+	test("marks the project default when no branch was named", () => {
+		expect(
+			stripAnsi(
+				formatPulledEnv(outcome, cwd, { ...branch, usedDefault: true }),
+			),
+		).toContain("from branch dev (br-dev-1, project default)");
 	});
 });
 

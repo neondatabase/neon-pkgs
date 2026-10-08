@@ -30,14 +30,13 @@ import {
 } from "../neon_services.js";
 import type { BranchScopeProps } from "../types.js";
 import { warnAiGateway } from "../utils/ai_gateway_notice.js";
-import { announceTargetBranch } from "../utils/branch_notice.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	fillSingleProject,
 	type ResolvedBranchRef,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
-import { formatPulledEnv } from "./env_output.js";
+import { formatPulledEnv, pulledBranch } from "./env_output.js";
 
 export type EnvPullProps = BranchScopeProps & {
 	/** Target dotenv file, relative to cwd. Defaults to the project directory's `.env`, else `.env.local`. */
@@ -196,10 +195,9 @@ export const builder = (argv: yargs.Argv) =>
 				const envKeys = rawEnvKeys
 					? parseEnvPullKeys(rawEnvKeys, "--env")
 					: undefined;
-				// Explicit `env pull` announces the branch it's reading from up front so the user
-				// can catch "pulled env from the wrong branch" before it overwrites their .env. The
-				// bundled auto-pull (link / checkout / apply) stays quiet — those already report the
-				// branch they pinned/applied to.
+				// Explicit `env pull` names the branch it read from in its summary, so "pulled env
+				// from the wrong branch" is visible. The bundled auto-pull (link / checkout / apply)
+				// doesn't — those already report the branch they pinned/applied to.
 				//
 				// It also implies the AI Gateway when there is no neon.ts, so a bare `env pull`
 				// really does write everything the branch can give you. The bundled auto-pull does
@@ -268,6 +266,7 @@ export type PullOutcome =
 export const pull = async (
 	props: EnvPullProps,
 	opts: {
+		/** Names the branch in the summary; for callers that don't report it themselves. */
 		announce?: boolean;
 		implyAiGateway?: boolean;
 		/** Skips the branch lookup when the caller resolved this same branch already. */
@@ -297,9 +296,7 @@ export const pull = async (
 			? envKeysForSelection(selectionServices, selectionEnvKeys)
 			: undefined;
 	const branch = opts.branch ?? (await resolveBranchRef(props));
-	if (opts.announce) {
-		announceTargetBranch(props, branch, "Pulling env from branch");
-	}
+	const namedBranch = opts.announce ? branch : undefined;
 	const branchId = branch.branchId;
 
 	// Resolve the target file first and layer its current contents under the resolver's env
@@ -343,8 +340,8 @@ export const pull = async (
 			dropped.skipped.length > 0;
 		if (!skippedUnsupportedOnly) {
 			log.info(
-				"No Neon env variables to pull for this branch (no DATABASE_URL or " +
-					"enabled Auth / Data API).",
+				`No Neon env variables to pull from ${namedBranch ? pulledBranch(namedBranch) : "this branch"}: ` +
+					"no DATABASE_URL or enabled Auth / Data API.",
 			);
 		}
 		return { status: "empty" };
@@ -376,6 +373,7 @@ export const pull = async (
 					: {}),
 			},
 			cwd,
+			namedBranch,
 		),
 	);
 

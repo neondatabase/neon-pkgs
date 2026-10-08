@@ -29,6 +29,7 @@ import type {
 	NeonTriggerSnapshot,
 } from "@neon/config";
 import { ErrorCode, PlatformError } from "@neon/config";
+import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yargs from "yargs/yargs";
 
@@ -498,6 +499,20 @@ describe("env pull", () => {
 		}
 		expect(written.join("")).toBe("");
 		expect(logged).toContain("Pulled 3 Neon variables into .env.local");
+	});
+
+	it("names the branch once, in the summary heading, when announcing", async () => {
+		const logged = stripAnsi(
+			await captureLog(() =>
+				pull(baseProps(new FakeNeonApi(), cwd), {
+					announce: true,
+				}).then(() => undefined),
+			),
+		);
+		expect(logged.split("\n")[0]).toBe(
+			`Pulled 3 Neon variables into .env.local from branch ${BRANCH_NAME} (${BRANCH_ID})`,
+		);
+		expect(logged.split(BRANCH_ID)).toHaveLength(2);
 	});
 
 	it("writes Neon vars into .env.local when no .env exists", async () => {
