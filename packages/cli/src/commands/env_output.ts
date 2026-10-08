@@ -1,12 +1,14 @@
 import { homedir } from "node:os";
 import { isAbsolute, relative } from "node:path";
 import { isFunctionBaseUrlKey } from "@neon-internals/env-core/env";
+import chalk from "chalk";
 import {
 	BRANCH_ENV_KEY,
 	ENV_PULL_KEYS,
 	serviceForEnvKey,
 } from "../env_services.js";
 import { NEON_SERVICE_LABELS, NEON_SERVICES } from "../neon_services.js";
+import type { ResolvedBranchRef } from "../utils/enrichers.js";
 import type { PullOutcome } from "./env.js";
 
 /** Wide enough for the longest label ("Object Storage") plus a gutter, so blocks align. */
@@ -60,14 +62,22 @@ const groupKeys = (keys: readonly string[]): Map<string, string[]> => {
 	return groups;
 };
 
+/** `branch dev (br-…)`, with `, project default` when no branch was named. */
+export const pulledBranch = (branch: ResolvedBranchRef): string =>
+	`branch ${chalk.cyan.bold(branch.branchName)} ${chalk.dim(
+		`(${branch.branchId}${branch.usedDefault ? ", project default" : ""})`,
+	)}`;
+
 export const formatPulledEnv = (
 	outcome: Extract<PullOutcome, { status: "written" }>,
 	cwd: string,
+	branch?: ResolvedBranchRef,
 ): string => {
 	const fresh = new Set(outcome.credential?.fresh ?? []);
 	const count = outcome.written.length;
+	const source = branch ? ` from ${pulledBranch(branch)}` : "";
 	const lines = [
-		`Pulled ${count} Neon variable${count === 1 ? "" : "s"} into ${displayPath(outcome.file, cwd)}`,
+		`Pulled ${count} Neon variable${count === 1 ? "" : "s"} into ${displayPath(outcome.file, cwd)}${source}`,
 	];
 	const groups = groupKeys(outcome.written);
 	for (const group of GROUP_ORDER) {
