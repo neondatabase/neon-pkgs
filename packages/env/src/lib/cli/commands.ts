@@ -329,7 +329,7 @@ function handleError(err: unknown): CommandResult {
 				"No Neon API key. `neon-env` looks for one in this order:",
 				"  - the `--api-key` flag",
 				"  - the `NEON_API_KEY` environment variable",
-				"  - `credentials.json` in `NEONCTL_CONFIG_DIR` (else `~/.config/neonctl`) — run `neon auth` to create it",
+				"  - `credentials.json` in `NEONCTL_CONFIG_DIR` (else `~/.config/neonctl`) — run `neon login` to create it",
 			].join("\n"),
 			EXIT_CODE_BY_PLATFORM_ERROR_CODE[ErrorCode.MissingApiKey] ?? 1,
 		);

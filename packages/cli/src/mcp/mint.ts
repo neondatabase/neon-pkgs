@@ -13,7 +13,7 @@ export type MintedMcpKey = {
 };
 
 const cannotMintMessage =
-	"This CLI credential cannot mint API keys. Organization and project-scoped keys cannot create other keys. Sign in with `neon auth` or pass a personal API key.";
+	"This CLI credential cannot mint API keys. Organization and project-scoped keys cannot create other keys. Sign in with `neon login` or pass a personal API key.";
 
 export function mintedKeyRevokeCommand(
 	key: Pick<MintedMcpKey, "id" | "orgId">,

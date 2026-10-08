@@ -50,7 +50,7 @@ export class KeyringUnavailableError extends Error {
 
 export class KeyringUnreadableError extends Error {
 	constructor(profile: string) {
-		const replace = `\`neon auth --profile ${profile}\``;
+		const replace = `\`neon login --profile ${profile}\``;
 		super(
 			`Could not read the OS keyring item for profile "${profile}". Unlock the keyring and retry, or run ${replace}. To reset the profile: \`neon profile remove ${profile} --yes\`.`,
 		);

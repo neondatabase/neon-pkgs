@@ -77,9 +77,9 @@ export const authFailureMessage = (context: AuthContext | null): string => {
 
 	if (context?.source === "stored-credentials") {
 		if (context.storage === "keyring") {
-			return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session (OS keyring). Sign in again with \`neon auth --profile ${profile}\`.`;
+			return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session (OS keyring). Sign in again with \`neon login --profile ${profile}\`.`;
 		}
-		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. Sign in again with \`neon auth --profile ${profile}\`.`;
+		return `Authentication failed: the Neon API rejected profile "${profile}"'s stored session${where}. Sign in again with \`neon login --profile ${profile}\`.`;
 	}
 
 	return "Authentication failed: the Neon API rejected the API key. Check --api-key or NEON_API_KEY.";

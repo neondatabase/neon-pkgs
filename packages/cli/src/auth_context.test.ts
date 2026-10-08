@@ -25,7 +25,7 @@ describe("authFailureMessage", () => {
 			storage: "keyring",
 		});
 		expect(message).toContain("OS keyring");
-		expect(message).toContain("neon auth --profile work");
+		expect(message).toContain("neon login --profile work");
 		expect(message).not.toContain("file was not created");
 		expect(message).not.toContain("--api-key");
 	});
@@ -37,7 +37,7 @@ describe("authFailureMessage", () => {
 			profile: "DEFAULT",
 			storage: "keyring",
 		});
-		expect(message).toContain("neon auth --profile DEFAULT");
+		expect(message).toContain("neon login --profile DEFAULT");
 	});
 
 	test("an adopted session says to sign in again, not to check a flag", () => {
@@ -47,7 +47,7 @@ describe("authFailureMessage", () => {
 			profile: "adopted",
 			credentialsPath: "/elsewhere/credentials.json",
 		});
-		expect(message).toContain("neon auth --profile adopted");
+		expect(message).toContain("neon login --profile adopted");
 		expect(message).not.toContain("--api-key");
 	});
 

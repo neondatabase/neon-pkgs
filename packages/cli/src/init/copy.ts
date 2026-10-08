@@ -99,10 +99,10 @@ export const NO_AGENT_SETUP_CONFLICT =
 	"--no-agent-setup cannot be combined with --agent, --skill, or MCP flags.";
 
 export const NON_TTY_LINK_NEEDS_AUTH =
-	"No interactive terminal. Sign in with `neon auth`, then re-run, or pass --claimable.";
+	"No interactive terminal. Sign in with `neon login`, then re-run, or pass --claimable.";
 
 export const YES_LINK_NEEDS_AUTH =
-	"-y cannot sign in. Sign in with `neon auth`, then re-run, or pass --claimable.";
+	"-y cannot sign in. Sign in with `neon login`, then re-run, or pass --claimable.";
 
 export const MCP_SCOPED_NEEDS_PROJECT =
 	"--mcp-project-scoped requires a linked project. Link a project first, or omit --mcp-project-scoped.";
@@ -157,7 +157,7 @@ export const PROGRESS = {
 export const unattendedUnauthedNext = (): string[] => [
 	"Link a project with a Neon account and an authenticated CLI.",
 	"Sign up: https://neon.com/signup",
-	`${getCliName()} auth`,
+	`${getCliName()} login`,
 	`${getCliName()} link`,
 	"",
 	"Or create a claimable project without an account. It expires in 72 hours unless claimed.",

@@ -310,7 +310,7 @@ describe("profile list", () => {
 			]),
 		);
 		expect(stderr).toMatch(
-			/neon auth --profile DEFAULT|neon profile remove DEFAULT --yes/,
+			/neon login --profile DEFAULT|neon profile remove DEFAULT --yes/,
 		);
 	});
 
@@ -1215,7 +1215,7 @@ describe("a malformed profiles.json", () => {
 		);
 	});
 
-	// `neon auth --profile work` is the other way in, and it opened the browser first.
+	// `neon login --profile work` is the other way in, and it opened the browser first.
 	test("stops a named sign-in before the browser opens", async () => {
 		const sentinel = JSON.stringify({ access_token: "sentinel-token" });
 		const dir = makeConfigDir({
@@ -1455,7 +1455,7 @@ describe("profile remove", () => {
 			/leftover may still be in the OS store|cannot delete the OS keyring item/i,
 		);
 		expect(stderr).toContain("com.neon.neon-cli");
-		expect(stderr).not.toContain("neon auth --profile work");
+		expect(stderr).not.toContain("neon login --profile work");
 		expect(existsSync(resolve(dir, "profiles.json"))).toBe(false);
 	});
 
@@ -1648,5 +1648,22 @@ describe("--profile on a subcommand that takes a name", () => {
 		expect(stderr).not.toContain("Did you mean");
 		// Nothing was acted on, least of all the profile named only by the flag.
 		expect(existsSync(resolve(dir, "credentials.other.json"))).toBe(true);
+	});
+});
+
+describe("login and its auth alias", () => {
+	test.each([
+		"login",
+		"auth",
+	])("%s --profile names a new profile to create", async (command) => {
+		const dir = makeConfigDir({});
+		const { code, stderr } = await runCli(
+			[command, "--profile", "fresh", "--config-dir", dir],
+			{ CI: "true" },
+		);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain("Cannot run interactive auth in CI");
+		expect(stderr).not.toContain("Unknown profile");
 	});
 });

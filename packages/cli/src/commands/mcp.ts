@@ -277,7 +277,7 @@ export const setupNeonMcp = async (
 	if (plan.auth === "api-key" && !existing) {
 		if (!options.apiClient || !options.apiKey) {
 			throw new Error(
-				`Authentication required. Run \`${getCliName()} auth\`, pass --api-key or use --oauth to install without a Neon credential.`,
+				`Authentication required. Run \`${getCliName()} login\`, pass --api-key or use --oauth to install without a Neon credential.`,
 			);
 		}
 		if (

@@ -117,8 +117,8 @@ export const locationForAuth = (
 	return locationForName(configDir, name);
 };
 
-export const command = "auth";
-export const aliases = ["login"];
+export const command = "login";
+export const aliases = ["auth"];
 export const describe =
 	"Sign in with a browser. See --help for API keys and profiles";
 
@@ -156,12 +156,12 @@ export const builder = (yargs: yargs.Argv) =>
 		})
 		.option("keyring", {
 			describe:
-				"Store the credential in the OS keyring. Per profile; later auth without the flag stays there. See `neon profile list`.",
+				"Store the credential in the OS keyring. Per profile; a later login without the flag stays there. See `neon profile list`.",
 			type: "boolean",
 		})
-		.example("$0 auth", "Sign in with a browser")
+		.example("$0 login", "Sign in with a browser")
 		.example(
-			"$0 auth --profile work",
+			"$0 login --profile work",
 			"Save a browser session in profile work",
 		)
 		.example(
@@ -201,7 +201,7 @@ export const authFlow = async ({
 	keyring,
 }: AuthProps) => {
 	// A named profile that doesn't exist yet is created here rather than erroring: `neon
-	// auth --profile work` is how you make one, so it must work before there is anything
+	// login --profile work` is how you make one, so it must work before there is anything
 	// to look up.
 	const profileName = selectProfileName(profile);
 	const isNamed = profileName !== DEFAULT_PROFILE;
@@ -370,7 +370,7 @@ const fetchIdentity = async (
 	} catch (err) {
 		if (isNeonApiError(err) && err.status === 401) {
 			throw new Error(
-				"Signed in, but the Neon API rejected the new access token. Try `neon auth` again.",
+				"Signed in, but the Neon API rejected the new access token. Try `neon login` again.",
 			);
 		}
 		log.warning(
@@ -715,10 +715,11 @@ export const ensureAuth = async (
 	// The MCP handler validates targets before deciding whether authentication is required.
 	const isMcp = isMcpCommand(props);
 
-	// `auth` writes a credential rather than using one, and reads `--profile` as the
+	// `login` writes a credential rather than using one, and reads `--profile` as the
 	// destination to write it to. Running selection here would reject the flag pair it
 	// accepts, and could resolve a stored key that this command must not authenticate with.
-	if (props._[0] === "auth") {
+	// yargs keeps the name as typed, so both spellings have to be listed.
+	if (props._[0] === "login" || props._[0] === "auth") {
 		props.apiClient = getApiClient({
 			apiKey: props.apiKey,
 			apiHost: props.apiHost,
@@ -768,7 +769,7 @@ export const ensureAuth = async (
 				error.code === "project_claimed"
 			) {
 				throw new Error(
-					"This project was claimed. Run `neon claim status` to drop the local assertion, then `neon auth` or `neon link`.",
+					"This project was claimed. Run `neon claim status` to drop the local assertion, then `neon login` or `neon link`.",
 				);
 			}
 			throw error;

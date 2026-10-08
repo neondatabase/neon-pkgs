@@ -75,7 +75,7 @@ export const recoverFrom401 = async (canRetry: boolean): Promise<boolean> => {
 			log.error(err.message);
 			if (err.terminal) {
 				log.error(
-					`Run \`neon auth --profile ${context.profile ?? "DEFAULT"}\` to sign in again.`,
+					`Run \`neon login --profile ${context.profile ?? "DEFAULT"}\` to sign in again.`,
 				);
 			}
 			return false;

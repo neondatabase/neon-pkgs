@@ -802,6 +802,6 @@ const finishClaimedContext = (
 		});
 	}
 	log.info(
-		"Dropped the local identity assertion. The next command needs `neon auth` or `neon link`.",
+		"Dropped the local identity assertion. The next command needs `neon login` or `neon link`.",
 	);
 };

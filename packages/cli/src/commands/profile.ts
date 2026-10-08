@@ -177,7 +177,7 @@ export const builder = (argv: yargs.Argv) =>
 					})
 					.example(
 						"$0 profile create work",
-						"Sign in with the browser, like `neon auth --profile work`",
+						"Sign in with the browser, like `neon login --profile work`",
 					)
 					.example(
 						'$0 profile create work --api-key "$KEY"',
@@ -613,7 +613,7 @@ const create = async (props: CreateProps) => {
 		);
 	}
 
-	// No key and no --mint means a browser sign-in, which is exactly `neon auth --profile`.
+	// No key and no --mint means a browser sign-in, which is exactly `neon login --profile`.
 	// Delegating rather than reimplementing keeps one OAuth path in the CLI.
 	if (!suppliedKey) {
 		// The no-flag form is the one an agent reaches for first, and `authFlow` answers it

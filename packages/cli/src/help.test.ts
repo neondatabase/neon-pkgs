@@ -265,7 +265,7 @@ const assertAuthHelpTeachesCredentials = (
 	expect(stderr).toBe("");
 	expect(stdout).toContain(trailer);
 	expect(flat).toContain("Sign in with a browser");
-	expect(flat).toContain("auth --profile work");
+	expect(flat).toContain("login --profile work");
 	expect(flat).toContain('projects list --api-key "$KEY"');
 	expect(flat).toContain('NEON_API_KEY="$KEY"');
 	expect(flat).toContain('profile create agent --api-key "$KEY"');
@@ -350,10 +350,10 @@ describe("auth and login help teach API keys and profiles", () => {
 		expect(stdout).toContain("--api-key -");
 	});
 
-	it("wraps the auth catalog description to COLUMNS", async () => {
+	it("wraps the login catalog description to COLUMNS", async () => {
 		const { stdout } = await runCli(["--help"], { COLUMNS: "40" });
 		expect(flattenHelp(stdout)).toContain("Sign in with a browser");
-		const authIdx = stdout.indexOf("neon auth");
+		const authIdx = stdout.indexOf("neon login");
 		expect(authIdx).toBeGreaterThanOrEqual(0);
 		const descLines = stdout
 			.slice(authIdx, authIdx + 500)

@@ -8,7 +8,7 @@
  * ```
  * ~/.config/neon/
  * ├── credentials.json          # this IS the DEFAULT profile, not a copy of it
- * ├── credentials.work.json     # created by `neon auth --profile work`
+ * ├── credentials.work.json     # created by `neon login --profile work`
  * └── profiles.json             # created only once a second profile exists
  * ```
  *
@@ -165,7 +165,7 @@ export const inspectProfiles = (dir: string): ProfilesRead => {
  *
  * A malformed file is reported through `onWarn` and treated as absent, because for a *read* the
  * worst case is a named profile turning up missing, which is recoverable — whereas throwing
- * would lock the user out of `neon auth` itself. Writing is the opposite: see
+ * would lock the user out of `neon login` itself. Writing is the opposite: see
  * {@link upsertProfile}, which refuses rather than rebuilding a file it cannot read.
  */
 export const readProfiles = (
@@ -184,7 +184,7 @@ export const readProfiles = (
  *
  * Call this **before** anything that writes a credential, opens a browser, or spends an API
  * call. {@link upsertProfile} refuses too, but it runs last: by then `create` has already
- * overwritten `credentials.<name>.json` and revoked the key it replaced, and `neon auth
+ * overwritten `credentials.<name>.json` and revoked the key it replaced, and `neon login
  * --profile` has already signed in over it — a refusal that arrives after the destruction it
  * exists to prevent. The path resolution itself is the unsound part, since with the metadata
  * unreadable the conventional filename is a guess about which account that file belongs to.

@@ -26,14 +26,14 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		const p = err as PlatformError;
 		expect(p.code).toBe(ErrorCode.Unauthorized);
 		// Message now suggests both fix paths since we accept both API keys and the
-		// OAuth token written by `neonctl auth`.
+		// OAuth token written by `neonctl login`.
 		expect(p.message).toContain(
 			"Bearer token sent to the Neon API was rejected",
 		);
 		expect(p.message).toContain(
 			"https://console.neon.tech/app/settings/api-keys",
 		);
-		expect(p.message).toContain("neon auth");
+		expect(p.message).toContain("neon login");
 		expect(p.message).toContain("req-1");
 		expect(p.details.status).toBe(401);
 		expect(p.details.requestId).toBe("req-1");
@@ -72,7 +72,7 @@ describe("wrapNeonError — HTTP status mapping", () => {
 		expect(p.message).toContain("functions requires a claimed project");
 		expect(p.message).toContain("npx neon claim accept");
 		expect(p.message).toContain("npx neon claim status");
-		expect(p.message).toContain("npx neon auth");
+		expect(p.message).toContain("npx neon login");
 		expect(p.message).toContain("req-claimable");
 		expect(p.message).not.toContain("API key");
 		expect(p.details.requestId).toBe("req-claimable");
