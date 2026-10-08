@@ -14,7 +14,7 @@ import { storeFor } from "./credential_io.js";
 import { log } from "./log.js";
 import type { ExtendedTokenSet } from "./types.js";
 
-/** Kept free of command types so auth and profile can share it. */
+/** Kept free of command types so login and profile can share it. */
 export type RetireProps = {
 	apiHost: string;
 	oauthHost: string;

@@ -350,7 +350,7 @@ describe("auth and login help teach API keys and profiles", () => {
 		expect(stdout).toContain("--api-key -");
 	});
 
-	it("wraps the auth catalog description to COLUMNS", async () => {
+	it("wraps the login catalog description to COLUMNS", async () => {
 		const { stdout } = await runCli(["--help"], { COLUMNS: "40" });
 		expect(flattenHelp(stdout)).toContain("Sign in with a browser");
 		const authIdx = stdout.indexOf("neon login");
