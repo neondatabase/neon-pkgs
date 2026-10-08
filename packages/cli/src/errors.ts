@@ -32,6 +32,16 @@ export const matchErrorCode = (message?: string): ErrorCode => {
 };
 
 /**
+ * The CLI reports user-facing failures by throwing a plain `Error` with the message to print,
+ * so only JavaScript's own error types point at a bug in the CLI.
+ */
+export const isUnexpectedError = (err: unknown): err is Error =>
+	err instanceof TypeError ||
+	err instanceof ReferenceError ||
+	err instanceof RangeError ||
+	err instanceof SyntaxError;
+
+/**
  * The single, human-readable line shown when the CLI couldn't reach the Neon API because
  * of a connection-level failure (DNS, refused/reset connection, offline). It replaces the
  * cryptic `fetch failed` / empty axios message a network blip otherwise surfaces (see

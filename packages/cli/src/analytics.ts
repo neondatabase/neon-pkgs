@@ -6,7 +6,7 @@ import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { storeFor } from "./credential_io.js";
 import { getCliAgent, getGithubEnvVars, isCi } from "./env.js";
-import type { ErrorCode } from "./errors.js";
+import { type ErrorCode, isUnexpectedError } from "./errors.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 
@@ -327,6 +327,7 @@ export const analyticsMiddleware = (args: {
 const ATTRIBUTION_WAIT_MS = 1000;
 
 let closing: Promise<void> | undefined;
+const errorReports: Promise<void>[] = [];
 
 /**
  * Send queued events, then close the client and flush. Later calls share the first close: the
@@ -377,6 +378,7 @@ export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
 							),
 						};
 			await analytics.closeAndFlush(flush);
+			await Promise.all(errorReports);
 			log.debug("Flushed CLI analytics");
 		})();
 	}
@@ -438,6 +440,20 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 		});
 	});
 	log.debug("Sent CLI error event: %s", errCode);
+	if (errCode === "UNKNOWN_ERROR" && isUnexpectedError(err)) {
+		errorReports.push(
+			import("./error_reporting.js")
+				.then(({ reportUnexpectedError }) =>
+					reportUnexpectedError(err, redactCredentialTokenIds),
+				)
+				.catch((reportError: unknown) => {
+					log.debug(
+						"Could not report the error to Sentry: %s",
+						reportError,
+					);
+				}),
+		);
+	}
 };
 
 export const trackEvent = (
