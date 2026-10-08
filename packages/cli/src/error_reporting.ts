@@ -100,10 +100,34 @@ const safeMessage = (message: string): string =>
 		? message
 		: OMITTED_MESSAGE;
 
-const scrubEvent = (
-	event: ErrorEvent,
+// V8 starts `stack` with the full message, newlines included, and Sentry parses every line after
+// the first as a frame. Only indented `at` lines are frames.
+const stackFrameLines = (error: Error): string[] => {
+	const stack = error.stack ?? "";
+	const header = error.message
+		? `${error.name}: ${error.message}`
+		: error.name;
+	const frames = stack.startsWith(header)
+		? stack.slice(header.length)
+		: stack;
+	return frames.split("\n").filter((line) => /^ {4}at /.test(line));
+};
+
+const sanitizeError = (
+	error: Error,
 	redact: (text: string) => string,
-): ErrorEvent => {
+): Error => {
+	const message = redact(safeMessage(error.message));
+	const sanitized = new Error(message);
+	sanitized.name = error.name;
+	sanitized.stack = [
+		`${error.name}: ${message}`,
+		...stackFrameLines(error),
+	].join("\n");
+	return sanitized;
+};
+
+const scrubEvent = (event: ErrorEvent): ErrorEvent => {
 	const { server_name: _serverName, ...rest } = event;
 	return {
 		...rest,
@@ -112,13 +136,6 @@ const scrubEvent = (
 					exception: {
 						values: event.exception.values.map((exception) => ({
 							...exception,
-							...(exception.value !== undefined
-								? {
-										value: redact(
-											safeMessage(exception.value),
-										),
-									}
-								: {}),
 							...(exception.stacktrace?.frames
 								? {
 										stacktrace: {
@@ -149,7 +166,7 @@ export const reportUnexpectedError = async (
 		stackParser: createStackParser(nodeStackLineParser()),
 		integrations: [],
 		transport: fetchTransport,
-		beforeSend: (event) => scrubEvent(event, redact),
+		beforeSend: scrubEvent,
 	});
 	client.init();
 	const scope = new Scope();
@@ -158,6 +175,6 @@ export const reportUnexpectedError = async (
 		ci: String(isCi()),
 		agent: getCliAgent(process.env) ?? "none",
 	});
-	client.captureException(error, undefined, scope);
+	client.captureException(sanitizeError(error, redact), undefined, scope);
 	await client.flush(FLUSH_TIMEOUT_MS);
 };

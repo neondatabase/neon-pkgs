@@ -182,6 +182,28 @@ describe("error reporting", () => {
 		expect(JSON.stringify(events)).not.toContain("private-token-123");
 	});
 
+	it("keeps a multiline message out of the stack frames", async () => {
+		const analytics = await setup();
+		let parseError: unknown;
+		try {
+			JSON.parse("X\nat secret123");
+		} catch (err) {
+			parseError = err;
+		}
+		if (!(parseError instanceof SyntaxError)) {
+			throw new Error("JSON.parse did not throw a SyntaxError");
+		}
+
+		analytics.sendError(parseError, "UNKNOWN_ERROR");
+		await analytics.closeAnalytics();
+
+		expect(events).toHaveLength(1);
+		expect(JSON.stringify(events)).not.toContain("secret123");
+		const frames =
+			events[0]?.exception?.values?.[0]?.stacktrace?.frames ?? [];
+		expect(frames.length).toBeGreaterThan(0);
+	});
+
 	it("sends a report queued after analytics already started closing", async () => {
 		const analytics = await setup();
 
@@ -197,6 +219,18 @@ describe("error reporting", () => {
 		stallEnvelopes = true;
 
 		analytics.sendError(new TypeError("stalled"), "UNKNOWN_ERROR");
+		const started = Date.now();
+		await analytics.closeAnalytics({ timeout: 100 });
+
+		expect(Date.now() - started).toBeLessThan(1000);
+	});
+
+	it("keeps a late report within a later close's timeout", async () => {
+		const analytics = await setup();
+		stallEnvelopes = true;
+
+		await analytics.closeAnalytics({ timeout: 100 });
+		analytics.sendError(new TypeError("late"), "UNKNOWN_ERROR");
 		const started = Date.now();
 		await analytics.closeAnalytics({ timeout: 100 });
 

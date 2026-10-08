@@ -339,6 +339,9 @@ export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
 	if (!analytics) {
 		return Promise.resolve();
 	}
+	if (closing && opts?.timeout !== undefined) {
+		return untilDeadline(closing, Date.now() + opts.timeout);
+	}
 	if (!closing) {
 		const started = Date.now();
 		closing = (async () => {
@@ -389,20 +392,24 @@ export const closeAnalytics = (opts?: { timeout?: number }): Promise<void> => {
 	return closing;
 };
 
+const untilDeadline = async (work: Promise<unknown>, deadline: number) => {
+	let timer: NodeJS.Timeout | undefined;
+	await Promise.race([
+		work,
+		new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+		}),
+	]);
+	clearTimeout(timer);
+};
+
 const settleErrorReports = async (deadline: number | undefined) => {
 	const reports = Promise.all(errorReports);
 	if (deadline === undefined) {
 		await reports;
 		return;
 	}
-	let timer: NodeJS.Timeout | undefined;
-	await Promise.race([
-		reports,
-		new Promise<void>((resolve) => {
-			timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
-		}),
-	]);
-	clearTimeout(timer);
+	await untilDeadline(reports, deadline);
 };
 
 const getErrorAnalyticsEventContext = (
