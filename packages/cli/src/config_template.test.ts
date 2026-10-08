@@ -41,6 +41,7 @@ export default defineConfig({
 
 export default defineConfig({
   // Declare your Neon services here
+  realtime: true,
   auth: true,
   dataApi: true,
   aiGateway: true,
@@ -76,9 +77,8 @@ export default defineConfig({
 		expect(rendered).not.toContain("preview");
 	});
 
-	it("declares Realtime separately from services", () => {
-		expect(renderNeonConfig([], true)).toContain("  realtime: true,");
-		expect(renderNeonConfig([], false)).toContain("  realtime: false,");
+	it("declares Realtime when it is selected as a service", () => {
+		expect(renderNeonConfig(["realtime"])).toContain("  realtime: true,");
 		expect(renderNeonConfig([])).not.toContain("realtime:");
 	});
 

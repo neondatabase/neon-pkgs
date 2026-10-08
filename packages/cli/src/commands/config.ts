@@ -38,12 +38,10 @@ import { type ConfigEdit, editNeonConfig } from "../config_edit.js";
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import { declaredNeonServices } from "../config_services.js";
 import {
-	CONFIG_INIT_SERVICE_OPTIONS,
-	type ConfigInitSelection,
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
-	parseConfigInitSelection,
+	parseConfigInitServices,
 	REQUIRED_PACKAGES,
 	renderFunctionSource,
 	renderNeonConfig,
@@ -61,6 +59,7 @@ import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
 	NEON_SERVICE_LABELS,
+	NEON_SERVICES,
 	type NeonService,
 	servicesFlagValue,
 	servicesOption,
@@ -326,7 +325,7 @@ export type ConfigInitProps = {
 	silent?: boolean;
 	/**
 	 * Raw `--services` values, repeated and/or comma-separated, as
-	 * {@link parseConfigInitSelection} reads them. When omitted,
+	 * {@link parseConfigInitServices} reads them. When omitted,
 	 * {@link resolveInitSelection} picks interactively on a TTY and falls back to the starter
 	 * policy otherwise.
 	 */
@@ -361,25 +360,19 @@ export type ConfigInitProps = {
  */
 const resolveInitSelection = async (
 	props: ConfigInitProps,
-): Promise<ConfigInitSelection> => {
+): Promise<NeonService[]> => {
 	if (props.services !== undefined) {
-		const parsed = parseConfigInitSelection(
-			props.services,
-			(used, canonical) =>
-				log.warning(deprecatedServiceMessage(used, canonical)),
+		return parseConfigInitServices(props.services, (used, canonical) =>
+			log.warning(deprecatedServiceMessage(used, canonical)),
 		);
-		return {
-			services: parsed.services,
-			...(parsed.realtime ? { realtime: true } : {}),
-		};
 	}
 	if (props.pickServices) {
-		return { services: await props.pickServices() };
+		return await props.pickServices();
 	}
 	if (isCi() || !process.stdout.isTTY) {
-		return { services: [] };
+		return [];
 	}
-	return { services: await pickServicesInteractively() };
+	return await pickServicesInteractively();
 };
 
 /**
@@ -557,19 +550,15 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 			}
 		}
 	} else {
-		const { services, realtime } = await resolveInitSelection(props);
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			renderNeonConfig(services, realtime),
-		);
+		const services = await resolveInitSelection(props);
+		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
 		if (!props.silent) {
-			if (services.length === 0 && realtime !== true) {
+			if (services.length === 0) {
 				log.info("Created neon.ts with a starter policy.");
 			} else {
-				const declared = [
-					...services,
-					...(realtime === true ? ["Realtime"] : []),
-				];
+				const declared = services.map((service) =>
+					service === "realtime" ? "Realtime" : service,
+				);
 				log.info("Created neon.ts declaring %s.", declared.join(", "));
 			}
 		}
@@ -1053,7 +1042,7 @@ export const builder = (argv: yargs.Argv) =>
 					},
 					services: servicesOption({
 						key: "services",
-						allowed: CONFIG_INIT_SERVICE_OPTIONS,
+						allowed: NEON_SERVICES,
 						describe: "Services the scaffolded neon.ts declares",
 						also:
 							"postgres alone writes the starter policy; every branch has Postgres. " +

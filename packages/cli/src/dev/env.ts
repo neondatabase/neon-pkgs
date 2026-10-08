@@ -136,6 +136,7 @@ const CLAIMABLE_UNSUPPORTED_SERVICES: ReadonlySet<NeonService> = new Set([
 	"ai-gateway",
 	"functions",
 	"object-storage",
+	"realtime",
 ]);
 
 const CLAIMABLE_RESOLVE_ORDER = ["postgres", "auth", "data-api"] as const;
