@@ -1,5 +1,8 @@
-import { NO_AGENT_SETUP_CONFLICT, NON_TTY_AGENT_SETUP } from "./copy.js";
-import { INIT_NEEDS_YES_OR_TERMINAL } from "./plan.js";
+import {
+	INIT_NEEDS_YES,
+	NO_AGENT_SETUP_CONFLICT,
+	NON_TTY_AGENT_SETUP,
+} from "./copy.js";
 
 export type InitMode = "recommended" | "custom";
 
@@ -77,7 +80,7 @@ export const resolveInitMode = (input: InitModeInput): InitModeResolution => {
 	if (input.interactive) {
 		return { kind: "ask" };
 	}
-	throw new Error(INIT_NEEDS_YES_OR_TERMINAL);
+	throw new Error(INIT_NEEDS_YES);
 };
 
 export const assertAgentSetupFlags = (input: {
