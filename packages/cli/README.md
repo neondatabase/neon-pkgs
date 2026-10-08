@@ -740,7 +740,7 @@ neon deploy
 
 The branch is chosen with `--branch <id|name>`; without it the project's default branch is used. The policy is the `neon.ts` in the project directory (next to `.neon`, or the current directory without one); pass `--config <path>` to point at another file.
 
-**Confirmations** (also on `deploy`). Two things need a yes before `apply` changes anything: applying to a branch Neon marks as protected, and overriding settings the branch already has (compute, TTL, `protected`, Data API settings, custom-domain targets). Adding services and deploying functions never asks. In a terminal, `apply` shows the settings it would override and asks once, default No. Without a terminal (CI, agents, pipes) or with `-o json|yaml`, it exits 1 before changing anything and names the flag to pass:
+**Confirmations** (also on `deploy`). Two things need a yes before `apply` changes anything: applying to a branch Neon marks as protected, and overriding settings the branch already has (compute, TTL, `protected`, Data API settings, custom-domain targets, and disabling an existing Data API). Adding services and deploying functions never asks. In a terminal, `apply` shows the settings it would override and asks once, default No. Without a terminal (CI, agents, pipes) or with `-o json|yaml`, it exits 1 before changing anything and names the flag to pass:
 
 - `--update-existing` — override settings that differ from `neon.ts`.
 - `--allow-protected` — apply to a protected branch.
