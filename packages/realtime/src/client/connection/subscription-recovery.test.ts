@@ -303,6 +303,34 @@ describe("SubscriptionRecovery", () => {
 			recovery.cancel();
 		});
 
+		it("chunks hints that exceed the host timer limit", () => {
+			const pending: Array<{
+				callback: () => void;
+				delayMs: number;
+			}> = [];
+			const { recovery, callbacks } = createRecovery({
+				setTimer: (callback, delayMs) => {
+					pending.push({ callback, delayMs });
+					return setTimeout(() => undefined, 0);
+				},
+				clearTimer: (handle) => clearTimeout(handle),
+			});
+
+			expect(
+				recovery.retry(error("backend_overloaded"), 4_294_967_295),
+			).toBe(true);
+			expect(defined(pending[0]).delayMs).toBe(2_147_483_647);
+			defined(pending[0]).callback();
+			expect(callbacks.resubscribe).not.toHaveBeenCalled();
+			expect(defined(pending[1]).delayMs).toBe(2_147_483_647);
+			defined(pending[1]).callback();
+			expect(callbacks.resubscribe).not.toHaveBeenCalled();
+			expect(defined(pending[2]).delayMs).toBe(1);
+			defined(pending[2]).callback();
+			expect(callbacks.resubscribe).toHaveBeenCalledOnce();
+			recovery.cancel();
+		});
+
 		it("falls back to exponential backoff when hint is undefined", async () => {
 			const { recovery, callbacks } = createRecovery({
 				random: () => 0,

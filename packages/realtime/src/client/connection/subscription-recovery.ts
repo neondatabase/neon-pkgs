@@ -6,6 +6,8 @@ import {
 	type ReconnectTimer,
 } from "./reconnect.js";
 
+const MAX_HOST_TIMER_DELAY_MS = 2_147_483_647;
+
 interface RecoveryEpisode {
 	readonly backoff: ReconnectBackoff;
 	error: DiagnosticError;
@@ -77,15 +79,25 @@ export class SubscriptionRecovery {
 				this.callbacks.exhausted(episode.error);
 			}, attempt.remainingMs);
 		}
+		this.scheduleDelay(episode, attempt.delayMs);
+		this.callbacks.scheduled(error.code, attempt.attempt, attempt.delayMs);
+		return true;
+	}
+
+	private scheduleDelay(episode: RecoveryEpisode, remainingMs: number): void {
+		const delayMs = Math.min(remainingMs, MAX_HOST_TIMER_DELAY_MS);
 		episode.delayTimer = episode.backoff.setTimer(() => {
 			if (this.episode !== episode || !episode.waiting) return;
 			episode.delayTimer = undefined;
+			const nextRemainingMs = remainingMs - delayMs;
+			if (nextRemainingMs > 0) {
+				this.scheduleDelay(episode, nextRemainingMs);
+				return;
+			}
 			episode.waiting = false;
 			// The coordinator waits for socket readiness if this delay expires first.
 			this.callbacks.resubscribe();
-		}, attempt.delayMs);
-		this.callbacks.scheduled(error.code, attempt.attempt, attempt.delayMs);
-		return true;
+		}, delayMs);
 	}
 
 	/** Admission alone does not establish stability; a complete baseline does. */
