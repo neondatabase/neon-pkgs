@@ -7,7 +7,7 @@ import {
 	RECOVERABLE_PROJECT_FIELDS,
 } from "./commands/projects.js";
 import { SNAPSHOT_FIELDS } from "./commands/snapshots.js";
-import { formatHumanChunk } from "./human_table.js";
+import { formatHumanChunk, titleCaseField } from "./human_table.js";
 import {
 	INSPECT_QUERIES,
 	type InspectSubcommand,
@@ -24,12 +24,6 @@ const inspectRow = (fields: readonly string[]): Record<string, unknown> =>
 
 const headerOf = (out: string): string =>
 	stripAnsi(out).trimEnd().split("\n")[0] ?? "";
-
-const titleCase = (field: string): string =>
-	field
-		.split("_")
-		.map((word) => (word ? word[0]?.toUpperCase() + word.slice(1) : word))
-		.join(" ");
 
 const neverExpires = {
 	expires_at: (row: { expires_at?: string | null }) =>
@@ -135,7 +129,7 @@ describe("list field order", () => {
 			header.indexOf("Deleted At"),
 		);
 		for (const field of PROJECT_FIELDS) {
-			expect(header).toContain(titleCase(field));
+			expect(header).toContain(titleCaseField(field));
 		}
 	});
 
@@ -158,7 +152,7 @@ describe("list field order", () => {
 		expect(out).not.toMatch(BOX);
 		const header = headerOf(out);
 		for (const field of CLAIM_LIST_FIELDS) {
-			expect(header).toContain(titleCase(field));
+			expect(header).toContain(titleCaseField(field));
 		}
 		expect(header.indexOf("Project Expires At")).toBeGreaterThan(-1);
 		expect(stripAnsi(out)).toContain(PROJECT_ID);
@@ -208,7 +202,7 @@ describe("inspect list columns", () => {
 		expect(out).not.toMatch(BOX);
 		const header = headerOf(out);
 		for (const field of list.fields) {
-			expect(header).toContain(titleCase(field));
+			expect(header).toContain(titleCaseField(field));
 		}
 		expect(stripAnsi(out).trimEnd().split("\n")).toHaveLength(2);
 	});

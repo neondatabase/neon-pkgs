@@ -282,10 +282,35 @@ function flattenCell(value: unknown): string {
 	return String(value).replace(/\s+/g, " ").trim();
 }
 
-function titleCaseField(field: string): string {
+const LABEL_WORDS: Record<string, string> = {
+	api: "API",
+	cname: "CNAME",
+	cors: "CORS",
+	db: "DB",
+	id: "ID",
+	jwks: "JWKS",
+	jwt: "JWT",
+	lfc: "LFC",
+	lsn: "LSN",
+	mib: "MiB",
+	openapi: "OpenAPI",
+	pid: "PID",
+	pids: "PIDs",
+	s3: "S3",
+	ttl: "TTL",
+	uri: "URI",
+	url: "URL",
+	vpc: "VPC",
+};
+
+export function titleCaseField(field: string): string {
 	return field
 		.split("_")
-		.map((word) => (word ? word[0]?.toUpperCase() + word.slice(1) : word))
+		.map(
+			(word) =>
+				LABEL_WORDS[word] ??
+				(word ? word[0]?.toUpperCase() + word.slice(1) : word),
+		)
 		.join(" ");
 }
 

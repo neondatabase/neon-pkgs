@@ -339,8 +339,8 @@ describe("claim list table output", () => {
 		expect(code).toBe(0);
 		expect(stderr).toBe("");
 		expect(stdout).not.toMatch(BOX);
-		expect(stdout).toContain("Project Id");
-		expect(stdout).toContain("Branch Id");
+		expect(stdout).toContain("Project ID");
+		expect(stdout).toContain("Branch ID");
 		expect(stdout).toContain("State");
 		expect(stdout).toContain("Project Expires At");
 		expect(stdout).toContain("Origin");

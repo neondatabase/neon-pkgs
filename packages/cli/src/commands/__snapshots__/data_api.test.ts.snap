@@ -40,9 +40,9 @@ settings:
 `;
 
 exports[`data-api > get with table output 1`] = `
-"Url         https://app-test.dataproxy.neon.tech
+"URL         https://app-test.dataproxy.neon.tech
 Status      active
-Db Schemas  public, analytics
+DB Schemas  public, analytics
 "
 `;
 

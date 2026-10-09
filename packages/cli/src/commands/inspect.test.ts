@@ -221,14 +221,14 @@ describe("inspect db", () => {
 
 		expect(output).toContain("Duration");
 		expect(output).toContain("Wait Event");
-		expect(output).not.toContain("Blocking Pids");
+		expect(output).not.toContain("Blocking PIDs");
 		expect(output).toContain("Role");
 		expect(output).toContain("Query Group");
 		expect(output).toContain("Query");
 		expect(output).toContain(STALLED_QUERY_ROW.query);
 		expect(output).not.toContain("...");
 		expect(output).not.toMatch(
-			/Observed At|Query Start|Leader Pid|Backend Type|Database|Application Name|Query Id|Wait Event Type/,
+			/Observed At|Query Start|Leader PID|Backend Type|Database|Application Name|Query ID|Wait Event Type/,
 		);
 		expect(output.trimEnd().split("\n")).toHaveLength(2);
 		expect(stripAnsi(captureWriter("table", 40))).toBe(output);
@@ -239,7 +239,7 @@ describe("inspect db", () => {
 			captureWriter("table", 80, [BLOCKED_STALLED_QUERY_ROW]),
 		);
 
-		expect(output).toContain("Blocking Pids");
+		expect(output).toContain("Blocking PIDs");
 		expect(output).toContain("771");
 		expect(output).toContain(STALLED_QUERY_ROW.query);
 		expect(output.trimEnd().split("\n")).toHaveLength(2);
