@@ -1,9 +1,12 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, test } from "vitest";
 import { ErrorCode, PlatformError } from "./errors.js";
 import {
 	buildFunctionDeployForm,
 	collectCursorPages,
 	createNeonAuthRestInput,
+	createRealNeonApi,
 	customDomainsUnavailableError,
 	isPreviewFeatureUnavailable,
 	previewUnavailableError,
@@ -429,5 +432,53 @@ describe("collectCursorPages", () => {
 		});
 		expect(seen).toEqual([undefined, "two"]);
 		expect(items).toEqual([1, 2]);
+	});
+});
+
+describe("enableNeonAuth", () => {
+	test("reports the API's reason, not a name collision, when a branch without Neon Auth cannot be provisioned", async () => {
+		const apiMessage =
+			"The `neon_auth` schema already exists and cannot be automatically provisioned. Please drop the existing `neon_auth` schema before provisioning Neon Auth.";
+		const server = createServer((req, res) => {
+			res.setHeader("content-type", "application/json");
+			if (
+				req.method === "POST" &&
+				req.url?.endsWith("/branches/br-1/auth")
+			) {
+				res.statusCode = 409;
+				res.end(
+					JSON.stringify({
+						request_id: "req-1",
+						code: "",
+						message: apiMessage,
+					}),
+				);
+				return;
+			}
+			res.statusCode = 404;
+			res.end(
+				JSON.stringify({
+					message: "Neon Auth is not enabled for this branch",
+				}),
+			);
+		});
+		await new Promise<void>((resolve) => server.listen(0, resolve));
+		const { port } = server.address() as AddressInfo;
+		try {
+			const api = createRealNeonApi({
+				apiKey: "test-key",
+				baseUrl: `http://localhost:${port}`,
+			});
+			const failure = api.enableNeonAuth("proj-1", "br-1");
+			await expect(failure).rejects.toMatchObject({
+				code: ErrorCode.Conflict,
+			});
+			await expect(failure).rejects.toThrow(
+				`enableNeonAuth(proj-1/br-1) failed: Neon API said: "${apiMessage}" (request id req-1).`,
+			);
+			await expect(failure).rejects.not.toThrow("name collision");
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
 	});
 });

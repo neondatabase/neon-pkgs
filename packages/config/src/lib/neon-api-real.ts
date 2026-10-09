@@ -877,6 +877,7 @@ class RealNeonApi implements NeonApi {
 			) {
 				const existing = await this.getNeonAuth(projectId, branchId);
 				if (existing) return existing;
+				throw neonAuthProvisioningConflict(err, projectId, branchId);
 			}
 			throw err;
 		}
@@ -2002,6 +2003,30 @@ function neonAuthResponseToSnapshot(
 	}
 	if (data.base_url) snapshot.baseUrl = data.base_url;
 	return snapshot;
+}
+
+/**
+ * A 409 from enabling Neon Auth on a branch that has no integration is not a name
+ * collision, so the generic conflict hint does not apply. The API message names the cause
+ * (for example an existing `neon_auth` schema) and what to do about it.
+ */
+function neonAuthProvisioningConflict(
+	err: PlatformError,
+	projectId: string,
+	branchId: string,
+): PlatformError {
+	const { neonMessage, requestId } = err.details;
+	const requestIdSuffix =
+		typeof requestId === "string" ? ` (request id ${requestId})` : "";
+	const reason =
+		typeof neonMessage === "string"
+			? `Neon API said: "${neonMessage}"${requestIdSuffix}.`
+			: `Neon Auth is not enabled on this branch and could not be provisioned (HTTP 409)${requestIdSuffix}.`;
+	return new PlatformError(
+		ErrorCode.Conflict,
+		`enableNeonAuth(${projectId}/${branchId}) failed: ${reason}`,
+		{ cause: err, details: err.details },
+	);
 }
 
 export function createNeonAuthRestInput(input: {
