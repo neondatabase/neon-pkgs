@@ -133,24 +133,60 @@ export const connectionUriForDatabase = (
 	return url.toString();
 };
 
-const listBranchDatabases = async (
+type BranchConnectionReads = {
+	branchId: string;
+	parsedPIT: ReturnType<typeof parsePITBranch>;
+	endpoints: Promise<Endpoint[]>;
+	role: Promise<string>;
+	databases: Promise<Database[]>;
+};
+
+/**
+ * Resolves the branch once and starts its endpoint, role, and database reads together.
+ * Callers read them in the order a sequential run would, so the first error is the same.
+ */
+const startBranchConnectionReads = async (
 	props: ResolveConnectionProps,
-): Promise<{ branchId: string; names: string[] }> => {
+): Promise<BranchConnectionReads> => {
 	const projectId = props.projectId;
 	const parsedPIT = props.branch
 		? parsePITBranch(props.branch)
 		: ({ tag: "head", branch: "" } as const);
-	const branchId = await branchIdFromProps({
-		...props,
-		...(props.branch ? { branch: parsedPIT.branch } : {}),
-	});
-	const {
-		data: { databases },
-	} = await props.apiClient.listProjectBranchDatabases(projectId, branchId);
-	return {
-		branchId,
-		names: databases.map((d: Database) => d.name),
-	};
+	if (props.branch) {
+		props.branch = parsedPIT.branch;
+	}
+	const branchId = await branchIdFromProps(props);
+
+	const endpoints = props.apiClient
+		.listProjectBranchEndpoints(projectId, branchId)
+		.then(({ data }) => data.endpoints);
+	const role = props.roleName
+		? Promise.resolve(props.roleName)
+		: props.apiClient
+				.listProjectBranchRoles(projectId, branchId)
+				.then(({ data }): string => {
+					if (data.roles.length === 0) {
+						throw new Error(
+							`No roles found for the branch: ${branchId}`,
+						);
+					}
+					if (data.roles.length === 1) {
+						return data.roles[0].name;
+					}
+					throw new Error(
+						`Multiple roles found for the branch, please provide one with the --role-name option: ${data.roles
+							.map((r: Role) => r.name)
+							.join(", ")}`,
+					);
+				});
+	const databases = props.apiClient
+		.listProjectBranchDatabases(projectId, branchId)
+		.then(({ data }) => data.databases);
+	for (const read of [endpoints, role, databases]) {
+		// Read in order by the caller; this only stops an unread rejection from crashing the process.
+		read.catch(() => undefined);
+	}
+	return { branchId, parsedPIT, endpoints, role, databases };
 };
 
 /**
@@ -161,19 +197,12 @@ const listBranchDatabases = async (
  */
 export const resolveConnectionUri = async (
 	props: ResolveConnectionProps,
+	started?: BranchConnectionReads,
 ): Promise<ResolvedConnection> => {
-	const projectId = props.projectId;
-	const parsedPIT = props.branch
-		? parsePITBranch(props.branch)
-		: ({ tag: "head", branch: "" } as const);
-	if (props.branch) {
-		props.branch = parsedPIT.branch;
-	}
-	const branchId = await branchIdFromProps(props);
+	const reads = started ?? (await startBranchConnectionReads(props));
+	const { branchId, parsedPIT } = reads;
 
-	const {
-		data: { endpoints },
-	} = await props.apiClient.listProjectBranchEndpoints(projectId, branchId);
+	const endpoints = await reads.endpoints;
 	const matchEndpointType = props.endpointType ?? EndpointType.ReadWrite;
 	let endpoint = endpoints.find(
 		(e: Endpoint) => e.type === matchEndpointType,
@@ -189,29 +218,8 @@ export const resolveConnectionUri = async (
 		);
 	}
 
-	const role: string =
-		props.roleName ||
-		(await props.apiClient
-			.listProjectBranchRoles(projectId, branchId)
-			.then(({ data }): string => {
-				if (data.roles.length === 0) {
-					throw new Error(
-						`No roles found for the branch: ${branchId}`,
-					);
-				}
-				if (data.roles.length === 1) {
-					return data.roles[0].name;
-				}
-				throw new Error(
-					`Multiple roles found for the branch, please provide one with the --role-name option: ${data.roles
-						.map((r: Role) => r.name)
-						.join(", ")}`,
-				);
-			}));
-
-	const {
-		data: { databases: branchDatabases },
-	} = await props.apiClient.listProjectBranchDatabases(projectId, branchId);
+	const role = await reads.role;
+	const branchDatabases = await reads.databases;
 
 	const database =
 		props.databaseName ||
@@ -342,18 +350,19 @@ export const resolveInspectTargets = async (
 		};
 	}
 
-	const { branchId, names } = await listBranchDatabases(props);
+	const reads = await startBranchConnectionReads(props);
+	const names = (await reads.databases).map((d: Database) => d.name);
 	if (names.length === 0) {
-		throw new Error(`No databases found for the branch: ${branchId}`);
+		throw new Error(`No databases found for the branch: ${reads.branchId}`);
 	}
 	const selection = selectInspectTargets({
 		branchDatabases: names,
 		scope,
 	});
-	const first = await resolveConnectionUri({
-		...props,
-		databaseName: selection.databases[0],
-	});
+	const first = await resolveConnectionUri(
+		{ ...props, databaseName: selection.databases[0] },
+		reads,
+	);
 	return {
 		targets: selection.databases.map((database) => ({
 			database,
