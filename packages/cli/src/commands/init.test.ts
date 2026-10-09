@@ -493,6 +493,37 @@ describe("init handler", () => {
 		expect(out).toContain("mcp -y --agent opencode --oauth");
 	});
 
+	test("an MCP-only agent whose key cannot be minted reports no agent tooling", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-only-fail-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
+		ops.installMcp.mockRejectedValue(new CannotMintApiKeyError());
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					mcpAuth: "api-key",
+					agent: ["mcporter"],
+					link: false,
+					config: false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(CannotMintApiKeyError);
+
+		expect(ops.installSkills).not.toHaveBeenCalled();
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup failed.");
+		expect(out).toMatch(/Agents\s+skipped/);
+		expect(out).not.toMatch(/Agents\s+.*MCP/);
+	});
+
 	test("Recommended installs the plugin globally for detected agents", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-rec-plugin-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

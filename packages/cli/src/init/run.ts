@@ -1383,10 +1383,17 @@ const joinNext = (
 		? [...first, ...second]
 		: [...first, "", ...second];
 
-const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan =>
-	tooling.setup === "skills-mcp" || tooling.setup === "mixed"
-		? { ...tooling, mcpAgents: [] }
-		: tooling;
+const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan => {
+	if (tooling.setup === "mixed") {
+		return { ...tooling, mcpAgents: [] };
+	}
+	if (tooling.setup === "skills-mcp") {
+		return tooling.skillsAgents.length === 0
+			? { setup: "skip" }
+			: { ...tooling, mcpAgents: [] };
+	}
+	return tooling;
+};
 
 const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
 	switch (tooling.setup) {
