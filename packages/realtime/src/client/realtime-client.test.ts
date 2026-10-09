@@ -25,6 +25,7 @@ type FakeWebSocketListener =
 
 class FakeWebSocket {
 	static instances: FakeWebSocket[] = [];
+	static deferClose = false;
 	readyState = 0;
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
@@ -54,6 +55,12 @@ class FakeWebSocket {
 
 	close(): void {
 		if (this.readyState >= 2) return;
+		this.readyState = 2;
+		if (!FakeWebSocket.deferClose) this.finishClose();
+	}
+
+	finishClose(): void {
+		if (this.readyState === 3) return;
 		this.readyState = 3;
 		this.emit("close", {});
 	}
@@ -76,6 +83,7 @@ class FakeWebSocket {
 
 afterEach(() => {
 	FakeWebSocket.instances = [];
+	FakeWebSocket.deferClose = false;
 	vi.unstubAllGlobals();
 	vi.useRealTimers();
 });
@@ -903,6 +911,31 @@ describe("RealtimeClient", () => {
 		} finally {
 			client.close();
 		}
+	});
+
+	it("reuses a live ID after the last unsubscribe while its socket is closing", () => {
+		useFakeWebSocket();
+		FakeWebSocket.deferClose = true;
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const firstSubscription = client.subscribe(query("first"));
+		const firstSocket = connectAndAdmit();
+		baselineSync(firstSocket, "first");
+
+		firstSubscription.unsubscribe();
+		expect(firstSocket.readyState).toBe(2);
+
+		const replacement = client.subscribe(query("replacement"));
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const replacementSocket = connectAndAdmit();
+		baselineSync(replacementSocket, "replacement");
+		expect(replacement.getSnapshot()).toMatchObject({
+			status: "live",
+			data: [{ id: 1, title: "replacement" }],
+		});
+
+		firstSocket.finishClose();
+		expect(replacement.getSnapshot().status).toBe("live");
+		client.close();
 	});
 
 	it("confirms transactions visible to an applied MVCC snapshot", async () => {
