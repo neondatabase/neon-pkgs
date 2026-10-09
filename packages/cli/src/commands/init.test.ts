@@ -23,7 +23,6 @@ import {
 	MCP_SCOPED_NEEDS_PROJECT,
 	NO_AGENT_SETUP_CONFLICT,
 	namedAgentsUnavailable,
-	YES_LINK_NEEDS_AUTH,
 } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
@@ -329,27 +328,389 @@ describe("init handler", () => {
 		});
 	});
 
-	test("-y with --project-id refuses to open sign-in", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-project-id-"));
+	test("-y with org, project, and branch but no credentials writes .neon offline and neon.ts", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-offline-pin-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
 		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				orgId: "org-example",
+				projectId: "prj-example",
+				branch: "br-example",
+				services: ["auth"],
+				linkProject,
+				initConfig,
+				envPull,
+				hasLocalCredentials: () => false,
+				detectProjectAgents: () => ["cursor"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(stepKinds(ops)).toEqual(["plugins"]);
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(envPull).not.toHaveBeenCalled();
+		expect(JSON.parse(readFileSync(join(cwd, ".neon"), "utf8"))).toEqual({
+			orgId: "org-example",
+			projectId: "prj-example",
+			branch: "br-example",
+		});
+		expect(initConfig).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd, services: ["auth"] }),
+		);
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup needs a next step.");
+		expect(out).toMatch(/Project\s+linked, not verified/);
+		expect(out).toMatch(/neon login/);
+		expect(out).toMatch(/neon deploy/);
+		expect(out).not.toMatch(/neon link/);
+		expect(out).not.toMatch(/claim create/);
+	});
+
+	test.each([
+		{ name: "with an existing pin", existing: true },
+		{ name: "in an empty directory", existing: false },
+	])("a deferred link defers project-scoped MCP $name", async ({
+		existing,
+	}) => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-deferred-mcp-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const pin = { projectId: "prj-old", branch: "main" };
+		if (existing) {
+			writeFileSync(join(cwd, ".neon"), JSON.stringify(pin));
+		}
+		const ops = makeOperations();
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				projectId: "prj-new",
+				mcpProjectScoped: true,
+				mcpAuth: "oauth",
+				agent: ["mcporter"],
+				initConfig,
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(ops.installMcp).not.toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+		if (existing) {
+			expect(
+				JSON.parse(readFileSync(join(cwd, ".neon"), "utf8")),
+			).toEqual(pin);
+		}
+		const out = stdoutText(stdout);
+		expect(out).toMatch(/Agents\s+skipped/);
+		expect(out).toContain("link --project-id prj-new");
+		expect(out).toContain(
+			"mcp -y --project-id prj-new --agent mcporter --oauth",
+		);
+	});
+
+	test("an offline pin with only Postgres names env pull as the step after login", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-offline-pg-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				agentSetup: false,
+				orgId: "org-example",
+				projectId: "prj-example",
+				branch: "main",
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		const out = stdoutText(stdout);
+		expect(out).toContain("Then pull the branch's environment variables:");
+		expect(out).toMatch(/neon env pull/);
+	});
+
+	test("an offline pin with an existing neon.ts does not name env pull as the next step", async () => {
+		const cwd = mkdtempSync(
+			join(tmpdir(), "neon-init-yes-offline-existing-"),
+		);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				agentSetup: false,
+				config: false,
+				orgId: "org-example",
+				projectId: "prj-example",
+				branch: "main",
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		const out = stdoutText(stdout);
+		expect(out).toMatch(/neon login/);
+		expect(out).not.toContain(
+			"Then pull the branch's environment variables:",
+		);
+	});
+
+	test("-y with --project-id and no credentials keeps an existing pin and does not pull env", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-relink-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(
+			join(cwd, ".neon-work"),
+			JSON.stringify({ projectId: "prj-old", branch: "main" }),
+		);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				agentSetup: false,
+				projectId: "prj-new",
+				profile: "work",
+				configDir: join(cwd, "creds"),
+				contextFile: ".neon-work",
+				linkProject,
+				envPull,
+				hasLocalCredentials: () => false,
+			}),
+		);
+
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(envPull).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(readFileSync(join(cwd, ".neon-work"), "utf8")),
+		).toEqual({ projectId: "prj-old", branch: "main" });
+		const out = stdoutText(stdout);
+		expect(out).toContain(
+			`login --profile work --config-dir ${join(cwd, "creds")}`,
+		);
+		expect(out).toContain(
+			`link --project-id prj-new --context-file .neon-work --profile work --config-dir ${join(cwd, "creds")}`,
+		);
+	});
+
+	test("Recommended configures MCP with OAuth when the credential cannot mint, then links", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-fallback-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
+		const fallbackMcp = ops.installMcp.getMockImplementation();
+		ops.installMcp.mockImplementation(async (options) => {
+			if (options.oauth !== true) {
+				throw new CannotMintApiKeyError();
+			}
+			return fallbackMcp?.(options) as never;
+		});
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const warning = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				projectId: "prj-example",
+				linkProject,
+				initConfig,
+				detectProjectAgents: () => ["cursor", "opencode"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(ops.installMcp).toHaveBeenCalledTimes(2);
+		expect(ops.installMcp.mock.calls[1]?.[0]).toMatchObject({
+			oauth: true,
+			agent: ["opencode"],
+		});
+		expect(stdoutText(warning)).toContain(
+			"cannot mint an API key for the Neon MCP server",
+		);
+		expect(linkProject).toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+	});
+
+	test("--mcp-auth api-key finishes the other steps, then reports the mint failure", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-no-fallback-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
+		ops.installMcp.mockRejectedValue(new CannotMintApiKeyError());
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 
 		await expect(
 			handler(
 				baseProps({
 					cwd,
+					operations: ops,
 					yes: true,
+					mcpAuth: "api-key",
+					agent: ["opencode"],
 					projectId: "prj-example",
-					agentSetup: false,
-					config: false,
 					linkProject,
+					initConfig,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(CannotMintApiKeyError);
+
+		expect(ops.installMcp).toHaveBeenCalledTimes(1);
+		expect(ops.installSkills).toHaveBeenCalledTimes(1);
+		expect(linkProject).toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup failed.");
+		expect(out).toContain("Agents   skills: opencode");
+		expect(out).not.toContain("skills and MCP");
+		expect(out).toContain(
+			"mcp -y --agent opencode --api-key <personal-api-key>",
+		);
+		expect(out).toContain("mcp -y --agent opencode --oauth");
+	});
+
+	test("--mcp-auth api-key without credentials finishes the offline pin and neon.ts, then reports MCP", async () => {
+		const cwd = mkdtempSync(
+			join(tmpdir(), "neon-init-mcp-key-signed-out-"),
+		);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({ projectId: "prj-old", branch: "main" }),
+		);
+		const ops = makeOperations();
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { MCP_API_KEY_NEEDS_AUTH } = await import("../init/copy.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					mcpAuth: "api-key",
+					agent: ["opencode"],
+					orgId: "org-new",
+					projectId: "prj-new",
+					branch: "br-new",
+					initConfig,
 					hasLocalCredentials: () => false,
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(YES_LINK_NEEDS_AUTH);
-		expect(linkProject).not.toHaveBeenCalled();
+		).rejects.toThrow(MCP_API_KEY_NEEDS_AUTH);
+
+		expect(ops.installMcp).not.toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+		expect(JSON.parse(readFileSync(join(cwd, ".neon"), "utf8"))).toEqual({
+			orgId: "org-new",
+			projectId: "prj-new",
+			branch: "br-new",
+		});
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup failed.");
+		expect(out).toContain("minting its API key needs a signed-in CLI");
+		expect(out).toContain(
+			"mcp -y --agent opencode --api-key <personal-api-key>",
+		);
+		expect(out).toMatch(/neon login/);
+	});
+
+	test("without -y, API-key MCP runs after link signs in", async () => {
+		const cwd = mkdtempSync(
+			join(tmpdir(), "neon-init-mcp-key-interactive-"),
+		);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				mcpAuth: "api-key",
+				agent: ["opencode"],
+				projectId: "prj-example",
+				config: false,
+				linkProject,
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(linkProject).toHaveBeenCalled();
+		expect(ops.installMcp).toHaveBeenCalledTimes(1);
+		expect(ops.installMcp.mock.calls[0]?.[0].oauth).toBeFalsy();
+	});
+
+	test("an MCP-only agent whose key cannot be minted reports no agent tooling", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-only-fail-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
+		ops.installMcp.mockRejectedValue(new CannotMintApiKeyError());
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					mcpAuth: "api-key",
+					agent: ["mcporter"],
+					link: false,
+					config: false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(CannotMintApiKeyError);
+
+		expect(ops.installSkills).not.toHaveBeenCalled();
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup failed.");
+		expect(out).toMatch(/Agents\s+skipped/);
+		expect(out).not.toMatch(/Agents\s+.*MCP/);
 	});
 
 	test("Recommended installs the plugin globally for detected agents", async () => {

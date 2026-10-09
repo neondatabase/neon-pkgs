@@ -12,8 +12,14 @@ export type MintedMcpKey = {
 	projectId?: string;
 };
 
-const cannotMintMessage =
-	"This CLI credential cannot mint API keys. Organization and project-scoped keys cannot create other keys. Sign in with `neon login` or pass a personal API key.";
+export class CannotMintApiKeyError extends Error {
+	constructor() {
+		super(
+			"This CLI credential cannot mint API keys. Organization and project-scoped keys cannot create other keys. Sign in with `neon login` or pass a personal API key.",
+		);
+		this.name = "CannotMintApiKeyError";
+	}
+}
 
 export function mintedKeyRevokeCommand(
 	key: Pick<MintedMcpKey, "id" | "orgId">,
@@ -114,7 +120,7 @@ const createAndAssert = async (
 		return assertUsable(client, data, name, scope);
 	} catch (err) {
 		if (isNeonApiError(err) && (err.status === 403 || err.status === 404)) {
-			throw new Error(cannotMintMessage);
+			throw new CannotMintApiKeyError();
 		}
 		throw err;
 	}

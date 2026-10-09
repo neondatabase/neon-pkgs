@@ -21,6 +21,7 @@ import {
 } from "../commands/skills.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
+import { CannotMintApiKeyError } from "../mcp/mint.js";
 import type { CommonProps } from "../types.js";
 import {
 	AgentSelectionSkipped,
@@ -29,7 +30,7 @@ import {
 import { getCliName } from "../utils/cli_name.js";
 import { type InitAuthOptions, runAuthenticatedMcp } from "./auth.js";
 import { raceSigint } from "./cancelled.js";
-import { PROGRESS } from "./copy.js";
+import { MCP_OAUTH_FALLBACK, PROGRESS } from "./copy.js";
 import { detectAgent } from "./detect_host.js";
 import {
 	assertNamedAgentTooling,
@@ -153,6 +154,8 @@ export const runToolingSteps = async (
 		operations?: Partial<ToolingOperations>;
 		narrate?: "command" | "human";
 		allowAgentSkip?: boolean;
+		/** Set when MCP auth was not chosen by the user, so OAuth may stand in for a key the credential cannot mint. */
+		mcpOauthFallback?: boolean;
 	},
 ): Promise<ToolingStep["kind"][]> => {
 	const ops: ToolingOperations = {
@@ -214,9 +217,28 @@ export const runToolingSteps = async (
 					break;
 				}
 				case "mcp": {
-					const outcome = await raceSigint(
-						ops.installMcp({ ...step.options, ...sharedOptions }),
-					);
+					const install = (oauth: boolean | undefined) =>
+						raceSigint(
+							ops.installMcp({
+								...step.options,
+								...sharedOptions,
+								oauth,
+							}),
+						);
+					let outcome: McpInstallOutcome;
+					try {
+						outcome = await install(step.options.oauth);
+					} catch (error) {
+						if (
+							!(error instanceof CannotMintApiKeyError) ||
+							options.mcpOauthFallback !== true ||
+							step.options.oauth === true
+						) {
+							throw error;
+						}
+						log.warning(MCP_OAUTH_FALLBACK);
+						outcome = await install(true);
+					}
 					reportMcpInstall(reportProps, outcome);
 					const error = mcpInstallError(outcome);
 					if (error) throw error;

@@ -9,6 +9,7 @@ import { readLinkedClaimableCredentials } from "../claimable/state.js";
 import { create as createClaimableProject } from "../commands/claim.js";
 import { ConfigInstallFailed, initCmd } from "../commands/config.js";
 import type { EnvPullProps, PullOutcome } from "../commands/env.js";
+import { quoteFlagValue, runLink } from "../commands/link.js";
 import { defaultDir } from "../config.js";
 import {
 	CONFIG_INIT_SERVICES,
@@ -17,6 +18,7 @@ import {
 import { contextBranch, readContextFile } from "../context.js";
 import { log } from "../log.js";
 import { type AgentType, getAgentDisplayName } from "../mcp/agents.js";
+import { CannotMintApiKeyError } from "../mcp/mint.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { type NeonService, servicesFlagValue } from "../neon_services.js";
 import {
@@ -67,16 +69,21 @@ import {
 	existingConfigNext,
 	extraServicesNext,
 	installFailedNext,
+	MCP_API_KEY_NEEDS_AUTH,
 	MCP_SCOPED_NEEDS_PROJECT,
+	type McpKeyFailure,
+	mcpAfterLinkNext,
 	mcpConfigLocationSkipped,
 	mcpConfigLocationUnavailable,
+	mcpKeyFailedNext,
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
 	namedAgentsUnavailable,
+	offlinePinNext,
 	PROGRESS,
+	PROJECT_PINNED_OFFLINE,
 	skippedLinkNext,
 	unattendedUnauthedNext,
-	YES_LINK_NEEDS_AUTH,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
 import {
@@ -208,6 +215,48 @@ export type InitProps = CommonProps & {
 const isLinked = (contextFile: string): boolean => {
 	const projectId = readContextFile(contextFile).projectId;
 	return typeof projectId === "string" && projectId.length > 0;
+};
+
+type FlagPairs = [string, string | undefined][];
+
+const commandLine = (command: string, pairs: FlagPairs): string =>
+	[
+		`${getCliName()} ${command}`,
+		...pairs.flatMap(([flag, value]) =>
+			value === undefined ? [] : [`${flag} ${quoteFlagValue(value)}`],
+		),
+	].join(" ");
+
+const deferredLinkCommands = (
+	props: InitProps,
+	inputs: InitLinkInputs,
+): { login: string; link: string; envPull: string } => {
+	const session: FlagPairs = [
+		["--profile", props.profile],
+		[
+			"--config-dir",
+			props.configDir === defaultDir ? undefined : props.configDir,
+		],
+	];
+	const context: FlagPairs = [
+		[
+			"--context-file",
+			props.contextFile === ".neon" ? undefined : props.contextFile,
+		],
+	];
+	return {
+		login: commandLine("login", session),
+		link: commandLine("link", [
+			["--org-id", inputs.orgId],
+			["--project-id", inputs.projectId],
+			["--project-name", inputs.projectName],
+			["--region-id", inputs.regionId],
+			["--branch", inputs.branch],
+			...context,
+			...session,
+		]),
+		envPull: commandLine("env pull", [...context, ...session]),
+	};
 };
 
 const expandTelemetryServices = (
@@ -592,6 +641,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
+		let mcpAuthChosen = props.mcpAuth !== undefined;
 		let mcpConfigLocation: InitMcpConfigLocation =
 			props.mcpConfigLocation ?? "global";
 		let selectedSkills: readonly string[] | undefined = props.skill;
@@ -758,14 +808,17 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								(detection.interactive
 									? pickInitMcpAuthInteractively
 									: undefined);
-							mcpAuth =
+							const chosenAuth =
 								props.mcpAuth ??
 								(yes
 									? undefined
 									: await pickAuth?.({
 											authenticated:
 												detection.authenticated,
-										})) ??
+										}));
+							mcpAuthChosen = chosenAuth !== undefined;
+							mcpAuth =
+								chosenAuth ??
 								(detection.authenticated &&
 								props.claimable !== true
 									? "api-key"
@@ -799,22 +852,75 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			(mcpAuth === "api-key" || props.mcpProjectScoped === true);
 
 		const mcpOauth = mcpAuth === "oauth";
-		const earlyTooling = delayMcp
-			? tooling.setup === "skills-mcp"
-				? {
-						setup: "skills-mcp" as const,
-						skillsAgents: tooling.skillsAgents,
-						mcpAgents: [] as const,
-					}
-				: tooling.setup === "mixed"
-					? {
-							setup: "mixed" as const,
-							pluginAgents: tooling.pluginAgents,
-							skillsAgents: tooling.skillsAgents,
-							mcpAgents: [] as const,
-						}
-					: tooling
-			: tooling;
+		const earlyTooling = delayMcp ? withoutMcp(tooling) : tooling;
+		// Reported after the remaining steps run, so one missing MCP key does not
+		// leave the directory without a link or neon.ts.
+		const mcpState: {
+			error?: Error;
+			reason?: McpKeyFailure;
+			pinId?: string;
+			/** Formatted `--project-id` value for MCP that waits on a deferred link. */
+			deferredPin?: string;
+		} = {};
+		const reportedTooling = (): InitToolingPlan =>
+			mcpState.error === undefined && mcpState.deferredPin === undefined
+				? tooling
+				: withoutMcp(tooling);
+		const mcpCommand = (projectIdArg: string | undefined): string =>
+			[
+				`${getCliName()} mcp -y`,
+				...(mcpConfigLocation === "project" ? ["--project"] : []),
+				...(projectIdArg !== undefined
+					? [`--project-id ${projectIdArg}`]
+					: []),
+				...("mcpAgents" in tooling ? tooling.mcpAgents : []).map(
+					(agent) => `--agent ${agent}`,
+				),
+			].join(" ");
+		const mcpFailedNext = (): string[] =>
+			mcpState.error === undefined
+				? []
+				: mcpKeyFailedNext(
+						mcpState.reason ?? "cannot-mint",
+						mcpCommand(
+							mcpState.pinId !== undefined
+								? quoteFlagValue(mcpState.pinId)
+								: undefined,
+						),
+					);
+		const mcpDeferredNext = (): string[] =>
+			mcpState.deferredPin === undefined
+				? []
+				: mcpAfterLinkNext(
+						`${mcpCommand(mcpState.deferredPin)}${mcpOauth ? " --oauth" : ""}`,
+					);
+		const runTooling = async (
+			steps: ReturnType<typeof planInitToolingSteps>,
+			plan: InitToolingPlan,
+		): Promise<void> => {
+			let ran = plan;
+			try {
+				await runToolingSteps(steps, {
+					cwd,
+					output: props.output,
+					auth,
+					operations: props.operations,
+					narrate: "human",
+					mcpOauthFallback: !mcpAuthChosen,
+				});
+			} catch (error) {
+				if (!(error instanceof CannotMintApiKeyError)) {
+					throw error;
+				}
+				mcpState.error = error;
+				mcpState.reason = "cannot-mint";
+				ran = withoutMcp(plan);
+			}
+			funnel.agentsInstalled = uniqueAgents([
+				...funnel.agentsInstalled,
+				...agentsFromTooling(ran),
+			]);
+		};
 
 		const toolingSteps = planInitToolingSteps({
 			tooling: earlyTooling,
@@ -826,20 +932,16 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
 		});
 		if (toolingSteps.length > 0) {
-			await runToolingSteps(toolingSteps, {
-				cwd,
-				output: props.output,
-				auth,
-				operations: props.operations,
-				narrate: "human",
-			});
-			funnel.agentsInstalled = agentsFromTooling(earlyTooling);
+			await runTooling(toolingSteps, earlyTooling);
 		}
 
 		let projectSetup: InitProjectSetupChoice | "skip" | "already" = "skip";
 		let linkedNow = false;
 		let claimExpiresAt: string | undefined;
 		const noLink = props.link === false;
+		// -y never opens a browser, so without credentials it leaves linking as a next step.
+		const linkByDefault =
+			detection.authenticated || (hasExplicitLinkInputs && !yes);
 
 		if (noLink) {
 			funnel.link = alreadyLinked ? "already_linked" : "skipped";
@@ -855,7 +957,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				claimExpiresAt = stored?.expiresAt;
 			}
 		} else if (recommended) {
-			if (hasExplicitLinkInputs || detection.authenticated) {
+			if (linkByDefault) {
 				projectSetup = "link";
 			} else if (detection.interactive && !yes) {
 				projectSetup = "link";
@@ -865,7 +967,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			}
 		} else if (props.claimable === true) {
 			projectSetup = "claimable";
-		} else if (hasExplicitLinkInputs || detection.authenticated) {
+		} else if (linkByDefault) {
 			projectSetup = "link";
 		} else if (yes) {
 			projectSetup = "skip";
@@ -880,6 +982,31 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		} else {
 			throw new Error(NON_TTY_LINK_NEEDS_AUTH);
 		}
+
+		const linkProps: InitLinkProps = {
+			apiClient: props.apiClient,
+			apiKey: props.apiKey,
+			apiHost: props.apiHost,
+			output: props.output,
+			contextFile,
+			yes,
+			clear: false,
+			checks: true,
+			envPull: true,
+			config: false,
+			cwd,
+			...linkInputs,
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+			...(props.clientId ? { clientId: props.clientId } : {}),
+			...(props.forceAuth !== undefined
+				? { forceAuth: props.forceAuth }
+				: {}),
+			...(props.allowUnsafeTls !== undefined
+				? { allowUnsafeTls: props.allowUnsafeTls }
+				: {}),
+		};
 
 		if (
 			usesMcp &&
@@ -910,43 +1037,61 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			);
 			claimExpiresAt = stored?.expiresAt;
 		} else if (projectSetup === "link") {
-			if (yes && !detection.authenticated) {
-				throw new Error(YES_LINK_NEEDS_AUTH);
-			}
 			printInitProgress(
 				detection.authenticated ? PROGRESS.link : PROGRESS.auth,
 			);
 			const linkProject = props.linkProject ?? runAuthenticatedLink;
-			const linkProps: InitLinkProps = {
-				apiClient: props.apiClient,
-				apiKey: props.apiKey,
-				apiHost: props.apiHost,
-				output: props.output,
-				contextFile,
-				yes,
-				clear: false,
-				checks: true,
-				envPull: true,
-				config: false,
-				cwd,
-				...linkInputs,
-				...(props.configDir ? { configDir: props.configDir } : {}),
-				...(props.profile ? { profile: props.profile } : {}),
-				...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
-				...(props.clientId ? { clientId: props.clientId } : {}),
-				...(props.forceAuth !== undefined
-					? { forceAuth: props.forceAuth }
-					: {}),
-				...(props.allowUnsafeTls !== undefined
-					? { allowUnsafeTls: props.allowUnsafeTls }
-					: {}),
-			};
 			await linkProject(linkProps);
 			linkedNow = true;
 			funnel.link = "linked";
 		}
 
-		if (delayMcp && tooling.setup !== "skip") {
+		// With org, project, and branch all named, the pin needs no API call. Neon
+		// verifies it on the first command that reaches it.
+		const pinnedOffline =
+			funnel.link === "skipped" &&
+			!noLink &&
+			linkInputs.orgId !== undefined &&
+			linkInputs.projectId !== undefined &&
+			linkInputs.branch !== undefined &&
+			linkInputs.projectName === undefined &&
+			linkInputs.regionId === undefined;
+		if (pinnedOffline) {
+			await runLink({ ...linkProps, checks: false, envPull: false });
+			linkedNow = true;
+			funnel.link = "linked";
+		}
+
+		if (
+			delayMcp &&
+			tooling.setup !== "skip" &&
+			props.mcpProjectScoped === true &&
+			funnel.link === "skipped" &&
+			!noLink
+		) {
+			// The pin would name the old project, or none, until the deferred link runs.
+			mcpState.deferredPin =
+				linkInputs.projectId !== undefined
+					? quoteFlagValue(linkInputs.projectId)
+					: "<project-id>";
+		} else if (
+			delayMcp &&
+			tooling.setup !== "skip" &&
+			mcpAuth === "api-key" &&
+			// Only -y is still signed out here; without it, link may have signed in.
+			yes &&
+			!detection.authenticated
+		) {
+			mcpState.error = new Error(MCP_API_KEY_NEEDS_AUTH);
+			mcpState.reason = "signed-out";
+			const linkedId = readContextFile(contextFile).projectId;
+			if (
+				props.mcpProjectScoped === true &&
+				typeof linkedId === "string"
+			) {
+				mcpState.pinId = linkedId;
+			}
+		} else if (delayMcp && tooling.setup !== "skip") {
 			const linkedId = readContextFile(contextFile).projectId;
 			let pinId: string | undefined;
 			if (props.mcpProjectScoped === true) {
@@ -978,18 +1123,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				mcpProject: mcpConfigLocation === "project",
 				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
 			});
+			mcpState.pinId = pinId;
 			if (mcpSteps.length > 0) {
-				await runToolingSteps(mcpSteps, {
-					cwd,
-					output: props.output,
-					auth,
-					operations: props.operations,
-					narrate: "human",
-				});
-				funnel.agentsInstalled = uniqueAgents([
-					...funnel.agentsInstalled,
-					...agentsFromTooling(mcpOnly),
-				]);
+				await runTooling(mcpSteps, mcpOnly);
 			}
 		}
 
@@ -1087,7 +1223,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							heading: failed.heading,
 							body: failed.body,
 							rows: [],
-							next: failed.next,
+							next: joinNext(failed.next, mcpFailedNext()),
 						}),
 					);
 					printed = true;
@@ -1104,16 +1240,22 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const context = readContextFile(contextFile);
 		const branch = contextBranch(context);
 		const linked = isLinked(contextFile);
-		const alreadyPulled = linkedNow && funnel.link === "linked";
-		const shouldPull = shouldPullEnvAfterInitConfig({
-			wroteNewFile,
-			extraServices,
-			alreadyPulled,
-			...(typeof context.projectId === "string"
-				? { projectId: context.projectId }
-				: {}),
-			...(branch !== undefined ? { branch } : {}),
-		});
+		const alreadyPulled =
+			linkedNow && funnel.link === "linked" && !pinnedOffline;
+		// A skipped link leaves either no pin or one the account flags asked to replace,
+		// and an offline pin has no credentials to pull with.
+		const shouldPull =
+			funnel.link !== "skipped" &&
+			!pinnedOffline &&
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile,
+				extraServices,
+				alreadyPulled,
+				...(typeof context.projectId === "string"
+					? { projectId: context.projectId }
+					: {}),
+				...(branch !== undefined ? { branch } : {}),
+			});
 
 		if (shouldPull) {
 			try {
@@ -1152,7 +1294,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							{
 								label: "Agents",
 								value: agentsRowValue({
-									tooling,
+									tooling: reportedTooling(),
 									installed: funnel.agentsInstalled,
 								}),
 							},
@@ -1168,7 +1310,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								),
 							},
 						],
-						next: failed.next,
+						next: joinNext(failed.next, mcpFailedNext()),
 					}),
 				);
 				printed = true;
@@ -1177,22 +1319,42 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			}
 		}
 
-		const pendingUnauthed =
-			funnel.link === "skipped" && !noLink && !alreadyLinked;
+		const pendingUnauthed = funnel.link === "skipped" && !noLink;
 		const pendingServices = extraServices && linked;
 		const pendingClaimable =
 			funnel.link === "claimable" && claimExpiresAt !== undefined;
 		const pendingExisting =
 			funnel.config === "existing" && linked && !wroteNewFile;
 		const pending =
+			pinnedOffline ||
 			pendingUnauthed ||
 			pendingServices ||
 			(pendingClaimable && extraServices) ||
 			pendingExisting;
 
 		const next: string[] = [];
-		if (pendingUnauthed) {
-			next.push(...unattendedUnauthedNext());
+		if (pinnedOffline) {
+			const commands = deferredLinkCommands(props, linkInputs);
+			next.push(
+				...offlinePinNext({
+					login: commands.login,
+					...(extraServices || existingConfig
+						? {}
+						: { envPull: commands.envPull }),
+				}),
+			);
+		} else if (pendingUnauthed) {
+			next.push(
+				...unattendedUnauthedNext(
+					hasExplicitLinkInputs
+						? deferredLinkCommands(props, linkInputs)
+						: undefined,
+				),
+			);
+			const deferredMcp = mcpDeferredNext();
+			if (deferredMcp.length > 0) {
+				next.push("", ...deferredMcp);
+			}
 		} else if (noLink && !alreadyLinked) {
 			next.push(...skippedLinkNext());
 		}
@@ -1235,6 +1397,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		) {
 			outcome = "success";
 		}
+		if (mcpState.error !== undefined) {
+			outcome = "error";
+		}
 
 		printInitDone(
 			formatInitDone({
@@ -1243,25 +1408,31 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					{
 						label: "Agents",
 						value: agentsRowValue({
-							tooling,
+							tooling: reportedTooling(),
 							installed: funnel.agentsInstalled,
 						}),
 					},
 					{
 						label: "Project",
-						value: projectRowValue(
-							funnel.link ?? (linked ? "already_linked" : null),
-						),
+						value: pinnedOffline
+							? PROJECT_PINNED_OFFLINE
+							: projectRowValue(
+									funnel.link ??
+										(linked ? "already_linked" : null),
+								),
 					},
 					{
 						label: "Config",
 						value: configRowValue(funnel.config, existingFilename),
 					},
 				],
-				next,
+				next: joinNext(mcpFailedNext(), next),
 			}),
 		);
 		printed = true;
+		if (mcpState.error !== undefined) {
+			throw mcpState.error;
+		}
 
 		takeCommandSuccessExtras();
 		recordCommandSuccessExtras({
@@ -1304,6 +1475,26 @@ const uniqueAgents = (ids: readonly AgentType[]): AgentType[] => {
 		out.push(id);
 	}
 	return out;
+};
+
+const joinNext = (
+	first: readonly string[],
+	second: readonly string[],
+): string[] =>
+	first.length === 0 || second.length === 0
+		? [...first, ...second]
+		: [...first, "", ...second];
+
+const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan => {
+	if (tooling.setup === "mixed") {
+		return { ...tooling, mcpAgents: [] };
+	}
+	if (tooling.setup === "skills-mcp") {
+		return tooling.skillsAgents.length === 0
+			? { setup: "skip" }
+			: { ...tooling, mcpAgents: [] };
+	}
+	return tooling;
 };
 
 const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
