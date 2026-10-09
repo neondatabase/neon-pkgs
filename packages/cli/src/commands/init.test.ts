@@ -23,7 +23,6 @@ import {
 	MCP_SCOPED_NEEDS_PROJECT,
 	NO_AGENT_SETUP_CONFLICT,
 	namedAgentsUnavailable,
-	YES_LINK_NEEDS_AUTH,
 } from "../init/copy.js";
 import type { InitAgentSetup } from "../init/plan.js";
 import type { AgentType } from "../mcp/agents.js";
@@ -329,27 +328,113 @@ describe("init handler", () => {
 		});
 	});
 
-	test("-y with --project-id refuses to open sign-in", async () => {
+	test("-y with --project-id and no credentials writes neon.ts and prints the link command", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-project-id-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
 		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				orgId: "org-example",
+				projectId: "prj-example",
+				branch: "br-example",
+				services: ["auth"],
+				linkProject,
+				initConfig,
+				hasLocalCredentials: () => false,
+				detectProjectAgents: () => ["cursor"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(stepKinds(ops)).toEqual(["plugins"]);
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd, services: ["auth"] }),
+		);
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup needs a next step.");
+		expect(out).toMatch(/neon login/);
+		expect(out).toContain(
+			"link --org-id org-example --project-id prj-example --branch br-example",
+		);
+		expect(out).not.toMatch(/claim create/);
+	});
+
+	test("Recommended configures MCP with OAuth when the credential cannot mint, then links", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-fallback-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
+		const fallbackMcp = ops.installMcp.getMockImplementation();
+		ops.installMcp.mockImplementation(async (options) => {
+			if (options.oauth !== true) {
+				throw new CannotMintApiKeyError();
+			}
+			return fallbackMcp?.(options) as never;
+		});
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const warning = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				projectId: "prj-example",
+				linkProject,
+				initConfig,
+				detectProjectAgents: () => ["cursor", "opencode"],
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(ops.installMcp).toHaveBeenCalledTimes(2);
+		expect(ops.installMcp.mock.calls[1]?.[0]).toMatchObject({
+			oauth: true,
+			agent: ["opencode"],
+		});
+		expect(stdoutText(warning)).toContain(
+			"cannot mint an API key for the Neon MCP server",
+		);
+		expect(linkProject).toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+	});
+
+	test("--mcp-auth api-key keeps the mint failure", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-no-fallback-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
+		ops.installMcp.mockRejectedValue(new CannotMintApiKeyError());
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 
 		await expect(
 			handler(
 				baseProps({
 					cwd,
+					operations: ops,
 					yes: true,
-					projectId: "prj-example",
-					agentSetup: false,
+					mcpAuth: "api-key",
+					agent: ["opencode"],
+					link: false,
 					config: false,
-					linkProject,
-					hasLocalCredentials: () => false,
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
-		).rejects.toThrow(YES_LINK_NEEDS_AUTH);
-		expect(linkProject).not.toHaveBeenCalled();
+		).rejects.toThrow(CannotMintApiKeyError);
+		expect(ops.installMcp).toHaveBeenCalledTimes(1);
 	});
 
 	test("Recommended installs the plugin globally for detected agents", async () => {

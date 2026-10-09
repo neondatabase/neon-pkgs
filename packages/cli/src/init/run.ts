@@ -9,6 +9,7 @@ import { readLinkedClaimableCredentials } from "../claimable/state.js";
 import { create as createClaimableProject } from "../commands/claim.js";
 import { ConfigInstallFailed, initCmd } from "../commands/config.js";
 import type { EnvPullProps, PullOutcome } from "../commands/env.js";
+import { quoteFlagValue } from "../commands/link.js";
 import { defaultDir } from "../config.js";
 import {
 	CONFIG_INIT_SERVICES,
@@ -76,7 +77,6 @@ import {
 	PROGRESS,
 	skippedLinkNext,
 	unattendedUnauthedNext,
-	YES_LINK_NEEDS_AUTH,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
 import {
@@ -208,6 +208,22 @@ export type InitProps = CommonProps & {
 const isLinked = (contextFile: string): boolean => {
 	const projectId = readContextFile(contextFile).projectId;
 	return typeof projectId === "string" && projectId.length > 0;
+};
+
+const linkCommand = (inputs: InitLinkInputs): string => {
+	const flags: [string, string | undefined][] = [
+		["--org-id", inputs.orgId],
+		["--project-id", inputs.projectId],
+		["--project-name", inputs.projectName],
+		["--region-id", inputs.regionId],
+		["--branch", inputs.branch],
+	];
+	return [
+		`${getCliName()} link`,
+		...flags.flatMap(([flag, value]) =>
+			value === undefined ? [] : [`${flag} ${quoteFlagValue(value)}`],
+		),
+	].join(" ");
 };
 
 const expandTelemetryServices = (
@@ -592,6 +608,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
+		let mcpAuthChosen = props.mcpAuth !== undefined;
 		let mcpConfigLocation: InitMcpConfigLocation =
 			props.mcpConfigLocation ?? "global";
 		let selectedSkills: readonly string[] | undefined = props.skill;
@@ -758,14 +775,17 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								(detection.interactive
 									? pickInitMcpAuthInteractively
 									: undefined);
-							mcpAuth =
+							const chosenAuth =
 								props.mcpAuth ??
 								(yes
 									? undefined
 									: await pickAuth?.({
 											authenticated:
 												detection.authenticated,
-										})) ??
+										}));
+							mcpAuthChosen = chosenAuth !== undefined;
+							mcpAuth =
+								chosenAuth ??
 								(detection.authenticated &&
 								props.claimable !== true
 									? "api-key"
@@ -832,6 +852,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				auth,
 				operations: props.operations,
 				narrate: "human",
+				mcpOauthFallback: !mcpAuthChosen,
 			});
 			funnel.agentsInstalled = agentsFromTooling(earlyTooling);
 		}
@@ -840,6 +861,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		let linkedNow = false;
 		let claimExpiresAt: string | undefined;
 		const noLink = props.link === false;
+		// -y never opens a browser, so without credentials it leaves linking as a next step.
+		const linkByDefault =
+			detection.authenticated || (hasExplicitLinkInputs && !yes);
 
 		if (noLink) {
 			funnel.link = alreadyLinked ? "already_linked" : "skipped";
@@ -855,7 +879,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				claimExpiresAt = stored?.expiresAt;
 			}
 		} else if (recommended) {
-			if (hasExplicitLinkInputs || detection.authenticated) {
+			if (linkByDefault) {
 				projectSetup = "link";
 			} else if (detection.interactive && !yes) {
 				projectSetup = "link";
@@ -865,7 +889,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			}
 		} else if (props.claimable === true) {
 			projectSetup = "claimable";
-		} else if (hasExplicitLinkInputs || detection.authenticated) {
+		} else if (linkByDefault) {
 			projectSetup = "link";
 		} else if (yes) {
 			projectSetup = "skip";
@@ -910,9 +934,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			);
 			claimExpiresAt = stored?.expiresAt;
 		} else if (projectSetup === "link") {
-			if (yes && !detection.authenticated) {
-				throw new Error(YES_LINK_NEEDS_AUTH);
-			}
 			printInitProgress(
 				detection.authenticated ? PROGRESS.link : PROGRESS.auth,
 			);
@@ -985,6 +1006,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					auth,
 					operations: props.operations,
 					narrate: "human",
+					mcpOauthFallback: !mcpAuthChosen,
 				});
 				funnel.agentsInstalled = uniqueAgents([
 					...funnel.agentsInstalled,
@@ -1177,8 +1199,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			}
 		}
 
-		const pendingUnauthed =
-			funnel.link === "skipped" && !noLink && !alreadyLinked;
+		const pendingUnauthed = funnel.link === "skipped" && !noLink;
 		const pendingServices = extraServices && linked;
 		const pendingClaimable =
 			funnel.link === "claimable" && claimExpiresAt !== undefined;
@@ -1192,7 +1213,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		const next: string[] = [];
 		if (pendingUnauthed) {
-			next.push(...unattendedUnauthedNext());
+			next.push(
+				...unattendedUnauthedNext(
+					hasExplicitLinkInputs ? linkCommand(linkInputs) : undefined,
+				),
+			);
 		} else if (noLink && !alreadyLinked) {
 			next.push(...skippedLinkNext());
 		}

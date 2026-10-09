@@ -104,8 +104,8 @@ export const INIT_NEEDS_YES =
 export const NON_TTY_LINK_NEEDS_AUTH =
 	"No interactive terminal. Sign in with `neon login`, then re-run, or pass --claimable.";
 
-export const YES_LINK_NEEDS_AUTH =
-	"-y cannot sign in. Sign in with `neon login`, then re-run, or pass --claimable.";
+export const MCP_OAUTH_FALLBACK =
+	"This CLI credential cannot mint an API key for the Neon MCP server. Configuring it with OAuth instead.";
 
 export const MCP_SCOPED_NEEDS_PROJECT =
 	"--mcp-project-scoped requires a linked project. Link a project first, or omit --mcp-project-scoped.";
@@ -157,15 +157,23 @@ export const PROGRESS = {
 	env: "Pulling Neon environment variables...",
 } as const;
 
-export const unattendedUnauthedNext = (): string[] => [
-	"Link a project with a Neon account and an authenticated CLI.",
-	"Sign up: https://neon.com/signup",
-	`${getCliName()} login`,
-	`${getCliName()} link`,
-	"",
-	"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
-	`${getCliName()} claim create`,
-];
+/** `linkCommand` is the `neon link` invocation carrying the account flags init was given. */
+export const unattendedUnauthedNext = (linkCommand?: string): string[] =>
+	linkCommand === undefined
+		? [
+				"Link a project with a Neon account and an authenticated CLI.",
+				"Sign up: https://neon.com/signup",
+				`${getCliName()} login`,
+				`${getCliName()} link`,
+				"",
+				"Or create a claimable project without an account. It expires in 72 hours unless claimed.",
+				`${getCliName()} claim create`,
+			]
+		: [
+				"Link the project once the CLI is authenticated.",
+				`${getCliName()} login`,
+				linkCommand,
+			];
 
 export const skippedLinkNext = (): string[] => [
 	"To connect this directory to a Neon project:",
