@@ -1,4 +1,5 @@
 import type { Database, Endpoint, Role } from "@neon/sdk";
+import { defaultConnectionRole } from "@neon-internals/env-core/roles";
 import { parseConnectionUri } from "../psql/index.js";
 import { PgConnection } from "../psql/wire/connection.js";
 import type { BranchScopeProps } from "../types.js";
@@ -170,8 +171,11 @@ const startBranchConnectionReads = async (
 							`No roles found for the branch: ${branchId}`,
 						);
 					}
-					if (data.roles.length === 1) {
-						return data.roles[0].name;
+					const picked = defaultConnectionRole(
+						data.roles.map((r: Role) => r.name),
+					);
+					if (picked) {
+						return picked;
 					}
 					throw new Error(
 						`Multiple roles found for the branch, please provide one with the --role-name option: ${data.roles

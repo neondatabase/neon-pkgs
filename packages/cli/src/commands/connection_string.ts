@@ -1,4 +1,5 @@
 import type { Database, Endpoint, Role } from "@neon/sdk";
+import { defaultConnectionRole } from "@neon-internals/env-core/roles";
 import type yargs from "yargs";
 import type { BranchScopeProps } from "../types.js";
 import { EndpointType } from "../utils/api_enums.js";
@@ -40,7 +41,8 @@ export const builder = (argv: yargs.Argv) => {
 			},
 			"role-name": {
 				type: "string",
-				describe: "Role name",
+				describe:
+					"Role name. Defaults to neondb_owner, else the only role besides the Data API and Neon Auth roles",
 			},
 			"database-name": {
 				type: "string",
@@ -157,8 +159,11 @@ export const handler = async (
 						`No roles found for the branch: ${branchId}`,
 					);
 				}
-				if (data.roles.length === 1) {
-					return data.roles[0].name;
+				const picked = defaultConnectionRole(
+					data.roles.map((r: Role) => r.name),
+				);
+				if (picked) {
+					return picked;
 				}
 				throw new Error(
 					`Multiple roles found for the branch, please provide one with the --role-name option: ${data.roles

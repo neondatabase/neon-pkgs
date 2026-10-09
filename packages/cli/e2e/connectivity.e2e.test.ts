@@ -27,9 +27,9 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 
 	/**
 	 * A second role and database, created by the last test in this file rather than in setup.
-	 * A branch carrying two roles makes every invocation that omits `--role-name` ambiguous
-	 * and the CLI refuses it, so creating them up front would break the default-path cases.
-	 * That refusal is worth pinning too, and the last test does.
+	 * A branch carrying two databases makes every invocation that omits `--database-name`
+	 * ambiguous and the CLI refuses it, so creating them up front would break the default-path
+	 * cases. That refusal is worth pinning too, and the last test does.
 	 */
 	const ROLE = "e2e_alt_role";
 	const DATABASE = "e2e_alt_db";
@@ -232,11 +232,11 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 	});
 
 	/**
-	 * Last, because it changes the branch: with a second role present the CLI can no longer
-	 * pick one on its own. Selecting a non-default role and database is what proves the flags
-	 * are read at all — passing the defaults would look identical to ignoring them.
+	 * Last, because it changes the branch: with a second database present the CLI can no
+	 * longer pick one on its own. Selecting a non-default role and database is what proves the
+	 * flags are read at all — passing the defaults would look identical to ignoring them.
 	 */
-	it("selects a non-default role and database, and refuses to guess between two", async () => {
+	it("selects a non-default role and database, defaults to the project's owner role, and refuses to guess between two databases", async () => {
 		await apiRequest(`/projects/${projectId}/branches/${branchId}/roles`, {
 			method: "POST",
 			body: { role: { name: ROLE } },
@@ -276,11 +276,17 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 		expect(psqlAsRole.code, psqlAsRole.stderr).toBe(0);
 		expect(psqlAsRole.stdout.trim()).toBe(`${ROLE}/${DATABASE}`);
 
+		const ownerByDefault = await connectionString([
+			"--database-name",
+			DATABASE,
+		]);
+		expect(ownerByDefault.username).toBe(defaultRole);
+
 		const ambiguous = await runCli(
 			["connection-string", "--project-id", projectId],
 			{ json: false },
 		);
 		expect(ambiguous.code).not.toBe(0);
-		expect(ambiguous.stderr).toContain("Multiple roles found");
+		expect(ambiguous.stderr).toContain("Multiple databases found");
 	});
 });

@@ -27,6 +27,7 @@ import {
 	type ResolvedPreviewConfig,
 	resolveConfig,
 } from "@neon/config/v1";
+import { defaultConnectionRole, NEON_DEFAULT_OWNER_ROLE } from "./roles.js";
 
 /**
  * Mapping between the {@link NeonEnv} property paths and the OS-level env-var keys used
@@ -38,11 +39,6 @@ import {
  * by the OS. Keep this in sync with {@link postgresEnvSchema} / {@link authEnvSchema} /
  * {@link dataApiEnvSchema}.
  */
-/**
- * Neon's default branch owner role, created with every project. This is the role a
- * `DATABASE_URL` should connect as.
- */
-const NEON_DEFAULT_OWNER_ROLE = "neondb_owner";
 
 /**
  * Neon's default database, created with every project. When a branch has several databases
@@ -50,19 +46,6 @@ const NEON_DEFAULT_OWNER_ROLE = "neondb_owner";
  * user added a second database next to `neondb`) auto-picks without asking.
  */
 const NEON_DEFAULT_DATABASE = "neondb";
-
-/**
- * Roles Neon provisions for the Auth / Data API (PostgREST) stack. They exist to back
- * RLS-scoped Data API requests authenticated by JWT — never to hold a `DATABASE_URL` —
- * so they're skipped when auto-picking the connection role. Enabling Neon Auth or the
- * Data API (`neon config apply`) adds these next to the owner role, which is why a plain
- * branch routinely reports more than one role.
- */
-const NEON_MANAGED_AUTH_ROLES: ReadonlySet<string> = new Set([
-	"authenticator",
-	"anonymous",
-	"authenticated",
-]);
 
 export const NEON_ENV_VAR_KEYS = {
 	/**
@@ -1664,19 +1647,8 @@ function pickRoleName(
 			{ details: { branchId: branch.id } },
 		);
 	}
-	if (roles.length === 1) return roles[0].name;
-
-	// Multiple roles. Enabling Neon Auth / the Data API provisions the PostgREST roles
-	// (authenticator/anonymous/authenticated) alongside the project owner, so a normal
-	// branch ends up with >1 role even though only the owner backs a `DATABASE_URL`.
-	// Default to Neon's owner role; if the project was created with a custom owner name,
-	// fall back to the single role left after dropping the managed auth roles. Only a
-	// genuinely ambiguous set (more than one app role) still asks the caller to choose.
-	const owner = roles.find((r) => r.name === NEON_DEFAULT_OWNER_ROLE);
-	if (owner) return owner.name;
-
-	const appRoles = roles.filter((r) => !NEON_MANAGED_AUTH_ROLES.has(r.name));
-	if (appRoles.length === 1) return appRoles[0].name;
+	const picked = defaultConnectionRole(roles.map((r) => r.name));
+	if (picked) return picked;
 
 	throw new PlatformError(
 		ErrorCode.AmbiguousBranchAuth,
