@@ -193,6 +193,44 @@ It imports the harness **by subpath** (`@neon/e2e-harness/projects`, `/api`, `/e
 barrel: the barrel re-exports the `e2eTest` fixture, which imports `vitest`, and Vitest runs
 `globalSetup` outside a worker where that throws.
 
+##### The Neon Auth suite (`@neon/auth`)
+
+`pnpm --filter @neon/auth test:e2e` is a separate live suite, run by its own workflow for the
+same reason the gateway suite's is: auth provisioning belongs to changes that can affect it,
+not to every pull request.
+
+| | |
+| --- | --- |
+| **Workflow** | `.github/workflows/e2e-auth.yml` — path-filtered to `packages/auth/**` and `tests/e2e-harness/**`, plus pushes to `main` and `workflow_dispatch` |
+| **Credentials** | The same `NEON_TEST_API_KEY`. Nothing auth-specific is stored |
+
+`e2e/global-setup.ts` provisions everything from that key: a throwaway project, Neon Auth
+enabled on its default branch (`better_auth`), and email verification turned off — the only
+way a headless signup can succeed — then publishes `NEON_AUTH_BASE_URL` and
+`NEON_AUTH_JWKS_URL` to the test files and deletes the project afterwards. Those two
+variables are run-internal, set by the provisioning itself, which is why they appear in
+neither the env var table nor any `.env.example`.
+
+The suite is deliberately small and high-signal, because a headless run can only exercise
+what needs no browser and no outside party:
+
+- **`endpoints`** — `src/server/endpoints.ts` declares three paths that exist nowhere in
+  better-auth 1.6.23 (`revoke-all-sessions`, `jwt`, `email-otp/passcode`; better-auth serves
+  `revoke-other-sessions`, `/jwks`, `email-otp/reset-password`). Whether Neon Auth aliases
+  them is a fact only the live service knows, so each probe asserts the declared path is not
+  a 404 and the failure message names better-auth's spelling.
+- **`session`** — a real signup → sign-in → `getSession` → `getJWTToken` → sign-out
+  round-trip through `SupabaseAuthAdapter`, asserting the wire contract a mock cannot
+  fabricate: the raw `Set-Cookie` names and attributes, the `set-auth-jwt` header the JWT
+  rides on, and that the JWT's `kid` resolves against the JWKS the provisioning reported.
+  Node's fetch has no cookie jar, so `e2e/helpers.ts` installs one as `globalThis.fetch` —
+  the adapter's requests ride the global fetch, and the jar's recording is the only way a
+  test sees the raw `Set-Cookie`.
+
+Out of scope on purpose: OAuth, magic link, email-OTP delivery, phone/SMS, cross-tab
+`BroadcastChannel`, and the iframe popup — all of them need a browser or an outside party a
+headless run cannot provide.
+
 ##### The shared harness (`tests/e2e-harness`)
 
 `@neon/e2e-harness` is a **private, never-published** workspace package holding the
