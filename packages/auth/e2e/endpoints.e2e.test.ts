@@ -4,13 +4,11 @@ import { authBaseUrl } from "./helpers";
 
 /**
  * `src/server/endpoints.ts` is the single source of truth for the paths the server-side
- * proxy calls, and three of its declarations name routes that do not exist anywhere in
+ * proxy calls, and two of its declarations name routes that do not exist anywhere in
  * better-auth 1.6.23 (the version this package pins):
  *
  * - `revokeOtherSessions: "revoke-all-sessions"` — better-auth serves
  *   `revoke-other-sessions` (`better-auth/dist/api/routes/session.d.mts`);
- * - `jwks: "jwt"` — the jwt plugin serves `/jwks` (`jwksPath` defaults to `"/jwks"` in
- *   `better-auth/dist/plugins/jwt/index.mjs`);
  * - `emailOtp.resetPassword: "email-otp/passcode"` — the email-otp plugin serves
  *   `email-otp/reset-password` (`better-auth/dist/plugins/email-otp/index.d.mts`).
  *
@@ -25,11 +23,6 @@ const SUSPICIOUS_ENDPOINTS = [
 		key: "revokeOtherSessions",
 		config: API_ENDPOINTS.revokeOtherSessions,
 		betterAuthPath: "revoke-other-sessions",
-	},
-	{
-		key: "jwks",
-		config: API_ENDPOINTS.jwks,
-		betterAuthPath: "jwks",
 	},
 	{
 		key: "emailOtp.resetPassword",
