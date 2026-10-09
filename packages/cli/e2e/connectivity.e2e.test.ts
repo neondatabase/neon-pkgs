@@ -236,7 +236,7 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 	 * pick one on its own. Selecting a non-default role and database is what proves the flags
 	 * are read at all — passing the defaults would look identical to ignoring them.
 	 */
-	it("selects a non-default role and database, and refuses to guess between two", async () => {
+	it("selects a non-default role and database, defaults to the project's owner role, and refuses to guess between two databases", async () => {
 		await apiRequest(`/projects/${projectId}/branches/${branchId}/roles`, {
 			method: "POST",
 			body: { role: { name: ROLE } },
@@ -276,11 +276,17 @@ describe.sequential("e2e — neon CLI connectivity against the real API", () => 
 		expect(psqlAsRole.code, psqlAsRole.stderr).toBe(0);
 		expect(psqlAsRole.stdout.trim()).toBe(`${ROLE}/${DATABASE}`);
 
+		const ownerByDefault = await connectionString([
+			"--database-name",
+			DATABASE,
+		]);
+		expect(ownerByDefault.username).toBe(defaultRole);
+
 		const ambiguous = await runCli(
 			["connection-string", "--project-id", projectId],
 			{ json: false },
 		);
 		expect(ambiguous.code).not.toBe(0);
-		expect(ambiguous.stderr).toContain("Multiple roles found");
+		expect(ambiguous.stderr).toContain("Multiple databases found");
 	});
 });
