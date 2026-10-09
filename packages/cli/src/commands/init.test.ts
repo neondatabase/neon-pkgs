@@ -368,6 +368,47 @@ describe("init handler", () => {
 		expect(out).not.toMatch(/claim create/);
 	});
 
+	test("-y with --project-id and no credentials keeps an existing pin and does not pull env", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-relink-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(
+			join(cwd, ".neon-work"),
+			JSON.stringify({ projectId: "prj-old", branch: "main" }),
+		);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				agentSetup: false,
+				projectId: "prj-new",
+				profile: "work",
+				configDir: join(cwd, "creds"),
+				contextFile: ".neon-work",
+				linkProject,
+				envPull,
+				hasLocalCredentials: () => false,
+			}),
+		);
+
+		expect(linkProject).not.toHaveBeenCalled();
+		expect(envPull).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(readFileSync(join(cwd, ".neon-work"), "utf8")),
+		).toEqual({ projectId: "prj-old", branch: "main" });
+		const out = stdoutText(stdout);
+		expect(out).toContain(
+			`login --profile work --config-dir ${join(cwd, "creds")}`,
+		);
+		expect(out).toContain(
+			`link --project-id prj-new --context-file .neon-work --profile work --config-dir ${join(cwd, "creds")}`,
+		);
+	});
+
 	test("Recommended configures MCP with OAuth when the credential cannot mint, then links", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-fallback-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

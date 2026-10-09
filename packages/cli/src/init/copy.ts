@@ -157,9 +157,12 @@ export const PROGRESS = {
 	env: "Pulling Neon environment variables...",
 } as const;
 
-/** `linkCommand` is the `neon link` invocation carrying the account flags init was given. */
-export const unattendedUnauthedNext = (linkCommand?: string): string[] =>
-	linkCommand === undefined
+/** `deferred` carries the account and credential flags init was given. */
+export const unattendedUnauthedNext = (deferred?: {
+	login: string;
+	link: string;
+}): string[] =>
+	deferred === undefined
 		? [
 				"Link a project with a Neon account and an authenticated CLI.",
 				"Sign up: https://neon.com/signup",
@@ -171,8 +174,8 @@ export const unattendedUnauthedNext = (linkCommand?: string): string[] =>
 			]
 		: [
 				"Link the project once the CLI is authenticated.",
-				`${getCliName()} login`,
-				linkCommand,
+				deferred.login,
+				deferred.link,
 			];
 
 export const skippedLinkNext = (): string[] => [

@@ -210,20 +210,42 @@ const isLinked = (contextFile: string): boolean => {
 	return typeof projectId === "string" && projectId.length > 0;
 };
 
-const linkCommand = (inputs: InitLinkInputs): string => {
-	const flags: [string, string | undefined][] = [
-		["--org-id", inputs.orgId],
-		["--project-id", inputs.projectId],
-		["--project-name", inputs.projectName],
-		["--region-id", inputs.regionId],
-		["--branch", inputs.branch],
-	];
-	return [
-		`${getCliName()} link`,
-		...flags.flatMap(([flag, value]) =>
+type FlagPairs = [string, string | undefined][];
+
+const commandLine = (command: string, pairs: FlagPairs): string =>
+	[
+		`${getCliName()} ${command}`,
+		...pairs.flatMap(([flag, value]) =>
 			value === undefined ? [] : [`${flag} ${quoteFlagValue(value)}`],
 		),
 	].join(" ");
+
+const deferredLinkCommands = (
+	props: InitProps,
+	inputs: InitLinkInputs,
+): { login: string; link: string } => {
+	const session: FlagPairs = [
+		["--profile", props.profile],
+		[
+			"--config-dir",
+			props.configDir === defaultDir ? undefined : props.configDir,
+		],
+	];
+	return {
+		login: commandLine("login", session),
+		link: commandLine("link", [
+			["--org-id", inputs.orgId],
+			["--project-id", inputs.projectId],
+			["--project-name", inputs.projectName],
+			["--region-id", inputs.regionId],
+			["--branch", inputs.branch],
+			[
+				"--context-file",
+				props.contextFile === ".neon" ? undefined : props.contextFile,
+			],
+			...session,
+		]),
+	};
 };
 
 const expandTelemetryServices = (
@@ -1127,15 +1149,18 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const branch = contextBranch(context);
 		const linked = isLinked(contextFile);
 		const alreadyPulled = linkedNow && funnel.link === "linked";
-		const shouldPull = shouldPullEnvAfterInitConfig({
-			wroteNewFile,
-			extraServices,
-			alreadyPulled,
-			...(typeof context.projectId === "string"
-				? { projectId: context.projectId }
-				: {}),
-			...(branch !== undefined ? { branch } : {}),
-		});
+		// A skipped link leaves either no pin or one the account flags asked to replace.
+		const shouldPull =
+			funnel.link !== "skipped" &&
+			shouldPullEnvAfterInitConfig({
+				wroteNewFile,
+				extraServices,
+				alreadyPulled,
+				...(typeof context.projectId === "string"
+					? { projectId: context.projectId }
+					: {}),
+				...(branch !== undefined ? { branch } : {}),
+			});
 
 		if (shouldPull) {
 			try {
@@ -1215,7 +1240,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		if (pendingUnauthed) {
 			next.push(
 				...unattendedUnauthedNext(
-					hasExplicitLinkInputs ? linkCommand(linkInputs) : undefined,
+					hasExplicitLinkInputs
+						? deferredLinkCommands(props, linkInputs)
+						: undefined,
 				),
 			);
 		} else if (noLink && !alreadyLinked) {
