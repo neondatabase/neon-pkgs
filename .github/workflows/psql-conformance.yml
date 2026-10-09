@@ -4,8 +4,8 @@
 # implementation, using upstream PostgreSQL regression scripts as ground
 # truth. The scripts are VENDORED under
 # packages/cli/tests/psql-conformance/fixtures/upstream/<PG_TAG>/ (pinned
-# in POSTGRES_REF, currently REL_19_BETA1) so no public egress is needed at
-# test time — the protected runner group can only reach the JFrog mirror.
+# in POSTGRES_REF, currently REL_19_BETA1) so the test needs no public source
+# checkout at run time.
 #
 # MATRIX: Neon supports PG 14-18; we also exercise 19beta1 to track upstream
 # psql parity ahead of the server GA. Per-subtest deferred work is tracked
@@ -42,8 +42,8 @@ jobs:
     psql-conformance:
         name: psql-conformance (pg-${{ matrix.pg }})
         runs-on:
-            group: neondatabase-protected-runner-group
-            labels: linux-ubuntu-latest
+            group: databricks-ghec-public-repos-runner-group-small
+            labels: linux-ubuntu-latest-public-2core-8gb
         strategy:
             fail-fast: false
             matrix:
