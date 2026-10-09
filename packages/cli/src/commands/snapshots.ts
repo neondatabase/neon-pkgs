@@ -5,7 +5,7 @@ import type {
 	SnapshotFrequency,
 } from "@neon/sdk";
 import type yargs from "yargs";
-import { retryOnLock } from "../api.js";
+import { isNeonApiError, retryOnLock } from "../api.js";
 import { log } from "../log.js";
 import type { ProjectScopeProps } from "../types.js";
 import {
@@ -13,7 +13,13 @@ import {
 	fillSingleProject,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
-import { looksLikeLSN, looksLikeTimestamp, toIso } from "../utils/formats.js";
+import {
+	looksLikeBranchId,
+	looksLikeLSN,
+	looksLikeSnapshotId,
+	looksLikeTimestamp,
+	toIso,
+} from "../utils/formats.js";
 import { writer } from "../writer.js";
 import { BRANCH_FIELDS } from "./branches.js";
 
@@ -348,6 +354,37 @@ const resolveSnapshot = async (
 	);
 };
 
+/**
+ * Runs `call` on the snapshot `props.id` names. An id goes straight to the API without the
+ * listing; a 404 sends it through {@link resolveSnapshot}, since a name can look like an id.
+ * When the listing has that id, the 404 was about something else (a target branch), so it stands.
+ */
+const withSnapshotId = async <T>(
+	props: ProjectScopeProps & { id: string },
+	call: (snapshotId: string) => Promise<T>,
+): Promise<T> => {
+	let notFound: unknown;
+	if (looksLikeSnapshotId(props.id)) {
+		try {
+			return await call(props.id);
+		} catch (err) {
+			if (!(isNeonApiError(err) && err.status === 404)) throw err;
+			notFound = err;
+		}
+	}
+	const snapshot = await resolveSnapshot(props);
+	if (notFound && snapshot.id === props.id) throw notFound;
+	return call(snapshot.id);
+};
+
+/** A `br-…` id needs no branch listing; a name or the context/default branch does. */
+const snapshotBranchId = async (
+	props: ProjectScopeProps & { branch?: string },
+): Promise<string> =>
+	props.branch && looksLikeBranchId(props.branch)
+		? props.branch
+		: (await resolveBranchRef(props)).branchId;
+
 const list = async (props: ProjectScopeProps) => {
 	const {
 		data: { snapshots },
@@ -393,10 +430,7 @@ const create = async (
 		);
 	}
 
-	const { branchId } = await resolveBranchRef({
-		...props,
-		branch: props.branch,
-	} as any);
+	const branchId = await snapshotBranchId(props);
 
 	const { data } = await retryOnLock(() =>
 		props.apiClient.createSnapshot(props.projectId, branchId, {
@@ -436,8 +470,6 @@ const update = async (
 		);
 	}
 
-	const snapshot = await resolveSnapshot(props);
-
 	// `undefined` fields are dropped by JSON serialization, so an omitted
 	// `expires_at` leaves the expiration unchanged while an explicit `null`
 	// clears it.
@@ -447,13 +479,15 @@ const update = async (
 			? toIso(props.expiresAt, "--expires-at")
 			: undefined;
 
-	const { data } = await retryOnLock(() =>
-		props.apiClient.updateSnapshot(props.projectId, snapshot.id, {
-			snapshot: {
-				name: props.name,
-				expires_at: expiresAt,
-			},
-		}),
+	const { data } = await withSnapshotId(props, (snapshotId) =>
+		retryOnLock(() =>
+			props.apiClient.updateSnapshot(props.projectId, snapshotId, {
+				snapshot: {
+					name: props.name,
+					expires_at: expiresAt,
+				},
+			}),
+		),
 	);
 
 	writer(props).end(data.snapshot, {
@@ -487,23 +521,22 @@ const restore = async (
 		finalize: boolean;
 	},
 ) => {
-	const snapshot = await resolveSnapshot(props);
-
-	const targetBranchId = props.targetBranch
-		? await branchIdResolve({
-				branch: props.targetBranch,
-				projectId: props.projectId,
-				apiClient: props.apiClient,
-			})
-		: undefined;
-
-	const { data } = await retryOnLock(() =>
-		props.apiClient.restoreSnapshot(props.projectId, snapshot.id, {
-			name: props.name,
-			target_branch_id: targetBranchId,
-			finalize_restore: props.finalize,
-		}),
-	);
+	const { data } = await withSnapshotId(props, async (snapshotId) => {
+		const targetBranchId = props.targetBranch
+			? await branchIdResolve({
+					branch: props.targetBranch,
+					projectId: props.projectId,
+					apiClient: props.apiClient,
+				})
+			: undefined;
+		return retryOnLock(() =>
+			props.apiClient.restoreSnapshot(props.projectId, snapshotId, {
+				name: props.name,
+				target_branch_id: targetBranchId,
+				finalize_restore: props.finalize,
+			}),
+		);
+	});
 
 	const out = writer(props).write(data.branch, {
 		fields: BRANCH_FIELDS,
@@ -549,10 +582,7 @@ const finalize = async (
 };
 
 const scheduleGet = async (props: ProjectScopeProps & { branch?: string }) => {
-	const { branchId } = await resolveBranchRef({
-		...props,
-		branch: props.branch,
-	} as any);
+	const branchId = await snapshotBranchId(props);
 	const { data } = await props.apiClient.getSnapshotSchedule(
 		props.projectId,
 		branchId,
@@ -630,11 +660,6 @@ const scheduleSet = async (
 		schedule?: string;
 	},
 ) => {
-	const { branchId } = await resolveBranchRef({
-		...props,
-		branch: props.branch,
-	} as any);
-
 	let schedule: BackupScheduleItem[];
 	if (props.schedule) {
 		schedule = parseScheduleJson(props.schedule);
@@ -652,6 +677,7 @@ const scheduleSet = async (
 		);
 	}
 
+	const branchId = await snapshotBranchId(props);
 	await retryOnLock(() =>
 		props.apiClient.setSnapshotSchedule(props.projectId, branchId, {
 			schedule,
