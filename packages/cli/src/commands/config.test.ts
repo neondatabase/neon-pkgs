@@ -32,6 +32,7 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSecret,
 	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
@@ -224,6 +225,10 @@ class FakeNeonApi implements NeonApi {
 		return structuredClone(this.realtime);
 	}
 
+	async getProjectBranchRealtimeSecret(): Promise<NeonRealtimeSecret> {
+		return { secret: "nrt_live_1_cli-config-test", pending: false };
+	}
+
 	async enableProjectBranchRealtime(
 		projectId: string,
 		branchId: string,
@@ -233,6 +238,7 @@ class FakeNeonApi implements NeonApi {
 		this.realtime = {
 			enabled: true,
 			pending: false,
+			invocationUrl: "wss://realtime.fake.neon.tech/v1",
 			...(input?.allowedOrigins !== undefined
 				? { allowedOrigins: [...input.allowedOrigins] }
 				: {}),
@@ -1429,6 +1435,29 @@ describe("config commands", () => {
 		const envPath = join(cwd, ".env.local");
 		expect(existsSync(envPath)).toBe(true);
 		expect(readFileSync(envPath, "utf8")).toContain("DATABASE_URL=");
+	});
+
+	it("pulls Realtime env after provisioning it", async () => {
+		const api = new FakeNeonApi();
+		const { stream } = captureOut();
+		const config = writeConfig("export default { realtime: true };\n");
+
+		await applyCmd({
+			...baseProps(api, stream),
+			output: "table",
+			config,
+			cwd,
+			envPull: true,
+		});
+
+		const env = readFileSync(join(cwd, ".env.local"), "utf8");
+		expect(env).toContain(
+			"NEON_REALTIME_URL=wss://realtime.fake.neon.tech/v1",
+		);
+		expect(env).toContain(
+			"NEON_REALTIME_SECRET=nrt_live_1_cli-config-test",
+		);
+		expect(env).toContain("NEON_DATABASE_NAME=neondb");
 	});
 
 	it("lists the project's branches once per step of an apply with its env pull", async () => {

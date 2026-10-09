@@ -23,6 +23,8 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSecret,
+	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
 	UpdateBranchInput,
@@ -61,6 +63,9 @@ export class FakeNeonApi implements NeonApi {
 	private readonly neonAuth = new Map<string, NeonAuthSnapshot>();
 	/** Keyed by `${projectId}:${branchId}:${databaseName}`. */
 	private readonly neonDataApi = new Map<string, NeonDataApiSnapshot>();
+	/** Branch-level Realtime state and shared secrets, keyed by project + branch. */
+	private readonly realtime = new Map<string, NeonRealtimeSnapshot>();
+	private readonly realtimeSecrets = new Map<string, NeonRealtimeSecret>();
 	/** Preview buckets, keyed by `${projectId}:${branchId}`. */
 	private readonly buckets = new Map<string, NeonBucketSnapshot[]>();
 	/** Object-storage connection overrides, keyed by `${projectId}:${branchId}`. */
@@ -616,6 +621,43 @@ export class FakeNeonApi implements NeonApi {
 		this.neonDataApi.delete(`${projectId}:${branchId}:${databaseName}`);
 	}
 
+	async getProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSnapshot> {
+		this.history.push({
+			method: "getProjectBranchRealtime",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		return clone(
+			this.realtime.get(`${projectId}:${branchId}`) ?? {
+				enabled: false,
+				pending: false,
+			},
+		);
+	}
+
+	async getProjectBranchRealtimeSecret(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSecret> {
+		this.history.push({
+			method: "getProjectBranchRealtimeSecret",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const secret = this.realtimeSecrets.get(`${projectId}:${branchId}`);
+		if (!secret) {
+			throw new Error(
+				`Fake Neon: Realtime is not enabled on ${branchId}`,
+			);
+		}
+		return clone(secret);
+	}
+
 	/** Test helper: attach a Neon Auth integration to a branch. */
 	seedNeonAuth(
 		projectId: string,
@@ -635,6 +677,25 @@ export class FakeNeonApi implements NeonApi {
 		this.neonDataApi.set(`${projectId}:${branchId}:${databaseName}`, {
 			...snapshot,
 		});
+	}
+
+	/** Test helper: attach Realtime state and its shared secret to a branch. */
+	seedRealtime(
+		projectId: string,
+		branchId: string,
+		snapshot: NeonRealtimeSnapshot,
+		secret = "nrt_live_1_test-secret",
+	): void {
+		const key = `${projectId}:${branchId}`;
+		this.realtime.set(key, clone(snapshot));
+		if (snapshot.enabled) {
+			this.realtimeSecrets.set(key, {
+				secret,
+				pending: snapshot.pending,
+			});
+		} else {
+			this.realtimeSecrets.delete(key);
+		}
 	}
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────

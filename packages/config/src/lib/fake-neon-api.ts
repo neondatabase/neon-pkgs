@@ -22,6 +22,7 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSecret,
 	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
@@ -653,6 +654,28 @@ export class FakeNeonApi implements NeonApi {
 				pending: false,
 			},
 		);
+	}
+
+	async getProjectBranchRealtimeSecret(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSecret> {
+		this.history.push({
+			method: "getProjectBranchRealtimeSecret",
+			args: [projectId, branchId],
+		});
+		this.requireProject(projectId);
+		this.requireBranch(projectId, branchId);
+		const state = this.realtime.get(`${projectId}:${branchId}`);
+		if (!state?.enabled) {
+			throw new Error(
+				`Fake Neon: Realtime is not enabled on ${branchId}`,
+			);
+		}
+		return {
+			secret: `nrt_live_1_${branchId}`,
+			pending: state.pending,
+		};
 	}
 
 	async enableProjectBranchRealtime(

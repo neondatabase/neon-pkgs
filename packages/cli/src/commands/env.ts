@@ -139,7 +139,7 @@ export const builder = (argv: yargs.Argv) =>
 							"",
 							"On an unclaimed Claimable Neon project, neon.ts is still the source",
 							"of truth when it only declares Postgres, Auth, and the Data API.",
-							"A neon.ts that declares AI Gateway, Functions, or Object Storage",
+							"A neon.ts that declares Realtime, AI Gateway, Functions, or Object Storage",
 							"fails: those cannot be used until the project is claimed. Without",
 							"a neon.ts, a bare pull writes provisioned Postgres, Auth, and Data",
 							"API. Naming unsupported services with --service / --env warns",
@@ -230,8 +230,8 @@ const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
  * The Neon env vars `env pull` *owns*, so it removes any that the branch no longer has when
  * it reconciles the local `.env` (see {@link pull}). Scoped to the unambiguously Neon-named
  * vars — the `NEON_*` aliases plus `DATABASE_URL[_UNPOOLED]` — so switching a working
- * directory to a project/branch without Auth / the Data API drops the now-stale
- * `NEON_AUTH_*` / `NEON_DATA_API_*` lines instead of leaving credentials for features that
+ * directory to a project/branch without Auth / the Data API / Realtime drops the now-stale
+ * `NEON_AUTH_*` / `NEON_DATA_API_*` / `NEON_REALTIME_*` lines instead of leaving credentials for features that
  * aren't enabled.
  *
  * Deliberately **excludes** the storage vars Neon projects onto third-party SDK names
@@ -243,6 +243,7 @@ const NEON_OWNED_ENV_KEYS: readonly EnvPullKey[] = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
+	...Object.values(NEON_ENV_VAR_KEYS.realtime),
 	...Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 ];
 

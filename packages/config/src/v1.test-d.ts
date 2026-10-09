@@ -233,6 +233,14 @@ describe("defineConfig return-type stability", () => {
 		// An omitted toggle stays `undefined` (not `boolean`), so the env namespace is absent.
 		const empty = defineConfig({});
 		expectTypeOf(empty.auth).toEqualTypeOf<undefined>();
+
+		const realtime = defineConfig({
+			realtime: { allowedOrigins: ["https://app.example.com"] },
+		});
+		expectTypeOf(realtime.realtime).toEqualTypeOf<
+			| { readonly allowedOrigins: readonly ["https://app.example.com"] }
+			| undefined
+		>();
 	});
 
 	test("declared function slugs are preserved on the returned Config", () => {

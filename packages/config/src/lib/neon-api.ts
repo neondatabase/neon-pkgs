@@ -148,6 +148,12 @@ export interface NeonRealtimeSnapshot {
 	allowedOrigins?: string[];
 }
 
+/** The branch's Realtime shared secret and its asynchronous rotation state. */
+export interface NeonRealtimeSecret {
+	secret: string;
+	pending: boolean;
+}
+
 /** Options accepted when enabling Realtime or updating its allowed origins. */
 export interface ConfigureRealtimeInput {
 	/** Omit to preserve the current or inherited origins. */
@@ -509,6 +515,12 @@ export interface NeonApi {
 		projectId: string,
 		branchId: string,
 	): Promise<NeonRealtimeSnapshot>;
+
+	/** Read the shared secret used by application backends to issue Realtime tokens. */
+	getProjectBranchRealtimeSecret?(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSecret>;
 
 	/** Enable Realtime, or update its options when it is already enabled. */
 	enableProjectBranchRealtime?(

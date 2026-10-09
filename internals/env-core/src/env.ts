@@ -22,6 +22,8 @@ import {
 	type NeonBranchStorageSnapshot,
 	type NeonCredentialMeta,
 	type NeonDatabaseSnapshot,
+	type NeonRealtimeSecret,
+	type NeonRealtimeSnapshot,
 	type NeonRoleSnapshot,
 	PlatformError,
 	type ResolvedPreviewConfig,
@@ -37,7 +39,7 @@ import { defaultConnectionRole, NEON_DEFAULT_OWNER_ROLE } from "./roles.js";
  * Each top-level key here is a {@link NeonEnv} namespace; the inner record maps the
  * camelCase property names exposed to TypeScript to the UPPER_SNAKE env-var names used
  * by the OS. Keep this in sync with {@link postgresEnvSchema} / {@link authEnvSchema} /
- * {@link dataApiEnvSchema}.
+ * {@link dataApiEnvSchema} / {@link realtimeEnvSchema}.
  */
 
 /**
@@ -66,6 +68,11 @@ export const NEON_ENV_VAR_KEYS = {
 	},
 	dataApi: {
 		url: "NEON_DATA_API_URL",
+	},
+	realtime: {
+		url: "NEON_REALTIME_URL",
+		secret: "NEON_REALTIME_SECRET",
+		databaseName: "NEON_DATABASE_NAME",
 	},
 	/**
 	 * Object storage (Preview). The S3 SDKs read `AWS_*` from their standard config chain, so
@@ -163,6 +170,16 @@ export interface NeonAuthEnv {
 /** Bits of a Neon Data API integration. Only present when the branch policy enables it. */
 export interface NeonDataApiEnv {
 	url: string;
+}
+
+/** Connection values for a branch with Realtime enabled. */
+export interface NeonRealtimeEnv {
+	/** WebSocket endpoint passed to `createRealtimeClient`. */
+	url: string;
+	/** Server-only key passed to `createRealtime`. Never expose it to browser code. */
+	secret: string;
+	/** Database passed to `createRealtime`; selected with the same rules as Postgres URLs. */
+	databaseName: string;
 }
 
 /**
@@ -359,6 +376,7 @@ type FunctionBaseUrlKeyOf<C extends Config> =
  * - `postgres` is always present.
  * - `auth` is added iff `config.auth` is statically enabled.
  * - `dataApi` is added iff `config.dataApi` is statically enabled.
+ * - `realtime` is added iff `config.realtime` is statically enabled.
  * - `storage` is added iff `config.buckets` (or deprecated `preview.buckets`) declares at least one bucket.
  * - `aiGateway` is added iff `config.aiGateway` (or deprecated `preview.aiGateway`) is statically enabled.
  * - `functions` is added iff `config.functions` (or deprecated `preview.functions`) declares at least one slug.
@@ -375,6 +393,9 @@ export type NeonEnv<C extends Config = Config> = {
 	: NoNamespace) &
 	(ServiceOn<NonNullable<C["dataApi"]>> extends true
 		? { dataApi: NeonDataApiEnv }
+		: NoNamespace) &
+	(ServiceOn<NonNullable<C["realtime"]>> extends true
+		? { realtime: NeonRealtimeEnv }
 		: NoNamespace) &
 	(HasBuckets<C> extends true ? { storage: NeonStorageEnv } : NoNamespace) &
 	(AiGatewayOn<C> extends true
@@ -398,6 +419,10 @@ interface EnvKeysByNamespace {
 	branch: "NEON_BRANCH";
 	auth: "NEON_AUTH_BASE_URL" | "NEON_AUTH_JWKS_URL";
 	dataApi: "NEON_DATA_API_URL";
+	realtime:
+		| "NEON_REALTIME_URL"
+		| "NEON_REALTIME_SECRET"
+		| "NEON_DATABASE_NAME";
 	storage:
 		| "AWS_ACCESS_KEY_ID"
 		| "AWS_SECRET_ACCESS_KEY"
@@ -412,6 +437,7 @@ interface NamespaceEnv {
 	branch: NeonBranchEnv;
 	auth: NeonAuthEnv;
 	dataApi: NeonDataApiEnv;
+	realtime: NeonRealtimeEnv;
 	storage: NeonStorageEnv;
 	aiGateway: NeonAiGatewayEnv;
 }
@@ -424,6 +450,9 @@ interface EnvKeyToProp {
 	NEON_AUTH_BASE_URL: "baseUrl";
 	NEON_AUTH_JWKS_URL: "jwksUrl";
 	NEON_DATA_API_URL: "url";
+	NEON_REALTIME_URL: "url";
+	NEON_REALTIME_SECRET: "secret";
+	NEON_DATABASE_NAME: "databaseName";
 	AWS_ACCESS_KEY_ID: "accessKeyId";
 	AWS_SECRET_ACCESS_KEY: "secretAccessKey";
 	AWS_ENDPOINT_URL_S3: "endpoint";
@@ -786,6 +815,129 @@ function requiredValue<T>(value: T | null, description: string): T {
 	return value;
 }
 
+const REALTIME_POLL_INTERVAL_MS = 1_000;
+
+/**
+ * Wait for asynchronous Realtime provisioning/rotation before reading its secret. The
+ * secret endpoint deliberately returns 404 until provisioning finishes, and during a
+ * rotation it can still expose the previous key while `pending` is true.
+ */
+async function resolveRealtimeEnv(args: {
+	api: NeonApi;
+	projectId: string;
+	branch: NeonBranchSnapshot;
+	wantsUrl: boolean;
+	wantsSecret: boolean;
+}): Promise<Partial<NeonRealtimeEnv>> {
+	const getRealtime = args.api.getProjectBranchRealtime;
+	if (!getRealtime) {
+		throw new PlatformError(
+			ErrorCode.FeatureUnavailable,
+			"fetchEnv cannot resolve Realtime: this NeonApi adapter does not implement getProjectBranchRealtime.",
+		);
+	}
+	const getSecret = args.api.getProjectBranchRealtimeSecret;
+
+	let resolvedEnv: Partial<NeonRealtimeEnv> | undefined;
+	while (resolvedEnv === undefined) {
+		const snapshot: NeonRealtimeSnapshot = await getRealtime.call(
+			args.api,
+			args.projectId,
+			args.branch.id,
+		);
+		if (!snapshot.pending) {
+			if (!snapshot.enabled) {
+				throw new PlatformError(
+					ErrorCode.NotFound,
+					[
+						`fetchEnv: branch policy enables realtime but Realtime is disabled on branch ${args.branch.name} (${args.branch.id}).`,
+						"Enable it via `apply(config, { projectId, branchId })` (or `npx neon deploy`) and re-run fetchEnv. Or set realtime to false or omit it.",
+					].join(" "),
+					{
+						details: {
+							projectId: args.projectId,
+							branchId: args.branch.id,
+						},
+					},
+				);
+			}
+
+			let secret: NeonRealtimeSecret | undefined;
+			if (args.wantsSecret) {
+				if (!getSecret) {
+					throw new PlatformError(
+						ErrorCode.FeatureUnavailable,
+						"fetchEnv cannot resolve NEON_REALTIME_SECRET: this NeonApi adapter does not implement getProjectBranchRealtimeSecret.",
+					);
+				}
+				secret = await getSecret.call(
+					args.api,
+					args.projectId,
+					args.branch.id,
+				);
+			}
+			if (!secret?.pending) {
+				resolvedEnv = {
+					...(args.wantsUrl
+						? {
+								url: realtimeWebSocketUrl(
+									requiredRealtimeInvocationUrl(
+										snapshot,
+										args.branch,
+									),
+								),
+							}
+						: {}),
+					...(secret ? { secret: secret.secret } : {}),
+				};
+			}
+		}
+
+		if (resolvedEnv === undefined) {
+			await new Promise((resolve) =>
+				setTimeout(resolve, REALTIME_POLL_INTERVAL_MS),
+			);
+		}
+	}
+	return resolvedEnv;
+}
+
+function requiredRealtimeInvocationUrl(
+	snapshot: NeonRealtimeSnapshot,
+	branch: NeonBranchSnapshot,
+): string {
+	if (snapshot.invocationUrl !== undefined && snapshot.invocationUrl !== "") {
+		return snapshot.invocationUrl;
+	}
+	throw new PlatformError(
+		ErrorCode.ServerError,
+		`Realtime is enabled on branch ${branch.name} (${branch.id}), but the Neon API returned no invocation URL.`,
+		{ details: { branchId: branch.id } },
+	);
+}
+
+/** Normalize the control-plane invocation URL to the WebSocket URL the client SDK needs. */
+function realtimeWebSocketUrl(value: string): string {
+	let parsed: URL;
+	try {
+		parsed = new URL(value);
+	} catch {
+		throw new PlatformError(
+			ErrorCode.ServerError,
+			`Realtime invocation URL is invalid: ${JSON.stringify(value)}.`,
+		);
+	}
+	if (parsed.protocol === "https:") parsed.protocol = "wss:";
+	else if (parsed.protocol === "http:") parsed.protocol = "ws:";
+	else if (parsed.protocol !== "wss:" && parsed.protocol !== "ws:") {
+		throw new PlatformError(
+			ErrorCode.ServerError,
+			`Realtime invocation URL must use http(s) or ws(s): ${JSON.stringify(value)}.`,
+		);
+	}
+	return parsed.toString();
+}
+
 /**
  * The {@link fetchEnv} body, with the key selection as a plain argument and no generic
  * narrowing. Exists for callers that compute the selection at runtime — notably
@@ -853,6 +1005,12 @@ export async function fetchEnvKeysState(
 	const wantsAuth =
 		desired.authEnabled && (wants(K.auth.baseUrl) || wants(K.auth.jwksUrl));
 	const wantsDataApi = desired.dataApiEnabled && wants(K.dataApi.url);
+	const realtimeEnabled = desired.realtimePolicy === "enabled";
+	const wantsRealtime =
+		realtimeEnabled &&
+		(wants(K.realtime.url) ||
+			wants(K.realtime.secret) ||
+			wants(K.realtime.databaseName));
 	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
 	const functionUrlMode = options.functionUrls ?? "policy";
 	const declaredSlugs = (desired.preview?.functions ?? []).map(
@@ -893,7 +1051,8 @@ export async function fetchEnvKeysState(
 		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
 		constructSlugs.length > 0;
 	const needsConnectionTarget = wantsPooled || needsUnpooled;
-	const needsDatabase = needsConnectionTarget || wantsDataApi;
+	const needsDatabase =
+		needsConnectionTarget || wantsDataApi || wantsRealtime;
 	const [roles, databases] = await Promise.all([
 		needsConnectionTarget
 			? api.listBranchRoles(projectId, branch.id)
@@ -1014,6 +1173,36 @@ export async function fetchEnvKeysState(
 			);
 		}
 		result.dataApi = { url: dataApiSnapshot.url } satisfies NeonDataApiEnv;
+	}
+
+	if (wantsRealtime) {
+		const realtime = await resolveRealtimeEnv({
+			api,
+			projectId,
+			branch,
+			wantsUrl: wants(K.realtime.url),
+			wantsSecret: wants(K.realtime.secret),
+		});
+		const realtimeEnv: Partial<NeonRealtimeEnv> = {};
+		if (wants(K.realtime.url)) {
+			realtimeEnv.url = requiredValue(
+				realtime.url,
+				"WebSocket URL for enabled Realtime",
+			);
+		}
+		if (wants(K.realtime.secret)) {
+			realtimeEnv.secret = requiredValue(
+				realtime.secret,
+				"shared secret for enabled Realtime",
+			);
+		}
+		if (wants(K.realtime.databaseName)) {
+			realtimeEnv.databaseName = requiredValue(
+				databaseName,
+				"database for enabled Realtime",
+			);
+		}
+		result.realtime = realtimeEnv;
 	}
 
 	// Object storage + AI Gateway (Preview). Platform defaults back these when the region
@@ -1331,6 +1520,9 @@ export function policyEnvKeys(
 		K.branch.name,
 		...(desired.authEnabled ? [K.auth.baseUrl, K.auth.jwksUrl] : []),
 		...(desired.dataApiEnabled ? [K.dataApi.url] : []),
+		...(desired.realtimePolicy === "enabled"
+			? [K.realtime.url, K.realtime.secret, K.realtime.databaseName]
+			: []),
 		...((desired.preview?.buckets.length ?? 0) > 0
 			? [
 					K.storage.accessKeyId,
@@ -1749,6 +1941,9 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
 	put(K.auth.baseUrl, env.auth?.baseUrl);
 	put(K.auth.jwksUrl, env.auth?.jwksUrl);
 	put(K.dataApi.url, env.dataApi?.url);
+	put(K.realtime.url, env.realtime?.url);
+	put(K.realtime.secret, env.realtime?.secret);
+	put(K.realtime.databaseName, env.realtime?.databaseName);
 	put(K.storage.accessKeyId, env.storage?.accessKeyId);
 	put(K.storage.secretAccessKey, env.storage?.secretAccessKey);
 	put(K.storage.endpoint, env.storage?.endpoint);

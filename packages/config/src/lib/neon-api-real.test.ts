@@ -34,6 +34,20 @@ describe("Realtime adapter", () => {
 					body: text === "" ? undefined : JSON.parse(text),
 				});
 				if (request.method === "GET") {
+					if (request.url.endsWith("/realtime/secret")) {
+						return new Response(
+							JSON.stringify({
+								secret: "nrt_live_1_test-secret",
+								pending: false,
+							}),
+							{
+								status: 200,
+								headers: {
+									"Content-Type": "application/json",
+								},
+							},
+						);
+					}
 					return new Response(
 						JSON.stringify({
 							enabled: true,
@@ -66,6 +80,12 @@ describe("Realtime adapter", () => {
 				revision: 3,
 				allowedOrigins: ["https://app.example.com"],
 			});
+			await expect(
+				api.getProjectBranchRealtimeSecret?.("proj-one", "br-main"),
+			).resolves.toEqual({
+				secret: "nrt_live_1_test-secret",
+				pending: false,
+			});
 			await api.enableProjectBranchRealtime?.("proj-one", "br-main", {
 				allowedOrigins: ["https://app.example.com"],
 			});
@@ -75,6 +95,11 @@ describe("Realtime adapter", () => {
 				{
 					method: "GET",
 					url: "https://api.example.test/api/v2/projects/proj-one/branches/br-main/realtime",
+					body: undefined,
+				},
+				{
+					method: "GET",
+					url: "https://api.example.test/api/v2/projects/proj-one/branches/br-main/realtime/secret",
 					body: undefined,
 				},
 				{
