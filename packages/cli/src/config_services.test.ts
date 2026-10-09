@@ -2,6 +2,7 @@ import { defineConfig } from "@neon/config-runtime";
 import { describe, expect, it } from "vitest";
 import {
 	claimableDataApiCreateBody,
+	declaredClaimableNeonServices,
 	declaredNeonServices,
 } from "./config_services.js";
 
@@ -30,6 +31,13 @@ describe("declaredNeonServices", () => {
 			"functions",
 			"ai-gateway",
 			"realtime",
+		]);
+		expect(declaredClaimableNeonServices(config)).toEqual([
+			"auth",
+			"data-api",
+			"object-storage",
+			"functions",
+			"ai-gateway",
 		]);
 	});
 

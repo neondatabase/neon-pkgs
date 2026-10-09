@@ -326,7 +326,7 @@ export type ConfigInitProps = {
 	/**
 	 * Raw `--services` values, repeated and/or comma-separated, as
 	 * {@link parseConfigInitServices} reads them. When omitted,
-	 * {@link resolveInitSelection} picks interactively on a TTY and falls back to the starter
+	 * {@link resolveServices} picks interactively on a TTY and falls back to the starter
 	 * policy otherwise.
 	 */
 	services?: readonly string[];
@@ -358,7 +358,7 @@ export type ConfigInitProps = {
  * picker only runs on an interactive terminal outside CI. Everything else scaffolds the
  * starter policy, which is what `config init` has always written.
  */
-const resolveInitSelection = async (
+const resolveServices = async (
 	props: ConfigInitProps,
 ): Promise<NeonService[]> => {
 	if (props.services !== undefined) {
@@ -367,12 +367,12 @@ const resolveInitSelection = async (
 		);
 	}
 	if (props.pickServices) {
-		return await props.pickServices();
+		return props.pickServices();
 	}
 	if (isCi() || !process.stdout.isTTY) {
 		return [];
 	}
-	return await pickServicesInteractively();
+	return pickServicesInteractively();
 };
 
 /**
@@ -550,7 +550,7 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 			}
 		}
 	} else {
-		const services = await resolveInitSelection(props);
+		const services = await resolveServices(props);
 		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
 		if (!props.silent) {
 			if (services.length === 0) {

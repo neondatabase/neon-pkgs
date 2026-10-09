@@ -7,6 +7,12 @@ import {
 import type { Config } from "@neon/config-runtime";
 import type { NeonService } from "./neon_services.js";
 
+export type ClaimableService = Exclude<NeonService, "realtime">;
+
+export const isClaimableService = (
+	service: NeonService,
+): service is ClaimableService => service !== "realtime";
+
 const isToggleEnabled = (
 	toggle: boolean | { enabled?: boolean } | undefined,
 ): boolean => {
@@ -34,6 +40,11 @@ export const declaredNeonServices = (config: Config): NeonService[] => {
 	}
 	return services;
 };
+
+export const declaredClaimableNeonServices = (
+	config: Config,
+): ClaimableService[] =>
+	declaredNeonServices(config).filter(isClaimableService);
 
 export type ClaimableDataApiCreateBody = {
 	auth_provider: "neon_auth" | "external";
