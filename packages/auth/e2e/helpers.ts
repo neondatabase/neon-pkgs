@@ -31,6 +31,13 @@ export function uniqueEmail(prefix = "auth-e2e"): string {
 /** The password every throwaway account gets. Meets better-auth's minimum length. */
 export const TEST_PASSWORD = "TestPassword123!";
 
+/**
+ * The `Origin` every request carries. Node's fetch sends none, and the service rejects a
+ * relative `callbackURL` without one (400 `bad_oauth_callback`); the provisioning trusts
+ * localhost origins so this one is accepted.
+ */
+export const ORIGIN = "http://localhost:3000";
+
 /** What the cookie jar saw on one response: the facts no adapter exposes to a test. */
 export interface RecordedResponse {
 	url: string;
@@ -72,6 +79,7 @@ export function installCookieFetch(): CookieFetch {
 		const stored = [...jar.entries()]
 			.filter(([key]) => key.startsWith(`${url.hostname}|`))
 			.map(([, cookie]) => cookie);
+		if (!headers.has("origin")) headers.set("origin", ORIGIN);
 		if (stored.length > 0 && !headers.has("cookie")) {
 			headers.set("cookie", stored.join("; "));
 		}
