@@ -1176,9 +1176,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				? undefined
 				: (configPlan.services ?? ["postgres"]);
 			if (planned !== undefined) {
-				const services = parseConfigInitServices(planned);
-				extraServices = services.length > 0;
-				selectedServices = expandTelemetryServices(services);
+				const declared = parseConfigInitServices(planned);
+				extraServices = declared.length > 0;
+				selectedServices = expandTelemetryServices(declared);
 				funnel.services = selectedServices;
 				wroteNewFile = true;
 			} else {

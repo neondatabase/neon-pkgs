@@ -23,8 +23,10 @@ import {
 } from "../claimable/state.js";
 import {
 	type ClaimableDataApiCreateBody,
+	type ClaimableService,
 	claimableDataApiCreateBody,
-	declaredNeonServices,
+	declaredClaimableNeonServices,
+	isClaimableService,
 } from "../config_services.js";
 import { applyContext, contextBranch, readContextFile } from "../context.js";
 import { isCi } from "../env.js";
@@ -33,7 +35,6 @@ import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
 	NEON_SERVICES,
-	type NeonService,
 	parseServices,
 	servicesFlagValue,
 	servicesOption,
@@ -76,12 +77,6 @@ type AcceptProps = ClaimProps & {
 type DeleteProps = ClaimProps & {
 	yes: boolean;
 };
-
-type ClaimableService = Exclude<NeonService, "realtime">;
-
-const isClaimableService = (
-	service: NeonService,
-): service is ClaimableService => service !== "realtime";
 
 const CLAIMABLE_SERVICES = NEON_SERVICES.filter(isClaimableService);
 
@@ -255,9 +250,7 @@ export const builder = (argv: yargs.Argv) =>
 						: undefined,
 				);
 				const configuredServices = policy
-					? declaredNeonServices(policy.config).filter(
-							isClaimableService,
-						)
+					? declaredClaimableNeonServices(policy.config)
 					: [];
 				const dataApi = policy
 					? claimableDataApiCreateBody(policy.config)
