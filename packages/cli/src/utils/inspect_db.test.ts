@@ -279,4 +279,128 @@ describe("resolveInspectTargets", () => {
 
 		expect(resolved.targets[0]?.connectionUri).toContain("sales%252026");
 	});
+
+	const ENDPOINT = {
+		type: "read_write",
+		host: "ep-1.neon.tech",
+		id: "ep-1",
+		branch_id: "br-main-branch-123456",
+	};
+
+	const recordingClient = (
+		calls: string[],
+		overrides: Record<string, () => Promise<unknown>> = {},
+	) => {
+		const record =
+			(name: string, response: () => Promise<unknown>) => async () => {
+				calls.push(name);
+				return (overrides[name] ?? response)();
+			};
+		return {
+			listProjectBranches: record("branches", async () => ({
+				data: {
+					branches: [{ id: "br-main-branch-123456", name: "main" }],
+				},
+			})),
+			listProjectBranchDatabases: record("databases", async () => ({
+				data: { databases: [{ name: "neondb" }, { name: "other_db" }] },
+			})),
+			listProjectBranchEndpoints: record("endpoints", async () => ({
+				data: { endpoints: [ENDPOINT] },
+			})),
+			listProjectBranchRoles: record("roles", async () => ({
+				data: { roles: [{ name: "neondb_owner" }] },
+			})),
+			getProjectBranchRolePassword: record("password", async () => ({
+				data: { password: "secret" },
+			})),
+		};
+	};
+
+	const branchProps = (apiClient: unknown): ResolveInspectTargetsProps => ({
+		projectId: "proj-1",
+		branch: "main",
+		apiKey: "test-key",
+		apiHost: "https://console.neon.tech/api/v2",
+		output: "json",
+		contextFile: "/dev/null",
+		apiClient: apiClient as never,
+	});
+
+	it("resolves the branch and lists its databases once", async () => {
+		const calls: string[] = [];
+
+		const resolved = await resolveInspectTargets(
+			branchProps(recordingClient(calls)),
+			"database",
+		);
+
+		expect(resolved.targets.map((t) => t.database)).toEqual([
+			"neondb",
+			"other_db",
+		]);
+		expect([...calls].sort()).toEqual(
+			["branches", "databases", "endpoints", "password", "roles"].sort(),
+		);
+	});
+
+	it("starts the endpoint, role, and database reads together", async () => {
+		const calls: string[] = [];
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const hold = (response: unknown) => async (): Promise<unknown> => {
+			await held;
+			return response;
+		};
+		const resolving = resolveInspectTargets(
+			branchProps(
+				recordingClient(calls, {
+					endpoints: hold({ data: { endpoints: [ENDPOINT] } }),
+					roles: hold({
+						data: { roles: [{ name: "neondb_owner" }] },
+					}),
+					databases: hold({
+						data: { databases: [{ name: "neondb" }] },
+					}),
+				}),
+			),
+			"database",
+		);
+
+		try {
+			await new Promise((resolve) => setImmediate(resolve));
+			expect(calls).toEqual([
+				"branches",
+				"endpoints",
+				"roles",
+				"databases",
+			]);
+		} finally {
+			release();
+		}
+		await resolving;
+		expect(calls.at(-1)).toBe("password");
+	});
+
+	it("reports the database error before an endpoint error, as a sequential run did", async () => {
+		const calls: string[] = [];
+
+		await expect(
+			resolveInspectTargets(
+				branchProps(
+					recordingClient(calls, {
+						endpoints: async () => {
+							throw new Error("endpoints failed");
+						},
+						databases: async () => ({ data: { databases: [] } }),
+					}),
+				),
+				"database",
+			),
+		).rejects.toThrow(
+			"No databases found for the branch: br-main-branch-123456",
+		);
+	});
 });
