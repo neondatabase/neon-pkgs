@@ -1,5 +1,14 @@
 # neonctl
 
+## 8.3.1
+
+### Patch Changes
+
+- 6f5c8f3: Installing the CLI on Node 22.0–22.11 or 23.0–23.1 no longer prints an `EBADENGINE` warning for `@sentry/core`.
+- Updated dependencies [6f5c8f3]
+- Updated dependencies [c9e4494]
+  - neon@8.3.1
+
 ## 8.3.0
 
 ### Patch Changes
