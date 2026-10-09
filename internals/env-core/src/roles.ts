@@ -19,13 +19,7 @@ const NEON_MANAGED_AUTH_ROLES: ReadonlySet<string> = new Set([
 	"authenticated",
 ]);
 
-/**
- * The role a connection uses when none was named: the only role on the branch, else Neon's
- * default owner (`neondb_owner`), else the single role left after dropping the managed
- * Auth/Data API roles. Enabling Neon Auth or the Data API adds those PostgREST roles next to
- * the owner, so a normal branch has more than one role. `undefined` means more than one app
- * role remains (or none exist) and the caller has to ask.
- */
+/** `undefined` when more than one app role remains (or none exist), so the caller has to ask. */
 export function defaultConnectionRole(
 	roleNames: readonly string[],
 ): string | undefined {
