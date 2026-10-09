@@ -4,7 +4,7 @@
  * @module React
  */
 
-export { RealtimeProvider } from "./context.js";
+export { RealtimeProvider, useRealtimeClient } from "./context.js";
 export type {
 	RealtimeProviderProps,
 	UseLiveQueryOptions,
