@@ -346,26 +346,40 @@ describe("resolveInspectTargets", () => {
 
 	it("starts the endpoint, role, and database reads together", async () => {
 		const calls: string[] = [];
-		let releaseDatabases: () => void = () => undefined;
-		const databasesHeld = new Promise<void>((resolve) => {
-			releaseDatabases = resolve;
+		let release: () => void = () => undefined;
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
 		});
+		const hold = (response: unknown) => async (): Promise<unknown> => {
+			await held;
+			return response;
+		};
 		const resolving = resolveInspectTargets(
 			branchProps(
 				recordingClient(calls, {
-					databases: async () => {
-						await databasesHeld;
-						return { data: { databases: [{ name: "neondb" }] } };
-					},
+					endpoints: hold({ data: { endpoints: [ENDPOINT] } }),
+					roles: hold({
+						data: { roles: [{ name: "neondb_owner" }] },
+					}),
+					databases: hold({
+						data: { databases: [{ name: "neondb" }] },
+					}),
 				}),
 			),
 			"database",
 		);
 
-		await new Promise((resolve) => setImmediate(resolve));
-		expect(calls).toEqual(["branches", "endpoints", "roles", "databases"]);
-
-		releaseDatabases();
+		try {
+			await new Promise((resolve) => setImmediate(resolve));
+			expect(calls).toEqual([
+				"branches",
+				"endpoints",
+				"roles",
+				"databases",
+			]);
+		} finally {
+			release();
+		}
 		await resolving;
 		expect(calls.at(-1)).toBe("password");
 	});
