@@ -240,6 +240,55 @@ describe("resolveInspectTargets", () => {
 		}
 	});
 
+	it("connects as neondb_owner on a branch with the Data API roles", async () => {
+		const resolved = await resolveInspectTargets(
+			{
+				projectId: "proj-1",
+				branch: "br-main-branch-123456",
+				databaseName: "neondb",
+				apiKey: "test-key",
+				apiHost: "https://console.neon.tech/api/v2",
+				output: "json",
+				contextFile: "/dev/null",
+				apiClient: {
+					listProjectBranchDatabases: async () => ({
+						data: { databases: [{ name: "neondb" }] },
+					}),
+					listProjectBranchRoles: async () => ({
+						data: {
+							roles: [
+								{ name: "neondb_owner" },
+								{ name: "authenticator" },
+								{ name: "anonymous" },
+								{ name: "authenticated" },
+							],
+						},
+					}),
+					listProjectBranchEndpoints: async () => ({
+						data: {
+							endpoints: [
+								{
+									type: "read_write",
+									host: "ep-1.neon.tech",
+									id: "ep-1",
+									branch_id: "br-main-branch-123456",
+								},
+							],
+						},
+					}),
+					getProjectBranchRolePassword: async () => ({
+						data: { password: "secret" },
+					}),
+				} as never,
+			},
+			"database",
+		);
+
+		expect(resolved.targets[0]?.connectionUri).toContain(
+			"postgresql://neondb_owner:secret@",
+		);
+	});
+
 	it("encodes a percent in --database-name", async () => {
 		const resolved = await resolveInspectTargets(
 			{

@@ -106,7 +106,8 @@ const dbBuilder = (argv: yargs.Argv) => {
 				type: "string",
 			},
 			"role-name": {
-				describe: "Role name",
+				describe:
+					"Role name. Defaults to neondb_owner, else the only role besides the Data API and Neon Auth roles",
 				type: "string",
 			},
 			"db-url": {
