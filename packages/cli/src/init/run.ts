@@ -69,7 +69,9 @@ import {
 	existingConfigNext,
 	extraServicesNext,
 	installFailedNext,
+	MCP_API_KEY_NEEDS_AUTH,
 	MCP_SCOPED_NEEDS_PROJECT,
+	type McpKeyFailure,
 	mcpAfterLinkNext,
 	mcpConfigLocationSkipped,
 	mcpConfigLocationUnavailable,
@@ -854,7 +856,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		// Reported after the remaining steps run, so one missing MCP key does not
 		// leave the directory without a link or neon.ts.
 		const mcpState: {
-			error?: CannotMintApiKeyError;
+			error?: Error;
+			reason?: McpKeyFailure;
 			pinId?: string;
 			/** Formatted `--project-id` value for MCP that waits on a deferred link. */
 			deferredPin?: string;
@@ -878,6 +881,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			mcpState.error === undefined
 				? []
 				: mcpKeyFailedNext(
+						mcpState.reason ?? "cannot-mint",
 						mcpCommand(
 							mcpState.pinId !== undefined
 								? quoteFlagValue(mcpState.pinId)
@@ -909,6 +913,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					throw error;
 				}
 				mcpState.error = error;
+				mcpState.reason = "cannot-mint";
 				ran = withoutMcp(plan);
 			}
 			funnel.agentsInstalled = uniqueAgents([
@@ -1069,6 +1074,21 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				linkInputs.projectId !== undefined
 					? quoteFlagValue(linkInputs.projectId)
 					: "<project-id>";
+		} else if (
+			delayMcp &&
+			tooling.setup !== "skip" &&
+			mcpAuth === "api-key" &&
+			!detection.authenticated
+		) {
+			mcpState.error = new Error(MCP_API_KEY_NEEDS_AUTH);
+			mcpState.reason = "signed-out";
+			const linkedId = readContextFile(contextFile).projectId;
+			if (
+				props.mcpProjectScoped === true &&
+				typeof linkedId === "string"
+			) {
+				mcpState.pinId = linkedId;
+			}
 		} else if (delayMcp && tooling.setup !== "skip") {
 			const linkedId = readContextFile(contextFile).projectId;
 			let pinId: string | undefined;

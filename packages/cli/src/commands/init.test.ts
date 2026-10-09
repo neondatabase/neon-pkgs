@@ -573,6 +573,55 @@ describe("init handler", () => {
 		expect(out).toContain("mcp -y --agent opencode --oauth");
 	});
 
+	test("--mcp-auth api-key without credentials finishes the offline pin and neon.ts, then reports MCP", async () => {
+		const cwd = mkdtempSync(
+			join(tmpdir(), "neon-init-mcp-key-signed-out-"),
+		);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({ projectId: "prj-old", branch: "main" }),
+		);
+		const ops = makeOperations();
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { MCP_API_KEY_NEEDS_AUTH } = await import("../init/copy.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					mcpAuth: "api-key",
+					agent: ["opencode"],
+					orgId: "org-new",
+					projectId: "prj-new",
+					branch: "br-new",
+					initConfig,
+					hasLocalCredentials: () => false,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(MCP_API_KEY_NEEDS_AUTH);
+
+		expect(ops.installMcp).not.toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+		expect(JSON.parse(readFileSync(join(cwd, ".neon"), "utf8"))).toEqual({
+			orgId: "org-new",
+			projectId: "prj-new",
+			branch: "br-new",
+		});
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup failed.");
+		expect(out).toContain("minting its API key needs a signed-in CLI");
+		expect(out).toContain(
+			"mcp -y --agent opencode --api-key <personal-api-key>",
+		);
+		expect(out).toMatch(/neon login/);
+	});
+
 	test("an MCP-only agent whose key cannot be minted reports no agent tooling", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-only-fail-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

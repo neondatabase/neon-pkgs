@@ -240,9 +240,19 @@ export const installFailedNext = (
 	next: ["Install the dependencies, then run neon init again:", command],
 });
 
+export const MCP_API_KEY_NEEDS_AUTH =
+	"API-key MCP setup needs a Neon credential to mint the key. Sign in with `neon login` or pass a personal API key.";
+
+export type McpKeyFailure = "cannot-mint" | "signed-out";
+
 /** `mcp` is the `neon mcp` invocation without an auth flag. */
-export const mcpKeyFailedNext = (mcp: string): string[] => [
-	"The Neon MCP server was not configured: this CLI credential cannot mint its API key.",
+export const mcpKeyFailedNext = (
+	reason: McpKeyFailure,
+	mcp: string,
+): string[] => [
+	reason === "cannot-mint"
+		? "The Neon MCP server was not configured: this CLI credential cannot mint its API key."
+		: "The Neon MCP server was not configured: minting its API key needs a signed-in CLI.",
 	"Configure it with a personal API key:",
 	`${mcp} --api-key <personal-api-key>`,
 	"",
