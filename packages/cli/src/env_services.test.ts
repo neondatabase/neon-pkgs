@@ -46,6 +46,13 @@ describe("env pull key selection", () => {
 				"NEON_AUTH_BASE_URL",
 			]),
 		).toEqual(["postgres", "auth"]);
+		expect(
+			servicesForEnvKeys([
+				"NEON_REALTIME_URL",
+				"NEON_REALTIME_SECRET",
+				"NEON_DATABASE_NAME",
+			]),
+		).toEqual(["realtime"]);
 	});
 
 	it("unions full service bundles with exact env keys", () => {
@@ -54,6 +61,15 @@ describe("env pull key selection", () => {
 			"NEON_BRANCH",
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
+		]);
+	});
+
+	it("selects the complete Realtime env bundle", () => {
+		expect(envKeysForSelection(["realtime"], [])).toEqual([
+			"NEON_BRANCH",
+			"NEON_REALTIME_URL",
+			"NEON_REALTIME_SECRET",
+			"NEON_DATABASE_NAME",
 		]);
 	});
 

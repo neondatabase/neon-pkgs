@@ -27,6 +27,7 @@ export type {
 	NeonFunctionsEnv,
 	NeonFunctionUrlEnv,
 	NeonPostgresEnv,
+	NeonRealtimeEnv,
 	NeonStorageEnv,
 	ResolvedNeonEnv,
 	SelectableEnvKey,

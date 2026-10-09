@@ -95,7 +95,7 @@ describe("pullConfig", () => {
 		).toBeUndefined();
 	});
 
-	test("omits auth/dataApi when neither integration is enabled", async () => {
+	test("omits auth/dataApi/Realtime when none is enabled", async () => {
 		const api = new FakeNeonApi();
 		const projectId = "proj-none";
 		api.seedProject({
@@ -118,6 +118,36 @@ describe("pullConfig", () => {
 
 		expect(pulled.config.auth).toBeUndefined();
 		expect(pulled.config.dataApi).toBeUndefined();
+		expect(pulled.config.realtime).toBeUndefined();
+	});
+
+	test("sets config.realtime when Realtime is enabled", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-realtime";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "realtime",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedRealtime(projectId, "br-main", {
+			enabled: true,
+			pending: false,
+			invocationUrl: "wss://realtime.example.test/v1",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.realtime).toBe(true);
 	});
 
 	test("sets config.auth when a Neon Auth integration is enabled", async () => {

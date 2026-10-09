@@ -42,7 +42,7 @@ describe("the service vocabulary", () => {
 
 	it("offers each command only what it can act on", () => {
 		expect(ENV_PULL_SERVICES).toContain("functions");
-		expect(ENV_PULL_SERVICES).not.toContain("realtime");
+		expect(ENV_PULL_SERVICES).toContain("realtime");
 		expect(CONFIG_INIT_SERVICES).toContain("data-api");
 		expect(CONFIG_INIT_SERVICES).toContain("realtime");
 		// Every branch has Postgres, so a policy has nothing to declare for it.
@@ -84,7 +84,7 @@ describe("parseServices", () => {
 
 	it("rejects an unknown service rather than acting on everything but it", () => {
 		expect(() => parseServices(["postgres", "nope"], envPull)).toThrow(
-			/Unknown service nope\..*Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway\./s,
+			/Unknown service nope\..*Supported values: postgres, auth, data-api, functions, object-storage, ai-gateway, realtime\./s,
 		);
 	});
 
@@ -103,9 +103,6 @@ describe("parseServices", () => {
 	it("says a real service is not selectable here, rather than calling it unknown", () => {
 		expect(() => parseServices(["postgres"], addOnsOnly)).toThrow(
 			/postgres is not something --services can select\./,
-		);
-		expect(() => parseServices(["realtime"], envPull)).toThrow(
-			/realtime is not something --service can select\./,
 		);
 	});
 

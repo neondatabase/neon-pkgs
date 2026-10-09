@@ -67,6 +67,12 @@ const startServer = async (
 		},
 	);
 	app.get(
+		"/projects/test/branches/br-sunny-branch-123456/realtime",
+		(_req, res) => {
+			res.send({ enabled: false, pending: false });
+		},
+	);
+	app.get(
 		"/projects/test/branches/br-sunny-branch-123456/roles",
 		(_req, res) => {
 			res.send({ roles: [{ name: "neondb_owner" }] });

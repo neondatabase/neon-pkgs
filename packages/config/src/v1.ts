@@ -192,6 +192,7 @@ export type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSecret,
 	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonScheduleTriggerSnapshot,

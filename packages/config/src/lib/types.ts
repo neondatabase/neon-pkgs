@@ -741,9 +741,10 @@ export interface Config<
 	AiGateway extends ServiceToggleInput | undefined =
 		| ServiceToggleInput
 		| undefined,
+	Realtime extends RealtimeInput | undefined = RealtimeInput | undefined,
 > {
 	/** Enable, configure, or disable Realtime on every branch this policy is applied to. */
-	realtime?: RealtimeInput;
+	realtime?: Realtime;
 	/** Neon Auth integration toggle (GA). Static — drives `NeonEnv.auth`. */
 	auth?: Auth;
 	/**

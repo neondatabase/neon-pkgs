@@ -24,7 +24,7 @@ Contributing? See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branch` (a branch **name** like `main`, or a `br-…` id). (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
 
-> `parseEnv` takes **no branch name**: the secret set is static (top-level `config.auth` / `config.dataApi`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** _or_ a **key filter** — omit it for the full external (app/build) env, pass a **function slug** when running inside that deployed function (adds a typed `function` namespace of its declared env keys), or pass an **array of OS-level env-var keys** to require + return only that subset.
+> `parseEnv` takes **no branch name**: the secret set is static (top-level `config.auth` / `config.dataApi` / `config.realtime`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** _or_ a **key filter** — omit it for the full external (app/build) env, pass a **function slug** when running inside that deployed function (adds a typed `function` namespace of that function's declared env keys), or pass an **array of OS-level env-var keys** to require + return only that subset.
 
 ```ts
 import config from "../neon";
@@ -50,11 +50,11 @@ const { postgres } = parseEnv(config, ["DATABASE_URL"]);
 postgres.databaseUrl; // string — `databaseUrlUnpooled` is absent, and never required
 ```
 
-Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `branch` (the branch name, surfaced as `NEON_BRANCH`) is always present on a `fetchEnv` result and present on a `parseEnv` result when `NEON_BRANCH` was injected; `auth` and `dataApi` are included (and statically typed) when the evaluated branch policy enables them.
+Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `branch` (the branch name, surfaced as `NEON_BRANCH`) is always present on a `fetchEnv` result and present on a `parseEnv` result when `NEON_BRANCH` was injected; `auth`, `dataApi`, and `realtime` are included (and statically typed) when the policy enables them.
 
 | Function | Description |
 | --- | --- |
-| `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API values when enabled). `projectId` and `branch` are required; `branch` accepts a branch **name** (e.g. `main`) or a `br-…` id. (The legacy id-only `branchId` option still works.) Pass `keys` to fetch only some vars — see [Fetching a subset](#fetching-a-subset). Reads nothing from `process.env` or disk. |
+| `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API/Realtime values when enabled). `projectId` and `branch` are required; `branch` accepts a branch **name** (e.g. `main`) or a `br-…` id. (The legacy id-only `branchId` option still works.) Pass `keys` to fetch only some vars — see [Fetching a subset](#fetching-a-subset). Reads nothing from `process.env` or disk. |
 | `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys; `functions.<slug>.baseUrl` is the invocation URL. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
@@ -69,7 +69,7 @@ neon-env run -- npm run dev
 neon-env run -- pnpm dev
 ```
 
-`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH` / `NEON_BRANCH_ID`, or the `branch` field in `.neon[/project.json]` — by name or id), fetches the connection strings from Neon, and spawns the command with `NEON_BRANCH` / `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (plus the Auth, Data API, object-storage `AWS_*`, AI Gateway `NEON_AI_GATEWAY_*`, and function `NEON_FUNCTION_*_BASE_URL` vars when the policy enables them — see [Env vars produced](#env-vars-produced)) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
+`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH` / `NEON_BRANCH_ID`, or the `branch` field in `.neon[/project.json]` — by name or id), fetches the connection strings from Neon, and spawns the command with `NEON_BRANCH` / `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (plus the Auth, Data API, Realtime, object-storage `AWS_*`, AI Gateway `NEON_AI_GATEWAY_*`, and function `NEON_FUNCTION_*_BASE_URL` vars when the policy enables them — see [Env vars produced](#env-vars-produced)) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
 
 ### `export` — print env to stdout
 
@@ -120,6 +120,14 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | Key | From |
 | --- | --- |
 | `NEON_DATA_API_URL` | Data API (PostgREST) integration URL |
+
+**Realtime** (when `realtime` is enabled). `fetchEnv` waits for asynchronous provisioning or secret rotation to finish before returning these values:
+
+| Key | From |
+| --- | --- |
+| `NEON_REALTIME_URL` | WebSocket endpoint passed to `createRealtimeClient` |
+| `NEON_REALTIME_SECRET` | shared key passed to server-side `createRealtime`; never expose it to browser code |
+| `NEON_DATABASE_NAME` | database passed to `createRealtime`; selected with the same `neondb`/sole-database rule as the Postgres URLs |
 
 **Object storage** (when `buckets` declares at least one bucket). Projected onto the AWS SDK's standard config vars so an S3 client works from env alone (set `forcePathStyle: true`):
 
