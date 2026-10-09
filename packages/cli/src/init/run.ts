@@ -70,6 +70,7 @@ import {
 	extraServicesNext,
 	installFailedNext,
 	MCP_SCOPED_NEEDS_PROJECT,
+	mcpAfterLinkNext,
 	mcpConfigLocationSkipped,
 	mcpConfigLocationUnavailable,
 	mcpKeyFailedNext,
@@ -852,20 +853,43 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const earlyTooling = delayMcp ? withoutMcp(tooling) : tooling;
 		// Reported after the remaining steps run, so one missing MCP key does not
 		// leave the directory without a link or neon.ts.
-		const mcpFailure: { error?: CannotMintApiKeyError; pinId?: string } =
-			{};
+		const mcpState: {
+			error?: CannotMintApiKeyError;
+			pinId?: string;
+			/** Formatted `--project-id` value for MCP that waits on a deferred link. */
+			deferredPin?: string;
+		} = {};
 		const reportedTooling = (): InitToolingPlan =>
-			mcpFailure.error === undefined ? tooling : withoutMcp(tooling);
+			mcpState.error === undefined && mcpState.deferredPin === undefined
+				? tooling
+				: withoutMcp(tooling);
+		const mcpCommand = (projectIdArg: string | undefined): string =>
+			[
+				`${getCliName()} mcp -y`,
+				...(mcpConfigLocation === "project" ? ["--project"] : []),
+				...(projectIdArg !== undefined
+					? [`--project-id ${projectIdArg}`]
+					: []),
+				...("mcpAgents" in tooling ? tooling.mcpAgents : []).map(
+					(agent) => `--agent ${agent}`,
+				),
+			].join(" ");
 		const mcpFailedNext = (): string[] =>
-			mcpFailure.error === undefined || tooling.setup === "skip"
+			mcpState.error === undefined
 				? []
-				: mcpKeyFailedNext({
-						agents: "mcpAgents" in tooling ? tooling.mcpAgents : [],
-						project: mcpConfigLocation === "project",
-						...(mcpFailure.pinId !== undefined
-							? { projectId: mcpFailure.pinId }
-							: {}),
-					});
+				: mcpKeyFailedNext(
+						mcpCommand(
+							mcpState.pinId !== undefined
+								? quoteFlagValue(mcpState.pinId)
+								: undefined,
+						),
+					);
+		const mcpDeferredNext = (): string[] =>
+			mcpState.deferredPin === undefined
+				? []
+				: mcpAfterLinkNext(
+						`${mcpCommand(mcpState.deferredPin)}${mcpOauth ? " --oauth" : ""}`,
+					);
 		const runTooling = async (
 			steps: ReturnType<typeof planInitToolingSteps>,
 			plan: InitToolingPlan,
@@ -884,7 +908,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				if (!(error instanceof CannotMintApiKeyError)) {
 					throw error;
 				}
-				mcpFailure.error = error;
+				mcpState.error = error;
 				ran = withoutMcp(plan);
 			}
 			funnel.agentsInstalled = uniqueAgents([
@@ -1033,7 +1057,19 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			funnel.link = "linked";
 		}
 
-		if (delayMcp && tooling.setup !== "skip") {
+		if (
+			delayMcp &&
+			tooling.setup !== "skip" &&
+			props.mcpProjectScoped === true &&
+			funnel.link === "skipped" &&
+			!noLink
+		) {
+			// The pin would name the old project, or none, until the deferred link runs.
+			mcpState.deferredPin =
+				linkInputs.projectId !== undefined
+					? quoteFlagValue(linkInputs.projectId)
+					: "<project-id>";
+		} else if (delayMcp && tooling.setup !== "skip") {
 			const linkedId = readContextFile(contextFile).projectId;
 			let pinId: string | undefined;
 			if (props.mcpProjectScoped === true) {
@@ -1065,7 +1101,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				mcpProject: mcpConfigLocation === "project",
 				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
 			});
-			mcpFailure.pinId = pinId;
+			mcpState.pinId = pinId;
 			if (mcpSteps.length > 0) {
 				await runTooling(mcpSteps, mcpOnly);
 			}
@@ -1291,6 +1327,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						: undefined,
 				),
 			);
+			const deferredMcp = mcpDeferredNext();
+			if (deferredMcp.length > 0) {
+				next.push("", ...deferredMcp);
+			}
 		} else if (noLink && !alreadyLinked) {
 			next.push(...skippedLinkNext());
 		}
@@ -1333,7 +1373,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		) {
 			outcome = "success";
 		}
-		if (mcpFailure.error !== undefined) {
+		if (mcpState.error !== undefined) {
 			outcome = "error";
 		}
 
@@ -1366,8 +1406,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			}),
 		);
 		printed = true;
-		if (mcpFailure.error !== undefined) {
-			throw mcpFailure.error;
+		if (mcpState.error !== undefined) {
+			throw mcpState.error;
 		}
 
 		takeCommandSuccessExtras();

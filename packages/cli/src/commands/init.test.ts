@@ -376,6 +376,53 @@ describe("init handler", () => {
 		expect(out).not.toMatch(/claim create/);
 	});
 
+	test.each([
+		{ name: "with an existing pin", existing: true },
+		{ name: "in an empty directory", existing: false },
+	])("a deferred link defers project-scoped MCP $name", async ({
+		existing,
+	}) => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-deferred-mcp-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const pin = { projectId: "prj-old", branch: "main" };
+		if (existing) {
+			writeFileSync(join(cwd, ".neon"), JSON.stringify(pin));
+		}
+		const ops = makeOperations();
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				projectId: "prj-new",
+				mcpProjectScoped: true,
+				mcpAuth: "oauth",
+				agent: ["mcporter"],
+				initConfig,
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(ops.installMcp).not.toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+		if (existing) {
+			expect(
+				JSON.parse(readFileSync(join(cwd, ".neon"), "utf8")),
+			).toEqual(pin);
+		}
+		const out = stdoutText(stdout);
+		expect(out).toMatch(/Agents\s+skipped/);
+		expect(out).toContain("link --project-id prj-new");
+		expect(out).toContain(
+			"mcp -y --project-id prj-new --agent mcporter --oauth",
+		);
+	});
+
 	test("an offline pin with only Postgres names env pull as the step after login", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-offline-pg-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
