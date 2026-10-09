@@ -78,7 +78,7 @@
 	},
 	"dependencies": {
 		"@neon/sdk": "workspace:*",
-		"zod": "^4.4.3"
+		"zod": "^4.5.4"
 	},
 	"devDependencies": {
 		"@hey-api/openapi-ts": "0.98.2",
