@@ -435,3 +435,41 @@ describe("createAuthServer cookie forwarding (Secure forcing)", () => {
 		expect(options).toMatchObject({ secure: true, sameSite: "none" });
 	});
 });
+
+describe("createAuthServer getAccessToken", () => {
+	let fetchMock: ReturnType<typeof vi.fn>;
+	const originalFetch = globalThis.fetch;
+
+	beforeEach(() => {
+		fetchMock = vi.fn();
+		globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	test("POSTs { providerId, accountId } as a JSON body", async () => {
+		fetchMock.mockResolvedValueOnce(Response.json({ accessToken: "tok" }));
+
+		const server = createAuthServer({
+			baseUrl: TEST_BASE_URL,
+			context: makeContext,
+			cookieSecret: TEST_SECRET,
+		});
+
+		await (
+			server as unknown as {
+				getAccessToken: (args: unknown) => Promise<unknown>;
+			}
+		).getAccessToken({ providerId: "google", accountId: "acc_1" });
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(String(url)).toBe(`${TEST_BASE_URL}/get-access-token`);
+		expect(init.method).toBe("POST");
+		expect(JSON.parse(init.body)).toEqual({
+			providerId: "google",
+			accountId: "acc_1",
+		});
+	});
+});
