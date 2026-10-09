@@ -224,9 +224,6 @@ importers:
       '@segment/analytics-node':
         specifier: 1.3.0
         version: 1.3.0
-      '@sentry/core':
-        specifier: 11.2.0
-        version: 11.2.0
       add-mcp:
         specifier: 2.0.0
         version: 2.0.0
@@ -306,6 +303,9 @@ importers:
       '@rollup/plugin-node-resolve':
         specifier: 15.2.3
         version: 15.2.3(rollup@3.29.4)
+      '@sentry/core':
+        specifier: 11.2.0
+        version: 11.2.0
       '@testcontainers/postgresql':
         specifier: ^11.14.0
         version: 11.14.0
