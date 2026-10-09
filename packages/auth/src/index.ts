@@ -16,3 +16,4 @@ export type {
 } from "./neon-auth";
 export { createAuthClient, createInternalNeonAuth } from "./neon-auth";
 export type { ReactBetterAuthClient, VanillaBetterAuthClient } from "./types";
+export { BETTER_AUTH_VERSION } from "./utils/better-auth-version";

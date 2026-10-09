@@ -810,21 +810,25 @@ class SupabaseAuthAdapterImpl
 				}
 
 				const identitiesPromises = result.data.map(async (account) => {
-					let accountInfo = null;
-					try {
-						const infoResult = await this._betterAuth.accountInfo({
-							query: { accountId: account.accountId },
-						});
-						accountInfo = infoResult.data;
-					} catch (error) {
-						// If getAccountInfo fails, continue with basic data
-						console.warn(
-							`Failed to get account info for ${account.providerId}:`,
-							error,
-						);
+					// Credential (email/password) accounts have no social provider for
+					// account-info to query, so the endpoint always rejects them.
+					if (account.providerId === "credential") {
+						return mapBetterAuthIdentity(account, null);
 					}
 
-					return mapBetterAuthIdentity(account, accountInfo ?? null);
+					// account-info selects by the local account row id, not the
+					// provider-side account id.
+					const infoResult = await this._betterAuth.accountInfo({
+						query: { accountId: account.id },
+					});
+					if (infoResult?.error) {
+						throw normalizeBetterAuthError(infoResult.error);
+					}
+
+					return mapBetterAuthIdentity(
+						account,
+						infoResult?.data ?? null,
+					);
 				});
 
 				const identities = await Promise.all(identitiesPromises);
@@ -977,14 +981,9 @@ class SupabaseAuthAdapterImpl
 				);
 			}
 
-			// Map to better-auth fields
-			const providerId = targetIdentity.provider; // e.g., "google"
-			const accountId = targetIdentity.identity_id; // e.g., "google-user-id-12345"
-
-			// Call better-auth
+			// unlink-account selects by the local account row id.
 			const result = await this._betterAuth.unlinkAccount({
-				providerId,
-				accountId,
+				accountId: targetIdentity.id,
 			});
 
 			if (result?.error) {

@@ -38,3 +38,55 @@ describe("handleAuthRequest cookie forwarding", () => {
 		);
 	});
 });
+
+describe("handleAuthRequest client-info forwarding", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	test("forwards an inbound x-neon-client-info header verbatim", async () => {
+		const clientInfo = JSON.stringify({
+			sdk: "@neon/auth",
+			version: "0.0.0-test",
+			runtime: "browser",
+		});
+		const fetchSpy = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValue(new Response(null, { status: 200 }));
+		const request = new Request(
+			"https://app.example.com/api/auth/get-session",
+			{ headers: { "x-neon-client-info": clientInfo } },
+		);
+
+		await handleAuthRequest(
+			"https://auth.example.com",
+			request,
+			"get-session",
+		);
+
+		const upstreamHeaders = new Headers(
+			fetchSpy.mock.calls[0]?.[1]?.headers,
+		);
+		expect(upstreamHeaders.get("x-neon-client-info")).toBe(clientInfo);
+	});
+
+	test("does not add x-neon-client-info when the inbound request lacks it", async () => {
+		const fetchSpy = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValue(new Response(null, { status: 200 }));
+		const request = new Request(
+			"https://app.example.com/api/auth/get-session",
+		);
+
+		await handleAuthRequest(
+			"https://auth.example.com",
+			request,
+			"get-session",
+		);
+
+		const upstreamHeaders = new Headers(
+			fetchSpy.mock.calls[0]?.[1]?.headers,
+		);
+		expect(upstreamHeaders.has("x-neon-client-info")).toBe(false);
+	});
+});

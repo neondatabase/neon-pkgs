@@ -6,6 +6,7 @@ import type {
 	SessionData,
 	SessionDataCookie,
 } from "@/server/types";
+import { injectClientInfo } from "@/utils/client-info";
 import { validateSessionData } from "./validator";
 
 // Default 5-minute TTL for session data cookie (in seconds)
@@ -292,9 +293,9 @@ export async function fetchSessionWithCookie(
 	}
 
 	const response = await fetch(`${baseUrl}/get-session`, {
-		headers: {
+		headers: injectClientInfo({
 			Cookie: `${cookieName}=${cookieValue}`,
-		},
+		}),
 		signal: AbortSignal.timeout(3000), // 3s timeout
 	});
 

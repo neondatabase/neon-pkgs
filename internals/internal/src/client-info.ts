@@ -25,6 +25,7 @@ export interface ClientInfo {
 	platform: string;
 	arch: string;
 	framework?: string;
+	betterAuthVersion?: string;
 }
 
 /**
@@ -70,7 +71,11 @@ function detectFramework(): string | undefined {
 	return undefined;
 }
 
-export function getClientInfo(sdkName: string, sdkVersion: string): ClientInfo {
+export function getClientInfo(
+	sdkName: string,
+	sdkVersion: string,
+	extras?: Pick<ClientInfo, "betterAuthVersion">,
+): ClientInfo {
 	const base: ClientInfo = {
 		sdk: sdkName,
 		version: sdkVersion,
@@ -150,16 +155,21 @@ export function getClientInfo(sdkName: string, sdkVersion: string): ClientInfo {
 		result.framework = framework;
 	}
 
+	if (extras?.betterAuthVersion) {
+		result.betterAuthVersion = extras.betterAuthVersion;
+	}
+
 	return result;
 }
 
 export function createClientInfoInjector(
 	defaultSdkName: string,
 	defaultSdkVersion: string,
+	extras?: Pick<ClientInfo, "betterAuthVersion">,
 ) {
 	// Cache client info at factory creation time (module init)
 	const cachedClientInfo = JSON.stringify(
-		getClientInfo(defaultSdkName, defaultSdkVersion),
+		getClientInfo(defaultSdkName, defaultSdkVersion, extras),
 	);
 
 	return function injectClientInfo(
@@ -175,7 +185,11 @@ export function createClientInfoInjector(
 		// Only recompute if SDK override is provided (rare case)
 		const clientInfoString = sdkOverride
 			? JSON.stringify(
-					getClientInfo(sdkOverride.name, sdkOverride.version),
+					getClientInfo(
+						sdkOverride.name,
+						sdkOverride.version,
+						extras,
+					),
 				)
 			: cachedClientInfo;
 

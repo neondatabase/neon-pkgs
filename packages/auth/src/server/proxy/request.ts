@@ -7,6 +7,7 @@ const PROXY_HEADERS = [
 	"authorization",
 	"referer",
 	"content-type",
+	"x-neon-client-info",
 ];
 
 /**

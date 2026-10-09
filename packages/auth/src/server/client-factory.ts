@@ -1,6 +1,7 @@
 import { normalizeBetterAuthError } from "@/core/better-auth-helpers";
 import { validateSessionData } from "@/server/session/validator";
 import { parseCookieValue, parseSetCookies } from "@/server/utils/cookies";
+import { injectClientInfo } from "@/utils/client-info";
 import type { SessionCookieSameSite } from "./config";
 import { validateCookieConfig } from "./config";
 import {
@@ -192,7 +193,7 @@ export function createAuthServer(config: NeonAuthServerConfig): NeonAuthServer {
 		try {
 			response = await fetch(url.toString(), {
 				method,
-				headers,
+				headers: injectClientInfo(headers),
 				body: requestBody,
 			});
 		} catch (error) {
