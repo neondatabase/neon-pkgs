@@ -204,9 +204,11 @@ function pickProbeDatabase(
 
 /**
  * Run a Preview-feature read, returning `fallback` if the feature is unavailable for the
- * project/region (a {@link ErrorCode.FeatureUnavailable} from the adapter). Other errors
- * propagate. Used by `pullConfig` so a branch without a Preview feature still mirrors
- * cleanly for env resolution / `inspect`, rather than aborting on an unrelated capability.
+ * project/region. Most adapters report {@link ErrorCode.FeatureUnavailable}; API hosts where
+ * a route is not deployed can instead return a generic 404. The project and branch are
+ * validated independently by `pullConfig`, so that route-level 404 is also safe to degrade.
+ * Other errors propagate. This lets a branch without a Preview feature still mirror cleanly
+ * for env resolution / `inspect`, rather than aborting on an unrelated capability.
  */
 async function degradeUnavailable<T>(
 	read: () => Promise<T>,
@@ -217,7 +219,8 @@ async function degradeUnavailable<T>(
 	} catch (err) {
 		if (
 			err instanceof PlatformError &&
-			err.code === ErrorCode.FeatureUnavailable
+			(err.code === ErrorCode.FeatureUnavailable ||
+				(err.code === ErrorCode.NotFound && err.details.status === 404))
 		) {
 			return fallback;
 		}

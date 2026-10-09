@@ -150,6 +150,39 @@ describe("pullConfig", () => {
 		expect(pulled.config.realtime).toBe(true);
 	});
 
+	test("omits Realtime when its API route is not deployed", async () => {
+		class MissingRealtimeRouteApi extends FakeNeonApi {
+			override async getProjectBranchRealtime(): Promise<never> {
+				throw new PlatformError(
+					ErrorCode.NotFound,
+					"getProjectBranchRealtime failed: resource not found on Neon.",
+					{ details: { status: 404 } },
+				);
+			}
+		}
+		const api = new MissingRealtimeRouteApi();
+		const projectId = "proj-without-realtime-route";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "without-realtime-route",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.realtime).toBeUndefined();
+	});
+
 	test("sets config.auth when a Neon Auth integration is enabled", async () => {
 		const api = new FakeNeonApi();
 		const projectId = "proj-auth";
