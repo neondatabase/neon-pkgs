@@ -15,8 +15,9 @@ import { authBaseUrl } from "./helpers";
  *   `email-otp/reset-password` (`better-auth/dist/plugins/email-otp/index.d.mts`).
  *
  * Neon Auth may run custom aliases on top, which is exactly what only the live service
- * can answer. Each probe asserts the declared path is not a 404; the failure message
- * names better-auth's spelling so the fix is a one-line change either way.
+ * can answer. Each probe asserts the declared path is not a 404; on failure it also
+ * probes better-auth's spelling and reports both statuses, so the fix to the table is
+ * driven by what the service did rather than by which spelling we expected.
  */
 
 const SUSPICIOUS_ENDPOINTS = [
@@ -70,11 +71,16 @@ describe("declared server endpoints exist on the live service", () => {
 	for (const { key, config, betterAuthPath } of SUSPICIOUS_ENDPOINTS) {
 		test(`${key} → ${config.method} ${config.path} is not a 404`, async () => {
 			const response = await probe(config.path, config.method);
+			// Unauthenticated, so a real route answers 401/400/405 — only 404 means absent.
+			const candidate =
+				response.status === 404
+					? (await probe(betterAuthPath, config.method)).status
+					: null;
 			expect(
 				response.status !== 404,
-				`${config.method} ${config.path} (API_ENDPOINTS.${key}) returned 404 on ` +
-					`${authBaseUrl()}. better-auth 1.6.23 serves this as "${betterAuthPath}" — ` +
-					"if the live service agrees, the path in src/server/endpoints.ts is wrong.",
+				`declared ${config.method} ${config.path} (API_ENDPOINTS.${key}) → 404; ` +
+					`candidate ${config.method} ${betterAuthPath} → ${candidate} ` +
+					`(${candidate === 404 ? "also absent" : "exists"}) on ${authBaseUrl()}`,
 			).toBe(true);
 		});
 	}

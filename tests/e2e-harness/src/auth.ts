@@ -98,6 +98,22 @@ export async function configureEmailPassword(
 	);
 }
 
+/**
+ * Trust localhost origins. Better Auth refuses a relative `callbackURL` unless the request
+ * carries a trusted `Origin`, and headless clients send none, so the suite supplies a
+ * localhost one (`ORIGIN` in `packages/auth/e2e/helpers.ts`) that this makes acceptable.
+ * Shape per `UpdateNeonAuthAllowLocalhostRequest`.
+ */
+export async function allowLocalhostOrigins(
+	projectId: string,
+	branchId: string,
+): Promise<void> {
+	await apiRequest(
+		`/projects/${projectId}/branches/${branchId}/auth/allow_localhost`,
+		{ method: "PATCH", body: { allow_localhost: true } },
+	);
+}
+
 /** Disable the integration and drop the `neon_auth` schema it provisioned. */
 export async function disableNeonAuth(
 	projectId: string,
@@ -129,6 +145,7 @@ export async function provisionNeonAuth(): Promise<ProvisionedNeonAuth> {
 		const branch = await defaultBranch(projectId);
 		const auth = await enableNeonAuth(projectId, branch.id);
 		await configureEmailPassword(projectId, branch.id);
+		await allowLocalhostOrigins(projectId, branch.id);
 		return {
 			projectId,
 			branchId: branch.id,
