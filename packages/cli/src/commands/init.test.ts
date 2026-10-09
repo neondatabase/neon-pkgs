@@ -622,6 +622,35 @@ describe("init handler", () => {
 		expect(out).toMatch(/neon login/);
 	});
 
+	test("without -y, API-key MCP runs after link signs in", async () => {
+		const cwd = mkdtempSync(
+			join(tmpdir(), "neon-init-mcp-key-interactive-"),
+		);
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const ops = makeOperations();
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				mcpAuth: "api-key",
+				agent: ["opencode"],
+				projectId: "prj-example",
+				config: false,
+				linkProject,
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(linkProject).toHaveBeenCalled();
+		expect(ops.installMcp).toHaveBeenCalledTimes(1);
+		expect(ops.installMcp.mock.calls[0]?.[0].oauth).toBeFalsy();
+	});
+
 	test("an MCP-only agent whose key cannot be minted reports no agent tooling", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-only-fail-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

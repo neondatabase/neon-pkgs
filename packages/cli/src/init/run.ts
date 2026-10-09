@@ -1078,6 +1078,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			delayMcp &&
 			tooling.setup !== "skip" &&
 			mcpAuth === "api-key" &&
+			// Only -y is still signed out here; without it, link may have signed in.
+			yes &&
 			!detection.authenticated
 		) {
 			mcpState.error = new Error(MCP_API_KEY_NEEDS_AUTH);
