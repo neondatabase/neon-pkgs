@@ -1,5 +1,11 @@
 # neon
 
+## 8.3.4
+
+### Patch Changes
+
+- 299e18c: `neon inspect db` resolves the branch and lists its databases once, and reads endpoints, roles, and databases together: about 0.5 s faster per run.
+
 ## 8.3.3
 
 ### Patch Changes
