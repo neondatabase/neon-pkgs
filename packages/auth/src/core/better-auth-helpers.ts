@@ -436,7 +436,7 @@ export function mapBetterAuthIdentity(
 	betterAuthUserIdentityAccount: Awaited<
 		ReturnType<typeof listUserAccounts>
 	>[number],
-	accountInfoData: Awaited<ReturnType<typeof accountInfo>>,
+	accountInfoData: Awaited<ReturnType<typeof accountInfo>> | null,
 ): UserIdentity {
 	return {
 		id: betterAuthUserIdentityAccount.id,
@@ -452,10 +452,10 @@ export function mapBetterAuthIdentity(
 					provider: betterAuthUserIdentityAccount.providerId,
 					provider_id: betterAuthUserIdentityAccount.accountId,
 					scopes: betterAuthUserIdentityAccount.scopes,
-					email: accountInfoData.data.email,
-					name: accountInfoData.data.user.name,
-					picture: accountInfoData.data.user.picture,
-					email_verified: accountInfoData.data.user.email_verified,
+					email: accountInfoData.user.email,
+					name: accountInfoData.user.name,
+					picture: accountInfoData.user.image,
+					email_verified: accountInfoData.user.emailVerified,
 					...accountInfoData.data,
 				}
 			: {
