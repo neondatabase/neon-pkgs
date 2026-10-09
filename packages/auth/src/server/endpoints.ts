@@ -45,7 +45,7 @@ type ValidEndpointTree<T> = {
 export const API_ENDPOINTS = {
 	// Session & token
 	getSession: { path: "get-session", method: "GET" },
-	getAccessToken: { path: "get-access-token", method: "GET" },
+	getAccessToken: { path: "get-access-token", method: "POST" },
 	listSessions: { path: "list-sessions", method: "GET" },
 	revokeSession: { path: "revoke-session", method: "POST" },
 	revokeSessions: { path: "revoke-sessions", method: "POST" },
