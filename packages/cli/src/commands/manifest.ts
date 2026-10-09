@@ -210,6 +210,11 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./realtime.js"),
 	},
 	{
+		command: "subscribe <query>",
+		describe: "Subscribe to a live SQL query with Neon Realtime",
+		load: () => import("./subscribe.js"),
+	},
+	{
 		command: "functions",
 		aliases: ["function"],
 		describe: "Manage Neon Functions",
