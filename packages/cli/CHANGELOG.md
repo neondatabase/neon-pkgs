@@ -1,5 +1,12 @@
 # neon
 
+## 8.3.1
+
+### Patch Changes
+
+- 6f5c8f3: Installing the CLI on Node 22.0–22.11 or 23.0–23.1 no longer prints an `EBADENGINE` warning for `@sentry/core`.
+- c9e4494: `neon snapshots restore` and `update` skip the snapshot listing when given a snapshot id, and `create` and `schedule get` / `set` skip the branch listing when given a branch id: one request fewer each.
+
 ## 8.3.0
 
 ### Minor Changes
