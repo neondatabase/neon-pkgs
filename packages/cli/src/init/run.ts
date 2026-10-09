@@ -1338,7 +1338,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			next.push(
 				...offlinePinNext({
 					login: commands.login,
-					...(extraServices ? {} : { envPull: commands.envPull }),
+					...(extraServices || existingConfig
+						? {}
+						: { envPull: commands.envPull }),
 				}),
 			);
 		} else if (pendingUnauthed) {
