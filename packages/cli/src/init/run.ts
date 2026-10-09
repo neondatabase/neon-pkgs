@@ -18,6 +18,7 @@ import {
 import { contextBranch, readContextFile } from "../context.js";
 import { log } from "../log.js";
 import { type AgentType, getAgentDisplayName } from "../mcp/agents.js";
+import { CannotMintApiKeyError } from "../mcp/mint.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { type NeonService, servicesFlagValue } from "../neon_services.js";
 import {
@@ -71,6 +72,7 @@ import {
 	MCP_SCOPED_NEEDS_PROJECT,
 	mcpConfigLocationSkipped,
 	mcpConfigLocationUnavailable,
+	mcpKeyFailedNext,
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
 	namedAgentsUnavailable,
@@ -841,22 +843,49 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			(mcpAuth === "api-key" || props.mcpProjectScoped === true);
 
 		const mcpOauth = mcpAuth === "oauth";
-		const earlyTooling = delayMcp
-			? tooling.setup === "skills-mcp"
-				? {
-						setup: "skills-mcp" as const,
-						skillsAgents: tooling.skillsAgents,
-						mcpAgents: [] as const,
-					}
-				: tooling.setup === "mixed"
-					? {
-							setup: "mixed" as const,
-							pluginAgents: tooling.pluginAgents,
-							skillsAgents: tooling.skillsAgents,
-							mcpAgents: [] as const,
-						}
-					: tooling
-			: tooling;
+		const earlyTooling = delayMcp ? withoutMcp(tooling) : tooling;
+		// Reported after the remaining steps run, so one missing MCP key does not
+		// leave the directory without a link or neon.ts.
+		const mcpFailure: { error?: CannotMintApiKeyError; pinId?: string } =
+			{};
+		const reportedTooling = (): InitToolingPlan =>
+			mcpFailure.error === undefined ? tooling : withoutMcp(tooling);
+		const mcpFailedNext = (): string[] =>
+			mcpFailure.error === undefined || tooling.setup === "skip"
+				? []
+				: mcpKeyFailedNext({
+						agents: "mcpAgents" in tooling ? tooling.mcpAgents : [],
+						project: mcpConfigLocation === "project",
+						...(mcpFailure.pinId !== undefined
+							? { projectId: mcpFailure.pinId }
+							: {}),
+					});
+		const runTooling = async (
+			steps: ReturnType<typeof planInitToolingSteps>,
+			plan: InitToolingPlan,
+		): Promise<void> => {
+			let ran = plan;
+			try {
+				await runToolingSteps(steps, {
+					cwd,
+					output: props.output,
+					auth,
+					operations: props.operations,
+					narrate: "human",
+					mcpOauthFallback: !mcpAuthChosen,
+				});
+			} catch (error) {
+				if (!(error instanceof CannotMintApiKeyError)) {
+					throw error;
+				}
+				mcpFailure.error = error;
+				ran = withoutMcp(plan);
+			}
+			funnel.agentsInstalled = uniqueAgents([
+				...funnel.agentsInstalled,
+				...agentsFromTooling(ran),
+			]);
+		};
 
 		const toolingSteps = planInitToolingSteps({
 			tooling: earlyTooling,
@@ -868,15 +897,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			...(selectedSkills !== undefined ? { skills: selectedSkills } : {}),
 		});
 		if (toolingSteps.length > 0) {
-			await runToolingSteps(toolingSteps, {
-				cwd,
-				output: props.output,
-				auth,
-				operations: props.operations,
-				narrate: "human",
-				mcpOauthFallback: !mcpAuthChosen,
-			});
-			funnel.agentsInstalled = agentsFromTooling(earlyTooling);
+			await runTooling(toolingSteps, earlyTooling);
 		}
 
 		let projectSetup: InitProjectSetupChoice | "skip" | "already" = "skip";
@@ -1021,19 +1042,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				mcpProject: mcpConfigLocation === "project",
 				...(pinId !== undefined ? { mcpProjectId: pinId } : {}),
 			});
+			mcpFailure.pinId = pinId;
 			if (mcpSteps.length > 0) {
-				await runToolingSteps(mcpSteps, {
-					cwd,
-					output: props.output,
-					auth,
-					operations: props.operations,
-					narrate: "human",
-					mcpOauthFallback: !mcpAuthChosen,
-				});
-				funnel.agentsInstalled = uniqueAgents([
-					...funnel.agentsInstalled,
-					...agentsFromTooling(mcpOnly),
-				]);
+				await runTooling(mcpSteps, mcpOnly);
 			}
 		}
 
@@ -1131,7 +1142,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							heading: failed.heading,
 							body: failed.body,
 							rows: [],
-							next: failed.next,
+							next: joinNext(failed.next, mcpFailedNext()),
 						}),
 					);
 					printed = true;
@@ -1199,7 +1210,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							{
 								label: "Agents",
 								value: agentsRowValue({
-									tooling,
+									tooling: reportedTooling(),
 									installed: funnel.agentsInstalled,
 								}),
 							},
@@ -1215,7 +1226,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								),
 							},
 						],
-						next: failed.next,
+						next: joinNext(failed.next, mcpFailedNext()),
 					}),
 				);
 				printed = true;
@@ -1287,6 +1298,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		) {
 			outcome = "success";
 		}
+		if (mcpFailure.error !== undefined) {
+			outcome = "error";
+		}
 
 		printInitDone(
 			formatInitDone({
@@ -1295,7 +1309,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					{
 						label: "Agents",
 						value: agentsRowValue({
-							tooling,
+							tooling: reportedTooling(),
 							installed: funnel.agentsInstalled,
 						}),
 					},
@@ -1310,10 +1324,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						value: configRowValue(funnel.config, existingFilename),
 					},
 				],
-				next,
+				next: joinNext(mcpFailedNext(), next),
 			}),
 		);
 		printed = true;
+		if (mcpFailure.error !== undefined) {
+			throw mcpFailure.error;
+		}
 
 		takeCommandSuccessExtras();
 		recordCommandSuccessExtras({
@@ -1357,6 +1374,19 @@ const uniqueAgents = (ids: readonly AgentType[]): AgentType[] => {
 	}
 	return out;
 };
+
+const joinNext = (
+	first: readonly string[],
+	second: readonly string[],
+): string[] =>
+	first.length === 0 || second.length === 0
+		? [...first, ...second]
+		: [...first, "", ...second];
+
+const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan =>
+	tooling.setup === "skills-mcp" || tooling.setup === "mixed"
+		? { ...tooling, mcpAgents: [] }
+		: tooling;
 
 const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
 	switch (tooling.setup) {

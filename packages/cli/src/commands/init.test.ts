@@ -452,13 +452,15 @@ describe("init handler", () => {
 		expect(initConfig).toHaveBeenCalled();
 	});
 
-	test("--mcp-auth api-key keeps the mint failure", async () => {
+	test("--mcp-auth api-key finishes the other steps, then reports the mint failure", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mcp-no-fallback-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const ops = makeOperations();
 		const { CannotMintApiKeyError } = await import("../mcp/mint.js");
 		ops.installMcp.mockRejectedValue(new CannotMintApiKeyError());
-		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const linkProject = vi.fn().mockResolvedValue(undefined);
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 
 		await expect(
@@ -469,13 +471,26 @@ describe("init handler", () => {
 					yes: true,
 					mcpAuth: "api-key",
 					agent: ["opencode"],
-					link: false,
-					config: false,
+					projectId: "prj-example",
+					linkProject,
+					initConfig,
 					contextFile: join(cwd, ".neon"),
 				}),
 			),
 		).rejects.toThrow(CannotMintApiKeyError);
+
 		expect(ops.installMcp).toHaveBeenCalledTimes(1);
+		expect(ops.installSkills).toHaveBeenCalledTimes(1);
+		expect(linkProject).toHaveBeenCalled();
+		expect(initConfig).toHaveBeenCalled();
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup failed.");
+		expect(out).toContain("Agents   skills: opencode");
+		expect(out).not.toContain("skills and MCP");
+		expect(out).toContain(
+			"mcp -y --agent opencode --api-key <personal-api-key>",
+		);
+		expect(out).toContain("mcp -y --agent opencode --oauth");
 	});
 
 	test("Recommended installs the plugin globally for detected agents", async () => {
