@@ -328,12 +328,13 @@ describe("init handler", () => {
 		});
 	});
 
-	test("-y with --project-id and no credentials writes neon.ts and prints the link command", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-project-id-"));
+	test("-y with org, project, and branch but no credentials writes .neon offline and neon.ts", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-offline-pin-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const ops = makeOperations();
 		const linkProject = vi.fn().mockResolvedValue(undefined);
 		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
 		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { handler } = await import("./init.js");
 
@@ -348,6 +349,7 @@ describe("init handler", () => {
 				services: ["auth"],
 				linkProject,
 				initConfig,
+				envPull,
 				hasLocalCredentials: () => false,
 				detectProjectAgents: () => ["cursor"],
 				contextFile: join(cwd, ".neon"),
@@ -356,16 +358,47 @@ describe("init handler", () => {
 
 		expect(stepKinds(ops)).toEqual(["plugins"]);
 		expect(linkProject).not.toHaveBeenCalled();
+		expect(envPull).not.toHaveBeenCalled();
+		expect(JSON.parse(readFileSync(join(cwd, ".neon"), "utf8"))).toEqual({
+			orgId: "org-example",
+			projectId: "prj-example",
+			branch: "br-example",
+		});
 		expect(initConfig).toHaveBeenCalledWith(
 			expect.objectContaining({ cwd, services: ["auth"] }),
 		);
 		const out = stdoutText(stdout);
 		expect(out).toContain("Neon setup needs a next step.");
+		expect(out).toMatch(/Project\s+linked, not verified/);
 		expect(out).toMatch(/neon login/);
-		expect(out).toContain(
-			"link --org-id org-example --project-id prj-example --branch br-example",
-		);
+		expect(out).toMatch(/neon deploy/);
+		expect(out).not.toMatch(/neon link/);
 		expect(out).not.toMatch(/claim create/);
+	});
+
+	test("an offline pin with only Postgres names env pull as the step after login", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-yes-offline-pg-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				agentSetup: false,
+				orgId: "org-example",
+				projectId: "prj-example",
+				branch: "main",
+				hasLocalCredentials: () => false,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		const out = stdoutText(stdout);
+		expect(out).toContain("Then pull the branch's environment variables:");
+		expect(out).toMatch(/neon env pull/);
 	});
 
 	test("-y with --project-id and no credentials keeps an existing pin and does not pull env", async () => {

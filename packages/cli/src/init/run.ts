@@ -9,7 +9,7 @@ import { readLinkedClaimableCredentials } from "../claimable/state.js";
 import { create as createClaimableProject } from "../commands/claim.js";
 import { ConfigInstallFailed, initCmd } from "../commands/config.js";
 import type { EnvPullProps, PullOutcome } from "../commands/env.js";
-import { quoteFlagValue } from "../commands/link.js";
+import { quoteFlagValue, runLink } from "../commands/link.js";
 import { defaultDir } from "../config.js";
 import {
 	CONFIG_INIT_SERVICES,
@@ -76,7 +76,9 @@ import {
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
 	namedAgentsUnavailable,
+	offlinePinNext,
 	PROGRESS,
+	PROJECT_PINNED_OFFLINE,
 	skippedLinkNext,
 	unattendedUnauthedNext,
 } from "./copy.js";
@@ -225,12 +227,18 @@ const commandLine = (command: string, pairs: FlagPairs): string =>
 const deferredLinkCommands = (
 	props: InitProps,
 	inputs: InitLinkInputs,
-): { login: string; link: string } => {
+): { login: string; link: string; envPull: string } => {
 	const session: FlagPairs = [
 		["--profile", props.profile],
 		[
 			"--config-dir",
 			props.configDir === defaultDir ? undefined : props.configDir,
+		],
+	];
+	const context: FlagPairs = [
+		[
+			"--context-file",
+			props.contextFile === ".neon" ? undefined : props.contextFile,
 		],
 	];
 	return {
@@ -241,12 +249,10 @@ const deferredLinkCommands = (
 			["--project-name", inputs.projectName],
 			["--region-id", inputs.regionId],
 			["--branch", inputs.branch],
-			[
-				"--context-file",
-				props.contextFile === ".neon" ? undefined : props.contextFile,
-			],
+			...context,
 			...session,
 		]),
+		envPull: commandLine("env pull", [...context, ...session]),
 	};
 };
 
@@ -948,6 +954,31 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			throw new Error(NON_TTY_LINK_NEEDS_AUTH);
 		}
 
+		const linkProps: InitLinkProps = {
+			apiClient: props.apiClient,
+			apiKey: props.apiKey,
+			apiHost: props.apiHost,
+			output: props.output,
+			contextFile,
+			yes,
+			clear: false,
+			checks: true,
+			envPull: true,
+			config: false,
+			cwd,
+			...linkInputs,
+			...(props.configDir ? { configDir: props.configDir } : {}),
+			...(props.profile ? { profile: props.profile } : {}),
+			...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
+			...(props.clientId ? { clientId: props.clientId } : {}),
+			...(props.forceAuth !== undefined
+				? { forceAuth: props.forceAuth }
+				: {}),
+			...(props.allowUnsafeTls !== undefined
+				? { allowUnsafeTls: props.allowUnsafeTls }
+				: {}),
+		};
+
 		if (
 			usesMcp &&
 			mcpAuth === "api-key" &&
@@ -981,31 +1012,23 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				detection.authenticated ? PROGRESS.link : PROGRESS.auth,
 			);
 			const linkProject = props.linkProject ?? runAuthenticatedLink;
-			const linkProps: InitLinkProps = {
-				apiClient: props.apiClient,
-				apiKey: props.apiKey,
-				apiHost: props.apiHost,
-				output: props.output,
-				contextFile,
-				yes,
-				clear: false,
-				checks: true,
-				envPull: true,
-				config: false,
-				cwd,
-				...linkInputs,
-				...(props.configDir ? { configDir: props.configDir } : {}),
-				...(props.profile ? { profile: props.profile } : {}),
-				...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
-				...(props.clientId ? { clientId: props.clientId } : {}),
-				...(props.forceAuth !== undefined
-					? { forceAuth: props.forceAuth }
-					: {}),
-				...(props.allowUnsafeTls !== undefined
-					? { allowUnsafeTls: props.allowUnsafeTls }
-					: {}),
-			};
 			await linkProject(linkProps);
+			linkedNow = true;
+			funnel.link = "linked";
+		}
+
+		// With org, project, and branch all named, the pin needs no API call. Neon
+		// verifies it on the first command that reaches it.
+		const pinnedOffline =
+			funnel.link === "skipped" &&
+			!noLink &&
+			linkInputs.orgId !== undefined &&
+			linkInputs.projectId !== undefined &&
+			linkInputs.branch !== undefined &&
+			linkInputs.projectName === undefined &&
+			linkInputs.regionId === undefined;
+		if (pinnedOffline) {
+			await runLink({ ...linkProps, checks: false, envPull: false });
 			linkedNow = true;
 			funnel.link = "linked";
 		}
@@ -1159,10 +1182,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const context = readContextFile(contextFile);
 		const branch = contextBranch(context);
 		const linked = isLinked(contextFile);
-		const alreadyPulled = linkedNow && funnel.link === "linked";
-		// A skipped link leaves either no pin or one the account flags asked to replace.
+		const alreadyPulled =
+			linkedNow && funnel.link === "linked" && !pinnedOffline;
+		// A skipped link leaves either no pin or one the account flags asked to replace,
+		// and an offline pin has no credentials to pull with.
 		const shouldPull =
 			funnel.link !== "skipped" &&
+			!pinnedOffline &&
 			shouldPullEnvAfterInitConfig({
 				wroteNewFile,
 				extraServices,
@@ -1242,13 +1268,22 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const pendingExisting =
 			funnel.config === "existing" && linked && !wroteNewFile;
 		const pending =
+			pinnedOffline ||
 			pendingUnauthed ||
 			pendingServices ||
 			(pendingClaimable && extraServices) ||
 			pendingExisting;
 
 		const next: string[] = [];
-		if (pendingUnauthed) {
+		if (pinnedOffline) {
+			const commands = deferredLinkCommands(props, linkInputs);
+			next.push(
+				...offlinePinNext({
+					login: commands.login,
+					...(extraServices ? {} : { envPull: commands.envPull }),
+				}),
+			);
+		} else if (pendingUnauthed) {
 			next.push(
 				...unattendedUnauthedNext(
 					hasExplicitLinkInputs
@@ -1315,9 +1350,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					},
 					{
 						label: "Project",
-						value: projectRowValue(
-							funnel.link ?? (linked ? "already_linked" : null),
-						),
+						value: pinnedOffline
+							? PROJECT_PINNED_OFFLINE
+							: projectRowValue(
+									funnel.link ??
+										(linked ? "already_linked" : null),
+								),
 					},
 					{
 						label: "Config",

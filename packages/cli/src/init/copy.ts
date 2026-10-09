@@ -178,6 +178,19 @@ export const unattendedUnauthedNext = (deferred?: {
 				deferred.link,
 			];
 
+export const PROJECT_PINNED_OFFLINE = "linked, not verified";
+
+export const offlinePinNext = (input: {
+	login: string;
+	envPull?: string;
+}): string[] => [
+	"The link was written without contacting Neon. Sign in to use it:",
+	input.login,
+	...(input.envPull !== undefined
+		? ["Then pull the branch's environment variables:", input.envPull]
+		: []),
+];
+
 export const skippedLinkNext = (): string[] => [
 	"To connect this directory to a Neon project:",
 	`${getCliName()} link`,
