@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { createAuthClient } from "../src/index";
+import {
+	NEON_AUTH_LEGACY_SESSION_CHALLENGE_COOKIE_NAME,
+	NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME,
+	NEON_AUTH_SESSION_COOKIE_NAME,
+} from "../src/server/constants";
 import { SupabaseAuthAdapter } from "../src/vanilla/adapters";
 import {
 	authBaseUrl,
@@ -50,25 +55,28 @@ describe("password session against the live service", () => {
 			const cookie = (name: string): string | undefined =>
 				setCookies.find((value) => value.startsWith(`${name}=`));
 
-			// The upstream contract this SDK is built on: an opaque session cookie plus
-			// the OAuth challenge cookie (the service also accepts its legacy misspelling
-			// `session_challange`), both partitioned so they survive the iframe-based
+			// The upstream session cookie is partitioned so it survives the iframe-based
 			// sign-in flow the popup OAuth path exists for.
-			const sessionToken = cookie("session_token");
+			const sessionToken = cookie(NEON_AUTH_SESSION_COOKIE_NAME);
 			expect(
 				sessionToken,
-				`no session_token Set-Cookie in ${JSON.stringify(setCookies)}`,
+				`no ${NEON_AUTH_SESSION_COOKIE_NAME} Set-Cookie in ${JSON.stringify(setCookies)}`,
 			).toBeDefined();
+			// The challenge cookie (or its legacy misspelling) belongs to the OAuth path;
+			// password sign-in does not set it, so it is only checked when present.
 			const challenge =
-				cookie("session_challenge") ?? cookie("session_challange");
-			expect(
-				challenge,
-				"no session_challenge (or legacy session_challange) Set-Cookie on sign-in",
-			).toBeDefined();
+				cookie(NEON_AUTH_SESSION_CHALLENGE_COOKIE_NAME) ??
+				cookie(NEON_AUTH_LEGACY_SESSION_CHALLENGE_COOKIE_NAME);
 			for (const value of [sessionToken, challenge]) {
+				if (value === undefined) continue;
+				expect(value).toMatch(/;\s*Secure/i);
 				expect(value).toMatch(/SameSite=None/i);
 				expect(value).toMatch(/Partitioned/i);
 			}
+			expect(sessionToken).toMatch(/;\s*HttpOnly/i);
+			expect(
+				Number(/Max-Age=(\d+)/i.exec(sessionToken as string)?.[1]),
+			).toBeGreaterThan(0);
 
 			// The session token is the JWT the service delivers via the set-auth-jwt
 			// response header, not a cookie value — the recorded header is the only
