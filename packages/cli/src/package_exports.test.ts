@@ -110,6 +110,15 @@ describe("the built package", () => {
 			expect(path.slice(distDir.length)).toMatch(/^[/\\]_chunks[/\\]/);
 		}
 	});
+
+	it("compiles @sentry/* in, so npm never checks the @sentry/core engines range", () => {
+		const importsSentry =
+			/^\s*(?:import|export)\b[^'"`]*?from\s*["']@sentry\/|^\s*import\s*["']@sentry\/|\bimport\s*\(\s*["']@sentry\//m;
+		const leaking = emittedFiles().filter((path) =>
+			importsSentry.test(readFileSync(path, "utf8")),
+		);
+		expect(leaking).toEqual([]);
+	});
 });
 
 /**
@@ -140,6 +149,24 @@ describe("the published manifests", () => {
 			expect(
 				names.filter((name) => name.startsWith("@neon-internals/")),
 			).toEqual([]);
+		}
+	});
+
+	it("never declares the compiled-in @sentry/core as a runtime dependency", () => {
+		const manifest: unknown = JSON.parse(
+			readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+		);
+		if (!isRecord(manifest))
+			throw new Error("../package.json is not an object.");
+		for (const field of [
+			"dependencies",
+			"optionalDependencies",
+			"peerDependencies",
+		]) {
+			const declared = manifest[field];
+			expect(
+				isRecord(declared) ? declared["@sentry/core"] : undefined,
+			).toBe(undefined);
 		}
 	});
 

@@ -5,6 +5,11 @@ import { defineConfig } from "tsdown";
  * which have to be compiled in — they are never published, so a bare specifier surviving into
  * `dist` cannot resolve for anyone who installed from npm.
  *
+ * `@sentry/*` is compiled in too. The `engines` range of `@sentry/core` excludes Node 22.0–22.11
+ * and 23.0–23.1, which the CLI supports, and as an installed dependency it made npm print
+ * EBADENGINE there. The whole scope, because `@sentry/core` imports `@sentry/conventions`, and
+ * that bare specifier would not resolve once `@sentry/core` is no longer installed.
+ *
  * tsdown externalizes declared runtime dependencies only, so without the shape tests a
  * devDependency reached from shipped source gets inlined with its whole transitive graph:
  * `src/test_utils/*` imports vitest, express and emocks.
@@ -15,14 +20,15 @@ import { defineConfig } from "tsdown";
  * rolldown's virtual modules start with a NUL, and `#` is a package's own subpath import, which
  * resolves locally.
  */
-const externalExceptInternals = (id: string): boolean =>
+const externalExceptInlined = (id: string): boolean =>
 	!id.startsWith(".") &&
 	!id.startsWith("/") &&
 	!id.startsWith("\\") &&
 	!id.startsWith("#") &&
 	!id.startsWith("\0") &&
 	!/^[a-zA-Z]:[\\/]/.test(id) &&
-	!id.startsWith("@neon-internals/");
+	!id.startsWith("@neon-internals/") &&
+	!id.startsWith("@sentry/");
 
 export default defineConfig({
 	name: "neon",
@@ -40,7 +46,7 @@ export default defineConfig({
 	format: "esm",
 	outDir: "dist",
 	treeshake: true,
-	external: externalExceptInternals,
+	external: externalExceptInlined,
 	outputOptions: {
 		// Shared modules land in one directory so `exports` can keep them off the
 		// published surface, the way `./dist/*` would otherwise expose them.
