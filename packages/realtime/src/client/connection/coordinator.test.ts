@@ -576,7 +576,8 @@ describe("ConnectionCoordinator", () => {
 
 		expect(second.failed).toHaveBeenCalledWith(
 			expect.objectContaining({
-				code: "connection_lost",
+				code: "protocol_error",
+				message: "connection cannot recover",
 				retryable: false,
 			}),
 		);
