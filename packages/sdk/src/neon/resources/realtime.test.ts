@@ -9,12 +9,15 @@ import {
 
 type Call = { url: string; method: string; body: unknown };
 
+type Reply = { status: number; body?: unknown };
+
 function neonRouting(
-	respond: (request: Call) => { status: number; body?: unknown },
+	respond: (request: Call) => Reply | Promise<Reply>,
 	config?: {
 		retries?: number;
 		waitForReadiness?: boolean;
 		timeoutMs?: number;
+		requestTimeoutMs?: number;
 	},
 ) {
 	const calls: Call[] = [];
@@ -22,6 +25,7 @@ function neonRouting(
 		apiKey: "test",
 		retries: config?.retries ?? 0,
 		waitForReadiness: config?.waitForReadiness,
+		requestTimeoutMs: config?.requestTimeoutMs,
 		wait: { pollIntervalMs: 1, timeoutMs: config?.timeoutMs ?? 5_000 },
 		fetch: async (input, init) => {
 			const request = input instanceof Request ? input : undefined;
@@ -41,7 +45,7 @@ function neonRouting(
 						: raw,
 			};
 			calls.push(call);
-			const { status, body } = respond(call);
+			const { status, body } = await respond(call);
 			if (body === undefined) {
 				return new Response(null, { status });
 			}
@@ -220,6 +224,33 @@ describe("realtime", () => {
 		await expect(
 			neon.realtime.enable(selectors, { throwOnError: true }),
 		).rejects.toBeInstanceOf(NeonWaitTimeoutError);
+	});
+
+	it("times out when a poll never answers", async () => {
+		const { neon } = neonRouting(
+			(call) =>
+				call.method === "GET"
+					? new Promise<Reply>(() => {})
+					: { status: 202 },
+			{ timeoutMs: 30 },
+		);
+		const { error } = await neon.realtime.enable(selectors);
+		expect(error).toBeInstanceOf(NeonWaitTimeoutError);
+		expect(error).toMatchObject({ operations: [] });
+	});
+
+	it("keeps polling past requestTimeoutMs, which bounds only the request", async () => {
+		const pending = realtimeBackend(8);
+		const { neon, calls } = neonRouting(
+			async (call) => {
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				return pending(call);
+			},
+			{ requestTimeoutMs: 20 },
+		);
+		const { error } = await neon.realtime.enable(selectors);
+		expect(error).toBeUndefined();
+		expect(calls).toHaveLength(10);
 	});
 
 	it("stops polling with NeonAbortError when the signal aborts", async () => {
