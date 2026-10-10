@@ -557,6 +557,32 @@ describe("ConnectionCoordinator", () => {
 		expect(events).toEqual(["connection_failed"]);
 	});
 
+	it("fails a subscription created after a terminal connection failure", () => {
+		const coordinator = createCoordinator();
+		const first = target();
+		coordinator.subscribe({ capability: "one" }, first);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "connection_error",
+			code: "protocol_error",
+			message: "connection cannot recover",
+		});
+		expect(first.failed).toHaveBeenCalledOnce();
+
+		const second = target();
+		coordinator.subscribe({ capability: "two" }, second);
+
+		expect(second.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "connection_lost",
+				retryable: false,
+			}),
+		);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+	});
+
 	it("probes an idle ready connection and times it out without inbound activity", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();
