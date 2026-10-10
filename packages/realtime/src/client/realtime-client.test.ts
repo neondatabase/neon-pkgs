@@ -1223,6 +1223,10 @@ describe("RealtimeClient", () => {
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		const matchingRows = subscription.awaitRows(() => false);
+		let transactionFailure: unknown;
+		void subscription.awaitTxId("42").catch((error: unknown) => {
+			transactionFailure = error;
+		});
 		socket.receive({
 			type: "subscription_error",
 			live_id: "41",
@@ -1240,6 +1244,17 @@ describe("RealtimeClient", () => {
 			},
 		});
 		await expect(matchingRows).rejects.toMatchObject({
+			code: "baseline_sync_failed",
+			retryable: false,
+			sqlState: "22P02",
+		});
+		await Promise.resolve();
+		expect(transactionFailure).toMatchObject({
+			code: "baseline_sync_failed",
+			retryable: false,
+			sqlState: "22P02",
+		});
+		await expect(subscription.awaitTxId("43")).rejects.toMatchObject({
 			code: "baseline_sync_failed",
 			retryable: false,
 			sqlState: "22P02",

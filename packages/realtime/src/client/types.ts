@@ -359,10 +359,10 @@ export interface RawLiveQuerySubscription<Row> {
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default the
-	 * promise remains pending until the transaction arrives or the subscription
-	 * closes.
+	 * promise remains pending until the transaction arrives, the subscription
+	 * fails, or the subscription closes.
 	 * @throws If the timeout elapses, the transaction ID is invalid, or the
-	 * subscription closes before applying the transaction.
+	 * subscription fails or closes before applying the transaction.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<void>;
 	/**

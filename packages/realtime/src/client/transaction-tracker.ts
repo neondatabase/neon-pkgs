@@ -19,6 +19,7 @@ export class TransactionTracker {
 	private readonly waiting = new Map<string, Set<TransactionWaiter>>();
 	private visibility?: ParsedMvccSnapshot;
 	private closed = false;
+	private closeError?: Error;
 
 	wait = async (txid: string, timeout?: number): Promise<void> => {
 		const normalized = normalizeTxid(txid);
@@ -30,7 +31,12 @@ export class TransactionTracker {
 				"Live-query transaction timeout must be a non-negative number",
 			);
 		}
-		if (this.closed) throw new Error("Live-query subscription is closed");
+		if (this.closed) {
+			throw (
+				this.closeError ??
+				new Error("Live-query subscription is closed")
+			);
+		}
 		if (
 			this.recent.has(normalized.text) ||
 			this.visibility?.isVisible(normalized.value)
@@ -92,10 +98,10 @@ export class TransactionTracker {
 		}
 	}
 
-	close(): void {
+	close(error = new Error("Live-query subscription is closed")): void {
 		if (this.closed) return;
 		this.closed = true;
-		const error = new Error("Live-query subscription is closed");
+		this.closeError = error;
 		for (const waiters of this.waiting.values()) {
 			for (const waiter of waiters) {
 				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
