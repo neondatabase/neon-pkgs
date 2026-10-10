@@ -2,6 +2,7 @@ import {
 	ConnectionCoordinator,
 	ConnectionCoordinatorError,
 	type ConnectionHandle,
+	type WebSocketFactory,
 } from "./connection/coordinator.js";
 import {
 	type ClientEventSink,
@@ -52,11 +53,15 @@ class RealtimeClientImpl implements RealtimeClient {
 	private readonly parsers: PostgreSQLParserRegistry;
 	private readonly events: ClientEventSink;
 
-	constructor(options: RealtimeClientOptions) {
+	constructor(
+		options: RealtimeClientOptions,
+		webSocketFactory?: WebSocketFactory,
+	) {
 		this.events = createClientEventSink(options);
 		this.coordinator = new ConnectionCoordinator({
 			url: options.url,
 			events: this.events,
+			webSocketFactory,
 		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
@@ -173,4 +178,12 @@ export function createRealtimeClient(
 	options: RealtimeClientOptions,
 ): RealtimeClient {
 	return new RealtimeClientImpl(options);
+}
+
+/** @internal Node direct subscriptions supply a terminable WebSocket. */
+export function createRealtimeClientInternal(
+	options: RealtimeClientOptions,
+	webSocketFactory: WebSocketFactory,
+): RealtimeClient {
+	return new RealtimeClientImpl(options, webSocketFactory);
 }

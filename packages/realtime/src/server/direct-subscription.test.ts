@@ -76,6 +76,8 @@ class FakeWebSocket {
 	}
 }
 
+vi.mock("ws", () => ({ default: FakeWebSocket }));
+
 afterEach(() => {
 	vi.useRealTimers();
 	vi.restoreAllMocks();

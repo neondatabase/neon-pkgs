@@ -1,3 +1,7 @@
+import type {
+	WebSocketFactory,
+	WebSocketLike,
+} from "../client/connection/coordinator.js";
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
@@ -76,19 +80,25 @@ export class DirectLiveQueryClient {
 
 	private getClient(): Promise<RealtimeClient> {
 		this.assertOpen();
-		this.clientPromise ??= import("../client/realtime-client.js").then(
-			(module) => {
-				this.assertOpen();
-				const client = module.createRealtimeClient({
+		this.clientPromise ??= Promise.all([
+			import("../client/realtime-client.js"),
+			import("ws"),
+		]).then(([module, { default: NodeWebSocket }]) => {
+			this.assertOpen();
+			const webSocketFactory: WebSocketFactory = (url, protocols) =>
+				new NodeWebSocket(url, protocols) as WebSocketLike;
+			const client = module.createRealtimeClientInternal(
+				{
 					url: this.options.url,
 					parsers: this.options.parsers,
 					logLevel: this.options.logLevel,
 					logger: this.options.logger,
-				});
-				this.client = client;
-				return client;
-			},
-		);
+				},
+				webSocketFactory,
+			);
+			this.client = client;
+			return client;
+		});
 		return this.clientPromise;
 	}
 }
