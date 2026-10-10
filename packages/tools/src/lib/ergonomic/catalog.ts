@@ -1052,6 +1052,56 @@ export const toolFactories = {
 					},
 				),
 		}),
+	"realtime.get": (options) =>
+		fromGenerated(options, {
+			id: "realtime.get",
+			generated: "getProjectBranchRealtime",
+			run: (neon, input, signal) =>
+				neon.realtime.get(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"realtime.enable": (options) =>
+		fromGenerated(options, {
+			id: "realtime.enable",
+			generated: "enableProjectBranchRealtime",
+			run: (neon, input, signal) =>
+				neon.realtime.enable(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						allowed_origins: input.allowed_origins,
+					},
+					{ signal },
+				),
+		}),
+	"realtime.disable": (options) =>
+		fromGenerated(options, {
+			id: "realtime.disable",
+			generated: "disableProjectBranchRealtime",
+			run: (neon, input, signal) =>
+				neon.realtime.disable(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"realtime.rotateSecret": (options) =>
+		fromGenerated(options, {
+			id: "realtime.rotateSecret",
+			generated: "rotateProjectBranchRealtimeSecret",
+			annotations: {
+				readOnlyHint: false,
+				destructiveHint: true,
+				idempotentHint: false,
+				openWorldHint: false,
+			},
+			run: (neon, input, signal) =>
+				neon.realtime.rotateSecret(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
 	"logs.query": (options) =>
 		fromGenerated(options, {
 			id: "logs.query",

@@ -15,6 +15,8 @@ import type {
 	ProjectBranchLogRecord,
 	ProjectListItem,
 	ProjectPermission,
+	Realtime,
+	RealtimeSecret,
 	RotateCredentialResponse,
 	ScheduleTrigger,
 	Snapshot,
@@ -569,6 +571,27 @@ it("credentials reveal and rotate are typed", () => {
 			tokenId: "tok",
 		}),
 	).resolves.toEqualTypeOf<RotateCredentialResponse>();
+});
+
+it("realtime is typed", () => {
+	const neon = createNeonClient({ apiKey: "x" });
+	const branch = { projectId: "p", branchId: "br" };
+	expectTypeOf(neon.realtime.get(branch)).resolves.toEqualTypeOf<
+		NeonResult<Realtime>
+	>();
+	expectTypeOf(
+		neon.realtime.enable({ ...branch, allowed_origins: ["https://a.dev"] }),
+	).resolves.toEqualTypeOf<NeonResult<void>>();
+	expectTypeOf(neon.realtime.secret(branch)).resolves.toEqualTypeOf<
+		NeonResult<RealtimeSecret>
+	>();
+
+	const throwing = createNeonClient({ apiKey: "x", throwOnError: true });
+	expectTypeOf(
+		throwing.realtime.secret(branch),
+	).resolves.toEqualTypeOf<RealtimeSecret>();
+	expectTypeOf(throwing.realtime.rotateSecret(branch)).resolves.toBeVoid();
+	expectTypeOf(throwing.realtime.disable(branch)).resolves.toBeVoid();
 });
 
 it("credential create input stays requestable scopes", () => {

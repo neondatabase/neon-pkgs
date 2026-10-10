@@ -75,6 +75,12 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"presignProjectBranchBucketObject",
 	// ai gateway
 	"getProjectBranchAiGateway",
+	// realtime
+	"getProjectBranchRealtime",
+	"enableProjectBranchRealtime",
+	"disableProjectBranchRealtime",
+	"getProjectBranchRealtimeSecret",
+	"rotateProjectBranchRealtimeSecret",
 	// credentials
 	"listCredentials",
 	"createCredential",

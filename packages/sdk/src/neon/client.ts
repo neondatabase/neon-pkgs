@@ -12,6 +12,7 @@ import { Logs } from "./resources/logs.js";
 import { Operations } from "./resources/operations.js";
 import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
+import { Realtime } from "./resources/realtime.js";
 import { Snapshots } from "./resources/snapshots.js";
 import { Storage } from "./resources/storage.js";
 import { Triggers } from "./resources/triggers.js";
@@ -37,6 +38,7 @@ export interface NeonClient<DThrow extends boolean = false> {
 	readonly triggers: Triggers<DThrow>;
 	readonly credentials: Credentials<DThrow>;
 	readonly aiGateway: AiGateway<DThrow>;
+	readonly realtime: Realtime<DThrow>;
 	readonly logs: Logs<DThrow>;
 	readonly snapshots: Snapshots<DThrow>;
 	readonly operations: Operations<DThrow>;
@@ -76,6 +78,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		triggers: new Triggers<Throw>(ctx),
 		credentials: new Credentials<Throw>(ctx),
 		aiGateway: new AiGateway<Throw>(ctx),
+		realtime: new Realtime<Throw>(ctx),
 		logs: new Logs<Throw>(ctx),
 		snapshots: new Snapshots<Throw>(ctx),
 		operations: new Operations<Throw>(ctx),
