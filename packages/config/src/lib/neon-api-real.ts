@@ -2,6 +2,7 @@ import type {
 	DataApiSettings as ApiDataApiSettings,
 	Realtime as ApiRealtime,
 	RealtimeOptions as ApiRealtimeOptions,
+	RealtimeSecret as ApiRealtimeSecret,
 	Branch,
 	BranchCreateRequest,
 	BranchCreateRequestEndpointOptions,
@@ -32,6 +33,7 @@ import {
 	getProject as rawGetProject,
 	getProjectBranchDataApi as rawGetProjectBranchDataApi,
 	getProjectBranchRealtime as rawGetProjectBranchRealtime,
+	getProjectBranchRealtimeSecret as rawGetProjectBranchRealtimeSecret,
 	listProjectBranchDatabases as rawListProjectBranchDatabases,
 	listProjectBranches as rawListProjectBranches,
 	listProjectBranchRoles as rawListProjectBranchRoles,
@@ -70,6 +72,7 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSecret,
 	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
@@ -233,6 +236,10 @@ function realtimeSnapshotFromApi(data: ApiRealtime): NeonRealtimeSnapshot {
 			? { allowedOrigins: [...data.allowed_origins] }
 			: {}),
 	};
+}
+
+function realtimeSecretFromApi(data: ApiRealtimeSecret): NeonRealtimeSecret {
+	return { secret: data.secret, pending: data.pending };
 }
 
 // ─── Preview: buckets ──────────────────────────────────────────────────────
@@ -1132,6 +1139,28 @@ class RealNeonApi implements NeonApi {
 				realtimeSnapshotFromApi(
 					unwrap(
 						await rawGetProjectBranchRealtime({
+							client: this.client,
+							path: {
+								project_id: projectId,
+								branch_id: branchId,
+							},
+						}),
+					),
+				),
+			{ projectId },
+		);
+	}
+
+	async getProjectBranchRealtimeSecret(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSecret> {
+		return this.call(
+			`getProjectBranchRealtimeSecret(${projectId}/${branchId})`,
+			async () =>
+				realtimeSecretFromApi(
+					unwrap(
+						await rawGetProjectBranchRealtimeSecret({
 							client: this.client,
 							path: {
 								project_id: projectId,

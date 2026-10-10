@@ -25,6 +25,8 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSecret,
+	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
 } from "@neon/config";
@@ -51,6 +53,8 @@ const BRANCH_NAME = "main";
 type FakeOverrides = {
 	getNeonAuth?: NeonApi["getNeonAuth"];
 	getNeonDataApi?: NeonApi["getNeonDataApi"];
+	getProjectBranchRealtime?: NeonApi["getProjectBranchRealtime"];
+	getProjectBranchRealtimeSecret?: NeonApi["getProjectBranchRealtimeSecret"];
 	listBranchFunctions?: NeonApi["listBranchFunctions"];
 };
 
@@ -175,6 +179,27 @@ class FakeNeonApi implements NeonApi {
 		throw new Error("not implemented");
 	}
 	async deleteProjectBranchDataApi(): Promise<void> {}
+	async getProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSnapshot> {
+		if (this.overrides.getProjectBranchRealtime) {
+			return this.overrides.getProjectBranchRealtime(projectId, branchId);
+		}
+		return { enabled: false, pending: false };
+	}
+	async getProjectBranchRealtimeSecret(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSecret> {
+		if (this.overrides.getProjectBranchRealtimeSecret) {
+			return this.overrides.getProjectBranchRealtimeSecret(
+				projectId,
+				branchId,
+			);
+		}
+		return { secret: "nrt_live_1_cli-test", pending: false };
+	}
 	async listBranchBuckets(): Promise<NeonBucketSnapshot[]> {
 		return [];
 	}
@@ -545,6 +570,29 @@ describe("env pull", () => {
 		);
 	});
 
+	it("includes Realtime vars when live branch read-back reports it enabled", async () => {
+		const api = new FakeNeonApi({
+			getProjectBranchRealtime: async () => ({
+				enabled: true,
+				pending: false,
+				invocationUrl: "wss://realtime.fake.neon.tech/v1",
+			}),
+			getProjectBranchRealtimeSecret: async () => ({
+				secret: "nrt_live_1_bare-pull",
+				pending: false,
+			}),
+		});
+
+		await pull(baseProps(api, cwd));
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env).toMatchObject({
+			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
+			NEON_REALTIME_SECRET: "nrt_live_1_bare-pull",
+			NEON_DATABASE_NAME: "neondb",
+		});
+	});
+
 	it("updates an existing .env in place, preserving other keys", async () => {
 		writeFileSync(
 			join(cwd, ".env"),
@@ -582,6 +630,9 @@ describe("env pull", () => {
 				"NEON_AUTH_BASE_URL=https://stale.neonauth.example/db/auth",
 				"NEON_AUTH_JWKS_URL=https://stale.neonauth.example/db/auth/.well-known/jwks.json",
 				"NEON_DATA_API_URL=https://stale.apirest.example/db/rest/v1",
+				"NEON_REALTIME_URL=wss://stale.realtime.example/v1",
+				"NEON_REALTIME_SECRET=nrt_live_1_stale",
+				"NEON_DATABASE_NAME=old_db",
 				"",
 			].join("\n"),
 		);
@@ -597,6 +648,9 @@ describe("env pull", () => {
 		expect(content).not.toContain("NEON_AUTH_BASE_URL");
 		expect(content).not.toContain("NEON_AUTH_JWKS_URL");
 		expect(content).not.toContain("NEON_DATA_API_URL");
+		expect(content).not.toContain("NEON_REALTIME_URL");
+		expect(content).not.toContain("NEON_REALTIME_SECRET");
+		expect(content).not.toContain("NEON_DATABASE_NAME");
 		expect(result.status).toBe("written");
 		if (result.status === "written") {
 			expect(result.written).toContain("DATABASE_URL");
@@ -831,6 +885,30 @@ describe("env pull --service", () => {
 		);
 		expect(content).toMatch(/^NEON_AUTH_JWKS_URL=/m);
 		expect(content).not.toContain("DATABASE_URL");
+	});
+
+	it("pulls the Realtime URL, secret, and selected database as one service", async () => {
+		const api = new FakeNeonApi({
+			getProjectBranchRealtime: async () => ({
+				enabled: true,
+				pending: false,
+				invocationUrl: "https://realtime.fake.neon.tech/v1",
+			}),
+			getProjectBranchRealtimeSecret: async () => ({
+				secret: "nrt_live_1_cli-test",
+				pending: false,
+			}),
+		});
+
+		await pull({ ...baseProps(api, cwd), services: ["realtime"] });
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env).toMatchObject({
+			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
+			NEON_REALTIME_SECRET: "nrt_live_1_cli-test",
+			NEON_DATABASE_NAME: "neondb",
+		});
+		expect(env.DATABASE_URL).toBeUndefined();
 	});
 
 	it("fails by name when a selected service is not on the branch", async () => {

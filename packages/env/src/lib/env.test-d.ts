@@ -11,6 +11,7 @@ import type {
 	NeonFunctionsEnv,
 	NeonFunctionUrlEnv,
 	NeonPostgresEnv,
+	NeonRealtimeEnv,
 	NeonStorageEnv,
 	SelectableEnvKey,
 	SelectedNeonEnv,
@@ -68,6 +69,16 @@ describe("parseEnv key filter (types)", () => {
 		});
 		const env = parseEnv(config, ["AWS_REGION"]);
 		expectTypeOf(env).toEqualTypeOf<{ storage: { region: string } }>();
+	});
+
+	test("Realtime keys are selectable only when the policy enables Realtime", () => {
+		const config = defineConfig({ realtime: true });
+		const env = parseEnv(config, ["NEON_DATABASE_NAME"]);
+		expectTypeOf(env).toEqualTypeOf<{
+			realtime: { databaseName: string };
+		}>();
+		// @ts-expect-error Realtime is not enabled by an empty policy.
+		parseEnv(defineConfig({}), ["NEON_REALTIME_SECRET"]);
 	});
 
 	test("SelectableEnvKey reflects exactly the policy's namespaces", () => {
@@ -548,6 +559,7 @@ type NamespacePresence<C extends Config> = {
 	branch: "branch" extends keyof NeonEnv<C> ? true : false;
 	auth: "auth" extends keyof NeonEnv<C> ? true : false;
 	dataApi: "dataApi" extends keyof NeonEnv<C> ? true : false;
+	realtime: "realtime" extends keyof NeonEnv<C> ? true : false;
 	storage: "storage" extends keyof NeonEnv<C> ? true : false;
 	aiGateway: "aiGateway" extends keyof NeonEnv<C> ? true : false;
 	functions: "functions" extends keyof NeonEnv<C> ? true : false;
@@ -559,6 +571,7 @@ type PostgresOnly = {
 	branch: true;
 	auth: false;
 	dataApi: false;
+	realtime: false;
 	storage: false;
 	aiGateway: false;
 	functions: false;
@@ -619,6 +632,23 @@ describe("NeonEnv namespace presence (types)", () => {
 		// Disabled → omitted.
 		expectTypeOf<
 			NamespacePresence<typeof disabled>["dataApi"]
+		>().toEqualTypeOf<false>();
+	});
+
+	test("Realtime enablement adds (or omits) the realtime namespace", () => {
+		const enabled = defineConfig({ realtime: true });
+		const configured = defineConfig({
+			realtime: { allowedOrigins: ["*"] },
+		});
+		const disabled = defineConfig({ realtime: false });
+		expectTypeOf<
+			NamespacePresence<typeof enabled>["realtime"]
+		>().toEqualTypeOf<true>();
+		expectTypeOf<
+			NeonEnv<typeof configured>["realtime"]
+		>().toEqualTypeOf<NeonRealtimeEnv>();
+		expectTypeOf<
+			NamespacePresence<typeof disabled>["realtime"]
 		>().toEqualTypeOf<false>();
 	});
 
@@ -707,6 +737,7 @@ describe("NeonEnv namespace presence (types)", () => {
 		const everything = defineConfig({
 			auth: true,
 			dataApi: true,
+			realtime: true,
 			preview: {
 				buckets: { uploads: {} },
 				aiGateway: true,
@@ -718,6 +749,7 @@ describe("NeonEnv namespace presence (types)", () => {
 			branch: true;
 			auth: true;
 			dataApi: true;
+			realtime: true;
 			storage: true;
 			aiGateway: true;
 			functions: true;
@@ -728,6 +760,7 @@ describe("NeonEnv namespace presence (types)", () => {
 		const everything = defineConfig({
 			auth: true,
 			dataApi: true,
+			realtime: true,
 			buckets: { uploads: {} },
 			aiGateway: true,
 			functions: { hello: { name: "H", source: "./h.ts" } },
@@ -737,6 +770,7 @@ describe("NeonEnv namespace presence (types)", () => {
 			branch: true;
 			auth: true;
 			dataApi: true;
+			realtime: true;
 			storage: true;
 			aiGateway: true;
 			functions: true;

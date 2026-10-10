@@ -13,6 +13,7 @@ import {
 	type NeonEndpointSnapshot,
 	type NeonFunctionSnapshot,
 	type NeonProjectSnapshot,
+	type NeonRealtimeSnapshot,
 	PlatformError,
 } from "@neon/config";
 
@@ -64,7 +65,8 @@ export interface PulledBranchConfig {
 		expiresAt?: string;
 	};
 	/**
-	 * The branch's live state expressed as a {@link Config}: static `auth` / `dataApi`
+	 * The branch's live state expressed as a {@link Config}: static `auth` / `dataApi` /
+	 * `realtime`
 	 * toggles, any object-storage `preview.buckets`, plus a `branch` closure carrying the
 	 * branch's lifecycle/compute tuning. Buckets are included here (not just in
 	 * {@link PulledBranchConfig.preview}) because they round-trip cleanly — name + access
@@ -91,6 +93,7 @@ export async function pullConfig(
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 	const branchId = options.branchId;
+	const getRealtime = api.getProjectBranchRealtime?.bind(api);
 
 	// The first three stages need only the project and branch ids, so they start together.
 	// They are awaited in the order they used to run, so the first error reported is the same
@@ -141,6 +144,14 @@ export async function pullConfig(
 						? api.getNeonDataApi(projectId, branchId, probeDatabase)
 						: Promise.resolve(null),
 				),
+				started(() =>
+					getRealtime
+						? degradeUnavailable(
+								() => getRealtime(projectId, branchId),
+								null,
+							)
+						: Promise.resolve(null),
+				),
 			]);
 		}),
 	);
@@ -152,7 +163,8 @@ export async function pullConfig(
 		(ep) => ep.type === "read_write" && ep.branchId === branch.id,
 	);
 	await databasesRead;
-	const [buckets, functions, credentials, auth, dataApi] = await previewRead;
+	const [buckets, functions, credentials, auth, dataApi, realtime] =
+		await previewRead;
 
 	return buildPulledBranchConfig(project, branch, branches, endpoint, {
 		buckets,
@@ -160,6 +172,7 @@ export async function pullConfig(
 		credentials,
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
+		realtime,
 	});
 }
 
@@ -191,9 +204,11 @@ function pickProbeDatabase(
 
 /**
  * Run a Preview-feature read, returning `fallback` if the feature is unavailable for the
- * project/region (a {@link ErrorCode.FeatureUnavailable} from the adapter). Other errors
- * propagate. Used by `pullConfig` so a branch without a Preview feature still mirrors
- * cleanly for env resolution / `inspect`, rather than aborting on an unrelated capability.
+ * project/region. Most adapters report {@link ErrorCode.FeatureUnavailable}; API hosts where
+ * a route is not deployed can instead return a generic 404. The project and branch are
+ * validated independently by `pullConfig`, so that route-level 404 is also safe to degrade.
+ * Other errors propagate. This lets a branch without a Preview feature still mirror cleanly
+ * for env resolution / `inspect`, rather than aborting on an unrelated capability.
  */
 async function degradeUnavailable<T>(
 	read: () => Promise<T>,
@@ -204,7 +219,8 @@ async function degradeUnavailable<T>(
 	} catch (err) {
 		if (
 			err instanceof PlatformError &&
-			err.code === ErrorCode.FeatureUnavailable
+			(err.code === ErrorCode.FeatureUnavailable ||
+				(err.code === ErrorCode.NotFound && err.details.status === 404))
 		) {
 			return fallback;
 		}
@@ -232,13 +248,15 @@ export function buildPulledBranchConfig(
 		authEnabled?: boolean;
 		/** Whether a Neon Data API integration is enabled on the branch. */
 		dataApiEnabled?: boolean;
+		/** Realtime state when the adapter supports the branch endpoint. */
+		realtime?: NeonRealtimeSnapshot | null;
 	},
 ): PulledBranchConfig {
 	const parent = branch.parentId
 		? branches.find((b) => b.id === branch.parentId)
 		: undefined;
-	// Auth/Data API are static top-level toggles, so a config pulled from a branch with
-	// them enabled round-trips through `resolveConfig` / `fetchEnv` and the matching
+	// Auth, Data API, and Realtime are static top-level toggles, so a config pulled from a
+	// branch with them enabled round-trips through `resolveConfig` / `fetchEnv` and the matching
 	// secrets get injected. Branch lifecycle/compute is per-branch tuning, so it goes in
 	// the `branch` closure.
 	const tuning: BranchTuning = {};
@@ -266,6 +284,7 @@ export function buildPulledBranchConfig(
 	const config: Config = {
 		...(previewState?.authEnabled ? { auth: true } : {}),
 		...(previewState?.dataApiEnabled ? { dataApi: true } : {}),
+		...(previewState?.realtime?.enabled ? { realtime: true } : {}),
 		...(Object.keys(bucketDefs).length > 0
 			? { preview: { buckets: bucketDefs } }
 			: {}),

@@ -169,8 +169,9 @@ export function defineConfig<
 	const Functions extends Record<string, FunctionDef> | undefined = undefined,
 	const Buckets extends Record<string, BucketDef> | undefined = undefined,
 	const AiGateway extends ServiceToggleInput | undefined = undefined,
+	const Realtime extends RealtimeInput | undefined = undefined,
 >(input: {
-	realtime?: RealtimeInput;
+	realtime?: Realtime;
 	// Each field is intersected with its concrete interface (not just typed as the bare
 	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
 	// complete against in the object-literal position (they see `{} | undefined`), so you
@@ -200,7 +201,7 @@ export function defineConfig<
 	// through onto the returned Config and read by the runtime at `checkout` / `deploy` time.
 	// Never evaluated here.
 	experimental?: ExperimentalInput;
-}): Config<Auth, DataApi, Preview, Functions, Buckets, AiGateway> {
+}): Config<Auth, DataApi, Preview, Functions, Buckets, AiGateway, Realtime> {
 	if (typeof input === "function") {
 		throw new ConfigValidationError([
 			"defineConfig now expects an object, not a function: `export default defineConfig({ auth: true, functions: { … }, branch: (branch) => ({ … }) })`.",
@@ -224,7 +225,8 @@ export function defineConfig<
 		Preview,
 		Functions,
 		Buckets,
-		AiGateway
+		AiGateway,
+		Realtime
 	>;
 }
 
