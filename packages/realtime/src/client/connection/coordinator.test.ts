@@ -51,8 +51,16 @@ class FakeWebSocket implements WebSocketLike {
 	close(): void {
 		if (this.readyState >= 2) return;
 		this.onClose?.();
+		this.readyState = 2;
+		if (this.emitCloseOnClose) {
+			this.readyState = 3;
+			this.emit("close", {});
+		}
+	}
+
+	terminate(): void {
 		this.readyState = 3;
-		if (this.emitCloseOnClose) this.emit("close", {});
+		this.emit("close", {});
 	}
 
 	open(): void {
@@ -168,6 +176,25 @@ describe("ConnectionCoordinator", () => {
 		await vi.advanceTimersByTimeAsync(1_000);
 		expect(FakeWebSocket.instances).toHaveLength(1);
 		expect(callbacks.failed).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("force-closes a socket whose peer does not finish the close handshake", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.emitCloseOnClose = false;
+		const terminate = vi.spyOn(socket, "terminate");
+
+		coordinator.close();
+
+		expect(socket.readyState).toBe(2);
+		await vi.advanceTimersByTimeAsync(999);
+		expect(terminate).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(terminate).toHaveBeenCalledOnce();
+		expect(socket.readyState).toBe(3);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
