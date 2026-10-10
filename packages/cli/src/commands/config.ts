@@ -556,7 +556,10 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 			if (services.length === 0) {
 				log.info("Created neon.ts with a starter policy.");
 			} else {
-				log.info("Created neon.ts declaring %s.", services.join(", "));
+				const declared = services.map((service) =>
+					service === "realtime" ? "Realtime" : service,
+				);
+				log.info("Created neon.ts declaring %s.", declared.join(", "));
 			}
 		}
 		if (services.includes("functions")) {
@@ -577,6 +580,12 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 
 export type ConfigAddTarget =
 	| { kind: "service"; service: "auth" | "data-api" | "ai-gateway" }
+	| {
+			kind: "realtime";
+			enabled: true;
+			allowedOrigins?: readonly string[];
+	  }
+	| { kind: "realtime"; enabled: false }
 	| { kind: "function"; slug: string; name?: string; source?: string }
 	| { kind: "bucket"; name: string; access?: "private" | "public_read" };
 
@@ -632,6 +641,17 @@ const planAdd = (
 		: "";
 	const provision = `Next: \`${cli} config plan${flag}\` to preview, \`${cli} config apply${flag}\` to provision.`;
 	switch (target.kind) {
+		case "realtime":
+			return {
+				edit: {
+					kind: "realtime",
+					enabled: target.enabled,
+					...(target.enabled && target.allowedOrigins !== undefined
+						? { allowedOrigins: target.allowedOrigins }
+						: {}),
+				},
+				next: provision,
+			};
 		case "service":
 			return {
 				edit: { kind: "service", service: target.service },
@@ -721,9 +741,12 @@ export const addCmd = async (props: ConfigAddProps): Promise<void> => {
 	);
 
 	if (changes.length === 0) {
-		if (props.target.kind === "service") {
+		if (
+			props.target.kind === "service" ||
+			props.target.kind === "realtime"
+		) {
 			log.info(
-				"%s already enables that; nothing to change.",
+				"%s already has the requested configuration; nothing to change.",
 				shown(configPath),
 			);
 			return;
@@ -1009,7 +1032,7 @@ export const builder = (argv: yargs.Argv) =>
 			"init",
 			"Scaffold a neon.ts policy and install the Neon config packages",
 			(yargs) =>
-				yargs.options({
+				yargs.strict().options({
 					install: {
 						describe:
 							"Install @neon/config and @neon/env if they're missing. " +

@@ -41,6 +41,7 @@ export default defineConfig({
 
 export default defineConfig({
   // Declare your Neon services here
+  realtime: true,
   auth: true,
   dataApi: true,
   aiGateway: true,
@@ -74,6 +75,11 @@ export default defineConfig({
 		expect(rendered).toContain("auth: true,");
 		expect(rendered).not.toContain("dataApi");
 		expect(rendered).not.toContain("preview");
+	});
+
+	it("declares Realtime when it is selected as a service", () => {
+		expect(renderNeonConfig(["realtime"])).toContain("  realtime: true,");
+		expect(renderNeonConfig([])).not.toContain("realtime:");
 	});
 
 	it("declares data-api with auth, because the default provider requires it", () => {

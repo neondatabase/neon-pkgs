@@ -18,10 +18,54 @@ const bucket = (name: string): ConfigEdit => ({
 	name,
 	access: "private",
 });
+const realtime = (
+	enabled: boolean,
+	allowedOrigins?: readonly string[],
+): ConfigEdit =>
+	enabled
+		? {
+				kind: "realtime",
+				enabled: true,
+				...(allowedOrigins !== undefined ? { allowedOrigins } : {}),
+			}
+		: { kind: "realtime", enabled: false };
 
 const STARTER = renderNeonConfig([]);
 
 describe("editNeonConfig on the starter policy", () => {
+	it("adds, configures, and disables Realtime before services", () => {
+		const enabled = editNeonConfig(
+			STARTER,
+			realtime(true, ["https://app.example.com"]),
+		);
+		expect(enabled.source).toContain(
+			'  realtime: { allowedOrigins: ["https://app.example.com"] },\n  // Declare your Neon services here',
+		);
+
+		const updated = editNeonConfig(
+			enabled.source,
+			realtime(true, ["http://localhost:3000"]),
+		);
+		expect(updated.source).toContain(
+			'realtime: { allowedOrigins: ["http://localhost:3000"] }',
+		);
+
+		const disabled = editNeonConfig(updated.source, realtime(false));
+		expect(disabled.source).toContain("realtime: false");
+	});
+
+	it("preserves allowed origins when enable is called without new settings", () => {
+		const configured = editNeonConfig(
+			STARTER,
+			realtime(true, ["https://app.example.com"]),
+		).source;
+
+		expect(editNeonConfig(configured, realtime(true))).toEqual({
+			source: configured,
+			changes: [],
+		});
+	});
+
 	it("flips auth: false to true and touches nothing else", () => {
 		const result = editNeonConfig(STARTER, service("auth"));
 
@@ -87,6 +131,7 @@ describe("editNeonConfig on the starter policy", () => {
 
 	it("is a no-op when run twice", () => {
 		for (const edit of [
+			realtime(true),
 			service("auth"),
 			service("data-api"),
 			service("ai-gateway"),

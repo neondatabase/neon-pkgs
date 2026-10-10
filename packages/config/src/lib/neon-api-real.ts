@@ -1,5 +1,7 @@
 import type {
 	DataApiSettings as ApiDataApiSettings,
+	Realtime as ApiRealtime,
+	RealtimeOptions as ApiRealtimeOptions,
 	Branch,
 	BranchCreateRequest,
 	BranchCreateRequestEndpointOptions,
@@ -23,10 +25,13 @@ import {
 	createProjectBranch as rawCreateProjectBranch,
 	createProjectBranchDataApi as rawCreateProjectBranchDataApi,
 	deleteProjectBranchDataApi as rawDeleteProjectBranchDataApi,
+	disableProjectBranchRealtime as rawDisableProjectBranchRealtime,
+	enableProjectBranchRealtime as rawEnableProjectBranchRealtime,
 	getConnectionUri as rawGetConnectionUri,
 	getNeonAuth as rawGetNeonAuth,
 	getProject as rawGetProject,
 	getProjectBranchDataApi as rawGetProjectBranchDataApi,
+	getProjectBranchRealtime as rawGetProjectBranchRealtime,
 	listProjectBranchDatabases as rawListProjectBranchDatabases,
 	listProjectBranches as rawListProjectBranches,
 	listProjectBranchRoles as rawListProjectBranchRoles,
@@ -41,6 +46,7 @@ import { z } from "zod";
 import { formatSuspendTimeout, parseSuspendTimeout } from "./duration.js";
 import { ErrorCode, PlatformError } from "./errors.js";
 import type {
+	ConfigureRealtimeInput,
 	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
@@ -64,6 +70,7 @@ import type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
 	UpdateBranchInput,
@@ -204,6 +211,28 @@ function dataApiSnapshotFromResponse(
 	const settings = dataApiSettingsFromApi(data.settings);
 	if (settings) snapshot.settings = settings;
 	return snapshot;
+}
+
+function realtimeOptionsToApi(
+	input: ConfigureRealtimeInput | undefined,
+): ApiRealtimeOptions {
+	return input?.allowedOrigins === undefined
+		? {}
+		: { allowed_origins: [...input.allowedOrigins] };
+}
+
+function realtimeSnapshotFromApi(data: ApiRealtime): NeonRealtimeSnapshot {
+	return {
+		enabled: data.enabled,
+		pending: data.pending,
+		...(data.invocation_url !== undefined
+			? { invocationUrl: data.invocation_url }
+			: {}),
+		...(data.revision !== undefined ? { revision: data.revision } : {}),
+		...(data.allowed_origins !== undefined
+			? { allowedOrigins: [...data.allowed_origins] }
+			: {}),
+	};
 }
 
 // ─── Preview: buckets ──────────────────────────────────────────────────────
@@ -1089,6 +1118,74 @@ class RealNeonApi implements NeonApi {
 				return;
 			throw err;
 		}
+	}
+
+	// ─── Realtime ──────────────────────────────────────────────────────────────
+
+	async getProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+	): Promise<NeonRealtimeSnapshot> {
+		return this.call(
+			`getProjectBranchRealtime(${projectId}/${branchId})`,
+			async () =>
+				realtimeSnapshotFromApi(
+					unwrap(
+						await rawGetProjectBranchRealtime({
+							client: this.client,
+							path: {
+								project_id: projectId,
+								branch_id: branchId,
+							},
+						}),
+					),
+				),
+			{ projectId },
+		);
+	}
+
+	async enableProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+		input?: ConfigureRealtimeInput,
+	): Promise<void> {
+		await this.call(
+			`enableProjectBranchRealtime(${projectId}/${branchId})`,
+			async () => {
+				unwrap(
+					await rawEnableProjectBranchRealtime({
+						client: this.client,
+						path: {
+							project_id: projectId,
+							branch_id: branchId,
+						},
+						body: realtimeOptionsToApi(input),
+					}),
+				);
+			},
+			{ projectId, mutating: true },
+		);
+	}
+
+	async disableProjectBranchRealtime(
+		projectId: string,
+		branchId: string,
+	): Promise<void> {
+		await this.call(
+			`disableProjectBranchRealtime(${projectId}/${branchId})`,
+			async () => {
+				unwrap(
+					await rawDisableProjectBranchRealtime({
+						client: this.client,
+						path: {
+							project_id: projectId,
+							branch_id: branchId,
+						},
+					}),
+				);
+			},
+			{ projectId, mutating: true },
+		);
 	}
 
 	// ─── Preview: buckets ──────────────────────────────────────────────────────

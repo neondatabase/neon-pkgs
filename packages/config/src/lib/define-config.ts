@@ -24,6 +24,8 @@ import type {
 	FunctionTriggerDef,
 	FunctionTuning,
 	PreviewInput,
+	RealtimeConfig,
+	RealtimeInput,
 	ResolvedBranchConfig,
 	ResolvedDataApiConfig,
 	ResolvedFunctionConfig,
@@ -135,6 +137,7 @@ type BucketsAutocomplete<Buckets> =
  * import { defineConfig } from "@neon/config/v1";
  *
  * export default defineConfig({
+ *   realtime: { allowedOrigins: ["https://app.example.com"] },
  *   auth: true,
  *   functions: {
  *     hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
@@ -143,8 +146,9 @@ type BucketsAutocomplete<Buckets> =
  * });
  * ```
  *
- * The policy is split into a **static** existential set (top-level `auth` / `dataApi` /
- * `aiGateway` / `functions` / `buckets` / `triggers`, plus the deprecated `preview` aliases) and a
+ * The policy is split into a **static** existential set (top-level `realtime` / `auth` /
+ * `dataApi` / `aiGateway` / `functions` / `buckets` / `triggers`, plus the deprecated
+ * `preview` aliases) and a
  * **dynamic** per-branch `branch` closure. The static half determines which secrets exist —
  * so `NeonEnv<typeof config>` and `parseEnv` are exact — while the closure can only *tune*
  * a branch (lifecycle, compute, per-function deploy settings), never change what exists.
@@ -166,6 +170,7 @@ export function defineConfig<
 	const Buckets extends Record<string, BucketDef> | undefined = undefined,
 	const AiGateway extends ServiceToggleInput | undefined = undefined,
 >(input: {
+	realtime?: RealtimeInput;
 	// Each field is intersected with its concrete interface (not just typed as the bare
 	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
 	// complete against in the object-literal position (they see `{} | undefined`), so you
@@ -237,6 +242,12 @@ export function resolveConfig(
 	const tuning = evaluateBranchTuning(config.branch, branch);
 
 	const resolved: ResolvedBranchConfig = {
+		realtimePolicy:
+			config.realtime === undefined
+				? "omitted"
+				: isRealtimeEnabled(config.realtime)
+					? "enabled"
+					: "disabled",
 		authEnabled: isServiceEnabled(config.auth),
 		dataApiEnabled: isDataApiEnabled(config.dataApi),
 		dataApiPolicy:
@@ -246,6 +257,8 @@ export function resolveConfig(
 					? "enabled"
 					: "disabled",
 	};
+	const realtime = resolveRealtime(config.realtime);
+	if (realtime) resolved.realtime = realtime;
 	const dataApi = resolveDataApi(config.dataApi);
 	if (dataApi) resolved.dataApi = dataApi;
 	if (tuning.parent !== undefined) resolved.parent = tuning.parent;
@@ -303,6 +316,25 @@ function isServiceEnabled(toggle: ServiceToggleInput | undefined): boolean {
 	if (toggle === undefined) return false;
 	if (typeof toggle === "boolean") return toggle;
 	return toggle.enabled !== false;
+}
+
+/** Whether a {@link RealtimeInput} is enabled (present object or `true`). */
+function isRealtimeEnabled(input: RealtimeInput | undefined): boolean {
+	if (input === undefined) return false;
+	if (typeof input === "boolean") return input;
+	return true;
+}
+
+/** Copy the options from an object-form {@link RealtimeInput}. */
+function resolveRealtime(
+	input: RealtimeInput | undefined,
+): RealtimeConfig | undefined {
+	if (typeof input !== "object") return undefined;
+	return {
+		...(input.allowedOrigins !== undefined
+			? { allowedOrigins: [...input.allowedOrigins] }
+			: {}),
+	};
 }
 
 /** Whether a {@link DataApiInput} is enabled (present object/`true` unless `enabled: false`). */

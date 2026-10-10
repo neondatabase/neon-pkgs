@@ -350,6 +350,157 @@ describe("pushConfig", () => {
 		);
 	});
 
+	test("plans and applies Realtime enablement with allowed origins", async () => {
+		const config = defineConfig({
+			realtime: { allowedOrigins: ["https://app.example.com"] },
+		});
+		const dry = seededFake();
+		const plan = await pushConfig(config, {
+			api: dry.api,
+			projectId: dry.projectId,
+			branchId: "br-main",
+			dryRun: true,
+		});
+		expect(plan.applied).toEqual(
+			expect.arrayContaining([
+				{
+					kind: "service",
+					action: "create",
+					identifier: "realtime",
+					details: {
+						allowedOrigins: ["https://app.example.com"],
+					},
+				},
+			]),
+		);
+		expect(
+			dry.api.history.some(
+				(h) => h.method === "enableProjectBranchRealtime",
+			),
+		).toBe(false);
+
+		const live = seededFake();
+		const result = await pushConfig(config, {
+			api: live.api,
+			projectId: live.projectId,
+			branchId: "br-main",
+		});
+		const enable = live.api.history.find(
+			(h) => h.method === "enableProjectBranchRealtime",
+		);
+		expect(enable?.args[2]).toEqual({
+			allowedOrigins: ["https://app.example.com"],
+		});
+		expect(result.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					kind: "service",
+					action: "create",
+					identifier: "realtime",
+				}),
+			]),
+		);
+		await expect(
+			live.api.getProjectBranchRealtime(live.projectId, "br-main"),
+		).resolves.toMatchObject({
+			enabled: true,
+			allowedOrigins: ["https://app.example.com"],
+		});
+	});
+
+	test("Realtime origin updates and disablement require updateExisting", async () => {
+		const seedEnabled = () => {
+			const seeded = seededFake();
+			seeded.api.seedRealtime(seeded.projectId, "br-main", {
+				enabled: true,
+				pending: false,
+				allowedOrigins: ["https://old.example.com"],
+			});
+			return seeded;
+		};
+		const update = defineConfig({
+			realtime: { allowedOrigins: ["https://app.example.com"] },
+		});
+		const noFlag = seedEnabled();
+		await expect(
+			pushConfig(update, {
+				api: noFlag.api,
+				projectId: noFlag.projectId,
+				branchId: "br-main",
+			}),
+		).rejects.toBeInstanceOf(PushConflictError);
+		expect(
+			noFlag.api.history.some(
+				(h) => h.method === "enableProjectBranchRealtime",
+			),
+		).toBe(false);
+
+		const withFlag = seedEnabled();
+		const updated = await pushConfig(update, {
+			api: withFlag.api,
+			projectId: withFlag.projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+		expect(updated.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					action: "update",
+					identifier: "realtime",
+				}),
+			]),
+		);
+
+		const disabled = seedEnabled();
+		const disabledResult = await pushConfig(
+			defineConfig({ realtime: false }),
+			{
+				api: disabled.api,
+				projectId: disabled.projectId,
+				branchId: "br-main",
+				updateExisting: true,
+			},
+		);
+		expect(disabledResult.applied).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					action: "delete",
+					identifier: "realtime",
+				}),
+			]),
+		);
+		await expect(
+			disabled.api.getProjectBranchRealtime(
+				disabled.projectId,
+				"br-main",
+			),
+		).resolves.toMatchObject({ enabled: false });
+	});
+
+	test("omitted Realtime does not fetch or mutate its remote state", async () => {
+		const { api, projectId } = seededFake();
+		api.seedRealtime(projectId, "br-main", {
+			enabled: true,
+			pending: false,
+		});
+		await pushConfig(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			updateExisting: true,
+		});
+		expect(
+			api.history.some((h) => h.method === "getProjectBranchRealtime"),
+		).toBe(false);
+		expect(
+			api.history.some(
+				(h) =>
+					h.method === "enableProjectBranchRealtime" ||
+					h.method === "disableProjectBranchRealtime",
+			),
+		).toBe(false);
+	});
+
 	test("auth/dataApi changes carry no redundant details (target branch / derived db)", async () => {
 		const config = defineConfig({ auth: {}, dataApi: {} });
 

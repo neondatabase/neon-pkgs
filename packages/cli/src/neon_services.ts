@@ -25,6 +25,7 @@ export const NEON_SERVICES = [
 	"functions",
 	"object-storage",
 	"ai-gateway",
+	"realtime",
 ] as const;
 export type NeonService = (typeof NEON_SERVICES)[number];
 
@@ -36,6 +37,7 @@ export const NEON_SERVICE_LABELS: Readonly<Record<NeonService, string>> = {
 	"object-storage": "Object Storage",
 	functions: "Functions",
 	"ai-gateway": "AI Gateway",
+	realtime: "Realtime",
 };
 
 /**
@@ -59,14 +61,15 @@ export const deprecatedServiceMessage = (
 	`"${used}" is the old name for "${canonical}" and still works, but it will be removed. ` +
 	`Use "${canonical}".`;
 
-export type ParseServicesOptions = {
-	/** The subset this command supports. In {@link NEON_SERVICES} order. */
-	allowed: readonly NeonService[];
-	/** The flag being parsed, for error messages. */
-	flag: string;
-	/** Called once per deprecated spelling used, so the command can warn in its own voice. */
-	onDeprecated?: (used: string, canonical: NeonService) => void;
-};
+export type ParseServicesOptions<Selection extends NeonService = NeonService> =
+	{
+		/** The subset this command supports. In {@link NEON_SERVICES} order. */
+		allowed: readonly Selection[];
+		/** The flag being parsed, for error messages. */
+		flag: string;
+		/** Called once per deprecated spelling used, so the command can warn in its own voice. */
+		onDeprecated?: (used: string, canonical: NeonService) => void;
+	};
 
 /**
  * Parse the raw values of a services flag into a canonical selection.
@@ -81,10 +84,10 @@ export type ParseServicesOptions = {
  * real service but not one this command supports says so, since that is a different problem
  * from a typo.
  */
-export const parseServices = (
+export const parseServices = <const Selection extends NeonService>(
 	raw: readonly string[],
-	options: ParseServicesOptions,
-): NeonService[] => {
+	options: ParseServicesOptions<Selection>,
+): Selection[] => {
 	const { allowed, flag, onDeprecated } = options;
 	const supported = `Supported values: ${allowed.join(", ")}.`;
 
@@ -120,9 +123,7 @@ export const parseServices = (
 	// carry a "still works" claim about a value that never took effect.
 	for (const [used, canonical] of deprecated) onDeprecated?.(used, canonical);
 
-	return NEON_SERVICES.filter(
-		(service) => allowed.includes(service) && resolved.includes(service),
-	);
+	return allowed.filter((service) => resolved.includes(service));
 };
 
 /**

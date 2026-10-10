@@ -274,6 +274,37 @@ describe("init handler", () => {
 		);
 	});
 
+	test("--services realtime writes realtime to neon.ts", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-realtime-"));
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { initCmd } = await import("./config.js");
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				services: ["realtime"],
+				contextFile: join(cwd, ".neon"),
+				initConfig: async (input: {
+					cwd: string;
+					services?: readonly string[];
+				}) =>
+					initCmd({
+						cwd: input.cwd,
+						install: false,
+						silent: true,
+						...(input.services ? { services: input.services } : {}),
+					}),
+			}),
+		);
+
+		expect(readFileSync(join(cwd, "neon.ts"), "utf8")).toContain(
+			"realtime: true",
+		);
+	});
+
 	test("empty -y without auth skips link and prints the next step", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-unauth-"));
 		const ops = makeOperations();
@@ -2093,12 +2124,19 @@ describe("init flag parsing", () => {
 			config?: boolean;
 			link?: boolean;
 			agentSetup?: boolean;
+			services?: string[];
 		};
 
 	test("--config is a three-state flag", async () => {
 		expect((await parse([])).config).toBeUndefined();
 		expect((await parse(["--config"])).config).toBe(true);
 		expect((await parse(["--no-config"])).config).toBe(false);
+	});
+
+	test("--services accepts realtime", async () => {
+		expect((await parse(["--services", "realtime"])).services).toEqual([
+			"realtime",
+		]);
 	});
 
 	test("--no-link skips project linking", async () => {

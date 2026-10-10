@@ -2,6 +2,7 @@ import { defineConfig } from "@neon/config-runtime";
 import { describe, expect, it } from "vitest";
 import {
 	claimableDataApiCreateBody,
+	declaredClaimableNeonServices,
 	declaredNeonServices,
 } from "./config_services.js";
 
@@ -19,10 +20,19 @@ describe("declaredNeonServices", () => {
 				},
 				aiGateway: true,
 			},
+			realtime: { allowedOrigins: ["https://app.example.com"] },
 			branch: () => ({}),
 		});
 
 		expect(declaredNeonServices(config)).toEqual([
+			"auth",
+			"data-api",
+			"object-storage",
+			"functions",
+			"ai-gateway",
+			"realtime",
+		]);
+		expect(declaredClaimableNeonServices(config)).toEqual([
 			"auth",
 			"data-api",
 			"object-storage",
@@ -40,6 +50,7 @@ describe("declaredNeonServices", () => {
 				functions: {},
 				aiGateway: { enabled: false },
 			},
+			realtime: false,
 			branch: () => ({}),
 		});
 

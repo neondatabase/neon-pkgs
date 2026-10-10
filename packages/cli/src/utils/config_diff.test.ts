@@ -267,6 +267,16 @@ describe("renderAppliedChanges", () => {
 		expect(text.split("\n")[1]).toBe("  - Data API");
 	});
 
+	it("renders a Realtime change with its product name", () => {
+		const changes: AppliedChange[] = [
+			{ kind: "service", action: "create", identifier: "realtime" },
+		];
+		const text = renderAppliedChanges(changes, "Planned changes", {
+			color: false,
+		});
+		expect(text.split("\n")[1]).toBe("  + Realtime");
+	});
+
 	it("renders a custom-domain register as + domain <hostname> -> <slug>", () => {
 		const changes: AppliedChange[] = [
 			{

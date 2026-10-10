@@ -122,11 +122,14 @@ const renderGaServices = (services: readonly NeonService[]): string => {
 export const renderNeonConfig = (services: readonly NeonService[]): string => {
 	const auth = services.includes("auth") || services.includes("data-api");
 	const dataApi = services.includes("data-api") ? "  dataApi: true,\n" : "";
+	const realtimeDeclaration = services.includes("realtime")
+		? "  realtime: true,\n"
+		: "";
 	return `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
 
 export default defineConfig({
   // Declare your Neon services here
-  auth: ${auth},
+${realtimeDeclaration}  auth: ${auth},
 ${dataApi}${renderGaServices(services)}  // Branch policy: per-branch tuning
   branch: (branch) => {
     if (branch.isDefault) {

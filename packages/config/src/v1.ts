@@ -64,6 +64,8 @@ import {
 	hooksSchema,
 	postgresConfigSchema,
 	previewInputSchema,
+	realtimeConfigSchema,
+	realtimeInputSchema,
 	serviceToggleInputSchema,
 	serviceToggleSchema,
 } from "./lib/schema.js";
@@ -101,6 +103,8 @@ export const schemas = {
 	hooks: hooksSchema,
 	postgres: postgresConfigSchema,
 	preview: previewInputSchema,
+	realtime: realtimeConfigSchema,
+	realtimeInput: realtimeInputSchema,
 	service: serviceToggleSchema,
 	serviceInput: serviceToggleInputSchema,
 } as const;
@@ -164,6 +168,7 @@ export type { LoadConfigOptions } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────
 export type {
+	ConfigureRealtimeInput,
 	CreateBranchInput,
 	CreateBucketInput,
 	CreateCredentialInput,
@@ -187,6 +192,7 @@ export type {
 	NeonFunctionDeploymentSnapshot,
 	NeonFunctionSnapshot,
 	NeonProjectSnapshot,
+	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonScheduleTriggerSnapshot,
 	NeonStorageObjectCreatedTriggerSnapshot,
@@ -250,6 +256,8 @@ export type {
 	PreviewInput,
 	PreviewTuning,
 	PushResult,
+	RealtimeConfig,
+	RealtimeInput,
 	ResolvedBranchConfig,
 	ResolvedBucketConfig,
 	ResolvedDataApiConfig,
