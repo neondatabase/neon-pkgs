@@ -530,14 +530,22 @@ describe("special mappings", () => {
 		);
 	});
 
-	test("realtime.enable sends allowed_origins as the body", async () => {
+	test("realtime.enable sends allowed_origins as the body and waits for pending to clear", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["realtime.enable"] as const,
+			wait: { pollIntervalMs: 1 },
 			fetch: async (input, init) => {
-				requests.push(new Request(input, init));
-				return new Response(null, { status: 202 });
+				const request = new Request(input, init);
+				requests.push(request);
+				if (request.method !== "GET") {
+					return new Response(null, { status: 202 });
+				}
+				return jsonResponse({
+					enabled: true,
+					pending: requests.length < 3,
+				});
 			},
 		});
 
@@ -555,6 +563,7 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({
 			allowed_origins: ["https://app.example.com"],
 		});
+		expect(requests.map((r) => r.method)).toEqual(["POST", "GET", "GET"]);
 	});
 
 	test("branches.delete has no hard_delete input", () => {

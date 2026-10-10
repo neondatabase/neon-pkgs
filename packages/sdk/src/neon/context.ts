@@ -136,15 +136,22 @@ export class RequestContext {
 		opts: CallOptions | undefined,
 		exec: Exec<D>,
 	): Promise<void | NeonResult<void>> {
-		const shouldThrow = this.shouldThrow(opts);
+		return finalize(
+			await this.executeVoid(opts, exec),
+			this.shouldThrow(opts),
+		);
+	}
+
+	/** Like {@link execute} for an empty body; returns the envelope without throwing. */
+	async executeVoid<D>(
+		opts: CallOptions | undefined,
+		exec: Exec<D>,
+	): Promise<NeonResult<void>> {
 		const requested = await this.#request(opts, exec);
-		if (!requested.ok)
-			return finalize(err<void>(requested.error), shouldThrow);
+		if (!requested.ok) return err(requested.error);
 		const readiness = await this.#maybeWait(opts, requested.data);
-		if (readiness?.error) {
-			return finalize(err<void>(readiness.error), shouldThrow);
-		}
-		return finalize(ok(undefined), shouldThrow);
+		if (readiness?.error) return err(readiness.error);
+		return ok(undefined);
 	}
 
 	/**

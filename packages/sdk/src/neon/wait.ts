@@ -150,6 +150,73 @@ export async function waitForOperations(
 	}
 }
 
+interface PolledRead<T> {
+	data?: T | undefined;
+	error?: unknown;
+	response?: Response | undefined;
+}
+
+/**
+ * Poll `read` until `settled` accepts its body, under the same budget and error contract
+ * as {@link waitForOperations}. For resources whose asynchronous changes report a pending
+ * flag instead of returning operations. A timeout carries no operations to resume from.
+ */
+export async function pollUntil<T>(
+	read: (signal: AbortSignal | undefined) => Promise<PolledRead<T>>,
+	settled: (data: T) => boolean,
+	what: string,
+	options: WaitForOptions = {},
+): Promise<NeonResult<T>> {
+	const pollIntervalMs = options.pollIntervalMs ?? 1000;
+	const timeoutMs = options.timeoutMs ?? 300_000;
+	const deadline = createDeadline(timeoutMs, options.signal);
+	const ended = (): NeonAbortError | NeonWaitTimeoutError | undefined => {
+		const source = deadline.source();
+		if (source === "caller") {
+			return new NeonAbortError(
+				`Waiting for ${what} was aborted by its signal.`,
+			);
+		}
+		if (source === "timeout") {
+			return new NeonWaitTimeoutError(
+				`Timed out after ${timeoutMs}ms waiting for ${what}.`,
+				{ timeoutMs, operations: [] },
+			);
+		}
+		return undefined;
+	};
+
+	try {
+		for (;;) {
+			if (
+				(await delay(pollIntervalMs, deadline.signal)) === "cancelled"
+			) {
+				return err(
+					ended() ??
+						new NeonAbortError(
+							`Waiting for ${what} was aborted by its signal.`,
+						),
+				);
+			}
+			const polled = await runBounded(deadline, () =>
+				read(deadline.signal),
+			);
+			const stopped = ended();
+			if (stopped) return err(stopped);
+			if (polled === undefined) {
+				return err(toNeonError(undefined, undefined));
+			}
+			const { data, error, response } = polled;
+			if (error !== undefined || data === undefined || data === null) {
+				return err(toNeonError(error, response));
+			}
+			if (settled(data)) return ok(data);
+		}
+	} finally {
+		deadline.dispose();
+	}
+}
+
 function operationFailed(op: Operation): NeonOperationError {
 	const detail = op.error ? `: ${op.error}` : "";
 	return new NeonOperationError(

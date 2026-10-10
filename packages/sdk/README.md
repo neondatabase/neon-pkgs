@@ -277,7 +277,7 @@ consuming it twice gets a fresh deadline each time.
 
 Neon mutations are asynchronous (they return `operations`). `waitForReadiness` blocks until they settle.
 
-Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, and `branches.createAndConnect` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those four. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor({ operations })`.
+Omit the client option to use per-method defaults: `projects.create`, `projects.createAndConnect`, `branches.create`, `branches.createAndConnect`, and `realtime.enable` poll; other mutations (for example `projects.update`) do not. `createNeonClient({ waitForReadiness: false })` disables polling on those five. `createNeonClient({ waitForReadiness: true })` enables it on every mutation that returns operations, and on the `neon.realtime` mutations, which poll the Realtime state instead. Per-call `{ waitForReadiness }` still wins. The connect workflows also hand back a connection string. Per-call `wait` overrides the client's poll interval and timeout for that call, field by field: `{ wait: { timeoutMs: 600_000 } }` keeps the client's `pollIntervalMs`. The primitive is `neon.operations.waitFor({ operations })`.
 
 ```ts
 const neon = createNeonClient({ apiKey });
@@ -677,17 +677,22 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 
 ### `neon.realtime`
 
-Branch-scoped Realtime (beta). `enable`, `disable`, and `rotateSecret` return once the
-API has queued the change (HTTP 202). They do not wait for it; poll `get` until
-`pending` is `false`. `waitForReadiness` has no effect on them.
+Branch-scoped Realtime (beta). `enable`, `disable`, and `rotateSecret` are asynchronous
+on the API (HTTP 202, no `operations`). With readiness polling on, they poll `get` until
+`pending` is `false`, under the same `wait` budget as operation polling. `enable` polls by
+default; `disable` and `rotateSecret` poll only when `waitForReadiness` is `true` on the
+client or the call.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `get({ projectId, branchId })` | `Realtime` | `{ enabled, pending, invocation_url?, revision?, allowed_origins? }` |
-| `enable({ projectId, branchId, allowed_origins? })` | **→void** | Also applies new options to an enabled branch. Omitting `allowed_origins` keeps the current or inherited value; `[]` or `["*"]` allows any origin |
+| `enable({ projectId, branchId, allowed_origins? })` | **→void** | Readiness polling on by default. Also applies new options to an enabled branch. Omitting `allowed_origins` keeps the current or inherited value; `[]` or `["*"]` allows any origin |
 | `disable({ projectId, branchId })` | **→void** | Discards the shared secret |
 | `secret({ projectId, branchId })` | `RealtimeSecret` | `{ secret, pending }`. Server-only: the backend seals queries with it (`@neon/realtime/server`). 404 while Realtime is disabled or before the secret exists |
 | `rotateSecret({ projectId, branchId })` | **→void** | `secret()` returns the new value once `pending` is `false` |
+
+A timeout is a `NeonWaitTimeoutError` with an empty `operations` list; the change is still
+queued, so call `get` to check on it.
 
 ```ts
 const neon = createNeonClient({ apiKey, throwOnError: true });
@@ -696,16 +701,12 @@ const branch = { projectId, branchId };
 await neon.realtime.enable({
   ...branch,
   allowed_origins: ["https://app.example.com"],
-});
-
-let state = await neon.realtime.get(branch);
-while (state.pending) {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  state = await neon.realtime.get(branch);
-}
+}); // resolves once pending is false
 
 const { secret } = await neon.realtime.secret(branch);
 // secret → NEON_REALTIME_SECRET on the application backend
+
+await neon.realtime.rotateSecret(branch, { waitForReadiness: true });
 ```
 
 `projects.create` and `branches.create` also accept `realtime: { allowed_origins? }` to

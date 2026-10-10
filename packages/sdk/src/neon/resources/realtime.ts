@@ -1,3 +1,4 @@
+import type { Client } from "../../client/client/index.js";
 import {
 	disableProjectBranchRealtime,
 	enableProjectBranchRealtime,
@@ -12,7 +13,8 @@ import type {
 } from "../../client/types.gen.js";
 import type { CallOptions, RequestContext } from "../context.js";
 import { invalidParamsResult, validateParams } from "../params.js";
-import type { NeonResult, Outcome } from "../result.js";
+import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
+import { pollUntil } from "../wait.js";
 
 export type RealtimeGetParams = { projectId: string; branchId: string };
 export type RealtimeEnableParams = RealtimeGetParams & RealtimeOptions;
@@ -22,9 +24,17 @@ export type RealtimeRotateSecretParams = RealtimeGetParams;
 
 const SELECTORS = { projectId: "string", branchId: "string" } as const;
 
+type Path = { project_id: string; branch_id: string };
+type Queue = (
+	client: Client,
+	path: Path,
+	signal: AbortSignal | undefined,
+) => Promise<{ error?: unknown; response?: Response }>;
+
 /**
- * Branch-scoped Realtime. Enable, disable, and rotate are asynchronous and resolve once
- * the change is queued; poll {@link Realtime.get} until `pending` is `false`.
+ * Branch-scoped Realtime. Enable, disable, and rotate are asynchronous: with
+ * `waitForReadiness` they poll {@link Realtime.get} until `pending` is `false`, otherwise
+ * they resolve once the API has queued the change.
  */
 export class Realtime<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
@@ -65,7 +75,8 @@ export class Realtime<DThrow extends boolean> {
 	}
 
 	/**
-	 * Enable Realtime, or apply new options to a branch that already has it.
+	 * Enable Realtime, or apply new options to a branch that already has it. Waits until
+	 * the change is applied unless `waitForReadiness` is `false`.
 	 *
 	 * @apiCall POST /projects/{project_id}/branches/{branch_id}/realtime
 	 */
@@ -78,22 +89,25 @@ export class Realtime<DThrow extends boolean> {
 		params: RealtimeEnableParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		const invalid = validateParams(params, "realtime.enable", SELECTORS);
-		if (invalid) {
-			return invalidParamsResult<void>(
-				invalid,
-				this.#ctx.shouldThrow(opts),
-			);
-		}
-		const { projectId, branchId, ...input } = params;
-		return this.#ctx.runVoid(opts, (client, signal) =>
-			enableProjectBranchRealtime({
-				client,
-				path: { project_id: projectId, branch_id: branchId },
-				body: input,
-				throwOnError: false,
-				signal,
-			}),
+		return this.#mutate(
+			"realtime.enable",
+			params,
+			opts,
+			true,
+			(client, path, signal) => {
+				const {
+					projectId: _projectId,
+					branchId: _branchId,
+					...input
+				} = params;
+				return enableProjectBranchRealtime({
+					client,
+					path,
+					body: input,
+					throwOnError: false,
+					signal,
+				});
+			},
 		);
 	}
 
@@ -111,21 +125,18 @@ export class Realtime<DThrow extends boolean> {
 		params: RealtimeDisableParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		const invalid = validateParams(params, "realtime.disable", SELECTORS);
-		if (invalid) {
-			return invalidParamsResult<void>(
-				invalid,
-				this.#ctx.shouldThrow(opts),
-			);
-		}
-		const { projectId, branchId } = params;
-		return this.#ctx.runVoid(opts, (client, signal) =>
-			disableProjectBranchRealtime({
-				client,
-				path: { project_id: projectId, branch_id: branchId },
-				throwOnError: false,
-				signal,
-			}),
+		return this.#mutate(
+			"realtime.disable",
+			params,
+			opts,
+			false,
+			(client, path, signal) =>
+				disableProjectBranchRealtime({
+					client,
+					path,
+					throwOnError: false,
+					signal,
+				}),
 		);
 	}
 
@@ -182,25 +193,62 @@ export class Realtime<DThrow extends boolean> {
 		params: RealtimeRotateSecretParams,
 		opts?: CallOptions,
 	): Promise<void | NeonResult<void>> {
-		const invalid = validateParams(
-			params,
+		return this.#mutate(
 			"realtime.rotateSecret",
-			SELECTORS,
+			params,
+			opts,
+			false,
+			(client, path, signal) =>
+				rotateProjectBranchRealtimeSecret({
+					client,
+					path,
+					throwOnError: false,
+					signal,
+				}),
 		);
-		if (invalid) {
-			return invalidParamsResult<void>(
-				invalid,
-				this.#ctx.shouldThrow(opts),
-			);
+	}
+
+	async #mutate(
+		method: string,
+		params: RealtimeGetParams,
+		opts: CallOptions | undefined,
+		waitByDefault: boolean,
+		queue: Queue,
+	): Promise<void | NeonResult<void>> {
+		const shouldThrow = this.#ctx.shouldThrow(opts);
+		const invalid = validateParams(params, method, SELECTORS);
+		if (invalid) return invalidParamsResult<void>(invalid, shouldThrow);
+		const path = {
+			project_id: params.projectId,
+			branch_id: params.branchId,
+		};
+		const queued = await this.#ctx.executeVoid(opts, (client, signal) =>
+			queue(client, path, signal),
+		);
+		if (queued.error || !this.#ctx.resolveWait(opts, waitByDefault)) {
+			return finalize(queued, shouldThrow);
 		}
-		const { projectId, branchId } = params;
-		return this.#ctx.runVoid(opts, (client, signal) =>
-			rotateProjectBranchRealtimeSecret({
-				client,
-				path: { project_id: projectId, branch_id: branchId },
-				throwOnError: false,
-				signal,
-			}),
+		const defaults = this.#ctx.defaults.waitOptions;
+		const applied = await pollUntil(
+			(signal) =>
+				getProjectBranchRealtime({
+					client: this.#ctx.client,
+					path,
+					throwOnError: false,
+					signal,
+				}),
+			(state) => !state.pending,
+			`Realtime on branch ${params.branchId} to apply the change`,
+			{
+				pollIntervalMs:
+					opts?.wait?.pollIntervalMs ?? defaults.pollIntervalMs,
+				timeoutMs: opts?.wait?.timeoutMs ?? defaults.timeoutMs,
+				signal: opts?.signal,
+			},
+		);
+		return finalize(
+			applied.error ? err<void>(applied.error) : ok(undefined),
+			shouldThrow,
 		);
 	}
 }

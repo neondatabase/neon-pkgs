@@ -108,7 +108,9 @@ Tools run with `waitForReadiness: true`. When a mutation response includes an `o
 
 An abort `signal` on `execute` or a wait timeout stops the poll, not the create: the branch or project may already exist, and the error does not include its id. List before retrying.
 
-`functions.deploy` can still return `pending`. Its response has no `operations` array, so the tool does not poll. The same holds for `realtime.enable`, `realtime.disable`, and `realtime.rotateSecret`: they return once the change is queued, and `realtime.get` reports `pending: true` until it is applied.
+`functions.deploy` can still return `pending`. Its response has no `operations` array, so the tool does not poll.
+
+`realtime.enable`, `realtime.disable`, and `realtime.rotateSecret` have no `operations` either. They poll the branch's Realtime state until `pending` is `false`, under the same `wait` budget.
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
