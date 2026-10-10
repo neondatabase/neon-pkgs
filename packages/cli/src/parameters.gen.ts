@@ -92,6 +92,11 @@ export const projectCreateRequest = {
               description: "The project name. If not specified, the name will be identical to the generated project ID",
               demandOption: false,
   },
+  'project.realtime.allowed_origins': {
+              type: "array",
+              description: "The browser origins allowed to connect, each `http` or `https` with a host and optional port\nand no path. An empty list, or `*` alone, allows any origin. Omitted keeps the current or\ninherited value.\n",
+              demandOption: false,
+  },
   'project.branch.name': {
               type: "string",
               description: "The default branch name. If not specified, the default branch name, `main`, will be used.\n",
@@ -277,6 +282,11 @@ export const branchCreateRequest = {
   'branch.protected': {
               type: "boolean",
               description: "Whether the branch is protected. Protected branches (and their computes) cannot be deleted, archived, or reset, and block deletion of the project. Can be gated by `protected_branches_only` in the IP allowlist. Paid plans only.\n",
+              demandOption: false,
+  },
+  'branch.realtime.allowed_origins': {
+              type: "array",
+              description: "The browser origins allowed to connect, each `http` or `https` with a host and optional port\nand no path. An empty list, or `*` alone, allows any origin. Omitted keeps the current or\ninherited value.\n",
               demandOption: false,
   },
   'branch.archived': {

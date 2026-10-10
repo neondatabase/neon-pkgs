@@ -687,6 +687,23 @@ export const zVpcEndpointAssignment = z.strictObject({
     label: z.string()
 });
 
+export const zRealtimeOptions = z.strictObject({
+    allowed_origins: z.array(z.string().min(1).max(2048).regex(/^(\*|https?:\/\/[^\/?#@,*\s]+)$/)).max(16).optional()
+});
+
+export const zRealtime = z.strictObject({
+    enabled: z.boolean(),
+    pending: z.boolean(),
+    invocation_url: z.string().optional(),
+    revision: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).optional(),
+    allowed_origins: z.array(z.string()).optional()
+});
+
+export const zRealtimeSecret = z.strictObject({
+    secret: z.string().min(1),
+    pending: z.boolean()
+});
+
 export const zRole = z.strictObject({
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     name: z.string(),
@@ -773,6 +790,7 @@ export const zBillingSubscriptionType = z.enum([
     'aws_marketplace',
     'free_v2',
     'free_v3',
+    'build',
     'launch',
     'launch_v3',
     'scale',
@@ -1072,6 +1090,7 @@ export const zBranchCreateRequest = z.strictObject({
         parent_lsn: z.string().optional(),
         parent_timestamp: z.iso.datetime().optional(),
         protected: z.boolean().optional(),
+        realtime: zRealtimeOptions.optional(),
         archived: z.boolean().optional(),
         init_source: z.string().optional(),
         expires_at: z.iso.datetime().optional()
@@ -1327,7 +1346,8 @@ export const zDataApiReponse = z.strictObject({
     url: z.url(),
     status: z.string(),
     settings: zDataApiSettings.nullish(),
-    available_schemas: z.array(z.string()).nullish()
+    available_schemas: z.array(z.string()).nullish(),
+    observed_at: z.iso.datetime().optional()
 });
 
 /**
@@ -1681,6 +1701,7 @@ export const zProjectCreateRequest = z.strictObject({
     project: z.strictObject({
         settings: zProjectSettingsData.optional(),
         name: z.string().min(1).max(256).optional(),
+        realtime: zRealtimeOptions.optional(),
         branch: z.strictObject({
             name: z.string().min(1).max(256).optional(),
             role_name: z.string().optional(),
@@ -3007,6 +3028,33 @@ export const zGetProjectBranchRolePasswordPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     role_name: z.string()
+});
+
+export const zDisableProjectBranchRealtimePath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zGetProjectBranchRealtimePath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zEnableProjectBranchRealtimeBody = zRealtimeOptions;
+
+export const zEnableProjectBranchRealtimePath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zGetProjectBranchRealtimeSecretPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zRotateProjectBranchRealtimeSecretPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
 });
 
 export const zResetProjectBranchRolePasswordPath = z.strictObject({
