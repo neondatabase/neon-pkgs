@@ -29,6 +29,8 @@ import { setDeadlineTimer } from "./timer.js";
 const SOCKET_CONNECTING = 0;
 const SOCKET_OPEN = 1;
 const SOCKET_CLOSING = 2;
+const SOCKET_CLOSED = 3;
+const SOCKET_CLOSE_GRACE_MS = 1_000;
 const NORMAL_CLOSE = 1_000;
 const APPLICATION_CLOSE = 4_000;
 
@@ -69,6 +71,8 @@ export interface WebSocketLike {
 	addEventListener(type: "error", listener: () => void): void;
 	send(data: string): void;
 	close(code?: number, reason?: string): void;
+	/** Immediately destroy the transport when the implementation supports it. */
+	terminate?(): void;
 }
 
 export type WebSocketFactory = (
@@ -963,11 +967,23 @@ export class ConnectionCoordinator {
 		this.heartbeat?.stop();
 		const socket = this.socket;
 		if (!socket) return;
+		let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
+		socket.addEventListener("close", () => {
+			if (forceCloseTimer !== undefined) clearTimeout(forceCloseTimer);
+			forceCloseTimer = undefined;
+		});
 		// Detach before close(): it can synchronously emit error, and a failed
 		// handshake may never emit close. Retire the wire attempt ourselves.
 		this.socket = undefined;
 		try {
 			if (socket.readyState < SOCKET_CLOSING) socket.close(code, reason);
+			const terminate = socket.terminate?.bind(socket);
+			if (terminate && socket.readyState < SOCKET_CLOSED) {
+				forceCloseTimer = setTimeout(() => {
+					forceCloseTimer = undefined;
+					if (socket.readyState < SOCKET_CLOSED) terminate();
+				}, SOCKET_CLOSE_GRACE_MS);
+			}
 		} finally {
 			this.disconnected();
 		}

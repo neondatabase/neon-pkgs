@@ -157,8 +157,8 @@ wire subscription behind the same public object and returns to `live` after its
 fresh authoritative reset.
 
 This mode holds the Realtime secret and can seal arbitrary queries. Use
-it only in trusted runtimes, never in browser code. The runtime must provide a
-standards-compatible global `WebSocket` implementation.
+it only in trusted runtimes, never in browser code. Direct subscriptions use a
+Node WebSocket implementation supplied by the SDK.
 `createRealtime({ url, parsers })` accepts the same OID overrides as the
 low-level client for trusted direct-subscription results.
 It also accepts the client-side `logLevel` and `logger` options described
