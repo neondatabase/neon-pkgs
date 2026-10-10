@@ -218,6 +218,9 @@ importers:
       '@neon/config-runtime':
         specifier: workspace:*
         version: link:../config-runtime
+      '@neon/realtime':
+        specifier: workspace:*
+        version: link:../realtime
       '@neon/sdk':
         specifier: workspace:*
         version: link:../sdk
