@@ -162,7 +162,7 @@ export class ConnectionCoordinator {
 	private requestId = 0n;
 	private ready = false;
 	private disposed = false;
-	private terminalConnection = false;
+	private terminalConnection?: ConnectionCoordinatorError;
 	private pendingConnectionError?: ConnectionCoordinatorError;
 
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
@@ -231,8 +231,12 @@ export class ConnectionCoordinator {
 		this.managedSubscriptions.add(managed);
 		this.activeSubscriptions.add(managed);
 		managed.events.started();
-		this.connect();
-		if (this.ready) this.sendSubscribe(managed);
+		if (this.terminalConnection) {
+			this.failSubscription(managed, this.terminalConnection);
+		} else {
+			this.connect();
+			if (this.ready) this.sendSubscribe(managed);
+		}
 		return Object.freeze({
 			renew: (replacement: ConnectionSealedQuery) =>
 				this.renew(managed, replacement),
@@ -910,7 +914,7 @@ export class ConnectionCoordinator {
 	}
 
 	private terminateConnection(error: ConnectionCoordinatorError): void {
-		this.terminalConnection = true;
+		this.terminalConnection = error;
 		this.cancelReconnectEpisode();
 		const subscriptions = [...this.managedSubscriptions].filter(
 			(subscription) =>
