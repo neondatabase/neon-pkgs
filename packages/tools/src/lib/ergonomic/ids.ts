@@ -3,6 +3,7 @@ export const hiddenToolIds = [
 	"postgres.roles.password",
 	"storage.objects.get",
 	"credentials.reveal",
+	"realtime.secret",
 ] as const;
 
 export type HiddenToolId = (typeof hiddenToolIds)[number];
@@ -84,6 +85,10 @@ export const toolIds = [
 	"credentials.revoke",
 	"credentials.rotate",
 	"aiGateway.get",
+	"realtime.get",
+	"realtime.enable",
+	"realtime.disable",
+	"realtime.rotateSecret",
 	"logs.query",
 	"logs.fields",
 	"logs.fieldValues",
@@ -132,6 +137,7 @@ const hiddenToolHint: Record<HiddenToolId, string> = {
 	"postgres.roles.password": "Role passwords are not published as a tool.",
 	"storage.objects.get": "Object bytes are not published as a tool.",
 	"credentials.reveal": "Credential secrets are not published as a tool.",
+	"realtime.secret": "The Realtime secret is not published as a tool.",
 };
 
 export const unpublishedToolError = (id: string): TypeError => {

@@ -24,9 +24,10 @@ export interface NeonConfig<Throw extends boolean = false> {
 	/**
 	 * Omit to use per-method defaults: `projects.create`, `projects.createAndConnect`,
 	 * `branches.create`, and `branches.createAndConnect` poll until provisioning
-	 * operations finish; other mutations do not. Set `false` to disable polling on
-	 * those four. Set `true` to poll on every mutation that returns operations.
-	 * Overridable per call.
+	 * operations finish, and `realtime.enable` polls until the Realtime state is no
+	 * longer pending; other mutations do not. Set `false` to disable polling on those
+	 * five. Set `true` to poll on every mutation that returns operations and on the
+	 * `realtime` mutations. Overridable per call.
 	 */
 	waitForReadiness?: boolean;
 	/** Tuning for the readiness poller (interval / timeout). Not a per-call abort. */
