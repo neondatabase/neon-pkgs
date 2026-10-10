@@ -690,20 +690,22 @@ API has queued the change (HTTP 202). They do not wait for it; poll `get` until
 | `rotateSecret({ projectId, branchId })` | **→void** | `secret()` returns the new value once `pending` is `false` |
 
 ```ts
+const neon = createNeonClient({ apiKey, throwOnError: true });
+const branch = { projectId, branchId };
+
 await neon.realtime.enable({
-  projectId,
-  branchId,
+  ...branch,
   allowed_origins: ["https://app.example.com"],
 });
 
-let state = (await neon.realtime.get({ projectId, branchId })).data;
-while (state?.pending) {
+let state = await neon.realtime.get(branch);
+while (state.pending) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
-  state = (await neon.realtime.get({ projectId, branchId })).data;
+  state = await neon.realtime.get(branch);
 }
 
-const { data: secret } = await neon.realtime.secret({ projectId, branchId });
-// secret.secret → NEON_REALTIME_SECRET on the application backend
+const { secret } = await neon.realtime.secret(branch);
+// secret → NEON_REALTIME_SECRET on the application backend
 ```
 
 `projects.create` and `branches.create` also accept `realtime: { allowed_origins? }` to
