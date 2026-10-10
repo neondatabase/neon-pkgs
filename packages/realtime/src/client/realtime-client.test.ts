@@ -1254,6 +1254,11 @@ describe("RealtimeClient", () => {
 			retryable: false,
 			sqlState: "22P02",
 		});
+		await expect(subscription.awaitTxId("43")).rejects.toMatchObject({
+			code: "baseline_sync_failed",
+			retryable: false,
+			sqlState: "22P02",
+		});
 		client.close();
 	});
 

@@ -324,15 +324,17 @@ export class Subscription<Row>
 	}
 
 	fail(error: ConnectionCoordinatorError): void {
+		const publicError = new PublicLiveQueryError(
+			error.code,
+			error.retryable,
+			error.message,
+			{ cause: error.cause, sqlState: error.sqlState },
+		);
+		this.transactions.close(publicError);
 		this.setLifecycle(
 			Object.freeze({
 				status: "error",
-				error: new PublicLiveQueryError(
-					error.code,
-					error.retryable,
-					error.message,
-					{ cause: error.cause, sqlState: error.sqlState },
-				),
+				error: publicError,
 			}),
 		);
 	}
