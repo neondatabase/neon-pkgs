@@ -530,6 +530,33 @@ describe("special mappings", () => {
 		);
 	});
 
+	test("realtime.enable sends allowed_origins as the body", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["realtime.enable"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return new Response(null, { status: 202 });
+			},
+		});
+
+		expect(tools["realtime.enable"].requiresApproval).toBe(true);
+		await tools["realtime.enable"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			allowed_origins: ["https://app.example.com"],
+		});
+
+		expect(requests[0].method).toBe("POST");
+		expect(requests[0].url).toMatch(
+			/\/projects\/project-id\/branches\/branch-id\/realtime$/,
+		);
+		expect(await requests[0].json()).toEqual({
+			allowed_origins: ["https://app.example.com"],
+		});
+	});
+
 	test("branches.delete has no hard_delete input", () => {
 		const tool = createNeonTool("branches.delete", { apiKey: "test-key" });
 		const schema = z.toJSONSchema(tool.inputSchema);
