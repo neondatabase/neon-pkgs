@@ -1,5 +1,5 @@
 /**
- * Validate that an adapter produced one supported PostgreSQL `SELECT`.
+ * Validate that an adapter produced one PostgreSQL `SELECT` statement.
  *
  * This helper is intended for adapter authors. It performs the SDK's fast
  * syntactic checks; the Realtime proxy remains authoritative.
@@ -10,11 +10,5 @@
 export function validateLiveSelectSql(sql: string): void {
 	if (!/^\s*select\b/i.test(sql) || sql.includes(";")) {
 		throw new Error("Live queries must compile to one SELECT statement");
-	}
-	const unsupportedClause =
-		/\b(?:distinct|group\s+by|having|union|intersect|except|with)\b/i;
-	const unsupportedJoin = /\b(?:cross\s+join|join\s+lateral)\b/i;
-	if (unsupportedClause.test(sql) || unsupportedJoin.test(sql)) {
-		throw new Error("Live query uses an unsupported SQL feature");
 	}
 }
