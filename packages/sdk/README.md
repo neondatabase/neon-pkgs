@@ -675,6 +675,40 @@ Branch-scoped AI Gateway endpoint metadata (beta).
 | --- | --- | --- |
 | `get({ projectId, branchId })` | `BranchAiGateway` | 404 when AI Gateway is not enabled on the branch |
 
+### `neon.realtime`
+
+Branch-scoped Realtime (beta). `enable`, `disable`, and `rotateSecret` return once the
+API has queued the change (HTTP 202). They do not wait for it; poll `get` until
+`pending` is `false`. `waitForReadiness` has no effect on them.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get({ projectId, branchId })` | `Realtime` | `{ enabled, pending, invocation_url?, revision?, allowed_origins? }` |
+| `enable({ projectId, branchId, allowed_origins? })` | **→void** | Also applies new options to an enabled branch. Omitting `allowed_origins` keeps the current or inherited value; `[]` or `["*"]` allows any origin |
+| `disable({ projectId, branchId })` | **→void** | Discards the shared secret |
+| `secret({ projectId, branchId })` | `RealtimeSecret` | `{ secret, pending }`. Server-only: the backend seals queries with it (`@neon/realtime/server`). 404 while Realtime is disabled or before the secret exists |
+| `rotateSecret({ projectId, branchId })` | **→void** | `secret()` returns the new value once `pending` is `false` |
+
+```ts
+await neon.realtime.enable({
+  projectId,
+  branchId,
+  allowed_origins: ["https://app.example.com"],
+});
+
+let state = (await neon.realtime.get({ projectId, branchId })).data;
+while (state?.pending) {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  state = (await neon.realtime.get({ projectId, branchId })).data;
+}
+
+const { data: secret } = await neon.realtime.secret({ projectId, branchId });
+// secret.secret → NEON_REALTIME_SECRET on the application backend
+```
+
+`projects.create` and `branches.create` also accept `realtime: { allowed_origins? }` to
+enable Realtime on the new branch.
+
 ### `neon.logs`
 
 Branch-scoped logs from the services running on a branch — Neon Functions, object

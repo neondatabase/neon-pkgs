@@ -173,6 +173,13 @@ export type {
 	TransferProjectsInput,
 } from "./neon/resources/projects.js";
 export type {
+	RealtimeDisableParams,
+	RealtimeEnableParams,
+	RealtimeGetParams,
+	RealtimeRotateSecretParams,
+	RealtimeSecretParams,
+} from "./neon/resources/realtime.js";
+export type {
 	RolesCreateParams,
 	RolesDeleteParams,
 	RolesGetParams,
