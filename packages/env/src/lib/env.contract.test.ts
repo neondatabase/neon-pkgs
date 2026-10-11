@@ -50,7 +50,7 @@ const INPUT_ENV_KEYS = [
 		prop: "secret",
 	},
 	{
-		key: "NEON_DATABASE_NAME",
+		key: "NEON_REALTIME_DATABASE_NAME",
 		namespace: "realtime",
 		prop: "databaseName",
 	},
@@ -118,7 +118,7 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 			    "databaseUrlUnpooled": "DATABASE_URL_UNPOOLED",
 			  },
 			  "realtime": {
-			    "databaseName": "NEON_DATABASE_NAME",
+			    "databaseName": "NEON_REALTIME_DATABASE_NAME",
 			    "secret": "NEON_REALTIME_SECRET",
 			    "url": "NEON_REALTIME_URL",
 			  },

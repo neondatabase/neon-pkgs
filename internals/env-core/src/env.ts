@@ -72,7 +72,7 @@ export const NEON_ENV_VAR_KEYS = {
 	realtime: {
 		url: "NEON_REALTIME_URL",
 		secret: "NEON_REALTIME_SECRET",
-		databaseName: "NEON_DATABASE_NAME",
+		databaseName: "NEON_REALTIME_DATABASE_NAME",
 	},
 	/**
 	 * Object storage (Preview). The S3 SDKs read `AWS_*` from their standard config chain, so
@@ -422,7 +422,7 @@ interface EnvKeysByNamespace {
 	realtime:
 		| "NEON_REALTIME_URL"
 		| "NEON_REALTIME_SECRET"
-		| "NEON_DATABASE_NAME";
+		| "NEON_REALTIME_DATABASE_NAME";
 	storage:
 		| "AWS_ACCESS_KEY_ID"
 		| "AWS_SECRET_ACCESS_KEY"
@@ -452,7 +452,7 @@ interface EnvKeyToProp {
 	NEON_DATA_API_URL: "url";
 	NEON_REALTIME_URL: "url";
 	NEON_REALTIME_SECRET: "secret";
-	NEON_DATABASE_NAME: "databaseName";
+	NEON_REALTIME_DATABASE_NAME: "databaseName";
 	AWS_ACCESS_KEY_ID: "accessKeyId";
 	AWS_SECRET_ACCESS_KEY: "secretAccessKey";
 	AWS_ENDPOINT_URL_S3: "endpoint";

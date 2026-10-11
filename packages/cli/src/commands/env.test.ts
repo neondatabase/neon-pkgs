@@ -589,7 +589,7 @@ describe("env pull", () => {
 		expect(env).toMatchObject({
 			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
 			NEON_REALTIME_SECRET: "nrt_live_1_bare-pull",
-			NEON_DATABASE_NAME: "neondb",
+			NEON_REALTIME_DATABASE_NAME: "neondb",
 		});
 	});
 
@@ -632,7 +632,7 @@ describe("env pull", () => {
 				"NEON_DATA_API_URL=https://stale.apirest.example/db/rest/v1",
 				"NEON_REALTIME_URL=wss://stale.realtime.example/v1",
 				"NEON_REALTIME_SECRET=nrt_live_1_stale",
-				"NEON_DATABASE_NAME=old_db",
+				"NEON_REALTIME_DATABASE_NAME=old_db",
 				"",
 			].join("\n"),
 		);
@@ -650,7 +650,7 @@ describe("env pull", () => {
 		expect(content).not.toContain("NEON_DATA_API_URL");
 		expect(content).not.toContain("NEON_REALTIME_URL");
 		expect(content).not.toContain("NEON_REALTIME_SECRET");
-		expect(content).not.toContain("NEON_DATABASE_NAME");
+		expect(content).not.toContain("NEON_REALTIME_DATABASE_NAME");
 		expect(result.status).toBe("written");
 		if (result.status === "written") {
 			expect(result.written).toContain("DATABASE_URL");
@@ -906,7 +906,7 @@ describe("env pull --service", () => {
 		expect(env).toMatchObject({
 			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
 			NEON_REALTIME_SECRET: "nrt_live_1_cli-test",
-			NEON_DATABASE_NAME: "neondb",
+			NEON_REALTIME_DATABASE_NAME: "neondb",
 		});
 		expect(env.DATABASE_URL).toBeUndefined();
 	});

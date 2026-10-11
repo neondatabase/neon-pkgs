@@ -73,7 +73,7 @@ describe("parseEnv key filter (types)", () => {
 
 	test("Realtime keys are selectable only when the policy enables Realtime", () => {
 		const config = defineConfig({ realtime: true });
-		const env = parseEnv(config, ["NEON_DATABASE_NAME"]);
+		const env = parseEnv(config, ["NEON_REALTIME_DATABASE_NAME"]);
 		expectTypeOf(env).toEqualTypeOf<{
 			realtime: { databaseName: string };
 		}>();

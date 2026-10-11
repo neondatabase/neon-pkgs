@@ -404,7 +404,7 @@ describe("fetchEnv", () => {
 		expect(toEntries(env)).toMatchObject({
 			NEON_REALTIME_URL: "wss://realtime.example.test/v1",
 			NEON_REALTIME_SECRET: "nrt_live_1_env-test",
-			NEON_DATABASE_NAME: "neondb",
+			NEON_REALTIME_DATABASE_NAME: "neondb",
 		});
 	});
 
@@ -783,7 +783,7 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_REALTIME_URL", "wss://realtime.example.test/v1");
 		vi.stubEnv("NEON_REALTIME_SECRET", "nrt_live_1_parse-test");
-		vi.stubEnv("NEON_DATABASE_NAME", "app");
+		vi.stubEnv("NEON_REALTIME_DATABASE_NAME", "app");
 
 		const env = parseEnv(defineConfig({ realtime: true }));
 		expect(env.realtime).toEqual({

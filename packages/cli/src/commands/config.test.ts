@@ -1457,7 +1457,7 @@ describe("config commands", () => {
 		expect(env).toContain(
 			"NEON_REALTIME_SECRET=nrt_live_1_cli-config-test",
 		);
-		expect(env).toContain("NEON_DATABASE_NAME=neondb");
+		expect(env).toContain("NEON_REALTIME_DATABASE_NAME=neondb");
 	});
 
 	it("lists the project's branches once per step of an apply with its env pull", async () => {

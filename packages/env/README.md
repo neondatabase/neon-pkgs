@@ -127,7 +127,7 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | --- | --- |
 | `NEON_REALTIME_URL` | WebSocket endpoint passed to `createRealtimeClient` |
 | `NEON_REALTIME_SECRET` | shared key passed to server-side `createRealtime`; never expose it to browser code |
-| `NEON_DATABASE_NAME` | database passed to `createRealtime`; selected with the same `neondb`/sole-database rule as the Postgres URLs |
+| `NEON_REALTIME_DATABASE_NAME` | database passed to `createRealtime`; selected with the same `neondb`/sole-database rule as the Postgres URLs |
 
 **Object storage** (when `buckets` declares at least one bucket). Projected onto the AWS SDK's standard config vars so an S3 client works from env alone (set `forcePathStyle: true`):
 

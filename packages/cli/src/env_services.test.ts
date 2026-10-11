@@ -50,7 +50,7 @@ describe("env pull key selection", () => {
 			servicesForEnvKeys([
 				"NEON_REALTIME_URL",
 				"NEON_REALTIME_SECRET",
-				"NEON_DATABASE_NAME",
+				"NEON_REALTIME_DATABASE_NAME",
 			]),
 		).toEqual(["realtime"]);
 	});
@@ -69,7 +69,7 @@ describe("env pull key selection", () => {
 			"NEON_BRANCH",
 			"NEON_REALTIME_URL",
 			"NEON_REALTIME_SECRET",
-			"NEON_DATABASE_NAME",
+			"NEON_REALTIME_DATABASE_NAME",
 		]);
 	});
 
