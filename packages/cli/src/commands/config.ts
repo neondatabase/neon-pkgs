@@ -913,7 +913,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"add",
-			"Add a service, feature, function, or bucket to neon.ts (creates it if missing)",
+			"Add a service, function, or bucket to neon.ts (creates it if missing)",
 			(yargs) =>
 				yargs
 					.command(
