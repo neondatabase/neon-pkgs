@@ -1048,7 +1048,28 @@ export const getApiClient = ({
 				}),
 			),
 
-		// ─── VPC endpoints (project + organization) ──────────────────────────
+		// ─── Realtime ───────────────────────────────────────────────
+		enableProjectBranchRealtime: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.EnableProjectBranchRealtimeData["body"]>,
+		) =>
+			call(() =>
+				raw.enableProjectBranchRealtime({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		disableProjectBranchRealtime: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.disableProjectBranchRealtime({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+
+		// ─── VPC endpoints (project + organization) ─────────────────────────
 		listProjectVpcEndpoints: (projectId: string) =>
 			call(() =>
 				raw.listProjectVpcEndpoints({

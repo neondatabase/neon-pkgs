@@ -1,9 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect } from "vitest";
+import { afterEach, beforeEach, describe } from "vitest";
 import { test } from "../test_utils/fixtures.js";
-import { disable, enable } from "./realtime.js";
 
 describe("realtime", () => {
 	let workspace: string;
@@ -16,69 +15,66 @@ describe("realtime", () => {
 		rmSync(workspace, { recursive: true, force: true });
 	});
 
-	test("enable declares Realtime without making an API request", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand(["realtime", "enable", "--no-install"], {
-			unreachableHost: true,
-			code: 0,
-			cwd: workspace,
-			snapshot: false,
-		});
-
-		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
-			"realtime: true",
-		);
-	});
-
-	test("enable writes and updates allowed origins", async ({
+	test("enable requests Realtime for the selected branch", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(
 			[
 				"realtime",
 				"enable",
-				"--no-install",
+				"--project-id",
+				"test",
+				"--branch",
+				"sunny",
 				"--allowed-origin",
 				"https://app.example.com",
+				"--allowed-origin",
+				"http://localhost:3000",
+			],
+			{
+				mockDir: "realtime",
+				snapshot: false,
+				stderr: "Realtime enable requested for branch br-sunny-branch-123456.",
+			},
+		);
+	});
+
+	test("disable uses the project and branch linked in .neon", async ({
+		testCliCommand,
+	}) => {
+		writeFileSync(
+			join(workspace, ".neon"),
+			JSON.stringify({ projectId: "test", branch: "sunny" }),
+		);
+
+		await testCliCommand(["realtime", "disable"], {
+			mockDir: "realtime",
+			cwd: workspace,
+			snapshot: false,
+			stderr: "Realtime disable requested for branch br-sunny-branch-123456.",
+		});
+	});
+
+	test("enable rejects an invalid allowed origin before calling the API", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"realtime",
+				"enable",
+				"--project-id",
+				"test",
+				"--branch",
+				"sunny",
+				"--allowed-origin",
+				"https://app.example.com/path",
 			],
 			{
 				unreachableHost: true,
-				code: 0,
-				cwd: workspace,
+				code: 1,
 				snapshot: false,
+				stderr: 'ERROR: Invalid Neon config: - realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
 			},
 		);
-		await enable({
-			cwd: workspace,
-			install: false,
-			allowedOrigins: ["http://localhost:3000"],
-		});
-
-		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
-			'realtime: { allowedOrigins: ["http://localhost:3000"] }',
-		);
-	});
-
-	test("disable writes false and enable can turn it back on", async () => {
-		await disable({ cwd: workspace, install: false });
-		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
-			"realtime: false",
-		);
-
-		await enable({ cwd: workspace, install: false });
-		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
-			"realtime: true",
-		);
-	});
-
-	test("rejects an invalid allowed origin before creating neon.ts", async () => {
-		await expect(
-			enable({
-				cwd: workspace,
-				install: false,
-				allowedOrigins: ["https://app.example.com/path"],
-			}),
-		).rejects.toThrow("http(s) origin with no path");
 	});
 });

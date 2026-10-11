@@ -1,80 +1,66 @@
 import { defineConfig } from "@neon/config";
 import type yargs from "yargs";
-import { addCmd } from "./config.js";
+import { retryOnLock } from "../api.js";
+import { log } from "../log.js";
+import type { BranchScopeProps } from "../types.js";
+import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 
-type RealtimeEditProps = {
-	cwd?: string;
-	contextFile?: string;
-	config?: string;
-	install?: boolean;
-};
-
-export type RealtimeEnableProps = RealtimeEditProps & {
+export type RealtimeEnableProps = BranchScopeProps & {
 	allowedOrigins?: readonly string[];
 };
 
-const commonProps = (props: RealtimeEditProps) => ({
-	install: props.install ?? true,
-	...(props.cwd !== undefined ? { cwd: props.cwd } : {}),
-	...(props.contextFile !== undefined
-		? { contextFile: props.contextFile }
-		: {}),
-	...(props.config !== undefined ? { config: props.config } : {}),
-});
-
-/** Declare Realtime locally; this command makes no API calls. */
+/** Request Realtime provisioning or an allowed-origin update for a branch. */
 export const enable = async (props: RealtimeEnableProps): Promise<void> => {
 	const realtime =
 		props.allowedOrigins === undefined
 			? true
 			: { allowedOrigins: props.allowedOrigins };
-	// Validate the same constraints `neon.ts` will enforce before writing the file.
+	// Give direct CLI users the same origin validation as declarative neon.ts users.
 	defineConfig({ realtime });
-	await addCmd({
-		target: {
-			kind: "realtime",
-			enabled: true,
-			...(props.allowedOrigins !== undefined
-				? { allowedOrigins: props.allowedOrigins }
-				: {}),
-		},
-		...commonProps(props),
-	});
+
+	const branchId = await branchIdFromProps(props);
+	await retryOnLock(() =>
+		props.apiClient.enableProjectBranchRealtime(
+			props.projectId,
+			branchId,
+			props.allowedOrigins === undefined
+				? {}
+				: { allowed_origins: [...props.allowedOrigins] },
+		),
+	);
+	log.info("Realtime enable requested for branch %s.", branchId);
 };
 
-/** Declare Realtime disabled locally; this command makes no API calls. */
-export const disable = async (props: RealtimeEditProps): Promise<void> => {
-	await addCmd({
-		target: { kind: "realtime", enabled: false },
-		...commonProps(props),
-	});
+/** Request Realtime deprovisioning for a branch. */
+export const disable = async (props: BranchScopeProps): Promise<void> => {
+	const branchId = await branchIdFromProps(props);
+	await retryOnLock(() =>
+		props.apiClient.disableProjectBranchRealtime(props.projectId, branchId),
+	);
+	log.info("Realtime disable requested for branch %s.", branchId);
 };
-
-const editOptions = (argv: yargs.Argv) =>
-	argv.strict().options({
-		config: {
-			describe:
-				"Path to the neon.ts to edit (defaults to the neon.ts next to .neon, or in cwd without one; created there when missing)",
-			type: "string",
-		},
-		install: {
-			describe:
-				"Install @neon/config and @neon/env when creating neon.ts. On by default; use --no-install to skip",
-			type: "boolean",
-			default: true,
-		},
-	});
 
 export const command = "realtime";
-export const describe = "Manage Neon Realtime in neon.ts";
+export const describe = "Manage Neon Realtime for a branch";
 export const builder = (argv: yargs.Argv) =>
 	argv
 		.usage("$0 realtime <sub-command> [options]")
+		.options({
+			"project-id": {
+				describe: "Project ID",
+				type: "string",
+			},
+			branch: {
+				describe: "Branch ID or name",
+				type: "string",
+			},
+		})
+		.middleware(fillSingleProject as any)
 		.command(
 			"enable",
-			"Declare Realtime enabled in neon.ts",
+			"Enable Realtime on a branch",
 			(yargs) =>
-				editOptions(yargs).option("allowed-origin", {
+				yargs.strict().option("allowed-origin", {
 					describe:
 						'Allowed browser origin (repeatable). "*" allows every origin',
 					type: "array",
@@ -82,7 +68,7 @@ export const builder = (argv: yargs.Argv) =>
 				}),
 			(args) =>
 				enable({
-					...(args as RealtimeEditProps),
+					...(args as unknown as BranchScopeProps),
 					...(args.allowedOrigin !== undefined
 						? { allowedOrigins: args.allowedOrigin }
 						: {}),
@@ -90,9 +76,9 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"disable",
-			"Declare Realtime disabled in neon.ts",
-			editOptions,
-			(args) => disable(args),
+			"Disable Realtime on a branch",
+			(yargs) => yargs.strict(),
+			(args) => disable(args as unknown as BranchScopeProps),
 		);
 
 export const handler = (_args: yargs.Arguments) => {

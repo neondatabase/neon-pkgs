@@ -206,7 +206,7 @@ export const commandManifest: CommandEntry[] = [
 	},
 	{
 		command: "realtime",
-		describe: "Manage Neon Realtime in neon.ts",
+		describe: "Manage Neon Realtime for a branch",
 		load: () => import("./realtime.js"),
 	},
 	{

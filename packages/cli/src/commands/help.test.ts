@@ -30,6 +30,7 @@ const PARENT_COMMANDS = [
 	"inspect",
 	"claim",
 	"data-api",
+	"realtime",
 	"functions",
 	"triggers",
 	"credentials",

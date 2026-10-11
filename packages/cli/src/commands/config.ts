@@ -583,10 +583,8 @@ export type ConfigAddTarget =
 	| { kind: "service"; service: "auth" | "data-api" | "ai-gateway" }
 	| {
 			kind: "realtime";
-			enabled: true;
 			allowedOrigins?: readonly string[];
 	  }
-	| { kind: "realtime"; enabled: false }
 	| { kind: "function"; slug: string; name?: string; source?: string }
 	| { kind: "bucket"; name: string; access?: "private" | "public_read" };
 
@@ -643,18 +641,17 @@ const planAdd = (
 	const provision = `Next: \`${cli} config plan${flag}\` to preview, \`${cli} config apply${flag}\` to provision.`;
 	switch (target.kind) {
 		case "realtime": {
-			const realtime = target.enabled
-				? target.allowedOrigins === undefined
+			const realtime =
+				target.allowedOrigins === undefined
 					? true
-					: { allowedOrigins: target.allowedOrigins }
-				: false;
+					: { allowedOrigins: target.allowedOrigins };
 			// Validate the same constraints `neon.ts` will enforce before writing the file.
 			defineConfig({ realtime });
 			return {
 				edit: {
 					kind: "realtime",
-					enabled: target.enabled,
-					...(target.enabled && target.allowedOrigins !== undefined
+					enabled: true,
+					...(target.allowedOrigins !== undefined
 						? { allowedOrigins: target.allowedOrigins }
 						: {}),
 				},
@@ -969,7 +966,6 @@ export const builder = (argv: yargs.Argv) =>
 							addCmd(
 								addProps(args, {
 									kind: "realtime",
-									enabled: true,
 									...(args.allowedOrigin !== undefined
 										? {
 												allowedOrigins:
