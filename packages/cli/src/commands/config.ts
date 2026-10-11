@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import {
 	type BranchTarget,
 	type DeployEvent,
+	defineConfig,
 	type HookBranch,
 	packagesToStage,
 	previewGaWarningForConfig,
@@ -641,7 +642,14 @@ const planAdd = (
 		: "";
 	const provision = `Next: \`${cli} config plan${flag}\` to preview, \`${cli} config apply${flag}\` to provision.`;
 	switch (target.kind) {
-		case "realtime":
+		case "realtime": {
+			const realtime = target.enabled
+				? target.allowedOrigins === undefined
+					? true
+					: { allowedOrigins: target.allowedOrigins }
+				: false;
+			// Validate the same constraints `neon.ts` will enforce before writing the file.
+			defineConfig({ realtime });
 			return {
 				edit: {
 					kind: "realtime",
@@ -652,6 +660,7 @@ const planAdd = (
 				},
 				next: provision,
 			};
+		}
 		case "service":
 			return {
 				edit: { kind: "service", service: target.service },
@@ -712,7 +721,7 @@ const planAdd = (
 };
 
 /**
- * Declare a service, function, or bucket in the project's `neon.ts` with a text edit that
+ * Declare a service, feature, function, or bucket in the project's `neon.ts` with a text edit that
  * leaves the rest of the file alone, creating the file (and installing the config packages)
  * when the project has none. Local only, like `config init`.
  */
@@ -907,7 +916,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.command(
 			"add",
-			"Add a service, function, or bucket to neon.ts (creates it if missing)",
+			"Add a service, feature, function, or bucket to neon.ts (creates it if missing)",
 			(yargs) =>
 				yargs
 					.command(
@@ -943,6 +952,30 @@ export const builder = (argv: yargs.Argv) =>
 								addProps(args, {
 									kind: "service",
 									service: "ai-gateway",
+								}),
+							),
+					)
+					.command(
+						"realtime",
+						"Enable Realtime (realtime: true)",
+						(yargs) =>
+							addSharedOptions(yargs).option("allowed-origin", {
+								describe:
+									'Allowed browser origin (repeatable). "*" allows every origin',
+								type: "array",
+								string: true,
+							}),
+						(args) =>
+							addCmd(
+								addProps(args, {
+									kind: "realtime",
+									enabled: true,
+									...(args.allowedOrigin !== undefined
+										? {
+												allowedOrigins:
+													args.allowedOrigin,
+											}
+										: {}),
 								}),
 							),
 					)

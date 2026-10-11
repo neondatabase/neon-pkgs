@@ -168,6 +168,70 @@ describe("config add", () => {
 		expect(read("neon.ts")).toBe(original);
 	});
 
+	test("add realtime declares Realtime without making an API request", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["config", "add", "realtime", "--no-install"], {
+			unreachableHost: true,
+			code: 0,
+			cwd: workspace,
+			snapshot: false,
+		});
+
+		expect(read("neon.ts")).toContain("realtime: true");
+	});
+
+	test("add realtime writes repeatable allowed origins", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"config",
+				"add",
+				"realtime",
+				"--no-install",
+				"--allowed-origin",
+				"https://app.example.com",
+				"--allowed-origin",
+				"http://localhost:3000",
+			],
+			{
+				unreachableHost: true,
+				code: 0,
+				cwd: workspace,
+				snapshot: false,
+			},
+		);
+
+		expect(read("neon.ts")).toContain(
+			'realtime: { allowedOrigins: ["https://app.example.com","http://localhost:3000"] }',
+		);
+	});
+
+	test("add realtime rejects an invalid allowed origin before writing", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"config",
+				"add",
+				"realtime",
+				"--no-install",
+				"--allowed-origin",
+				"https://app.example.com/path",
+			],
+			{
+				unreachableHost: true,
+				code: 1,
+				cwd: workspace,
+				snapshot: false,
+				stderr: 'ERROR: Invalid Neon config: - realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
+			},
+		);
+
+		expect(existsSync(join(workspace, "neon.ts"))).toBe(false);
+	});
+
 	test("edits the linked project's neon.ts from a subdirectory", async () => {
 		writeFileSync(join(workspace, ".neon"), "{}\n");
 		writeFileSync(join(workspace, "neon.ts"), renderNeonConfig([]));
