@@ -855,6 +855,7 @@ class RealNeonApi implements NeonApi {
 		// Idempotent: if an integration already exists on the branch, the POST returns 409
 		// (`Conflict`). We swallow that and re-fetch the existing snapshot so callers can
 		// rely on `enableNeonAuth` to be safe to invoke from any push, including no-ops.
+		// A 409 with no integration to re-fetch is a failed provisioning and is thrown.
 		try {
 			return await this.call(
 				`enableNeonAuth(${projectId}/${branchId})`,
@@ -2006,9 +2007,9 @@ function neonAuthResponseToSnapshot(
 }
 
 /**
- * A 409 from enabling Neon Auth on a branch that has no integration is not a name
- * collision, so the generic conflict hint does not apply. The API message names the cause
- * (for example an existing `neon_auth` schema) and what to do about it.
+ * A 409 from enabling Neon Auth on a branch that still has no integration. The cause is
+ * whatever the API says (for example an existing `neon_auth` schema), so its message replaces
+ * the generic name-collision hint that `wrapNeonError` adds to every 409.
  */
 function neonAuthProvisioningConflict(
 	err: PlatformError,

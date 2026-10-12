@@ -1,5 +1,4 @@
 import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { describe, expect, test } from "vitest";
 import { ErrorCode, PlatformError } from "./errors.js";
 import {
@@ -436,49 +435,112 @@ describe("collectCursorPages", () => {
 });
 
 describe("enableNeonAuth", () => {
-	test("reports the API's reason, not a name collision, when a branch without Neon Auth cannot be provisioned", async () => {
-		const apiMessage =
-			"The `neon_auth` schema already exists and cannot be automatically provisioned. Please drop the existing `neon_auth` schema before provisioning Neon Auth.";
+	const AUTH_PATH = "/projects/proj-1/branches/br-1/auth";
+	const API_MESSAGE =
+		"The `neon_auth` schema already exists and cannot be automatically provisioned. Please drop the existing `neon_auth` schema before provisioning Neon Auth.";
+
+	/** POST answers 409 with the schema message; GET answers `get`. Records every request. */
+	const withAuthServer = async (
+		get: { status: number; body: unknown },
+		run: (
+			api: ReturnType<typeof createRealNeonApi>,
+			requests: string[],
+		) => Promise<void>,
+	) => {
+		const requests: string[] = [];
 		const server = createServer((req, res) => {
-			res.setHeader("content-type", "application/json");
-			if (
-				req.method === "POST" &&
-				req.url?.endsWith("/branches/br-1/auth")
-			) {
-				res.statusCode = 409;
-				res.end(
-					JSON.stringify({
-						request_id: "req-1",
-						code: "",
-						message: apiMessage,
-					}),
-				);
-				return;
-			}
-			res.statusCode = 404;
-			res.end(
-				JSON.stringify({
-					message: "Neon Auth is not enabled for this branch",
-				}),
-			);
+			const path = new URL(req.url ?? "/", "http://localhost").pathname;
+			requests.push(`${req.method} ${path}`);
+			req.resume();
+			req.on("end", () => {
+				res.setHeader("content-type", "application/json");
+				if (path === AUTH_PATH && req.method === "POST") {
+					res.statusCode = 409;
+					res.end(
+						JSON.stringify({
+							request_id: "req-1",
+							code: "",
+							message: API_MESSAGE,
+						}),
+					);
+				} else if (path === AUTH_PATH && req.method === "GET") {
+					res.statusCode = get.status;
+					res.end(JSON.stringify(get.body));
+				} else {
+					res.statusCode = 500;
+					res.end(
+						JSON.stringify({
+							message: `unexpected ${req.method} ${path}`,
+						}),
+					);
+				}
+			});
 		});
-		await new Promise<void>((resolve) => server.listen(0, resolve));
-		const { port } = server.address() as AddressInfo;
 		try {
-			const api = createRealNeonApi({
-				apiKey: "test-key",
-				baseUrl: `http://localhost:${port}`,
-			});
-			const failure = api.enableNeonAuth("proj-1", "br-1");
-			await expect(failure).rejects.toMatchObject({
-				code: ErrorCode.Conflict,
-			});
-			await expect(failure).rejects.toThrow(
-				`enableNeonAuth(proj-1/br-1) failed: Neon API said: "${apiMessage}" (request id req-1).`,
+			await new Promise<void>((resolve) => server.listen(0, resolve));
+			const address = server.address();
+			if (address === null || typeof address === "string") {
+				throw new Error("test server has no port");
+			}
+			await run(
+				createRealNeonApi({
+					apiKey: "test-key",
+					baseUrl: `http://localhost:${address.port}`,
+				}),
+				requests,
 			);
-			await expect(failure).rejects.not.toThrow("name collision");
 		} finally {
+			server.closeAllConnections();
 			await new Promise((resolve) => server.close(resolve));
 		}
+	};
+
+	test("returns the existing integration when the branch already has Neon Auth", async () => {
+		await withAuthServer(
+			{
+				status: 200,
+				body: {
+					auth_provider_project_id: "auth-1",
+					jwks_url: "https://auth.example/jwks",
+					base_url: "https://auth.example",
+				},
+			},
+			async (api, requests) => {
+				await expect(
+					api.enableNeonAuth("proj-1", "br-1"),
+				).resolves.toEqual({
+					projectId: "auth-1",
+					jwksUrl: "https://auth.example/jwks",
+					baseUrl: "https://auth.example",
+				});
+				expect(requests).toEqual([
+					`POST ${AUTH_PATH}`,
+					`GET ${AUTH_PATH}`,
+				]);
+			},
+		);
+	});
+
+	test("reports the API's reason, not a name collision, when a branch without Neon Auth cannot be provisioned", async () => {
+		await withAuthServer(
+			{
+				status: 404,
+				body: { message: "Neon Auth is not enabled for this branch" },
+			},
+			async (api, requests) => {
+				const failure = api.enableNeonAuth("proj-1", "br-1");
+				await expect(failure).rejects.toMatchObject({
+					code: ErrorCode.Conflict,
+				});
+				await expect(failure).rejects.toThrow(
+					`enableNeonAuth(proj-1/br-1) failed: Neon API said: "${API_MESSAGE}" (request id req-1).`,
+				);
+				await expect(failure).rejects.not.toThrow("name collision");
+				expect(requests).toEqual([
+					`POST ${AUTH_PATH}`,
+					`GET ${AUTH_PATH}`,
+				]);
+			},
+		);
 	});
 });

@@ -728,8 +728,8 @@ const enable = async (props: AuthBranchProps & { databaseName?: string }) => {
 				branchId,
 			));
 		} catch (readErr) {
-			// No integration to show: the 409 was a provisioning conflict (for example an
-			// existing `neon_auth` schema), and its message says what to do.
+			// No integration to show, so the 409 was not "already enabled"; report the API's
+			// reason (for example an existing `neon_auth` schema) instead.
 			if (isNeonApiError(readErr) && readErr.status === 404) throw err;
 			throw readErr;
 		}
