@@ -57,8 +57,11 @@ pnpm --filter @neon/env test:ci
 | `internals/` | `@neon-internals/*` — private, never published, bundled into the packages that use them. Currently the credential and env-resolution code shared by the `neon` CLI and `@neon/env`; each has its own README |
 | `tests/` | Test-only workspace packages, currently the live e2e harness |
 
-See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
-CLI package, which keeps its own toolchain).
+If the only consumers of a helper are other packages in this repo, and a Neon user should not
+import it, it does not go on a published export. Share it through `internals/`
+(`@neon-internals/*`), not by adding it to `@neon/config/v1` (or any other public surface) so a
+sibling can reach it. [`AGENTS.md`](./AGENTS.md) has the packaging rules, plus the deeper
+architecture and per-package notes (especially the CLI package, which keeps its own toolchain).
 
 Some packages add their own contributing notes for rules that only apply there. Read the
 package's file before changing it:
