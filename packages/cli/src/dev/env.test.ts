@@ -418,6 +418,23 @@ describe("resolveDevEnv", () => {
 		rmSync(cwd, { recursive: true, force: true });
 	});
 
+	it("fails instead of running without env when neon.ts declares Realtime outside staging", async () => {
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { realtime: true } };\n",
+		);
+
+		await expect(
+			resolveDevEnv({
+				cwd,
+				projectId: PROJECT_ID,
+				branchId: BRANCH_ID,
+				apiHost: "https://console.neon.tech/api/v2",
+				api: new FakeNeonApi(),
+			}),
+		).rejects.toThrow(/Neon Realtime is coming soon!/);
+	});
+
 	it("injects the AI Gateway on a branch with no neon.ts, like the deployed runtime does", async () => {
 		// `dev` exists to make local behave like deployed. A function that reads
 		// NEON_AI_GATEWAY_* works in production and would fail locally without this.

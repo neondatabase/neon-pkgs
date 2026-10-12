@@ -1822,6 +1822,7 @@ export const applyPolicyOnCreate = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return;
 		throw err;
 	}
+	assertPolicyAvailable(config, props.apiHost);
 
 	try {
 		warnDeprecatedPreview(
@@ -1946,6 +1947,7 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return null;
 		throw err;
 	}
+	assertPolicyAvailable(config, props.apiHost);
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,

@@ -50,16 +50,23 @@ export const listedServices = <T extends string>(services: readonly T[]) =>
 		? services
 		: services.filter((service) => service !== "realtime");
 
+/** A hard stop: callers that degrade other failures to warnings let this one through. */
+export class StagingOnlyError extends Error {
+	override readonly name = "StagingOnlyError";
+}
+
 export const assertRealtimeAvailable = (apiHost?: string): void => {
 	if (!stagingFeaturesEnabled(apiHost)) {
-		throw new Error(REALTIME_COMING_SOON);
+		throw new StagingOnlyError(REALTIME_COMING_SOON);
 	}
 };
 
-/** A `neon.ts` that declares Realtime would call an API production does not serve. */
+/**
+ * A `neon.ts` with any `preview.realtime` value reads the Realtime API, which production
+ * does not serve. `false` reads it too, to disable Realtime on the branch.
+ */
 export const assertPolicyAvailable = (config: Config, apiHost?: string) => {
-	const realtime = config.preview?.realtime;
-	if (realtime !== undefined && realtime !== false) {
+	if (config.preview?.realtime !== undefined) {
 		assertRealtimeAvailable(apiHost);
 	}
 };

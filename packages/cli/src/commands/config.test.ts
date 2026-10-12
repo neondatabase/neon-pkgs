@@ -753,10 +753,13 @@ describe("config commands", () => {
 		});
 	});
 
-	it("refuses a Realtime policy outside staging", async () => {
+	it.each([
+		"true",
+		"false",
+	])("refuses preview.realtime: %s outside staging", async (value) => {
 		const api = new FakeNeonApi();
 		const config = writeConfig(
-			"export default { preview: { realtime: true } };\n",
+			`export default { preview: { realtime: ${value} } };\n`,
 		);
 
 		await expect(

@@ -40,6 +40,7 @@ import {
 import {
 	assertPolicyAvailable,
 	assertRealtimeAvailable,
+	StagingOnlyError,
 	stagingFeaturesEnabled,
 } from "../utils/staging.js";
 
@@ -871,7 +872,11 @@ export const resolveDevEnv = async (
 		const { vars, credential } = await resolveNeonEnvVars(ctx);
 		return { vars, credential };
 	} catch (err) {
-		if (err instanceof DevEnvMismatchError) throw err;
+		if (
+			err instanceof DevEnvMismatchError ||
+			err instanceof StagingOnlyError
+		)
+			throw err;
 		if (err instanceof MissingBranchContextError) {
 			log.debug("dev: %s; skipping env injection", err.message);
 			return {

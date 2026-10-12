@@ -144,3 +144,46 @@ describe("config handlers forward apiHost", () => {
 		});
 	});
 });
+
+describe("checkout policy paths outside staging", () => {
+	const withRealtimeNeonTs = async (run: (cwd: string) => Promise<void>) => {
+		const cwd = mkdtempSync(join(tmpdir(), "neonctl-cfg-realtime-"));
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			"export default { preview: { realtime: true } };\n",
+		);
+		try {
+			await run(cwd);
+		} finally {
+			rmSync(cwd, { recursive: true, force: true });
+		}
+	};
+
+	it("createBranchFromPolicyOnCheckout refuses Realtime before creating a branch", async () => {
+		await withRealtimeNeonTs(async (cwd) => {
+			await expect(
+				createBranchFromPolicyOnCheckout({
+					projectId: "p",
+					branchName: "feature-x",
+					apiHost: HOST,
+					cwd,
+				}),
+			).rejects.toThrow(/Neon Realtime is coming soon!/);
+			expect(createBranch).not.toHaveBeenCalled();
+		});
+	});
+
+	it("applyPolicyOnCreate refuses Realtime before applying", async () => {
+		await withRealtimeNeonTs(async (cwd) => {
+			await expect(
+				applyPolicyOnCreate({
+					projectId: "p",
+					branchId: "br-test",
+					apiHost: HOST,
+					cwd,
+				}),
+			).rejects.toThrow(/Neon Realtime is coming soon!/);
+			expect(apply).not.toHaveBeenCalled();
+		});
+	});
+});
