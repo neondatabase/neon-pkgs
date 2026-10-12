@@ -2,7 +2,6 @@ import {
 	encodeTextParameter,
 	type PreparedLiveQueryParameter,
 	type RealtimeAdapter,
-	validateLiveSelectSql,
 } from "@neon/realtime/server";
 import {
 	assertResultNamesMatchSelection,
@@ -21,7 +20,6 @@ export function drizzleAdapter(): RealtimeAdapter<ConcretePgSelectQuery> {
 	return Object.freeze({
 		prepare(query: ConcretePgSelectQuery) {
 			const compiled = query.toSQL();
-			validateLiveSelectSql(compiled.sql);
 			assertResultNamesMatchSelection(query);
 			return Object.freeze({
 				sql: compiled.sql,

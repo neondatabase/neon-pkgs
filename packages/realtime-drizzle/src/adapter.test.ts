@@ -294,6 +294,27 @@ describe("concrete Drizzle query adapter", () => {
 
 		expect(() => drizzleAdapter().prepare(query)).not.toThrow();
 	});
+
+	it("forwards aggregate query shapes to the Realtime proxy", () => {
+		const distinct = db
+			.selectDistinct({ body: messages.body })
+			.from(messages);
+		const grouped = db
+			.select({
+				body: messages.body,
+				count: sql<number>`count(*)`.as("count"),
+			})
+			.from(messages)
+			.groupBy(messages.body)
+			.having(sql`count(*) > 1`);
+
+		expect(drizzleAdapter().prepare(distinct).sql).toContain(
+			"select distinct",
+		);
+		expect(drizzleAdapter().prepare(grouped).sql).toMatch(
+			/group by .* having /,
+		);
+	});
 });
 
 function decodeParameter(parameter: { readonly value: string | null }) {

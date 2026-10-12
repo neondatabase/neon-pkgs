@@ -5,7 +5,6 @@
  */
 
 export { encodeTextParameter } from "./server/adapter.js";
-export { validateLiveSelectSql } from "./server/query-validation.js";
 export { isTypedRawSqlParameter } from "./server/raw-parameter.js";
 export type {
 	PostgresParameterHelpers,

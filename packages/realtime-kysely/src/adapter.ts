@@ -1,8 +1,4 @@
-import {
-	type PreparedLiveQuery,
-	type RealtimeAdapter,
-	validateLiveSelectSql,
-} from "@neon/realtime/server";
+import type { PreparedLiveQuery, RealtimeAdapter } from "@neon/realtime/server";
 import {
 	createQueryId,
 	PostgresQueryCompiler,
@@ -31,16 +27,10 @@ export function kyselyAdapter(): RealtimeAdapter<KyselySelectQuery> {
 	return Object.freeze({
 		prepare(query: KyselySelectQuery): PreparedLiveQuery {
 			const queryNode = query.toOperationNode();
-			if (queryNode.kind !== "SelectQueryNode") {
-				throw new Error(
-					"Kysely Live requires a concrete select builder",
-				);
-			}
 			const compiled = new PostgresQueryCompiler().compileQuery(
 				queryNode as SelectQueryNode,
 				createQueryId(),
 			);
-			validateLiveSelectSql(compiled.sql);
 			return Object.freeze({
 				sql: compiled.sql,
 				parameters: Object.freeze(

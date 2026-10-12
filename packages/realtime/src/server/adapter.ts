@@ -1,7 +1,3 @@
-const MAX_SQL_BYTES = 32 * 1024;
-const MAX_PARAMETERS = 256;
-const MAX_PARAMETER_BYTES = 16 * 1024;
-
 /** One PostgreSQL text-format Bind parameter in a prepared live query. */
 export interface PreparedLiveQueryParameter {
 	/** PostgreSQL type OID hint, or `0` to request SQL-context inference. */
@@ -34,33 +30,6 @@ export interface RealtimeAdapter<Query> {
 	prepare(query: Query): PreparedLiveQuery;
 }
 
-export function validatePreparedQuery(query: PreparedLiveQuery): void {
-	if (
-		!/^\s*select\b/i.test(query.sql) ||
-		query.sql.includes(";") ||
-		utf8(query.sql).length > MAX_SQL_BYTES ||
-		query.parameters.length > MAX_PARAMETERS
-	) {
-		throw new Error("Invalid Realtime prepared query");
-	}
-	for (const parameter of query.parameters) {
-		if (
-			typeof parameter !== "object" ||
-			parameter === null ||
-			!Number.isSafeInteger(parameter.typeOid) ||
-			parameter.typeOid < 0 ||
-			parameter.typeOid > 0xffff_ffff ||
-			!(
-				parameter.value === null ||
-				(typeof parameter.value === "string" &&
-					utf8(parameter.value).length <= MAX_PARAMETER_BYTES)
-			)
-		) {
-			throw new Error("Invalid Realtime prepared parameter");
-		}
-	}
-}
-
 /**
  * Encode an already unambiguous scalar as a PostgreSQL text-format parameter.
  *
@@ -79,8 +48,4 @@ export function encodeTextParameter(
 		typeOid,
 		value: value === null ? null : String(value),
 	});
-}
-
-function utf8(value: string): Uint8Array {
-	return new TextEncoder().encode(value);
 }

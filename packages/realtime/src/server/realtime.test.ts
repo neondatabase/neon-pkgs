@@ -159,19 +159,18 @@ describe("Realtime backend SDK", () => {
 		expect(query.parameters[1]).toEqual({ typeOid: 0, value: null });
 	});
 
-	it("validates raw SQL metadata before encrypting", async () => {
-		const getRandomValues = vi.spyOn(globalThis.crypto, "getRandomValues");
+	it("leaves raw SQL validation to the Realtime proxy", async () => {
 		const realtime = createRealtime({ secret: SECRET, db: "app" });
-		const invalid = rawSql<MessageRow>("delete from messages");
+		const query = rawSql<MessageRow>("delete from messages;");
 
-		await expect(realtime.seal({ query: invalid })).rejects.toThrow(
-			"Invalid Realtime prepared query",
-		);
-		expect(getRandomValues).not.toHaveBeenCalled();
+		const sealedQuery = await realtime.seal({ query });
+
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
+			sql: "delete from messages;",
+		});
 	});
 
-	it("rejects invalid adapter OID hints before encrypting", async () => {
-		const getRandomValues = vi.spyOn(globalThis.crypto, "getRandomValues");
+	it("leaves adapter output validation to the Realtime proxy", async () => {
 		const realtime = createRealtime<object>({
 			secret: SECRET,
 			db: "app",
@@ -183,10 +182,11 @@ describe("Realtime backend SDK", () => {
 			},
 		});
 
-		await expect(realtime.seal({ query: {} })).rejects.toThrow(
-			"Invalid Realtime prepared parameter",
-		);
-		expect(getRandomValues).not.toHaveBeenCalled();
+		const sealedQuery = await realtime.seal({ query: {} });
+
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
+			parameters: [{ type_oid: -1, value: "Nw==" }],
+		});
 	});
 
 	it("requires a valid opaque Realtime secret", () => {

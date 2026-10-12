@@ -134,15 +134,32 @@ describe("Kysely query adapter", () => {
 		);
 	});
 
-	it("rejects non-select operation nodes at runtime", () => {
+	it("forwards aggregate query shapes to the Realtime proxy", () => {
+		const db = createDatabase<Database>();
+		const distinct = db.selectFrom("messages").select("body").distinct();
+		const grouped = db
+			.selectFrom("messages")
+			.select(["body", sql<number>`count(*)`.as("count")])
+			.groupBy("body")
+			.having(sql<number>`count(*)`, ">", 1);
+
+		expect(kyselyAdapter().prepare(distinct).sql).toContain(
+			"select distinct",
+		);
+		expect(kyselyAdapter().prepare(grouped).sql).toMatch(
+			/group by .* having /,
+		);
+	});
+
+	it("leaves operation validation to the Realtime proxy", () => {
 		const db = createDatabase<Database>();
 		const update = db
 			.updateTable("messages")
 			.set({ body: "changed" })
 			.where("id", "=", 1);
 
-		expect(() => kyselyAdapter().prepare(update as never)).toThrow(
-			"requires a concrete select builder",
+		expect(kyselyAdapter().prepare(update as never).sql).toBe(
+			'update "messages" set "body" = $1 where "id" = $2',
 		);
 	});
 });
