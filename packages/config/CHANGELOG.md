@@ -1,5 +1,12 @@
 # @neondatabase/config
 
+## 1.9.1
+
+### Patch Changes
+
+- Updated dependencies [5f572b6]
+  - @neon/sdk@7.2.0
+
 ## 1.9.0
 
 ### Minor Changes

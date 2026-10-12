@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 2.1.0
+
+### Minor Changes
+
+- 5f572b6: Add `neon.realtime` with `get`, `enable`, `disable`, `secret`, and `rotateSecret` for branch Realtime. `enable` waits until the change is applied by default; `disable` and `rotateSecret` wait with `waitForReadiness: true`. `@neon/tools` publishes `realtime.get`, `realtime.enable`, `realtime.disable`, and `realtime.rotateSecret` as tools, which wait for the change; `realtime.secret` is not a tool.
+
+### Patch Changes
+
+- Updated dependencies [5f572b6]
+  - @neon/sdk@7.2.0
+
 ## 2.0.3
 
 ### Patch Changes

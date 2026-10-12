@@ -1,5 +1,18 @@
 # neon
 
+## 8.4.1
+
+### Patch Changes
+
+- 3c08c9b: Arguments after `--` on `neon psql`, `neon connection-string --psql`, `neon branches create --psql`, and `neon projects create --psql` now reach psql exactly as typed. Numeric-looking values were rewritten (`1e3` became `1000`), and the embedded psql crashed on them.
+- aeff82c: Neon Realtime is staging-only for now. Outside `NEON_API_HOST` / `--api-host` pointing at `https://console-stage.neon.build/api/v2`, `neon realtime`, `neon subscribe`, `neon config add realtime`, `--services realtime`, and a `neon.ts` that declares `preview.realtime` fail with "Neon Realtime is coming soon!", and `neon env pull`, `neon config status`, and the env pull in `neon init` / `link` / `checkout` no longer read Realtime. `pullConfig` and `inspect` read Realtime only with `realtime: true`.
+- 65c1fca: A single-value flag given twice with different values (`--parent a --parent b`, `--branch a --branch b`, `-o json --output yaml`) now fails with `--<flag> was given more than once. Pass it at most once.` It used to crash, look up a branch named `a,b`, or fall back to table output. The same value given twice still works.
+- Updated dependencies [aeff82c]
+- Updated dependencies [5f572b6]
+  - @neon/config-runtime@1.9.1
+  - @neon/sdk@7.2.0
+  - @neon/config@1.9.1
+
 ## 8.4.0
 
 ### Minor Changes
