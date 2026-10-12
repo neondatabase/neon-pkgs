@@ -86,8 +86,11 @@ const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set(["NEON_BRANCH"]);
 const allNamespacesConfig = defineConfig({
 	auth: true,
 	dataApi: true,
-	realtime: true,
-	preview: { buckets: { uploads: {} }, aiGateway: true },
+	preview: {
+		realtime: true,
+		buckets: { uploads: {} },
+		aiGateway: true,
+	},
 });
 
 describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
@@ -174,8 +177,8 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 		const config = defineConfig({
 			auth: true,
 			dataApi: true,
-			realtime: true,
 			preview: {
+				realtime: true,
 				buckets: { uploads: {} },
 				aiGateway: true,
 				functions: { hello: { name: "Hello", source: "./hello.ts" } },

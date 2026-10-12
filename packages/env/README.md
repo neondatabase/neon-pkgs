@@ -24,7 +24,7 @@ Contributing? See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 The library functions are **filesystem- and env-agnostic**: `fetchEnv` requires an explicit `projectId` + `branch` (a branch **name** like `main`, or a `br-…` id). (The `neon-env` CLI does the `.neon`/`NEON_*` resolution and passes these in.)
 
-> `parseEnv` takes **no branch name**: the secret set is static (top-level `config.auth` / `config.dataApi` / `config.realtime`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** _or_ a **key filter** — omit it for the full external (app/build) env, pass a **function slug** when running inside that deployed function (adds a typed `function` namespace of that function's declared env keys), or pass an **array of OS-level env-var keys** to require + return only that subset.
+> `parseEnv` takes **no branch name**: the secret set is static (`config.auth` / `config.dataApi` / `config.preview.realtime`), so it reads those toggles directly without evaluating the per-branch closure. Its optional second argument is a **scope** _or_ a **key filter** — omit it for the full external (app/build) env, pass a **function slug** when running inside that deployed function (adds a typed `function` namespace of that function's declared env keys), or pass an **array of OS-level env-var keys** to require + return only that subset.
 
 ```ts
 import config from "../neon";

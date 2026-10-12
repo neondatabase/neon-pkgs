@@ -303,6 +303,13 @@ type HasPreviewAiGateway<C extends Config> = [
 		? ServiceOn<NonNullable<A>>
 		: false;
 
+/** Whether the policy statically enables Realtime under `preview.realtime`. */
+type RealtimeOn<C extends Config> = [NonNullable<C["preview"]>] extends [never]
+	? false
+	: NonNullable<C["preview"]> extends { realtime: infer R }
+		? ServiceOn<NonNullable<R>>
+		: false;
+
 type AiGatewayOn<C extends Config> = OrBool<
 	HasGaToggle<C["aiGateway"]>,
 	HasPreviewAiGateway<C>
@@ -366,14 +373,14 @@ type FunctionBaseUrlKeyOf<C extends Config> =
  * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
  * {@link Config} so the type system knows which optional namespaces are present.
  *
- * Because the secret-bearing toggles now live in the **static** top-level `config.auth` /
- * `config.dataApi` (not inside a per-branch closure), the namespace presence is a direct
- * read of those fields — no union-across-branches, no default-config escape hatch:
+ * Because the secret-bearing toggles live in the **static** config (not inside a per-branch
+ * closure), namespace presence is a direct read of those fields — no union-across-branches,
+ * no default-config escape hatch:
  *
  * - `postgres` is always present.
  * - `auth` is added iff `config.auth` is statically enabled.
  * - `dataApi` is added iff `config.dataApi` is statically enabled.
- * - `realtime` is added iff `config.realtime` is statically enabled.
+ * - `realtime` is added iff `config.preview.realtime` is statically enabled.
  * - `storage` is added iff `config.buckets` (or deprecated `preview.buckets`) declares at least one bucket.
  * - `aiGateway` is added iff `config.aiGateway` (or deprecated `preview.aiGateway`) is statically enabled.
  * - `functions` is added iff `config.functions` (or deprecated `preview.functions`) declares at least one slug.
@@ -391,9 +398,7 @@ export type NeonEnv<C extends Config = Config> = {
 	(ServiceOn<NonNullable<C["dataApi"]>> extends true
 		? { dataApi: NeonDataApiEnv }
 		: NoNamespace) &
-	(ServiceOn<NonNullable<C["realtime"]>> extends true
-		? { realtime: NeonRealtimeEnv }
-		: NoNamespace) &
+	(RealtimeOn<C> extends true ? { realtime: NeonRealtimeEnv } : NoNamespace) &
 	(HasBuckets<C> extends true ? { storage: NeonStorageEnv } : NoNamespace) &
 	(AiGatewayOn<C> extends true
 		? { aiGateway: NeonAiGatewayEnv }

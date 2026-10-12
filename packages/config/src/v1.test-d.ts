@@ -235,9 +235,11 @@ describe("defineConfig return-type stability", () => {
 		expectTypeOf(empty.auth).toEqualTypeOf<undefined>();
 
 		const realtime = defineConfig({
-			realtime: { allowedOrigins: ["https://app.example.com"] },
+			preview: {
+				realtime: { allowedOrigins: ["https://app.example.com"] },
+			},
 		});
-		expectTypeOf(realtime.realtime).toEqualTypeOf<
+		expectTypeOf(realtime.preview?.realtime).toEqualTypeOf<
 			| { readonly allowedOrigins: readonly ["https://app.example.com"] }
 			| undefined
 		>();

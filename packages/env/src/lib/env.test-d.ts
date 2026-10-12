@@ -72,7 +72,7 @@ describe("parseEnv key filter (types)", () => {
 	});
 
 	test("Realtime keys are selectable only when the policy enables Realtime", () => {
-		const config = defineConfig({ realtime: true });
+		const config = defineConfig({ preview: { realtime: true } });
 		const env = parseEnv(config, ["NEON_REALTIME_SECRET"]);
 		expectTypeOf(env).toEqualTypeOf<{
 			realtime: { secret: string };
@@ -636,11 +636,11 @@ describe("NeonEnv namespace presence (types)", () => {
 	});
 
 	test("Realtime enablement adds (or omits) the realtime namespace", () => {
-		const enabled = defineConfig({ realtime: true });
+		const enabled = defineConfig({ preview: { realtime: true } });
 		const configured = defineConfig({
-			realtime: { allowedOrigins: ["*"] },
+			preview: { realtime: { allowedOrigins: ["*"] } },
 		});
-		const disabled = defineConfig({ realtime: false });
+		const disabled = defineConfig({ preview: { realtime: false } });
 		expectTypeOf<
 			NamespacePresence<typeof enabled>["realtime"]
 		>().toEqualTypeOf<true>();
@@ -737,8 +737,8 @@ describe("NeonEnv namespace presence (types)", () => {
 		const everything = defineConfig({
 			auth: true,
 			dataApi: true,
-			realtime: true,
 			preview: {
+				realtime: true,
 				buckets: { uploads: {} },
 				aiGateway: true,
 				functions: { hello: { name: "H", source: "./h.ts" } },
@@ -760,7 +760,7 @@ describe("NeonEnv namespace presence (types)", () => {
 		const everything = defineConfig({
 			auth: true,
 			dataApi: true,
-			realtime: true,
+			preview: { realtime: true },
 			buckets: { uploads: {} },
 			aiGateway: true,
 			functions: { hello: { name: "H", source: "./h.ts" } },

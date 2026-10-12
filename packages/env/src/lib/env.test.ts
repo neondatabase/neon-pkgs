@@ -390,11 +390,14 @@ describe("fetchEnv", () => {
 			"nrt_live_1_env-test",
 		);
 
-		const env = await fetchEnv(defineConfig({ realtime: true }), {
-			api,
-			projectId,
-			branchId: "br-main",
-		});
+		const env = await fetchEnv(
+			defineConfig({ preview: { realtime: true } }),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+			},
+		);
 
 		expect(env.realtime).toEqual({
 			url: "wss://realtime.example.test/v1",
@@ -441,11 +444,14 @@ describe("fetchEnv", () => {
 				invocationUrl: "wss://realtime.example.test/v1",
 			});
 
-			const resolved = fetchEnv(defineConfig({ realtime: true }), {
-				api,
-				projectId,
-				branchId: "br-main",
-			});
+			const resolved = fetchEnv(
+				defineConfig({ preview: { realtime: true } }),
+				{
+					api,
+					projectId,
+					branchId: "br-main",
+				},
+			);
 			await vi.advanceTimersByTimeAsync(1_000);
 
 			await expect(resolved).resolves.toHaveProperty(
@@ -461,7 +467,7 @@ describe("fetchEnv", () => {
 	test("errors clearly when policy Realtime is disabled on the branch", async () => {
 		const { api, projectId } = seededFake();
 		await expect(
-			fetchEnv(defineConfig({ realtime: true }), {
+			fetchEnv(defineConfig({ preview: { realtime: true } }), {
 				api,
 				projectId,
 				branchId: "br-main",
@@ -763,12 +769,14 @@ describe("parseEnv", () => {
 		vi.stubEnv("NEON_REALTIME_URL", "wss://realtime.example.test/v1");
 		vi.stubEnv("NEON_REALTIME_SECRET", "nrt_live_1_parse-test");
 
-		const env = parseEnv(defineConfig({ realtime: true }));
+		const env = parseEnv(defineConfig({ preview: { realtime: true } }));
 		expect(env.realtime).toEqual({
 			url: "wss://realtime.example.test/v1",
 			secret: "nrt_live_1_parse-test",
 		});
-		const disabled = parseEnv(defineConfig({ realtime: false }));
+		const disabled = parseEnv(
+			defineConfig({ preview: { realtime: false } }),
+		);
 		// @ts-expect-error disabled Realtime must not add its namespace.
 		disabled.realtime;
 	});

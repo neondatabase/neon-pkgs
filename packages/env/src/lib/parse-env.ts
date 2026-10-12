@@ -209,8 +209,8 @@ function isServiceEnabledInput(
  * - You are **inside a deployed Neon Function**, whose env was uploaded at `config apply`.
  *
  * Unlike the old API, `parseEnv` does **not** take a branch name: the secret set is now
- * static (top-level `config.auth` / `config.dataApi` / `config.realtime`), so it reads those directly without
- * evaluating the per-branch closure.
+ * static (`config.auth` / `config.dataApi` / `config.preview.realtime`), so it reads those
+ * directly without evaluating the per-branch closure.
  *
  * The second argument is a **scope** or a **key filter**:
  * - omitted — *external* scope (app bootstrap, build scripts, your dev machine). Returns the
@@ -331,7 +331,10 @@ export function parseEnv(
 		}
 	}
 
-	if (config.realtime !== undefined && config.realtime !== false) {
+	if (
+		config.preview?.realtime !== undefined &&
+		config.preview.realtime !== false
+	) {
 		const realtime = realtimeEnvSchema.safeParse({
 			NEON_REALTIME_URL: source.NEON_REALTIME_URL,
 			NEON_REALTIME_SECRET: source.NEON_REALTIME_SECRET,
