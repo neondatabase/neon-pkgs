@@ -15,8 +15,12 @@ type FakeWebSocketListener =
 	| ((event: { readonly data: unknown }) => void);
 
 class FakeWebSocket implements WebSocketLike {
+	static readonly CONNECTING = 0;
+	static readonly OPEN = 1;
+	static readonly CLOSING = 2;
+	static readonly CLOSED = 3;
 	static instances: FakeWebSocket[] = [];
-	readyState = 0;
+	readyState = FakeWebSocket.CONNECTING;
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
 	onSend?: (message: Record<string, unknown>) => void;
@@ -49,22 +53,22 @@ class FakeWebSocket implements WebSocketLike {
 	}
 
 	close(): void {
-		if (this.readyState >= 2) return;
+		if (this.readyState >= FakeWebSocket.CLOSING) return;
 		this.onClose?.();
-		this.readyState = 2;
+		this.readyState = FakeWebSocket.CLOSING;
 		if (this.emitCloseOnClose) {
-			this.readyState = 3;
+			this.readyState = FakeWebSocket.CLOSED;
 			this.emit("close", {});
 		}
 	}
 
 	terminate(): void {
-		this.readyState = 3;
+		this.readyState = FakeWebSocket.CLOSED;
 		this.emit("close", {});
 	}
 
 	open(): void {
-		this.readyState = 1;
+		this.readyState = FakeWebSocket.OPEN;
 		this.emit("open", {});
 	}
 
@@ -73,7 +77,7 @@ class FakeWebSocket implements WebSocketLike {
 	}
 
 	disconnect(): void {
-		this.readyState = 3;
+		this.readyState = FakeWebSocket.CLOSED;
 		this.emit("close", {});
 	}
 
@@ -117,7 +121,7 @@ describe("ConnectionCoordinator", () => {
 		expect(callbacks.disconnected).toHaveBeenCalledTimes(1);
 		expect(callbacks.admitted).toHaveBeenCalledTimes(1);
 		expect(callbacks.failed).not.toHaveBeenCalled();
-		expect(second.readyState).toBe(1);
+		expect(second.readyState).toBe(FakeWebSocket.OPEN);
 		coordinator.close();
 	});
 
@@ -153,7 +157,7 @@ describe("ConnectionCoordinator", () => {
 		);
 		expect(callbacks.failed).not.toHaveBeenCalled();
 		coordinator.close();
-		expect(second.readyState).toBe(3);
+		expect(second.readyState).toBe(FakeWebSocket.CLOSED);
 	});
 
 	it.each([
@@ -172,7 +176,7 @@ describe("ConnectionCoordinator", () => {
 		coordinator.close();
 
 		expect(close).toHaveBeenCalledTimes(1);
-		expect(socket.readyState).toBe(3);
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
 		await vi.advanceTimersByTimeAsync(1_000);
 		expect(FakeWebSocket.instances).toHaveLength(1);
 		expect(callbacks.failed).not.toHaveBeenCalled();
@@ -189,12 +193,12 @@ describe("ConnectionCoordinator", () => {
 
 		coordinator.close();
 
-		expect(socket.readyState).toBe(2);
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSING);
 		await vi.advanceTimersByTimeAsync(999);
 		expect(terminate).not.toHaveBeenCalled();
 		await vi.advanceTimersByTimeAsync(1);
 		expect(terminate).toHaveBeenCalledOnce();
-		expect(socket.readyState).toBe(3);
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
@@ -628,12 +632,12 @@ describe("ConnectionCoordinator", () => {
 		expect(
 			socket.sent.filter((message) => message.type === "ping"),
 		).toHaveLength(1);
-		expect(socket.readyState).toBe(1);
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
 		await vi.advanceTimersByTimeAsync(1);
 		expect(
 			socket.sent.filter((message) => message.type === "ping"),
 		).toHaveLength(2);
-		expect(socket.readyState).toBe(1);
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
 	});
 
 	it("keeps increasing backoff until a reconnected socket is stable", async () => {
@@ -1030,7 +1034,7 @@ describe("subscription load-shedding recovery", () => {
 		baseline(socket, "42");
 		expect(healthy.reconciliation.caughtUp).toHaveBeenCalledOnce();
 		expect(healthy.failed).not.toHaveBeenCalled();
-		expect(socket.readyState).toBe(1);
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
 		coordinator.close();
 		expect(vi.getTimerCount()).toBe(0);
 	});
