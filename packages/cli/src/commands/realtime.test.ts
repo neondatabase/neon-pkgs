@@ -84,12 +84,14 @@ describe("realtime", () => {
 		);
 	});
 
-	test("is not a command outside staging", async ({ testCliCommand }) => {
+	test("explains it is coming soon outside staging", async ({
+		testCliCommand,
+	}) => {
 		await testCliCommand(["realtime", "enable", "--project-id", "test"], {
 			code: 1,
 			snapshot: false,
 			stderr: expect.stringContaining(
-				"ERROR: Unknown commands: realtime",
+				"ERROR: Neon Realtime is coming soon!",
 			),
 		});
 	});

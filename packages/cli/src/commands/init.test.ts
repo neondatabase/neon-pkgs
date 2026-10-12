@@ -275,6 +275,9 @@ describe("init handler", () => {
 	});
 
 	test("--services realtime writes preview.realtime to neon.ts", async () => {
+		// Treat the mock API host as staging, for init and the nested config init.
+		vi.stubEnv("NEON_STAGING_API_HOST", host);
+		vi.stubEnv("NEON_API_HOST", host);
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-realtime-"));
 		vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { initCmd } = await import("./config.js");

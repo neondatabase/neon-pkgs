@@ -98,6 +98,21 @@ describe("staging-only commands", () => {
 		expect(strip(stdout)).toMatch(/neon subscribe/);
 	});
 
+	test("realtime is not offered as a service outside staging", async ({
+		testCliCommand,
+	}) => {
+		for (const args of [
+			["env", "pull", "--help"],
+			["init", "--help"],
+			["config", "init", "--help"],
+		]) {
+			const { stdout } = await testCliCommand(args, { snapshot: false });
+			expect(strip(stdout).replace(/\s+/g, " ")).not.toMatch(
+				/ai-gateway, realtime/,
+			);
+		}
+	});
+
 	test("realtime prints its help with no subcommand on staging", async ({
 		testCliCommand,
 	}) => {

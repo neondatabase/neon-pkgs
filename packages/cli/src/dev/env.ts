@@ -38,7 +38,8 @@ import {
 	resolvePackageManager,
 } from "../utils/package_manager.js";
 import {
-	STAGING_ONLY_MESSAGE,
+	assertPolicyAvailable,
+	assertRealtimeAvailable,
 	stagingFeaturesEnabled,
 } from "../utils/staging.js";
 
@@ -574,8 +575,8 @@ const resolveSelectedServices = async (
 			impliedServices.includes(service),
 	);
 	const selectedKeys = envKeysForSelection(directServices, envKeys);
-	if (services.includes("realtime") && !stagingFeaturesEnabled(ctx.apiHost)) {
-		throw new Error(`Realtime ${STAGING_ONLY_MESSAGE}`);
+	if (services.includes("realtime")) {
+		assertRealtimeAvailable(ctx.apiHost);
 	}
 
 	// Read only the services that were named, rather than going through `pullConfig`. That
@@ -1022,6 +1023,7 @@ const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 				? { unsetFunctionEnv: "omit" as const }
 				: {}),
 		});
+		assertPolicyAvailable(config, ctx.apiHost);
 		return config;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

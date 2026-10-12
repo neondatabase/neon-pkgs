@@ -42,7 +42,7 @@ import { loadConfigFromFile, type NeonApi } from "@neon/config-runtime";
 import { unzipSync } from "fflate";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import { STAGING_API_HOST } from "../utils/staging.js";
 import type { ConfigProps } from "./config.js";
 import {
 	applyCmd,
@@ -753,6 +753,17 @@ describe("config commands", () => {
 		});
 	});
 
+	it("refuses a Realtime policy outside staging", async () => {
+		const api = new FakeNeonApi();
+		const config = writeConfig(
+			"export default { preview: { realtime: true } };\n",
+		);
+
+		await expect(
+			planCmd({ ...baseProps(api, captureOut().stream), config }),
+		).rejects.toThrow(/Neon Realtime is coming soon!/);
+	});
+
 	it("plans and applies Realtime through the config runtime", async () => {
 		const api = new FakeNeonApi();
 		const config = writeConfig(
@@ -760,7 +771,11 @@ describe("config commands", () => {
 		);
 		const planned = captureOut();
 
-		await planCmd({ ...baseProps(api, planned.stream), config });
+		await planCmd({
+			...baseProps(api, planned.stream),
+			apiHost: STAGING_API_HOST,
+			config,
+		});
 
 		const plan = JSON.parse(planned.read());
 		expect(plan.dryRun).toBe(true);
@@ -775,7 +790,11 @@ describe("config commands", () => {
 		expect(api.enableRealtimeCalls).toHaveLength(0);
 
 		const applied = captureOut();
-		await applyCmd({ ...baseProps(api, applied.stream), config });
+		await applyCmd({
+			...baseProps(api, applied.stream),
+			apiHost: STAGING_API_HOST,
+			config,
+		});
 
 		expect(JSON.parse(applied.read()).dryRun).toBe(false);
 		expect(api.enableRealtimeCalls).toEqual([
@@ -1446,6 +1465,7 @@ describe("config commands", () => {
 
 		await applyCmd({
 			...baseProps(api, stream),
+			apiHost: STAGING_API_HOST,
 			output: "table",
 			config,
 			cwd,

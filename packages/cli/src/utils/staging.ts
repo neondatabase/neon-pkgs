@@ -1,12 +1,15 @@
-import { Parser } from "yargs/helpers";
+import type { Config } from "@neon/config-runtime";
+import { hideBin, Parser } from "yargs/helpers";
 
 /**
  * Staging-only features ship in a release before their API reaches production. The CLI
  * exposes them only when the API host it sends requests to (`--api-host`, else
- * `NEON_API_HOST`) is Neon's staging console; with production or no host set, they do not
- * exist.
+ * `NEON_API_HOST`) is Neon's staging console; with production or no host set, they are
+ * hidden from help and fail with a "coming soon" message.
  */
 export const STAGING_API_HOST = "https://console-stage.neon.build/api/v2";
+
+export const REALTIME_COMING_SOON = `Neon Realtime is coming soon! For now it only works on Neon's staging API: set NEON_API_HOST=${STAGING_API_HOST} or pass --api-host.`;
 
 /** `NEON_STAGING_API_HOST` lets the CLI's tests treat their local mock API as staging. */
 const stagingHostname = () =>
@@ -17,11 +20,10 @@ export const isStagingApiHost = (apiHost: string | undefined): boolean =>
 	URL.canParse(apiHost) &&
 	new URL(apiHost).hostname === stagingHostname();
 
-export const stagingFeaturesEnabled = (apiHost?: string): boolean =>
-	isStagingApiHost(apiHost ?? process.env.NEON_API_HOST);
-
-/** The same decision before yargs runs, for choosing which commands to register. */
-export const stagingFeaturesEnabledForArgv = (args: readonly string[]) => {
+/** The API host this process was invoked with, read before or without yargs. */
+export const stagingFeaturesEnabledForArgv = (
+	args: readonly string[] = hideBin(process.argv),
+): boolean => {
 	const { argv } = Parser.detailed([...args], {
 		string: ["api-host"],
 		alias: { "api-host": ["apiHost"] },
@@ -31,7 +33,33 @@ export const stagingFeaturesEnabledForArgv = (args: readonly string[]) => {
 		},
 	});
 	const flag = argv["api-host"];
-	return stagingFeaturesEnabled(typeof flag === "string" ? flag : undefined);
+	return isStagingApiHost(
+		typeof flag === "string" ? flag : process.env.NEON_API_HOST,
+	);
 };
 
-export const STAGING_ONLY_MESSAGE = `is staging-only. Point the CLI at staging with NEON_API_HOST=${STAGING_API_HOST} or --api-host.`;
+/** `apiHost` is a command's resolved host; without one, the host this process was invoked with. */
+export const stagingFeaturesEnabled = (apiHost?: string): boolean =>
+	apiHost === undefined
+		? stagingFeaturesEnabledForArgv()
+		: isStagingApiHost(apiHost);
+
+/** Service names to list in help: Realtime only on staging. */
+export const listedServices = <T extends string>(services: readonly T[]) =>
+	stagingFeaturesEnabledForArgv()
+		? services
+		: services.filter((service) => service !== "realtime");
+
+export const assertRealtimeAvailable = (apiHost?: string): void => {
+	if (!stagingFeaturesEnabled(apiHost)) {
+		throw new Error(REALTIME_COMING_SOON);
+	}
+};
+
+/** A `neon.ts` that declares Realtime would call an API production does not serve. */
+export const assertPolicyAvailable = (config: Config, apiHost?: string) => {
+	const realtime = config.preview?.realtime;
+	if (realtime !== undefined && realtime !== false) {
+		assertRealtimeAvailable(apiHost);
+	}
+};
