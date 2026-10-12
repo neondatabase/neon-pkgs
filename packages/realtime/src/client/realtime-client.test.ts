@@ -916,18 +916,19 @@ describe("RealtimeClient", () => {
 	it("reuses a live ID after the last unsubscribe while its socket is closing", () => {
 		useFakeWebSocket();
 		FakeWebSocket.deferClose = true;
+		const reusedLiveId = "41";
 		const client = createRealtimeClient({ url: "ws://live.test/v1" });
 		const firstSubscription = client.subscribe(query("first"));
-		const firstSocket = connectAndAdmit();
-		baselineSync(firstSocket, "first");
+		const firstSocket = connectAndAdmit(reusedLiveId);
+		baselineSync(firstSocket, "first", reusedLiveId);
 
 		firstSubscription.unsubscribe();
 		expect(firstSocket.readyState).toBe(2);
 
 		const replacement = client.subscribe(query("replacement"));
 		expect(FakeWebSocket.instances).toHaveLength(2);
-		const replacementSocket = connectAndAdmit();
-		baselineSync(replacementSocket, "replacement");
+		const replacementSocket = connectAndAdmit(reusedLiveId);
+		baselineSync(replacementSocket, "replacement", reusedLiveId);
 		expect(replacement.getSnapshot()).toMatchObject({
 			status: "live",
 			data: [{ id: 1, title: "replacement" }],
@@ -1451,7 +1452,7 @@ function useFakeWebSocket(): void {
 	vi.stubGlobal("WebSocket", FakeWebSocket);
 }
 
-function connectAndAdmit(): FakeWebSocket {
+function connectAndAdmit(liveId = "41"): FakeWebSocket {
 	const socket = defined(FakeWebSocket.instances.at(-1));
 	socket.open();
 	socket.receive({ type: "ready" });
@@ -1461,7 +1462,7 @@ function connectAndAdmit(): FakeWebSocket {
 	socket.receive({
 		type: "subscribed",
 		request_id: request.request_id,
-		live_id: "41",
+		live_id: liveId,
 		epoch: "1",
 		first_sequence: "1",
 		columns: [
