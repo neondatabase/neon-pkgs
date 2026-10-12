@@ -1,5 +1,18 @@
 # @neondatabase/config-runtime
 
+## 1.9.0
+
+### Minor Changes
+
+- 33325b3: Add Realtime as a branch-level preview feature in `neon.ts`. `neon init --services realtime` and `neon config add realtime [--allowed-origin <origin>]` declare it for plan and deploy, while `neon realtime enable` and `neon realtime disable` manage the selected branch directly.
+- 5e276fd: Expose the Realtime WebSocket URL and server-only secret through `@neon/env` and `neon env pull`. Config-aware pulls wait for asynchronous Realtime provisioning before returning `NEON_REALTIME_URL` and `NEON_REALTIME_SECRET`; applications derive the database name from `DATABASE_URL`.
+
+### Patch Changes
+
+- Updated dependencies [33325b3]
+- Updated dependencies [5e276fd]
+  - @neon/config@1.9.0
+
 ## 1.8.1
 
 ### Patch Changes

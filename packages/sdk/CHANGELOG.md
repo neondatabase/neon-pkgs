@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 7.1.0
+
+### Minor Changes
+
+- 025988c: Add generated API methods and types for enabling, inspecting, disabling, and rotating Neon Realtime on a branch, including retrieving its shared secret.
+
 ## 7.0.1
 
 ### Patch Changes

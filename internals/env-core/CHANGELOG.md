@@ -1,5 +1,13 @@
 # @neon-internals/env-core
 
+## 0.0.31
+
+### Patch Changes
+
+- Updated dependencies [33325b3]
+- Updated dependencies [5e276fd]
+  - @neon/config@1.9.0
+
 ## 0.0.30
 
 ### Patch Changes
