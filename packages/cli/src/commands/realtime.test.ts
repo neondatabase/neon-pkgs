@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures.js";
-import { STAGING_API_HOST } from "../utils/staging.js";
 
-const STAGING = { NEON_API_HOST: STAGING_API_HOST };
+// The fixture sends requests to a local mock through --api-host.
+const STAGING = { NEON_STAGING_API_HOST: "http://localhost" };
 
 describe("realtime", () => {
 	let workspace: string;
@@ -76,7 +76,7 @@ describe("realtime", () => {
 			],
 			{
 				unreachableHost: true,
-				env: STAGING,
+				env: { NEON_STAGING_API_HOST: "http://127.0.0.1" },
 				code: 1,
 				snapshot: false,
 				stderr: 'ERROR: Invalid Neon config: - preview.realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',

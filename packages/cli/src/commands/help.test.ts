@@ -2,7 +2,6 @@ import strip from "strip-ansi";
 import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
-import { STAGING_API_HOST } from "../utils/staging.js";
 
 describe("help", () => {
 	test("without args", async ({ testCliCommand }) => {
@@ -80,7 +79,8 @@ describe("parent commands print help with no subcommand", () => {
 });
 
 describe("staging-only commands", () => {
-	const staging = { NEON_API_HOST: STAGING_API_HOST };
+	// The fixture sends requests to a local mock through --api-host.
+	const staging = { NEON_STAGING_API_HOST: "http://localhost" };
 
 	test("are not listed outside staging", async ({ testCliCommand }) => {
 		const { stdout } = await testCliCommand(["--help"], {
