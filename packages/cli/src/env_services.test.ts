@@ -47,11 +47,7 @@ describe("env pull key selection", () => {
 			]),
 		).toEqual(["postgres", "auth"]);
 		expect(
-			servicesForEnvKeys([
-				"NEON_REALTIME_URL",
-				"NEON_REALTIME_SECRET",
-				"NEON_REALTIME_DATABASE_NAME",
-			]),
+			servicesForEnvKeys(["NEON_REALTIME_URL", "NEON_REALTIME_SECRET"]),
 		).toEqual(["realtime"]);
 	});
 
@@ -69,7 +65,6 @@ describe("env pull key selection", () => {
 			"NEON_BRANCH",
 			"NEON_REALTIME_URL",
 			"NEON_REALTIME_SECRET",
-			"NEON_REALTIME_DATABASE_NAME",
 		]);
 	});
 

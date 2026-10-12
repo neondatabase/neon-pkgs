@@ -589,8 +589,8 @@ describe("env pull", () => {
 		expect(env).toMatchObject({
 			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
 			NEON_REALTIME_SECRET: "nrt_live_1_bare-pull",
-			NEON_REALTIME_DATABASE_NAME: "neondb",
 		});
+		expect(env).not.toHaveProperty("NEON_REALTIME_DATABASE_NAME");
 	});
 
 	it("updates an existing .env in place, preserving other keys", async () => {
@@ -632,7 +632,6 @@ describe("env pull", () => {
 				"NEON_DATA_API_URL=https://stale.apirest.example/db/rest/v1",
 				"NEON_REALTIME_URL=wss://stale.realtime.example/v1",
 				"NEON_REALTIME_SECRET=nrt_live_1_stale",
-				"NEON_REALTIME_DATABASE_NAME=old_db",
 				"",
 			].join("\n"),
 		);
@@ -650,7 +649,6 @@ describe("env pull", () => {
 		expect(content).not.toContain("NEON_DATA_API_URL");
 		expect(content).not.toContain("NEON_REALTIME_URL");
 		expect(content).not.toContain("NEON_REALTIME_SECRET");
-		expect(content).not.toContain("NEON_REALTIME_DATABASE_NAME");
 		expect(result.status).toBe("written");
 		if (result.status === "written") {
 			expect(result.written).toContain("DATABASE_URL");
@@ -887,7 +885,7 @@ describe("env pull --service", () => {
 		expect(content).not.toContain("DATABASE_URL");
 	});
 
-	it("pulls the Realtime URL, secret, and selected database as one service", async () => {
+	it("pulls the Realtime URL and secret as one service", async () => {
 		const api = new FakeNeonApi({
 			getProjectBranchRealtime: async () => ({
 				enabled: true,
@@ -906,8 +904,8 @@ describe("env pull --service", () => {
 		expect(env).toMatchObject({
 			NEON_REALTIME_URL: "wss://realtime.fake.neon.tech/v1",
 			NEON_REALTIME_SECRET: "nrt_live_1_cli-test",
-			NEON_REALTIME_DATABASE_NAME: "neondb",
 		});
+		expect(env).not.toHaveProperty("NEON_REALTIME_DATABASE_NAME");
 		expect(env.DATABASE_URL).toBeUndefined();
 	});
 

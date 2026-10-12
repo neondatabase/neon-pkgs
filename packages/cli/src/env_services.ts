@@ -65,7 +65,6 @@ const ENV_KEY_SERVICE: Record<
 	NEON_DATA_API_URL: "data-api",
 	NEON_REALTIME_URL: "realtime",
 	NEON_REALTIME_SECRET: "realtime",
-	NEON_REALTIME_DATABASE_NAME: "realtime",
 	AWS_ACCESS_KEY_ID: "object-storage",
 	AWS_SECRET_ACCESS_KEY: "object-storage",
 	AWS_ENDPOINT_URL_S3: "object-storage",

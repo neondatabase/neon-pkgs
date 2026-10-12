@@ -152,9 +152,6 @@ const realtimeEnvSchema = z.object({
 	NEON_REALTIME_SECRET: z
 		.string({ message: "NEON_REALTIME_SECRET is missing" })
 		.min(1, "NEON_REALTIME_SECRET must not be empty"),
-	NEON_REALTIME_DATABASE_NAME: z
-		.string({ message: "NEON_REALTIME_DATABASE_NAME is missing" })
-		.min(1, "NEON_REALTIME_DATABASE_NAME must not be empty"),
 });
 
 const storageEnvSchema = z.object({
@@ -338,13 +335,11 @@ export function parseEnv(
 		const realtime = realtimeEnvSchema.safeParse({
 			NEON_REALTIME_URL: source.NEON_REALTIME_URL,
 			NEON_REALTIME_SECRET: source.NEON_REALTIME_SECRET,
-			NEON_REALTIME_DATABASE_NAME: source.NEON_REALTIME_DATABASE_NAME,
 		});
 		if (realtime.success) {
 			result.realtime = {
 				url: realtime.data.NEON_REALTIME_URL,
 				secret: realtime.data.NEON_REALTIME_SECRET,
-				databaseName: realtime.data.NEON_REALTIME_DATABASE_NAME,
 			} satisfies NeonRealtimeEnv;
 		} else {
 			for (const issue of realtime.error.issues)
@@ -513,7 +508,6 @@ const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 	NEON_DATA_API_URL: ["dataApi", "url"],
 	NEON_REALTIME_URL: ["realtime", "url"],
 	NEON_REALTIME_SECRET: ["realtime", "secret"],
-	NEON_REALTIME_DATABASE_NAME: ["realtime", "databaseName"],
 	AWS_ACCESS_KEY_ID: ["storage", "accessKeyId"],
 	AWS_SECRET_ACCESS_KEY: ["storage", "secretAccessKey"],
 	AWS_ENDPOINT_URL_S3: ["storage", "endpoint"],

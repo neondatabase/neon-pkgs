@@ -72,7 +72,6 @@ export const NEON_ENV_VAR_KEYS = {
 	realtime: {
 		url: "NEON_REALTIME_URL",
 		secret: "NEON_REALTIME_SECRET",
-		databaseName: "NEON_REALTIME_DATABASE_NAME",
 	},
 	/**
 	 * Object storage (Preview). The S3 SDKs read `AWS_*` from their standard config chain, so
@@ -178,8 +177,6 @@ export interface NeonRealtimeEnv {
 	url: string;
 	/** Server-only key passed to `createRealtime`. Never expose it to browser code. */
 	secret: string;
-	/** Database passed to `createRealtime`; selected with the same rules as Postgres URLs. */
-	databaseName: string;
 }
 
 /**
@@ -419,10 +416,7 @@ interface EnvKeysByNamespace {
 	branch: "NEON_BRANCH";
 	auth: "NEON_AUTH_BASE_URL" | "NEON_AUTH_JWKS_URL";
 	dataApi: "NEON_DATA_API_URL";
-	realtime:
-		| "NEON_REALTIME_URL"
-		| "NEON_REALTIME_SECRET"
-		| "NEON_REALTIME_DATABASE_NAME";
+	realtime: "NEON_REALTIME_URL" | "NEON_REALTIME_SECRET";
 	storage:
 		| "AWS_ACCESS_KEY_ID"
 		| "AWS_SECRET_ACCESS_KEY"
@@ -452,7 +446,6 @@ interface EnvKeyToProp {
 	NEON_DATA_API_URL: "url";
 	NEON_REALTIME_URL: "url";
 	NEON_REALTIME_SECRET: "secret";
-	NEON_REALTIME_DATABASE_NAME: "databaseName";
 	AWS_ACCESS_KEY_ID: "accessKeyId";
 	AWS_SECRET_ACCESS_KEY: "secretAccessKey";
 	AWS_ENDPOINT_URL_S3: "endpoint";
@@ -1007,10 +1000,7 @@ export async function fetchEnvKeysState(
 	const wantsDataApi = desired.dataApiEnabled && wants(K.dataApi.url);
 	const realtimeEnabled = desired.realtimePolicy === "enabled";
 	const wantsRealtime =
-		realtimeEnabled &&
-		(wants(K.realtime.url) ||
-			wants(K.realtime.secret) ||
-			wants(K.realtime.databaseName));
+		realtimeEnabled && (wants(K.realtime.url) || wants(K.realtime.secret));
 	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
 	const functionUrlMode = options.functionUrls ?? "policy";
 	const declaredSlugs = (desired.preview?.functions ?? []).map(
@@ -1051,8 +1041,7 @@ export async function fetchEnvKeysState(
 		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
 		constructSlugs.length > 0;
 	const needsConnectionTarget = wantsPooled || needsUnpooled;
-	const needsDatabase =
-		needsConnectionTarget || wantsDataApi || wantsRealtime;
+	const needsDatabase = needsConnectionTarget || wantsDataApi;
 	const [roles, databases] = await Promise.all([
 		needsConnectionTarget
 			? api.listBranchRoles(projectId, branch.id)
@@ -1194,12 +1183,6 @@ export async function fetchEnvKeysState(
 			realtimeEnv.secret = requiredValue(
 				realtime.secret,
 				"shared secret for enabled Realtime",
-			);
-		}
-		if (wants(K.realtime.databaseName)) {
-			realtimeEnv.databaseName = requiredValue(
-				databaseName,
-				"database for enabled Realtime",
 			);
 		}
 		result.realtime = realtimeEnv;
@@ -1521,7 +1504,7 @@ export function policyEnvKeys(
 		...(desired.authEnabled ? [K.auth.baseUrl, K.auth.jwksUrl] : []),
 		...(desired.dataApiEnabled ? [K.dataApi.url] : []),
 		...(desired.realtimePolicy === "enabled"
-			? [K.realtime.url, K.realtime.secret, K.realtime.databaseName]
+			? [K.realtime.url, K.realtime.secret]
 			: []),
 		...((desired.preview?.buckets.length ?? 0) > 0
 			? [
@@ -1943,7 +1926,6 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
 	put(K.dataApi.url, env.dataApi?.url);
 	put(K.realtime.url, env.realtime?.url);
 	put(K.realtime.secret, env.realtime?.secret);
-	put(K.realtime.databaseName, env.realtime?.databaseName);
 	put(K.storage.accessKeyId, env.storage?.accessKeyId);
 	put(K.storage.secretAccessKey, env.storage?.secretAccessKey);
 	put(K.storage.endpoint, env.storage?.endpoint);

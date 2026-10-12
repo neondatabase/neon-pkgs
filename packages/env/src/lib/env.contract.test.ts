@@ -49,11 +49,6 @@ const INPUT_ENV_KEYS = [
 		namespace: "realtime",
 		prop: "secret",
 	},
-	{
-		key: "NEON_REALTIME_DATABASE_NAME",
-		namespace: "realtime",
-		prop: "databaseName",
-	},
 	{ key: "AWS_ACCESS_KEY_ID", namespace: "storage", prop: "accessKeyId" },
 	{
 		key: "AWS_SECRET_ACCESS_KEY",
@@ -118,7 +113,6 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 			    "databaseUrlUnpooled": "DATABASE_URL_UNPOOLED",
 			  },
 			  "realtime": {
-			    "databaseName": "NEON_REALTIME_DATABASE_NAME",
 			    "secret": "NEON_REALTIME_SECRET",
 			    "url": "NEON_REALTIME_URL",
 			  },
@@ -201,7 +195,6 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 			realtime: {
 				url: "wss://realtime.example.com/v1",
 				secret: "nrt_live_1_contract-test",
-				databaseName: "neondb",
 			},
 			storage: {
 				accessKeyId: "nak_live_abc",

@@ -73,9 +73,9 @@ describe("parseEnv key filter (types)", () => {
 
 	test("Realtime keys are selectable only when the policy enables Realtime", () => {
 		const config = defineConfig({ realtime: true });
-		const env = parseEnv(config, ["NEON_REALTIME_DATABASE_NAME"]);
+		const env = parseEnv(config, ["NEON_REALTIME_SECRET"]);
 		expectTypeOf(env).toEqualTypeOf<{
-			realtime: { databaseName: string };
+			realtime: { secret: string };
 		}>();
 		// @ts-expect-error Realtime is not enabled by an empty policy.
 		parseEnv(defineConfig({}), ["NEON_REALTIME_SECRET"]);

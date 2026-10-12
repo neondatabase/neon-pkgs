@@ -374,7 +374,7 @@ describe("fetchEnv", () => {
 		expect(env.postgres.databaseUrl).toContain("/my-database?");
 	});
 
-	test("fetches ready Realtime URL, secret, and selected database", async () => {
+	test("fetches ready Realtime URL and secret", async () => {
 		const { api, projectId } = seededFakeWithDatabases([
 			{ name: "app" },
 			{ name: "neondb" },
@@ -399,34 +399,13 @@ describe("fetchEnv", () => {
 		expect(env.realtime).toEqual({
 			url: "wss://realtime.example.test/v1",
 			secret: "nrt_live_1_env-test",
-			databaseName: "neondb",
 		});
-		expect(toEntries(env)).toMatchObject({
+		const entries = toEntries(env);
+		expect(entries).toMatchObject({
 			NEON_REALTIME_URL: "wss://realtime.example.test/v1",
 			NEON_REALTIME_SECRET: "nrt_live_1_env-test",
-			NEON_REALTIME_DATABASE_NAME: "neondb",
 		});
-	});
-
-	test("Realtime uses an explicitly selected database", async () => {
-		const { api, projectId } = seededFakeWithDatabases([
-			{ name: "app" },
-			{ name: "neondb" },
-		]);
-		api.seedRealtime(projectId, "br-main", {
-			enabled: true,
-			pending: false,
-			invocationUrl: "wss://realtime.example.test/v1",
-		});
-
-		const env = await fetchEnv(defineConfig({ realtime: true }), {
-			api,
-			projectId,
-			branchId: "br-main",
-			databaseName: "app",
-		});
-
-		expect(env.realtime.databaseName).toBe("app");
+		expect(entries).not.toHaveProperty("NEON_REALTIME_DATABASE_NAME");
 	});
 
 	test("waits for pending Realtime provisioning before reading the secret", async () => {
@@ -783,13 +762,11 @@ describe("parseEnv", () => {
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_REALTIME_URL", "wss://realtime.example.test/v1");
 		vi.stubEnv("NEON_REALTIME_SECRET", "nrt_live_1_parse-test");
-		vi.stubEnv("NEON_REALTIME_DATABASE_NAME", "app");
 
 		const env = parseEnv(defineConfig({ realtime: true }));
 		expect(env.realtime).toEqual({
 			url: "wss://realtime.example.test/v1",
 			secret: "nrt_live_1_parse-test",
-			databaseName: "app",
 		});
 		const disabled = parseEnv(defineConfig({ realtime: false }));
 		// @ts-expect-error disabled Realtime must not add its namespace.
