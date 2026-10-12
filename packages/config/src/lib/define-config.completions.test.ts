@@ -152,7 +152,12 @@ export default defineConfig({
 });
 `);
 			expect(completions).toEqual(
-				expect.arrayContaining(["aiGateway", "functions", "buckets"]),
+				expect.arrayContaining([
+					"aiGateway",
+					"functions",
+					"buckets",
+					"realtime",
+				]),
 			);
 		},
 		LANGUAGE_SERVICE_TIMEOUT_MS,
@@ -175,7 +180,7 @@ export default defineConfig({
 	);
 
 	test(
-		"the defineConfig preview key is marked deprecated",
+		"the defineConfig preview key is not marked deprecated",
 		() => {
 			const preview = memberCompletionEntriesAt(`
 import { defineConfig } from "./define-config.js";
@@ -184,7 +189,7 @@ export default defineConfig({
 });
 `).find((entry) => entry.name === "preview");
 			expect(preview).toBeDefined();
-			expect(preview?.kindModifiers?.split(",") ?? []).toContain(
+			expect(preview?.kindModifiers?.split(",") ?? []).not.toContain(
 				"deprecated",
 			);
 		},
