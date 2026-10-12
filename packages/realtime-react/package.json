@@ -1,6 +1,6 @@
 {
   "name": "@neon/realtime-react",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "React integration for live queries.",
   "keywords": [
     "neon",
@@ -58,7 +58,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@neon/realtime": "^0.0.1",
+    "@neon/realtime": "^0.0.2",
     "react": "^18.0.0 || ^19.0.0"
   },
   "engines": {

@@ -1,5 +1,13 @@
 # @neon/realtime-kysely
 
+## 0.0.2
+
+### Patch Changes
+
+- c4a6fce: Delegate SQL and prepared-query validation to the Realtime proxy. ORM adapters now forward compiled queries without locally restricting their SQL shape, and `validateLiveSelectSql` is no longer exported from `@neon/realtime/server`.
+- Updated dependencies [c4a6fce]
+  - @neon/realtime@0.0.2
+
 ## 0.0.1
 
 ### Patch Changes

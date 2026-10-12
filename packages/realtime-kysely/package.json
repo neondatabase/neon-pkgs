@@ -1,6 +1,6 @@
 {
   "name": "@neon/realtime-kysely",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Kysely adapter for defining live queries.",
   "keywords": [
     "neon",
@@ -54,7 +54,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@neon/realtime": "^0.0.1",
+    "@neon/realtime": "^0.0.2",
     "kysely": ">=0.28.17 <0.30.0"
   },
   "engines": {
