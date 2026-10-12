@@ -76,6 +76,13 @@ export const forwardedPsqlArgs = (stdout: string): unknown[] => {
 	return args.slice(1);
 };
 
+/** The CLI rejects `--output` given twice with different values, so a test's own wins. */
+export const passesOutput = (args: readonly string[]) =>
+	args.some(
+		(arg) =>
+			arg === "-o" || arg === "--output" || arg.startsWith("--output="),
+	);
+
 export const test = originalTest.extend<Fixtures>({
 	runMockServer: async ({}, use) => {
 		let startedServer: Server | undefined;
@@ -143,8 +150,13 @@ export const test = originalTest.extend<Fixtures>({
 				[
 					"--api-host",
 					apiHost,
-					"--output",
-					options.output ?? (options.outputTable ? "table" : "yaml"),
+					...(passesOutput(args)
+						? []
+						: [
+								"--output",
+								options.output ??
+									(options.outputTable ? "table" : "yaml"),
+							]),
 					"--no-analytics",
 					...(options.apiKey === false
 						? []

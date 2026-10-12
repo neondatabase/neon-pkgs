@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { passesOutput } from "../test_utils/fixtures.js";
 import {
 	type NeonApiServer,
 	startNeonApiServer,
@@ -79,8 +80,7 @@ const runCli = (args: string[] = ["me"]): Promise<RunResult> => {
 			"--client-id",
 			"test-client",
 			"--no-analytics",
-			"--output",
-			"json",
+			...(passesOutput(args) ? [] : ["--output", "json"]),
 			...args,
 		],
 		{

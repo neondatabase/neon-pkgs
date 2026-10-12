@@ -40,6 +40,10 @@ import { recoverFromSSO } from "./sso_recovery.js";
 import { notifyIfUpdateAvailable } from "./update_notifier.js";
 import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
+import {
+	collapseRepeatedFlags,
+	declaredOptions,
+} from "./utils/repeated_flags.js";
 import { stagingFeaturesEnabledForArgv } from "./utils/staging.js";
 
 const NO_SUBCOMMANDS_VERBS = [
@@ -194,6 +198,10 @@ builder = builder
 			default: true,
 		},
 	})
+	// Before `resolveApiKeyFromEnv`, which replaces a repeated `--api-key` with NEON_API_KEY.
+	.middleware((args) => {
+		collapseRepeatedFlags(args, declaredOptions(builder));
+	}, true)
 	.middleware((args) => {
 		fillInArgs(args);
 	}, true)
