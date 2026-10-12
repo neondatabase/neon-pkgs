@@ -76,6 +76,7 @@
 		"fflate": "^0.8.3",
 		"open": "^10.2.0",
 		"openid-client": "6.8.1",
+		"pg-connection-string": "^2.14.1",
 		"pg-protocol": "^1.14.0",
 		"picocolors": "^1.1.1",
 		"prompts": "2.4.2",

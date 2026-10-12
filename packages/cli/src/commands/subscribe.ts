@@ -135,13 +135,13 @@ export const subscribe = async (
 		branchId,
 		apiKey: props.apiKey,
 		apiHost: props.apiHost,
-		services: ["realtime"],
+		services: ["postgres", "realtime"],
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
 	const url = requiredEnv(vars, "NEON_REALTIME_URL");
 	const secret = requiredEnv(vars, "NEON_REALTIME_SECRET");
-	const database = requiredEnv(vars, "NEON_DATABASE_NAME");
+	const database = await databaseName(requiredEnv(vars, "DATABASE_URL"));
 	const realtime = await connect({ url, secret, database });
 	const render = createRenderer(props);
 	let subscription: RawLiveQuerySubscription<QueryRow> | undefined;
@@ -196,11 +196,18 @@ const ensureWebSocket = async (): Promise<void> => {
 
 const requiredEnv = (
 	vars: Record<string, string>,
-	key: "NEON_REALTIME_URL" | "NEON_REALTIME_SECRET" | "NEON_DATABASE_NAME",
+	key: "DATABASE_URL" | "NEON_REALTIME_URL" | "NEON_REALTIME_SECRET",
 ): string => {
 	const value = vars[key];
 	if (value) return value;
 	throw new Error(`Could not resolve ${key} for the selected branch.`);
+};
+
+const databaseName = async (connectionString: string): Promise<string> => {
+	const { parse } = await import("pg-connection-string");
+	const database = parse(connectionString, { useLibpqCompat: true }).database;
+	if (database) return database;
+	throw new Error("DATABASE_URL must include a database name.");
 };
 
 type Renderer = (event: SubscribeEvent) => void;

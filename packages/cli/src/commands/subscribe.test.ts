@@ -145,9 +145,10 @@ const props = (
 
 const realtimeEnv = {
 	vars: {
+		DATABASE_URL:
+			"postgresql://user:password@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require",
 		NEON_REALTIME_URL: "wss://realtime.example/v1",
 		NEON_REALTIME_SECRET: "secret",
-		NEON_DATABASE_NAME: "neondb",
 	},
 	credential: {
 		issued: false,
@@ -247,7 +248,7 @@ describe("subscribe command", () => {
 			branchId: "branch-1",
 			apiKey: "api-key",
 			apiHost: "https://console-stage.example/api/v2",
-			services: ["realtime"],
+			services: ["postgres", "realtime"],
 		});
 		expect(setupResult.connectionOptions()).toEqual({
 			url: "wss://realtime.example/v1",
