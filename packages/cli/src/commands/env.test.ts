@@ -38,6 +38,7 @@ import yargs from "yargs/yargs";
 import { clearAuthContext, setAuthContext } from "../auth_context.js";
 import { writeClaimableCredentials } from "../claimable/state.js";
 import { readEnvFile } from "../env_file.js";
+import { STAGING_API_HOST } from "../utils/staging.js";
 import {
 	autoPullEnvAfterPin,
 	builder,
@@ -583,7 +584,7 @@ describe("env pull", () => {
 			}),
 		});
 
-		await pull(baseProps(api, cwd));
+		await pull({ ...baseProps(api, cwd), apiHost: STAGING_API_HOST });
 
 		const env = readEnvFile(join(cwd, ".env.local"));
 		expect(env).toMatchObject({
@@ -591,6 +592,22 @@ describe("env pull", () => {
 			NEON_REALTIME_SECRET: "nrt_live_1_bare-pull",
 		});
 		expect(env).not.toHaveProperty("NEON_REALTIME_DATABASE_NAME");
+	});
+
+	it("does not read Realtime outside staging", async () => {
+		const api = new FakeNeonApi({
+			getProjectBranchRealtime: async () => {
+				throw new Error(
+					"production answers the Realtime endpoint with HTTP 500",
+				);
+			},
+		});
+
+		await pull(baseProps(api, cwd));
+
+		const env = readEnvFile(join(cwd, ".env.local"));
+		expect(env.DATABASE_URL).toBeDefined();
+		expect(env).not.toHaveProperty("NEON_REALTIME_URL");
 	});
 
 	it("updates an existing .env in place, preserving other keys", async () => {
@@ -898,7 +915,11 @@ describe("env pull --service", () => {
 			}),
 		});
 
-		await pull({ ...baseProps(api, cwd), services: ["realtime"] });
+		await pull({
+			...baseProps(api, cwd),
+			apiHost: STAGING_API_HOST,
+			services: ["realtime"],
+		});
 
 		const env = readEnvFile(join(cwd, ".env.local"));
 		expect(env).toMatchObject({
@@ -907,6 +928,16 @@ describe("env pull --service", () => {
 		});
 		expect(env).not.toHaveProperty("NEON_REALTIME_DATABASE_NAME");
 		expect(env.DATABASE_URL).toBeUndefined();
+	});
+
+	it("refuses a Realtime selection outside staging", async () => {
+		await expect(
+			pull({
+				...baseProps(new FakeNeonApi(), cwd),
+				services: ["realtime"],
+			}),
+		).rejects.toThrow(/Realtime is staging-only/);
+		expect(existsSync(join(cwd, ".env.local"))).toBe(false);
 	});
 
 	it("fails by name when a selected service is not on the branch", async () => {

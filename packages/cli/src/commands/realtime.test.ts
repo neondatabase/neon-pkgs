@@ -1,8 +1,11 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe } from "vitest";
+import { afterEach, beforeEach, describe, expect } from "vitest";
 import { test } from "../test_utils/fixtures.js";
+import { STAGING_API_HOST } from "../utils/staging.js";
+
+const STAGING = { NEON_API_HOST: STAGING_API_HOST };
 
 describe("realtime", () => {
 	let workspace: string;
@@ -33,6 +36,7 @@ describe("realtime", () => {
 			],
 			{
 				mockDir: "realtime",
+				env: STAGING,
 				snapshot: false,
 				stderr: "Realtime enable requested for branch br-sunny-branch-123456.",
 			},
@@ -49,6 +53,7 @@ describe("realtime", () => {
 
 		await testCliCommand(["realtime", "disable"], {
 			mockDir: "realtime",
+			env: STAGING,
 			cwd: workspace,
 			snapshot: false,
 			stderr: "Realtime disable requested for branch br-sunny-branch-123456.",
@@ -71,10 +76,21 @@ describe("realtime", () => {
 			],
 			{
 				unreachableHost: true,
+				env: STAGING,
 				code: 1,
 				snapshot: false,
 				stderr: 'ERROR: Invalid Neon config: - preview.realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
 			},
 		);
+	});
+
+	test("is not a command outside staging", async ({ testCliCommand }) => {
+		await testCliCommand(["realtime", "enable", "--project-id", "test"], {
+			code: 1,
+			snapshot: false,
+			stderr: expect.stringContaining(
+				"ERROR: Unknown commands: realtime",
+			),
+		});
 	});
 });

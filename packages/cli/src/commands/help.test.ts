@@ -2,6 +2,7 @@ import strip from "strip-ansi";
 import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
+import { STAGING_API_HOST } from "../utils/staging.js";
 
 describe("help", () => {
 	test("without args", async ({ testCliCommand }) => {
@@ -30,7 +31,6 @@ const PARENT_COMMANDS = [
 	"inspect",
 	"claim",
 	"data-api",
-	"realtime",
 	"functions",
 	"triggers",
 	"credentials",
@@ -77,6 +77,37 @@ describe("parent commands print help with no subcommand", () => {
 			expect(stderr).toBe("");
 		});
 	}
+});
+
+describe("staging-only commands", () => {
+	const staging = { NEON_API_HOST: STAGING_API_HOST };
+
+	test("are not listed outside staging", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(["--help"], {
+			snapshot: false,
+		});
+		expect(strip(stdout)).not.toMatch(/neon (realtime|subscribe)/);
+	});
+
+	test("are listed on staging", async ({ testCliCommand }) => {
+		const { stdout } = await testCliCommand(["--help"], {
+			snapshot: false,
+			env: staging,
+		});
+		expect(strip(stdout)).toMatch(/neon realtime/);
+		expect(strip(stdout)).toMatch(/neon subscribe/);
+	});
+
+	test("realtime prints its help with no subcommand on staging", async ({
+		testCliCommand,
+	}) => {
+		const { stdout, stderr } = await testCliCommand(["realtime"], {
+			snapshot: false,
+			env: staging,
+		});
+		expect(strip(stdout)).toContain("Commands:");
+		expect(stderr).toBe("");
+	});
 });
 
 const USAGE_ERRORS = [

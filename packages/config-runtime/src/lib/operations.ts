@@ -12,7 +12,11 @@ import {
 	resolveConfig,
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
-import { type PulledBranchConfig, pullConfig } from "./pull-config.js";
+import {
+	type PullConfigOptions,
+	type PulledBranchConfig,
+	pullConfig,
+} from "./pull-config.js";
 import { type PushConfigOptions, pushConfig } from "./push-config.js";
 
 /**
@@ -65,7 +69,7 @@ export interface ApplyOptions extends ConfigOperationOptions {
  * `projectId` and `branchId` are **required** (both in `options`).
  */
 export async function inspect(
-	options: ConfigOperationOptions,
+	options: ConfigOperationOptions & Pick<PullConfigOptions, "realtime">,
 ): Promise<PulledBranchConfig> {
 	return pullConfig({
 		projectId: options.projectId,
@@ -73,6 +77,7 @@ export async function inspect(
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.apiHost ? { apiHost: options.apiHost } : {}),
+		...(options.realtime ? { realtime: true } : {}),
 	});
 }
 

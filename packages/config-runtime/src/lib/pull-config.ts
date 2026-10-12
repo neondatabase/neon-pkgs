@@ -28,6 +28,11 @@ export interface PullConfigOptions {
 	apiHost?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
 	api?: NeonApi;
+	/**
+	 * Read the branch's Realtime state. Off by default: Realtime is only on Neon's staging
+	 * API, and production answers the endpoint with HTTP 500 rather than 404.
+	 */
+	realtime?: boolean;
 }
 
 /**
@@ -93,7 +98,9 @@ export async function pullConfig(
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 	const branchId = options.branchId;
-	const getRealtime = api.getProjectBranchRealtime?.bind(api);
+	const getRealtime = options.realtime
+		? api.getProjectBranchRealtime?.bind(api)
+		: undefined;
 
 	// The first three stages need only the project and branch ids, so they start together.
 	// They are awaited in the order they used to run, so the first error reported is the same

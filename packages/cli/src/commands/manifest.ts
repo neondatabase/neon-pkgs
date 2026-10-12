@@ -12,6 +12,8 @@ export type CommandEntry = {
 	aliases?: string[];
 	describe: string;
 	load: () => Promise<CommandModule>;
+	/** Registered only when the CLI targets Neon's staging API. See `utils/staging.ts`. */
+	stagingOnly?: true;
 };
 
 /**
@@ -208,11 +210,13 @@ export const commandManifest: CommandEntry[] = [
 		command: "realtime",
 		describe: "Manage Neon Realtime for a branch",
 		load: () => import("./realtime.js"),
+		stagingOnly: true,
 	},
 	{
 		command: "subscribe <query>",
 		describe: "Subscribe to a live SQL query with Neon Realtime",
 		load: () => import("./subscribe.js"),
+		stagingOnly: true,
 	},
 	{
 		command: "functions",
@@ -373,21 +377,24 @@ export const preloadCommand = async (
  * command still runs, because yargs 17 awaits a builder's promise when it runs a command; shell
  * completion does not await it, so a mispredicted completion lists no subcommands.
  */
-export const lazyCommands = commandManifest.map((entry) => ({
-	command: entry.command,
-	aliases: entry.aliases,
-	describe: entry.describe,
-	builder: (argv: yargs.Argv) => {
-		const mod = loaded.get(entry);
-		return mod
-			? mod.builder(argv)
-			: entry.load().then((m) => {
-					loaded.set(entry, m);
-					return m.builder(argv);
-				});
-	},
-	handler: async (args: never) => {
-		const mod = loaded.get(entry) ?? (await entry.load());
-		return mod.handler?.(args);
-	},
-}));
+export const lazyCommands = ({ staging }: { staging: boolean }) =>
+	commandManifest
+		.filter((entry) => staging || !entry.stagingOnly)
+		.map((entry) => ({
+			command: entry.command,
+			aliases: entry.aliases,
+			describe: entry.describe,
+			builder: (argv: yargs.Argv) => {
+				const mod = loaded.get(entry);
+				return mod
+					? mod.builder(argv)
+					: entry.load().then((m) => {
+							loaded.set(entry, m);
+							return m.builder(argv);
+						});
+			},
+			handler: async (args: never) => {
+				const mod = loaded.get(entry) ?? (await entry.load());
+				return mod.handler?.(args);
+			},
+		}));

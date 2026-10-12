@@ -99,6 +99,7 @@ import {
 	runCommand,
 } from "../utils/package_manager.js";
 import { pickServicesInteractively } from "../utils/service_picker.js";
+import { stagingFeaturesEnabled } from "../utils/staging.js";
 import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
 import { autoPullEnvAfterPin } from "./env.js";
@@ -1127,6 +1128,7 @@ const liveConfigView = async (opts: {
 		...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
 		...(opts.apiHost ? { apiHost: opts.apiHost } : {}),
 		...(opts.runtimeApi ? { api: opts.runtimeApi } : {}),
+		realtime: stagingFeaturesEnabled(opts.apiHost),
 	});
 	const resolved = resolveConfig(live.config, {
 		name: live.branch.name,

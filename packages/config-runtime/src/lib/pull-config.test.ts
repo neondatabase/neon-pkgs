@@ -145,9 +145,43 @@ describe("pullConfig", () => {
 			api,
 			projectId,
 			branchId: "br-main",
+			realtime: true,
 		});
 
 		expect(pulled.config.preview?.realtime).toBe(true);
+	});
+
+	test("does not read Realtime unless asked", async () => {
+		class ProductionRealtimeApi extends FakeNeonApi {
+			override async getProjectBranchRealtime(): Promise<never> {
+				throw new PlatformError(
+					ErrorCode.ServerError,
+					"getProjectBranchRealtime failed: the Neon API returned a server error (HTTP 500).",
+					{ details: { status: 500 } },
+				);
+			}
+		}
+		const api = new ProductionRealtimeApi();
+		const projectId = "proj-production";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "production",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.preview?.realtime).toBeUndefined();
 	});
 
 	test("omits Realtime when its API route is not deployed", async () => {
@@ -178,6 +212,7 @@ describe("pullConfig", () => {
 			api,
 			projectId,
 			branchId: "br-main",
+			realtime: true,
 		});
 
 		expect(pulled.config.preview?.realtime).toBeUndefined();
