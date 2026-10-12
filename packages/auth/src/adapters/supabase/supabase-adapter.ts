@@ -981,9 +981,8 @@ class SupabaseAuthAdapterImpl
 				);
 			}
 
-			// Find the identity by internal DB ID
 			const targetIdentity = identities.data.identities.find(
-				(i) => i.id === identity.identity_id,
+				(i) => i.identity_id === identity.identity_id,
 			);
 			if (!targetIdentity) {
 				throw createAuthError(
@@ -994,7 +993,7 @@ class SupabaseAuthAdapterImpl
 
 			// unlink-account selects by the local account row id.
 			const result = await this._betterAuth.unlinkAccount({
-				accountId: targetIdentity.id,
+				accountId: targetIdentity.identity_id,
 			});
 
 			if (result?.error) {

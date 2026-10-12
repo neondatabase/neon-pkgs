@@ -438,10 +438,13 @@ export function mapBetterAuthIdentity(
 	>[number],
 	accountInfoData: Awaited<ReturnType<typeof accountInfo>> | null,
 ): UserIdentity {
+	// Supabase's UserIdentity uses `identity_id` for the identity row key and
+	// `id` for the provider-side user id, and unlinkIdentity selects by
+	// `identity_id`; the local account row id plays the row-key role here.
 	return {
-		id: betterAuthUserIdentityAccount.id,
-		user_id: betterAuthUserIdentityAccount.id,
-		identity_id: betterAuthUserIdentityAccount.accountId,
+		id: betterAuthUserIdentityAccount.accountId,
+		user_id: betterAuthUserIdentityAccount.userId,
+		identity_id: betterAuthUserIdentityAccount.id,
 		provider: betterAuthUserIdentityAccount.providerId,
 		created_at: toISOString(betterAuthUserIdentityAccount.createdAt),
 		updated_at: toISOString(betterAuthUserIdentityAccount.updatedAt),

@@ -28,6 +28,7 @@ const SESSION_PAYLOAD = {
 
 const GOOGLE_ACCOUNT = {
 	id: "acc_local_1",
+	userId: "user_1",
 	accountId: "google-sub-123",
 	providerId: "google",
 	scopes: ["openid", "email", "profile"],
@@ -37,6 +38,7 @@ const GOOGLE_ACCOUNT = {
 
 const CREDENTIAL_ACCOUNT = {
 	id: "acc_local_2",
+	userId: "user_1",
 	accountId: "user@example.com",
 	providerId: "credential",
 	scopes: [],
@@ -46,6 +48,7 @@ const CREDENTIAL_ACCOUNT = {
 
 const GITHUB_ACCOUNT = {
 	id: "acc_local_3",
+	userId: "user_1",
 	accountId: "github-456",
 	providerId: "github",
 	scopes: ["read:user", "user:email"],
@@ -200,8 +203,8 @@ describe("SupabaseAuthAdapter identities", () => {
 			(i) => i.provider === "google",
 		);
 		expect(google).toMatchObject({
-			id: "acc_local_1",
-			identity_id: "google-sub-123",
+			id: "google-sub-123",
+			identity_id: "acc_local_1",
 			provider: "google",
 			created_at: NOW,
 			updated_at: NOW,
@@ -278,7 +281,22 @@ describe("SupabaseAuthAdapter identities", () => {
 		expect(accountInfoRequests()).toHaveLength(0);
 	});
 
-	test("unlinkIdentity sends only the local account id", async () => {
+	test("getUserIdentities maps ids with Supabase semantics", async () => {
+		const adapter = SupabaseAuthAdapter()(BASE_URL);
+
+		const result = await adapter.getUserIdentities();
+
+		const google = result.data?.identities.find(
+			(i) => i.provider === "google",
+		);
+		expect(google).toMatchObject({
+			id: "google-sub-123",
+			identity_id: "acc_local_1",
+			user_id: "user_1",
+		});
+	});
+
+	test("unlinkIdentity accepts an identity exactly as getUserIdentities returned it (#765)", async () => {
 		const adapter = SupabaseAuthAdapter()(BASE_URL);
 		const identities = await adapter.getUserIdentities();
 		const google = identities.data?.identities.find(
@@ -286,12 +304,7 @@ describe("SupabaseAuthAdapter identities", () => {
 		);
 		if (!google) throw new Error("google identity missing from fixture");
 
-		// unlinkIdentity looks the identity up by `i.id === identity.identity_id`,
-		// so the local row id is supplied as identity_id here.
-		const result = await adapter.unlinkIdentity({
-			...google,
-			identity_id: "acc_local_1",
-		});
+		const result = await adapter.unlinkIdentity(google);
 
 		expect(result.error).toBeNull();
 		const unlinkRequests = requests.filter((r) =>
@@ -301,8 +314,4 @@ describe("SupabaseAuthAdapter identities", () => {
 		expect(unlinkRequests[0].method).toBe("POST");
 		expect(unlinkRequests[0].body).toEqual({ accountId: "acc_local_1" });
 	});
-
-	test.todo(
-		"unlinkIdentity accepts an identity exactly as getUserIdentities returned it (#765)",
-	);
 });
