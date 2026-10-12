@@ -118,10 +118,10 @@ describe("pullConfig", () => {
 
 		expect(pulled.config.auth).toBeUndefined();
 		expect(pulled.config.dataApi).toBeUndefined();
-		expect(pulled.config.realtime).toBeUndefined();
+		expect(pulled.config.preview?.realtime).toBeUndefined();
 	});
 
-	test("sets config.realtime when Realtime is enabled", async () => {
+	test("sets config.preview.realtime when Realtime is enabled", async () => {
 		const api = new FakeNeonApi();
 		const projectId = "proj-realtime";
 		api.seedProject({
@@ -147,7 +147,7 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		expect(pulled.config.realtime).toBe(true);
+		expect(pulled.config.preview?.realtime).toBe(true);
 	});
 
 	test("omits Realtime when its API route is not deployed", async () => {
@@ -180,7 +180,7 @@ describe("pullConfig", () => {
 			branchId: "br-main",
 		});
 
-		expect(pulled.config.realtime).toBeUndefined();
+		expect(pulled.config.preview?.realtime).toBeUndefined();
 	});
 
 	test("sets config.auth when a Neon Auth integration is enabled", async () => {

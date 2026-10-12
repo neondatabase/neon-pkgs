@@ -1440,7 +1440,9 @@ describe("config commands", () => {
 	it("pulls Realtime env after provisioning it", async () => {
 		const api = new FakeNeonApi();
 		const { stream } = captureOut();
-		const config = writeConfig("export default { realtime: true };\n");
+		const config = writeConfig(
+			"export default { preview: { realtime: true } };\n",
+		);
 
 		await applyCmd({
 			...baseProps(api, stream),

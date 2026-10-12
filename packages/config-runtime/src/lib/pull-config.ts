@@ -65,9 +65,9 @@ export interface PulledBranchConfig {
 		expiresAt?: string;
 	};
 	/**
-	 * The branch's live state expressed as a {@link Config}: static `auth` / `dataApi` /
-	 * `realtime`
-	 * toggles, any object-storage `preview.buckets`, plus a `branch` closure carrying the
+	 * The branch's live state expressed as a {@link Config}: static `auth` / `dataApi`
+	 * toggles, Realtime under `preview.realtime`, any object-storage `preview.buckets`, plus
+	 * a `branch` closure carrying the
 	 * branch's lifecycle/compute tuning. Buckets are included here (not just in
 	 * {@link PulledBranchConfig.preview}) because they round-trip cleanly — name + access
 	 * level is all a {@link Config} needs — so the no-policy env path (`neon dev` /
@@ -255,10 +255,10 @@ export function buildPulledBranchConfig(
 	const parent = branch.parentId
 		? branches.find((b) => b.id === branch.parentId)
 		: undefined;
-	// Auth, Data API, and Realtime are static top-level toggles, so a config pulled from a
-	// branch with them enabled round-trips through `resolveConfig` / `fetchEnv` and the matching
-	// secrets get injected. Branch lifecycle/compute is per-branch tuning, so it goes in
-	// the `branch` closure.
+	// Auth and Data API are static top-level toggles, while Realtime is static under
+	// `preview.realtime`. A config pulled from a branch with them enabled round-trips through
+	// `resolveConfig` / `fetchEnv` and the matching secrets get injected. Branch
+	// lifecycle/compute is per-branch tuning, so it goes in the `branch` closure.
 	const tuning: BranchTuning = {};
 	if (parent) tuning.parent = parent.name;
 	// Deliberately NOT emitting `ttl` from `branch.expiresAt`: policy `ttl` is a
@@ -281,12 +281,14 @@ export function buildPulledBranchConfig(
 	for (const b of previewState?.buckets ?? []) {
 		bucketDefs[b.name] = { access: b.accessLevel };
 	}
+	const policyPreview: NonNullable<Config["preview"]> = {};
+	if (previewState?.realtime?.enabled) policyPreview.realtime = true;
+	if (Object.keys(bucketDefs).length > 0) policyPreview.buckets = bucketDefs;
 	const config: Config = {
 		...(previewState?.authEnabled ? { auth: true } : {}),
 		...(previewState?.dataApiEnabled ? { dataApi: true } : {}),
-		...(previewState?.realtime?.enabled ? { realtime: true } : {}),
-		...(Object.keys(bucketDefs).length > 0
-			? { preview: { buckets: bucketDefs } }
+		...(Object.keys(policyPreview).length > 0
+			? { preview: policyPreview }
 			: {}),
 		...(Object.keys(tuning).length > 0 ? { branch: () => tuning } : {}),
 	};

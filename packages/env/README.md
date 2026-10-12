@@ -121,7 +121,7 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | --- | --- |
 | `NEON_DATA_API_URL` | Data API (PostgREST) integration URL |
 
-**Realtime** (when `realtime` is enabled). `fetchEnv` waits for asynchronous provisioning or secret rotation to finish before returning these values:
+**Realtime** (when `preview.realtime` is enabled). `fetchEnv` waits for asynchronous provisioning or secret rotation to finish before returning these values:
 
 | Key | From |
 | --- | --- |

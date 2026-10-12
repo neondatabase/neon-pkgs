@@ -804,7 +804,7 @@ const configForServices = (
 		if (!branch.realtimeEnabled) {
 			notOnBranch("realtime", "Realtime integration");
 		}
-		config.realtime = true;
+		config.preview = { realtime: true };
 	}
 	if (services.includes("object-storage")) {
 		if (branch.buckets.length === 0) {
