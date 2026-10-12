@@ -439,7 +439,6 @@ describe("enableNeonAuth", () => {
 	const API_MESSAGE =
 		"The `neon_auth` schema already exists and cannot be automatically provisioned. Please drop the existing `neon_auth` schema before provisioning Neon Auth.";
 
-	/** POST answers 409 with the schema message; GET answers `get`. Records every request. */
 	const withAuthServer = async (
 		get: { status: number; body: unknown },
 		run: (
