@@ -393,14 +393,10 @@ describe("exchangeOAuthToken client-info header", () => {
 	async function captureUpstream(headers: Record<string, string>) {
 		process.env.NEXT_RUNTIME = "nodejs";
 		vi.resetModules();
-		const freshProxy = await import("../proxy");
 		const { exchangeOAuthToken: run } = await import("./oauth");
-		const upstream = vi
-			.spyOn(freshProxy, "handleAuthRequest")
+		const fetchSpy = vi
+			.spyOn(globalThis, "fetch")
 			.mockResolvedValue(Response.json({}, { status: 401 }));
-		vi.spyOn(freshProxy, "handleAuthResponse").mockResolvedValue(
-			new Response("no", { status: 401 }),
-		);
 
 		await run(
 			new Request(`https://example.com/dashboard?${VERIFIER_PARAM}=v`, {
@@ -413,14 +409,15 @@ describe("exchangeOAuthToken client-info header", () => {
 			TEST_SECRET,
 		);
 
-		return upstream.mock.calls[0][1] as Request;
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		return new Headers(fetchSpy.mock.calls[0]?.[1]?.headers);
 	}
 
 	test("stamps X-Neon-Client-Info on the verifier exchange", async () => {
-		const upstreamRequest = await captureUpstream({});
+		const upstreamHeaders = await captureUpstream({});
 
 		const info = JSON.parse(
-			upstreamRequest.headers.get("X-Neon-Client-Info") ?? "null",
+			upstreamHeaders.get("X-Neon-Client-Info") ?? "null",
 		);
 		expect(info.sdk).toBe("@neon/auth");
 		expect(info.framework).toBe("next");
@@ -428,10 +425,10 @@ describe("exchangeOAuthToken client-info header", () => {
 
 	test("preserves an inbound X-Neon-Client-Info value", async () => {
 		const inbound = JSON.stringify({ sdk: "custom", version: "9.9.9" });
-		const upstreamRequest = await captureUpstream({
+		const upstreamHeaders = await captureUpstream({
 			"X-Neon-Client-Info": inbound,
 		});
 
-		expect(upstreamRequest.headers.get("X-Neon-Client-Info")).toBe(inbound);
+		expect(upstreamHeaders.get("X-Neon-Client-Info")).toBe(inbound);
 	});
 });
