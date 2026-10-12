@@ -1,4 +1,5 @@
 import { parseCookies } from "better-auth/cookies";
+import { injectClientInfo } from "@/utils/client-info";
 import type { SessionCookieSameSite } from "../config";
 import {
 	NEON_AUTH_SESSION_COOKIE_NAME,
@@ -161,7 +162,7 @@ export async function processAuthMiddleware(
 		// GET-only upstream, spuriously logging the user out.
 		const sessionRequest = new Request(request.url, {
 			method: "GET",
-			headers: stripBodyHeaders(request.headers),
+			headers: injectClientInfo(stripBodyHeaders(request.headers)),
 		});
 
 		const sessionResponse = await handleAuthProxyRequest({

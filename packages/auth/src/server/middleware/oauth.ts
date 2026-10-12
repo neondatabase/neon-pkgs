@@ -1,5 +1,6 @@
 import { parseCookies } from "better-auth/cookies";
 import { NEON_AUTH_SESSION_VERIFIER_PARAM_NAME } from "@/core/constants";
+import { injectClientInfo } from "@/utils/client-info";
 import type { SessionCookieSameSite } from "../config";
 import {
 	NEON_AUTH_LEGACY_SESSION_CHALLENGE_COOKIE_NAME,
@@ -94,7 +95,7 @@ export async function exchangeOAuthToken(
 	// Make request to upstream to exchange verifier for session
 	const upstreamRequest = new Request(request.url, {
 		method: "GET",
-		headers: request.headers,
+		headers: injectClientInfo(request.headers),
 	});
 
 	const upstreamResponse = await handleAuthRequest(
