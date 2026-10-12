@@ -21,6 +21,23 @@ const schemaSubpaths = [
 ] as const;
 
 describe("@neon/realtime package", () => {
+	it("keeps the direct-subscription WebSocket transport opt-in", () => {
+		const manifest = JSON.parse(
+			readFileSync(join(packageRoot, "package.json"), "utf8"),
+		) as {
+			readonly dependencies?: Readonly<Record<string, string>>;
+			readonly devDependencies: Readonly<Record<string, string>>;
+			readonly peerDependencies: Readonly<Record<string, string>>;
+			readonly peerDependenciesMeta: Readonly<
+				Record<string, { readonly optional?: boolean }>
+			>;
+		};
+
+		expect(manifest.dependencies?.ws).toBeUndefined();
+		expect(manifest.peerDependencies.ws).toBe(manifest.devDependencies.ws);
+		expect(manifest.peerDependenciesMeta.ws?.optional).toBe(true);
+	});
+
 	it("publishes the canonical schemas directly", () => {
 		const manifest = JSON.parse(
 			readFileSync(join(packageRoot, "package.json"), "utf8"),

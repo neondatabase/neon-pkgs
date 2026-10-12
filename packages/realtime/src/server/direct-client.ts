@@ -82,8 +82,8 @@ export class DirectLiveQueryClient {
 		this.assertOpen();
 		this.clientPromise ??= Promise.all([
 			import("../client/realtime-client.js"),
-			import("ws"),
-		]).then(([module, { default: NodeWebSocket }]) => {
+			loadNodeWebSocket(),
+		]).then(([module, NodeWebSocket]) => {
 			this.assertOpen();
 			const webSocketFactory: WebSocketFactory = (url, protocols) =>
 				new NodeWebSocket(url, protocols) as WebSocketLike;
@@ -100,6 +100,17 @@ export class DirectLiveQueryClient {
 			return client;
 		});
 		return this.clientPromise;
+	}
+}
+
+async function loadNodeWebSocket(): Promise<typeof import("ws").default> {
+	try {
+		return (await import("ws")).default;
+	} catch (cause) {
+		throw new Error(
+			'Direct subscriptions require the optional peer dependency "ws". Install it in your application before calling createRealtime().',
+			{ cause },
+		);
 	}
 }
 

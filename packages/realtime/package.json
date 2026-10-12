@@ -63,8 +63,7 @@
     "tsc": "tsc"
   },
   "dependencies": {
-    "postgres-array": "^3.0.4",
-    "ws": "^8.21.2"
+    "postgres-array": "^3.0.4"
   },
   "devDependencies": {
     "@types/node": "catalog:",
@@ -76,7 +75,16 @@
     "json-schema-to-typescript": "^16.0.0",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "ws": "^8.21.2"
+  },
+  "peerDependencies": {
+    "ws": "^8.21.2"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=20.19.0"
