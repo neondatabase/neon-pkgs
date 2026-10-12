@@ -1,5 +1,12 @@
 # @neondatabase/config-runtime
 
+## 1.8.1
+
+### Patch Changes
+
+- Updated dependencies [bb25e72]
+  - @neon/config@1.8.7
+
 ## 1.8.0
 
 ### Minor Changes

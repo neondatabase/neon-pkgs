@@ -1,5 +1,14 @@
 # neon
 
+## 8.3.6
+
+### Patch Changes
+
+- bb25e72: When Neon Auth can't be provisioned on a branch (for example because the database already has a `neon_auth` schema), `neon neon-auth enable` now shows the API's reason instead of "Neon Auth is not enabled for this branch", and in that case `neon deploy` / `neon config apply` no longer append a hint about name collisions.
+- Updated dependencies [bb25e72]
+  - @neon/config@1.8.7
+  - @neon/config-runtime@1.8.1
+
 ## 8.3.5
 
 ### Patch Changes
