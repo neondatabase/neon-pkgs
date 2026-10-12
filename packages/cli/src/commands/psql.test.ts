@@ -2,7 +2,11 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect } from "vitest";
-import { test } from "../test_utils/fixtures";
+import {
+	forwardedPsqlArgs,
+	NUMERIC_PSQL_ARGS,
+	test,
+} from "../test_utils/fixtures";
 
 describe("psql", () => {
 	test("psql connects to a branch", async ({ testCliCommand }) => {
@@ -32,6 +36,51 @@ describe("psql", () => {
 			"-c",
 			"SELECT 1",
 		]);
+	});
+
+	test("psql forwards numeric-looking args after -- as typed", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"psql",
+				"test_branch",
+				"--project-id",
+				"test",
+				"--database-name",
+				"test_db",
+				"--role-name",
+				"test_role",
+				"--",
+				...NUMERIC_PSQL_ARGS,
+			],
+			{ snapshot: false },
+		);
+		expect(forwardedPsqlArgs(stdout)).toEqual(NUMERIC_PSQL_ARGS);
+	});
+
+	test("embedded psql accepts numeric-looking args after --", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"psql",
+				"test_branch",
+				"--project-id",
+				"test",
+				"--database-name",
+				"test_db",
+				"--role-name",
+				"test_role",
+				"--fallback",
+				"--",
+				"-p",
+				"5432",
+				"--version",
+			],
+			{ snapshot: false },
+		);
+		expect(stdout).toMatch(/^psql \(PostgreSQL\)/m);
 	});
 
 	test("psql pooled", async ({ testCliCommand }) => {

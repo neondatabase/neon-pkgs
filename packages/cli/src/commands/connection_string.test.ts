@@ -1,5 +1,9 @@
 import { describe, expect } from "vitest";
-import { test } from "../test_utils/fixtures";
+import {
+	forwardedPsqlArgs,
+	NUMERIC_PSQL_ARGS,
+	test,
+} from "../test_utils/fixtures";
 
 describe("connection_string", () => {
 	test("picks neondb_owner over the Data API roles", async ({
@@ -198,6 +202,28 @@ describe("connection_string", () => {
 			"-c",
 			"SELECT 1",
 		]);
+	});
+
+	test("connection_string with psql forwards numeric-looking args as typed", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"connection-string",
+				"test_branch",
+				"--project-id",
+				"test",
+				"--database-name",
+				"test_db",
+				"--role-name",
+				"test_role",
+				"--psql",
+				"--",
+				...NUMERIC_PSQL_ARGS,
+			],
+			{ snapshot: false },
+		);
+		expect(forwardedPsqlArgs(stdout)).toEqual(NUMERIC_PSQL_ARGS);
 	});
 
 	test("connection_string without ssl", async ({ testCliCommand }) => {

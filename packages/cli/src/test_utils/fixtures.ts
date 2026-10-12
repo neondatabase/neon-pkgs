@@ -60,6 +60,22 @@ const reserveClosedPort = (): Promise<string> =>
 		});
 	});
 
+/** Tokens yargs would turn into numbers. `1.50` and `1e3` do not survive the round trip. */
+export const NUMERIC_PSQL_ARGS = ["-c", "1", "-p", "5432", "-v", "1.50", "1e3"];
+
+/** The arguments `mocks/bin/psql` received after the connection URI. */
+export const forwardedPsqlArgs = (stdout: string): unknown[] => {
+	const match = /\{"psql-cli-args":(\[.*?\])\}/.exec(stdout);
+	if (!match) {
+		throw new Error(`mocks/bin/psql did not run. stdout: ${stdout}`);
+	}
+	const args: unknown = JSON.parse(match[1]);
+	if (!Array.isArray(args)) {
+		throw new Error(`psql-cli-args is not an array: ${match[1]}`);
+	}
+	return args.slice(1);
+};
+
 export const test = originalTest.extend<Fixtures>({
 	runMockServer: async ({}, use) => {
 		let startedServer: Server | undefined;

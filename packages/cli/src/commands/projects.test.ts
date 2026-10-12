@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { describe, expect } from "vitest";
 import YAML from "yaml";
 
-import { test } from "../test_utils/fixtures";
+import {
+	forwardedPsqlArgs,
+	NUMERIC_PSQL_ARGS,
+	test,
+} from "../test_utils/fixtures";
 import { formatDuration } from "./projects";
 
 const contextFile = (context: Record<string, string>) => {
@@ -133,6 +137,24 @@ describe("projects", () => {
 			"-c",
 			"SELECT 1",
 		]);
+	});
+
+	test("create and connect with psql forwards numeric-looking args as typed", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"projects",
+				"create",
+				"--name",
+				"test_project",
+				"--psql",
+				"--",
+				...NUMERIC_PSQL_ARGS,
+			],
+			{ snapshot: false },
+		);
+		expect(forwardedPsqlArgs(stdout)).toEqual(NUMERIC_PSQL_ARGS);
 	});
 
 	test("create project with setting the context", async ({
