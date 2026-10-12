@@ -18,6 +18,7 @@ import {
 import type { NeonApiClient } from "../api.js";
 import { log } from "../log.js";
 import { loadProjectConfig } from "../project.js";
+import { assertPolicyAvailable } from "./staging.js";
 
 /**
  * Load the nearest `neon.ts` for hook discovery, or `undefined` when there is none — or when
@@ -231,6 +232,7 @@ export const resolveHookEnv = async (
 	config: Config,
 	options: FetchEnvKeysOptions,
 ): Promise<HookEnv | undefined> => {
+	assertPolicyAvailable(config, options.apiHost);
 	try {
 		const resolved = await fetchEnvKeys(config, options, null);
 		return shapeHookEnv(resolved);

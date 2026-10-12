@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { loadHookConfig, shapeHookEnv } from "./hooks.js";
+import { loadHookConfig, resolveHookEnv, shapeHookEnv } from "./hooks.js";
 
 describe("shapeHookEnv", () => {
 	test("maps postgres, defaulting missing URLs to empty strings", () => {
@@ -140,5 +140,20 @@ describe("loadHookConfig", () => {
 			"export default { this is not valid TS",
 		);
 		expect(await loadHookConfig(cwd)).toBeUndefined();
+	});
+});
+
+describe("resolveHookEnv", () => {
+	test("refuses a Realtime policy outside staging instead of skipping the hook", async () => {
+		await expect(
+			resolveHookEnv(
+				{ preview: { realtime: true } },
+				{
+					projectId: "p",
+					branch: "br-test",
+					apiHost: "https://console.neon.tech/api/v2",
+				},
+			),
+		).rejects.toThrow(/Neon Realtime is coming soon!/);
 	});
 });
