@@ -38,6 +38,18 @@ describe("stagingFeaturesEnabledForArgv", () => {
 		).toBe(true);
 	});
 
+	test("--apiHost decides over NEON_API_HOST", () => {
+		vi.stubEnv("NEON_API_HOST", STAGING_API_HOST);
+		expect(
+			stagingFeaturesEnabledForArgv(["--apiHost", PRODUCTION_API_HOST]),
+		).toBe(false);
+
+		vi.stubEnv("NEON_API_HOST", PRODUCTION_API_HOST);
+		expect(
+			stagingFeaturesEnabledForArgv(["--apiHost", STAGING_API_HOST]),
+		).toBe(true);
+	});
+
 	test("falls back to NEON_API_HOST without --api-host", () => {
 		vi.stubEnv("NEON_API_HOST", STAGING_API_HOST);
 		expect(stagingFeaturesEnabledForArgv(["projects", "list"])).toBe(true);

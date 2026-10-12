@@ -24,6 +24,7 @@ export const stagingFeaturesEnabled = (apiHost?: string): boolean =>
 export const stagingFeaturesEnabledForArgv = (args: readonly string[]) => {
 	const { argv } = Parser.detailed([...args], {
 		string: ["api-host"],
+		alias: { "api-host": ["apiHost"] },
 		configuration: {
 			"populate--": true,
 			"parse-positional-numbers": false,
