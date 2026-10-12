@@ -120,11 +120,13 @@ describe("defineConfig surfaces the guard at the call site (negative types)", ()
 
 describe("defineConfig accepts every valid form (positive types)", () => {
 	test("Realtime booleans and settings", () => {
-		defineConfig({ realtime: true });
-		defineConfig({ realtime: false });
-		defineConfig({ realtime: {} });
+		defineConfig({ preview: { realtime: true } });
+		defineConfig({ preview: { realtime: false } });
+		defineConfig({ preview: { realtime: {} } });
 		defineConfig({
-			realtime: { allowedOrigins: ["https://app.example.com"] },
+			preview: {
+				realtime: { allowedOrigins: ["https://app.example.com"] },
+			},
 		});
 	});
 
@@ -154,8 +156,13 @@ describe("defineConfig accepts every valid form (positive types)", () => {
 describe("Realtime stays out of branch tuning (negative types)", () => {
 	test("rejects Realtime in branch tuning", () => {
 		defineConfig({
-			// @ts-expect-error Realtime is a static top-level declaration.
+			// @ts-expect-error Realtime is a static preview declaration.
 			branch: () => ({ realtime: true }),
 		});
+	});
+
+	test("rejects Realtime at the top level", () => {
+		// @ts-expect-error Realtime belongs under preview.
+		defineConfig({ realtime: true });
 	});
 });

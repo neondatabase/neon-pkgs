@@ -162,9 +162,9 @@ describe("configInputSchema", () => {
 				],
 			},
 		]) {
-			expect(configInputSchema.safeParse({ realtime }).success).toBe(
-				true,
-			);
+			expect(
+				configInputSchema.safeParse({ preview: { realtime } }).success,
+			).toBe(true);
 		}
 	});
 
@@ -177,10 +177,16 @@ describe("configInputSchema", () => {
 			{ allowedOrigins: Array(17).fill("https://app.example.com") },
 			{ allowed_origins: ["https://app.example.com"] },
 		]) {
-			expect(configInputSchema.safeParse({ realtime }).success).toBe(
-				false,
-			);
+			expect(
+				configInputSchema.safeParse({ preview: { realtime } }).success,
+			).toBe(false);
 		}
+	});
+
+	test("rejects Realtime at the top level", () => {
+		expect(configInputSchema.safeParse({ realtime: true }).success).toBe(
+			false,
+		);
 	});
 
 	test("accepts top-level services, a preview block, and a branch closure", () => {

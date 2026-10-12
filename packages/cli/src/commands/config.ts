@@ -646,7 +646,7 @@ const planAdd = (
 					? true
 					: { allowedOrigins: target.allowedOrigins };
 			// Validate the same constraints `neon.ts` will enforce before writing the file.
-			defineConfig({ realtime });
+			defineConfig({ preview: { realtime } });
 			return {
 				edit: {
 					kind: "realtime",
@@ -954,7 +954,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.command(
 						"realtime",
-						"Enable Realtime (realtime: true)",
+						"Enable Realtime (preview.realtime: true)",
 						(yargs) =>
 							addSharedOptions(yargs).option("allowed-origin", {
 								describe:

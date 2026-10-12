@@ -35,7 +35,10 @@ export const declaredNeonServices = (config: Config): NeonService[] => {
 	if (isToggleEnabled(authoredAiGateway(config))) {
 		services.push("ai-gateway");
 	}
-	if (config.realtime !== undefined && config.realtime !== false) {
+	if (
+		config.preview?.realtime !== undefined &&
+		config.preview.realtime !== false
+	) {
 		services.push("realtime");
 	}
 	return services;

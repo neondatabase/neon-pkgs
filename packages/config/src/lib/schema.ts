@@ -520,8 +520,9 @@ export const functionsRecordSchema = z.record(
 	functionDefSchema,
 );
 
-/** Static, beta Preview feature set: AI Gateway toggle + functions/buckets records. */
+/** Preview features and deprecated aliases for graduated services. */
 export const previewInputSchema = z.strictObject({
+	realtime: realtimeInputSchema.optional(),
 	aiGateway: serviceToggleInputSchema.optional(),
 	functions: functionsRecordSchema.optional(),
 	buckets: z.record(bucketNameSchema, bucketDefSchema).optional(),
@@ -632,7 +633,6 @@ export const experimentalInputSchema = z.strictObject({
  */
 export const configInputSchema = z
 	.strictObject({
-		realtime: realtimeInputSchema.optional(),
 		auth: serviceToggleInputSchema.optional(),
 		dataApi: dataApiInputSchema.optional(),
 		aiGateway: serviceToggleInputSchema.optional(),

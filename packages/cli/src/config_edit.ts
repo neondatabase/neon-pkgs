@@ -61,7 +61,6 @@ type Step = { source: string; change?: string };
 
 /** Top-level keys in the order the starter policy writes them. New keys land in this order. */
 const KEY_ORDER: readonly string[] = [
-	"realtime",
 	"auth",
 	"dataApi",
 	"aiGateway",
@@ -359,18 +358,33 @@ const setRealtime = (
 	edit: Extract<ConfigEdit, { kind: "realtime" }>,
 ): Step => {
 	const desired = realtimeValue(edit);
-	const snippet = [`realtime: ${desired},`];
-	const entry = findEntry(parsed.root, "realtime");
-	if (!entry) {
+	const declaration = `realtime: ${desired},`;
+	const snippet = ["preview: {", `${parsed.unit}${declaration}`, "},"];
+	const previewEntry = findEntry(parsed.root, "preview");
+	if (!previewEntry) {
 		return {
 			source: insertEntry(
 				parsed,
 				parsed.root,
 				snippet,
 				snippet,
-				entryAfter(parsed, "realtime"),
+				entryAfter(parsed, "preview"),
 			),
-			change: `added realtime: ${desired}`,
+			change: `added preview.realtime: ${desired}`,
+		};
+	}
+	const preview = objectOf(parsed, previewEntry);
+	if (!preview) {
+		return unsupported(
+			"preview is set to an expression, not an object literal.",
+			snippet,
+		);
+	}
+	const entry = findEntry(preview, "realtime");
+	if (!entry) {
+		return {
+			source: insertEntry(parsed, preview, [declaration], snippet),
+			change: `added preview.realtime: ${desired}`,
 		};
 	}
 
@@ -393,12 +407,12 @@ const setRealtime = (
 					[`allowedOrigins: ${origins},`],
 					snippet,
 				),
-				change: `added realtime.allowedOrigins: ${origins}`,
+				change: `added preview.realtime.allowedOrigins: ${origins}`,
 			};
 		}
 		if (!allowedOrigins.keyed) {
 			return unsupported(
-				"realtime.allowedOrigins is a computed property.",
+				"preview.realtime.allowedOrigins is a computed property.",
 				snippet,
 			);
 		}
@@ -412,7 +426,7 @@ const setRealtime = (
 				parsed.source.slice(0, allowedOrigins.valueStart) +
 				origins +
 				parsed.source.slice(allowedOrigins.valueEnd),
-			change: `set realtime.allowedOrigins to ${origins}`,
+			change: `set preview.realtime.allowedOrigins to ${origins}`,
 		};
 	}
 
@@ -421,7 +435,7 @@ const setRealtime = (
 		(current !== "true" && current !== "false" && !object)
 	) {
 		return unsupported(
-			"realtime is set to an expression, not a boolean or object literal.",
+			"preview.realtime is set to an expression, not a boolean or object literal.",
 			snippet,
 		);
 	}
@@ -430,7 +444,7 @@ const setRealtime = (
 			parsed.source.slice(0, entry.valueStart) +
 			desired +
 			parsed.source.slice(entry.valueEnd),
-		change: `set realtime to ${desired}`,
+		change: `set preview.realtime to ${desired}`,
 	};
 };
 

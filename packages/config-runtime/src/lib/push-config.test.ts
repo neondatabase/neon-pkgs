@@ -352,7 +352,9 @@ describe("pushConfig", () => {
 
 	test("plans and applies Realtime enablement with allowed origins", async () => {
 		const config = defineConfig({
-			realtime: { allowedOrigins: ["https://app.example.com"] },
+			preview: {
+				realtime: { allowedOrigins: ["https://app.example.com"] },
+			},
 		});
 		const dry = seededFake();
 		const plan = await pushConfig(config, {
@@ -419,7 +421,9 @@ describe("pushConfig", () => {
 			return seeded;
 		};
 		const update = defineConfig({
-			realtime: { allowedOrigins: ["https://app.example.com"] },
+			preview: {
+				realtime: { allowedOrigins: ["https://app.example.com"] },
+			},
 		});
 		const noFlag = seedEnabled();
 		await expect(
@@ -453,7 +457,7 @@ describe("pushConfig", () => {
 
 		const disabled = seedEnabled();
 		const disabledResult = await pushConfig(
-			defineConfig({ realtime: false }),
+			defineConfig({ preview: { realtime: false } }),
 			{
 				api: disabled.api,
 				projectId: disabled.projectId,

@@ -750,7 +750,7 @@ describe("config commands", () => {
 	it("plans and applies Realtime through the config runtime", async () => {
 		const api = new FakeNeonApi();
 		const config = writeConfig(
-			'export default { realtime: { allowedOrigins: ["https://app.example.com"] } };\n',
+			'export default { preview: { realtime: { allowedOrigins: ["https://app.example.com"] } } };\n',
 		);
 		const planned = captureOut();
 

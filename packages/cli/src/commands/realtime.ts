@@ -16,7 +16,7 @@ export const enable = async (props: RealtimeEnableProps): Promise<void> => {
 			? true
 			: { allowedOrigins: props.allowedOrigins };
 	// Give direct CLI users the same origin validation as declarative neon.ts users.
-	defineConfig({ realtime });
+	defineConfig({ preview: { realtime } });
 
 	const branchId = await branchIdFromProps(props);
 	await retryOnLock(() =>

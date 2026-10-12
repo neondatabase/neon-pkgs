@@ -257,7 +257,7 @@ describe("diffConfig", () => {
 			diffConfig(originPolicy, enabledRemote, {
 				updateExisting: false,
 			}).conflicts[0],
-		).toMatchObject({ field: "realtime.allowedOrigins" });
+		).toMatchObject({ field: "preview.realtime.allowedOrigins" });
 		expect(
 			diffConfig(originPolicy, enabledRemote, {
 				updateExisting: true,
@@ -276,7 +276,7 @@ describe("diffConfig", () => {
 			diffConfig(disabledPolicy, enabledRemote, {
 				updateExisting: false,
 			}).conflicts[0],
-		).toMatchObject({ field: "realtime", desired: false });
+		).toMatchObject({ field: "preview.realtime", desired: false });
 		expect(
 			diffConfig(disabledPolicy, enabledRemote, {
 				updateExisting: true,

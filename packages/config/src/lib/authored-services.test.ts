@@ -53,6 +53,12 @@ describe("authored service homes", () => {
 		expect(mergeAuthoredPreview(config)).toEqual({});
 	});
 
+	test("Realtime does not enter deprecated preview service normalization", () => {
+		const config = defineConfig({ preview: { realtime: true } });
+		expect(deprecatedPreviewAuthoring(config)).toEqual([]);
+		expect(mergeAuthoredPreview(config)).toBeUndefined();
+	});
+
 	test("lists each deprecated preview path still authored", () => {
 		const config = defineConfig({
 			preview: {
@@ -134,6 +140,11 @@ describe("previewGaWarningForConfig", () => {
 		).toBeNull();
 		expect(
 			previewGaWarningForConfig(defineConfig({ preview: {} })),
+		).toBeNull();
+		expect(
+			previewGaWarningForConfig(
+				defineConfig({ preview: { realtime: true } }),
+			),
 		).toBeNull();
 	});
 

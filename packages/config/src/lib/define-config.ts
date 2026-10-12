@@ -137,7 +137,9 @@ type BucketsAutocomplete<Buckets> =
  * import { defineConfig } from "@neon/config/v1";
  *
  * export default defineConfig({
- *   realtime: { allowedOrigins: ["https://app.example.com"] },
+ *   preview: {
+ *     realtime: { allowedOrigins: ["https://app.example.com"] },
+ *   },
  *   auth: true,
  *   functions: {
  *     hello: { name: "Hello", source: "./functions/hello.ts", dev: { port: 8787 } },
@@ -146,9 +148,9 @@ type BucketsAutocomplete<Buckets> =
  * });
  * ```
  *
- * The policy is split into a **static** existential set (top-level `realtime` / `auth` /
+ * The policy is split into a **static** existential set (`preview.realtime`, top-level `auth` /
  * `dataApi` / `aiGateway` / `functions` / `buckets` / `triggers`, plus the deprecated
- * `preview` aliases) and a
+ * aliases under `preview`) and a
  * **dynamic** per-branch `branch` closure. The static half determines which secrets exist —
  * so `NeonEnv<typeof config>` and `parseEnv` are exact — while the closure can only *tune*
  * a branch (lifecycle, compute, per-function deploy settings), never change what exists.
@@ -170,7 +172,6 @@ export function defineConfig<
 	const Buckets extends Record<string, BucketDef> | undefined = undefined,
 	const AiGateway extends ServiceToggleInput | undefined = undefined,
 >(input: {
-	realtime?: RealtimeInput;
 	// Each field is intersected with its concrete interface (not just typed as the bare
 	// generic). The generic alone — e.g. `preview?: Preview` — gives editors no members to
 	// complete against in the object-literal position (they see `{} | undefined`), so you
@@ -190,10 +191,9 @@ export function defineConfig<
 		Record<string, BucketDef> &
 		BucketsAutocomplete<Buckets>;
 	triggers?: Record<string, FunctionTriggerDef>;
-	// `& PreviewInput` restores top-level member hints (aiGateway/functions/buckets);
+	// `& PreviewInput` restores top-level member hints (realtime/aiGateway/functions/buckets);
 	// `& PreviewAutocomplete<Preview>` restores hints *inside* each function/bucket slug
 	// object (see `PreviewAutocomplete`), which the bare index signature otherwise hides.
-	/** @deprecated Use top-level `aiGateway`, `functions`, and `buckets`. */
 	preview?: Preview & PreviewInput & PreviewAutocomplete<Preview>;
 	branch?: BranchTuningFn<Preview, Functions>;
 	// Experimental (unstable) features — currently just lifecycle hooks. Static — carried
@@ -240,12 +240,13 @@ export function resolveConfig(
 	branch: BranchTarget,
 ): ResolvedBranchConfig {
 	const tuning = evaluateBranchTuning(config.branch, branch);
+	const realtimeInput = config.preview?.realtime;
 
 	const resolved: ResolvedBranchConfig = {
 		realtimePolicy:
-			config.realtime === undefined
+			realtimeInput === undefined
 				? "omitted"
-				: isRealtimeEnabled(config.realtime)
+				: isRealtimeEnabled(realtimeInput)
 					? "enabled"
 					: "disabled",
 		authEnabled: isServiceEnabled(config.auth),
@@ -257,7 +258,7 @@ export function resolveConfig(
 					? "enabled"
 					: "disabled",
 	};
-	const realtime = resolveRealtime(config.realtime);
+	const realtime = resolveRealtime(realtimeInput);
 	if (realtime) resolved.realtime = realtime;
 	const dataApi = resolveDataApi(config.dataApi);
 	if (dataApi) resolved.dataApi = dataApi;

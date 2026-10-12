@@ -123,7 +123,7 @@ export const renderNeonConfig = (services: readonly NeonService[]): string => {
 	const auth = services.includes("auth") || services.includes("data-api");
 	const dataApi = services.includes("data-api") ? "  dataApi: true,\n" : "";
 	const realtimeDeclaration = services.includes("realtime")
-		? "  realtime: true,\n"
+		? "  preview: {\n    realtime: true,\n  },\n"
 		: "";
 	return `import { defineConfig } from "${CONFIG_PACKAGE}/v1";
 

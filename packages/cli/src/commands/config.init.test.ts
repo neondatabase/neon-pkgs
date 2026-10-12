@@ -247,7 +247,7 @@ describe("config init", () => {
 		);
 	});
 
-	test("--services realtime writes realtime: true", async () => {
+	test("--services realtime writes preview.realtime: true", async () => {
 		await initCmd({
 			cwd: workspace,
 			install: false,
@@ -255,7 +255,7 @@ describe("config init", () => {
 		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
-		expect(content).toContain("realtime: true");
+		expect(content).toContain("preview: {\n    realtime: true,");
 		expect(content).toContain("auth: false");
 	});
 
@@ -567,7 +567,7 @@ describe("config init", () => {
 		);
 
 		expect(readFileSync(join(workspace, "neon.ts"), "utf8")).toContain(
-			"realtime: true",
+			"preview: {\n    realtime: true,",
 		);
 	});
 });

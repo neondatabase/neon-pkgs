@@ -73,7 +73,7 @@ describe("realtime", () => {
 				unreachableHost: true,
 				code: 1,
 				snapshot: false,
-				stderr: 'ERROR: Invalid Neon config: - realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
+				stderr: 'ERROR: Invalid Neon config: - preview.realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
 			},
 		);
 	});

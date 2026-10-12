@@ -993,7 +993,7 @@ function requireRealtimeApi(api: NeonApi): {
 	if (!get || !enable || !disable) {
 		throw new PlatformError(
 			ErrorCode.FeatureUnavailable,
-			"This NeonApi adapter does not implement Realtime. Implement getProjectBranchRealtime, enableProjectBranchRealtime, and disableProjectBranchRealtime, or remove realtime from neon.ts.",
+			"This NeonApi adapter does not implement Realtime. Implement getProjectBranchRealtime, enableProjectBranchRealtime, and disableProjectBranchRealtime, or remove preview.realtime from neon.ts.",
 		);
 	}
 	return {

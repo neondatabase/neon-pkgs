@@ -12,6 +12,9 @@ describe("declaredNeonServices", () => {
 			auth: true,
 			dataApi: { enabled: true },
 			preview: {
+				realtime: {
+					allowedOrigins: ["https://app.example.com"],
+				},
 				buckets: {
 					assets: { access: "private" },
 				},
@@ -20,7 +23,6 @@ describe("declaredNeonServices", () => {
 				},
 				aiGateway: true,
 			},
-			realtime: { allowedOrigins: ["https://app.example.com"] },
 			branch: () => ({}),
 		});
 
@@ -46,11 +48,11 @@ describe("declaredNeonServices", () => {
 			auth: false,
 			dataApi: { enabled: false },
 			preview: {
+				realtime: false,
 				buckets: {},
 				functions: {},
 				aiGateway: { enabled: false },
 			},
-			realtime: false,
 			branch: () => ({}),
 		});
 

@@ -48,17 +48,21 @@ export function authoredAiGateway(
  *
  * Collision between the two homes is rejected at validation time, so each field
  * has at most one source. An empty `preview: {}` still produces an empty object
- * so resolve keeps today's `resolved.preview` of empty arrays.
+ * so resolve keeps today's `resolved.preview` of empty arrays. A preview block that
+ * contains only Realtime stays out of this legacy service normalization.
  */
 export function mergeAuthoredPreview(config: Config): PreviewInput | undefined {
 	const functions = authoredFunctions(config);
 	const buckets = authoredBuckets(config);
 	const aiGateway = authoredAiGateway(config);
+	const hasEmptyPreview =
+		config.preview !== undefined &&
+		Object.keys(config.preview).length === 0;
 	if (
 		functions === undefined &&
 		buckets === undefined &&
 		aiGateway === undefined &&
-		config.preview === undefined
+		!hasEmptyPreview
 	) {
 		return undefined;
 	}

@@ -33,13 +33,13 @@ const realtime = (
 const STARTER = renderNeonConfig([]);
 
 describe("editNeonConfig on the starter policy", () => {
-	it("adds, configures, and disables Realtime before services", () => {
+	it("adds, configures, and disables Realtime under preview", () => {
 		const enabled = editNeonConfig(
 			STARTER,
 			realtime(true, ["https://app.example.com"]),
 		);
 		expect(enabled.source).toContain(
-			'  realtime: { allowedOrigins: ["https://app.example.com"] },\n  // Declare your Neon services here',
+			'  preview: {\n    realtime: { allowedOrigins: ["https://app.example.com"] },\n  },\n  // Branch policy',
 		);
 
 		const updated = editNeonConfig(
@@ -47,11 +47,27 @@ describe("editNeonConfig on the starter policy", () => {
 			realtime(true, ["http://localhost:3000"]),
 		);
 		expect(updated.source).toContain(
-			'realtime: { allowedOrigins: ["http://localhost:3000"] }',
+			'preview: {\n    realtime: { allowedOrigins: ["http://localhost:3000"] },\n  }',
 		);
 
 		const disabled = editNeonConfig(updated.source, realtime(false));
-		expect(disabled.source).toContain("realtime: false");
+		expect(disabled.source).toContain("preview: {\n    realtime: false,");
+	});
+
+	it("adds Realtime to an existing preview block", () => {
+		const source = `export default defineConfig({
+  preview: {
+    aiGateway: true,
+  },
+});
+`;
+
+		expect(
+			editNeonConfig(source, realtime(true)).source,
+		).toContain(`  preview: {
+    aiGateway: true,
+    realtime: true,
+  },`);
 	});
 
 	it("preserves allowed origins when enable is called without new settings", () => {
@@ -334,6 +350,17 @@ describe("editNeonConfig refusals", () => {
 
 		expect(() => editNeonConfig(source, service("auth"))).toThrow(
 			/auth is set to an expression/,
+		);
+	});
+
+	it("refuses a preview value that is not an object literal", () => {
+		const source = `export default defineConfig({
+  preview: sharedPreview,
+});
+`;
+
+		expect(() => editNeonConfig(source, realtime(true))).toThrow(
+			/preview is set to an expression, not an object literal/,
 		);
 	});
 

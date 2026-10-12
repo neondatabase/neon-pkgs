@@ -178,7 +178,7 @@ describe("config add", () => {
 			snapshot: false,
 		});
 
-		expect(read("neon.ts")).toContain("realtime: true");
+		expect(read("neon.ts")).toContain("preview: {\n    realtime: true,");
 	});
 
 	test("add realtime writes repeatable allowed origins", async ({
@@ -204,7 +204,7 @@ describe("config add", () => {
 		);
 
 		expect(read("neon.ts")).toContain(
-			'realtime: { allowedOrigins: ["https://app.example.com","http://localhost:3000"] }',
+			'preview: {\n    realtime: { allowedOrigins: ["https://app.example.com","http://localhost:3000"] },',
 		);
 	});
 
@@ -225,7 +225,7 @@ describe("config add", () => {
 				code: 1,
 				cwd: workspace,
 				snapshot: false,
-				stderr: 'ERROR: Invalid Neon config: - realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
+				stderr: 'ERROR: Invalid Neon config: - preview.realtime.allowedOrigins[0]: expected "*" or an http(s) origin with no path, query, or fragment',
 			},
 		);
 

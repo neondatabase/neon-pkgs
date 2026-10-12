@@ -117,7 +117,7 @@ describe("resolveConfig", () => {
 
 	test("normalizes Realtime enablement, options, disablement, and omission", () => {
 		expect(
-			resolveConfig(defineConfig({ realtime: true }), {
+			resolveConfig(defineConfig({ preview: { realtime: true } }), {
 				name: "main",
 				exists: true,
 			}),
@@ -125,8 +125,10 @@ describe("resolveConfig", () => {
 		expect(
 			resolveConfig(
 				defineConfig({
-					realtime: {
-						allowedOrigins: ["https://app.example.com"],
+					preview: {
+						realtime: {
+							allowedOrigins: ["https://app.example.com"],
+						},
 					},
 				}),
 				{ name: "main", exists: true },
@@ -136,7 +138,7 @@ describe("resolveConfig", () => {
 			realtime: { allowedOrigins: ["https://app.example.com"] },
 		});
 		expect(
-			resolveConfig(defineConfig({ realtime: false }), {
+			resolveConfig(defineConfig({ preview: { realtime: false } }), {
 				name: "main",
 				exists: true,
 			}),

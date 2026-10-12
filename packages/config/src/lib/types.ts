@@ -582,15 +582,10 @@ export interface BucketDef {
 	access?: BucketAccessLevel;
 }
 
-/**
- * Deprecated home for AI Gateway, Functions, and Object Storage.
- *
- * Those services are GA as top-level `aiGateway`, `functions`, and `buckets`.
- * A `preview` block still works; deploy/apply warns that the keys can be lifted.
- *
- * @deprecated Use top-level `aiGateway`, `functions`, and `buckets`.
- */
+/** Preview features, plus deprecated homes for services that have graduated to GA. */
 export interface PreviewInput {
+	/** Enable, configure, or disable Realtime on every branch this policy is applied to. */
+	realtime?: RealtimeInput;
 	/**
 	 * Enable/disable the AI Gateway on the branch (toggle, like auth / dataApi).
 	 * @deprecated Use top-level `aiGateway`.
@@ -742,8 +737,6 @@ export interface Config<
 		| ServiceToggleInput
 		| undefined,
 > {
-	/** Enable, configure, or disable Realtime on every branch this policy is applied to. */
-	realtime?: RealtimeInput;
 	/** Neon Auth integration toggle (GA). Static — drives `NeonEnv.auth`. */
 	auth?: Auth;
 	/**
@@ -771,9 +764,7 @@ export interface Config<
 	 * are deployed. Triggers that exist remotely but are omitted here are left alone.
 	 */
 	triggers?: Record<string, FunctionTriggerDef>;
-	/**
-	 * @deprecated Use top-level `aiGateway`, `functions`, and `buckets`.
-	 */
+	/** Preview features and deprecated aliases for graduated services. */
 	preview?: Preview;
 	/** Per-branch tuning closure. Cannot change the static existential set. */
 	branch?: BranchTuningFn<Preview, Functions>;

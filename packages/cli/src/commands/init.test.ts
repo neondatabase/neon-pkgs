@@ -274,7 +274,7 @@ describe("init handler", () => {
 		);
 	});
 
-	test("--services realtime writes realtime to neon.ts", async () => {
+	test("--services realtime writes preview.realtime to neon.ts", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-realtime-"));
 		vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { initCmd } = await import("./config.js");
@@ -301,7 +301,7 @@ describe("init handler", () => {
 		);
 
 		expect(readFileSync(join(cwd, "neon.ts"), "utf8")).toContain(
-			"realtime: true",
+			"preview: {\n    realtime: true,",
 		);
 	});
 

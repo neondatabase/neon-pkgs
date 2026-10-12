@@ -245,7 +245,7 @@ function diffRealtime(args: {
 			conflicts.push({
 				kind: "branch",
 				identifier: remote.branch.name,
-				field: "realtime",
+				field: "preview.realtime",
 				current: true,
 				desired: false,
 				reason: "Existing Realtime would be disabled. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
@@ -286,7 +286,7 @@ function diffRealtime(args: {
 		conflicts.push({
 			kind: "branch",
 			identifier: remote.branch.name,
-			field: "realtime.allowedOrigins",
+			field: "preview.realtime.allowedOrigins",
 			current: state.allowedOrigins,
 			desired: allowedOrigins,
 			reason: "Existing Realtime has different allowed origins. Pass `updateExisting: true` (SDK) or `--update-existing` (CLI) to apply.",
