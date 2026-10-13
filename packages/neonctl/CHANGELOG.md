@@ -1,5 +1,12 @@
 # neonctl
 
+## 8.4.3
+
+### Patch Changes
+
+- Updated dependencies [fb929cd]
+  - neon@8.4.3
+
 ## 8.4.2
 
 ### Patch Changes
