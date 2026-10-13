@@ -41,7 +41,11 @@ export {
 	parseFunctionBaseUrlKey,
 	toEntries,
 } from "@neon-internals/env-core/env";
-export type { FunctionSlugOf, NeonFunctionEnv } from "./lib/parse-env.js";
+export type {
+	FunctionSlugOf,
+	NeonFunctionEnv,
+	ParsedNeonEnv,
+} from "./lib/parse-env.js";
 export { parseEnv } from "./lib/parse-env.js";
 
 // The stateful counterpart — `fetchEnvReusingSecrets`, which reads an env source and can mint

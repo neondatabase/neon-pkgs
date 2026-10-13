@@ -701,9 +701,12 @@ describe("NeonEnv namespace presence (types)", () => {
 		expectTypeOf<
 			NeonEnv<typeof fnOnly>["functions"]["hello"]["baseUrl"]
 		>().toEqualTypeOf<string>();
-		expectTypeOf(
-			parseEnv(fnOnly).functions.hello.baseUrl,
-		).toEqualTypeOf<string>();
+		expectTypeOf(parseEnv(fnOnly).functions).toEqualTypeOf<
+			{ hello: NeonFunctionUrlEnv } | undefined
+		>();
+		expectTypeOf(parseEnv(fnOnly, "hello").functions).toEqualTypeOf<
+			{ hello: NeonFunctionUrlEnv } | undefined
+		>();
 		const fetched = fetchEnv(fnOnly, {
 			projectId: "proj",
 			branch: "main",

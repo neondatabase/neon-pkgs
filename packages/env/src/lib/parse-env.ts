@@ -107,6 +107,16 @@ type FunctionEnvKeysOf<
  * The extra `function` namespace added to `parseEnv`'s result when called with a function
  * slug scope: the declared env-var keys for that function, each resolved to a `string`.
  */
+/**
+ * What `parseEnv` returns without a key filter: {@link NeonEnv} with `functions` optional,
+ * because the deployed Functions runtime does not inject `NEON_FUNCTION_<SLUG>_BASE_URL`.
+ * Select the key (`parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"])`) to require it.
+ */
+export type ParsedNeonEnv<C extends Config> =
+	NeonEnv<C> extends { functions: infer F }
+		? Omit<NeonEnv<C>, "functions"> & { functions?: F }
+		: NeonEnv<C>;
+
 export type NeonFunctionEnv<C extends Config, S extends string> = {
 	function: Record<FunctionEnvKeysOf<C, S>, string>;
 };
@@ -246,7 +256,7 @@ function isServiceEnabledInput(
  * postgres.databaseUrl; // string — `databaseUrlUnpooled` is absent
  * ```
  */
-export function parseEnv<const C extends Config>(config: C): NeonEnv<C>;
+export function parseEnv<const C extends Config>(config: C): ParsedNeonEnv<C>;
 // Overload order is load-bearing for **editor autocomplete**, not for type checking: when the
 // argument is a half-typed string literal the call resolves against no signature, and the
 // editor takes its string-literal completions from the first candidate overload. With the
@@ -261,7 +271,7 @@ export function parseEnv<
 >(
 	config: C,
 	scope: FunctionScopeField<C, S>,
-): NeonEnv<C> & NeonFunctionEnv<C, S>;
+): ParsedNeonEnv<C> & NeonFunctionEnv<C, S>;
 export function parseEnv<
 	const C extends Config,
 	const K extends SelectableEnvKey<C>,
@@ -393,6 +403,9 @@ export function parseEnv(
 		const functions: Record<string, NeonFunctionUrlEnv> = {};
 		for (const slug of declaredFunctionSlugs) {
 			const key = functionBaseUrlKey(slug);
+			// The Functions runtime does not inject NEON_FUNCTION_<SLUG>_BASE_URL, so an
+			// unset one leaves `functions` out instead of failing every deployed function.
+			if (source[key] === undefined) continue;
 			const parsed = readFunctionBaseUrl(key, source[key]);
 			if (parsed.ok) {
 				functions[slug] = { baseUrl: parsed.value };

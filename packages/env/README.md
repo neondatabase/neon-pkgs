@@ -41,7 +41,6 @@ const env2 = parseEnv(config);
 // Inside a deployed function, pass its slug for the typed `function` namespace:
 const fnEnv = parseEnv(config, "hello");
 fnEnv.function.resendApiKey; // typed from hello's declared env keys
-fnEnv.functions.hello.baseUrl;
 
 // Key filter — only enforce + return the vars you actually use (e.g. a Next.js app that
 // reads the pooled URL but not the unpooled one). The keys autocomplete from the policy, so
@@ -146,7 +145,9 @@ Derive the database passed to `createRealtime` from `DATABASE_URL` so the two ca
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
-**Functions** (when `functions` declares at least one slug). Each declared slug requires `NEON_FUNCTION_<SLUG>_BASE_URL`, typed as `env.functions.<slug>.baseUrl: string`. These are the public function URLs, not the function's declared `env` secrets (those are uploaded at deploy). `fetchEnv` / `neon env pull` derive the URL from the branch connection host; the function does not have to be deployed. `parseEnv` requires the var to be a URL. `neon dev` injects `http://localhost:<port>` instead.
+**Functions** (when `functions` declares at least one slug). Each declared slug maps to `NEON_FUNCTION_<SLUG>_BASE_URL`, read as `env.functions.<slug>.baseUrl: string`. These are the public function URLs, not the function's declared `env` secrets (those are uploaded at deploy). `fetchEnv` / `neon env pull` derive the URL from the branch connection host; the function does not have to be deployed. `neon dev` injects `http://localhost:<port>` instead.
+
+The deployed Functions runtime does not inject these vars yet. Without a key filter, `parseEnv` therefore returns `functions` only when every declared slug's URL is set, and leaves it `undefined` otherwise. A value that is set must be a URL. Select the key to require it.
 
 | Key | From |
 | --- | --- |
@@ -154,7 +155,10 @@ Derive the database passed to `createRealtime` from `DATABASE_URL` so the two ca
 
 ```ts
 const env = parseEnv(config);
-env.functions.hello.baseUrl; // string
+env.functions?.hello.baseUrl; // string | undefined
+
+const { functions: required } = parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"]);
+required.hello.baseUrl; // string, throws when unset
 
 const { functions } = await fetchEnv(config, { projectId, branch: "main" });
 functions.hello.baseUrl; // string

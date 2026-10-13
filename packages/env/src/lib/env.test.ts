@@ -641,15 +641,15 @@ describe("parseEnv", () => {
 			expect(env.function).toEqual({});
 		});
 
-		test("requires a declared function invocation URL", () => {
+		test("omits functions when a declared function invocation URL is not injected", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			expect(() => parseEnv(config)).toThrowError(
-				/NEON_FUNCTION_HELLO_BASE_URL is missing/,
-			);
-			expect(() => parseEnv(config)).toThrowError(/neon env pull/);
-			expect(() => parseEnv(config)).toThrowError(/localhost/);
-			expect(() => parseEnv(config)).not.toThrowError(/Vercel/);
+			vi.stubEnv("resendApiKey", "re_live_123");
+
+			expect(parseEnv(config).functions).toBeUndefined();
+			const scoped = parseEnv(config, "hello");
+			expect(scoped.functions).toBeUndefined();
+			expect(scoped.function.resendApiKey).toBe("re_live_123");
 		});
 
 		test("a function env key that looks like a URL key still points at deploy upload", () => {
@@ -689,7 +689,7 @@ describe("parseEnv", () => {
 				"https://br-main-hello.compute.fake.neon.tech/",
 			);
 			const env = parseEnv(config);
-			expect(env.functions.hello.baseUrl).toBe(
+			expect(env.functions?.hello.baseUrl).toBe(
 				"https://br-main-hello.compute.fake.neon.tech/",
 			);
 		});
@@ -1561,7 +1561,7 @@ describe("function invocation URLs", () => {
 		vi.stubEnv("DATABASE_URL", "postgres://pooled");
 		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		vi.stubEnv("NEON_FUNCTION_HELLO_BASE_URL", "http://localhost:8787");
-		expect(parseEnv(helloPolicy).functions.hello.baseUrl).toBe(
+		expect(parseEnv(helloPolicy).functions?.hello.baseUrl).toBe(
 			"http://localhost:8787",
 		);
 	});
@@ -1573,5 +1573,7 @@ describe("function invocation URLs", () => {
 		expect(() => parseEnv(helloPolicy)).toThrowError(
 			/NEON_FUNCTION_HELLO_BASE_URL must be a URL/,
 		);
+		expect(() => parseEnv(helloPolicy)).toThrowError(/neon env pull/);
+		expect(() => parseEnv(helloPolicy)).not.toThrowError(/Vercel/);
 	});
 });
