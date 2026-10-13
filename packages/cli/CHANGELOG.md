@@ -1,5 +1,11 @@
 # neon
 
+## 8.4.2
+
+### Patch Changes
+
+- edc3bed: Install the WebSocket transport required by `neon subscribe` so direct Realtime subscriptions work from clean and global CLI installations.
+
 ## 8.4.1
 
 ### Patch Changes

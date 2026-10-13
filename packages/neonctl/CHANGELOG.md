@@ -1,5 +1,12 @@
 # neonctl
 
+## 8.4.2
+
+### Patch Changes
+
+- Updated dependencies [edc3bed]
+  - neon@8.4.2
+
 ## 8.4.1
 
 ### Patch Changes
