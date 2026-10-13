@@ -59,7 +59,9 @@ async function fetchReport(url: string): Promise<EnvReport> {
 	let last = "no response";
 	while (Date.now() < deadline) {
 		try {
-			const response = await fetch(url);
+			const response = await fetch(url, {
+				signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+			});
 			if (response.ok) return (await response.json()) as EnvReport;
 			last = `HTTP ${response.status}: ${await response.text()}`;
 		} catch (error) {
