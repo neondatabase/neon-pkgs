@@ -281,6 +281,21 @@ function httpError(response: Response, body: unknown): NeonApiError {
 	);
 }
 
+/** Build a {@link NeonApiError} for a 2xx `Response` whose body failed to read or parse. */
+function unreadableBodyError(response: Response, cause: unknown): NeonApiError {
+	const base = httpError(response, undefined);
+	const reason = cause instanceof Error ? cause.message : String(cause);
+	return new NeonApiError(
+		`Could not read the Neon API response (${response.status} ${response.statusText}) to ${base.requestPath ?? "the request"}: ${reason}`,
+		{
+			status: base.status,
+			statusText: base.statusText,
+			headers: base.headers,
+			requestPath: base.requestPath,
+		},
+	);
+}
+
 /**
  * Translate a thrown `fetch` failure into a {@link NeonApiError}. A request
  * timeout uses `ECONNABORTED` (matching the old axios behaviour, and excluded
@@ -483,6 +498,11 @@ export const getApiClient = ({
 				response,
 				rawErrorBody(result.error) ?? result.data,
 			);
+		}
+		// The generated client reports a 2xx body it could not read or parse here, next to
+		// an `ok` response and no `data`.
+		if (result.error !== undefined && result.error !== null) {
+			throw unreadableBodyError(response, rawErrorBody(result.error));
 		}
 		return {
 			data: result.data as T,
