@@ -466,7 +466,7 @@ so "reach into an internal" is not a thing it can do.
 
 #### Staging-only features
 
-A CLI feature can ship before its API reaches production. Until then it is **staging-only**: it is exposed only when the host requests go to (`--api-host` or `--apiHost`, else `NEON_API_HOST`) is `https://console-stage.neon.build/api/v2`. With production or no host set, it is left out of `--help`, anything that asks for it fails with a "coming soon" error, and reads the CLI makes on its own (such as `neon env pull` without a `neon.ts`) skip it. Neon Realtime is gated this way.
+A CLI feature can ship before its API reaches production. Until then it is **staging-only**: it is exposed only when the host requests go to (`--api-host` or `--apiHost`, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build` (`https://console-stage.neon.build/api/v2`). With production or no host set, it is left out of `--help`, anything that asks for it fails with a "coming soon" error, and reads the CLI makes on its own (such as `neon env pull` without a `neon.ts`) skip it. Neon Realtime is gated this way.
 
 Run the CLI against staging with a staging API key:
 
@@ -474,7 +474,7 @@ Run the CLI against staging with a staging API key:
 NEON_API_HOST=https://console-stage.neon.build/api/v2 NEON_API_KEY=<staging key> neon realtime --help
 ```
 
-**A production HTTP 500 from an endpoint that works on staging most likely means the feature is staging-only for now** and needs this gate. Production answered the unreleased Realtime route `GET /projects/{id}/branches/{branch}/realtime` with HTTP 500 rather than 404, so `neon env pull` failed for every user until the read was gated.
+**A production HTTP 500 from an endpoint that works on staging most likely means the feature is staging-only for now** and needs this gate. Production answered the unreleased Realtime route `GET /projects/{id}/branches/{branch}/realtime` with HTTP 500 rather than 404, so on neon 8.4.0 `neon env pull` without a `neon.ts` failed for every project until the read was gated.
 
 **Always ask the developer to confirm that a feature should be staging-only** before adding or removing a gate. A 500 is a reason to ask, not a confirmation.
 
@@ -491,7 +491,7 @@ The helpers live in `packages/cli/src/utils/staging.ts`:
 
 The Realtime-specific pieces are `REALTIME_COMING_SOON`, `assertRealtimeAvailable()`, `assertPolicyAvailable()`, and `listedServices()`.
 
-**Removing a gate:** once the feature works in production, delete its call sites and its feature-specific helpers. Keep `STAGING_API_HOST`, `isStagingApiHost()`, `stagingFeaturesEnabled()`, `stagingFeaturesEnabledForArgv()`, `StagingOnlyError`, the `NEON_STAGING_API_HOST` override, and the `stagingOnly` manifest field, even when nothing uses them anymore, so the next staging-only feature reuses them.
+**Removing a gate:** once the feature works in production, delete its call sites and its feature-specific helpers, and remove any library opt-in or make it default on (for Realtime, `pullConfig`'s `realtime` option; dropping only the CLI argument leaves Realtime unread). Keep `STAGING_API_HOST`, `isStagingApiHost()`, `stagingFeaturesEnabled()`, `stagingFeaturesEnabledForArgv()`, `StagingOnlyError`, the `NEON_STAGING_API_HOST` override, and the `stagingOnly` manifest field, even when nothing uses them anymore, so the next staging-only feature reuses them.
 
 -   **Build**: `pnpm --filter <name> build` runs swagger param generation (`generateOptionsFromSpec.ts` → `src/parameters.gen.ts`, a committed generated file), then `tsc --noEmit` and `tsdown` to `dist/`, then copies `callback.html` into `dist/`. Every non-test source file is an entry, so each keeps its own path under `dist/` and the `./dist/*` wildcard export still resolves; only the private `@neon-internals/*` packages are inlined, into `dist/_chunks/`. It **publishes from the package root** (`bin: dist/cli.js`, `files: ["dist", …]`). The param generator reads the OpenAPI spec from the `@neon/sdk` workspace package's vendored copy (`../sdk/spec/neon-openapi.json`, kept in sync via its `spec:pull` script), so it works offline within the monorepo.
 -   **Lint**: Biome, via a `packages/cli/**` override in the root `biome.json` (relaxes some rules for the migrated upstream code, and enforces `noConsole` since the CLI routes all output through its writer/logger). Root `pnpm lint:ci` (`biome ci`) covers it. `pnpm --filter <name> lint` additionally runs `tsc --noEmit` then `biome check src`.

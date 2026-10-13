@@ -74,7 +74,7 @@ package's file before changing it:
 
 ## Staging-only features
 
-A CLI feature whose API is only on Neon's staging console ships **staging-only**: the CLI exposes it only when the host requests go to (`--api-host`, else `NEON_API_HOST`) is `https://console-stage.neon.build/api/v2`. Everywhere else it is hidden from `--help` and fails with a "coming soon" error. Neon Realtime is gated this way. To try one, point the CLI at staging with a staging API key:
+A CLI feature whose API is only on Neon's staging console ships **staging-only**: the CLI exposes it only when the host requests go to (`--api-host`, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build`. Everywhere else it is hidden from `--help` and fails with a "coming soon" error. Neon Realtime is gated this way. To try one, point the CLI at staging with a staging API key:
 
 ```bash
 export NEON_API_HOST=https://console-stage.neon.build/api/v2
@@ -84,7 +84,7 @@ neon realtime --help
 
 - **An endpoint that answers HTTP 500 in production but works on staging is most likely staging-only for now** and needs the gate. Production answered the unreleased Realtime route with 500, not 404.
 - **Confirm with the feature's owner that it should be staging-only** before adding or removing a gate.
-- The helpers are in `packages/cli/src/utils/staging.ts`. When the last staging-only feature ships to production, remove its call sites but keep the generic helpers (`isStagingApiHost()`, `stagingFeaturesEnabled()`, `stagingFeaturesEnabledForArgv()`, `StagingOnlyError`, `NEON_STAGING_API_HOST`) and the `stagingOnly` manifest field, so the next one reuses them.
+- The helpers are in `packages/cli/src/utils/staging.ts`. When a staging-only feature ships to production, remove its call sites and any library opt-in it added (or make that opt-in default on), but keep the generic helpers (`isStagingApiHost()`, `stagingFeaturesEnabled()`, `stagingFeaturesEnabledForArgv()`, `StagingOnlyError`, `NEON_STAGING_API_HOST`) and the `stagingOnly` manifest field, so the next one reuses them.
 
 Details, including which helper fits which case: [`AGENTS.md`](./AGENTS.md#staging-only-features).
 
