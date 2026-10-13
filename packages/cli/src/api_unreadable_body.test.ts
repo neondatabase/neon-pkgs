@@ -2,8 +2,11 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getErrorAnalyticsEventProperties } from "./analytics.js";
-import { getApiClient, isNeonApiError } from "./api.js";
-import { isUnexpectedError } from "./errors.js";
+import {
+	getApiClient,
+	isNeonApiError,
+	UnreadableResponseError,
+} from "./api.js";
 
 /**
  * A 2xx JSON response whose body cannot be parsed. The generated client reports that on its
@@ -60,7 +63,7 @@ describe("a 2xx JSON response with an unparseable body", () => {
 		expect(err.message).toBe(
 			"Could not read the Neon API response (200 OK) to /projects/proj-1/branches/br-1/roles/neondb_owner/reveal_password: the body is not valid JSON",
 		);
-		expect(isUnexpectedError(err)).toBe(false);
+		expect(err).toBeInstanceOf(UnreadableResponseError);
 	});
 
 	it("keeps the body out of the message and the analytics event", async () => {

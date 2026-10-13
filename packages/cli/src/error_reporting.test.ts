@@ -249,6 +249,32 @@ describe("error reporting", () => {
 		expect(events).toEqual([]);
 	});
 
+	it("reports a 2xx response whose body could not be read, without its message", async () => {
+		const analytics = await setup();
+		const { NeonApiError, UnreadableResponseError } = await import(
+			"./api.js"
+		);
+
+		analytics.sendError(
+			new NeonApiError("Branch not found", { status: 404 }),
+			"API_ERROR",
+		);
+		analytics.sendError(
+			new UnreadableResponseError(
+				"Could not read the Neon API response (200 OK) to /projects/proj-secret-1/branches/br-1/databases: the body is not valid JSON",
+				{ status: 200 },
+			),
+			"API_ERROR",
+		);
+		await analytics.closeAnalytics();
+
+		expect(events).toHaveLength(1);
+		const [exception] = events[0]?.exception?.values ?? [];
+		expect(exception?.type).toBe("UnreadableResponseError");
+		expect(exception?.value).toBe("(message omitted)");
+		expect(JSON.stringify(events)).not.toContain("proj-secret-1");
+	});
+
 	it("does not report a TypeError classified as a network failure", async () => {
 		const analytics = await setup();
 

@@ -1,6 +1,10 @@
 import { OAUTH } from "@neon-internals/cli-core/credentials";
 import { Analytics, type TrackParams } from "@segment/analytics-node";
-import { getApiClient, isNeonApiError } from "./api.js";
+import {
+	getApiClient,
+	isNeonApiError,
+	UnreadableResponseError,
+} from "./api.js";
 import { type AuthContext, getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
@@ -467,7 +471,10 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 		});
 	});
 	log.debug("Sent CLI error event: %s", errCode);
-	if (errCode === "UNKNOWN_ERROR" && isUnexpectedError(err)) {
+	if (
+		(errCode === "UNKNOWN_ERROR" && isUnexpectedError(err)) ||
+		err instanceof UnreadableResponseError
+	) {
 		const report = import("./error_reporting.js")
 			.then(({ reportUnexpectedError }) =>
 				reportUnexpectedError(err, redactCredentialTokenIds),
