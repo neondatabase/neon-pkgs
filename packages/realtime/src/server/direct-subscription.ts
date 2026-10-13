@@ -1,13 +1,11 @@
 import { QueryRefreshController } from "../client/query-refresh.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
-	LiveQueryBatchInfo,
-	LiveQueryChange,
 	LiveQuerySnapshot,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
-	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RawLiveQueryUpdate,
 } from "../client/types.js";
 
 export interface ManagedDirectSubscription<Subscription> {
@@ -47,14 +45,8 @@ export function manageDirectSubscription<
 	});
 	const base = {
 		getState: () => subscription.getState(),
-		onReset: (listener: (rows: readonly RawLiveQueryRow<Row>[]) => void) =>
-			subscription.onReset(listener),
-		onBatch: (
-			listener: (
-				changes: readonly LiveQueryChange<Row>[],
-				batch: LiveQueryBatchInfo,
-			) => void,
-		) => subscription.onBatch(listener),
+		onUpdate: (listener: (update: RawLiveQueryUpdate<Row>) => void) =>
+			subscription.onUpdate(listener),
 		onStateChange: (listener: (state: LiveQueryState) => void) =>
 			subscription.onStateChange(listener),
 		awaitTxId: (txid: string, timeout?: number) =>

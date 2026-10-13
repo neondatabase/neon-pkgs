@@ -42,7 +42,8 @@ export interface ConnectionCallbacks {
 	readonly events?: SubscriptionEventSink;
 	readonly reconciliation: ReconciliationTarget;
 	admitted(columns: readonly WireColumn[]): void;
-	disconnected(): void;
+	connecting(): void;
+	queryUnavailable(): void;
 	failed(error: ConnectionCoordinatorError): void;
 }
 
@@ -306,6 +307,7 @@ export class ConnectionCoordinator {
 		if (subscription.state === "awaiting_query") {
 			subscription.state = "active";
 			this.activeSubscriptions.add(subscription);
+			subscription.callbacks.connecting();
 			this.connect();
 			if (this.ready) this.sendSubscribe(subscription);
 			return renewal.promise;
@@ -642,7 +644,7 @@ export class ConnectionCoordinator {
 			this.reconciler.remove(subscription.liveId);
 		}
 		subscription.resetWire();
-		subscription.callbacks.disconnected();
+		subscription.callbacks.connecting();
 	}
 
 	private connectionError(code: string, message: string): void {
@@ -727,7 +729,7 @@ export class ConnectionCoordinator {
 		}
 		for (const subscription of this.activeSubscriptions) {
 			subscription.resetWire();
-			subscription.callbacks.disconnected();
+			subscription.callbacks.connecting();
 		}
 		if (
 			!this.disposed &&
@@ -888,7 +890,7 @@ export class ConnectionCoordinator {
 		}
 		subscription.resetWire();
 		subscription.events.queryUnavailable(error);
-		subscription.callbacks.disconnected();
+		subscription.callbacks.queryUnavailable();
 
 		if (
 			rejectedCapability !== undefined &&
@@ -896,6 +898,7 @@ export class ConnectionCoordinator {
 		) {
 			subscription.state = "active";
 			this.activeSubscriptions.add(subscription);
+			subscription.callbacks.connecting();
 			this.connect();
 			if (this.ready) this.sendSubscribe(subscription);
 			return;

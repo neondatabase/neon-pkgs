@@ -21,13 +21,13 @@ import { waitForRows } from "./row-waiter.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 import { TransactionTracker } from "./transaction-tracker.js";
 import type {
-	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQueryError,
 	LiveQuerySnapshot,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
 	RawLiveQueryRow,
+	RawLiveQueryUpdate,
 } from "./types.js";
 
 export interface SubscriptionOwner {
@@ -74,14 +74,8 @@ export class Subscription<Row>
 		readonly WireChange[],
 		readonly LiveQueryChange<Row>[]
 	>();
-	private readonly resetListeners = new Set<
-		(rows: readonly RawLiveQueryRow<Row>[]) => void
-	>();
-	private readonly batchListeners = new Set<
-		(
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void
+	private readonly updateListeners = new Set<
+		(update: RawLiveQueryUpdate<Row>) => void
 	>();
 	private readonly stateListeners = new Set<
 		(state: LiveQueryState) => void
@@ -109,10 +103,7 @@ export class Subscription<Row>
 			);
 		}
 		this.initialized = initialData !== undefined;
-		this.state = Object.freeze({
-			status: initialData === undefined ? "connecting" : "stale",
-			error: undefined,
-		});
+		this.state = connectingState;
 		this.snapshot = this.makeSnapshot();
 	}
 
@@ -137,16 +128,9 @@ export class Subscription<Row>
 
 	getSnapshot = (): LiveQuerySnapshot<Row> => this.snapshot;
 
-	onReset = (
-		listener: (rows: readonly RawLiveQueryRow<Row>[]) => void,
-	): (() => void) => listen(this.resetListeners, listener);
-
-	onBatch = (
-		listener: (
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void,
-	): (() => void) => listen(this.batchListeners, listener);
+	onUpdate = (
+		listener: (update: RawLiveQueryUpdate<Row>) => void,
+	): (() => void) => listen(this.updateListeners, listener);
 
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		listen(this.stateListeners, listener);
@@ -188,12 +172,14 @@ export class Subscription<Row>
 				new Error("Live-query renewal must be for the same query"),
 			);
 		}
-		const failedState =
-			this.state.status === "error" ? this.state : undefined;
-		if (failedState) this.setLifecycle(staleState(this));
+		const precedingState =
+			this.state.status === "error" || this.state.status === "stale"
+				? this.state
+				: undefined;
+		if (precedingState) this.setLifecycle(connectingState);
 		return this.owner.renew(this, query).catch((error: unknown) => {
-			if (failedState && this.state.status !== "error") {
-				this.setLifecycle(failedState);
+			if (precedingState && this.state.status !== "error") {
+				this.setLifecycle(precedingState);
 			}
 			throw error;
 		});
@@ -271,7 +257,10 @@ export class Subscription<Row>
 		this.initialized = true;
 		this.snapshot = this.makeSnapshot();
 		this.transactions.applySnapshot(mvcc);
-		this.notify(this.resetListeners, staged.rows);
+		this.notify(
+			this.updateListeners,
+			Object.freeze({ type: "rows", rows: staged.rows }),
+		);
 	}
 
 	publishBatch(batch: ReconciledBatch): void {
@@ -283,7 +272,10 @@ export class Subscription<Row>
 		if (!changes) throw new Error("Realtime published an unapplied batch");
 		this.appliedBatches.delete(batch.changes);
 		const info = Object.freeze({ txids: batch.txids });
-		this.notify(this.batchListeners, changes, info);
+		this.notify(
+			this.updateListeners,
+			Object.freeze({ type: "changes", changes, batch: info }),
+		);
 		if (this.materialized && this.state.status === "live") {
 			this.notify(this.changeListeners, this.snapshot);
 		}
@@ -313,14 +305,20 @@ export class Subscription<Row>
 	resetRequired(): void {
 		if (this.closed) return;
 		this.events.resetRequired();
-		this.setLifecycle(staleState(this));
 	}
 
-	disconnected(): void {
+	connecting(): void {
 		this.columns = undefined;
 		this.appliedBatches.clear();
 		this.stagedReset = undefined;
-		this.setLifecycle(staleState(this));
+		this.setLifecycle(connectingState);
+	}
+
+	queryUnavailable(): void {
+		this.columns = undefined;
+		this.appliedBatches.clear();
+		this.stagedReset = undefined;
+		this.setLifecycle(staleState);
 	}
 
 	fail(error: ConnectionCoordinatorError): void {
@@ -346,10 +344,6 @@ export class Subscription<Row>
 		this.setLifecycle(
 			Object.freeze({ status: "closed", error: undefined }),
 		);
-	}
-
-	hasRetainedState(): boolean {
-		return this.initialized;
 	}
 
 	private decodeReset(
@@ -425,14 +419,15 @@ export class Subscription<Row>
 	}
 }
 
-export function staleState<Row>(
-	subscription: Subscription<Row>,
-): LiveQueryState {
-	return Object.freeze({
-		status: subscription.hasRetainedState() ? "stale" : "connecting",
-		error: undefined,
-	});
-}
+const connectingState: LiveQueryState = Object.freeze({
+	status: "connecting",
+	error: undefined,
+});
+
+const staleState: LiveQueryState = Object.freeze({
+	status: "stale",
+	error: undefined,
+});
 
 function sameState(left: LiveQueryState, right: LiveQueryState): boolean {
 	return left.status === right.status && left.error === right.error;

@@ -20,7 +20,7 @@ export interface RealtimeProviderProps {
  * @typeParam Row - Row produced by the sealed query.
  */
 export interface UseLiveQueryOptions<Row> {
-	/** Server-rendered or otherwise preloaded rows exposed initially as stale. */
+	/** Server-rendered or otherwise preloaded rows exposed while connecting. */
 	readonly initialData?: readonly Row[];
 	/**
 	 * Obtain a replacement capability for the same exact query before expiry.

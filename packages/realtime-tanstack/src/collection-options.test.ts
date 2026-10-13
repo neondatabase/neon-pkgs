@@ -1,5 +1,4 @@
 import type {
-	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQueryState,
 	MaterializedLiveQueryOptions,
@@ -7,6 +6,7 @@ import type {
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RawLiveQueryUpdate,
 	RealtimeClient,
 	RealtimeLogEntry,
 	SealedLiveQuery,
@@ -116,7 +116,7 @@ describe("Realtime TanStack DB collection", () => {
 		await cancelled;
 	});
 
-	it("installs resets and transactions as authoritative collection state", async () => {
+	it("installs rows and changes as authoritative collection state", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
 		expectTypeOf(collection.utils).toEqualTypeOf<RealtimeCollectionUtils>();
@@ -224,14 +224,17 @@ describe("Realtime TanStack DB collection", () => {
 		});
 	});
 
-	it("keeps a ready collection ready while Realtime is stale", async () => {
+	it.each([
+		"connecting",
+		"stale",
+	] as const)("keeps a ready collection ready while Realtime is %s", async (status) => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
 		const preload = collection.preload();
 		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
 		await preload;
 
-		client.latest().state({ status: "stale", error: undefined });
+		client.latest().state({ status, error: undefined });
 
 		expect(collection.status).toBe("ready");
 		expect(collection.get(1)).toMatchObject({ title: "one" });
@@ -507,14 +510,8 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 			timer?: ReturnType<typeof setTimeout>;
 		}>
 	>();
-	private readonly resetListeners = new Set<
-		(rows: readonly RawLiveQueryRow<Row>[]) => void
-	>();
-	private readonly batchListeners = new Set<
-		(
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void
+	private readonly updateListeners = new Set<
+		(update: RawLiveQueryUpdate<Row>) => void
 	>();
 	private readonly stateListeners = new Set<
 		(state: LiveQueryState) => void
@@ -532,16 +529,9 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 
 	getState = (): LiveQueryState => this.currentState;
 
-	onReset = (
-		listener: (rows: readonly RawLiveQueryRow<Row>[]) => void,
-	): (() => void) => add(this.resetListeners, listener);
-
-	onBatch = (
-		listener: (
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void,
-	): (() => void) => add(this.batchListeners, listener);
+	onUpdate = (
+		listener: (update: RawLiveQueryUpdate<Row>) => void,
+	): (() => void) => add(this.updateListeners, listener);
 
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		add(this.stateListeners, listener);
@@ -573,7 +563,7 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 
 	renew = async (query: SealedLiveQuery<Row>): Promise<void> => {
 		this.renewals.push(query);
-		this.state({ status: "stale", error: undefined });
+		this.state({ status: "connecting", error: undefined });
 	};
 
 	unsubscribe = (): void => {
@@ -591,16 +581,20 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	reset(rows: readonly RawLiveQueryRow<Row>[]): void {
 		this.currentState = { status: "live", error: undefined };
 		for (const listener of this.stateListeners) listener(this.currentState);
-		for (const listener of this.resetListeners) listener(rows);
+		const update = { type: "rows", rows } as const;
+		for (const listener of this.updateListeners) listener(update);
 	}
 
 	batch(
 		changes: readonly LiveQueryChange<Row>[],
 		txids: readonly string[],
 	): void {
-		for (const listener of this.batchListeners) {
-			listener(changes, { txids });
-		}
+		const update = {
+			type: "changes",
+			changes,
+			batch: { txids },
+		} as const;
+		for (const listener of this.updateListeners) listener(update);
 		for (const txid of txids) {
 			this.appliedTxids.add(txid);
 			for (const waiter of this.txWaiters.get(txid) ?? []) {

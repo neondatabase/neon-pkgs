@@ -87,7 +87,7 @@ export type RealtimeCollectionOptions<
 
 /**
  * Create TanStack DB collection options backed by a raw live-query subscription.
- * Resets and committed publication batches are applied atomically.
+ * Complete-row replacements and committed change batches are applied atomically.
  *
  * @typeParam Row - Object row synchronized into the collection.
  * @typeParam Key - Stable key returned by `getKey`.
@@ -297,13 +297,15 @@ function createRealtimeCollectionOptions<
 
 				const stateChanged = (state: LiveQueryState) => {
 					if (state.status === "error") markError(state.error);
-					// connecting maps to loading; live becomes ready through reset;
-					// stale deliberately leaves an already-ready collection ready, and
-					// closed maps to TanStack DB's normal sync cleanup.
+					// Initial connecting maps to loading; complete rows make the
+					// collection ready. Reconnection and stale capability states retain
+					// an already-ready collection, while closed uses normal sync cleanup.
 				};
 
-				const unsubscribeReset = subscription.onReset(installReset);
-				const unsubscribeBatch = subscription.onBatch(applyBatch);
+				const unsubscribeUpdate = subscription.onUpdate((update) => {
+					if (update.type === "rows") installReset(update.rows);
+					else applyBatch(update.changes);
+				});
 				const unsubscribeState =
 					subscription.onStateChange(stateChanged);
 				queryRefresh.start();
@@ -311,8 +313,7 @@ function createRealtimeCollectionOptions<
 				return () => {
 					cleaned = true;
 					queryRefresh.stop();
-					unsubscribeReset();
-					unsubscribeBatch();
+					unsubscribeUpdate();
 					unsubscribeState();
 					subscription.unsubscribe();
 					if (activeSubscription === subscription) {

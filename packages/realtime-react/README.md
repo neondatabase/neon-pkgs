@@ -58,8 +58,10 @@ export function Messages(props: MessagesProps) {
     refreshQuery: () => sealMessages(props.channelId),
   });
 
-  useEffect(() => utils.onBatch((_changes, batch) => {
-    console.debug("Applied transactions", batch.txids);
+  useEffect(() => utils.onUpdate((update) => {
+    if (update.type === "changes") {
+      console.debug("Applied transactions", update.batch.txids);
+    }
   }), [utils]);
 
   if (error) return <p>{error.message}</p>;
@@ -67,7 +69,7 @@ export function Messages(props: MessagesProps) {
 
   return (
     <>
-      {status === "stale" && <p>Updating…</p>}
+      {status !== "live" && <p>Updating…</p>}
       <ul>
         {data.map((message) => <li key={message.id}>{message.body}</li>)}
       </ul>
@@ -84,12 +86,14 @@ sealed query changes.
 
 When `refreshQuery` is present, the integration renews before expiry
 and keeps retrying through capability expiry and transport outages. Existing
-data remains available with status `stale`. Changing the sealed query starts
-a new logical query; changing only the refresh callback does not.
+data remains available while `stale` indicates that a replacement capability
+is being obtained and `connecting` indicates active resubscription or transport
+recovery. Changing the sealed query starts a new logical query; changing only
+the refresh callback does not.
 
 For SSR, execute the same query on the server and pass its rows as
-`initialData`. React renders them immediately as stale data, and the first
-authoritative live-query reset reconciles any intervening changes.
+`initialData`. React renders them immediately with status `connecting`, and the
+first authoritative live-query result reconciles any intervening changes.
 
 ### Optimistic mutations
 

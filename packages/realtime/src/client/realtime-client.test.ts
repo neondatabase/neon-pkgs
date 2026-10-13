@@ -119,7 +119,7 @@ describe("RealtimeClient", () => {
 					: {}),
 			});
 			expect(subscription.getSnapshot()).toMatchObject({
-				status: "stale",
+				status: "connecting",
 				data: [{ id: 1, title: "before" }],
 				error: undefined,
 			});
@@ -140,7 +140,7 @@ describe("RealtimeClient", () => {
 				retry_after_ms: 2_000,
 			});
 			expect(subscription.getSnapshot()).toMatchObject({
-				status: "stale",
+				status: "connecting",
 				data: [{ id: 1, title: "before" }],
 				error: undefined,
 			});
@@ -355,7 +355,7 @@ describe("RealtimeClient", () => {
 			logger: (entry) => events.push(entry.event),
 		});
 		const subscription = client.subscribe(query("initial"));
-		subscription.onReset(() => subscription.unsubscribe());
+		subscription.onUpdate(() => subscription.unsubscribe());
 
 		baselineSync(connectAndAdmit(), "value");
 		await Promise.resolve();
@@ -500,7 +500,7 @@ describe("RealtimeClient", () => {
 		await Promise.resolve();
 		events.length = 0;
 		subscription.onStateChange((state) => {
-			if (state.status === "stale") client.close();
+			if (state.status === "connecting") client.close();
 		});
 
 		socket.close();
@@ -514,7 +514,7 @@ describe("RealtimeClient", () => {
 		);
 	});
 
-	it("queues publication commit before reentrant batch listeners", async () => {
+	it("queues publication commit before reentrant update listeners", async () => {
 		useFakeWebSocket();
 		const events: string[] = [];
 		const client = createRealtimeClient({
@@ -527,7 +527,7 @@ describe("RealtimeClient", () => {
 		baselineSync(socket, "before");
 		await Promise.resolve();
 		events.length = 0;
-		subscription.onBatch(() => client.close());
+		subscription.onUpdate(() => client.close());
 
 		publication(
 			socket,
@@ -601,14 +601,16 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
-	it("preserves wire order across batches and replacement resets", () => {
+	it("keeps complete-row replacements live and preserves wire order", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
 		});
 		const subscription = client.subscribe(query("ordered"));
 		const resets: unknown[] = [];
-		subscription.onReset((rows) => resets.push(rows));
+		subscription.onUpdate((update) => {
+			if (update.type === "rows") resets.push(update.rows);
+		});
 		const socket = connectAndAdmit();
 
 		baselineSyncRows(socket, [
@@ -618,6 +620,8 @@ describe("RealtimeClient", () => {
 			],
 			[{ row_key: ROW_KEY_B, values: ["2", "second"] }],
 		]);
+		const states: string[] = [];
+		subscription.onStateChange((state) => states.push(state.status));
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,
@@ -630,7 +634,7 @@ describe("RealtimeClient", () => {
 
 		reset(socket, "2");
 		expect(subscription.getSnapshot()).toEqual({
-			status: "stale",
+			status: "live",
 			error: undefined,
 			data: [
 				{ id: 3, title: "third" },
@@ -638,6 +642,7 @@ describe("RealtimeClient", () => {
 				{ id: 2, title: "second" },
 			],
 		});
+		expect(states).toEqual([]);
 		baselineSyncRows(
 			socket,
 			[
@@ -660,6 +665,7 @@ describe("RealtimeClient", () => {
 				{ id: 1, title: "first replacement" },
 			],
 		});
+		expect(states).toEqual([]);
 		expect(resets).toEqual([
 			[
 				{ rowId: ROW_KEY_C, row: { id: 3, title: "third" } },
@@ -684,7 +690,7 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
-	it("starts hydrated data as stale and replaces it atomically", () => {
+	it("starts hydrated data while connecting and replaces it atomically", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
@@ -695,7 +701,7 @@ describe("RealtimeClient", () => {
 		const changes: unknown[] = [];
 		subscription.onChange((value) => changes.push(value));
 		expect(subscription.getSnapshot()).toMatchObject({
-			status: "stale",
+			status: "connecting",
 			data: [{ id: 1, title: "server" }],
 		});
 
@@ -710,7 +716,7 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
-	it("exposes raw resets and atomic batches with every transaction ID", () => {
+	it("exposes complete rows and incremental changes through one update stream", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({
 			url: "ws://live.test/v1",
@@ -722,12 +728,8 @@ describe("RealtimeClient", () => {
 			RawLiveQuerySubscription<MessageRow>
 		>();
 		expectTypeOf(subscription).not.toHaveProperty("awaitRows");
-		const resets: unknown[] = [];
-		const batches: unknown[] = [];
-		subscription.onReset((rows) => resets.push(rows));
-		subscription.onBatch((changes, batch) =>
-			batches.push({ changes, batch }),
-		);
+		const updates: unknown[] = [];
+		subscription.onUpdate((update) => updates.push(update));
 
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
@@ -743,11 +745,13 @@ describe("RealtimeClient", () => {
 			["42", "43"],
 		);
 
-		expect(resets).toEqual([
-			[{ rowId: ROW_KEY, row: { id: 1, title: "before" } }],
-		]);
-		expect(batches).toEqual([
+		expect(updates).toEqual([
 			{
+				type: "rows",
+				rows: [{ rowId: ROW_KEY, row: { id: 1, title: "before" } }],
+			},
+			{
+				type: "changes",
 				changes: [
 					{
 						type: "upsert",
@@ -803,11 +807,9 @@ describe("RealtimeClient", () => {
 			: client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
-		const batches = vi.fn();
-		const resets = vi.fn();
+		const updates = vi.fn();
 		const states = vi.fn();
-		subscription.onBatch(batches);
-		subscription.onReset(resets);
+		subscription.onUpdate(updates);
 		subscription.onStateChange(states);
 		const confirmation = subscription.awaitTxId("42");
 		socket.receive({
@@ -822,8 +824,7 @@ describe("RealtimeClient", () => {
 			mvcc: { xmin: "10", xmax: "20", xip: ["10"] },
 		});
 		await expect(subscription.awaitTxId("70")).resolves.toBeUndefined();
-		expect(batches).not.toHaveBeenCalled();
-		expect(resets).not.toHaveBeenCalled();
+		expect(updates).not.toHaveBeenCalled();
 		expect(states).not.toHaveBeenCalled();
 		await expect(subscription.awaitTxId("80", 1)).rejects.toThrow(
 			"Timed out",
@@ -891,7 +892,7 @@ describe("RealtimeClient", () => {
 				mvcc: { xmin: "43", xmax: "43", xip: [] },
 			};
 			first.close();
-			expect(subscription.getState().status).toBe("stale");
+			expect(subscription.getState().status).toBe("connecting");
 			first.receive(proof);
 			await vi.advanceTimersByTimeAsync(1_000);
 			expect(FakeWebSocket.instances).toHaveLength(2);
@@ -1198,7 +1199,9 @@ describe("RealtimeClient", () => {
 		const subscription = client.subscribe(query("initial"));
 		const socket = connectAndAdmit();
 		const resets: unknown[] = [];
-		subscription.onReset((rows) => resets.push(rows));
+		subscription.onUpdate((update) => {
+			if (update.type === "rows") resets.push(update.rows);
+		});
 		baselineSync(socket, "before");
 		socket.receive({
 			type: "subscription_error",
@@ -1230,7 +1233,7 @@ describe("RealtimeClient", () => {
 			],
 		});
 		await expect(renewal).resolves.toBeUndefined();
-		expect(subscription.getSnapshot().status).toBe("stale");
+		expect(subscription.getSnapshot().status).toBe("connecting");
 
 		baselineSync(socket, "after", "42", "2");
 		expect(subscription.getSnapshot()).toEqual({

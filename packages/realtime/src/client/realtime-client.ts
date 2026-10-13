@@ -99,7 +99,8 @@ class RealtimeClientImpl implements RealtimeClient {
 			events,
 			reconciliation: subscription,
 			admitted: (columns) => subscription.admit(columns),
-			disconnected: () => subscription.disconnected(),
+			connecting: () => subscription.connecting(),
+			queryUnavailable: () => subscription.queryUnavailable(),
 			failed: (error) => subscription.fail(error),
 		});
 		this.handles.set(subscription as Subscription<unknown>, handle);

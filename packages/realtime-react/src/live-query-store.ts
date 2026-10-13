@@ -1,12 +1,10 @@
 import {
-	type LiveQueryBatchInfo,
-	type LiveQueryChange,
 	type LiveQueryError,
 	type LiveQuerySnapshot,
 	type LiveQueryState,
 	type MaterializedLiveQuerySubscription,
 	QueryRefreshController,
-	type RawLiveQueryRow,
+	type RawLiveQueryUpdate,
 	type RealtimeClient,
 	type SealedLiveQuery,
 } from "@neon/realtime/client";
@@ -14,18 +12,13 @@ import type { UseLiveQueryUtils } from "./types.js";
 
 type SnapshotListener<Row> = (snapshot: LiveQuerySnapshot<Row>) => void;
 type StateListener = (state: LiveQueryState) => void;
-type ResetListener<Row> = (rows: readonly RawLiveQueryRow<Row>[]) => void;
-type BatchListener<Row> = (
-	changes: readonly LiveQueryChange<Row>[],
-	batch: LiveQueryBatchInfo,
-) => void;
+type UpdateListener<Row> = (update: RawLiveQueryUpdate<Row>) => void;
 
 export class ReactLiveQueryStore<Row> {
 	private readonly reactListeners = new Set<() => void>();
 	private readonly snapshotListeners = new Set<SnapshotListener<Row>>();
 	private readonly stateListeners = new Set<StateListener>();
-	private readonly resetListeners = new Set<ResetListener<Row>>();
-	private readonly batchListeners = new Set<BatchListener<Row>>();
+	private readonly updateListeners = new Set<UpdateListener<Row>>();
 	private readonly initialSnapshot: LiveQuerySnapshot<Row>;
 	private readonly queryRefresh: QueryRefreshController<Row>;
 	private subscription?: MaterializedLiveQuerySubscription<Row>;
@@ -42,7 +35,7 @@ export class ReactLiveQueryStore<Row> {
 		initialData?: readonly Row[],
 	) {
 		this.initialSnapshot = Object.freeze({
-			status: initialData === undefined ? "connecting" : "stale",
+			status: "connecting",
 			error: undefined,
 			data:
 				initialData === undefined
@@ -70,8 +63,7 @@ export class ReactLiveQueryStore<Row> {
 			getState: this.getState,
 			getSnapshot: this.getSnapshot,
 			awaitRows: this.awaitRows,
-			onReset: this.onReset,
-			onBatch: this.onBatch,
+			onUpdate: this.onUpdate,
 			onStateChange: this.onStateChange,
 			onChange: this.onChange,
 			awaitTxId: this.awaitTxId,
@@ -120,11 +112,8 @@ export class ReactLiveQueryStore<Row> {
 			: Promise.reject(new Error("Live query is not subscribed"));
 	};
 
-	private onReset = (listener: ResetListener<Row>): (() => void) =>
-		listen(this.resetListeners, listener);
-
-	private onBatch = (listener: BatchListener<Row>): (() => void) =>
-		listen(this.batchListeners, listener);
+	private onUpdate = (listener: UpdateListener<Row>): (() => void) =>
+		listen(this.updateListeners, listener);
 
 	private onStateChange = (listener: StateListener): (() => void) =>
 		listen(this.stateListeners, listener);
@@ -157,9 +146,8 @@ export class ReactLiveQueryStore<Row> {
 			subscription.onStateChange((state) =>
 				notify(this.stateListeners, state),
 			),
-			subscription.onReset((rows) => notify(this.resetListeners, rows)),
-			subscription.onBatch((changes, batch) =>
-				notify(this.batchListeners, changes, batch),
+			subscription.onUpdate((update) =>
+				notify(this.updateListeners, update),
 			),
 		];
 		this.detachForwarders = () => {

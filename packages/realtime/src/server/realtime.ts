@@ -82,8 +82,8 @@ export interface RealtimeServer<Query> {
  *
  * Each subscription prepares and encrypts its query locally, then uses a
  * shared low-level client and refreshes its capability automatically. It
- * remains stale through retryable outages and transparently replaces an
- * expired subscription after connectivity returns.
+ * retains its rows while connecting through retryable outages and
+ * transparently replaces an expired subscription after connectivity returns.
  *
  * @typeParam Query - Query object accepted by the configured adapter.
  */
@@ -102,7 +102,7 @@ export interface RealtimeDirectServer<Query> extends RealtimeServer<Query> {
 		options?: MaterializedLiveQueryOptions<QueryRow<ConcreteQuery>>,
 	): Promise<MaterializedLiveQuerySubscription<QueryRow<ConcreteQuery>>>;
 	/**
-	 * Subscribe to raw resets and atomic change batches without retaining rows.
+	 * Subscribe to complete rows and atomic change batches without retaining rows.
 	 *
 	 * @param query - Concrete raw SQL or adapter-native query.
 	 * @param options - Set `materialize` to `false` to consume raw events.

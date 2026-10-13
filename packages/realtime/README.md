@@ -144,17 +144,18 @@ subscription.unsubscribe(); // Stop this query.
 realtime.close(); // Stop every query and close the shared WebSocket.
 ```
 
-Use `{ materialize: false }` as the second argument to consume raw resets and
-batches. Direct subscriptions share one lazily opened client, prepare the query
-once, and mint replacement capabilities automatically. `subscribe()` resolves
-after the initial capability is minted; use the subscription lifecycle to know
-when its first authoritative result is live.
+Use `{ materialize: false }` as the second argument to consume complete rows and
+incremental changes. Direct subscriptions share one lazily opened client,
+prepare the query once, and mint replacement capabilities automatically.
+`subscribe()` resolves after the initial capability is minted; use the
+subscription lifecycle to know when its first authoritative result is live.
 
-During an outage, the logical subscription remains `stale` with its latest
-materialized rows. The SDK keeps minting current capabilities and reconnecting
-with backoff. If the subscription expires, recovery creates a new
-wire subscription behind the same public object and returns to `live` after its
-fresh authoritative reset.
+During an outage, the logical subscription becomes `connecting` while retaining
+its latest materialized rows. The SDK keeps minting current capabilities and
+reconnecting with backoff. If the capability expires, the subscription is
+`stale` while awaiting its replacement, then becomes `connecting` while recovery
+creates a new wire subscription behind the same public object. It returns to
+`live` after receiving a fresh authoritative result.
 
 This mode holds the Realtime secret and can seal arbitrary queries. Use
 it only in trusted runtimes, never in browser code. Direct subscriptions use
@@ -198,9 +199,11 @@ client.close();
 
 The client opens one WebSocket lazily and multiplexes subscriptions. Lifecycle
 states are `connecting`, `live`, `stale`, `error`, and `closed`. During
-reconnection or sealed-query renewal, existing materialized data remains
-available as `stale`. Recoverable connection failures retry with capped
-jittered backoff until the connection recovers or the client is closed.
+initial connection, reconnection, or resubscription, existing materialized data
+remains available with status `connecting`. `stale` specifically means that the
+capability has expired and the low-level client is waiting for the application
+to call `renew()`. Recoverable connection failures retry with capped jittered
+backoff until the connection recovers or the client is closed.
 
 Some subscription errors also retry automatically:
 
@@ -217,8 +220,8 @@ client reconnects on its own backoff and resubscribes once the hint has passed.
 
 Only the affected subscription is retried, using the current socket and latest
 sealed query; other subscriptions keep receiving updates. Its last complete
-result remains `stale` (or `connecting` if no result has arrived). Re-admission
-uses a fresh request and live ID and installs a new baseline.
+result remains available with status `connecting`. Re-admission uses a fresh
+request and live ID and installs a new baseline.
 
 A retry with a hint never runs before it. With the hint `h` (at least 100 ms),
 the SDK waits a random time in `[h, max(h, min(2h, cap))]`, which spreads
@@ -266,7 +269,7 @@ Each entry has a stable `event` name:
 
 `subscription_retry_scheduled` includes the server `code`, the one-based
 `attempt` within the recovery episode, and the next `delayMs`, so repeated
-admission rejections remain visible while a subscription stays stale.
+admission rejections remain visible while a subscription stays `connecting`.
 
 Supply `logger` to route the same structured entries into an application
 logger. `logLevel` still controls which entries it receives:
@@ -359,9 +362,10 @@ row types consistent with the selected parser preset and overrides.
 Applications obtain a replacement capability through the same backend endpoint
 and call `subscription.renew(replacement)`. The SDK rejects a replacement for a
 different query by comparing its public query fingerprint. If the previous
-capability has already expired, the subscription remains `stale` and `renew()`
-opens a new subscription behind the same public object. Its next full
-reset replaces the retained rows and returns it to `live`.
+capability has already expired, the subscription remains `stale` until `renew()`
+is called. Calling it moves the subscription to `connecting` and opens a new
+subscription behind the same public object. Its next complete result replaces
+the retained rows and returns it to `live`.
 
 After a mutation returns its PostgreSQL transaction ID, use `awaitTxId()` to
 wait until that transaction has been applied to this subscription:
@@ -404,30 +408,34 @@ complete result.
 ### Raw subscriptions
 
 The default subscription materializes query rows. Integrations that own their
-state can consume raw resets and atomic batches instead:
+state can consume a single ordered stream of complete rows and incremental
+changes instead:
 
 ```ts
 const raw = client.subscribe(sealedQuery, { materialize: false });
 
-raw.onReset((rows) => replaceAll(rows));
-raw.onBatch((changes, { txids }) => {
-  applyCommittedChanges(changes);
-  for (const txid of txids) confirmMutation(txid);
+raw.onUpdate((update) => {
+  if (update.type === "rows") {
+    replaceAll(update.rows);
+  } else {
+    applyCommittedChanges(update.changes);
+    for (const txid of update.batch.txids) confirmMutation(txid);
+  }
 });
 ```
 
 Every raw row and change has an opaque `rowId`. Do not interpret it as a primary
-key or retain it across resets. Transaction IDs are decimal strings so 64-bit
-values remain exact in JavaScript.
+key or retain it after a `rows` update replaces the complete result. Transaction
+IDs are decimal strings so 64-bit values remain exact in JavaScript.
 
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
-available immediately as stale data until the first authoritative reset.
-Realtime does not transform those rows: the application is responsible for making
-their JavaScript representation match the configured live parsers. The core
-defaults align with node-postgres and Neon Serverless for built-in types, while
-the optional presets cover common driver and ORM differences. Framework date
-serialization and server/browser timezone alignment remain application
-concerns.
+available immediately with status `connecting` until the first authoritative
+result. Realtime does not transform those rows: the application is responsible
+for making their JavaScript representation match the configured live parsers.
+The core defaults align with node-postgres and Neon Serverless for built-in
+types, while the optional presets cover common driver and ORM differences.
+Framework date serialization and server/browser timezone alignment remain
+application concerns.
 
 ## Integrations and examples
 

@@ -1,11 +1,11 @@
 import { Writable } from "node:stream";
 import type {
-	LiveQueryBatchInfo,
 	LiveQueryChange,
 	LiveQuerySnapshot,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
 	RawLiveQueryRow,
+	RawLiveQueryUpdate,
 } from "@neon/realtime";
 import { describe, expect, it, vi } from "vitest";
 import yargs from "yargs";
@@ -26,14 +26,8 @@ class FakeSubscription implements MaterializedLiveQuerySubscription<Row> {
 		error: undefined,
 	};
 	private data: readonly Row[] | undefined;
-	private readonly resetListeners = new Set<
-		(rows: readonly RawLiveQueryRow<Row>[]) => void
-	>();
-	private readonly batchListeners = new Set<
-		(
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void
+	private readonly updateListeners = new Set<
+		(update: RawLiveQueryUpdate<Row>) => void
 	>();
 	private readonly stateListeners = new Set<
 		(state: LiveQueryState) => void
@@ -51,16 +45,9 @@ class FakeSubscription implements MaterializedLiveQuerySubscription<Row> {
 		data: this.data,
 	});
 
-	onReset = (
-		listener: (rows: readonly RawLiveQueryRow<Row>[]) => void,
-	): (() => void) => addListener(this.resetListeners, listener);
-
-	onBatch = (
-		listener: (
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void,
-	): (() => void) => addListener(this.batchListeners, listener);
+	onUpdate = (
+		listener: (update: RawLiveQueryUpdate<Row>) => void,
+	): (() => void) => addListener(this.updateListeners, listener);
 
 	onStateChange = (
 		listener: (state: LiveQueryState) => void,
@@ -86,7 +73,8 @@ class FakeSubscription implements MaterializedLiveQuerySubscription<Row> {
 
 	emitReset(rows: readonly RawLiveQueryRow<Row>[]): void {
 		this.data = rows.map(({ row }) => row);
-		for (const listener of this.resetListeners) listener(rows);
+		const update = { type: "rows", rows } as const;
+		for (const listener of this.updateListeners) listener(update);
 	}
 
 	emitBatch(
@@ -95,8 +83,12 @@ class FakeSubscription implements MaterializedLiveQuerySubscription<Row> {
 		txids: readonly string[],
 	): void {
 		this.data = data;
-		for (const listener of this.batchListeners)
-			listener(changes, { txids });
+		const update = {
+			type: "changes",
+			changes,
+			batch: { txids },
+		} as const;
+		for (const listener of this.updateListeners) listener(update);
 	}
 
 	emitState(state: LiveQueryState): void {

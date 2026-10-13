@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
 
 import type {
-	LiveQueryBatchInfo,
-	LiveQueryChange,
 	LiveQuerySnapshot,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
-	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RawLiveQueryUpdate,
 	RealtimeClient,
 	RealtimeLogEntry,
 	SealedLiveQuery,
@@ -50,9 +48,9 @@ describe("Realtime React integration", () => {
 			if (!observed)
 				throw new Error("Expected the live query hook to render");
 			const { utils } = observed;
-			const onBatch = vi.fn();
+			const onUpdate = vi.fn();
 			const onChange = vi.fn();
-			utils.onBatch(onBatch);
+			utils.onUpdate(onUpdate);
 			utils.onChange(onChange);
 			observe.mockClear();
 			const pending = utils.awaitTxId("42");
@@ -64,7 +62,7 @@ describe("Realtime React integration", () => {
 				await pending;
 			});
 			await expect(utils.awaitTxId("41")).resolves.toBeUndefined();
-			expect(onBatch).not.toHaveBeenCalled();
+			expect(onUpdate).not.toHaveBeenCalled();
 			expect(onChange).not.toHaveBeenCalled();
 			expect(observe).not.toHaveBeenCalled();
 			expect(screen.getByText("live:before")).toBeTruthy();
@@ -103,7 +101,7 @@ describe("Realtime React integration", () => {
 				await followingNoOp;
 			});
 			expect(screen.getByText("live:after")).toBeTruthy();
-			expect(onBatch).toHaveBeenCalledOnce();
+			expect(onUpdate).toHaveBeenCalledOnce();
 			expect(onChange).toHaveBeenCalledOnce();
 
 			const cancelled = expect(utils.awaitTxId("100")).rejects.toThrow(
@@ -131,7 +129,7 @@ describe("Realtime React integration", () => {
 			</RealtimeProvider>,
 		);
 
-		expect(screen.getByText("stale:server")).toBeTruthy();
+		expect(screen.getByText("connecting:server")).toBeTruthy();
 		expectTypeOf(observed).toEqualTypeOf<
 			UseLiveQueryResult<MessageRow> | undefined
 		>();
@@ -227,7 +225,7 @@ describe("Realtime React integration", () => {
 			await eventually(() => expect(refreshQuery).toHaveBeenCalledOnce());
 		});
 		expect(client.latest().renewals).toEqual([replacement]);
-		expect(screen.getByText("stale:none")).toBeTruthy();
+		expect(screen.getByText("connecting:none")).toBeTruthy();
 	});
 
 	it("uses the subscription diagnostic context for query refreshes", async () => {
@@ -307,7 +305,7 @@ describe("Realtime React integration", () => {
 			</RealtimeProvider>,
 		);
 
-		expect(html).toContain("stale");
+		expect(html).toContain("connecting");
 		expect(html).toContain("server");
 		expect(client.subscriptions).toHaveLength(0);
 	});
@@ -450,14 +448,8 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 		(snapshot: LiveQuerySnapshot<Row>) => void
 	>();
 	private stateListeners = new Set<(state: LiveQueryState) => void>();
-	private resetListeners = new Set<
-		(rows: readonly RawLiveQueryRow<Row>[]) => void
-	>();
-	private batchListeners = new Set<
-		(
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void
+	private updateListeners = new Set<
+		(update: RawLiveQueryUpdate<Row>) => void
 	>();
 	readonly renewals: SealedLiveQuery<Row>[] = [];
 	unsubscribed = false;
@@ -465,7 +457,7 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 
 	constructor(initialData?: readonly Row[]) {
 		this.snapshot = {
-			status: initialData === undefined ? "connecting" : "stale",
+			status: "connecting",
 			error: undefined,
 			data: initialData,
 		};
@@ -480,16 +472,9 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 
 	getSnapshot = (): LiveQuerySnapshot<Row> => this.snapshot;
 
-	onReset = (
-		listener: (rows: readonly RawLiveQueryRow<Row>[]) => void,
-	): (() => void) => add(this.resetListeners, listener);
-
-	onBatch = (
-		listener: (
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void,
-	): (() => void) => add(this.batchListeners, listener);
+	onUpdate = (
+		listener: (update: RawLiveQueryUpdate<Row>) => void,
+	): (() => void) => add(this.updateListeners, listener);
 
 	onStateChange = (listener: (state: LiveQueryState) => void): (() => void) =>
 		add(this.stateListeners, listener);
@@ -512,7 +497,11 @@ class TestSubscription<Row> implements MaterializedLiveQuerySubscription<Row> {
 
 	renew = async (query: SealedLiveQuery<Row>): Promise<void> => {
 		this.renewals.push(query);
-		this.publish({ ...this.snapshot, status: "stale", error: undefined });
+		this.publish({
+			...this.snapshot,
+			status: "connecting",
+			error: undefined,
+		});
 	};
 
 	unsubscribe = (): void => {

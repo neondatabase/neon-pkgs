@@ -253,7 +253,7 @@ describe("trusted direct subscriptions", () => {
 
 		first.close();
 		expect(subscription.getSnapshot()).toEqual({
-			status: "stale",
+			status: "connecting",
 			error: undefined,
 			data: [{ id: 1, body: "before" }],
 		});
@@ -264,7 +264,7 @@ describe("trusted direct subscriptions", () => {
 			await vi.advanceTimersByTimeAsync(50_000);
 			await flushWebCrypto();
 		}
-		expect(subscription.getState().status).toBe("stale");
+		expect(subscription.getState().status).toBe("connecting");
 
 		recovered.open();
 		recovered.receive({ type: "ready" });

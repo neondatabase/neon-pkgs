@@ -23,6 +23,7 @@ export type {
 	RawLiveQueryOptions,
 	RawLiveQueryRow,
 	RawLiveQuerySubscription,
+	RawLiveQueryUpdate,
 	RealtimeClient,
 	RealtimeClientOptions,
 	RealtimeLogEntry,

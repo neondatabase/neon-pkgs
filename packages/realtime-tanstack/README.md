@@ -46,11 +46,12 @@ stable unique string or number for every row. Standard collection options such
 as `id`, `schema`, garbage collection, collation, and mutation handlers are
 forwarded to TanStack DB.
 
-The integration synchronizes eagerly. It applies each authoritative reset or
-live-query publication batch as one TanStack sync transaction. Realtime
-`connecting` maps to a loading collection and `live` maps to ready. A stale
-subscription keeps its usable collection ready during recovery; terminal errors
-put the collection into its error state.
+The integration synchronizes eagerly. It applies each complete-row replacement
+or incremental change batch as one TanStack sync transaction. Realtime
+`connecting` maps to a loading collection until the first complete result and
+`live` maps to ready. Once ready, a collection retains its usable rows while a
+subscription is `connecting` or `stale`; terminal errors put the collection into
+its error state.
 
 ## Optimistic mutations
 

@@ -236,7 +236,14 @@ export interface LiveQueryError extends Error {
 /** Atomic lifecycle state for a live-query subscription. */
 export type LiveQueryState =
 	| {
-			/** Current non-error lifecycle status. */
+			/**
+			 * Current non-error lifecycle status.
+			 *
+			 * `connecting` means the subscription is actively synchronizing,
+			 * including initial connection and reconnect attempts. `stale` means
+			 * the capability has expired and the subscription is waiting for a
+			 * replacement.
+			 */
 			readonly status: "connecting" | "live" | "stale" | "closed";
 			/** Non-error states never carry an error. */
 			readonly error: undefined;
@@ -254,7 +261,7 @@ export type LiveQueryState =
  * @typeParam Row - Row produced by the subscribed query.
  */
 export type LiveQuerySnapshot<Row> = LiveQueryState & {
-	/** Current rows, or `undefined` before the first reset when not preloaded. */
+	/** Current rows, or `undefined` before the first result when not preloaded. */
 	readonly data: readonly Row[] | undefined;
 };
 
@@ -265,12 +272,12 @@ export interface LiveQueryBatchInfo {
 }
 
 /**
- * A row in a raw reset, paired with its opaque Realtime identity.
+ * A row in a complete raw result, paired with its opaque Realtime identity.
  *
  * @typeParam Row - Row produced by the subscribed query.
  */
 export interface RawLiveQueryRow<Row> {
-	/** Opaque identity scoped to the subscription and invalidated by reset. */
+	/** Opaque identity invalidated by the next complete `rows` update. */
 	readonly rowId: string;
 	/** Decoded query row. */
 	readonly row: Row;
@@ -285,7 +292,7 @@ export type LiveQueryChange<Row> =
 	| {
 			/** Insert or replace the complete row at this opaque identity. */
 			readonly type: "upsert";
-			/** Opaque identity scoped to the subscription and invalidated by reset. */
+			/** Opaque identity invalidated by the next complete `rows` update. */
 			readonly rowId: string;
 			/** Complete row after the insert or update. */
 			readonly row: Row;
@@ -293,26 +300,50 @@ export type LiveQueryChange<Row> =
 	| {
 			/** Remove the row at this opaque identity. */
 			readonly type: "remove";
-			/** Opaque identity scoped to the subscription and invalidated by reset. */
+			/** Opaque identity invalidated by the next complete `rows` update. */
 			readonly rowId: string;
+	  };
+
+/**
+ * One authoritative raw query-result update.
+ *
+ * `rows` replaces the complete preceding result and invalidates its row-ID
+ * namespace. `changes` applies incrementally to the current result.
+ *
+ * @typeParam Row - Row produced by the subscribed query.
+ */
+export type RawLiveQueryUpdate<Row> =
+	| {
+			/** Complete authoritative query rows. */
+			readonly type: "rows";
+			/** Rows replacing the preceding result. */
+			readonly rows: readonly RawLiveQueryRow<Row>[];
+	  }
+	| {
+			/** Incremental changes from one atomic publication. */
+			readonly type: "changes";
+			/** Row changes to apply to the current result. */
+			readonly changes: readonly LiveQueryChange<Row>[];
+			/** PostgreSQL transactions represented by the publication. */
+			readonly batch: LiveQueryBatchInfo;
 	  };
 
 /** Options for the default materialized subscription. */
 export interface MaterializedLiveQueryOptions<Row> {
 	/** Select materialization; omitted and `true` are equivalent. */
 	readonly materialize?: true;
-	/** Preloaded rows exposed as stale data until the first authoritative reset. */
+	/** Preloaded rows exposed while connecting to the authoritative result. */
 	readonly initialData?: readonly Row[];
 }
 
 /** Options for a raw, non-materializing subscription. */
 export interface RawLiveQueryOptions {
-	/** Disable SDK materialization and consume resets and batches directly. */
+	/** Disable SDK materialization and consume raw result updates directly. */
 	readonly materialize: false;
 }
 
 /**
- * A live-query subscription that exposes raw reset and publication events.
+ * A live-query subscription that exposes ordered raw result updates.
  *
  * @typeParam Row - Row produced by the subscribed query.
  */
@@ -320,27 +351,13 @@ export interface RawLiveQuerySubscription<Row> {
 	/** Return the complete current lifecycle state. */
 	getState(): LiveQueryState;
 	/**
-	 * Observe authoritative full-result resets.
-	 * A reset replaces the preceding row-ID namespace in its entirety.
+	 * Observe complete-row replacements and incremental changes through one
+	 * ordered update stream. Every affected materialized subscription has
+	 * already applied an update before its listener runs.
 	 *
 	 * @returns A function that removes this listener.
 	 */
-	onReset(
-		listener: (rows: readonly RawLiveQueryRow<Row>[]) => void,
-	): () => void;
-	/**
-	 * Observe changes from one atomic publication and its transaction IDs.
-	 * Every affected materialized subscription has already applied the batch
-	 * before any batch listener runs.
-	 *
-	 * @returns A function that removes this listener.
-	 */
-	onBatch(
-		listener: (
-			changes: readonly LiveQueryChange<Row>[],
-			batch: LiveQueryBatchInfo,
-		) => void,
-	): () => void;
+	onUpdate(listener: (update: RawLiveQueryUpdate<Row>) => void): () => void;
 	/**
 	 * Observe lifecycle transitions.
 	 *
@@ -369,10 +386,11 @@ export interface RawLiveQuerySubscription<Row> {
 	 * Renew this logical subscription with a capability for the same exact query.
 	 * If the preceding subscription has expired, the client creates a new
 	 * wire subscription while preserving this object, its listeners, and any
-	 * retained rows. The replacement then produces a new authoritative reset.
+	 * retained rows. The replacement then produces a new authoritative result.
 	 *
 	 * @returns A promise that resolves after the proxy accepts the replacement.
-	 * A subsequent authoritative reset returns the subscription to `live`.
+	 * Calling this while `stale` moves the subscription to `connecting`; a
+	 * subsequent authoritative result returns it to `live`.
 	 * @throws If the replacement query fingerprint differs or renewal is rejected.
 	 */
 	renew(query: SealedLiveQuery<Row>): Promise<void>;
@@ -407,7 +425,8 @@ export interface MaterializedLiveQuerySubscription<Row>
 	): Promise<void>;
 	/**
 	 * Observe row or lifecycle changes as complete snapshots.
-	 * The listener runs after resets, publication batches, and state transitions.
+	 * The listener runs after complete-row replacements, incremental changes,
+	 * and state transitions.
 	 *
 	 * @returns A function that removes this listener.
 	 */

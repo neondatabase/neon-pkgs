@@ -285,13 +285,7 @@ const consumeSnapshots = async (
 	consumeSubscription(
 		subscription,
 		(fail) => [
-			subscription.onReset(() =>
-				attempt(fail, () => {
-					const rows = subscription.getSnapshot().data;
-					if (rows !== undefined) render({ type: "snapshot", rows });
-				}),
-			),
-			subscription.onBatch(() =>
+			subscription.onUpdate(() =>
 				attempt(fail, () => {
 					const rows = subscription.getSnapshot().data;
 					if (rows !== undefined) render({ type: "snapshot", rows });
@@ -309,14 +303,21 @@ const consumeChanges = async (
 	consumeSubscription(
 		subscription,
 		(fail) => [
-			subscription.onReset((rows) =>
-				attempt(fail, () => render({ type: "reset", rows })),
-			),
-			subscription.onBatch((changes, batch) =>
-				attempt(fail, () =>
-					render({ type: "batch", txids: batch.txids, changes }),
-				),
-			),
+			subscription.onUpdate((update) => {
+				if (update.type === "rows") {
+					attempt(fail, () =>
+						render({ type: "reset", rows: update.rows }),
+					);
+				} else {
+					attempt(fail, () =>
+						render({
+							type: "batch",
+							txids: update.batch.txids,
+							changes: update.changes,
+						}),
+					);
+				}
+			}),
 		],
 		signal,
 	);
