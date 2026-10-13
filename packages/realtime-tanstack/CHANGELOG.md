@@ -1,5 +1,14 @@
 # @neon/realtime-tanstack
 
+## 0.0.3
+
+### Patch Changes
+
+- b3cce2b: Unify raw query results under `onUpdate()` with `rows` and `changes` events. Complete-row results now remain `live`, `connecting` represents active synchronization, and `stale` is reserved for an expired capability awaiting renewal.
+- Updated dependencies [b3cce2b]
+- Updated dependencies [264c4fa]
+  - @neon/realtime@0.0.3
+
 ## 0.0.2
 
 ### Patch Changes

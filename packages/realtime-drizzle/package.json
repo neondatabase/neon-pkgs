@@ -1,6 +1,6 @@
 {
   "name": "@neon/realtime-drizzle",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Drizzle adapter for defining live queries.",
   "keywords": [
     "neon",
@@ -58,7 +58,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@neon/realtime": "^0.0.2",
+    "@neon/realtime": "^0.0.3",
     "drizzle-orm": ">=0.45.2 <0.46.0"
   },
   "peerDependenciesMeta": {

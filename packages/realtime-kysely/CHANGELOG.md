@@ -1,5 +1,13 @@
 # @neon/realtime-kysely
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [b3cce2b]
+- Updated dependencies [264c4fa]
+  - @neon/realtime@0.0.3
+
 ## 0.0.2
 
 ### Patch Changes
