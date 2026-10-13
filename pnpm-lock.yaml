@@ -278,6 +278,9 @@ importers:
       which:
         specifier: 3.0.1
         version: 3.0.1
+      ws:
+        specifier: ^8.21.2
+        version: 8.21.2
       yaml:
         specifier: ^2.9.0
         version: 2.9.0

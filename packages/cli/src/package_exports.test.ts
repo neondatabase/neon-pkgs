@@ -128,6 +128,26 @@ describe("the built package", () => {
  * while the code would still be bundled and the build would still look fine.
  */
 describe("the published manifests", () => {
+	it("ships the WebSocket transport required by direct Realtime subscriptions", () => {
+		const cliManifest: unknown = JSON.parse(
+			readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+		);
+		const realtimeManifest: unknown = JSON.parse(
+			readFileSync(
+				new URL("../../realtime/package.json", import.meta.url),
+				"utf8",
+			),
+		);
+		if (!isRecord(cliManifest) || !isRecord(realtimeManifest))
+			throw new Error("Published package manifests must be objects.");
+
+		const dependencies = cliManifest.dependencies;
+		const peerDependencies = realtimeManifest.peerDependencies;
+		expect(isRecord(dependencies) ? dependencies.ws : undefined).toBe(
+			isRecord(peerDependencies) ? peerDependencies.ws : undefined,
+		);
+	});
+
 	// Both packages that bundle the internals, checked here rather than one each, because the
 	// invariant is about the internals staying unpublishable and not about either consumer.
 	it.each([
