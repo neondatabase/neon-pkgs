@@ -308,16 +308,12 @@ export class Subscription<Row>
 	}
 
 	connecting(): void {
-		this.columns = undefined;
-		this.appliedBatches.clear();
-		this.stagedReset = undefined;
+		this.resetSynchronization();
 		this.setLifecycle(connectingState);
 	}
 
 	queryUnavailable(): void {
-		this.columns = undefined;
-		this.appliedBatches.clear();
-		this.stagedReset = undefined;
+		this.resetSynchronization();
 		this.setLifecycle(staleState);
 	}
 
@@ -377,6 +373,12 @@ export class Subscription<Row>
 
 	private requireParsers(): PostgreSQLParserRegistry {
 		return this.parsers;
+	}
+
+	private resetSynchronization(): void {
+		this.columns = undefined;
+		this.appliedBatches.clear();
+		this.stagedReset = undefined;
 	}
 
 	private setLifecycle(
