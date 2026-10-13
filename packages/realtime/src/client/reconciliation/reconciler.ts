@@ -51,8 +51,6 @@ export interface ReconciliationLifecycle {
 }
 
 export interface ReconciliationLimits {
-	/** Bytes retained while assembling one baseline sync. */
-	readonly maxBaselineSyncBytes: number;
 	/** Bytes retained by one publication or all post-baseline-sync backlogs. */
 	readonly maxPublicationBytes: number;
 }
@@ -142,7 +140,6 @@ type ReconciliationMessage = Extract<
  */
 export class BaselineSyncPublicationReconciler {
 	private readonly targets = new Map<string, TargetState>();
-	private readonly maxBaselineSyncBytes: number;
 	private readonly maxPublicationBytes: number;
 	private backlogBytes = 0;
 	private publication?: PendingPublication;
@@ -151,10 +148,6 @@ export class BaselineSyncPublicationReconciler {
 		limits: Partial<ReconciliationLimits> = {},
 		private readonly events: ReconciliationEventSink = SILENT_RECONCILIATION_EVENTS,
 	) {
-		this.maxBaselineSyncBytes = positiveLimit(
-			limits.maxBaselineSyncBytes ?? DEFAULT_STAGING_BYTES,
-			"maxBaselineSyncBytes",
-		);
 		this.maxPublicationBytes = positiveLimit(
 			limits.maxPublicationBytes ?? DEFAULT_STAGING_BYTES,
 			"maxPublicationBytes",
@@ -242,7 +235,7 @@ export class BaselineSyncPublicationReconciler {
 				this.baselineSyncBatch(message, bytes);
 				return;
 			case "baseline_sync_end":
-				this.baselineSyncEnd(message, bytes);
+				this.baselineSyncEnd(message);
 				return;
 			case "open":
 				this.publicationOpen(message.publication_id, bytes);
@@ -300,7 +293,6 @@ export class BaselineSyncPublicationReconciler {
 		) {
 			throw new ProtocolError("invalid baseline sync start");
 		}
-		this.checkBaselineSyncBytes(bytes);
 		state.latestBaselineSync = version;
 		state.baselineSync = {
 			version,
@@ -340,7 +332,6 @@ export class BaselineSyncPublicationReconciler {
 		) {
 			throw new ProtocolError("invalid baseline sync batch");
 		}
-		this.checkBaselineSyncBytes(baselineSync.bytes + bytes);
 		for (const row of message.rows) {
 			if (row.values.length !== state.columnCount) {
 				throw new ProtocolError(
@@ -361,7 +352,6 @@ export class BaselineSyncPublicationReconciler {
 
 	private baselineSyncEnd(
 		message: Extract<ReconciliationMessage, { type: "baseline_sync_end" }>,
-		bytes: number,
 	): void {
 		const state = this.target(message.live_id);
 		if (!state.active) return;
@@ -383,8 +373,6 @@ export class BaselineSyncPublicationReconciler {
 		) {
 			throw new ProtocolError("invalid baseline sync end");
 		}
-		this.checkBaselineSyncBytes(baselineSync.bytes + bytes);
-
 		// The exact-frontier baseline-sync contract guarantees that every
 		// subsequently delivered publication is newer than the baseline. Replay
 		// the complete contiguous backlog; interpreting transaction IDs against
@@ -618,12 +606,6 @@ export class BaselineSyncPublicationReconciler {
 		this.backlogBytes -= state.backlogBytes;
 		state.backlogBytes = 0;
 		state.backlog = [];
-	}
-
-	private checkBaselineSyncBytes(bytes: number): void {
-		if (bytes > this.maxBaselineSyncBytes) {
-			throw new ProtocolError("baseline sync exceeds the byte limit");
-		}
 	}
 
 	private checkPublicationBytes(bytes: number): void {

@@ -6,44 +6,25 @@ import {
 } from "./reconciler.js";
 import {
 	accept,
-	baselineSyncBatch,
 	baselineSyncEnd,
 	baselineSyncStart,
 	completeEmptyBaselineSync,
 	keyedPublication,
 	publicationMessages,
 	ROW_A,
-	row,
 	target,
 	upsert,
 	wireBytes,
 } from "./reconciler.test-helpers.js";
 
 describe("reconciliation resource bounds", () => {
-	it("counts every baseline-sync frame against an exact UTF-8 byte limit", () => {
-		const messages = [
-			baselineSyncStart(),
-			baselineSyncBatch(0, [row(ROW_A, "é")]),
-			baselineSyncEnd(1),
-		];
-		const size = messages.reduce(
-			(total, message) => total + wireBytes(message),
-			0,
-		);
+	it("does not cap baseline-sync bytes", () => {
+		const reconciler = subscribed({ maxPublicationBytes: 10_000 });
 
-		const exact = subscribed({
-			maxBaselineSyncBytes: size,
-			maxPublicationBytes: 10_000,
-		});
-		for (const message of messages) accept(exact, message);
-
-		const over = subscribed({
-			maxBaselineSyncBytes: size - 1,
-			maxPublicationBytes: 10_000,
-		});
 		expect(() => {
-			for (const message of messages) accept(over, message);
-		}).toThrow("baseline sync exceeds the byte limit");
+			reconciler.accept(baselineSyncStart(), 16 * 1024 * 1024 + 1);
+			accept(reconciler, baselineSyncEnd(0));
+		}).not.toThrow();
 	});
 
 	it("counts open, bodies, and commit against the publication limit", () => {
@@ -59,14 +40,12 @@ describe("reconciliation resource bounds", () => {
 			0,
 		);
 		const exact = subscribed({
-			maxBaselineSyncBytes: 10_000,
 			maxPublicationBytes: size,
 		});
 		completeEmptyBaselineSync(exact);
 		for (const message of messages) accept(exact, message);
 
 		const over = subscribed({
-			maxBaselineSyncBytes: 10_000,
 			maxPublicationBytes: size - 1,
 		});
 		completeEmptyBaselineSync(over);
@@ -77,7 +56,6 @@ describe("reconciliation resource bounds", () => {
 
 	it("bounds accumulated post-baseline-sync backlog and releases all staging", () => {
 		const reconciler = subscribed({
-			maxBaselineSyncBytes: 10_000,
 			maxPublicationBytes: 600,
 		});
 		accept(reconciler, baselineSyncStart());
@@ -112,9 +90,9 @@ describe("reconciliation resource bounds", () => {
 		expect(
 			() =>
 				new BaselineSyncPublicationReconciler({
-					maxBaselineSyncBytes: 0,
+					maxPublicationBytes: 0,
 				}),
-		).toThrow("maxBaselineSyncBytes must be a positive safe integer");
+		).toThrow("maxPublicationBytes must be a positive safe integer");
 		const reconciler = subscribed();
 		expect(() => reconciler.accept(baselineSyncStart(), 0)).toThrow(
 			"message byte length must be a positive safe integer",
