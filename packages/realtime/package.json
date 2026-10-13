@@ -76,10 +76,10 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "ws": "^8.21.2"
+    "ws": "catalog:"
   },
   "peerDependencies": {
-    "ws": "^8.21.2"
+    "ws": "catalog:"
   },
   "peerDependenciesMeta": {
     "ws": {

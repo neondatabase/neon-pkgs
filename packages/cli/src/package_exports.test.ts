@@ -143,7 +143,11 @@ describe("the published manifests", () => {
 
 		const dependencies = cliManifest.dependencies;
 		const peerDependencies = realtimeManifest.peerDependencies;
-		expect(isRecord(dependencies) ? dependencies.ws : undefined).toBe(
+		const wsDependency = isRecord(dependencies)
+			? dependencies.ws
+			: undefined;
+		expect(wsDependency).toEqual(expect.any(String));
+		expect(wsDependency).toBe(
 			isRecord(peerDependencies) ? peerDependencies.ws : undefined,
 		);
 	});
