@@ -306,6 +306,35 @@ regression + TAP tests.
 
 - **TLS cipher is runtime-dependent.** The negotiated TLS 1.3 ciphersuite is chosen by the host runtime's TLS library from an offer byte-identical to libpq's. Under Node (OpenSSL) that is `TLS_AES_256_GCM_SHA384`, matching vanilla psql; under Bun (BoringSSL) it is `TLS_AES_128_GCM_SHA256`. Both are TLS 1.3 AEAD suites with no practical security difference, and neither runtime exposes a client-side knob to steer the selection.
 
+## Subscribe to a Realtime query
+
+`neon subscribe` streams a live SQL query until interrupted:
+
+```bash
+neon subscribe "SELECT id, title, completed FROM realtime_todos ORDER BY id"
+```
+
+The default terminal output is append-only. It identifies the selected project,
+branch, and database; prints the initial result once; reports connection-state
+changes; and then prints each published batch with its transaction IDs, a compact
+`+insert ~update -delete` summary, and the affected rows. It does not take over the
+terminal or require keyboard navigation. Pass `--changes` to display the raw reset
+and batch events instead of the materialized view.
+
+For scripts and agents, JSON output is a JSON Lines stream with one complete event
+per line. YAML output uses one document per event:
+
+```bash
+neon subscribe --changes --output json "SELECT * FROM realtime_todos" |
+  jq --unbuffered 'select(.type == "batch")'
+
+neon subscribe --output yaml "SELECT * FROM realtime_todos"
+```
+
+Machine-readable output retains the event stream: without `--changes`, each event is
+a complete `snapshot`; with `--changes`, events are raw `reset` and `batch` objects.
+Lifecycle labels and the target header are terminal-only.
+
 ## Configure autocompletion
 
 The Neon CLI supports autocompletion, which you can configure in a few easy steps. See [Neon CLI commands — completion](https://neon.com/docs/cli/completion) for instructions.

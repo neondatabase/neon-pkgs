@@ -9,6 +9,7 @@ import type {
 } from "@neon/realtime";
 import { describe, expect, it, vi } from "vitest";
 import yargs from "yargs";
+import { stripAnsi } from "../human_table.js";
 import {
 	builder,
 	command,
@@ -128,11 +129,12 @@ const props = (
 	changes: boolean,
 	signal: AbortSignal,
 	out: NodeJS.WritableStream,
+	output: SubscribeProps["output"] = "json",
 ): SubscribeProps => ({
 	apiClient: {} as never,
 	apiKey: "api-key",
 	apiHost: "https://console-stage.example/api/v2",
-	output: "json",
+	output,
 	contextFile: "/workspace/.neon",
 	projectId: "project-1",
 	branch: "main",
@@ -324,6 +326,85 @@ describe("subscribe command", () => {
 				changes: [{ type: "remove", rowId: "row-1" }],
 			},
 		]);
+	});
+
+	it("renders one initial snapshot followed by readable transaction changes", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, output.out, "table"),
+			{
+				...setupResult.dependencies,
+				now: () => new Date("2026-10-13T12:34:56.000Z"),
+			},
+		);
+		await setupResult.ready;
+
+		subscription.emitReset([
+			{ rowId: "row-1", row: { id: 1, value: "first" } },
+			{ rowId: "row-2", row: { id: 2, value: "to delete" } },
+			{ rowId: "row-4", row: { id: 4, value: "unchanged" } },
+		]);
+		subscription.emitState({ status: "live", error: undefined });
+		subscription.emitBatch(
+			[
+				{ id: 1, value: "updated" },
+				{ id: 3, value: "inserted" },
+				{ id: 4, value: "unchanged" },
+			],
+			[
+				{
+					type: "upsert",
+					rowId: "row-1",
+					row: { id: 1, value: "updated" },
+				},
+				{
+					type: "upsert",
+					rowId: "row-3",
+					row: { id: 3, value: "inserted" },
+				},
+				{ type: "remove", rowId: "row-2" },
+			],
+			["42"],
+		);
+		subscription.emitState({ status: "stale", error: undefined });
+		subscription.emitReset([
+			{ rowId: "new-row", row: { id: 5, value: "after reset" } },
+		]);
+		controller.abort();
+		await run;
+
+		const text = stripAnsi(output.text());
+		expect(text).toContain("Live query");
+		expect(text).toContain("Project   project-1");
+		expect(text).toContain("Branch    main (branch-1)");
+		expect(text).toContain("Database  neondb");
+		expect(text).toContain("Mode      Materialized result");
+		expect(text).toContain("Query     SELECT * FROM items");
+		expect(text).toContain("[2026-10-13T12:34:56.000Z] Connecting…");
+		expect(text).toContain(
+			"[2026-10-13T12:34:56.000Z] Initial snapshot · 3 rows",
+		);
+		expect(text).toContain(
+			"[2026-10-13T12:34:56.000Z] Live — waiting for changes.",
+		);
+		expect(text).toContain(
+			"[2026-10-13T12:34:56.000Z] Transaction 42 · +1 ~1 -1",
+		);
+		expect(text).toContain("~ update");
+		expect(text).toContain("+ insert");
+		expect(text).toContain("- delete");
+		expect(text).toContain(
+			"[2026-10-13T12:34:56.000Z] Reconnecting — showing the last known result.",
+		);
+		expect(text).toContain("[2026-10-13T12:34:56.000Z] Reset · 1 row");
+		expect(text.match(/Initial snapshot/g)).toHaveLength(1);
+		expect(text.match(/unchanged/g)).toHaveLength(1);
+		expect(text).not.toContain("row-1");
+		expect(text).not.toContain("row-2");
+		expect(text).not.toContain("row-3");
 	});
 
 	it("surfaces a terminal subscription error and closes the client", async () => {
