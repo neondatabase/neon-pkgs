@@ -281,10 +281,17 @@ function httpError(response: Response, body: unknown): NeonApiError {
 	);
 }
 
-/** Build a {@link NeonApiError} for a 2xx `Response` whose body failed to read or parse. */
+/**
+ * Build a {@link NeonApiError} for a 2xx `Response` whose body failed to read or parse.
+ * The cause's message is left out: `JSON.parse` quotes the input, and the body can carry a
+ * password or token that would reach stderr and analytics.
+ */
 function unreadableBodyError(response: Response, cause: unknown): NeonApiError {
 	const base = httpError(response, undefined);
-	const reason = cause instanceof Error ? cause.message : String(cause);
+	const reason =
+		cause instanceof SyntaxError
+			? "the body is not valid JSON"
+			: "the body could not be read";
 	return new NeonApiError(
 		`Could not read the Neon API response (${response.status} ${response.statusText}) to ${base.requestPath ?? "the request"}: ${reason}`,
 		{

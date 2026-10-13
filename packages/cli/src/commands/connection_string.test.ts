@@ -23,7 +23,7 @@ describe("connection_string", () => {
 				snapshot: false,
 				code: 1,
 				stderr: expect.stringMatching(
-					/ERROR: Could not read the Neon API response \(200 OK\) to \/projects\/test\/branches\/br-sunny-branch-123456\/databases: .*JSON/,
+					/ERROR: Could not read the Neon API response \(200 OK\) to \/projects\/test\/branches\/br-sunny-branch-123456\/databases: the body is not valid JSON/,
 				),
 			},
 		);

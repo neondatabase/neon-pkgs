@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { getErrorAnalyticsEventProperties } from "./analytics.js";
 import { getApiClient, isNeonApiError } from "./api.js";
 import { isUnexpectedError } from "./errors.js";
 
@@ -16,7 +17,8 @@ let apiHost: string;
 beforeAll(async () => {
 	server = createServer((_req, res) => {
 		res.writeHead(200, { "Content-Type": "application/json" });
-		res.end('{"databases": [');
+		// V8's JSON.parse error quotes input like this back in its message.
+		res.end('{"password": FAKESECRET}');
 	});
 	await new Promise<void>((resolve) =>
 		server.listen(0, "127.0.0.1", resolve),
@@ -32,10 +34,11 @@ afterAll(async () => {
 	);
 });
 
-describe("a 2xx JSON response with an unparseable body", () => {
-	it("throws a NeonApiError naming the status, path, and parse failure", async () => {
-		const api = getApiClient({ apiKey: "test", apiHost });
-		const err = await api.listProjectBranchDatabases("proj-1", "br-1").then(
+async function rejection() {
+	const api = getApiClient({ apiKey: "test", apiHost });
+	return api
+		.getProjectBranchRolePassword("proj-1", "br-1", "neondb_owner")
+		.then(
 			(result) => {
 				throw new Error(
 					`expected a rejection, got data: ${JSON.stringify(result.data)}`,
@@ -43,15 +46,28 @@ describe("a 2xx JSON response with an unparseable body", () => {
 			},
 			(error: unknown) => error,
 		);
+}
+
+describe("a 2xx JSON response with an unparseable body", () => {
+	it("throws a NeonApiError naming the status and path", async () => {
+		const err = await rejection();
 
 		if (!isNeonApiError(err)) throw err;
 		expect(err.status).toBe(200);
 		expect(err.requestPath).toBe(
-			"/projects/proj-1/branches/br-1/databases",
+			"/projects/proj-1/branches/br-1/roles/neondb_owner/reveal_password",
 		);
-		expect(err.message).toMatch(
-			/^Could not read the Neon API response \(200 OK\) to \/projects\/proj-1\/branches\/br-1\/databases: .*JSON/,
+		expect(err.message).toBe(
+			"Could not read the Neon API response (200 OK) to /projects/proj-1/branches/br-1/roles/neondb_owner/reveal_password: the body is not valid JSON",
 		);
 		expect(isUnexpectedError(err)).toBe(false);
+	});
+
+	it("keeps the body out of the message and the analytics event", async () => {
+		const err = await rejection();
+		if (!isNeonApiError(err)) throw err;
+
+		const properties = getErrorAnalyticsEventProperties(err, "API_ERROR");
+		expect(JSON.stringify(properties)).not.toContain("FAKESECRET");
 	});
 });
