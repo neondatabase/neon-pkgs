@@ -332,6 +332,9 @@ describe("Realtime v1 JSON codec", () => {
 				}),
 			),
 		).toThrow(ProtocolError);
+	});
+
+	it("accepts server messages larger than the former 1 MiB limit", () => {
 		expect(() =>
 			decodeServerMessage(
 				JSON.stringify({
@@ -340,7 +343,7 @@ describe("Realtime v1 JSON codec", () => {
 					message: "x".repeat(1024 * 1024),
 				}),
 			),
-		).toThrow(ProtocolError);
+		).not.toThrow();
 	});
 
 	it("keeps the production validator generated from the authoritative schema", () => {

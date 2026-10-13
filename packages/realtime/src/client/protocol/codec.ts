@@ -6,7 +6,6 @@ import {
 	realtimeSchemaPatterns,
 } from "./schema-validator.gen.js";
 
-const MAX_SERVER_MESSAGE_BYTES = 1024 * 1024;
 const UTF8 = new TextEncoder();
 
 interface SchemaValidationError {
@@ -56,11 +55,6 @@ export function decodeServerMessage(text: string): ServerMessage {
 
 /** Decode a server frame and parse any connection-wide progress evidence. */
 export function decodeServerFrame(text: string): DecodedServerFrame {
-	const byteLength = utf8ByteLength(text);
-	if (byteLength > MAX_SERVER_MESSAGE_BYTES) {
-		throw new ProtocolError("message exceeds the byte limit");
-	}
-
 	// JSON.parse silently keeps the last duplicate member, so inspect the source
 	// before parsing and before the generated structural validator sees it.
 	try {
