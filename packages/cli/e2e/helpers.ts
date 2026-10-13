@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -61,42 +61,44 @@ function withGlobalFlags(args: string[], globals: string[]): string[] {
 	return [...args.slice(0, separator), ...globals, ...args.slice(separator)];
 }
 
+type CliOptions = {
+	json?: boolean;
+	/** Override the shared scratch config directory. Never pass `--config-dir` in `args`. */
+	configDir?: string;
+	/**
+	 * Override the shared scratch `.neon`. Needed by anything that is supposed to read a
+	 * project from context — the default points at an empty temp file precisely so a
+	 * command cannot pick one up by accident.
+	 */
+	contextFile?: string;
+	/**
+	 * Authenticate from this profile. Suppresses `--api-key`, which is the only way to
+	 * exercise a stored credential — the two together are rejected on purpose.
+	 */
+	profile?: string;
+	/**
+	 * Pass this key as `--api-key`. Defaults to the harness key, and to nothing at all when
+	 * `profile` is set. Give both to exercise the rejection.
+	 *
+	 * `null` passes none. The `profile` subcommands that act on a stored credential refuse
+	 * `--api-key` rather than ignoring it, so the default would make them fail — and a case
+	 * about reading profiles off disk should not be authenticating in the first place.
+	 */
+	apiKey?: string | null;
+	/** Extra environment for the child. `undefined` removes an inherited variable. */
+	env?: Record<string, string | undefined>;
+	/** Working directory for the child. Commands that read `.neon` from the cwd need one. */
+	cwd?: string;
+};
+
 /**
- * Run the real CLI the way a user would, minus the parts that would make a test
+ * Start the real CLI the way a user would, minus the parts that would make a test
  * environment-dependent: analytics off, JSON output, isolated config and context.
  */
-export function runCli(
+export function spawnCli(
 	args: string[],
-	options: {
-		json?: boolean;
-		/** Override the shared scratch config directory. Never pass `--config-dir` in `args`. */
-		configDir?: string;
-		/**
-		 * Override the shared scratch `.neon`. Needed by anything that is supposed to read a
-		 * project from context — the default points at an empty temp file precisely so a
-		 * command cannot pick one up by accident.
-		 */
-		contextFile?: string;
-		/**
-		 * Authenticate from this profile. Suppresses `--api-key`, which is the only way to
-		 * exercise a stored credential — the two together are rejected on purpose.
-		 */
-		profile?: string;
-		/**
-		 * Pass this key as `--api-key`. Defaults to the harness key, and to nothing at all when
-		 * `profile` is set. Give both to exercise the rejection.
-		 *
-		 * `null` passes none. The `profile` subcommands that act on a stored credential refuse
-		 * `--api-key` rather than ignoring it, so the default would make them fail — and a case
-		 * about reading profiles off disk should not be authenticating in the first place.
-		 */
-		apiKey?: string | null;
-		/** Extra environment for the child. `undefined` removes an inherited variable. */
-		env?: Record<string, string | undefined>;
-		/** Working directory for the child. Commands that read `.neon` from the cwd need one. */
-		cwd?: string;
-	} = {},
-): Promise<CliResult> {
+	options: CliOptions = {},
+): ChildProcessWithoutNullStreams {
 	const key =
 		options.apiKey === null
 			? undefined
@@ -134,12 +136,21 @@ export function runCli(
 	for (const [key, value] of Object.entries(env)) {
 		if (value === undefined) delete env[key];
 	}
+	return spawn(process.execPath, argv, {
+		stdio: "pipe",
+		env,
+		...(options.cwd ? { cwd: options.cwd } : {}),
+	});
+}
+
+/** {@link spawnCli} to completion, with a timeout. */
+export function runCli(
+	args: string[],
+	options: CliOptions = {},
+): Promise<CliResult> {
 	return new Promise((resolvePromise, reject) => {
-		const child = spawn(process.execPath, argv, {
-			stdio: ["ignore", "pipe", "pipe"],
-			env,
-			...(options.cwd ? { cwd: options.cwd } : {}),
-		});
+		const child = spawnCli(args, options);
+		child.stdin.end();
 		let stdout = "";
 		let stderr = "";
 		const timer = setTimeout(() => {

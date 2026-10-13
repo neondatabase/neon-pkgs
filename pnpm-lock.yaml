@@ -306,6 +306,9 @@ importers:
       '@neon/e2e-harness':
         specifier: workspace:*
         version: link:../../tests/e2e-harness
+      '@neon/env':
+        specifier: workspace:*
+        version: link:../env
       '@neon/functions':
         specifier: workspace:*
         version: link:../functions
