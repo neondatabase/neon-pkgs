@@ -38,7 +38,6 @@ export class ProtocolError extends Error {
 
 export interface DecodedServerFrame {
 	readonly message: ServerMessage;
-	readonly byteLength: number;
 	/** Parsed once so connection-wide progress can share immutable evidence. */
 	readonly mvcc?: ParsedMvccSnapshot;
 }
@@ -55,7 +54,7 @@ export function decodeServerMessage(text: string): ServerMessage {
 	return decodeServerFrame(text).message;
 }
 
-/** Decode a server frame and retain its exact UTF-8 size for staging limits. */
+/** Decode a server frame and parse any connection-wide progress evidence. */
 export function decodeServerFrame(text: string): DecodedServerFrame {
 	const byteLength = utf8ByteLength(text);
 	if (byteLength > MAX_SERVER_MESSAGE_BYTES) {
@@ -93,7 +92,6 @@ export function decodeServerFrame(text: string): DecodedServerFrame {
 	}
 	return Object.freeze({
 		message: freezeWireValue(message),
-		byteLength,
 		mvcc,
 	});
 }

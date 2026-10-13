@@ -212,11 +212,7 @@ export function accept(
 	reconciler: BaselineSyncPublicationReconciler,
 	message: Parameters<BaselineSyncPublicationReconciler["accept"]>[0],
 ): void {
-	reconciler.accept(message, wireBytes(message));
-}
-
-export function wireBytes(value: object): number {
-	return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+	reconciler.accept(message);
 }
 
 export function keys(rows: readonly WireRow[]): string {

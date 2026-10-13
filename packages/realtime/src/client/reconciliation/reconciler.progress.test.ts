@@ -13,7 +13,6 @@ import {
 	subscribed,
 	target,
 	upsert,
-	wireBytes,
 } from "./reconciler.test-helpers.js";
 
 const progress = {
@@ -36,14 +35,13 @@ describe("ordered MVCC progress", () => {
 		completeEmptyBaselineSync(reconciler);
 		completeEmptyBaselineSync(reconciler, "10");
 		const parsed = parseMvccSnapshot(progress.mvcc);
-		reconciler.accept(progress, wireBytes(progress), parsed);
+		reconciler.accept(progress, parsed);
 
 		expect(left.applyProgress).toHaveBeenCalledWith(parsed);
 		expect(right.applyProgress.mock.calls[0]?.[0]).toBe(parsed);
 		expect(left.publishBatch).not.toHaveBeenCalled();
 		expect(right.publishBatch).not.toHaveBeenCalled();
 		expect(left.publishReset).toHaveBeenCalledOnce();
-		expect(reconciler.stagingBytes).toBe(0);
 	});
 
 	it("does not give cached progress to a later admission or incomplete baseline", () => {

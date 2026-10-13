@@ -352,14 +352,6 @@ describe("Realtime v1 JSON codec", () => {
 		).not.toThrow();
 	});
 
-	it("reports the exact wire size for downstream staging accounting", () => {
-		const text = JSON.stringify({ type: "pong", token: "é" });
-		expect(decodeServerFrame(text)).toMatchObject({
-			message: { type: "pong", token: "é" },
-			byteLength: new TextEncoder().encode(text).byteLength,
-		});
-	});
-
 	it("serializes every client command with wire field names", () => {
 		const messages: ClientMessage[] = [
 			{ type: "subscribe", request_id: "1", authorization: "token" },

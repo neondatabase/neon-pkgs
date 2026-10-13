@@ -173,13 +173,11 @@ export class ConnectionCoordinator {
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
 		if (!options.url) throw new Error("Realtime requires a WebSocket URL");
 		this.events = options.events ?? SILENT_CLIENT_EVENTS;
-		this.reconciler =
+		this.reconciler = new BaselineSyncPublicationReconciler(
 			this.events === SILENT_CLIENT_EVENTS
-				? new BaselineSyncPublicationReconciler()
-				: new BaselineSyncPublicationReconciler(
-						{},
-						this.reconciliationEvents(),
-					);
+				? undefined
+				: this.reconciliationEvents(),
+		);
 		this.webSocketFactory =
 			options.webSocketFactory ?? defaultWebSocketFactory;
 		if (options.reconnect !== false) {
@@ -387,7 +385,7 @@ export class ConnectionCoordinator {
 		try {
 			const frame = decodeServerFrame(text);
 			this.heartbeat?.received();
-			this.route(frame.message, frame.byteLength, frame.mvcc);
+			this.route(frame.message, frame.mvcc);
 		} catch (error) {
 			this.protocolFailure(
 				error instanceof Error
@@ -397,11 +395,7 @@ export class ConnectionCoordinator {
 		}
 	}
 
-	private route(
-		message: ServerMessage,
-		byteLength: number,
-		mvcc?: ParsedMvccSnapshot,
-	): void {
+	private route(message: ServerMessage, mvcc?: ParsedMvccSnapshot): void {
 		if (!this.ready) {
 			if (message.type === "ping") {
 				this.send({ type: "pong", token: message.token });
@@ -458,7 +452,7 @@ export class ConnectionCoordinator {
 			case "reset_required":
 			case "commit":
 			case "progress":
-				this.reconciler.accept(message, byteLength, mvcc);
+				this.reconciler.accept(message, mvcc);
 				return;
 		}
 	}
