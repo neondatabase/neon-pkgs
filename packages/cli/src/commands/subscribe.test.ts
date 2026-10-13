@@ -397,7 +397,7 @@ describe("subscribe command", () => {
 		expect(text).toContain("+ insert");
 		expect(text).toContain("- delete");
 		expect(text).toContain(
-			"[2026-10-13T12:34:56.000Z] Reconnecting — showing the last known result.",
+			"[2026-10-13T12:34:56.000Z] Updating — showing the last known result.",
 		);
 		expect(text).toContain("[2026-10-13T12:34:56.000Z] Reset · 1 row");
 		expect(text.match(/Initial snapshot/g)).toHaveLength(1);

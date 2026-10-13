@@ -454,7 +454,7 @@ const humanStatus = (state: LiveQueryState): string => {
 		case "live":
 			return "Live — waiting for changes.";
 		case "stale":
-			return "Reconnecting — showing the last known result.";
+			return "Updating — showing the last known result.";
 		case "closed":
 			return "Subscription closed.";
 		case "error":
