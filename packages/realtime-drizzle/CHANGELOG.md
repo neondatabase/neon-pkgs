@@ -1,5 +1,16 @@
 # @neon/realtime-drizzle
 
+## 0.1.0
+
+### Minor Changes
+
+- Promote the Neon Realtime SDK packages to 0.1.0 for the beta release.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neon/realtime@0.1.0
+
 ## 0.0.3
 
 ### Patch Changes

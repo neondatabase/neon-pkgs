@@ -1,5 +1,16 @@
 # @neon/realtime
 
+## 0.1.0
+
+### Minor Changes
+
+- Promote the Neon Realtime SDK packages to 0.1.0 for the beta release.
+
+### Patch Changes
+
+- 475adfb: Remove the 1 MiB client-side limit on incoming Realtime WebSocket messages.
+- 475adfb: Remove the client-side 16 MiB limits on publications and buffered change backlogs.
+
 ## 0.0.3
 
 ### Patch Changes
