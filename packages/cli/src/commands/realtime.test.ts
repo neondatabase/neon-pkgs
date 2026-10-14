@@ -84,15 +84,20 @@ describe("realtime", () => {
 		);
 	});
 
-	test("explains it is coming soon outside staging", async ({
-		testCliCommand,
-	}) => {
-		await testCliCommand(["realtime", "enable", "--project-id", "test"], {
-			code: 1,
-			snapshot: false,
-			stderr: expect.stringContaining(
-				"ERROR: Neon Realtime is coming soon!",
-			),
+	for (const args of [
+		["realtime", "enable", "--project-id", "test"],
+		["realtime", "subscribe", "SELECT 1"],
+	]) {
+		test(`${args[1]} explains Realtime is coming soon outside staging`, async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(args, {
+				code: 1,
+				snapshot: false,
+				stderr: expect.stringContaining(
+					"ERROR: Neon Realtime is coming soon!",
+				),
+			});
 		});
-	});
+	}
 });
