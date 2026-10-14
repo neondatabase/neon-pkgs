@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -16,10 +17,11 @@ import {
 const FIXTURE = resolve(import.meta.dirname, "fixtures", "env-contract");
 const POLICY = join(FIXTURE, "neon.ts");
 const CONTEXT_FILE = join(FIXTURE, ".neon");
+const DOTENV = join(FIXTURE, ".env.local");
 const READY_TIMEOUT_MS = 90_000;
 
 /** Variables only one side can have: the function's own URL, and its declared env. */
-type Runtime = "pulled" | "dev" | "deployed";
+type Runtime = "pulled" | "dev" | "deployed" | "devSource" | "devExplicit";
 
 const FUNCTION_KEYS = new Set([
 	"NEON_FUNCTION_PROBE_BASE_URL",
@@ -42,15 +44,44 @@ function namespaces(report: EnvReport, form: "external" | "scoped"): string[] {
 	return outcome.namespaces;
 }
 
-/** The URL `neon dev` prints next to the probe slug once its server is listening. */
-async function devUrl(output: () => string): Promise<string> {
+/** The URL `neon dev` prints once its server is listening, matched by `pattern`. */
+async function devUrl(output: () => string, pattern: RegExp): Promise<string> {
 	const deadline = Date.now() + READY_TIMEOUT_MS;
 	while (Date.now() < deadline) {
-		const match = /probe\s+(http:\/\/localhost:\d+)/.exec(output());
+		const match = pattern.exec(output());
 		if (match?.[1]) return match[1];
+		if (output().includes("ERROR:"))
+			throw new Error("neon dev failed to start");
 		await new Promise((wait) => setTimeout(wait, 500));
 	}
 	throw new Error("neon dev never printed the probe URL");
+}
+
+/** Start `neon dev` with `args` in the fixture, read the probe's report, and stop it. */
+async function devReport(args: string[], pattern: RegExp): Promise<EnvReport> {
+	const dev = spawnCli(["dev", ...args], {
+		cwd: FIXTURE,
+		contextFile: CONTEXT_FILE,
+		json: false,
+	});
+	let output = "";
+	dev.stdout.on("data", (chunk) => {
+		output += String(chunk);
+	});
+	dev.stderr.on("data", (chunk) => {
+		output += String(chunk);
+	});
+	const closed = once(dev, "close");
+	try {
+		return await fetchReport(await devUrl(() => output, pattern));
+	} catch (error) {
+		throw new Error(
+			`neon dev ${args.join(" ")}: ${String(error)}\noutput:\n${output}`,
+		);
+	} finally {
+		dev.kill("SIGTERM");
+		await closed;
+	}
 }
 
 /** GET `url` until it answers 200, for cold starts and dev-server startup. */
@@ -91,6 +122,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 
 	beforeAll(async () => {
 		tmp = mkdtempSync(join(tmpdir(), "neon-env-contract-e2e-"));
+		writeFileSync(DOTENV, "PROBE_SETTING=probe-value\n");
 		projectId = await createProject({
 			name: uniqueProjectName("cli-env-contract"),
 		});
@@ -102,7 +134,16 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		const target = ["--project-id", projectId, "--branch", branch.id];
 
 		const deployed = await runCli(
-			["deploy", "-y", ...target, "--config", POLICY, "--no-env-pull"],
+			[
+				"deploy",
+				"-y",
+				...target,
+				"--config",
+				POLICY,
+				"--env",
+				DOTENV,
+				"--no-env-pull",
+			],
 			{ cwd: FIXTURE },
 		);
 		if (deployed.code !== 0) {
@@ -145,7 +186,11 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		for (const [key, value] of Object.entries(readEnvFile(envFile))) {
 			vi.stubEnv(key, value);
 		}
+		// The runner imports neon.ts itself, so it needs PROBE_SETTING to evaluate it. The
+		// value is removed before reporting and before any `neon dev` inherits this env.
+		vi.stubEnv("PROBE_SETTING", "probe-value");
 		const { envReport } = await import("./fixtures/env-contract/report.js");
+		vi.stubEnv("PROBE_SETTING", undefined);
 		collected.pulled = envReport();
 		vi.unstubAllEnvs();
 
@@ -158,31 +203,23 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 				branch: branch.name,
 			}),
 		);
-		const dev = spawnCli(["dev"], {
-			cwd: FIXTURE,
-			contextFile: CONTEXT_FILE,
-			json: false,
-		});
-		let devOutput = "";
-		dev.stdout.on("data", (chunk) => {
-			devOutput += String(chunk);
-		});
-		dev.stderr.on("data", (chunk) => {
-			devOutput += String(chunk);
-		});
-		try {
-			collected.dev = await fetchReport(await devUrl(() => devOutput));
-		} catch (error) {
-			throw new Error(`${String(error)}\nneon dev output:\n${devOutput}`);
-		} finally {
-			dev.kill("SIGTERM");
-		}
+		const slugUrl = /probe\s+(http:\/\/localhost:\d+)/;
+		const anyUrl = /(http:\/\/localhost:\d+)/;
+		collected.dev = await devReport([], slugUrl);
+		collected.devSource = await devReport(
+			["--source", "./probe.ts"],
+			anyUrl,
+		);
+		const explicit = join(tmp, "explicit.env");
+		writeFileSync(explicit, "PROBE_SETTING=from-explicit\n");
+		collected.devExplicit = await devReport(["--env", explicit], slugUrl);
 	}, 600_000);
 
 	afterAll(async () => {
 		if (projectId) await deleteProject(projectId);
 		if (tmp) rmSync(tmp, { recursive: true, force: true });
 		rmSync(CONTEXT_FILE, { force: true });
+		rmSync(DOTENV, { force: true });
 	});
 
 	it.each([
@@ -199,6 +236,19 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 	] as const)('parseEnv(config, "probe") succeeds inside the function (%s)', (where) => {
 		expect(namespaces(report(where), "scoped")).toContain("function");
 		expect(report(where).values.PROBE_SETTING).toBe("probe-value");
+	});
+
+	it("neon dev --source passes .env.local to the function", () => {
+		expect(report("devSource").values.PROBE_SETTING).toBe("probe-value");
+	});
+
+	it("neon dev --env loads that file instead of .env.local", () => {
+		expect(namespaces(report("devExplicit"), "scoped")).toContain(
+			"function",
+		);
+		expect(report("devExplicit").values.PROBE_SETTING).toBe(
+			"from-explicit",
+		);
 	});
 
 	it("the deployed runtime provides the variables neon env pull writes", () => {

@@ -623,7 +623,16 @@ Console), or drop auth from --service.
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 
-**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. Each `NEON_FUNCTION_<SLUG>_BASE_URL` this process is serving is rewritten to `http://localhost:<port>`: every neon.ts function, or the matching slug when `--source` names one. `neon env pull` and `neon-env run` write the production URL (`https://<branchId>-<slug>.compute.…`). `dev` writes nothing, but it does *read* your `.env` / `.env.local` to reuse the branch credential behind the AI Gateway and object storage. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
+**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. Each `NEON_FUNCTION_<SLUG>_BASE_URL` this process is serving is rewritten to `http://localhost:<port>`: every neon.ts function, or the matching slug when `--source` names one. `neon env pull` and `neon-env run` write the production URL (`https://<branchId>-<slug>.compute.…`).
+
+Before `neon.ts` is evaluated, `dev` loads the project directory's `.env.local` and `.env` into the environment, so Function env values written as `process.env.X!` resolve the same way they do for `neon deploy --env`. A variable already set wins, then `.env.local`, then `.env`. Functions also inherit the loaded variables. `--env <file>` loads only that file, resolved from the current directory, matching `neon deploy --env`:
+
+```bash
+neon dev                       # loads .env.local, then .env
+neon dev --env .env.staging    # loads only .env.staging
+```
+
+`dev` writes nothing. To reuse the branch credential behind the AI Gateway and object storage, it reads only the file `env pull` writes (`.env` when it exists, otherwise `.env.local`), so an override in the other file cannot pair one credential's key ID with another's secret. Without a file to read from it issues one on every start and leaves the last one live — it has nowhere to keep it, and so cannot name it to revoke it. It says so when it happens; run `env pull` (or just `link` / `checkout`) once and restarts reuse the credential instead.
 
 **Where `.neon` lives**: `link` writes `.neon` into the **current working directory** by default. If an existing `.neon` is found in any parent directory, that file is reused — so commands run from a sub-directory of a linked project still pick up the project's context. To pin the location explicitly, pass `--context-file <path>`. `neon init` always writes `.neon` into the current directory.
 

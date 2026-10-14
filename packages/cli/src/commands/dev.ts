@@ -32,12 +32,18 @@ import {
 	resolveFunctionsFromConfig,
 } from "../dev/functions.js";
 import { resolveWatchInputs } from "../dev/inputs.js";
-import { readEnvFile, resolveEnvFilePath } from "../env_file.js";
+import {
+	defaultDevEnvFiles,
+	loadEnvFileIntoProcess,
+	readEnvFile,
+	resolveEnvFilePath,
+} from "../env_file.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import { branchIdResolve } from "../utils/enrichers.js";
 import { bundleEntry } from "../utils/esbuild.js";
+import { envFlag } from "./config.js";
 
 type DevProps = CommonProps & {
 	source?: string;
@@ -46,6 +52,7 @@ type DevProps = CommonProps & {
 	branch?: string;
 	id?: string;
 	configDir?: string;
+	env?: string;
 };
 
 export const command = "dev";
@@ -80,6 +87,7 @@ export const builder = (argv: yargs.Argv) =>
 					"port is chosen automatically.",
 				type: "number",
 			},
+			...envFlag,
 		})
 		.epilogue(
 			[
@@ -94,9 +102,14 @@ export const builder = (argv: yargs.Argv) =>
 				"this process is serving (every neon.ts function, or the matching slug when",
 				"`--source` names one).",
 				"",
-				"`dev` reads your .env / .env.local to reuse the branch credential behind the",
-				"AI Gateway and object storage, and never writes to them. With no such file it",
-				"issues a credential on every start, so run `env pull` once if you restart often.",
+				"Before neon.ts is evaluated, `dev` loads the project's .env.local and .env into",
+				"the environment, so Function env values that read process.env resolve. A",
+				"variable already set wins, then .env.local, then .env. `--env <file>` loads",
+				"only that file instead. Functions also inherit the loaded variables.",
+				"",
+				"`dev` reuses the branch credential behind the AI Gateway and object storage from",
+				"the file `env pull` writes, and never writes to it. With no such file it issues a",
+				"credential on every start, so run `env pull` once if you restart often.",
 			].join("\n"),
 		)
 		.strict();
@@ -122,6 +135,7 @@ export const devEnvContext = (
 	},
 	branchId: string | undefined,
 	cwd: string,
+	baseEnv: NodeJS.ProcessEnv = process.env,
 ) => {
 	const location = {
 		cwd,
@@ -132,7 +146,7 @@ export const devEnvContext = (
 		...location,
 		implyAiGateway: true,
 		env: {
-			...process.env,
+			...baseEnv,
 			...(existsSync(envFile) ? readEnvFile(envFile) : {}),
 		},
 		...(props.projectId ? { projectId: props.projectId } : {}),
@@ -177,8 +191,13 @@ export const reportDevCredential = (
 };
 
 export const handler = async (props: DevProps): Promise<void> => {
+	// Credential reuse keeps reading only the file `env pull` writes. Mixing in .env.local
+	// could pair a pulled AWS_ACCESS_KEY_ID with a stale AWS_SECRET_ACCESS_KEY.
+	const credentialBaseEnv = { ...process.env };
+	loadDevEnvFiles(props, process.cwd());
+
 	if (props.source !== undefined) {
-		await runSingleSource(props);
+		await runSingleSource(props, credentialBaseEnv);
 		return;
 	}
 
@@ -191,11 +210,41 @@ export const handler = async (props: DevProps): Promise<void> => {
 		);
 	}
 
-	await runFromConfig(props);
+	await runFromConfig(props, credentialBaseEnv);
+};
+
+/**
+ * Load dotenv files into process.env before neon.ts is evaluated: `--env <file>` alone
+ * (relative to cwd), else the project's {@link defaultDevEnvFiles}. A key already set wins.
+ */
+export const loadDevEnvFiles = (
+	props: Pick<DevProps, "env" | "contextFile">,
+	cwd: string,
+): void => {
+	const files = props.env
+		? [resolve(cwd, props.env)]
+		: defaultDevEnvFiles({
+				cwd,
+				...(props.contextFile
+					? { contextFile: props.contextFile }
+					: {}),
+			});
+	for (const file of files) {
+		const applied = loadEnvFileIntoProcess(file);
+		log.debug(
+			"dev: loaded %d var(s) from %s: %s",
+			applied.length,
+			file,
+			applied.join(", "),
+		);
+	}
 };
 
 /** Single-function mode: serve exactly the `--source` path (legacy behavior). */
-const runSingleSource = async (props: DevProps): Promise<void> => {
+const runSingleSource = async (
+	props: DevProps,
+	credentialBaseEnv: NodeJS.ProcessEnv,
+): Promise<void> => {
 	const source = resolve(process.cwd(), props.source as string);
 	if (!existsSync(source)) {
 		throw new Error(`Source file not found: ${source}`);
@@ -206,7 +255,9 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
 		vars: neonEnv,
 		skipped,
 		credential,
-	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	} = await resolveDevEnv(
+		devEnvContext(props, branchId, process.cwd(), credentialBaseEnv),
+	);
 	reportDevCredential(credential);
 
 	const match = await findConfigFunctionBySource(
@@ -236,7 +287,10 @@ const runSingleSource = async (props: DevProps): Promise<void> => {
  * Multi-function mode: serve every function declared in neon.ts. Requires a neon.ts
  * (there is no single source to fall back on), one dev server per function.
  */
-const runFromConfig = async (props: DevProps): Promise<void> => {
+const runFromConfig = async (
+	props: DevProps,
+	credentialBaseEnv: NodeJS.ProcessEnv,
+): Promise<void> => {
 	const branchId = await resolveBranchId(props);
 	const resolved = await resolveFunctionsFromConfig(
 		process.cwd(),
@@ -263,7 +317,9 @@ const runFromConfig = async (props: DevProps): Promise<void> => {
 		vars: neonEnv,
 		skipped,
 		credential,
-	} = await resolveDevEnv(devEnvContext(props, branchId, process.cwd()));
+	} = await resolveDevEnv(
+		devEnvContext(props, branchId, process.cwd(), credentialBaseEnv),
+	);
 	reportDevCredential(credential);
 
 	const units = await planFunctionsToUnits(
