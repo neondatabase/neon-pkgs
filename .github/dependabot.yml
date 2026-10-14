@@ -13,12 +13,11 @@ updates:
         patterns:
           - "*"
 
-  # npm — root workspace plus every package/example manifest.
+  # npm — root workspace plus every package manifest.
   - package-ecosystem: npm
     directories:
       - /
       - /packages/*
-      - /examples/*
     schedule:
       interval: weekly
     cooldown:

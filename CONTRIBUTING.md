@@ -57,6 +57,8 @@ pnpm --filter @neon/env test:ci
 | `internals/` | `@neon-internals/*` — private, never published, bundled into the packages that use them. Currently the credential and env-resolution code shared by the `neon` CLI and `@neon/env`; each has its own README |
 | `tests/` | Test-only workspace packages, currently the live e2e harness |
 
+Examples meant for users belong in [`neondatabase/examples`](https://github.com/neondatabase/examples), not in this repository.
+
 See [`AGENTS.md`](./AGENTS.md) for the deeper architecture and per-package notes (especially the
 CLI package, which keeps its own toolchain).
 
