@@ -108,6 +108,7 @@ builder = builder
 	.usage("$0 <command> [options]")
 	.parserConfiguration({
 		"populate--": true,
+		"sort-commands": true,
 		// yargs otherwise rewrites numeric-looking tokens after `--` into numbers (`1e3` becomes
 		// 1000) before they reach psql. Declared positionals keep their own `type` either way.
 		"parse-positional-numbers": false,

@@ -21,7 +21,7 @@ export type CommandEntry = {
 };
 
 /**
- * Every top-level command, in help order, with the metadata yargs needs to list and route it.
+ * Every top-level command, with the metadata yargs needs to list and route it.
  * A command's module (and everything it imports) loads only when yargs selects that command,
  * so `neon --help` and `neon projects list` don't pay for `init`, `dev`, or `psql`.
  *

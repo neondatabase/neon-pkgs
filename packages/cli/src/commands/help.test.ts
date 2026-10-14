@@ -11,6 +11,28 @@ describe("help", () => {
 			stderr: "",
 		});
 	});
+
+	test("lists top-level commands alphabetically", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(["--help"], {
+			snapshot: false,
+		});
+		const help = strip(stdout);
+		const commandsBlock = help.slice(
+			help.indexOf("Commands:"),
+			help.indexOf("Global options:"),
+		);
+		const commandNames = commandsBlock.split("\n").flatMap((line) => {
+			const match = /^neon ([^\s,]+)/.exec(line);
+			return match ? [match[1]!] : [];
+		});
+
+		expect(commandNames.length).toBeGreaterThan(1);
+		expect(commandNames).toEqual(
+			[...commandNames].sort((left, right) => left.localeCompare(right)),
+		);
+	});
 });
 
 const PARENT_COMMANDS = [
