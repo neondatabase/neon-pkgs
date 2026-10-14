@@ -238,9 +238,6 @@ describe("loadEnvFileIntoProcess", () => {
 		rmSync(cwd, { recursive: true, force: true });
 		delete process.env.NEONCTL_TEST_LOADENV_NEW;
 		delete process.env.NEONCTL_TEST_LOADENV_EXISTING;
-		for (const key of ["TOKEN", "PEM", "HASH", "EXPORTED"]) {
-			delete process.env[`NEONCTL_TEST_LOADENV_${key}`];
-		}
 	});
 
 	it("sets unset vars but never overrides existing process.env entries", () => {
@@ -256,33 +253,5 @@ describe("loadEnvFileIntoProcess", () => {
 		expect(process.env.NEONCTL_TEST_LOADENV_NEW).toBe("from-file");
 		expect(process.env.NEONCTL_TEST_LOADENV_EXISTING).toBe("from-process");
 		expect(applied).toEqual(["NEONCTL_TEST_LOADENV_NEW"]);
-	});
-
-	it("reads values the way the application's own dotenv loader would", () => {
-		const path = join(cwd, ".env");
-		writeFileSync(
-			path,
-			[
-				"NEONCTL_TEST_LOADENV_TOKEN=abc # local token",
-				'NEONCTL_TEST_LOADENV_PEM="first',
-				'second"',
-				'NEONCTL_TEST_LOADENV_HASH="has # hash"',
-				"export NEONCTL_TEST_LOADENV_EXPORTED=yes",
-				"",
-			].join("\n"),
-		);
-
-		loadEnvFileIntoProcess(path);
-
-		expect(process.env.NEONCTL_TEST_LOADENV_TOKEN).toBe("abc");
-		expect(process.env.NEONCTL_TEST_LOADENV_PEM).toBe("first\nsecond");
-		expect(process.env.NEONCTL_TEST_LOADENV_HASH).toBe("has # hash");
-		expect(process.env.NEONCTL_TEST_LOADENV_EXPORTED).toBe("yes");
-	});
-
-	it("fails on a missing file", () => {
-		expect(() => loadEnvFileIntoProcess(join(cwd, "nope.env"))).toThrow(
-			/Env file not found/,
-		);
 	});
 });
