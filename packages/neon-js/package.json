@@ -1,0 +1,111 @@
+{
+	"name": "@neon/neon-js",
+	"version": "0.8.0-beta",
+	"description": "TypeScript SDK for Neon Auth and Data API - authentication and PostgreSQL querying",
+	"keywords": [
+		"neon",
+		"neondb",
+		"postgresql",
+		"postgres",
+		"database",
+		"authentication",
+		"auth",
+		"typescript",
+		"sdk",
+		"better-auth",
+		"supabase",
+		"data-api"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git",
+		"directory": "packages/neon-js"
+	},
+	"homepage": "https://github.com/neondatabase/neon-pkgs/tree/main/packages/neon-js#readme",
+	"bugs": {
+		"url": "https://github.com/neondatabase/neon-pkgs/issues"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./auth": {
+			"types": "./dist/auth/index.d.ts",
+			"default": "./dist/auth/index.js"
+		},
+		"./auth/types": {
+			"types": "./dist/auth/types/index.d.ts",
+			"default": "./dist/auth/types/index.js"
+		},
+		"./auth/react": {
+			"types": "./dist/auth/react/index.d.ts",
+			"default": "./dist/auth/react/index.js"
+		},
+		"./auth/react/adapters": {
+			"types": "./dist/auth/react/adapters/index.d.ts",
+			"default": "./dist/auth/react/adapters/index.js"
+		},
+		"./auth/vanilla": {
+			"types": "./dist/auth/vanilla/index.d.ts",
+			"default": "./dist/auth/vanilla/index.js"
+		},
+		"./auth/vanilla/adapters": {
+			"types": "./dist/auth/vanilla/adapters/index.d.ts",
+			"default": "./dist/auth/vanilla/adapters/index.js"
+		},
+		"./auth/next": {
+			"types": "./dist/auth/next/index.d.ts",
+			"default": "./dist/auth/next/index.js"
+		},
+		"./auth/next/server": {
+			"types": "./dist/auth/next/server/index.d.ts",
+			"default": "./dist/auth/next/server/index.js"
+		},
+		"./auth/server": {
+			"types": "./dist/auth/server/index.d.ts",
+			"default": "./dist/auth/server/index.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json",
+		"llms.txt"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest",
+		"test:node": "node --run test",
+		"test:ci": "vitest run --typecheck --passWithNoTests",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@neon-internals/internal": "workspace:*",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"dependencies": {
+		"@neon/auth": "workspace:*",
+		"@neon/postgrest-js": "workspace:*"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

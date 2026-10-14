@@ -1,0 +1,394 @@
+# @neon/neon-js
+
+> The official TypeScript SDK for Neon - unified client combining authentication and PostgreSQL database querying with automatic token management.
+
+`@neon/neon-js` brings together Neon Auth and Neon Data API in a single client. It provides a familiar interface for authentication and type-safe database queries with PostgREST.
+
+## When to Use This Package
+
+| Use Case | Package |
+|----------|---------|
+| Auth + Database (most apps) | `@neon/neon-js` |
+| Auth only (no database) | `@neon/auth` |
+| Database only (external auth) | `@neon/postgrest-js` |
+
+## Installation
+
+```bash
+npm install @neon/neon-js
+```
+
+## Environment Variables
+
+```bash
+# React/Vite
+VITE_NEON_AUTH_URL=https://your-project.neon.tech/auth
+VITE_NEON_DATA_API_URL=https://your-project.neon.tech/rest/v1
+
+# Next.js
+NEON_AUTH_BASE_URL=https://your-project.neon.tech
+```
+
+## Quick Start
+
+```typescript
+import { createClient } from '@neon/neon-js';
+
+const client = createClient<Database>({
+  auth: {
+    url: import.meta.env.VITE_NEON_AUTH_URL,
+  },
+  dataApi: {
+    url: import.meta.env.VITE_NEON_DATA_API_URL,
+  },
+});
+
+// Authenticate
+await client.auth.signIn.email({
+  email: 'user@example.com',
+  password: 'secure-password',
+});
+
+// Query database (token automatically injected)
+const { data: users } = await client
+  .from('users')
+  .select('*')
+  .eq('status', 'active');
+```
+
+## Authentication
+
+### Sign Up & Sign In
+
+```typescript
+// Sign up
+await client.auth.signUp.email({
+  email: 'user@example.com',
+  password: 'secure-password',
+  name: 'John Doe',
+});
+
+// Sign in with email
+await client.auth.signIn.email({
+  email: 'user@example.com',
+  password: 'secure-password',
+});
+
+// Sign in with OAuth
+await client.auth.signIn.social({
+  provider: 'google',
+  callbackURL: '/dashboard',
+});
+
+// Get session
+const session = await client.auth.getSession();
+
+// Sign out
+await client.auth.signOut();
+```
+
+### Adapters
+
+**Critical:** Adapters are factory functions - must call with `()`.
+
+```typescript
+// SupabaseAuthAdapter - Supabase-compatible API
+import { createClient, SupabaseAuthAdapter } from '@neon/neon-js';
+
+const client = createClient<Database>({
+  auth: {
+    adapter: SupabaseAuthAdapter(), // Must call with ()
+    url: import.meta.env.VITE_NEON_AUTH_URL,
+  },
+  dataApi: {
+    url: import.meta.env.VITE_NEON_DATA_API_URL,
+  },
+});
+
+await client.auth.signInWithPassword({ email, password });
+const { data: session } = await client.auth.getSession();
+```
+
+```typescript
+// BetterAuthVanillaAdapter - Direct Better Auth API
+import { createClient, BetterAuthVanillaAdapter } from '@neon/neon-js';
+
+const client = createClient<Database>({
+  auth: {
+    adapter: BetterAuthVanillaAdapter(),
+    url: import.meta.env.VITE_NEON_AUTH_URL,
+  },
+  dataApi: {
+    url: import.meta.env.VITE_NEON_DATA_API_URL,
+  },
+});
+
+await client.auth.signIn.email({ email, password });
+const session = await client.auth.getSession();
+```
+
+```typescript
+// BetterAuthReactAdapter - React hooks (MUST use subpath import)
+import { createClient } from '@neon/neon-js';
+import { BetterAuthReactAdapter } from '@neon/neon-js/auth/react/adapters';
+
+const client = createClient<Database>({
+  auth: {
+    adapter: BetterAuthReactAdapter(),
+    url: import.meta.env.VITE_NEON_AUTH_URL,
+  },
+  dataApi: {
+    url: import.meta.env.VITE_NEON_DATA_API_URL,
+  },
+});
+
+function MyComponent() {
+  const session = client.auth.useSession();
+  if (session.isPending) return <div>Loading...</div>;
+  return <div>Hello, {session.data?.user.name}</div>;
+}
+```
+
+### Anonymous Access
+
+Enable RLS-based data access for unauthenticated users:
+
+```typescript
+const client = createClient<Database>({
+  auth: {
+    url: import.meta.env.VITE_NEON_AUTH_URL,
+    allowAnonymous: true, // Enable anonymous data access via RLS
+  },
+  dataApi: {
+    url: import.meta.env.VITE_NEON_DATA_API_URL,
+  },
+});
+
+// Works without signing in - uses anonymous token for RLS
+const { data: publicItems } = await client.from('public_items').select();
+```
+
+**Required SQL setup:**
+
+```sql
+-- Enable RLS on table
+ALTER TABLE public.public_items ENABLE ROW LEVEL SECURITY;
+
+-- Allow anonymous read access
+CREATE POLICY "anonymous_read" ON public.public_items
+  FOR SELECT TO anonymous USING (true);
+
+-- Grant permissions to roles
+GRANT SELECT ON public.public_items TO anonymous;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.public_items TO authenticated;
+```
+
+## Next.js Integration
+
+See [@neon/auth/NEXT-JS.md](https://github.com/neondatabase/neon-pkgs/blob/main/packages/auth/NEXT-JS.md) for full guide.
+
+**Environment variables:**
+
+```bash
+NEON_AUTH_BASE_URL=https://your-project.neon.tech
+NEON_AUTH_COOKIE_SECRET=your-secret-at-least-32-characters-long
+```
+
+**Quick setup:**
+
+```typescript
+// lib/auth/server.ts - Unified server instance
+import { createNeonAuth } from '@neon/neon-js/auth/next/server';
+
+export const auth = createNeonAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  cookies: {
+    secret: process.env.NEON_AUTH_COOKIE_SECRET!,
+    sessionDataTtl: 300,          // Optional: session data cache TTL in seconds (default: 300 = 5 min)
+    domain: '.example.com',       // Optional: for cross-subdomain cookies
+  },
+});
+
+// app/api/auth/[...path]/route.ts - API handler
+import { auth } from '@/lib/auth/server';
+export const { GET, POST } = auth.handler();
+
+// middleware.ts - Route protection
+import { auth } from '@/lib/auth/server';
+export default auth.middleware({ loginUrl: '/auth/sign-in' });
+
+// lib/auth/client.ts - Client-side auth
+"use client"
+import { createAuthClient } from '@neon/neon-js/auth/next';
+export const authClient = createAuthClient();
+
+// Server Components
+import { auth } from '@/lib/auth/server';
+// Server components using `auth` methods must be rendered dynamically
+export const dynamic = 'force-dynamic';
+const { data: session } = await auth.getSession();
+
+// Server Actions
+import { auth } from '@/lib/auth/server';
+await auth.signIn.email({ email, password });
+```
+
+## Database Querying
+
+### SELECT
+
+```typescript
+// Simple select
+const { data } = await client.from('users').select('id, name, email');
+
+// With filters
+const { data } = await client
+  .from('posts')
+  .select('*')
+  .eq('status', 'published')
+  .gt('views', 100)
+  .order('created_at', { ascending: false })
+  .limit(10);
+
+// Joins
+const { data } = await client
+  .from('posts')
+  .select(`
+    id,
+    title,
+    author:users(name, email)
+  `)
+  .eq('status', 'published');
+```
+
+### INSERT
+
+```typescript
+// Single row
+const { data } = await client
+  .from('users')
+  .insert({ name: 'Alice', email: 'alice@example.com' })
+  .select();
+
+// Multiple rows
+const { data } = await client
+  .from('users')
+  .insert([
+    { name: 'Bob', email: 'bob@example.com' },
+    { name: 'Carol', email: 'carol@example.com' },
+  ])
+  .select();
+```
+
+### UPDATE
+
+```typescript
+const { data } = await client
+  .from('users')
+  .update({ status: 'inactive' })
+  .eq('last_login', null)
+  .select();
+```
+
+### DELETE
+
+```typescript
+const { data } = await client
+  .from('users')
+  .delete()
+  .eq('status', 'deleted')
+  .select();
+```
+
+### RPC (Stored Procedures)
+
+```typescript
+const { data } = await client.rpc('get_user_stats', {
+  user_id: 123,
+  start_date: '2024-01-01',
+});
+```
+
+## Error Handling
+
+```typescript
+import { AuthRequiredError } from '@neon/neon-js';
+
+try {
+  const { data } = await client.from('posts').select();
+} catch (error) {
+  if (error instanceof AuthRequiredError) {
+    // User not authenticated - redirect to login
+    window.location.href = '/login';
+  }
+  // Handle PostgREST errors
+  if (error.code === 'PGRST301') {
+    // Row-level security violation - check RLS policies
+  }
+  if (error.code === '42501') {
+    // Permission denied - check GRANT statements
+  }
+}
+```
+
+## TypeScript
+
+Pass a `Database` type generated from your schema to `createClient`:
+
+```typescript
+import type { Database } from './types/database';
+
+const client = createClient<Database>({
+  auth: { url: process.env.NEON_AUTH_URL! },
+  dataApi: { url: process.env.NEON_DATA_API_URL! },
+});
+
+// Fully typed queries with autocomplete
+const { data } = await client
+  .from('users')
+  .select('id, name, email')
+  .eq('status', 'active');
+```
+
+## Configuration
+
+```typescript
+const client = createClient({
+  auth: {
+    url: 'https://your-auth-server.neon.tech/auth',
+    allowAnonymous: true,
+  },
+  dataApi: {
+    url: 'https://your-data-api.neon.tech/rest/v1',
+    options: {
+      db: { schema: 'public' },
+      global: { headers: { 'X-Custom-Header': 'value' } },
+    },
+  },
+});
+```
+
+## Critical Rules
+
+1. **Adapters are factories** - Call them: `SupabaseAuthAdapter()` not `SupabaseAuthAdapter`
+2. **React adapter import path** - Must use subpath: `@neon/neon-js/auth/react/adapters`
+3. **Anonymous access requires RLS** - Must configure database policies and grants
+4. **Type generation** - Regenerate your `Database` type after schema changes to keep types in sync
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `AuthRequiredError` | No session when querying | Sign in first or enable `allowAnonymous` |
+| `permission denied for table` | RLS blocking access | Add RLS policy + GRANT for role |
+| `adapter is not a function` | Missing `()` on adapter | Use `SupabaseAuthAdapter()` not `SupabaseAuthAdapter` |
+| OAuth popup blocked | Browser blocking popup | User must allow popups for domain |
+| `PGRST301` | JWT expired or invalid | Session expired - re-authenticate |
+| Cross-tab sync not working | Node.js environment | BroadcastChannel is browser-only feature |
+| Session always null | Cookies blocked | Check browser settings, try non-incognito |
+
+## Optional
+
+- [PostgREST Documentation](https://postgrest.org): Query syntax reference
+- [Better Auth Documentation](https://www.better-auth.com/docs): Authentication library docs
+- [Next.js Integration Guide](https://github.com/neondatabase/neon-pkgs/blob/main/packages/auth/NEXT-JS.md): Full Next.js setup

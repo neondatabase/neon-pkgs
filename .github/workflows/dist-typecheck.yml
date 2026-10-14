@@ -59,6 +59,12 @@ jobs:
                       skipConsumerCompile: true
                     - name: "@neon/postgrest-js"
                       dir: postgrest-js
+                    - name: "@neon/neon-js"
+                      dir: neon-js
+                      # The consumer compile follows our re-exports into better-auth's own .d.ts files (bun:sqlite,
+                      # node:sqlite, organization routes) and `next/server`, which do
+                      # not compile under skipLibCheck:false. See issue #765.
+                      skipConsumerCompile: true
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0

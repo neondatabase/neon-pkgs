@@ -30,6 +30,16 @@
 	},
 	"overrides": [
 		{
+			"includes": ["packages/neon-js/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noExplicitAny": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["packages/cli/**"],
 			"linter": {
 				"rules": {
