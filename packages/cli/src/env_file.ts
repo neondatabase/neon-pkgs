@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { parseEnv } from "node:util";
 import { type ProjectLocation, projectDir } from "./project.js";
 
 /**
@@ -152,9 +153,15 @@ export const readEnvFile = (path: string): Record<string, string> => {
  * (e.g. a `neon.ts` whose function `env` values come from `process.env.X`). Existing
  * `process.env` entries are **not** overridden — an already-exported var wins over the
  * file, matching dotenv's default. Returns the keys that were applied.
+ *
+ * Parsed with Node's own dotenv parser, so inline comments and multiline quoted values
+ * arrive as the application's own loader would read them; a preloaded value wins over it.
  */
 export const loadEnvFileIntoProcess = (path: string): string[] => {
-	const parsed = readEnvFile(path);
+	if (!existsSync(path)) {
+		throw new Error(`Env file not found: ${path}`);
+	}
+	const parsed = parseEnv(readFileSync(path, "utf8"));
 	const applied: string[] = [];
 	for (const [key, value] of Object.entries(parsed)) {
 		if (process.env[key] === undefined) {
