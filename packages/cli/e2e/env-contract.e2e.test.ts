@@ -21,7 +21,7 @@ const DOTENV = join(FIXTURE, ".env.local");
 const READY_TIMEOUT_MS = 90_000;
 
 /** Variables only one side can have: the function's own URL, and its declared env. */
-type Runtime = "pulled" | "dev" | "deployed" | "devSource" | "devExplicit";
+type Runtime = "pulled" | "dev" | "deployed" | "devExplicit";
 
 const FUNCTION_KEYS = new Set([
 	"NEON_FUNCTION_PROBE_BASE_URL",
@@ -204,12 +204,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 			}),
 		);
 		const slugUrl = /probe\s+(http:\/\/localhost:\d+)/;
-		const anyUrl = /(http:\/\/localhost:\d+)/;
 		collected.dev = await devReport([], slugUrl);
-		collected.devSource = await devReport(
-			["--source", "./probe.ts"],
-			anyUrl,
-		);
 		const explicit = join(tmp, "explicit.env");
 		writeFileSync(explicit, "PROBE_SETTING=from-explicit\n");
 		collected.devExplicit = await devReport(["--env", explicit], slugUrl);
@@ -236,10 +231,6 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 	] as const)('parseEnv(config, "probe") succeeds inside the function (%s)', (where) => {
 		expect(namespaces(report(where), "scoped")).toContain("function");
 		expect(report(where).values.PROBE_SETTING).toBe("probe-value");
-	});
-
-	it("neon dev --source passes .env.local to the function", () => {
-		expect(report("devSource").values.PROBE_SETTING).toBe("probe-value");
 	});
 
 	it("neon dev --env loads that file instead of .env.local", () => {

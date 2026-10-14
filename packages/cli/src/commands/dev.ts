@@ -105,7 +105,8 @@ export const builder = (argv: yargs.Argv) =>
 				"Before neon.ts is evaluated, `dev` loads the project's .env.local and .env into",
 				"the environment, so Function env values that read process.env resolve. A",
 				"variable already set wins, then .env.local, then .env. `--env <file>` loads",
-				"only that file instead. Functions also inherit the loaded variables.",
+				"only that file instead. Functions get only the keys their neon.ts env",
+				"declares, as on deploy.",
 				"",
 				"`dev` reuses the branch credential behind the AI Gateway and object storage from",
 				"the file `env pull` writes, and never writes to it. With no such file it issues a",
@@ -191,13 +192,15 @@ export const reportDevCredential = (
 };
 
 export const handler = async (props: DevProps): Promise<void> => {
-	// Credential reuse keeps reading only the file `env pull` writes. Mixing in .env.local
-	// could pair a pulled AWS_ACCESS_KEY_ID with a stale AWS_SECRET_ACCESS_KEY.
-	const credentialBaseEnv = { ...process.env };
+	// Captured before the dotenv files load. Credential reuse keeps reading only the file
+	// `env pull` writes (mixing in .env.local could pair a pulled AWS_ACCESS_KEY_ID with a
+	// stale secret), and Function children get only their declared env from the files, as
+	// deployed, so an app's own dotenv loader still parses the rest.
+	const shellEnv = { ...process.env };
 	loadDevEnvFiles(props, process.cwd());
 
 	if (props.source !== undefined) {
-		await runSingleSource(props, credentialBaseEnv);
+		await runSingleSource(props, shellEnv);
 		return;
 	}
 
@@ -210,7 +213,7 @@ export const handler = async (props: DevProps): Promise<void> => {
 		);
 	}
 
-	await runFromConfig(props, credentialBaseEnv);
+	await runFromConfig(props, shellEnv);
 };
 
 /**
@@ -243,7 +246,7 @@ export const loadDevEnvFiles = (
 /** Single-function mode: serve exactly the `--source` path (legacy behavior). */
 const runSingleSource = async (
 	props: DevProps,
-	credentialBaseEnv: NodeJS.ProcessEnv,
+	shellEnv: NodeJS.ProcessEnv,
 ): Promise<void> => {
 	const source = resolve(process.cwd(), props.source as string);
 	if (!existsSync(source)) {
@@ -256,7 +259,7 @@ const runSingleSource = async (
 		skipped,
 		credential,
 	} = await resolveDevEnv(
-		devEnvContext(props, branchId, process.cwd(), credentialBaseEnv),
+		devEnvContext(props, branchId, process.cwd(), shellEnv),
 	);
 	reportDevCredential(credential);
 
@@ -271,7 +274,7 @@ const runSingleSource = async (
 		slug: null,
 		source,
 		bundleDir: devBundleDir(process.cwd()),
-		childEnv: buildChildEnv({ ...neonEnv, ...overlay }, port),
+		childEnv: buildChildEnv({ ...neonEnv, ...overlay }, port, shellEnv),
 		label: null,
 		envSummary: { neon: Object.keys(neonEnv), fn: [] },
 	};
@@ -289,7 +292,7 @@ const runSingleSource = async (
  */
 const runFromConfig = async (
 	props: DevProps,
-	credentialBaseEnv: NodeJS.ProcessEnv,
+	shellEnv: NodeJS.ProcessEnv,
 ): Promise<void> => {
 	const branchId = await resolveBranchId(props);
 	const resolved = await resolveFunctionsFromConfig(
@@ -318,7 +321,7 @@ const runFromConfig = async (
 		skipped,
 		credential,
 	} = await resolveDevEnv(
-		devEnvContext(props, branchId, process.cwd(), credentialBaseEnv),
+		devEnvContext(props, branchId, process.cwd(), shellEnv),
 	);
 	reportDevCredential(credential);
 
@@ -326,6 +329,8 @@ const runFromConfig = async (
 		functions,
 		neonEnv,
 		DEFAULT_PORT_BASE,
+		new Map(),
+		shellEnv,
 	);
 
 	// Re-derive the units from neon.ts on demand so the config watcher can hot-add/remove
@@ -343,6 +348,7 @@ const runFromConfig = async (
 			neonEnv,
 			searchBase,
 			keepPorts,
+			shellEnv,
 		);
 	};
 
@@ -381,6 +387,7 @@ export const planFunctionsToUnits = async (
 	neonEnv: Record<string, string>,
 	searchBase: number,
 	keepPorts: ReadonlyMap<string, number> = new Map(),
+	inheritedEnv: NodeJS.ProcessEnv = process.env,
 ): Promise<ServedUnit[]> => {
 	const reserved = new Set<number>();
 	const portBySlug = new Map<string, number>();
@@ -417,7 +424,13 @@ export const planFunctionsToUnits = async (
 	);
 	const branchEnv = { ...neonEnv, ...overlay };
 	return assigned.map(({ fn, port }) =>
-		plannedToUnit(fn, branchEnv, { mode: "explicit", port }, overlay),
+		plannedToUnit(
+			fn,
+			branchEnv,
+			{ mode: "explicit", port },
+			overlay,
+			inheritedEnv,
+		),
 	);
 };
 
@@ -559,9 +572,14 @@ const plannedToUnit = (
 	fn: PlannedFunction,
 	branchEnv: Record<string, string>,
 	port: PortSpec,
-	overlay: Record<string, string> = {},
+	overlay: Record<string, string>,
+	inheritedEnv: NodeJS.ProcessEnv,
 ): ServedUnit => {
-	const childEnv = buildChildEnv({ ...branchEnv, ...fn.env }, port);
+	const childEnv = buildChildEnv(
+		{ ...branchEnv, ...fn.env },
+		port,
+		inheritedEnv,
+	);
 	return {
 		slug: fn.slug,
 		source: fn.source,
@@ -596,8 +614,9 @@ const plannedToUnit = (
 const buildChildEnv = (
 	neonEnv: Record<string, string>,
 	port: PortSpec,
+	inheritedEnv: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv => {
-	const env: NodeJS.ProcessEnv = { ...process.env, ...neonEnv };
+	const env: NodeJS.ProcessEnv = { ...inheritedEnv, ...neonEnv };
 	delete env.NEON_DEV_PORT;
 	delete env.NEON_DEV_PORT_BASE;
 	if (port.mode === "explicit") {

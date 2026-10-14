@@ -296,6 +296,28 @@ describe("local function URLs", () => {
 		expect(units[0]?.childEnv.DATABASE_URL).toBe("postgres://prod");
 	});
 
+	it("passes a dotenv key to the child only when the function declares it", async () => {
+		const [unit] = await planFunctionsToUnits(
+			[
+				{
+					slug: "hello",
+					name: "Hello",
+					source: "/fns/hello.ts",
+					port: 8787,
+					env: { DECLARED: "from-neon-ts" },
+				},
+			],
+			{},
+			8787,
+			new Map(),
+			{ FROM_SHELL: "shell" },
+		);
+
+		expect(unit?.childEnv.DECLARED).toBe("from-neon-ts");
+		expect(unit?.childEnv.FROM_SHELL).toBe("shell");
+		expect(unit?.childEnv.PATH).toBeUndefined();
+	});
+
 	it("keeps a search-mode port and configKey when replanned with keepPorts", async () => {
 		const hello = {
 			slug: "hello",
