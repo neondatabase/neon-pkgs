@@ -53,9 +53,9 @@ export type SubscribeDependencies = {
 type SubscribeEvent =
 	| { type: "status"; state: LiveQueryState }
 	| { type: "snapshot"; rows: readonly QueryRow[] }
-	| { type: "reset"; rows: readonly RawLiveQueryRow<QueryRow>[] }
+	| { type: "rows"; rows: readonly RawLiveQueryRow<QueryRow>[] }
 	| {
-			type: "batch";
+			type: "changes";
 			txids: readonly string[];
 			changes: readonly LiveQueryChange<QueryRow>[];
 	  };
@@ -69,7 +69,7 @@ export const builder = (argv: yargs.Argv) =>
 		})
 		.options({
 			changes: {
-				describe: "Show raw resets and transaction batches",
+				describe: "Show raw rows and changes events",
 				type: "boolean",
 				default: false,
 			},
@@ -80,7 +80,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.example(
 			'$0 realtime subscribe --changes "SELECT * FROM items"',
-			"Print raw reset and delta events",
+			"Print raw rows and changes events",
 		)
 		.epilogue(
 			"The subscription runs until interrupted. Terminal output is an append-only snapshot and transaction log; JSON output is newline-delimited; YAML output uses one document per event.",
@@ -254,8 +254,8 @@ const createRenderer = (
 			return;
 		}
 		out.write("\n");
-		if (event.type === "reset" && !props.changes) {
-			const label = hasBaseline ? "Reset" : "Initial snapshot";
+		if (event.type === "rows" && !props.changes) {
+			const label = hasBaseline ? "Rows" : "Initial snapshot";
 			hasBaseline = true;
 			rowsById.clear();
 			for (const { rowId, row } of event.rows) rowsById.set(rowId, row);
@@ -266,8 +266,8 @@ const createRenderer = (
 			);
 			return;
 		}
-		if (event.type === "batch" && !props.changes) {
-			renderHumanBatch(out, event, rowsById, now);
+		if (event.type === "changes" && !props.changes) {
+			renderHumanChanges(out, event, rowsById, now);
 			return;
 		}
 		renderTableEvent(out, event, now);
@@ -283,7 +283,7 @@ const renderTableEvent = (
 		renderMaterializedRows(out, event.rows, `${timestamp(now)} Snapshot`);
 		return;
 	}
-	if (event.type === "reset") {
+	if (event.type === "rows") {
 		const rows = event.rows.map(({ rowId, row }) => ({
 			row_id: rowId,
 			row,
@@ -292,8 +292,8 @@ const renderTableEvent = (
 			out,
 			rows,
 			["row_id", "row"],
-			`${timestamp(now)} Reset · ${rowCount(rows.length)}`,
-			"Reset contains no rows.",
+			`${timestamp(now)} Rows · ${rowCount(rows.length)}`,
+			"Rows event contains no rows.",
 		);
 		return;
 	}
@@ -307,7 +307,7 @@ const renderTableEvent = (
 		rows,
 		["type", "row_id", "row"],
 		`${timestamp(now)} ${transactionLabel(event.txids)} · ${rawChangeSummary(event.changes)}`,
-		"Batch contains no row changes.",
+		"Changes event contains no row changes.",
 	);
 };
 
@@ -349,9 +349,9 @@ type ClassifiedChange = {
 	row?: QueryRow;
 };
 
-const renderHumanBatch = (
+const renderHumanChanges = (
 	out: NodeJS.WritableStream,
-	event: Extract<SubscribeEvent, { type: "batch" }>,
+	event: Extract<SubscribeEvent, { type: "changes" }>,
 	rowsById: Map<string, QueryRow>,
 	now: () => Date,
 ): void => {
@@ -361,10 +361,10 @@ const renderHumanBatch = (
 	);
 	const updated = changes.filter((change) => change.operation === "~ update");
 	const deleted = changes.filter((change) => change.operation === "- delete");
-	const rowFieldsInBatch = rowFields(
+	const rowFieldsInChanges = rowFields(
 		changes.flatMap((change) => (change.row ? [change.row] : [])),
 	);
-	const operationField = uniqueOperationField(rowFieldsInBatch);
+	const operationField = uniqueOperationField(rowFieldsInChanges);
 	const rows = changes.map((change) => ({
 		...(change.row ?? {}),
 		[operationField]: change.operation,
@@ -372,7 +372,7 @@ const renderHumanBatch = (
 	renderRows(
 		out,
 		rows,
-		[operationField, ...rowFieldsInBatch],
+		[operationField, ...rowFieldsInChanges],
 		`${timestamp(now)} ${transactionLabel(event.txids)} · +${inserted.length} ~${updated.length} -${deleted.length}`,
 		"Transaction contains no row changes.",
 	);
@@ -494,12 +494,12 @@ const consumeChanges = async (
 			subscription.onUpdate((update) => {
 				if (update.type === "rows") {
 					attempt(fail, () =>
-						render({ type: "reset", rows: update.rows }),
+						render({ type: "rows", rows: update.rows }),
 					);
 				} else {
 					attempt(fail, () =>
 						render({
-							type: "batch",
+							type: "changes",
 							txids: update.batch.txids,
 							changes: update.changes,
 						}),

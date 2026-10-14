@@ -70,13 +70,13 @@ class FakeSubscription implements MaterializedLiveQuerySubscription<Row> {
 		this.unsubscribed = true;
 	};
 
-	emitReset(rows: readonly RawLiveQueryRow<Row>[]): void {
+	emitRows(rows: readonly RawLiveQueryRow<Row>[]): void {
 		this.data = rows.map(({ row }) => row);
 		const update = { type: "rows", rows } as const;
 		for (const listener of this.updateListeners) listener(update);
 	}
 
-	emitBatch(
+	emitChanges(
 		data: readonly Row[],
 		changes: readonly LiveQueryChange<Row>[],
 		txids: readonly string[],
@@ -211,10 +211,10 @@ describe("subscribe command", () => {
 		);
 		await setupResult.ready;
 
-		subscription.emitReset([
+		subscription.emitRows([
 			{ rowId: "row-1", row: { id: 1, value: "first" } },
 		]);
-		subscription.emitBatch(
+		subscription.emitChanges(
 			[
 				{ id: 1, value: "first" },
 				{ id: 2, value: "second" },
@@ -269,7 +269,7 @@ describe("subscribe command", () => {
 		expect(setupResult.closeCount()).toBe(1);
 	});
 
-	it("renders raw resets and transaction batches with --changes", async () => {
+	it("renders raw rows and changes events with --changes", async () => {
 		const subscription = new FakeSubscription();
 		const setupResult = setup(subscription);
 		const output = capture();
@@ -280,10 +280,10 @@ describe("subscribe command", () => {
 		);
 		await setupResult.ready;
 
-		subscription.emitReset([
+		subscription.emitRows([
 			{ rowId: "row-1", row: { id: 1, value: "first" } },
 		]);
-		subscription.emitBatch(
+		subscription.emitChanges(
 			[],
 			[{ type: "remove", rowId: "row-1" }],
 			["43"],
@@ -300,7 +300,7 @@ describe("subscribe command", () => {
 				.map((line) => JSON.parse(line)),
 		).toEqual([
 			{
-				type: "reset",
+				type: "rows",
 				rows: [
 					{
 						rowId: "row-1",
@@ -309,7 +309,7 @@ describe("subscribe command", () => {
 				],
 			},
 			{
-				type: "batch",
+				type: "changes",
 				txids: ["43"],
 				changes: [{ type: "remove", rowId: "row-1" }],
 			},
@@ -330,13 +330,13 @@ describe("subscribe command", () => {
 		);
 		await setupResult.ready;
 
-		subscription.emitReset([
+		subscription.emitRows([
 			{ rowId: "row-1", row: { id: 1, value: "first" } },
 			{ rowId: "row-2", row: { id: 2, value: "to delete" } },
 			{ rowId: "row-4", row: { id: 4, value: "unchanged" } },
 		]);
 		subscription.emitState({ status: "live", error: undefined });
-		subscription.emitBatch(
+		subscription.emitChanges(
 			[
 				{ id: 1, value: "updated" },
 				{ id: 3, value: "inserted" },
@@ -358,8 +358,8 @@ describe("subscribe command", () => {
 			["42"],
 		);
 		subscription.emitState({ status: "stale", error: undefined });
-		subscription.emitReset([
-			{ rowId: "new-row", row: { id: 5, value: "after reset" } },
+		subscription.emitRows([
+			{ rowId: "new-row", row: { id: 5, value: "replacement" } },
 		]);
 		controller.abort();
 		await run;
@@ -387,7 +387,7 @@ describe("subscribe command", () => {
 		expect(text).toContain(
 			"[2026-10-13T12:34:56.000Z] Stale — showing the last known result.",
 		);
-		expect(text).toContain("[2026-10-13T12:34:56.000Z] Reset · 1 row");
+		expect(text).toContain("[2026-10-13T12:34:56.000Z] Rows · 1 row");
 		expect(text.match(/Initial snapshot/g)).toHaveLength(1);
 		expect(text.match(/unchanged/g)).toHaveLength(1);
 		expect(text).not.toContain("row-1");
