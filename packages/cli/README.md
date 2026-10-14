@@ -1173,6 +1173,19 @@ neon inspect db stalled-queries
 neon inspect db stalled-queries --output json
 ```
 
+## Generate TypeScript types (`data-api gen-types`)
+
+`neon data-api gen-types` reads a database's schema and writes a `Database` type for use with `@neon/postgrest-js` / `@neon/neon-js` (the same generator as `neon-js gen-types`, which it replaces).
+
+```bash
+neon data-api gen-types                                   # linked project, default branch, database and role
+neon data-api gen-types --project-id <id> --branch main --database neondb
+neon data-api gen-types --db-url "postgresql://user:pass@host/db"   # any Postgres; no Neon sign-in needed
+neon data-api gen-types --out-file src/types/db.ts -s public -s auth
+```
+
+Without `--db-url` the connection is resolved like [`connection-string`](#commands): `--project-id`, `--branch`, `--database` and `--role-name`, falling back to the linked project. Flags carried over from `neon-js gen-types`: `--db-url`, `--schema` / `-s` (repeatable, default `public`), `--postgrest-v9-compat`, `--query-timeout`. `--output` / `-o` is the CLI-wide output format, so the file path moved to `--out-file` (default `database.types.ts`).
+
 ## Logs (`logs`)
 
 `neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, and Postgres computes. **Logs are currently available only for projects in `aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, and `aws-ap-southeast-1`.**
@@ -1502,6 +1515,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
+| data-api                                                                   | `create`, `get`, `update`, `refresh-schema`, `delete`, `gen-types`                                           | Manage the Data API, generate types |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | triggers                                                                   | `list`, `get`, `create`, `update`, `enable`, `disable`, `delete`                                             | Manage function triggers           |
 | credentials                                                                | `list`, `create`, `reveal`, `rotate`, `revoke`                                                               | Manage branch credentials          |

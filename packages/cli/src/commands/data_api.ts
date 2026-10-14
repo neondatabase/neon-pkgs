@@ -10,7 +10,7 @@ import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	branchIdFromProps,
-	fillSingleProject,
+	fillSingleProjectUnlessDbUrl,
 	resolveSingleDatabase,
 } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
@@ -95,7 +95,7 @@ export const builder = (argv: yargs.Argv) =>
 				type: "string",
 			},
 		})
-		.middleware(fillSingleProject as any)
+		.middleware(fillSingleProjectUnlessDbUrl as any)
 		.command(
 			"create",
 			"Provision the Neon Data API for a database",
@@ -166,6 +166,54 @@ export const builder = (argv: yargs.Argv) =>
 			"Tear down the Neon Data API for a database",
 			(yargs) => yargs,
 			(args) => deleteDataApi(args as any),
+		)
+		.command(
+			"gen-types",
+			"Generate TypeScript types from the database schema",
+			(yargs) =>
+				yargs
+					.options({
+						"db-url": {
+							type: "string",
+							describe:
+								"Postgres connection string. Skips the Neon API; defaults to the connection for --project-id, --branch, --role-name and --database",
+						},
+						"role-name": {
+							type: "string",
+							describe:
+								"Role to connect as. Ignored with --db-url",
+						},
+						"out-file": {
+							type: "string",
+							default: "database.types.ts",
+							describe: "File to write the types to",
+						},
+						schema: {
+							alias: "s",
+							type: "array",
+							string: true,
+							default: ["public"],
+							describe: "Schema to include (repeatable)",
+						},
+						"postgrest-v9-compat": {
+							type: "boolean",
+							default: false,
+							describe:
+								"Disable one-to-one relationship detection",
+						},
+						"query-timeout": {
+							type: "string",
+							describe: "Query timeout, such as 30s, 1m or 90s",
+						},
+					})
+					.example(
+						"$0 data-api gen-types --db-url postgresql://user:pass@host/db",
+						"Generate types from any Postgres",
+					),
+			async (args) => {
+				const { genTypes } = await import("./data_api_gen_types.js");
+				await genTypes(args as any);
+			},
 		);
 
 export const handler = (args: yargs.Argv) => {
