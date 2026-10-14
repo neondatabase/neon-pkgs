@@ -14,8 +14,8 @@ jobs:
     typecheck-dist:
         name: Check ${{ matrix.name }} distributed types
         runs-on:
-            group: databricks-ghec-public-repos-runner-group-small
-            labels: linux-ubuntu-latest-public-2core-8gb
+            group: databricks-ghec-untrusted-runner-group
+            labels: linux-ubuntu-latest-untrusted-2core-8gb
         strategy:
             matrix:
                 include:
