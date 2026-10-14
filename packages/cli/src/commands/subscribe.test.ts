@@ -196,7 +196,7 @@ const setup = (subscription: FakeSubscription) => {
 };
 
 describe("subscribe command", () => {
-	it("registers the top-level query and raw-change flag", () => {
+	it("registers the nested query and raw-change flag", () => {
 		expect(command).toBe("subscribe <query>");
 		expect(commandDescription).toContain("live SQL query");
 		const options = (builder(yargs([])) as any).getOptions();

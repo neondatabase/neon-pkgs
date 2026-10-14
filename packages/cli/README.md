@@ -308,10 +308,10 @@ regression + TAP tests.
 
 ## Subscribe to a Realtime query
 
-`neon subscribe` streams a live SQL query until interrupted:
+`neon realtime subscribe` streams a live SQL query until interrupted:
 
 ```bash
-neon subscribe "SELECT id, title, completed FROM realtime_todos ORDER BY id"
+neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER BY id"
 ```
 
 The default terminal output is append-only. It identifies the selected project,
@@ -325,10 +325,10 @@ For scripts and agents, JSON output is a JSON Lines stream with one complete eve
 per line. YAML output uses one document per event:
 
 ```bash
-neon subscribe --changes --output json "SELECT * FROM realtime_todos" |
+neon realtime subscribe --changes --output json "SELECT * FROM realtime_todos" |
   jq --unbuffered 'select(.type == "batch")'
 
-neon subscribe --output yaml "SELECT * FROM realtime_todos"
+neon realtime subscribe --output yaml "SELECT * FROM realtime_todos"
 ```
 
 Machine-readable output retains the event stream: without `--changes`, each event is
