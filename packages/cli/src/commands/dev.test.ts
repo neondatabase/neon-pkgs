@@ -444,6 +444,16 @@ describe("local function URLs", () => {
 		expect(port.mode).toBe("search");
 	});
 
+	it("picks the port from the shell, not from a PORT the dotenv files loaded", async () => {
+		vi.stubEnv("PORT", "4321 # from .env.local");
+		const { port } = await sourceFunctionUrlOverlay(
+			undefined,
+			undefined,
+			{},
+		);
+		expect(port.mode).toBe("search");
+	});
+
 	it("uses neon.ts dev.port when --source matches and --port is omitted", async () => {
 		vi.stubEnv("PORT", "");
 		const hello = {

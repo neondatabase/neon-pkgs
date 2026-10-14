@@ -268,7 +268,11 @@ const runSingleSource = async (
 		source,
 		props.contextFile,
 	);
-	const { overlay, port } = await sourceFunctionUrlOverlay(match, props.port);
+	const { overlay, port } = await sourceFunctionUrlOverlay(
+		match,
+		props.port,
+		shellEnv,
+	);
 
 	const unit: ServedUnit = {
 		slug: null,
@@ -455,8 +459,9 @@ export const localFunctionUrlEnv = (
 export const sourceFunctionUrlOverlay = async (
 	match: PlannedFunction | undefined,
 	cliPort: number | undefined,
+	shellEnv: NodeJS.ProcessEnv = process.env,
 ): Promise<{ overlay: Record<string, string>; port: PortSpec }> => {
-	const portSpec = portFromProps(cliPort);
+	const portSpec = portFromProps(cliPort, shellEnv);
 	if (match === undefined) {
 		return { overlay: {}, port: portSpec };
 	}
@@ -540,10 +545,13 @@ type PortSpec =
 	// Search upward from `from` via NEON_DEV_PORT_BASE.
 	| { mode: "search"; from: number };
 
-const portFromProps = (port: number | undefined): PortSpec => {
+const portFromProps = (
+	port: number | undefined,
+	shellEnv: NodeJS.ProcessEnv,
+): PortSpec => {
 	if (port !== undefined) return { mode: "explicit", port };
-	if (process.env.PORT !== undefined && process.env.PORT !== "") {
-		return { mode: "explicit", port: Number(process.env.PORT) };
+	if (shellEnv.PORT !== undefined && shellEnv.PORT !== "") {
+		return { mode: "explicit", port: Number(shellEnv.PORT) };
 	}
 	return { mode: "search", from: DEFAULT_PORT_BASE };
 };
