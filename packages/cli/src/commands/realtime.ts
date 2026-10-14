@@ -4,7 +4,10 @@ import { retryOnLock } from "../api.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
-import * as subscribeCommand from "./subscribe.js";
+import {
+	builder as subscribeBuilder,
+	handler as subscribeHandler,
+} from "./subscribe.js";
 
 export type RealtimeEnableProps = BranchScopeProps & {
 	allowedOrigins?: readonly string[];
@@ -81,7 +84,12 @@ export const builder = (argv: yargs.Argv) =>
 			(yargs) => yargs.strict(),
 			(args) => disable(args as unknown as BranchScopeProps),
 		)
-		.command(subscribeCommand as never);
+		.command(
+			"subscribe <query>",
+			"Subscribe to a live SQL query with Neon Realtime",
+			subscribeBuilder,
+			subscribeHandler,
+		);
 
 export const handler = (_args: yargs.Arguments) => {
 	/* Yargs requires a handler for command groups. */

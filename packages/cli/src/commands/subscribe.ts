@@ -60,9 +60,6 @@ type SubscribeEvent =
 			changes: readonly LiveQueryChange<QueryRow>[];
 	  };
 
-export const command = "subscribe <query>";
-export const describe = "Subscribe to a live SQL query with Neon Realtime";
-
 export const builder = (argv: yargs.Argv) =>
 	argv
 		.usage('$0 realtime subscribe "<query>" [options]')
@@ -90,7 +87,8 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.strict();
 
-export const handler = async (props: SubscribeProps): Promise<void> => {
+export const handler = async (args: yargs.Arguments): Promise<void> => {
+	const props = args as unknown as SubscribeProps;
 	const controller = new AbortController();
 	const stop = (exitCode: number) => {
 		controller.abort();
