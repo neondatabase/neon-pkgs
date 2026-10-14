@@ -1,5 +1,11 @@
 # neon
 
+## 8.4.4
+
+### Patch Changes
+
+- 37e0381: When a successful Neon API response has a body that cannot be parsed, commands now fail with `Could not read the Neon API response (<status>) to <path>: <reason>` instead of crashing with `TypeError: Cannot read properties of undefined`.
+
 ## 8.4.3
 
 ### Patch Changes

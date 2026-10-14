@@ -6,6 +6,30 @@ import {
 } from "../test_utils/fixtures";
 
 describe("connection_string", () => {
+	test("reports a 200 response whose body is not valid JSON", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"connection-string",
+				"br-sunny-branch-123456",
+				"--project-id",
+				"test",
+				"--role-name",
+				"neondb_owner",
+			],
+			{
+				mockDir: "unparseable-databases",
+				snapshot: false,
+				code: 1,
+				stderr: expect.stringMatching(
+					/ERROR: Could not read the Neon API response \(200 OK\) to \/projects\/test\/branches\/br-sunny-branch-123456\/databases: the body is not valid JSON/,
+				),
+			},
+		);
+		expect(stdout).toBe("");
+	});
+
 	test("picks neondb_owner over the Data API roles", async ({
 		testCliCommand,
 	}) => {

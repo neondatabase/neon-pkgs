@@ -116,6 +116,20 @@ export class NeonApiError extends Error {
 	}
 }
 
+/**
+ * A 2xx response whose body could not be read or parsed. The request succeeded, so this is
+ * reported to Sentry as well as counted as an API error.
+ */
+export class UnreadableResponseError extends NeonApiError {
+	constructor(
+		message: string,
+		init: ConstructorParameters<typeof NeonApiError>[1],
+	) {
+		super(message, init);
+		this.name = "UnreadableResponseError";
+	}
+}
+
 /** Narrow an unknown error to a {@link NeonApiError}. */
 export function isNeonApiError(err: unknown): err is NeonApiError {
 	return err instanceof NeonApiError;
@@ -277,6 +291,30 @@ function httpError(response: Response, body: unknown): NeonApiError {
 			data: body,
 			headers: headersToObject(response.headers),
 			requestPath,
+		},
+	);
+}
+
+/**
+ * The cause's message is left out: `JSON.parse` quotes the input, and the body can carry a
+ * password or token that would reach stderr and analytics.
+ */
+function unreadableBodyError(
+	response: Response,
+	cause: unknown,
+): UnreadableResponseError {
+	const base = httpError(response, undefined);
+	const reason =
+		cause instanceof SyntaxError
+			? "the body is not valid JSON"
+			: "the body could not be read";
+	return new UnreadableResponseError(
+		`Could not read the Neon API response (${response.status} ${response.statusText}) to ${base.requestPath ?? "the request"}: ${reason}`,
+		{
+			status: base.status,
+			statusText: base.statusText,
+			headers: base.headers,
+			requestPath: base.requestPath,
 		},
 	);
 }
@@ -483,6 +521,11 @@ export const getApiClient = ({
 				response,
 				rawErrorBody(result.error) ?? result.data,
 			);
+		}
+		// The generated client reports a 2xx body it could not read or parse here, next to
+		// an `ok` response and no `data`.
+		if (result.error !== undefined && result.error !== null) {
+			throw unreadableBodyError(response, rawErrorBody(result.error));
 		}
 		return {
 			data: result.data as T,

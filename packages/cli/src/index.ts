@@ -13,6 +13,7 @@ import {
 	isNeonApiError,
 	messageFromBody,
 	type NeonApiClient,
+	UnreadableResponseError,
 } from "./api.js";
 import { AuthRefreshError, defaultClientID } from "./auth.js";
 import { getAuthContext } from "./auth_context.js";
@@ -336,6 +337,8 @@ async function handleError(
 			const serverMessage = messageFromBody(err.data);
 			if (serverMessage) {
 				log.error(serverMessage);
+			} else if (err instanceof UnreadableResponseError) {
+				log.error(err.message);
 			} else {
 				// A response without a message (e.g. a 404 for an unknown route) would
 				// otherwise exit 1 with nothing on stderr.
