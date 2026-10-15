@@ -69,6 +69,9 @@ const DEPLOY_FREE_SERVICES: ReadonlySet<NeonService> = new Set([
 	"functions",
 ]);
 
+export const needsDeploy = (declared: readonly NeonService[]): boolean =>
+	declared.some((service) => !DEPLOY_FREE_SERVICES.has(service));
+
 export type InitEnvPull =
 	| { kind: "skip" }
 	/** Resolve from neon.ts when present, else from the branch's live state. */
@@ -94,7 +97,7 @@ export const initEnvPullAfterConfig = (input: {
 	if (input.claimable && input.declared.length > 0) {
 		return { kind: "skip" };
 	}
-	if (input.declared.every((service) => DEPLOY_FREE_SERVICES.has(service))) {
+	if (!needsDeploy(input.declared)) {
 		return { kind: "policy" };
 	}
 	return {

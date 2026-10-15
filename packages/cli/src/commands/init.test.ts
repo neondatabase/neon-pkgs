@@ -1673,7 +1673,7 @@ describe("init handler", () => {
 		expect(out).not.toContain("neon dev\n");
 	});
 
-	test("Functions next to a service awaiting a deploy keep their URL and run after checkout", async () => {
+	test("Functions next to a service awaiting a deploy keep their URL and run after deploy", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fn-auth-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -1705,7 +1705,7 @@ describe("init handler", () => {
 			}),
 		);
 		const out = stdoutText(stdout);
-		expect(out.indexOf("neon checkout dev --create")).toBeLessThan(
+		expect(out.indexOf("neon deploy")).toBeLessThan(
 			out.indexOf("neon dev\n"),
 		);
 	});
@@ -1757,8 +1757,12 @@ describe("init handler", () => {
 		);
 		const out = stdoutText(stdout);
 		expect(out).toContain("Neon agent skills");
-		expect(out).toContain("neon dev\n");
-		expect(out).toContain("neon checkout dev --create");
+		expect(out.indexOf("neon checkout dev --create")).toBeLessThan(
+			out.indexOf("neon dev\n"),
+		);
+		expect(out.indexOf("neon dev\n")).toBeLessThan(
+			out.indexOf("neon config plan"),
+		);
 	});
 
 	test("link still gets env pulled when neon.ts is declined", async () => {

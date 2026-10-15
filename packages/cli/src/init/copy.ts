@@ -196,28 +196,32 @@ export const skippedLinkNext = (): string[] => [
 	`${getCliName()} link`,
 ];
 
+/** `needsDeploy`: `neon dev` fails until the branch has every declared service. */
 export const extraServicesNext = (input: {
 	skills: boolean;
 	functions: boolean;
-}): string[] => [
-	...(input.skills
-		? [
-				"Set up the services declared in neon.ts with your coding agent. The Neon agent skills cover best practices for each one.",
-				"",
-			]
-		: []),
-	"Create a development branch from neon.ts and switch to it:",
-	`${getCliName()} checkout dev --create`,
-	"",
-	...(input.functions
-		? ["Run Neon Functions locally:", `${getCliName()} dev`, ""]
-		: []),
-	"Preview the changes:",
-	`${getCliName()} config plan`,
-	"",
-	"Deploy when the changes and target are correct. Deploy also pulls the branch's environment variables:",
-	`${getCliName()} deploy`,
-];
+	needsDeploy: boolean;
+}): string[] => {
+	const dev = ["Run Neon Functions locally:", `${getCliName()} dev`];
+	return [
+		...(input.skills
+			? [
+					"Set up the services declared in neon.ts with your coding agent. The Neon agent skills cover best practices for each one.",
+					"",
+				]
+			: []),
+		"Create a development branch from neon.ts and switch to it:",
+		`${getCliName()} checkout dev --create`,
+		"",
+		...(input.functions && !input.needsDeploy ? [...dev, ""] : []),
+		"Preview the changes:",
+		`${getCliName()} config plan`,
+		"",
+		"Deploy when the changes and target are correct. Deploy also pulls the branch's environment variables:",
+		`${getCliName()} deploy`,
+		...(input.functions && input.needsDeploy ? ["", ...dev] : []),
+	];
+};
 
 export const existingConfigNext = (): string[] => [
 	"The existing Neon config was preserved. Refresh environment variables when its declared services are available:",
