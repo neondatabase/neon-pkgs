@@ -259,3 +259,7 @@ pnpm changeset        # pick package(s) + bump + summary
 
 Commit the generated `.changeset/*.md` with your PR. See the "Release Management" section of
 [`AGENTS.md`](./AGENTS.md) for how releases are cut and published.
+
+A CLI release publishes two packages, always `neon` first and `neonctl` second. `neonctl` wraps
+`neon` and pins its exact version, so it cannot install until that `neon` is on npm. See
+"Publish order" in [`AGENTS.md`](./AGENTS.md).

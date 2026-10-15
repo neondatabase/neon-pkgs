@@ -666,13 +666,19 @@ including a git-vs-npm check that flags packages which changed but lack a change
 
 ### Publish order
 
+**Always publish `neon` before `neonctl`.** `neonctl` wraps `neon`: `pnpm pack` turns its
+`workspace:*` dependency into an exact `neon@<version>` pin, so a `neonctl` published first cannot
+install until the matching `neon` is on npm. Dispatch `-f package=neon`, wait until
+`npm view neon@<version> version` prints the new version (npm can take a few minutes after the run
+goes green), then dispatch `-f package=neonctl`.
+
 **Publish leaf dependencies first, the CLI last:**
 `@neon/config` → `@neon/config-runtime` / `@neon/env` → `neon` → `neonctl`.
 Publishing `neon` also ships the standalone binaries and the GitHub release; publish the
 compatibility package only after `npm view neon version` confirms the matching primary package.
 Verify each with `npm view <pkg> version`. After every successful publish, `npm i -g neon@latest` and `neon --version`.
 
-Ordering is a courtesy to npm consumers, not a build constraint. Every internal dependency is
+Apart from `neon` → `neonctl`, ordering is a courtesy to npm consumers, not a build constraint. Every internal dependency is
 `workspace:*`, so a package is always built and packed against workspace source and never makes a
 registry round-trip for a sibling.
 
@@ -707,7 +713,7 @@ specific to it:
 - **Compatibility command**: `neonctl` is a thin package that depends on `neon` (`workspace:*`)
   and owns only the legacy `neonctl` executable. `pnpm pack` rewrites that to an **exact** version
   pin, so `npm i neonctl` cannot resolve until the matching `neon` is on npm. Publish `neon` first,
-  verify it, then dispatch `-f package=neonctl`. It has no binaries. This ordering applies to every
+  wait for `npm view neon@<version> version`, then dispatch `-f package=neonctl`. It has no binaries. This ordering applies to every
   CLI release, not just the one that introduced the split.
 - **Homebrew**: `brew install neonctl` is a homebrew-core formula built from the npm `neonctl`
   tarball (autobumped by Homebrew's bot), not something this repo publishes. It relies on that

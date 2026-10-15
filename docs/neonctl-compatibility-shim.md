@@ -100,7 +100,8 @@ The release mechanism does not change:
    workflow is manually dispatched once per package.
 4. Dispatch `package=neon` first. This publishes the implementation package,
    builds standalone binaries, and creates the `neon@<version>` GitHub release.
-5. Verify `npm view neon version`.
+5. Wait until `npm view neon@<version> version` prints the new version. npm can
+   take a few minutes after the workflow run goes green.
 6. Dispatch `package=neonctl`. Its packed `workspace:*` dependency points at the
    same `neon` version, which is now available to npm consumers.
 7. Verify `npm view neonctl version` and
