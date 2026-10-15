@@ -34,7 +34,7 @@ Only the pieces the `neon-js gen-types` CLI uses:
 - `lib/generators.ts` — the `getGeneratorMetadata()` driver.
 - `lib/sql/*.ts` — the introspection SQL strings.
 - `templates/typescript.ts` — the TypeScript codegen template (`apply()`).
-- `LICENSE` — full upstream MIT license text.
+- `LICENSE` — full upstream Apache-2.0 license text.
 
 ## What we deliberately did **not** vendor
 
@@ -82,7 +82,7 @@ SHA and any per-file modifications.
    from the new tag.
 3. Re-apply the modifications listed above. The git history of this directory
    is the canonical record of what changed and why.
-4. Run `pnpm --filter @neondatabase/neon-js typecheck` and `pnpm test`.
+4. Run `pnpm --filter neon typecheck` and `pnpm --filter neon test:ci`.
 5. Update the `Copied on` date.
 6. Bump per-file headers' tag/commit/date.
 
@@ -97,5 +97,5 @@ strictly safer side we treat the vendored sub-tree as Apache-2.0:
 - The LICENSE file is shipped verbatim in this directory (Apache-2.0 §4(a)).
 - No NOTICE file exists upstream, so none is required here (Apache-2.0 §4(d)).
 
-The rest of `@neondatabase/neon-js` is also Apache-2.0, so license compatibility
+The rest of `neon` (the CLI package) is also Apache-2.0, so license compatibility
 is trivial.
