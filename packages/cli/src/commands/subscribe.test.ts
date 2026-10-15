@@ -12,8 +12,6 @@ import yargs from "yargs";
 import { stripAnsi } from "../human_table.js";
 import {
 	builder,
-	command,
-	describe as commandDescription,
 	type SubscribeDependencies,
 	type SubscribeProps,
 	subscribe,
@@ -196,9 +194,7 @@ const setup = (subscription: FakeSubscription) => {
 };
 
 describe("subscribe command", () => {
-	it("registers the top-level query and raw-change flag", () => {
-		expect(command).toBe("subscribe <query>");
-		expect(commandDescription).toContain("live SQL query");
+	it("registers the query and raw-change flag", () => {
 		const options = (builder(yargs([])) as any).getOptions();
 		expect(options.boolean).toContain("changes");
 		expect(options.default.changes).toBe(false);

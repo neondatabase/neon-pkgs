@@ -1,5 +1,12 @@
 # neon
 
+## 8.4.5
+
+### Patch Changes
+
+- e952716: List top-level commands alphabetically in `neon --help` so commands are easier to find.
+- f145dbc: Move the Realtime query subscription command from `neon subscribe` to `neon realtime subscribe`.
+
 ## 8.4.4
 
 ### Patch Changes

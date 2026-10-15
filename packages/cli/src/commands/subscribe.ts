@@ -10,7 +10,7 @@ import YAML from "yaml";
 import type yargs from "yargs";
 import { resolveNeonEnvVars } from "../dev/env.js";
 import type { BranchScopeProps } from "../types.js";
-import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
+import { branchIdFromProps } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
 
 type QueryRow = Record<string, unknown>;
@@ -60,25 +60,14 @@ type SubscribeEvent =
 			changes: readonly LiveQueryChange<QueryRow>[];
 	  };
 
-export const command = "subscribe <query>";
-export const describe = "Subscribe to a live SQL query with Neon Realtime";
-
 export const builder = (argv: yargs.Argv) =>
 	argv
-		.usage('$0 subscribe "<query>" [options]')
+		.usage('$0 realtime subscribe "<query>" [options]')
 		.positional("query", {
 			describe: "SELECT query to subscribe to",
 			type: "string",
 		})
 		.options({
-			"project-id": {
-				describe: "Project ID",
-				type: "string",
-			},
-			branch: {
-				describe: "Branch ID or name",
-				type: "string",
-			},
 			changes: {
 				describe: "Show raw resets and transaction batches",
 				type: "boolean",
@@ -86,20 +75,20 @@ export const builder = (argv: yargs.Argv) =>
 			},
 		})
 		.example(
-			'$0 subscribe "SELECT * FROM items"',
+			'$0 realtime subscribe "SELECT * FROM items"',
 			"Print the initial result followed by a readable transaction log",
 		)
 		.example(
-			'$0 subscribe --changes "SELECT * FROM items"',
+			'$0 realtime subscribe --changes "SELECT * FROM items"',
 			"Print raw reset and delta events",
 		)
 		.epilogue(
 			"The subscription runs until interrupted. Terminal output is an append-only snapshot and transaction log; JSON output is newline-delimited; YAML output uses one document per event.",
 		)
-		.middleware(fillSingleProject as never)
 		.strict();
 
-export const handler = async (props: SubscribeProps): Promise<void> => {
+export const handler = async (args: yargs.Arguments): Promise<void> => {
+	const props = args as unknown as SubscribeProps;
 	const controller = new AbortController();
 	const stop = (exitCode: number) => {
 		controller.abort();
