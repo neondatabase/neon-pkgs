@@ -74,6 +74,22 @@ package's file before changing it:
 
 `--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; detection on `-y`; or omit `-y` in a terminal to pick. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. `link` has no `--agent`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
 
+## Staging-only features
+
+A CLI feature whose API is only on Neon's staging console ships **staging-only**: the CLI exposes it only when the host requests go to (`--api-host`, else `NEON_API_HOST`) has the staging hostname `console-stage.neon.build`. Everywhere else it is hidden from `--help` and fails with a "coming soon" error. Neon Realtime is gated this way. To try one, point the CLI at staging with a staging API key:
+
+```bash
+export NEON_API_HOST=https://console-stage.neon.build/api/v2
+export NEON_API_KEY=<staging key>
+neon realtime --help
+```
+
+- **An endpoint that answers HTTP 500 in production but works on staging is most likely staging-only for now** and needs the gate. Production answered the unreleased Realtime route with 500, not 404.
+- **Confirm with the feature's owner that it should be staging-only** before adding or removing a gate.
+- The helpers are in `packages/cli/src/utils/staging.ts`. When a staging-only feature ships to production, remove its call sites and any library opt-in it added (or make that opt-in default on), but keep the generic helpers (`isStagingApiHost()`, `stagingFeaturesEnabled()`, `stagingFeaturesEnabledForArgv()`, `StagingOnlyError`, `NEON_STAGING_API_HOST`) and the `stagingOnly` manifest field, so the next one reuses them.
+
+Details, including which helper fits which case: [`AGENTS.md`](./AGENTS.md#staging-only-features).
+
 ## Testing
 
 The standard suite uses [Vitest](https://vitest.dev/) and does not call live Neon services:

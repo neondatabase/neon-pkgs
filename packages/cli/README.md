@@ -316,23 +316,23 @@ neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER B
 
 The default terminal output is append-only. It identifies the selected project,
 branch, and database; prints the initial result once; reports connection-state
-changes; and then prints each published batch with its transaction IDs, a compact
+changes; and then prints each published change set with its transaction IDs, a compact
 `+insert ~update -delete` summary, and the affected rows. It does not take over the
-terminal or require keyboard navigation. Pass `--changes` to display the raw reset
-and batch events instead of the materialized view.
+terminal or require keyboard navigation. Pass `--changes` to display the raw `rows`
+and `changes` events instead of the materialized view.
 
 For scripts and agents, JSON output is a JSON Lines stream with one complete event
 per line. YAML output uses one document per event:
 
 ```bash
 neon realtime subscribe --changes --output json "SELECT * FROM realtime_todos" |
-  jq --unbuffered 'select(.type == "batch")'
+  jq --unbuffered 'select(.type == "changes")'
 
 neon realtime subscribe --output yaml "SELECT * FROM realtime_todos"
 ```
 
 Machine-readable output retains the event stream: without `--changes`, each event is
-a complete `snapshot`; with `--changes`, events are raw `reset` and `batch` objects.
+a complete `snapshot`; with `--changes`, events are raw `rows` and `changes` objects.
 Lifecycle labels and the target header are terminal-only.
 
 ## Configure autocompletion
