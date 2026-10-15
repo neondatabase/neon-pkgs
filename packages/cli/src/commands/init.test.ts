@@ -1673,6 +1673,43 @@ describe("init handler", () => {
 		expect(out).not.toContain("neon dev\n");
 	});
 
+	test("Functions next to a service awaiting a deploy keep their URL and run after checkout", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fn-auth-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+		);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				envPull,
+				yes: true,
+				link: false,
+				services: ["auth", "functions"],
+				contextFile,
+				detectProjectAgents: () => ["cursor"],
+			}),
+		);
+
+		expect(envPull).toHaveBeenCalledWith(
+			expect.objectContaining({
+				services: ["postgres"],
+				envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			}),
+		);
+		const out = stdoutText(stdout);
+		expect(out.indexOf("neon checkout dev --create")).toBeLessThan(
+			out.indexOf("neon dev\n"),
+		);
+	});
+
 	test("link defers its env pull until neon.ts declares the services", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-deferred-pull-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

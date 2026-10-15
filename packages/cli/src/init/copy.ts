@@ -206,12 +206,12 @@ export const extraServicesNext = (input: {
 				"",
 			]
 		: []),
+	"Create a development branch from neon.ts and switch to it:",
+	`${getCliName()} checkout dev --create`,
+	"",
 	...(input.functions
 		? ["Run Neon Functions locally:", `${getCliName()} dev`, ""]
 		: []),
-	"Create a development branch and switch to it:",
-	`${getCliName()} checkout dev --create`,
-	"",
 	"Preview the changes:",
 	`${getCliName()} config plan`,
 	"",

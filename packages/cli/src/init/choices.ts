@@ -1,3 +1,6 @@
+import { functionBaseUrlKey } from "@neon-internals/env-core/env";
+import { FUNCTION_SLUG } from "../config_template.js";
+import type { EnvPullKey } from "../env_services.js";
 import type { NeonService } from "../neon_services.js";
 
 export type InitConfigPlan =
@@ -70,7 +73,7 @@ export type InitEnvPull =
 	| { kind: "skip" }
 	/** Resolve from neon.ts when present, else from the branch's live state. */
 	| { kind: "policy" }
-	| { kind: "services"; services: NeonService[] };
+	| { kind: "services"; services: NeonService[]; envKeys: EnvPullKey[] };
 
 export const initEnvPullAfterConfig = (input: {
 	/** Init linked in this run and left the env pull until neon.ts exists. */
@@ -99,5 +102,9 @@ export const initEnvPullAfterConfig = (input: {
 		services: input.declared.includes("ai-gateway")
 			? ["postgres", "ai-gateway"]
 			: ["postgres"],
+		// `--service functions` needs a deployed function; the scaffolded one's URL does not.
+		envKeys: input.declared.includes("functions")
+			? [functionBaseUrlKey(FUNCTION_SLUG)]
+			: [],
 	};
 };

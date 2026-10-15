@@ -201,7 +201,11 @@ describe("initEnvPullAfterConfig", () => {
 				claimable: false,
 				...pinned,
 			}),
-		).toEqual({ kind: "services", services: ["postgres", "ai-gateway"] });
+		).toEqual({
+			kind: "services",
+			services: ["postgres", "ai-gateway"],
+			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+		});
 		expect(
 			initEnvPullAfterConfig({
 				linkDeferredPull: false,
@@ -210,7 +214,7 @@ describe("initEnvPullAfterConfig", () => {
 				claimable: false,
 				...pinned,
 			}),
-		).toEqual({ kind: "services", services: ["postgres"] });
+		).toEqual({ kind: "services", services: ["postgres"], envKeys: [] });
 	});
 
 	test("skips when nothing changed since an earlier pull", () => {

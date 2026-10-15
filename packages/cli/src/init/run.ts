@@ -1287,7 +1287,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						projectId: context.projectId,
 						branch,
 						...(envPullPlan.kind === "services"
-							? { services: envPullPlan.services }
+							? {
+									services: envPullPlan.services,
+									envKeys: envPullPlan.envKeys,
+								}
 							: {}),
 					}),
 				);
