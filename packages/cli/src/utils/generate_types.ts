@@ -1,6 +1,7 @@
 import { getGeneratorMetadata } from "../vendor/postgres-meta/lib/generators.js";
 import PostgresMeta from "../vendor/postgres-meta/lib/PostgresMeta.js";
 import { apply as applyTypescriptTemplate } from "../vendor/postgres-meta/templates/typescript.js";
+import { buildPoolConfig } from "./pg_pool_config.js";
 
 export type GenerateTypesOptions = {
 	connectionString: string;
@@ -14,7 +15,7 @@ export const generateTypes = async (
 	options: GenerateTypesOptions,
 ): Promise<string> => {
 	const pgMeta = new PostgresMeta({
-		connectionString: options.connectionString,
+		...buildPoolConfig(options.connectionString),
 		...(options.queryTimeout !== undefined && {
 			query_timeout: options.queryTimeout,
 			statement_timeout: options.queryTimeout,

@@ -1182,7 +1182,10 @@ neon data-api gen-types                                   # linked project, defa
 neon data-api gen-types --project-id <id> --branch main --database neondb
 neon data-api gen-types --db-url "postgresql://user:pass@host/db"   # any Postgres; no Neon sign-in needed
 neon data-api gen-types --out-file src/types/db.ts -s public -s auth
+neon data-api gen-types --out-file - > database.types.ts   # stdout, like supabase gen types
 ```
+
+The connection verifies the server certificate for `sslmode=require`, `verify-ca` and `verify-full`, honors `sslrootcert`, and enforces `channel_binding=require`. Only `sslmode=no-verify` turns verification off.
 
 Without `--db-url` the connection is resolved like [`connection-string`](#commands): `--project-id`, `--branch`, `--database` and `--role-name`, falling back to the linked project. Flags carried over from `neon-js gen-types`: `--db-url`, `--schema` / `-s` (repeatable, default `public`), `--postgrest-v9-compat`, `--query-timeout`. `--output` / `-o` is the CLI-wide output format, so the file path moved to `--out-file` (default `database.types.ts`).
 

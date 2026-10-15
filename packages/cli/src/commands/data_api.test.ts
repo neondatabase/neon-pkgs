@@ -215,6 +215,35 @@ describe("data-api", () => {
 		);
 	});
 
+	test("gen-types on a multi-database branch names the flag that resolves it", async ({
+		testCliCommand,
+	}) => {
+		const args = [
+			"data-api",
+			"gen-types",
+			"--project-id",
+			"test-project-123456",
+			"--branch",
+			"main",
+		];
+		await testCliCommand(args, {
+			mockDir: "single_org_multidb",
+			code: 1,
+			snapshot: false,
+			stderr: expect.stringContaining("--database-name option: db1, db2"),
+		});
+		// Past the resolver: it connects to the mock host, where nothing listens.
+		await testCliCommand([...args, "--database-name", "db1"], {
+			mockDir: "single_org_multidb",
+			code: 1,
+			snapshot: false,
+			env: { CI: "true" },
+			stderr: expect.stringMatching(
+				/ERROR: connect ECONNREFUSED 127\.0\.0\.1:1/,
+			),
+		});
+	});
+
 	// Nothing listens on 127.0.0.1:1, so these drive the hermetic `--db-url` path: the
 	// command must bypass the Neon API and credentials and fail on the Postgres connection.
 	const UNREACHABLE_DB_URL = "postgresql://user:pass@127.0.0.1:1/postgres";

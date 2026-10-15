@@ -16,6 +16,8 @@ export type GenTypesProps = BranchScopeProps & {
 	queryTimeout?: string;
 };
 
+const STDOUT = "-";
+
 const UNIT_MS = { h: 3_600_000, m: 60_000, s: 1_000 } as const;
 
 export const parseDuration = (duration: string): number => {
@@ -57,6 +59,15 @@ export const genTypes = async (props: GenTypesProps): Promise<void> => {
 		detectOneToOneRelationships: !props.postgrestV9Compat,
 		queryTimeout,
 	});
+
+	if (props.outFile === STDOUT) {
+		await new Promise<void>((resolve, reject) =>
+			process.stdout.write(types, (error) =>
+				error ? reject(error) : resolve(),
+			),
+		);
+		return;
+	}
 
 	mkdirSync(path.dirname(props.outFile), { recursive: true });
 	writeFileSync(props.outFile, types);

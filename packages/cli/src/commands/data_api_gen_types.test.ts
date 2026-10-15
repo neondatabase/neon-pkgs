@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -106,6 +106,29 @@ describe("genTypes", () => {
 		);
 		expect(resolveConnectionUri).not.toHaveBeenCalled();
 		expect(generateTypes).not.toHaveBeenCalled();
+	});
+
+	test("--out-file - writes the types to stdout and creates no file", async () => {
+		const write = vi.spyOn(process.stdout, "write").mockImplementation(((
+			_chunk: unknown,
+			cb?: () => void,
+		) => {
+			cb?.();
+			return true;
+		}) as typeof process.stdout.write);
+		try {
+			await genTypes(
+				props({ dbUrl: "postgresql://u:p@h/d", outFile: "-" }),
+			);
+
+			expect(write).toHaveBeenCalledTimes(1);
+			expect(write.mock.calls[0]?.[0]).toBe(
+				"export type Database = {}\n",
+			);
+			expect(readdirSync(dir)).toEqual([]);
+		} finally {
+			write.mockRestore();
+		}
 	});
 
 	test("creates the output directory and writes the types", async () => {

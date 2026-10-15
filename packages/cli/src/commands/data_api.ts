@@ -91,6 +91,8 @@ export const builder = (argv: yargs.Argv) =>
 				type: "string",
 			},
 			database: {
+				// The shared connection resolver tells users to pass --database-name.
+				alias: "database-name",
 				describe: "Database name",
 				type: "string",
 			},
@@ -186,7 +188,8 @@ export const builder = (argv: yargs.Argv) =>
 						"out-file": {
 							type: "string",
 							default: "database.types.ts",
-							describe: "File to write the types to",
+							describe:
+								"File to write the types to, or - for stdout",
 						},
 						schema: {
 							alias: "s",
