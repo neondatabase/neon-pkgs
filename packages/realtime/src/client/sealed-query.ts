@@ -13,8 +13,11 @@ export interface SealedLiveQuery<Row> {
 	readonly queryFingerprint: string;
 	/** Capability expiry as Unix milliseconds. */
 	readonly expiresAt: number;
-	/** @internal Carries the inferred row type without adding runtime data. */
-	readonly __row?: Row;
+	/**
+	 * @internal A scalar phantom keeps JSON-aware framework types from
+	 * serializing the live row type. This property is not present at runtime.
+	 */
+	readonly __row?: string & { readonly __type: Row };
 }
 
 export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {

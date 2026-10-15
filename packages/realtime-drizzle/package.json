@@ -53,6 +53,7 @@
     "@vitest/coverage-v8": "catalog:",
     "console-fail-test": "catalog:",
     "drizzle-orm": "0.45.2",
+    "hono": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

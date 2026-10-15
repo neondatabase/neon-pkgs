@@ -47,7 +47,7 @@ describe("Kysely query adapter", () => {
 		const channelId = "general";
 		const query = db
 			.selectFrom("messages")
-			.select(["id", "body", "note"])
+			.select(["id", "body", "note", "sent_at"])
 			.where("channel_id", "=", channelId);
 
 		const sealedQuery = await realtime.seal({ query });
@@ -57,12 +57,13 @@ describe("Kysely query adapter", () => {
 				id: number;
 				body: string;
 				note: string | null;
+				sent_at: Date;
 			}>
 		>();
 		expect(JSON.stringify(sealedQuery)).not.toContain(channelId);
 		const prepared = kyselyAdapter().prepare(query);
 		expect(prepared.sql).toBe(
-			'select "id", "body", "note" from "messages" where "channel_id" = $1',
+			'select "id", "body", "note", "sent_at" from "messages" where "channel_id" = $1',
 		);
 		expect(prepared.parameters).toEqual([{ typeOid: 0, value: channelId }]);
 	});

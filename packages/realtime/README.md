@@ -437,6 +437,28 @@ types, while the optional presets cover common driver and ORM differences.
 Framework date serialization and server/browser timezone alignment remain
 application concerns.
 
+The sealed query's inferred row type describes the **live, decoded rows**, even
+when a JSON-aware RPC framework such as Hono or tRPC transforms the types of
+actual HTTP response data. If a typed API response contains a query producing
+`{ id: number; created_at: Date }` and initial rows serialized as JSON, restore
+the date strings before subscribing:
+
+```ts
+// payload.query retains its Date row type; payload.initialData contains strings.
+const initialData = payload.initialData.map((row) => ({
+  ...row,
+  created_at: new Date(row.created_at),
+}));
+const subscription = client.subscribe(payload.query, { initialData });
+// subscription.getSnapshot().data: readonly { id: number; created_at: Date }[] | undefined
+```
+
+In this example, passing the unconverted `payload.initialData` is a type error.
+No conversion is necessary when the application's serializer already restores
+`Date` values. Realtime
+does not provide an HTTP/SSR deserializer or infer row types from untyped JSON;
+preserve the typed sealed query through your application's API boundary.
+
 ## Integrations and examples
 
 - [`@neon/realtime-react`](../realtime-react) provides `RealtimeProvider` and

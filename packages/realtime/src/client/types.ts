@@ -332,7 +332,11 @@ export type RawLiveQueryUpdate<Row> =
 export interface MaterializedLiveQueryOptions<Row> {
 	/** Select materialization; omitted and `true` are equivalent. */
 	readonly materialize?: true;
-	/** Preloaded rows exposed while connecting to the authoritative result. */
+	/**
+	 * Preloaded rows exposed while connecting to the authoritative result.
+	 * Supply decoded rows matching the live result, restoring any values changed
+	 * by transport serialization (for example, JSON date strings) beforehand.
+	 */
 	readonly initialData?: readonly Row[];
 }
 

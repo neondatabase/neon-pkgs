@@ -18,6 +18,9 @@ catalogs:
     console-fail-test:
       specifier: 0.5.0
       version: 0.5.0
+    hono:
+      specifier: ^4.12.25
+      version: 4.12.25
     tsdown:
       specifier: ^0.14.1
       version: 0.14.1
@@ -744,6 +747,9 @@ importers:
         specifier: ^3.0.4
         version: 3.0.4
     devDependencies:
+      '@trpc/server':
+        specifier: ^11.19.0
+        version: 11.19.0(typescript@5.9.3)
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
@@ -762,12 +768,18 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.10.2
+      hono:
+        specifier: 'catalog:'
+        version: 4.12.25
       json-schema-to-typescript:
         specifier: ^16.0.0
         version: 16.0.0
       tsdown:
         specifier: 'catalog:'
         version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
+      type-fest:
+        specifier: ^4.41.0
+        version: 4.41.0
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -795,6 +807,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@neondatabase/serverless@1.0.1)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(kysely@0.29.6)(pg@8.23.1)
+      hono:
+        specifier: 'catalog:'
+        version: 4.12.25
       tsdown:
         specifier: 'catalog:'
         version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
@@ -858,6 +873,9 @@ importers:
       console-fail-test:
         specifier: 'catalog:'
         version: 0.5.0
+      hono:
+        specifier: 'catalog:'
+        version: 4.12.25
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1(@noble/hashes@2.4.0)
@@ -2862,6 +2880,12 @@ packages:
         optional: true
       '@types/react-dom':
         optional: true
+
+  '@trpc/server@11.19.0':
+    resolution: {integrity: sha512-7C1goiDurz82yFKtZUbEzjXd0Rg/jyisaIZQhdvus+1l7E6mwcEYZXjZ1US/HF8kOyz1LERL8UN3bcboJtjcyQ==}
+    hasBin: true
+    peerDependencies:
+      typescript: '>=5.7.2'
 
   '@types/aria-query@5.0.4':
     resolution: {integrity: sha512-rfT93uj5s0PRL7EzccGMs3brplhcrghnDoV26NqKhCAS1hVo+WdNsPvE/yb6ilfr5hi2MEk6d5EWJTKdxg8jVw==}
@@ -8146,6 +8170,10 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
+
+  '@trpc/server@11.19.0(typescript@5.9.3)':
+    dependencies:
+      typescript: 5.9.3
 
   '@types/aria-query@5.0.4': {}
 
