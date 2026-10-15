@@ -21,7 +21,7 @@ export type RealtimeRotateSecretProps = BranchScopeProps & {
 const ROTATION_POLL_INTERVAL_MS =
 	Number(process.env.NEON_REALTIME_POLL_INTERVAL_MS) || 1_000;
 const ROTATION_POLL_TIMEOUT_MS =
-	Number(process.env.NEON_REALTIME_POLL_TIMEOUT_MS) || 300_000;
+	Number(process.env.NEON_REALTIME_POLL_TIMEOUT_MS) || 60_000;
 
 /** Request Realtime provisioning or an allowed-origin update for a branch. */
 export const enable = async (props: RealtimeEnableProps): Promise<void> => {
