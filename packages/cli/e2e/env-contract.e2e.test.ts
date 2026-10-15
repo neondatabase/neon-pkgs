@@ -21,11 +21,12 @@ const DOTENV = join(FIXTURE, ".env.local");
 const READY_TIMEOUT_MS = 90_000;
 
 /** Variables only one side can have: the function's own URL, and its declared env. */
-type Runtime = "pulled" | "dev" | "deployed" | "devExplicit";
+type Runtime = "pulled" | "dev" | "deployed" | "devSource" | "devExplicit";
 
 const FUNCTION_KEYS = new Set([
 	"NEON_FUNCTION_PROBE_BASE_URL",
 	"PROBE_SETTING",
+	"PROBE_EXTRA",
 ]);
 
 function withoutFunctionKeys(keys: string[]): string[] {
@@ -122,7 +123,10 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 
 	beforeAll(async () => {
 		tmp = mkdtempSync(join(tmpdir(), "neon-env-contract-e2e-"));
-		writeFileSync(DOTENV, "PROBE_SETTING=probe-value\n");
+		writeFileSync(
+			DOTENV,
+			"PROBE_SETTING=probe-value\nPROBE_EXTRA=undeclared\n",
+		);
 		projectId = await createProject({
 			name: uniqueProjectName("cli-env-contract"),
 		});
@@ -205,6 +209,10 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		);
 		const slugUrl = /probe\s+(http:\/\/localhost:\d+)/;
 		collected.dev = await devReport([], slugUrl);
+		collected.devSource = await devReport(
+			["--source", "./probe.ts"],
+			/(http:\/\/localhost:\d+)/,
+		);
 		const explicit = join(tmp, "explicit.env");
 		writeFileSync(explicit, "PROBE_SETTING=from-explicit\n");
 		collected.devExplicit = await devReport(["--env", explicit], slugUrl);
@@ -233,6 +241,13 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		expect(report(where).values.PROBE_SETTING).toBe("probe-value");
 	});
 
+	it("neon dev passes undeclared .env.local keys to the function", () => {
+		expect(report("dev").values.PROBE_EXTRA).toBe("undeclared");
+		expect(report("devSource").values.PROBE_SETTING).toBe("probe-value");
+		expect(report("devSource").values.PROBE_EXTRA).toBe("undeclared");
+		expect(report("deployed").values.PROBE_EXTRA).toBeUndefined();
+	});
+
 	it("neon dev --env loads that file instead of .env.local", () => {
 		expect(namespaces(report("devExplicit"), "scoped")).toContain(
 			"function",
@@ -240,6 +255,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		expect(report("devExplicit").values.PROBE_SETTING).toBe(
 			"from-explicit",
 		);
+		expect(report("devExplicit").values.PROBE_EXTRA).toBeUndefined();
 	});
 
 	it("the deployed runtime provides the variables neon env pull writes", () => {
@@ -266,6 +282,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		const {
 			NEON_FUNCTION_PROBE_BASE_URL: devUrl,
 			PROBE_SETTING: _dev,
+			PROBE_EXTRA: _devExtra,
 			...dev
 		} = report("dev").values;
 		const {
