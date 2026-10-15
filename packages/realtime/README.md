@@ -455,9 +455,9 @@ const subscription = client.subscribe(payload.query, { initialData });
 
 In this example, passing the unconverted `payload.initialData` is a type error.
 No conversion is necessary when the application's serializer already restores
-`Date` values. Realtime
-does not provide an HTTP/SSR deserializer or infer row types from untyped JSON;
-preserve the typed sealed query through your application's API boundary.
+`Date` values. Realtime does not provide an HTTP/SSR deserializer or infer row
+types from untyped JSON; preserve the typed sealed query through your
+application's API boundary.
 
 ## Integrations and examples
 
