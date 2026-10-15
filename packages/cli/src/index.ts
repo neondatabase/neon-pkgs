@@ -45,6 +45,7 @@ import {
 	collapseRepeatedFlags,
 	declaredOptions,
 } from "./utils/repeated_flags.js";
+import { stagingFeaturesEnabledForArgv } from "./utils/staging.js";
 
 const NO_SUBCOMMANDS_VERBS = [
 	// `api <path>` has a handler but no subcommands (like `status`), so the
@@ -233,7 +234,11 @@ builder = builder
 	.middleware(enrichFromContext as any)
 	.middleware(analyticsMiddleware)
 	// @types/yargs declares builders synchronous; yargs 17 awaits a builder's promise.
-	.command(lazyCommands as any)
+	.command(
+		lazyCommands({
+			staging: stagingFeaturesEnabledForArgv(hideBin(process.argv)),
+		}) as any,
+	)
 	.strictCommands()
 	.version(pkg.version)
 	.group("version", "Global options:")

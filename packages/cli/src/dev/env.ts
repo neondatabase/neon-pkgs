@@ -37,6 +37,7 @@ import {
 	formatInstallCommand,
 	resolvePackageManager,
 } from "../utils/package_manager.js";
+import { StagingOnlyError } from "../utils/staging.js";
 
 export type DevEnvContext = {
 	cwd: string;
@@ -862,7 +863,11 @@ export const resolveDevEnv = async (
 		const { vars, credential } = await resolveNeonEnvVars(ctx);
 		return { vars, credential };
 	} catch (err) {
-		if (err instanceof DevEnvMismatchError) throw err;
+		if (
+			err instanceof DevEnvMismatchError ||
+			err instanceof StagingOnlyError
+		)
+			throw err;
 		if (err instanceof MissingBranchContextError) {
 			log.debug("dev: %s; skipping env injection", err.message);
 			return {
