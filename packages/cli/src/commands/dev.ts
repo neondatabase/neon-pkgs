@@ -195,10 +195,13 @@ export const handler = async (props: DevProps): Promise<void> => {
 	// `env pull` writes: mixing in .env.local could pair a pulled AWS_ACCESS_KEY_ID with a
 	// stale secret. Port selection reads PORT from it too.
 	const shellEnv = { ...process.env };
-	loadDevEnvFiles(props, process.cwd());
+	const envFiles = formatEnvFiles(
+		loadDevEnvFiles(props, process.cwd()),
+		process.cwd(),
+	);
 
 	if (props.source !== undefined) {
-		await runSingleSource(props, shellEnv);
+		await runSingleSource(props, shellEnv, envFiles);
 		return;
 	}
 
@@ -211,8 +214,11 @@ export const handler = async (props: DevProps): Promise<void> => {
 		);
 	}
 
-	await runFromConfig(props, shellEnv);
+	await runFromConfig(props, shellEnv, envFiles);
 };
+
+/** A dotenv file `neon dev` loaded, and the keys it set (keys already set are skipped). */
+export type LoadedEnvFile = { path: string; applied: string[] };
 
 /**
  * Load dotenv files into process.env before neon.ts is evaluated: `--env <file>` alone
@@ -221,7 +227,7 @@ export const handler = async (props: DevProps): Promise<void> => {
 export const loadDevEnvFiles = (
 	props: Pick<DevProps, "env" | "contextFile">,
 	cwd: string,
-): void => {
+): LoadedEnvFile[] => {
 	const files = props.env
 		? [resolve(cwd, props.env)]
 		: defaultDevEnvFiles({
@@ -230,21 +236,32 @@ export const loadDevEnvFiles = (
 					? { contextFile: props.contextFile }
 					: {}),
 			});
-	for (const file of files) {
-		const applied = loadEnvFileIntoProcess(file);
-		log.debug(
-			"dev: loaded %d var(s) from %s: %s",
-			applied.length,
-			file,
-			applied.join(", "),
-		);
-	}
+	return files.map((path) => ({
+		path,
+		applied: loadEnvFileIntoProcess(path),
+	}));
+};
+
+/**
+ * The banner's account of the dotenv files, in load order, e.g.
+ * `.env.local (4 vars) → .env (2 vars)`. Counts are the keys each file set. Exported for
+ * unit testing.
+ */
+export const formatEnvFiles = (files: LoadedEnvFile[], cwd: string): string => {
+	if (files.length === 0) return "none (no .env.local or .env)";
+	return files
+		.map(({ path, applied }) => {
+			const count = `${applied.length} var${applied.length === 1 ? "" : "s"}`;
+			return `${relative(cwd, path) || path} (${count})`;
+		})
+		.join(" → ");
 };
 
 /** Single-function mode: serve exactly the `--source` path (legacy behavior). */
 const runSingleSource = async (
 	props: DevProps,
 	shellEnv: NodeJS.ProcessEnv,
+	envFiles: string,
 ): Promise<void> => {
 	const source = resolve(process.cwd(), props.source as string);
 	if (!existsSync(source)) {
@@ -284,6 +301,7 @@ const runSingleSource = async (
 	// No config reload in single-source mode: there's exactly one file to serve, and
 	// nothing to add or remove. neon.ts hot-reload is config-mode only.
 	await runSupervisor([unit], {
+		envFiles,
 		...(skipped ? { envNote: skipped.reason } : {}),
 	});
 };
@@ -295,6 +313,7 @@ const runSingleSource = async (
 const runFromConfig = async (
 	props: DevProps,
 	shellEnv: NodeJS.ProcessEnv,
+	envFiles: string,
 ): Promise<void> => {
 	const branchId = await resolveBranchId(props);
 	const resolved = await resolveFunctionsFromConfig(
@@ -353,6 +372,7 @@ const runFromConfig = async (
 
 	await runSupervisor(units, {
 		reload: { configPath, replan },
+		envFiles,
 		...(skipped ? { envNote: skipped.reason } : {}),
 	});
 };
@@ -378,6 +398,8 @@ type SupervisorOptions = {
 	 * (e.g. not linked). Functions still run; this just explains the absence of DATABASE_URL.
 	 */
 	envNote?: string;
+	/** Which dotenv files were loaded, in order, from {@link formatEnvFiles}. */
+	envFiles?: string;
 };
 
 /** Ports are chosen before spawn so every sibling's localhost URL can be overlaid. */
@@ -675,7 +697,7 @@ const runSupervisor = async (
 	units: ServedUnit[],
 	options: SupervisorOptions = {},
 ): Promise<void> => {
-	const { reload, envNote } = options;
+	const { reload, envNote, envFiles } = options;
 
 	const runtimePath = resolveRuntimePath();
 	let shuttingDown = false;
@@ -789,7 +811,7 @@ const runSupervisor = async (
 		);
 	}
 
-	printBanner(running, envNote);
+	printBanner(running, envNote, envFiles);
 
 	// Config mode only: watch neon.ts and reconcile the live unit set when it changes.
 	// Reconciles are serialized: a burst of saves (editor write-then-format) must not run
@@ -1147,10 +1169,20 @@ const pipeChildOutput = (child: ChildProcess, label: string | null): void => {
 	forward("stderr");
 };
 
-const printBanner = (running: RunningUnit[], envNote?: string): void => {
+const printBanner = (
+	running: RunningUnit[],
+	envNote?: string,
+	envFiles?: string,
+): void => {
 	log.info("");
 	log.info(chalk.green.bold("  Neon Functions dev server"));
 	log.info("");
+	if (envFiles) {
+		log.info(
+			`  ${chalk.dim("env files".padEnd(20))} ${chalk.dim(envFiles)}`,
+		);
+		log.info("");
+	}
 	for (const r of running) {
 		const name = r.unit.label ?? "function";
 		const url = urlFor(r.boundPort);

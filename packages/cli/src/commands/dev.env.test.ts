@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { devEnvContext, loadDevEnvFiles, reportDevCredential } from "./dev.js";
+import {
+	devEnvContext,
+	formatEnvFiles,
+	loadDevEnvFiles,
+	reportDevCredential,
+} from "./dev.js";
 
 /**
  * What `neon dev` loads into process.env before neon.ts is evaluated, so Function env
@@ -38,9 +43,31 @@ describe("neon dev's dotenv loading", () => {
 	it("loads both files, with .env.local winning over .env", () => {
 		writeFileSync(join(dir, ".env"), "DEV_A=from-env\nDEV_B=only-in-env\n");
 		writeFileSync(join(dir, ".env.local"), "DEV_A=from-env-local\n");
-		loadDevEnvFiles(ctx(), dir);
+		const loaded = loadDevEnvFiles(ctx(), dir);
 		expect(process.env.DEV_A).toBe("from-env-local");
 		expect(process.env.DEV_B).toBe("only-in-env");
+		expect(loaded).toEqual([
+			{ path: join(dir, ".env.local"), applied: ["DEV_A"] },
+			{ path: join(dir, ".env"), applied: ["DEV_B"] },
+		]);
+		expect(formatEnvFiles(loaded, dir)).toBe(
+			".env.local (1 var) → .env (1 var)",
+		);
+	});
+
+	it("says when no dotenv file was loaded", () => {
+		expect(formatEnvFiles(loadDevEnvFiles(ctx(), dir), dir)).toBe(
+			"none (no .env.local or .env)",
+		);
+	});
+
+	it("names files relative to cwd", () => {
+		const sub = join(dir, "apps", "web");
+		mkdirSync(sub, { recursive: true });
+		writeFileSync(join(dir, ".env.local"), "DEV_A=1\nDEV_B=2\n");
+		expect(formatEnvFiles(loadDevEnvFiles(ctx(), sub), sub)).toBe(
+			"../../.env.local (2 vars)",
+		);
 	});
 
 	it("never overrides a variable already set in the shell", () => {
