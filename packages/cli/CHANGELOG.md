@@ -1,5 +1,11 @@
 # neon
 
+## 8.7.0
+
+### Minor Changes
+
+- abbd5a8: Add `neon realtime rotate-secret` to replace a branch's Realtime shared secret. The command waits for rotation to complete by default; pass `--no-wait` to return after submitting the request.
+
 ## 8.6.1
 
 ### Patch Changes
