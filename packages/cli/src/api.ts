@@ -1092,6 +1092,13 @@ export const getApiClient = ({
 			),
 
 		// ─── Realtime ───────────────────────────────────────────────
+		getProjectBranchRealtime: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.getProjectBranchRealtime({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
 		enableProjectBranchRealtime: (
 			projectId: string,
 			branchId: string,
@@ -1107,6 +1114,16 @@ export const getApiClient = ({
 		disableProjectBranchRealtime: (projectId: string, branchId: string) =>
 			call(() =>
 				raw.disableProjectBranchRealtime({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		rotateProjectBranchRealtimeSecret: (
+			projectId: string,
+			branchId: string,
+		) =>
+			call(() =>
+				raw.rotateProjectBranchRealtimeSecret({
 					client,
 					path: { project_id: projectId, branch_id: branchId },
 				}),
