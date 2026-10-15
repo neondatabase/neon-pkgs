@@ -1,4 +1,3 @@
-import type { Config } from "@neon/config-runtime";
 import { hideBin, Parser } from "yargs/helpers";
 
 /**
@@ -8,8 +7,6 @@ import { hideBin, Parser } from "yargs/helpers";
  * hidden from help and fail with a "coming soon" message.
  */
 export const STAGING_API_HOST = "https://console-stage.neon.build/api/v2";
-
-export const REALTIME_COMING_SOON = `Neon Realtime is coming soon! For now it only works on Neon's staging API: set NEON_API_HOST=${STAGING_API_HOST} or pass --api-host.`;
 
 /** `NEON_STAGING_API_HOST` lets the CLI's tests treat their local mock API as staging. */
 const stagingHostname = () =>
@@ -44,29 +41,7 @@ export const stagingFeaturesEnabled = (apiHost?: string): boolean =>
 		? stagingFeaturesEnabledForArgv()
 		: isStagingApiHost(apiHost);
 
-/** Service names to list in help: Realtime only on staging. */
-export const listedServices = <T extends string>(services: readonly T[]) =>
-	stagingFeaturesEnabledForArgv()
-		? services
-		: services.filter((service) => service !== "realtime");
-
 /** A hard stop: callers that degrade other failures to warnings let this one through. */
 export class StagingOnlyError extends Error {
 	override readonly name = "StagingOnlyError";
 }
-
-export const assertRealtimeAvailable = (apiHost?: string): void => {
-	if (!stagingFeaturesEnabled(apiHost)) {
-		throw new StagingOnlyError(REALTIME_COMING_SOON);
-	}
-};
-
-/**
- * A `neon.ts` with any `preview.realtime` value reads the Realtime API, which production
- * does not serve. `false` reads it too, to disable Realtime on the branch.
- */
-export const assertPolicyAvailable = (config: Config, apiHost?: string) => {
-	if (config.preview?.realtime !== undefined) {
-		assertRealtimeAvailable(apiHost);
-	}
-};

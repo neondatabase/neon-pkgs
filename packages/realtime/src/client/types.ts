@@ -1,3 +1,4 @@
+import type { NoInferCompat } from "./no-infer.js";
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
@@ -472,7 +473,7 @@ export interface RealtimeClient {
 	 */
 	subscribe<Row>(
 		query: SealedLiveQuery<Row>,
-		options?: MaterializedLiveQueryOptions<Row>,
+		options?: MaterializedLiveQueryOptions<NoInferCompat<Row>>,
 	): MaterializedLiveQuerySubscription<Row>;
 	/**
 	 * Start a raw subscription without retaining query rows in the SDK.

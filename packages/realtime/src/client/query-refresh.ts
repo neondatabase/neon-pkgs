@@ -1,5 +1,6 @@
 import type { QueryRefreshEventSink } from "./diagnostics.js";
 import { subscriptionEventsFor } from "./diagnostics.js";
+import type { NoInferCompat } from "./no-infer.js";
 import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
 import type { RawLiveQuerySubscription } from "./types.js";
 
@@ -10,9 +11,11 @@ interface QueryRefreshControllerOptions<Row> {
 	/** Capability from which expiry and query identity are initially read. */
 	readonly query: SealedLiveQuery<Row>;
 	/** Callback that obtains a replacement capability for the same query. */
-	readonly refreshQuery?: () => Promise<SealedLiveQuery<Row>>;
+	readonly refreshQuery?: () => Promise<SealedLiveQuery<NoInferCompat<Row>>>;
 	/** Renew the underlying subscription with a replacement query. */
-	readonly renewSubscription: (query: SealedLiveQuery<Row>) => Promise<void>;
+	readonly renewSubscription: (
+		query: SealedLiveQuery<NoInferCompat<Row>>,
+	) => Promise<void>;
 	/** Called after the underlying subscription has been renewed successfully. */
 	readonly onSubscriptionRenewed?: () => void;
 	/** Called when invalid replacement data permanently stops automatic refresh. */
@@ -22,7 +25,7 @@ interface QueryRefreshControllerOptions<Row> {
 	 * Renewal behavior remains defined by `renewSubscription`, which also
 	 * supports integrations that construct the controller before subscribing.
 	 */
-	readonly subscription?: RawLiveQuerySubscription<Row>;
+	readonly subscription?: RawLiveQuerySubscription<NoInferCompat<Row>>;
 }
 
 /**

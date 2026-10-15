@@ -1,7 +1,6 @@
 import type yargs from "yargs";
 import { Parser } from "yargs/helpers";
 import { getCliName } from "../utils/cli_name.js";
-import { REALTIME_COMING_SOON } from "../utils/staging.js";
 
 type CommandModule = {
 	builder: (argv: yargs.Argv) => unknown;
@@ -214,13 +213,6 @@ export const commandManifest: CommandEntry[] = [
 		command: "realtime",
 		describe: "Manage Neon Realtime for a branch",
 		load: () => import("./realtime.js"),
-		stagingOnly: REALTIME_COMING_SOON,
-	},
-	{
-		command: "subscribe <query>",
-		describe: "Subscribe to a live SQL query with Neon Realtime",
-		load: () => import("./subscribe.js"),
-		stagingOnly: REALTIME_COMING_SOON,
 	},
 	{
 		command: "functions",

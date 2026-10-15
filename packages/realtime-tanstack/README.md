@@ -100,3 +100,6 @@ starts ordinary Realtime synchronization. Do not pass `initialData` to
 options with a Realtime-owned `sync` implementation and an additional
 `utils.awaitTxId()` method. The package also exports the corresponding config,
 options, and utilities types for reusable collection factories.
+
+The sealed query determines the row type. Refresh callbacks and collection
+options are checked against it rather than weakening it.
