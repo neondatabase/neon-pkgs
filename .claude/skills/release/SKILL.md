@@ -185,8 +185,10 @@ compatibility package deliberately keeps both the `neonctl` and `neon` commands 
 working untouched — see [`docs/neonctl-compatibility-shim.md`](../../../docs/neonctl-compatibility-shim.md)
 before changing its `bin` map.
 
-After each run succeeds, confirm with `npm view <pkg> version` — if it still shows the old version,
-you ran a dry-run (missing/`dry-run` `package` input); re-dispatch with the real `-f package=<name>`.
+After each run succeeds, confirm with `npm view <pkg>@<version> version`. npm can take a few
+minutes to serve a new version, so keep checking. If it never appears, read the run's `package`
+input before re-dispatching: a missing or `dry-run` value published nothing, while a real package
+name means the publish went through and a second dispatch would fail on the existing version.
 This requires access to that repo — if you don't have it, hand the publish backlog list to someone
 who does.
 
