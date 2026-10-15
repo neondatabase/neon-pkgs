@@ -562,7 +562,7 @@ describe("bootstrap", () => {
 		expect(existsSync(join(dest, ".git"))).toBe(true);
 	});
 
-	test("announces the dependency install before the package manager runs", async () => {
+	test("announces the dependency install with the package manager it runs", async () => {
 		// The fixture package.json has no dependencies, so an offline npm install
 		// succeeds without touching a registry.
 		const { code, stderr } = await runBootstrap(
