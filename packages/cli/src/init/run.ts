@@ -66,9 +66,9 @@ import {
 	CLAIMABLE_NO_LINK,
 	claimableNext,
 	claimableThenServicesNext,
+	configInitNext,
 	envPullFailedNext,
 	existingConfigNext,
-	extraServicesNext,
 	installFailedNext,
 	MCP_API_KEY_NEEDS_AUTH,
 	MCP_SCOPED_NEEDS_PROJECT,
@@ -80,6 +80,7 @@ import {
 	NO_AGENTS_FALLBACK_STATUS,
 	NON_TTY_LINK_NEEDS_AUTH,
 	namedAgentsUnavailable,
+	newConfigNext,
 	offlinePinNext,
 	PROGRESS,
 	PROJECT_PINNED_OFFLINE,
@@ -1381,12 +1382,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				next.push("");
 			}
 			next.push(...claimableNext(claimExpiresAt));
-		} else if (pendingServices) {
+		} else if (wroteNewFile && linked) {
 			if (next.length > 0) {
 				next.push("");
 			}
 			next.push(
-				...extraServicesNext({
+				...newConfigNext({
 					skills: installsSkills(reportedTooling()),
 					functions: declared.includes("functions"),
 				}),
@@ -1396,6 +1397,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				next.push("");
 			}
 			next.push(...existingConfigNext());
+		}
+		if (funnel.config === "skipped" && !existingConfig) {
+			if (next.length > 0) {
+				next.push("");
+			}
+			next.push(...configInitNext());
 		}
 
 		outcome =

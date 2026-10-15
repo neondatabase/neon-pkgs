@@ -1707,6 +1707,53 @@ describe("init handler", () => {
 		);
 	});
 
+	test.each([
+		{
+			name: "a Postgres-only neon.ts",
+			config: undefined,
+			expected: "neon config plan",
+		},
+		{ name: "--no-config", config: false, expected: "neon config init" },
+	])("-y next steps after $name", async ({ config, expected }) => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-next-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		const linkProject = vi.fn(async () => {
+			writeFileSync(
+				contextFile,
+				`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+			);
+		});
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				contextFile,
+				linkProject,
+				yes: true,
+				detectProjectAgents: () => ["cursor"],
+				...(config === false ? { config: false } : {}),
+			}),
+		);
+
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon setup complete.");
+		expect(out).toContain(expected);
+		if (config === false) {
+			expect(out).not.toContain("neon deploy");
+		} else {
+			expect(out).toContain(
+				"Deploy to your Neon project:\n  neon deploy",
+			);
+			expect(out).toContain("neon checkout dev --create");
+			expect(out).toContain("Neon agent skills");
+			expect(out).not.toContain("neon config init");
+		}
+	});
+
 	test("link defers its env pull until neon.ts declares the services", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-deferred-pull-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
