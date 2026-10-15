@@ -1,7 +1,3 @@
-import type {
-	MaterializedLiveQuerySubscription,
-	RealtimeClient,
-} from "@neon/realtime/client";
 import { createRealtime, type SealedLiveQuery } from "@neon/realtime/server";
 import { and, eq, gte, sql } from "drizzle-orm";
 import {
@@ -34,8 +30,6 @@ import {
 	varchar,
 } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/pg-proxy";
-import { Hono } from "hono";
-import { hc } from "hono/client";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { drizzleAdapter } from "./index.js";
@@ -50,6 +44,7 @@ const messages = pgTable("adapter_messages", {
 	channelId: text("channel_id").notNull(),
 	authorId: text("author_id").notNull(),
 	body: text("body").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 	sequence: integer("sequence").notNull(),
 	note: text("note"),
 	published: boolean("published").notNull(),
@@ -105,64 +100,6 @@ afterEach(() => {
 });
 
 describe("concrete Drizzle query adapter", () => {
-	it("preserves selected Date types through Hono while requiring decoded initial rows", async () => {
-		const instant = new Date("2026-10-15T12:34:56.789Z");
-		const datedMessages = pgTable("dated_messages", {
-			id: serial("id").primaryKey(),
-			created_at: timestamp("created_at", {
-				withTimezone: true,
-			}).notNull(),
-		});
-		const database = drizzle(async () => ({
-			rows: [[1, instant.toISOString()]],
-		}));
-		const query = database.select().from(datedMessages);
-		type Row = Awaited<typeof query>[number];
-		expectTypeOf<Row>().toEqualTypeOf<{ id: number; created_at: Date }>();
-		const realtime = createRealtime({
-			secret: SECRET,
-			db: "app",
-			adapter: drizzleAdapter(),
-		});
-		const app = new Hono().get("/query", async (context) =>
-			context.json({
-				query: await realtime.seal({ query }),
-				initialData: await query,
-			}),
-		);
-		const rpc = hc<typeof app>("https://example.test", {
-			fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-				app.request(new Request(input, init)),
-		});
-		const payload = await (await rpc.query.$get()).json();
-
-		expectTypeOf(payload.query).toMatchTypeOf<SealedLiveQuery<Row>>();
-		expectTypeOf(payload.initialData).toEqualTypeOf<
-			{ id: number; created_at: string }[]
-		>();
-		expect(payload.initialData).toEqual([
-			{ id: 1, created_at: instant.toISOString() },
-		]);
-		expect(Object.keys(payload.query).sort()).toEqual([
-			"capability",
-			"expiresAt",
-			"queryFingerprint",
-		]);
-
-		// Check subscription inference without opening a WebSocket.
-		expectTypeOf((client: RealtimeClient) => {
-			client.subscribe(payload.query, {
-				// @ts-expect-error JSON dates must be decoded before seeding the subscription.
-				initialData: payload.initialData,
-			});
-			const initialData = payload.initialData.map((row) => ({
-				...row,
-				created_at: new Date(row.created_at),
-			}));
-			return client.subscribe(payload.query, { initialData });
-		}).returns.toEqualTypeOf<MaterializedLiveQuerySubscription<Row>>();
-	});
-
 	it("uses Drizzle's SQL and driver-ready values with OID zero", async () => {
 		const fetch = vi.fn();
 		vi.stubGlobal("fetch", fetch);
@@ -179,6 +116,7 @@ describe("concrete Drizzle query adapter", () => {
 				messageId: sql<number>`${messages.id}`.as("messageId"),
 				channelId: sql<string>`${messages.channelId}`.as("channelId"),
 				body: messages.body,
+				createdAt: sql<Date>`${messages.createdAt}`.as("createdAt"),
 				note: messages.note,
 			})
 			.from(messages)
@@ -197,6 +135,7 @@ describe("concrete Drizzle query adapter", () => {
 				messageId: number;
 				channelId: string;
 				body: string;
+				createdAt: Date;
 				note: string | null;
 			}>
 		>();

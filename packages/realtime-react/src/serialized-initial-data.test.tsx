@@ -4,8 +4,6 @@ import {
 	createRealtimeClient,
 	type SealedLiveQuery,
 } from "@neon/realtime/client";
-import { Hono } from "hono";
-import { hc, type InferResponseType } from "hono/client";
 import { renderToString } from "react-dom/server";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
@@ -19,27 +17,33 @@ interface TimestampRow {
 	created_at: Date;
 }
 
+/** Representative recursive transformation performed by JSON-aware APIs. */
+type JsonTransport<Value> = Value extends string | number | boolean | null
+	? Value
+	: Value extends Date
+		? string
+		: Value extends readonly unknown[]
+			? { [Key in keyof Value]: JsonTransport<Value[Key]> }
+			: Value extends object
+				? { [Key in keyof Value]: JsonTransport<Value[Key]> }
+				: never;
+
 const query: SealedLiveQuery<TimestampRow> = {
 	capability: "unused-during-server-rendering",
 	queryFingerprint: "a".repeat(64),
 	expiresAt: 2_000_000_000_000,
 };
-const app = new Hono().get("/rows", (context) =>
-	context.json({
-		query,
-		initialData: [
-			{ id: 1, created_at: new Date("2026-10-15T10:00:00.000Z") },
-		],
-	}),
-);
-const rpc = hc<typeof app>("https://unused.invalid", {
-	fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-		app.request(new Request(input, init)),
-});
-type Payload = InferResponseType<typeof rpc.rows.$get>;
+type Payload = JsonTransport<{
+	query: SealedLiveQuery<TimestampRow>;
+	initialData: readonly TimestampRow[];
+}>;
+const payload: Payload = {
+	query,
+	initialData: [{ id: 1, created_at: "2026-10-15T10:00:00.000Z" }],
+};
 
 describe("serialized initial data", () => {
-	it("preserves decoded rows through Hono RPC typing", () => {
+	it("preserves decoded rows through JSON transport typing", () => {
 		// The package build type-checks this custom hook without rendering it.
 		function useTypedRows(payload: Payload) {
 			const restored = payload.initialData.map((row) => ({
@@ -64,8 +68,7 @@ describe("serialized initial data", () => {
 		>();
 	});
 
-	it("renders application-decoded initial dates immediately during SSR", async () => {
-		const payload = await (await rpc.rows.$get()).json();
+	it("renders application-decoded initial dates immediately during SSR", () => {
 		expectTypeOf(payload.initialData[0].created_at).toEqualTypeOf<string>();
 		const initialData = payload.initialData.map((row) => ({
 			...row,

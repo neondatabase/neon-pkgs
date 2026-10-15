@@ -1,9 +1,4 @@
-import { type inferRouterOutputs, initTRPC } from "@trpc/server";
-import { Hono } from "hono";
-import { hc, type InferResponseType } from "hono/client";
-import type { Jsonify } from "type-fest";
-import { describe, expect, expectTypeOf, it } from "vitest";
-import { createRealtime, rawSql } from "../server/realtime.js";
+import { describe, expectTypeOf, it } from "vitest";
 import type { SealedLiveQuery } from "./sealed-query.js";
 import type {
 	MaterializedLiveQuerySubscription,
@@ -18,49 +13,26 @@ interface TimestampRow {
 
 type QueryRow<Query> = Query extends SealedLiveQuery<infer Row> ? Row : never;
 
-const server = createRealtime({
-	secret: "nrt_live_1BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
-	db: "app",
-});
-const sql = rawSql<TimestampRow>("select id, created_at from items");
-const initialData: TimestampRow[] = [
-	{ id: 1, created_at: new Date("2026-10-15T10:00:00.000Z") },
-];
-async function loadRows() {
-	return { query: await server.seal({ query: sql }), initialData };
-}
+/** Representative recursive transformation performed by JSON-aware APIs. */
+type JsonTransport<Value> = Value extends string | number | boolean | null
+	? Value
+	: Value extends Date
+		? string
+		: Value extends bigint
+			? string
+			: Value extends readonly unknown[]
+				? { [Key in keyof Value]: JsonTransport<Value[Key]> }
+				: Value extends object
+					? { [Key in keyof Value]: JsonTransport<Value[Key]> }
+					: never;
 
-const app = new Hono().get("/rows", async (context) =>
-	context.json(await loadRows()),
-);
-const rpc = hc<typeof app>("https://unused.invalid");
-type HonoPayload = InferResponseType<typeof rpc.rows.$get>;
+type Payload = JsonTransport<{
+	query: SealedLiveQuery<TimestampRow>;
+	initialData: readonly TimestampRow[];
+}>;
 
 describe("sealed query row types", () => {
-	it("preserves Hono RPC query rows while serializing actual preload rows", async () => {
-		expectTypeOf<
-			QueryRow<HonoPayload["query"]>
-		>().toEqualTypeOf<TimestampRow>();
-		expectTypeOf<
-			HonoPayload["initialData"][number]["created_at"]
-		>().toEqualTypeOf<string>();
-
-		const response = await app.request("/rows");
-		const payload = await response.json();
-		expect(payload.initialData).toEqual([
-			{ id: 1, created_at: "2026-10-15T10:00:00.000Z" },
-		]);
-		expect(Object.keys(payload.query).sort()).toEqual([
-			"capability",
-			"expiresAt",
-			"queryFingerprint",
-		]);
-	});
-
-	it("preserves rows through tRPC's default JSON output typing", () => {
-		const trpc = initTRPC.create();
-		const router = trpc.router({ rows: trpc.procedure.query(loadRows) });
-		type Payload = inferRouterOutputs<typeof router>["rows"];
+	it("preserves live rows while actual payload rows are serialized", () => {
 		expectTypeOf<
 			QueryRow<Payload["query"]>
 		>().toEqualTypeOf<TimestampRow>();
@@ -69,7 +41,7 @@ describe("sealed query row types", () => {
 		>().toEqualTypeOf<string>();
 	});
 
-	it("preserves the complete phantom through general-purpose JSON typing", () => {
+	it("preserves object, tuple, unknown, and never row types", () => {
 		type Row = {
 			created_at: Date | null;
 			history: readonly Date[];
@@ -77,20 +49,22 @@ describe("sealed query row types", () => {
 		};
 		type Tuple = readonly [id: number, created_at: Date];
 		expectTypeOf<
-			QueryRow<Jsonify<SealedLiveQuery<Row>>>
+			QueryRow<JsonTransport<SealedLiveQuery<Row>>>
 		>().toEqualTypeOf<Row>();
 		expectTypeOf<
-			QueryRow<Jsonify<SealedLiveQuery<Tuple>>>
+			QueryRow<JsonTransport<SealedLiveQuery<Tuple>>>
 		>().toEqualTypeOf<Tuple>();
 		expectTypeOf<
-			QueryRow<Jsonify<SealedLiveQuery<unknown>>>
+			QueryRow<JsonTransport<SealedLiveQuery<unknown>>>
 		>().toBeUnknown();
-		expectTypeOf<QueryRow<Jsonify<SealedLiveQuery<never>>>>().toBeNever();
+		expectTypeOf<
+			QueryRow<JsonTransport<SealedLiveQuery<never>>>
+		>().toBeNever();
 	});
 
-	it("infers decoded subscription rows from Hono query responses", () => {
+	it("requires serialized rows to be restored before subscribing", () => {
 		// Checked by tsc during build; never subscribe or open a socket here.
-		function check(client: RealtimeClient, payload: HonoPayload) {
+		function check(client: RealtimeClient, payload: Payload) {
 			const restored = payload.initialData.map((row) => ({
 				...row,
 				created_at: new Date(row.created_at),

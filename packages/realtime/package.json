@@ -66,17 +66,14 @@
     "postgres-array": "^3.0.4"
   },
   "devDependencies": {
-    "@trpc/server": "^11.19.0",
     "@types/node": "catalog:",
     "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "catalog:",
     "ajv": "^8.20.0",
     "console-fail-test": "catalog:",
     "fast-check": "^4.9.0",
-    "hono": "catalog:",
     "json-schema-to-typescript": "^16.0.0",
     "tsdown": "catalog:",
-    "type-fest": "^4.41.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "ws": "catalog:"
