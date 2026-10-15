@@ -84,6 +84,10 @@ lower-level event listeners. Register listeners in an effect. `utils` omits
 `unsubscribe()` because React owns cleanup when the component unmounts or its
 sealed query changes.
 
+The hook infers the row type from the sealed query. `initialData` and
+`refreshQuery` must match it; they cannot remove selected columns or widen
+their types to make incompatible inputs fit.
+
 When `refreshQuery` is present, the integration renews before expiry
 and keeps retrying through capability expiry and transport outages. Existing
 data remains available while `stale` indicates that a replacement capability

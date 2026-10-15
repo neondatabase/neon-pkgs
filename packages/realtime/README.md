@@ -236,6 +236,16 @@ reconnects do not reset the episode. It resets after a complete baseline
 remains live for 30 seconds. Unsubscribing or closing the client cancels
 pending retries.
 
+### Row type inference
+
+`client.subscribe()` infers the live row type from the sealed query. Preloaded
+`initialData` must match that type; it cannot remove selected columns or widen
+their types to make an incompatible value fit. `QueryRefreshController`
+similarly checks replacement queries against its initial query's row type.
+
+This inference check uses a compatibility helper, not TypeScript 5.4's built-in
+`NoInfer`, and is tested with TypeScript 5.3 and the repository's current compiler.
+
 ### Client diagnostics
 
 Client diagnostics are silent by default. Set `logLevel` to write structured

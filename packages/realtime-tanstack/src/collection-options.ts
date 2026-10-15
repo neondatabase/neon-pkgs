@@ -15,6 +15,7 @@ import type {
 	UtilsRecord,
 } from "@tanstack/db";
 import { withCollectionConfigFactory } from "@tanstack/db";
+import type { NoInferCompat } from "./no-infer.js";
 
 /** Utilities attached to a Realtime-backed TanStack DB collection. */
 export interface RealtimeCollectionUtils extends UtilsRecord {
@@ -101,7 +102,10 @@ export function realtimeCollectionOptions<
 	Key extends string | number = string | number,
 	Schema extends StandardSchemaV1 = never,
 >(
-	config: RealtimeCollectionConfig<Row, Key, Schema>,
+	// Infer rows from the query, then check collection options against that type.
+	config: RealtimeCollectionConfig<NoInferCompat<Row>, Key, Schema> & {
+		readonly query: SealedLiveQuery<Row>;
+	},
 ): RealtimeCollectionOptions<Row, Key, Schema> {
 	const createOptions = () => createRealtimeCollectionOptions(config);
 	return withCollectionConfigFactory(createOptions(), createOptions);
