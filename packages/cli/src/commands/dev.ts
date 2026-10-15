@@ -34,7 +34,6 @@ import {
 import { resolveWatchInputs } from "../dev/inputs.js";
 import {
 	defaultDevEnvFiles,
-	loadEnvFileIntoProcess,
 	readEnvFile,
 	resolveEnvFilePath,
 } from "../env_file.js";
@@ -102,10 +101,10 @@ export const builder = (argv: yargs.Argv) =>
 				"this process is serving (every neon.ts function, or the matching slug when",
 				"`--source` names one).",
 				"",
-				"Before neon.ts is evaluated, `dev` loads the project's .env.local and .env into",
-				"the environment, so Function env values that read process.env resolve. A",
-				"variable already set wins, then .env.local, then .env. `--env <file>` loads",
-				"only that file instead. Functions inherit every loaded variable.",
+				"Before neon.ts is evaluated, `dev` loads the project's .env, then .env.local,",
+				"which overrides it, into the environment, so Function env values that read",
+				"process.env resolve. A variable already set in the shell wins. `--env <file>`",
+				"loads only that file instead. Functions inherit every loaded variable.",
 				"",
 				"`dev` reuses the branch credential behind the AI Gateway and object storage from",
 				"the file `env pull` writes, and never writes to it. With no such file it issues a",
@@ -217,12 +216,13 @@ export const handler = async (props: DevProps): Promise<void> => {
 	await runFromConfig(props, shellEnv, envFiles);
 };
 
-/** A dotenv file `neon dev` loaded, and the keys it set (keys already set are skipped). */
+/** A dotenv file `neon dev` loaded, and the keys it set (keys from the shell are skipped). */
 export type LoadedEnvFile = { path: string; applied: string[] };
 
 /**
  * Load dotenv files into process.env before neon.ts is evaluated: `--env <file>` alone
- * (relative to cwd), else the project's {@link defaultDevEnvFiles}. A key already set wins.
+ * (relative to cwd), else the project's {@link defaultDevEnvFiles}. A later file overrides
+ * an earlier one; a key set before loading (the shell) is never overridden.
  */
 export const loadDevEnvFiles = (
 	props: Pick<DevProps, "env" | "contextFile">,
@@ -236,10 +236,20 @@ export const loadDevEnvFiles = (
 					? { contextFile: props.contextFile }
 					: {}),
 			});
-	return files.map((path) => ({
-		path,
-		applied: loadEnvFileIntoProcess(path),
-	}));
+	const preset = new Set(
+		Object.keys(process.env).filter(
+			(key) => process.env[key] !== undefined,
+		),
+	);
+	return files.map((path) => {
+		const applied: string[] = [];
+		for (const [key, value] of Object.entries(readEnvFile(path))) {
+			if (preset.has(key)) continue;
+			process.env[key] = value;
+			applied.push(key);
+		}
+		return { path, applied };
+	});
 };
 
 /**

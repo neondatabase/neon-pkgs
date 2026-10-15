@@ -16,7 +16,7 @@ import {
  */
 describe("neon dev's dotenv loading", () => {
 	let dir: string;
-	const keys = ["DEV_A", "DEV_B", "DEV_ONLY_DEFAULT", "DEV_SHELL"];
+	const keys = ["DEV_A", "DEV_B", "DEV_C", "DEV_ONLY_DEFAULT", "DEV_SHELL"];
 	beforeEach(() => {
 		dir = mkdtempSync(join(tmpdir(), "neonctl-dev-load-"));
 		for (const key of keys) vi.stubEnv(key, undefined);
@@ -40,18 +40,19 @@ describe("neon dev's dotenv loading", () => {
 		expect(process.env.DEV_A).toBe("from-env");
 	});
 
-	it("loads both files, with .env.local winning over .env", () => {
-		writeFileSync(join(dir, ".env"), "DEV_A=from-env\nDEV_B=only-in-env\n");
-		writeFileSync(join(dir, ".env.local"), "DEV_A=from-env-local\n");
+	it("loads .env, then .env.local, which overrides it", () => {
+		writeFileSync(join(dir, ".env"), "DEV_A=1\nDEV_B=2\n");
+		writeFileSync(join(dir, ".env.local"), "DEV_A=2\nDEV_C=3\n");
 		const loaded = loadDevEnvFiles(ctx(), dir);
-		expect(process.env.DEV_A).toBe("from-env-local");
-		expect(process.env.DEV_B).toBe("only-in-env");
+		expect(process.env.DEV_A).toBe("2");
+		expect(process.env.DEV_B).toBe("2");
+		expect(process.env.DEV_C).toBe("3");
 		expect(loaded).toEqual([
-			{ path: join(dir, ".env.local"), applied: ["DEV_A"] },
-			{ path: join(dir, ".env"), applied: ["DEV_B"] },
+			{ path: join(dir, ".env"), applied: ["DEV_A", "DEV_B"] },
+			{ path: join(dir, ".env.local"), applied: ["DEV_A", "DEV_C"] },
 		]);
 		expect(formatEnvFiles(loaded, dir)).toBe(
-			".env.local (1 var) → .env (1 var)",
+			".env (2 vars) → .env.local (2 vars)",
 		);
 	});
 

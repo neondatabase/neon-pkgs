@@ -22,14 +22,13 @@ export const resolveEnvFilePath = (
 
 /**
  * The dotenv files `neon dev` loads by default, in load order: the project directory's
- * `.env.local`, then `.env`. Loaded with {@link loadEnvFileIntoProcess}, a key already set
- * wins, so the shell beats `.env.local`, which beats `.env`. Missing files are skipped.
+ * `.env`, then `.env.local`, whose values override it. Missing files are skipped.
  */
 export const defaultDevEnvFiles = (
 	location: ProjectLocation & { cwd: string },
 ): string[] => {
 	const dir = projectDir(location);
-	return [join(dir, ".env.local"), join(dir, ".env")].filter((path) =>
+	return [join(dir, ".env"), join(dir, ".env.local")].filter((path) =>
 		existsSync(path),
 	);
 };
