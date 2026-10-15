@@ -69,7 +69,7 @@ const DEPLOY_FREE_SERVICES: ReadonlySet<NeonService> = new Set([
 	"functions",
 ]);
 
-export const needsDeploy = (declared: readonly NeonService[]): boolean =>
+const needsDeploy = (declared: readonly NeonService[]): boolean =>
 	declared.some((service) => !DEPLOY_FREE_SERVICES.has(service));
 
 export type InitEnvPull =

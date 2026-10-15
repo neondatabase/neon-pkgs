@@ -1673,7 +1673,7 @@ describe("init handler", () => {
 		expect(out).not.toContain("neon dev\n");
 	});
 
-	test("Functions next to a service awaiting a deploy keep their URL and run after deploy", async () => {
+	test("Functions next to a service awaiting a deploy keep their URL", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fn-auth-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -1757,11 +1757,17 @@ describe("init handler", () => {
 		);
 		const out = stdoutText(stdout);
 		expect(out).toContain("Neon agent skills");
-		expect(out.indexOf("neon checkout dev --create")).toBeLessThan(
-			out.indexOf("neon dev\n"),
-		);
-		expect(out.indexOf("neon dev\n")).toBeLessThan(
-			out.indexOf("neon config plan"),
+		const positions = [
+			"neon config plan",
+			"neon deploy",
+			"Optional, once deployed:",
+			"neon dev\n",
+			"neon checkout dev --create",
+			"Neon agent skills",
+		].map((text) => out.indexOf(text));
+		expect(positions.every((at) => at >= 0)).toBe(true);
+		expect(positions).toEqual(
+			[...positions].sort((left, right) => left - right),
 		);
 	});
 

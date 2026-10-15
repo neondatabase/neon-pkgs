@@ -46,7 +46,6 @@ import {
 	INIT_CONFIG_SERVICES_CONFLICT,
 	type InitEnvPull,
 	initEnvPullAfterConfig,
-	needsDeploy,
 	resolveInitConfigChoice,
 } from "./choices.js";
 import {
@@ -1394,7 +1393,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				...extraServicesNext({
 					skills: installsSkills(reportedTooling()),
 					functions: declared.includes("functions"),
-					needsDeploy: needsDeploy(declared),
 				}),
 			);
 		} else if (pendingExisting) {
