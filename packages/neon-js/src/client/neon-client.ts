@@ -20,6 +20,7 @@ export type NeonClientConstructorOptions<
  * For auth-free clients, use @neon/postgrest-js instead.
  */
 export class NeonClient<
+	// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 	Database = any,
 	SchemaName extends string & keyof Database = DefaultSchemaName<Database>,
 	TAuth extends NeonAuthAdapter = NeonAuthAdapter,

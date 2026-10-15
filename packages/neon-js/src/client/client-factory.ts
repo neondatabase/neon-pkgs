@@ -181,11 +181,13 @@ type CreateClientResult<
 // Overload: External auth provider (no Neon Auth) — returns a plain
 // NeonPostgrestClient with no `.auth` property. Listed first so its `auth?:
 // never` shape is matched before the auth-required object overloads.
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	config: CreateClientExternalConfig<DefaultSchemaName<Database>>,
 ): NeonPostgrestClient<Database, DefaultSchemaName<Database>>;
 
 // Overload: No adapter specified (defaults to BetterAuthVanillaAdapter)
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(config: {
 	auth: { url: string; allowAnonymous?: boolean };
 	dataApi: CreateClientDataApiConfig<
@@ -195,6 +197,7 @@ export function createClient<Database = any>(config: {
 }): CreateClientResult<Database, BetterAuthVanillaAdapterInstance>;
 
 // Overload: SupabaseAuthAdapter
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	config: CreateClientConfig<
 		DefaultSchemaName<Database>,
@@ -203,6 +206,7 @@ export function createClient<Database = any>(
 ): CreateClientResult<Database, SupabaseAuthAdapterInstance>;
 
 // Overload: BetterAuthVanillaAdapter
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	config: CreateClientConfig<
 		DefaultSchemaName<Database>,
@@ -211,6 +215,7 @@ export function createClient<Database = any>(
 ): CreateClientResult<Database, BetterAuthVanillaAdapterInstance>;
 
 // Overload: BetterAuthReactAdapter
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	config: CreateClientConfig<
 		DefaultSchemaName<Database>,
@@ -219,6 +224,7 @@ export function createClient<Database = any>(
 ): CreateClientResult<Database, BetterAuthReactAdapterInstance>;
 
 // Overload: String form, no adapter specified (defaults to BetterAuthVanillaAdapter)
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	baseUrl: string,
 	options?: CreateClientStringOptions<
@@ -228,6 +234,7 @@ export function createClient<Database = any>(
 ): CreateClientResult<Database, BetterAuthVanillaAdapterInstance>;
 
 // Overload: String form, SupabaseAuthAdapter
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	baseUrl: string,
 	options: CreateClientStringOptions<
@@ -237,6 +244,7 @@ export function createClient<Database = any>(
 ): CreateClientResult<Database, SupabaseAuthAdapterInstance>;
 
 // Overload: String form, BetterAuthVanillaAdapter
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	baseUrl: string,
 	options: CreateClientStringOptions<
@@ -246,6 +254,7 @@ export function createClient<Database = any>(
 ): CreateClientResult<Database, BetterAuthVanillaAdapterInstance>;
 
 // Overload: String form, BetterAuthReactAdapter
+// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 export function createClient<Database = any>(
 	baseUrl: string,
 	options: CreateClientStringOptions<
@@ -256,6 +265,7 @@ export function createClient<Database = any>(
 
 // Implementation signature
 export function createClient<
+	// biome-ignore lint/suspicious/noExplicitAny: `any` is the default so an unspecified Database generic stays compatible with the upstream PostgrestClient's untyped schema.
 	Database = any,
 	SchemaName extends string & keyof Database = DefaultSchemaName<Database>,
 	TAuthAdapter extends NeonAuthAdapter = BetterAuthVanillaAdapterInstance,
