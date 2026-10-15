@@ -6,7 +6,6 @@ import { listSkillIds } from "../skills/catalog.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
 import { helpCsv, helpEpilogue } from "../utils/help_text.js";
-import { listedServices } from "../utils/staging.js";
 
 export type { InitProps };
 
@@ -66,7 +65,7 @@ export const builder = (yargs: yargs.Argv) =>
 			"services",
 			servicesOption({
 				key: "services",
-				allowed: listedServices(NEON_SERVICES),
+				allowed: NEON_SERVICES,
 				describe: "Services to declare in neon.ts",
 				also:
 					"postgres alone writes the starter policy; every branch has Postgres. " +

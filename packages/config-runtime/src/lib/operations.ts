@@ -77,7 +77,7 @@ export async function inspect(
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.apiHost ? { apiHost: options.apiHost } : {}),
-		...(options.realtime ? { realtime: true } : {}),
+		...(options.realtime === false ? { realtime: false } : {}),
 	});
 }
 

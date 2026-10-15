@@ -16,9 +16,6 @@ import { renderNeonConfig } from "../config_template";
 import { test } from "../test_utils/fixtures";
 import { addCmd } from "./config";
 
-// unreachableHost points --api-host at 127.0.0.1.
-const STAGING_LOOPBACK = { NEON_STAGING_API_HOST: "http://127.0.0.1" };
-
 describe("config add", () => {
 	let workspace: string;
 
@@ -171,30 +168,11 @@ describe("config add", () => {
 		expect(read("neon.ts")).toBe(original);
 	});
 
-	test("add realtime is hidden and refused outside staging", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand(["config", "add", "--help"], {
-			snapshot: false,
-		});
-		expect(stdout).not.toContain("config add realtime");
-
-		await testCliCommand(["config", "add", "realtime", "--no-install"], {
-			unreachableHost: true,
-			code: 1,
-			cwd: workspace,
-			snapshot: false,
-			stderr: expect.stringContaining("Neon Realtime is coming soon!"),
-		});
-		expect(existsSync(join(workspace, "neon.ts"))).toBe(false);
-	});
-
 	test("add realtime declares Realtime without making an API request", async ({
 		testCliCommand,
 	}) => {
 		await testCliCommand(["config", "add", "realtime", "--no-install"], {
 			unreachableHost: true,
-			env: STAGING_LOOPBACK,
 			code: 0,
 			cwd: workspace,
 			snapshot: false,
@@ -219,7 +197,6 @@ describe("config add", () => {
 			],
 			{
 				unreachableHost: true,
-				env: STAGING_LOOPBACK,
 				code: 0,
 				cwd: workspace,
 				snapshot: false,
@@ -245,7 +222,6 @@ describe("config add", () => {
 			],
 			{
 				unreachableHost: true,
-				env: STAGING_LOOPBACK,
 				code: 1,
 				cwd: workspace,
 				snapshot: false,

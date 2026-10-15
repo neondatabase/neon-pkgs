@@ -145,14 +145,13 @@ describe("pullConfig", () => {
 			api,
 			projectId,
 			branchId: "br-main",
-			realtime: true,
 		});
 
 		expect(pulled.config.preview?.realtime).toBe(true);
 	});
 
-	test("does not read Realtime unless asked", async () => {
-		class ProductionRealtimeApi extends FakeNeonApi {
+	test("does not read Realtime with realtime: false", async () => {
+		class FailingRealtimeApi extends FakeNeonApi {
 			override async getProjectBranchRealtime(): Promise<never> {
 				throw new PlatformError(
 					ErrorCode.ServerError,
@@ -161,12 +160,12 @@ describe("pullConfig", () => {
 				);
 			}
 		}
-		const api = new ProductionRealtimeApi();
-		const projectId = "proj-production";
+		const api = new FailingRealtimeApi();
+		const projectId = "proj-skip-realtime";
 		api.seedProject({
 			project: {
 				id: projectId,
-				name: "production",
+				name: "skip-realtime",
 				regionId: "aws-us-east-1",
 				pgVersion: 17,
 			},
@@ -179,6 +178,7 @@ describe("pullConfig", () => {
 			api,
 			projectId,
 			branchId: "br-main",
+			realtime: false,
 		});
 
 		expect(pulled.config.preview?.realtime).toBeUndefined();
@@ -212,7 +212,6 @@ describe("pullConfig", () => {
 			api,
 			projectId,
 			branchId: "br-main",
-			realtime: true,
 		});
 
 		expect(pulled.config.preview?.realtime).toBeUndefined();

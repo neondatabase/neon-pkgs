@@ -36,7 +36,6 @@ import {
 	type ResolvedBranchRef,
 	resolveBranchRef,
 } from "../utils/enrichers.js";
-import { listedServices } from "../utils/staging.js";
 import { formatPulledEnv, pulledBranch } from "./env_output.js";
 
 export type EnvPullProps = BranchScopeProps & {
@@ -106,7 +105,7 @@ export const builder = (argv: yargs.Argv) =>
 						},
 						service: servicesOption({
 							key: "service",
-							allowed: listedServices(ENV_PULL_SERVICES),
+							allowed: ENV_PULL_SERVICES,
 							describe: "Pull only these services' variables",
 							also:
 								"Overrides neon.ts, and prunes only within the services you name. " +

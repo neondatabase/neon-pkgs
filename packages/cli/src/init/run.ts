@@ -35,7 +35,6 @@ import {
 	type PackageManager,
 	resolvePackageManager,
 } from "../utils/package_manager.js";
-import { assertRealtimeAvailable } from "../utils/staging.js";
 import {
 	pullInitEnv as defaultPullInitEnv,
 	type InitAuthOptions,
@@ -510,11 +509,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	if (props.config === false && servicesFlag !== undefined) {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
 	}
-	if (
-		servicesFlag !== undefined &&
-		parseConfigInitServices(servicesFlag).includes("realtime")
-	) {
-		assertRealtimeAvailable(props.apiHost);
+	if (servicesFlag !== undefined) {
+		parseConfigInitServices(servicesFlag);
 	}
 	const linkInputs: InitLinkInputs = {
 		...(props.orgId ? { orgId: props.orgId } : {}),
