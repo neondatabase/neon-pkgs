@@ -1086,6 +1086,17 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
+	"realtime.secret": (options) =>
+		fromGenerated(options, {
+			id: "realtime.secret",
+			generated: "getProjectBranchRealtimeSecret",
+			requiresApproval: true,
+			run: (neon, input, signal) =>
+				neon.realtime.secret(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
 	"realtime.rotateSecret": (options) =>
 		fromGenerated(options, {
 			id: "realtime.rotateSecret",

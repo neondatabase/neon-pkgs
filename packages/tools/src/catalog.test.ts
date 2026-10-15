@@ -566,6 +566,33 @@ describe("special mappings", () => {
 		expect(requests.map((r) => r.method)).toEqual(["POST", "GET", "GET"]);
 	});
 
+	test("realtime.secret requires approval and returns the branch secret", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["realtime.secret"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ secret: "rt_secret", pending: false });
+			},
+		});
+
+		expect(tools["realtime.secret"].requiresApproval).toBe(true);
+		expect(tools["realtime.secret"].annotations.readOnlyHint).toBe(true);
+		const result = await tools["realtime.secret"].execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+		});
+
+		expect(result).toEqual({
+			data: { secret: "rt_secret", pending: false },
+		});
+		expect(requests[0].method).toBe("GET");
+		expect(requests[0].url).toMatch(
+			/\/projects\/project-id\/branches\/branch-id\/realtime\/secret$/,
+		);
+	});
+
 	test("branches.delete has no hard_delete input", () => {
 		const tool = createNeonTool("branches.delete", { apiKey: "test-key" });
 		const schema = z.toJSONSchema(tool.inputSchema);
