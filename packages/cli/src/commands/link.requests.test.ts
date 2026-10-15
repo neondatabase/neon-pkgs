@@ -1,12 +1,12 @@
 import { fork } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import emocks from "emocks";
 import express from "express";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { NeonApiError } from "../api.js";
 import { clearAuthContext, setAuthContext } from "../auth_context.js";
 import { type LinkProps, runLink } from "./link.js";
@@ -127,6 +127,32 @@ describe("link request scheduling", () => {
 });
 
 describe("link with the bundled env pull", () => {
+	test("a deferred pull pins the branch without pulling or printing the skip hint", async () => {
+		const { apiClient, project, branches } = gatedClient();
+		const contextFile = join(tempDir(), ".neon");
+		const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+		const linked = runLink({
+			...linkProps(apiClient, contextFile),
+			envPull: true,
+			deferEnvPull: true,
+		});
+		branches.resolve(BRANCHES);
+		project.resolve(PROJECT);
+		await linked;
+		const written = stderr.mock.calls
+			.map((call) => String(call[0]))
+			.join("");
+		stderr.mockRestore();
+
+		expect(JSON.parse(readFileSync(contextFile, "utf8"))).toMatchObject({
+			branch: "dev",
+		});
+		expect(existsSync(join(dirname(contextFile), ".env.local"))).toBe(
+			false,
+		);
+		expect(written).not.toContain("Skipped env pull");
+	});
+
 	test("writes the env file without listing branches again after link and pullConfig", async () => {
 		const seen: string[] = [];
 		const app = express();

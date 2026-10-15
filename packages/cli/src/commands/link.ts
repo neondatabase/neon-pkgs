@@ -54,6 +54,8 @@ export type LinkProps = CommonProps & {
 	clear: boolean;
 	checks: boolean;
 	envPull: boolean;
+	/** The caller pulls after it writes neon.ts, so skip the pull without the skip hint. */
+	deferEnvPull?: boolean;
 	config?: boolean;
 	cwd?: string;
 	profile?: string;
@@ -1445,7 +1447,12 @@ const finalizeLink = async (
 	summary: HumanSummary,
 ): Promise<void> => {
 	printSummary(props, summary);
-	if (!summary.branch || !summary.projectId || summary.noChecks) {
+	if (
+		!summary.branch ||
+		!summary.projectId ||
+		summary.noChecks ||
+		props.deferEnvPull === true
+	) {
 		return;
 	}
 	const { config: _offerConfig, ...rest } = props;

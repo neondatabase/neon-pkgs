@@ -890,7 +890,7 @@ Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 
-After a new default `neon.ts` on a pinned branch, init runs `env pull` unless link already pulled env or the file declares extra services (those still need `neon config plan` / `neon deploy`).
+Init pulls the branch's env vars once, after the `neon.ts` step, so the pull includes what `neon.ts` declares. The AI Gateway and Functions need no deploy and are pulled immediately. When `neon.ts` declares Auth, the Data API, Object Storage, or Realtime, init pulls Postgres (and the AI Gateway when declared). `neon deploy` provisions the rest and pulls their env vars. An existing `neon.ts` is pulled by `link` as usual.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
