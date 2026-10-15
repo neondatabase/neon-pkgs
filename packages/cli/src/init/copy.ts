@@ -196,14 +196,14 @@ export const skippedLinkNext = (): string[] => [
 	`${getCliName()} link`,
 ];
 
-export const extraServicesNext = (input: {
+export const newConfigNext = (input: {
 	skills: boolean;
 	functions: boolean;
 }): string[] => [
 	"Preview the changes:",
 	`${getCliName()} config plan`,
 	"",
-	"Deploy when the changes and target are correct. Deploy also pulls the branch's environment variables:",
+	"Deploy to your Neon project:",
 	`${getCliName()} deploy`,
 	"",
 	"Optional, once deployed:",
@@ -218,6 +218,11 @@ export const extraServicesNext = (input: {
 				"Set up the services declared in neon.ts with your coding agent. The Neon agent skills cover best practices for each one.",
 			]
 		: []),
+];
+
+export const configInitNext = (): string[] => [
+	"Declare this project's Neon services as code in neon.ts:",
+	`${getCliName()} config init`,
 ];
 
 export const existingConfigNext = (): string[] => [
@@ -237,7 +242,7 @@ export const claimableThenServicesNext = (expiresAt: string): string[] => [
 	"After claiming the project, review neon.ts and preview the changes:",
 	`${getCliName()} config plan`,
 	"",
-	"Deploy when the changes and target are correct:",
+	"Deploy to your Neon project:",
 	`${getCliName()} deploy`,
 	"",
 	"Refresh local environment variables:",
