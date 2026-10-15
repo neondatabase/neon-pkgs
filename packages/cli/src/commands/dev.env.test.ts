@@ -79,6 +79,21 @@ describe("neon dev's dotenv loading", () => {
 		expect(process.env.DEV_SHELL).toBe("from-shell");
 	});
 
+	it("treats a shell name in different case as set on Windows", () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		try {
+			vi.stubEnv("Dev_Shell", "from-shell");
+			writeFileSync(join(dir, ".env.local"), "DEV_SHELL=from-file\n");
+			expect(loadDevEnvFiles(ctx(), dir)).toEqual([
+				{ path: join(dir, ".env.local"), applied: [] },
+			]);
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+			delete process.env.Dev_Shell;
+		}
+	});
+
 	it("loads only the --env file, and resolves it from cwd", () => {
 		writeFileSync(
 			join(dir, ".env.local"),

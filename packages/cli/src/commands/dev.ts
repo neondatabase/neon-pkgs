@@ -236,15 +236,18 @@ export const loadDevEnvFiles = (
 					? { contextFile: props.contextFile }
 					: {}),
 			});
+	// Windows env var names are case-insensitive, so `Token` in the shell blocks `TOKEN`.
+	const name = (key: string) =>
+		process.platform === "win32" ? key.toUpperCase() : key;
 	const preset = new Set(
-		Object.keys(process.env).filter(
-			(key) => process.env[key] !== undefined,
-		),
+		Object.keys(process.env)
+			.filter((key) => process.env[key] !== undefined)
+			.map(name),
 	);
 	return files.map((path) => {
 		const applied: string[] = [];
 		for (const [key, value] of Object.entries(readEnvFile(path))) {
-			if (preset.has(key)) continue;
+			if (preset.has(name(key))) continue;
 			process.env[key] = value;
 			applied.push(key);
 		}
