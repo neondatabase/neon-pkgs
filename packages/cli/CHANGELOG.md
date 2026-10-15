@@ -1,5 +1,18 @@
 # neon
 
+## 8.5.0
+
+### Minor Changes
+
+- d123ab5: Neon Realtime works against the production API. `neon realtime` (including `neon realtime subscribe`), `neon config add realtime`, `--services realtime`, and `preview.realtime` in `neon.ts` no longer require `NEON_API_HOST` to point at staging, and `neon env pull`, `neon config status`, and `neon dev` read the branch's Realtime state again. `pullConfig` and `inspect` read Realtime by default; pass `realtime: false` to skip it.
+
+### Patch Changes
+
+- 7413f64: Rename Realtime subscription output events from `reset` and `batch` to `rows` and `changes`, matching the SDK terminology.
+- 72576e7: Add `neon-realtime` to `neon skills`. `neon skills -y` and `neon init -y` install it with the other default Neon skills.
+- Updated dependencies [d123ab5]
+  - @neon/config-runtime@1.10.0
+
 ## 8.4.5
 
 ### Patch Changes
