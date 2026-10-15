@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-	analyticsUserId,
+	analyticsIdentity,
 	commandSuccessProperties,
 	getAnalyticsEventProperties,
 	getErrorAnalyticsEventProperties,
@@ -17,17 +17,41 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 });
 
-describe("analyticsUserId", () => {
+const ANON_ID = "0b5c3f1e-7c1d-4a52-9a3e-2d1f6a8b9c10";
+
+describe("analyticsIdentity", () => {
 	it("reports a run nothing identified as anonymous, not as an empty identity", () => {
-		expect(analyticsUserId("")).toBe("anonymous");
+		expect(analyticsIdentity("", undefined)).toEqual({
+			userId: "anonymous",
+		});
 	});
 
 	it("treats an id the API never returned the same as an empty one", () => {
-		expect(analyticsUserId(undefined)).toBe("anonymous");
+		expect(analyticsIdentity(undefined, undefined)).toEqual({
+			userId: "anonymous",
+		});
 	});
 
 	it("attributes an identified run to the user", () => {
-		expect(analyticsUserId("1234")).toBe("1234");
+		expect(analyticsIdentity("1234", undefined)).toEqual({
+			userId: "1234",
+		});
+	});
+
+	it("sends the stored id alone while nobody is identified", () => {
+		expect(analyticsIdentity(undefined, ANON_ID)).toEqual({
+			anonymousId: ANON_ID,
+		});
+		expect(analyticsIdentity("", ANON_ID)).toEqual({
+			anonymousId: ANON_ID,
+		});
+	});
+
+	it("sends both ids once the user is known, so earlier anonymous events can be linked", () => {
+		expect(analyticsIdentity("1234", ANON_ID)).toEqual({
+			userId: "1234",
+			anonymousId: ANON_ID,
+		});
 	});
 });
 
