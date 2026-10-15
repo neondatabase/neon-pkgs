@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.0.2
+
+### Patch Changes
+
+- 8ac70da: Raise the `zod` dependency range to `^4.5.4`.
+
 ## 1.0.1
 
 ### Patch Changes

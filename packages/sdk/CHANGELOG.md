@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 7.3.0
+
+### Minor Changes
+
+- 0cee585: Add the Neon Auth OAuth provider endpoints from the latest Neon API spec. `@neon/sdk/raw` gains `getNeonAuthOAuthProviderPlugin`, `updateNeonAuthOAuthProviderPlugin`, and `listNeonAuthOAuthClients` / `createNeonAuthOAuthClient` / `getNeonAuthOAuthClient` / `updateNeonAuthOAuthClient` / `deleteNeonAuthOAuthClient` / `rotateNeonAuthOAuthClientSecret`; `@neon/tools/schemas` gains their request schemas.
+
 ## 7.2.0
 
 ### Minor Changes

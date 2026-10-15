@@ -1,5 +1,18 @@
 # @neon/tools
 
+## 2.2.0
+
+### Minor Changes
+
+- 0cee585: Add the Neon Auth OAuth provider endpoints from the latest Neon API spec. `@neon/sdk/raw` gains `getNeonAuthOAuthProviderPlugin`, `updateNeonAuthOAuthProviderPlugin`, and `listNeonAuthOAuthClients` / `createNeonAuthOAuthClient` / `getNeonAuthOAuthClient` / `updateNeonAuthOAuthClient` / `deleteNeonAuthOAuthClient` / `rotateNeonAuthOAuthClientSecret`; `@neon/tools/schemas` gains their request schemas.
+- e0eed3d: Publish `realtime.secret` as a tool. It returns the branch's Realtime secret and requires approval.
+
+### Patch Changes
+
+- 8ac70da: Raise the `zod` dependency range to `^4.5.4`.
+- Updated dependencies [0cee585]
+  - @neon/sdk@7.3.0
+
 ## 2.1.0
 
 ### Minor Changes

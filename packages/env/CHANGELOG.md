@@ -1,5 +1,13 @@
 # @neondatabase/env
 
+## 1.6.3
+
+### Patch Changes
+
+- 8ac70da: Raise the `zod` dependency range to `^4.5.4`.
+- Updated dependencies [8ac70da]
+  - @neon/config@1.9.2
+
 ## 1.6.2
 
 ### Patch Changes
