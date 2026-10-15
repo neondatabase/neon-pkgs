@@ -65,6 +65,9 @@ jobs:
                       # node:sqlite, organization routes) and `next/server`, which do
                       # not compile under skipLibCheck:false. See issue #765.
                       skipConsumerCompile: true
+                    - name: "@neon/oauth"
+                      dir: oauth
+                      namedExports: true
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -83,4 +86,4 @@ jobs:
 
             - name: Compile declarations as a consumer
               if: ${{ !matrix.skipConsumerCompile }}
-              run: pnpm exec node scripts/check-dist-types.mjs packages/${{ matrix.dir }}
+              run: pnpm exec node scripts/check-dist-types.mjs packages/${{ matrix.dir }} ${{ matrix.namedExports && '--named-exports' || '' }}

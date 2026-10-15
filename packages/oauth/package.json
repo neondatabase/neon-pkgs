@@ -1,0 +1,137 @@
+{
+	"name": "@neon/oauth",
+	"version": "0.0.0",
+	"description": "OAuth helpers for apps built on Neon Auth: sign users in, verify access tokens, and protect MCP servers",
+	"keywords": [
+		"neon",
+		"neondb",
+		"postgresql",
+		"auth",
+		"oauth",
+		"oidc",
+		"pkce",
+		"mcp",
+		"model-context-protocol",
+		"jwt",
+		"typescript"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git",
+		"directory": "packages/oauth"
+	},
+	"homepage": "https://github.com/neondatabase/neon-pkgs/tree/main/packages/oauth#readme",
+	"bugs": {
+		"url": "https://github.com/neondatabase/neon-pkgs/issues"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./verify": {
+			"types": "./dist/verify/index.d.ts",
+			"default": "./dist/verify/index.js"
+		},
+		"./adapter": {
+			"types": "./dist/adapter.d.ts",
+			"default": "./dist/adapter.js"
+		},
+		"./hono": {
+			"types": "./dist/hono.d.ts",
+			"default": "./dist/hono.js"
+		},
+		"./express": {
+			"types": "./dist/express.d.ts",
+			"default": "./dist/express.js"
+		},
+		"./next": {
+			"types": "./dist/next.d.ts",
+			"default": "./dist/next.js"
+		},
+		"./node": {
+			"types": "./dist/node.d.ts",
+			"default": "./dist/node.js"
+		},
+		"./mcp": {
+			"types": "./dist/mcp/index.d.ts",
+			"default": "./dist/mcp/index.js"
+		},
+		"./mcp/hono": {
+			"types": "./dist/mcp/hono.d.ts",
+			"default": "./dist/mcp/hono.js"
+		},
+		"./mcp/express": {
+			"types": "./dist/mcp/express.d.ts",
+			"default": "./dist/mcp/express.js"
+		},
+		"./mcp/next": {
+			"types": "./dist/mcp/next.d.ts",
+			"default": "./dist/mcp/next.js"
+		},
+		"./mcp/node": {
+			"types": "./dist/mcp/node.d.ts",
+			"default": "./dist/mcp/node.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"docs/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest",
+		"test:ci": "vitest run --passWithNoTests",
+		"tsc": "tsc"
+	},
+	"devDependencies": {
+		"@modelcontextprotocol/sdk": "1.30.0",
+		"@types/express": "5.0.3",
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"express": "5.1.0",
+		"hono": "4.12.25",
+		"rolldown": "1.2.8",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"dependencies": {
+		"jose": "6.2.5",
+		"openid-client": "6.8.8"
+	},
+	"peerDependencies": {
+		"@modelcontextprotocol/sdk": ">=1.20.0",
+		"express": ">=4.0.0",
+		"hono": ">=4.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@modelcontextprotocol/sdk": {
+			"optional": true
+		},
+		"express": {
+			"optional": true
+		},
+		"hono": {
+			"optional": true
+		}
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}
