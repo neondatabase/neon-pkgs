@@ -69,10 +69,7 @@ export const rotateSecret = async (
 	if (!props.wait) return;
 
 	const deadline = Date.now() + ROTATION_POLL_TIMEOUT_MS;
-	while (Date.now() < deadline) {
-		await new Promise((resolve) =>
-			setTimeout(resolve, ROTATION_POLL_INTERVAL_MS),
-		);
+	do {
 		const { data } = await props.apiClient.getProjectBranchRealtime(
 			props.projectId,
 			branchId,
@@ -88,7 +85,16 @@ export const rotateSecret = async (
 			);
 			return;
 		}
-	}
+
+		const remainingMs = deadline - Date.now();
+		if (remainingMs <= 0) break;
+		await new Promise((resolve) =>
+			setTimeout(
+				resolve,
+				Math.min(ROTATION_POLL_INTERVAL_MS, remainingMs),
+			),
+		);
+	} while (Date.now() < deadline);
 
 	throw new Error(
 		`Timed out waiting for Realtime secret rotation on branch ${branchId}. It may still be in progress.`,
