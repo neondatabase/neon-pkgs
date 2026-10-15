@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+	captureShellEnv,
 	devEnvContext,
 	formatEnvFiles,
 	loadDevEnvFiles,
@@ -91,6 +92,28 @@ describe("neon dev's dotenv loading", () => {
 		} finally {
 			if (platform) Object.defineProperty(process, "platform", platform);
 			delete process.env.Dev_Shell;
+		}
+	});
+
+	it("captures PORT through process.env, which Windows looks up case-insensitively", () => {
+		const env = process.env;
+		const windowsEnv = new Proxy<NodeJS.ProcessEnv>(
+			{ Port: "4321" },
+			{
+				get: (target, key) =>
+					typeof key === "string"
+						? Object.entries(target).find(
+								([name]) =>
+									name.toUpperCase() === key.toUpperCase(),
+							)?.[1]
+						: undefined,
+			},
+		);
+		Object.defineProperty(process, "env", { value: windowsEnv });
+		try {
+			expect(captureShellEnv().PORT).toBe("4321");
+		} finally {
+			Object.defineProperty(process, "env", { value: env });
 		}
 	});
 

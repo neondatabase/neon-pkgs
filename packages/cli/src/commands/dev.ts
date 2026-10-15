@@ -193,7 +193,7 @@ export const handler = async (props: DevProps): Promise<void> => {
 	// Captured before the dotenv files load. Credential reuse keeps reading only the file
 	// `env pull` writes: mixing in .env.local could pair a pulled AWS_ACCESS_KEY_ID with a
 	// stale secret. Port selection reads PORT from it too.
-	const shellEnv = { ...process.env };
+	const shellEnv = captureShellEnv();
 	const envFiles = formatEnvFiles(
 		loadDevEnvFiles(props, process.cwd()),
 		process.cwd(),
@@ -215,6 +215,16 @@ export const handler = async (props: DevProps): Promise<void> => {
 
 	await runFromConfig(props, shellEnv, envFiles);
 };
+
+/**
+ * Copy of the shell env before any dotenv file loads. PORT is read through `process.env`,
+ * which is case-insensitive on Windows, so a shell `Port` still sets the port. Exported for
+ * unit testing.
+ */
+export const captureShellEnv = (): NodeJS.ProcessEnv => ({
+	...process.env,
+	PORT: process.env.PORT,
+});
 
 /** A dotenv file `neon dev` loaded, and the keys it set (keys from the shell are skipped). */
 export type LoadedEnvFile = { path: string; applied: string[] };
