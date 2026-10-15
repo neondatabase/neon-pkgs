@@ -3587,6 +3587,339 @@
                 }
             }
         },
+        "/projects/{project_id}/branches/{branch_id}/auth/plugins/oauth-provider": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "Retrieve OAuth provider plugin configuration",
+                "description": "Returns the OAuth provider plugin configuration for Neon Auth.\nThe OAuth provider plugin lets Neon Auth act as an OAuth 2.1 authorization server for your own clients, such as MCP clients.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "getNeonAuthOAuthProviderPlugin",
+                "responses": {
+                    "200": {
+                        "description": "Returns the OAuth provider plugin configuration",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthOAuthProviderConfig"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "patch": {
+                "summary": "Update OAuth provider plugin configuration",
+                "description": "Updates the OAuth provider plugin configuration for Neon Auth.\nOnly the fields provided in the request body are updated; omitted fields retain their current values.\nA provided `resources` list replaces the stored list.\nA provided `mcp` object replaces the stored MCP configuration and must include `resource`.\nThe plugin can only be enabled on the project's root branch.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "updateNeonAuthOAuthProviderPlugin",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/NeonAuthOAuthProviderConfigUpdate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "The OAuth provider plugin configuration has been updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthOAuthProviderConfig"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "List OAuth clients",
+                "description": "Lists the OAuth clients registered for the branch's Neon Auth OAuth provider.\nClient secrets are never returned.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "listNeonAuthOAuthClients",
+                "responses": {
+                    "200": {
+                        "description": "Returns the OAuth clients",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListNeonAuthOAuthClientsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "post": {
+                "summary": "Create an OAuth client",
+                "description": "Registers an OAuth client with the branch's Neon Auth OAuth provider.\nFor `confidential` clients the response includes the `client_secret`, which is shown only once.\nEvery entry in `resources` must be configured on the OAuth provider plugin.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "createNeonAuthOAuthClient",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/NeonAuthOAuthClientCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "The OAuth client has been created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthOAuthClientCreated"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "client_id",
+                    "in": "path",
+                    "description": "The OAuth client ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9]+$",
+                        "maxLength": 64
+                    }
+                }
+            ],
+            "get": {
+                "summary": "Retrieve an OAuth client",
+                "description": "Returns an OAuth client registered with the branch's Neon Auth OAuth provider.\nThe client secret is never returned.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "getNeonAuthOAuthClient",
+                "responses": {
+                    "200": {
+                        "description": "Returns the OAuth client",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthOAuthClient"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "patch": {
+                "summary": "Update an OAuth client",
+                "description": "Updates an OAuth client. Only the fields provided in the request body are updated.\nA provided `resources` list replaces the client's stored list. The client `type` cannot be changed.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "updateNeonAuthOAuthClient",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/NeonAuthOAuthClientUpdateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "The OAuth client has been updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthOAuthClient"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            },
+            "delete": {
+                "summary": "Delete an OAuth client",
+                "description": "Deletes an OAuth client. Tokens already issued to the client are not revoked.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "deleteNeonAuthOAuthClient",
+                "responses": {
+                    "204": {
+                        "description": "The OAuth client has been deleted"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
+        "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}/rotate_secret": {
+            "parameters": [
+                {
+                    "name": "project_id",
+                    "in": "path",
+                    "description": "The Neon project ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "branch_id",
+                    "in": "path",
+                    "description": "The Neon branch ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,60}$"
+                    }
+                },
+                {
+                    "name": "client_id",
+                    "in": "path",
+                    "description": "The OAuth client ID",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9]+$",
+                        "maxLength": 64
+                    }
+                }
+            ],
+            "post": {
+                "summary": "Rotate an OAuth client secret",
+                "description": "Generates a new secret for a confidential OAuth client and invalidates the previous one.\nThe new secret is shown only once.\n",
+                "tags": [
+                    "Auth"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "rotateNeonAuthOAuthClientSecret",
+                "responses": {
+                    "200": {
+                        "description": "The client secret has been rotated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/NeonAuthOAuthClientSecret"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
         "/projects/{project_id}/branches/{branch_id}/auth/webhooks": {
             "parameters": [
                 {
@@ -15881,6 +16214,299 @@
                     }
                 }
             },
+            "NeonAuthOAuthProviderResource": {
+                "type": "object",
+                "required": [
+                    "identifier"
+                ],
+                "properties": {
+                    "identifier": {
+                        "type": "string",
+                        "description": "Absolute URL identifying a protected resource. Issued access tokens carry it as their audience."
+                    }
+                }
+            },
+            "NeonAuthOAuthProviderMcp": {
+                "type": "object",
+                "properties": {
+                    "resource": {
+                        "type": "string",
+                        "description": "The MCP server URL that dynamically registered clients are linked to."
+                    },
+                    "dynamic_registration": {
+                        "type": "boolean",
+                        "description": "Whether MCP clients may register themselves via dynamic client registration (RFC 7591). Defaults to true, but takes effect only when an MCP resource is configured; reads report false otherwise. When false, only clients created through the OAuth clients API can be used, and they can still be linked to the MCP resource."
+                    }
+                }
+            },
+            "NeonAuthOAuthProviderMcpUpdate": {
+                "type": "object",
+                "required": [
+                    "resource"
+                ],
+                "properties": {
+                    "resource": {
+                        "type": "string",
+                        "description": "The MCP server URL that dynamically registered clients are linked to."
+                    },
+                    "dynamic_registration": {
+                        "type": "boolean",
+                        "description": "Whether MCP clients may register themselves via dynamic client registration (RFC 7591). When omitted, the stored value is kept."
+                    }
+                }
+            },
+            "NeonAuthOAuthProviderConfig": {
+                "type": "object",
+                "required": [
+                    "enabled"
+                ],
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether the OAuth provider plugin is enabled.",
+                        "default": false
+                    },
+                    "login_page": {
+                        "type": "string",
+                        "description": "URL of the page that authorization requests redirect to for sign-in."
+                    },
+                    "consent_page": {
+                        "type": "string",
+                        "description": "URL of the page that authorization requests redirect to for consent."
+                    },
+                    "mcp": {
+                        "$ref": "#/components/schemas/NeonAuthOAuthProviderMcp",
+                        "description": "MCP resource configuration."
+                    },
+                    "resources": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/NeonAuthOAuthProviderResource"
+                        },
+                        "description": "Protected resources that clients can be linked to."
+                    }
+                }
+            },
+            "NeonAuthOAuthProviderConfigUpdate": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether the OAuth provider plugin is enabled."
+                    },
+                    "login_page": {
+                        "type": "string",
+                        "description": "URL of the page that authorization requests redirect to for sign-in."
+                    },
+                    "consent_page": {
+                        "type": "string",
+                        "description": "URL of the page that authorization requests redirect to for consent."
+                    },
+                    "mcp": {
+                        "$ref": "#/components/schemas/NeonAuthOAuthProviderMcpUpdate",
+                        "description": "MCP resource configuration. When provided, `resource` is required and the stored MCP configuration is replaced as a whole."
+                    },
+                    "resources": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/NeonAuthOAuthProviderResource"
+                        },
+                        "description": "Protected resources that clients can be linked to. When provided, replaces the stored list."
+                    }
+                }
+            },
+            "NeonAuthOAuthClientType": {
+                "type": "string",
+                "enum": [
+                    "confidential",
+                    "public"
+                ],
+                "description": "Confidential clients authenticate with a client secret. Public clients have no secret."
+            },
+            "NeonAuthOAuthClient": {
+                "type": "object",
+                "required": [
+                    "client_id",
+                    "name",
+                    "type",
+                    "redirect_uris",
+                    "resources",
+                    "skip_consent",
+                    "disabled"
+                ],
+                "properties": {
+                    "client_id": {
+                        "type": "string",
+                        "description": "The OAuth client ID."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Display name of the client."
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/NeonAuthOAuthClientType"
+                    },
+                    "redirect_uris": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Redirect URIs the client may use."
+                    },
+                    "resources": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Identifiers of the protected resources the client is linked to."
+                    },
+                    "skip_consent": {
+                        "type": "boolean",
+                        "description": "Whether users are not asked for consent when authorizing this client."
+                    },
+                    "disabled": {
+                        "type": "boolean",
+                        "description": "Whether the client is disabled."
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When the client was created."
+                    }
+                }
+            },
+            "NeonAuthOAuthClientCreated": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/NeonAuthOAuthClient"
+                    },
+                    {
+                        "type": "object",
+                        "x-sensitive": [
+                            "client_secret"
+                        ],
+                        "properties": {
+                            "client_secret": {
+                                "type": "string",
+                                "description": "The client secret. Returned only for confidential clients and only in this response."
+                            }
+                        }
+                    }
+                ]
+            },
+            "ListNeonAuthOAuthClientsResponse": {
+                "type": "object",
+                "required": [
+                    "clients"
+                ],
+                "properties": {
+                    "clients": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/NeonAuthOAuthClient"
+                        },
+                        "description": "OAuth clients registered for the branch."
+                    }
+                }
+            },
+            "NeonAuthOAuthClientCreateRequest": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "redirect_uris",
+                    "type",
+                    "resources"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "description": "Display name of the client."
+                    },
+                    "redirect_uris": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Redirect URIs the client may use. Must be https, or http on loopback hosts when localhost is allowed."
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/NeonAuthOAuthClientType"
+                    },
+                    "resources": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 11,
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Identifiers of the protected resources to link the client to. Each must be configured on the OAuth provider plugin."
+                    },
+                    "skip_consent": {
+                        "type": "boolean",
+                        "description": "Whether to skip the consent prompt for this client."
+                    }
+                }
+            },
+            "NeonAuthOAuthClientUpdateRequest": {
+                "type": "object",
+                "description": "At least one field must be provided.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "description": "Display name of the client."
+                    },
+                    "redirect_uris": {
+                        "type": "array",
+                        "maxItems": 10,
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Redirect URIs the client may use. When provided, replaces the stored list."
+                    },
+                    "skip_consent": {
+                        "type": "boolean",
+                        "description": "Whether to skip the consent prompt for this client."
+                    },
+                    "disabled": {
+                        "type": "boolean",
+                        "description": "Whether the client is disabled."
+                    },
+                    "resources": {
+                        "type": "array",
+                        "maxItems": 11,
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Identifiers of the protected resources to link the client to. When provided, replaces the stored list."
+                    }
+                }
+            },
+            "NeonAuthOAuthClientSecret": {
+                "type": "object",
+                "required": [
+                    "client_id",
+                    "client_secret"
+                ],
+                "x-sensitive": [
+                    "client_secret"
+                ],
+                "properties": {
+                    "client_id": {
+                        "type": "string",
+                        "description": "The OAuth client ID."
+                    },
+                    "client_secret": {
+                        "type": "string",
+                        "description": "The new client secret. Shown only once."
+                    }
+                }
+            },
             "NeonAuthTransferAuthProviderProjectRequest": {
                 "type": "object",
                 "required": [
@@ -15955,6 +16581,10 @@
                     "phone_number": {
                         "$ref": "#/components/schemas/NeonAuthPhoneNumberConfig",
                         "description": "Configuration for the phone number authentication plugin."
+                    },
+                    "oauth_provider": {
+                        "$ref": "#/components/schemas/NeonAuthOAuthProviderConfig",
+                        "description": "Configuration for the OAuth provider plugin, which lets Neon Auth act as an OAuth authorization server for your own clients."
                     },
                     "email_provider": {
                         "$ref": "#/components/schemas/NeonAuthEmailServerConfigResponse",

@@ -1492,6 +1492,84 @@ export const zNeonAuthPhoneNumberConfigUpdate = z.strictObject({
     otp_expires_in: z.int().gte(60).lte(600).optional()
 });
 
+export const zNeonAuthOAuthProviderResource = z.strictObject({
+    identifier: z.string()
+});
+
+export const zNeonAuthOAuthProviderMcp = z.strictObject({
+    resource: z.string().optional(),
+    dynamic_registration: z.boolean().optional()
+});
+
+export const zNeonAuthOAuthProviderMcpUpdate = z.strictObject({
+    resource: z.string(),
+    dynamic_registration: z.boolean().optional()
+});
+
+export const zNeonAuthOAuthProviderConfig = z.strictObject({
+    enabled: z.boolean(),
+    login_page: z.string().optional(),
+    consent_page: z.string().optional(),
+    mcp: zNeonAuthOAuthProviderMcp.optional(),
+    resources: z.array(zNeonAuthOAuthProviderResource).optional()
+});
+
+export const zNeonAuthOAuthProviderConfigUpdate = z.strictObject({
+    enabled: z.boolean().optional(),
+    login_page: z.string().optional(),
+    consent_page: z.string().optional(),
+    mcp: zNeonAuthOAuthProviderMcpUpdate.optional(),
+    resources: z.array(zNeonAuthOAuthProviderResource).optional()
+});
+
+/**
+ * Confidential clients authenticate with a client secret. Public clients have no secret.
+ */
+export const zNeonAuthOAuthClientType = z.enum(['confidential', 'public']);
+
+export const zNeonAuthOAuthClient = z.strictObject({
+    client_id: z.string(),
+    name: z.string(),
+    type: zNeonAuthOAuthClientType,
+    redirect_uris: z.array(z.string()),
+    resources: z.array(z.string()),
+    skip_consent: z.boolean(),
+    disabled: z.boolean(),
+    created_at: z.iso.datetime().optional()
+});
+
+export const zNeonAuthOAuthClientCreated = zNeonAuthOAuthClient.merge(z.strictObject({
+    client_secret: z.string().optional()
+}));
+
+export const zListNeonAuthOAuthClientsResponse = z.strictObject({
+    clients: z.array(zNeonAuthOAuthClient)
+});
+
+export const zNeonAuthOAuthClientCreateRequest = z.strictObject({
+    name: z.string().min(1).max(100),
+    redirect_uris: z.array(z.string()).min(1).max(10),
+    type: zNeonAuthOAuthClientType,
+    resources: z.array(z.string()).min(1).max(11),
+    skip_consent: z.boolean().optional()
+});
+
+/**
+ * At least one field must be provided.
+ */
+export const zNeonAuthOAuthClientUpdateRequest = z.strictObject({
+    name: z.string().min(1).max(100).optional(),
+    redirect_uris: z.array(z.string()).max(10).optional(),
+    skip_consent: z.boolean().optional(),
+    disabled: z.boolean().optional(),
+    resources: z.array(z.string()).max(11).optional()
+});
+
+export const zNeonAuthOAuthClientSecret = z.strictObject({
+    client_id: z.string(),
+    client_secret: z.string()
+});
+
 export const zNeonAuthTransferAuthProviderProjectRequest = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     auth_provider: zNeonAuthSupportedAuthProvider
@@ -1631,6 +1709,7 @@ export const zNeonAuthPluginConfigs = z.strictObject({
     organization: zNeonAuthOrganizationConfig.optional(),
     magic_link: zNeonAuthMagicLinkConfig.optional(),
     phone_number: zNeonAuthPhoneNumberConfig.optional(),
+    oauth_provider: zNeonAuthOAuthProviderConfig.optional(),
     email_provider: zNeonAuthEmailServerConfigResponse.optional(),
     email_and_password: zNeonAuthEmailAndPasswordConfig.optional(),
     oauth_providers: z.array(zNeonAuthOauthProvider).optional(),
@@ -2826,6 +2905,56 @@ export const zUpdateNeonAuthPhoneNumberPluginBody = zNeonAuthPhoneNumberConfigUp
 export const zUpdateNeonAuthPhoneNumberPluginPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zGetNeonAuthOAuthProviderPluginPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zUpdateNeonAuthOAuthProviderPluginBody = zNeonAuthOAuthProviderConfigUpdate;
+
+export const zUpdateNeonAuthOAuthProviderPluginPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zListNeonAuthOAuthClientsPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zCreateNeonAuthOAuthClientBody = zNeonAuthOAuthClientCreateRequest;
+
+export const zCreateNeonAuthOAuthClientPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+});
+
+export const zDeleteNeonAuthOAuthClientPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+});
+
+export const zGetNeonAuthOAuthClientPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+});
+
+export const zUpdateNeonAuthOAuthClientBody = zNeonAuthOAuthClientUpdateRequest;
+
+export const zUpdateNeonAuthOAuthClientPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+});
+
+export const zRotateNeonAuthOAuthClientSecretPath = z.strictObject({
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
 });
 
 export const zGetNeonAuthWebhookConfigPath = z.strictObject({

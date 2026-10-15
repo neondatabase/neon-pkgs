@@ -24,6 +24,7 @@ export const operationIds = [
 	"createNeonAuth",
 	"createNeonAuthIntegration",
 	"createNeonAuthNewUser",
+	"createNeonAuthOAuthClient",
 	"createNeonAuthProviderSDKKeys",
 	"createOrganizationInvitations",
 	"createOrgApiKey",
@@ -44,6 +45,7 @@ export const operationIds = [
 	"deleteBranchNeonAuthUser",
 	"deleteNeonAuthDomainFromRedirectURIWhitelist",
 	"deleteNeonAuthIntegration",
+	"deleteNeonAuthOAuthClient",
 	"deleteNeonAuthOauthProvider",
 	"deleteNeonAuthUser",
 	"deleteOrganizationSpendingLimit",
@@ -83,6 +85,8 @@ export const operationIds = [
 	"getNeonAuthEmailAndPasswordConfig",
 	"getNeonAuthEmailProvider",
 	"getNeonAuthEmailServer",
+	"getNeonAuthOAuthClient",
+	"getNeonAuthOAuthProviderPlugin",
 	"getNeonAuthPhoneNumberPlugin",
 	"getNeonAuthPluginConfigs",
 	"getNeonAuthWebhookConfig",
@@ -118,6 +122,7 @@ export const operationIds = [
 	"listBranchNeonAuthTrustedDomains",
 	"listCredentials",
 	"listNeonAuthIntegrations",
+	"listNeonAuthOAuthClients",
 	"listNeonAuthOauthProviders",
 	"listNeonAuthRedirectURIWhitelistDomains",
 	"listOrganizationVPCEndpoints",
@@ -158,6 +163,7 @@ export const operationIds = [
 	"revokeOrgApiKey",
 	"revokePermissionFromProject",
 	"rotateCredential",
+	"rotateNeonAuthOAuthClientSecret",
 	"rotateProjectBranchRealtimeSecret",
 	"sendNeonAuthEmailProviderTest",
 	"sendNeonAuthTestEmail",
@@ -179,7 +185,9 @@ export const operationIds = [
 	"updateNeonAuthEmailProvider",
 	"updateNeonAuthEmailServer",
 	"updateNeonAuthMagicLinkPlugin",
+	"updateNeonAuthOAuthClient",
 	"updateNeonAuthOauthProvider",
+	"updateNeonAuthOAuthProviderPlugin",
 	"updateNeonAuthOrganizationPlugin",
 	"updateNeonAuthPhoneNumberPlugin",
 	"updateNeonAuthUserRole",
@@ -683,6 +691,42 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.createNeonAuthNewUser({
 			body: optionalGroup({ "project_id": input["project_id"], "auth_provider": input["auth_provider"], "email": input["email"], "name": input["name"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"createNeonAuthOAuthClient": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "createNeonAuthOAuthClient",
+				id: "create_neon_auth_o_auth_client",
+				title: "Create an OAuth client",
+				description: "Registers an OAuth client with the branch's Neon Auth OAuth provider.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zCreateNeonAuthOAuthClientPath.shape["project_id"],
+	"branch_id": zod.zCreateNeonAuthOAuthClientPath.shape["branch_id"],
+	"name": zod.zCreateNeonAuthOAuthClientBody.shape["name"],
+	"redirect_uris": zod.zCreateNeonAuthOAuthClientBody.shape["redirect_uris"],
+	"type": zod.zCreateNeonAuthOAuthClientBody.shape["type"],
+	"resources": zod.zCreateNeonAuthOAuthClientBody.shape["resources"],
+	"skip_consent": zod.zCreateNeonAuthOAuthClientBody.shape["skip_consent"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.createNeonAuthOAuthClient({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: optionalGroup({ "name": input["name"], "redirect_uris": input["redirect_uris"], "type": input["type"], "resources": input["resources"], "skip_consent": input["skip_consent"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -1357,6 +1401,37 @@ export const operationFactories = {
 					raw.deleteNeonAuthIntegration({
 			path: optionalGroup({ "project_id": input["project_id"], "auth_provider": input["auth_provider"] }, true),
 			body: optionalGroup({ "delete_data": input["delete_data"] }, false),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"deleteNeonAuthOAuthClient": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "deleteNeonAuthOAuthClient",
+				id: "delete_neon_auth_o_auth_client",
+				title: "Delete an OAuth client",
+				description: "Deletes an OAuth client.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zDeleteNeonAuthOAuthClientPath.shape["project_id"],
+	"branch_id": zod.zDeleteNeonAuthOAuthClientPath.shape["branch_id"],
+	"client_id": zod.zDeleteNeonAuthOAuthClientPath.shape["client_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "DELETE",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.deleteNeonAuthOAuthClient({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "client_id": input["client_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -2567,6 +2642,67 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"getNeonAuthOAuthClient": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "getNeonAuthOAuthClient",
+				id: "get_neon_auth_o_auth_client",
+				title: "Retrieve an OAuth client",
+				description: "Returns an OAuth client registered with the branch's Neon Auth OAuth provider.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zGetNeonAuthOAuthClientPath.shape["project_id"],
+	"branch_id": zod.zGetNeonAuthOAuthClientPath.shape["branch_id"],
+	"client_id": zod.zGetNeonAuthOAuthClientPath.shape["client_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.getNeonAuthOAuthClient({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "client_id": input["client_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"getNeonAuthOAuthProviderPlugin": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "getNeonAuthOAuthProviderPlugin",
+				id: "get_neon_auth_o_auth_provider_plugin",
+				title: "Retrieve OAuth provider plugin configuration",
+				description: "Returns the OAuth provider plugin configuration for Neon Auth.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zGetNeonAuthOAuthProviderPluginPath.shape["project_id"],
+	"branch_id": zod.zGetNeonAuthOAuthProviderPluginPath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/plugins/oauth-provider",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.getNeonAuthOAuthProviderPlugin({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"getNeonAuthPhoneNumberPlugin": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -3632,6 +3768,36 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.listNeonAuthIntegrations({
 			path: optionalGroup({ "project_id": input["project_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"listNeonAuthOAuthClients": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "listNeonAuthOAuthClients",
+				id: "list_neon_auth_o_auth_clients",
+				title: "List OAuth clients",
+				description: "Lists the OAuth clients registered for the branch's Neon Auth OAuth provider.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zListNeonAuthOAuthClientsPath.shape["project_id"],
+	"branch_id": zod.zListNeonAuthOAuthClientsPath.shape["branch_id"],
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.listNeonAuthOAuthClients({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -4904,6 +5070,37 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"rotateNeonAuthOAuthClientSecret": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "rotateNeonAuthOAuthClientSecret",
+				id: "rotate_neon_auth_o_auth_client_secret",
+				title: "Rotate an OAuth client secret",
+				description: "Generates a new secret for a confidential OAuth client and invalidates the previous one.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zRotateNeonAuthOAuthClientSecretPath.shape["project_id"],
+	"branch_id": zod.zRotateNeonAuthOAuthClientSecretPath.shape["branch_id"],
+	"client_id": zod.zRotateNeonAuthOAuthClientSecretPath.shape["client_id"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "POST",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}/rotate_secret",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.rotateNeonAuthOAuthClientSecret({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "client_id": input["client_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"rotateProjectBranchRealtimeSecret": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -5579,6 +5776,43 @@ export const operationFactories = {
 			}),
 			client,
 		),
+	"updateNeonAuthOAuthClient": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "updateNeonAuthOAuthClient",
+				id: "update_neon_auth_o_auth_client",
+				title: "Update an OAuth client",
+				description: "Updates an OAuth client.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zUpdateNeonAuthOAuthClientPath.shape["project_id"],
+	"branch_id": zod.zUpdateNeonAuthOAuthClientPath.shape["branch_id"],
+	"client_id": zod.zUpdateNeonAuthOAuthClientPath.shape["client_id"],
+	"name": zod.zUpdateNeonAuthOAuthClientBody.shape["name"],
+	"redirect_uris": zod.zUpdateNeonAuthOAuthClientBody.shape["redirect_uris"],
+	"skip_consent": zod.zUpdateNeonAuthOAuthClientBody.shape["skip_consent"],
+	"disabled": zod.zUpdateNeonAuthOAuthClientBody.shape["disabled"],
+	"resources": zod.zUpdateNeonAuthOAuthClientBody.shape["resources"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "PATCH",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.updateNeonAuthOAuthClient({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "client_id": input["client_id"] }, true),
+			body: optionalGroup({ "name": input["name"], "redirect_uris": input["redirect_uris"], "skip_consent": input["skip_consent"], "disabled": input["disabled"], "resources": input["resources"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
 	"updateNeonAuthOauthProvider": (client: Client) =>
 		bindOperation(
 			defineOperation({
@@ -5606,6 +5840,42 @@ export const operationFactories = {
 					raw.updateNeonAuthOauthProvider({
 			path: optionalGroup({ "project_id": input["project_id"], "oauth_provider_id": input["oauth_provider_id"] }, true),
 			body: optionalGroup({ "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"] }, true),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"updateNeonAuthOAuthProviderPlugin": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "updateNeonAuthOAuthProviderPlugin",
+				id: "update_neon_auth_o_auth_provider_plugin",
+				title: "Update OAuth provider plugin configuration",
+				description: "Updates the OAuth provider plugin configuration for Neon Auth.",
+				inputSchema: z.strictObject({
+	"project_id": zod.zUpdateNeonAuthOAuthProviderPluginPath.shape["project_id"],
+	"branch_id": zod.zUpdateNeonAuthOAuthProviderPluginPath.shape["branch_id"],
+	"enabled": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["enabled"],
+	"login_page": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["login_page"],
+	"consent_page": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["consent_page"],
+	"mcp": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["mcp"],
+	"resources": zod.zUpdateNeonAuthOAuthProviderPluginBody.shape["resources"],
+}),
+				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+				requiresApproval: true,
+				metadata: {
+					method: "PATCH",
+					path: "/projects/{project_id}/branches/{branch_id}/auth/plugins/oauth-provider",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Auth"],
+				},
+				invoke: (client, input, signal) =>
+					raw.updateNeonAuthOAuthProviderPlugin({
+			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
+			body: optionalGroup({ "enabled": input["enabled"], "login_page": input["login_page"], "consent_page": input["consent_page"], "mcp": input["mcp"], "resources": input["resources"] }, true),
 			client,
 			signal,
 			throwOnError: true,
