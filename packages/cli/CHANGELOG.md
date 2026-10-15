@@ -1,5 +1,11 @@
 # neon
 
+## 8.7.1
+
+### Patch Changes
+
+- 9b6eadd: `neon bootstrap` prints `Installing dependencies with <package manager>…` before it runs the install.
+
 ## 8.7.0
 
 ### Minor Changes
