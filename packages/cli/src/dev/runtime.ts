@@ -235,6 +235,16 @@ export const portSelectionFromEnv = (env: NodeJS.ProcessEnv): PortSelection => {
 	if (explicit !== undefined && explicit !== "") {
 		return { mode: "explicit", port: parsePort(explicit, "NEON_DEV_PORT") };
 	}
+	// `neon dev` already chose to search. A PORT here can come from the loaded dotenv
+	// files, which are for the app, not for port selection.
+	const searchBase = env.NEON_DEV_PORT_BASE;
+	if (searchBase !== undefined && searchBase !== "") {
+		const from = Number(searchBase);
+		return {
+			mode: "search",
+			from: Number.isInteger(from) ? from : DEFAULT_SEARCH_BASE,
+		};
+	}
 	const injected = env.PORT;
 	if (injected !== undefined && injected !== "") {
 		return { mode: "explicit", port: parsePort(injected, "PORT") };

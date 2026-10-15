@@ -174,6 +174,12 @@ describe("portSelectionFromEnv", () => {
 		});
 	});
 
+	it("keeps the parent's search over a PORT loaded from dotenv files", () => {
+		expect(
+			portSelectionFromEnv({ NEON_DEV_PORT_BASE: "8787", PORT: "0" }),
+		).toEqual({ mode: "search", from: 8787 });
+	});
+
 	it("throws on an invalid NEON_DEV_PORT", () => {
 		expect(() =>
 			portSelectionFromEnv({ NEON_DEV_PORT: "not-a-port" }),
