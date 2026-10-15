@@ -102,5 +102,4 @@ options with a Realtime-owned `sync` implementation and an additional
 options, and utilities types for reusable collection factories.
 
 The sealed query determines the row type. Refresh callbacks and collection
-options are checked against it rather than weakening it; `getKey` still infers
-the collection's key type from its return value.
+options are checked against it rather than weakening it.
