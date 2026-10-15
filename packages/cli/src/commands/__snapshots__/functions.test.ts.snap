@@ -185,6 +185,8 @@ exports[`functions > deploy rejects the removed --entry flag 1`] = `""`;
 
 exports[`functions > deploy rejects the removed --path flag 1`] = `""`;
 
+exports[`functions > deploy rejects the removed --path flag 2`] = `""`;
+
 exports[`functions > deploy requires at least one option 1`] = `""`;
 
 exports[`functions > domain alias lists custom domains 1`] = `

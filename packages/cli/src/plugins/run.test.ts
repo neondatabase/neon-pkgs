@@ -29,6 +29,7 @@ describe("pluginsAddArgs", () => {
 			"neon-postgres",
 			"neon-postgres-branches",
 			"neon-postgres-egress-optimizer",
+			"neon-realtime",
 		]);
 		expect(args).toEqual([
 			"-y",
