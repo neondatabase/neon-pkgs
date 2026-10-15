@@ -52,6 +52,7 @@ const PARENT_COMMANDS = [
 	"inspect",
 	"claim",
 	"data-api",
+	"realtime",
 	"functions",
 	"triggers",
 	"credentials",
@@ -98,53 +99,6 @@ describe("parent commands print help with no subcommand", () => {
 			expect(stderr).toBe("");
 		});
 	}
-});
-
-describe("staging-only commands", () => {
-	// The fixture sends requests to a local mock through --api-host.
-	const staging = { NEON_STAGING_API_HOST: "http://localhost" };
-
-	test("are not listed outside staging", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand(["--help"], {
-			snapshot: false,
-		});
-		expect(strip(stdout)).not.toMatch(/neon (realtime|subscribe)/);
-	});
-
-	test("are listed on staging", async ({ testCliCommand }) => {
-		const { stdout } = await testCliCommand(["--help"], {
-			snapshot: false,
-			env: staging,
-		});
-		expect(strip(stdout)).toMatch(/neon realtime/);
-		expect(strip(stdout)).toMatch(/neon subscribe/);
-	});
-
-	test("realtime is not offered as a service outside staging", async ({
-		testCliCommand,
-	}) => {
-		for (const args of [
-			["env", "pull", "--help"],
-			["init", "--help"],
-			["config", "init", "--help"],
-		]) {
-			const { stdout } = await testCliCommand(args, { snapshot: false });
-			expect(strip(stdout).replace(/\s+/g, " ")).not.toMatch(
-				/ai-gateway, realtime/,
-			);
-		}
-	});
-
-	test("realtime prints its help with no subcommand on staging", async ({
-		testCliCommand,
-	}) => {
-		const { stdout, stderr } = await testCliCommand(["realtime"], {
-			snapshot: false,
-			env: staging,
-		});
-		expect(strip(stdout)).toContain("Commands:");
-		expect(stderr).toBe("");
-	});
 });
 
 const USAGE_ERRORS = [

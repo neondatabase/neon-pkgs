@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const source = new URL("../src/callback.html", import.meta.url);
 const output = new URL("../dist/", import.meta.url);
@@ -40,4 +40,11 @@ mkdirSync(output, { recursive: true });
 writeFileSync(
 	new URL("callback.html", output),
 	`${html}\n<!-- Inter font license:\n${fontLicense}\n-->\n`,
+);
+
+// Apache-2.0 requires the license text to accompany redistributed copies of the vendored
+// postgres-meta code, which is compiled into dist/ and into the standalone binary.
+cpSync(
+	new URL("../src/vendor/postgres-meta/LICENSE", import.meta.url),
+	new URL("vendor/postgres-meta/LICENSE", output),
 );

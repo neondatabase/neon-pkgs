@@ -9,6 +9,7 @@ import {
 	createClientEventSink,
 	registerSubscriptionEvents,
 } from "./diagnostics.js";
+import type { NoInferCompat } from "./no-infer.js";
 import {
 	createParserRegistry,
 	type PostgreSQLParserRegistry,
@@ -68,7 +69,7 @@ class RealtimeClientImpl implements RealtimeClient {
 
 	subscribe<Row>(
 		query: SealedLiveQuery<Row>,
-		options?: MaterializedLiveQueryOptions<Row>,
+		options?: MaterializedLiveQueryOptions<NoInferCompat<Row>>,
 	): MaterializedLiveQuerySubscription<Row>;
 	subscribe<Row>(
 		query: SealedLiveQuery<Row>,
@@ -76,7 +77,9 @@ class RealtimeClientImpl implements RealtimeClient {
 	): RawLiveQuerySubscription<Row>;
 	subscribe<Row>(
 		query: SealedLiveQuery<Row>,
-		options?: MaterializedLiveQueryOptions<Row> | RawLiveQueryOptions,
+		options?:
+			| MaterializedLiveQueryOptions<NoInferCompat<Row>>
+			| RawLiveQueryOptions,
 	): MaterializedLiveQuerySubscription<Row> | RawLiveQuerySubscription<Row> {
 		if (this.disposed) throw new Error("Realtime client is closed");
 		validateSealedQuery(query);

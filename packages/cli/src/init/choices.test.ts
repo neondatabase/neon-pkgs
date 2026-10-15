@@ -3,9 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
+	initEnvPullAfterConfig,
 	resolveInitConfigChoice,
-	shouldPullEnvAfterInitConfig,
-	shouldRefreshEnvAfterNewConfig,
 } from "./choices.js";
 
 describe("resolveInitConfigChoice", () => {
@@ -166,65 +165,91 @@ describe("configPlanFromResolution", () => {
 	});
 });
 
-describe("shouldPullEnvAfterInitConfig", () => {
-	test("skips a second pull after link already pulled env", () => {
+describe("initEnvPullAfterConfig", () => {
+	const pinned = { projectId: "proj-1", branch: "main" };
+
+	test("pulls from neon.ts after a link that deferred its pull", () => {
 		expect(
-			shouldPullEnvAfterInitConfig({
+			initEnvPullAfterConfig({
+				linkDeferredPull: true,
 				wroteNewFile: true,
-				extraServices: false,
-				alreadyPulled: true,
-				projectId: "proj-1",
-				branch: "main",
+				declared: ["ai-gateway", "functions"],
+				claimable: false,
+				...pinned,
 			}),
-		).toBe(false);
+		).toEqual({ kind: "policy" });
 	});
 
-	test("skips when extra services still need a deploy", () => {
+	test("still pulls after a deferred link when neon.ts was declined", () => {
 		expect(
-			shouldPullEnvAfterInitConfig({
-				wroteNewFile: true,
-				extraServices: true,
-				alreadyPulled: false,
-				projectId: "proj-1",
-				branch: "main",
-			}),
-		).toBe(false);
-	});
-
-	test("pulls once for a new bare neon.ts on a pinned branch", () => {
-		expect(
-			shouldPullEnvAfterInitConfig({
-				wroteNewFile: true,
-				extraServices: false,
-				alreadyPulled: false,
-				projectId: "proj-1",
-				branch: "main",
-			}),
-		).toBe(true);
-	});
-});
-
-describe("shouldRefreshEnvAfterNewConfig", () => {
-	test("only after a new neon.ts on a pinned branch", () => {
-		expect(
-			shouldRefreshEnvAfterNewConfig({
-				wroteNewFile: true,
-				projectId: "proj-1",
-				branch: "main",
-			}),
-		).toBe(true);
-		expect(
-			shouldRefreshEnvAfterNewConfig({
-				wroteNewFile: true,
-				projectId: "proj-1",
-			}),
-		).toBe(false);
-		expect(
-			shouldRefreshEnvAfterNewConfig({
+			initEnvPullAfterConfig({
+				linkDeferredPull: true,
 				wroteNewFile: false,
-				projectId: "proj-1",
-				branch: "main",
+				declared: [],
+				claimable: false,
+				...pinned,
 			}),
-		).toBe(false);
+		).toEqual({ kind: "policy" });
+	});
+
+	test("pulls only deploy-free services while others await a deploy", () => {
+		expect(
+			initEnvPullAfterConfig({
+				linkDeferredPull: true,
+				wroteNewFile: true,
+				declared: ["auth", "ai-gateway", "functions"],
+				claimable: false,
+				...pinned,
+			}),
+		).toEqual({
+			kind: "services",
+			services: ["postgres", "ai-gateway"],
+			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+		});
+		expect(
+			initEnvPullAfterConfig({
+				linkDeferredPull: false,
+				wroteNewFile: true,
+				declared: ["object-storage"],
+				claimable: false,
+				...pinned,
+			}),
+		).toEqual({ kind: "services", services: ["postgres"], envKeys: [] });
+	});
+
+	test("skips when nothing changed since an earlier pull", () => {
+		expect(
+			initEnvPullAfterConfig({
+				linkDeferredPull: false,
+				wroteNewFile: false,
+				declared: [],
+				claimable: false,
+				...pinned,
+			}),
+		).toEqual({ kind: "skip" });
+	});
+
+	test("skips a claimable project whose neon.ts declares extra services", () => {
+		expect(
+			initEnvPullAfterConfig({
+				linkDeferredPull: false,
+				wroteNewFile: true,
+				declared: ["ai-gateway"],
+				claimable: true,
+				...pinned,
+			}),
+		).toEqual({ kind: "skip" });
+	});
+
+	test("skips without a pinned branch", () => {
+		expect(
+			initEnvPullAfterConfig({
+				linkDeferredPull: true,
+				wroteNewFile: true,
+				declared: [],
+				claimable: false,
+				projectId: "proj-1",
+			}),
+		).toEqual({ kind: "skip" });
 	});
 });

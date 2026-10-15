@@ -35,7 +35,6 @@ import {
 	type PackageManager,
 	resolvePackageManager,
 } from "../utils/package_manager.js";
-import { assertRealtimeAvailable } from "../utils/staging.js";
 import {
 	pullInitEnv as defaultPullInitEnv,
 	type InitAuthOptions,
@@ -44,8 +43,9 @@ import { InitCancelled, raceSigint, restoreCursor } from "./cancelled.js";
 import {
 	configPlanFromResolution,
 	INIT_CONFIG_SERVICES_CONFLICT,
+	type InitEnvPull,
+	initEnvPullAfterConfig,
 	resolveInitConfigChoice,
-	shouldPullEnvAfterInitConfig,
 } from "./choices.js";
 import {
 	agentsRowValue,
@@ -510,11 +510,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	if (props.config === false && servicesFlag !== undefined) {
 		throw new Error(INIT_CONFIG_SERVICES_CONFLICT);
 	}
-	if (
-		servicesFlag !== undefined &&
-		parseConfigInitServices(servicesFlag).includes("realtime")
-	) {
-		assertRealtimeAvailable(props.apiHost);
+	if (servicesFlag !== undefined) {
+		parseConfigInitServices(servicesFlag);
 	}
 	const linkInputs: InitLinkInputs = {
 		...(props.orgId ? { orgId: props.orgId } : {}),
@@ -940,7 +937,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 
 		let projectSetup: InitProjectSetupChoice | "skip" | "already" = "skip";
-		let linkedNow = false;
 		let claimExpiresAt: string | undefined;
 		const noLink = props.link === false;
 		// -y never opens a browser, so without credentials it leaves linking as a next step.
@@ -987,6 +983,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			throw new Error(NON_TTY_LINK_NEEDS_AUTH);
 		}
 
+		// Pulling before neon.ts exists would miss the services it declares.
+		const deferLinkPull = !existingConfig && props.config !== false;
 		const linkProps: InitLinkProps = {
 			apiClient: props.apiClient,
 			apiKey: props.apiKey,
@@ -997,6 +995,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			clear: false,
 			checks: true,
 			envPull: true,
+			deferEnvPull: deferLinkPull,
 			config: false,
 			cwd,
 			...linkInputs,
@@ -1033,7 +1032,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					? { profile: props.profile }
 					: {}),
 			});
-			linkedNow = true;
 			funnel.link = "claimable";
 			const stored = readLinkedClaimableCredentials(
 				configDir,
@@ -1046,7 +1044,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			);
 			const linkProject = props.linkProject ?? runAuthenticatedLink;
 			await linkProject(linkProps);
-			linkedNow = true;
 			funnel.link = "linked";
 		}
 
@@ -1062,7 +1059,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			linkInputs.regionId === undefined;
 		if (pinnedOffline) {
 			await runLink({ ...linkProps, checks: false, envPull: false });
-			linkedNow = true;
 			funnel.link = "linked";
 		}
 
@@ -1174,13 +1170,18 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		let wroteNewFile = false;
 		let extraServices = false;
+		let declared: NeonService[] = [];
 		let selectedServices: NeonService[] | null = null;
+		const linkDeferredPull =
+			deferLinkPull &&
+			projectSetup === "link" &&
+			funnel.link === "linked";
 		if (configPlan.kind === "write") {
 			const planned = existingConfig
 				? undefined
 				: (configPlan.services ?? ["postgres"]);
 			if (planned !== undefined) {
-				const declared = parseConfigInitServices(planned);
+				declared = parseConfigInitServices(planned);
 				extraServices = declared.length > 0;
 				selectedServices = expandTelemetryServices(declared);
 				funnel.services = selectedServices;
@@ -1221,7 +1222,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				});
 			} catch (error) {
 				if (error instanceof ConfigInstallFailed) {
-					const failed = installFailedNext(error.command);
+					const failed = installFailedNext(
+						error.command,
+						linkDeferredPull,
+					);
 					printInitDone(
 						formatInitDone({
 							heading: failed.heading,
@@ -1244,24 +1248,23 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const context = readContextFile(contextFile);
 		const branch = contextBranch(context);
 		const linked = isLinked(contextFile);
-		const alreadyPulled =
-			linkedNow && funnel.link === "linked" && !pinnedOffline;
 		// A skipped link leaves either no pin or one the account flags asked to replace,
 		// and an offline pin has no credentials to pull with.
-		const shouldPull =
-			funnel.link !== "skipped" &&
-			!pinnedOffline &&
-			shouldPullEnvAfterInitConfig({
-				wroteNewFile,
-				extraServices,
-				alreadyPulled,
-				...(typeof context.projectId === "string"
-					? { projectId: context.projectId }
-					: {}),
-				...(branch !== undefined ? { branch } : {}),
-			});
+		const envPullPlan: InitEnvPull =
+			funnel.link === "skipped" || pinnedOffline
+				? { kind: "skip" }
+				: initEnvPullAfterConfig({
+						linkDeferredPull,
+						wroteNewFile,
+						declared,
+						claimable: funnel.link === "claimable",
+						...(typeof context.projectId === "string"
+							? { projectId: context.projectId }
+							: {}),
+						...(branch !== undefined ? { branch } : {}),
+					});
 
-		if (shouldPull) {
+		if (envPullPlan.kind !== "skip") {
 			try {
 				if (
 					typeof context.projectId !== "string" ||
@@ -1279,6 +1282,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						cwd,
 						projectId: context.projectId,
 						branch,
+						...(envPullPlan.kind === "services"
+							? {
+									services: envPullPlan.services,
+									envKeys: envPullPlan.envKeys,
+								}
+							: {}),
 					}),
 				);
 			} catch (error) {
@@ -1376,7 +1385,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			if (next.length > 0) {
 				next.push("");
 			}
-			next.push(...extraServicesNext());
+			next.push(
+				...extraServicesNext({
+					skills: installsSkills(reportedTooling()),
+					functions: declared.includes("functions"),
+				}),
+			);
 		} else if (pendingExisting) {
 			if (next.length > 0) {
 				next.push("");
@@ -1500,6 +1514,12 @@ const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan => {
 	}
 	return tooling;
 };
+
+/** The Neon plugin bundles the skills. */
+const installsSkills = (tooling: InitToolingPlan): boolean =>
+	tooling.setup === "skills-mcp"
+		? tooling.skillsAgents.length > 0
+		: tooling.setup !== "skip";
 
 const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
 	switch (tooling.setup) {

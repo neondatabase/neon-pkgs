@@ -47,6 +47,11 @@ export const NEON_SKILL_CATALOG: readonly SkillEntry[] = [
 		defaultSelected: true,
 	},
 	{
+		skill: "neon-realtime",
+		source: AGENT_SKILLS_SOURCE,
+		defaultSelected: true,
+	},
+	{
 		skill: "neon-postgres-agent-platforms",
 		source: PLATFORMS_SKILLS_SOURCE,
 		defaultSelected: false,

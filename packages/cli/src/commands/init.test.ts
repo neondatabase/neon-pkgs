@@ -275,9 +275,6 @@ describe("init handler", () => {
 	});
 
 	test("--services realtime writes preview.realtime to neon.ts", async () => {
-		// Treat the mock API host as staging, for init and the nested config init.
-		vi.stubEnv("NEON_STAGING_API_HOST", host);
-		vi.stubEnv("NEON_API_HOST", host);
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-realtime-"));
 		vi.spyOn(process.stdout, "write").mockReturnValue(true);
 		const { initCmd } = await import("./config.js");
@@ -1636,7 +1633,7 @@ describe("init handler", () => {
 		);
 	});
 
-	test("extra services skip env pull after writing neon.ts", async () => {
+	test("services awaiting a deploy pull only Postgres after writing neon.ts", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-extra-svc-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -1661,8 +1658,148 @@ describe("init handler", () => {
 			}),
 		);
 
-		expect(envPull).not.toHaveBeenCalled();
-		expect(stdoutText(stdout)).toContain("neon config plan");
+		expect(envPull).toHaveBeenCalledTimes(1);
+		expect(envPull).toHaveBeenCalledWith(
+			expect.objectContaining({ services: ["postgres"] }),
+		);
+		const out = stdoutText(stdout);
+		expect(out).toContain("neon checkout dev --create");
+		expect(out).toContain("neon config plan");
+		expect(out).toContain("neon deploy");
+		expect(out).not.toContain("neon env pull");
+		expect(out).not.toContain("neon dev\n");
+	});
+
+	test("Functions next to a service awaiting a deploy keep their URL", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fn-auth-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+		);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				envPull,
+				yes: true,
+				link: false,
+				services: ["auth", "functions"],
+				contextFile,
+				detectProjectAgents: () => ["cursor"],
+			}),
+		);
+
+		expect(envPull).toHaveBeenCalledWith(
+			expect.objectContaining({
+				services: ["postgres"],
+				envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			}),
+		);
+		const out = stdoutText(stdout);
+		expect(out.indexOf("neon deploy")).toBeLessThan(
+			out.indexOf("neon dev\n"),
+		);
+	});
+
+	test("link defers its env pull until neon.ts declares the services", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-deferred-pull-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		const order: string[] = [];
+		const linkProject = vi.fn(async () => {
+			order.push("link");
+			writeFileSync(
+				contextFile,
+				`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+			);
+		});
+		const initConfig = vi.fn(async () => {
+			order.push("config");
+		});
+		const envPull = vi.fn(async () => {
+			order.push("env pull");
+			return { status: "empty" as const };
+		});
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				contextFile,
+				linkProject,
+				initConfig,
+				envPull,
+				pickAgentSetup: async () => "plugin",
+				detectProjectAgents: () => ["cursor"],
+				pickConfig: async () => true,
+				pickServices: async () => ["ai-gateway", "functions"],
+				pickPackageManager: async () => "npm",
+			}),
+		);
+
+		expect(order).toEqual(["link", "config", "env pull"]);
+		expect(linkProject).toHaveBeenCalledWith(
+			expect.objectContaining({ envPull: true, deferEnvPull: true }),
+		);
+		expect(envPull).toHaveBeenCalledWith(
+			expect.not.objectContaining({ services: expect.anything() }),
+		);
+		const out = stdoutText(stdout);
+		expect(out).toContain("Neon agent skills");
+		const positions = [
+			"neon config plan",
+			"neon deploy",
+			"Optional, once deployed:",
+			"neon dev\n",
+			"neon checkout dev --create",
+			"Neon agent skills",
+		].map((text) => out.indexOf(text));
+		expect(positions.every((at) => at >= 0)).toBe(true);
+		expect(positions).toEqual(
+			[...positions].sort((left, right) => left - right),
+		);
+	});
+
+	test("link still gets env pulled when neon.ts is declined", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-declined-ts-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		const linkProject = vi.fn(async () => {
+			writeFileSync(
+				contextFile,
+				`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+			);
+		});
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		const envPull = vi.fn().mockResolvedValue({ status: "empty" });
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				contextFile,
+				linkProject,
+				initConfig,
+				envPull,
+				pickAgentSetup: async () => "skip",
+				pickConfig: async () => false,
+			}),
+		);
+
+		expect(initConfig).not.toHaveBeenCalled();
+		expect(envPull).toHaveBeenCalledTimes(1);
+		expect(envPull).toHaveBeenCalledWith(
+			expect.objectContaining({ projectId: "proj-1", branch: "main" }),
+		);
 	});
 
 	test("env pull after neon.ts forwards an explicit API key", async () => {

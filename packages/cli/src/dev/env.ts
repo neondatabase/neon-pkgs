@@ -37,12 +37,7 @@ import {
 	formatInstallCommand,
 	resolvePackageManager,
 } from "../utils/package_manager.js";
-import {
-	assertPolicyAvailable,
-	assertRealtimeAvailable,
-	StagingOnlyError,
-	stagingFeaturesEnabled,
-} from "../utils/staging.js";
+import { StagingOnlyError } from "../utils/staging.js";
 
 export type DevEnvContext = {
 	cwd: string;
@@ -422,7 +417,6 @@ export const resolveNeonEnvVars = async (
 			projectId: ctx.projectId,
 			branchId: ctx.branchId,
 			...apiOptions(ctx),
-			realtime: stagingFeaturesEnabled(ctx.apiHost),
 		});
 		// The read-back config's branch closure ignores its argument, so the snapshot does
 		// not need the parent id that `pullConfig` reports only as a name.
@@ -576,9 +570,6 @@ const resolveSelectedServices = async (
 			impliedServices.includes(service),
 	);
 	const selectedKeys = envKeysForSelection(directServices, envKeys);
-	if (services.includes("realtime")) {
-		assertRealtimeAvailable(ctx.apiHost);
-	}
 
 	// Read only the services that were named, rather than going through `pullConfig`. That
 	// keeps a selection independent of everything else on the branch — `pullConfig` also
@@ -1028,7 +1019,6 @@ const loadNeonConfig = async (ctx: DevEnvContext): Promise<Config | null> => {
 				? { unsetFunctionEnv: "omit" as const }
 				: {}),
 		});
-		assertPolicyAvailable(config, ctx.apiHost);
 		return config;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);

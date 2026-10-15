@@ -236,6 +236,12 @@ reconnects do not reset the episode. It resets after a complete baseline
 remains live for 30 seconds. Unsubscribing or closing the client cancels
 pending retries.
 
+### Row type inference
+
+`client.subscribe()` infers the live row type from the sealed query. Preloaded
+`initialData` must match that type; it cannot remove selected columns or widen
+their types to make an incompatible value fit.
+
 ### Client diagnostics
 
 Client diagnostics are silent by default. Set `logLevel` to write structured

@@ -2,6 +2,7 @@ import type { SealedLiveQuery } from "@neon/realtime/client";
 import { useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import { RealtimeContext } from "./context.js";
 import { ReactLiveQueryStore } from "./live-query-store.js";
+import type { NoInferCompat } from "./no-infer.js";
 import type { UseLiveQueryOptions, UseLiveQueryResult } from "./types.js";
 
 /**
@@ -17,7 +18,7 @@ import type { UseLiveQueryOptions, UseLiveQueryResult } from "./types.js";
  */
 export function useLiveQuery<Row>(
 	query: SealedLiveQuery<Row>,
-	options: UseLiveQueryOptions<Row> = {},
+	options: UseLiveQueryOptions<NoInferCompat<Row>> = {},
 ): UseLiveQueryResult<Row> {
 	const client = useContext(RealtimeContext);
 	if (!client) throw new Error("useLiveQuery requires a RealtimeProvider");

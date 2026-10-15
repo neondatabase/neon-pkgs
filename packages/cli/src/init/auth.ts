@@ -107,7 +107,7 @@ export const pullInitEnv = async (
 ): Promise<PullOutcome> => {
 	const authenticated = authContext(props, ["env", "pull"]);
 	await ensureAuth(authenticated);
-	const opts = { announce: true, implyAiGateway: true };
+	const opts = { announce: true };
 	try {
 		return await pull(authenticated, opts);
 	} catch (error) {

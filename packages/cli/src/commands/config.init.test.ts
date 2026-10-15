@@ -16,7 +16,6 @@ import { loadConfigFromFile } from "@neon/config-runtime";
 import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 import { hasNeonConfigFile } from "../project";
 import { test } from "../test_utils/fixtures";
-import { STAGING_API_HOST } from "../utils/staging.js";
 import { initCmd } from "./config";
 
 describe("config init", () => {
@@ -248,24 +247,12 @@ describe("config init", () => {
 		);
 	});
 
-	test("--services realtime is refused outside staging", async () => {
-		await expect(
-			initCmd({ cwd: workspace, install: false, services: ["realtime"] }),
-		).rejects.toThrow(/Neon Realtime is coming soon!/);
-		expect(existsSync(join(workspace, "neon.ts"))).toBe(false);
-	});
-
 	test("--services realtime writes preview.realtime: true", async () => {
-		vi.stubEnv("NEON_API_HOST", STAGING_API_HOST);
-		try {
-			await initCmd({
-				cwd: workspace,
-				install: false,
-				services: ["realtime"],
-			});
-		} finally {
-			vi.unstubAllEnvs();
-		}
+		await initCmd({
+			cwd: workspace,
+			install: false,
+			services: ["realtime"],
+		});
 
 		const content = readFileSync(join(workspace, "neon.ts"), "utf8");
 		expect(content).toContain("preview: {\n    realtime: true,");
@@ -573,7 +560,6 @@ describe("config init", () => {
 			["config", "init", "--no-install", "--services", "realtime"],
 			{
 				unreachableHost: true,
-				env: { NEON_STAGING_API_HOST: "http://127.0.0.1" },
 				code: 0,
 				cwd: workspace,
 				snapshot: false,

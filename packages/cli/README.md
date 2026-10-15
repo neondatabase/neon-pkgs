@@ -308,31 +308,31 @@ regression + TAP tests.
 
 ## Subscribe to a Realtime query
 
-`neon subscribe` streams a live SQL query until interrupted:
+`neon realtime subscribe` streams a live SQL query until interrupted:
 
 ```bash
-neon subscribe "SELECT id, title, completed FROM realtime_todos ORDER BY id"
+neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER BY id"
 ```
 
 The default terminal output is append-only. It identifies the selected project,
 branch, and database; prints the initial result once; reports connection-state
-changes; and then prints each published batch with its transaction IDs, a compact
+changes; and then prints each published change set with its transaction IDs, a compact
 `+insert ~update -delete` summary, and the affected rows. It does not take over the
-terminal or require keyboard navigation. Pass `--changes` to display the raw reset
-and batch events instead of the materialized view.
+terminal or require keyboard navigation. Pass `--changes` to display the raw `rows`
+and `changes` events instead of the materialized view.
 
 For scripts and agents, JSON output is a JSON Lines stream with one complete event
 per line. YAML output uses one document per event:
 
 ```bash
-neon subscribe --changes --output json "SELECT * FROM realtime_todos" |
-  jq --unbuffered 'select(.type == "batch")'
+neon realtime subscribe --changes --output json "SELECT * FROM realtime_todos" |
+  jq --unbuffered 'select(.type == "changes")'
 
-neon subscribe --output yaml "SELECT * FROM realtime_todos"
+neon realtime subscribe --output yaml "SELECT * FROM realtime_todos"
 ```
 
 Machine-readable output retains the event stream: without `--changes`, each event is
-a complete `snapshot`; with `--changes`, events are raw `reset` and `batch` objects.
+a complete `snapshot`; with `--changes`, events are raw `rows` and `changes` objects.
 Lifecycle labels and the target header are terminal-only.
 
 ## Configure autocompletion
@@ -899,7 +899,7 @@ Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 
-After a new default `neon.ts` on a pinned branch, init runs `env pull` unless link already pulled env or the file declares extra services (those still need `neon config plan` / `neon deploy`).
+Init pulls the branch's env vars once, after the `neon.ts` step, so the pull includes what `neon.ts` declares. The AI Gateway and Functions need no deploy and are pulled immediately. When `neon.ts` declares Auth, the Data API, Object Storage, or Realtime, init pulls Postgres, plus the AI Gateway and the scaffolded function's URL when declared. `neon deploy` provisions the rest and pulls their env vars. An existing `neon.ts` is pulled by `link` as usual.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 
@@ -976,7 +976,7 @@ On a TTY the command asks which agents and which skills, then installs. Detected
 
 `-y` skips those questions and installs the default skills into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--skill` / `-s` names specific skills and skips the skill picker; it does not select agents. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y`, or `--skill <name>` (add `--agent <name>` to name agents). If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-`--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
+`--skill` names by source repo: `neondatabase/agent-skills` (`neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`, `neon-realtime`); `neondatabase/neon-for-agent-platforms` (`neon-postgres-agent-platforms`).
 
 Supported agents match `neon mcp`, minus agents that cannot install skills: `antigravity`, `cline`, `cline-cli`, `claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini-cli`, `goose`, `github-copilot-cli`, `grok-build`, `opencode`, `vscode`, `windsurf`, `zed`. `mcporter` is a known MCP name that is then skipped. `neon skills --help` lists the same skill and agent values, and that `-y` leaves out `neon-postgres-agent-platforms`.
 
@@ -1028,7 +1028,7 @@ Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and
 
 Supported agents with a plugins mapping: `claude-code`, `claude-desktop`, `codex`, `cursor`, `github-copilot-cli`, `grok-build`, `vscode`. `claude-desktop` installs as Claude Code; detecting both produces one install and lists both names in the table. `mcporter` is a known MCP name that is then skipped.
 
-The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`. It does not include `neon-postgres-agent-platforms`.
+The plugins CLI installs every plugin it finds in the Neon plugin package. Today that is `neon-postgres` from `neondatabase/agent-skills`. It includes the Neon MCP server (`https://mcp.neon.tech/mcp`) and these skills: `neon`, `neon-ai-gateway`, `neon-auth`, `neon-functions`, `neon-object-storage`, `neon-postgres`, `neon-postgres-branches`, `neon-postgres-egress-optimizer`, `neon-realtime`. It does not include `neon-postgres-agent-platforms`.
 
 `neon plugins --help` lists the plugin, those contents, and the supported agent names.
 

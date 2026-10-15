@@ -63,8 +63,6 @@ const NO_SUBCOMMANDS_VERBS = [
 
 	"psql",
 
-	"subscribe",
-
 	"set-context",
 
 	"checkout",

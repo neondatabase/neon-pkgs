@@ -14,6 +14,7 @@ export const PLUGIN_SKILLS = [
 	"neon-postgres",
 	"neon-postgres-branches",
 	"neon-postgres-egress-optimizer",
+	"neon-realtime",
 ] as const;
 export const PLUGINS_CLI_TIMEOUT_MS = 120_000;
 

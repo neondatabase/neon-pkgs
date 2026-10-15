@@ -99,13 +99,6 @@ import {
 	runCommand,
 } from "../utils/package_manager.js";
 import { pickServicesInteractively } from "../utils/service_picker.js";
-import {
-	assertPolicyAvailable,
-	assertRealtimeAvailable,
-	listedServices,
-	stagingFeaturesEnabled,
-	stagingFeaturesEnabledForArgv,
-} from "../utils/staging.js";
 import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
 import { autoPullEnvAfterPin } from "./env.js";
@@ -370,15 +363,9 @@ const resolveServices = async (
 	props: ConfigInitProps,
 ): Promise<NeonService[]> => {
 	if (props.services !== undefined) {
-		const services = parseConfigInitServices(
-			props.services,
-			(used, canonical) =>
-				log.warning(deprecatedServiceMessage(used, canonical)),
+		return parseConfigInitServices(props.services, (used, canonical) =>
+			log.warning(deprecatedServiceMessage(used, canonical)),
 		);
-		if (services.includes("realtime")) {
-			assertRealtimeAvailable(props.apiHost);
-		}
-		return services;
 	}
 	if (props.pickServices) {
 		return props.pickServices();
@@ -965,30 +952,29 @@ export const builder = (argv: yargs.Argv) =>
 								}),
 							),
 					)
-					.command({
-						command: "realtime",
-						describe: stagingFeaturesEnabledForArgv()
-							? "Enable Realtime (preview.realtime: true)"
-							: false,
-						builder: (yargs) =>
+					.command(
+						"realtime",
+						"Enable Realtime (preview.realtime: true)",
+						(yargs) =>
 							addSharedOptions(yargs).option("allowed-origin", {
 								describe:
 									'Allowed browser origin (repeatable). "*" allows every origin',
 								type: "array",
 								string: true,
 							}),
-						handler: (args) => {
-							assertRealtimeAvailable();
-							return addCmd(
+						(args) =>
+							addCmd(
 								addProps(args, {
 									kind: "realtime",
 									...(args.allowedOrigin !== undefined
-										? { allowedOrigins: args.allowedOrigin }
+										? {
+												allowedOrigins:
+													args.allowedOrigin,
+											}
 										: {}),
 								}),
-							);
-						},
-					})
+							),
+					)
 					.command(
 						"function <slug>",
 						"Declare a Neon Function and create its handler file",
@@ -1085,7 +1071,7 @@ export const builder = (argv: yargs.Argv) =>
 					},
 					services: servicesOption({
 						key: "services",
-						allowed: listedServices(NEON_SERVICES),
+						allowed: NEON_SERVICES,
 						describe: "Services the scaffolded neon.ts declares",
 						also:
 							"postgres alone writes the starter policy; every branch has Postgres. " +
@@ -1141,7 +1127,6 @@ const liveConfigView = async (opts: {
 		...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
 		...(opts.apiHost ? { apiHost: opts.apiHost } : {}),
 		...(opts.runtimeApi ? { api: opts.runtimeApi } : {}),
-		realtime: stagingFeaturesEnabled(opts.apiHost),
 	});
 	const resolved = resolveConfig(live.config, {
 		name: live.branch.name,
@@ -1173,7 +1158,6 @@ const loadConfig = async (props: ConfigProps): Promise<Config> => {
 		contextFile: props.contextFile,
 		...(props.config ? { path: props.config } : {}),
 	});
-	assertPolicyAvailable(config, props.apiHost);
 	return config;
 };
 
@@ -1822,7 +1806,6 @@ export const applyPolicyOnCreate = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return;
 		throw err;
 	}
-	assertPolicyAvailable(config, props.apiHost);
 
 	try {
 		warnDeprecatedPreview(
@@ -1947,7 +1930,6 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return null;
 		throw err;
 	}
-	assertPolicyAvailable(config, props.apiHost);
 
 	await assertAiGatewayProvisionableFromCreds({
 		projectId: props.projectId,

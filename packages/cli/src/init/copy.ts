@@ -196,16 +196,28 @@ export const skippedLinkNext = (): string[] => [
 	`${getCliName()} link`,
 ];
 
-export const extraServicesNext = (): string[] => [
-	"Review neon.ts and confirm the linked project and branch before deploying.",
+export const extraServicesNext = (input: {
+	skills: boolean;
+	functions: boolean;
+}): string[] => [
 	"Preview the changes:",
 	`${getCliName()} config plan`,
 	"",
-	"Deploy when the changes and target are correct:",
+	"Deploy when the changes and target are correct. Deploy also pulls the branch's environment variables:",
 	`${getCliName()} deploy`,
 	"",
-	"Refresh local environment variables after deployment:",
-	`${getCliName()} env pull`,
+	"Optional, once deployed:",
+	...(input.functions
+		? ["Run Neon Functions locally:", `${getCliName()} dev`, ""]
+		: []),
+	"Work on a development branch created from neon.ts:",
+	`${getCliName()} checkout dev --create`,
+	...(input.skills
+		? [
+				"",
+				"Set up the services declared in neon.ts with your coding agent. The Neon agent skills cover best practices for each one.",
+			]
+		: []),
 ];
 
 export const existingConfigNext = (): string[] => [
@@ -234,10 +246,21 @@ export const claimableThenServicesNext = (expiresAt: string): string[] => [
 
 export const installFailedNext = (
 	command: string,
+	envPull: boolean,
 ): { heading: string; body: string; next: string[] } => ({
 	heading: HEADING_FAILED,
 	body: "Could not install the Neon dependencies.",
-	next: ["Install the dependencies, then run neon init again:", command],
+	next: [
+		"Install the dependencies, then run neon init again:",
+		command,
+		...(envPull
+			? [
+					"",
+					"Then pull the branch's environment variables:",
+					`${getCliName()} env pull`,
+				]
+			: []),
+	],
 });
 
 export const MCP_API_KEY_NEEDS_AUTH =
