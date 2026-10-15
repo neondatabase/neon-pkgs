@@ -653,6 +653,7 @@ const executePostScaffold = async (
 			continue;
 		}
 		if (action === "install") {
+			log.info("Installing dependencies with %s…", choices.pm);
 			installed = await runCommand(
 				choices.pm,
 				installArgs(choices.pm),

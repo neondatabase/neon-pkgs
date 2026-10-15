@@ -178,6 +178,7 @@ const TABLE_LIST_OUTPUT = `${HONO_LIST_ROW.id} — ${HONO_LIST_ROW.description} 
 const runBootstrap = (
 	server: Server,
 	args: string[],
+	env: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> => {
 	const base = `http://localhost:${(server.address() as AddressInfo).port}`;
 	const argv = [
@@ -198,6 +199,7 @@ const runBootstrap = (
 				CI: "true",
 				NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
 				NEON_BOOTSTRAP_MANIFEST_URL: `${base}/manifest/bootstrap.yaml`,
+				...env,
 			},
 		});
 		let stdout = "";
@@ -558,6 +560,31 @@ describe("bootstrap", () => {
 		);
 		// git init ran as part of the quick start.
 		expect(existsSync(join(dest, ".git"))).toBe(true);
+	});
+
+	test("announces the dependency install before the package manager runs", async () => {
+		// The fixture package.json has no dependencies, so an offline npm install
+		// succeeds without touching a registry.
+		const { code, stderr } = await runBootstrap(
+			server,
+			[
+				dest,
+				"--default",
+				"--force",
+				"--no-git",
+				"--no-agent-setup",
+				"--no-link",
+			],
+			{
+				npm_config_user_agent: "npm/11.0.0 node/v22.0.0",
+				npm_config_offline: "true",
+				npm_config_audit: "false",
+				npm_config_fund: "false",
+			},
+		);
+		expect(code, stderr).toBe(0);
+		expect(stderr).toContain("Installing dependencies with npm…");
+		expect(existsSync(join(dest, "package-lock.json"))).toBe(true);
 	});
 
 	test("selectedTemplate scaffolds the catalog source for a known id", async () => {
