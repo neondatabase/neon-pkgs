@@ -60,6 +60,27 @@ describe("realtime", () => {
 		});
 	});
 
+	test("rotate-secret requests a new secret for the selected branch", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"realtime",
+				"rotate-secret",
+				"--project-id",
+				"test",
+				"--branch",
+				"sunny",
+			],
+			{
+				mockDir: "realtime",
+				env: STAGING,
+				snapshot: false,
+				stderr: "Realtime secret rotation requested for branch br-sunny-branch-123456.",
+			},
+		);
+	});
+
 	test("enable rejects an invalid allowed origin before calling the API", async ({
 		testCliCommand,
 	}) => {
@@ -86,6 +107,7 @@ describe("realtime", () => {
 
 	for (const args of [
 		["realtime", "enable", "--project-id", "test"],
+		["realtime", "rotate-secret", "--project-id", "test"],
 		["realtime", "subscribe", "SELECT 1"],
 	]) {
 		test(`${args[1]} explains Realtime is coming soon outside staging`, async ({

@@ -1111,6 +1111,16 @@ export const getApiClient = ({
 					path: { project_id: projectId, branch_id: branchId },
 				}),
 			),
+		rotateProjectBranchRealtimeSecret: (
+			projectId: string,
+			branchId: string,
+		) =>
+			call(() =>
+				raw.rotateProjectBranchRealtimeSecret({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
 
 		// ─── VPC endpoints (project + organization) ─────────────────────────
 		listProjectVpcEndpoints: (projectId: string) =>

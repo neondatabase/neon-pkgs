@@ -44,6 +44,18 @@ export const disable = async (props: BranchScopeProps): Promise<void> => {
 	log.info("Realtime disable requested for branch %s.", branchId);
 };
 
+/** Request replacement of a branch's Realtime shared secret. */
+export const rotateSecret = async (props: BranchScopeProps): Promise<void> => {
+	const branchId = await branchIdFromProps(props);
+	await retryOnLock(() =>
+		props.apiClient.rotateProjectBranchRealtimeSecret(
+			props.projectId,
+			branchId,
+		),
+	);
+	log.info("Realtime secret rotation requested for branch %s.", branchId);
+};
+
 export const command = "realtime";
 export const describe = "Manage Neon Realtime for a branch";
 export const builder = (argv: yargs.Argv) =>
@@ -83,6 +95,12 @@ export const builder = (argv: yargs.Argv) =>
 			"Disable Realtime on a branch",
 			(yargs) => yargs.strict(),
 			(args) => disable(args as unknown as BranchScopeProps),
+		)
+		.command(
+			"rotate-secret",
+			"Replace a branch's Realtime shared secret",
+			(yargs) => yargs.strict(),
+			(args) => rotateSecret(args as unknown as BranchScopeProps),
 		)
 		.command(
 			"subscribe <query>",
