@@ -12,6 +12,7 @@
 
 /packages/auth/              @Shridhad
 /packages/postgrest-js/      @Shridhad
+/packages/oauth/             @Shridhad
 /internals/internal/         @Shridhad
 
 # CI/CD: workflows, composite actions, Dependabot config, CODEOWNERS itself
