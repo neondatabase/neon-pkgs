@@ -95,7 +95,7 @@ describe("Mastra compatibility", () => {
 		const tools = createNeonTools({
 			apiKey: "test-key",
 			tools: ["projects.get"],
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
 		expect(toMastraTools(tools).get_projects.inputSchema).toBe(
@@ -112,7 +112,7 @@ describe("Mastra compatibility", () => {
 			apiKey: "test-key",
 			tools: ["projects.get"],
 			descriptions: { get_projects: "Granted project details." },
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
 				return jsonResponse({ project: { id: "granted-project" } });
