@@ -188,6 +188,19 @@ export const isInspectDbUrl = (args: {
 	typeof args.dbUrl === "string" &&
 	args.dbUrl.length > 0;
 
+/**
+ * `data-api gen-types --db-url` introspects that Postgres directly and never calls the Neon API.
+ * Like {@link isInspectDbUrl}, an empty `--db-url` still resolves the branch through the API.
+ */
+export const isGenTypesDbUrl = (args: {
+	_: (string | number)[];
+	dbUrl?: string;
+}): boolean =>
+	args._[0] === "data-api" &&
+	args._[1] === "gen-types" &&
+	typeof args.dbUrl === "string" &&
+	args.dbUrl.length > 0;
+
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>
 	isMcpCommand(args) && argvEnablesMcpOauth(process.argv);

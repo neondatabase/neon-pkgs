@@ -19,6 +19,7 @@ import {
 	isAskCommand,
 	isCurrentBranchProbe,
 	isFeedbackCommand,
+	isGenTypesDbUrl,
 	isInspectDbUrl,
 	isMcpOauth,
 	isPluginsCommand,
@@ -199,6 +200,30 @@ describe("isInspectDbUrl", () => {
 		expect(
 			isInspectDbUrl({
 				_: ["projects", "list"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(false);
+	});
+});
+
+describe("isGenTypesDbUrl", () => {
+	test("is true for data-api gen-types with a nonempty --db-url", () => {
+		expect(
+			isGenTypesDbUrl({
+				_: ["data-api", "gen-types"],
+				dbUrl: "postgresql://localhost/postgres",
+			}),
+		).toBe(true);
+	});
+
+	test("is false without a nonempty --db-url or on another command", () => {
+		expect(isGenTypesDbUrl({ _: ["data-api", "gen-types"] })).toBe(false);
+		expect(
+			isGenTypesDbUrl({ _: ["data-api", "gen-types"], dbUrl: "" }),
+		).toBe(false);
+		expect(
+			isGenTypesDbUrl({
+				_: ["data-api", "get"],
 				dbUrl: "postgresql://localhost/postgres",
 			}),
 		).toBe(false);
