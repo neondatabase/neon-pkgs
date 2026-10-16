@@ -195,6 +195,23 @@ describe("neon.decisionModel", () => {
 		expect(gateway.requests).toHaveLength(0);
 	});
 
+	it("names the minimum ai version when given raw state from an older release", async () => {
+		gateway = await startTestGateway({ body: BILLING_OK });
+		const model = createNeon({
+			baseURL: gateway.baseURL,
+			apiKey: "test-token",
+		}).decisionModel("typesafeai-jev-1-14-0");
+
+		await expect(
+			model.doDecide({
+				// @ts-expect-error ai@7.0.130-7.0.132 pass the raw state value
+				state: "I was charged twice this month.",
+				questions: BILLING,
+			}),
+		).rejects.toThrow("upgrade ai to 7.0.133 or newer");
+		expect(gateway.requests).toHaveLength(0);
+	});
+
 	it("reads the base URL and token from the environment", async () => {
 		gateway = await startTestGateway({ body: BILLING_OK });
 		vi.stubEnv("NEON_AI_GATEWAY_BASE_URL", gateway.baseURL);

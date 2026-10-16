@@ -202,6 +202,13 @@ export class NeonDecisionModel {
 // One JSON part goes as the JSON value itself; anything else is flattened into
 // the single string System One accepts.
 function toSystemOneState(state: readonly NeonDecisionStatePart[]): unknown {
+	// ai@7.0.130-7.0.132 pass the caller's raw state instead of parts.
+	if (!Array.isArray(state)) {
+		throw new UnsupportedFunctionalityError({
+			functionality:
+				"decision state from ai versions before 7.0.133; upgrade ai to 7.0.133 or newer",
+		});
+	}
 	const [only] = state;
 	if (state.length === 1 && only.type === "json") {
 		return only.value;
