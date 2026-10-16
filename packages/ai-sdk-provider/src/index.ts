@@ -7,6 +7,8 @@
  *   incl. Codex, everything else → unified MLflow).
  * - `neon.embeddingModel()` — embedding models on the OpenAI-compatible
  *   `/v1/embeddings` endpoint.
+ * - `neon.decisionModel()` — System One decision models for AI SDK 7's
+ *   `experimental_decide`, on `/typesafe/v1/systemone`.
  */
 export { NeonAnthropicLanguageModel } from "./lib/neon-anthropic-language-model.js";
 export { NeonChatLanguageModel } from "./lib/neon-chat-language-model.js";
@@ -14,6 +16,14 @@ export type {
 	NeonChatModelId,
 	NeonKnownModelId,
 } from "./lib/neon-chat-options.js";
+export {
+	type NeonDecisionAnswer,
+	type NeonDecisionCallOptions,
+	NeonDecisionModel,
+	type NeonDecisionModelId,
+	type NeonDecisionQuestion,
+	type NeonDecisionResult,
+} from "./lib/neon-decision-model.js";
 export type { NeonEmbeddingModelId } from "./lib/neon-embedding-options.js";
 export {
 	getNeonModelCapabilities,
