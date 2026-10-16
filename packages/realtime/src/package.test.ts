@@ -21,6 +21,31 @@ const schemaSubpaths = [
 ] as const;
 
 describe("@neon/realtime package", () => {
+	it("resolves the package root to the client surface on React Native", () => {
+		const manifest = JSON.parse(
+			readFileSync(join(packageRoot, "package.json"), "utf8"),
+		) as {
+			readonly exports: Readonly<
+				Record<
+					string,
+					{
+						readonly "react-native"?: {
+							readonly types: string;
+							readonly import: string;
+							readonly default: string;
+						};
+					}
+				>
+			>;
+		};
+
+		expect(manifest.exports["."]?.["react-native"]).toEqual({
+			types: "./dist/index.react-native.d.ts",
+			import: "./dist/index.react-native.js",
+			default: "./dist/index.react-native.js",
+		});
+	});
+
 	it("keeps the direct-subscription WebSocket transport opt-in", () => {
 		const manifest = JSON.parse(
 			readFileSync(join(packageRoot, "package.json"), "utf8"),

@@ -26,6 +26,11 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "react-native": {
+        "types": "./dist/index.react-native.d.ts",
+        "import": "./dist/index.react-native.js",
+        "default": "./dist/index.react-native.js"
+      },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"

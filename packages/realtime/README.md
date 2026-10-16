@@ -31,7 +31,7 @@ import { createRealtime } from "@neon/realtime/server";
 | --- | --- |
 | `@neon/realtime/server` | Seal raw SQL or adapter-native queries on an application backend. |
 | `@neon/realtime/client` | Subscribe from a browser and consume materialized or raw changes. |
-| `@neon/realtime` | Convenience export of both surfaces; prefer the dedicated entry points in application code. |
+| `@neon/realtime` | Convenience export of both surfaces; React Native resolves this entry point to the client surface only. Prefer the dedicated entry points in application code. |
 
 ## Seal a query on the backend
 
