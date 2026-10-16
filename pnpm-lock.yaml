@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@biomejs/biome':
+      specifier: ^2.5.1
+      version: 2.5.1
     '@types/node':
       specifier: ^20.19.0
       version: 20.19.17
@@ -24,9 +27,15 @@ catalogs:
     typescript:
       specifier: ^5.9.0
       version: 5.9.3
+    vite:
+      specifier: ^6.4.1
+      version: 6.4.1
     vitest:
       specifier: ^3.0.9
       version: 3.0.9
+    ws:
+      specifier: ^8.21.2
+      version: 8.21.2
 
 importers:
 
@@ -6851,7 +6860,7 @@ snapshots:
       cjs-module-lexer: 1.4.3
       fflate: 0.8.3
       lru-cache: 11.5.1
-      semver: 7.8.2
+      semver: 7.7.2
       typescript: 5.6.1-rc
       validate-npm-package-name: 5.0.1
 
@@ -10056,7 +10065,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.2
-      undici: 7.30.0
+      undici: 7.28.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
