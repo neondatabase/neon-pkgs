@@ -153,6 +153,7 @@ export type InitClaimFn = (input: {
 	output: "yaml" | "json" | "table";
 	apiKey: string;
 	profile?: string;
+	regionId?: string;
 }) => Promise<void>;
 
 export type InitProps = CommonProps & {
@@ -460,6 +461,7 @@ const defaultCreateClaimable: InitClaimFn = async (input) => {
 		envPull: false,
 		cwd: input.cwd,
 		...(input.profile !== undefined ? { profile: input.profile } : {}),
+		...(input.regionId !== undefined ? { regionId: input.regionId } : {}),
 	});
 };
 
@@ -521,12 +523,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		...(props.regionId ? { regionId: props.regionId } : {}),
 		...(props.branch ? { branch: props.branch } : {}),
 	};
-	const hasExplicitLinkInputs =
+	const hasAccountLinkInputs =
 		props.orgId !== undefined ||
 		props.projectId !== undefined ||
 		props.projectName !== undefined ||
-		props.regionId !== undefined ||
 		props.branch !== undefined;
+	const hasExplicitLinkInputs =
+		hasAccountLinkInputs || props.regionId !== undefined;
 
 	const funnel = createInitFunnel();
 	let outcome: InitFunnelOutcome = "error";
@@ -624,7 +627,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			if (props.link === false) {
 				throw new Error(CLAIMABLE_NO_LINK);
 			}
-			if (hasExplicitLinkInputs) {
+			if (hasAccountLinkInputs) {
 				throw new Error(CLAIMABLE_ACCOUNT_FLAGS);
 			}
 			if (alreadyLinked) {
@@ -1031,6 +1034,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				apiKey: props.apiKey,
 				...(props.profile !== undefined
 					? { profile: props.profile }
+					: {}),
+				...(props.regionId !== undefined
+					? { regionId: props.regionId }
 					: {}),
 			});
 			funnel.link = "claimable";

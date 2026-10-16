@@ -58,6 +58,7 @@ type ClaimProps = {
 
 type CreateProps = ClaimProps & {
 	services?: readonly ClaimableService[];
+	regionId?: string;
 	config?: string;
 	file?: string;
 	envPull: boolean;
@@ -170,6 +171,7 @@ export const CLAIM_LIST_FIELDS = [
 export const CLAIM_CREATE_FIELDS = [
 	"project_id",
 	"branch_id",
+	"region_id",
 	"state",
 	"project_expires_at",
 	"granted_capabilities",
@@ -213,6 +215,11 @@ export const builder = (argv: yargs.Argv) =>
 							also: "Postgres is always included. Services unavailable before claim are recorded and reported.",
 						}),
 					)
+					.option("region-id", {
+						describe:
+							"Region ID for the new project (e.g. aws-eu-central-1). Defaults to aws-us-east-2",
+						type: "string",
+					})
 					.option("file", {
 						describe:
 							"Target dotenv file. Defaults to an existing .env, otherwise .env.local",
@@ -429,6 +436,7 @@ export const create = async (props: CreateProps): Promise<void> => {
 	const registration = await client.register({
 		capabilities: claimableCapabilities(props.services ?? []),
 		source: "neon_cli",
+		...(props.regionId !== undefined ? { regionId: props.regionId } : {}),
 		...(props.dataApi ? { dataApi: props.dataApi } : {}),
 	});
 	const stored: StoredClaimableCredentials = {
@@ -502,6 +510,7 @@ export const create = async (props: CreateProps): Promise<void> => {
 			{
 				project_id: registration.project.id,
 				branch_id: registration.project.branchId,
+				region_id: registration.project.regionId,
 				state: "unclaimed",
 				project_expires_at: registration.project.expiresAt,
 				granted_capabilities: granted,

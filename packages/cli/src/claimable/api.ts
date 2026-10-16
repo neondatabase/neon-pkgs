@@ -28,6 +28,7 @@ export type Registration = {
 	project: {
 		id: string;
 		branchId: string;
+		regionId: string;
 		expiresAt: string;
 	};
 	capabilities: CapabilityDecision[];
@@ -204,6 +205,7 @@ export const parseRegistrationResponse = (value: unknown): Registration => {
 		project: {
 			id: stringField(project, "id", action),
 			branchId: stringField(project, "branch_id", action),
+			regionId: stringField(project, "region_id", action),
 			expiresAt: stringField(project, "expires_at", action),
 		},
 		capabilities: capabilities.map((item) =>
@@ -365,6 +367,7 @@ export class ClaimableClient {
 	async register(input: {
 		capabilities: readonly ClaimableCapability[];
 		source: string;
+		regionId?: string;
 		dataApi?: {
 			auth_provider: "neon_auth" | "external";
 			jwks_url?: string;
@@ -380,6 +383,9 @@ export class ClaimableClient {
 					type: "anonymous",
 					capabilities: input.capabilities,
 					source: input.source,
+					...(input.regionId !== undefined
+						? { region_id: input.regionId }
+						: {}),
 					...(input.dataApi !== undefined
 						? { data_api: input.dataApi }
 						: {}),

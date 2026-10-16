@@ -310,6 +310,7 @@ describe("claim create env pull", () => {
 						project: {
 							id: PROJECT_ID,
 							branch_id: BRANCH_ID,
+							region_id: "aws-us-east-2",
 							expires_at: "2099-01-01T00:00:00.000Z",
 						},
 						capabilities,

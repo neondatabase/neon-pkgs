@@ -7,6 +7,7 @@ import { e2eTest, runCli } from "./helpers.js";
 type CreatedClaim = {
 	project_id: string;
 	branch_id: string;
+	region_id: string;
 	state: string;
 };
 
@@ -18,6 +19,7 @@ type ClaimStatus = {
 
 type BareProject = {
 	id: string;
+	region_id: string;
 };
 
 const cleanups: Array<() => void> = [];
@@ -93,6 +95,7 @@ describe.sequential("e2e — neon claim against live Claimable Neon", () => {
 				);
 				projectId = created.project_id;
 				expect(created.state).toBe("unclaimed");
+				expect(created.region_id).toBe("aws-us-east-2");
 				expect(
 					JSON.parse(readFileSync(createdIn.contextFile, "utf8")),
 				).toEqual({
@@ -183,4 +186,42 @@ describe.sequential("e2e — neon claim against live Claimable Neon", () => {
 			}
 		},
 	);
+
+	e2eTest("creates the project in the --region-id region", async () => {
+		const dirs = isolatedDirs();
+		let projectId: string | undefined;
+		try {
+			const created = await runAnonymousJson<CreatedClaim>(
+				[
+					"claim",
+					"create",
+					"--region-id",
+					"aws-eu-central-1",
+					"--no-env-pull",
+					...claimHostArgs(),
+				],
+				dirs,
+			);
+			projectId = created.project_id;
+			expect(created.region_id).toBe("aws-eu-central-1");
+
+			const fetched = await runAnonymousJson<BareProject>(
+				["projects", "get", created.project_id],
+				dirs,
+			);
+			expect(fetched.region_id).toBe("aws-eu-central-1");
+		} finally {
+			if (projectId !== undefined) {
+				const deleted = await runCli(
+					["claim", "delete", projectId, "--yes", ...claimHostArgs()],
+					{
+						...anonymous,
+						configDir: dirs.configDir,
+						contextFile: dirs.contextFile,
+					},
+				);
+				expect(deleted.code, deleted.stderr).toBe(0);
+			}
+		}
+	});
 });

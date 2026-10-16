@@ -70,6 +70,7 @@ describe("claim create table fields", () => {
 			data: {
 				project_id: "quiet-fog-12345678",
 				branch_id: "br-quiet-fog-12345678",
+				region_id: "aws-us-east-2",
 				state: "unclaimed",
 				project_expires_at: "2026-08-24T12:00:00.000Z",
 				granted_capabilities: ["postgres"],
