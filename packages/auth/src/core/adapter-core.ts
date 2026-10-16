@@ -10,7 +10,8 @@ import {
 } from "better-auth/client/plugins";
 import { anonymousTokenClient } from "../plugins/anonymous-token";
 import type { BetterAuthInstance } from "../types";
-import { injectClientInfo } from "../utils/client-info";
+import { createAdapterClientInfoInjector } from "../utils/client-info";
+import type { NeonAuthAdapterName } from "./adapter-name";
 import { normalizeBetterAuthError } from "./better-auth-helpers";
 import {
 	BETTER_AUTH_METHODS_HOOKS,
@@ -51,7 +52,11 @@ export abstract class NeonAuthAdapterCore {
 	 */
 
 	//#region Constructor
-	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
+	constructor(
+		betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions,
+		adapterName?: NeonAuthAdapterName,
+	) {
+		const injectClientInfo = createAdapterClientInfoInjector(adapterName);
 		// Preserve user's onSuccess callback if they provided one
 		const userOnSuccess = betterAuthClientOptions.fetchOptions?.onSuccess;
 		const userOnRequest = betterAuthClientOptions.fetchOptions?.onRequest;

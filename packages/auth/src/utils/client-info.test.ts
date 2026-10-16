@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { BetterAuthReactAdapter } from "../adapters/better-auth-react/better-auth-react-adapter";
+import { BetterAuthVanillaAdapter } from "../adapters/better-auth-vanilla/better-auth-vanilla-adapter";
+import { SupabaseAuthAdapter } from "../adapters/supabase/supabase-adapter";
 import { NeonAuthAdapterCore } from "../core/adapter-core";
+import { createInternalNeonAuth } from "../neon-auth";
 import type { BetterAuthInstance } from "../types";
 import { BETTER_AUTH_VERSION } from "./better-auth-version";
 
@@ -75,6 +79,11 @@ describe("X-Neon-Client-Info sent by the auth adapter", () => {
 		expect(info.betterAuthVersion).toBe(BETTER_AUTH_VERSION);
 	});
 
+	test("omits adapter when the core is used without one", async () => {
+		const info = await captureClientInfo();
+		expect("adapter" in info).toBe(false);
+	});
+
 	test("is classified as modern by the server gate", async () => {
 		const info = await captureClientInfo();
 		expect(isModernBetterAuth(info.betterAuthVersion)).toBe(true);
@@ -102,5 +111,47 @@ describe("X-Neon-Client-Info sent by the auth adapter", () => {
 			"../../node_modules/better-auth/package.json",
 		);
 		expect(BETTER_AUTH_VERSION).toBe(installed.version);
+	});
+});
+
+describe("X-Neon-Client-Info adapter field", () => {
+	const originalFetch = globalThis.fetch;
+	let fetchMock: ReturnType<typeof vi.fn>;
+
+	beforeEach(() => {
+		fetchMock = vi.fn(async () => Response.json({}, { status: 200 }));
+		globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	async function sentClientInfo(
+		config: Parameters<typeof createInternalNeonAuth>[1],
+	) {
+		const auth = createInternalNeonAuth(
+			"https://auth.example.com/api/auth",
+			config,
+		);
+		await auth.getJWTToken().catch(() => null);
+		const [, init] = fetchMock.mock.calls[0] as [unknown, RequestInit];
+		const header = new Headers(init.headers).get("X-Neon-Client-Info");
+		return JSON.parse(header as string);
+	}
+
+	test.each([
+		["supabase", SupabaseAuthAdapter()],
+		["better-auth-vanilla", BetterAuthVanillaAdapter()],
+		["better-auth-react", BetterAuthReactAdapter()],
+	] as const)("reports %s", async (name, adapter) => {
+		const info = await sentClientInfo({ adapter } as never);
+		expect(info.adapter).toBe(name);
+		expect(info.sdk).toBe("@neon/auth");
+	});
+
+	test("reports the default adapter when none is configured", async () => {
+		const info = await sentClientInfo(undefined);
+		expect(info.adapter).toBe("better-auth-vanilla");
 	});
 });

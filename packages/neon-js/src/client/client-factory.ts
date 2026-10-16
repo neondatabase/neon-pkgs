@@ -1,5 +1,6 @@
 import {
 	createInternalNeonAuth,
+	getAdapterName,
 	type NeonAuthAdapter,
 	type NeonAuthConfig,
 } from "@neon/auth";
@@ -295,7 +296,9 @@ export function createClient<
 	const { auth: authConfig, dataApi: dataApiConfig } = config;
 
 	// Build client info once - sub-packages will see it and skip their own injection
-	const clientInfoHeader = buildNeonJsClientInfo();
+	const clientInfoHeader = buildNeonJsClientInfo(
+		getAdapterName(authConfig.adapter),
+	);
 
 	// Step 1: Instantiate auth adapter
 	const auth = createInternalNeonAuth<TAuthAdapter>(authConfig.url, {
