@@ -130,6 +130,33 @@ const { embeddings } = await embedMany({
 
 Both models return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` ignores it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NeonEmbeddingModelId` autocompletes the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
 
+## Decisions
+
+`neon.decisionModel()` calls TypeSafe's System One decision models, such as Jev, on the gateway's `/typesafe/v1/systemone` endpoint with the same base URL and token. It works with AI SDK 7's `experimental_decide` and needs `ai@7.0.133` or newer; earlier 7.0 releases pass the decision state in a different shape.
+
+```ts
+import { neon } from "@neon/ai-sdk-provider";
+import { experimental_decide as decide } from "ai";
+
+const { answers } = await decide({
+  model: neon.decisionModel("typesafeai-jev-1-14-0"),
+  state: "I was charged twice this month.",
+  questions: {
+    billing: {
+      type: "boolean",
+      instructions: "Is the user asking about billing?",
+      criteria: { true: "Billing related", false: "Not billing" },
+    },
+  },
+});
+
+answers.billing; // { type: "boolean", probability: 0.97 }
+```
+
+A `boolean` question is sent as a System One `noul` question; `choice` and `score` questions are sent as they are. Probabilities and scores come back rounded to two decimals, and the per-answer `confidence` System One reports for `choice` and `score` is in `providerMetadata.neon.confidence`. State can be text or JSON; file parts throw `UnsupportedFunctionalityError`.
+
+System One models are rolling out to the gateway. `GET $NEON_AI_GATEWAY_BASE_URL/v1/models` lists the ones your branch serves, with `dialects: ["systemone"]`. `NeonDecisionModelId` accepts any string.
+
 ## Image generation
 
 Available on OpenAI models via the Responses `image_generation` tool (there is no `generateImage()` image-model endpoint). Use `streamText` — streaming returns the image as a `tool-result` part and avoids the gateway's non-streaming response-size cap and read timeout:
