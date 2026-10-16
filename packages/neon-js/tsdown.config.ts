@@ -21,6 +21,7 @@ export default defineConfig({
 	dts: { resolve: [/^@neon-internals\//] },
 	entry: [
 		"src/index.ts",
+		"src/supabase/index.ts",
 		"src/auth/index.ts",
 		"src/auth/types/index.ts",
 		"src/auth/react/index.ts",

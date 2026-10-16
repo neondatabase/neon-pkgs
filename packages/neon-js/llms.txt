@@ -92,12 +92,11 @@ await client.auth.signOut();
 **Critical:** Adapters are factory functions - must call with `()`.
 
 ```typescript
-// SupabaseAuthAdapter - Supabase-compatible API
-import { createClient, SupabaseAuthAdapter } from '@neon/neon-js';
+// Supabase-compatible API: import createClient from the /supabase subpath (no adapter option)
+import { createClient } from '@neon/neon-js/supabase';
 
 const client = createClient<Database>({
   auth: {
-    adapter: SupabaseAuthAdapter(), // Must call with ()
     url: import.meta.env.VITE_NEON_AUTH_URL,
   },
   dataApi: {
@@ -107,6 +106,9 @@ const client = createClient<Database>({
 
 await client.auth.signInWithPassword({ email, password });
 const { data: session } = await client.auth.getSession();
+
+// Supabase adapter options (fetchOptions, sessionOptions, ...) go on the auth config, e.g. to forward a request cookie on a server:
+// auth: { url, fetchOptions: { headers: { Cookie: request.headers.get('cookie') ?? '' } } }
 ```
 
 ```typescript
@@ -370,10 +372,11 @@ const client = createClient({
 
 ## Critical Rules
 
-1. **Adapters are factories** - Call them: `SupabaseAuthAdapter()` not `SupabaseAuthAdapter`
-2. **React adapter import path** - Must use subpath: `@neon/neon-js/auth/react/adapters`
-3. **Anonymous access requires RLS** - Must configure database policies and grants
-4. **Type generation** - Regenerate your `Database` type after schema changes to keep types in sync
+1. **Adapters are factories** - Call them: `BetterAuthVanillaAdapter()` not `BetterAuthVanillaAdapter`
+2. **Supabase API lives at `/supabase`** - `import { createClient } from '@neon/neon-js/supabase'`; the main `createClient` does not accept `SupabaseAuthAdapter`
+3. **React adapter import path** - Must use subpath: `@neon/neon-js/auth/react/adapters`
+4. **Anonymous access requires RLS** - Must configure database policies and grants
+5. **Type generation** - Regenerate your `Database` type after schema changes to keep types in sync
 
 ## Troubleshooting
 
@@ -381,7 +384,7 @@ const client = createClient({
 |-------|-------|-----|
 | `AuthRequiredError` | No session when querying | Sign in first or enable `allowAnonymous` |
 | `permission denied for table` | RLS blocking access | Add RLS policy + GRANT for role |
-| `adapter is not a function` | Missing `()` on adapter | Use `SupabaseAuthAdapter()` not `SupabaseAuthAdapter` |
+| `adapter is not a function` | Missing `()` on adapter | Use `BetterAuthVanillaAdapter()` not `BetterAuthVanillaAdapter` |
 | OAuth popup blocked | Browser blocking popup | User must allow popups for domain |
 | `PGRST301` | JWT expired or invalid | Session expired - re-authenticate |
 | Cross-tab sync not working | Node.js environment | BroadcastChannel is browser-only feature |

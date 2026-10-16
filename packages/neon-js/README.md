@@ -13,7 +13,7 @@ The official TypeScript SDK for Neon, combining authentication and database quer
 
 **Key Features:**
 
-- **Integrated Authentication** - Works out of the box with optional adapters (Supabase-compatible, React hooks)
+- **Integrated Authentication** - Works out of the box with optional adapters (React hooks) and a Supabase-compatible client at `@neon/neon-js/supabase`
 - **PostgreSQL Querying** - Full PostgREST client with type-safe queries
 - **Anonymous Access** - Optional RLS-based data access for unauthenticated users
 - **High Performance** - Session caching, request deduplication
@@ -116,18 +116,17 @@ const { data: users } = await client
 
 You can optionally specify an adapter for different API styles:
 
-#### SupabaseAuthAdapter (Supabase-compatible API)
+#### Supabase-compatible API
 
-Use this adapter if you're migrating from Supabase or prefer the Supabase API style:
+If you're migrating from Supabase or prefer the Supabase API style, import `createClient` from the `/supabase` subpath. It has the Supabase adapter built in, so there is no `adapter` option:
 
 ```typescript
-import { createClient, SupabaseAuthAdapter } from '@neon/neon-js';
+import { createClient } from '@neon/neon-js/supabase';
 
 // `Database` is a type generated from your schema
 // See "TypeScript" section below for details
 const client = createClient<Database>({
   auth: {
-    adapter: SupabaseAuthAdapter(),
     url: import.meta.env.VITE_NEON_AUTH_URL,
   },
   dataApi: {
@@ -143,6 +142,20 @@ await client.auth.signInWithPassword({
 
 const { data: session } = await client.auth.getSession();
 ```
+
+Auth config also accepts the `SupabaseAuthAdapter` options (`fetchOptions`, `sessionOptions`, ...). For example, a server can forward the incoming request cookie:
+
+```typescript
+const client = createClient<Database>({
+  auth: {
+    url: process.env.NEON_AUTH_URL!,
+    fetchOptions: { headers: { Cookie: request.headers.get('cookie') ?? '' } },
+  },
+  dataApi: { url: process.env.NEON_DATA_API_URL! },
+});
+```
+
+The main `createClient` no longer accepts `SupabaseAuthAdapter`. If you already import it, switch to `@neon/neon-js/supabase` and drop the `adapter` option. `SupabaseAuthAdapter` itself is still exported from `@neon/neon-js/auth/vanilla/adapters`.
 
 #### BetterAuthReactAdapter (React Hooks)
 
@@ -256,9 +269,9 @@ const session = await client.auth.getSession();
 await client.auth.signOut();
 ```
 
-### SupabaseAuthAdapter API
+### Supabase-compatible API
 
-When using `SupabaseAuthAdapter`, you get access to the Supabase-compatible API:
+When using `@neon/neon-js/supabase`, you get access to the Supabase-compatible API:
 
 ```typescript
 // Sign up with metadata
@@ -481,7 +494,7 @@ Concurrent authentication calls are automatically deduplicated:
 ```typescript
 import { AuthError } from '@neon/neon-js/auth';
 
-// Auth errors (SupabaseAuthAdapter)
+// Auth errors (Supabase-compatible client)
 try {
   await client.auth.signInWithPassword({ email, password });
 } catch (error) {
@@ -554,7 +567,7 @@ export function useAuth() {
 
 ## Supabase Migration Guide
 
-neon-js provides a Supabase-compatible API, making migration straightforward.
+`@neon/neon-js/supabase` provides a Supabase-compatible API, making migration straightforward.
 
 ### 1. Update Dependencies
 
@@ -576,7 +589,7 @@ neon-js provides a Supabase-compatible API, making migration straightforward.
 
 ```diff
 - import { createClient } from '@supabase/supabase-js';
-+ import { createClient, SupabaseAuthAdapter } from '@neon/neon-js';
++ import { createClient } from '@neon/neon-js/supabase';
 
 - export const client = createClient(
 -   import.meta.env.VITE_SUPABASE_URL,
@@ -584,7 +597,6 @@ neon-js provides a Supabase-compatible API, making migration straightforward.
 - );
 + export const client = createClient<Database>({
 +   auth: {
-+     adapter: SupabaseAuthAdapter(), // Must call as function!
 +     url: import.meta.env.VITE_NEON_AUTH_URL,
 +   },
 +   dataApi: {

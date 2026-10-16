@@ -14,41 +14,6 @@ import { describe, expectTypeOf, it } from "vitest";
 import { createClient } from "../client/client-factory";
 
 // =============================================================================
-// Test 1: SupabaseAuthAdapter - should infer SupabaseAuthAdapter methods
-// =============================================================================
-describe("SupabaseAuthAdapter type inference", () => {
-	const supabaseClient = createClient({
-		auth: {
-			adapter: SupabaseAuthAdapter(),
-			url: "https://auth.example.com",
-		},
-		dataApi: {
-			url: "https://data-api.example.com/rest/v1",
-		},
-	});
-
-	it("should have getSession method", () => {
-		expectTypeOf(supabaseClient.auth.getSession).toBeFunction();
-	});
-
-	it("should have getJWTToken method", () => {
-		expectTypeOf(supabaseClient.auth.getJWTToken).toBeFunction();
-	});
-
-	it("should have signInWithPassword method (Supabase API)", () => {
-		expectTypeOf(supabaseClient.auth.signInWithPassword).toBeFunction();
-	});
-
-	it("should have signUp method (Supabase API)", () => {
-		expectTypeOf(supabaseClient.auth.signUp).toBeFunction();
-	});
-
-	it("should have signOut method", () => {
-		expectTypeOf(supabaseClient.auth.signOut).toBeFunction();
-	});
-});
-
-// =============================================================================
 // Test 2: BetterAuthVanillaAdapter - should expose Better Auth API directly
 // =============================================================================
 describe("BetterAuthVanillaAdapter type inference", () => {
@@ -150,21 +115,6 @@ describe("Database type parameter with adapter inference", () => {
 		};
 	}
 
-	it("should infer SupabaseAuthAdapter API when Database type is provided", () => {
-		const typedClient = createClient<TestDatabase>({
-			auth: {
-				adapter: SupabaseAuthAdapter(),
-				url: "https://auth.example.com",
-			},
-			dataApi: {
-				url: "https://data-api.example.com/rest/v1",
-			},
-		});
-
-		expectTypeOf(typedClient.auth.signInWithPassword).toBeFunction();
-		expectTypeOf(typedClient.auth.getJWTToken).toBeFunction();
-	});
-
 	it("should infer BetterAuthVanillaAdapter API when Database type is provided", () => {
 		const typedClient = createClient<TestDatabase>({
 			auth: {
@@ -191,24 +141,6 @@ describe("String form — default adapter type inference", () => {
 	it("should default to BetterAuthVanillaAdapter API", () => {
 		expectTypeOf(client.auth.signIn.email).toBeFunction();
 		expectTypeOf(client.auth.getSession).toBeFunction();
-	});
-});
-
-// =============================================================================
-// Test 7: String form — explicit SupabaseAuthAdapter
-// =============================================================================
-describe("String form — SupabaseAuthAdapter type inference", () => {
-	const client = createClient(
-		"https://ep-xxx.c-2.us-east-2.aws.neon.build/db",
-		{
-			auth: { adapter: SupabaseAuthAdapter() },
-		},
-	);
-
-	it("should expose Supabase API", () => {
-		expectTypeOf(client.auth.signInWithPassword).toBeFunction();
-		expectTypeOf(client.auth.signUp).toBeFunction();
-		expectTypeOf(client.auth.signOut).toBeFunction();
 	});
 });
 
@@ -253,14 +185,6 @@ describe("String form with Database type parameter", () => {
 		);
 		expectTypeOf(typed.auth.signIn.email).toBeFunction();
 	});
-
-	it("should preserve Database type with explicit Supabase adapter", () => {
-		const typed = createClient<TestDatabaseStringForm>(
-			"https://ep-xxx.c-2.us-east-2.aws.neon.build/db",
-			{ auth: { adapter: SupabaseAuthAdapter() } },
-		);
-		expectTypeOf(typed.auth.signInWithPassword).toBeFunction();
-	});
 });
 
 // =============================================================================
@@ -280,5 +204,28 @@ describe("External auth provider form type inference", () => {
 
 	it("should not expose an `auth` property", () => {
 		expectTypeOf(client).not.toHaveProperty("auth");
+	});
+});
+
+// =============================================================================
+// Test 11: The Supabase adapter is not accepted by the main entry
+// =============================================================================
+describe("Supabase adapter is rejected by the main createClient", () => {
+	it("rejects the object form", () => {
+		// @ts-expect-error the Supabase-compatible client lives at `@neon/neon-js/supabase`
+		createClient({
+			auth: {
+				adapter: SupabaseAuthAdapter(),
+				url: "https://auth.example.com",
+			},
+			dataApi: { url: "https://data-api.example.com/rest/v1" },
+		});
+	});
+
+	it("rejects the string form", () => {
+		createClient("https://ep-xxx.c-2.us-east-2.aws.neon.build/db", {
+			// @ts-expect-error the Supabase-compatible client lives at `@neon/neon-js/supabase`
+			auth: { adapter: SupabaseAuthAdapter() },
+		});
 	});
 });
