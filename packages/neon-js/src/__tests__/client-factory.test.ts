@@ -16,6 +16,11 @@ vi.mock("@neon/auth", async (importOriginal) => {
 	};
 });
 
+import { BetterAuthReactAdapter } from "@neon/auth/react/adapters";
+import {
+	BetterAuthVanillaAdapter,
+	SupabaseAuthAdapter,
+} from "@neon/auth/vanilla/adapters";
 import { createClient } from "../client/client-factory";
 import { defaultDeriveNeonUrls } from "../client/derive-urls";
 
@@ -213,5 +218,42 @@ describe("createClient — external auth provider form", () => {
 
 		expect(error?.message).toMatch(/Authentication required/);
 		expect(baseFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe("createClient — X-Neon-Client-Info adapter field", () => {
+	beforeEach(() => {
+		createInternalNeonAuthMock.mockClear();
+	});
+
+	function authHeaderInfo() {
+		const config = createInternalNeonAuthMock.mock.calls[0]?.[1] as {
+			fetchOptions: { headers: Record<string, string> };
+		};
+		return JSON.parse(config.fetchOptions.headers["X-Neon-Client-Info"]);
+	}
+
+	it.each([
+		["supabase", SupabaseAuthAdapter()],
+		["better-auth-vanilla", BetterAuthVanillaAdapter()],
+		["better-auth-react", BetterAuthReactAdapter()],
+	] as const)("reports %s", (name, adapter) => {
+		createClient(BASE_URL, { auth: { adapter: adapter as never } });
+
+		const info = authHeaderInfo();
+		expect(info.adapter).toBe(name);
+		expect(info.sdk).toBe("@neon/neon-js");
+	});
+
+	it("reports the default adapter when none is configured", () => {
+		createClient(BASE_URL);
+
+		expect(authHeaderInfo().adapter).toBe("better-auth-vanilla");
+	});
+
+	it("omits the adapter for a custom adapter builder", () => {
+		createClient(BASE_URL, { auth: { adapter: vi.fn() as never } });
+
+		expect("adapter" in authHeaderInfo()).toBe(false);
 	});
 });

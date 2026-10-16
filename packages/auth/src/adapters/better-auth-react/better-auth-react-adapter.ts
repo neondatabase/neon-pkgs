@@ -4,6 +4,7 @@ import {
 	type NeonAuthAdapterCoreAuthOptions,
 	type SupportedBetterAuthClientPlugins,
 } from "../../core/adapter-core";
+import { registerAdapterBuilder } from "../../core/adapter-name";
 
 export type BetterAuthReactAdapterOptions = Omit<
 	NeonAuthAdapterCoreAuthOptions,
@@ -19,7 +20,7 @@ class BetterAuthReactAdapterImpl extends NeonAuthAdapterCore {
 	>;
 
 	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
-		super(betterAuthClientOptions);
+		super(betterAuthClientOptions, "better-auth-react");
 		this._betterAuth = createAuthClient(this.betterAuthOptions);
 	}
 
@@ -58,16 +59,19 @@ type BetterAuthReactAdapterBuilder = (
 export function BetterAuthReactAdapter(
 	options?: BetterAuthReactAdapterOptions,
 ): BetterAuthReactAdapterBuilder {
-	return (url: string, fetchOptions?: { headers?: Record<string, string> }) =>
-		new BetterAuthReactAdapterImpl({
-			baseURL: url,
-			...options,
-			fetchOptions: {
-				...options?.fetchOptions,
-				headers: {
-					...options?.fetchOptions?.headers,
-					...fetchOptions?.headers,
+	return registerAdapterBuilder(
+		"better-auth-react",
+		(url: string, fetchOptions?: { headers?: Record<string, string> }) =>
+			new BetterAuthReactAdapterImpl({
+				baseURL: url,
+				...options,
+				fetchOptions: {
+					...options?.fetchOptions,
+					headers: {
+						...options?.fetchOptions?.headers,
+						...fetchOptions?.headers,
+					},
 				},
-			},
-		});
+			}),
+	);
 }

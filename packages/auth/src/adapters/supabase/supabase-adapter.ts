@@ -18,6 +18,7 @@ import {
 	type NeonAuthAdapterCoreAuthOptions,
 	type SupportedBetterAuthClientPlugins,
 } from "../../core/adapter-core";
+import { registerAdapterBuilder } from "../../core/adapter-name";
 import {
 	mapBetterAuthIdentity,
 	mapBetterAuthSession,
@@ -72,7 +73,7 @@ class SupabaseAuthAdapterImpl
 	private _stateChangeEmitters = new Map<string, Subscription>();
 
 	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
-		super(betterAuthClientOptions);
+		super(betterAuthClientOptions, "supabase");
 		this._betterAuth = createAuthClient(this.betterAuthOptions);
 
 		/**
@@ -1528,16 +1529,19 @@ export type SupabaseAuthAdapterBuilder = (
 export function SupabaseAuthAdapter(
 	options?: SupabaseAuthAdapterOptions,
 ): SupabaseAuthAdapterBuilder {
-	return (url: string, fetchOptions?: { headers?: Record<string, string> }) =>
-		new SupabaseAuthAdapterImpl({
-			baseURL: url,
-			...options,
-			fetchOptions: {
-				...options?.fetchOptions,
-				headers: {
-					...options?.fetchOptions?.headers,
-					...fetchOptions?.headers,
+	return registerAdapterBuilder(
+		"supabase",
+		(url: string, fetchOptions?: { headers?: Record<string, string> }) =>
+			new SupabaseAuthAdapterImpl({
+				baseURL: url,
+				...options,
+				fetchOptions: {
+					...options?.fetchOptions,
+					headers: {
+						...options?.fetchOptions?.headers,
+						...fetchOptions?.headers,
+					},
 				},
-			},
-		});
+			}),
+	);
 }
