@@ -46,9 +46,7 @@ function validCompactJweHeader(capability: string): boolean {
 		const encodedHeader = segments[0];
 		if (!encodedHeader) return false;
 		const header = JSON.parse(
-			new TextDecoder("utf-8", { fatal: true }).decode(
-				decodeBase64Url(encodedHeader),
-			),
+			decodeAscii(decodeBase64Url(encodedHeader)),
 		) as unknown;
 		return (
 			isRecord(header) &&
@@ -60,6 +58,15 @@ function validCompactJweHeader(capability: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+function decodeAscii(value: Uint8Array): string {
+	let decoded = "";
+	for (const byte of value) {
+		if (byte > 0x7f) throw new Error();
+		decoded += String.fromCharCode(byte);
+	}
+	return decoded;
 }
 
 function decodeBase64Url(value: string): Uint8Array {
