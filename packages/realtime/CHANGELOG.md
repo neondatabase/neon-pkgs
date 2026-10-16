@@ -1,5 +1,12 @@
 # @neon/realtime
 
+## 0.1.1
+
+### Patch Changes
+
+- 7f758b9: Preserve sealed queries' live row types through JSON-aware RPC typing. Serialized initial data must be converted to the live row representation before being passed to the SDK; for example, restore JSON date strings to `Date` objects when the live parser returns `Date`.
+- 5216b7d: Infer live rows from the sealed query instead of weakening the result type to accept incompatible initial data or refresh callbacks.
+
 ## 0.1.0
 
 ### Minor Changes
