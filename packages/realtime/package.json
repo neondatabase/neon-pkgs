@@ -68,6 +68,7 @@
     "tsc": "tsc"
   },
   "dependencies": {
+    "base64-js": "catalog:",
     "postgres-array": "^3.0.4"
   },
   "devDependencies": {

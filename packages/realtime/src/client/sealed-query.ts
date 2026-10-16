@@ -1,3 +1,5 @@
+import { decodeBase64 } from "./base64.js";
+
 /**
  * JSON-compatible sealed representation of one exact live query.
  *
@@ -72,8 +74,7 @@ function decodeAscii(value: Uint8Array): string {
 function decodeBase64Url(value: string): Uint8Array {
 	if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error();
 	const standard = value.replace(/-/g, "+").replace(/_/g, "/");
-	const binary = atob(standard + "=".repeat((4 - (standard.length % 4)) % 4));
-	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+	return decodeBase64(standard + "=".repeat((4 - (standard.length % 4)) % 4));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

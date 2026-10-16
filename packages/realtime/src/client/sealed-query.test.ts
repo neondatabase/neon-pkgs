@@ -42,6 +42,12 @@ describe("sealed query row types", () => {
 		expect(() => validateSealedQuery(sealedQuery())).not.toThrow();
 	});
 
+	it("validates the protected header without atob", () => {
+		vi.stubGlobal("atob", undefined);
+
+		expect(() => validateSealedQuery(sealedQuery())).not.toThrow();
+	});
+
 	it("rejects non-ASCII protected headers", () => {
 		expect(() =>
 			validateSealedQuery(sealedQuery({ note: "café" })),
