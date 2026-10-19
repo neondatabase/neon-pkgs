@@ -221,10 +221,6 @@ const client = createRealtimeClient({
 });
 ```
 
-The factory may return any transport that implements the exported
-`WebSocketLike` interface. A browser `WebSocket` already satisfies this
-contract.
-
 The third constructor argument is a React Native extension and is unavailable
 in browsers. An origin allowlist is a browser security boundary; native clients
 can choose their own header value, so do not treat it as native-app
