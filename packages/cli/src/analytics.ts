@@ -33,16 +33,10 @@ export type AnalyticsIdentity =
 	| { userId?: string; anonymousId: string };
 
 /**
- * The identity to send an event under, given whatever identified this invocation.
- *
- * Nothing is guaranteed to have identified it: a command can run with no credentials at all,
- * leaving the user id empty. Segment accepts an empty `userId` and forwards it as-is rather
- * than rejecting it, so the substitution has to happen here. `""` is falsy but not nullish,
- * which is why the checks are on truthiness.
- *
- * - Known user, stored id: both. Segment links the id's earlier anonymous events to the user.
- * - Unknown user, stored id: the id alone, so each installation is its own anonymous user.
- * - Neither (CI, an unwritable config directory): the shared `"anonymous"` user, as before.
+ * The identity to send an event under. A run nothing identified (an empty `userId`, which
+ * Segment would forward as-is) falls back to the stored anonymous id, and to the shared
+ * `"anonymous"` user where there is none. A known user is sent with the id so Segment can
+ * link the two.
  *
  * Exported for tests.
  */

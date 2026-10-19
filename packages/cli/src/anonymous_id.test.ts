@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
 	existsSync,
 	mkdtempSync,
@@ -8,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ANONYMOUS_ID_FILE, getOrCreateAnonymousId } from "./anonymous_id.js";
@@ -68,4 +70,61 @@ describe("getOrCreateAnonymousId", () => {
 		writeFileSync(blocker, "");
 		expect(getOrCreateAnonymousId(join(blocker, "sub"))).toBeUndefined();
 	});
+
+	it("gives parallel first runs one id", async () => {
+		const tsx = fileURLToPath(
+			new URL("../node_modules/.bin/tsx", import.meta.url),
+		);
+		const module = fileURLToPath(
+			new URL("./anonymous_id.ts", import.meta.url),
+		);
+		const go = join(dir, "go");
+		// Kept outside the config dir so the children's only shared state is the id file.
+		const scripts = mkdtempSync(join(tmpdir(), "neon-anon-id-script-"));
+		const script = join(scripts, "child.mts");
+		writeFileSync(
+			script,
+			`import { existsSync } from "node:fs";
+const [module, dir, go] = process.argv.slice(2);
+const { getOrCreateAnonymousId } = await import(module);
+// Hold every child here until all are loaded, so their first reads overlap.
+while (!existsSync(go)) {}
+console.log(getOrCreateAnonymousId(dir));
+`,
+		);
+		const configDir = join(dir, "config");
+		const run = () =>
+			new Promise<string>((resolve, reject) => {
+				const child = spawn(
+					tsx,
+					[script, pathToFileURL(module).href, configDir, go],
+					{ env: { ...process.env, CI: "" } },
+				);
+				let out = "";
+				let err = "";
+				child.stdout.on("data", (chunk) => {
+					out += chunk;
+				});
+				child.stderr.on("data", (chunk) => {
+					err += chunk;
+				});
+				child.on("error", reject);
+				child.on("close", (code) =>
+					code === 0 ? resolve(out.trim()) : reject(new Error(err)),
+				);
+			});
+		try {
+			const children = Array.from({ length: 12 }, run);
+			await new Promise((resolve) => setTimeout(resolve, 3000));
+			writeFileSync(go, "");
+			const ids = await Promise.all(children);
+			expect(new Set(ids).size).toBe(1);
+			expect(ids[0]).toMatch(UUID);
+			expect(
+				readFileSync(join(configDir, ANONYMOUS_ID_FILE), "utf8").trim(),
+			).toBe(ids[0]);
+		} finally {
+			rmSync(scripts, { recursive: true, force: true });
+		}
+	}, 60_000);
 });

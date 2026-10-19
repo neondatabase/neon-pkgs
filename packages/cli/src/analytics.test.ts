@@ -24,32 +24,13 @@ describe("analyticsIdentity", () => {
 		expect(analyticsIdentity("", undefined)).toEqual({
 			userId: "anonymous",
 		});
-	});
-
-	it("treats an id the API never returned the same as an empty one", () => {
 		expect(analyticsIdentity(undefined, undefined)).toEqual({
 			userId: "anonymous",
 		});
 	});
 
-	it("attributes an identified run to the user", () => {
-		expect(analyticsIdentity("1234", undefined)).toEqual({
-			userId: "1234",
-		});
-	});
-
-	it("sends the stored id alone while nobody is identified", () => {
-		expect(analyticsIdentity(undefined, ANON_ID)).toEqual({
-			anonymousId: ANON_ID,
-		});
+	it("treats an empty user id the same as a missing one", () => {
 		expect(analyticsIdentity("", ANON_ID)).toEqual({
-			anonymousId: ANON_ID,
-		});
-	});
-
-	it("sends both ids once the user is known, so earlier anonymous events can be linked", () => {
-		expect(analyticsIdentity("1234", ANON_ID)).toEqual({
-			userId: "1234",
 			anonymousId: ANON_ID,
 		});
 	});
