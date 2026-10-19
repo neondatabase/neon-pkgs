@@ -18,7 +18,10 @@ import {
 	type NeonAuthAdapterCoreAuthOptions,
 	type SupportedBetterAuthClientPlugins,
 } from "../../core/adapter-core";
-import { registerAdapterBuilder } from "../../core/adapter-name";
+import {
+	createAdapterBuilder,
+	type NeonAuthAdapterName,
+} from "../../core/adapter-name";
 import {
 	mapBetterAuthIdentity,
 	mapBetterAuthSession,
@@ -64,6 +67,7 @@ class SupabaseAuthAdapterImpl
 	extends NeonAuthAdapterCore
 	implements SupabaseAuthClientInterface
 {
+	static readonly adapterName = "supabase" satisfies NeonAuthAdapterName;
 	admin: SupabaseAuthClientInterface["admin"] = undefined as never;
 	mfa: SupabaseAuthClientInterface["mfa"] = undefined as never;
 	oauth: SupabaseAuthClientInterface["oauth"] = undefined as never;
@@ -73,7 +77,7 @@ class SupabaseAuthAdapterImpl
 	private _stateChangeEmitters = new Map<string, Subscription>();
 
 	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
-		super(betterAuthClientOptions, "supabase");
+		super(betterAuthClientOptions);
 		this._betterAuth = createAuthClient(this.betterAuthOptions);
 
 		/**
@@ -1529,19 +1533,5 @@ export type SupabaseAuthAdapterBuilder = (
 export function SupabaseAuthAdapter(
 	options?: SupabaseAuthAdapterOptions,
 ): SupabaseAuthAdapterBuilder {
-	return registerAdapterBuilder(
-		"supabase",
-		(url: string, fetchOptions?: { headers?: Record<string, string> }) =>
-			new SupabaseAuthAdapterImpl({
-				baseURL: url,
-				...options,
-				fetchOptions: {
-					...options?.fetchOptions,
-					headers: {
-						...options?.fetchOptions?.headers,
-						...fetchOptions?.headers,
-					},
-				},
-			}),
-	);
+	return createAdapterBuilder(SupabaseAuthAdapterImpl, options);
 }

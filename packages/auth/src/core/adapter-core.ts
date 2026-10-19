@@ -52,11 +52,13 @@ export abstract class NeonAuthAdapterCore {
 	 */
 
 	//#region Constructor
-	constructor(
-		betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions,
-		adapterName?: NeonAuthAdapterName,
-	) {
-		const injectClientInfo = createAdapterClientInfoInjector(adapterName);
+	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
+		const Adapter = new.target as {
+			readonly adapterName?: NeonAuthAdapterName;
+		};
+		const injectClientInfo = createAdapterClientInfoInjector(
+			Adapter.adapterName,
+		);
 		// Preserve user's onSuccess callback if they provided one
 		const userOnSuccess = betterAuthClientOptions.fetchOptions?.onSuccess;
 		const userOnRequest = betterAuthClientOptions.fetchOptions?.onRequest;

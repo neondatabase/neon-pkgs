@@ -17,6 +17,12 @@ declare global {
 
 export const X_NEON_CLIENT_INFO_HEADER = "X-Neon-Client-Info";
 
+/** Closed set of values reported in the `adapter` field of X-Neon-Client-Info. */
+export type NeonAuthAdapterName =
+	| "supabase"
+	| "better-auth-vanilla"
+	| "better-auth-react";
+
 export interface ClientInfo {
 	sdk: string;
 	version: string;
@@ -27,7 +33,7 @@ export interface ClientInfo {
 	framework?: string;
 	betterAuthVersion?: string;
 	/** Which @neon/auth adapter issued the request; omitted when none is in play. */
-	adapter?: string;
+	adapter?: NeonAuthAdapterName;
 }
 
 type ClientInfoExtras = Pick<ClientInfo, "betterAuthVersion" | "adapter">;

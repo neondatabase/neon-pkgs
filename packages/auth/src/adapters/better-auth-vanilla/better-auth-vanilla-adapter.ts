@@ -4,7 +4,10 @@ import {
 	type NeonAuthAdapterCoreAuthOptions,
 	type SupportedBetterAuthClientPlugins,
 } from "../../core/adapter-core";
-import { registerAdapterBuilder } from "../../core/adapter-name";
+import {
+	createAdapterBuilder,
+	type NeonAuthAdapterName,
+} from "../../core/adapter-name";
 
 export type BetterAuthVanillaAdapterOptions = Omit<
 	NeonAuthAdapterCoreAuthOptions,
@@ -15,12 +18,14 @@ export type BetterAuthVanillaAdapterOptions = Omit<
  * Internal implementation class - use BetterAuthVanillaAdapter factory function instead
  */
 class BetterAuthVanillaAdapterImpl extends NeonAuthAdapterCore {
+	static readonly adapterName =
+		"better-auth-vanilla" satisfies NeonAuthAdapterName;
 	private _betterAuth: ReturnType<
 		typeof createAuthClient<{ plugins: SupportedBetterAuthClientPlugins }>
 	>;
 
 	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
-		super(betterAuthClientOptions, "better-auth-vanilla");
+		super(betterAuthClientOptions);
 		this._betterAuth = createAuthClient(this.betterAuthOptions);
 	}
 
@@ -59,19 +64,5 @@ export type BetterAuthVanillaAdapterBuilder = (
 export function BetterAuthVanillaAdapter(
 	options?: BetterAuthVanillaAdapterOptions,
 ): BetterAuthVanillaAdapterBuilder {
-	return registerAdapterBuilder(
-		"better-auth-vanilla",
-		(url: string, fetchOptions?: { headers?: Record<string, string> }) =>
-			new BetterAuthVanillaAdapterImpl({
-				baseURL: url,
-				...options,
-				fetchOptions: {
-					...options?.fetchOptions,
-					headers: {
-						...options?.fetchOptions?.headers,
-						...fetchOptions?.headers,
-					},
-				},
-			}),
-	);
+	return createAdapterBuilder(BetterAuthVanillaAdapterImpl, options);
 }
