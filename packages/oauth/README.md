@@ -66,7 +66,7 @@ export const { GET } = createRouteHandlers(client); // @neon/oauth/next, app/api
 // Any other: (await routeOAuthClient(client, request)) ?? next()
 
 const result = await client.getUser(request);
-if (result.ok) result.user; // { id, email, emailVerified, name, image }
+if (result.ok) result.user; // { id, email?, emailVerified?, name?, image? }; `id` is the ID token `sub`
 else result.reason; // "no_session" | "invalid_session" | "expired"
 ```
 
@@ -264,7 +264,7 @@ Each layer follows one rule:
 | Situation | What you get | Examples |
 |---|---|---|
 | **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown synchronously when you create the object (a URL `clientId` against a server without CIMD support is only known after discovery, so it is thrown by `startLogin` / `finishLogin`) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
-| **Authorization server unreachable** (discovery, JWKS, token endpoint: network, timeout, 5xx, untrusted document) | `AuthServerUnavailableError`, thrown by every operation that needs the server. It is never reported as "signed out" | `getDiscovery`, `verifyAccessToken`, `startLogin`, `finishLogin`, `getAccessToken` / `withAccessToken` when a refresh is needed |
+| **Authorization server unreachable** (discovery, JWKS, token and userinfo endpoints: network, timeout, 5xx, untrusted document) | `AuthServerUnavailableError`, thrown by every operation that needs the server. It is never reported as "signed out" | `getDiscovery`, `verifyAccessToken`, `startLogin`, `finishLogin`, `getAccessToken` / `withAccessToken` when a refresh is needed |
 | **Expected auth outcome** | a returned `{ ok: false, reason }` | see below |
 
 `OAuthError` is the base class of `OAuthConfigError` and `AuthServerUnavailableError`.
@@ -274,18 +274,19 @@ Each layer follows one rule:
 | `getSession()` / `getUser()` | `no_session`, `invalid_session` (tampered cookie or rotated secret), `expired` |
 | `getAccessToken()` / `withAccessToken()` | `no_session`, `refresh_unavailable`, `refresh_failed` (the server rejected the refresh token) |
 | `verifyAccessToken()` | `invalid_token`, with `code`: `expired`, `invalid_audience`, `invalid_issuer`, `missing_sub` or `invalid_token` |
-| `finishLogin()` | `invalid_callback` (error, missing code or forged `state`), `token_rejected` |
+| `finishLogin()` | `invalid_callback` (error, missing code or forged `state`), `token_rejected` (code refused, or no ID token), `userinfo_rejected` (userinfo answered 4xx or with an unusable body, or its `sub` differs from the ID token's) |
 
 `refresh_failed` means the server answered and rejected the refresh token, so the user must sign in again. An outage is never reported as `refresh_failed` or `no_session`; it is thrown as `AuthServerUnavailableError`, and the right response is a retry message (503), not a login redirect.
 
-The HTTP helpers always answer instead of throwing: the bearer guards and every adapter reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope) or `503` (server unavailable); the `login` and `callback` routes reply `400` for a bad callback and `503` when the server is unavailable. Pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx; nothing is logged by default.
+The HTTP helpers always answer instead of throwing: the bearer guards and every adapter reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope) or `503` (server unavailable); the `login` and `callback` routes reply `400` for a bad callback (including `token_rejected` / `userinfo_rejected`) and `503` when the server is unavailable. Sign-in needs the userinfo endpoint: if it is unreachable the callback answers `503` and sets no session cookie. Pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx; nothing is logged by default.
 
 ## Neon Auth notes
 
 - **`resource` becomes `aud`.** The client sends `resource=<audience>` on authorize and token requests; the API must verify the same string. A mismatch rejects every call.
 - **`iss` is per branch, keys are shared across branches.** The signature alone does not prove the branch, so `iss` is matched exactly, and discovery's `issuer` must equal the configured one.
 - **`client_secret_basic` only.** Neon Auth rejects `client_secret_post` for confidential clients. Public clients use PKCE with no secret.
-- **Profile comes from userinfo.** The ID token has no name/email, so the client calls the userinfo endpoint at sign-in and stores the result in the session.
+- **Profile comes from userinfo, and sign-in requires it.** The ID token has no name/email, so the client calls the userinfo endpoint at sign-in and stores the result in the session. `user.id` is always the verified ID token `sub`. Userinfo returns `email` / `emailVerified` for the `email` scope and `name` / `image` for the `profile` scope, so those four fields are optional on `AuthUser` and absent (never `""`) when not returned.
+- **ID tokens are EdDSA.** The client expects an EdDSA-signed ID token, like the access tokens.
 - **Tokens are EdDSA.** `algorithms` defaults to `["EdDSA"]`.
 - **The session lives in the cookie.** AES-256-GCM (`dir`) JWE, key derived with HKDF-SHA-256 from `cookies.secret`; HttpOnly, SameSite=Lax, `Secure` unless the redirect URI is `http://localhost`. A warning is logged if it passes ~3.8 KB. Rotating `cookies.secret` signs everyone out.
 - **Logout is local.** It clears this app's cookie; it does not end the Neon Auth session.

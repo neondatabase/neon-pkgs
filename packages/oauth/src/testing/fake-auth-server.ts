@@ -4,9 +4,12 @@ import type { AddressInfo } from "node:net";
 import type { JWTPayload } from "jose";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
+/** The only authorization code the fake token endpoint redeems; any other code is `invalid_grant`. */
+export const GOOD_CODE = "good-code";
+
 export interface FakeAuthServer {
 	issuer: string;
-	hits: { discovery: number; jwks: number; token: number };
+	hits: { discovery: number; jwks: number; token: number; userinfo: number };
 	/** Overrides the `issuer` field the discovery document reports. */
 	setReportedIssuer(issuer: string): void;
 	setDiscoveryDelay(ms: number): void;
@@ -17,6 +20,12 @@ export interface FakeAuthServer {
 	setJwksStatus(status: number): void;
 	/** Whether discovery advertises `client_id_metadata_document_supported`. Defaults to true. */
 	setCimdSupported(supported: boolean): void;
+	/** Makes the userinfo endpoint answer with this status; `"drop"` closes the connection without a response. */
+	setUserinfoStatus(status: number | "drop"): void;
+	/** Claims the userinfo endpoint returns on success. Defaults to `{ sub: "user-1", email, name, ... }`. */
+	setUserinfoClaims(claims: Record<string, unknown>): void;
+	/** The `sub` of the ID token the authorization-code grant issues. */
+	setIdTokenSub(sub: string): void;
 	sign(
 		claims?: JWTPayload,
 		opts?: {
@@ -41,7 +50,7 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 		use: "sig",
 	};
 
-	const hits = { discovery: 0, jwks: 0, token: 0 };
+	const hits = { discovery: 0, jwks: 0, token: 0, userinfo: 0 };
 	// Refresh tokens rotate: redeeming one invalidates it, as a strict authorization server would.
 	const spentRefreshTokens = new Set<string>();
 	let tokenDelayMs = 0;
@@ -52,6 +61,15 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 	let tokenStatus = 200;
 	let jwksStatus = 200;
 	let cimdSupported = true;
+	let userinfoStatus: number | "drop" = 200;
+	let userinfoClaims: Record<string, unknown> = {
+		sub: "user-1",
+		email: "user@example.com",
+		email_verified: true,
+		name: "User One",
+		picture: "https://img.test/u1.png",
+	};
+	let idTokenSub = "user-1";
 	let issuer = "";
 
 	const signToken = (
@@ -95,6 +113,7 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 								token_endpoint: `${issuer}/token`,
 								client_id_metadata_document_supported:
 									cimdSupported,
+								userinfo_endpoint: `${issuer}/userinfo`,
 							})
 						: json(status, {}),
 				delayMs,
@@ -111,6 +130,32 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 					if (tokenStatus !== 200)
 						return json(tokenStatus, { error: "server_error" });
 					const form = new URLSearchParams(body);
+					if (
+						form.get("grant_type") === "authorization_code" &&
+						form.get("code") === GOOD_CODE
+					) {
+						const idToken = await new SignJWT({})
+							.setProtectedHeader({ alg: "EdDSA", kid: "k1" })
+							.setIssuer(issuer)
+							.setSubject(idTokenSub)
+							.setAudience("c1")
+							.setIssuedAt()
+							.setExpirationTime("5m")
+							.sign(privateKey);
+						return json(200, {
+							access_token: await signToken(
+								{},
+								{
+									aud: form.get("resource") ?? undefined,
+									sub: idTokenSub,
+								},
+							),
+							id_token: idToken,
+							token_type: "Bearer",
+							expires_in: 300,
+							refresh_token: `refresh-${++tokenSeq}`,
+						});
+					}
 					const presented = form.get("refresh_token") ?? "";
 					if (
 						form.get("grant_type") !== "refresh_token" ||
@@ -130,6 +175,15 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 					});
 				}, tokenDelayMs),
 			);
+		} else if (req.url === "/auth/userinfo") {
+			hits.userinfo++;
+			if (userinfoStatus === "drop") return req.socket.destroy();
+			json(
+				userinfoStatus,
+				userinfoStatus === 200
+					? userinfoClaims
+					: { error: "server_error" },
+			);
 		} else {
 			json(404, {});
 		}
@@ -147,6 +201,9 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 		setTokenStatus: (v) => (tokenStatus = v),
 		setJwksStatus: (v) => (jwksStatus = v),
 		setCimdSupported: (v) => (cimdSupported = v),
+		setUserinfoStatus: (v) => (userinfoStatus = v),
+		setUserinfoClaims: (v) => (userinfoClaims = v),
+		setIdTokenSub: (v) => (idTokenSub = v),
 		sign: (claims = {}, opts = {}) => signToken(claims, opts),
 		close: () => new Promise((r) => server.close(() => r())),
 	};

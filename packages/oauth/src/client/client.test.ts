@@ -49,7 +49,6 @@ const user = {
 	email: "u@example.com",
 	emailVerified: true,
 	name: "U",
-	image: null,
 };
 const now = () => Math.floor(Date.now() / 1000);
 const expired = (extra = {}) => ({

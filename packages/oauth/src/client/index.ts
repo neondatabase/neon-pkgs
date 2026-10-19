@@ -47,13 +47,17 @@ export interface CookieOptions {
 	sameSite?: SameSite;
 }
 
-/** Field names follow better-auth's `User`, which is what Neon Auth stores. */
+/**
+ * The signed-in user. `id` is the `sub` of the verified ID token. The rest comes from the userinfo
+ * endpoint, which returns `email` / `emailVerified` for the `email` scope and `name` / `image` for
+ * the `profile` scope, and only the values the user has. A field the server did not return is absent.
+ */
 export interface AuthUser {
 	id: string;
-	email: string;
-	emailVerified: boolean;
-	name: string;
-	image: string | null;
+	email?: string;
+	emailVerified?: boolean;
+	name?: string;
+	image?: string;
 }
 
 export interface Session {
@@ -85,11 +89,17 @@ export type UserResult = { ok: true; user: AuthUser } | SessionFailure;
 /**
  * Outcome of completing a sign-in.
  * - `invalid_callback`: the callback carries an error, no code, or a `state` that does not match the attempt.
- * - `token_rejected`: the token endpoint refused the code.
+ * - `token_rejected`: the token endpoint refused the code, or answered without an ID token.
+ * - `userinfo_rejected`: the userinfo endpoint answered with a 4xx or an unusable body, or its `sub` differs from the ID token's.
+ *
+ * An unreachable token or userinfo endpoint (network error, timeout, 5xx) throws `AuthServerUnavailableError` instead.
  */
 export type LoginResult =
 	| { ok: true; session: Session }
-	| { ok: false; reason: "invalid_callback" | "token_rejected" };
+	| {
+			ok: false;
+			reason: "invalid_callback" | "token_rejected" | "userinfo_rejected";
+	  };
 
 /** Why no access token could be produced. */
 export type AccessTokenFailure = {
@@ -232,7 +242,8 @@ export function createOAuthClient(
 				config: new oidc.Configuration(
 					doc as oidc.ServerMetadata,
 					clientId,
-					undefined,
+					// Neon Auth signs ID tokens with EdDSA; the library default (RS256) would reject them.
+					{ id_token_signed_response_alg: "EdDSA" },
 					// Neon Auth rejects client_secret_post for confidential clients, so authenticate
 					// at the token endpoint with HTTP Basic. Public clients send no secret and rely on PKCE.
 					clientSecret
@@ -266,12 +277,40 @@ export function createOAuthClient(
 		return err instanceof oidc.ResponseBodyError && err.status < 500;
 	}
 
-	function unavailable(err: unknown): AuthServerUnavailableError {
+	function unavailable(
+		err: unknown,
+		endpoint = "Token endpoint",
+	): AuthServerUnavailableError {
 		return err instanceof AuthServerUnavailableError
 			? err
-			: new AuthServerUnavailableError("Token endpoint unavailable", {
+			: new AuthServerUnavailableError(`${endpoint} unavailable`, {
 					cause: err,
 				});
+	}
+
+	/**
+	 * Userinfo failures that mean the server answered and refused: a 4xx, a body without a usable
+	 * `sub`, or a `sub` that differs from the ID token's. The library nests the HTTP response (or
+	 * the sub mismatch) several causes deep, so walk the chain.
+	 */
+	function isUserinfoRejection(err: unknown): boolean {
+		for (
+			let cur: unknown = err;
+			cur instanceof Error || cur instanceof Response;
+			cur = (cur as { cause?: unknown }).cause
+		) {
+			const { status, code } = cur as {
+				status?: unknown;
+				code?: unknown;
+			};
+			if (typeof status === "number") return status < 500;
+			if (
+				code === "OAUTH_JSON_ATTRIBUTE_COMPARISON_FAILED" ||
+				code === "OAUTH_INVALID_RESPONSE"
+			)
+				return true;
+		}
+		return false;
 	}
 
 	async function finishLogin(
@@ -306,11 +345,27 @@ export function createOAuthClient(
 				return { ok: false, reason: "token_rejected" };
 			throw unavailable(err);
 		}
+		// The ID token is the verified source of the user's identity.
+		const idClaims = tokens.claims();
+		if (!idClaims) return { ok: false, reason: "token_rejected" };
+
+		let info: Awaited<ReturnType<typeof oidc.fetchUserInfo>>;
+		try {
+			info = await oidc.fetchUserInfo(
+				config,
+				tokens.access_token,
+				idClaims.sub,
+			);
+		} catch (err) {
+			if (isUserinfoRejection(err))
+				return { ok: false, reason: "userinfo_rejected" };
+			throw unavailable(err, "Userinfo endpoint");
+		}
 		return {
 			ok: true,
 			session: {
 				...sessionFromTokens(tokens),
-				user: await loadUser(config, tokens),
+				user: userFrom(idClaims.sub, info),
 			},
 		};
 	}
@@ -330,38 +385,19 @@ export function createOAuthClient(
 	}
 
 	// Neon Auth's ID token has no name/email, so the profile comes from the userinfo endpoint.
-	async function loadUser(
-		config: oidc.Configuration,
-		tokens: oidc.TokenEndpointResponse & oidc.TokenEndpointResponseHelpers,
-	): Promise<AuthUser> {
-		const idClaims: Record<string, unknown> = { ...tokens.claims() };
-		let info: Record<string, unknown> = {};
-		try {
-			info = await oidc.fetchUserInfo(
-				config,
-				tokens.access_token,
-				(idClaims.sub as string | undefined) ?? oidc.skipSubjectCheck,
-			);
-		} catch (err) {
-			console.error(
-				"userinfo failed:",
-				err instanceof Error ? err.message : err,
-			);
-		}
-		const claims = { ...idClaims, ...info };
+	function userFrom(id: string, info: Record<string, unknown>): AuthUser {
 		const str = (v: unknown) =>
 			typeof v === "string" && v ? v : undefined;
-		const email = str(claims.email) ?? "";
-		return {
-			id:
-				str(claims.sub) ??
-				str(decodeJwt(tokens.access_token).sub) ??
-				"",
-			email,
-			emailVerified: claims.email_verified === true,
-			name: str(claims.name) ?? email,
-			image: str(claims.picture) ?? null,
-		};
+		const user: AuthUser = { id };
+		const email = str(info.email);
+		if (email !== undefined) user.email = email;
+		if (typeof info.email_verified === "boolean")
+			user.emailVerified = info.email_verified;
+		const name = str(info.name);
+		if (name !== undefined) user.name = name;
+		const image = str(info.picture);
+		if (image !== undefined) user.image = image;
+		return user;
 	}
 
 	async function sessionSetCookie(session: Session): Promise<string> {

@@ -12,7 +12,7 @@ import {
 	OAuthError,
 } from "./index";
 import type { FakeAuthServer } from "./testing/fake-auth-server";
-import { startFakeAuthServer } from "./testing/fake-auth-server";
+import { GOOD_CODE, startFakeAuthServer } from "./testing/fake-auth-server";
 
 vi.mock("openid-client", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("openid-client")>();
@@ -52,7 +52,6 @@ const user = {
 	email: "e",
 	emailVerified: true,
 	name: "n",
-	image: null,
 };
 const session = (extra = {}) => ({
 	accessToken: "a",
@@ -186,6 +185,98 @@ describe("token endpoint or JWKS unreachable", () => {
 				audience: AUD,
 			}),
 		).rejects.toBeInstanceOf(AuthServerUnavailableError);
+	});
+});
+
+describe("userinfo is required to finish a sign-in", () => {
+	const attempt = { state: "s", codeVerifier: "v" };
+	const callbackUrl = new URL(`${REDIRECT}?code=${GOOD_CODE}&state=s`);
+
+	async function callbackRequest() {
+		const tx = await seal({ ...attempt, returnTo: "/" }, SECRET, "tx", 600);
+		return new Request(
+			`http://localhost:3000/auth/callback?code=${GOOD_CODE}&state=s`,
+			{ headers: { cookie: `neon_auth_session_tx=${tx}` } },
+		);
+	}
+
+	it("success: user.id is the ID token sub, profile comes from userinfo", async () => {
+		fake.setIdTokenSub("sub-from-id-token");
+		fake.setUserinfoClaims({
+			sub: "sub-from-id-token",
+			email: "a@b.test",
+			email_verified: true,
+			name: "Ann",
+			picture: "https://img.test/a.png",
+		});
+		const result = await make().client.finishLogin(callbackUrl, attempt);
+		expect(result).toMatchObject({
+			ok: true,
+			session: {
+				user: {
+					id: "sub-from-id-token",
+					email: "a@b.test",
+					emailVerified: true,
+					name: "Ann",
+					image: "https://img.test/a.png",
+				},
+			},
+		});
+	});
+
+	it("optional profile fields stay absent instead of becoming empty strings", async () => {
+		fake.setUserinfoClaims({ sub: "user-1" });
+		const result = await make().client.finishLogin(callbackUrl, attempt);
+		expect(result.ok && result.session.user).toEqual({ id: "user-1" });
+	});
+
+	it.each([
+		500,
+		503,
+		"drop",
+	] as const)("userinfo %s: finishLogin throws AuthServerUnavailableError", async (status) => {
+		fake.setUserinfoStatus(status);
+		await expect(
+			make().client.finishLogin(callbackUrl, attempt),
+		).rejects.toBeInstanceOf(AuthServerUnavailableError);
+	});
+
+	it("userinfo 5xx: callback answers 503, calls onError, sets no session cookie", async () => {
+		const onError = vi.fn();
+		fake.setUserinfoStatus(503);
+		const res = await make({ onError }).client.handlers.callback(
+			await callbackRequest(),
+		);
+		expect(res.status).toBe(503);
+		expect(onError).toHaveBeenCalledWith(
+			expect.any(AuthServerUnavailableError),
+			expect.any(Request),
+		);
+		expect(res.headers.get("set-cookie") ?? "").not.toContain(
+			"neon_auth_session=",
+		);
+	});
+
+	it("userinfo 401: finishLogin returns userinfo_rejected; callback answers 400 with no session cookie", async () => {
+		fake.setUserinfoStatus(401);
+		const { client } = make();
+		expect(await client.finishLogin(callbackUrl, attempt)).toEqual({
+			ok: false,
+			reason: "userinfo_rejected",
+		});
+		const res = await client.handlers.callback(await callbackRequest());
+		expect(res.status).toBe(400);
+		expect(res.headers.get("set-cookie") ?? "").not.toContain(
+			"neon_auth_session=",
+		);
+	});
+
+	it("userinfo sub that differs from the ID token sub is rejected", async () => {
+		fake.setUserinfoClaims({ sub: "someone-else", email: "x@y.test" });
+		expect(await make().client.finishLogin(callbackUrl, attempt)).toEqual({
+			ok: false,
+			reason: "userinfo_rejected",
+		});
 	});
 });
 
