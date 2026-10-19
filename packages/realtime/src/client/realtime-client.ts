@@ -62,7 +62,7 @@ class RealtimeClientImpl implements RealtimeClient {
 		this.coordinator = new ConnectionCoordinator({
 			url: options.url,
 			events: this.events,
-			webSocketFactory,
+			webSocketFactory: webSocketFactory ?? options.webSocketFactory,
 		});
 		this.parsers = createParserRegistry(options.parsers);
 	}

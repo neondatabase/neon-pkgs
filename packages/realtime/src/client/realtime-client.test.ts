@@ -89,6 +89,26 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("uses a custom WebSocket factory", () => {
+		const webSocketFactory = vi.fn(
+			(url: string, protocols: string | string[]) =>
+				new FakeWebSocket(url, protocols) as unknown as WebSocket,
+		);
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			webSocketFactory,
+		});
+
+		client.subscribe(query("custom socket"));
+
+		expect(webSocketFactory).toHaveBeenCalledOnce();
+		expect(webSocketFactory).toHaveBeenCalledWith(
+			"ws://live.test/v1",
+			"neon.realtime.v1",
+		);
+		client.close();
+	});
+
 	it.each([
 		"upstream_cancelled",
 		"backend_overloaded",

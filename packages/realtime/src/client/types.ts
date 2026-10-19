@@ -445,6 +445,17 @@ export interface RealtimeClientOptions {
 	 */
 	readonly url: string;
 	/**
+	 * Override how the client creates its WebSocket.
+	 *
+	 * This is primarily useful in runtimes such as React Native, whose
+	 * WebSocket constructor accepts platform-specific connection options. In
+	 * browsers, omit this option to use the built-in WebSocket constructor.
+	 */
+	readonly webSocketFactory?: (
+		url: string,
+		protocols: string | string[],
+	) => WebSocket;
+	/**
 	 * PostgreSQL result parsers keyed by type OID.
 	 *
 	 * These entries override {@link nodePostgresParsers}. The client snapshots
