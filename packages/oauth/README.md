@@ -64,7 +64,7 @@ export const oauth = createOAuth({
 | `baseUrl` | Required, absolute URL. |
 | `resource` | The API's identifier. `requireBearerAuth()` verifies against it unless you pass an `audience`. Also accepted by `createVerifier`. |
 | `cookies` | `{ secret, name = "neon_auth_session", maxAgeSeconds = 7d, domain, sameSite = "lax" }`. `sameSite` and `domain` apply to the session cookie; the short-lived login cookie is always Lax. |
-| `scopes` | Default `["openid", "profile", "email"]`. `openid` is always requested (added if omitted) because sign-in needs the ID token. |
+| `scopes` | Default `["profile", "email"]`; `openid` is always requested (added if omitted) because sign-in needs the ID token. |
 | `algorithms`, `clockTolerance` | Token verification. Algorithms default to `["EdDSA"]`. |
 | `discovery` | `{ ttlMs = 1h, failureBackoffMs = 5s }`. |
 | `jwks` | Passed to jose's `createRemoteJWKSet`. |
@@ -94,12 +94,36 @@ import { nodeOAuthClient } from "@neon/oauth/node";
 
 const signIn = nodeOAuthClient(oauth.client);
 createServer((req, res) =>
-  signIn(req, res, () => {
-    res.statusCode = 404; // not a sign-in route: continue with your own routing
-    res.end("Not found");
+  signIn(req, res, (err) => {
+    // `err` is set when the middleware failed (for example a misconfiguration): answer 500, not 404.
+    res.statusCode = err ? 500 : 404; // not a sign-in route: continue with your own routing
+    res.end();
   }),
 ).listen(3000);
 ```
+
+Express and `node:http` hand your handlers their own request type, but `getUser`, `getSession`, `getAccessToken` and `withAccessToken` take a Web `Request`. Build one from the headers and URL, and forward every `Set-Cookie` of a refreshed session:
+
+```ts
+import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
+import type { OAuthClient } from "@neon/oauth";
+
+const toRequest = (req: ExpressRequest) =>
+  new Request(`${req.protocol}://${req.get("host")}${req.originalUrl}`, {
+    headers: { cookie: req.headers.cookie ?? "" },
+  });
+
+export async function things(client: OAuthClient, req: ExpressRequest, res: ExpressResponse) {
+  const out = await client.withAccessToken(toRequest(req), ({ authorizationHeaders }) =>
+    fetch("https://api.example.com/things", { headers: authorizationHeaders }),
+  );
+  if (!out.ok) return res.redirect("/api/auth/login");
+  for (const cookie of out.response.headers.getSetCookie()) res.append("set-cookie", cookie); // not folded into one header
+  res.status(out.response.status).send(Buffer.from(await out.response.arrayBuffer()));
+}
+```
+
+With `node:http` the request is `new Request(new URL(req.url ?? "/", "https://app.example.com"), { headers: { cookie: req.headers.cookie ?? "" } })`, and the cookies go out with `res.setHeader("set-cookie", out.response.headers.getSetCookie())`.
 
 ### Call an API as the user
 
@@ -154,7 +178,7 @@ export const GET = withAuth(oauth, (req, auth) => Response.json({ user: auth.sub
 
 // Anything else
 const out = await authenticate(oauth, request); // from "@neon/oauth/adapter"
-if (!out.ok) return out.response; // 401/403 with an RFC 6750 WWW-Authenticate, 503 if Neon Auth is unavailable
+if (!out.ok) return out.response; // 401/403 with an RFC 6750 WWW-Authenticate, 503 if Neon Auth is unavailable, 500 on an unexpected failure
 out.auth; // { token, sub, clientId?, scopes, audience, expiresAt, claims }
 ```
 
@@ -190,6 +214,8 @@ app.get("/api/things", honoBearerAuth(verifier, { requiredScopes: ["read"] }), (
 
 ```ts
 import { Hono } from "hono";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpAuth } from "@neon/oauth/mcp";
 import { honoMcp, type McpAuthVariables } from "@neon/oauth/mcp/hono";
 
@@ -197,33 +223,84 @@ const auth = createMcpAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
   resource: "https://mcp.example.com/mcp", // the MCP endpoint URL; becomes the token's `aud`
 });
-// Stateless MCP SDK servers need a fresh server and transport per request:
-// `transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined }); await newServer().connect(transport)`.
+// A stateless transport serves one request, so build the server and transport per request.
+const newServer = () => new McpServer({ name: "demo", version: "1.0.0" });
 
 const app = new Hono<McpAuthVariables>();
 // Serves /.well-known/oauth-protected-resource/mcp (+ bare fallback, CORS) and guards POST/GET/DELETE /mcp.
 app.use(honoMcp(auth));
 app.all("/mcp", async (c) => {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await newServer().connect(transport); // newServer: () => new McpServer(...)
+  await newServer().connect(transport);
   return transport.handleRequest(c.req.raw, { authInfo: c.get("authInfo") });
 });
 ```
+
+The Web-standard transport (`@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js`, used by the Hono and Next.js examples) needs `@modelcontextprotocol/sdk` 1.25.0 or later. The Node `StreamableHTTPServerTransport` used by the Express and `node:http` adapters is older.
 
 `resource` is the audience. 401/403 challenges include `resource_metadata` pointing at the path-inserted RFC 9728 metadata URL. `scopesSupported` adds `scopes_supported` to the metadata document. Verification options (`algorithms`, `clockTolerance`, `discovery`, `jwks`) are accepted alongside.
 
 In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP SDK's `AuthInfo`. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(auth)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(auth), handler)`), which types the handler on its own.
 
-Express: `app.use(expressMcp(auth))`, then `(req as AuthedRequest).auth` in the handler. The guard reads headers only, so it works before or after `express.json()`; the SDK's Node transport reads the request stream unless you pass `req.body` as the third argument of `handleRequest`. That transport reads `req.auth` as the SDK's `AuthInfo`, so set `req.auth = auth.toAuthInfo(req.auth)` first.
+Express: `app.use(expressMcp(auth))`; the guard reads headers only, so it works before or after `express.json()`. `req.auth` is an `AuthResult` until you replace it: the SDK's Node transport reads `req.auth` as its `AuthInfo`, so convert it before `handleRequest`.
+
+```ts
+import express from "express";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpAuth } from "@neon/oauth/mcp";
+import { expressMcp, type AuthedRequest } from "@neon/oauth/mcp/express";
+
+const auth = createMcpAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  resource: "https://mcp.example.com/mcp",
+});
+const newServer = () => new McpServer({ name: "demo", version: "1.0.0" });
+
+const app = express();
+app.use(expressMcp(auth));
+app.use(express.json());
+app.post("/mcp", async (req, res) => {
+  const result = (req as AuthedRequest).auth; // AuthResult
+  Object.assign(req, { auth: auth.toAuthInfo(result) }); // from here `req.auth` is the SDK's AuthInfo
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await newServer().connect(transport);
+  await transport.handleRequest(req, res, req.body);
+});
+```
 
 Next.js App Router:
 
+Create `auth` once in a shared module so both routes use the same instance:
+
 ```ts
+// lib/mcp-auth.ts
+import { createMcpAuth } from "@neon/oauth/mcp";
+
+export const auth = createMcpAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  resource: "https://mcp.example.com/mcp",
+});
+
 // app/.well-known/oauth-protected-resource/[[...path]]/route.ts
+import { createMetadataHandlers } from "@neon/oauth/mcp/next";
+import { auth } from "@/lib/mcp-auth";
+
 export const { GET, OPTIONS } = createMetadataHandlers(auth);
 
 // app/mcp/route.ts
-export const POST = withMcpAuth(auth, (req, authResult) => handle(req, auth.toAuthInfo(authResult)));
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { withMcpAuth } from "@neon/oauth/mcp/next";
+import { auth } from "@/lib/mcp-auth";
+
+const newServer = () => new McpServer({ name: "demo", version: "1.0.0" });
+
+export const POST = withMcpAuth(auth, async (request, result) => {
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await newServer().connect(transport);
+  return transport.handleRequest(request, { authInfo: auth.toAuthInfo(result) });
+});
 ```
 
 `createMcpAuth(opts)` is `createOAuth({ baseUrl, ... }).mcp({ resource, scopesSupported })` without the sign-in client. If the same app also signs users in or guards other APIs, call `oauth.mcp({ resource })` on your existing `oauth` instead so everything shares one discovery cache.
@@ -302,7 +379,7 @@ Each layer follows one rule:
 
 `refresh_failed` means the server answered and rejected the refresh token, so the user must sign in again. An outage is never reported as `refresh_failed` or `no_session`; it is thrown as `AuthServerUnavailableError`, and the right response is a retry message (503), not a login redirect.
 
-The HTTP helpers always answer instead of throwing: the bearer guards and every adapter reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope) or `503` (server unavailable); the `login` and `callback` routes reply `400` for a bad callback (including `token_rejected` / `userinfo_rejected`) and `503` when the server is unavailable. Sign-in needs the userinfo endpoint: if it is unreachable the callback answers `503` and sets no session cookie. Pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx; nothing is logged by default.
+The HTTP helpers answer instead of throwing: the bearer guards and every adapter reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope), `503` (server unavailable) or `500` (unexpected failure). The one exception is a guard with no `audience` and no configured `resource`: that is an `OAuthConfigError`, thrown on every request (passed to `next(err)` or the framework's error handler); the `login` and `callback` routes reply `400` for a bad callback (including `token_rejected` / `userinfo_rejected`) and `503` when the server is unavailable. Sign-in needs the userinfo endpoint: if it is unreachable the callback answers `503` and sets no session cookie. Pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx; nothing is logged by default.
 
 ## Neon Auth notes
 
@@ -310,8 +387,7 @@ The HTTP helpers always answer instead of throwing: the bearer guards and every 
 - **`iss` is per branch, keys are shared across branches.** The signature alone does not prove the branch, so `iss` is matched exactly, and discovery's `issuer` must equal the configured one.
 - **`client_secret_basic` only.** Neon Auth rejects `client_secret_post` for confidential clients. Public clients use PKCE with no secret.
 - **Profile comes from userinfo, and sign-in requires it.** The ID token has no name/email, so the client calls the userinfo endpoint at sign-in and stores the result in the session. `user.id` is always the verified ID token `sub`. Userinfo returns `email` / `emailVerified` for the `email` scope and `name` / `image` for the `profile` scope, so those four fields are optional on `AuthUser` and absent (never `""`) when not returned.
-- **ID tokens are EdDSA.** The client expects an EdDSA-signed ID token, like the access tokens.
-- **Tokens are EdDSA.** `algorithms` defaults to `["EdDSA"]`.
+- **Tokens are EdDSA.** `algorithms` defaults to `["EdDSA"]` for access tokens, and the sign-in client expects an EdDSA-signed ID token.
 - **The session lives in the cookie.** AES-256-GCM (`dir`) JWE, key derived with HKDF-SHA-256 from `cookies.secret`; HttpOnly, SameSite=Lax by default (`cookies.sameSite`), `Secure` unless the redirect URI is `http://localhost`. A warning is logged if it passes ~3.8 KB. Rotating `cookies.secret` signs everyone out.
 - **Logout is local.** It clears this app's cookie; it does not end the Neon Auth session.
 

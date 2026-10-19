@@ -25,8 +25,8 @@ export interface McpOptions {
  * Maps a verified {@link AuthResult} to the MCP SDK's `AuthInfo`, which the SDK transport takes
  * as `transport.handleRequest(req, { authInfo })`. Claims are kept under `extra.claims`.
  *
- * The MCP adapters already expose the result as `authInfo`; call this only when you have an
- * `AuthResult` from `authenticate` or `withMcpAuth`. The SDK requires `clientId` to be a string,
+ * Hono exposes it already, as `c.get("authInfo")`. With `expressMcp`, `nodeMcp`, `withMcpAuth` or
+ * `authenticate`, call this on the `AuthResult` they give you. The SDK requires `clientId` to be a string,
  * so a token without a `client_id` claim maps to `""`.
  *
  * @param result The verified token.
@@ -67,7 +67,8 @@ export interface McpAuth {
 	 *
 	 * @param token The bearer token, without the `Bearer ` prefix.
 	 * @returns `{ ok: true, auth }`, or `{ ok: false, reason: "invalid_token", code, message }` for a bad token.
-	 * @throws {AuthServerUnavailableError} If the signing keys cannot be fetched.
+	 * @throws {AuthServerUnavailableError} If the discovery document or signing keys cannot be fetched, or
+	 *   verification fails for a reason other than the token itself.
 	 */
 	verifyAccessToken(token: string): Promise<VerifyResult>;
 	/**

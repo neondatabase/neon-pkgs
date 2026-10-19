@@ -44,7 +44,8 @@ export type McpAuthOptions = McpOptions & VerifierOptions;
  *
  * Equivalent to `createOAuth(...).mcp(...)` without loading the sign-in client; use that form when
  * the same app also signs users in, so everything shares one discovery cache. Nothing is fetched
- * until the first request.
+ * until the first request. The example's Web-standard transport needs `@modelcontextprotocol/sdk`
+ * 1.25.0 or later.
  *
  * @param options The MCP `resource`, optional `scopesSupported`, and the verification options.
  * @returns The helper to pass to an MCP adapter.

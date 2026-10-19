@@ -10,7 +10,7 @@ export type AuthOutcome =
 	| { ok: true; auth: AuthResult }
 	| { ok: false; response: Response };
 
-/** Anything that can create a bearer guard: an `OAuth` instance, a verifier or an MCP resource server. */
+/** Anything that can create a bearer guard: an `OAuth` instance, a verifier or an `McpAuth`. */
 export interface BearerSource<O extends BearerAuthOptions> {
 	requireBearerAuth(opts: O): BearerGuard;
 }

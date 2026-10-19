@@ -28,7 +28,7 @@ export type AuthedRequest = Request & { auth: AuthResult };
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns Middleware; read the result as `(req as AuthedRequest).auth`.
- * @throws {OAuthConfigError} On the first request, if neither `opts.audience` nor a configured
+ * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
  *   `resource` is available. It is passed to `next(err)`.
  * @see {@link expressOAuthClient} for the sign-in routes.
  *
@@ -58,6 +58,9 @@ export function expressBearerAuth(
 /**
  * Express middleware that serves the sign-in routes `{basePath}/login`, `/callback` and `/logout`
  * for an OAuth client; every other request calls `next()`.
+ *
+ * To read the session in an Express handler, build a Web `Request` from `req.originalUrl` and
+ * `req.headers.cookie` and pass it to `client.getUser` (see the README).
  *
  * @param client The client from `createOAuth(...).client`.
  * @param opts See {@link OAuthRouteOptions}; `basePath` defaults to the prefix of the client's `redirectUri`.

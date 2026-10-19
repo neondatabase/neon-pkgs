@@ -33,7 +33,7 @@ export type AuthVariables = { Variables: { auth: AuthResult } };
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns Middleware typed with {@link AuthVariables}.
- * @throws {OAuthConfigError} On the first request, if neither `opts.audience` nor a configured
+ * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
  *   `resource` is available. Hono passes it to its error handler.
  * @see {@link honoOAuthClient} for the sign-in routes.
  *

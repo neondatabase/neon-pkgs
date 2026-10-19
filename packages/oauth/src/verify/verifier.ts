@@ -137,7 +137,8 @@ export interface Verifier {
 	 * @param token The bearer token, without the `Bearer ` prefix.
 	 * @param audience The API identifier the token must have been issued for (its `aud`).
 	 * @returns `{ ok: true, auth }`, or `{ ok: false, reason: "invalid_token", code, message }` for a bad token.
-	 * @throws {AuthServerUnavailableError} If the signing keys cannot be fetched.
+	 * @throws {AuthServerUnavailableError} If the discovery document or signing keys cannot be fetched, or
+	 *   verification fails for a reason other than the token itself.
 	 */
 	verifyAccessToken(token: string, audience: string): Promise<VerifyResult>;
 	/**
@@ -341,7 +342,7 @@ export function createVerifier(options: VerifierOptions): Verifier {
 	}
 
 	/**
-	 * Framework-neutral guard for a generic API: the verified result, or a ready 401/403/503 `Response`. The guard never throws.
+	 * Framework-neutral guard for a generic API: the verified result, or a ready 401/403/503/500 `Response`. The guard never throws.
 	 * Creating it throws `OAuthConfigError` when neither `options.audience` nor `resource` is set.
 	 */
 	function requireBearerAuth({

@@ -42,7 +42,7 @@ export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns Middleware; read the result from `req.auth` (see {@link AuthedIncomingMessage}).
- * @throws {OAuthConfigError} On the first request, if neither `opts.audience` nor a configured
+ * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
  *   `resource` is available. It is passed to `next(err)`.
  * @see {@link nodeOAuthClient} for the sign-in routes.
  *
@@ -59,9 +59,14 @@ export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
  * const guard = nodeBearerAuth(verifier, { requiredScopes: ["read"] });
  *
  * createServer((req, res) =>
- *   guard(req, res, () => {
+ *   guard(req, res, (err) => {
+ *     if (err) {
+ *       res.statusCode = 500; // e.g. a missing audience: OAuthConfigError
+ *       return res.end();
+ *     }
+ *     const { auth } = req as Required<AuthedIncomingMessage>;
  *     res.setHeader("content-type", "application/json");
- *     res.end(JSON.stringify({ user: (req as AuthedIncomingMessage).auth?.sub }));
+ *     res.end(JSON.stringify({ user: auth.sub }));
  *   }),
  * ).listen(3000);
  * ```
@@ -81,6 +86,9 @@ export function nodeBearerAuth(
 /**
  * `node:http` middleware that serves the sign-in routes `{basePath}/login`, `/callback` and
  * `/logout` for an OAuth client; every other request calls `next()`.
+ *
+ * To read the session in a handler, build a Web `Request` from `req.url` and `req.headers.cookie`
+ * and pass it to `client.getUser` (see the README).
  *
  * @param client The client from `createOAuth(...).client`.
  * @param opts See {@link OAuthRouteOptions}; `basePath` defaults to the prefix of the client's `redirectUri`.
@@ -104,9 +112,9 @@ export function nodeBearerAuth(
  * const signIn = nodeOAuthClient(oauth.client);
  *
  * createServer((req, res) =>
- *   signIn(req, res, () => {
- *     res.statusCode = 404;
- *     res.end("Not found");
+ *   signIn(req, res, (err) => {
+ *     res.statusCode = err ? 500 : 404; // not a sign-in route
+ *     res.end();
  *   }),
  * ).listen(3000);
  * ```
@@ -141,9 +149,9 @@ export function nodeOAuthClient(
  * const metadata = nodeClientMetadata(doc);
  *
  * createServer((req, res) =>
- *   metadata(req, res, () => {
- *     res.statusCode = 404;
- *     res.end("Not found");
+ *   metadata(req, res, (err) => {
+ *     res.statusCode = err ? 500 : 404; // not the metadata document
+ *     res.end();
  *   }),
  * ).listen(3000);
  * ```

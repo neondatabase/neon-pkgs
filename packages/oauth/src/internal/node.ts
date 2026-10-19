@@ -17,8 +17,9 @@ export type NodeMiddleware = (
  * Builds `node:http` middleware from a function over a Web `Request`; use it to write your own
  * Node-style adapter. `nodeBearerAuth` and `nodeOAuthClient` are built on it.
  *
- * A `Response` returned by `step` is sent, `undefined` calls `next()`, and a thrown or rejected
- * error goes to `next(err)`. The `Request` carries headers and URL only, no body, so it works
+ * A `Response` returned by `step` is sent, `undefined` calls `next()`, and a rejection of its
+ * promise goes to `next(err)`. An error thrown synchronously, while building the `Request` or in
+ * `step` itself, is not caught. The `Request` carries headers and URL only, no body, so it works
  * behind a body parser.
  *
  * @param step Receives the Web `Request` and the original `IncomingMessage`.

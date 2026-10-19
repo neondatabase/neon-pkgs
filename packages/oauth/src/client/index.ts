@@ -237,8 +237,8 @@ export interface OAuthClient {
 	/**
 	 * Returns a usable access token for this request, refreshing it first if it expires within 30 seconds.
 	 *
-	 * Concurrent refreshes of the same refresh token inside this process share one token request.
-	 * Separate processes do not coordinate, so a rotating refresh token can still be spent twice
+	 * Concurrent refreshes of the same refresh token on this client instance share one token request.
+	 * Separate instances and processes do not coordinate, so a rotating refresh token can still be spent twice
 	 * across instances. Prefer {@link OAuthClient.withAccessToken}, which also handles the refreshed cookie.
 	 *
 	 * @param request The incoming request; only its `Cookie` header is read.

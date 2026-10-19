@@ -103,7 +103,8 @@ export interface HonoMcpOptions extends BearerAuthOptions {
  * path, and passes every other request through. A missing or invalid token gets a 401 or 403 with a challenge carrying `resource_metadata`, or a 503 when the authorization server is unavailable (500 on an unexpected failure). For authenticated requests it sets `c.get("auth")`
  * (the verified {@link AuthResult}) and `c.get("authInfo")` (the MCP SDK's `AuthInfo`).
  *
- * Mount it before the MCP route.
+ * Mount it before the MCP route. The example's Web-standard transport needs
+ * `@modelcontextprotocol/sdk` 1.25.0 or later.
  *
  * @param auth The result of `createMcpAuth()`.
  * @param opts Required scopes, `onError` and the endpoint `path`. See {@link HonoMcpOptions}.

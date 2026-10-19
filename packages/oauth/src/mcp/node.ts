@@ -79,10 +79,10 @@ export interface NodeMcpOptions extends BearerAuthOptions {
  * const guard = nodeMcp(auth);
  *
  * createServer((req, res) =>
- *   guard(req, res, async () => {
+ *   guard(req, res, async (err) => {
  *     const result = (req as AuthedIncomingMessage).auth;
- *     if (!result) {
- *       res.statusCode = 404; // not a guarded MCP request
+ *     if (err || !result) {
+ *       res.statusCode = err ? 500 : 404; // 404: not a guarded MCP request
  *       return res.end();
  *     }
  *     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

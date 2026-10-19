@@ -106,7 +106,8 @@ export interface OAuth {
 	 * @param token The bearer token, without the `Bearer ` prefix.
 	 * @param options.audience The API identifier the token must have been issued for (its `aud`).
 	 * @returns `{ ok: true, auth }`, or `{ ok: false, reason: "invalid_token", code, message }` for a bad token.
-	 * @throws {AuthServerUnavailableError} If the signing keys cannot be fetched.
+	 * @throws {AuthServerUnavailableError} If the discovery document or signing keys cannot be fetched, or
+	 *   verification fails for a reason other than the token itself.
 	 */
 	verifyAccessToken(
 		token: string,
@@ -176,7 +177,8 @@ export interface OAuthWithClient extends OAuth {
  *
  * const app = new Hono<AuthVariables>();
  * app.use(honoOAuthClient(oauth.client)); // /api/auth/login, /callback, /logout
- * app.get("/me", honoBearerAuth(oauth), (c) => c.json({ user: c.get("auth").sub }));
+ * app.get("/me", async (c) => c.json(await oauth.client.getUser(c.req.raw))); // browser session
+ * app.get("/api/things", honoBearerAuth(oauth), (c) => c.json({ user: c.get("auth").sub })); // bearer token
  * ```
  */
 export function createOAuth(options: OAuthWithClientOptions): OAuthWithClient;

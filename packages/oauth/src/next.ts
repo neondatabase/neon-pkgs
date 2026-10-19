@@ -43,7 +43,7 @@ export type AuthedHandler<C> = (
  * @param handler Runs only for authenticated requests; see {@link AuthedHandler}.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns A route handler `(request, routeContext) => Promise<Response>` to export as `GET`, `POST`, ...
- * @throws {OAuthConfigError} On the first request, if neither `opts.audience` nor a configured
+ * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
  *   `resource` is available. The returned promise rejects.
  *
  * @example

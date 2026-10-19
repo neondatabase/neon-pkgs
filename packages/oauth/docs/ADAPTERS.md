@@ -83,7 +83,7 @@ Node-style `(req, res, next)` frameworks can build on `nodeMiddleware`, `nodeBea
 ## Checklist
 
 1. Framework imports are `import type` only, and the framework is an optional peer dependency.
-2. Only call `authenticate`, `routeOAuthClient`, `resolveBasePath`, `routeMcpMetadata`. No `instanceof Response` checks, no path matching of your own.
+2. Use `authenticate`, `routeOAuthClient`, `resolveBasePath` and `routeMcpMetadata` for all auth and routing decisions: no `instanceof Response` checks, no challenges of your own. An MCP adapter also matches the endpoint itself, with `mcpPath` and `MCP_METHODS`, and converts the result with `auth.toAuthInfo`.
 3. Forward every `Set-Cookie` separately (`response.headers.getSetCookie()`); `Headers` folds them otherwise.
 4. Pass method, full URL (with query) and headers to the `Request`. Bodies are not needed by any contract function.
 5. Never consume the request body in a guard: the MCP transport reads it afterwards (or takes the already-parsed body).
@@ -96,7 +96,9 @@ No adapter needed. The core already takes a `Request` and returns a `Response`:
 ```ts
 export default {
   async fetch(request: Request) {
-    return (await routeOAuthClient(oauth.client, request)) ?? routeMcpMetadata(auth, request) ?? (await app(request));
+    return routeMcpMetadata(auth, request) ?? (await app(request));
   },
 };
 ```
+
+`auth` is the result of `createMcpAuth()`, or `oauth.mcp()` on an existing instance. Add `routeOAuthClient(oauth.client, request)` only where Node APIs are available: the sign-in client uses `node:crypto`, so it does not run on Workers without Node compatibility.

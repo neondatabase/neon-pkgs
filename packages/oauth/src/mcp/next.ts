@@ -28,7 +28,9 @@ export type AuthedHandler<C> = (
  *
  * A missing or invalid token gets a 401 or 403 `Response` with a challenge carrying `resource_metadata`, or a 503 when the authorization server is unavailable (500 on an unexpected failure); otherwise `handler` runs with the verified {@link AuthResult}. Next route
  * handlers have no middleware, hence a wrapper. It does not serve the metadata routes: add
- * {@link createMetadataHandlers} for those.
+ * {@link createMetadataHandlers} for those. Create `auth` once in a shared module (for example
+ * `lib/mcp-auth.ts`) and import it in both route files. The example's Web-standard transport needs
+ * `@modelcontextprotocol/sdk` 1.25.0 or later.
  *
  * @typeParam C The route context type, e.g. `{ params: Promise<{ id: string }> }`.
  * @param auth The result of `createMcpAuth()`.
