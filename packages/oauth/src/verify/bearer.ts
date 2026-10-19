@@ -8,37 +8,50 @@ export interface BearerAuthOptions {
 	/**
 	 * Called with the cause whenever the guard answers 5xx (authorization server unavailable, or
 	 * an unexpected failure), for logging. 401 and 403 are expected outcomes and are not reported.
+	 * A throwing callback is ignored.
 	 */
 	onError?: (error: unknown, request: Request) => void;
 }
 
-/** Options for guarding a generic API (as opposed to an MCP server, whose audience is always its `resource`). */
+/** Options for guarding a generic API. An MCP server's audience is always its `resource`, so MCP guards take {@link BearerAuthOptions}. */
 export interface OAuthBearerOptions extends BearerAuthOptions {
 	/**
-	 * This API's identifier. Clients send it as `resource`, and Neon Auth stamps it into the token's `aud`.
-	 * Defaults to the `resource` passed to `createOAuth` / `createVerifier`; one of the two is required.
+	 * This API's identifier: clients send it as `resource`, and Neon Auth stamps it into the token's `aud`.
+	 * One of `audience` or the `resource` passed to `createOAuth` / `createVerifier` is required.
+	 *
+	 * @defaultValue the `resource` the verifier was created with
 	 */
 	audience?: string;
 	/**
 	 * Adds `resource_metadata` (RFC 9728) to `WWW-Authenticate` challenges. `true` derives the
-	 * path-inserted well-known URL from the audience; a string is used verbatim. Off by default.
+	 * path-inserted well-known URL from the audience (see {@link protectedResourceMetadataUrl});
+	 * a string is used verbatim.
+	 *
+	 * @defaultValue omitted: challenges carry no `resource_metadata`
 	 */
 	resourceMetadataUrl?: string | true;
 }
 
 /**
- * Framework-neutral guard: resolves to the verified `AuthResult`, or a ready-to-send `Response`
- * (401 invalid or missing token, 403 insufficient scope, 503 authorization server unavailable,
- * 500 unexpected). It never throws; test with `result instanceof Response`, or use `authenticate`
- * from `@neon/oauth/adapter` to get `{ ok, auth | response }` instead.
+ * A framework-neutral bearer guard: given a `Request`, resolves to the verified {@link AuthResult}
+ * or to a ready-to-send `Response`.
+ *
+ * The `Response` is 401 (missing or invalid token), 403 (insufficient scope), 503 (authorization
+ * server unavailable) or 500 (unexpected failure). The guard never throws; test the result with
+ * `result instanceof Response`, or use `authenticate` from `@neon/oauth/adapter` for an
+ * `{ ok, auth | response }` shape.
  */
 export type BearerGuard = (request: Request) => Promise<AuthResult | Response>;
 
 /**
- * The RFC 9728 protected-resource metadata URL for `resource`: the well-known prefix with the
- * resource's path inserted (`https://host/mcp` gives `https://host/.well-known/oauth-protected-resource/mcp`).
+ * Returns the RFC 9728 protected-resource metadata URL for `resource`, with the resource's path
+ * inserted after the well-known prefix.
+ *
+ * `https://mcp.example.com/mcp` gives `https://mcp.example.com/.well-known/oauth-protected-resource/mcp`.
  * This is what `resourceMetadataUrl: true` puts in `WWW-Authenticate` challenges.
- * Throws a `TypeError` if `resource` is not an absolute URL.
+ *
+ * @param resource The protected resource's absolute URL.
+ * @throws {TypeError} If `resource` is not an absolute URL.
  */
 export function protectedResourceMetadataUrl(resource: string): string {
 	const u = new URL(resource);
@@ -49,10 +62,33 @@ export function protectedResourceMetadataUrl(resource: string): string {
 }
 
 /**
- * Builds a `BearerGuard` that checks the `Authorization: Bearer` header against `audience` using
- * `verifier`. Lower-level than `verifier.requireBearerAuth()` (which resolves the audience for
- * you); use it when you already have the verifier and the exact audience. 401/403 carry an RFC 6750
- * `WWW-Authenticate` challenge; the 5xx bodies never include the cause, which goes to `opts.onError`.
+ * Creates a {@link BearerGuard} that checks the `Authorization: Bearer` header against an exact
+ * `audience`. Use it when you already hold a verifier and know the audience; otherwise call the
+ * verifier's `requireBearerAuth()`, which resolves the audience for you.
+ *
+ * 401 and 403 responses carry an RFC 6750 `WWW-Authenticate` challenge. 5xx response bodies never
+ * include the cause, which goes to `options.onError`.
+ *
+ * @param verifier The verifier from `createVerifier`, used for key discovery and signature checks.
+ * @param audience The `aud` the token must carry.
+ * @param opts Required scopes, `onError` and `resourceMetadataUrl`.
+ * @returns A guard that never throws.
+ *
+ * @example
+ * ```ts
+ * import { createBearerGuard, createVerifier } from "@neon/oauth/verify";
+ *
+ * const verifier = createVerifier({ baseUrl: process.env.NEON_AUTH_BASE_URL! });
+ * const guard = createBearerGuard(verifier, "https://api.example.com", { requiredScopes: ["read"] });
+ *
+ * export default {
+ *   async fetch(request: Request) {
+ *     const result = await guard(request);
+ *     if (result instanceof Response) return result;
+ *     return Response.json({ user: result.sub });
+ *   },
+ * };
+ * ```
  */
 export function createBearerGuard(
 	verifier: Verifier,

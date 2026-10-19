@@ -75,6 +75,7 @@ export async function unseal<T>(
 	return result.ok ? result.data : undefined;
 }
 
+/** The cookie `SameSite` attribute, in lower case. */
 export type SameSite = "lax" | "strict" | "none";
 
 export function serializeCookie(

@@ -1,5 +1,6 @@
 /**
- * `@neon/oauth/node` — `node:http` adapters for `@neon/oauth`.
+ * `@neon/oauth/node` — `node:http` middleware for sign-in, bearer-token guards and client
+ * metadata, plus the helpers they are built on.
  *
  * @module
  */
@@ -28,17 +29,42 @@ import {
 
 export type { FetchHandler, NodeMiddleware, NodeNext };
 export { nodeMiddleware, toNodeHandler };
-/** A `node:http` request after `nodeBearerAuth` has run: `auth` is the verified token. */
+/** A `node:http` request after {@link nodeBearerAuth} has run: `auth` is the verified token. */
 export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
 
 /**
- * `node:http` middleware (`(req, res, next)`) that requires a valid bearer token. On success it
- * sets the verified `AuthResult` on `req.auth` (see `AuthedIncomingMessage`) and calls `next()`;
- * otherwise it responds 401/403/503. Use it for a generic API; for an MCP server use `nodeMcp`
- * from `@neon/oauth/mcp/node`.
+ * `node:http` middleware (`(req, res, next)`) that requires a valid bearer token, for a generic
+ * API. On success it sets the verified {@link AuthResult} on `req.auth` and calls `next()`.
  *
- * @param source A `createOAuth()` instance or `createVerifier()` verifier. `opts.audience` is
- *   required unless a `resource` was configured, else `OAuthConfigError` is passed to `next(err)`.
+ * Otherwise it responds 401 or 403 with an RFC 6750 `WWW-Authenticate` challenge, or 503 when the authorization server is unavailable (500 on an unexpected failure). For an MCP
+ * server use `nodeMcp` from `@neon/oauth/mcp/node`.
+ *
+ * @param source A `createOAuth()` instance or `createVerifier()` verifier.
+ * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
+ * @returns Middleware; read the result from `req.auth` (see {@link AuthedIncomingMessage}).
+ * @throws {OAuthConfigError} On the first request, if neither `opts.audience` nor a configured
+ *   `resource` is available. It is passed to `next(err)`.
+ * @see {@link nodeOAuthClient} for the sign-in routes.
+ *
+ * @example
+ * ```ts
+ * import { createServer } from "node:http";
+ * import { nodeBearerAuth, type AuthedIncomingMessage } from "@neon/oauth/node";
+ * import { createVerifier } from "@neon/oauth/verify";
+ *
+ * const verifier = createVerifier({
+ *   baseUrl: process.env.NEON_AUTH_BASE_URL!,
+ *   resource: "https://api.example.com",
+ * });
+ * const guard = nodeBearerAuth(verifier, { requiredScopes: ["read"] });
+ *
+ * createServer((req, res) =>
+ *   guard(req, res, () => {
+ *     res.setHeader("content-type", "application/json");
+ *     res.end(JSON.stringify({ user: (req as AuthedIncomingMessage).auth?.sub }));
+ *   }),
+ * ).listen(3000);
+ * ```
  */
 export function nodeBearerAuth(
 	source: AuthSource,
@@ -53,10 +79,37 @@ export function nodeBearerAuth(
 }
 
 /**
- * `node:http` middleware that serves the sign-in routes `${basePath}/login`, `/callback` and
- * `/logout` for an OAuth client; everything else calls `next()`. `basePath` comes from the
- * client's `redirectUri`. Throws `OAuthConfigError` when called if `redirectUri` does not end in
- * `/callback` or an explicit `opts.basePath` disagrees with it.
+ * `node:http` middleware that serves the sign-in routes `{basePath}/login`, `/callback` and
+ * `/logout` for an OAuth client; every other request calls `next()`.
+ *
+ * @param client The client from `createOAuth(...).client`.
+ * @param opts See {@link OAuthRouteOptions}; `basePath` defaults to the prefix of the client's `redirectUri`.
+ * @returns A `(req, res, next)` middleware.
+ * @throws {OAuthConfigError} Immediately, if the `redirectUri` path does not end in `/callback` or
+ *   an explicit `opts.basePath` disagrees with it.
+ * @see {@link routeOAuthClient} for the framework-agnostic form.
+ *
+ * @example
+ * ```ts
+ * import { createServer } from "node:http";
+ * import { createOAuth } from "@neon/oauth";
+ * import { nodeOAuthClient } from "@neon/oauth/node";
+ *
+ * const oauth = createOAuth({
+ *   baseUrl: process.env.NEON_AUTH_BASE_URL!,
+ *   clientId: process.env.NEON_AUTH_CLIENT_ID!,
+ *   redirectUri: "https://app.example.com/api/auth/callback",
+ *   cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! },
+ * });
+ * const signIn = nodeOAuthClient(oauth.client);
+ *
+ * createServer((req, res) =>
+ *   signIn(req, res, () => {
+ *     res.statusCode = 404;
+ *     res.end("Not found");
+ *   }),
+ * ).listen(3000);
+ * ```
  */
 export function nodeOAuthClient(
 	client: OAuthClient,
@@ -66,7 +119,35 @@ export function nodeOAuthClient(
 	return nodeMiddleware((request) => routeOAuthClient(client, request, opts));
 }
 
-/** `node:http` middleware that serves a `createClientMetadataDocument` result at the path of its `client_id` (GET/HEAD); everything else calls `next()`. */
+/**
+ * `node:http` middleware that serves a Client ID Metadata Document on GET and HEAD at the path of
+ * its `client_id`; everything else calls `next()`.
+ *
+ * @param doc The result of `createClientMetadataDocument`.
+ * @returns A `(req, res, next)` middleware.
+ * @see {@link routeClientMetadata} for the framework-agnostic form.
+ *
+ * @example
+ * ```ts
+ * import { createServer } from "node:http";
+ * import { createClientMetadataDocument } from "@neon/oauth";
+ * import { nodeClientMetadata } from "@neon/oauth/node";
+ *
+ * const doc = createClientMetadataDocument({
+ *   clientId: "https://app.example.com/oauth/client.json",
+ *   clientName: "Reports",
+ *   redirectUris: ["https://app.example.com/api/auth/callback"],
+ * });
+ * const metadata = nodeClientMetadata(doc);
+ *
+ * createServer((req, res) =>
+ *   metadata(req, res, () => {
+ *     res.statusCode = 404;
+ *     res.end("Not found");
+ *   }),
+ * ).listen(3000);
+ * ```
+ */
 export function nodeClientMetadata(
 	doc: ClientMetadataDocument,
 ): NodeMiddleware {

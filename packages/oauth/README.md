@@ -48,12 +48,12 @@ import { createOAuth } from "@neon/oauth";
 
 export const oauth = createOAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!, // the OAuth issuer, e.g. https://ep-x.neonauth.../neondb/auth
-  resource: "http://localhost:3000/api", // your API; becomes the token's `aud`
+  resource: "https://api.example.com", // your API; becomes the token's `aud`
   // Only for signing users in (adds `oauth.client`):
   clientId: process.env.NEON_AUTH_CLIENT_ID!,
   clientSecret: process.env.NEON_AUTH_CLIENT_SECRET, // omit for a public client
-  redirectUri: "http://localhost:3000/auth/callback", // registered on the client; must end in /callback
-  cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! }, // 32+ chars: openssl rand -base64 32
+  redirectUri: "https://app.example.com/api/auth/callback", // registered on the client; must end in /callback
+  cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! }, // 32+ chars: openssl rand -hex 32
 });
 ```
 
@@ -71,14 +71,14 @@ export const oauth = createOAuth({
 
 ### Sign in
 
-The sign-in routes are `GET <prefix>/login` (`?returnTo=/path`), `<prefix>/callback` and `<prefix>/logout`. `<prefix>` is taken from `redirectUri`'s path (`https://app.test/auth/callback` serves `/auth/*`), so the callback route and the registered redirect cannot drift apart. An explicit `basePath` option that disagrees with `redirectUri` throws, naming both.
+The sign-in routes are `GET <prefix>/login` (`?returnTo=/path`), `<prefix>/callback` and `<prefix>/logout`. `<prefix>` is taken from `redirectUri`'s path (`https://app.example.com/api/auth/callback` serves `/api/auth/*`), so the callback route and the registered redirect cannot drift apart. An explicit `basePath` option that disagrees with `redirectUri` throws, naming both.
 
 ```ts
 const { client } = oauth;
 
 app.use(honoOAuthClient(client)); // @neon/oauth/hono
 app.use(expressOAuthClient(client)); // @neon/oauth/express
-export const { GET } = createRouteHandlers(client); // @neon/oauth/next, app/api/auth/[...oauth]/route.ts, redirectUri <origin>/api/auth/callback
+export const { GET } = createRouteHandlers(client); // @neon/oauth/next, app/api/auth/[...oauth]/route.ts
 // Any other: (await routeOAuthClient(client, request)) ?? next()
 
 const result = await client.getUser(request);
@@ -111,11 +111,11 @@ import { AuthServerUnavailableError } from "@neon/oauth";
 async function things(request: Request): Promise<Response> {
   try {
     const out = await client.withAccessToken(request, ({ authorizationHeaders }) =>
-      fetch("http://localhost:3000/api/things", { headers: authorizationHeaders }),
+      fetch("https://api.example.com/things", { headers: authorizationHeaders }),
     );
     if (out.ok) return out.response;
     // no_session | refresh_unavailable | refresh_failed: this user has to sign in again.
-    return Response.redirect(new URL("/auth/login", request.url));
+    return Response.redirect(new URL("/api/auth/login", request.url));
   } catch (err) {
     if (err instanceof AuthServerUnavailableError) {
       // Neon Auth could not be reached to refresh the token. The user is still signed in:
@@ -154,7 +154,7 @@ export const GET = withAuth(oauth, (req, auth) => Response.json({ user: auth.sub
 
 // Anything else
 const out = await authenticate(oauth, request); // from "@neon/oauth/adapter"
-if (!out.ok) return out.response; // 401/403/503 with an RFC 6750 WWW-Authenticate
+if (!out.ok) return out.response; // 401/403 with an RFC 6750 WWW-Authenticate, 503 if Neon Auth is unavailable
 out.auth; // { token, sub, clientId?, scopes, audience, expiresAt, claims }
 ```
 
@@ -173,7 +173,7 @@ import { createVerifier } from "@neon/oauth/verify";
 
 const verifier = createVerifier({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
-  resource: "http://localhost:3000/api", // the audience tokens must carry
+  resource: "https://api.example.com", // the audience tokens must carry
 });
 
 const app = new Hono();
@@ -195,20 +195,26 @@ import { honoMcp, type McpAuthVariables } from "@neon/oauth/mcp/hono";
 
 const auth = createMcpAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
-  resource: "http://localhost:3000/mcp", // the MCP endpoint URL; becomes the token's `aud`
+  resource: "https://mcp.example.com/mcp", // the MCP endpoint URL; becomes the token's `aud`
 });
+// Stateless MCP SDK servers need a fresh server and transport per request:
+// `transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined }); await newServer().connect(transport)`.
 
 const app = new Hono<McpAuthVariables>();
 // Serves /.well-known/oauth-protected-resource/mcp (+ bare fallback, CORS) and guards POST/GET/DELETE /mcp.
 app.use(honoMcp(auth));
-app.post("/mcp", (c) => transport.handleRequest(c.req.raw, { authInfo: c.get("authInfo") }));
+app.all("/mcp", async (c) => {
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await newServer().connect(transport); // newServer: () => new McpServer(...)
+  return transport.handleRequest(c.req.raw, { authInfo: c.get("authInfo") });
+});
 ```
 
 `resource` is the audience. 401/403 challenges include `resource_metadata` pointing at the path-inserted RFC 9728 metadata URL. `scopesSupported` adds `scopes_supported` to the metadata document. Verification options (`algorithms`, `clockTolerance`, `discovery`, `jwks`) are accepted alongside.
 
 In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP SDK's `AuthInfo`. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(auth)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(auth), handler)`), which types the handler on its own.
 
-Express: `app.use(expressMcp(auth))` before `express.json()` (the transport must read the raw body), then `(req as AuthedRequest).auth` in the handler.
+Express: `app.use(expressMcp(auth))`, then `(req as AuthedRequest).auth` in the handler. The guard reads headers only, so it works before or after `express.json()`; the SDK's Node transport reads the request stream unless you pass `req.body` as the third argument of `handleRequest`. That transport reads `req.auth` as the SDK's `AuthInfo`, so set `req.auth = auth.toAuthInfo(req.auth)` first.
 
 Next.js App Router:
 
@@ -241,7 +247,7 @@ export const oauth = createOAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
   clientId, // a URL, sent as-is
   redirectUri: "https://app.example.com/api/auth/callback",
-  cookies: { secret: process.env.COOKIE_SECRET! },
+  cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! },
 });
 ```
 
@@ -257,7 +263,7 @@ export const { GET } = createClientMetadataHandlers(metadata);
 
 The document sets `client_id` to its own URL, `token_endpoint_auth_method: "none"` (public client, PKCE), `response_types: ["code"]` and `grant_types` (default `authorization_code` and `refresh_token`), plus optional `client_uri`, `logo_uri` and `scope`. `createClientMetadataDocument` throws `OAuthConfigError` for a `clientId` that is not an https URL with a path (no fragment or credentials), for a non-loopback `http` redirect URI, and for an empty `clientName` or `redirectUris`.
 
-- **The authorization server must support it.** Neon Auth advertises `client_id_metadata_document_supported` in its discovery document. With a URL `clientId` against a server that does not, `startLogin` (and so the `login` route) throws an `OAuthConfigError` naming the issuer, rather than sending a `client_id` the server will reject.
+- **The authorization server must support it.** Neon Auth advertises `client_id_metadata_document_supported` in its discovery document. With a URL `clientId` against a server that does not, `startLogin`, `finishLogin` or a token refresh (and so the `login` route) throws an `OAuthConfigError` naming the issuer, rather than sending a `client_id` the server will reject.
 - **The URL must be publicly reachable over https** by the authorization server, so local development needs a tunnel. Redirect URIs may still be `http://localhost`.
 - **Public clients only.** Passing `clientSecret` with a URL `clientId` throws.
 - **MCP clients** that do not ship a document of their own should use this instead of Dynamic Client Registration, which the MCP specification deprecates.
@@ -281,11 +287,11 @@ Each layer follows one rule:
 
 | Situation | What you get | Examples |
 |---|---|---|
-| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown synchronously when you create the object (a URL `clientId` against a server without CIMD support is only known after discovery, so it is thrown by `startLogin` / `finishLogin`) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
+| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown when you create the object (the framework bearer guards build their guard per request, so they throw on the first request; a URL `clientId` against a server without CIMD support is only known after discovery, so it is thrown by `startLogin`, `finishLogin` or a token refresh) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
 | **Authorization server unreachable** (discovery, JWKS, token and userinfo endpoints: network, timeout, 5xx, untrusted document) | `AuthServerUnavailableError`, thrown by every operation that needs the server. It is never reported as "signed out" | `getDiscovery`, `verifyAccessToken`, `startLogin`, `finishLogin`, `getAccessToken` / `withAccessToken` when a refresh is needed |
 | **Expected auth outcome** | a returned `{ ok: false, reason }` | see below |
 
-`OAuthError` is the base class of `OAuthConfigError` and `AuthServerUnavailableError`.
+`OAuthError` is the base class of `OAuthConfigError`, `AuthServerUnavailableError` and `InvalidTokenError`.
 
 | Operation | `reason` when `ok` is false |
 |---|---|
@@ -306,7 +312,7 @@ The HTTP helpers always answer instead of throwing: the bearer guards and every 
 - **Profile comes from userinfo, and sign-in requires it.** The ID token has no name/email, so the client calls the userinfo endpoint at sign-in and stores the result in the session. `user.id` is always the verified ID token `sub`. Userinfo returns `email` / `emailVerified` for the `email` scope and `name` / `image` for the `profile` scope, so those four fields are optional on `AuthUser` and absent (never `""`) when not returned.
 - **ID tokens are EdDSA.** The client expects an EdDSA-signed ID token, like the access tokens.
 - **Tokens are EdDSA.** `algorithms` defaults to `["EdDSA"]`.
-- **The session lives in the cookie.** AES-256-GCM (`dir`) JWE, key derived with HKDF-SHA-256 from `cookies.secret`; HttpOnly, SameSite=Lax, `Secure` unless the redirect URI is `http://localhost`. A warning is logged if it passes ~3.8 KB. Rotating `cookies.secret` signs everyone out.
+- **The session lives in the cookie.** AES-256-GCM (`dir`) JWE, key derived with HKDF-SHA-256 from `cookies.secret`; HttpOnly, SameSite=Lax by default (`cookies.sameSite`), `Secure` unless the redirect URI is `http://localhost`. A warning is logged if it passes ~3.8 KB. Rotating `cookies.secret` signs everyone out.
 - **Logout is local.** It clears this app's cookie; it does not end the Neon Auth session.
 
 ## Develop
@@ -326,7 +332,7 @@ A test bundles each jose-only entry and fails if it pulls in `openid-client` or 
 |---|---|---|
 | `@neon/oauth` | `createOAuth`, `createClientMetadataDocument`: verification, MCP servers and the sign-in client from one issuer | yes |
 | `@neon/oauth/verify` | `createVerifier`, `createBearerGuard`, `OAuthError`, `OAuthConfigError`, `AuthServerUnavailableError`, `InvalidTokenError`, `AuthResult`, `VerifyResult` | no |
-| `@neon/oauth/mcp` | `createMcpAuth`, `toAuthInfo`, `routeMcpMetadata`, `McpResourceServer`, errors | no |
+| `@neon/oauth/mcp` | `createMcpAuth`, `toAuthInfo`, `routeMcpMetadata`, `MCP_METHODS`, `mcpPath`, `McpAuth`, errors | no |
 | `@neon/oauth/mcp/hono` | `honoMcp`, `honoMcpBearerAuth`, `honoProtectedResourceMetadata`, `McpAuthVariables` | no |
 | `@neon/oauth/mcp/express` | `expressMcp`, `expressMcpBearerAuth` (`req.auth`) | no |
 | `@neon/oauth/mcp/next` | `withMcpAuth`, `createMetadataHandlers` | no |
