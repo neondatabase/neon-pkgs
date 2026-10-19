@@ -102,7 +102,7 @@
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
 		"express": "5.1.0",
-		"hono": "4.12.25",
+		"hono": "4.13.7",
 		"rolldown": "1.2.8",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
