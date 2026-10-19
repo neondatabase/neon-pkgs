@@ -14,9 +14,6 @@ export {
 	BetterAuthVanillaAdapter,
 	type BetterAuthVanillaAdapterInstance,
 	type BetterAuthVanillaAdapterOptions,
-	SupabaseAuthAdapter,
-	type SupabaseAuthAdapterInstance,
-	type SupabaseAuthAdapterOptions,
 } from "@neon/auth/vanilla/adapters";
 // Re-export utilities from postgrest-js for convenience
 // The external-auth-provider form of createClient returns this type
