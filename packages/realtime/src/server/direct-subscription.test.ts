@@ -385,8 +385,9 @@ function base64Url(value: Uint8Array): string {
 }
 
 async function flushWebCrypto(): Promise<void> {
-	// Capability refresh performs one digest and one encryption before sending
-	// the renewal frame; Web Crypto completes outside Vitest's fake timer queue.
+	// Capability refresh fingerprints, signs, and encrypts before sending the
+	// renewal frame; Web Crypto completes outside Vitest's fake timer queue.
+	await crypto.subtle.digest("SHA-256", new Uint8Array());
 	await crypto.subtle.digest("SHA-256", new Uint8Array());
 	await crypto.subtle.digest("SHA-256", new Uint8Array());
 	await Promise.resolve();

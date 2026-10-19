@@ -6,7 +6,11 @@ import {
 	utf8,
 	webCrypto,
 } from "./crypto.js";
-import { queryFingerprint } from "./fingerprint.js";
+import {
+	derivePublicQueryFingerprintKey,
+	publicQueryFingerprint,
+	queryFingerprint,
+} from "./fingerprint.js";
 import type { RealtimeQueryCapabilityV1 } from "./schema/realtime-query-capability-v1.gen.js";
 import type { RealtimeSecret } from "./secret.js";
 
@@ -16,6 +20,7 @@ const TAG_BYTES = 16;
 const MAX_TOKEN_BYTES = 256 * 1024;
 
 export interface IssuedSealedLiveQuery {
+	readonly version: 2;
 	readonly capability: string;
 	readonly queryFingerprint: string;
 	/** Capability expiry as Unix milliseconds. */
@@ -33,8 +38,17 @@ export function createCapabilityIssuer(
 	clock: () => number = Date.now,
 ): (query: PreparedLiveQuery) => Promise<IssuedSealedLiveQuery> {
 	const keyPromise = importAesKey(secret.key);
+	const publicFingerprintKeyPromise = derivePublicQueryFingerprintKey(
+		secret.key,
+		database,
+	);
 	return async (query) => {
-		const queryFingerprintValue = await queryFingerprint(query);
+		const [capabilityFingerprint, publicFingerprint] = await Promise.all([
+			queryFingerprint(query),
+			publicFingerprintKeyPromise.then((key) =>
+				publicQueryFingerprint(query, key),
+			),
+		]);
 		const issuedAt = Math.floor(clock() / 1_000);
 		const expiresAt = issuedAt + SEALED_QUERY_LIFETIME_SECONDS;
 		const claims: CapabilityClaims = {
@@ -42,7 +56,7 @@ export function createCapabilityIssuer(
 			aud: "realtime-proxy",
 			database,
 			error_details: errorDetails,
-			query_fingerprint: queryFingerprintValue,
+			query_fingerprint: capabilityFingerprint,
 			sql: query.sql,
 			parameters: query.parameters.map((parameter) => ({
 				type_oid: parameter.typeOid,
@@ -65,8 +79,9 @@ export function createCapabilityIssuer(
 			claims,
 		);
 		return Object.freeze({
+			version: 2,
 			capability,
-			queryFingerprint: queryFingerprintValue,
+			queryFingerprint: publicFingerprint,
 			expiresAt: expiresAt * 1_000,
 		});
 	};

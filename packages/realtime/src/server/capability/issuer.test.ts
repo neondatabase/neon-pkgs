@@ -12,6 +12,7 @@ import {
 	encodeBase64Url,
 	utf8,
 } from "./crypto.js";
+import { queryFingerprint } from "./fingerprint.js";
 import { createCapabilityIssuer } from "./issuer.js";
 import { parseRealtimeSecret } from "./secret.js";
 
@@ -23,7 +24,7 @@ const QUERY: PreparedLiveQuery = {
 };
 const validateCapability = capabilityValidator();
 
-describe("Realtime v1 capability issuer", () => {
+describe("Realtime capability issuer", () => {
 	it("extracts the encryption key from one opaque secret", () => {
 		const parsed = parseRealtimeSecret(SECRET);
 		expect(parsed).toEqual({ key: KEY });
@@ -38,6 +39,7 @@ describe("Realtime v1 capability issuer", () => {
 		)(QUERY);
 
 		const { header, claims } = await decrypt(sealedQuery.capability, KEY);
+		const capabilityFingerprint = await queryFingerprint(QUERY);
 		expect(
 			validateCapability({ protected: header, claims }),
 			JSON.stringify(validateCapability.errors),
@@ -52,13 +54,16 @@ describe("Realtime v1 capability issuer", () => {
 			aud: "realtime-proxy",
 			database: "app",
 			error_details: "full",
-			query_fingerprint: sealedQuery.queryFingerprint,
+			query_fingerprint: capabilityFingerprint,
 			sql: QUERY.sql,
 			parameters: [{ type_oid: 23, value: "Nw==" }],
 			iat: 1_700_000_000,
 			exp: 1_700_000_060,
 		});
 		expect(claims).not.toHaveProperty("branch");
+		expect(sealedQuery).toMatchObject({ version: 2 });
+		expect(sealedQuery.queryFingerprint).toMatch(/^[0-9a-f]{64}$/);
+		expect(sealedQuery.queryFingerprint).not.toBe(capabilityFingerprint);
 		expect(sealedQuery.expiresAt).toBe(1_700_000_060_000);
 	});
 
@@ -97,6 +102,32 @@ describe("Realtime v1 capability issuer", () => {
 		});
 
 		expect(int4.queryFingerprint).not.toBe(int8.queryFingerprint);
+	});
+
+	it("scopes public fingerprints to the Realtime secret and database", async () => {
+		const sameScope = await createCapabilityIssuer(
+			parseRealtimeSecret(SECRET),
+			"app",
+		)(QUERY);
+		const otherDatabase = await createCapabilityIssuer(
+			parseRealtimeSecret(SECRET),
+			"analytics",
+		)(QUERY);
+		const otherKey = Uint8Array.from(KEY, (byte) => byte ^ 0xff);
+		const otherSecret = await createCapabilityIssuer(
+			parseRealtimeSecret(encodeSecret(otherKey)),
+			"app",
+		)(QUERY);
+
+		expect(sameScope.queryFingerprint).not.toBe(
+			otherDatabase.queryFingerprint,
+		);
+		expect(sameScope.queryFingerprint).not.toBe(
+			otherSecret.queryFingerprint,
+		);
+		await expectInternalFingerprint(sameScope.capability, KEY);
+		await expectInternalFingerprint(otherDatabase.capability, KEY);
+		await expectInternalFingerprint(otherSecret.capability, otherKey);
 	});
 
 	it("keeps generated capability types synchronized with the schema", () => {
@@ -159,6 +190,16 @@ async function decrypt(token: string, rawKey: Uint8Array) {
 		header: JSON.parse(new TextDecoder().decode(base64UrlDecode(header))),
 		claims: JSON.parse(new TextDecoder().decode(plaintext)),
 	};
+}
+
+async function expectInternalFingerprint(
+	capability: string,
+	key: Uint8Array,
+): Promise<void> {
+	const { claims } = await decrypt(capability, key);
+	expect(claims).toMatchObject({
+		query_fingerprint: await queryFingerprint(QUERY),
+	});
 }
 
 function encodeSecret(key: Uint8Array): string {
