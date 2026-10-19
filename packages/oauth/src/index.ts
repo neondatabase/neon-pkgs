@@ -34,6 +34,11 @@ export type {
 	UserResult,
 } from "./client";
 export type {
+	ClientMetadataDocument,
+	ClientMetadataDocumentOptions,
+} from "./client/metadata-document";
+export { createClientMetadataDocument } from "./client/metadata-document";
+export type {
 	McpOptions,
 	McpResourceServer,
 } from "./mcp/resource-server";

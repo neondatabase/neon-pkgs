@@ -8,11 +8,17 @@
 import type {
 	AuthResult,
 	AuthSource,
+	ClientMetadataDocument,
 	OAuthBearerOptions,
 	OAuthClient,
 	OAuthRouteOptions,
 } from "./adapter";
-import { authenticate, resolveBasePath, routeOAuthClient } from "./adapter";
+import {
+	authenticate,
+	clientMetadataResponse,
+	resolveBasePath,
+	routeOAuthClient,
+} from "./adapter";
 
 export type AuthedHandler<C> = (
 	request: Request,
@@ -49,5 +55,15 @@ export function createRouteHandlers(
 		GET: async (request: Request): Promise<Response> =>
 			(await routeOAuthClient(client, request, { basePath })) ??
 			new Response("Not found", { status: 404 }),
+	};
+}
+
+/**
+ * For the route at the path of the document's `client_id`, e.g. `app/oauth/client.json/route.ts`:
+ * `export const { GET } = createClientMetadataHandlers(doc)`.
+ */
+export function createClientMetadataHandlers(doc: ClientMetadataDocument) {
+	return {
+		GET: (_request: Request): Response => clientMetadataResponse(doc),
 	};
 }

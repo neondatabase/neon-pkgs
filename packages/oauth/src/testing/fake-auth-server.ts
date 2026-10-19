@@ -15,6 +15,8 @@ export interface FakeAuthServer {
 	/** Makes the token endpoint answer every request with this status and an OAuth `server_error` body. */
 	setTokenStatus(status: number): void;
 	setJwksStatus(status: number): void;
+	/** Whether discovery advertises `client_id_metadata_document_supported`. Defaults to true. */
+	setCimdSupported(supported: boolean): void;
 	sign(
 		claims?: JWTPayload,
 		opts?: {
@@ -49,6 +51,7 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 	let status = 200;
 	let tokenStatus = 200;
 	let jwksStatus = 200;
+	let cimdSupported = true;
 	let issuer = "";
 
 	const signToken = (
@@ -90,6 +93,8 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 								jwks_uri: `${issuer}/jwks.json`,
 								authorization_endpoint: `${issuer}/authorize`,
 								token_endpoint: `${issuer}/token`,
+								client_id_metadata_document_supported:
+									cimdSupported,
 							})
 						: json(status, {}),
 				delayMs,
@@ -141,6 +146,7 @@ export async function startFakeAuthServer(): Promise<FakeAuthServer> {
 		setTokenDelay: (v) => (tokenDelayMs = v),
 		setTokenStatus: (v) => (tokenStatus = v),
 		setJwksStatus: (v) => (jwksStatus = v),
+		setCimdSupported: (v) => (cimdSupported = v),
 		sign: (claims = {}, opts = {}) => signToken(claims, opts),
 		close: () => new Promise((r) => server.close(() => r())),
 	};

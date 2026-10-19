@@ -14,10 +14,15 @@ import {
 	unseal,
 	unsealResult,
 } from "./cookies";
+import { isMetadataDocumentClientId } from "./metadata-document";
 
 export interface OAuthClientOptions {
+	/**
+	 * A pre-registered client id, or the https URL of a Client ID Metadata Document (see
+	 * `createClientMetadataDocument`). A URL is sent as-is: the authorization server fetches the document.
+	 */
 	clientId: string;
-	/** Omit for a public client (PKCE only). */
+	/** Omit for a public client (PKCE only). Not allowed with a URL `clientId`. */
 	clientSecret?: string;
 	/** Must equal a redirect URI registered on the client, and be served by `handlers.callback`. */
 	redirectUri: string;
@@ -183,6 +188,12 @@ export function createOAuthClient(
 			`redirectUri must be an absolute URL, got "${redirectUri}".`,
 		);
 	}
+	const usesMetadataDocument = isMetadataDocumentClientId(clientId);
+	if (usesMetadataDocument && clientSecret) {
+		throw new OAuthConfigError(
+			"A URL clientId (Client ID Metadata Document) identifies a public client: remove clientSecret.",
+		);
+	}
 	const cookies = options.cookies as CookieOptions;
 	const cookieSecret = cookies.secret;
 	const scopes = options.scopes ?? ["openid", "profile", "email"];
@@ -207,6 +218,14 @@ export function createOAuthClient(
 		| undefined;
 	async function getConfiguration(): Promise<oidc.Configuration> {
 		const doc = await getDiscovery();
+		if (
+			usesMetadataDocument &&
+			doc.client_id_metadata_document_supported !== true
+		) {
+			throw new OAuthConfigError(
+				`clientId is a URL (Client ID Metadata Document) but ${doc.issuer} does not advertise "client_id_metadata_document_supported". Use a pre-registered clientId, or enable client metadata documents on the authorization server.`,
+			);
+		}
 		if (configured?.doc !== doc) {
 			configured = {
 				doc,

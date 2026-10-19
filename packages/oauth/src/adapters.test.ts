@@ -8,13 +8,27 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { authenticate, routeOAuthClient } from "./adapter";
+import {
+	authenticate,
+	clientMetadataResponse,
+	routeClientMetadata,
+	routeOAuthClient,
+} from "./adapter";
+import { createClientMetadataDocument } from "./client/metadata-document";
 import type { AuthedRequest } from "./express";
-import { expressBearerAuth, expressOAuthClient } from "./express";
-import { honoBearerAuth, honoOAuthClient } from "./hono";
+import {
+	expressBearerAuth,
+	expressClientMetadata,
+	expressOAuthClient,
+} from "./express";
+import { honoBearerAuth, honoClientMetadata, honoOAuthClient } from "./hono";
 import { createOAuth } from "./index";
-import { createRouteHandlers, withAuth } from "./next";
-import { nodeBearerAuth, toNodeHandler } from "./node";
+import {
+	createClientMetadataHandlers,
+	createRouteHandlers,
+	withAuth,
+} from "./next";
+import { nodeBearerAuth, nodeClientMetadata, toNodeHandler } from "./node";
 import type { FakeAuthServer } from "./testing/fake-auth-server";
 import { startFakeAuthServer } from "./testing/fake-auth-server";
 import { createVerifier } from "./verify";
@@ -383,5 +397,76 @@ describe("verifier-only source (createVerifier from @neon/oauth/verify)", () => 
 		expect(() => verifier().requireBearerAuth()).toThrow(
 			/audience.*resource/,
 		);
+	});
+});
+
+describe("client metadata document routes", () => {
+	const CLIENT_ID = "https://app.example.com/oauth/client.json";
+	const doc = createClientMetadataDocument({
+		clientId: CLIENT_ID,
+		clientName: "Reports",
+		redirectUris: ["https://app.example.com/api/auth/callback"],
+	});
+
+	async function expectServed(res: Response) {
+		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toMatch(/^application\/json/);
+		expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
+		expect(await res.json()).toEqual(doc);
+	}
+
+	it("clientMetadataResponse is JSON with a cache lifetime", async () => {
+		await expectServed(clientMetadataResponse(doc));
+	});
+
+	it("routeClientMetadata answers GET and HEAD on the client_id path only", async () => {
+		await expectServed(
+			routeClientMetadata(doc, new Request(CLIENT_ID)) as Response,
+		);
+		const head = routeClientMetadata(
+			doc,
+			new Request(CLIENT_ID, { method: "HEAD" }),
+		) as Response;
+		expect(head.status).toBe(200);
+		expect(
+			routeClientMetadata(
+				doc,
+				new Request("https://app.example.com/other"),
+			),
+		).toBeUndefined();
+		expect(
+			routeClientMetadata(
+				doc,
+				new Request(CLIENT_ID, { method: "POST" }),
+			),
+		).toBeUndefined();
+	});
+
+	it("hono serves the document and falls through elsewhere", async () => {
+		const app = new Hono();
+		app.use(honoClientMetadata(doc));
+		app.get("/other", (c) => c.text("other"));
+		await expectServed(await app.request(CLIENT_ID));
+		expect(await (await app.request("/other")).text()).toBe("other");
+	});
+
+	it("next serves the document from the route that mounts it", async () => {
+		const { GET } = createClientMetadataHandlers(doc);
+		await expectServed(await GET(new Request("http://x.test/anything")));
+	});
+
+	it("node and express serve the document and fall through elsewhere", async () => {
+		const nodeUrl = await listen((req, res) =>
+			nodeClientMetadata(doc)(req, res, () => res.end("next")),
+		);
+		await expectServed(await fetch(`${nodeUrl}/oauth/client.json`));
+		expect(await (await fetch(`${nodeUrl}/other`)).text()).toBe("next");
+
+		const app = express();
+		app.use(expressClientMetadata(doc));
+		app.get("/other", (_req, res) => void res.send("other"));
+		const expressUrl = await listen(app);
+		await expectServed(await fetch(`${expressUrl}/oauth/client.json`));
+		expect(await (await fetch(`${expressUrl}/other`)).text()).toBe("other");
 	});
 });

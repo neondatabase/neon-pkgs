@@ -204,6 +204,46 @@ export const POST = withMcpAuth(mcp, (req, auth) => handle(req, mcp.toAuthInfo(a
 
 `createMcpAuth(opts)` is `createOAuth({ baseUrl, ... }).mcp({ resource, scopesSupported })` without the sign-in client. If the same app also signs users in or guards other APIs, call `oauth.mcp({ resource })` on your existing `oauth` instead so everything shares one discovery cache.
 
+## Client ID Metadata Documents (recommended for MCP / public clients)
+
+Instead of pre-registering a client, make your `clientId` an https URL that serves a small JSON document describing the client. The authorization server fetches that document itself when it sees the URL; your app never fetches anything. There is no registration step and no secret.
+
+```ts
+import { createClientMetadataDocument, createOAuth } from "@neon/oauth";
+
+const clientId = "https://app.example.com/oauth/client.json";
+
+export const metadata = createClientMetadataDocument({
+  clientId, // the URL this document is served from
+  clientName: "Reports",
+  redirectUris: ["https://app.example.com/api/auth/callback"],
+});
+
+export const oauth = createOAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  clientId, // a URL, sent as-is
+  redirectUri: "https://app.example.com/api/auth/callback",
+  cookies: { secret: process.env.COOKIE_SECRET! },
+});
+```
+
+Serve the document at the `clientId` URL with the adapter for your framework. It answers `GET`/`HEAD` with `application/json` and `Cache-Control: public, max-age=3600`.
+
+```ts
+app.use(honoClientMetadata(metadata)); // @neon/oauth/hono
+app.use(expressClientMetadata(metadata)); // @neon/oauth/express
+nodeClientMetadata(metadata)(req, res, next); // @neon/oauth/node
+// app/oauth/client.json/route.ts: @neon/oauth/next
+export const { GET } = createClientMetadataHandlers(metadata);
+```
+
+The document sets `client_id` to its own URL, `token_endpoint_auth_method: "none"` (public client, PKCE), `response_types: ["code"]` and `grant_types` (default `authorization_code` and `refresh_token`), plus optional `client_uri`, `logo_uri` and `scope`. `createClientMetadataDocument` throws `OAuthConfigError` for a `clientId` that is not an https URL with a path (no fragment or credentials), for a non-loopback `http` redirect URI, and for an empty `clientName` or `redirectUris`.
+
+- **The authorization server must support it.** Neon Auth advertises `client_id_metadata_document_supported` in its discovery document. With a URL `clientId` against a server that does not, `startLogin` (and so the `login` route) throws an `OAuthConfigError` naming the issuer, rather than sending a `client_id` the server will reject.
+- **The URL must be publicly reachable over https** by the authorization server, so local development needs a tunnel. Redirect URIs may still be `http://localhost`.
+- **Public clients only.** Passing `clientSecret` with a URL `clientId` throws.
+- **MCP clients** that do not ship a document of their own should use this instead of Dynamic Client Registration, which the MCP specification deprecates.
+
 ## Framework adapters
 
 | Framework | Sign-in and API guards | MCP |
@@ -223,7 +263,7 @@ Each layer follows one rule:
 
 | Situation | What you get | Examples |
 |---|---|---|
-| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown synchronously when you create the object | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
+| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown synchronously when you create the object (a URL `clientId` against a server without CIMD support is only known after discovery, so it is thrown by `startLogin` / `finishLogin`) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
 | **Authorization server unreachable** (discovery, JWKS, token endpoint: network, timeout, 5xx, untrusted document) | `AuthServerUnavailableError`, thrown by every operation that needs the server. It is never reported as "signed out" | `getDiscovery`, `verifyAccessToken`, `startLogin`, `finishLogin`, `getAccessToken` / `withAccessToken` when a refresh is needed |
 | **Expected auth outcome** | a returned `{ ok: false, reason }` | see below |
 
@@ -265,15 +305,15 @@ A test bundles each jose-only entry and fails if it pulls in `openid-client` or 
 
 | Import | Provides | Loads `openid-client` |
 |---|---|---|
-| `@neon/oauth` | `createOAuth`: verification, MCP servers and the sign-in client from one issuer | yes |
+| `@neon/oauth` | `createOAuth`, `createClientMetadataDocument`: verification, MCP servers and the sign-in client from one issuer | yes |
 | `@neon/oauth/verify` | `createVerifier`, `createBearerGuard`, `OAuthError`, `OAuthConfigError`, `AuthServerUnavailableError`, `InvalidTokenError`, `AuthResult`, `VerifyResult` | no |
 | `@neon/oauth/mcp` | `createMcpAuth`, `toAuthInfo`, `routeMcpMetadata`, `McpResourceServer`, errors | no |
 | `@neon/oauth/mcp/hono` | `honoMcp`, `honoMcpBearerAuth`, `honoProtectedResourceMetadata`, `McpAuthVariables` | no |
 | `@neon/oauth/mcp/express` | `expressMcp`, `expressMcpBearerAuth` (`req.auth`) | no |
 | `@neon/oauth/mcp/next` | `withMcpAuth`, `createMetadataHandlers` | no |
 | `@neon/oauth/mcp/node` | `nodeMcp`, `nodeMcpBearerAuth` | no |
-| `@neon/oauth/hono` | `honoBearerAuth`, `honoOAuthClient`, `AuthVariables` | no (types only) |
-| `@neon/oauth/express` | `expressBearerAuth`, `expressOAuthClient` | no (types only) |
-| `@neon/oauth/next` | `withAuth`, `createRouteHandlers` | no (types only) |
-| `@neon/oauth/node` | `toNodeHandler`, `nodeBearerAuth`, `nodeOAuthClient`, `nodeMiddleware` | no (types only) |
-| `@neon/oauth/adapter` | The adapter contract: `authenticate`, `routeOAuthClient` | no |
+| `@neon/oauth/hono` | `honoBearerAuth`, `honoOAuthClient`, `honoClientMetadata`, `AuthVariables` | no (types only) |
+| `@neon/oauth/express` | `expressBearerAuth`, `expressOAuthClient`, `expressClientMetadata` | no (types only) |
+| `@neon/oauth/next` | `withAuth`, `createRouteHandlers`, `createClientMetadataHandlers` | no (types only) |
+| `@neon/oauth/node` | `toNodeHandler`, `nodeBearerAuth`, `nodeOAuthClient`, `nodeClientMetadata`, `nodeMiddleware` | no (types only) |
+| `@neon/oauth/adapter` | The adapter contract: `authenticate`, `routeOAuthClient`, `routeClientMetadata`, `clientMetadataResponse` | no |

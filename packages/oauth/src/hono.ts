@@ -8,11 +8,17 @@ import type { MiddlewareHandler } from "hono";
 import type {
 	AuthResult,
 	AuthSource,
+	ClientMetadataDocument,
 	OAuthBearerOptions,
 	OAuthClient,
 	OAuthRouteOptions,
 } from "./adapter";
-import { authenticate, resolveBasePath, routeOAuthClient } from "./adapter";
+import {
+	authenticate,
+	resolveBasePath,
+	routeClientMetadata,
+	routeOAuthClient,
+} from "./adapter";
 
 export type AuthVariables = { Variables: { auth: AuthResult } };
 
@@ -37,4 +43,11 @@ export function honoOAuthClient(
 	resolveBasePath(client, opts);
 	return async (c, next) =>
 		(await routeOAuthClient(client, c.req.raw, opts)) ?? next();
+}
+
+/** Serves the document at the path of its `client_id`; other requests fall through. */
+export function honoClientMetadata(
+	doc: ClientMetadataDocument,
+): MiddlewareHandler {
+	return async (c, next) => routeClientMetadata(doc, c.req.raw) ?? next();
 }

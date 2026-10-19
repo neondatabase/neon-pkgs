@@ -7,11 +7,17 @@ import type { IncomingMessage } from "node:http";
 import type {
 	AuthResult,
 	AuthSource,
+	ClientMetadataDocument,
 	OAuthBearerOptions,
 	OAuthClient,
 	OAuthRouteOptions,
 } from "./adapter";
-import { authenticate, resolveBasePath, routeOAuthClient } from "./adapter";
+import {
+	authenticate,
+	resolveBasePath,
+	routeClientMetadata,
+	routeOAuthClient,
+} from "./adapter";
 import {
 	type FetchHandler,
 	type NodeMiddleware,
@@ -44,4 +50,11 @@ export function nodeOAuthClient(
 ): NodeMiddleware {
 	resolveBasePath(client, opts);
 	return nodeMiddleware((request) => routeOAuthClient(client, request, opts));
+}
+
+/** Serves the document at the path of its `client_id`; everything else calls `next()`. */
+export function nodeClientMetadata(
+	doc: ClientMetadataDocument,
+): NodeMiddleware {
+	return nodeMiddleware((request) => routeClientMetadata(doc, request));
 }

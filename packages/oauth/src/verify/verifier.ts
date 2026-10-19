@@ -43,6 +43,8 @@ export interface VerifierOptions {
 export interface AuthServerMetadata {
 	issuer: string;
 	jwks_uri: string;
+	/** Whether the server fetches Client ID Metadata Documents, i.e. accepts an https URL as `client_id`. */
+	client_id_metadata_document_supported?: boolean;
 	[key: string]: unknown;
 }
 

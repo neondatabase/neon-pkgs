@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOAuth } from "../index";
 import type { FakeAuthServer } from "../testing/fake-auth-server";
 import { startFakeAuthServer } from "../testing/fake-auth-server";
+import { OAuthConfigError } from "../verify/errors";
 import { seal } from "./cookies";
 
 // The fake authorization server speaks plain HTTP; openid-client only allows that when opted in per Configuration.
@@ -240,5 +241,51 @@ describe("returnTo", () => {
 			),
 		);
 		expect(res.headers.get("location")).toBe(expected);
+	});
+});
+
+describe("URL client_id (Client ID Metadata Document)", () => {
+	const CIMD_CLIENT_ID = "https://app.example.com/oauth/client.json";
+	const makeCimd = (extra = {}) =>
+		createOAuth({
+			baseUrl: fake.issuer,
+			clientId: CIMD_CLIENT_ID,
+			redirectUri: REDIRECT,
+			cookies: { secret: SECRET },
+			...extra,
+		}).client;
+
+	it("sends the URL verbatim as client_id on the authorize request", async () => {
+		const { url } = await makeCimd().startLogin();
+		expect(url.searchParams.get("client_id")).toBe(CIMD_CLIENT_ID);
+	});
+
+	it("throws a config error naming the issuer when the server does not advertise support", async () => {
+		fake.setCimdSupported(false);
+		const client = makeCimd();
+		await expect(client.startLogin()).rejects.toThrow(OAuthConfigError);
+		await expect(client.startLogin()).rejects.toThrow(
+			/client_id_metadata_document_supported/,
+		);
+	});
+
+	it("answers the login route with 500 and reports the cause when unsupported", async () => {
+		fake.setCimdSupported(false);
+		const errors: unknown[] = [];
+		const client = makeCimd({ onError: (e: unknown) => errors.push(e) });
+		const res = await client.handlers.login(
+			new Request("http://localhost:3000/auth/login"),
+		);
+		expect(res.status).toBe(500);
+		expect(errors[0]).toBeInstanceOf(OAuthConfigError);
+	});
+
+	it("does not require the field for a pre-registered client_id", async () => {
+		fake.setCimdSupported(false);
+		await expect(make().startLogin()).resolves.toBeDefined();
+	});
+
+	it("rejects a client secret with a URL client_id", () => {
+		expect(() => makeCimd({ clientSecret: "s" })).toThrow(OAuthConfigError);
 	});
 });

@@ -8,11 +8,12 @@ import type { Request, RequestHandler } from "express";
 import type {
 	AuthResult,
 	AuthSource,
+	ClientMetadataDocument,
 	OAuthBearerOptions,
 	OAuthClient,
 	OAuthRouteOptions,
 } from "./adapter";
-import { nodeBearerAuth, nodeOAuthClient } from "./node";
+import { nodeBearerAuth, nodeClientMetadata, nodeOAuthClient } from "./node";
 
 /** A request that has passed `expressBearerAuth`. */
 export type AuthedRequest = Request & { auth: AuthResult };
@@ -31,4 +32,11 @@ export function expressOAuthClient(
 	opts?: OAuthRouteOptions,
 ): RequestHandler {
 	return nodeOAuthClient(client, opts);
+}
+
+/** Serves the document at the path of its `client_id`; other requests fall through. */
+export function expressClientMetadata(
+	doc: ClientMetadataDocument,
+): RequestHandler {
+	return nodeClientMetadata(doc);
 }

@@ -7,6 +7,7 @@
  */
 
 import type { OAuthClient } from "./client";
+import type { ClientMetadataDocument } from "./client/metadata-document";
 import type { OAuth } from "./index";
 import type { McpResourceServer } from "./mcp/resource-server";
 import {
@@ -27,6 +28,7 @@ export type AuthSource = BearerSource<OAuthBearerOptions>;
 export type {
 	AuthOutcome,
 	AuthResult,
+	ClientMetadataDocument,
 	McpResourceServer,
 	OAuth,
 	OAuthBearerOptions,
@@ -108,4 +110,26 @@ export async function routeOAuthClient(
 		return client.handlers[action](request);
 	}
 	return undefined;
+}
+
+/** The document as JSON. Authorization servers cache it for as long as `cache-control` allows. */
+export function clientMetadataResponse(doc: ClientMetadataDocument): Response {
+	return new Response(JSON.stringify(doc), {
+		headers: {
+			"content-type": "application/json",
+			"cache-control": "public, max-age=3600",
+		},
+	});
+}
+
+/** Answers GET/HEAD on the path of the document's `client_id`; `undefined` for anything else so the caller keeps routing. */
+export function routeClientMetadata(
+	doc: ClientMetadataDocument,
+	request: Request,
+): Response | undefined {
+	if (request.method !== "GET" && request.method !== "HEAD") return undefined;
+	if (new URL(request.url).pathname !== new URL(doc.client_id).pathname) {
+		return undefined;
+	}
+	return clientMetadataResponse(doc);
 }
