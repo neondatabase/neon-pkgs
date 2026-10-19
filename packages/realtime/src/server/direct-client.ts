@@ -1,7 +1,3 @@
-import type {
-	WebSocketFactory,
-	WebSocketLike,
-} from "../client/connection/coordinator.js";
 import type { PostgreSQLParsers } from "../client/postgres/parsers.js";
 import type { SealedLiveQuery } from "../client/sealed-query.js";
 import type {
@@ -12,6 +8,8 @@ import type {
 	RealtimeClient,
 	RealtimeLogger,
 	RealtimeLogLevel,
+	WebSocketFactory,
+	WebSocketLike,
 } from "../client/types.js";
 import {
 	type ManagedDirectSubscription,

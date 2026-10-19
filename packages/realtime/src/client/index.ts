@@ -30,4 +30,6 @@ export type {
 	RealtimeLogEvent,
 	RealtimeLogger,
 	RealtimeLogLevel,
+	WebSocketFactory,
+	WebSocketLike,
 } from "./types.js";
