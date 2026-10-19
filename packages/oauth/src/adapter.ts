@@ -20,7 +20,8 @@ import { OAuthConfigError } from "./verify/errors";
 import type { AuthResult } from "./verify/verifier";
 
 /**
- * What the API guards need from their first argument: satisfied by `createOAuth()` and by
+ * What the API guards (`honoBearerAuth`, `expressBearerAuth`, `withAuth`, `nodeBearerAuth`,
+ * `authenticate`) need from their first argument: satisfied by `createOAuth()` and by
  * `createVerifier()` from `@neon/oauth/verify`, so an API-only server does not load the sign-in client.
  */
 export type AuthSource = BearerSource<OAuthBearerOptions>;
@@ -35,7 +36,35 @@ export type {
 	OAuthClient,
 };
 
-/** Verifies the request's bearer token. On failure `response` is a ready 401/403/503 to send as-is. */
+/**
+ * Checks the bearer token of a Web `Request` and returns `{ ok: true, auth }` with the verified
+ * `AuthResult`, or `{ ok: false, response }` with a ready 401 (missing or invalid token), 403
+ * (missing scope) or 503 (authorization server unavailable) `Response` to send as-is. It never throws
+ * for those outcomes; a throwing `opts.onError` is swallowed.
+ *
+ * Use it in a custom adapter or handler (a framework this package has no adapter for, a plain
+ * fetch handler) that needs to guard a route itself. Prefer the framework guards
+ * (`honoBearerAuth`, `expressBearerAuth`, `withAuth`, `nodeBearerAuth`, `honoMcp`, ...) when one
+ * exists: they call this and wire the result into the framework.
+ *
+ * @param source A `createOAuth()` instance or `createVerifier()` verifier (`opts.audience` is
+ *   then required unless a `resource` was configured, otherwise `OAuthConfigError` is thrown), or the
+ *   result of `createMcpAuth()` (audience and `resource_metadata` challenge come from it).
+ * @param request Only the `Authorization` header is read.
+ *
+ * @example
+ * ```ts
+ * import { authenticate } from "@neon/oauth/adapter";
+ *
+ * export default {
+ *   async fetch(request: Request) {
+ *     const out = await authenticate(verifier, request, { requiredScopes: ["read"] });
+ *     if (!out.ok) return out.response;
+ *     return Response.json({ user: out.auth.sub });
+ *   },
+ * };
+ * ```
+ */
 export function authenticate(
 	source: McpResourceServer,
 	request: Request,
@@ -58,6 +87,7 @@ export function authenticate(
 	);
 }
 
+/** Options for the sign-in route helpers (`routeOAuthClient`, `honoOAuthClient`, `createRouteHandlers`, ...). */
 export interface OAuthRouteOptions {
 	/**
 	 * Path prefix for `/login`, `/callback` and `/logout`. Defaults to the prefix of the client's
@@ -95,7 +125,30 @@ export function resolveBasePath(
 	return explicit;
 }
 
-/** Handles GET `${basePath}/login|callback|logout`; `undefined` for anything else so the caller keeps routing. */
+/**
+ * Serves the sign-in routes `GET ${basePath}/login`, `/callback` and `/logout` for an `OAuthClient`
+ * and resolves to their `Response`; resolves to `undefined` for any other request so the caller
+ * keeps routing. `basePath` is derived from the client's `redirectUri` (see `OAuthRouteOptions`).
+ *
+ * Use it to build your own framework adapter, or a plain fetch handler, that mounts the sign-in
+ * routes. The built-in adapters (`honoOAuthClient`, `expressOAuthClient`, `createRouteHandlers`,
+ * `nodeOAuthClient`) already call it, so you do not need it with those. The routes themselves
+ * answer 302 on success, 400 for a bad callback and 503 when the authorization server is
+ * unavailable; they never throw. It does throw `OAuthConfigError` when `redirectUri` does not end
+ * in `/callback` or an explicit `basePath` disagrees with it, so call `resolveBasePath` once at
+ * startup to fail early.
+ *
+ * @example
+ * ```ts
+ * import { routeOAuthClient } from "@neon/oauth/adapter";
+ *
+ * export default {
+ *   async fetch(request: Request) {
+ *     return (await routeOAuthClient(oauth.client, request)) ?? new Response("Not found", { status: 404 });
+ *   },
+ * };
+ * ```
+ */
 export async function routeOAuthClient(
 	client: OAuthClient,
 	request: Request,
@@ -112,7 +165,11 @@ export async function routeOAuthClient(
 	return undefined;
 }
 
-/** The document as JSON. Authorization servers cache it for as long as `cache-control` allows. */
+/**
+ * The Client ID Metadata Document as a JSON `Response` (`cache-control: public, max-age=3600`;
+ * authorization servers cache it for as long as that allows). For frameworks where you already
+ * route by path, as in `createClientMetadataHandlers`; otherwise use `routeClientMetadata`.
+ */
 export function clientMetadataResponse(doc: ClientMetadataDocument): Response {
 	return new Response(JSON.stringify(doc), {
 		headers: {
@@ -122,7 +179,12 @@ export function clientMetadataResponse(doc: ClientMetadataDocument): Response {
 	});
 }
 
-/** Answers GET/HEAD on the path of the document's `client_id`; `undefined` for anything else so the caller keeps routing. */
+/**
+ * Answers GET/HEAD on the path of the document's `client_id` with the document; returns `undefined`
+ * for anything else so the caller keeps routing. Use it to build a framework adapter that serves a
+ * `createClientMetadataDocument` result; the built-in adapters (`honoClientMetadata`,
+ * `expressClientMetadata`, `nodeClientMetadata`) already call it.
+ */
 export function routeClientMetadata(
 	doc: ClientMetadataDocument,
 	request: Request,

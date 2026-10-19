@@ -13,9 +13,17 @@ import type { McpResourceServer } from "./resource-server";
 import { MCP_METHODS, mcpPath, routeMcpMetadata } from "./resource-server";
 
 export type { NodeMiddleware };
+/** A `node:http` request after the MCP guards have run: `auth` is the verified token. */
 export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
 
-/** Bearer guard. On success the verified `AuthResult` is at `req.auth` and `next()` is called. */
+/**
+ * `node:http` middleware that requires a valid bearer token for an MCP server route. On success it
+ * sets `req.auth` (the verified `AuthResult`) and calls `next()`; otherwise it responds 401/403/503
+ * with a challenge carrying `resource_metadata`. It does not serve the metadata routes: use `nodeMcp`
+ * for the whole MCP endpoint.
+ *
+ * @param mcp The result of `createMcpAuth()`.
+ */
 export function nodeMcpBearerAuth(
 	mcp: McpResourceServer,
 	opts: BearerAuthOptions = {},
@@ -28,12 +36,28 @@ export function nodeMcpBearerAuth(
 	});
 }
 
+/** Options for `nodeMcp` and `expressMcp`: the bearer options, plus the endpoint path. */
 export interface NodeMcpOptions extends BearerAuthOptions {
 	/** MCP endpoint path. Defaults to the path of `resource`. */
 	path?: string;
 }
 
-/** Serves the metadata routes and guards POST/GET/DELETE on the MCP path. Everything else calls `next()`. */
+/**
+ * `node:http` middleware (`(req, res, next)`) that protects an MCP endpoint in one call. It serves
+ * the RFC 9728 protected-resource metadata and its CORS preflight (unauthenticated), requires a
+ * valid bearer token on POST/GET/DELETE (the Streamable HTTP methods) at the MCP path (401/403/503
+ * are answered for you), and calls `next()` for everything else. For authenticated requests
+ * `req.auth` is the verified `AuthResult` (see `AuthedIncomingMessage`).
+ *
+ * @param mcp The result of `createMcpAuth()`.
+ *
+ * @example
+ * ```ts
+ * const auth = createMcpAuth({ baseUrl, resource: "https://mcp.example.com/mcp" });
+ * const mcpMiddleware = nodeMcp(auth);
+ * createServer((req, res) => mcpMiddleware(req, res, () => handleMcp(req, res, auth)));
+ * ```
+ */
 export function nodeMcp(
 	mcp: McpResourceServer,
 	opts: NodeMcpOptions = {},

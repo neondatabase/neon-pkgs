@@ -2,21 +2,25 @@
 // of this JSON, which the authorization server fetches. The client itself never fetches anything.
 import { OAuthConfigError } from "../verify/errors";
 
+/** Input to `createClientMetadataDocument`. */
 export interface ClientMetadataDocumentOptions {
 	/** The https URL this document is served from. Must have a path and no fragment or credentials. */
 	clientId: string;
 	/** Shown on the consent screen. */
 	clientName: string;
-	/** https, `http` on a loopback host, or a custom scheme. */
+	/** https, `http` on a loopback host, or a custom scheme. At least one; must not contain a fragment. */
 	redirectUris: string[];
+	/** An https URL of the client's home page. */
 	clientUri?: string;
+	/** An https URL of the client's logo, shown on the consent screen. */
 	logoUri?: string;
+	/** Space-separated scopes the client may request. */
 	scope?: string;
 	/** Defaults to `["authorization_code", "refresh_token"]`. */
 	grantTypes?: string[];
 }
 
-/** CIMD clients are public: PKCE, no client secret. */
+/** The JSON document to serve at the `client_id` URL, in the wire format (snake_case) authorization servers fetch. CIMD clients are public: PKCE, no client secret. */
 export interface ClientMetadataDocument {
 	client_id: string;
 	client_name: string;
@@ -81,9 +85,25 @@ function assertHttpsUrl(name: string, value: string): void {
 }
 
 /**
- * Builds the document to serve at `clientId`. Serve it with a framework adapter
- * (`createClientMetadataHandlers`, `honoClientMetadata`, ...) and pass the same `clientId` to `createOAuth`.
- * Throws `OAuthConfigError` for an invalid field.
+ * Builds the Client ID Metadata Document for a public client whose `client_id` is an https URL,
+ * so no registration step or secret is needed. Use it when the client is an MCP or other public
+ * client; use a pre-registered `clientId` otherwise.
+ *
+ * Serve the result at `clientId` with a framework adapter (`createClientMetadataHandlers`,
+ * `honoClientMetadata`, `expressClientMetadata`, `nodeClientMetadata`) and pass the same
+ * `clientId` to `createOAuth`. The authorization server fetches the document; your app never does.
+ * Throws `OAuthConfigError` for an invalid field (`clientId` not a canonical https URL with a path,
+ * missing `clientName`, no or invalid `redirectUris`, non-https `clientUri` / `logoUri`).
+ *
+ * @example
+ * ```ts
+ * const doc = createClientMetadataDocument({
+ *   clientId: "https://app.example.com/oauth/client.json",
+ *   clientName: "My app",
+ *   redirectUris: ["https://app.example.com/api/auth/callback"],
+ * });
+ * app.use(honoClientMetadata(doc));
+ * ```
  */
 export function createClientMetadataDocument(
 	options: ClientMetadataDocumentOptions,

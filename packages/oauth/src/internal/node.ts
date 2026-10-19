@@ -2,15 +2,23 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { sendWebResponse, toWebRequest } from "./node-http";
 
+/** A handler in the Web `Request` -> `Response` shape, such as `client.handlers.login`. */
 export type FetchHandler = (request: Request) => Response | Promise<Response>;
+/** The `next` callback of `node:http`-style middleware; pass an error to hand it to the framework. */
 export type NodeNext = (err?: unknown) => void;
+/** Connect/Express-style middleware: `(req, res, next)`. */
 export type NodeMiddleware = (
 	req: IncomingMessage,
 	res: ServerResponse,
 	next: NodeNext,
 ) => void;
 
-/** Runs `step` on the converted request; a returned Response is sent, `undefined` calls `next`. Errors go to `next(err)`. */
+/**
+ * Builds `node:http` middleware from a function over a Web `Request`: a returned `Response` is
+ * sent, `undefined` calls `next()`, and a thrown error goes to `next(err)`. The request carries
+ * headers and URL only, no body, so it works behind a body parser. Use it to write your own
+ * Node-style adapter; `nodeBearerAuth` and `nodeOAuthClient` are built on it.
+ */
 export function nodeMiddleware(
 	step: (
 		request: Request,
@@ -26,7 +34,11 @@ export function nodeMiddleware(
 	};
 }
 
-/** Adapts a Request->Response handler (such as `client.handlers.login`) to a plain `node:http` listener. */
+/**
+ * Adapts a Web `Request` -> `Response` handler (such as `client.handlers.login`) to a plain
+ * `node:http` listener `(req, res)`, e.g. `createServer(toNodeHandler(oauth.client.handlers.login))`.
+ * Unlike `nodeMiddleware`, the request body is passed through.
+ */
 export function toNodeHandler(
 	handler: FetchHandler,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {

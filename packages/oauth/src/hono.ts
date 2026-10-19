@@ -20,9 +20,24 @@ import {
 	routeOAuthClient,
 } from "./adapter";
 
+/** Hono context variables set by `honoBearerAuth`. Use as `new Hono<AuthVariables>()` to read `c.get('auth')` in handlers. */
 export type AuthVariables = { Variables: { auth: AuthResult } };
 
-/** Bearer guard for any route. On success the verified `AuthResult` is at `c.get('auth')`. */
+/**
+ * Hono middleware that requires a valid bearer token. On success it stores the verified
+ * `AuthResult` at `c.get('auth')` and calls the next handler; otherwise it responds 401/403/503
+ * with an RFC 6750 `WWW-Authenticate` challenge. Use it for a generic API; for an MCP server use
+ * `honoMcp` from `@neon/oauth/mcp/hono`.
+ *
+ * @param source A `createOAuth()` instance or `createVerifier()` verifier. `opts.audience` is
+ *   required unless a `resource` was configured, else `OAuthConfigError` is thrown on the first request.
+ *
+ * @example
+ * ```ts
+ * app.use("/api/*", honoBearerAuth(verifier, { requiredScopes: ["read"] }));
+ * app.get("/api/me", (c) => c.json({ user: c.get("auth").sub }));
+ * ```
+ */
 export function honoBearerAuth(
 	source: AuthSource,
 	opts: OAuthBearerOptions = {},
@@ -35,7 +50,13 @@ export function honoBearerAuth(
 	};
 }
 
-/** Serves `${basePath}/login|callback|logout`; other requests fall through. Mount with `app.use(honoOAuthClient(client))`. */
+/**
+ * Hono middleware that serves the sign-in routes `${basePath}/login`, `/callback` and `/logout`
+ * for an OAuth client; every other request falls through to the next handler. `basePath` comes
+ * from the client's `redirectUri`. Mount it with `app.use(honoOAuthClient(oauth.client))`.
+ * Throws `OAuthConfigError` when called if `redirectUri` does not end in `/callback` or an explicit
+ * `opts.basePath` disagrees with it.
+ */
 export function honoOAuthClient(
 	client: OAuthClient,
 	opts?: OAuthRouteOptions,
@@ -45,7 +66,10 @@ export function honoOAuthClient(
 		(await routeOAuthClient(client, c.req.raw, opts)) ?? next();
 }
 
-/** Serves the document at the path of its `client_id`; other requests fall through. */
+/**
+ * Hono middleware that serves a `createClientMetadataDocument` result at the path of its
+ * `client_id` (GET/HEAD); other requests fall through. Mount with `app.use(honoClientMetadata(doc))`.
+ */
 export function honoClientMetadata(
 	doc: ClientMetadataDocument,
 ): MiddlewareHandler {

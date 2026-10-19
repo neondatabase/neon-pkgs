@@ -16,6 +16,7 @@ import {
 } from "./cookies";
 import { isMetadataDocumentClientId } from "./metadata-document";
 
+/** Settings for `createOAuthClient`; `createOAuth` builds these from its own options. */
 export interface OAuthClientOptions {
 	/**
 	 * A pre-registered client id, or the https URL of a Client ID Metadata Document (see
@@ -28,12 +29,14 @@ export interface OAuthClientOptions {
 	redirectUri: string;
 	/** The API the access token is for; becomes the token's `aud`. */
 	resource?: string;
+	/** Scopes to request. Defaults to `["profile", "email"]`; `openid` is always added. */
 	scopes?: string[];
 	cookies: CookieOptions;
 	/** Called with the cause when a sign-in route answers 5xx, for logging. */
 	onError?: (error: unknown, request: Request) => void;
 }
 
+/** How the client's encrypted, stateless session cookie is keyed, named and scoped. */
 export interface CookieOptions {
 	/** At least 32 characters. Encrypts the cookies; changing it signs everyone out. */
 	secret: string;
@@ -60,16 +63,21 @@ export interface AuthUser {
 	image?: string;
 }
 
+/** What the session cookie holds. */
 export interface Session {
 	accessToken: string;
+	/** Absent when the server issued none; the token then cannot be refreshed. */
 	refreshToken?: string;
 	/** Access-token expiry, seconds since epoch. */
 	expiresAt?: number;
 	user: AuthUser;
 }
 
+/** The values `startLogin` generates that `finishLogin` needs back: keep them (server-side or in a short-lived cookie) until the callback. */
 export interface LoginAttempt {
+	/** Anti-CSRF value; the callback's `state` must equal it. */
 	state: string;
+	/** The PKCE verifier matching the challenge sent on the authorize URL. */
 	codeVerifier: string;
 }
 
@@ -83,7 +91,9 @@ export type SessionFailure = {
 	ok: false;
 	reason: "no_session" | "invalid_session" | "expired";
 };
+/** Outcome of `getSession`: the `session`, or why there is none. */
 export type SessionResult = { ok: true; session: Session } | SessionFailure;
+/** Outcome of `getUser`: the signed-in `user`, or why there is none. */
 export type UserResult = { ok: true; user: AuthUser } | SessionFailure;
 
 /**
@@ -114,6 +124,7 @@ export type AccessTokenFailure = {
 	reason: "no_session" | "refresh_unavailable" | "refresh_failed";
 };
 
+/** Outcome of `getAccessToken`. */
 export type AccessTokenResult =
 	| {
 			ok: true;
@@ -130,8 +141,21 @@ export interface AccessTokenContext {
 	authorizationHeaders: { authorization: string };
 }
 
+/**
+ * The sign-in client of a `createOAuth` instance (`oauth.client`): authorization code + PKCE with
+ * the session kept in an encrypted cookie, no server-side store. Mount `handlers` with a framework
+ * adapter (`honoOAuthClient`, `expressOAuthClient`, `createRouteHandlers`, `nodeOAuthClient`),
+ * then read the signed-in user with `getUser(request)`.
+ */
 export interface OAuthClient {
-	/** Request handlers for sign-in. Mount them through a framework adapter rather than calling them directly. */
+	/**
+	 * Request handlers for sign-in. Mount them through a framework adapter (or `routeOAuthClient`)
+	 * rather than calling them directly. None throws: they answer an outage with 503 and anything
+	 * unexpected with 500, reporting the cause to `onError`.
+	 * - `login`: 302 to the authorization server; `?returnTo=/path` (same-site paths only) is where the user lands afterwards.
+	 * - `callback`: completes sign-in, sets the session cookie and 302s to `returnTo`; 400 for a bad or expired attempt.
+	 * - `logout`: clears this app's session cookie and 302s to `returnTo`. It does not end the Neon Auth session.
+	 */
 	readonly handlers: {
 		login(request: Request): Promise<Response>;
 		callback(request: Request): Promise<Response>;
@@ -139,7 +163,12 @@ export interface OAuthClient {
 	};
 	/** The configured redirect URI; adapters derive the callback route from its path. */
 	readonly redirectUri: string;
+	/**
+	 * The session in the request's cookie, including tokens. Never contacts the server.
+	 * A missing, tampered or expired cookie is `{ ok: false, reason }`, not an error.
+	 */
 	getSession(request: Request): Promise<SessionResult>;
+	/** The signed-in user from the request's session cookie; same failure reasons as `getSession`. Never contacts the server. */
 	getUser(request: Request): Promise<UserResult>;
 	/**
 	 * A usable access token for this request, refreshed first if it is about to expire.
@@ -174,7 +203,8 @@ const TX_MAX_AGE_SECONDS = 600;
 const REFRESH_SKEW_SECONDS = 30;
 
 /**
- * `getDiscovery` is the issuer's shared cache, so the client never fetches discovery on its own.
+ * Creates the sign-in client. Prefer `createOAuth`, which calls this and shares its discovery
+ * cache; `getDiscovery` is that shared cache, so the client never fetches discovery on its own.
  * Missing or invalid settings throw an `OAuthConfigError` naming each one.
  */
 export function createOAuthClient(

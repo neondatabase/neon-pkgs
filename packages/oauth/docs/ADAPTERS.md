@@ -6,11 +6,11 @@ The core speaks Web `Request`/`Response` and nothing else. An adapter is a trans
 
 | Function | From | Returns | Use for |
 |---|---|---|---|
-| `authenticate(source, request, opts?)` | `@neon/oauth/adapter` | `{ ok: true, auth } \| { ok: false, response }` | Bearer guard. `source` is an `OAuth` from `createOAuth()` or a verifier from `createVerifier()` (typed as `AuthSource`; `opts.audience` is required unless a `resource` was configured), or an `McpResourceServer`. Send `response` as-is on failure (401/403/503 with an RFC 6750 `WWW-Authenticate`). |
+| `authenticate(source, request, opts?)` | `@neon/oauth/adapter` | `{ ok: true, auth } \| { ok: false, response }` | Bearer guard. `source` is an `OAuth` from `createOAuth()` or a verifier from `createVerifier()` (typed as `AuthSource`; `opts.audience` is required unless a `resource` was configured), or an `McpResourceServer` (the result of `createMcpAuth()`). Send `response` as-is on failure (401/403/503 with an RFC 6750 `WWW-Authenticate`). |
 | `routeOAuthClient(client, request, { basePath? })` | `@neon/oauth/adapter` | `Promise<Response \| undefined>` | `GET {basePath}/login`, `/callback`, `/logout`. `undefined` means "not mine, keep routing". |
-| `routeMcpMetadata(mcp, request)` | `@neon/oauth/mcp` | `Response \| undefined` | GET/OPTIONS on the RFC 9728 metadata paths (path-inserted and bare), with CORS. |
+| `routeMcpMetadata(auth, request)` | `@neon/oauth/mcp` | `Response \| undefined` | GET/OPTIONS on the RFC 9728 metadata paths (path-inserted and bare), with CORS. |
 
-For MCP guards `@neon/oauth/mcp` also exports `MCP_METHODS` (`POST`, `GET`, `DELETE`) and `mcpPath(mcp, path?)` (defaults to the path of `mcp.resource`).
+For MCP guards `@neon/oauth/mcp` also exports `MCP_METHODS` (`POST`, `GET`, `DELETE`) and `mcpPath(auth, path?)` (defaults to the path of `auth.resource`).
 
 `basePath` is derived from the client's `redirectUri`: its path must end in `/callback`, and the rest is the prefix (`<origin>/api/auth/callback` serves `/api/auth/*`). An explicit `basePath` is only a check: `routeOAuthClient` and `resolveBasePath(client, opts)` throw, naming both values, if it disagrees. Call `resolveBasePath` when the adapter is created so a mismatch fails at startup, not on the first request.
 
@@ -46,7 +46,7 @@ export const myOAuthClient = (client: OAuthClient): MyMiddleware => {
 
 ### MCP template
 
-An MCP adapter serves the metadata routes, guards the MCP endpoint's methods, and exposes both the `AuthResult` and the MCP SDK's `AuthInfo`. It uses the same primitives; only the source is an `McpResourceServer` from `createMcpAuth`.
+An MCP adapter serves the metadata routes, guards the MCP endpoint's methods, and exposes both the `AuthResult` and the MCP SDK's `AuthInfo`. It uses the same primitives; only the source is the result of `createMcpAuth()` (an `McpResourceServer`).
 
 ```ts
 import type { MyCtx, MyMiddleware } from "myfw";
@@ -56,12 +56,12 @@ import type { McpResourceServer } from "@neon/oauth/mcp";
 
 const toRequest = (ctx: MyCtx): Request => /* as above */;
 
-export function myMcp(mcp: McpResourceServer): MyMiddleware {
-  const target = mcpPath(mcp); // the path of mcp.resource
+export function myMcp(auth: McpResourceServer): MyMiddleware {
+  const target = mcpPath(auth); // the path of auth.resource
   return async (ctx, next) => {
     const request = toRequest(ctx);
 
-    const metadata = routeMcpMetadata(mcp, request); // 1. RFC 9728 metadata and its CORS preflight, unauthenticated
+    const metadata = routeMcpMetadata(auth, request); // 1. RFC 9728 metadata and its CORS preflight, unauthenticated
     if (metadata) return ctx.send(metadata);
 
     const { pathname } = new URL(request.url);
@@ -69,10 +69,10 @@ export function myMcp(mcp: McpResourceServer): MyMiddleware {
       return next(); // 2. not the MCP endpoint: keep routing
     }
 
-    const out = await authenticate(mcp, request); // 3. 401/403/503 carry resource_metadata for MCP clients
+    const out = await authenticate(auth, request); // 3. 401/403/503 carry resource_metadata for MCP clients
     if (!out.ok) return ctx.send(out.response);
     ctx.state.auth = out.auth;
-    ctx.state.authInfo = mcp.toAuthInfo(out.auth); // 4. pass to transport.handleRequest(req, { authInfo })
+    ctx.state.authInfo = auth.toAuthInfo(out.auth); // 4. pass to transport.handleRequest(req, { authInfo })
     return next();
   };
 }
@@ -96,7 +96,7 @@ No adapter needed. The core already takes a `Request` and returns a `Response`:
 ```ts
 export default {
   async fetch(request: Request) {
-    return (await routeOAuthClient(oauth.client, request)) ?? routeMcpMetadata(mcp, request) ?? (await app(request));
+    return (await routeOAuthClient(oauth.client, request)) ?? routeMcpMetadata(auth, request) ?? (await app(request));
   },
 };
 ```

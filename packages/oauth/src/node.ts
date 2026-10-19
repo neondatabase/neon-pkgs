@@ -28,9 +28,18 @@ import {
 
 export type { FetchHandler, NodeMiddleware, NodeNext };
 export { nodeMiddleware, toNodeHandler };
+/** A `node:http` request after `nodeBearerAuth` has run: `auth` is the verified token. */
 export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
 
-/** Bearer guard. On success the verified `AuthResult` is at `req.auth` and `next()` is called. */
+/**
+ * `node:http` middleware (`(req, res, next)`) that requires a valid bearer token. On success it
+ * sets the verified `AuthResult` on `req.auth` (see `AuthedIncomingMessage`) and calls `next()`;
+ * otherwise it responds 401/403/503. Use it for a generic API; for an MCP server use `nodeMcp`
+ * from `@neon/oauth/mcp/node`.
+ *
+ * @param source A `createOAuth()` instance or `createVerifier()` verifier. `opts.audience` is
+ *   required unless a `resource` was configured, else `OAuthConfigError` is passed to `next(err)`.
+ */
 export function nodeBearerAuth(
 	source: AuthSource,
 	opts: OAuthBearerOptions = {},
@@ -43,7 +52,12 @@ export function nodeBearerAuth(
 	});
 }
 
-/** Serves `${basePath}/login|callback|logout`; everything else calls `next()`. */
+/**
+ * `node:http` middleware that serves the sign-in routes `${basePath}/login`, `/callback` and
+ * `/logout` for an OAuth client; everything else calls `next()`. `basePath` comes from the
+ * client's `redirectUri`. Throws `OAuthConfigError` when called if `redirectUri` does not end in
+ * `/callback` or an explicit `opts.basePath` disagrees with it.
+ */
 export function nodeOAuthClient(
 	client: OAuthClient,
 	opts?: OAuthRouteOptions,
@@ -52,7 +66,7 @@ export function nodeOAuthClient(
 	return nodeMiddleware((request) => routeOAuthClient(client, request, opts));
 }
 
-/** Serves the document at the path of its `client_id`; everything else calls `next()`. */
+/** `node:http` middleware that serves a `createClientMetadataDocument` result at the path of its `client_id` (GET/HEAD); everything else calls `next()`. */
 export function nodeClientMetadata(
 	doc: ClientMetadataDocument,
 ): NodeMiddleware {

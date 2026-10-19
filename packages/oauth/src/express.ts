@@ -18,7 +18,21 @@ import { nodeBearerAuth, nodeClientMetadata, nodeOAuthClient } from "./node";
 /** A request that has passed `expressBearerAuth`. */
 export type AuthedRequest = Request & { auth: AuthResult };
 
-/** Bearer guard for any route. On success the verified `AuthResult` is at `req.auth`. */
+/**
+ * Express middleware that requires a valid bearer token. On success it sets the verified
+ * `AuthResult` on `req.auth` (read it as `(req as AuthedRequest).auth`) and calls `next()`;
+ * otherwise it responds 401/403/503. Use it for a generic API; for an MCP server use
+ * `expressMcp` from `@neon/oauth/mcp/express`.
+ *
+ * @param source A `createOAuth()` instance or `createVerifier()` verifier. `opts.audience` is
+ *   required unless a `resource` was configured, else `OAuthConfigError` reaches Express' error handler.
+ *
+ * @example
+ * ```ts
+ * app.use("/api", expressBearerAuth(verifier));
+ * app.get("/api/me", (req, res) => res.json({ user: (req as AuthedRequest).auth.sub }));
+ * ```
+ */
 export function expressBearerAuth(
 	source: AuthSource,
 	opts: OAuthBearerOptions = {},
@@ -26,7 +40,13 @@ export function expressBearerAuth(
 	return nodeBearerAuth(source, opts);
 }
 
-/** Serves `${basePath}/login|callback|logout`; other requests fall through. */
+/**
+ * Express middleware that serves the sign-in routes `${basePath}/login`, `/callback` and
+ * `/logout` for an OAuth client; every other request calls `next()`. `basePath` comes from the
+ * client's `redirectUri`. Mount it with `app.use(expressOAuthClient(oauth.client))`. Throws
+ * `OAuthConfigError` when called if `redirectUri` does not end in `/callback` or an explicit
+ * `opts.basePath` disagrees with it.
+ */
 export function expressOAuthClient(
 	client: OAuthClient,
 	opts?: OAuthRouteOptions,
@@ -34,7 +54,10 @@ export function expressOAuthClient(
 	return nodeOAuthClient(client, opts);
 }
 
-/** Serves the document at the path of its `client_id`; other requests fall through. */
+/**
+ * Express middleware that serves a `createClientMetadataDocument` result at the path of its
+ * `client_id` (GET/HEAD); other requests call `next()`.
+ */
 export function expressClientMetadata(
 	doc: ClientMetadataDocument,
 ): RequestHandler {

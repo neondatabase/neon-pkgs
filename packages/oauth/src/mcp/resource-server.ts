@@ -9,16 +9,20 @@ import {
 import { OAuthConfigError } from "../verify/errors";
 import type { AuthResult, Verifier } from "../verify/verifier";
 
+/** Settings for the authentication of one MCP server, as taken by `oauth.mcp()` and (with the verification options) `createMcpAuth`. */
 export interface McpOptions {
-	/** Public URL of the MCP endpoint, e.g. `https://host/mcp`. Clients send it as `resource`; it becomes the token `aud`. */
+	/** Public URL of the MCP endpoint, e.g. `https://host/mcp`. Clients send it as `resource`; it becomes the token `aud`. Must be an absolute URL. */
 	resource: string;
-	/** Scopes advertised as `scopes_supported` in the metadata document. */
+	/** Scopes advertised as `scopes_supported` in the protected-resource metadata document. */
 	scopesSupported?: string[];
 }
 
 /**
- * Maps a verified result to the MCP SDK's `AuthInfo`; claims are kept under `extra.claims`.
- * The SDK requires `clientId` to be a string, so a token without a `client_id` claim maps to `""`.
+ * Maps a verified `AuthResult` to the MCP SDK's `AuthInfo`, which the SDK transport takes as
+ * `transport.handleRequest(req, { authInfo })`; claims are kept under `extra.claims`. The MCP
+ * adapters already do this and expose it as `authInfo`; call it yourself only when you take an
+ * `AuthResult` from `authenticate` or `withMcpAuth`. The SDK requires `clientId` to be a string,
+ * so a token without a `client_id` claim maps to `""`.
  */
 export function toAuthInfo(result: AuthResult): AuthInfo {
 	const [audience] = result.audience;
@@ -33,6 +37,20 @@ export function toAuthInfo(result: AuthResult): AuthInfo {
 	};
 }
 
+/**
+ * The authentication helper for one MCP server, returned by `createMcpAuth` and `oauth.mcp()`.
+ * It is not an MCP server: it verifies tokens bound to the MCP `resource` and serves the
+ * RFC 9728 protected-resource metadata that MCP clients use to find the authorization server. Hand it
+ * to an MCP adapter (`honoMcp`, `expressMcp`, `nodeMcp`, `withMcpAuth`, ...) or to `authenticate`.
+ *
+ * Members: `issuer`; `resource` (the audience); `resourceMetadataUrl` (put in 401/403 challenges);
+ * `metadataPaths` (the paths the metadata is served on: path-inserted, plus the bare well-known
+ * fallback); `verifyAccessToken(token)` (against `resource`; a bad token is
+ * `{ ok: false, reason: "invalid_token", code }`, an outage throws `AuthServerUnavailableError`);
+ * `requireBearerAuth(opts?)` (a `BearerGuard` whose challenges carry `resource_metadata`);
+ * `protectedResourceMetadata()` (the metadata body); `handleMetadataRequest(request)` (same as
+ * `routeMcpMetadata`); and `toAuthInfo(auth)`.
+ */
 export type McpResourceServer = ReturnType<typeof createMcp>;
 
 const WELL_KNOWN_BARE = "/.well-known/oauth-protected-resource";
@@ -40,6 +58,10 @@ const WELL_KNOWN_BARE = "/.well-known/oauth-protected-resource";
 // Browser-based MCP clients fetch the metadata cross-origin before they have a token.
 const CORS = { "access-control-allow-origin": "*" };
 
+/**
+ * Builds the `McpResourceServer` on a shared verifier. Internal: use `createMcpAuth`
+ * (`@neon/oauth/mcp`) or `oauth.mcp()` (`@neon/oauth`).
+ */
 export function createMcp(
 	verifier: Verifier,
 	{ resource, scopesSupported }: McpOptions,
@@ -106,7 +128,21 @@ export function createMcp(
 	};
 }
 
-/** GET/OPTIONS on the RFC 9728 metadata paths; `undefined` for anything else. */
+/**
+ * Serves the RFC 9728 protected-resource metadata document and its CORS preflight: a `Response`
+ * for GET/OPTIONS on the metadata paths (path-inserted and bare, unauthenticated by design),
+ * `undefined` for any other request so the caller keeps routing. Use it when building your own
+ * MCP adapter or fetch handler; the built-in MCP adapters already call it.
+ *
+ * @example
+ * ```ts
+ * export default {
+ *   async fetch(request: Request) {
+ *     return routeMcpMetadata(auth, request) ?? new Response("Not found", { status: 404 });
+ *   },
+ * };
+ * ```
+ */
 export function routeMcpMetadata(
 	mcp: McpResourceServer,
 	request: Request,
@@ -114,9 +150,9 @@ export function routeMcpMetadata(
 	return mcp.handleMetadataRequest(request);
 }
 
-/** Streamable HTTP methods the MCP endpoint is guarded on. */
+/** The Streamable HTTP methods (`POST`, `GET`, `DELETE`) the MCP adapters guard on the MCP endpoint. For building your own MCP adapter. */
 export const MCP_METHODS = ["POST", "GET", "DELETE"] as const;
 
-/** The MCP endpoint path: `path` if given, else the path of the resource URL. */
+/** The path of the MCP endpoint: `path` if given, else the path of the server's `resource` URL. For building your own MCP adapter. */
 export const mcpPath = (mcp: McpResourceServer, path?: string): string =>
 	path ?? new URL(mcp.resource).pathname;

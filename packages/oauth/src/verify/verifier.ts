@@ -14,6 +14,7 @@ import {
 	OAuthConfigError,
 } from "./errors";
 
+/** Options for verifying Neon Auth access tokens; shared by `createVerifier`, `createOAuth` and `createMcpAuth`. */
 export interface VerifierOptions {
 	/** The Neon Auth URL, which is the OAuth issuer, e.g. `https://<host>/neondb/auth`. Matched exactly against token `iss`. */
 	baseUrl: string;
@@ -24,7 +25,7 @@ export interface VerifierOptions {
 	resource?: string;
 	/** Accepted signature algorithms. Defaults to `['EdDSA']`; pinned so a token cannot pick its own (alg confusion). */
 	algorithms?: string[];
-	/** Seconds of clock skew tolerated on `exp`/`nbf`. */
+	/** Seconds of clock skew tolerated on `exp`/`nbf`. Defaults to none. */
 	clockTolerance?: number;
 	discovery?: {
 		/** How long a discovery document is trusted before it is re-fetched. Default 1 hour. */
@@ -32,7 +33,7 @@ export interface VerifierOptions {
 		/** How long a failed discovery attempt is remembered, so an outage is not hammered. Default 5 seconds. */
 		failureBackoffMs?: number;
 	};
-	/** Passed to jose's `createRemoteJWKSet`. */
+	/** Tuning for the remote key set, passed to jose's `createRemoteJWKSet`; jose's defaults apply when omitted. */
 	jwks?: {
 		cooldownDuration?: number;
 		cacheMaxAge?: number;
@@ -40,15 +41,21 @@ export interface VerifierOptions {
 	};
 }
 
+/** The authorization server's discovery document (RFC 8414 / OpenID Connect); other standard fields are kept as-is. */
 export interface AuthServerMetadata {
+	/** Always equal to the configured issuer: a document claiming another issuer is rejected. */
 	issuer: string;
+	/** Where the signing keys are fetched from. */
 	jwks_uri: string;
 	/** Whether the server fetches Client ID Metadata Documents, i.e. accepts an https URL as `client_id`. */
 	client_id_metadata_document_supported?: boolean;
 	[key: string]: unknown;
 }
 
-/** Verification outcome. A bad token is a result; an unreachable server throws `AuthServerUnavailableError`. */
+/**
+ * Verification outcome. A bad token is a result (`code` says why, `message` is safe to show in a
+ * 401 body); an unreachable server throws `AuthServerUnavailableError` instead.
+ */
 export type VerifyResult =
 	| { ok: true; auth: AuthResult }
 	| {
@@ -58,6 +65,7 @@ export type VerifyResult =
 			message: string;
 	  };
 
+/** A verified access token, as handed to your handlers. */
 export interface AuthResult {
 	/** The raw bearer token, for forwarding or for the MCP SDK's `AuthInfo`. */
 	token: string;
@@ -65,10 +73,13 @@ export interface AuthResult {
 	sub: string;
 	/** The OAuth client the token was issued to; absent when the token has no `client_id` claim. */
 	clientId?: string;
+	/** The space-separated `scope` claim, split; empty when the token has none. */
 	scopes: string[];
+	/** The `aud` claim as an array. */
 	audience: string[];
 	/** Seconds since epoch. */
 	expiresAt?: number;
+	/** The full verified JWT payload, for custom claims. */
 	claims: JWTPayload;
 }
 
@@ -78,6 +89,32 @@ const DISCOVERY_PATHS = [
 	"/.well-known/openid-configuration",
 ];
 
+/**
+ * Creates a token verifier for the Neon Auth issuer at `baseUrl`. Use it for an API that only
+ * accepts tokens and never signs users in: it depends on `jose` alone and never loads the sign-in
+ * client. Pass the result to any framework guard (`honoBearerAuth`, `expressBearerAuth`,
+ * `withAuth`, `nodeBearerAuth`) or call `requireBearerAuth()` / `verifyAccessToken()` directly.
+ * Use `createOAuth` when the same app also signs users in, and `createMcpAuth` for an MCP server.
+ *
+ * The verifier has `issuer`, `getDiscovery()` (cached, single-flight), `verifyAccessToken(token, audience)`
+ * (a bad token is `{ ok: false, reason: "invalid_token", code }`; an outage throws
+ * `AuthServerUnavailableError`) and `requireBearerAuth(options?)`, which builds a `BearerGuard`
+ * and throws `OAuthConfigError` when neither `options.audience` nor `resource` is set.
+ *
+ * Throws `OAuthConfigError` when `baseUrl` is missing or not an absolute URL.
+ *
+ * @example
+ * ```ts
+ * import { createVerifier } from "@neon/oauth/verify";
+ * import { honoBearerAuth } from "@neon/oauth/hono";
+ *
+ * const verifier = createVerifier({
+ *   baseUrl: process.env.NEON_AUTH_BASE_URL!,
+ *   resource: "https://api.example.com",
+ * });
+ * app.use("/api/*", honoBearerAuth(verifier));
+ * ```
+ */
 export function createVerifier(options: VerifierOptions) {
 	const baseUrl = options?.baseUrl;
 	if (typeof baseUrl !== "string" || baseUrl === "") {
@@ -258,6 +295,7 @@ export function createVerifier(options: VerifierOptions) {
 	return verifier;
 }
 
+/** The object `createVerifier` returns. */
 export type Verifier = ReturnType<typeof createVerifier>;
 
 function translateVerifyError(err: unknown): Error {

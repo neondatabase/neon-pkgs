@@ -12,13 +12,29 @@ npm install @neon/oauth
 
 Requires Node.js 20.19+. The sign-in client's cookie encryption uses `node:crypto`, so **it does not run on the Edge runtime** (including Next.js `runtime = "edge"`, and Cloudflare Workers without Node compatibility). Token verification (`@neon/oauth/verify`) and MCP protection (`@neon/oauth/mcp`) only need `jose` and `fetch`.
 
+## Contents
+
+- [Choose your setup](#choose-your-setup)
+- [Sign users in and protect an API](#sign-users-in-and-protect-an-api)
+  - [Sign in](#sign-in)
+  - [Call an API as the user](#call-an-api-as-the-user)
+  - [Protect an API](#protect-an-api)
+- [Protect an API without signing users in](#protect-an-api-without-signing-users-in)
+- [Protect an MCP server](#protect-an-mcp-server)
+- [Client ID Metadata Documents (recommended for MCP / public clients)](#client-id-metadata-documents-recommended-for-mcp--public-clients)
+- [Framework adapters](#framework-adapters)
+- [Errors and results](#errors-and-results)
+- [Neon Auth notes](#neon-auth-notes)
+- [Develop](#develop)
+- [Appendix: entry points](#appendix-entry-points)
+
 ## Choose your setup
 
 | You are building... | Start with | Import from |
 |---|---|---|
 | An app that **signs users in** | `createOAuth()` | `@neon/oauth` |
 | An **API that accepts tokens** and never signs anyone in | `createVerifier()` (works with every framework guard, see [Protect an API without signing users in](#protect-an-api-without-signing-users-in)) | `@neon/oauth/verify` |
-| An **MCP server** | `createMcpAuth()` | `@neon/oauth/mcp` |
+| Authentication for an **MCP server** | `createMcpAuth()` | `@neon/oauth/mcp` |
 | **Several** of the above in one app | one `createOAuth()` instance; its `client`, `requireBearerAuth()` and `mcp()` share discovery and key caches | `@neon/oauth` |
 
 API-only and MCP-only servers import the specialized entry points, which depend on [`jose`](https://github.com/panva/jose) alone and never load `openid-client`.
@@ -170,36 +186,38 @@ app.get("/api/things", honoBearerAuth(verifier, { requiredScopes: ["read"] }), (
 
 ## Protect an MCP server
 
+`createMcpAuth()` does not create an MCP server. It creates the authentication helper for the MCP server you already have (for example one built with `@modelcontextprotocol/sdk`): token verification bound to the MCP endpoint URL, plus the protected-resource metadata MCP clients use to find the authorization server. An adapter such as `honoMcp` is the middleware that serves that metadata and guards the MCP endpoint with it.
+
 ```ts
 import { Hono } from "hono";
 import { createMcpAuth } from "@neon/oauth/mcp";
 import { honoMcp, type McpAuthVariables } from "@neon/oauth/mcp/hono";
 
-const mcp = createMcpAuth({
+const auth = createMcpAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
   resource: "http://localhost:3000/mcp", // the MCP endpoint URL; becomes the token's `aud`
 });
 
 const app = new Hono<McpAuthVariables>();
 // Serves /.well-known/oauth-protected-resource/mcp (+ bare fallback, CORS) and guards POST/GET/DELETE /mcp.
-app.use(honoMcp(mcp));
+app.use(honoMcp(auth));
 app.post("/mcp", (c) => transport.handleRequest(c.req.raw, { authInfo: c.get("authInfo") }));
 ```
 
 `resource` is the audience. 401/403 challenges include `resource_metadata` pointing at the path-inserted RFC 9728 metadata URL. `scopesSupported` adds `scopes_supported` to the metadata document. Verification options (`algorithms`, `clockTolerance`, `discovery`, `jwks`) are accepted alongside.
 
-In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP SDK's `AuthInfo`. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(mcp)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(mcp), handler)`), which types the handler on its own.
+In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP SDK's `AuthInfo`. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(auth)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(auth), handler)`), which types the handler on its own.
 
-Express: `app.use(expressMcp(mcp))` before `express.json()` (the transport must read the raw body), then `(req as AuthedRequest).auth` in the handler.
+Express: `app.use(expressMcp(auth))` before `express.json()` (the transport must read the raw body), then `(req as AuthedRequest).auth` in the handler.
 
 Next.js App Router:
 
 ```ts
 // app/.well-known/oauth-protected-resource/[[...path]]/route.ts
-export const { GET, OPTIONS } = createMetadataHandlers(mcp);
+export const { GET, OPTIONS } = createMetadataHandlers(auth);
 
 // app/mcp/route.ts
-export const POST = withMcpAuth(mcp, (req, auth) => handle(req, mcp.toAuthInfo(auth)));
+export const POST = withMcpAuth(auth, (req, authResult) => handle(req, auth.toAuthInfo(authResult)));
 ```
 
 `createMcpAuth(opts)` is `createOAuth({ baseUrl, ... }).mcp({ resource, scopesSupported })` without the sign-in client. If the same app also signs users in or guards other APIs, call `oauth.mcp({ resource })` on your existing `oauth` instead so everything shares one discovery cache.
