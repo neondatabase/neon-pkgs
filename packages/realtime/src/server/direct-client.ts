@@ -87,15 +87,13 @@ export class DirectLiveQueryClient {
 			this.assertOpen();
 			const webSocketFactory: WebSocketFactory = (url, protocols) =>
 				new NodeWebSocket(url, protocols) as WebSocketLike;
-			const client = module.createRealtimeClientInternal(
-				{
-					url: this.options.url,
-					parsers: this.options.parsers,
-					logLevel: this.options.logLevel,
-					logger: this.options.logger,
-				},
+			const client = module.createRealtimeClientInternal({
+				url: this.options.url,
+				parsers: this.options.parsers,
+				logLevel: this.options.logLevel,
+				logger: this.options.logger,
 				webSocketFactory,
-			);
+			});
 			this.client = client;
 			return client;
 		});

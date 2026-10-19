@@ -44,6 +44,13 @@ export type {
 	RealtimeLogLevel,
 } from "./types.js";
 
+type RealtimeClientImplOptions = Omit<
+	RealtimeClientOptions,
+	"webSocketFactory"
+> & {
+	readonly webSocketFactory?: WebSocketFactory;
+};
+
 class RealtimeClientImpl implements RealtimeClient {
 	private readonly coordinator: ConnectionCoordinator;
 	private readonly handles = new Map<
@@ -54,15 +61,12 @@ class RealtimeClientImpl implements RealtimeClient {
 	private readonly parsers: PostgreSQLParserRegistry;
 	private readonly events: ClientEventSink;
 
-	constructor(
-		options: RealtimeClientOptions,
-		webSocketFactory?: WebSocketFactory,
-	) {
+	constructor(options: RealtimeClientImplOptions) {
 		this.events = createClientEventSink(options);
 		this.coordinator = new ConnectionCoordinator({
 			url: options.url,
 			events: this.events,
-			webSocketFactory: webSocketFactory ?? options.webSocketFactory,
+			webSocketFactory: options.webSocketFactory,
 		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
@@ -186,8 +190,9 @@ export function createRealtimeClient(
 
 /** @internal Node direct subscriptions supply a terminable WebSocket. */
 export function createRealtimeClientInternal(
-	options: RealtimeClientOptions,
-	webSocketFactory: WebSocketFactory,
+	options: RealtimeClientImplOptions & {
+		readonly webSocketFactory: WebSocketFactory;
+	},
 ): RealtimeClient {
-	return new RealtimeClientImpl(options, webSocketFactory);
+	return new RealtimeClientImpl(options);
 }
