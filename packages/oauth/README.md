@@ -48,7 +48,7 @@ export const oauth = createOAuth({
 | `baseUrl` | Required, absolute URL. |
 | `resource` | The API's identifier. `requireBearerAuth()` verifies against it unless you pass an `audience`. Also accepted by `createVerifier`. |
 | `cookies` | `{ secret, name = "neon_auth_session", maxAgeSeconds = 7d, domain, sameSite = "lax" }`. `sameSite` and `domain` apply to the session cookie; the short-lived login cookie is always Lax. |
-| `scopes` | Default `["openid", "profile", "email"]`. |
+| `scopes` | Default `["openid", "profile", "email"]`. `openid` is always requested (added if omitted) because sign-in needs the ID token. |
 | `algorithms`, `clockTolerance` | Token verification. Algorithms default to `["EdDSA"]`. |
 | `discovery` | `{ ttlMs = 1h, failureBackoffMs = 5s }`. |
 | `jwks` | Passed to jose's `createRemoteJWKSet`. |

@@ -271,6 +271,20 @@ describe("userinfo is required to finish a sign-in", () => {
 		);
 	});
 
+	it.each([
+		[["email"], "openid email"],
+		[["email", "openid"], "openid email"],
+	])("scopes %j always request openid and sign-in succeeds", async (scopes, expected) => {
+		const { client } = make({ scopes });
+		const { url } = await client.startLogin();
+		expect(url.searchParams.get("scope")).toBe(expected);
+		fake.setUserinfoClaims({ sub: "sub-1", email: "a@b.test" });
+		fake.setIdTokenSub("sub-1");
+		expect(await client.finishLogin(callbackUrl, attempt)).toMatchObject({
+			ok: true,
+		});
+	});
+
 	it("userinfo sub that differs from the ID token sub is rejected", async () => {
 		fake.setUserinfoClaims({ sub: "someone-else", email: "x@y.test" });
 		expect(await make().client.finishLogin(callbackUrl, attempt)).toEqual({

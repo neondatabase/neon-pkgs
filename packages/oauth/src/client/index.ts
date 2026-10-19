@@ -206,7 +206,9 @@ export function createOAuthClient(
 	}
 	const cookies = options.cookies as CookieOptions;
 	const cookieSecret = cookies.secret;
-	const scopes = options.scopes ?? ["openid", "profile", "email"];
+	// finishLogin needs the ID token, which the server only issues for the openid scope.
+	const requested = options.scopes ?? ["profile", "email"];
+	const scopes = ["openid", ...requested.filter((s) => s !== "openid")];
 	const sessionCookie = cookies.name ?? "neon_auth_session";
 	const txCookie = `${sessionCookie}_tx`;
 	const sessionMaxAge = cookies.maxAgeSeconds ?? 7 * 86_400;
@@ -331,7 +333,7 @@ export function createOAuthClient(
 			tokens = await oidc.authorizationCodeGrant(
 				config,
 				callbackUrl,
-				// The access token is the product here; don't require an ID token.
+				// The library verifies an ID token when present; a missing one is mapped to token_rejected below instead of a library error.
 				{
 					pkceCodeVerifier: attempt.codeVerifier,
 					expectedState: attempt.state,
