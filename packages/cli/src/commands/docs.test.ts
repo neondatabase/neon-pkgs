@@ -6,9 +6,13 @@ import {
 import type { AddressInfo } from "node:net";
 import { describe, expect } from "vitest";
 import YAML from "yaml";
-
+import pkg from "../pkg.js";
 import { test } from "../test_utils/fixtures.js";
-import { DEFAULT_SITE_SEARCH_URL, resolveSiteSearchUrl } from "./docs.js";
+import {
+	DEFAULT_SITE_SEARCH_URL,
+	resolveSiteSearchUrl,
+	siteSearchHeaders,
+} from "./docs.js";
 
 const DOCS_ENV = { CI: "1" };
 
@@ -382,5 +386,75 @@ describe("neon docs search", () => {
 			env: DOCS_ENV,
 		});
 		expect(`${stdout}${stderr}`).toMatch(/docs search <query>/);
+	});
+});
+
+describe("siteSearchHeaders", () => {
+	test("tags the CLI with its version and the coding agent", () => {
+		expect(
+			siteSearchHeaders({
+				analytics: true,
+				agent: "claude-code",
+				version: "8.10.0",
+			}),
+		).toEqual({
+			"Content-Type": "application/json",
+			"User-Agent": "neon/8.10.0",
+			"x-neon-source": "cli",
+			"x-neon-client": "claude-code",
+		});
+	});
+
+	test("omits the client without an agent and opts out without analytics", () => {
+		expect(
+			siteSearchHeaders({
+				analytics: false,
+				agent: undefined,
+				version: "8.10.0",
+			}),
+		).toEqual({
+			"Content-Type": "application/json",
+			"User-Agent": "neon/8.10.0",
+			"x-neon-source": "cli",
+			"x-neon-analytics": "off",
+		});
+	});
+});
+
+describe("neon docs search caller headers", () => {
+	test("sends source, version, agent, and the analytics opt-out", async ({
+		testCliCommand,
+	}) => {
+		const seen: Array<Record<string, string | string[] | undefined>> = [];
+		await withSearchServer(
+			(req, res) => {
+				seen.push({ ...req.headers });
+				res.statusCode = 200;
+				res.setHeader("Content-Type", "application/json");
+				res.end(JSON.stringify({ hits: [] }));
+			},
+			async (url) => {
+				await testCliCommand(["docs", "search", "lsn", "--url", url], {
+					apiKey: false,
+					output: "json",
+					snapshot: false,
+					env: { ...DOCS_ENV, CLAUDE_CODE_CHILD_SESSION: "1" },
+				});
+				await testCliCommand(["docs", "search", "lsn", "--url", url], {
+					apiKey: false,
+					output: "json",
+					snapshot: false,
+					env: DOCS_ENV,
+				});
+			},
+		);
+		expect(seen).toHaveLength(2);
+		for (const headers of seen) {
+			expect(headers["x-neon-source"]).toBe("cli");
+			expect(headers["user-agent"]).toBe(`neon/${pkg.version}`);
+			expect(headers["x-neon-analytics"]).toBe("off");
+		}
+		expect(seen[0]?.["x-neon-client"]).toBe("claude-code");
+		expect(seen[1]?.["x-neon-client"]).toBeUndefined();
 	});
 });

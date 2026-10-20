@@ -1,6 +1,8 @@
 import type yargs from "yargs";
 
+import { getCliAgent } from "../env.js";
 import { isNetworkError } from "../errors.js";
+import pkg from "../pkg.js";
 import type { CommonProps } from "../types.js";
 import { single } from "../utils/flags.js";
 import { writer } from "../writer.js";
@@ -35,6 +37,7 @@ export type DocsSearchHit = {
 };
 
 type DocsSearchProps = CommonProps & {
+	analytics: boolean;
 	query: string;
 	category?: SiteSearchCategory[];
 	limit: number;
@@ -130,6 +133,11 @@ const search = async (props: DocsSearchProps) => {
 		query,
 		limit: props.limit,
 		categories: props.category ? [...new Set(props.category)] : undefined,
+		headers: siteSearchHeaders({
+			analytics: props.analytics,
+			agent: getCliAgent(process.env),
+			version: pkg.version,
+		}),
 	});
 	writer(props).end(hits, {
 		fields: ["title", "heading", "url"],
@@ -146,6 +154,23 @@ function sectionOf(hit: DocsSearchHit): string {
 	return (parts[0] === hit.title ? parts.slice(1) : parts).join(" > ");
 }
 
+// neon-agent records each search with its caller; --no-analytics asks it to record nothing.
+export function siteSearchHeaders(opts: {
+	analytics: boolean;
+	agent: string | undefined;
+	version: string;
+}): Record<string, string> {
+	return {
+		"Content-Type": "application/json",
+		"User-Agent": `neon/${opts.version}`,
+		"x-neon-source": "cli",
+		...(opts.agent
+			? { "x-neon-client": encodeURIComponent(opts.agent) }
+			: {}),
+		...(opts.analytics ? {} : { "x-neon-analytics": "off" }),
+	};
+}
+
 function isTimeout(error: unknown): boolean {
 	return (
 		error instanceof Error &&
@@ -158,12 +183,13 @@ async function searchSite(opts: {
 	query: string;
 	limit: number;
 	categories?: SiteSearchCategory[];
+	headers: Record<string, string>;
 }): Promise<DocsSearchHit[]> {
 	const signal = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
 	try {
 		const response = await fetch(opts.url, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: opts.headers,
 			body: JSON.stringify({
 				query: opts.query,
 				limit: opts.limit,
