@@ -19,13 +19,13 @@
 // ---------------------------------------------------------------------------
 // Off by default. Only runs when:
 //
-//   - `LOAD_BALANCE_REAL=1` is set in the env (the CI job exports it).
+//   - `LOAD_BALANCE_REAL=1` is set in the env (no CI job sets it).
 //   - The runner is Linux (the fixture binds to 127.0.0.2 / 127.0.0.3,
 //     which works without alias setup on Linux only).
 //
-// This separation keeps the matrix portable on macOS/Windows. The CI
-// pipeline opts in explicitly via `LOAD_BALANCE_REAL=1` in a dedicated
-// `loadbalance-dns` job (see `.github/workflows/psql-conformance.yml`).
+// This separation keeps the matrix portable on macOS/Windows. The
+// `psql-conformance` job in .github/workflows/ci.yml does not set
+// `LOAD_BALANCE_REAL`, so this spec is skipped in CI and runs only when opted in.
 //
 // External infrastructure assumed:
 //
@@ -102,7 +102,7 @@ const loadWire = async (): Promise<WireModule> => {
 
 describe("tap/004_load_balance_dns_real (gate)", () => {
 	if (!LOAD_BALANCE_REAL) {
-		it.skip("skipped: LOAD_BALANCE_REAL != 1 (real-DNS spec only runs in the dedicated CI job)", () => {
+		it.skip("skipped: LOAD_BALANCE_REAL != 1 (real-DNS spec only runs when opted in)", () => {
 			/* unreachable */
 		});
 	} else if (!IS_LINUX) {
