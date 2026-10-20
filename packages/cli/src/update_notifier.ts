@@ -51,6 +51,7 @@ type UpdateNotifierEligibility = Pick<
 	isPackaged: boolean;
 	stderrIsTty: boolean;
 	stdoutIsTty: boolean;
+	succeeded: boolean;
 };
 
 type UpdateWorkerProcessOptions = {
@@ -306,6 +307,7 @@ export const shouldRunUpdateNotifier = ({
 	output,
 	stderrIsTty,
 	stdoutIsTty,
+	succeeded,
 }: UpdateNotifierEligibility): boolean =>
 	!runningInCi &&
 	!disabled &&
@@ -315,7 +317,8 @@ export const shouldRunUpdateNotifier = ({
 	stderrIsTty &&
 	commandPath.length > 0 &&
 	commandPath[0] !== "completion" &&
-	!isCurrentBranchProbe({ commandPath, currentBranch });
+	!isCurrentBranchProbe({ commandPath, currentBranch }) &&
+	succeeded;
 
 export const notifyIfUpdateAvailable = ({
 	commandPath,
@@ -334,6 +337,7 @@ export const notifyIfUpdateAvailable = ({
 			output,
 			stderrIsTty: process.stderr.isTTY === true,
 			stdoutIsTty: process.stdout.isTTY === true,
+			succeeded: (process.exitCode ?? 0) === 0,
 		})
 	) {
 		return;
