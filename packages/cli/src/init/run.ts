@@ -28,6 +28,12 @@ import {
 } from "../plugins/targets.js";
 import { hasNeonConfigFile, neonConfigFilename } from "../project.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
+import {
+	attachToolingContext,
+	classifyToolingError,
+	tagToolingStep,
+	toolingContextOf,
+} from "../tooling_error.js";
 import type { CommonProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
@@ -1228,6 +1234,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					...(planned !== undefined ? { services: planned } : {}),
 				});
 			} catch (error) {
+				if (!(error instanceof InitCancelled)) {
+					tagToolingStep(error, "config");
+				}
 				if (error instanceof ConfigInstallFailed) {
 					const failed = installFailedNext(
 						error.command,
@@ -1305,6 +1314,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				if (error instanceof InitCancelled) {
 					throw error;
 				}
+				tagToolingStep(error, "env_pull");
 				const failed = envPullFailedNext();
 				printInitDone(
 					formatInitDone({
@@ -1489,6 +1499,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			throw error;
 		}
 		outcome = "error";
+		funnel.failure = {
+			step: toolingContextOf(error)?.step ?? "other",
+			kind: classifyToolingError(error),
+		};
+		// Lets the `CLI Error` event be joined to this run's start and end events.
+		attachToolingContext(error, { initRunId: funnel.initRunId });
 		throw error;
 	} finally {
 		finishInitFunnel(funnel, outcome, analytics);

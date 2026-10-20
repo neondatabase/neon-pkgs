@@ -2014,6 +2014,161 @@ describe("init handler", () => {
 	});
 });
 
+describe("init funnel failures", () => {
+	test("the end event names the failed step and reason, and the error joins the run", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-funnel-fail-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		const { toolingContextOf } = await import("../tooling_error.js");
+		vi.mocked(trackEvent).mockClear();
+		const operations = makeOperations();
+		operations.installPlugins.mockRejectedValue(
+			new Error("EACCES: permission denied, open '/x/plugin.json'"),
+		);
+
+		const failure = await handler(
+			baseProps({
+				cwd,
+				operations,
+				yes: true,
+				link: false,
+				config: false,
+				analytics: true,
+				contextFile: join(cwd, ".neon"),
+				detectProjectAgents: () => ["cursor"],
+			}),
+		).catch((error: unknown) => error);
+
+		expect(failure).toBeInstanceOf(Error);
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end");
+		expect(end?.[1]).toEqual(
+			expect.objectContaining({
+				outcome: "error",
+				failed_step: "plugins",
+				error_kind: "permission_denied",
+			}),
+		);
+		expect(toolingContextOf(failure)?.initRunId).toBe(
+			(end?.[1] as { init_run_id: string }).init_run_id,
+		);
+	});
+
+	test("a failing config step is reported as config", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-funnel-config-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					link: false,
+					analytics: true,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents: () => ["cursor"],
+					initConfig: vi
+						.fn()
+						.mockRejectedValue(
+							new Error("EACCES: permission denied"),
+						),
+				}),
+			),
+		).rejects.toThrow(/EACCES/);
+
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end");
+		expect(end?.[1]).toEqual(
+			expect.objectContaining({
+				outcome: "error",
+				failed_step: "config",
+				error_kind: "permission_denied",
+			}),
+		);
+	});
+
+	test("a failing env pull is reported as env_pull", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-funnel-env-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const contextFile = join(cwd, ".neon");
+		writeFileSync(
+			contextFile,
+			`${JSON.stringify({ projectId: "proj-1", branch: "main" })}\n`,
+		);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					envPull: vi
+						.fn()
+						.mockRejectedValue(new Error("getaddrinfo ENOTFOUND")),
+					yes: true,
+					analytics: true,
+					contextFile,
+					detectProjectAgents: () => ["cursor"],
+				}),
+			),
+		).rejects.toThrow(/ENOTFOUND/);
+
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end");
+		expect(end?.[1]).toEqual(
+			expect.objectContaining({
+				outcome: "error",
+				failed_step: "env_pull",
+				error_kind: "network",
+			}),
+		);
+	});
+
+	test("a run that succeeds reports no failure", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-funnel-ok-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: makeOperations(),
+				yes: true,
+				link: false,
+				config: false,
+				analytics: true,
+				contextFile: join(cwd, ".neon"),
+				detectProjectAgents: () => ["cursor"],
+			}),
+		);
+
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end");
+		expect(end?.[1]).toEqual(
+			expect.objectContaining({
+				outcome: "success",
+				failed_step: null,
+				error_kind: null,
+			}),
+		);
+	});
+});
+
 describe("init CLI", () => {
 	cliTest("help describes the orchestrator", async ({ testCliCommand }) => {
 		const { stdout, stderr } = await testCliCommand(["init", "--help"], {

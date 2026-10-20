@@ -3,6 +3,7 @@ import { trackEvent } from "../analytics.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { NeonService } from "../neon_services.js";
 import pkg from "../pkg.js";
+import type { ToolingErrorKind, ToolingErrorStep } from "../tooling_error.js";
 import type { InitDetection } from "./detect.js";
 import type { InitAgentSetupChoice, InitMode } from "./mode.js";
 
@@ -24,6 +25,12 @@ export type InitFunnelLink =
 export type InitFunnelConfig = "created" | "existing" | "skipped";
 
 export type InitFunnelOutcome = "success" | "pending" | "error" | "aborted";
+
+/** Why a run ended in `error`: the step that failed (`other` when none could be named) and the reason. */
+export type InitFunnelFailure = {
+	step: ToolingErrorStep | "other";
+	kind: ToolingErrorKind;
+};
 
 export type InitFunnelStart = {
 	init_run_id: string;
@@ -47,6 +54,8 @@ export type InitFunnelEnd = {
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
 	outcome: InitFunnelOutcome;
+	failed_step: InitFunnelFailure["step"] | null;
+	error_kind: InitFunnelFailure["kind"] | null;
 };
 
 const FLAG_ALIASES: Readonly<Record<string, string>> = {
@@ -141,6 +150,7 @@ export const initEndProperties = (input: {
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
 	outcome: InitFunnelOutcome;
+	failure?: InitFunnelFailure | null;
 }): InitFunnelEnd => ({
 	init_run_id: input.initRunId,
 	cli_version: pkg.version,
@@ -151,6 +161,8 @@ export const initEndProperties = (input: {
 	config: input.config,
 	services: input.services,
 	outcome: input.outcome,
+	failed_step: input.failure?.step ?? null,
+	error_kind: input.failure?.kind ?? null,
 });
 
 export const emitInitStart = (properties: InitFunnelStart): void => {
@@ -169,6 +181,7 @@ export type InitFunnelState = {
 	link: InitFunnelLink | null;
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
+	failure: InitFunnelFailure | null;
 	ended: boolean;
 };
 
@@ -182,6 +195,7 @@ export const createInitFunnel = (
 	link: null,
 	config: null,
 	services: null,
+	failure: null,
 	ended: false,
 });
 
@@ -204,6 +218,7 @@ export const finishInitFunnel = (
 			config: state.config,
 			services: state.services,
 			outcome,
+			failure: outcome === "error" ? state.failure : null,
 		}),
 	);
 };

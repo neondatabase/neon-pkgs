@@ -22,6 +22,7 @@ import {
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
 import { CannotMintApiKeyError } from "../mcp/mint.js";
+import { tagToolingStep } from "../tooling_error.js";
 import type { CommonProps } from "../types.js";
 import {
 	AgentSelectionSkipped,
@@ -251,7 +252,10 @@ export const runToolingSteps = async (
 			}
 			completed.push(step.kind);
 		} catch (error) {
-			if (!(error instanceof AgentSelectionSkipped)) throw error;
+			if (!(error instanceof AgentSelectionSkipped)) {
+				tagToolingStep(error, step.kind);
+				throw error;
+			}
 		}
 	}
 	return completed;
