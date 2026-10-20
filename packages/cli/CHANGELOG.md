@@ -1,5 +1,15 @@
 # neon
 
+## 8.10.0
+
+### Minor Changes
+
+- f1b2376: Add `neon docs search <query>` to search neon.com (docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog) from the terminal, with `--category` and `--limit`. It needs no Neon login.
+
+### Patch Changes
+
+- f3596ca: `neon login --keyring` on Windows no longer fails after the browser step. OAuth sessions now store only the fields the CLI reads, which fits Windows Credential Manager's 1,280-character limit, and a credential that still doesn't fit fails before anything is written with a message that names the command to run instead.
+
 ## 8.9.0
 
 ### Minor Changes
