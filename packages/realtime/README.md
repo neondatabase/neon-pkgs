@@ -461,7 +461,8 @@ An upsert replaces an existing row without moving it. A `move` change contains
 immediately after its predecessor, or at the head when `afterRowId` is `null`.
 Apply contents first, then moves in their received order. Both identities must
 exist after applying contents. A moved predecessor is placed earlier in the
-batch. Moves carry no row payload.
+batch. Every ordered patch entrant must have its own move, including a new tail
+row. Moves carry no row payload.
 
 Raw consumers must handle all three `LiveQueryChange` variants explicitly:
 
@@ -478,11 +479,14 @@ for (const change of update.changes) {
 Raw updates contain complete committed batches, with public transport fragments
 reassembled. Stage and validate an entire batch before exposing its result.
 The core checks framing and program structure for raw consumers; it does not
-retain a second result to check that move rows and predecessors exist. An
-adapter preserving sequence owns those stateful checks. Core materialized
-subscriptions perform them before installing any target, including while
-replaying the baseline backlog. Application callback side effects are outside
-SDK rollback; callbacks across independent adapters are not a transaction.
+retain a second result to check move rows, predecessors, or entrant placement.
+An adapter preserving sequence owns those stateful checks after it has a
+baseline. Core materialized subscriptions validate Move programs against prior
+membership before installing any target, including while replaying the baseline
+backlog. A content-only batch does not reveal whether its query is ordered, so
+the core retains unordered keyed semantics for those batches. Application
+callback side effects are outside SDK rollback; callbacks across independent
+adapters are not a transaction.
 
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
 available immediately with status `connecting` until the first authoritative

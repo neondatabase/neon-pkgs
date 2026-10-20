@@ -1500,7 +1500,10 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
-	it("abandons a shared publication when a parser closes the client", async () => {
+	it.each([
+		false,
+		true,
+	])("abandons a shared publication when a parser closes the client: throws=%s", async (throws) => {
 		useFakeWebSocket();
 		const events: string[] = [];
 		const client = createRealtimeClient({
@@ -1510,6 +1513,7 @@ describe("RealtimeClient", () => {
 			parsers: defineParsers({
 				90000: (value) => {
 					client.close();
+					if (throws) throw new Error("after close");
 					return value;
 				},
 			}),
@@ -1570,6 +1574,7 @@ describe("RealtimeClient", () => {
 		await Promise.resolve();
 		expect(events).toContain("client_closed");
 		expect(events).not.toContain("connection_failed");
+		expect(events).not.toContain("connection_publication_committed");
 		expect(onUpdate).not.toHaveBeenCalled();
 		for (const subscription of subscriptions)
 			expect(subscription.getSnapshot()).toMatchObject({

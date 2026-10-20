@@ -113,7 +113,7 @@
         },
         {
           "type": "object",
-          "$comment": "Sequentially splice row_key immediately after after_row_key; null means head. Contents precede moves. Each moved key and final predecessor occurs at most once; a moved anchor must be placed earlier. Both keys must exist in the final result. Expose only at Commit.",
+          "$comment": "Sequentially splice row_key immediately after after_row_key; null means head. Contents precede moves. Every ordered patch entrant must have its own move, including a new tail row. Materialized programs containing moves validate entrants against prior membership; content-only programs do not reveal whether the query is ordered. Raw receivers validate structure without retaining membership. Each moved key and final predecessor occurs at most once; a moved anchor must be placed earlier. Both keys must exist in the final result. Expose only at Commit.",
           "required": ["op", "row_key", "after_row_key"],
           "properties": {
             "op": { "const": "move" },
