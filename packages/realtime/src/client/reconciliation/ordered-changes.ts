@@ -66,11 +66,30 @@ export function applyMaterializedChanges<Row>(
 	rows: Map<string, Row>,
 	changes: readonly LiveQueryChange<Row>[],
 ): Map<string, Row> {
+	const hasMoves = changes.some((change) => change.type === "move");
+	if (hasMoves) {
+		const moved = new Set(
+			changes.flatMap((change) =>
+				change.type === "move" ? [change.rowId] : [],
+			),
+		);
+		// Entrants need an explicit position; appending an unplaced key to the
+		// Map would silently give an invalid ordered program a tail position.
+		for (const change of changes) {
+			if (
+				change.type === "upsert" &&
+				!rows.has(change.rowId) &&
+				!moved.has(change.rowId)
+			) {
+				throw new ProtocolError("ordered entrant has no move");
+			}
+		}
+	}
 	for (const change of changes) {
 		if (change.type === "remove") rows.delete(change.rowId);
 		else if (change.type === "upsert") rows.set(change.rowId, change.row);
 	}
-	if (!changes.some((change) => change.type === "move")) return rows;
+	if (!hasMoves) return rows;
 
 	// A temporary linked order makes each splice constant-time. Build the
 	// resulting Map once, rather than searching and splicing an array per move.

@@ -270,6 +270,66 @@ describe("ordered production subscriptions", () => {
 		expect(rawUpdate).not.toHaveBeenCalled();
 	});
 
+	it("rejects an unplaced entrant in a later target before installing any target", () => {
+		const { reconciler, target: left } = setup([A, B, C, D, X]);
+		const raw = subscription(false);
+		const right = subscription();
+		add(reconciler, raw, "10");
+		add(reconciler, right, "11");
+		baseline(reconciler, [], "10");
+		baseline(reconciler, [A, B, C, D], "11");
+		const leftBefore = left.getSnapshot();
+		const rightBefore = right.getSnapshot();
+		const leftChange = vi.fn();
+		const rawUpdate = vi.fn();
+		left.onChange(leftChange);
+		raw.onUpdate(rawUpdate);
+		reconciler.accept({ type: "open", publication_id: "p" });
+		reconciler.accept({
+			...keyedResults("p", 0, "1", "1", [
+				upsert(X, "updated"),
+				move(D, null),
+			]),
+			targets: ["9", "10", "11"].map((live_id) => ({
+				live_id,
+				epoch: "1",
+				sequence: "1",
+			})),
+		});
+		expect(() => reconciler.accept(commit("p", 1))).toThrow(
+			"entrant has no move",
+		);
+		expect(left.getSnapshot()).toBe(leftBefore);
+		expect(right.getSnapshot()).toBe(rightBefore);
+		expect(leftChange).not.toHaveBeenCalled();
+		expect(rawUpdate).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		true,
+		false,
+	])("rejects malformed move order while awaiting a baseline: materialized=%s", (materialized) => {
+		const reconciler = new BaselineSyncPublicationReconciler();
+		const target = subscription(materialized);
+		add(reconciler, target);
+		const before = target.getSnapshot();
+		const onUpdate = vi.fn();
+		const onChange = vi.fn();
+		target.onUpdate(onUpdate);
+		if (materialized) target.onChange(onChange);
+		reconciler.accept(baselineSyncStart());
+		reconciler.accept(baselineSyncBatch(0, [row(A, "a"), row(B, "b")]));
+		expect(() =>
+			keyedPublication(reconciler, "bad", "1", "1", [
+				move(A, null),
+				upsert(B, "late"),
+			]),
+		).toThrow("contents follow moves");
+		expect(target.getSnapshot()).toBe(before);
+		expect(onUpdate).not.toHaveBeenCalled();
+		expect(onChange).not.toHaveBeenCalled();
+	});
+
 	it("keeps content-only updates private when a later target's move fails", () => {
 		const { reconciler, target: left } = setup();
 		const right = subscription();
@@ -382,6 +442,43 @@ describe("ordered production subscriptions", () => {
 		);
 		expect(target.getSnapshot()).toBe(before);
 		expect(onUpdate).not.toHaveBeenCalled();
+	});
+
+	it("rejects an unplaced entrant in replay without exposing the baseline or earlier batches", () => {
+		const reconciler = new BaselineSyncPublicationReconciler();
+		const target = subscription(true, [{ value: "retained" }]);
+		add(reconciler, target);
+		const before = target.getSnapshot();
+		const onUpdate = vi.fn();
+		target.onUpdate(onUpdate);
+		reconciler.accept(baselineSyncStart());
+		reconciler.accept(baselineSyncBatch(0, [row(A, "a"), row(B, "b")]));
+		keyedPublication(reconciler, "p1", "1", "1", [upsert(A, "updated")]);
+		keyedPublication(reconciler, "p2", "1", "2", [
+			upsert(X, "unplaced"),
+			move(B, null),
+		]);
+		expect(() => reconciler.accept(baselineSyncEnd(1))).toThrow(
+			"entrant has no move",
+		);
+		expect(target.getSnapshot()).toBe(before);
+		expect(onUpdate).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		true,
+		false,
+	])("ignores a prepared update after closing: closeBeforePrepare=%s", (closeBeforePrepare) => {
+		const { target } = setup();
+		if (closeBeforePrepare) target.markClosed();
+		const install = target.prepare(undefined, [
+			{ changes: [upsert(A, "discarded")], txids: [] },
+		]);
+		if (!closeBeforePrepare) target.markClosed();
+		const before = target.getSnapshot();
+		install();
+		expect(target.getSnapshot()).toBe(before);
+		expect(values(target)).toEqual(["a", "b", "c", "d"]);
 	});
 
 	it("discards an old epoch's buffered moves when reset requires a new baseline", () => {

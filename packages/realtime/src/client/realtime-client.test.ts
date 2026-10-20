@@ -1421,6 +1421,163 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("discards the baseline and complete replay backlog when a replay value fails to parse", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+			parsers: defineParsers({
+				90000: (value) => {
+					if (value === "bad") throw new Error("bad value");
+					return value;
+				},
+			}),
+		});
+		const initialData = [{ id: 7, title: "retained" }];
+		const subscription = client.subscribe(query("replay parser"), {
+			initialData,
+		});
+		const onUpdate = vi.fn();
+		subscription.onUpdate(onUpdate);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const request = defined(
+			socket.sent.find((message) => message.type === "subscribe"),
+		);
+		socket.receive({
+			type: "subscribed",
+			request_id: request.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [
+				{
+					name: "title",
+					type_oid: 90000,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		const target = {
+			live_id: "41",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+		};
+		socket.receive({
+			type: "baseline_sync_start",
+			...target,
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		socket.receive({
+			type: "baseline_sync_batch",
+			...target,
+			index: 0,
+			rows: [{ row_key: ROW_KEY, values: ["baseline"] }],
+		});
+		publication(
+			socket,
+			[{ op: "upsert", row_key: ROW_KEY, values: ["bad"] }],
+			["42"],
+		);
+		expect(subscription.getSnapshot().data).toEqual(initialData);
+		socket.receive({
+			type: "baseline_sync_end",
+			...target,
+			batch_count: 1,
+		});
+		await Promise.resolve();
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "error",
+			data: initialData,
+			error: { code: "parser_error" },
+		});
+		expect(onUpdate).not.toHaveBeenCalled();
+		expect(events).not.toContain("subscription_baseline_sync_completed");
+		client.close();
+	});
+
+	it("abandons a shared publication when a parser closes the client", async () => {
+		useFakeWebSocket();
+		const events: string[] = [];
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "debug",
+			logger: (entry) => events.push(entry.event),
+			parsers: defineParsers({
+				90000: (value) => {
+					client.close();
+					return value;
+				},
+			}),
+		});
+		const subscriptions = [
+			client.subscribe(query("close parser")),
+			client.subscribe(query("sibling")),
+		];
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		const requests = socket.sent.filter(
+			(message) => message.type === "subscribe",
+		);
+		for (const [index, request] of requests.entries()) {
+			const liveId = String(41 + index);
+			socket.receive({
+				type: "subscribed",
+				request_id: request.request_id,
+				live_id: liveId,
+				epoch: "1",
+				first_sequence: "1",
+				columns: [
+					{
+						name: "value",
+						type_oid: 90000,
+						typmod: -1,
+						codec: "pg_text",
+					},
+				],
+			});
+			emptySnapshot(socket, liveId);
+		}
+		await Promise.resolve();
+		events.length = 0;
+		const onUpdate = vi.fn();
+		for (const subscription of subscriptions)
+			subscription.onUpdate(onUpdate);
+		socket.receive({ type: "open", publication_id: "close" });
+		socket.receive({
+			type: "keyed_results",
+			publication_id: "close",
+			index: 0,
+			txids: ["42"],
+			targets: ["41", "42"].map((live_id) => ({
+				live_id,
+				epoch: "1",
+				sequence: "1",
+			})),
+			changes: [{ op: "upsert", row_key: ROW_KEY, values: ["close"] }],
+		});
+		socket.receive({
+			type: "commit",
+			publication_id: "close",
+			body_count: 1,
+			frontier: { lsn: "0/10" },
+		});
+		await Promise.resolve();
+		expect(events).toContain("client_closed");
+		expect(events).not.toContain("connection_failed");
+		expect(onUpdate).not.toHaveBeenCalled();
+		for (const subscription of subscriptions)
+			expect(subscription.getSnapshot()).toMatchObject({
+				status: "closed",
+				data: [],
+			});
+	});
+
 	it("does not partially apply a batch when a later value fails to parse", () => {
 		useFakeWebSocket();
 		const client = createRealtimeClient({

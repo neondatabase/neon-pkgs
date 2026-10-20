@@ -477,8 +477,11 @@ export class BaselineSyncPublicationReconciler {
 				const install = state.live
 					? state.target.prepare(undefined, [batch])
 					: undefined;
+				// Application parsers may close the client and clear this publication.
+				if (this.publication !== publication) return;
 				committed.push({ state, staged, batch, install });
 			} catch (error) {
+				if (this.publication !== publication) return;
 				if (error instanceof ProtocolError) throw error;
 				committed.push({ state, staged, batch, failure: { error } });
 			}
