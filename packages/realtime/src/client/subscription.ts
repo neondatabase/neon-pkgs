@@ -206,15 +206,11 @@ export class Subscription<Row>
 		if (this.closed) return () => {};
 		const reset =
 			wireRows === undefined ? undefined : this.decodeReset(wireRows);
-		let candidate = this.rows
-			? reset
-				? new Map(reset.map(({ rowId, row }) => [rowId, row]))
-				: new Map(this.rows)
-			: undefined;
 		const decodedBatches = new Map<
 			readonly WireChange[],
 			readonly LiveQueryChange<Row>[]
 		>();
+		let hasMoves = false;
 		for (const batch of batches) {
 			const changes = Object.freeze(
 				batch.changes.map((change): LiveQueryChange<Row> => {
@@ -225,6 +221,7 @@ export class Subscription<Row>
 						});
 					}
 					if (change.op === "move") {
+						hasMoves = true;
 						return Object.freeze({
 							type: "move",
 							rowId: change.row_key,
@@ -242,18 +239,38 @@ export class Subscription<Row>
 					});
 				}),
 			);
-			if (candidate)
-				candidate = applyMaterializedChanges(candidate, changes);
 			decodedBatches.set(batch.changes, changes);
 		}
-		const data =
-			candidate && (reset !== undefined || this.initialized)
+		const incrementalContents = reset === undefined && !hasMoves;
+		let candidate = this.rows
+			? reset
+				? new Map(reset.map(({ rowId, row }) => [rowId, row]))
+				: incrementalContents
+					? this.rows
+					: new Map(this.rows)
+			: undefined;
+		if (candidate && !incrementalContents) {
+			for (const changes of decodedBatches.values())
+				candidate = applyMaterializedChanges(candidate, changes);
+		}
+		let data =
+			candidate &&
+			!incrementalContents &&
+			(reset !== undefined || this.initialized)
 				? Object.freeze([...candidate.values()])
 				: undefined;
-		// Preparation owns every potentially failing decode and splice. Installing
-		// only swaps SDK-owned state after all publication targets have prepared.
+		// Decode and validate moves before any target installs. Content-only live
+		// updates can then mutate the existing Map without cloning the full window.
+		// Resets and their complete replay backlog always use a private candidate.
 		return () => {
 			if (this.closed) return;
+			if (candidate && incrementalContents) {
+				for (const changes of decodedBatches.values())
+					applyMaterializedChanges(candidate, changes);
+				data = this.initialized
+					? Object.freeze([...candidate.values()])
+					: undefined;
+			}
 			this.rows = candidate;
 			this.stagedReset = reset ? { rows: reset } : undefined;
 			for (const [changes, decoded] of decodedBatches)

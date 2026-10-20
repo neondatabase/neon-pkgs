@@ -270,7 +270,47 @@ describe("ordered production subscriptions", () => {
 		expect(rawUpdate).not.toHaveBeenCalled();
 	});
 
-	it("installs every target before the first application callback", () => {
+	it("keeps content-only updates private when a later target's move fails", () => {
+		const { reconciler, target: left } = setup();
+		const right = subscription();
+		add(reconciler, right, "10");
+		baseline(reconciler, [A, B, C], "10");
+		const before = left.getSnapshot();
+		const onChange = vi.fn();
+		left.onChange(onChange);
+		reconciler.accept({ type: "open", publication_id: "p" });
+		reconciler.accept(
+			keyedResults("p", 0, "1", "1", [
+				upsert(A, "updated"),
+				{ op: "remove", row_key: B },
+				upsert(X, "new"),
+			]),
+		);
+		reconciler.accept({
+			...keyedResults("p", 1, "1", "1", [move(D, null)]),
+			targets: [{ live_id: "10", epoch: "1", sequence: "1" }],
+		});
+		expect(() => reconciler.accept(commit("p", 2))).toThrow("missing row");
+		expect(left.getSnapshot()).toBe(before);
+		expect(onChange).not.toHaveBeenCalled();
+		// Enumerate the underlying Map again to detect any hidden partial edits.
+		left.prepare(undefined, [])();
+		expect(values(left)).toEqual(["a", "b", "c", "d"]);
+	});
+
+	it.each([
+		{ changes: [move(D, null)], expected: ["d", "a", "b", "c"] },
+		{
+			changes: [
+				upsert(A, "updated"),
+				{ op: "remove" as const, row_key: B },
+			],
+			expected: ["updated", "c", "d"],
+		},
+	])("installs every target before the first application callback: $changes", ({
+		changes,
+		expected,
+	}) => {
 		const { reconciler, target: left } = setup();
 		const right = subscription();
 		add(reconciler, right, "10");
@@ -279,7 +319,7 @@ describe("ordered production subscriptions", () => {
 		left.onChange(() => observed.push(values(right)));
 		reconciler.accept({ type: "open", publication_id: "p" });
 		reconciler.accept({
-			...keyedResults("p", 0, "1", "1", [move(D, null)]),
+			...keyedResults("p", 0, "1", "1", changes),
 			targets: ["9", "10"].map((live_id) => ({
 				live_id,
 				epoch: "1",
@@ -287,7 +327,7 @@ describe("ordered production subscriptions", () => {
 			})),
 		});
 		reconciler.accept(commit("p", 1));
-		expect(observed).toEqual([["d", "a", "b", "c"]]);
+		expect(observed).toEqual([expected]);
 	});
 
 	it("replays the complete baseline backlog privately and exposes one caught-up snapshot", () => {
