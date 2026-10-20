@@ -57,6 +57,7 @@ export interface ConnectionCoordinatorOptions {
 
 export interface ConnectionHandle {
 	renew(query: ConnectionSealedQuery): Promise<void>;
+	resubscribe(query: ConnectionSealedQuery): Promise<void>;
 	fail(error: ConnectionCoordinatorError): void;
 	unsubscribe(): void;
 }
@@ -243,6 +244,8 @@ export class ConnectionCoordinator {
 		return Object.freeze({
 			renew: (replacement: ConnectionSealedQuery) =>
 				this.renew(managed, replacement),
+			resubscribe: (replacement: ConnectionSealedQuery) =>
+				this.resubscribe(managed, replacement),
 			fail: (error: ConnectionCoordinatorError) =>
 				this.failLocalSubscription(managed, error),
 			unsubscribe: () => this.unsubscribe(managed),
@@ -306,12 +309,53 @@ export class ConnectionCoordinator {
 			subscription.state = "active";
 			this.activeSubscriptions.add(subscription);
 			subscription.callbacks.connecting();
+			if (subscription.state !== "active") return renewal.promise;
 			this.connect();
 			if (this.ready) this.sendSubscribe(subscription);
 			return renewal.promise;
 		}
 		this.sendNextRenewal(subscription);
 		return renewal.promise;
+	}
+
+	/** Replace the wire subscription while retaining its logical owner. */
+	private resubscribe(
+		subscription: ManagedSubscription,
+		query: ConnectionSealedQuery,
+	): Promise<void> {
+		validateSealedQuery(query);
+		if (subscription.state === "closed") {
+			return Promise.reject(
+				new Error("Live-query subscription is closed"),
+			);
+		}
+		if (subscription.state === "failed" || this.terminalConnection) {
+			return Promise.reject(
+				new ConnectionCoordinatorError(
+					"connection_lost",
+					false,
+					"Realtime connection cannot recover",
+				),
+			);
+		}
+
+		const superseded = new ConnectionCoordinatorError(
+			"renewal_superseded",
+			false,
+			"Live-query renewal was superseded by a newer sealed query",
+		);
+		this.rejectRenewals(subscription, superseded);
+		const liveId = subscription.liveId;
+		if (liveId) {
+			this.reconciler.deactivate(liveId);
+			this.liveSubscriptions.delete(liveId);
+			this.detachingLiveIds.add(liveId);
+			this.send({ type: "unsubscribe", live_id: liveId });
+		}
+		subscription.resetWire();
+		subscription.state = "awaiting_query";
+		this.activeSubscriptions.delete(subscription);
+		return this.renew(subscription, query);
 	}
 
 	private unsubscribe(subscription: ManagedSubscription): void {
@@ -461,14 +505,29 @@ export class ConnectionCoordinator {
 		message: Extract<ServerMessage, { type: "subscribed" }>,
 	): void {
 		const subscription = this.pendingRequests.get(message.request_id);
-		if (
-			!subscription ||
-			subscription.liveId ||
-			this.liveSubscriptions.has(message.live_id)
-		) {
+		if (!subscription || this.liveSubscriptions.has(message.live_id)) {
 			throw new ProtocolError("invalid subscription admission");
 		}
 		this.pendingRequests.delete(message.request_id);
+		if (subscription.requestId !== message.request_id) {
+			// A fresh resubscribe can supersede an admission already in flight.
+			// Keep a sink for any frames queued behind the late acceptance and
+			// immediately detach it without exposing it to the logical owner.
+			this.reconciler.add({
+				liveId: message.live_id,
+				epoch: message.epoch,
+				firstSequence: message.first_sequence,
+				columnCount: message.columns.length,
+				target: subscription.callbacks.reconciliation,
+			});
+			this.reconciler.deactivate(message.live_id);
+			this.detachingLiveIds.add(message.live_id);
+			this.send({ type: "unsubscribe", live_id: message.live_id });
+			return;
+		}
+		if (subscription.liveId) {
+			throw new ProtocolError("invalid subscription admission");
+		}
 		subscription.requestId = undefined;
 		if (
 			subscription.state === "closed" ||
@@ -525,6 +584,7 @@ export class ConnectionCoordinator {
 		if (!subscription)
 			throw new ProtocolError("unknown subscribe request ID");
 		this.pendingRequests.delete(message.request_id);
+		if (subscription.requestId !== message.request_id) return;
 		subscription.requestId = undefined;
 		if (subscription.state === "closed" || subscription.state === "failed")
 			return;
@@ -555,6 +615,9 @@ export class ConnectionCoordinator {
 	}
 
 	private renewed(liveId: string): void {
+		// A renewal response can already be queued when a fresh resubscribe
+		// detaches the old wire subscription.
+		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription?.renewing)
 			throw new ProtocolError("unexpected renewal response");

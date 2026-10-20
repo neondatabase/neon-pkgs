@@ -1,7 +1,11 @@
 import type { QueryRefreshEventSink } from "./diagnostics.js";
 import { subscriptionEventsFor } from "./diagnostics.js";
 import type { NoInferCompat } from "./no-infer.js";
-import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
+import {
+	assertRenewalQuery,
+	type SealedLiveQuery,
+	validateSealedQuery,
+} from "./sealed-query.js";
 import type { RawLiveQuerySubscription } from "./types.js";
 
 const REFRESH_EARLY_MS = 10_000;
@@ -91,6 +95,7 @@ export class QueryRefreshController<Row> {
 	 * applying it to the active subscription fails.
 	 */
 	async replaceSealedQuery(query: SealedLiveQuery<Row>): Promise<void> {
+		validateSealedQuery(query);
 		this.assertSameQuery(query);
 		await this.options.renewSubscription(query);
 		this.query = query;
@@ -186,9 +191,7 @@ export class QueryRefreshController<Row> {
 	}
 
 	private assertSameQuery(query: SealedLiveQuery<Row>): void {
-		if (query.queryFingerprint !== this.query.queryFingerprint) {
-			throw new Error("Live-query renewal must be for the same query");
-		}
+		assertRenewalQuery(this.query, query);
 	}
 
 	private isCurrent(generation: number): boolean {

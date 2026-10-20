@@ -173,6 +173,41 @@ describe("QueryRefreshController", () => {
 		expect(events).toContain("query_refresh_stopped");
 		controller.stop();
 	});
+
+	it("accepts a different fingerprint across an envelope version change", async () => {
+		const renewSubscription = vi.fn();
+		const controller = new QueryRefreshController({
+			query: query(20),
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+		});
+		const replacement = {
+			...query(40),
+			version: 2 as const,
+			queryFingerprint: "22".repeat(32),
+		};
+
+		await controller.replaceSealedQuery(replacement);
+
+		expect(renewSubscription).toHaveBeenCalledWith(replacement);
+		expect(controller.currentQuery()).toBe(replacement);
+	});
+
+	it("still rejects a different fingerprint within version 2", async () => {
+		const controller = new QueryRefreshController({
+			query: { ...query(20), version: 2 },
+			renewSubscription: vi.fn(),
+			onRefreshExhausted: vi.fn(),
+		});
+
+		await expect(
+			controller.replaceSealedQuery({
+				...query(40),
+				version: 2,
+				queryFingerprint: "22".repeat(32),
+			}),
+		).rejects.toThrow("same query");
+	});
 });
 
 function loggedSubscription(

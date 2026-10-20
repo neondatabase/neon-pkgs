@@ -18,7 +18,7 @@ import type {
 	ReconciliationTarget,
 } from "./reconciliation/reconciler.js";
 import { waitForRows } from "./row-waiter.js";
-import type { SealedLiveQuery } from "./sealed-query.js";
+import { assertRenewalQuery, type SealedLiveQuery } from "./sealed-query.js";
 import { TransactionTracker } from "./transaction-tracker.js";
 import type {
 	LiveQueryChange,
@@ -167,10 +167,10 @@ export class Subscription<Row>
 				new Error("Live-query subscription is closed"),
 			);
 		}
-		if (query.queryFingerprint !== this.query.queryFingerprint) {
-			return Promise.reject(
-				new Error("Live-query renewal must be for the same query"),
-			);
+		try {
+			assertRenewalQuery(this.query, query);
+		} catch (error) {
+			return Promise.reject(error);
 		}
 		const precedingState =
 			this.state.status === "error" || this.state.status === "stale"

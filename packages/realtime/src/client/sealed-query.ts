@@ -7,6 +7,11 @@
  * @typeParam Row - Row produced by the sealed query.
  */
 export interface SealedLiveQuery<Row> {
+	/**
+	 * Positive integer version of the public sealed-query envelope. An omitted
+	 * version identifies the legacy envelope.
+	 */
+	readonly version?: number;
 	/** Opaque encrypted bearer capability. */
 	readonly capability: string;
 	/** Stable identity used to prevent accidentally renewing a different query. */
@@ -23,6 +28,8 @@ export interface SealedLiveQuery<Row> {
 export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {
 	if (
 		!query ||
+		(query.version !== undefined &&
+			(!Number.isSafeInteger(query.version) || query.version <= 0)) ||
 		typeof query.capability !== "string" ||
 		!validCompactJweHeader(query.capability) ||
 		typeof query.queryFingerprint !== "string" ||
@@ -31,6 +38,27 @@ export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {
 		query.expiresAt <= 0
 	) {
 		throw new Error("Invalid sealed live query");
+	}
+}
+
+/** @internal Normalize the legacy omitted version to its envelope version. */
+export function sealedQueryEnvelopeVersion<Row>(
+	query: SealedLiveQuery<Row>,
+): number {
+	return query.version ?? 1;
+}
+
+/** @internal Assert identity only when both envelopes use the same version. */
+export function assertRenewalQuery<Row>(
+	current: SealedLiveQuery<Row>,
+	replacement: SealedLiveQuery<Row>,
+): void {
+	if (
+		sealedQueryEnvelopeVersion(current) ===
+			sealedQueryEnvelopeVersion(replacement) &&
+		replacement.queryFingerprint !== current.queryFingerprint
+	) {
+		throw new Error("Live-query renewal must be for the same query");
 	}
 }
 

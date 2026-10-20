@@ -14,7 +14,11 @@ import {
 	createParserRegistry,
 	type PostgreSQLParserRegistry,
 } from "./postgres/parsers.js";
-import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
+import {
+	type SealedLiveQuery,
+	sealedQueryEnvelopeVersion,
+	validateSealedQuery,
+} from "./sealed-query.js";
 import { Subscription } from "./subscription.js";
 import type {
 	MaterializedLiveQueryOptions,
@@ -118,7 +122,12 @@ class RealtimeClientImpl implements RealtimeClient {
 		const handle = this.handles.get(subscription as Subscription<unknown>);
 		if (!handle) throw new Error("Live-query subscription is closed");
 		try {
-			await handle.renew(query);
+			if (
+				sealedQueryEnvelopeVersion(subscription.currentQuery()) !==
+				sealedQueryEnvelopeVersion(query)
+			) {
+				await handle.resubscribe(query);
+			} else await handle.renew(query);
 			subscription.replaceSealedQuery(query);
 		} catch (error) {
 			const state = subscription.getState();

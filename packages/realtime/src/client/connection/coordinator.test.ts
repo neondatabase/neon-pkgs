@@ -312,6 +312,93 @@ describe("ConnectionCoordinator", () => {
 		await second;
 	});
 
+	it("resubscribes the same logical subscription with a fresh wire ID", async () => {
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		const handle = coordinator.subscribe(
+			{ capability: "initial" },
+			callbacks,
+		);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+
+		const replacement = handle.resubscribe({ capability: "replacement" });
+
+		expect(socket.sent).toEqual([
+			{
+				type: "subscribe",
+				request_id: "1",
+				authorization: "initial",
+			},
+			{
+				type: "subscribe",
+				request_id: "2",
+				authorization: "replacement",
+			},
+		]);
+		// The superseded request may still be admitted. It is detached without
+		// ever becoming visible to the retained logical subscription.
+		socket.receive({
+			type: "subscribed",
+			request_id: "1",
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "41",
+		});
+		expect(callbacks.admitted).not.toHaveBeenCalled();
+
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		await expect(replacement).resolves.toBeUndefined();
+		expect(callbacks.admitted).toHaveBeenCalledOnce();
+		expect(callbacks.connecting).toHaveBeenCalledOnce();
+	});
+
+	it("ignores an in-flight renewal response from a replaced wire subscription", async () => {
+		const coordinator = createCoordinator();
+		const handle = coordinator.subscribe(
+			{ capability: "initial" },
+			target(),
+		);
+		const socket = admit();
+		const oldRenewal = handle.renew({ capability: "intermediate" });
+		const oldResult = expect(oldRenewal).rejects.toThrow("superseded");
+
+		const replacement = handle.resubscribe({ capability: "replacement" });
+
+		await oldResult;
+		expect(socket.sent.slice(-2)).toEqual([
+			{ type: "unsubscribe", live_id: "41" },
+			{
+				type: "subscribe",
+				request_id: "2",
+				authorization: "replacement",
+			},
+		]);
+		socket.receive({ type: "renewed", live_id: "41" });
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+		await expect(replacement).resolves.toBeUndefined();
+	});
+
 	it("reconnects and resubscribes with the newest sealed query", async () => {
 		vi.useFakeTimers();
 		const callbacks = target();

@@ -1150,6 +1150,169 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it("replaces the internal subscription from legacy v1 to envelope v2", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+		});
+		const legacyV1Query = query("initial"); // An omitted version is legacy v1.
+		const version2Query = {
+			...query("replacement", "22".repeat(32)),
+			version: 2,
+		};
+		const subscription = client.subscribe(legacyV1Query);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		const states: string[] = [];
+		const resets: unknown[] = [];
+		subscription.onStateChange((state) => states.push(state.status));
+		subscription.onUpdate((update) => {
+			if (update.type === "rows") resets.push(update.rows);
+		});
+		let transactionSeen = false;
+		const transaction = subscription.awaitTxId("42").then(() => {
+			transactionSeen = true;
+		});
+		const renewal = subscription.renew(version2Query);
+
+		expect(subscription.getSnapshot()).toEqual({
+			status: "connecting",
+			error: undefined,
+			data: [{ id: 1, title: "before" }],
+		});
+		expect(socket.sent.slice(-2)).toEqual([
+			{ type: "unsubscribe", live_id: "41" },
+			{
+				type: "subscribe",
+				request_id: "2",
+				authorization: version2Query.capability,
+			},
+		]);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: [
+				{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+				{
+					name: "title",
+					type_oid: 25,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		await expect(renewal).resolves.toBeUndefined();
+		expect(transactionSeen).toBe(false);
+		socket.receive({ type: "unsubscribed", live_id: "41" });
+		baselineSync(socket, "after", "42", "2");
+		socket.receive({
+			type: "progress",
+			mvcc: { xmin: "43", xmax: "43", xip: [] },
+		});
+		await transaction;
+
+		expect(subscription.getSnapshot()).toEqual({
+			status: "live",
+			error: undefined,
+			data: [{ id: 1, title: "after" }],
+		});
+		expect(states).toEqual(["connecting", "live"]);
+		expect(resets).toEqual([
+			[{ rowId: ROW_KEY, row: { id: 1, title: "after" } }],
+		]);
+		expect(transactionSeen).toBe(true);
+		const otherVersion2Query = {
+			...query("other", "33".repeat(32)),
+			version: 2,
+		};
+		await expect(subscription.renew(otherVersion2Query)).rejects.toThrow(
+			"same query",
+		);
+		client.close();
+	});
+
+	it("replaces a raw subscription from envelope v2 to future v3", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const version2Query = {
+			...query("initial", "22".repeat(32)),
+			version: 2,
+		};
+		const version3Query = {
+			...query("replacement", "33".repeat(32)),
+			version: 3,
+		};
+		const subscription = client.subscribe(version2Query, {
+			materialize: false,
+		});
+		const updates: unknown[] = [];
+		subscription.onUpdate((update) => updates.push(update));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+
+		const renewal = subscription.renew(version3Query);
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: [
+				{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+				{
+					name: "title",
+					type_oid: 25,
+					typmod: -1,
+					codec: "pg_text",
+				},
+			],
+		});
+		await renewal;
+		baselineSync(socket, "after", "42", "2");
+
+		expect(updates).toEqual([
+			{
+				type: "rows",
+				rows: [{ rowId: ROW_KEY, row: { id: 1, title: "before" } }],
+			},
+			{
+				type: "rows",
+				rows: [{ rowId: ROW_KEY, row: { id: 1, title: "after" } }],
+			},
+		]);
+		client.close();
+	});
+
+	it("allows reentrant unsubscribe while replacing legacy v1 with envelope v2", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const legacyV1Query = query("initial"); // An omitted version is legacy v1.
+		const version2Query = {
+			...query("replacement", "22".repeat(32)),
+			version: 2,
+		};
+		const subscription = client.subscribe(legacyV1Query);
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		subscription.onStateChange((state) => {
+			if (state.status === "connecting") subscription.unsubscribe();
+		});
+
+		const renewal = subscription.renew(version2Query);
+
+		await expect(renewal).rejects.toThrow("subscription is closed");
+		expect(subscription.getState().status).toBe("closed");
+		expect(socket.sent.at(-1)).toEqual({
+			type: "unsubscribe",
+			live_id: "41",
+		});
+		expect(socket.readyState).toBe(3);
+		client.close();
+	});
+
 	it("reports rejected renewal attempts without warning for superseded ones", async () => {
 		useFakeWebSocket();
 		vi.useFakeTimers();

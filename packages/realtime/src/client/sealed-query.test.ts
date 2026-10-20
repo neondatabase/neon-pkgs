@@ -1,5 +1,5 @@
-import { describe, expectTypeOf, it } from "vitest";
-import type { SealedLiveQuery } from "./sealed-query.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
 import type {
 	MaterializedLiveQuerySubscription,
 	RawLiveQuerySubscription,
@@ -87,3 +87,43 @@ describe("sealed query row types", () => {
 		expectTypeOf(check).toBeFunction();
 	});
 });
+
+describe("sealed query envelope versions", () => {
+	it("accepts the legacy omitted version and future positive versions", () => {
+		expect(() => validateSealedQuery(sealedQuery())).not.toThrow();
+		for (const version of [1, 2, 3, Number.MAX_SAFE_INTEGER]) {
+			expect(() =>
+				validateSealedQuery({ ...sealedQuery(), version }),
+			).not.toThrow();
+		}
+	});
+
+	it.each([
+		0,
+		-1,
+		1.5,
+		Number.MAX_SAFE_INTEGER + 1,
+		Number.NaN,
+		Number.POSITIVE_INFINITY,
+		"2",
+		null,
+	])("rejects malformed version %j", (version) => {
+		expect(() =>
+			validateSealedQuery({
+				...sealedQuery(),
+				version,
+			} as unknown as SealedLiveQuery<unknown>),
+		).toThrow("Invalid sealed live query");
+	});
+});
+
+function sealedQuery(): SealedLiveQuery<unknown> {
+	const header = Buffer.from(
+		JSON.stringify({ alg: "dir", enc: "A256GCM", v: 1 }),
+	).toString("base64url");
+	return {
+		capability: `${header}..a.b.c`,
+		queryFingerprint: "11".repeat(32),
+		expiresAt: 1,
+	};
+}
