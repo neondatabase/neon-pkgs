@@ -14,6 +14,7 @@ import { getCliAgent, getGithubEnvVars, isCi } from "./env.js";
 import { type ErrorCode, isUnexpectedError } from "./errors.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
+import { toolingErrorProperties } from "./tooling_error.js";
 
 const WRITE_KEY = "3SQXn5ejjXWLEJ8xU2PRYhAotLtTaeeV";
 
@@ -146,6 +147,8 @@ type ErrorEventContext = {
 	version: string;
 	ci: boolean;
 	agent: ReturnType<typeof getCliAgent>;
+	/** The command's first word. Only reported for errors that carry tooling context. */
+	command?: string;
 };
 
 /** Lets tests send to a local collector; the CLI itself always uses track.neon.tech. */
@@ -429,11 +432,12 @@ const settleErrorReports = async (deadline: number | undefined) => {
 };
 
 const getErrorAnalyticsEventContext = (
-	_args: AnalyticsEventArgs,
+	args: AnalyticsEventArgs,
 ): ErrorEventContext => ({
 	version: pkg.version,
 	ci: isCi(),
 	agent: getCliAgent(process.env),
+	command: args._[0] === undefined ? undefined : String(args._[0]),
 });
 
 // `nak_live_…` is the credential token id (also AWS_ACCESS_KEY_ID). CLI Started
@@ -450,11 +454,20 @@ export const getErrorAnalyticsEventProperties = (
 ) => {
 	const apiError = isNeonApiError(err) ? err : undefined;
 	const requestId = apiError?.headers?.["x-neon-ret-request-id"];
+	const { command, ...base } = context ?? {};
+	// Errors from `neon init`, `neon skills` and `neon mcp` say which step failed and why, and
+	// carry a bounded message instead of the child process's whole output.
+	const {
+		message = err.message,
+		stack = err.stack,
+		...tooling
+	} = toolingErrorProperties(err, command) ?? {};
 
 	return {
-		...context,
-		message: redactCredentialTokenIds(err.message),
-		stack: err.stack ? redactCredentialTokenIds(err.stack) : err.stack,
+		...base,
+		...tooling,
+		message: redactCredentialTokenIds(String(message)),
+		stack: stack ? redactCredentialTokenIds(String(stack)) : undefined,
 		errCode,
 		statusCode: apiError?.status,
 		requestId,
@@ -475,6 +488,13 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 		errCode,
 		errorEventContext,
 	);
+	const { errorKind, step } = properties as {
+		errorKind?: string;
+		step?: string;
+	};
+	if (errorKind !== undefined) {
+		log.debug("Failed in the %s step: %s", step ?? "unknown", errorKind);
+	}
 	enqueue((analytics, { userId }) => {
 		analytics.track({
 			event: "CLI Error",

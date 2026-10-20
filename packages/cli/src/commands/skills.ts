@@ -21,6 +21,13 @@ import {
 	skillsInstallableAgents,
 } from "../skills/targets.js";
 import { confirmSkillsUpdate } from "../skills/wizard.js";
+import {
+	attachToolingContext,
+	classifyToolingError,
+	mergeToolingContexts,
+	toolingContextOf,
+	withToolingStep,
+} from "../tooling_error.js";
 import type { CommonProps } from "../types.js";
 import {
 	canPickAgentsInteractively,
@@ -222,6 +229,8 @@ type SkillsInstallFailure = {
 	label: string;
 	message: string;
 	skills: readonly string[];
+	/** The error behind `message`, for what it knows about the failure. */
+	cause?: unknown;
 };
 
 export type SkillsInstallOutcome = {
@@ -301,6 +310,7 @@ export const installSkills = async (
 				label: skills,
 				message,
 				skills: invocation.skills,
+				cause: error,
 			});
 		}
 	}
@@ -317,8 +327,35 @@ export const skillsInstallError = (
 		return undefined;
 	}
 	const first = failed[0];
+	const failure = (message: string): Error => {
+		const error = new Error(message);
+		attachToolingContext(error, {
+			// What the child processes reported (the first failure's, unless only a later one has it).
+			...mergeToolingContexts(
+				failed.map((row) => toolingContextOf(row.cause)),
+			),
+			// One reason per failure, since they need not share one.
+			errorKinds: [
+				...new Set(
+					failed.map((row) =>
+						classifyToolingError(
+							row.cause instanceof Error
+								? row.cause
+								: new Error(row.message),
+							toolingContextOf(row.cause),
+						),
+					),
+				),
+			],
+			step: "skills",
+			skills: failed.flatMap((row) => row.skills),
+			agents,
+			scope,
+		});
+		return error;
+	};
 	if (first === undefined) {
-		return new Error("Failed to install Neon agent skills.");
+		return failure("Failed to install Neon agent skills.");
 	}
 	const retry = neonSkillsRetryCommand({
 		skills: failed.flatMap((row) => row.skills),
@@ -329,12 +366,12 @@ export const skillsInstallError = (
 		first.message.includes("needs npx (Node.js)") ||
 		first.message.includes("needs Node.js")
 	) {
-		return new Error(first.message);
+		return failure(first.message);
 	}
 	if (failed.length === rows.length) {
-		return new Error(`${first.message}\nRetry with: ${retry}`);
+		return failure(`${first.message}\nRetry with: ${retry}`);
 	}
-	return new Error(
+	return failure(
 		`Failed to install Neon agent skills for: ${failed.map((row) => row.label).join(", ")}.\n${first.message}\nRetry with: ${retry}`,
 	);
 };
@@ -359,23 +396,27 @@ export const reportSkillsInstall = (
 	}
 };
 
-export const handler = async (props: SkillsProps) => {
-	const outcome = await installSkills({
-		cwd: props.cwd,
-		yes: props.yes,
-		global: props.global,
-		agents: props.agent,
-		skills: props.skill,
+export const handler = (props: SkillsProps) =>
+	withToolingStep("skills", async () => {
+		const outcome = await installSkills({
+			cwd: props.cwd,
+			yes: props.yes,
+			global: props.global,
+			agents: props.agent,
+			skills: props.skill,
+		});
+		reportSkillsInstall(props, outcome);
+		const error = skillsInstallError(outcome);
+		if (error) {
+			throw error;
+		}
+		recordCommandSuccessExtras({ scope: outcome.scope });
 	});
-	reportSkillsInstall(props, outcome);
-	const error = skillsInstallError(outcome);
-	if (error) {
-		throw error;
-	}
-	recordCommandSuccessExtras({ scope: outcome.scope });
-};
 
-const updateHandler = async (props: SkillsProps) => {
+const updateHandler = (props: SkillsProps) =>
+	withToolingStep("skills", () => runUpdate(props));
+
+const runUpdate = async (props: SkillsProps) => {
 	assertSkillsNode();
 	const cwd = process.cwd();
 	const yes = props.yes === true;
@@ -394,6 +435,7 @@ const updateHandler = async (props: SkillsProps) => {
 	const rows: SkillsUpdateRow[] = [];
 	const args = skillsUpdateArgs({ global: scope === "global" });
 	let failure: string | undefined;
+	let failureCause: unknown;
 	try {
 		const result = await runSkillsCli({
 			args,
@@ -407,6 +449,7 @@ const updateHandler = async (props: SkillsProps) => {
 		});
 	} catch (error) {
 		failure = error instanceof Error ? error.message : String(error);
+		failureCause = error;
 		rows.push({
 			scope: scopeLabel(scope),
 			status: "failed",
@@ -422,11 +465,17 @@ const updateHandler = async (props: SkillsProps) => {
 	out.end();
 
 	if (failure !== undefined) {
-		throw new Error(
+		const error = new Error(
 			failure.includes("needs npx (Node.js)") ||
 				failure.includes("needs Node.js")
 				? failure
 				: `${failure}\nRetry with: ${neonSkillsUpdateRetryCommand(scope === "global")}`,
 		);
+		attachToolingContext(error, {
+			...toolingContextOf(failureCause),
+			step: "skills",
+			scope,
+		});
+		throw error;
 	}
 };

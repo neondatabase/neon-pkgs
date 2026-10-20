@@ -21,6 +21,7 @@ import {
 } from "../mcp/mint.js";
 import { resolveMcpPlan } from "../mcp/plan.js";
 import { mcpInstallableAgents, resolveInstallTargets } from "../mcp/targets.js";
+import { attachToolingContext, withToolingStep } from "../tooling_error.js";
 import type { CommonProps } from "../types.js";
 import {
 	canPickAgentsInteractively,
@@ -358,18 +359,28 @@ export const setupNeonMcp = async (
 	}
 
 	if (successes === 0) {
+		const failed = (message: string): Error => {
+			const error = new Error(message);
+			attachToolingContext(error, {
+				step: "mcp",
+				agents: install,
+				scope: plan.scope,
+				detail: firstMcpFailure(rows),
+			});
+			return error;
+		};
 		if (minted && options.apiClient) {
 			const withdrawn = await withdrawMintedKey(
 				options.apiClient,
 				minted,
 			);
-			throw new Error(
+			throw failed(
 				withdrawn
 					? "Failed to write Neon MCP config to any agent. The minted API key has been revoked."
 					: `Failed to write Neon MCP config to any agent. The minted API key could NOT be revoked. Remove it with \`${mintedKeyRevokeCommand(minted)}\`.`,
 			);
 		}
-		throw new Error("Failed to write Neon MCP config to any agent.");
+		throw failed("Failed to write Neon MCP config to any agent.");
 	}
 
 	return {
@@ -382,15 +393,28 @@ export const setupNeonMcp = async (
 	};
 };
 
+/** Why the first agent that failed to be written to did, which the thrown error doesn't say. */
+const firstMcpFailure = (rows: readonly McpInstallRow[]): string | undefined =>
+	rows.find((row) => row.status === "failed")?.error;
+
 /** The exact error `neon mcp` throws when some (not all) agents failed, or `undefined` on full success. */
 export const mcpInstallError = (
 	outcome: McpInstallOutcome,
-): Error | undefined =>
-	outcome.failedAgents.length > 0
-		? new Error(
-				`Failed to write Neon MCP config for: ${outcome.failedAgents.join(", ")}.`,
-			)
-		: undefined;
+): Error | undefined => {
+	if (outcome.failedAgents.length === 0) {
+		return undefined;
+	}
+	const error = new Error(
+		`Failed to write Neon MCP config for: ${outcome.failedAgents.join(", ")}.`,
+	);
+	attachToolingContext(error, {
+		step: "mcp",
+		agents: outcome.failedAgents,
+		scope: outcome.scope,
+		detail: firstMcpFailure(outcome.rows),
+	});
+	return error;
+};
 
 /** Writes the results table plus the URL/minted-key/OAuth notices. Shared by `neon mcp` and any in-process caller that wants the same human output. */
 export const reportMcpInstall = (
@@ -421,24 +445,25 @@ export const reportMcpInstall = (
 	}
 };
 
-export const handler = async (props: McpProps) => {
-	const outcome = await setupNeonMcp({
-		apiClient: props.apiClient,
-		apiKey: props.apiKey,
-		contextFile: props.contextFile,
-		cwd: props.cwd,
-		yes: props.yes,
-		oauth: props.oauth,
-		project: props.project,
-		agent: props.agent,
-		readOnly: props.readOnly,
-		projectId: props.projectId,
-		category: props.category,
+export const handler = (props: McpProps) =>
+	withToolingStep("mcp", async () => {
+		const outcome = await setupNeonMcp({
+			apiClient: props.apiClient,
+			apiKey: props.apiKey,
+			contextFile: props.contextFile,
+			cwd: props.cwd,
+			yes: props.yes,
+			oauth: props.oauth,
+			project: props.project,
+			agent: props.agent,
+			readOnly: props.readOnly,
+			projectId: props.projectId,
+			category: props.category,
+		});
+		reportMcpInstall(props, outcome);
+		const error = mcpInstallError(outcome);
+		if (error) {
+			throw error;
+		}
+		recordCommandSuccessExtras({ scope: outcome.scope });
 	});
-	reportMcpInstall(props, outcome);
-	const error = mcpInstallError(outcome);
-	if (error) {
-		throw error;
-	}
-	recordCommandSuccessExtras({ scope: outcome.scope });
-};

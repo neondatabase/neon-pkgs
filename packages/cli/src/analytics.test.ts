@@ -11,6 +11,7 @@ import {
 	takeCommandSuccessExtras,
 	telemetryCredential,
 } from "./analytics.js";
+import { attachToolingContext } from "./tooling_error.js";
 
 afterEach(() => {
 	takeCommandSuccessExtras();
@@ -357,5 +358,50 @@ describe("getErrorAnalyticsEventProperties credential ids", () => {
 		expect(properties.stack).not.toContain(
 			"nak_live_0123456789abcdef0123456789abcdef",
 		);
+	});
+});
+
+describe("getErrorAnalyticsEventProperties tooling errors", () => {
+	const context = {
+		version: "2.0.0",
+		ci: false,
+		agent: "codex" as const,
+		command: "init",
+	};
+
+	it("adds the failed step and reason for an error that carries them", () => {
+		const error = new Error("skills CLI failed:\nnpm error code E403");
+		attachToolingContext(error, {
+			step: "skills",
+			skills: ["neon"],
+			agents: ["cursor"],
+			exitCode: 1,
+		});
+		const properties = getErrorAnalyticsEventProperties(
+			error,
+			"UNKNOWN_ERROR",
+			context,
+		);
+		expect(properties).toMatchObject({
+			errCode: "UNKNOWN_ERROR",
+			command: "init",
+			step: "skills",
+			errorKind: "registry_blocked",
+			skills: ["neon"],
+			agents: ["cursor"],
+			exitCode: 1,
+		});
+	});
+
+	it("leaves every other error without tooling fields or a command", () => {
+		const properties = getErrorAnalyticsEventProperties(
+			new Error("branch already exists"),
+			"API_ERROR",
+			context,
+		);
+		expect(properties).not.toHaveProperty("command");
+		expect(properties).not.toHaveProperty("step");
+		expect(properties).not.toHaveProperty("errorKind");
+		expect(properties.message).toBe("branch already exists");
 	});
 });

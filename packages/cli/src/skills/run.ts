@@ -1,6 +1,7 @@
 import { execa } from "execa";
 
 import pkg from "../pkg.js";
+import { attachToolingContext } from "../tooling_error.js";
 
 const TELEMETRY_BLOCKERS = ["DISABLE_TELEMETRY", "DO_NOT_TRACK"] as const;
 
@@ -195,11 +196,17 @@ export const runSkillsCli = async (options: {
 				.filter((part) => typeof part === "string" && part.length > 0)
 				.join("\n");
 			const detail = childOut.length > 0 ? childOut : error.shortMessage;
-			throw new Error(
+			const failure = new Error(
 				detail.length > 0
 					? `skills CLI failed:\n${detail}`
 					: "skills CLI failed.",
 			);
+			attachToolingContext(failure, {
+				exitCode: error.exitCode,
+				timedOut: error.timedOut,
+				signal: error.signal,
+			});
+			throw failure;
 		}
 		throw error;
 	}
@@ -217,6 +224,9 @@ const isExecaFailure = (
 	stderr: string;
 	stdout: string;
 	shortMessage: string;
+	exitCode?: number;
+	timedOut?: boolean;
+	signal?: string;
 } =>
 	typeof error === "object" &&
 	error !== null &&
