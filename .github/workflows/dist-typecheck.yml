@@ -10,6 +10,10 @@ permissions:
     contents: read
     id-token: write # mint the JFrog OIDC token in ./.github/actions/prepare
 
+concurrency:
+    group: dist-typecheck-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
     typecheck-dist:
         name: Check ${{ matrix.name }} distributed types
