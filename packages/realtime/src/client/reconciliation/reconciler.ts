@@ -345,6 +345,8 @@ export class BaselineSyncPublicationReconciler {
 			install();
 		} catch (error) {
 			if (error instanceof ProtocolError) throw error;
+			state.baselineSync = undefined;
+			this.releaseBacklog(state);
 			state.active = false;
 			state.live = false;
 			state.target.decodeFailed(error);
