@@ -19,8 +19,9 @@ export type AuthedRequest = Request & { auth: AuthResult };
  * Express middleware that requires a valid bearer token on one route of an MCP server. On success
  * it sets `req.auth` (the verified {@link AuthResult}) and calls `next()`.
  *
- * Otherwise it responds 401 or 403 with a challenge carrying `resource_metadata`, or 503 when the authorization server is unavailable (500 on an unexpected failure). It does not
- * serve the metadata routes: use {@link expressMcp} for the whole endpoint.
+ * Otherwise it sends the guard's error response (401 or 403 with a challenge, 503, or 500; see
+ * `BearerGuard`). It does not serve the metadata routes: use {@link expressMcp} for the whole
+ * endpoint.
  *
  * @param auth The result of `createMcpAuth()`.
  * @param opts Required scopes and `onError`.
@@ -38,8 +39,11 @@ export function expressMcpBearerAuth(
  *
  * It serves the RFC 9728 protected-resource metadata and its CORS preflight (unauthenticated),
  * requires a valid bearer token on POST, GET and DELETE (the Streamable HTTP methods) at the MCP
- * path, and calls `next()` for every other request. A missing or invalid token gets a 401 or 403 with a challenge carrying `resource_metadata`, or a 503 when the authorization server is unavailable (500 on an unexpected failure). For authenticated requests `req.auth` is the
- * verified {@link AuthResult}.
+ * path, and calls `next()` for every other request. A missing or invalid token gets the guard's
+ * error response (401 or 403 with a challenge, 503, or 500; see `BearerGuard`). For authenticated
+ * requests `req.auth` is the verified {@link AuthResult}. The SDK's Node transport reads
+ * `req.auth` as the MCP TypeScript SDK's `AuthInfo`, so replace it with `auth.toAuthInfo(req.auth)`
+ * before `handleRequest`.
  *
  * The guard reads headers only, so it works before or after a body parser. The SDK transport
  * reads the request stream unless you pass the parsed body as the third argument of `handleRequest`.

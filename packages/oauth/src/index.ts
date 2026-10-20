@@ -177,7 +177,10 @@ export interface OAuthWithClient extends OAuth {
  *
  * const app = new Hono<AuthVariables>();
  * app.use(honoOAuthClient(oauth.client)); // /api/auth/login, /callback, /logout
- * app.get("/me", async (c) => c.json(await oauth.client.getUser(c.req.raw))); // browser session
+ * app.get("/me", async (c) => { // browser session
+ *   const result = await oauth.client.getUser(c.req.raw);
+ *   return result.ok ? c.json(result.user) : c.json({ error: result.reason }, 401);
+ * });
  * app.get("/api/things", honoBearerAuth(oauth), (c) => c.json({ user: c.get("auth").sub })); // bearer token
  * ```
  */

@@ -22,15 +22,38 @@ export interface McpOptions {
 }
 
 /**
- * Maps a verified {@link AuthResult} to the MCP SDK's `AuthInfo`, which the SDK transport takes
- * as `transport.handleRequest(req, { authInfo })`. Claims are kept under `extra.claims`.
+ * Converts a verified {@link AuthResult} into the MCP TypeScript SDK's `AuthInfo` (the type from
+ * `@modelcontextprotocol/sdk/server/auth/types.js`).
  *
- * Hono exposes it already, as `c.get("authInfo")`. With `expressMcp`, `nodeMcp`, `withMcpAuth` or
- * `authenticate`, call this on the `AuthResult` they give you. The SDK requires `clientId` to be a string,
- * so a token without a `client_id` claim maps to `""`.
+ * Pass it to the SDK transport as `transport.handleRequest(req, { authInfo })`; the SDK then hands
+ * it to your tool handlers as `extra.authInfo`, so a tool can see who is calling and with which
+ * scopes. Hono exposes it already, as `c.get("authInfo")`. With `expressMcp`, `nodeMcp`,
+ * `withMcpAuth` or `authenticate`, call this on the `AuthResult` they give you.
+ *
+ * Mapping:
+ * - `token`: the raw bearer token.
+ * - `clientId`: the `client_id` claim, or `""` when the token has none (the SDK requires a string).
+ * - `scopes`: the token's scopes.
+ * - `expiresAt`: the `exp` claim, in seconds since the epoch.
+ * - `resource`: the first audience, as a `URL`, when it is a valid URL.
+ * - `extra.claims`: the full verified JWT payload.
  *
  * @param result The verified token.
- * @returns The SDK's `AuthInfo`; `resource` is the token's first `aud` when that is a URL.
+ * @returns The SDK's `AuthInfo`.
+ *
+ * @example
+ * ```ts
+ * import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+ *
+ * const server = new McpServer({ name: "demo", version: "1.0.0" });
+ * server.registerTool("whoami", { description: "Who is calling" }, (extra) => {
+ *   const info = extra.authInfo; // set from toAuthInfo by the transport
+ *   const claims = info?.extra?.claims as { sub?: string } | undefined;
+ *   return {
+ *     content: [{ type: "text", text: `${claims?.sub} via ${info?.clientId} (${info?.scopes.join(" ")})` }],
+ *   };
+ * });
+ * ```
  */
 export function toAuthInfo(result: AuthResult): AuthInfo {
 	const [audience] = result.audience;
@@ -91,7 +114,7 @@ export interface McpAuth {
 	 * @returns The `Response`, or `undefined` for any other request so the caller keeps routing.
 	 */
 	handleMetadataRequest(request: Request): Response | undefined;
-	/** Same as the standalone {@link toAuthInfo}. */
+	/** Same as the standalone {@link toAuthInfo}: converts an `AuthResult` into the MCP SDK's `AuthInfo`. */
 	toAuthInfo(result: AuthResult): AuthInfo;
 }
 

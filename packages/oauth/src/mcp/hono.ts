@@ -17,7 +17,7 @@ import { MCP_METHODS, mcpPath, routeMcpMetadata } from "./resource-server";
 export type McpAuthVariables = {
 	Variables: {
 		auth: AuthResult;
-		/** `auth` mapped for the MCP SDK transport: `transport.handleRequest(req, { authInfo })`. */
+		/** `auth` as the MCP TypeScript SDK's `AuthInfo`: pass it to `transport.handleRequest(req, { authInfo })`, and tools receive it as `extra.authInfo`. */
 		authInfo: AuthInfo;
 	};
 };
@@ -27,10 +27,10 @@ export type McpAuthVariables = {
  * sets `c.get("auth")` (the verified {@link AuthResult}) and `c.get("authInfo")` (the MCP SDK's
  * `AuthInfo`).
  *
- * Otherwise it responds 401 or 403 with a challenge carrying `resource_metadata`, or 503 when the authorization server is unavailable (500 on an unexpected failure). It does not
- * serve the metadata routes: use {@link honoMcp} for the whole endpoint, or pair this with
- * {@link honoProtectedResourceMetadata} for per-route control. Used as route middleware, the
- * handler's context is typed automatically.
+ * Otherwise it sends the guard's error response (401 or 403 with a challenge, 503, or 500; see
+ * `BearerGuard`). It does not serve the metadata routes: use {@link honoMcp} for the whole
+ * endpoint, or pair this with {@link honoProtectedResourceMetadata} for per-route control. Used as
+ * route middleware, the handler's context is typed automatically.
  *
  * @param auth The result of `createMcpAuth()`.
  * @param opts Required scopes and `onError`.
@@ -39,6 +39,8 @@ export type McpAuthVariables = {
  * @example
  * ```ts
  * import { Hono } from "hono";
+ * import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+ * import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
  * import { createMcpAuth } from "@neon/oauth/mcp";
  * import { honoMcpBearerAuth, honoProtectedResourceMetadata } from "@neon/oauth/mcp/hono";
  *
@@ -46,12 +48,15 @@ export type McpAuthVariables = {
  *   baseUrl: process.env.NEON_AUTH_BASE_URL!,
  *   resource: "https://mcp.example.com/mcp",
  * });
+ * const newServer = () => new McpServer({ name: "demo", version: "1.0.0" });
  *
  * const app = new Hono();
  * honoProtectedResourceMetadata(app, auth);
- * app.post("/mcp", honoMcpBearerAuth(auth, { requiredScopes: ["mcp"] }), (c) =>
- *   c.json({ user: c.get("auth").sub }),
- * );
+ * app.post("/mcp", honoMcpBearerAuth(auth, { requiredScopes: ["mcp"] }), async (c) => {
+ *   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+ *   await newServer().connect(transport);
+ *   return transport.handleRequest(c.req.raw, { authInfo: c.get("authInfo") });
+ * });
  * ```
  */
 export function honoMcpBearerAuth(
@@ -100,8 +105,10 @@ export interface HonoMcpOptions extends BearerAuthOptions {
  *
  * It serves the RFC 9728 protected-resource metadata and its CORS preflight (unauthenticated),
  * requires a valid bearer token on POST, GET and DELETE (the Streamable HTTP methods) at the MCP
- * path, and passes every other request through. A missing or invalid token gets a 401 or 403 with a challenge carrying `resource_metadata`, or a 503 when the authorization server is unavailable (500 on an unexpected failure). For authenticated requests it sets `c.get("auth")`
- * (the verified {@link AuthResult}) and `c.get("authInfo")` (the MCP SDK's `AuthInfo`).
+ * path, and passes every other request through. A missing or invalid token gets the guard's error
+ * response (401 or 403 with a challenge, 503, or 500; see `BearerGuard`). For authenticated
+ * requests it sets `c.get("auth")` (the verified {@link AuthResult}) and `c.get("authInfo")` (the
+ * MCP SDK's `AuthInfo`; see `McpAuth.toAuthInfo`).
  *
  * Mount it before the MCP route. The example's Web-standard transport needs
  * `@modelcontextprotocol/sdk` 1.25.0 or later.

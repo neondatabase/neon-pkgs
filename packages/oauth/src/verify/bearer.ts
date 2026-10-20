@@ -37,7 +37,9 @@ export interface OAuthBearerOptions extends BearerAuthOptions {
  * or to a ready-to-send `Response`.
  *
  * The `Response` is 401 (missing or invalid token), 403 (insufficient scope), 503 (authorization
- * server unavailable) or 500 (unexpected failure). The guard never throws; test the result with
+ * server unavailable) or 500 (unexpected failure). The 401 and 403 carry an RFC 6750
+ * `WWW-Authenticate` challenge (with `resource_metadata` for MCP guards); the 5xx bodies never
+ * include the cause, which goes to `onError`. The guard never throws; test the result with
  * `result instanceof Response`, or use `authenticate` from `@neon/oauth/adapter` for an
  * `{ ok, auth | response }` shape.
  */

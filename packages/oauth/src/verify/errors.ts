@@ -35,10 +35,12 @@ export class OAuthError extends Error {
  * configuration instead of catching and retrying.
  *
  * Thrown when `createOAuth`, `createVerifier`, `createMcpAuth`, `createClientMetadataDocument` or a
- * framework sign-in adapter is created, and when a bearer guard is built without an `audience` or
- * `resource`. The framework bearer guards build theirs on each request, so there it surfaces on the
- * first request. A URL `clientId` against a server without Client ID Metadata Document support is
- * only known after discovery, so `startLogin`, `finishLogin` or a token refresh throws it.
+ * framework sign-in adapter is created, and when a bearer guard has no `audience` or `resource`:
+ * `requireBearerAuth()` throws once, when the guard is created, while the framework guards and
+ * `authenticate` build theirs per request, so every request fails (via `next(err)`, the framework's
+ * error handler, or a rejected promise). A URL `clientId` against a server without Client ID
+ * Metadata Document support is only known after discovery, so `startLogin`, `finishLogin` or a
+ * token refresh throws it.
  */
 export class OAuthConfigError extends OAuthError {
 	constructor(message: string) {

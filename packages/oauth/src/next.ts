@@ -35,8 +35,9 @@ export type AuthedHandler<C> = (
 /**
  * Wraps an App Router route handler so it needs a valid bearer token, for a generic API.
  *
- * A missing or invalid token gets a 401 or 403 `Response` with an RFC 6750 `WWW-Authenticate` challenge, or a 503 when the authorization server is unavailable (500 on an unexpected failure); otherwise `handler` runs with the verified {@link AuthResult}. For an MCP server use
- * `withMcpAuth` from `@neon/oauth/mcp/next`.
+ * A missing or invalid token gets the guard's error response (401 or 403 with a challenge, 503, or
+ * 500; see `BearerGuard`); otherwise `handler` runs with the verified
+ * {@link AuthResult}. For an MCP server use `withMcpAuth` from `@neon/oauth/mcp/next`.
  *
  * @typeParam C The route context type, e.g. `{ params: Promise<{ id: string }> }`.
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.

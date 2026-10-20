@@ -27,8 +27,8 @@ export type AuthVariables = { Variables: { auth: AuthResult } };
  * Hono middleware that requires a valid bearer token, for a generic API. On success it stores the
  * verified {@link AuthResult} at `c.get("auth")` and calls the next handler.
  *
- * Otherwise it responds 401 or 403 with an RFC 6750 `WWW-Authenticate` challenge, or 503 when the authorization server is unavailable (500 on an unexpected failure). For an MCP
- * server use `honoMcp` from `@neon/oauth/mcp/hono`.
+ * Otherwise it sends the guard's error response (401 or 403 with a challenge, 503, or 500; see
+ * `BearerGuard`). For an MCP server use `honoMcp` from `@neon/oauth/mcp/hono`.
  *
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
@@ -91,7 +91,10 @@ export function honoBearerAuth(
  *
  * const app = new Hono();
  * app.use(honoOAuthClient(oauth.client)); // serves /api/auth/login, /callback, /logout
- * app.get("/me", async (c) => c.json(await oauth.client.getUser(c.req.raw)));
+ * app.get("/me", async (c) => {
+ *   const result = await oauth.client.getUser(c.req.raw);
+ *   return result.ok ? c.json(result.user) : c.json({ error: result.reason }, 401);
+ * });
  * ```
  */
 export function honoOAuthClient(

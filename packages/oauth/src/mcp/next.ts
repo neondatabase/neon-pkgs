@@ -26,16 +26,18 @@ export type AuthedHandler<C> = (
 /**
  * Wraps an App Router MCP route handler so it needs a valid bearer token.
  *
- * A missing or invalid token gets a 401 or 403 `Response` with a challenge carrying `resource_metadata`, or a 503 when the authorization server is unavailable (500 on an unexpected failure); otherwise `handler` runs with the verified {@link AuthResult}. Next route
- * handlers have no middleware, hence a wrapper. It does not serve the metadata routes: add
- * {@link createMetadataHandlers} for those. Create `auth` once in a shared module (for example
- * `lib/mcp-auth.ts`) and import it in both route files. The example's Web-standard transport needs
- * `@modelcontextprotocol/sdk` 1.25.0 or later.
+ * A missing or invalid token gets the guard's error response (401 or 403 with a challenge, 503, or
+ * 500; see `BearerGuard`); otherwise `handler` runs with the verified
+ * {@link AuthResult}. Next route handlers have no middleware, hence a wrapper. It does not serve the
+ * metadata routes: add {@link createMetadataHandlers} for those. Create `auth` once in a shared
+ * module (for example `lib/mcp-auth.ts`) and import it in both route files. The example's
+ * Web-standard transport needs `@modelcontextprotocol/sdk` 1.25.0 or later.
  *
  * @typeParam C The route context type, e.g. `{ params: Promise<{ id: string }> }`.
  * @param auth The result of `createMcpAuth()`.
  * @param handler Runs only for authenticated requests; see {@link AuthedHandler}. Convert the
- *   result for the MCP SDK transport with `auth.toAuthInfo(result)`.
+ *   result to the MCP TypeScript SDK's `AuthInfo` with `auth.toAuthInfo(result)` and pass it to
+ *   `transport.handleRequest(request, { authInfo })`.
  * @param opts Required scopes and `onError`.
  * @returns A route handler `(request, routeContext) => Promise<Response>` to export as `POST`, `GET`, ...
  *
@@ -44,13 +46,9 @@ export type AuthedHandler<C> = (
  * // app/mcp/route.ts
  * import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
  * import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
- * import { createMcpAuth } from "@neon/oauth/mcp";
  * import { withMcpAuth } from "@neon/oauth/mcp/next";
+ * import { auth } from "@/lib/mcp-auth"; // export const auth = createMcpAuth({ ... })
  *
- * const auth = createMcpAuth({
- *   baseUrl: process.env.NEON_AUTH_BASE_URL!,
- *   resource: "https://mcp.example.com/mcp",
- * });
  * const newServer = () => new McpServer({ name: "demo", version: "1.0.0" });
  *
  * export const POST = withMcpAuth(auth, async (request, result) => {
@@ -87,13 +85,8 @@ export function withMcpAuth<C = unknown>(
  * @example
  * ```ts
  * // app/.well-known/oauth-protected-resource/[[...path]]/route.ts
- * import { createMcpAuth } from "@neon/oauth/mcp";
  * import { createMetadataHandlers } from "@neon/oauth/mcp/next";
- *
- * const auth = createMcpAuth({
- *   baseUrl: process.env.NEON_AUTH_BASE_URL!,
- *   resource: "https://mcp.example.com/mcp",
- * });
+ * import { auth } from "@/lib/mcp-auth"; // export const auth = createMcpAuth({ ... })
  *
  * export const { GET, OPTIONS } = createMetadataHandlers(auth);
  * ```

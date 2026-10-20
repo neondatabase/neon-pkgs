@@ -12,8 +12,52 @@ npm install @neon/oauth
 
 Requires Node.js 20.19+. The sign-in client's cookie encryption uses `node:crypto`, so **it does not run on the Edge runtime** (including Next.js `runtime = "edge"`, and Cloudflare Workers without Node compatibility). Token verification (`@neon/oauth/verify`) and MCP protection (`@neon/oauth/mcp`) only need `jose` and `fetch`.
 
+## Prerequisites
+
+Set these up in Neon first. The [OAuth provider guide](https://neon.com/docs/auth/guides/plugins/oauth-provider) covers each step (the plugin is currently in private preview).
+
+- **`NEON_AUTH_BASE_URL`:** the Auth URL of your branch, which is the OAuth issuer, e.g. `https://ep-example.neonauth.us-east-1.aws.neon.tech/neondb/auth`. Copy it from the Neon Console, or read `base_url` from `GET .../auth`. It differs on every branch.
+- **A protected resource:** enable the OAuth provider on the branch (Console: **Settings** > **Better Auth** > **Plugins**) and add your API identifier (or MCP server URL) as a resource. It is an absolute URL that becomes the token's `aud`; it does not need to resolve. Use the same value as `resource` below.
+- **`NEON_AUTH_CLIENT_ID` and `NEON_AUTH_CLIENT_SECRET`** (only to sign users in): create an OAuth client for your app, from the **OAuth clients** list in the OAuth provider settings or the create-client API. A confidential client shows its secret once; a public client has none. For MCP and other public clients, a [Client ID Metadata Document](#client-id-metadata-documents) replaces this step.
+- **The redirect URI:** register `https://app.example.com/api/auth/callback` on the client. It must match exactly, use `https` (or `http` on a loopback host when localhost access is enabled for the branch), and contain no fragment or credentials.
+- **`NEON_AUTH_COOKIE_SECRET`:** 32+ random characters, e.g. `openssl rand -hex 32`.
+
+You also host the login and consent pages the authorization server redirects to; the guide explains how they complete the flow.
+
+## Quickstart
+
+A complete Hono app that signs users in with cookies and protects an API with bearer tokens (the values come from [Prerequisites](#prerequisites)). Other frameworks and setups are covered below.
+
+```ts
+import { Hono } from "hono";
+import { createOAuth } from "@neon/oauth";
+import { honoBearerAuth, honoOAuthClient, type AuthVariables } from "@neon/oauth/hono";
+
+const oauth = createOAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  resource: "https://api.example.com",
+  clientId: process.env.NEON_AUTH_CLIENT_ID!,
+  redirectUri: "https://app.example.com/api/auth/callback",
+  cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET! },
+});
+
+const app = new Hono<AuthVariables>();
+app.use(honoOAuthClient(oauth.client)); // GET /api/auth/login, /callback, /logout
+app.get("/me", async (c) => {
+  const result = await oauth.client.getUser(c.req.raw);
+  return result.ok ? c.json(result.user) : c.json({ error: result.reason }, 401);
+});
+app.get("/api/things", honoBearerAuth(oauth), (c) => c.json({ user: c.get("auth").sub }));
+
+export default app;
+```
+
+Open `/api/auth/login?returnTo=/me` to sign in. See [Sign in](#sign-in), [Protect an API](#protect-an-api) and [Protect an MCP server](#protect-an-mcp-server) for the rest.
+
 ## Contents
 
+- [Prerequisites](#prerequisites)
+- [Quickstart](#quickstart)
 - [Choose your setup](#choose-your-setup)
 - [Sign users in and protect an API](#sign-users-in-and-protect-an-api)
   - [Sign in](#sign-in)
@@ -102,28 +146,49 @@ createServer((req, res) =>
 ).listen(3000);
 ```
 
-Express and `node:http` hand your handlers their own request type, but `getUser`, `getSession`, `getAccessToken` and `withAccessToken` take a Web `Request`. Build one from the headers and URL, and forward every `Set-Cookie` of a refreshed session:
+Express and `node:http` hand your handlers their own request type, but `getUser`, `getSession`, `getAccessToken` and `withAccessToken` take a Web `Request`. Build one from the URL and the `Cookie` header. With `getAccessToken`, a refreshed session comes back as `setCookie`, which you append to your own response:
 
 ```ts
-import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
-import type { OAuthClient } from "@neon/oauth";
+import type { NextFunction, Request as ExpressRequest, Response as ExpressResponse } from "express";
+import { AuthServerUnavailableError, type OAuthClient } from "@neon/oauth";
 
 const toRequest = (req: ExpressRequest) =>
   new Request(`${req.protocol}://${req.get("host")}${req.originalUrl}`, {
     headers: { cookie: req.headers.cookie ?? "" },
   });
 
-export async function things(client: OAuthClient, req: ExpressRequest, res: ExpressResponse) {
-  const out = await client.withAccessToken(toRequest(req), ({ authorizationHeaders }) =>
-    fetch("https://api.example.com/things", { headers: authorizationHeaders }),
-  );
-  if (!out.ok) return res.redirect("/api/auth/login");
-  for (const cookie of out.response.headers.getSetCookie()) res.append("set-cookie", cookie); // not folded into one header
-  res.status(out.response.status).send(Buffer.from(await out.response.arrayBuffer()));
+// Express 4 does not catch rejected promises: handle errors and pass the rest to next().
+export async function things(client: OAuthClient, req: ExpressRequest, res: ExpressResponse, next: NextFunction) {
+  try {
+    const token = await client.getAccessToken(toRequest(req));
+    if (!token.ok) return res.redirect("/api/auth/login");
+    if (token.setCookie) res.append("set-cookie", token.setCookie);
+    const upstream = await fetch("https://api.example.com/things", {
+      headers: { authorization: `Bearer ${token.accessToken}` },
+    });
+    res
+      .status(upstream.status)
+      .type(upstream.headers.get("content-type") ?? "application/octet-stream")
+      .send(Buffer.from(await upstream.arrayBuffer()));
+  } catch (err) {
+    if (err instanceof AuthServerUnavailableError) return res.status(503).set("Retry-After", "5").end();
+    next(err);
+  }
 }
 ```
 
-With `node:http` the request is `new Request(new URL(req.url ?? "/", "https://app.example.com"), { headers: { cookie: req.headers.cookie ?? "" } })`, and the cookies go out with `res.setHeader("set-cookie", out.response.headers.getSetCookie())`.
+With `node:http`, build the request and send the cookie like this:
+
+```ts
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+const toRequest = (req: IncomingMessage) =>
+  new Request(new URL(req.url ?? "/", "https://app.example.com"), {
+    headers: { cookie: req.headers.cookie ?? "" },
+  });
+
+const setSessionCookie = (res: ServerResponse, setCookie: string) => res.setHeader("set-cookie", setCookie);
+```
 
 ### Call an API as the user
 
@@ -240,9 +305,9 @@ The Web-standard transport (`@modelcontextprotocol/sdk/server/webStandardStreama
 
 `resource` is the audience. 401/403 challenges include `resource_metadata` pointing at the path-inserted RFC 9728 metadata URL. `scopesSupported` adds `scopes_supported` to the metadata document. Verification options (`algorithms`, `clockTolerance`, `discovery`, `jwks`) are accepted alongside.
 
-In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP SDK's `AuthInfo`. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(auth)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(auth), handler)`), which types the handler on its own.
+In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP TypeScript SDK's `AuthInfo` (from `@modelcontextprotocol/sdk/server/auth/types.js`). Pass it to `transport.handleRequest(req, { authInfo })` and your tool handlers receive it as `extra.authInfo`, which is how a tool learns who is calling and with which scopes. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(auth)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(auth), handler)`), which types the handler on its own.
 
-Express: `app.use(expressMcp(auth))`; the guard reads headers only, so it works before or after `express.json()`. `req.auth` is an `AuthResult` until you replace it: the SDK's Node transport reads `req.auth` as its `AuthInfo`, so convert it before `handleRequest`.
+Express: `app.use(expressMcp(auth))`; the guard reads headers only, so it works before or after `express.json()`. `req.auth` is an `AuthResult` until you replace it: the SDK's Node transport reads `req.auth` as its `AuthInfo` (the same type, delivered to tools as `extra.authInfo`), so convert it before `handleRequest`.
 
 ```ts
 import express from "express";
@@ -364,7 +429,7 @@ Each layer follows one rule:
 
 | Situation | What you get | Examples |
 |---|---|---|
-| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown when you create the object (the framework bearer guards build their guard per request, so they throw on the first request; a URL `clientId` against a server without CIMD support is only known after discovery, so it is thrown by `startLogin`, `finishLogin` or a token refresh) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
+| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown when you create the object (except a URL `clientId` against a server without CIMD support, known only after discovery, which `startLogin`, `finishLogin` or a token refresh throws; and the bearer-guard case below) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
 | **Authorization server unreachable** (discovery, JWKS, token and userinfo endpoints: network, timeout, 5xx, untrusted document) | `AuthServerUnavailableError`, thrown by every operation that needs the server. It is never reported as "signed out" | `getDiscovery`, `verifyAccessToken`, `startLogin`, `finishLogin`, `getAccessToken` / `withAccessToken` when a refresh is needed |
 | **Expected auth outcome** | a returned `{ ok: false, reason }` | see below |
 
@@ -379,7 +444,11 @@ Each layer follows one rule:
 
 `refresh_failed` means the server answered and rejected the refresh token, so the user must sign in again. An outage is never reported as `refresh_failed` or `no_session`; it is thrown as `AuthServerUnavailableError`, and the right response is a retry message (503), not a login redirect.
 
-The HTTP helpers answer instead of throwing: the bearer guards and every adapter reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope), `503` (server unavailable) or `500` (unexpected failure). The one exception is a guard with no `audience` and no configured `resource`: that is an `OAuthConfigError`, thrown on every request (passed to `next(err)` or the framework's error handler); the `login` and `callback` routes reply `400` for a bad callback (including `token_rejected` / `userinfo_rejected`) and `503` when the server is unavailable. Sign-in needs the userinfo endpoint: if it is unreachable the callback answers `503` and sets no session cookie. Pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx; nothing is logged by default.
+The HTTP helpers answer instead of throwing:
+
+- **Bearer guards and every bearer adapter** reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope), `503` (server unavailable) or `500` (unexpected failure). The one exception is a guard with no `audience` and no configured `resource`, which is an `OAuthConfigError`: `requireBearerAuth()` throws it once, when the guard is created; the framework guards and `authenticate` build theirs per request, so every request fails (via `next(err)`, the framework's error handler, or a rejected promise).
+- **Sign-in routes** reply `302` on success, `400` for a bad callback (including `token_rejected` / `userinfo_rejected`), `503` when the server is unavailable and `500` for an unexpected failure. Sign-in needs the userinfo endpoint: if it is unreachable the callback answers `503` and sets no session cookie.
+- **Logging:** pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx. Nothing is logged by default.
 
 ## Neon Auth notes
 

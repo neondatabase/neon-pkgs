@@ -46,7 +46,7 @@ export const myOAuthClient = (client: OAuthClient): MyMiddleware => {
 
 ### MCP template
 
-An MCP adapter serves the metadata routes, guards the MCP endpoint's methods, and exposes both the `AuthResult` and the MCP SDK's `AuthInfo`. It uses the same primitives; only the source is the result of `createMcpAuth()` (an `McpAuth`).
+An MCP adapter serves the metadata routes, guards the MCP endpoint's methods, and exposes both the `AuthResult` and the MCP TypeScript SDK's `AuthInfo` (what tools receive as `extra.authInfo`). It uses the same primitives; only the source is the result of `createMcpAuth()` (an `McpAuth`).
 
 ```ts
 import type { MyCtx, MyMiddleware } from "myfw";

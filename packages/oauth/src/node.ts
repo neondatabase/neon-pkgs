@@ -36,8 +36,8 @@ export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
  * `node:http` middleware (`(req, res, next)`) that requires a valid bearer token, for a generic
  * API. On success it sets the verified {@link AuthResult} on `req.auth` and calls `next()`.
  *
- * Otherwise it responds 401 or 403 with an RFC 6750 `WWW-Authenticate` challenge, or 503 when the authorization server is unavailable (500 on an unexpected failure). For an MCP
- * server use `nodeMcp` from `@neon/oauth/mcp/node`.
+ * Otherwise it sends the guard's error response (401 or 403 with a challenge, 503, or 500; see
+ * `BearerGuard`). For an MCP server use `nodeMcp` from `@neon/oauth/mcp/node`.
  *
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
