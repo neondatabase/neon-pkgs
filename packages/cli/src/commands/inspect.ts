@@ -37,6 +37,21 @@ const fillSingleProjectUnlessDbUrl = async (
 	return fillSingleProject(props);
 };
 
+export const visibleInspectFields = (
+	query: InspectQuery,
+	rows: readonly Record<string, unknown>[],
+	includeDatabaseColumn: boolean,
+): string[] => {
+	const fields = includeDatabaseColumn
+		? ["database", ...query.fields]
+		: [...query.fields];
+	return fields.filter(
+		(field) =>
+			!query.optionalFields?.includes(field) ||
+			rows.some((row) => row[field] != null),
+	);
+};
+
 const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 	const query: InspectQuery = INSPECT_QUERIES[name];
 	const { targets, includeDatabaseColumn, branchDatabaseCount } =
@@ -77,9 +92,7 @@ const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
 		}
 	}
 
-	const fields = includeDatabaseColumn
-		? ["database", ...query.fields]
-		: query.fields;
+	const fields = visibleInspectFields(query, rows, includeDatabaseColumn);
 	writer(props).end(rows, {
 		fields: fields as readonly (keyof (typeof rows)[number])[],
 		emptyMessage: includeDatabaseColumn
