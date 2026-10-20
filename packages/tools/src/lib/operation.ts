@@ -56,7 +56,7 @@ export interface NeonTool<
 	Id extends string = string,
 	Output = unknown,
 > {
-	operationId: string;
+	selector: string;
 	id: Id;
 	title: string;
 	description: string;
@@ -106,7 +106,7 @@ export const bindOperation = <
 	operation: NeonOperation<InputSchema, Id, Output>,
 	client: Client,
 ): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
-	operationId: operation.operationId,
+	selector: operation.operationId,
 	id: operation.id,
 	title: operation.title,
 	description: operation.description,
