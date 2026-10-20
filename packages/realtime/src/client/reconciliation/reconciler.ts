@@ -7,6 +7,8 @@ import type {
 	WireRow,
 } from "../protocol/messages.js";
 
+import { validateChangeOrder } from "./ordered-changes.js";
+
 export interface ReconciledBatch {
 	readonly changes: readonly WireChange[];
 	readonly txids: readonly string[];
@@ -15,10 +17,13 @@ export interface ReconciledBatch {
 export interface ReconciliationTarget {
 	/** Observe a baseline-sync attempt after reconciliation accepts it. */
 	baselineSyncStarted(): void;
-	/** Install state without notifying application listeners. */
-	installReset(rows: readonly WireRow[]): void;
-	/** Install changes without notifying application listeners. */
-	applyBatch(changes: readonly WireChange[]): void;
+	/** Prepare all candidate state without mutating visible rows or snapshots.
+	 * The returned installer must not fail or invoke application callbacks.
+	 */
+	prepare(
+		rows: readonly WireRow[] | undefined,
+		batches: readonly ReconciledBatch[],
+	): () => void;
 	/** Notify raw listeners after all state for this publication is installed. */
 	publishReset(rows: readonly WireRow[], mvcc: MvccSnapshot): void;
 	/** Notify listeners after all state for this publication is installed. */
@@ -335,21 +340,18 @@ export class BaselineSyncPublicationReconciler {
 		// the informational MVCC fields can incorrectly discard valid changes.
 		const replay = state.backlog;
 		const rows = Object.freeze([...baselineSync.rows]);
-		state.baselineSync = undefined;
-		this.releaseBacklog(state);
 		try {
-			state.target.installReset(rows);
-			for (const batch of replay) {
-				if (batch.changes.length > 0) {
-					state.target.applyBatch(batch.changes);
-				}
-			}
+			const install = state.target.prepare(rows, replay);
+			install();
 		} catch (error) {
+			if (error instanceof ProtocolError) throw error;
 			state.active = false;
 			state.live = false;
 			state.target.decodeFailed(error);
 			return;
 		}
+		state.baselineSync = undefined;
+		this.releaseBacklog(state);
 		state.target.baselineSyncCompleted(message.batch_count);
 		state.target.publishReset(rows, baselineSync.mvcc);
 		for (const batch of replay) state.target.publishBatch(batch);
@@ -452,20 +454,40 @@ export class BaselineSyncPublicationReconciler {
 		) {
 			throw new ProtocolError("invalid publication commit");
 		}
-		this.publication = undefined;
-
-		const immediate: Array<{
+		const committed: Array<{
 			readonly state: TargetState;
+			readonly staged: StagedTarget;
 			readonly batch: ReconciledBatch;
+			readonly install?: () => void;
+			readonly failure?: { readonly error: unknown };
 		}> = [];
+		// Validate complete programs across fragments, including raw targets and
+		// baseline backlogs, before advancing any target's protocol or row state.
+		for (const staged of publication.batches.values())
+			validateChangeOrder(staged.changes);
 		for (const [liveId, staged] of publication.batches) {
 			const state = this.target(liveId);
-			state.nextSequence = staged.nextSequence;
 			const batch = Object.freeze({
 				changes: Object.freeze([...staged.changes]),
 				txids: Object.freeze([...staged.txids]),
 			});
-			if (state.live) immediate.push({ state, batch });
+			try {
+				const install = state.live
+					? state.target.prepare(undefined, [batch])
+					: undefined;
+				committed.push({ state, staged, batch, install });
+			} catch (error) {
+				if (error instanceof ProtocolError) throw error;
+				committed.push({ state, staged, batch, failure: { error } });
+			}
+		}
+		this.publication = undefined;
+		for (const { state, staged, batch, install, failure } of committed) {
+			state.nextSequence = staged.nextSequence;
+			if (failure) {
+				state.active = false;
+				state.live = false;
+			} else if (install) install();
 			else state.backlog.push(batch);
 		}
 		const resetStates: TargetState[] = [];
@@ -479,32 +501,16 @@ export class BaselineSyncPublicationReconciler {
 			state.live = false;
 			resetStates.push(state);
 		}
-
-		// Preserve publication atomicity: mutate every target before invoking any
-		// listener that could inspect another subscription on this connection.
-		const installed: typeof immediate = [];
-		const failed: Array<{
-			readonly state: TargetState;
-			readonly error: unknown;
-		}> = [];
-		for (const entry of immediate) {
-			try {
-				entry.state.target.applyBatch(entry.batch.changes);
-				installed.push(entry);
-			} catch (error) {
-				entry.state.active = false;
-				entry.state.live = false;
-				failed.push({ state: entry.state, error });
-			}
-		}
 		this.events.publicationCommitted(bodyCount);
 		for (const state of resetStates) {
 			state.lifecycle?.interrupted();
 			state.target.resetRequired();
 		}
-		for (const { state, error } of failed) state.target.decodeFailed(error);
-		for (const { state, batch } of installed) {
-			state.target.publishBatch(batch);
+		for (const { state, failure } of committed) {
+			if (failure) state.target.decodeFailed(failure.error);
+		}
+		for (const { state, batch, install } of committed) {
+			if (install) state.target.publishBatch(batch);
 		}
 	}
 

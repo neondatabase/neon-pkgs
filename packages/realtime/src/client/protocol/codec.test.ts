@@ -15,6 +15,7 @@ import {
 } from "./index.js";
 import type { ClientMessage } from "./messages.js";
 import fixtures from "./schema/realtime-protocol-v1.fixtures.json";
+import v2Fixtures from "./schema/realtime-protocol-v2.fixtures.json";
 
 const CLIENT_TYPES = new Set([
 	"subscribe",
@@ -72,7 +73,26 @@ function decodesCleanly(frame: string): boolean {
 	}
 }
 
-describe("Realtime v1 JSON codec", () => {
+describe("Realtime v2 JSON codec", () => {
+	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
+		for (const fixture of v2Fixtures.valid)
+			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
+				fixture,
+			);
+		for (const fixture of v2Fixtures.invalid) rejectServerMessage(fixture);
+		expect(() =>
+			encodeClientMessage({
+				type: "subscribe",
+				request_id: "1",
+				authorization: "token",
+				supports_moves: true,
+			} as ClientMessage),
+		).toThrow(ProtocolError);
+		rejectServerMessage({ type: "ready", supports_moves: true });
+		rejectServerMessage({ type: "mode_ack", mode: "ordered" });
+		rejectServerMessage({ type: "abort", publication_id: "p" });
+	});
+
 	it("decodes every valid server fixture", () => {
 		const validServerFixtures = fixtures.valid.filter(({ type }) =>
 			SERVER_TYPES.has(type),

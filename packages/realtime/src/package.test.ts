@@ -18,6 +18,7 @@ const packageRoot = dirname(
 const schemaSubpaths = [
 	"schema/realtime-query-capability-v1.schema.json",
 	"schema/realtime-protocol-v1.schema.json",
+	"schema/realtime-protocol-v2.schema.json",
 ] as const;
 
 describe("@neon/realtime package", () => {

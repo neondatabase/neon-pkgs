@@ -13,8 +13,9 @@ React integration for [`@neon/realtime`](../realtime). It provides one shared
 npm install @neon/realtime @neon/realtime-react react
 ```
 
-> **Requirements:** Node.js >= 20.19 and React 18 or 19. The core SDK and React
-> are peer dependencies, so applications control their installed versions.
+> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and React 18 or 19.
+> The core SDK and React are peer dependencies, so applications control their
+> installed versions.
 
 ## Usage
 
@@ -83,6 +84,11 @@ The hook returns `data`, `status`, and `error`, plus stable `utils` for
 lower-level event listeners. Register listeners in an effect. `utils` omits
 `unsubscribe()` because React owns cleanup when the component unmounts or its
 sealed query changes.
+
+`data` preserves the server's ordered result sequence, including incremental
+moves. Each publication and completed baseline backlog exposes one atomic
+materialized snapshot. Upgrade the core and this adapter together to 0.2.0;
+the core requires a server that accepts `neon.realtime.v2`.
 
 The hook infers the row type from the sealed query. `initialData` and
 `refreshQuery` must match it; they cannot remove selected columns or widen

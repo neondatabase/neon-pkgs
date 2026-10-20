@@ -3,7 +3,8 @@
 These files are the canonical public contracts for Realtime protocol messages
 and decoded query capabilities. Their package exports use the same filenames:
 
-- `@neon/realtime/schema/realtime-protocol-v1.schema.json`
+- `@neon/realtime/schema/realtime-protocol-v2.schema.json` (active protocol)
+- `@neon/realtime/schema/realtime-protocol-v1.schema.json` (unchanged compatibility contract)
 - `@neon/realtime/schema/realtime-query-capability-v1.schema.json`
 
 After editing a schema, run `pnpm --filter @neon/realtime generate` to refresh
@@ -13,11 +14,16 @@ test scripts check that the generated files match the source schemas.
 ## Proxy synchronization
 
 The Realtime proxy vendors these schemas from immutable commits in this
-repository. Its schema sync script currently derives `neon-live-*` source
-filenames. Before pinning it to this rename, update that script to accept:
+repository. Pin its protocol generator to:
 
-- `packages/realtime/schema/realtime-protocol-v1.schema.json`
+- `packages/realtime/schema/realtime-protocol-v2.schema.json`
 - `packages/realtime/schema/realtime-query-capability-v1.schema.json`
+
+The SDK generates its active TypeScript types and standalone validator from v2.
+V2 keeps the v1 envelopes and adds `move` with required `row_key` and
+`after_row_key`; the latter is a row key or null for head. Validate normalized
+program structure after joining fragments, then validate row/anchor existence
+against the private candidate result. The v1 schema and fixtures remain stable.
 
 Update the adjacent `.source.json` metadata with the source commit, path,
 blob, source SHA-256, and generated SHA-256. Regenerate and check both schemas

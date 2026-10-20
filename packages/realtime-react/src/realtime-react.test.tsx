@@ -33,6 +33,69 @@ afterEach(() => {
 });
 
 describe("Realtime React integration", () => {
+	it("preserves the server sequence through the real materialized client", () => {
+		const wire = wireClient();
+		const results: UseLiveQueryResult<MessageRow>[] = [];
+		try {
+			render(
+				<RealtimeProvider client={wire.client}>
+					<Messages
+						query={query("ordered")}
+						observe={(result) => results.push(result)}
+					/>
+				</RealtimeProvider>,
+			);
+			act(() =>
+				wire.baseline(
+					["a", "b", "c", "d"].map((id, index) => ({
+						row_key: id.repeat(64),
+						values: [String(index + 1), id],
+					})),
+				),
+			);
+			act(() => {
+				wire.receive({ type: "open", publication_id: "rotation" });
+				wire.receive({
+					type: "keyed_results",
+					publication_id: "rotation",
+					index: 0,
+					txids: ["42"],
+					targets: [{ live_id: "1", epoch: "1", sequence: "1" }],
+					changes: [
+						{
+							op: "move",
+							row_key: "c".repeat(64),
+							after_row_key: null,
+						},
+						{
+							op: "move",
+							row_key: "d".repeat(64),
+							after_row_key: "c".repeat(64),
+						},
+					],
+				});
+			});
+			expect(screen.getByText("live:a")).toBeTruthy();
+			act(() =>
+				wire.receive({
+					type: "commit",
+					publication_id: "rotation",
+					body_count: 1,
+					frontier: { lsn: "0/10" },
+				}),
+			);
+			expect(screen.getByText("live:c")).toBeTruthy();
+			expect(results.at(-1)?.data?.map((row) => row.title)).toEqual([
+				"c",
+				"d",
+				"a",
+				"b",
+			]);
+		} finally {
+			wire.client.close();
+		}
+	});
+
 	it("confirms no-op progress through the real client without notifying row listeners", async () => {
 		const wire = wireClient();
 		let observed: UseLiveQueryResult<MessageRow> | undefined;
@@ -445,7 +508,9 @@ function wireClient() {
 	return {
 		client,
 		receive,
-		baseline: () => {
+		baseline: (
+			rows = [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+		) => {
 			receive({ type: "ready" });
 			receive({
 				type: "subscribed",
@@ -477,7 +542,7 @@ function wireClient() {
 				type: "baseline_sync_batch",
 				...target,
 				index: 0,
-				rows: [{ row_key: "a".repeat(64), values: ["1", "before"] }],
+				rows,
 			});
 			receive({ type: "baseline_sync_end", ...target, batch_count: 1 });
 		},
