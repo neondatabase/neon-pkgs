@@ -27,28 +27,23 @@ const hasCurrentBranchArgv = (): boolean =>
 
 const ANONYMOUS = "anonymous";
 
-/** Segment requires every call to carry a `userId`, an `anonymousId`, or both. */
-export type AnalyticsIdentity =
-	| { userId: string; anonymousId?: string }
-	| { userId?: string; anonymousId: string };
+export type AnalyticsIdentity = { userId: string; anonymousId?: string };
 
 /**
  * The identity to send an event under. A run nothing identified (an empty `userId`, which
- * Segment would forward as-is) falls back to the stored anonymous id, and to the shared
- * `"anonymous"` user where there is none. A known user is sent with the id so Segment can
- * link the two.
+ * Segment would forward as-is) is the shared `"anonymous"` user, as it always was, so existing
+ * queries on it keep working. The stored anonymous id goes with every event, signed in or not,
+ * so the signed-out events of an installation can be joined to its account once a user is known.
  *
  * Exported for tests.
  */
 export const analyticsIdentity = (
 	userId: string | undefined,
 	anonymousId: string | undefined,
-): AnalyticsIdentity => {
-	if (userId) {
-		return anonymousId ? { userId, anonymousId } : { userId };
-	}
-	return anonymousId ? { anonymousId } : { userId: ANONYMOUS };
-};
+): AnalyticsIdentity => ({
+	userId: userId || ANONYMOUS,
+	...(anonymousId ? { anonymousId } : {}),
+});
 
 /**
  * The account fields of `cli_command_success`, produced here and read in `index.ts`.

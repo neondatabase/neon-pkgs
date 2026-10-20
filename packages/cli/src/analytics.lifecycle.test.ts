@@ -171,9 +171,9 @@ describe("analytics account lookup", () => {
 				"CLI Started",
 				"cli_command_success",
 			]);
-			// No user was resolved, so each event goes out under the anonymous id alone.
+			// No user was resolved: the shared anonymous user, with this installation's id.
 			for (const event of events) {
-				expect(event.userId).toBeUndefined();
+				expect(event.userId).toBe("anonymous");
 				expect(event.anonymousId).toBe(anonymousId);
 			}
 		} finally {
@@ -207,7 +207,7 @@ describe("analytics account lookup", () => {
 				accountId: "acct-2",
 				authMethod: "api_key_user",
 			});
-			expect(events.at(-1)?.userId).toBeUndefined();
+			expect(events.at(-1)?.userId).toBe("anonymous");
 			expect(events.at(-1)?.anonymousId).toBe(anonymousId);
 		} finally {
 			await api.close();

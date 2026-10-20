@@ -29,8 +29,20 @@ describe("analyticsIdentity", () => {
 		});
 	});
 
-	it("treats an empty user id the same as a missing one", () => {
+	it("keeps the shared anonymous user for a signed-out run and adds the stored id", () => {
+		expect(analyticsIdentity(undefined, ANON_ID)).toEqual({
+			userId: "anonymous",
+			anonymousId: ANON_ID,
+		});
 		expect(analyticsIdentity("", ANON_ID)).toEqual({
+			userId: "anonymous",
+			anonymousId: ANON_ID,
+		});
+	});
+
+	it("sends the user and the stored id together once the user is known", () => {
+		expect(analyticsIdentity("1234", ANON_ID)).toEqual({
+			userId: "1234",
 			anonymousId: ANON_ID,
 		});
 	});
