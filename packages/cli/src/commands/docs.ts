@@ -161,8 +161,7 @@ const search = async (props: DocsSearchProps) => {
 	);
 };
 
-// One block per hit: "Title › Section" cut to the terminal width, then the full URL, which
-// stays whole so it can be copied or clicked.
+// The URL is never cut so it stays copyable and clickable.
 export function formatSearchResults(
 	hits: DocsSearchHit[],
 	opts: { emptyMessage: string; width: number | undefined },
@@ -174,10 +173,7 @@ export function formatSearchResults(
 			const line = [hit.title, ...section].join(" › ");
 			const shown =
 				opts.width === undefined ? line : truncateTo(line, opts.width);
-			const title = shown.startsWith(hit.title)
-				? `${chalk.bold(hit.title)}${shown.slice(hit.title.length)}`
-				: chalk.bold(shown);
-			return `${title}\n  ${chalk.cyan(hit.url)}\n`;
+			return `${chalk.bold(shown)}\n  ${chalk.cyan(hit.url)}\n`;
 		})
 		.join("\n");
 }
