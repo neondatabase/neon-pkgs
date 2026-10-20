@@ -117,9 +117,9 @@ export const bindOperation = <
 	async execute(input, context) {
 		const parsed = await operation.inputSchema.parseAsync(input);
 		const activeClient =
-			context !== undefined && "apiKey" in context
-				? clientWithCredential(client, context.apiKey)
-				: client;
+			context?.apiKey === undefined
+				? client
+				: clientWithCredential(client, context.apiKey);
 		const result = await operation.invoke(
 			activeClient,
 			parsed,
@@ -131,11 +131,8 @@ export const bindOperation = <
 
 const clientWithCredential = (
 	client: Client,
-	apiKey: NeonBearerCredential | undefined,
+	apiKey: NeonBearerCredential,
 ): Client => {
-	if (apiKey === undefined) {
-		throw new TypeError("A Neon API key or OAuth access token is required");
-	}
 	return createClient({
 		...client.getConfig(),
 		auth: requireBearerCredential(apiKey),
