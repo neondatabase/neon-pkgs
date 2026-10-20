@@ -46,7 +46,8 @@
       "default": "./dist/server.js"
     },
     "./schema/realtime-query-capability-v1.schema.json": "./schema/realtime-query-capability-v1.schema.json",
-    "./schema/realtime-protocol-v1.schema.json": "./schema/realtime-protocol-v1.schema.json"
+    "./schema/realtime-protocol-v1.schema.json": "./schema/realtime-protocol-v1.schema.json",
+    "./schema/realtime-protocol-v2.schema.json": "./schema/realtime-protocol-v2.schema.json"
   },
   "files": [
     "README.md",
