@@ -1,5 +1,12 @@
 # neonctl
 
+## 8.9.1
+
+### Patch Changes
+
+- Updated dependencies [f3596ca]
+  - neon@8.9.1
+
 ## 8.9.0
 
 ### Patch Changes

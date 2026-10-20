@@ -1,5 +1,11 @@
 # neon
 
+## 8.9.1
+
+### Patch Changes
+
+- f3596ca: `neon login --keyring` on Windows no longer fails after the browser step. OAuth sessions now store only the fields the CLI reads, which fits Windows Credential Manager's 1,280-character limit, and a credential that still doesn't fit fails before anything is written with a message that names the command to run instead.
+
 ## 8.9.0
 
 ### Minor Changes
