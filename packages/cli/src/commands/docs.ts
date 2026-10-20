@@ -1,7 +1,9 @@
+import chalk from "chalk";
 import type yargs from "yargs";
 
-import { getCliAgent } from "../env.js";
+import { getCliAgent, isCi } from "../env.js";
 import { isNetworkError } from "../errors.js";
+import { resolveOutputWidth, stripAnsi, truncateTo } from "../human_table.js";
 import pkg from "../pkg.js";
 import type { CommonProps } from "../types.js";
 import { single } from "../utils/flags.js";
@@ -139,14 +141,46 @@ const search = async (props: DocsSearchProps) => {
 			version: pkg.version,
 		}),
 	});
-	writer(props).end(hits, {
-		fields: ["title", "heading", "url"],
-		emptyMessage: `No results for "${query}".`,
-		renderColumns: {
-			heading: (hit) => sectionOf(hit),
-		},
+	const emptyMessage = `No results for "${query}".`;
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(hits, {
+			fields: ["title", "heading", "url"],
+			emptyMessage,
+		});
+		return;
+	}
+	const text = formatSearchResults(hits, {
+		emptyMessage,
+		width: resolveOutputWidth(process.stdout, undefined, {
+			stdout: process.stdout,
+			envColumns: process.env.COLUMNS,
+		}),
 	});
+	process.stdout.write(
+		process.env.NO_COLOR || isCi() ? stripAnsi(text) : text,
+	);
 };
+
+// One block per hit: "Title › Section" cut to the terminal width, then the full URL, which
+// stays whole so it can be copied or clicked.
+export function formatSearchResults(
+	hits: DocsSearchHit[],
+	opts: { emptyMessage: string; width: number | undefined },
+): string {
+	if (hits.length === 0) return `\n${opts.emptyMessage}\n`;
+	return hits
+		.map((hit) => {
+			const section = sectionOf(hit).split(" > ").filter(Boolean);
+			const line = [hit.title, ...section].join(" › ");
+			const shown =
+				opts.width === undefined ? line : truncateTo(line, opts.width);
+			const title = shown.startsWith(hit.title)
+				? `${chalk.bold(hit.title)}${shown.slice(hit.title.length)}`
+				: chalk.bold(shown);
+			return `${title}\n  ${chalk.cyan(hit.url)}\n`;
+		})
+		.join("\n");
+}
 
 // Docs headings start with the page title ("Glossary > LSN"); the title column already shows it.
 function sectionOf(hit: DocsSearchHit): string {

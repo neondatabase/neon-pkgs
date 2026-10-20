@@ -6,10 +6,12 @@ import {
 import type { AddressInfo } from "node:net";
 import { describe, expect } from "vitest";
 import YAML from "yaml";
+import { stripAnsi } from "../human_table.js";
 import pkg from "../pkg.js";
 import { test } from "../test_utils/fixtures.js";
 import {
 	DEFAULT_SITE_SEARCH_URL,
+	formatSearchResults,
 	resolveSiteSearchUrl,
 	siteSearchHeaders,
 } from "./docs.js";
@@ -87,6 +89,44 @@ describe("resolveSiteSearchUrl", () => {
 	});
 });
 
+describe("formatSearchResults", () => {
+	const hit = {
+		title: "Automate branching with CircleCI",
+		url: "https://neon.com/docs/guides/branching-circleci",
+		category: "docs",
+		breadcrumb: ["Docs"],
+		heading:
+			"Automate branching with CircleCI > Available commands > Example: Resetting a long-lived branch",
+		excerpt: "",
+	};
+	const plain = (width: number | undefined) =>
+		stripAnsi(
+			formatSearchResults([hit, hit], { emptyMessage: "none", width }),
+		);
+
+	test("puts title and section on one line and the url under it", () => {
+		expect(plain(undefined)).toBe(
+			"Automate branching with CircleCI › Available commands › Example: Resetting a long-lived branch\n" +
+				"  https://neon.com/docs/guides/branching-circleci\n" +
+				"\n" +
+				"Automate branching with CircleCI › Available commands › Example: Resetting a long-lived branch\n" +
+				"  https://neon.com/docs/guides/branching-circleci\n",
+		);
+	});
+
+	test("cuts the title line to the width and keeps the url whole", () => {
+		const [title, url] = plain(40).split("\n");
+		expect(title).toBe("Automate branching with CircleCI › Av...");
+		expect(url).toBe("  https://neon.com/docs/guides/branching-circleci");
+	});
+
+	test("prints the empty message when nothing matched", () => {
+		expect(
+			formatSearchResults([], { emptyMessage: "No results.", width: 80 }),
+		).toBe("\nNo results.\n");
+	});
+});
+
 describe("neon docs search", () => {
 	test("prints title, matched section, and url without logging in", async ({
 		testCliCommand,
@@ -104,13 +144,9 @@ describe("neon docs search", () => {
 						env: DOCS_ENV,
 					},
 				);
-				expect(stdout).toContain("Title");
-				expect(stdout).toContain("Glossary");
-				expect(stdout).toContain("LSN");
-				expect(stdout).toContain(
-					"https://neon.com/docs/reference/glossary",
+				expect(stdout).toBe(
+					"Glossary › LSN\n  https://neon.com/docs/reference/glossary\n",
 				);
-				expect(stdout).not.toContain("Glossary > LSN");
 				expect(stderr).not.toMatch(/auth/i);
 			},
 		);
