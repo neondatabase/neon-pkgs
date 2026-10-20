@@ -350,6 +350,19 @@ export const fillSingleProject = async (
 	}
 };
 
+/**
+ * `--db-url` points at a Postgres directly, so there is no project to look up and the
+ * API client may not exist.
+ */
+export const fillSingleProjectUnlessDbUrl = async (
+	props: CommonProps & { projectId?: string; orgId?: string; dbUrl?: string },
+) => {
+	if (props.dbUrl) {
+		return props;
+	}
+	return fillSingleProject(props);
+};
+
 export const fillSingleOrg = async (props: OrgScopeProps) => {
 	if (props.orgId) {
 		return props;
