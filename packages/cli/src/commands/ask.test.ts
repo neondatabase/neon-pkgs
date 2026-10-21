@@ -82,6 +82,7 @@ describe("neon ask", () => {
 			authorization: string | undefined;
 			accept: string | undefined;
 			source: string | undefined;
+			analytics: string | undefined;
 			body: unknown;
 		}> = [];
 		await withAskServer(
@@ -93,6 +94,10 @@ describe("neon ask", () => {
 					source:
 						typeof req.headers["x-caller-source"] === "string"
 							? req.headers["x-caller-source"]
+							: undefined,
+					analytics:
+						typeof req.headers["x-caller-analytics"] === "string"
+							? req.headers["x-caller-analytics"]
 							: undefined,
 					body,
 				});
@@ -134,6 +139,7 @@ describe("neon ask", () => {
 				authorization: undefined,
 				accept: "text/event-stream",
 				source: "cli",
+				analytics: "off",
 				body: { prompt: "How do schema-only branches work?" },
 			},
 		]);
