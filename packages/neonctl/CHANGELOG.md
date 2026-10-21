@@ -1,5 +1,12 @@
 # neonctl
 
+## 8.10.1
+
+### Patch Changes
+
+- Updated dependencies [7398b8d]
+  - neon@8.10.1
+
 ## 8.10.0
 
 ### Patch Changes

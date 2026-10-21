@@ -1,5 +1,11 @@
 # neon
 
+## 8.10.1
+
+### Patch Changes
+
+- 7398b8d: `neon docs search` tells the Neon search service it is the CLI, with the CLI version and the detected coding agent, so searches can be counted by caller. With `--no-analytics` it asks the service to record nothing.
+
 ## 8.10.0
 
 ### Minor Changes
