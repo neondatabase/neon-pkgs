@@ -2,30 +2,47 @@
 // of this JSON, which the authorization server fetches. The client itself never fetches anything.
 import { OAuthConfigError } from "../verify/errors";
 
+/** Input to {@link createClientMetadataDocument}. */
 export interface ClientMetadataDocumentOptions {
-	/** The https URL this document is served from. Must have a path and no fragment or credentials. */
+	/** The https URL this document is served from. Must be in canonical form with a path, and have no fragment or credentials. */
 	clientId: string;
-	/** Shown on the consent screen. */
+	/** Name shown on the consent screen. */
 	clientName: string;
-	/** https, `http` on a loopback host, or a custom scheme. */
+	/** Allowed redirect URIs: https, `http` on a loopback host, or a custom scheme. At least one; none may contain a fragment. */
 	redirectUris: string[];
+	/** An https URL of the client's home page. */
 	clientUri?: string;
+	/** An https URL of the client's logo, shown on the consent screen. */
 	logoUri?: string;
+	/** Space-separated scopes the client may request. */
 	scope?: string;
-	/** Defaults to `["authorization_code", "refresh_token"]`. */
+	/**
+	 * OAuth grant types the client uses.
+	 *
+	 * @defaultValue `["authorization_code", "refresh_token"]`
+	 */
 	grantTypes?: string[];
 }
 
-/** CIMD clients are public: PKCE, no client secret. */
+/** The JSON document served at the `client_id` URL, in the snake_case wire format authorization servers fetch. Client ID Metadata Document clients are public: PKCE, no client secret. */
 export interface ClientMetadataDocument {
+	/** The URL the document is served from. */
 	client_id: string;
+	/** Name shown on the consent screen. */
 	client_name: string;
+	/** Allowed redirect URIs. */
 	redirect_uris: string[];
+	/** Grant types the client uses. */
 	grant_types: string[];
+	/** Always `["code"]` (authorization code flow). */
 	response_types: ["code"];
+	/** Always `"none"`: a public client authenticating with PKCE. */
 	token_endpoint_auth_method: "none";
+	/** The client's home page, when given. */
 	client_uri?: string;
+	/** The client's logo, when given. */
 	logo_uri?: string;
+	/** Space-separated scopes, when given. */
 	scope?: string;
 }
 
@@ -81,9 +98,36 @@ function assertHttpsUrl(name: string, value: string): void {
 }
 
 /**
- * Builds the document to serve at `clientId`. Serve it with a framework adapter
- * (`createClientMetadataHandlers`, `honoClientMetadata`, ...) and pass the same `clientId` to `createOAuth`.
- * Throws `OAuthConfigError` for an invalid field.
+ * Builds the Client ID Metadata Document for a public client whose `client_id` is an https URL,
+ * so no registration step or secret is needed.
+ *
+ * Use it for an MCP or other public client; use a pre-registered `clientId` otherwise. Serve the
+ * result at `clientId` with a framework adapter (`createClientMetadataHandlers`,
+ * `honoClientMetadata`, `expressClientMetadata`, `nodeClientMetadata`) and pass the same
+ * `clientId` to `createOAuth`. The authorization server fetches the document; your app never does.
+ *
+ * @param options See {@link ClientMetadataDocumentOptions}.
+ * @returns The document to serve as JSON.
+ * @throws {OAuthConfigError} If `clientId` is not a canonical https URL with a path (and no
+ *   fragment or credentials), `clientName` is empty, `redirectUris` is empty or contains an invalid
+ *   URI (a fragment, a forbidden scheme, or `http` on a non-loopback host), or `clientUri` /
+ *   `logoUri` is not https.
+ *
+ * @example
+ * ```ts
+ * import { Hono } from "hono";
+ * import { createClientMetadataDocument } from "@neon/oauth";
+ * import { honoClientMetadata } from "@neon/oauth/hono";
+ *
+ * const doc = createClientMetadataDocument({
+ *   clientId: "https://app.example.com/oauth/client.json",
+ *   clientName: "Reports",
+ *   redirectUris: ["https://app.example.com/api/auth/callback"],
+ * });
+ *
+ * const app = new Hono();
+ * app.use(honoClientMetadata(doc));
+ * ```
  */
 export function createClientMetadataDocument(
 	options: ClientMetadataDocumentOptions,

@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { defined } from "../../defined.test-helpers.js";
 import { createClientEventSink } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
+import type { WebSocketLike } from "../types.js";
 import {
 	type ConnectionCallbacks,
 	ConnectionCoordinator,
 	type ConnectionCoordinatorOptions,
-	type WebSocketLike,
 } from "./coordinator.js";
 
 type FakeWebSocketListener =

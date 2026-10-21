@@ -15,6 +15,9 @@ on:
             - packages/sdk/**
             - packages/config/**
             - packages/config-runtime/**
+            - packages/env/**
+            - packages/functions/**
+            - packages/realtime/**
             - internals/**
             - pnpm-lock.yaml
             - pnpm-workspace.yaml

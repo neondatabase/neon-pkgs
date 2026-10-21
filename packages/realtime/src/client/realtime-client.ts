@@ -2,7 +2,6 @@ import {
 	ConnectionCoordinator,
 	ConnectionCoordinatorError,
 	type ConnectionHandle,
-	type WebSocketFactory,
 } from "./connection/coordinator.js";
 import {
 	type ClientEventSink,
@@ -23,6 +22,7 @@ import type {
 	RawLiveQuerySubscription,
 	RealtimeClient,
 	RealtimeClientOptions,
+	WebSocketFactory,
 } from "./types.js";
 
 export type {
@@ -42,6 +42,8 @@ export type {
 	RealtimeLogEvent,
 	RealtimeLogger,
 	RealtimeLogLevel,
+	WebSocketFactory,
+	WebSocketLike,
 } from "./types.js";
 
 class RealtimeClientImpl implements RealtimeClient {
@@ -54,15 +56,12 @@ class RealtimeClientImpl implements RealtimeClient {
 	private readonly parsers: PostgreSQLParserRegistry;
 	private readonly events: ClientEventSink;
 
-	constructor(
-		options: RealtimeClientOptions,
-		webSocketFactory?: WebSocketFactory,
-	) {
+	constructor(options: RealtimeClientOptions) {
 		this.events = createClientEventSink(options);
 		this.coordinator = new ConnectionCoordinator({
 			url: options.url,
 			events: this.events,
-			webSocketFactory,
+			webSocketFactory: options.webSocketFactory,
 		});
 		this.parsers = createParserRegistry(options.parsers);
 	}
@@ -186,8 +185,9 @@ export function createRealtimeClient(
 
 /** @internal Node direct subscriptions supply a terminable WebSocket. */
 export function createRealtimeClientInternal(
-	options: RealtimeClientOptions,
-	webSocketFactory: WebSocketFactory,
+	options: RealtimeClientOptions & {
+		readonly webSocketFactory: WebSocketFactory;
+	},
 ): RealtimeClient {
-	return new RealtimeClientImpl(options, webSocketFactory);
+	return new RealtimeClientImpl(options);
 }

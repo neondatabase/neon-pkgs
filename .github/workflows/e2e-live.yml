@@ -8,15 +8,54 @@
 # that secret at an org holding anything worth keeping — the suite sweeps stale
 # `neon-ts-e2e-*` projects on start.
 #
+# The workflow is path-filtered to the packages the suites exercise (and their workspace
+# dependencies), so unrelated pull requests do not churn projects in the test org.
+#
 # Fork and Dependabot pull requests skip the job: GitHub does not expose repository
 # secrets to untrusted pull request code, so the suite could only fail there.
 name: e2e (live Neon)
 
 on:
-    pull_request: ~
+    pull_request:
+        paths:
+            - "packages/sdk/**"
+            - "packages/config/**"
+            - "packages/config-runtime/**"
+            - "packages/env/**"
+            - "packages/effect/**"
+            - "packages/cli/**"
+            - "packages/functions/**"
+            - "packages/realtime/**"
+            - "internals/cli-core/**"
+            - "internals/env-core/**"
+            - "tests/e2e-harness/**"
+            - ".github/workflows/e2e-live.yml"
+            - ".github/actions/prepare/**"
+            - "package.json"
+            - ".node-version"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
     push:
         branches:
             - main
+        paths:
+            - "packages/sdk/**"
+            - "packages/config/**"
+            - "packages/config-runtime/**"
+            - "packages/env/**"
+            - "packages/effect/**"
+            - "packages/cli/**"
+            - "packages/functions/**"
+            - "packages/realtime/**"
+            - "internals/cli-core/**"
+            - "internals/env-core/**"
+            - "tests/e2e-harness/**"
+            - ".github/workflows/e2e-live.yml"
+            - ".github/actions/prepare/**"
+            - "package.json"
+            - ".node-version"
+            - "pnpm-lock.yaml"
+            - "pnpm-workspace.yaml"
     workflow_dispatch: ~
 
 permissions:

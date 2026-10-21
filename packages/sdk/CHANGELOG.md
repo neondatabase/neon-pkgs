@@ -1,5 +1,15 @@
 # @neon/sdk
 
+## 7.4.0
+
+### Minor Changes
+
+- cb6a151: Refresh the vendored Neon API spec for Neon Auth OAuth provider MCP settings. `NeonAuthOAuthProviderMcp` and `NeonAuthOAuthProviderMcpUpdate` gain `client_id_metadata_documents`, which controls whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL. `dynamic_registration` is now documented as legacy and defaults to `false`. The `@neon/tools/schemas` request schemas accept the new field.
+
+### Patch Changes
+
+- 8b0e72b: `neon.realtime` readiness polling reads the Realtime state immediately instead of after the first `pollIntervalMs`, so a `wait.timeoutMs` shorter than the interval no longer times out without checking.
+
 ## 7.3.0
 
 ### Minor Changes

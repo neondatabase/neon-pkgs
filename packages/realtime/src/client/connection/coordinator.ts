@@ -16,6 +16,7 @@ import {
 	type ReconciliationEventSink,
 	type ReconciliationTarget,
 } from "../reconciliation/reconciler.js";
+import type { WebSocketFactory, WebSocketLike } from "../types.js";
 import { ConnectionHeartbeat, type HeartbeatOptions } from "./heartbeat.js";
 import {
 	type ReconnectAttempt,
@@ -60,26 +61,6 @@ export interface ConnectionHandle {
 	fail(error: ConnectionCoordinatorError): void;
 	unsubscribe(): void;
 }
-
-export interface WebSocketLike {
-	readonly readyState: number;
-	addEventListener(type: "open", listener: () => void): void;
-	addEventListener(
-		type: "message",
-		listener: (event: { readonly data: unknown }) => void,
-	): void;
-	addEventListener(type: "close", listener: () => void): void;
-	addEventListener(type: "error", listener: () => void): void;
-	send(data: string): void;
-	close(code?: number, reason?: string): void;
-	/** Immediately destroy the transport when the implementation supports it. */
-	terminate?(): void;
-}
-
-export type WebSocketFactory = (
-	url: string,
-	protocols: string | string[],
-) => WebSocketLike;
 
 interface ConnectionCoordinatorErrorOptions extends ErrorOptions {
 	readonly sqlState?: string;

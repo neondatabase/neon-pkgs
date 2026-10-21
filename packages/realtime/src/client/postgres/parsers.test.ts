@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { RealtimeClientOptions } from "../types.js";
 import { pgTypeOids } from "./oids.js";
 import {
@@ -19,6 +19,10 @@ const TEXT_COLUMN = {
 } as const;
 
 describe("PostgreSQL result parsers", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it("accepts parser objects passed directly to the client", () => {
 		const customTypeOid = 90_000;
 		const options: RealtimeClientOptions = {
@@ -131,6 +135,7 @@ describe("PostgreSQL result parsers", () => {
 	});
 
 	it("decodes bytea transport before invoking the byte parser", () => {
+		vi.stubGlobal("atob", undefined);
 		const bytes = vi.fn((value: Uint8Array) => [...value]);
 		const parsers = createParserRegistry(
 			defineParsers({

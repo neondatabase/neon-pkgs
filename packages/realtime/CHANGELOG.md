@@ -1,5 +1,11 @@
 # @neon/realtime
 
+## 0.1.2
+
+### Patch Changes
+
+- acd0dd7: Support React Native clients through the package root, including runtimes without `TextDecoder` or `atob`, and allow platform-specific WebSocket construction.
+
 ## 0.1.1
 
 ### Patch Changes

@@ -22,7 +22,7 @@ const REDIRECT_URI = (port: number) => `http://127.0.0.1:${port}/callback`;
 // These scopes cannot be cancelled, they are always needed.
 const ALWAYS_PRESENT_SCOPES = ["openid", "offline", "offline_access"] as const;
 
-const NEONCTL_SCOPES = [
+export const NEONCTL_SCOPES = [
 	...ALWAYS_PRESENT_SCOPES,
 	"urn:neoncloud:projects:create",
 	"urn:neoncloud:projects:read",

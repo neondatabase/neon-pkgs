@@ -214,6 +214,15 @@ describe("realtime", () => {
 		expect(error).toMatchObject({ source: "wait", timeoutMs: 30 });
 	});
 
+	it("reads the state before the first poll interval", async () => {
+		const { neon, calls } = neonRouting(realtimeBackend(0));
+		const { error } = await neon.realtime.enable(selectors, {
+			wait: { pollIntervalMs: 60_000, timeoutMs: 50 },
+		});
+		expect(error).toBeUndefined();
+		expect(methods(calls)).toEqual(["POST", "GET"]);
+	});
+
 	it("throws the timeout with throwOnError", async () => {
 		const { neon } = neonRouting(
 			realtimeBackend(Number.POSITIVE_INFINITY),

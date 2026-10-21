@@ -1,5 +1,5 @@
-import { describe, expectTypeOf, it } from "vitest";
-import type { SealedLiveQuery } from "./sealed-query.js";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
 import type {
 	MaterializedLiveQuerySubscription,
 	RawLiveQuerySubscription,
@@ -32,6 +32,28 @@ type Payload = JsonTransport<{
 }>;
 
 describe("sealed query row types", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("validates the ASCII protected header without TextDecoder", () => {
+		vi.stubGlobal("TextDecoder", undefined);
+
+		expect(() => validateSealedQuery(sealedQuery())).not.toThrow();
+	});
+
+	it("validates the protected header without atob", () => {
+		vi.stubGlobal("atob", undefined);
+
+		expect(() => validateSealedQuery(sealedQuery())).not.toThrow();
+	});
+
+	it("rejects non-ASCII protected headers", () => {
+		expect(() =>
+			validateSealedQuery(sealedQuery({ note: "café" })),
+		).toThrow("Invalid sealed live query");
+	});
+
 	it("preserves live rows while actual payload rows are serialized", () => {
 		expectTypeOf<
 			QueryRow<Payload["query"]>
@@ -87,3 +109,16 @@ describe("sealed query row types", () => {
 		expectTypeOf(check).toBeFunction();
 	});
 });
+
+function sealedQuery(
+	extraHeader: Record<string, unknown> = {},
+): SealedLiveQuery<unknown> {
+	const header = Buffer.from(
+		JSON.stringify({ alg: "dir", enc: "A256GCM", v: 1, ...extraHeader }),
+	).toString("base64url");
+	return {
+		capability: `${header}..iv.ciphertext.tag`,
+		queryFingerprint: "0".repeat(64),
+		expiresAt: 1,
+	};
+}

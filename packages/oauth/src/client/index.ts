@@ -16,65 +16,126 @@ import {
 } from "./cookies";
 import { isMetadataDocumentClientId } from "./metadata-document";
 
-export interface OAuthClientOptions {
+/**
+ * Sign-in client settings for `createOAuth`. Passing `clientId`, `redirectUri` and `cookies`
+ * together turns on `oauth.client`; a partial set throws `OAuthConfigError`.
+ */
+export interface OAuthClientConfig {
 	/**
-	 * A pre-registered client id, or the https URL of a Client ID Metadata Document (see
-	 * `createClientMetadataDocument`). A URL is sent as-is: the authorization server fetches the document.
+	 * The OAuth client identifier: either a pre-registered client id, or the https URL of a Client
+	 * ID Metadata Document, which is sent as-is and fetched by the authorization server. Build and
+	 * serve that document with `createClientMetadataDocument`.
 	 */
 	clientId: string;
-	/** Omit for a public client (PKCE only). Not allowed with a URL `clientId`. */
+	/**
+	 * The secret of a confidential client, sent with HTTP Basic authentication at the token
+	 * endpoint. Omit it for a public client, which authenticates with PKCE only. Not allowed with a
+	 * URL `clientId`.
+	 *
+	 * @defaultValue omitted: a public client
+	 */
 	clientSecret?: string;
-	/** Must equal a redirect URI registered on the client, and be served by `handlers.callback`. */
+	/**
+	 * Where the authorization server sends the browser after sign-in, e.g.
+	 * `"https://app.example.com/api/auth/callback"`. Must exactly match a redirect URI registered
+	 * for the client. The framework adapters require its path to end in `/callback` and mount
+	 * `login`, `callback` and `logout` under the preceding prefix (`/api/auth` here).
+	 */
 	redirectUri: string;
-	/** The API the access token is for; becomes the token's `aud`. */
-	resource?: string;
+	/**
+	 * Scopes to request. `openid` is always added, because sign-in needs the ID token. `email`
+	 * fills `AuthUser.email` and `emailVerified`; `profile` fills `name` and `image`.
+	 *
+	 * @defaultValue `["profile", "email"]`
+	 */
 	scopes?: string[];
+	/** How the encrypted session cookie is named, scoped and keyed. See {@link CookieOptions}. */
 	cookies: CookieOptions;
-	/** Called with the cause when a sign-in route answers 5xx, for logging. */
+	/**
+	 * Called with the cause when a sign-in route answers 5xx (authorization server unavailable or
+	 * an unexpected failure), for logging. Expected failures such as a denied or forged callback
+	 * are not reported. A throwing callback is ignored.
+	 */
 	onError?: (error: unknown, request: Request) => void;
 }
 
+/** What `createOAuthClient` takes: {@link OAuthClientConfig} plus `resource`, which `createOAuth` passes from its verification options. */
+export type OAuthClientOptions = OAuthClientConfig & {
+	/** The API the access token is for; sent as `resource` on authorize and token requests, and becomes the token's `aud`. */
+	resource?: string;
+};
+
+/** How the client's encrypted, stateless session cookie is keyed, named and scoped. */
 export interface CookieOptions {
-	/** At least 32 characters. Encrypts the cookies; changing it signs everyone out. */
+	/** Encrypts the cookies; at least 32 characters (try `openssl rand -hex 32`). Changing it signs everyone out. */
 	secret: string;
-	/** Session cookie name. Defaults to `neon_auth_session`. */
+	/**
+	 * Session cookie name. The login-transaction cookie is named `<name>_tx`.
+	 *
+	 * @defaultValue `"neon_auth_session"`
+	 */
 	name?: string;
-	/** Defaults to 7 days. */
+	/**
+	 * Session lifetime in seconds.
+	 *
+	 * @defaultValue `604800` (7 days)
+	 */
 	maxAgeSeconds?: number;
-	/** Share the session across subdomains. Defaults to host-only. */
+	/**
+	 * Cookie `Domain`, to share the session across subdomains. Applies to the session cookie only.
+	 *
+	 * @defaultValue omitted: the cookie is host-only
+	 */
 	domain?: string;
-	/** Session cookie only; the login-transaction cookie is always Lax so the redirect back to the callback carries it. Defaults to `lax`. */
+	/**
+	 * Cookie `SameSite` attribute of the session cookie. The login-transaction cookie is always Lax,
+	 * so the redirect back to the callback carries it. `"none"` forces `Secure`.
+	 *
+	 * @defaultValue `"lax"`
+	 */
 	sameSite?: SameSite;
 }
 
 /**
- * The signed-in user. `id` is the `sub` of the verified ID token. The rest comes from the userinfo
- * endpoint, which returns `email` / `emailVerified` for the `email` scope and `name` / `image` for
- * the `profile` scope, and only the values the user has. A field the server did not return is absent.
+ * The signed-in user. `id` is the `sub` of the verified ID token; the rest comes from the userinfo
+ * endpoint. A field the server did not return is absent, never an empty string.
  */
 export interface AuthUser {
+	/** The `sub` of the verified ID token. */
 	id: string;
+	/** Present when the `email` scope was granted and the user has an email. */
 	email?: string;
+	/** Whether the server verified `email`. */
 	emailVerified?: boolean;
+	/** Present when the `profile` scope was granted and the user has a name. */
 	name?: string;
+	/** URL of the user's picture. Present when the `profile` scope was granted and the user has one. */
 	image?: string;
 }
 
+/** What the session cookie holds. */
 export interface Session {
+	/** The access token to call your API with. */
 	accessToken: string;
+	/** Present when the server issued one; without it an expired access token cannot be refreshed. */
 	refreshToken?: string;
-	/** Access-token expiry, seconds since epoch. */
+	/** Access-token expiry, in seconds since the epoch. */
 	expiresAt?: number;
+	/** The signed-in user. */
 	user: AuthUser;
 }
 
+/** The values `startLogin` generates and `finishLogin` needs back. Keep them (server-side or in a short-lived cookie) until the callback. */
 export interface LoginAttempt {
+	/** Anti-CSRF value; the callback's `state` must equal it. */
 	state: string;
+	/** The PKCE verifier matching the challenge sent on the authorize URL. */
 	codeVerifier: string;
 }
 
 /**
  * Why there is no session.
+ *
  * - `no_session`: no session cookie; the user must sign in.
  * - `invalid_session`: the cookie is not sealed with this app's secret (tampered, or the secret was rotated).
  * - `expired`: the cookie outlived `cookies.maxAgeSeconds`.
@@ -83,11 +144,14 @@ export type SessionFailure = {
 	ok: false;
 	reason: "no_session" | "invalid_session" | "expired";
 };
+/** Outcome of `getSession`: the `session`, or why there is none. */
 export type SessionResult = { ok: true; session: Session } | SessionFailure;
+/** Outcome of `getUser`: the signed-in `user`, or why there is none. */
 export type UserResult = { ok: true; user: AuthUser } | SessionFailure;
 
 /**
- * Outcome of completing a sign-in.
+ * Outcome of completing a sign-in: the `session`, or why it failed.
+ *
  * - `invalid_callback`: the callback carries an error, no code, or a `state` that does not match the attempt.
  * - `token_rejected`: the token endpoint refused the code, or answered without an ID token.
  * - `userinfo_rejected`: the userinfo endpoint answered with a 4xx or an unusable body, or its `sub` differs from the ID token's.
@@ -114,9 +178,11 @@ export type AccessTokenFailure = {
 	reason: "no_session" | "refresh_unavailable" | "refresh_failed";
 };
 
+/** Outcome of `getAccessToken`: the token, or why there is none. */
 export type AccessTokenResult =
 	| {
 			ok: true;
+			/** A current access token. */
 			accessToken: string;
 			/** Present when the token was refreshed: append it to your response as `Set-Cookie`. */
 			setCookie?: string;
@@ -125,47 +191,94 @@ export type AccessTokenResult =
 
 /** What `withAccessToken` hands to its callback. */
 export interface AccessTokenContext {
+	/** A current access token. */
 	accessToken: string;
-	/** Spread into the outgoing request's headers. */
+	/** `{ authorization: "Bearer <token>" }`, to spread into the outgoing request's headers. */
 	authorizationHeaders: { authorization: string };
 }
 
+/**
+ * The sign-in client of a `createOAuth` instance (`oauth.client`): authorization code with
+ * PKCE, and the session kept in an encrypted cookie with no server-side store.
+ *
+ * Mount `handlers` with a framework adapter (`honoOAuthClient`, `expressOAuthClient`,
+ * `createRouteHandlers`, `nodeOAuthClient`), then read the signed-in user with `getUser(request)`.
+ */
 export interface OAuthClient {
-	/** Request handlers for sign-in. Mount them through a framework adapter rather than calling them directly. */
+	/**
+	 * Request handlers for the sign-in routes. Mount them through a framework adapter (or
+	 * `routeOAuthClient`) rather than calling them directly. None throws: an outage answers 503 and
+	 * anything unexpected 500, with the cause reported to `onError`.
+	 */
 	readonly handlers: {
+		/** Redirects (302) to the authorization server. `?returnTo=/path` (same-site paths only; default `/`) is where the user lands afterwards. */
 		login(request: Request): Promise<Response>;
+		/** Completes sign-in, sets the session cookie and redirects (302) to `returnTo`. Answers 400 for a bad or expired attempt. */
 		callback(request: Request): Promise<Response>;
+		/** Clears this app's session cookie and redirects (302) to `returnTo`. It does not end the Neon Auth session. */
 		logout(request: Request): Promise<Response>;
 	};
 	/** The configured redirect URI; adapters derive the callback route from its path. */
 	readonly redirectUri: string;
+	/**
+	 * Reads the session, including tokens, from the request's cookie. Never contacts the server.
+	 *
+	 * @param request The incoming request; only its `Cookie` header is read.
+	 * @returns `{ ok: true, session }`, or `{ ok: false, reason }` for a missing, tampered or expired cookie.
+	 */
 	getSession(request: Request): Promise<SessionResult>;
+	/**
+	 * Reads the signed-in user from the request's session cookie. Never contacts the server.
+	 *
+	 * @param request The incoming request; only its `Cookie` header is read.
+	 * @returns `{ ok: true, user }`, or `{ ok: false, reason }` with the same reasons as {@link OAuthClient.getSession}.
+	 */
 	getUser(request: Request): Promise<UserResult>;
 	/**
-	 * A usable access token for this request, refreshed first if it is about to expire.
-	 * Concurrent refreshes of the same refresh token inside this process share one token request;
-	 * separate processes do not coordinate, so a rotating refresh token can still be spent twice
-	 * across instances. Throws `AuthServerUnavailableError` when a needed refresh cannot reach the server.
+	 * Returns a usable access token for this request, refreshing it first if it expires within 30 seconds.
+	 *
+	 * Concurrent refreshes of the same refresh token on this client instance share one token request.
+	 * Separate instances and processes do not coordinate, so a rotating refresh token can still be spent twice
+	 * across instances. Prefer {@link OAuthClient.withAccessToken}, which also handles the refreshed cookie.
+	 *
+	 * @param request The incoming request; only its `Cookie` header is read.
+	 * @returns `{ ok: true, accessToken, setCookie? }`, where a present `setCookie` must be appended
+	 *   to your response as `Set-Cookie`; or `{ ok: false, reason }`.
+	 * @throws {AuthServerUnavailableError} If a needed refresh cannot reach the server.
+	 * @throws {OAuthConfigError} If the client uses a URL `clientId` and the server does not support Client ID Metadata Documents.
 	 */
 	getAccessToken(request: Request): Promise<AccessTokenResult>;
 	/**
 	 * Runs `fn` with a current access token and appends the refreshed session cookie, if any, to
-	 * the `Response` it returns (existing `Set-Cookie` headers are kept). Prefer this over
-	 * `getAccessToken` so the cookie is never forgotten.
+	 * the `Response` it returns (existing `Set-Cookie` headers are kept).
+	 *
+	 * @param request The incoming request; only its `Cookie` header is read.
+	 * @param fn Receives the access token and ready-made `Authorization` headers; returns the `Response` to send.
+	 * @returns `{ ok: true, response }`, or `{ ok: false, reason }` when there is no usable token.
+	 * @throws {AuthServerUnavailableError} If a needed refresh cannot reach the server.
+	 * @throws {OAuthConfigError} If the client uses a URL `clientId` and the server does not support Client ID Metadata Documents.
 	 */
 	withAccessToken(
 		request: Request,
 		fn: (context: AccessTokenContext) => Response | Promise<Response>,
 	): Promise<{ ok: true; response: Response } | AccessTokenFailure>;
 	/**
-	 * Advanced: for a custom sign-in flow instead of `handlers`. Returns the authorize URL to
-	 * redirect the browser to, plus the values to keep until the callback.
+	 * Advanced: starts a custom sign-in flow instead of using `handlers`.
+	 *
+	 * @returns The authorize `url` to redirect the browser to, plus the {@link LoginAttempt} values to keep until the callback.
+	 * @throws {AuthServerUnavailableError} If the authorization server cannot be reached.
+	 * @throws {OAuthConfigError} If the client uses a URL `clientId` and the server does not support Client ID Metadata Documents.
 	 */
 	startLogin(): Promise<LoginAttempt & { url: URL }>;
 	/**
-	 * Advanced: exchanges the callback's `code` for tokens (checking `state`, sending the PKCE
-	 * verifier) and loads the user. Pair with `startLogin`. A bad callback is a `{ ok: false }` result;
-	 * an unreachable server throws `AuthServerUnavailableError`.
+	 * Advanced: completes a custom sign-in flow started with {@link OAuthClient.startLogin}. It
+	 * checks `state`, exchanges the callback's `code` for tokens (sending the PKCE verifier) and loads the user.
+	 *
+	 * @param callbackUrl The full callback URL the browser was redirected to.
+	 * @param attempt The values returned by `startLogin`.
+	 * @returns `{ ok: true, session }`, or `{ ok: false, reason }`; see {@link LoginResult}.
+	 * @throws {AuthServerUnavailableError} If the token or userinfo endpoint cannot be reached.
+	 * @throws {OAuthConfigError} If the client uses a URL `clientId` and the server does not support Client ID Metadata Documents.
 	 */
 	finishLogin(callbackUrl: URL, attempt: LoginAttempt): Promise<LoginResult>;
 }
@@ -174,8 +287,10 @@ const TX_MAX_AGE_SECONDS = 600;
 const REFRESH_SKEW_SECONDS = 30;
 
 /**
- * `getDiscovery` is the issuer's shared cache, so the client never fetches discovery on its own.
- * Missing or invalid settings throw an `OAuthConfigError` naming each one.
+ * Creates the sign-in client. Prefer `createOAuth`, which calls this with its shared discovery
+ * cache as `getDiscovery`, so the client never fetches discovery on its own.
+ *
+ * @throws {OAuthConfigError} If a required setting is missing (the message names each) or invalid.
  */
 export function createOAuthClient(
 	options: Partial<OAuthClientOptions>,

@@ -1,6 +1,6 @@
 {
 	"name": "@neon/oauth",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "OAuth helpers for apps built on Neon Auth: sign users in, verify access tokens, and protect MCP servers",
 	"keywords": [
 		"neon",

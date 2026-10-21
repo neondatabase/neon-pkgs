@@ -2,6 +2,28 @@ import type { NoInferCompat } from "./no-infer.js";
 import type { PostgreSQLParsers } from "./postgres/parsers.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
+/** Minimal WebSocket contract used by the Realtime client. */
+export interface WebSocketLike {
+	readonly readyState: number;
+	addEventListener(type: "open", listener: () => void): void;
+	addEventListener(
+		type: "message",
+		listener: (event: { readonly data: unknown }) => void,
+	): void;
+	addEventListener(type: "close", listener: () => void): void;
+	addEventListener(type: "error", listener: () => void): void;
+	send(data: string): void;
+	close(code?: number, reason?: string): void;
+	/** Immediately destroy the transport when the implementation supports it. */
+	terminate?(): void;
+}
+
+/** Create a WebSocket-compatible transport for the Realtime client. */
+export type WebSocketFactory = (
+	url: string,
+	protocols: string | string[],
+) => WebSocketLike;
+
 /** Client-side diagnostic verbosity. */
 export type RealtimeLogLevel = "silent" | "error" | "warn" | "info" | "debug";
 
@@ -444,6 +466,14 @@ export interface RealtimeClientOptions {
 	 * Realtime proxy WebSocket URL, using `wss:` outside local development.
 	 */
 	readonly url: string;
+	/**
+	 * Override how the client creates its WebSocket.
+	 *
+	 * This is primarily useful in runtimes such as React Native, whose
+	 * WebSocket constructor accepts platform-specific connection options. In
+	 * browsers, omit this option to use the built-in WebSocket constructor.
+	 */
+	readonly webSocketFactory?: WebSocketFactory;
 	/**
 	 * PostgreSQL result parsers keyed by type OID.
 	 *

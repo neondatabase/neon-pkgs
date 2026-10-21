@@ -1,5 +1,6 @@
 import { OAUTH } from "@neon-internals/cli-core/credentials";
 import { Analytics, type TrackParams } from "@segment/analytics-node";
+import { getOrCreateAnonymousId } from "./anonymous_id.js";
 import {
 	getApiClient,
 	isNeonApiError,
@@ -26,18 +27,23 @@ const hasCurrentBranchArgv = (): boolean =>
 
 const ANONYMOUS = "anonymous";
 
+export type AnalyticsIdentity = { userId: string; anonymousId?: string };
+
 /**
- * Who to attribute an event to, given whatever identified this invocation.
- *
- * Nothing is guaranteed to have identified it: a command can run with no credentials at all,
- * leaving the id empty. Segment accepts an empty `userId` and forwards it as-is rather than
- * rejecting it, so the substitution has to happen here. `""` is falsy but not nullish, which
- * is why the fallback has to be `||`.
+ * The identity to send an event under. A run nothing identified (an empty `userId`, which
+ * Segment would forward as-is) is the shared `"anonymous"` user, as it always was, so existing
+ * queries on it keep working. The stored anonymous id goes with every event, signed in or not,
+ * so the signed-out events of an installation can be joined to its account once a user is known.
  *
  * Exported for tests.
  */
-export const analyticsUserId = (userId: string | undefined): string =>
-	userId || ANONYMOUS;
+export const analyticsIdentity = (
+	userId: string | undefined,
+	anonymousId: string | undefined,
+): AnalyticsIdentity => ({
+	userId: userId || ANONYMOUS,
+	...(anonymousId ? { anonymousId } : {}),
+});
 
 /**
  * The account fields of `cli_command_success`, produced here and read in `index.ts`.
@@ -113,9 +119,12 @@ export const telemetryCredential = (
 let client: Analytics | undefined;
 let clientInitialized = false;
 let errorEventContext: ErrorEventContext | undefined;
+/** Set with the client, so it exists only when analytics is on. */
+let anonymousId: string | undefined;
 
 type AnalyticsEventArgs = {
 	_: (string | number)[];
+	configDir?: string;
 	output?: string;
 	currentBranch?: boolean;
 	prompt?: string;
@@ -140,9 +149,13 @@ type ErrorEventContext = {
 };
 
 /** Lets tests send to a local collector; the CLI itself always uses track.neon.tech. */
-export const useAnalyticsClientForTests = (analytics: Analytics) => {
+export const useAnalyticsClientForTests = (
+	analytics: Analytics,
+	testAnonymousId?: string,
+) => {
 	client = analytics;
 	clientInitialized = true;
+	anonymousId = testAnonymousId;
 };
 
 /**
@@ -170,9 +183,10 @@ export const initAnalyticsClientMiddleware = (
 		host: "https://track.neon.tech",
 	});
 	log.debug("Initialized CLI analytics client");
-	client.identify({
-		userId: ANONYMOUS,
-	});
+	anonymousId = args.configDir
+		? getOrCreateAnonymousId(args.configDir)
+		: undefined;
+	client.identify(analyticsIdentity(undefined, anonymousId));
 };
 
 type Attribution = {
@@ -313,11 +327,9 @@ export const analyticsMiddleware = (args: {
 
 	queue = queue.then(() => lookup);
 	enqueue((analytics, { userId }) => {
-		analytics.identify({
-			userId: analyticsUserId(userId),
-		});
+		analytics.identify(analyticsIdentity(userId, anonymousId));
 		analytics.track({
-			userId: analyticsUserId(userId),
+			...analyticsIdentity(userId, anonymousId),
 			event: "CLI Started",
 			properties: startedProperties,
 			context: {
@@ -466,7 +478,7 @@ export const sendError = (err: Error, errCode: ErrorCode) => {
 	enqueue((analytics, { userId }) => {
 		analytics.track({
 			event: "CLI Error",
-			userId: analyticsUserId(userId),
+			...analyticsIdentity(userId, anonymousId),
 			properties,
 		});
 	});
@@ -503,7 +515,7 @@ export const trackEvent = (
 	enqueue((analytics, { userId }) => {
 		analytics.track({
 			event,
-			userId: analyticsUserId(userId),
+			...analyticsIdentity(userId, anonymousId),
 			properties,
 		});
 	});
@@ -524,7 +536,7 @@ export const trackCommandSuccess = (
 	enqueue((analytics, { userId, accountId, authMethod, authData }) => {
 		analytics.track({
 			event: "cli_command_success",
-			userId: analyticsUserId(userId),
+			...analyticsIdentity(userId, anonymousId),
 			properties: { ...properties, accountId, authMethod, authData },
 		});
 	});

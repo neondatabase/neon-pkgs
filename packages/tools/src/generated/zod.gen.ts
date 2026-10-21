@@ -1498,12 +1498,14 @@ export const zNeonAuthOAuthProviderResource = z.strictObject({
 
 export const zNeonAuthOAuthProviderMcp = z.strictObject({
     resource: z.string().optional(),
-    dynamic_registration: z.boolean().optional()
+    dynamic_registration: z.boolean().optional(),
+    client_id_metadata_documents: z.boolean().optional()
 });
 
 export const zNeonAuthOAuthProviderMcpUpdate = z.strictObject({
     resource: z.string(),
-    dynamic_registration: z.boolean().optional()
+    dynamic_registration: z.boolean().optional(),
+    client_id_metadata_documents: z.boolean().optional()
 });
 
 export const zNeonAuthOAuthProviderConfig = z.strictObject({

@@ -31,7 +31,7 @@ import { createRealtime } from "@neon/realtime/server";
 | --- | --- |
 | `@neon/realtime/server` | Seal raw SQL or adapter-native queries on an application backend. |
 | `@neon/realtime/client` | Subscribe from a browser and consume materialized or raw changes. |
-| `@neon/realtime` | Convenience export of both surfaces; prefer the dedicated entry points in application code. |
+| `@neon/realtime` | Convenience export of both surfaces; React Native resolves this entry point to the client surface only. Prefer the dedicated entry points in application code. |
 
 ## Seal a query on the backend
 
@@ -204,6 +204,27 @@ remains available with status `connecting`. `stale` specifically means that the
 capability has expired and the low-level client is waiting for the application
 to call `renew()`. Recoverable connection failures retry with capped jittered
 backoff until the connection recovers or the client is closed.
+
+### React Native WebSocket origins
+
+React Native's WebSocket implementation sends an `Origin` header derived from
+the Realtime endpoint. If the branch restricts Realtime to browser origins,
+provide a custom WebSocket factory that sends one of those allowed origins:
+
+```ts
+const client = createRealtimeClient({
+  url: websocketUrl,
+  webSocketFactory: (url, protocols) =>
+    new WebSocket(url, protocols, {
+      headers: { origin: "https://app.example.com" },
+    }),
+});
+```
+
+The third constructor argument is a React Native extension and is unavailable
+in browsers. An origin allowlist is a browser security boundary; native clients
+can choose their own header value, so do not treat it as native-app
+authentication.
 
 Some subscription errors also retry automatically:
 

@@ -15,6 +15,9 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: ^3.0.9
       version: 3.0.9
+    base64-js:
+      specifier: ^1.5.1
+      version: 1.5.1
     console-fail-test:
       specifier: 0.5.0
       version: 0.5.0
@@ -808,6 +811,9 @@ importers:
 
   packages/realtime:
     dependencies:
+      base64-js:
+        specifier: 'catalog:'
+        version: 1.5.1
       postgres-array:
         specifier: ^3.0.4
         version: 3.0.4

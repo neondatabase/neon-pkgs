@@ -160,6 +160,9 @@ interface PolledRead<T> {
  * Poll `read` until `settled` accepts its body, under the same budget and error contract
  * as {@link waitForOperations}. For resources whose asynchronous changes report a pending
  * flag instead of returning operations. A timeout carries no operations to resume from.
+ *
+ * The first read is immediate and later reads are `pollIntervalMs` apart, so a budget
+ * shorter than one interval still observes the state once.
  */
 export async function pollUntil<T>(
 	read: (signal: AbortSignal | undefined) => Promise<PolledRead<T>>,
@@ -187,17 +190,7 @@ export async function pollUntil<T>(
 	};
 
 	try {
-		for (;;) {
-			if (
-				(await delay(pollIntervalMs, deadline.signal)) === "cancelled"
-			) {
-				return err(
-					ended() ??
-						new NeonAbortError(
-							`Waiting for ${what} was aborted by its signal.`,
-						),
-				);
-			}
+		while (deadline.source() === undefined) {
 			const polled = await runBounded(deadline, () =>
 				read(deadline.signal),
 			);
@@ -211,7 +204,19 @@ export async function pollUntil<T>(
 				return err(toNeonError(error, response));
 			}
 			if (settled(data)) return ok(data);
+
+			if (
+				(await delay(pollIntervalMs, deadline.signal)) === "cancelled"
+			) {
+				break;
+			}
 		}
+		return err(
+			ended() ??
+				new NeonAbortError(
+					`Waiting for ${what} was aborted by its signal.`,
+				),
+		);
 	} finally {
 		deadline.dispose();
 	}

@@ -52,9 +52,9 @@ export const API_KEY = "api_key";
 export type CredentialKind = typeof OAUTH | typeof API_KEY;
 
 /**
- * The on-disk shape. Every field is optional because the two kinds overlap and because an
- * OAuth token endpoint response carries more than we name here — the index signature keeps
- * those extra fields on a round-trip rather than dropping them.
+ * The on-disk shape. Every field is optional because the two kinds overlap. The index
+ * signature accepts extra fields in credentials written by older releases or by users; newly
+ * issued OAuth sessions are stored canonically by the CLI.
  */
 export type StoredCredentials = {
 	type?: string;

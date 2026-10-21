@@ -6,6 +6,7 @@ import {
 	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
+	type WebSocketLike,
 } from "./realtime-client.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
 
@@ -23,7 +24,7 @@ type FakeWebSocketListener =
 	| (() => void)
 	| ((event: { readonly data: unknown }) => void);
 
-class FakeWebSocket {
+class FakeWebSocket implements WebSocketLike {
 	static instances: FakeWebSocket[] = [];
 	static deferClose = false;
 	readyState = 0;
@@ -89,6 +90,26 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("uses a custom WebSocket factory", () => {
+		const webSocketFactory = vi.fn(
+			(url: string, protocols: string | string[]) =>
+				new FakeWebSocket(url, protocols),
+		);
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			webSocketFactory,
+		});
+
+		client.subscribe(query("custom socket"));
+
+		expect(webSocketFactory).toHaveBeenCalledOnce();
+		expect(webSocketFactory).toHaveBeenCalledWith(
+			"ws://live.test/v1",
+			"neon.realtime.v1",
+		);
+		client.close();
+	});
+
 	it.each([
 		"upstream_cancelled",
 		"backend_overloaded",

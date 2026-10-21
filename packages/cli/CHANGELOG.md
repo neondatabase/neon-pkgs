@@ -1,5 +1,35 @@
 # neon
 
+## 8.10.1
+
+### Patch Changes
+
+- 7398b8d: `neon docs search` tells the Neon search service it is the CLI, with the CLI version and the detected coding agent, so searches can be counted by caller. With `--no-analytics` it asks the service to record nothing.
+
+## 8.10.0
+
+### Minor Changes
+
+- f1b2376: Add `neon docs search <query>` to search neon.com (docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog) from the terminal, with `--category` and `--limit`. It needs no Neon login.
+
+### Patch Changes
+
+- f3596ca: `neon login --keyring` on Windows no longer fails after the browser step. OAuth sessions now store only the fields the CLI reads, which fits Windows Credential Manager's 1,280-character limit, and a credential that still doesn't fit fails before anything is written with a message that names the command to run instead.
+
+## 8.9.0
+
+### Minor Changes
+
+- 049b64c: Analytics now gives each installation a random anonymous id, stored as `anonymous_id` in the config directory, and sends it as `anonymousId` with every event. Signed-out commands keep the shared "anonymous" user id, so existing queries on it still work, and once a command knows the user it sends the real user id with the same anonymous id so the earlier events can be linked to the account. The id isn't created in CI or with `--no-analytics`.
+
+### Patch Changes
+
+- Updated dependencies [8b0e72b]
+- Updated dependencies [cb6a151]
+  - @neon/sdk@7.4.0
+  - @neon/config@1.9.3
+  - @neon/config-runtime@1.10.2
+
 ## 8.8.0
 
 ### Minor Changes

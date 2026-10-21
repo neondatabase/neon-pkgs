@@ -1005,6 +1005,18 @@ neon feedback --message "The branch docs were unclear" --output json
 
 Default table output is `Feedback received. Thank you!`. `--output json` and `--output yaml` print `{ "received": true }`. Messages are limited to 10,000 characters. Do not include passwords, API keys, connection strings, or other secrets.
 
+## Search neon.com (`docs search`)
+
+`neon docs search <query>` searches neon.com: the docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog. It does not log in and does not use your Neon account. It uses the same search as the neon.com search box. The search service records the query, the CLI version, and the detected coding agent; `--no-analytics` turns that off.
+
+```bash
+neon docs search "reset a branch"
+neon docs search "create branch" --category api --category docs
+neon docs search "pg_dump" --limit 5 --output json
+```
+
+`--category` limits results to `docs`, `api`, `postgresql`, `guides`, `faqs`, `blog`, or `changelog`; repeat it for more than one. `--limit` is 1 to 40, default 10. Default table output is one row per page: title, the section that matched, and URL. `--output json` and `--output yaml` print an array of hits with `title`, `url`, `category`, `breadcrumb`, `heading`, and `excerpt`, in rank order. No match prints `No results for "<query>".` and exits 0 (`[]` in JSON).
+
 ## Install the Neon plugin (`plugins`)
 
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
@@ -1553,7 +1565,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="analytics"></a>`--analytics`
 
-  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt`. When the CLI fails on an internal bug (a JavaScript `TypeError`, `ReferenceError`, `RangeError`, or `SyntaxError`), it also sends that error to Neon's Sentry: the error type, the message only when it is a standard JavaScript message that names nothing but code (any other message is replaced), the stack trace with file paths cut to the package (`neon/dist/...`), the CLI and Node.js versions, and whether it ran in CI or a coding agent. To opt-out of analytics data collection and error reports, specify `--no-analytics` or `--analytics false`.
+  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt` and the query passed to `neon docs search`. The Neon search service records each `neon docs search` query with the CLI version and the detected coding agent; with `--no-analytics` it records nothing. When the CLI fails on an internal bug (a JavaScript `TypeError`, `ReferenceError`, `RangeError`, or `SyntaxError`), it also sends that error to Neon's Sentry: the error type, the message only when it is a standard JavaScript message that names nothing but code (any other message is replaced), the stack trace with file paths cut to the package (`neon/dist/...`), the CLI and Node.js versions, and whether it ran in CI or a coding agent. To opt-out of analytics data collection and error reports, specify `--no-analytics` or `--analytics false`.
 
 - <a id="version"></a>`-v, --version`
 
