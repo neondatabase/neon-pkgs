@@ -30,9 +30,14 @@ describe("the registry JSON Schemas", () => {
 				REGISTRY_CONTRACT.operationSlug,
 			],
 			[operation.properties.route.pattern, REGISTRY_CONTRACT.route],
+			[operation.properties.source.pattern, REGISTRY_CONTRACT.source],
 			[
 				props.environment.items.properties.name.pattern,
 				REGISTRY_CONTRACT.envName,
+			],
+			[
+				props.environment.items.properties.description.pattern,
+				REGISTRY_CONTRACT.envDescription,
 			],
 			[props.dependencies.items.pattern, REGISTRY_CONTRACT.dependency],
 		];

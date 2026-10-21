@@ -1109,7 +1109,7 @@ A template's `layout` decides what you get. `router` writes one module per opera
 
 Variables a template needs are declared on each function in `neon.ts` (`env: { API_KEY: process.env.API_KEY! }`) and added, without values, to `.env.example` next to it. Values are never written to `.env` or `.env.local` for you: a blank placeholder there would deploy as an empty string and delete the live value. Put the real value in the file `env pull` uses and deploy with `neon config apply --env .env.local`. `neon dev` reads function env from your shell, so export it there as well.
 
-Nothing is written until every check passes: a file that already exists with different contents needs `--force`, and a slug `neon.ts` already declares needs `--slug`, `--force`, or `--no-add-to-config`.
+Nothing is written until every check passes: a file that already exists with different contents needs `--force`, and a slug `neon.ts` already declares needs `--slug`, `--force`, or `--no-add-to-config`. A `separate` template sets its own slugs, so `--slug` only changes its directory; remove the existing declarations from `neon.ts`, or use `--force` or `--no-add-to-config`.
 
 The registry lives in [`registry/`](https://github.com/neondatabase/examples/tree/main/registry) in `neondatabase/examples`. The CLI reads the index from `https://neon.com/functions/registry/registry.json`, which serves `main` through a CDN cache, and falls back to raw GitHub when neon.com is unreachable. Template files are always read from raw GitHub. Set `NEON_FUNCTION_REGISTRY_DIR` to a local checkout to try templates before they are merged, or `NEON_FUNCTION_REGISTRY_URL` to read an index from somewhere else.
 

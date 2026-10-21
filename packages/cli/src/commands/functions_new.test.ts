@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfigFromFile } from "@neon/config-runtime";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderNeonConfig } from "../config_template";
 import { openRegistry, type Registry } from "../functions/source";
 import { FIXTURE_REGISTRY_DIR } from "../test_utils/registry";
@@ -217,6 +217,33 @@ describe("functions new", () => {
 			/already declares hello/,
 		);
 		expect(existsSync(join(workspace, "functions"))).toBe(false);
+	});
+
+	it("does not suggest --slug when a separate template's slugs are declared", async () => {
+		await run({ template: "mailer", operations: ["send"] });
+		rmSync(join(workspace, "functions"), { recursive: true });
+
+		const error = await run({
+			template: "mailer",
+			operations: ["send"],
+			slug: "mailer2",
+		}).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toMatch(
+			/already declares mailsend\. The template sets these slugs/,
+		);
+		expect((error as Error).message).not.toContain("Pass --slug");
+	});
+
+	it("rejects an invalid --slug before reading the template", async () => {
+		const load = vi.spyOn(registry, "load");
+
+		await expect(
+			run({ template: "hello", slug: "my-hello" }),
+		).rejects.toThrow(
+			'"my-hello" is not a valid function slug: use 1-20 lowercase letters and digits, no hyphens. Try "myhello".',
+		);
+		expect(load).not.toHaveBeenCalled();
 	});
 
 	it("summarises a scaffold in the bootstrap layout", async () => {

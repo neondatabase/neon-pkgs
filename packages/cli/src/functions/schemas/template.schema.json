@@ -31,7 +31,7 @@
 				"additionalProperties": false,
 				"properties": {
 					"name": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" },
-					"description": { "type": "string" }
+					"description": { "type": "string", "pattern": "^[^\\r\\n]*$" }
 				}
 			}
 		},
@@ -50,6 +50,7 @@
 					"source": {
 						"type": "string",
 						"maxLength": 255,
+						"pattern": "\\.ts$",
 						"description": "Module path relative to this template.json."
 					},
 					"route": {

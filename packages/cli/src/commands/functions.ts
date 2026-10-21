@@ -165,7 +165,7 @@ export const builder = (argv: yargs.Argv) =>
 						branch: { hidden: true },
 						slug: {
 							describe:
-								"Function slug, also used as the directory name. Defaults to the template ID",
+								"Function slug, also used as the directory name. A separate template keeps its own slugs and uses this only for the directory. Defaults to the template ID",
 							type: "string",
 						},
 						operation: {

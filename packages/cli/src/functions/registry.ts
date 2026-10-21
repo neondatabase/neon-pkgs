@@ -24,8 +24,9 @@ const TEMPLATE_ID = /^[a-z0-9][a-z0-9-]*$/;
 const OPERATION_ID = /^[a-z0-9][a-z0-9-]*$/;
 const OPERATION_SLUG = FUNCTION_SLUG_PATTERN;
 const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
+const SINGLE_LINE = /^[^\r\n]*$/;
 const WINDOWS_ABSOLUTE = /^[A-Za-z]:/;
-const SOURCE_EXTENSION = /\.(?:ts|mts|cts|tsx|js|mjs|cjs|jsx)$/;
+const SOURCE_EXTENSION = /\.ts$/;
 const ROUTE_PATTERN = /^\/[A-Za-z0-9\-._~/]*$/;
 
 const EXACT_DEPENDENCY =
@@ -47,6 +48,8 @@ export const REGISTRY_CONTRACT = {
 	operationId: OPERATION_ID,
 	operationSlug: OPERATION_SLUG,
 	envName: ENV_NAME,
+	envDescription: SINGLE_LINE,
+	source: SOURCE_EXTENSION,
 	route: ROUTE_PATTERN,
 	dependency: EXACT_DEPENDENCY,
 	maxOperations: MAX_OPERATIONS,
@@ -133,7 +136,8 @@ export const parseEnvironment = (
 			!isRecord(item) ||
 			typeof item.name !== "string" ||
 			typeof item.description !== "string" ||
-			!ENV_NAME.test(item.name)
+			!ENV_NAME.test(item.name) ||
+			!SINGLE_LINE.test(item.description)
 		) {
 			return undefined;
 		}
@@ -268,7 +272,7 @@ export const parseTemplateItem = (
 	const environment = parseEnvironment(data.environment ?? []);
 	if (environment === undefined) {
 		throw new Error(
-			`Invalid template.json for "${data.id}": environment names must be UPPER_SNAKE with a description.`,
+			`Invalid template.json for "${data.id}": environment names must be UPPER_SNAKE with a one-line description.`,
 		);
 	}
 	let operations: FunctionTemplateOperation[] | undefined;
@@ -300,22 +304,41 @@ export const parseRegistryIndex = (text: string): RegistryIndexEntry[] => {
 			'Invalid function registry: missing "templates" array.',
 		);
 	}
+	if (items.length > MAX_INDEX_ENTRIES) {
+		throw new Error(
+			`Invalid function registry: ${items.length} templates, more than the ${MAX_INDEX_ENTRIES} the CLI reads.`,
+		);
+	}
 	const entries: RegistryIndexEntry[] = [];
 	const seen = new Set<string>();
-	for (const item of items.slice(0, MAX_INDEX_ENTRIES)) {
+	for (const [index, item] of items.entries()) {
+		const at = `templates[${index}]${
+			isRecord(item) && typeof item.id === "string"
+				? ` ("${item.id}")`
+				: ""
+		}`;
+		const invalid = (reason: string) =>
+			new Error(`Invalid function registry: ${at} ${reason}.`);
+		if (!isRecord(item)) throw invalid("is not an object");
+		if (!matches(item.id, TEMPLATE_ID)) throw invalid("has a bad id");
+		if (seen.has(item.id)) throw invalid("repeats an id");
+		if (!isText(item.title) || !isText(item.description)) {
+			throw invalid("is missing a title or description");
+		}
+		if (!isOptionalString(item.provider)) {
+			throw invalid("has a provider that is not a string");
+		}
 		if (
-			!isRecord(item) ||
-			!matches(item.id, TEMPLATE_ID) ||
-			seen.has(item.id) ||
-			!isText(item.title) ||
-			!isText(item.description) ||
-			!isOptionalString(item.provider) ||
 			typeof item.path !== "string" ||
-			!isContainedRelativePath(item.path) ||
-			(item.logo !== undefined &&
-				(typeof item.logo !== "string" || !isDisplayLogoUrl(item.logo)))
+			!isContainedRelativePath(item.path)
 		) {
-			continue;
+			throw invalid("has a missing or unsafe path");
+		}
+		if (
+			item.logo !== undefined &&
+			(typeof item.logo !== "string" || !isDisplayLogoUrl(item.logo))
+		) {
+			throw invalid("has a logo that is not an https:// URL");
 		}
 		seen.add(item.id);
 		entries.push({

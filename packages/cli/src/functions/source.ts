@@ -27,19 +27,22 @@ export type RegistrySource =
 	| { kind: "url"; url: URL };
 
 export class RegistryError extends Error {
-	constructor(message: string) {
+	readonly status?: number;
+	constructor(message: string, status?: number) {
 		super(message);
 		this.name = "RegistryError";
+		if (status !== undefined) this.status = status;
 	}
 }
 
 export const resolveRegistrySource = (
 	env: NodeJS.ProcessEnv = process.env,
 	cwd: string = process.cwd(),
+	defaultUrl: string = DEFAULT_REGISTRY_URL,
 ): RegistrySource => {
 	const dir = env[REGISTRY_DIR_ENV];
 	if (dir) return { kind: "dir", dir: resolve(cwd, dir) };
-	const raw = env[REGISTRY_URL_ENV] || DEFAULT_REGISTRY_URL;
+	const raw = env[REGISTRY_URL_ENV] || defaultUrl;
 	if (!URL.canParse(raw)) {
 		throw new RegistryError(`${REGISTRY_URL_ENV} is not a URL: ${raw}`);
 	}
@@ -119,6 +122,7 @@ const urlReader = (index: URL): ReadText => {
 		if (!response.ok) {
 			throw new RegistryError(
 				`The Function Registry answered ${response.status} for ${url.href}.`,
+				response.status,
 			);
 		}
 		const declared = Number(response.headers.get("content-length"));
@@ -149,18 +153,29 @@ export const templateSourcePaths = (template: FunctionTemplate): string[] =>
 
 const INDEX_FILE = "registry.json";
 
+export type RegistryDefaults = {
+	primary?: string;
+	fallback?: string;
+	env?: NodeJS.ProcessEnv;
+};
+
 export const openRegistry = async (
 	source?: RegistrySource,
+	{
+		primary = DEFAULT_REGISTRY_URL,
+		fallback = GITHUB_REGISTRY_URL,
+		env = process.env,
+	}: RegistryDefaults = {},
 ): Promise<Registry> => {
 	if (source) return openRegistryAt(source);
-	const resolved = resolveRegistrySource();
-	if (resolved.kind !== "url" || resolved.url.href !== DEFAULT_REGISTRY_URL) {
+	const resolved = resolveRegistrySource(env, process.cwd(), primary);
+	if (
+		resolved.kind !== "url" ||
+		resolved.url.href !== new URL(primary).href
+	) {
 		return openRegistryAt(resolved);
 	}
-	const github: RegistrySource = {
-		kind: "url",
-		url: new URL(GITHUB_REGISTRY_URL),
-	};
+	const github: RegistrySource = { kind: "url", url: new URL(fallback) };
 	try {
 		return await openRegistryAt(resolved, github);
 	} catch (error) {
@@ -172,12 +187,31 @@ export const openRegistry = async (
 const readerFor = (source: RegistrySource): ReadText =>
 	source.kind === "dir" ? dirReader(source.dir) : urlReader(source.url);
 
+const withStaleIndexHint =
+	(read: ReadText, index: RegistrySource, files: RegistrySource): ReadText =>
+	async (path, limit) => {
+		try {
+			return await read(path, limit);
+		} catch (error) {
+			if (!(error instanceof RegistryError) || error.status !== 404) {
+				throw error;
+			}
+			throw new RegistryError(
+				`${error.message} The index from ${describeRegistrySource(index)} is cached and may still list a template that moved or was removed. Try again in a few minutes, or set ${REGISTRY_URL_ENV}=${describeRegistrySource(files)} to read the current index.`,
+				404,
+			);
+		}
+	};
+
 const openRegistryAt = async (
 	source: RegistrySource,
 	files: RegistrySource = source,
 ): Promise<Registry> => {
 	const read = readerFor(source);
-	const readFile = files === source ? read : readerFor(files);
+	const readFile =
+		files === source
+			? read
+			: withStaleIndexHint(readerFor(files), source, files);
 	const indexPath =
 		source.kind === "dir"
 			? INDEX_FILE

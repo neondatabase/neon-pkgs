@@ -32,7 +32,10 @@ import { log } from "../log.js";
 import { projectConfigPath, projectDir } from "../project.js";
 import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
-import { deriveFunctionSlug } from "../utils/function_slug.js";
+import {
+	deriveFunctionSlug,
+	FUNCTION_SLUG_PATTERN,
+} from "../utils/function_slug.js";
 import {
 	installArgs,
 	type PackageManager,
@@ -193,9 +196,19 @@ const confirm = async (message: string, initial: boolean) => {
 	return answer.value as boolean | undefined;
 };
 
+const assertSlug = (slug: string | undefined): void => {
+	if (slug === undefined || FUNCTION_SLUG_PATTERN.test(slug)) return;
+	const suggestion = deriveFunctionSlug(slug);
+	throw new Error(
+		`"${slug}" is not a valid function slug: use 1-20 lowercase letters and digits, no hyphens.` +
+			(suggestion ? ` Try "${suggestion}".` : ""),
+	);
+};
+
 export const scaffoldFromTemplate = async (
 	options: ScaffoldFromTemplateOptions,
 ): Promise<ScaffoldFromTemplateResult> => {
+	assertSlug(options.slug);
 	const registry = options.registry ?? (await openRegistry());
 	const entry = registry.entries.find(({ id }) => id === options.template);
 	if (!entry) throw unknownTemplate(options.template, registry);
@@ -266,8 +279,11 @@ export const scaffoldFromTemplate = async (
 		registration.alreadyDeclared.length > 0 &&
 		!options.force
 	) {
+		const declared = `${displayPath(configPath, cwd)} already declares ${registration.alreadyDeclared.join(", ")}.`;
 		throw new Error(
-			`${displayPath(configPath, cwd)} already declares ${registration.alreadyDeclared.join(", ")}. Pass --slug to pick another one, --force to keep the declaration and overwrite the files, or --no-add-to-config.`,
+			plan.layout === "separate"
+				? `${declared} The template sets these slugs, so --slug cannot change them. Remove them from neon.ts, pass --force to keep the declarations and overwrite the files, or pass --no-add-to-config.`
+				: `${declared} Pass --slug to pick another one, --force to keep the declaration and overwrite the files, or --no-add-to-config.`,
 		);
 	}
 
@@ -511,6 +527,7 @@ const pickTemplate = async (
 export const handleNew = async (props: NewFunctionProps): Promise<void> => {
 	const interactive =
 		props.yes !== true && !structured(props) && isInteractiveTerminal();
+	assertSlug(props.slug);
 	const registry = await openRegistry();
 	let template = props.template;
 	if (template === undefined) {
