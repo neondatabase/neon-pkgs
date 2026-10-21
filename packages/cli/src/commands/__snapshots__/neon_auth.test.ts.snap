@@ -134,6 +134,120 @@ jwks_url: https://auth.test.neon.tech/.well-known/jwks.json
 
 exports[`neon-auth > enable reports a provisioning conflict on a branch without Neon Auth 1`] = `""`;
 
+exports[`neon-auth > oauth-client create 1`] = `
+"OAuth client
+Client ID      client-abc123
+Name           My MCP client
+Type           confidential
+Redirect Uris  https://app.example.com/callback
+Resources      https://api.example.com
+Skip Consent   false
+Disabled       false
+Created At     2026-01-01T00:00:00Z
+
+secret-shown-once
+"
+`;
+
+exports[`neon-auth > oauth-client create json includes the secret 1`] = `
+"{
+  "client_id": "client-abc123",
+  "name": "My MCP client",
+  "type": "confidential",
+  "redirect_uris": [
+    "https://app.example.com/callback"
+  ],
+  "resources": [
+    "https://api.example.com"
+  ],
+  "skip_consent": false,
+  "disabled": false,
+  "created_at": "2026-01-01T00:00:00Z",
+  "client_secret": "secret-shown-once"
+}
+"
+`;
+
+exports[`neon-auth > oauth-client create public has no secret 1`] = `
+"OAuth client
+Client ID      client-abc123
+Name           SPA
+Type           public
+Redirect Uris  https://spa.example.com/cb
+Resources      https://api.example.com
+Skip Consent   true
+Disabled       false
+Created At     2026-01-01T00:00:00Z
+"
+`;
+
+exports[`neon-auth > oauth-client delete 1`] = `
+"
+OAuth client "client-abc123" deleted
+
+"
+`;
+
+exports[`neon-auth > oauth-client get 1`] = `
+"client_id: client-abc123
+name: My MCP client
+type: confidential
+redirect_uris:
+  - https://app.example.com/callback
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
+exports[`neon-auth > oauth-client list 1`] = `
+"- client_id: client-abc123
+  name: My MCP client
+  type: confidential
+  redirect_uris:
+    - https://app.example.com/callback
+  resources:
+    - https://api.example.com
+  skip_consent: false
+  disabled: false
+  created_at: 2026-01-01T00:00:00Z
+- client_id: client-def456
+  name: Public SPA
+  type: public
+  redirect_uris:
+    - https://spa.example.com/cb
+    - http://localhost:3000/cb
+  resources: []
+  skip_consent: true
+  disabled: true
+  created_at: 2026-01-02T00:00:00Z
+"
+`;
+
+exports[`neon-auth > oauth-client rotate-secret 1`] = `
+"OAuth client secret
+Client ID  client-abc123
+
+rotated-secret-shown-once
+"
+`;
+
+exports[`neon-auth > oauth-client update 1`] = `
+"client_id: client-abc123
+name: Renamed
+type: confidential
+redirect_uris:
+  - https://app.example.com/callback
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: true
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
 exports[`neon-auth > oauth-provider add 1`] = `
 "id: google
 type: shared
@@ -164,6 +278,64 @@ type: standard
 client_id: my-client-id
 "
 `;
+
+exports[`neon-auth > oauth-server get 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://stored.example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: false
+resources:
+  - identifier: https://api.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: true
+resources:
+  - identifier: https://api.example.com
+  - identifier: https://api2.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update disables dynamic registration 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://stored.example.com/mcp
+  dynamic_registration: false
+  client_id_metadata_documents: false
+"
+`;
+
+exports[`neon-auth > oauth-server update reuses the stored MCP resource and booleans 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://stored.example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: true
+"
+`;
+
+exports[`neon-auth > oauth-server update sends no mcp without an mcp flag 1`] = `
+"enabled: false
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+"
+`;
+
+exports[`neon-auth > oauth-server update without a stored MCP resource fails 1`] = `""`;
 
 exports[`neon-auth > organization get 1`] = `
 "enabled: true
@@ -208,6 +380,16 @@ oauth_providers:
     type: shared
     client_id: ""
 allow_localhost: true
+oauth_provider:
+  enabled: true
+  login_page: https://app.example.com/login
+  consent_page: https://app.example.com/consent
+  mcp:
+    resource: https://stored.example.com/mcp
+    dynamic_registration: true
+    client_id_metadata_documents: false
+  resources:
+    - identifier: https://api.example.com
 "
 `;
 

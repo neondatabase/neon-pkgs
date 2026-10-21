@@ -440,6 +440,259 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	// --- Config: OAuth server ---
+
+	test("oauth-server get", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"neon-auth",
+			"config",
+			"oauth-server",
+			"get",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-server update", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"neon-auth",
+			"config",
+			"oauth-server",
+			"update",
+			"--enabled",
+			"--login-page",
+			"https://app.example.com/login",
+			"--mcp-resource",
+			"https://example.com/mcp",
+			"--mcp-client-id-metadata-documents",
+			"--resources",
+			"https://api.example.com",
+			"https://api2.example.com",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-server update reuses the stored MCP resource and booleans", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"neon-auth",
+			"config",
+			"oauth-server",
+			"update",
+			"--mcp-client-id-metadata-documents",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-server update without a stored MCP resource fails", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--mcp-client-id-metadata-documents",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				mockDir: "neon-auth-oauth-server-no-mcp",
+				code: 1,
+				stderr: "ERROR: No MCP resource is configured yet. Pass --mcp-resource <url> together with the other --mcp-* flags.",
+			},
+		);
+	});
+
+	test("oauth-server update disables dynamic registration", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"neon-auth",
+			"config",
+			"oauth-server",
+			"update",
+			"--no-mcp-dynamic-registration",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-server update sends no mcp without an mcp flag", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"neon-auth",
+			"config",
+			"oauth-server",
+			"update",
+			"--no-enabled",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	// --- OAuth clients ---
+
+	test("oauth-client list", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"neon-auth",
+			"oauth-client",
+			"list",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-client create", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"oauth-client",
+				"create",
+				"--name",
+				"My MCP client",
+				"--type",
+				"confidential",
+				"--redirect-uris",
+				"https://app.example.com/callback",
+				"--resources",
+				"https://api.example.com",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ outputTable: true },
+		);
+	});
+
+	test("oauth-client create json includes the secret", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand([
+			"neon-auth",
+			"oauth-client",
+			"create",
+			"--name",
+			"My MCP client",
+			"--type",
+			"confidential",
+			"--redirect-uris",
+			"https://app.example.com/callback",
+			"--resources",
+			"https://api.example.com",
+			"-o",
+			"json",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-client create public has no secret", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"oauth-client",
+				"create",
+				"--name",
+				"SPA",
+				"--type",
+				"public",
+				"--redirect-uris",
+				"https://spa.example.com/cb",
+				"--resources",
+				"https://api.example.com",
+				"--skip-consent",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ outputTable: true },
+		);
+	});
+
+	test("oauth-client get", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"neon-auth",
+			"oauth-client",
+			"get",
+			"client-abc123",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-client update", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"neon-auth",
+			"oauth-client",
+			"update",
+			"client-abc123",
+			"--name",
+			"Renamed",
+			"--disabled",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-client delete", async ({ testCliCommand }) => {
+		await testCliCommand([
+			"neon-auth",
+			"oauth-client",
+			"delete",
+			"client-abc123",
+			"--project-id",
+			"test",
+			"--branch",
+			"test_branch",
+		]);
+	});
+
+	test("oauth-client rotate-secret", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"oauth-client",
+				"rotate-secret",
+				"client-abc123",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ outputTable: true },
+		);
+	});
+
 	// --- Config: Webhook ---
 
 	test("webhook get", async ({ testCliCommand }) => {

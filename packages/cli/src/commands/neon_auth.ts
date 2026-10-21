@@ -6,6 +6,7 @@ import chalk from "chalk";
 import type yargs from "yargs";
 import { codeFromBody, isNeonApiError, retryOnLock } from "../api.js";
 import { stripAnsi } from "../human_table.js";
+import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	NeonAuthEmailVerificationMethod,
@@ -102,6 +103,27 @@ const ORGANIZATION_FIELDS = [
 	"creator_role",
 ] as const;
 
+const OAUTH_SERVER_FIELDS = [
+	"enabled",
+	"login_page",
+	"consent_page",
+	"mcp",
+	"resources",
+] as const;
+
+const OAUTH_CLIENT_FIELDS = [
+	"client_id",
+	"name",
+	"type",
+	"redirect_uris",
+	"resources",
+	"skip_consent",
+	"disabled",
+	"created_at",
+] as const;
+
+const OAUTH_CLIENT_SECRET_FIELDS = ["client_id", "client_secret"] as const;
+
 const WEBHOOK_FIELDS = [
 	"enabled",
 	"webhook_url",
@@ -165,86 +187,253 @@ export const builder = (argv: yargs.Argv) => {
 				await disable(args as any);
 			},
 		)
-		.command("oauth-provider", "Manage OAuth providers", (yargs) => {
-			return yargs
-				.usage("$0 neon-auth oauth-provider <sub-command> [options]")
-				.command(
-					"list",
-					"List OAuth providers",
-					(yargs) => yargs,
-					async (args) => {
-						await oauthProviderList(args as any);
-					},
-				)
-				.command(
-					"add",
-					"Add an OAuth provider",
-					(yargs) =>
-						yargs.options({
-							"provider-id": {
-								describe: `OAuth provider ID. Supported values: ${SUPPORTED_OAUTH_PROVIDERS.join(", ")}`,
-								type: "string",
-								choices: SUPPORTED_OAUTH_PROVIDERS,
-								demandOption: true,
-							},
-							"oauth-client-id": {
-								describe:
-									"OAuth client ID from your provider app. Omit to use Neon's shared OAuth app.",
-								type: "string",
-							},
-							"oauth-client-secret": {
-								describe:
-									"OAuth client secret from your provider app. Omit to use Neon's shared OAuth app.",
-								type: "string",
-							},
-						}),
-					async (args) => {
-						await oauthProviderAdd(args as any);
-					},
-				)
-				.command(
-					"update",
-					"Update an OAuth provider",
-					(yargs) =>
-						yargs.options({
-							"provider-id": {
-								describe: `OAuth provider ID. Supported values: ${SUPPORTED_OAUTH_PROVIDERS.join(", ")}`,
-								type: "string",
-								choices: SUPPORTED_OAUTH_PROVIDERS,
-								demandOption: true,
-							},
-							"oauth-client-id": {
-								describe:
-									"OAuth client ID from your provider app. Omit to use Neon's shared OAuth app.",
-								type: "string",
-							},
-							"oauth-client-secret": {
-								describe:
-									"OAuth client secret from your provider app. Omit to use Neon's shared OAuth app.",
-								type: "string",
-							},
-						}),
-					async (args) => {
-						await oauthProviderUpdate(args as any);
-					},
-				)
-				.command(
-					"delete",
-					"Delete an OAuth provider",
-					(yargs) =>
-						yargs.options({
-							"provider-id": {
-								describe: `OAuth provider ID. Supported values: ${SUPPORTED_OAUTH_PROVIDERS.join(", ")}`,
-								type: "string",
-								choices: SUPPORTED_OAUTH_PROVIDERS,
-								demandOption: true,
-							},
-						}),
-					async (args) => {
-						await oauthProviderDelete(args as any);
-					},
-				);
-		})
+		.command(
+			"oauth-provider",
+			"Manage social login providers (Google, GitHub, Vercel)",
+			(yargs) => {
+				return yargs
+					.usage(
+						"$0 neon-auth oauth-provider <sub-command> [options]",
+					)
+					.command(
+						"list",
+						"List OAuth providers",
+						(yargs) => yargs,
+						async (args) => {
+							await oauthProviderList(args as any);
+						},
+					)
+					.command(
+						"add",
+						"Add an OAuth provider",
+						(yargs) =>
+							yargs.options({
+								"provider-id": {
+									describe: `OAuth provider ID. Supported values: ${SUPPORTED_OAUTH_PROVIDERS.join(", ")}`,
+									type: "string",
+									choices: SUPPORTED_OAUTH_PROVIDERS,
+									demandOption: true,
+								},
+								"oauth-client-id": {
+									describe:
+										"OAuth client ID from your provider app. Omit to use Neon's shared OAuth app.",
+									type: "string",
+								},
+								"oauth-client-secret": {
+									describe:
+										"OAuth client secret from your provider app. Omit to use Neon's shared OAuth app.",
+									type: "string",
+								},
+							}),
+						async (args) => {
+							await oauthProviderAdd(args as any);
+						},
+					)
+					.command(
+						"update",
+						"Update an OAuth provider",
+						(yargs) =>
+							yargs.options({
+								"provider-id": {
+									describe: `OAuth provider ID. Supported values: ${SUPPORTED_OAUTH_PROVIDERS.join(", ")}`,
+									type: "string",
+									choices: SUPPORTED_OAUTH_PROVIDERS,
+									demandOption: true,
+								},
+								"oauth-client-id": {
+									describe:
+										"OAuth client ID from your provider app. Omit to use Neon's shared OAuth app.",
+									type: "string",
+								},
+								"oauth-client-secret": {
+									describe:
+										"OAuth client secret from your provider app. Omit to use Neon's shared OAuth app.",
+									type: "string",
+								},
+							}),
+						async (args) => {
+							await oauthProviderUpdate(args as any);
+						},
+					)
+					.command(
+						"delete",
+						"Delete an OAuth provider",
+						(yargs) =>
+							yargs.options({
+								"provider-id": {
+									describe: `OAuth provider ID. Supported values: ${SUPPORTED_OAUTH_PROVIDERS.join(", ")}`,
+									type: "string",
+									choices: SUPPORTED_OAUTH_PROVIDERS,
+									demandOption: true,
+								},
+							}),
+						async (args) => {
+							await oauthProviderDelete(args as any);
+						},
+					);
+			},
+		)
+		.command(
+			"oauth-client",
+			"Manage clients of this Neon Auth OAuth server (e.g. MCP clients); configure the server with `config oauth-server`",
+			(yargs) => {
+				return yargs
+					.usage("$0 neon-auth oauth-client <sub-command> [options]")
+					.command(
+						"list",
+						"List OAuth clients",
+						(yargs) => yargs,
+						async (args) => {
+							await oauthClientList(args as any);
+						},
+					)
+					.command(
+						"create",
+						"Create an OAuth client",
+						(yargs) =>
+							yargs
+								.options({
+									name: {
+										describe: "Display name of the client",
+										type: "string",
+										demandOption: true,
+									},
+									type: {
+										describe:
+											"Client type. Confidential clients receive a secret that is shown only once",
+										type: "string",
+										choices: [
+											"confidential",
+											"public",
+										] as const,
+										demandOption: true,
+									},
+									"redirect-uris": {
+										describe:
+											"Redirect URIs the client may use (https, or http on loopback when localhost is allowed)",
+										type: "string",
+										array: true,
+										demandOption: true,
+									},
+									resources: {
+										describe:
+											"Protected resource URLs to link the client to; each must be configured with `config oauth-server update --resources`",
+										type: "string",
+										array: true,
+										demandOption: true,
+									},
+									"skip-consent": {
+										describe:
+											"Skip the consent prompt (first-party clients only)",
+										type: "boolean",
+									},
+								})
+								.example(
+									"$0 neon-auth oauth-client create --name 'My app' --type confidential --redirect-uris https://app.example.com/callback --resources https://api.example.com",
+									"Create a confidential client",
+								),
+						async (args) => {
+							await oauthClientCreate(args as any);
+						},
+					)
+					.command(
+						"get <client-id>",
+						"Get an OAuth client",
+						(yargs) =>
+							yargs
+								.usage(
+									"$0 neon-auth oauth-client get <client-id> [options]",
+								)
+								.positional("client-id", {
+									describe: "OAuth client ID",
+									type: "string",
+									demandOption: true,
+								}),
+						async (args) => {
+							await oauthClientGet(args as any);
+						},
+					)
+					.command(
+						"update <client-id>",
+						"Update an OAuth client (the type cannot be changed)",
+						(yargs) =>
+							yargs
+								.usage(
+									"$0 neon-auth oauth-client update <client-id> [options]",
+								)
+								.positional("client-id", {
+									describe: "OAuth client ID",
+									type: "string",
+									demandOption: true,
+								})
+								.options({
+									name: {
+										describe: "Display name of the client",
+										type: "string",
+									},
+									"redirect-uris": {
+										describe:
+											"Redirect URIs the client may use; replaces the stored list",
+										type: "string",
+										array: true,
+									},
+									resources: {
+										describe:
+											"Protected resource URLs to link the client to; replaces the stored list",
+										type: "string",
+										array: true,
+									},
+									"skip-consent": {
+										describe:
+											"Skip the consent prompt (first-party clients only). Use --no-skip-consent or --skip-consent false to turn off",
+										type: "boolean",
+									},
+									disabled: {
+										describe:
+											"Disable the client. Use --no-disabled or --disabled false to re-enable",
+										type: "boolean",
+									},
+								}),
+						async (args) => {
+							await oauthClientUpdate(args as any);
+						},
+					)
+					.command(
+						"delete <client-id>",
+						"Delete an OAuth client",
+						(yargs) =>
+							yargs
+								.usage(
+									"$0 neon-auth oauth-client delete <client-id> [options]",
+								)
+								.positional("client-id", {
+									describe: "OAuth client ID",
+									type: "string",
+									demandOption: true,
+								}),
+						async (args) => {
+							await oauthClientDelete(args as any);
+						},
+					)
+					.command(
+						"rotate-secret <client-id>",
+						"Rotate the secret of a confidential client; the old secret stops working immediately",
+						(yargs) =>
+							yargs
+								.usage(
+									"$0 neon-auth oauth-client rotate-secret <client-id> [options]",
+								)
+								.positional("client-id", {
+									describe: "OAuth client ID",
+									type: "string",
+									demandOption: true,
+								}),
+						async (args) => {
+							await oauthClientRotateSecret(args as any);
+						},
+					);
+			},
+		)
 		.command("domain", "Manage redirect URI trusted domains", (yargs) => {
 			return yargs
 				.usage("$0 neon-auth domain <sub-command> [options]")
@@ -538,6 +727,77 @@ export const builder = (argv: yargs.Argv) => {
 							);
 					},
 				)
+				.command(
+					"oauth-server",
+					"Manage the OAuth 2.1 authorization server (API plugin: oauth_provider)",
+					(yargs) => {
+						return yargs
+							.usage(
+								"$0 neon-auth config oauth-server <sub-command> [options]",
+							)
+							.command(
+								"get",
+								"Get OAuth server config",
+								(yargs) => yargs,
+								async (args) => {
+									await oauthServerGet(args as any);
+								},
+							)
+							.command(
+								"update",
+								"Update OAuth server config",
+								(yargs) =>
+									yargs
+										.options({
+											enabled: {
+												describe:
+													"Enable the OAuth server. Use --no-enabled or --enabled false to disable",
+												type: "boolean",
+											},
+											"login-page": {
+												describe:
+													"URL of the page authorization requests redirect to for sign-in",
+												type: "string",
+											},
+											"consent-page": {
+												describe:
+													"URL of the page authorization requests redirect to for consent",
+												type: "string",
+											},
+											resources: {
+												describe:
+													"Protected resource URLs that clients can be linked to; replaces the stored list",
+												type: "string",
+												array: true,
+											},
+											"mcp-resource": {
+												describe:
+													"MCP server URL that MCP clients are linked to. Defaults to the stored value when another --mcp-* flag is given",
+												type: "string",
+											},
+											"mcp-client-id-metadata-documents":
+												{
+													describe:
+														"Allow MCP clients to identify themselves with a Client ID Metadata Document (CIMD) URL. Use --no-mcp-client-id-metadata-documents to disallow",
+													type: "boolean",
+												},
+											"mcp-dynamic-registration": {
+												describe:
+													"Allow MCP clients to register themselves via dynamic client registration (deprecated in favor of CIMD)",
+												type: "boolean",
+												hidden: true,
+											},
+										})
+										.example(
+											"$0 neon-auth config oauth-server update --enabled --mcp-resource https://example.com/mcp --mcp-client-id-metadata-documents",
+											"Enable the OAuth server for an MCP server",
+										),
+								async (args) => {
+									await oauthServerUpdate(args as any);
+								},
+							);
+					},
+				)
 				.command("webhook", "Manage webhook configuration", (yargs) => {
 					return yargs
 						.usage(
@@ -609,7 +869,7 @@ export const builder = (argv: yargs.Argv) => {
 							)
 							.positional("plugin-name", {
 								describe:
-									"Plugin name (e.g. organization, email_provider, email_and_password, oauth_providers, allow_localhost)",
+									"Plugin name (e.g. organization, email_provider, email_and_password, oauth_providers, oauth_provider, allow_localhost)",
 								type: "string",
 								demandOption: true,
 							}),
@@ -1401,6 +1661,300 @@ const organizationUpdate = async (
 	printKvBlock(
 		"Organization configuration updated",
 		printOrganizationEntries(data),
+	);
+};
+
+// --- OAuth server (API plugin: oauth_provider) ---
+
+type OAuthServerConfig = {
+	enabled: boolean;
+	login_page?: string;
+	consent_page?: string;
+	mcp?: {
+		resource?: string;
+		dynamic_registration?: boolean;
+		client_id_metadata_documents?: boolean;
+	};
+	resources?: { identifier: string }[];
+};
+
+const optionalBool = (v: boolean | undefined) =>
+	v === undefined ? undefined : String(v);
+
+const printOAuthServerEntries = (
+	data: OAuthServerConfig,
+): [string, string | undefined][] => [
+	["Enabled:", String(data.enabled)],
+	["Login Page:", data.login_page],
+	["Consent Page:", data.consent_page],
+	["MCP Resource:", data.mcp?.resource],
+	["MCP CIMD:", optionalBool(data.mcp?.client_id_metadata_documents)],
+	["MCP Dynamic Reg:", optionalBool(data.mcp?.dynamic_registration)],
+	["Resources:", (data.resources ?? []).map((r) => r.identifier).join(", ")],
+];
+
+const oauthServerGet = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.getNeonAuthOAuthProviderPlugin(
+		props.projectId,
+		branchId,
+	);
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data as any, { fields: OAUTH_SERVER_FIELDS as any });
+		return;
+	}
+	printKvBlock("OAuth server configuration", printOAuthServerEntries(data));
+};
+
+type OAuthServerUpdateProps = AuthBranchProps & {
+	enabled?: boolean;
+	loginPage?: string;
+	consentPage?: string;
+	resources?: string[];
+	mcpResource?: string;
+	mcpDynamicRegistration?: boolean;
+	mcpClientIdMetadataDocuments?: boolean;
+};
+
+/**
+ * The API requires `mcp.resource` whenever `mcp` is sent, and the spec says both that `mcp`
+ * is replaced as a whole and that omitted booleans keep their stored value. Filling every
+ * field from the stored config is correct under either reading.
+ */
+const resolveMcpUpdate = async (
+	props: OAuthServerUpdateProps,
+	branchId: string,
+) => {
+	const {
+		mcpResource,
+		mcpDynamicRegistration: dynamicRegistration,
+		mcpClientIdMetadataDocuments: clientIdMetadataDocuments,
+	} = props;
+	if (
+		mcpResource === undefined &&
+		dynamicRegistration === undefined &&
+		clientIdMetadataDocuments === undefined
+	) {
+		return undefined;
+	}
+	const stored =
+		mcpResource !== undefined &&
+		dynamicRegistration !== undefined &&
+		clientIdMetadataDocuments !== undefined
+			? undefined
+			: (
+					await props.apiClient.getNeonAuthOAuthProviderPlugin(
+						props.projectId,
+						branchId,
+					)
+				).data.mcp;
+	const resource = mcpResource ?? stored?.resource;
+	if (!resource) {
+		throw new Error(
+			"No MCP resource is configured yet. Pass --mcp-resource <url> together with the other --mcp-* flags.",
+		);
+	}
+	return {
+		resource,
+		dynamic_registration:
+			dynamicRegistration ?? stored?.dynamic_registration,
+		client_id_metadata_documents:
+			clientIdMetadataDocuments ?? stored?.client_id_metadata_documents,
+	};
+};
+
+const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
+	const branchId = await resolveBranch(props);
+	const mcp = await resolveMcpUpdate(props, branchId);
+	const { data } = await props.apiClient.updateNeonAuthOAuthProviderPlugin(
+		props.projectId,
+		branchId,
+		{
+			enabled: props.enabled,
+			login_page: props.loginPage,
+			consent_page: props.consentPage,
+			mcp,
+			resources: props.resources?.map((identifier) => ({ identifier })),
+		},
+	);
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data as any, { fields: OAUTH_SERVER_FIELDS as any });
+		return;
+	}
+	printKvBlock(
+		"OAuth server configuration updated",
+		printOAuthServerEntries(data),
+	);
+};
+
+// --- OAuth clients ---
+
+type OAuthClient = {
+	client_id: string;
+	name: string;
+	type: string;
+	redirect_uris: string[];
+	resources: string[];
+	skip_consent: boolean;
+	disabled: boolean;
+	created_at?: string;
+};
+
+const printOAuthClientEntries = (
+	data: OAuthClient,
+): [string, string | undefined][] => [
+	["Client ID:", data.client_id],
+	["Name:", data.name],
+	["Type:", data.type],
+	["Redirect URIs:", data.redirect_uris.join(", ")],
+	["Resources:", data.resources.join(", ")],
+	["Skip Consent:", String(data.skip_consent)],
+	["Disabled:", String(data.disabled)],
+	["Created At:", data.created_at],
+];
+
+const oauthClientList = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.listNeonAuthOAuthClients(
+		props.projectId,
+		branchId,
+	);
+	if (data.clients.length === 0 && props.output === "table") {
+		printMessage("No OAuth clients are configured for this branch.");
+		return;
+	}
+	writer(props).end(data.clients, { fields: OAUTH_CLIENT_FIELDS });
+};
+
+/**
+ * The secret is shown only once, so human output keeps it on its own last line of stdout
+ * and the notice goes to stderr. Structured output keeps it in the object for scripts.
+ */
+const reportOAuthClientSecret = (
+	props: AuthBranchProps,
+	data: { client_secret?: string; [field: string]: unknown },
+	fields: readonly string[],
+	tableFields: readonly string[],
+	title: string,
+) => {
+	const out = writer(props);
+	if (props.output === "table") {
+		out.write(data as never, { fields: tableFields as never, title });
+		out.end();
+		if (data.client_secret) {
+			out.text(`\n${data.client_secret}\n`);
+		}
+	} else {
+		out.end(data as never, { fields: fields as never });
+	}
+	if (data.client_secret) {
+		log.warning("Store this secret now: it is not shown again.");
+	}
+};
+
+const oauthClientCreate = async (
+	props: AuthBranchProps & {
+		name: string;
+		type: "confidential" | "public";
+		redirectUris: string[];
+		resources: string[];
+		skipConsent?: boolean;
+	},
+) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.createNeonAuthOAuthClient(
+		props.projectId,
+		branchId,
+		{
+			name: props.name,
+			type: props.type,
+			redirect_uris: props.redirectUris,
+			resources: props.resources,
+			skip_consent: props.skipConsent,
+		},
+	);
+	reportOAuthClientSecret(
+		props,
+		data,
+		[...OAUTH_CLIENT_FIELDS, "client_secret"],
+		OAUTH_CLIENT_FIELDS,
+		"OAuth client",
+	);
+};
+
+const oauthClientGet = async (
+	props: AuthBranchProps & { clientId: string },
+) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.getNeonAuthOAuthClient(
+		props.projectId,
+		branchId,
+		props.clientId,
+	);
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data, { fields: OAUTH_CLIENT_FIELDS });
+		return;
+	}
+	printKvBlock("OAuth client", printOAuthClientEntries(data));
+};
+
+const oauthClientUpdate = async (
+	props: AuthBranchProps & {
+		clientId: string;
+		name?: string;
+		redirectUris?: string[];
+		resources?: string[];
+		skipConsent?: boolean;
+		disabled?: boolean;
+	},
+) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.updateNeonAuthOAuthClient(
+		props.projectId,
+		branchId,
+		props.clientId,
+		{
+			name: props.name,
+			redirect_uris: props.redirectUris,
+			resources: props.resources,
+			skip_consent: props.skipConsent,
+			disabled: props.disabled,
+		},
+	);
+	if (props.output === "json" || props.output === "yaml") {
+		writer(props).end(data, { fields: OAUTH_CLIENT_FIELDS });
+		return;
+	}
+	printKvBlock("OAuth client updated", printOAuthClientEntries(data));
+};
+
+const oauthClientDelete = async (
+	props: AuthBranchProps & { clientId: string },
+) => {
+	const branchId = await resolveBranch(props);
+	await props.apiClient.deleteNeonAuthOAuthClient(
+		props.projectId,
+		branchId,
+		props.clientId,
+	);
+	printMessage(`OAuth client "${props.clientId}" deleted`);
+};
+
+const oauthClientRotateSecret = async (
+	props: AuthBranchProps & { clientId: string },
+) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.rotateNeonAuthOAuthClientSecret(
+		props.projectId,
+		branchId,
+		props.clientId,
+	);
+	reportOAuthClientSecret(
+		props,
+		data,
+		OAUTH_CLIENT_SECRET_FIELDS,
+		["client_id"],
+		"OAuth client secret",
 	);
 };
 
