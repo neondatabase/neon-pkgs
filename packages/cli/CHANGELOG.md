@@ -1,5 +1,11 @@
 # neon
 
+## 8.10.2
+
+### Patch Changes
+
+- 9aac61e: `neon docs search` prints each result as a "Title › Section" line cut to the terminal width, with the full URL under it, instead of a three-column table that wrapped in narrow terminals. JSON and YAML output are unchanged.
+
 ## 8.10.1
 
 ### Patch Changes
