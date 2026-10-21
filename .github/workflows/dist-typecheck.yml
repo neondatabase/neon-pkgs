@@ -15,63 +15,98 @@ concurrency:
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+    changes:
+        name: Select affected packages
+        runs-on:
+            group: databricks-ghec-untrusted-runner-group
+            labels: linux-ubuntu-latest-untrusted-2core-8gb
+        outputs:
+            matrix: ${{ steps.matrix.outputs.matrix }}
+            has-packages: ${{ steps.matrix.outputs.has-packages }}
+        steps:
+            - name: Harden the runner (Audit all outbound calls)
+              uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+              with:
+                  fetch-depth: 0 # the affected-package diff needs the base branch history
+            - uses: ./.github/actions/prepare
+              with:
+                  install: 'false'
+            - id: affected
+              uses: ./.github/actions/affected
+              with:
+                  workflow: .github/workflows/dist-typecheck.yml
+            # Every published package that ships types, keyed by workspace name. Optional flags:
+            #   skipConsumerCompile: skip the consumer compile (attw still runs).
+            #     @neon/auth: better-auth's own published .d.ts files do not survive a
+            #     skipLibCheck:false compile, and Next ships no exports map, so `next/server`
+            #     is unresolvable under moduleResolution=nodenext. Neither reflects a defect
+            #     in this package's emitted declarations. See issue #765.
+            #     @neon/neon-js: the consumer compile follows our re-exports into
+            #     better-auth's own .d.ts files (bun:sqlite, node:sqlite, organization
+            #     routes) and `next/server`, which do not compile under skipLibCheck:false.
+            #     See issue #765.
+            #   namedExports: pass --named-exports to the consumer compile.
+            - id: matrix
+              env:
+                  PACKAGES: ${{ steps.affected.outputs.packages }}
+              run: |
+                  published=$(cat <<'JSON'
+                  [
+                      {"name": "neon-new", "dir": "neon-new"},
+                      {"name": "vite-plugin-neon-new", "dir": "vite-plugin-neon-new"},
+                      {"name": "@neon/config", "dir": "config"},
+                      {"name": "@neon/config-runtime", "dir": "config-runtime"},
+                      {"name": "@neon/env", "dir": "env"},
+                      {"name": "@neon/functions", "dir": "functions"},
+                      {"name": "@neon/ai-sdk-provider", "dir": "ai-sdk-provider"},
+                      {"name": "@neon/tools", "dir": "tools"},
+                      {"name": "@neon/sdk", "dir": "sdk"},
+                      {"name": "@neon/effect", "dir": "effect"},
+                      {"name": "@neon/realtime", "dir": "realtime"},
+                      {"name": "@neon/realtime-react", "dir": "realtime-react"},
+                      {"name": "@neon/realtime-tanstack", "dir": "realtime-tanstack"},
+                      {"name": "@neon/realtime-drizzle", "dir": "realtime-drizzle"},
+                      {"name": "@neon/realtime-kysely", "dir": "realtime-kysely"},
+                      {"name": "@neon/auth", "dir": "auth", "skipConsumerCompile": true},
+                      {"name": "@neon/postgrest-js", "dir": "postgrest-js"},
+                      {"name": "@neon/neon-js", "dir": "neon-js", "skipConsumerCompile": true},
+                      {"name": "@neon/oauth", "dir": "oauth", "namedExports": true}
+                  ]
+                  JSON
+                  )
+
+                  # The selection matches by exact name, so a name that drifts from its package.json
+                  # would silently stop being checked.
+                  status=0
+                  while IFS=$'\t' read -r name dir; do
+                      actual=$(jq -r '.name' "packages/$dir/package.json")
+                      if [[ "$actual" != "$name" ]]; then
+                          echo "::error::packages/$dir/package.json is named '$actual' but this list says '$name'"
+                          status=1
+                      fi
+                  done < <(jq -r '.[] | [.name, .dir] | @tsv' <<<"$published")
+                  [[ "$status" == 0 ]] || exit 1
+
+                  matrix=$(jq -c --argjson affected "$PACKAGES" '
+                      map(select(.name as $name | $affected | index($name)))
+                      | {include: .}' <<<"$published")
+                  {
+                      echo "matrix=$matrix"
+                      echo "has-packages=$(jq -r '.include | length > 0' <<<"$matrix")"
+                  } | tee -a "$GITHUB_OUTPUT"
     typecheck-dist:
         name: Check ${{ matrix.name }} distributed types
+        needs: changes
+        if: needs.changes.outputs.has-packages == 'true'
         runs-on:
             group: databricks-ghec-untrusted-runner-group
             labels: linux-ubuntu-latest-untrusted-2core-8gb
         strategy:
-            matrix:
-                include:
-                    - name: neon-new
-                      dir: neon-new
-                    - name: vite-plugin-neon-new
-                      dir: vite-plugin-neon-new
-                    - name: "@neon/config"
-                      dir: config
-                    - name: "@neon/config-runtime"
-                      dir: config-runtime
-                    - name: "@neon/env"
-                      dir: env
-                    - name: "@neon/functions"
-                      dir: functions
-                    - name: "@neon/ai-sdk-provider"
-                      dir: ai-sdk-provider
-                    - name: "@neon/tools"
-                      dir: tools
-                    - name: "@neon/sdk"
-                      dir: sdk
-                    - name: "@neon/effect"
-                      dir: effect
-                    - name: "@neon/realtime"
-                      dir: realtime
-                    - name: "@neon/realtime-react"
-                      dir: realtime-react
-                    - name: "@neon/realtime-tanstack"
-                      dir: realtime-tanstack
-                    - name: "@neon/realtime-drizzle"
-                      dir: realtime-drizzle
-                    - name: "@neon/realtime-kysely"
-                      dir: realtime-kysely
-                    - name: "@neon/auth"
-                      dir: auth
-                      # The consumer compile is skipped: better-auth's own published
-                      # .d.ts files do not survive a skipLibCheck:false compile, and
-                      # Next ships no exports map, so `next/server` is unresolvable
-                      # under moduleResolution=nodenext. Neither reflects a defect in
-                      # this package's emitted declarations. See issue #765.
-                      skipConsumerCompile: true
-                    - name: "@neon/postgrest-js"
-                      dir: postgrest-js
-                    - name: "@neon/neon-js"
-                      dir: neon-js
-                      # The consumer compile follows our re-exports into better-auth's own .d.ts files (bun:sqlite,
-                      # node:sqlite, organization routes) and `next/server`, which do
-                      # not compile under skipLibCheck:false. See issue #765.
-                      skipConsumerCompile: true
-                    - name: "@neon/oauth"
-                      dir: oauth
-                      namedExports: true
+            matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
         steps:
             - name: Harden the runner (Audit all outbound calls)
               uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0

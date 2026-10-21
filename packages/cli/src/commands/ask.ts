@@ -16,6 +16,7 @@ const ASK_TIMEOUT_MS = 120_000;
 type AskProps = CommonProps & {
 	prompt: string;
 	url?: string;
+	analytics: boolean;
 };
 
 export const command = "ask";
@@ -71,6 +72,7 @@ export const handler = async (props: AskProps) => {
 		const text = await askAssistant({
 			prompt: props.prompt,
 			url,
+			analytics: props.analytics,
 			acceptEventStream: human,
 			onStatus: (message) => {
 				spinner.setMessage(message);
@@ -185,6 +187,7 @@ async function readStreamedAsk(
 async function askAssistant(opts: {
 	prompt: string;
 	url: string;
+	analytics: boolean;
 	acceptEventStream: boolean;
 	onStatus?: (message: string) => void;
 	onText?: (text: string) => void;
@@ -198,7 +201,8 @@ async function askAssistant(opts: {
 				Accept: opts.acceptEventStream
 					? "text/event-stream"
 					: "application/json",
-				"x-neon-source": "cli",
+				"x-caller-source": "cli",
+				...(opts.analytics ? {} : { "x-caller-analytics": "off" }),
 			},
 			body: JSON.stringify({ prompt: opts.prompt }),
 			signal: AbortSignal.timeout(ASK_TIMEOUT_MS),

@@ -1015,7 +1015,7 @@ neon docs search "create branch" --category api --category docs
 neon docs search "pg_dump" --limit 5 --output json
 ```
 
-`--category` limits results to `docs`, `api`, `postgresql`, `guides`, `faqs`, `blog`, or `changelog`; repeat it for more than one. `--limit` is 1 to 40, default 10. Default table output is one row per page: title, the section that matched, and URL. `--output json` and `--output yaml` print an array of hits with `title`, `url`, `category`, `breadcrumb`, `heading`, and `excerpt`, in rank order. No match prints `No results for "<query>".` and exits 0 (`[]` in JSON).
+`--category` limits results to `docs`, `api`, `postgresql`, `guides`, `faqs`, `blog`, or `changelog`; repeat it for more than one. `--limit` is 1 to 40, default 10. Default output is one block per result: `Title › Section` on one line, cut to the terminal width, and the full URL under it. `--output json` and `--output yaml` print an array of hits with `title`, `url`, `category`, `breadcrumb`, `heading`, and `excerpt`, in rank order. No match prints `No results for "<query>".` and exits 0 (`[]` in JSON).
 
 ## Install the Neon plugin (`plugins`)
 

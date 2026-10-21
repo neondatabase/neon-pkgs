@@ -1,5 +1,17 @@
 # neon
 
+## 8.10.3
+
+### Patch Changes
+
+- 59f8325: `neon docs search` and `neon ask` send their caller headers as `x-caller-*`. The Neon Functions proxy dropped the earlier `x-neon-*` names, so the service never saw the CLI as the caller, and `--no-analytics` did not stop a search from being recorded. `neon ask --no-analytics` now also asks the service to record nothing, including the prompt and answer.
+
+## 8.10.2
+
+### Patch Changes
+
+- 9aac61e: `neon docs search` prints each result as a "Title › Section" line cut to the terminal width, with the full URL under it, instead of a three-column table that wrapped in narrow terminals. JSON and YAML output are unchanged.
+
 ## 8.10.1
 
 ### Patch Changes
