@@ -91,8 +91,8 @@ describe("neon ask", () => {
 					authorization: req.headers.authorization,
 					accept: req.headers.accept,
 					source:
-						typeof req.headers["x-neon-source"] === "string"
-							? req.headers["x-neon-source"]
+						typeof req.headers["x-caller-source"] === "string"
+							? req.headers["x-caller-source"]
 							: undefined,
 					body,
 				});

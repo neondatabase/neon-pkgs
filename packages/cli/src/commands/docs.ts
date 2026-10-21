@@ -193,11 +193,11 @@ export function siteSearchHeaders(opts: {
 	return {
 		"Content-Type": "application/json",
 		"User-Agent": `neon/${opts.version}`,
-		"x-neon-source": "cli",
+		"x-caller-source": "cli",
 		...(opts.agent
-			? { "x-neon-client": encodeURIComponent(opts.agent) }
+			? { "x-caller-client": encodeURIComponent(opts.agent) }
 			: {}),
-		...(opts.analytics ? {} : { "x-neon-analytics": "off" }),
+		...(opts.analytics ? {} : { "x-caller-analytics": "off" }),
 	};
 }
 

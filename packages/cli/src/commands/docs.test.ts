@@ -436,8 +436,8 @@ describe("siteSearchHeaders", () => {
 		).toEqual({
 			"Content-Type": "application/json",
 			"User-Agent": "neon/8.10.0",
-			"x-neon-source": "cli",
-			"x-neon-client": "claude-code",
+			"x-caller-source": "cli",
+			"x-caller-client": "claude-code",
 		});
 	});
 
@@ -451,8 +451,8 @@ describe("siteSearchHeaders", () => {
 		).toEqual({
 			"Content-Type": "application/json",
 			"User-Agent": "neon/8.10.0",
-			"x-neon-source": "cli",
-			"x-neon-analytics": "off",
+			"x-caller-source": "cli",
+			"x-caller-analytics": "off",
 		});
 	});
 });
@@ -486,11 +486,11 @@ describe("neon docs search caller headers", () => {
 		);
 		expect(seen).toHaveLength(2);
 		for (const headers of seen) {
-			expect(headers["x-neon-source"]).toBe("cli");
+			expect(headers["x-caller-source"]).toBe("cli");
 			expect(headers["user-agent"]).toBe(`neon/${pkg.version}`);
-			expect(headers["x-neon-analytics"]).toBe("off");
+			expect(headers["x-caller-analytics"]).toBe("off");
 		}
-		expect(seen[0]?.["x-neon-client"]).toBe("claude-code");
-		expect(seen[1]?.["x-neon-client"]).toBeUndefined();
+		expect(seen[0]?.["x-caller-client"]).toBe("claude-code");
+		expect(seen[1]?.["x-caller-client"]).toBeUndefined();
 	});
 });
