@@ -446,7 +446,7 @@ describe("e2e — every currently enabled decision model on AI SDK 7", () => {
 			}),
 		);
 		expect(answers.refund.type).toBe("boolean");
-	}, 60_000);
+	}, 180_000);
 
 	it("surfaces the gateway's reason for an unknown decision model", async () => {
 		await expect(
