@@ -38,8 +38,8 @@ export function expressMcpBearerAuth(
  * Express middleware that protects an MCP endpoint in one call: `app.use(expressMcp(auth))`.
  *
  * It serves the RFC 9728 protected-resource metadata and its CORS preflight (unauthenticated),
- * requires a valid bearer token on POST, GET and DELETE (the Streamable HTTP methods) at the MCP
- * path, and calls `next()` for every other request. A missing or invalid token gets the guard's
+ * requires a valid bearer token on every method except `OPTIONS` at the MCP path (matched
+ * ignoring case and a trailing slash, with percent-escapes decoded), and calls `next()` for every other request. A missing or invalid token gets the guard's
  * error response (401 or 403 with a challenge, 503, or 500; see `BearerGuard`). For authenticated
  * requests `req.auth` is the verified {@link AuthResult}. The SDK's Node transport reads
  * `req.auth` as the MCP TypeScript SDK's `AuthInfo`, so replace it with `auth.toAuthInfo(req.auth)`

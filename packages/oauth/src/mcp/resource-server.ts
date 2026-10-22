@@ -223,9 +223,48 @@ export function routeMcpMetadata(
 	return auth.handleMetadataRequest(request);
 }
 
-/** The Streamable HTTP methods (`POST`, `GET`, `DELETE`) the MCP adapters guard on the MCP endpoint. Use it when building your own MCP adapter. */
+/** The Streamable HTTP methods (`POST`, `GET`, `DELETE`) an MCP endpoint serves. The MCP adapters guard every method except `OPTIONS`, not only these; see {@link isGuardedMcpRequest}. */
 export const MCP_METHODS = ["POST", "GET", "DELETE"] as const;
 
 /** Returns the path of the MCP endpoint: `path` if given, else the path of the server's `resource` URL. Use it when building your own MCP adapter. */
 export const mcpPath = (auth: McpAuth, path?: string): string =>
 	path ?? new URL(auth.resource).pathname;
+
+// Routers differ in how they fold a request path onto a route (Express ignores case and a trailing
+// slash, Hono decodes percent-escapes), and a guard that compares less loosely than the router
+// leaves the route open. Folding all of them at once over-matches harmlessly: the extra requests
+// are only challenged.
+function foldPath(path: string): string {
+	const folded = path
+		.replace(/(?:%[0-9a-f]{2})+/gi, (escaped) => {
+			try {
+				return decodeURIComponent(escaped);
+			} catch {
+				return escaped;
+			}
+		})
+		.toLowerCase()
+		.replace(/\/+/g, "/")
+		.replace(/\/$/, "");
+	return folded || "/";
+}
+
+/**
+ * Whether a request must pass the bearer check: every method except `OPTIONS` (CORS preflight) on
+ * the MCP endpoint, including `HEAD`. Paths are compared the way routers fold them: ignoring case
+ * and a trailing slash, with percent-escapes decoded. Use it when building your own MCP adapter.
+ *
+ * @param target The endpoint path, from {@link mcpPath}.
+ * @param method The request method.
+ * @param pathname The request's raw URL path, without the query string.
+ */
+export function isGuardedMcpRequest(
+	target: string,
+	method: string,
+	pathname: string,
+): boolean {
+	return (
+		method.toUpperCase() !== "OPTIONS" &&
+		foldPath(pathname) === foldPath(target)
+	);
+}

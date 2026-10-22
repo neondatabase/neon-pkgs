@@ -115,7 +115,7 @@ export const oauth = createOAuth({
 
 ### Sign in
 
-The sign-in routes are `GET <prefix>/login` (`?returnTo=/path`), `<prefix>/callback` and `<prefix>/logout`. `<prefix>` is taken from `redirectUri`'s path (`https://app.example.com/api/auth/callback` serves `/api/auth/*`), so the callback route and the registered redirect cannot drift apart. An explicit `basePath` option that disagrees with `redirectUri` throws, naming both.
+The sign-in routes are `GET <prefix>/login` (`?returnTo=/path`; only same-origin paths are followed, anything else lands on `/`), `<prefix>/callback` and `<prefix>/logout`. `<prefix>` is taken from `redirectUri`'s path (`https://app.example.com/api/auth/callback` serves `/api/auth/*`), so the callback route and the registered redirect cannot drift apart. An explicit `basePath` option that disagrees with `redirectUri` throws, naming both.
 
 ```ts
 const { client } = oauth;
@@ -292,7 +292,7 @@ const auth = createMcpAuth({
 const newServer = () => new McpServer({ name: "demo", version: "1.0.0" });
 
 const app = new Hono<McpAuthVariables>();
-// Serves /.well-known/oauth-protected-resource/mcp (+ bare fallback, CORS) and guards POST/GET/DELETE /mcp.
+// Serves /.well-known/oauth-protected-resource/mcp (+ bare fallback, CORS) and guards every method except OPTIONS on /mcp.
 app.use(honoMcp(auth));
 app.all("/mcp", async (c) => {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });

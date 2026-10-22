@@ -11,7 +11,11 @@ import { authenticateWith } from "../verify/authenticate";
 import type { BearerAuthOptions } from "../verify/bearer";
 import type { AuthResult } from "../verify/verifier";
 import type { McpAuth } from "./resource-server";
-import { MCP_METHODS, mcpPath, routeMcpMetadata } from "./resource-server";
+import {
+	isGuardedMcpRequest,
+	mcpPath,
+	routeMcpMetadata,
+} from "./resource-server";
 
 export type { NodeMiddleware };
 /** A `node:http` request after {@link nodeMcp} or {@link nodeMcpBearerAuth} has run: `auth` is the verified token. */
@@ -51,12 +55,19 @@ export interface NodeMcpOptions extends BearerAuthOptions {
 	path?: string;
 }
 
+// `new URL("//mcp", base)` reads `mcp` as a host and yields `/`, while routers treat `//mcp` as a path.
+function requestPath(target: string): string {
+	if (!target.startsWith("/"))
+		return new URL(target, "http://localhost").pathname;
+	return target.split(/[?#]/, 1)[0] ?? "/";
+}
+
 /**
  * `node:http` middleware (`(req, res, next)`) that protects an MCP endpoint in one call.
  *
  * It serves the RFC 9728 protected-resource metadata and its CORS preflight (unauthenticated),
- * requires a valid bearer token on POST, GET and DELETE (the Streamable HTTP methods) at the MCP
- * path, and calls `next()` for everything else. A missing or invalid token gets the guard's error
+ * requires a valid bearer token on every method except `OPTIONS` at the MCP path (matched
+ * ignoring case and a trailing slash, with percent-escapes decoded), and calls `next()` for everything else. A missing or invalid token gets the guard's error
  * response (401 or 403 with a challenge, 503, or 500; see `BearerGuard`). For authenticated
  * requests `req.auth` is the verified {@link AuthResult} (see {@link AuthedIncomingMessage}). The
  * SDK's Node transport reads `req.auth` as the MCP TypeScript SDK's `AuthInfo`, so replace it with
@@ -110,14 +121,10 @@ export function nodeMcp(
 	return (req, res, next) =>
 		metadata(req, res, (err) => {
 			if (err) return next(err);
-			const { pathname } = new URL(
+			const pathname = requestPath(
 				(req as { originalUrl?: string }).originalUrl ?? req.url ?? "/",
-				"http://localhost",
 			);
-			if (
-				pathname === target &&
-				(MCP_METHODS as readonly string[]).includes(req.method ?? "")
-			) {
+			if (isGuardedMcpRequest(target, req.method ?? "GET", pathname)) {
 				return guard(req, res, next);
 			}
 			next();

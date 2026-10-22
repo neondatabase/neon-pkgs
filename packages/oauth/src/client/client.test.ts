@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createOAuth } from "../index";
 import type { FakeAuthServer } from "../testing/fake-auth-server";
-import { startFakeAuthServer } from "../testing/fake-auth-server";
+import { GOOD_CODE, startFakeAuthServer } from "../testing/fake-auth-server";
 import { OAuthConfigError } from "../verify/errors";
-import { seal } from "./cookies";
+import { parseCookies, seal, unseal } from "./cookies";
 
 // The fake authorization server speaks plain HTTP; openid-client only allows that when opted in per Configuration.
 vi.mock("openid-client", async (importOriginal) => {
@@ -227,18 +227,74 @@ describe("withAccessToken", () => {
 });
 
 describe("returnTo", () => {
-	it.each([
+	const cases: [string, string][] = [
 		["/dashboard?tab=1", "/dashboard?tab=1"],
+		["/dashboard?tab=1#section", "/dashboard?tab=1#section"],
+		["/a/b%20c?x=%2F%2F", "/a/b%20c?x=%2F%2F"],
+		["/%2F/evil.example", "/%2F/evil.example"],
 		["//evil.example", "/"],
 		["/\\evil.example", "/"],
 		["https://evil.example", "/"],
+		["https:evil.example", "/"],
+		["http://localhost:3000.evil.example/", "/"],
+		["javascript:alert(1)", "/"],
 		["dashboard", "/"],
-	])("logout redirects returnTo %s to %s", async (returnTo, expected) => {
+		["", "/"],
+		["/\t/evil.example", "/"],
+		["/\n/evil.example", "/"],
+		["/\r/evil.example", "/"],
+		["/\t\\evil.example", "/"],
+		["\t//evil.example", "/"],
+		[" //evil.example", "/"],
+	];
+
+	it.each(
+		cases,
+	)("logout redirects returnTo %j to %j", async (returnTo, expected) => {
 		const res = await make().handlers.logout(
 			new Request(
 				`http://localhost:3000/auth/logout?returnTo=${encodeURIComponent(returnTo)}`,
 			),
 		);
+		expect(res.status).toBe(302);
+		expect(res.headers.get("location")).toBe(expected);
+	});
+
+	it.each(
+		cases,
+	)("login stores returnTo %j as %j", async (returnTo, expected) => {
+		const res = await make().handlers.login(
+			new Request(
+				`http://localhost:3000/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+			),
+		);
+		const cookie = res.headers.get("set-cookie") ?? "";
+		const tx = await unseal<{ returnTo: string }>(
+			parseCookies(cookie.split(";")[0] ?? null).neon_auth_session_tx,
+			SECRET,
+			"tx",
+		);
+		expect(tx?.returnTo).toBe(expected);
+	});
+
+	it.each(
+		cases,
+	)("callback redirects a stored returnTo %j to %j", async (returnTo, expected) => {
+		const client = make();
+		const { state, codeVerifier } = await client.startLogin();
+		const tx = await seal(
+			{ state, codeVerifier, returnTo },
+			SECRET,
+			"tx",
+			600,
+		);
+		const res = await client.handlers.callback(
+			new Request(
+				`http://localhost:3000/auth/callback?code=${GOOD_CODE}&state=${state}`,
+				{ headers: { cookie: `neon_auth_session_tx=${tx}` } },
+			),
+		);
+		expect(res.status).toBe(302);
 		expect(res.headers.get("location")).toBe(expected);
 	});
 });

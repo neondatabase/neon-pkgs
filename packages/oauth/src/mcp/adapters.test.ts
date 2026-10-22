@@ -192,3 +192,161 @@ describe("next adapter", () => {
 		).toBe(204);
 	});
 });
+
+// A protected handler must never run without a token, for every request the framework's router
+// would send to it. Raw paths are sent over a socket because fetch() normalizes some of them.
+describe("path variants cannot bypass the guard", () => {
+	const VARIANTS = [
+		"/mcp",
+		"/mcp/",
+		"/mcp//",
+		"/MCP",
+		"/Mcp/",
+		"/%6Dcp",
+		"/%6dCP/",
+		"/mcp?x=1",
+		"//mcp",
+	];
+	const METHODS = ["POST", "GET", "DELETE", "PUT", "PATCH", "HEAD"];
+
+	async function raw(
+		base: string,
+		method: string,
+		path: string,
+		headers: Record<string, string> = {},
+	): Promise<number> {
+		const { port } = new URL(base);
+		const { connect } = await import("node:net");
+		return new Promise((resolve, reject) => {
+			const socket = connect(Number(port), "127.0.0.1", () => {
+				const extra = Object.entries(headers)
+					.map(([k, v]) => `${k}: ${v}\r\n`)
+					.join("");
+				socket.write(
+					`${method} ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Length: 0\r\n${extra}\r\n`,
+				);
+			});
+			let data = "";
+			socket.on("data", (d) => {
+				data += d;
+			});
+			socket.on("error", reject);
+			socket.on("close", () =>
+				resolve(Number(/^HTTP\/1\.1 (\d{3})/.exec(data)?.[1])),
+			);
+		});
+	}
+
+	async function expectGuarded(base: string, reached: string[]) {
+		const unguarded: string[] = [];
+		for (const path of VARIANTS) {
+			for (const method of METHODS) {
+				const status = await raw(base, method, path);
+				if (status !== 401)
+					unguarded.push(`${method} ${path} -> ${status}`);
+			}
+		}
+		expect(unguarded).toEqual([]);
+		expect(reached).toEqual([]);
+		const ok = await raw(base, "POST", "/mcp", await bearer());
+		expect(ok).toBe(200);
+		expect(reached).toEqual(["POST"]);
+	}
+
+	it("express with expressMcp", async () => {
+		const reached: string[] = [];
+		const app = express();
+		app.use(expressMcp(mcp()));
+		app.use(express.json());
+		app.all("/mcp", (req, res) => {
+			reached.push(req.method);
+			res.json({ ok: true });
+		});
+		await expectGuarded(await listen(app), reached);
+	});
+
+	it("express with expressMcp and a custom path", async () => {
+		const reached: string[] = [];
+		const app = express();
+		app.use(expressMcp(mcp(), { path: "/mcp" }));
+		app.all("/mcp", (req, res) => {
+			reached.push(req.method);
+			res.json({ ok: true });
+		});
+		await expectGuarded(await listen(app), reached);
+	});
+
+	it("node:http", async () => {
+		const reached: string[] = [];
+		const mw = nodeMcp(mcp());
+		const base = await listen((req, res) =>
+			mw(req, res, () => {
+				reached.push(req.method ?? "");
+				res.end("ok");
+			}),
+		);
+		const unguarded: string[] = [];
+		for (const path of VARIANTS) {
+			for (const method of METHODS) {
+				const status = await raw(base, method, path);
+				if (status !== 401)
+					unguarded.push(`${method} ${path} -> ${status}`);
+			}
+		}
+		expect(unguarded).toEqual([]);
+		expect(reached).toEqual([]);
+	});
+
+	it("hono with honoMcp", async () => {
+		const reached: string[] = [];
+		const app = new Hono();
+		app.use(honoMcp(mcp()));
+		app.all("/mcp", (c) => {
+			reached.push(c.req.method);
+			return c.json({ ok: true });
+		});
+		await expectGuarded(
+			await listen(async (req, res) => {
+				const url = `http://127.0.0.1${req.url}`;
+				const response = await app.fetch(
+					new Request(url, {
+						method: req.method,
+						headers: req.headers as Record<string, string>,
+					}),
+				);
+				res.statusCode = response.status;
+				res.end(await response.text());
+			}),
+			reached,
+		);
+	});
+
+	it("hono with a route-level honoMcp on strict and non-strict apps", async () => {
+		for (const strict of [true, false]) {
+			const reached: string[] = [];
+			const app = new Hono({ strict });
+			app.use(honoMcp(mcp()));
+			app.all("/mcp", (c) => {
+				reached.push(c.req.method);
+				return c.json({ ok: true });
+			});
+			const unguarded: string[] = [];
+			for (const path of ["/%6Dcp", "/mcp/", "/MCP"]) {
+				const res = await app.request(path, { method: "POST" });
+				if (res.status !== 401)
+					unguarded.push(`strict=${strict} ${path} -> ${res.status}`);
+			}
+			expect(unguarded).toEqual([]);
+			expect(reached).toEqual([]);
+		}
+	});
+
+	it("OPTIONS on the MCP path stays unauthenticated", async () => {
+		const app = new Hono();
+		app.use(honoMcp(mcp()));
+		app.options("/mcp", (c) => c.body(null, 204));
+		expect((await app.request("/mcp", { method: "OPTIONS" })).status).toBe(
+			204,
+		);
+	});
+});

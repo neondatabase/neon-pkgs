@@ -11,7 +11,11 @@ import { authenticateWith } from "../verify/authenticate";
 import type { BearerAuthOptions } from "../verify/bearer";
 import type { AuthResult } from "../verify/verifier";
 import type { McpAuth } from "./resource-server";
-import { MCP_METHODS, mcpPath, routeMcpMetadata } from "./resource-server";
+import {
+	isGuardedMcpRequest,
+	mcpPath,
+	routeMcpMetadata,
+} from "./resource-server";
 
 /** Hono context variables set by {@link honoMcp} and {@link honoMcpBearerAuth}. Create the app as `new Hono<McpAuthVariables>()` to read them in handlers. */
 export type McpAuthVariables = {
@@ -104,8 +108,8 @@ export interface HonoMcpOptions extends BearerAuthOptions {
  * Hono middleware that protects an MCP endpoint in one call: `app.use(honoMcp(auth))`.
  *
  * It serves the RFC 9728 protected-resource metadata and its CORS preflight (unauthenticated),
- * requires a valid bearer token on POST, GET and DELETE (the Streamable HTTP methods) at the MCP
- * path, and passes every other request through. A missing or invalid token gets the guard's error
+ * requires a valid bearer token on every method except `OPTIONS` at the MCP path (matched
+ * ignoring case and a trailing slash, with percent-escapes decoded), and passes every other request through. A missing or invalid token gets the guard's error
  * response (401 or 403 with a challenge, 503, or 500; see `BearerGuard`). For authenticated
  * requests it sets `c.get("auth")` (the verified {@link AuthResult}) and `c.get("authInfo")` (the
  * MCP SDK's `AuthInfo`; see `McpAuth.toAuthInfo`).
@@ -152,8 +156,11 @@ export function honoMcp(
 		const metadata = routeMcpMetadata(auth, c.req.raw);
 		if (metadata) return metadata;
 		if (
-			new URL(c.req.url).pathname === target &&
-			(MCP_METHODS as readonly string[]).includes(c.req.method)
+			isGuardedMcpRequest(
+				target,
+				c.req.method,
+				new URL(c.req.url).pathname,
+			)
 		) {
 			return guard(c, next);
 		}

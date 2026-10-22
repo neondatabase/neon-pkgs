@@ -211,7 +211,7 @@ export interface OAuthClient {
 	 * anything unexpected 500, with the cause reported to `onError`.
 	 */
 	readonly handlers: {
-		/** Redirects (302) to the authorization server. `?returnTo=/path` (same-site paths only; default `/`) is where the user lands afterwards. */
+		/** Redirects (302) to the authorization server. `?returnTo=/path` (same-origin paths only; anything else becomes `/`) is where the user lands afterwards. */
 		login(request: Request): Promise<Response>;
 		/** Completes sign-in, sets the session cookie and redirects (302) to `returnTo`. Answers 400 for a bad or expired attempt. */
 		callback(request: Request): Promise<Response>;
@@ -650,15 +650,17 @@ export function createOAuthClient(
 		return { ok: true, response: withCookie };
 	}
 
-	// Only same-site paths. Browsers read `//host` and `/\host` as protocol-relative, so a bare
-	// leading-slash check would still let /login?returnTo=//evil.example become an open redirect.
-	const safeReturnTo = (v: unknown): string =>
-		typeof v === "string" &&
-		v.startsWith("/") &&
-		!v.startsWith("//") &&
-		!v.startsWith("/\\")
-			? v
+	// Browsers drop tab/CR/LF from a Location value and read `\` as `/`, so `/<TAB>/host` and
+	// `/\host` act as protocol-relative URLs. Resolving with the WHATWG parser and comparing origins
+	// judges the string the way the browser will; the resolved path is what gets stored and sent.
+	const appOrigin = redirect.origin;
+	const safeReturnTo = (v: unknown): string => {
+		if (typeof v !== "string" || !v.startsWith("/")) return "/";
+		const resolved = new URL(v, appOrigin);
+		return resolved.origin === appOrigin
+			? resolved.pathname + resolved.search + resolved.hash
 			: "/";
+	};
 
 	const text = (status: number, body: string) =>
 		new Response(body, {

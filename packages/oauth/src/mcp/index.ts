@@ -24,6 +24,7 @@ export {
 export type { AuthResult, VerifyResult } from "../verify/verifier";
 export type { McpAuth, McpOptions } from "./resource-server";
 export {
+	isGuardedMcpRequest,
 	MCP_METHODS,
 	mcpPath,
 	routeMcpMetadata,
