@@ -34,11 +34,11 @@ export class OAuthError extends Error {
  * Thrown when the package is configured incorrectly. This is a programmer error: fix the
  * configuration instead of catching and retrying.
  *
- * Thrown when `createOAuth`, `createVerifier`, `createMcpAuth`, `createClientMetadataDocument` or a
- * framework sign-in adapter is created, and when a bearer guard has no `audience` or `resource`:
- * `requireBearerAuth()` throws once, when the guard is created, while the framework guards and
- * `authenticate` build theirs per request, so every request fails (via `next(err)`, the framework's
- * error handler, or a rejected promise). A URL `clientId` against a server without Client ID
+ * Thrown when `createOAuth`, `createVerifier`, `createMcpAuth`, `createClientMetadataDocument`, a
+ * framework sign-in adapter or a bearer guard (`requireBearerAuth()` or a framework guard such as
+ * `honoBearerAuth`) is created. A guard with no `audience` or `resource`, or with
+ * `resourceMetadataUrl: true` and a non-URL audience, throws it at creation; `authenticate` reports
+ * the same errors later, as a rejected promise on the call. A URL `clientId` against a server without Client ID
  * Metadata Document support is only known after discovery, so `startLogin`, `finishLogin` or a
  * token refresh throws it.
  */

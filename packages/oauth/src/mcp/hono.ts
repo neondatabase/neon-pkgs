@@ -2,20 +2,18 @@
  * `@neon/oauth/mcp/hono` — Hono middleware that guards an MCP server and serves its
  * protected-resource metadata. Hono is imported for types only; the app provides it at runtime.
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { Hono, MiddlewareHandler } from "hono";
 
-import { authenticateWith } from "../verify/authenticate";
+import { createAuthenticator } from "../verify/authenticate";
 import type { BearerAuthOptions } from "../verify/bearer";
 import type { AuthResult } from "../verify/verifier";
-import type { McpAuth } from "./resource-server";
-import {
-	isGuardedMcpRequest,
-	mcpPath,
-	routeMcpMetadata,
-} from "./resource-server";
+import type { McpAuth } from "./mcp-auth";
+import { isGuardedMcpRequest, mcpPath, routeMcpMetadata } from "./mcp-auth";
 
 /** Hono context variables set by {@link honoMcp} and {@link honoMcpBearerAuth}. Create the app as `new Hono<McpAuthVariables>()` to read them in handlers. */
 export type McpAuthVariables = {
@@ -67,8 +65,9 @@ export function honoMcpBearerAuth(
 	auth: McpAuth,
 	opts: BearerAuthOptions = {},
 ): MiddlewareHandler<McpAuthVariables> {
+	const authenticate = createAuthenticator(auth, opts);
 	return async (c, next) => {
-		const outcome = await authenticateWith(auth, c.req.raw, opts);
+		const outcome = await authenticate(c.req.raw);
 		if (!outcome.ok) return outcome.response;
 		c.set("auth", outcome.auth);
 		c.set("authInfo", auth.toAuthInfo(outcome.auth));

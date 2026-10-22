@@ -16,6 +16,8 @@ import {
 } from "./cookies";
 import { isMetadataDocumentClientId } from "./metadata-document";
 
+export type { SameSite };
+
 /**
  * Sign-in client settings for `createOAuth`. Passing `clientId`, `redirectUri` and `cookies`
  * together turns on `oauth.client`; a partial set throws `OAuthConfigError`.

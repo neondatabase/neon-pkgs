@@ -4,19 +4,23 @@
 import type { Server } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { authenticate } from "../adapter";
 import type { FakeAuthServer } from "../testing/fake-auth-server";
 import { startFakeAuthServer } from "../testing/fake-auth-server";
+import { createVerifier, OAuthConfigError } from "../verify";
 import type { AuthedRequest } from "./express";
 import { expressMcp, expressMcpBearerAuth } from "./express";
-import { honoMcp } from "./hono";
+import { honoMcp, honoMcpBearerAuth } from "./hono";
+import type { McpAuth } from "./index";
 import { createMcpAuth, routeMcpMetadata } from "./index";
 import { createMetadataHandlers, withMcpAuth } from "./next";
-import { nodeMcp } from "./node";
+import { type AuthedIncomingMessage, nodeMcp, nodeMcpBearerAuth } from "./node";
 
 const RESOURCE = "http://api.test/mcp";
 const META = "/.well-known/oauth-protected-resource/mcp";
@@ -101,6 +105,33 @@ describe("hono adapter", () => {
 });
 
 describe("node adapter", () => {
+	it("sets req.auth to the SDK AuthInfo and req.authResult to the AuthResult", async () => {
+		const m = mcp();
+		const mw = nodeMcpBearerAuth(m);
+		const url = await listen((req, res) =>
+			mw(req, res, () => {
+				const r = req as AuthedIncomingMessage;
+				res.end(
+					JSON.stringify({
+						auth: r.auth,
+						authResult: r.authResult,
+					}),
+				);
+			}),
+		);
+		const body = await (
+			await fetch(url, { headers: await bearer() })
+		).json();
+		expect(body.auth).toMatchObject({
+			scopes: expect.any(Array),
+			clientId: expect.any(String),
+			extra: { claims: { sub: "user-1" } },
+		});
+		expect(body.auth.token).toBe(body.authResult.token);
+		expect(body.authResult).toMatchObject({ sub: "user-1" });
+		expect(body.auth.sub).toBeUndefined();
+	});
+
 	it("nodeMcp maps 401 / 200 / metadata and falls through otherwise", async () => {
 		const mw = nodeMcp(mcp());
 		const url = await listen((req, res) =>
@@ -122,21 +153,23 @@ describe("node adapter", () => {
 });
 
 describe("express adapter", () => {
-	it("maps 401 / 200 (req.auth) / metadata", async () => {
+	it("maps 401 / 200 (req.auth is AuthInfo, req.authResult is AuthResult) / metadata", async () => {
 		const app = express();
 		app.use(expressMcp(mcp()));
 		app.use(express.json());
 		app.post(
 			"/mcp",
 			(req, res) =>
-				void res.json({ sub: (req as AuthedRequest).auth.sub }),
+				void res.json({ sub: (req as AuthedRequest).authResult.sub }),
 		);
-		app.get(
-			"/guarded",
-			expressMcpBearerAuth(mcp()),
-			(req, res) =>
-				void res.json({ sub: (req as AuthedRequest).auth.sub }),
-		);
+		app.get("/guarded", expressMcpBearerAuth(mcp()), (req, res) => {
+			const r = req as AuthedRequest;
+			void res.json({
+				sub: r.authResult.sub,
+				token: r.auth.token === r.authResult.token,
+				claimsSub: (r.auth.extra?.claims as { sub: string }).sub,
+			});
+		});
 		const url = await listen(app);
 
 		const denied = await fetch(`${url}/mcp`, { method: "POST" });
@@ -160,7 +193,154 @@ describe("express adapter", () => {
 			await (
 				await fetch(`${url}/guarded`, { headers: await bearer() })
 			).json(),
-		).toEqual({ sub: "user-1" });
+		).toEqual({ sub: "user-1", token: true, claimsSub: "user-1" });
+	});
+});
+
+describe("guards are built when the middleware is created", () => {
+	it("MCP factories create without network I/O", () => {
+		const spy = vi.spyOn(globalThis, "fetch");
+		try {
+			const m = mcp();
+			nodeMcp(m);
+			nodeMcpBearerAuth(m);
+			expressMcp(m);
+			expressMcpBearerAuth(m);
+			honoMcp(m);
+			withMcpAuth(m, () => new Response());
+			expect(spy).not.toHaveBeenCalled();
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("authenticate builds its guard per call and rejects on misconfiguration", async () => {
+		const bad = createVerifier({ baseUrl: fake.issuer });
+		const req = new Request(RESOURCE);
+		let pending: Promise<unknown> | undefined;
+		expect(() => {
+			pending = authenticate(bad, req);
+		}).not.toThrow();
+		await expect(pending).rejects.toThrow(OAuthConfigError);
+	});
+
+	type Send = (headers: Record<string, string>) => Promise<Response>;
+	it.each<[string, (m: McpAuth) => Promise<Send>]>([
+		[
+			"nodeMcpBearerAuth",
+			async (m) => {
+				const mw = nodeMcpBearerAuth(m);
+				const url = await listen((req, res) =>
+					mw(req, res, () => res.end("ok")),
+				);
+				return (headers) => fetch(url, { headers });
+			},
+		],
+		[
+			"expressMcpBearerAuth",
+			async (m) => {
+				const app = express();
+				app.get(
+					"/",
+					expressMcpBearerAuth(m),
+					(_req, res) => void res.send("ok"),
+				);
+				const url = await listen(app);
+				return (headers) => fetch(url, { headers });
+			},
+		],
+		[
+			"honoMcpBearerAuth",
+			async (m) => {
+				const app = new Hono();
+				app.get("/", honoMcpBearerAuth(m), (c) => c.text("ok"));
+				return async (headers) =>
+					app.request("http://api.test/", { headers });
+			},
+		],
+		[
+			"withMcpAuth",
+			async (m) => {
+				const GET = withMcpAuth(m, () => new Response("ok"));
+				return async (headers) =>
+					GET(new Request(RESOURCE, { headers }), undefined);
+			},
+		],
+	])("%s builds the guard once for many requests", async (_name, make) => {
+		const m = mcp();
+		const requireBearerAuth = vi.fn(m.requireBearerAuth);
+		const send = await make({ ...m, requireBearerAuth });
+		for (let i = 0; i < 2; i++) {
+			expect((await send(await bearer())).status).toBe(200);
+		}
+		expect(requireBearerAuth).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("real SDK transport", () => {
+	it("hands req.auth to tools as extra.authInfo", async () => {
+		const m = mcp();
+		const app = express();
+		app.use(expressMcp(m));
+		app.use(express.json());
+		app.post("/mcp", async (req, res) => {
+			const server = new McpServer({ name: "t", version: "1.0.0" });
+			server.registerTool("whoami", { description: "who" }, (extra) => {
+				const info = (extra as { authInfo?: AuthInfo }).authInfo;
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: JSON.stringify({
+								clientId: info?.clientId,
+								sub: (info?.extra?.claims as { sub?: string })
+									?.sub,
+							}),
+						},
+					],
+				};
+			});
+			const transport = new StreamableHTTPServerTransport({
+				sessionIdGenerator: undefined,
+				enableJsonResponse: true,
+			});
+			res.on("close", () => void transport.close());
+			await server.connect(transport);
+			await transport.handleRequest(req, res, req.body);
+		});
+		const url = await listen(app);
+		const headers = {
+			...(await bearer()),
+			"content-type": "application/json",
+			accept: "application/json, text/event-stream",
+		};
+		const rpc = async (body: object) =>
+			(
+				await fetch(`${url}/mcp`, {
+					method: "POST",
+					headers,
+					body: JSON.stringify({ jsonrpc: "2.0", ...body }),
+				})
+			).json();
+
+		const init = await rpc({
+			id: 1,
+			method: "initialize",
+			params: {
+				protocolVersion: "2025-03-26",
+				capabilities: {},
+				clientInfo: { name: "c", version: "1.0.0" },
+			},
+		});
+		expect(init.result.serverInfo.name).toBe("t");
+		const call = await rpc({
+			id: 2,
+			method: "tools/call",
+			params: { name: "whoami", arguments: {} },
+		});
+		const seen = JSON.parse(call.result.content[0].text);
+		expect(seen.sub).toBe("user-1");
+		expect(typeof seen.clientId).toBe("string");
 	});
 });
 

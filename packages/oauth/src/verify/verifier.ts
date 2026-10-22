@@ -16,7 +16,7 @@ import {
 
 /** Options for verifying Neon Auth access tokens; shared by `createVerifier`, `createOAuth` and `createMcpAuth`. */
 export interface VerifierOptions {
-	/** The Neon Auth URL, which is the OAuth issuer, e.g. `https://<host>/neondb/auth`. Must be an absolute URL; matched exactly against the token's `iss`. */
+	/** The Neon Auth URL, which is the OAuth issuer, e.g. `https://ep-example.neonauth.us-east-1.aws.neon.tech/neondb/auth`. Must be an absolute URL; matched exactly against the token's `iss`. */
 	baseUrl: string;
 	/**
 	 * The API this verifier guards; becomes the token's `aud`. The verifier's `requireBearerAuth()`
@@ -147,7 +147,8 @@ export interface Verifier {
 	 *
 	 * @param options Audience, required scopes and `onError`. See {@link OAuthBearerOptions}.
 	 * @returns A guard that never throws.
-	 * @throws {OAuthConfigError} If neither `options.audience` nor the verifier's `resource` is set.
+	 * @throws {OAuthConfigError} If neither `options.audience` nor the verifier's `resource` is set, or `options.resourceMetadataUrl` is `true` and the audience
+	 * is not an absolute URL.
 	 */
 	requireBearerAuth(options?: OAuthBearerOptions): BearerGuard;
 }
@@ -191,7 +192,7 @@ export function createVerifier(options: VerifierOptions): Verifier {
 	const baseUrl = options?.baseUrl;
 	if (typeof baseUrl !== "string" || baseUrl === "") {
 		throw new OAuthConfigError(
-			"`baseUrl` is required (the Neon Auth URL, e.g. https://ep-xxx.neonauth.../neondb/auth).",
+			"`baseUrl` is required (the Neon Auth URL, e.g. https://ep-example.neonauth.us-east-1.aws.neon.tech/neondb/auth).",
 		);
 	}
 	if (!URL.canParse(baseUrl)) {

@@ -13,8 +13,8 @@
 
 import type { OAuthClient, OAuthClientConfig } from "./client";
 import { createOAuthClient } from "./client";
-import type { McpAuth, McpOptions } from "./mcp/resource-server";
-import { createMcp } from "./mcp/resource-server";
+import type { McpAuth, McpOptions } from "./mcp/mcp-auth";
+import { createMcp } from "./mcp/mcp-auth";
 import type { BearerGuard, OAuthBearerOptions } from "./verify/bearer";
 import type {
 	AuthServerMetadata,
@@ -33,6 +33,7 @@ export type {
 	LoginResult,
 	OAuthClient,
 	OAuthClientConfig,
+	SameSite,
 	Session,
 	SessionFailure,
 	SessionResult,
@@ -46,7 +47,7 @@ export { createClientMetadataDocument } from "./client/metadata-document";
 export type {
 	McpAuth,
 	McpOptions,
-} from "./mcp/resource-server";
+} from "./mcp/mcp-auth";
 export type {
 	BearerAuthOptions,
 	BearerGuard,
@@ -119,7 +120,8 @@ export interface OAuth {
 	 *
 	 * @param options Audience, required scopes and `onError`. See {@link OAuthBearerOptions}.
 	 * @returns A guard that never throws.
-	 * @throws {OAuthConfigError} If neither `options.audience` nor the configured `resource` is set.
+	 * @throws {OAuthConfigError} If neither `options.audience` nor the configured `resource` is set, or `options.resourceMetadataUrl` is `true` and the audience
+	 * is not an absolute URL.
 	 */
 	requireBearerAuth(options?: OAuthBearerOptions): BearerGuard;
 	/**

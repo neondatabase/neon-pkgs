@@ -4,7 +4,7 @@ OAuth helpers for apps built on [Neon Auth](https://neon.com/docs/auth/overview)
 
 > **Beta.** The API may change in minor versions.
 
-**`@neon/auth` or `@neon/oauth`?** [`@neon/auth`](../auth) is the SDK for apps that use Neon Auth for their own users (sessions, React, Next.js proxy). `@neon/oauth` is for apps that use Neon Auth as an OAuth provider: signing users in through the authorization-code flow, verifying the access tokens it issues, and protecting MCP servers. The packages are independent.
+**`@neon/auth` or `@neon/oauth`?** [`@neon/auth`](https://github.com/neondatabase/neon-pkgs/tree/main/packages/auth) is the SDK for apps that use Neon Auth for their own users (sessions, React, Next.js proxy). `@neon/oauth` is for apps that use Neon Auth as an OAuth provider: signing users in through the authorization-code flow, verifying the access tokens it issues, and protecting MCP servers. The packages are independent.
 
 ```bash
 npm install @neon/oauth
@@ -65,7 +65,7 @@ Open `/api/auth/login?returnTo=/me` to sign in. See [Sign in](#sign-in), [Protec
   - [Protect an API](#protect-an-api)
 - [Protect an API without signing users in](#protect-an-api-without-signing-users-in)
 - [Protect an MCP server](#protect-an-mcp-server)
-- [Client ID Metadata Documents (recommended for MCP / public clients)](#client-id-metadata-documents-recommended-for-mcp--public-clients)
+- [Client ID Metadata Documents](#client-id-metadata-documents)
 - [Framework adapters](#framework-adapters)
 - [Errors and results](#errors-and-results)
 - [Neon Auth notes](#neon-auth-notes)
@@ -91,7 +91,7 @@ API-only and MCP-only servers import the specialized entry points, which depend 
 import { createOAuth } from "@neon/oauth";
 
 export const oauth = createOAuth({
-  baseUrl: process.env.NEON_AUTH_BASE_URL!, // the OAuth issuer, e.g. https://ep-x.neonauth.../neondb/auth
+  baseUrl: process.env.NEON_AUTH_BASE_URL!, // the OAuth issuer, e.g. https://ep-example.neonauth.us-east-1.aws.neon.tech/neondb/auth
   resource: "https://api.example.com", // your API; becomes the token's `aud`
   // Only for signing users in (adds `oauth.client`):
   clientId: process.env.NEON_AUTH_CLIENT_ID!,
@@ -107,10 +107,10 @@ export const oauth = createOAuth({
 |---|---|
 | `baseUrl` | Required, absolute URL. |
 | `resource` | The API's identifier. `requireBearerAuth()` verifies against it unless you pass an `audience`. Also accepted by `createVerifier`. |
-| `cookies` | `{ secret, name = "neon_auth_session", maxAgeSeconds = 7d, domain, sameSite = "lax" }`. `sameSite` and `domain` apply to the session cookie; the short-lived login cookie is always Lax. |
+| `cookies` | `{ secret, name = "neon_auth_session", maxAgeSeconds = 604800 (7 days), domain, sameSite = "lax" }`. `sameSite` and `domain` apply to the session cookie; the short-lived login cookie is always Lax. |
 | `scopes` | Default `["profile", "email"]`; `openid` is always requested (added if omitted) because sign-in needs the ID token. |
 | `algorithms`, `clockTolerance` | Token verification. Algorithms default to `["EdDSA"]`. |
-| `discovery` | `{ ttlMs = 1h, failureBackoffMs = 5s }`. |
+| `discovery` | `{ ttlMs = 3_600_000 (1 h), failureBackoffMs = 5000 (5 s) }`. |
 | `jwks` | Passed to jose's `createRemoteJWKSet`. |
 
 ### Sign in
@@ -300,21 +300,20 @@ app.all("/mcp", async (c) => {
   return transport.handleRequest(c.req.raw, { authInfo: c.get("authInfo") });
 });
 ```
-
-The Web-standard transport (`@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js`, used by the Hono and Next.js examples) needs `@modelcontextprotocol/sdk` 1.25.0 or later. The Node `StreamableHTTPServerTransport` used by the Express and `node:http` adapters is older.
+The Web-standard transport used by the Hono and Next.js examples needs `@modelcontextprotocol/sdk` 1.25.0 or later; the Node transport used by Express and `node:http` has been available since 1.20.
 
 `resource` is the audience. 401/403 challenges include `resource_metadata` pointing at the path-inserted RFC 9728 metadata URL. `scopesSupported` adds `scopes_supported` to the metadata document. Verification options (`algorithms`, `clockTolerance`, `discovery`, `jwks`) are accepted alongside.
 
 In handlers, `c.get("auth")` is the verified `AuthResult` and `c.get("authInfo")` the same result as the MCP TypeScript SDK's `AuthInfo` (from `@modelcontextprotocol/sdk/server/auth/types.js`). Pass it to `transport.handleRequest(req, { authInfo })` and your tool handlers receive it as `extra.authInfo`, which is how a tool learns who is calling and with which scopes. Typing the app as `new Hono<McpAuthVariables>()` is what exposes them; alternatively use `honoMcpBearerAuth(auth)` as route middleware (`app.post("/mcp", honoMcpBearerAuth(auth), handler)`), which types the handler on its own.
 
-Express: `app.use(expressMcp(auth))`; the guard reads headers only, so it works before or after `express.json()`. `req.auth` is an `AuthResult` until you replace it: the SDK's Node transport reads `req.auth` as its `AuthInfo` (the same type, delivered to tools as `extra.authInfo`), so convert it before `handleRequest`.
+Express: `app.use(expressMcp(auth))`; the guard reads headers only, so it works before or after `express.json()`. `req.auth` is the MCP TypeScript SDK's `AuthInfo`, which is what the SDK's Node transport reads in `handleRequest` (tools receive it as `extra.authInfo`), and `req.authResult` is the full `AuthResult`. `nodeMcp` and `nodeMcpBearerAuth` from `@neon/oauth/mcp/node` set the same two properties. `req.authResult` is the `AuthResult` in every Express and Node adapter, MCP or not, while `req.auth` is an `AuthResult` only in the non-MCP ones; do not mount both kinds of guard on the same route.
 
 ```ts
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpAuth } from "@neon/oauth/mcp";
-import { expressMcp, type AuthedRequest } from "@neon/oauth/mcp/express";
+import { expressMcp } from "@neon/oauth/mcp/express";
 
 const auth = createMcpAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
@@ -326,8 +325,6 @@ const app = express();
 app.use(expressMcp(auth));
 app.use(express.json());
 app.post("/mcp", async (req, res) => {
-  const result = (req as AuthedRequest).auth; // AuthResult
-  Object.assign(req, { auth: auth.toAuthInfo(result) }); // from here `req.auth` is the SDK's AuthInfo
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   await newServer().connect(transport);
   await transport.handleRequest(req, res, req.body);
@@ -370,9 +367,9 @@ export const POST = withMcpAuth(auth, async (request, result) => {
 
 `createMcpAuth(opts)` is `createOAuth({ baseUrl, ... }).mcp({ resource, scopesSupported })` without the sign-in client. If the same app also signs users in or guards other APIs, call `oauth.mcp({ resource })` on your existing `oauth` instead so everything shares one discovery cache.
 
-## Client ID Metadata Documents (recommended for MCP / public clients)
+## Client ID Metadata Documents
 
-Instead of pre-registering a client, make your `clientId` an https URL that serves a small JSON document describing the client. The authorization server fetches that document itself when it sees the URL; your app never fetches anything. There is no registration step and no secret.
+This is the recommended setup for MCP servers and other public clients. Instead of pre-registering a client, make your `clientId` an HTTPS URL that serves a small JSON document describing the client. The authorization server fetches that document itself when it sees the URL; your app never fetches anything. There is no registration step and no secret.
 
 ```ts
 import { createClientMetadataDocument, createOAuth } from "@neon/oauth";
@@ -403,10 +400,10 @@ nodeClientMetadata(metadata)(req, res, next); // @neon/oauth/node
 export const { GET } = createClientMetadataHandlers(metadata);
 ```
 
-The document sets `client_id` to its own URL, `token_endpoint_auth_method: "none"` (public client, PKCE), `response_types: ["code"]` and `grant_types` (default `authorization_code` and `refresh_token`), plus optional `client_uri`, `logo_uri` and `scope`. `createClientMetadataDocument` throws `OAuthConfigError` for a `clientId` that is not an https URL with a path (no fragment or credentials), for a non-loopback `http` redirect URI, and for an empty `clientName` or `redirectUris`.
+The document sets `client_id` to its own URL, `token_endpoint_auth_method: "none"` (public client, PKCE), `response_types: ["code"]` and `grant_types` (default `authorization_code` and `refresh_token`), plus optional `client_uri`, `logo_uri` and `scope`. `createClientMetadataDocument` throws `OAuthConfigError` for a `clientId` that is not an HTTPS URL with a path (no fragment or credentials), for a non-loopback `http` redirect URI, and for an empty `clientName` or `redirectUris`.
 
 - **The authorization server must support it.** Neon Auth advertises `client_id_metadata_document_supported` in its discovery document. With a URL `clientId` against a server that does not, `startLogin`, `finishLogin` or a token refresh (and so the `login` route) throws an `OAuthConfigError` naming the issuer, rather than sending a `client_id` the server will reject.
-- **The URL must be publicly reachable over https** by the authorization server, so local development needs a tunnel. Redirect URIs may still be `http://localhost`.
+- **The URL must be publicly reachable over HTTPS** by the authorization server, so local development needs a tunnel. Redirect URIs may still be `http://localhost`.
 - **Public clients only.** Passing `clientSecret` with a URL `clientId` throws.
 - **MCP clients** that do not ship a document of their own should use this instead of Dynamic Client Registration, which the MCP specification deprecates.
 
@@ -421,7 +418,7 @@ The document sets `client_id` to its own URL, `token_endpoint_auth_method: "none
 
 The Next.js adapter covers **route handlers only** (`createRouteHandlers`, `withAuth`, `withMcpAuth`). Reading the session in Server Components, Server Actions or middleware is not provided yet; call `client.getUser(request)` / `client.getSession(request)` yourself where you have a `Request`.
 
-`hono`, `express` and `@modelcontextprotocol/sdk` are optional peer dependencies, imported for types only. Install the ones you use. Next.js needs no peer: the adapters are plain `Request`/`Response` functions. For a framework not listed, see [docs/ADAPTERS.md](docs/ADAPTERS.md).
+`hono`, `express` and `@modelcontextprotocol/sdk` are optional peer dependencies (`hono` >= 4, `express` >= 4, `@modelcontextprotocol/sdk` >= 1.20.0), imported for types only. Install the ones you use. Next.js needs no peer: the adapters are plain `Request`/`Response` functions. For a framework not listed, see [docs/ADAPTERS.md](https://github.com/neondatabase/neon-pkgs/blob/main/packages/oauth/docs/ADAPTERS.md).
 
 ## Errors and results
 
@@ -429,7 +426,7 @@ Each layer follows one rule:
 
 | Situation | What you get | Examples |
 |---|---|---|
-| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown when you create the object (except a URL `clientId` against a server without CIMD support, known only after discovery, which `startLogin`, `finishLogin` or a token refresh throws; and the bearer-guard case below) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` without an audience; a `redirectUri` that does not end in `/callback` |
+| **Misconfiguration** (a programmer error) | `OAuthConfigError`, thrown when you create the object (except a URL `clientId` against a server without CIMD support, known only after discovery, which `startLogin`, `finishLogin` or a token refresh throws) | `createOAuth()` with a missing `baseUrl`, a partial client config or a short `cookies.secret`; `requireBearerAuth()` or a framework guard such as `honoBearerAuth` without an audience; a `redirectUri` that does not end in `/callback` |
 | **Authorization server unreachable** (discovery, JWKS, token and userinfo endpoints: network, timeout, 5xx, untrusted document) | `AuthServerUnavailableError`, thrown by every operation that needs the server. It is never reported as "signed out" | `getDiscovery`, `verifyAccessToken`, `startLogin`, `finishLogin`, `getAccessToken` / `withAccessToken` when a refresh is needed |
 | **Expected auth outcome** | a returned `{ ok: false, reason }` | see below |
 
@@ -446,7 +443,7 @@ Each layer follows one rule:
 
 The HTTP helpers answer instead of throwing:
 
-- **Bearer guards and every bearer adapter** reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope), `503` (server unavailable) or `500` (unexpected failure). The one exception is a guard with no `audience` and no configured `resource`, which is an `OAuthConfigError`: `requireBearerAuth()` throws it once, when the guard is created; the framework guards and `authenticate` build theirs per request, so every request fails (via `next(err)`, the framework's error handler, or a rejected promise).
+- **Bearer guards and every bearer adapter** reply `401` (invalid or missing token, with `WWW-Authenticate`), `403` (insufficient scope), `503` (server unavailable) or `500` (unexpected failure). The one exception is a guard with no `audience` and no configured `resource`, which is an `OAuthConfigError` thrown when the middleware is created (`requireBearerAuth()`, `honoBearerAuth`, `expressBearerAuth`, `nodeBearerAuth`, `withAuth`), so it fails at startup. `authenticate` builds its guard on each call, so there it is a rejected promise.
 - **Sign-in routes** reply `302` on success, `400` for a bad callback (including `token_rejected` / `userinfo_rejected`), `503` when the server is unavailable and `500` for an unexpected failure. Sign-in needs the userinfo endpoint: if it is unreachable the callback answers `503` and sets no session cookie.
 - **Logging:** pass `onError(error, request)` to `createOAuth` (sign-in routes) or to the guard's options (`requireBearerAuth`, `honoBearerAuth`, `honoMcp`, ...) to log the underlying cause of a 5xx. Nothing is logged by default.
 
@@ -467,23 +464,21 @@ pnpm --filter @neon/oauth test:ci
 pnpm --filter @neon/oauth build
 ```
 
-Tests run a real local HTTP server as a fake Neon Auth, so they exercise the same `fetch` and JWKS code paths as production.
+Tests run a real local HTTP server as a fake Neon Auth, so they exercise the same `fetch` and JWKS code paths as production. A test bundles each jose-only entry and fails if it pulls in `openid-client` or the sign-in client.
 
 ## Appendix: entry points
-
-A test bundles each jose-only entry and fails if it pulls in `openid-client` or the sign-in client.
 
 | Import | Provides | Loads `openid-client` |
 |---|---|---|
 | `@neon/oauth` | `createOAuth`, `createClientMetadataDocument`: verification, MCP servers and the sign-in client from one issuer | yes |
-| `@neon/oauth/verify` | `createVerifier`, `createBearerGuard`, `OAuthError`, `OAuthConfigError`, `AuthServerUnavailableError`, `InvalidTokenError`, `AuthResult`, `VerifyResult` | no |
+| `@neon/oauth/verify` | `createVerifier`, `createBearerGuard`, `protectedResourceMetadataUrl`, `Verifier`, `VerifierOptions`, `BearerGuard`, `OAuthError`, `OAuthConfigError`, `AuthServerUnavailableError`, `InvalidTokenError`, `AuthResult`, `VerifyResult` | no |
 | `@neon/oauth/mcp` | `createMcpAuth`, `toAuthInfo`, `routeMcpMetadata`, `MCP_METHODS`, `mcpPath`, `McpAuth`, errors | no |
 | `@neon/oauth/mcp/hono` | `honoMcp`, `honoMcpBearerAuth`, `honoProtectedResourceMetadata`, `McpAuthVariables` | no |
-| `@neon/oauth/mcp/express` | `expressMcp`, `expressMcpBearerAuth` (`req.auth`) | no |
+| `@neon/oauth/mcp/express` | `expressMcp`, `expressMcpBearerAuth` (`req.auth`, `req.authResult`), `NodeMcpOptions`, `AuthedRequest` | no |
 | `@neon/oauth/mcp/next` | `withMcpAuth`, `createMetadataHandlers` | no |
-| `@neon/oauth/mcp/node` | `nodeMcp`, `nodeMcpBearerAuth` | no |
+| `@neon/oauth/mcp/node` | `nodeMcp`, `nodeMcpBearerAuth` (`req.auth`, `req.authResult`), `NodeMcpOptions`, `AuthedIncomingMessage` | no |
 | `@neon/oauth/hono` | `honoBearerAuth`, `honoOAuthClient`, `honoClientMetadata`, `AuthVariables` | no (types only) |
-| `@neon/oauth/express` | `expressBearerAuth`, `expressOAuthClient`, `expressClientMetadata` | no (types only) |
+| `@neon/oauth/express` | `expressBearerAuth`, `expressOAuthClient`, `expressClientMetadata`, `AuthedRequest` | no (types only) |
 | `@neon/oauth/next` | `withAuth`, `createRouteHandlers`, `createClientMetadataHandlers` | no (types only) |
-| `@neon/oauth/node` | `toNodeHandler`, `nodeBearerAuth`, `nodeOAuthClient`, `nodeClientMetadata`, `nodeMiddleware` | no (types only) |
-| `@neon/oauth/adapter` | The adapter contract: `authenticate`, `routeOAuthClient`, `routeClientMetadata`, `clientMetadataResponse` | no |
+| `@neon/oauth/node` | `toNodeHandler`, `nodeBearerAuth`, `nodeOAuthClient`, `nodeClientMetadata`, `nodeMiddleware`, `AuthedIncomingMessage` | no (types only) |
+| `@neon/oauth/adapter` | The adapter contract: `authenticate`, `resolveBasePath`, `routeOAuthClient`, `routeClientMetadata`, `clientMetadataResponse`, `AuthSource`, `OAuthRouteOptions` | no |

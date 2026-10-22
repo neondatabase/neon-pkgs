@@ -25,10 +25,11 @@ export interface McpOptions {
  * Converts a verified {@link AuthResult} into the MCP TypeScript SDK's `AuthInfo` (the type from
  * `@modelcontextprotocol/sdk/server/auth/types.js`).
  *
- * Pass it to the SDK transport as `transport.handleRequest(req, { authInfo })`; the SDK then hands
- * it to your tool handlers as `extra.authInfo`, so a tool can see who is calling and with which
- * scopes. Hono exposes it already, as `c.get("authInfo")`. With `expressMcp`, `nodeMcp`,
- * `withMcpAuth` or `authenticate`, call this on the `AuthResult` they give you.
+ * The SDK transport hands the `AuthInfo` to your tool handlers as `extra.authInfo`, so a tool can
+ * see who is calling and with which scopes. The adapters already provide it: Hono as
+ * `c.get("authInfo")`, and `expressMcp`, `nodeMcp` and their `*BearerAuth` variants as `req.auth`.
+ * Call this yourself only with `withMcpAuth` or `authenticate`, or on `req.authResult`, and pass
+ * the result to `transport.handleRequest(request, { authInfo })`.
  *
  * Mapping:
  * - `token`: the raw bearer token.
@@ -111,6 +112,7 @@ export interface McpAuth {
 	/**
 	 * Answers GET and OPTIONS (CORS preflight) on `metadataPaths`; see {@link routeMcpMetadata}.
 	 *
+	 * @param request The incoming request; only its method and URL path are read.
 	 * @returns The `Response`, or `undefined` for any other request so the caller keeps routing.
 	 */
 	handleMetadataRequest(request: Request): Response | undefined;

@@ -24,7 +24,8 @@ import type { MyCtx, MyMiddleware } from "myfw";
 import { authenticate, resolveBasePath, routeOAuthClient } from "@neon/oauth/adapter";
 import type { AuthSource, OAuthBearerOptions, OAuthClient } from "@neon/oauth/adapter";
 
-const toRequest = (ctx: MyCtx): Request => /* ctx.rawRequest, or new Request(url, { method, headers }) */;
+// ctx.rawRequest, or new Request(url, { method, headers })
+declare function toRequest(ctx: MyCtx): Request;
 
 export function myBearerAuth(source: AuthSource, opts: OAuthBearerOptions): MyMiddleware {
   return async (ctx, next) => {
@@ -54,7 +55,7 @@ import { authenticate } from "@neon/oauth/adapter";
 import { isGuardedMcpRequest, mcpPath, routeMcpMetadata } from "@neon/oauth/mcp";
 import type { McpAuth } from "@neon/oauth/mcp";
 
-const toRequest = (ctx: MyCtx): Request => /* as above */;
+declare function toRequest(ctx: MyCtx): Request; // as above
 
 export function myMcp(auth: McpAuth): MyMiddleware {
   const target = mcpPath(auth); // the path of auth.resource
@@ -83,7 +84,7 @@ Node-style `(req, res, next)` frameworks can build on `nodeMiddleware`, `nodeBea
 ## Checklist
 
 1. Framework imports are `import type` only, and the framework is an optional peer dependency.
-2. Use `authenticate`, `routeOAuthClient`, `resolveBasePath` and `routeMcpMetadata` for all auth and routing decisions: no `instanceof Response` checks, no challenges of your own. An MCP adapter also matches the endpoint itself, with `mcpPath` and `isGuardedMcpRequest`, and converts the result with `auth.toAuthInfo`.
+2. Use `authenticate`, `routeOAuthClient`, `resolveBasePath` and `routeMcpMetadata` for all auth and routing decisions: no `instanceof Response` checks, no challenges of your own. An MCP adapter also matches the endpoint itself, with `mcpPath` and `isGuardedMcpRequest`, and converts the result with `auth.toAuthInfo`. Node-style MCP adapters set `req.auth` to that `AuthInfo` (the SDK transport reads it there) and `req.authResult` to the `AuthResult`.
 3. Forward every `Set-Cookie` separately (`response.headers.getSetCookie()`); `Headers` folds them otherwise.
 4. Pass method, full URL (with query) and headers to the `Request`. Bodies are not needed by any contract function.
 5. Never consume the request body in a guard: the MCP transport reads it afterwards (or takes the already-parsed body).
@@ -94,6 +95,15 @@ Node-style `(req, res, next)` frameworks can build on `nodeMiddleware`, `nodeBea
 No adapter needed. The core already takes a `Request` and returns a `Response`:
 
 ```ts
+import { createMcpAuth, routeMcpMetadata } from "@neon/oauth/mcp";
+
+declare const app: (request: Request) => Promise<Response>; // your own handler
+
+const auth = createMcpAuth({
+  baseUrl: process.env.NEON_AUTH_BASE_URL!,
+  resource: "https://mcp.example.com/mcp",
+});
+
 export default {
   async fetch(request: Request) {
     return routeMcpMetadata(auth, request) ?? (await app(request));
@@ -101,4 +111,4 @@ export default {
 };
 ```
 
-`auth` is the result of `createMcpAuth()`, or `oauth.mcp()` on an existing instance. Add `routeOAuthClient(oauth.client, request)` only where Node APIs are available: the sign-in client uses `node:crypto`, so it does not run on Workers without Node compatibility.
+Use `oauth.mcp()` on an existing instance instead of `createMcpAuth()` if you have one. Add `routeOAuthClient(oauth.client, request)` only where Node APIs are available: the sign-in client uses `node:crypto`, so it does not run on Workers without Node compatibility.

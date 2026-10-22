@@ -23,6 +23,7 @@ export type NodeMiddleware = (
  * behind a body parser.
  *
  * @param step Receives the Web `Request` and the original `IncomingMessage`.
+ * @returns A `(req, res, next)` middleware.
  */
 export function nodeMiddleware(
 	step: (
@@ -42,6 +43,9 @@ export function nodeMiddleware(
 /**
  * Adapts a Web-standard handler (`Request` in, `Response` out), such as `client.handlers.login`,
  * to a plain `node:http` listener `(req, res)`. The request body is passed through.
+ *
+ * @param handler The Web-standard handler to adapt.
+ * @returns A `(req, res)` listener that resolves once the response is sent.
  */
 export function toNodeHandler(
 	handler: FetchHandler,

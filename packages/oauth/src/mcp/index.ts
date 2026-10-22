@@ -10,8 +10,8 @@
 
 import type { VerifierOptions } from "../verify/verifier";
 import { createVerifier } from "../verify/verifier";
-import type { McpAuth, McpOptions } from "./resource-server";
-import { createMcp } from "./resource-server";
+import type { McpAuth, McpOptions } from "./mcp-auth";
+import { createMcp } from "./mcp-auth";
 
 export type { BearerAuthOptions } from "../verify/bearer";
 export type { InvalidTokenCode } from "../verify/errors";
@@ -22,14 +22,14 @@ export {
 	OAuthError,
 } from "../verify/errors";
 export type { AuthResult, VerifyResult } from "../verify/verifier";
-export type { McpAuth, McpOptions } from "./resource-server";
+export type { McpAuth, McpOptions } from "./mcp-auth";
 export {
 	isGuardedMcpRequest,
 	MCP_METHODS,
 	mcpPath,
 	routeMcpMetadata,
 	toAuthInfo,
-} from "./resource-server";
+} from "./mcp-auth";
 
 /** Options for {@link createMcpAuth}: {@link McpOptions} plus the token-verification options (`baseUrl`, `algorithms`, ...). Sign-in client settings do not apply. */
 export type McpAuthOptions = McpOptions & VerifierOptions;
