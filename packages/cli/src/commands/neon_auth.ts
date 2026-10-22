@@ -772,7 +772,7 @@ export const builder = (argv: yargs.Argv) => {
 											},
 											"mcp-resource": {
 												describe:
-													"MCP server URL that MCP clients are linked to. Defaults to the stored value when another --mcp-* flag is given",
+													"MCP server URL that MCP clients are linked to. Defaults to the stored value when another --mcp-* flag is given. Once set, the MCP configuration cannot be removed, only pointed at another URL",
 												type: "string",
 											},
 											"mcp-client-id-metadata-documents":
@@ -1693,6 +1693,15 @@ const printOAuthServerEntries = (
 	["Resources:", (data.resources ?? []).map((r) => r.identifier).join(", ")],
 ];
 
+/** The API rejects an empty PATCH, so fail before any request with the flags that would do something. */
+const requireUpdateFields = (provided: unknown[], flags: string[]) => {
+	if (provided.every((value) => value === undefined)) {
+		throw new Error(
+			`Nothing to update. Pass at least one of ${flags.join(", ")}.`,
+		);
+	}
+};
+
 const oauthServerGet = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
 	const { data } = await props.apiClient.getNeonAuthOAuthProviderPlugin(
@@ -1730,6 +1739,11 @@ const resolveMcpUpdate = async (
 		mcpDynamicRegistration: dynamicRegistration,
 		mcpClientIdMetadataDocuments: clientIdMetadataDocuments,
 	} = props;
+	if (mcpResource === "") {
+		throw new Error(
+			"--mcp-resource must not be empty. The API has no way to remove the MCP configuration once set; point it at another URL instead.",
+		);
+	}
 	if (
 		mcpResource === undefined &&
 		dynamicRegistration === undefined &&
@@ -1764,6 +1778,25 @@ const resolveMcpUpdate = async (
 };
 
 const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
+	requireUpdateFields(
+		[
+			props.enabled,
+			props.loginPage,
+			props.consentPage,
+			props.resources,
+			props.mcpResource,
+			props.mcpClientIdMetadataDocuments,
+			props.mcpDynamicRegistration,
+		],
+		[
+			"--enabled",
+			"--login-page",
+			"--consent-page",
+			"--resources",
+			"--mcp-resource",
+			"--mcp-client-id-metadata-documents",
+		],
+	);
 	const branchId = await resolveBranch(props);
 	const mcp = await resolveMcpUpdate(props, branchId);
 	const { data } = await props.apiClient.updateNeonAuthOAuthProviderPlugin(
@@ -1834,18 +1867,16 @@ const reportOAuthClientSecret = (
 	props: AuthBranchProps,
 	data: { client_secret?: string; [field: string]: unknown },
 	fields: readonly string[],
-	tableFields: readonly string[],
+	entries: [string, string | undefined][],
 	title: string,
 ) => {
-	const out = writer(props);
 	if (props.output === "table") {
-		out.write(data as never, { fields: tableFields as never, title });
-		out.end();
+		printKvBlock(title, entries);
 		if (data.client_secret) {
-			out.text(`\n${data.client_secret}\n`);
+			writeStyled(`${data.client_secret}\n`);
 		}
 	} else {
-		out.end(data as never, { fields: fields as never });
+		writer(props).end(data as never, { fields: fields as never });
 	}
 	if (data.client_secret) {
 		log.warning("Store this secret now: it is not shown again.");
@@ -1877,7 +1908,7 @@ const oauthClientCreate = async (
 		props,
 		data,
 		[...OAUTH_CLIENT_FIELDS, "client_secret"],
-		OAUTH_CLIENT_FIELDS,
+		printOAuthClientEntries(data),
 		"OAuth client",
 	);
 };
@@ -1908,6 +1939,22 @@ const oauthClientUpdate = async (
 		disabled?: boolean;
 	},
 ) => {
+	requireUpdateFields(
+		[
+			props.name,
+			props.redirectUris,
+			props.resources,
+			props.skipConsent,
+			props.disabled,
+		],
+		[
+			"--name",
+			"--redirect-uris",
+			"--resources",
+			"--skip-consent",
+			"--disabled",
+		],
+	);
 	const branchId = await resolveBranch(props);
 	const { data } = await props.apiClient.updateNeonAuthOAuthClient(
 		props.projectId,
@@ -1953,7 +2000,7 @@ const oauthClientRotateSecret = async (
 		props,
 		data,
 		OAUTH_CLIENT_SECRET_FIELDS,
-		["client_id"],
+		[["Client ID:", data.client_id]],
 		"OAuth client secret",
 	);
 };

@@ -135,15 +135,16 @@ jwks_url: https://auth.test.neon.tech/.well-known/jwks.json
 exports[`neon-auth > enable reports a provisioning conflict on a branch without Neon Auth 1`] = `""`;
 
 exports[`neon-auth > oauth-client create 1`] = `
-"OAuth client
-Client ID      client-abc123
-Name           My MCP client
-Type           confidential
-Redirect Uris  https://app.example.com/callback
-Resources      https://api.example.com
-Skip Consent   false
-Disabled       false
-Created At     2026-01-01T00:00:00Z
+"
+OAuth client
+  Client ID:      client-abc123
+  Name:           My MCP client
+  Type:           confidential
+  Redirect URIs:  https://app.example.com/callback
+  Resources:      https://api.example.com
+  Skip Consent:   false
+  Disabled:       false
+  Created At:     2026-01-01T00:00:00Z
 
 secret-shown-once
 "
@@ -169,15 +170,17 @@ exports[`neon-auth > oauth-client create json includes the secret 1`] = `
 `;
 
 exports[`neon-auth > oauth-client create public has no secret 1`] = `
-"OAuth client
-Client ID      client-abc123
-Name           SPA
-Type           public
-Redirect Uris  https://spa.example.com/cb
-Resources      https://api.example.com
-Skip Consent   true
-Disabled       false
-Created At     2026-01-01T00:00:00Z
+"
+OAuth client
+  Client ID:      client-abc123
+  Name:           SPA
+  Type:           public
+  Redirect URIs:  https://spa.example.com/cb
+  Resources:      https://api.example.com
+  Skip Consent:   true
+  Disabled:       false
+  Created At:     2026-01-01T00:00:00Z
+
 "
 `;
 
@@ -226,11 +229,33 @@ exports[`neon-auth > oauth-client list 1`] = `
 "
 `;
 
+exports[`neon-auth > oauth-client list reports when there are no clients 1`] = `
+"
+No OAuth clients are configured for this branch.
+
+"
+`;
+
 exports[`neon-auth > oauth-client rotate-secret 1`] = `
-"OAuth client secret
-Client ID  client-abc123
+"
+OAuth client secret
+  Client ID:  client-abc123
 
 rotated-secret-shown-once
+"
+`;
+
+exports[`neon-auth > oauth-client rotate-secret json includes the secret 1`] = `
+"{
+  "client_id": "client-abc123",
+  "client_secret": "rotated-secret-shown-once"
+}
+"
+`;
+
+exports[`neon-auth > oauth-client rotate-secret yaml includes the secret 1`] = `
+"client_id: client-abc123
+client_secret: rotated-secret-shown-once
 "
 `;
 
@@ -247,6 +272,8 @@ disabled: true
 created_at: 2026-01-01T00:00:00Z
 "
 `;
+
+exports[`neon-auth > oauth-client update without any flag fails 1`] = `""`;
 
 exports[`neon-auth > oauth-provider add 1`] = `
 "id: google
@@ -292,6 +319,20 @@ resources:
 "
 `;
 
+exports[`neon-auth > oauth-server get table 1`] = `
+"
+OAuth server configuration
+  Enabled:          true
+  Login Page:       https://app.example.com/login
+  Consent Page:     https://app.example.com/consent
+  MCP Resource:     https://stored.example.com/mcp
+  MCP CIMD:         false
+  MCP Dynamic Reg:  true
+  Resources:        https://api.example.com
+
+"
+`;
+
 exports[`neon-auth > oauth-server update 1`] = `
 "enabled: true
 login_page: https://app.example.com/login
@@ -317,6 +358,8 @@ mcp:
 "
 `;
 
+exports[`neon-auth > oauth-server update rejects an empty MCP resource 1`] = `""`;
+
 exports[`neon-auth > oauth-server update reuses the stored MCP resource and booleans 1`] = `
 "enabled: true
 login_page: https://app.example.com/login
@@ -335,7 +378,34 @@ consent_page: https://app.example.com/consent
 "
 `;
 
+exports[`neon-auth > oauth-server update table 1`] = `
+"
+OAuth server configuration updated
+  Enabled:          true
+  Login Page:       https://app.example.com/login
+  Consent Page:     https://app.example.com/consent
+  MCP Resource:     
+  MCP CIMD:         
+  MCP Dynamic Reg:  
+  Resources:        
+
+"
+`;
+
+exports[`neon-auth > oauth-server update with every MCP flag skips reading the stored config 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://new.example.com/mcp
+  dynamic_registration: false
+  client_id_metadata_documents: true
+"
+`;
+
 exports[`neon-auth > oauth-server update without a stored MCP resource fails 1`] = `""`;
+
+exports[`neon-auth > oauth-server update without any flag fails 1`] = `""`;
 
 exports[`neon-auth > organization get 1`] = `
 "enabled: true

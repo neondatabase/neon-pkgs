@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
-import { test } from "../test_utils/fixtures";
+import { type RecordedRequest, test } from "../test_utils/fixtures";
 
 describe("neon-auth", () => {
 	// --- Enable / Status / Disable ---
@@ -477,20 +477,158 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	const mcpPatchBodies = (requests: RecordedRequest[]) =>
+		requests
+			.filter(
+				(r) =>
+					r.method === "PATCH" &&
+					r.path.endsWith("/plugins/oauth-provider"),
+			)
+			.map((r) => r.body);
+
 	test("oauth-server update reuses the stored MCP resource and booleans", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand([
-			"neon-auth",
-			"config",
-			"oauth-server",
-			"update",
-			"--mcp-client-id-metadata-documents",
-			"--project-id",
-			"test",
-			"--branch",
-			"test_branch",
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--mcp-client-id-metadata-documents",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(mcpPatchBodies(requests)).toEqual([
+			{
+				mcp: {
+					resource: "https://stored.example.com/mcp",
+					dynamic_registration: true,
+					client_id_metadata_documents: true,
+				},
+			},
 		]);
+	});
+
+	test("oauth-server update with every MCP flag skips reading the stored config", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--mcp-resource",
+				"https://new.example.com/mcp",
+				"--mcp-client-id-metadata-documents",
+				"--no-mcp-dynamic-registration",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(
+			requests.filter(
+				(r) =>
+					r.method === "GET" &&
+					r.path.endsWith("/plugins/oauth-provider"),
+			),
+		).toEqual([]);
+		expect(mcpPatchBodies(requests)).toEqual([
+			{
+				mcp: {
+					resource: "https://new.example.com/mcp",
+					dynamic_registration: false,
+					client_id_metadata_documents: true,
+				},
+			},
+		]);
+	});
+
+	test("oauth-server update rejects an empty MCP resource", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--mcp-resource",
+				"",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				code: 1,
+				stderr: "ERROR: --mcp-resource must not be empty. The API has no way to remove the MCP configuration once set; point it at another URL instead.",
+			},
+		);
+	});
+
+	test("oauth-server update without any flag fails", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				code: 1,
+				stderr: "ERROR: Nothing to update. Pass at least one of --enabled, --login-page, --consent-page, --resources, --mcp-resource, --mcp-client-id-metadata-documents.",
+			},
+		);
+	});
+
+	test("oauth-server get table", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"get",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ outputTable: true },
+		);
+	});
+
+	test("oauth-server update table", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--enabled",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ outputTable: true },
+		);
 	});
 
 	test("oauth-server update without a stored MCP resource fails", async ({
@@ -581,7 +719,10 @@ describe("neon-auth", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ outputTable: true },
+			{
+				outputTable: true,
+				stderr: "WARNING: Store this secret now: it is not shown again.",
+			},
 		);
 	});
 
@@ -631,7 +772,7 @@ describe("neon-auth", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ outputTable: true },
+			{ outputTable: true, stderr: "" },
 		);
 	});
 
@@ -689,7 +830,72 @@ describe("neon-auth", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ outputTable: true },
+			{
+				outputTable: true,
+				stderr: "WARNING: Store this secret now: it is not shown again.",
+			},
+		);
+	});
+
+	for (const output of ["json", "yaml"] as const) {
+		test(`oauth-client rotate-secret ${output} includes the secret`, async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-client",
+					"rotate-secret",
+					"client-abc123",
+					"-o",
+					output,
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					stderr: "WARNING: Store this secret now: it is not shown again.",
+				},
+			);
+		});
+	}
+
+	test("oauth-client list reports when there are no clients", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"oauth-client",
+				"list",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ mockDir: "neon-auth-oauth-clients-empty", outputTable: true },
+		);
+	});
+
+	test("oauth-client update without any flag fails", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"oauth-client",
+				"update",
+				"client-abc123",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				code: 1,
+				stderr: "ERROR: Nothing to update. Pass at least one of --name, --redirect-uris, --resources, --skip-consent, --disabled.",
+			},
 		);
 	});
 
