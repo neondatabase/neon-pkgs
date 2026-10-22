@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.1.0
+
+### Minor Changes
+
+- 859fad5: Add `neon.decisionModel()` for TypeSafe System One decision models (such as Jev) on the AI Gateway, for use with AI SDK 7's `experimental_decide` (`ai@7.0.133` or newer).
+
 ## 1.0.2
 
 ### Patch Changes
