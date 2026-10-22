@@ -61,6 +61,10 @@ export function expressMcpBearerAuth(
  * The guard reads headers only, so it works before or after a body parser. The SDK transport
  * reads the request stream unless you pass the parsed body as the third argument of `handleRequest`.
  *
+ * Mount the MCP handler with a method route such as `app.post("/mcp", ...)`. A prefix mount such as
+ * `app.use("/mcp", handler)` also receives `/mcp/<anything>`, which this guard does not cover; put
+ * {@link expressMcpBearerAuth} in front of such a handler instead.
+ *
  * @param auth The result of `createMcpAuth()`.
  * @param opts Required scopes, `onError` and the endpoint `path`. See {@link NodeMcpOptions}.
  * @returns Express middleware.
