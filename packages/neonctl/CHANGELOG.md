@@ -1,5 +1,16 @@
 # neonctl
 
+## 8.11.0
+
+### Minor Changes
+
+- 93b8226: Add `neon functions new [template]` and `neon functions templates list`. Templates come from the Neon Function Registry (`registry/` in neondatabase/examples): the index is read from neon.com, falling back to GitHub, and template files are read from GitHub. The scaffolded functions are declared in `neon.ts`. Set `NEON_FUNCTION_REGISTRY_DIR` to use a local copy, or `NEON_FUNCTION_REGISTRY_URL` to use another index.
+
+### Patch Changes
+
+- Updated dependencies [93b8226]
+  - neon@8.11.0
+
 ## 8.10.3
 
 ### Patch Changes
