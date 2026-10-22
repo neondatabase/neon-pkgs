@@ -540,6 +540,12 @@ Upgrade `@neon/realtime` and the official adapters together to 0.2.0. The new
 adapter peer range is `^0.2.0`; older adapters accept only 0.1.x. Custom raw
 consumers must implement the move variant before upgrading.
 
+Existing `subscribe()` and React `useLiveQuery()` calls keep the same signatures.
+Core materialized subscriptions and React handle ordered moves automatically.
+Custom raw consumers should follow the complete-batch staging and validation
+requirements above. TanStack collections retain unordered keyed semantics;
+their local queries must establish any desired order.
+
 The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
 transition server that accepts v1 and v2 before releasing upgraded clients.
 During transition, ordered queries receive complete replacements. Activation
