@@ -23,6 +23,7 @@ class FakeWebSocket implements WebSocketLike {
 	readyState = FakeWebSocket.CONNECTING;
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
+	protocol?: string;
 	onSend?: (message: Record<string, unknown>) => void;
 	onClose?: () => void;
 	emitCloseOnClose = true;
@@ -30,6 +31,8 @@ class FakeWebSocket implements WebSocketLike {
 
 	constructor(_url: string, protocols: string | string[]) {
 		this.protocols = protocols;
+		// Simulate server selecting the first offered protocol
+		this.protocol = Array.isArray(protocols) ? protocols[0] : protocols;
 		FakeWebSocket.instances.push(this);
 	}
 
@@ -263,7 +266,10 @@ describe("ConnectionCoordinator", () => {
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
@@ -1340,6 +1346,226 @@ describe("subscription load-shedding recovery", () => {
 		expect(socket.sent).toHaveLength(1);
 		expect(FakeWebSocket.instances).toHaveLength(1);
 		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("negotiates v3 protocol when offered", () => {
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, target());
+		const socket = defined(FakeWebSocket.instances[0]);
+		expect(socket.protocol).toBe("neon.realtime.v3");
+	});
+
+	it("assembles and routes fragmented baseline_sync_start", () => {
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.protocol = "neon.realtime.v3";
+		socket.open();
+		socket.receive({ type: "ready" });
+
+		const requestId = (
+			socket.sent.find((m) => m.type === "subscribe") as Record<
+				string,
+				unknown
+			>
+		).request_id;
+
+		socket.receive({
+			type: "subscribed",
+			request_id: requestId,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+
+		// Assemble a fragmented message
+		const completeMessage = {
+			type: "baseline_sync_start",
+			live_id: "41",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		};
+		const jsonStr = JSON.stringify(completeMessage);
+		const part1 = jsonStr.slice(0, jsonStr.length / 2);
+		const part2 = jsonStr.slice(jsonStr.length / 2);
+
+		socket.receive({
+			type: "fragment",
+			id: "100",
+			index: 0,
+			last: false,
+			data: part1,
+		});
+		expect(
+			callbacks.reconciliation.baselineSyncStarted,
+		).not.toHaveBeenCalled();
+
+		socket.receive({
+			type: "fragment",
+			id: "100",
+			index: 1,
+			last: true,
+			data: part2,
+		});
+		expect(callbacks.reconciliation.baselineSyncStarted).toHaveBeenCalled();
+	});
+
+	function openV3Subscription() {
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.protocol = "neon.realtime.v3";
+		socket.open();
+		socket.receive({ type: "ready" });
+		return { callbacks, socket };
+	}
+
+	it("rejects fragments on a neon.realtime.v2 connection", () => {
+		const { socket } = openV3Subscription();
+		socket.protocol = "neon.realtime.v2";
+		socket.receive({
+			type: "fragment",
+			id: "100",
+			index: 0,
+			last: false,
+			data: "{",
+		});
+		expect(socket.readyState).not.toBe(FakeWebSocket.OPEN);
+	});
+
+	it("allows only heartbeats inside an open fragment stream", () => {
+		const { socket } = openV3Subscription();
+		socket.receive({
+			type: "fragment",
+			id: "100",
+			index: 0,
+			last: false,
+			data: "{",
+		});
+		socket.receive({ type: "ping", token: "s1" });
+		expect(socket.sent).toContainEqual({ type: "pong", token: "s1" });
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+		socket.receive({
+			type: "progress",
+			mvcc: { xmin: "1", xmax: "1", xip: [] },
+		});
+		expect(socket.readyState).not.toBe(FakeWebSocket.OPEN);
+	});
+
+	it("rejects an assembled message that is itself a fragment", () => {
+		const { socket } = openV3Subscription();
+		const inner = JSON.stringify({
+			type: "fragment",
+			id: "7",
+			index: 0,
+			last: true,
+			data: "{}",
+		});
+		socket.receive({
+			type: "fragment",
+			id: "100",
+			index: 0,
+			last: true,
+			data: inner,
+		});
+		expect(socket.readyState).not.toBe(FakeWebSocket.OPEN);
+	});
+
+	it("treats row_too_large subscription_error as terminal", () => {
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = admit();
+
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "row_too_large",
+			message: "a result row exceeds the 4 MiB row limit",
+		});
+
+		expect(callbacks.failed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				code: "row_too_large",
+				retryable: false,
+			}),
+		);
+		expect(callbacks.connecting).toHaveBeenCalledTimes(0);
+	});
+
+	it("discards partial fragments on connection reset", () => {
+		vi.useFakeTimers();
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		const _handle = coordinator.subscribe(
+			{ capability: "token" },
+			callbacks,
+		);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.protocol = "neon.realtime.v3";
+		socket.open();
+		socket.receive({ type: "ready" });
+
+		// Admit subscription
+		const subscribeMsg = socket.sent.find(
+			(m) => m.type === "subscribe",
+		) as Record<string, unknown>;
+		socket.receive({
+			type: "subscribed",
+			request_id: subscribeMsg.request_id,
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+
+		// Start a fragment stream
+		socket.receive({
+			type: "fragment",
+			id: "100",
+			index: 0,
+			last: false,
+			data: '{"type":"p',
+		});
+
+		// Simulate disconnection
+		socket.disconnect();
+
+		// Advance time to trigger reconnect
+		vi.advanceTimersByTime(1);
+		const socket2 = defined(FakeWebSocket.instances[1]);
+		socket2.protocol = "neon.realtime.v3";
+		socket2.open();
+		socket2.receive({ type: "ready" });
+
+		// Admit subscription on new socket
+		const subscribeMsg2 = socket2.sent.find(
+			(m) => m.type === "subscribe",
+		) as Record<string, unknown>;
+		socket2.receive({
+			type: "subscribed",
+			request_id: subscribeMsg2.request_id,
+			live_id: "42",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+
+		// Should accept a new fragment stream starting at index 0
+		// Use ping which doesn't require subscription context
+		socket2.receive({
+			type: "fragment",
+			id: "101",
+			index: 0,
+			last: true,
+			data: '{"type":"ping","token":"test"}',
+		});
+		expect(callbacks.failed).not.toHaveBeenCalled();
+		coordinator.close();
 	});
 });
 

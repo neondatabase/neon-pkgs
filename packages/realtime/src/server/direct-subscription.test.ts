@@ -129,7 +129,10 @@ describe("trusted direct subscriptions", () => {
 		const socket = connectAndAdmit();
 		baselineSync(socket, "hello");
 		expect(socket.url).toBe("ws://live.test/v1");
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		expect(subscription.getSnapshot()).toMatchObject({
 			status: "live",
 			data: [{ id: 1, body: "hello" }],

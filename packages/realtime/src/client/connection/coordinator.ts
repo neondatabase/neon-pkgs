@@ -4,11 +4,13 @@ import {
 	type SubscriptionEventSink,
 } from "../diagnostics.js";
 import type { ParsedMvccSnapshot } from "../mvcc.js";
+import { FragmentAssembler } from "../protocol/fragment-assembler.js";
 import {
 	decodeServerFrame,
 	encodeClientMessage,
 	ProtocolError,
 	REALTIME_SUBPROTOCOL,
+	REALTIME_SUBPROTOCOL_V3,
 } from "../protocol/index.js";
 import type { ServerMessage, WireColumn } from "../protocol/messages.js";
 import {
@@ -150,6 +152,7 @@ export class ConnectionCoordinator {
 	private disposed = false;
 	private terminalConnection?: ConnectionCoordinatorError;
 	private pendingConnectionError?: ConnectionCoordinatorError;
+	private fragmentAssembler = new FragmentAssembler();
 
 	constructor(private readonly options: ConnectionCoordinatorOptions) {
 		if (!options.url) throw new Error("Realtime requires a WebSocket URL");
@@ -331,10 +334,10 @@ export class ConnectionCoordinator {
 		this.events.connection.attemptStarted();
 		let socket: WebSocketLike;
 		try {
-			socket = this.webSocketFactory(
-				this.options.url,
+			socket = this.webSocketFactory(this.options.url, [
+				REALTIME_SUBPROTOCOL_V3,
 				REALTIME_SUBPROTOCOL,
-			);
+			]);
 		} catch (error) {
 			this.noteConnectionLost(error);
 			this.scheduleReconnect();
@@ -366,6 +369,20 @@ export class ConnectionCoordinator {
 		try {
 			const frame = decodeServerFrame(text);
 			this.heartbeat?.received();
+			if (frame.message.type === "fragment") {
+				this.receiveFragment(frame.message);
+				return;
+			}
+			// Only heartbeats may interleave with an open fragment stream.
+			if (
+				this.fragmentAssembler.isOpen() &&
+				frame.message.type !== "ping" &&
+				frame.message.type !== "pong"
+			) {
+				throw new ProtocolError(
+					"server message interleaved with an open fragment stream",
+				);
+			}
 			this.route(frame.message, frame.mvcc);
 		} catch (error) {
 			this.protocolFailure(
@@ -374,6 +391,29 @@ export class ConnectionCoordinator {
 					: "invalid server message",
 			);
 		}
+	}
+
+	private receiveFragment(
+		fragment: Extract<ServerMessage, { type: "fragment" }>,
+	): void {
+		// Browsers report the negotiated subprotocol once the socket opens.
+		if (this.socket?.protocol !== REALTIME_SUBPROTOCOL_V3) {
+			throw new ProtocolError(
+				"fragment message not allowed on neon.realtime.v2",
+			);
+		}
+		const assembled = this.fragmentAssembler.processFragment(
+			fragment.id,
+			fragment.index,
+			fragment.last,
+			fragment.data,
+		);
+		if (assembled === undefined) return;
+		const frame = decodeServerFrame(assembled);
+		if (frame.message.type === "fragment") {
+			throw new ProtocolError("assembled message cannot be a fragment");
+		}
+		this.route(frame.message, frame.mvcc);
 	}
 
 	private route(message: ServerMessage, mvcc?: ParsedMvccSnapshot): void {
@@ -577,6 +617,7 @@ export class ConnectionCoordinator {
 			return;
 		}
 		const replacementRequired = requiresReplacementQuery(code);
+		// row_too_large is a terminal error (no retry, no replacement query)
 		const error = new ConnectionCoordinatorError(
 			code,
 			replacementRequired,
@@ -695,6 +736,7 @@ export class ConnectionCoordinator {
 		this.liveSubscriptions.clear();
 		this.detachingLiveIds.clear();
 		this.reconciler.clear();
+		this.fragmentAssembler.reset();
 		if (
 			!this.disposed &&
 			!this.terminalConnection &&
