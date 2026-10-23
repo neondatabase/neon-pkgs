@@ -7,7 +7,7 @@ import standaloneCode from "ajv/dist/standalone/index.js";
 import { compile } from "json-schema-to-typescript";
 
 const schemaUrl = new URL(
-  "../schema/realtime-protocol-v2.schema.json",
+  "../schema/realtime-protocol.schema.json",
   import.meta.url,
 );
 const validatorOutputUrl = new URL(

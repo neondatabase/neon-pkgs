@@ -45,9 +45,11 @@
       "import": "./dist/server.js",
       "default": "./dist/server.js"
     },
-    "./schema/realtime-query-capability-v1.schema.json": "./schema/realtime-query-capability-v1.schema.json",
-    "./schema/realtime-protocol-v1.schema.json": "./schema/realtime-protocol-v1.schema.json",
-    "./schema/realtime-protocol-v2.schema.json": "./schema/realtime-protocol-v2.schema.json"
+    "./schema/realtime-protocol.schema.json": "./schema/realtime-protocol.schema.json",
+    "./schema/realtime-query-capability.schema.json": "./schema/realtime-query-capability.schema.json",
+    "./schema/realtime-protocol-v1.schema.json": "./schema/legacy/realtime-protocol-v1.schema.json",
+    "./schema/realtime-protocol-v2.schema.json": "./schema/realtime-protocol.schema.json",
+    "./schema/realtime-query-capability-v1.schema.json": "./schema/realtime-query-capability.schema.json"
   },
   "files": [
     "README.md",

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { compile } from "json-schema-to-typescript";
 
 const schemaUrl = new URL(
-  "../schema/realtime-query-capability-v1.schema.json",
+  "../schema/realtime-query-capability.schema.json",
   import.meta.url,
 );
 const outputUrl = new URL(

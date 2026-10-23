@@ -29,6 +29,15 @@ This is a breaking upgrade at the 0.2.0 compatibility boundary:
   preserve server order, including for `ORDER BY`/`LIMIT` queries; use a TanStack
   local query to establish order, or core/React to preserve the server sequence.
 
-Add the public `@neon/realtime/schema/realtime-protocol-v2.schema.json` export.
-The existing v1 schema export remains available unchanged; it does not enable
-v1 connections in the SDK.
+Expose the active schemas at stable package subpaths:
+`@neon/realtime/schema/realtime-protocol.schema.json` (protocol v2) and
+`@neon/realtime/schema/realtime-query-capability.schema.json` (capability v1).
+Versions remain in each schema's `$id` and `title`. The versioned v2 protocol
+and v1 capability exports alias the corresponding active contracts.
+
+The v1 protocol export is deprecated and resolves to an unchanged, isolated
+legacy snapshot. Keep it throughout 0.2 and remove it at the next
+compatibility-breaking release. It does not enable v1 connections in the SDK.
+The source-file reorganization preserves the schemas, generated SDK code and
+Hadron #11138's existing commit pins. Its transition server still accepts both
+old v1 clients and the new v2 clients; activation remains a separate deployment.
