@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import protocolSchema from "../../../../schema/realtime-protocol.schema.json";
 import capabilitySchema from "../../../../schema/realtime-query-capability.schema.json";
 import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v1.fixtures.json";
+import fragmentFixtures from "./fragment-messages.fixtures.json";
 import orderedFixtures from "./ordered-changes.fixtures.json";
 import protocolFixtures from "./realtime-protocol.fixtures.json";
 
@@ -13,6 +14,7 @@ describe("Realtime protocol contracts", () => {
 		for (const fixture of [
 			...protocolFixtures.valid,
 			...orderedFixtures.valid,
+			...fragmentFixtures.valid,
 		]) {
 			expect(validate(fixture), JSON.stringify(validate.errors)).toBe(
 				true,
@@ -25,6 +27,7 @@ describe("Realtime protocol contracts", () => {
 		for (const fixture of [
 			...protocolFixtures.invalid,
 			...orderedFixtures.invalid,
+			...fragmentFixtures.invalid,
 		]) {
 			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
 		}

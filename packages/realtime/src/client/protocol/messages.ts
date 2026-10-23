@@ -1,6 +1,8 @@
 import type { Column, ServerMessage } from "./wire-types.gen.js";
 
 export const REALTIME_SUBPROTOCOL = "neon.realtime.v2";
+/** Adds `fragment` messages and the `row_too_large` subscription error. */
+export const REALTIME_SUBPROTOCOL_V3 = "neon.realtime.v3";
 
 type ServerVariant<Type extends ServerMessage["type"]> = Extract<
 	ServerMessage,

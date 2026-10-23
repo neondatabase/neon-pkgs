@@ -28,6 +28,7 @@ class FakeWebSocket implements WebSocketLike {
 	static instances: FakeWebSocket[] = [];
 	static deferClose = false;
 	readyState = 0;
+	protocol = "";
 	readonly sent: Record<string, unknown>[] = [];
 	readonly protocols: string | string[];
 	private readonly listeners = new Map<string, Set<FakeWebSocketListener>>();
@@ -103,10 +104,10 @@ describe("RealtimeClient", () => {
 		client.subscribe(query("custom socket"));
 
 		expect(webSocketFactory).toHaveBeenCalledOnce();
-		expect(webSocketFactory).toHaveBeenCalledWith(
-			"ws://live.test/v1",
+		expect(webSocketFactory).toHaveBeenCalledWith("ws://live.test/v1", [
+			"neon.realtime.v3",
 			"neon.realtime.v2",
-		);
+		]);
 		client.close();
 	});
 
@@ -612,7 +613,10 @@ describe("RealtimeClient", () => {
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
 
-		expect(socket.protocols).toBe("neon.realtime.v2");
+		expect(socket.protocols).toEqual([
+			"neon.realtime.v3",
+			"neon.realtime.v2",
+		]);
 		expect(socket.sent[0]).toMatchObject({ type: "subscribe" });
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
@@ -781,6 +785,72 @@ describe("RealtimeClient", () => {
 					},
 				],
 				batch: { txids: ["42", "43"] },
+			},
+		]);
+		client.close();
+	});
+
+	it("delivers the largest message the server sends in small fragments", () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+		});
+		const subscription = client.subscribe(query("initial"), {
+			materialize: false,
+		});
+		const updates: unknown[] = [];
+		subscription.onUpdate((update) => updates.push(update));
+		defined(FakeWebSocket.instances[0]).protocol = "neon.realtime.v3";
+		const socket = connectAndAdmit();
+
+		// Two rows of control characters fill a message's 8 MiB of result
+		// data; JSON escapes each character as six.
+		const title = "\u0001".repeat(4 * 1024 * 1024 - 1024);
+		const batch = JSON.stringify({
+			type: "baseline_sync_batch",
+			live_id: "41",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			index: 0,
+			rows: [
+				{ row_key: ROW_KEY, values: ["1", title] },
+				{ row_key: ROW_KEY_B, values: ["2", title] },
+			],
+		});
+		expect(batch.length).toBeGreaterThan(47 * 1024 * 1024);
+		socket.receive({
+			type: "baseline_sync_start",
+			live_id: "41",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			mvcc: { xmin: "1", xmax: "2", xip: [] },
+		});
+		const fragmentLength = 64 * 1024;
+		for (let index = 0; index * fragmentLength < batch.length; index++) {
+			const end = (index + 1) * fragmentLength;
+			socket.receive({
+				type: "fragment",
+				id: "7",
+				index,
+				last: end >= batch.length,
+				data: batch.slice(index * fragmentLength, end),
+			});
+		}
+		socket.receive({
+			type: "baseline_sync_end",
+			live_id: "41",
+			epoch: "1",
+			baseline_sync_attempt: "1",
+			batch_count: 1,
+		});
+
+		expect(updates).toEqual([
+			{
+				type: "rows",
+				rows: [
+					{ rowId: ROW_KEY, row: { id: 1, title } },
+					{ rowId: ROW_KEY_B, row: { id: 2, title } },
+				],
 			},
 		]);
 		client.close();

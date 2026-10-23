@@ -1,0 +1,61 @@
+{
+  "valid": [
+    {
+      "type": "fragment",
+      "id": "7",
+      "index": 0,
+      "last": false,
+      "data": "{\"type\":\"baseline_sync_batch\""
+    },
+    {
+      "type": "fragment",
+      "id": "7",
+      "index": 1,
+      "last": true,
+      "data": ",\"rows\":[]}"
+    },
+    {
+      "type": "subscription_error",
+      "live_id": "2",
+      "code": "row_too_large",
+      "message": "a result row exceeds the row limit"
+    }
+  ],
+  "invalid": [
+    {
+      "type": "fragment",
+      "id": "7",
+      "index": 0,
+      "last": false,
+      "data": ""
+    },
+    {
+      "type": "fragment",
+      "id": "7",
+      "index": -1,
+      "last": false,
+      "data": "{"
+    },
+    {
+      "type": "fragment",
+      "id": "7",
+      "index": 0,
+      "data": "{"
+    },
+    {
+      "type": "fragment",
+      "id": "x",
+      "index": 0,
+      "last": true,
+      "data": "{}"
+    },
+    {
+      "type": "fragment",
+      "id": "7",
+      "index": 0,
+      "last": true,
+      "data": "{}",
+      "extra": 1
+    }
+  ]
+}

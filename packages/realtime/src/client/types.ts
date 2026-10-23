@@ -5,6 +5,7 @@ import type { SealedLiveQuery } from "./sealed-query.js";
 /** Minimal WebSocket contract used by the Realtime client. */
 export interface WebSocketLike {
 	readonly readyState: number;
+	readonly protocol?: string;
 	addEventListener(type: "open", listener: () => void): void;
 	addEventListener(
 		type: "message",

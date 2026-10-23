@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
-  "title": "Neon Realtime protocol v2",
+  "$id": "https://neon.tech/schemas/realtime/realtime-protocol-v3.schema.json",
+  "title": "Neon Realtime protocol v3",
   "type": "object",
   "$defs": {
     "u64": {
@@ -315,7 +315,7 @@
             "type": { "const": "subscription_error" },
             "live_id": { "$ref": "#/$defs/u64" },
             "code": {
-              "enum": ["authorization_expired", "renewal_failed", "upstream_cancelled", "backend_overloaded", "baseline_sync_failed", "protocol_error"]
+              "enum": ["authorization_expired", "renewal_failed", "upstream_cancelled", "backend_overloaded", "baseline_sync_failed", "protocol_error", "row_too_large"]
             },
             "message": { "type": "string" },
             "sqlstate": { "$ref": "#/$defs/sqlstate" },
@@ -332,6 +332,19 @@
               "enum": ["protocol_error", "invalid_payload", "message_too_large", "resource_exhausted", "slow_consumer", "heartbeat_timeout", "backend_session_lost", "backend_protocol_error", "fence_failed", "internal_error"]
             },
             "message": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "$comment": "Message fragment, sent only on neon.realtime.v3 connections, which also receive the row_too_large subscription error. Concatenating data of fragments with indexes 0..n of one id, where only index n has last: true, yields the complete JSON text of exactly one server message that is not itself a fragment. Only ping and pong may arrive between fragments of one stream.",
+          "required": ["type", "id", "index", "last", "data"],
+          "properties": {
+            "type": { "const": "fragment" },
+            "id": { "$ref": "#/$defs/u64" },
+            "index": { "$ref": "#/$defs/u32" },
+            "last": { "type": "boolean" },
+            "data": { "type": "string", "minLength": 1 }
           },
           "additionalProperties": false
         },

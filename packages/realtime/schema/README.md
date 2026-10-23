@@ -5,7 +5,7 @@ these files so their changes remain easy to review:
 
 | Contract | Canonical source and package export | Current identity |
 | --- | --- | --- |
-| WebSocket messages | `realtime-protocol.schema.json` | Protocol v2 |
+| WebSocket messages | `realtime-protocol.schema.json` | Protocol v3 |
 | Decoded query capabilities | `realtime-query-capability.schema.json` | Capability v1 |
 
 Import them through `@neon/realtime/schema/<filename>`. The version remains in
@@ -19,16 +19,22 @@ Build and test scripts check that the generated files match the active schemas.
 
 ## Legacy protocol and export compatibility
 
-`legacy/realtime-protocol-v1.schema.json` is a frozen snapshot. No generator or
-runtime code consumes it. Its only schema-validation consumer is the isolated
+`legacy/realtime-protocol-v1.schema.json` and `legacy/realtime-protocol-v2.schema.json`
+are frozen snapshots. No generator or runtime code consumes them. Their only
+schema-validation consumer is the isolated
 `src/client/protocol/schema/legacy/contract.test.ts`, which checks the exact
-bytes pinned by the transition proxy and the old content-only contract.
+bytes pinned by the transition proxy, the old content-only v1 contract, and that
+v2 rejects the v3 additions. v3 is v2 plus the `fragment` server message and the
+`row_too_large` subscription error code; its fixtures are in
+`src/client/protocol/schema/fragment-messages.fixtures.json`.
 The shared protocol fixtures belong to the active codec and contract tests.
 
 Existing versioned package exports retain their original contracts:
 
-- `@neon/realtime/schema/realtime-protocol-v2.schema.json` aliases the active
-  protocol schema, currently v2.
+- `@neon/realtime/schema/realtime-protocol-v3.schema.json` aliases the active
+  protocol schema, currently v3.
+- `@neon/realtime/schema/realtime-protocol-v2.schema.json` resolves to the frozen
+  v2 snapshot, byte-for-byte the v2 schema the transition proxy pins.
 - `@neon/realtime/schema/realtime-query-capability-v1.schema.json` aliases the
   active capability schema, currently v1.
 - `@neon/realtime/schema/realtime-protocol-v1.schema.json` resolves to the frozen
@@ -63,8 +69,15 @@ migration.
 The transition server from Hadron #11138 accepts `neon.realtime.v1` and
 `neon.realtime.v2` and delivers ordered results as complete replacements, so
 existing v1 clients and the new v2 SDK can connect during rollout. This SDK
-still requests v2 only. Enabling incremental ordered delivery and requiring
-v2 belongs to the separate activation deployment after the client upgrade.
+requests `neon.realtime.v3` and falls back to v2, so it keeps working against
+that transition server. A server that also accepts v3 sends fragments only on
+v3 connections. Enabling incremental ordered delivery and requiring v2 belongs
+to the separate activation deployment after the client upgrade.
+
+V3 adds the `fragment` server message and the `row_too_large` subscription error
+code to v2, and changes nothing else. Concatenating the `data` of fragments
+`0..n` of one `id` yields one complete server message that is not a fragment;
+validate that assembled message as usual.
 
 V2 keeps the existing envelopes and adds `move` with required `row_key` and
 `after_row_key`; the latter is a row key or null for head. Validate normalized

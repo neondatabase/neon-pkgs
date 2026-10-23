@@ -432,6 +432,16 @@ specific mutation; pre-existing or unrelated rows can otherwise satisfy it.
 Raw subscriptions do not expose `awaitRows()` because they do not retain the
 complete result.
 
+### Large rows
+
+A result row can be up to 4 MiB. A message larger than the service's WebSocket
+message limit arrives as fragments on `neon.realtime.v3`, which the client
+prefers and reassembles before decoding. A row past 4 MiB fails only the
+subscriptions whose result contains it, with the terminal error
+`row_too_large`. It is not retried: select fewer or smaller columns, or keep
+the values below the limit. A server that speaks only `neon.realtime.v2`
+cannot fragment, so it cannot deliver a row larger than its message limit.
+
 ### Raw subscriptions
 
 The default subscription materializes query rows. Integrations that own their
@@ -546,8 +556,10 @@ Custom raw consumers should follow the complete-batch staging and validation
 requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
-The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
-transition server that accepts v1 and v2 before releasing upgraded clients.
+The SDK requests `neon.realtime.v3` and falls back to `neon.realtime.v2`,
+including on reconnect; v3 is v2 plus message fragments and the `row_too_large`
+error. Deploy a transition server that accepts v1 and v2 before releasing
+upgraded clients.
 During transition, ordered queries receive complete replacements. Activation
 replaces the server deployment, closes old sessions, requires v2, and enables
 ordered patches. An old browser tab must upgrade or reload to reconnect.
@@ -557,12 +569,13 @@ can roll back to replacement-only delivery while continuing to accept v2.
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
 `@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
 v1). Their filenames stay stable across revisions; `$id` and `title` retain each
 contract's version.
 
 Existing versioned exports continue to resolve to their original contracts. The
+v2 protocol export resolves to a frozen snapshot of v2. The
 v1 protocol export is deprecated and resolves to a frozen legacy snapshot,
 separate from the active generator and tests. It remains available throughout
 0.2 and is scheduled for removal at the next compatibility-breaking release.
