@@ -1,5 +1,11 @@
 # neon
 
+## 8.11.1
+
+### Patch Changes
+
+- bfa8a0e: `neon functions new` now saves a template's dependencies at the exact version the template pins (`-E`), instead of the package manager's default caret range. The printed install command does the same.
+
 ## 8.11.0
 
 ### Minor Changes
