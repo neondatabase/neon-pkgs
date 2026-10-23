@@ -372,6 +372,16 @@ describe("Realtime v1 JSON codec", () => {
 		);
 	});
 
+	it("accepts capabilities larger than the former 256 KiB limit", () => {
+		expect(() =>
+			encodeClientMessage({
+				type: "subscribe",
+				request_id: "1",
+				authorization: "x".repeat(256 * 1024 + 1),
+			}),
+		).not.toThrow();
+	});
+
 	it("rejects invalid outbound identifiers and bounds", () => {
 		expect(() =>
 			encodeClientMessage({

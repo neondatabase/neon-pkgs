@@ -186,14 +186,6 @@ function jsonPointerPath(pointer: string): string {
 
 function validateClientUtf8Limits(message: WireRecord): void {
 	switch (wireString(message, "type")) {
-		case "subscribe":
-		case "renew":
-			assertMaxUtf8Bytes(
-				wireString(message, "authorization"),
-				"authorization",
-				262_144,
-			);
-			break;
 		case "ping":
 		case "pong":
 			assertMaxUtf8Bytes(wireString(message, "token"), "token", 64);
