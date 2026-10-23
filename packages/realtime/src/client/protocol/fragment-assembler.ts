@@ -2,9 +2,11 @@ import { ProtocolError } from "./codec.js";
 
 /**
  * Maximum assembled message length in JS string code units (UTF-16 code units).
- * This is 32 MiB as specified in the protocol.
+ * One server message carries at most 8 MiB of result data, and JSON escapes a
+ * control character as six characters, so the largest message is about
+ * 48 Mi code units. This bound sits above it.
  */
-export const MAX_ASSEMBLED_MESSAGE_LENGTH = 33_554_432;
+export const MAX_ASSEMBLED_MESSAGE_LENGTH = 67_108_864;
 
 /**
  * Manages reassembly of fragmented server messages.
