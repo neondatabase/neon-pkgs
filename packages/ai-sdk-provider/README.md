@@ -108,7 +108,7 @@ getNeonModelCapabilities('gpt-6-astra').supportsTemperature; // false
 getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 ```
 
-**The rules are per model, not per family.** Some Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash`, `gemini-3-7-flash`, `gemini-3-8-flash`, and `gemini-4-argon` reject `temperature` and `topP` outright, so reading a row for "Gemini" is not enough; check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions. `getNeonModelCapabilities('gpt-6-astra').supportsTemperature` is `false` because [neon.com/models.json](https://neon.com/models.json) lists `temperature: false` for that id; it is not a live gateway measurement.
+**The rules are per model, not per family.** Some Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash`, `gemini-3-7-flash`, `gemini-3-8-flash`, and `gemini-4-argon` reject `temperature` and `topP` outright, so reading a row for "Gemini" is not enough; check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions.
 
 A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess. That is also why the table can lag: an id added since the last release inherits the permissive default until someone measures it.
 
