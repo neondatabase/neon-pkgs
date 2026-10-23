@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { NEON_MODELS_DEV_IDS } from "./neon-chat-options.js";
 import { NEON_EMBEDDING_MODEL_IDS } from "./neon-embedding-options.js";
-import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
+import {
+	getNeonModelCapabilities,
+	getNeonModelRoute,
+} from "./neon-model-capabilities.js";
 
 /**
  * Maintainer-only guard against catalog drift. https://neon.com/models.json is
@@ -108,14 +111,23 @@ describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
 		});
 	});
 
-	it("keeps gpt-6-astra temperature aligned with the catalog", async () => {
-		const models = await fetchNeonCatalogModels();
-		const catalog = catalogTemperature(models["gpt-6-astra"]);
-		const reported =
-			getNeonModelCapabilities("gpt-6-astra").supportsTemperature;
-		expect({ catalog, reported }).toEqual({
-			catalog: false,
-			reported: false,
-		});
+	// Checked for every released model on the Responses route, so a newly listed
+	// gpt-* id cannot inherit a permissive default unnoticed. The catalog value
+	// describes each model's default reasoning effort.
+	it("keeps Responses-route supportsTemperature aligned with the catalog", async () => {
+		const entries = Object.entries(await fetchNeonCatalogModels());
+		const mismatched = entries
+			.filter(
+				([id, entry]) =>
+					isReleased(entry) && getNeonModelRoute(id) === "openai",
+			)
+			.filter(
+				([id, entry]) =>
+					catalogTemperature(entry) !==
+					getNeonModelCapabilities(id).supportsTemperature,
+			)
+			.map(([id]) => id)
+			.sort();
+		expect(mismatched).toEqual([]);
 	});
 });

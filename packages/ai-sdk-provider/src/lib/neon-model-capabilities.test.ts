@@ -63,13 +63,21 @@ describe("getNeonModelCapabilities", () => {
 		expect(caps.supportsTopP).toBe(true);
 	});
 
-	it("marks gpt-6-astra without temperature support", () => {
-		const caps = getNeonModelCapabilities("gpt-6-astra");
-		expect(caps.family).toBe("openai");
-		expect(caps.supportsTemperature).toBe(false);
+	it("marks the measured gpt-6 ids without temperature or topP support", () => {
+		for (const id of [
+			"gpt-6-astra",
+			"gpt-6-sol",
+			"gpt-6-luna",
+			"gpt-6-1-sol",
+		]) {
+			const caps = getNeonModelCapabilities(id);
+			expect(caps.family).toBe("openai");
+			expect(caps.supportsTemperature).toBe(false);
+			expect(caps.supportsTopP).toBe(false);
+		}
 	});
 
-	it("does not inherit gpt-6-astra temperature onto other gpt-6 ids", () => {
+	it("does not inherit the measured gpt-6 restrictions onto other gpt-6 ids", () => {
 		const caps = getNeonModelCapabilities("gpt-6-future");
 		expect(caps.family).toBe("other");
 		expect(caps.supportsTemperature).toBe(true);
@@ -233,7 +241,7 @@ describe("getNeonModelCapabilities", () => {
 		});
 
 		// Its siblings on the same rule are unaffected.
-		expect(getNeonModelCapabilities("gpt-5-5").supportsTemperature).toBe(
+		expect(getNeonModelCapabilities("gpt-5-4").supportsTemperature).toBe(
 			true,
 		);
 		expect(getNeonModelCapabilities("gpt-5-1").supportsTemperature).toBe(
