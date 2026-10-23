@@ -317,7 +317,7 @@ export const builder = (argv: yargs.Argv) => {
 									},
 									resources: {
 										describe:
-											"Protected resource URLs to link the client to; each must be configured with `config oauth-server update --resources`",
+											"Protected resource URLs to link the client to; each must be configured with `neon-auth config oauth-server resource add`",
 										type: "string",
 										array: true,
 										demandOption: true,
@@ -803,7 +803,7 @@ export const builder = (argv: yargs.Argv) => {
 							)
 							.command(
 								"resource",
-								"Manage the protected resources of the OAuth server",
+								"Manage the protected resources of the OAuth server. Add and remove read the stored list and write back the full list, so concurrent changes by others can be overwritten",
 								(yargs) =>
 									yargs
 										.usage(
@@ -821,7 +821,7 @@ export const builder = (argv: yargs.Argv) => {
 										)
 										.command(
 											"add <url...>",
-											"Add protected resources",
+											"Add protected resources (reads the stored list and writes back the full list; concurrent changes by others can be overwritten)",
 											(yargs) =>
 												yargs.positional("url", {
 													describe:
@@ -838,7 +838,7 @@ export const builder = (argv: yargs.Argv) => {
 										)
 										.command(
 											"remove <url...>",
-											"Remove protected resources",
+											"Remove protected resources (reads the stored list and writes back the full list; concurrent changes by others can be overwritten)",
 											(yargs) =>
 												yargs.positional("url", {
 													describe:
@@ -1791,7 +1791,7 @@ type OAuthServerUpdateProps = AuthBranchProps & {
  */
 const resolveMcpUpdate = async (
 	props: OAuthServerUpdateProps,
-	branchId: string,
+	getStoredMcp: () => Promise<OAuthServerConfig["mcp"]>,
 ) => {
 	const {
 		mcpResource,
@@ -1810,12 +1810,7 @@ const resolveMcpUpdate = async (
 		dynamicRegistration !== undefined &&
 		clientIdMetadataDocuments !== undefined
 			? undefined
-			: (
-					await props.apiClient.getNeonAuthOAuthProviderPlugin(
-						props.projectId,
-						branchId,
-					)
-				).data.mcp;
+			: await getStoredMcp();
 	const resource = mcpResource ?? stored?.resource;
 	if (!resource) {
 		throw new Error(
@@ -1829,6 +1824,30 @@ const resolveMcpUpdate = async (
 		client_id_metadata_documents:
 			clientIdMetadataDocuments ?? stored?.client_id_metadata_documents,
 	};
+};
+
+/** Order-preserving dedupe: repeated values would otherwise be sent to the API as duplicates. */
+const unique = (values: string[]) => [...new Set(values)];
+
+/** Fails before any request when a list flag was passed with no values. */
+const requireNonEmptyLists = (lists: [flag: string, values?: string[]][]) => {
+	for (const [flag, values] of lists) {
+		if (values?.length === 0) {
+			throw new Error(`${flag} must list at least one value.`);
+		}
+	}
+};
+
+/** The MCP resource is linked to MCP clients on its own, so it cannot also be a protected resource. */
+const rejectMcpResourceCollision = (
+	urls: string[],
+	mcpResource: string | undefined,
+) => {
+	if (mcpResource && urls.includes(mcpResource)) {
+		throw new Error(
+			`${mcpResource} is the MCP resource and cannot also be a protected resource.`,
+		);
+	}
 };
 
 /** Checked before any request so a malformed invocation never reaches the API. */
@@ -1884,11 +1903,23 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 	);
 	validateOAuthServerUpdate(props);
 	const branchId = await resolveBranch(props);
+	let storedMcp: Promise<OAuthServerConfig["mcp"]> | undefined;
+	const getStoredMcp = () =>
+		(storedMcp ??= props.apiClient
+			.getNeonAuthOAuthProviderPlugin(props.projectId, branchId)
+			.then(({ data }) => data.mcp));
 	// The API clears the MCP configuration when `resource` is the empty string.
 	const mcp =
 		props.mcp === false
 			? { resource: "" }
-			: await resolveMcpUpdate(props, branchId);
+			: await resolveMcpUpdate(props, getStoredMcp);
+	const resources = props.resources && unique(props.resources);
+	if (resources && props.mcp !== false) {
+		rejectMcpResourceCollision(
+			resources,
+			mcp?.resource ?? (await getStoredMcp())?.resource,
+		);
+	}
 	const { data } = await props.apiClient.updateNeonAuthOAuthProviderPlugin(
 		props.projectId,
 		branchId,
@@ -1897,7 +1928,7 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 			login_page: props.loginPage,
 			consent_page: props.consentPage,
 			mcp,
-			resources: props.resources?.map((identifier) => ({ identifier })),
+			resources: resources?.map((identifier) => ({ identifier })),
 		},
 	);
 	if (props.output === "json" || props.output === "yaml") {
@@ -1911,9 +1942,6 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 };
 
 // --- OAuth server resources ---
-
-/** The API caps the list at this many protected resources. */
-const MAX_OAUTH_RESOURCES = 10;
 
 const getStoredOAuthServer = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
@@ -1962,36 +1990,27 @@ const oauthResourceList = async (props: AuthBranchProps) => {
 };
 
 const oauthResourceAdd = async (props: AuthBranchProps & { url: string[] }) => {
-	const urls = [...new Set(props.url)];
+	const urls = unique(props.url);
 	const { branchId, mcpResource, stored } = await getStoredOAuthServer(props);
 	const duplicates = urls.filter((url) => stored.includes(url));
 	if (duplicates.length > 0) {
 		throw new Error(`Already configured: ${duplicates.join(", ")}.`);
 	}
-	if (mcpResource && urls.includes(mcpResource)) {
-		throw new Error(
-			`${mcpResource} is the MCP resource and cannot also be a protected resource.`,
-		);
-	}
-	if (stored.length + urls.length > MAX_OAUTH_RESOURCES) {
-		throw new Error(
-			`A branch supports at most ${MAX_OAUTH_RESOURCES} protected resources; adding ${urls.length} to ${stored.length} would make ${stored.length + urls.length}.`,
-		);
-	}
+	rejectMcpResourceCollision(urls, mcpResource);
 	await replaceOAuthResources(props, branchId, [...stored, ...urls]);
 };
 
 const oauthResourceRemove = async (
 	props: AuthBranchProps & { url: string[] },
 ) => {
-	const urls = [...new Set(props.url)];
+	const urls = unique(props.url);
 	const { branchId, stored } = await getStoredOAuthServer(props);
 	const unknown = urls.filter((url) => !stored.includes(url));
 	if (unknown.length > 0) {
 		throw new Error(`Not configured: ${unknown.join(", ")}.`);
 	}
-	// The API keeps a removed resource linked to its clients, where it silently
-	// fails token requests, so surface those clients before the change.
+	// Clients keep the removed resource in their own list, so their token
+	// requests for it may start failing; surface them once the change is applied.
 	const { data } = await props.apiClient.listNeonAuthOAuthClients(
 		props.projectId,
 		branchId,
@@ -1999,20 +2018,20 @@ const oauthResourceRemove = async (
 	const linked = data.clients.filter((client) =>
 		client.resources.some((resource) => urls.includes(resource)),
 	);
+	await replaceOAuthResources(
+		props,
+		branchId,
+		stored.filter((url) => !urls.includes(url)),
+	);
 	if (linked.length > 0) {
 		log.warning(
 			`Clients still linked to a removed resource: ${linked
 				.map((client) => `"${client.name}" (${client.client_id})`)
 				.join(
 					", ",
-				)}. Their token requests for it will fail with invalid_target until it is added again.`,
+				)}. Their token requests for that resource may fail until it is added again.`,
 		);
 	}
-	await replaceOAuthResources(
-		props,
-		branchId,
-		stored.filter((url) => !urls.includes(url)),
-	);
 };
 
 // --- OAuth clients ---
@@ -2087,6 +2106,10 @@ const oauthClientCreate = async (
 		skipConsent?: boolean;
 	},
 ) => {
+	requireNonEmptyLists([
+		["--redirect-uris", props.redirectUris],
+		["--resources", props.resources],
+	]);
 	const branchId = await resolveBranch(props);
 	const { data } = await props.apiClient.createNeonAuthOAuthClient(
 		props.projectId,
@@ -2094,8 +2117,8 @@ const oauthClientCreate = async (
 		{
 			name: props.name,
 			type: props.type,
-			redirect_uris: props.redirectUris,
-			resources: props.resources,
+			redirect_uris: unique(props.redirectUris),
+			resources: unique(props.resources),
 			skip_consent: props.skipConsent,
 		},
 	);
@@ -2134,16 +2157,10 @@ const oauthClientUpdate = async (
 		disabled?: boolean;
 	},
 ) => {
-	for (const [flag, values] of [
+	requireNonEmptyLists([
 		["--redirect-uris", props.redirectUris],
 		["--resources", props.resources],
-	] as const) {
-		if (values?.length === 0) {
-			throw new Error(
-				`${flag} must list at least one value; the API does not accept an empty list.`,
-			);
-		}
-	}
+	]);
 	requireUpdateFields(
 		[
 			props.name,
@@ -2167,8 +2184,8 @@ const oauthClientUpdate = async (
 		props.clientId,
 		{
 			name: props.name,
-			redirect_uris: props.redirectUris,
-			resources: props.resources,
+			redirect_uris: props.redirectUris && unique(props.redirectUris),
+			resources: props.resources && unique(props.resources),
 			skip_consent: props.skipConsent,
 			disabled: props.disabled,
 		},

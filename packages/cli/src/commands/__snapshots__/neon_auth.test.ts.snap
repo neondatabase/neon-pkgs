@@ -150,6 +150,20 @@ secret-shown-once
 "
 `;
 
+exports[`neon-auth > oauth-client create dedupes redirect URIs and resources 1`] = `
+"client_id: client-abc123
+name: App
+type: public
+redirect_uris:
+  - https://app.example.com/cb
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
 exports[`neon-auth > oauth-client create json includes the secret 1`] = `
 "{
   "client_id": "client-abc123",
@@ -183,6 +197,10 @@ OAuth client
 
 "
 `;
+
+exports[`neon-auth > oauth-client create rejects empty --redirect-uris before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects empty --resources before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client delete 1`] = `
 "
@@ -287,6 +305,20 @@ created_at: 2026-01-01T00:00:00Z
 "
 `;
 
+exports[`neon-auth > oauth-client update dedupes redirect URIs and resources 1`] = `
+"client_id: client-abc123
+name: My MCP client
+type: confidential
+redirect_uris:
+  - https://app.example.com/cb
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
 exports[`neon-auth > oauth-client update rejects empty --redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client update rejects empty --resources before any request 1`] = `""`;
@@ -361,6 +393,33 @@ mcp:
 `;
 
 exports[`neon-auth > oauth-server update --no-mcp conflicts with the other MCP flags 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --resources dedupes URLs 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+resources:
+  - identifier: https://b.example.com
+  - identifier: https://a.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update --resources reads the stored config once when it also merges MCP flags 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --resources rejects the --mcp-resource value without reading the stored config 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --resources rejects the stored MCP resource 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --resources with --no-mcp skips the MCP collision check 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: ""
+resources:
+  - identifier: https://stored.example.com/mcp
+"
+`;
 
 exports[`neon-auth > oauth-server update 1`] = `
 "enabled: true
@@ -506,9 +565,13 @@ oauth_provider:
 "
 `;
 
-exports[`neon-auth > resource add rejects duplicates 1`] = `""`;
+exports[`neon-auth > resource add dedupes URLs repeated in the input 1`] = `
+"- identifier: https://api.example.com
+- identifier: https://new.example.com
+"
+`;
 
-exports[`neon-auth > resource add rejects more than 10 resources 1`] = `""`;
+exports[`neon-auth > resource add rejects duplicates 1`] = `""`;
 
 exports[`neon-auth > resource add rejects the MCP resource 1`] = `""`;
 
@@ -536,6 +599,8 @@ No protected resources are configured
 
 "
 `;
+
+exports[`neon-auth > resource remove does not warn about linked clients when the PATCH fails 1`] = `""`;
 
 exports[`neon-auth > resource remove does not warn when no client is linked 1`] = `
 "- identifier: https://a.example.com
