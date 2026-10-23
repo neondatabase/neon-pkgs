@@ -432,6 +432,15 @@ specific mutation; pre-existing or unrelated rows can otherwise satisfy it.
 Raw subscriptions do not expose `awaitRows()` because they do not retain the
 complete result.
 
+### Large rows
+
+A result row can be up to 4 MiB. A message larger than the service's WebSocket
+message limit arrives as fragments on `neon.realtime.v2`, which the client
+negotiates and reassembles before decoding. A row past 4 MiB fails only the
+subscriptions whose result contains it, with the terminal error
+`row_too_large`. It is not retried: select fewer or smaller columns, or keep
+the values below the limit.
+
 ### Raw subscriptions
 
 The default subscription materializes query rows. Integrations that own their
