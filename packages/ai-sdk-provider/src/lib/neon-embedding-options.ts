@@ -5,6 +5,7 @@
 
 /** Published embedding model ids from https://neon.com/models.json. */
 export const NEON_EMBEDDING_MODEL_IDS = [
+	"bge-large-en",
 	"gte-large-en",
 	"qwen3-embedding-0-6b",
 ] as const;

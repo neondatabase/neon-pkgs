@@ -108,6 +108,8 @@ describe("getNeonModelCapabilities", () => {
 			"claude-opus-5",
 			"claude-sonnet-5",
 			"claude-fable-5",
+			"claude-haiku-5-5",
+			"claude-sonnet-5-5",
 		]) {
 			const caps = getNeonModelCapabilities(id);
 			expect({
@@ -140,7 +142,8 @@ describe("getNeonModelCapabilities", () => {
 	});
 
 	// Every MLflow-routed family except the older Gemini models rejects
-	// penalties with `parameter "frequency_penalty" must be equal to 0`.
+	// penalties, most with `parameter "frequency_penalty" must be equal to 0`;
+	// grok and deepseek return a generic rejection instead.
 	it("drops penalties for every unified-endpoint family that rejects them", () => {
 		for (const id of [
 			"gpt-oss-20b",
@@ -149,8 +152,12 @@ describe("getNeonModelCapabilities", () => {
 			"qwen3-next-80b-a3b-instruct",
 			"gemma-3-12b",
 			"glm-5-2",
+			"glm-5-3",
 			"inkling",
 			"kimi-k3",
+			"grok-4-6",
+			"grok-4-7",
+			"deepseek-v4-1-flash",
 		]) {
 			expect({
 				id,
@@ -158,6 +165,25 @@ describe("getNeonModelCapabilities", () => {
 			}).toEqual({
 				id,
 				penalties: false,
+			});
+		}
+	});
+
+	it("keeps sampling, seed, and stop for grok and deepseek", () => {
+		for (const id of ["grok-4-6", "grok-4-7", "deepseek-v4-1-flash"]) {
+			const caps = getNeonModelCapabilities(id);
+			expect({
+				id,
+				temperature: caps.supportsTemperature,
+				topP: caps.supportsTopP,
+				seed: caps.supportsSeed,
+				stop: caps.supportsStopSequences,
+			}).toEqual({
+				id,
+				temperature: true,
+				topP: true,
+				seed: true,
+				stop: true,
 			});
 		}
 	});
@@ -184,6 +210,9 @@ describe("getNeonModelCapabilities", () => {
 			"gemini-3-5-flash-lite",
 			"gemini-3-6-flash",
 			"databricks-gemini-3-6-flash",
+			"gemini-3-7-flash",
+			"gemini-3-8-flash",
+			"gemini-4-argon",
 		]) {
 			expect({
 				id,
@@ -253,12 +282,20 @@ describe("getNeonModelCapabilities", () => {
 		}).toEqual({ penalties: false, temperature: false, topP: false });
 	});
 
-	it("drops temperature and topP for gemini-3-6-flash only", () => {
-		const strict = getNeonModelCapabilities("gemini-3-6-flash");
-		expect({
-			temperature: strict.supportsTemperature,
-			topP: strict.supportsTopP,
-		}).toEqual({ temperature: false, topP: false });
+	it("drops temperature and topP for the measured strict Gemini ids", () => {
+		for (const id of [
+			"gemini-3-6-flash",
+			"gemini-3-7-flash",
+			"gemini-3-8-flash",
+			"gemini-4-argon",
+		]) {
+			const strict = getNeonModelCapabilities(id);
+			expect({
+				id,
+				temperature: strict.supportsTemperature,
+				topP: strict.supportsTopP,
+			}).toEqual({ id, temperature: false, topP: false });
+		}
 
 		const lenient = getNeonModelCapabilities("gemini-3-5-flash-lite");
 		expect({
@@ -314,6 +351,7 @@ describe("getNeonModelCapabilities", () => {
 			"gpt-5-1",
 			"gpt-6-astra",
 			"gemini-3-flash",
+			"gemini-4-argon",
 			"llama-4-maverick",
 			"qwen35-122b-a10b",
 		];

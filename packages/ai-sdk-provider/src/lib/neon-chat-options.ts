@@ -7,7 +7,7 @@
 // `databricks-` prefixed form, which still resolves via the `(string & {})`
 // fallback on `NeonChatModelId`.
 //
-// `NEON_MODELS_DEV_IDS` mirrors the `released: true` entries of
+// `NEON_MODELS_DEV_IDS` mirrors the `released: true` chat entries of
 // neon.com/models.json `neon.models` exactly — `neon-catalog-drift.test.ts`
 // fails if the two diverge. A branch's live list
 // is `GET $NEON_AI_GATEWAY_BASE_URL/v1/models`. There is deliberately no second
@@ -20,6 +20,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"claude-fable-5",
 	"claude-fable-5-1",
 	"claude-haiku-4-5",
+	"claude-haiku-5-5",
 	"claude-opus-4-1",
 	"claude-opus-4-5",
 	"claude-opus-4-6",
@@ -30,6 +31,7 @@ export const NEON_MODELS_DEV_IDS = [
 	"claude-sonnet-4-5",
 	"claude-sonnet-4-6",
 	"claude-sonnet-5",
+	"claude-sonnet-5-5",
 	// OpenAI (native Responses API)
 	"gpt-5",
 	"gpt-5-1",
@@ -45,7 +47,10 @@ export const NEON_MODELS_DEV_IDS = [
 	"gpt-5-6-terra",
 	"gpt-5-mini",
 	"gpt-5-nano",
+	"gpt-6-1-sol",
 	"gpt-6-astra",
+	"gpt-6-luna",
+	"gpt-6-sol",
 	// OpenAI open-weight (unified MLflow endpoint)
 	"gpt-oss-120b",
 	"gpt-oss-20b",
@@ -55,7 +60,10 @@ export const NEON_MODELS_DEV_IDS = [
 	"gemini-3-5-flash",
 	"gemini-3-5-flash-lite",
 	"gemini-3-6-flash",
+	"gemini-3-7-flash",
+	"gemini-3-8-flash",
 	"gemini-3-flash",
+	"gemini-4-argon",
 	"gemma-3-12b",
 	// Meta (unified MLflow endpoint)
 	"llama-4-maverick",
@@ -66,13 +74,17 @@ export const NEON_MODELS_DEV_IDS = [
 	"qwen35-122b-a10b",
 	// Zhipu (unified MLflow endpoint)
 	"glm-5-2",
+	"glm-5-3",
 	"glm-5-3-flash",
 	// xAI (unified MLflow endpoint)
 	"grok-4-6",
+	"grok-4-7",
 	// Thinking Machines (unified MLflow endpoint)
 	"inkling",
 	// Moonshot (unified MLflow endpoint)
 	"kimi-k3",
+	// DeepSeek (unified MLflow endpoint)
+	"deepseek-v4-1-flash",
 ] as const;
 
 /** A known Neon AI Gateway model id. */

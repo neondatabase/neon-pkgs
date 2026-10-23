@@ -7,7 +7,9 @@ import { getNeonModelCapabilities } from "./neon-model-capabilities.js";
  * Maintainer-only guard against catalog drift. https://neon.com/models.json is
  * the published catalog this package's typed id lists must match; this test
  * fails when `NEON_MODELS_DEV_IDS` (chat) or `NEON_EMBEDDING_MODEL_IDS`
- * (`"type": "embedding"` entries) no longer mirror it.
+ * (`"type": "embedding"` entries) no longer mirror it. `"type": "decision"`
+ * entries are System One models called through `neon.decisionModel()`, not
+ * chat, so neither list carries them.
  *
  * It hits the network, so it is opt-in: it runs only when `NEON_DRIFT_CHECK=1`
  * (see the `test:drift` script and the scheduled `catalog-drift` CI workflow),
@@ -58,14 +60,17 @@ function isReleased(entry: unknown): boolean {
 	return entry.released;
 }
 
-function isEmbeddingEntry(entry: unknown): boolean {
+function hasType(entry: unknown, type: string): boolean {
 	return (
 		entry !== null &&
 		typeof entry === "object" &&
 		"type" in entry &&
-		entry.type === "embedding"
+		entry.type === type
 	);
 }
+
+const isEmbeddingEntry = (entry: unknown) => hasType(entry, "embedding");
+const isDecisionEntry = (entry: unknown) => hasType(entry, "decision");
 
 function compareIds(live: readonly string[], declared: readonly string[]) {
 	const liveSet = new Set(live);
@@ -81,7 +86,10 @@ describe.skipIf(!ENABLED)("neon.com/models.json catalog drift", () => {
 		const entries = Object.entries(await fetchNeonCatalogModels());
 		const live = entries
 			.filter(
-				([, entry]) => isReleased(entry) && !isEmbeddingEntry(entry),
+				([, entry]) =>
+					isReleased(entry) &&
+					!isEmbeddingEntry(entry) &&
+					!isDecisionEntry(entry),
 			)
 			.map(([id]) => id);
 		expect(live.length).toBeGreaterThan(0);

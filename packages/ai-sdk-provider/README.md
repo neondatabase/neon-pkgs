@@ -73,14 +73,16 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 
 | Models | Dropped |
 | --- | --- |
-| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, `claude-fable-5-1`) | `temperature`, `topP` |
+| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, `claude-fable-5-1`, `claude-haiku-5-5`, `claude-sonnet-5-5`) | `temperature`, `topP` |
 | All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
-| `glm-5-2`, `glm-5-3-flash`, `inkling`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
+| `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `inkling`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
+| Grok, DeepSeek | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
 | `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
 | `gemini-3-6-flash` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
+| `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
 | Every other Gemini | nothing |
 | `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5-pro` (reported only — Responses strips these upstream) | `temperature`, `topP` |
 
@@ -104,7 +106,7 @@ getNeonModelCapabilities('gpt-6-astra').supportsTemperature; // false
 getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 ```
 
-**The rules are per model, not per family.** Two Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash` rejects `temperature` and `topP` outright, so reading a row for "Gemini" is not enough — check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions. `getNeonModelCapabilities('gpt-6-astra').supportsTemperature` is `false` because [neon.com/models.json](https://neon.com/models.json) lists `temperature: false` for that id; it is not a live gateway measurement.
+**The rules are per model, not per family.** Some Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash`, `gemini-3-7-flash`, `gemini-3-8-flash`, and `gemini-4-argon` reject `temperature` and `topP` outright, so reading a row for "Gemini" is not enough; check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions. `getNeonModelCapabilities('gpt-6-astra').supportsTemperature` is `false` because [neon.com/models.json](https://neon.com/models.json) lists `temperature: false` for that id; it is not a live gateway measurement.
 
 A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess. That is also why the table can lag: an id added since the last release inherits the permissive default until someone measures it.
 
@@ -128,7 +130,7 @@ const { embeddings } = await embedMany({
 });
 ```
 
-Both models return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` ignores it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NeonEmbeddingModelId` autocompletes the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
+`qwen3-embedding-0-6b`, `gte-large-en`, and `bge-large-en` return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` and `bge-large-en` ignore it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NeonEmbeddingModelId` autocompletes the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
 
 ## Decisions
 
