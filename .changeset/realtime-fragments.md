@@ -2,4 +2,4 @@
 "@neon/realtime": minor
 ---
 
-Support message fragmentation on neon.realtime.v2 protocol. Large rows (up to 4 MiB per row) are now delivered in fragments across WebSocket messages. The client offers both neon.realtime.v2 and neon.realtime.v1 protocols; fragment reassembly occurs automatically on negotiated v2 connections. A new terminal error code, `row_too_large`, indicates when a subscription exceeds the row size limit.
+Support message fragmentation on the neon.realtime.v3 protocol. Large rows (up to 4 MiB per row) are now delivered in fragments across WebSocket messages. v3 is v2 plus the `fragment` message and the `row_too_large` subscription error; the client offers neon.realtime.v3 and falls back to neon.realtime.v2, and reassembles fragments automatically on v3 connections. A new terminal error code, `row_too_large`, indicates when a subscription exceeds the row size limit. The active protocol schema is now v3; `@neon/realtime/schema/realtime-protocol-v2.schema.json` resolves to a frozen snapshot of v2.
