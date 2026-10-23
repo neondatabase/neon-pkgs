@@ -1097,6 +1097,32 @@ describe("neon-auth", () => {
 			},
 		);
 		expect(patchBodies(requests)).toEqual([{ resources: [] }]);
+		expect(
+			requests
+				.filter((r) => r.path.includes("/auth/"))
+				.map((r) => `${r.method} ${r.path}`),
+		).toEqual([
+			expect.stringMatching(/^GET .*\/auth\/plugins\/oauth-provider$/),
+			expect.stringMatching(/^PATCH .*\/auth\/plugins\/oauth-provider$/),
+			expect.stringMatching(/^GET .*\/auth\/oauth-provider\/clients$/),
+		]);
+	});
+
+	test("resource remove succeeds without a warning when the client lookup fails", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "remove", "https://a.example.com"),
+			{
+				mockDir: "neon-auth-oauth-server-resources-clients-fail",
+				stderr: "",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([
+			{ resources: [{ identifier: "https://b.example.com" }] },
+		]);
 	});
 
 	test("resource remove does not warn when no client is linked", async ({
@@ -1130,6 +1156,11 @@ describe("neon-auth", () => {
 			},
 		);
 		expect(patchBodies(requests)).toHaveLength(1);
+		expect(
+			requests.filter((r) =>
+				r.path.endsWith("/auth/oauth-provider/clients"),
+			),
+		).toEqual([]);
 	});
 
 	test("resource remove rejects unknown URLs before any change", async ({

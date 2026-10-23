@@ -2033,20 +2033,30 @@ const oauthResourceRemove = async (
 	if (unknown.length > 0) {
 		throw new Error(`Not configured: ${unknown.join(", ")}.`);
 	}
-	// Clients keep the removed resource in their own list, so their token
-	// requests for it may start failing; surface them once the change is applied.
-	const { data } = await props.apiClient.listNeonAuthOAuthClients(
-		props.projectId,
-		branchId,
-	);
-	const linked = data.clients.filter((client) =>
-		client.resources.some((resource) => urls.includes(resource)),
-	);
 	await replaceOAuthResources(
 		props,
 		branchId,
 		stored.filter((url) => !urls.includes(url)),
 	);
+	// Clients keep the removed resource in their own list, so their token
+	// requests for it may start failing. The lookup only feeds this warning, so
+	// a failure must not undo the report of a removal that already succeeded.
+	let linked: OAuthClient[];
+	try {
+		const { data } = await props.apiClient.listNeonAuthOAuthClients(
+			props.projectId,
+			branchId,
+		);
+		linked = data.clients.filter((client) =>
+			client.resources.some((resource) => urls.includes(resource)),
+		);
+	} catch (err) {
+		log.debug(
+			"Could not look up clients linked to the removed resource: %s",
+			err,
+		);
+		return;
+	}
 	if (linked.length > 0) {
 		log.warning(
 			`Clients still linked to a removed resource: ${linked

@@ -693,6 +693,11 @@ exports[`neon-auth > resource remove does not warn when no client is linked 1`] 
 
 exports[`neon-auth > resource remove rejects unknown URLs before any change 1`] = `""`;
 
+exports[`neon-auth > resource remove succeeds without a warning when the client lookup fails 1`] = `
+"- identifier: https://b.example.com
+"
+`;
+
 exports[`neon-auth > resource remove warns about linked clients 1`] = `
 "[]
 "
