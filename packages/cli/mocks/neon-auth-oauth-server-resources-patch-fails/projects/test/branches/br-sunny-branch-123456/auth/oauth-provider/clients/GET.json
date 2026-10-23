@@ -1,0 +1,14 @@
+{
+  "clients": [
+    {
+      "client_id": "client-abc123",
+      "name": "My MCP client",
+      "type": "confidential",
+      "redirect_uris": ["https://app.example.com/callback"],
+      "resources": ["https://a.example.com"],
+      "skip_consent": false,
+      "disabled": false,
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

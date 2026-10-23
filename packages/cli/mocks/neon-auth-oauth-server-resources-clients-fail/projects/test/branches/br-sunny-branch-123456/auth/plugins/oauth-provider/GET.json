@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "login_page": "https://app.example.com/login",
+  "consent_page": "https://app.example.com/consent",
+  "resources": [
+    { "identifier": "https://a.example.com" },
+    { "identifier": "https://b.example.com" }
+  ]
+}

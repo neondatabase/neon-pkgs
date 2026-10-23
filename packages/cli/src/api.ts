@@ -1434,6 +1434,108 @@ export const getApiClient = ({
 					body: data,
 				}),
 			),
+		getNeonAuthOAuthProviderPlugin: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.getNeonAuthOAuthProviderPlugin({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		updateNeonAuthOAuthProviderPlugin: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<
+				raw.UpdateNeonAuthOAuthProviderPluginData["body"]
+			>,
+		) =>
+			call(() =>
+				raw.updateNeonAuthOAuthProviderPlugin({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		listNeonAuthOAuthClients: (projectId: string, branchId: string) =>
+			call(() =>
+				raw.listNeonAuthOAuthClients({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+				}),
+			),
+		createNeonAuthOAuthClient: (
+			projectId: string,
+			branchId: string,
+			data: NonNullable<raw.CreateNeonAuthOAuthClientData["body"]>,
+		) =>
+			call(() =>
+				raw.createNeonAuthOAuthClient({
+					client,
+					path: { project_id: projectId, branch_id: branchId },
+					body: data,
+				}),
+			),
+		getNeonAuthOAuthClient: (
+			projectId: string,
+			branchId: string,
+			clientId: string,
+		) =>
+			call(() =>
+				raw.getNeonAuthOAuthClient({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						client_id: clientId,
+					},
+				}),
+			),
+		updateNeonAuthOAuthClient: (
+			projectId: string,
+			branchId: string,
+			clientId: string,
+			data: NonNullable<raw.UpdateNeonAuthOAuthClientData["body"]>,
+		) =>
+			call(() =>
+				raw.updateNeonAuthOAuthClient({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						client_id: clientId,
+					},
+					body: data,
+				}),
+			),
+		deleteNeonAuthOAuthClient: (
+			projectId: string,
+			branchId: string,
+			clientId: string,
+		) =>
+			call(() =>
+				raw.deleteNeonAuthOAuthClient({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						client_id: clientId,
+					},
+				}),
+			),
+		rotateNeonAuthOAuthClientSecret: (
+			projectId: string,
+			branchId: string,
+			clientId: string,
+		) =>
+			call(() =>
+				raw.rotateNeonAuthOAuthClientSecret({
+					client,
+					path: {
+						project_id: projectId,
+						branch_id: branchId,
+						client_id: clientId,
+					},
+				}),
+			),
 		getNeonAuthWebhookConfig: (projectId: string, branchId: string) =>
 			call(() =>
 				raw.getNeonAuthWebhookConfig({

@@ -9,10 +9,16 @@ import { expect, test as originalTest } from "vitest";
 
 import { log } from "../log";
 
+export type RecordedRequest = {
+	method: string;
+	path: string;
+	body: unknown;
+};
+
 type Fixtures = {
 	runMockServer: (
 		mockDir: string,
-		onRequest?: (request: { method: string; path: string }) => void,
+		onRequest?: (request: RecordedRequest) => void,
 	) => Promise<Server>;
 	testCliCommand: (
 		args: string[],
@@ -24,6 +30,8 @@ type Fixtures = {
 			outputTable?: boolean;
 			output?: "json" | "yaml" | "table";
 			env?: Record<string, string>;
+			/** Called for every request the mock server receives, with its parsed JSON body. */
+			onRequest?: (request: RecordedRequest) => void;
 			/** Working directory to run the forked CLI in (e.g. a temp dir a command scaffolds into). */
 			cwd?: string;
 			/**
@@ -88,13 +96,17 @@ export const test = originalTest.extend<Fixtures>({
 		let startedServer: Server | undefined;
 		await use(async (mockDir, onRequest) => {
 			const app = express();
+			app.use(express.json());
 			if (onRequest) {
 				app.use((req, _res, next) => {
-					onRequest({ method: req.method, path: req.path });
+					onRequest({
+						method: req.method,
+						path: req.path,
+						body: req.body,
+					});
 					next();
 				});
 			}
-			app.use(express.json());
 			app.use(
 				"/",
 				emocks(join(process.cwd(), "mocks", mockDir), {
@@ -138,7 +150,10 @@ export const test = originalTest.extend<Fixtures>({
 				: `http://localhost:${
 						(
 							(
-								await runMockServer(options.mockDir || "main")
+								await runMockServer(
+									options.mockDir || "main",
+									options.onRequest,
+								)
 							).address() as AddressInfo
 						).port
 					}`;

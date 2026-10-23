@@ -25,5 +25,20 @@
       "client_id": ""
     }
   ],
-  "allow_localhost": true
+  "allow_localhost": true,
+  "oauth_provider": {
+    "enabled": true,
+    "login_page": "https://app.example.com/login",
+    "consent_page": "https://app.example.com/consent",
+    "mcp": {
+      "resource": "https://stored.example.com/mcp",
+      "dynamic_registration": true,
+      "client_id_metadata_documents": false
+    },
+    "resources": [
+      {
+        "identifier": "https://api.example.com"
+      }
+    ]
+  }
 }
