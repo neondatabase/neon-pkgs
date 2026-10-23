@@ -9,8 +9,8 @@ import {
 	ProtocolError,
 } from "./index.js";
 import type { ClientMessage } from "./messages.js";
-import fixtures from "./schema/realtime-protocol-v1.fixtures.json";
-import v2Fixtures from "./schema/realtime-protocol-v2.fixtures.json";
+import orderedFixtures from "./schema/ordered-changes.fixtures.json";
+import fixtures from "./schema/realtime-protocol.fixtures.json";
 
 const CLIENT_TYPES = new Set([
 	"subscribe",
@@ -47,11 +47,12 @@ function rejectServerMessage(value: unknown): void {
 
 describe("Realtime v2 JSON codec", () => {
 	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
-		for (const fixture of v2Fixtures.valid)
+		for (const fixture of orderedFixtures.valid)
 			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
 				fixture,
 			);
-		for (const fixture of v2Fixtures.invalid) rejectServerMessage(fixture);
+		for (const fixture of orderedFixtures.invalid)
+			rejectServerMessage(fixture);
 		expect(() =>
 			encodeClientMessage({
 				type: "subscribe",

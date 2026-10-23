@@ -271,7 +271,7 @@ describe("PostgreSQL result parsers", () => {
 		);
 	});
 
-	it("enforces the protocol v1 OID/codec mapping", () => {
+	it("enforces the protocol OID/codec mapping", () => {
 		expect(() =>
 			validateColumns([{ ...TEXT_COLUMN, type_oid: pgTypeOids.bytea }]),
 		).toThrow("requires the bytes codec");

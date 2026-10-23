@@ -556,9 +556,17 @@ can roll back to replacement-only delivery while continuing to accept v2.
 
 ## Protocol schemas
 
-The package exports its versioned protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol-v2.schema.json` and
-`@neon/realtime/schema/realtime-query-capability-v1.schema.json`.
-The v1 protocol schema remains exported for compatibility fixtures.
-See the [schema maintenance notes](schema/README.md) for generation and
-downstream synchronization.
+The package exports the active protocol and decoded capability schemas at
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
+`@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
+v1). Their filenames stay stable across revisions; `$id` and `title` retain each
+contract's version.
+
+Existing versioned exports continue to resolve to their original contracts. The
+v1 protocol export is deprecated and resolves to a frozen legacy snapshot,
+separate from the active generator and tests. It remains available throughout
+0.2 and is scheduled for removal at the next compatibility-breaking release.
+This layout change preserves the wire contracts and Hadron #11138's existing
+pins; its transition server continues to accept both v1 and v2 clients.
+See the [schema maintenance notes](schema/README.md) for generation, legacy
+removal and downstream synchronization.
