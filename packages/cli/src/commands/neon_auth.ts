@@ -189,7 +189,7 @@ export const builder = (argv: yargs.Argv) => {
 		)
 		.command(
 			"oauth-provider",
-			"Manage social login providers (Google, GitHub, Vercel)",
+			`Manage social login providers (${SUPPORTED_OAUTH_PROVIDERS.join(", ")})`,
 			(yargs) => {
 				return yargs
 					.usage(
@@ -1923,6 +1923,11 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 		rejectMcpResourceCollision(
 			resources,
 			mcp?.resource ?? (await getStoredMcp())?.resource,
+		);
+	}
+	if (props.mcpDynamicRegistration !== undefined) {
+		log.warning(
+			"--mcp-dynamic-registration is deprecated. Use --mcp-client-id-metadata-documents instead.",
 		);
 	}
 	const { data } = await props.apiClient.updateNeonAuthOAuthProviderPlugin(

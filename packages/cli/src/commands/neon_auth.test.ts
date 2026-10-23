@@ -906,33 +906,50 @@ describe("neon-auth", () => {
 	test("oauth-server update disables dynamic registration", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand([
-			"neon-auth",
-			"config",
-			"oauth-server",
-			"update",
-			"--no-mcp-dynamic-registration",
-			"--project-id",
-			"test",
-			"--branch",
-			"test_branch",
-		]);
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--no-mcp-dynamic-registration",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				onRequest: (r) => requests.push(r),
+				stderr: "WARNING: --mcp-dynamic-registration is deprecated. Use --mcp-client-id-metadata-documents instead.",
+			},
+		);
+		expect(mcpPatchBodies(requests)).toHaveLength(1);
+		expect(mcpPatchBodies(requests)[0]).toMatchObject({
+			mcp: { dynamic_registration: false },
+		});
 	});
 
 	test("oauth-server update sends no mcp without an mcp flag", async ({
 		testCliCommand,
 	}) => {
-		await testCliCommand([
-			"neon-auth",
-			"config",
-			"oauth-server",
-			"update",
-			"--no-enabled",
-			"--project-id",
-			"test",
-			"--branch",
-			"test_branch",
-		]);
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--no-enabled",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(oauthProviderGets(requests)).toEqual([]);
+		expect(mcpPatchBodies(requests)).toEqual([{ enabled: false }]);
 	});
 
 	// --- OAuth server resources ---
