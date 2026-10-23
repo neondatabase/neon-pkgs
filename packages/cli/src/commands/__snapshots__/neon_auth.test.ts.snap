@@ -389,6 +389,8 @@ login_page: https://app.example.com/login
 consent_page: https://app.example.com/consent
 mcp:
   resource: ""
+resources:
+  - identifier: https://api.example.com
 "
 `;
 
@@ -398,6 +400,10 @@ exports[`neon-auth > oauth-server update --resources dedupes URLs 1`] = `
 "enabled: true
 login_page: https://app.example.com/login
 consent_page: https://app.example.com/consent
+mcp:
+  resource: https://stored.example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: false
 resources:
   - identifier: https://b.example.com
   - identifier: https://a.example.com
@@ -443,10 +449,27 @@ mcp:
   resource: https://stored.example.com/mcp
   dynamic_registration: false
   client_id_metadata_documents: false
+resources:
+  - identifier: https://api.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update lets --resources reuse the stored MCP resource when --mcp-resource replaces it 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://new.example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: false
+resources:
+  - identifier: https://stored.example.com/mcp
 "
 `;
 
 exports[`neon-auth > oauth-server update rejects --mcp 1`] = `""`;
+
+exports[`neon-auth > oauth-server update rejects --no-mcp-resource before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-server update rejects an empty MCP resource before any request 1`] = `""`;
 
@@ -460,6 +483,8 @@ mcp:
   resource: https://stored.example.com/mcp
   dynamic_registration: true
   client_id_metadata_documents: true
+resources:
+  - identifier: https://api.example.com
 "
 `;
 
@@ -467,6 +492,12 @@ exports[`neon-auth > oauth-server update sends no mcp without an mcp flag 1`] = 
 "enabled: false
 login_page: https://app.example.com/login
 consent_page: https://app.example.com/consent
+mcp:
+  resource: https://stored.example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: false
+resources:
+  - identifier: https://api.example.com
 "
 `;
 
@@ -486,10 +517,10 @@ OAuth server configuration updated
   Enabled:          true
   Login Page:       https://app.example.com/login
   Consent Page:     https://app.example.com/consent
-  MCP Resource:     
-  MCP CIMD:         
-  MCP Dynamic Reg:  
-  Resources:        
+  MCP Resource:     https://stored.example.com/mcp
+  MCP CIMD:         false
+  MCP Dynamic Reg:  true
+  Resources:        https://api.example.com
 
 "
 `;
@@ -502,6 +533,8 @@ mcp:
   resource: https://new.example.com/mcp
   dynamic_registration: false
   client_id_metadata_documents: true
+resources:
+  - identifier: https://api.example.com
 "
 `;
 

@@ -1867,6 +1867,11 @@ const validateOAuthServerUpdate = (props: OAuthServerUpdateProps) => {
 			"--no-mcp cannot be combined with --mcp-resource, --mcp-client-id-metadata-documents or --mcp-dynamic-registration.",
 		);
 	}
+	if ((props.mcpResource as unknown) === false) {
+		throw new Error(
+			"--no-mcp-resource is not supported. To remove the MCP configuration, use --no-mcp.",
+		);
+	}
 	if (props.mcpResource === "") {
 		throw new Error(
 			"--mcp-resource must not be empty. To remove the MCP configuration, use --no-mcp.",

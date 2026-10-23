@@ -776,15 +776,57 @@ describe("neon-auth", () => {
 	});
 
 	test("oauth-server update rejects --mcp", async ({ testCliCommand }) => {
+		const requests: RecordedRequest[] = [];
 		await testCliCommand(serverArgs("update", "--mcp"), {
 			code: 1,
 			stderr: "ERROR: --mcp cannot be enabled. Configure MCP with --mcp-resource <url>, or remove it with --no-mcp.",
+			onRequest: (r) => requests.push(r),
 		});
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-server update rejects --no-mcp-resource before any request", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(serverArgs("update", "--no-mcp-resource"), {
+			code: 1,
+			stderr: "ERROR: --no-mcp-resource is not supported. To remove the MCP configuration, use --no-mcp.",
+			onRequest: (r) => requests.push(r),
+		});
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-server update lets --resources reuse the stored MCP resource when --mcp-resource replaces it", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"update",
+				"--mcp-resource",
+				"https://new.example.com/mcp",
+				"--resources",
+				"https://stored.example.com/mcp",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(mcpPatchBodies(requests)).toEqual([
+			{
+				mcp: {
+					resource: "https://new.example.com/mcp",
+					dynamic_registration: true,
+					client_id_metadata_documents: false,
+				},
+				resources: [{ identifier: "https://stored.example.com/mcp" }],
+			},
+		]);
 	});
 
 	test("oauth-server update without any flag fails", async ({
 		testCliCommand,
 	}) => {
+		const requests: RecordedRequest[] = [];
 		await testCliCommand(
 			[
 				"neon-auth",
@@ -799,8 +841,10 @@ describe("neon-auth", () => {
 			{
 				code: 1,
 				stderr: "ERROR: Nothing to update. Pass at least one of --enabled, --login-page, --consent-page, --resources, --no-mcp, --mcp-resource, --mcp-client-id-metadata-documents.",
+				onRequest: (r) => requests.push(r),
 			},
 		);
+		expect(requests).toEqual([]);
 	});
 
 	test("oauth-server get table", async ({ testCliCommand }) => {
@@ -1366,6 +1410,7 @@ describe("neon-auth", () => {
 	test("oauth-client update without any flag fails", async ({
 		testCliCommand,
 	}) => {
+		const requests: RecordedRequest[] = [];
 		await testCliCommand(
 			[
 				"neon-auth",
@@ -1380,8 +1425,10 @@ describe("neon-auth", () => {
 			{
 				code: 1,
 				stderr: "ERROR: Nothing to update. Pass at least one of --name, --redirect-uris, --resources, --skip-consent, --disabled.",
+				onRequest: (r) => requests.push(r),
 			},
 		);
+		expect(requests).toEqual([]);
 	});
 
 	// --- Config: Webhook ---
