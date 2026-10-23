@@ -99,7 +99,7 @@ describe("functions new", () => {
 			installed: false,
 		});
 		expect(result.cancelled === false && result.nextSteps[0]).toMatch(
-			/Install the template's dependencies: `.*mailer-sdk@1\.2\.3`/,
+			/Install the template's dependencies: `.* -E mailer-sdk@1\.2\.3`/,
 		);
 		const config = read("neon.ts");
 		for (const [slug, id] of [
@@ -330,6 +330,14 @@ describe("functions new", () => {
 		});
 		if (result.cancelled) throw new Error("unexpected cancel");
 
+		const configInstall = calls.find((args) =>
+			args.includes("@neon/config"),
+		);
+		const templateInstall = calls.find((args) =>
+			args.includes("mailer-sdk@1.2.3"),
+		);
+		expect(configInstall).not.toContain("-E");
+		expect(templateInstall).toContain("-E");
 		expect(calls.flat()).toEqual(
 			expect.arrayContaining([
 				"@neon/config",

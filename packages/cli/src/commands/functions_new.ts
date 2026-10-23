@@ -298,8 +298,8 @@ export const scaffoldFromTemplate = async (
 	}
 	const { dependencies } = template;
 	const pm = resolvePackageManager(projectRoot);
-	const installHint = (packages: readonly string[]) =>
-		installCommandFrom(projectRoot, pm, packages);
+	const installHint = (packages: readonly string[], exact = false) =>
+		installCommandFrom(projectRoot, pm, packages, { exact });
 	const configPackages = registration?.created
 		? missingDependencies(projectRoot)
 		: [];
@@ -324,14 +324,14 @@ export const scaffoldFromTemplate = async (
 	if (install && dependencies.length > 0) {
 		installed = await (options.run ?? runCommand)(
 			pm,
-			installArgs(pm, dependencies),
+			installArgs(pm, dependencies, { exact: true }),
 			projectRoot,
 		);
 		if (!installed) {
 			log.warning(
 				"Could not install %s. Run by hand: `%s`",
 				dependencies.join(", "),
-				installHint(dependencies),
+				installHint(dependencies, true),
 			);
 		}
 	}
@@ -356,9 +356,9 @@ export const scaffoldFromTemplate = async (
 	}
 	if (dependencies.length > 0 && !installed) {
 		nextSteps.push(
-			`Install the template's dependencies: \`${installHint(dependencies)}\``,
+			`Install the template's dependencies: \`${installHint(dependencies, true)}\``,
 		);
-		next.push(installHint(dependencies));
+		next.push(installHint(dependencies, true));
 	}
 	const environment = template.environment.map(({ name }) => name);
 	const variables = template.environment

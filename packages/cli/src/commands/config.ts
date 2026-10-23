@@ -101,6 +101,7 @@ import {
 	runDeployBeforeHook,
 } from "../utils/hooks.js";
 import {
+	type AddOptions,
 	formatInstallCommand,
 	installArgs,
 	type PackageManager,
@@ -452,8 +453,9 @@ export const installCommandFrom = (
 	dir: string,
 	pm: PackageManager,
 	missing: readonly string[],
+	options?: AddOptions,
 ): string => {
-	const command = formatInstallCommand(pm, [...missing]);
+	const command = formatInstallCommand(pm, [...missing], options);
 	const rel = relative(process.cwd(), dir);
 	if (rel === "") return command;
 	const target = rel.length <= dir.length ? rel : dir;
