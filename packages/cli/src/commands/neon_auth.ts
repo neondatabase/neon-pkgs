@@ -1829,9 +1829,18 @@ const resolveMcpUpdate = async (
 /** Order-preserving dedupe: repeated values would otherwise be sent to the API as duplicates. */
 const unique = (values: string[]) => [...new Set(values)];
 
+/** yargs negation turns `--no-<flag>` on an array option into `[false]`, which bypasses empty-array checks. */
+const isNegatedList = (values: unknown) =>
+	values === false || (Array.isArray(values) && values.includes(false));
+
 /** Fails before any request when a list flag was passed with no values. */
 const requireNonEmptyLists = (lists: [flag: string, values?: string[]][]) => {
 	for (const [flag, values] of lists) {
+		if (isNegatedList(values)) {
+			throw new Error(
+				`--no-${flag.slice(2)} is not supported. ${flag} must list at least one value.`,
+			);
+		}
 		if (values?.length === 0) {
 			throw new Error(`${flag} must list at least one value.`);
 		}
@@ -1875,6 +1884,11 @@ const validateOAuthServerUpdate = (props: OAuthServerUpdateProps) => {
 	if (props.mcpResource === "") {
 		throw new Error(
 			"--mcp-resource must not be empty. To remove the MCP configuration, use --no-mcp.",
+		);
+	}
+	if (isNegatedList(props.resources)) {
+		throw new Error(
+			"--no-resources is not supported. To remove resources, use `neon-auth config oauth-server resource remove <url...>`.",
 		);
 	}
 	if (props.resources?.length === 0) {

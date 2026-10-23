@@ -198,6 +198,10 @@ OAuth client
 "
 `;
 
+exports[`neon-auth > oauth-client create rejects --no-redirect-uris before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects --no-resources before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-client create rejects empty --redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client create rejects empty --resources before any request 1`] = `""`;
@@ -291,6 +295,20 @@ created_at: 2026-01-01T00:00:00Z
 "
 `;
 
+exports[`neon-auth > oauth-client update --no-skip-consent sends skip_consent false 1`] = `
+"client_id: client-abc123
+name: My MCP client
+type: confidential
+redirect_uris:
+  - https://app.example.com/callback
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
 exports[`neon-auth > oauth-client update 1`] = `
 "client_id: client-abc123
 name: Renamed
@@ -319,9 +337,27 @@ created_at: 2026-01-01T00:00:00Z
 "
 `;
 
+exports[`neon-auth > oauth-client update rejects --no-redirect-uris before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update rejects --no-resources before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-client update rejects empty --redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client update rejects empty --resources before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update sends skip_consent true 1`] = `
+"client_id: client-abc123
+name: My MCP client
+type: confidential
+redirect_uris:
+  - https://app.example.com/callback
+resources:
+  - https://api.example.com
+skip_consent: true
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
 
 exports[`neon-auth > oauth-client update without any flag fails 1`] = `""`;
 
@@ -471,6 +507,8 @@ exports[`neon-auth > oauth-server update rejects --mcp 1`] = `""`;
 
 exports[`neon-auth > oauth-server update rejects --no-mcp-resource before any request 1`] = `""`;
 
+exports[`neon-auth > oauth-server update rejects --no-resources before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-server update rejects an empty MCP resource before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-server update rejects empty --resources before any request 1`] = `""`;
@@ -483,6 +521,19 @@ mcp:
   resource: https://stored.example.com/mcp
   dynamic_registration: true
   client_id_metadata_documents: true
+resources:
+  - identifier: https://api.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update sends login and consent pages without mcp or resources 1`] = `
+"enabled: true
+login_page: https://app.example.com/new-login
+consent_page: https://app.example.com/new-consent
+mcp:
+  resource: https://stored.example.com/mcp
+  dynamic_registration: true
+  client_id_metadata_documents: false
 resources:
   - identifier: https://api.example.com
 "

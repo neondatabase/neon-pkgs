@@ -593,6 +593,28 @@ describe("neon-auth", () => {
 		expect(requests).toEqual([]);
 	});
 
+	test("oauth-server update sends login and consent pages without mcp or resources", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"update",
+				"--login-page",
+				"https://app.example.com/new-login",
+				"--consent-page",
+				"https://app.example.com/new-consent",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(patchBodies(requests)).toEqual([
+			{
+				login_page: "https://app.example.com/new-login",
+				consent_page: "https://app.example.com/new-consent",
+			},
+		]);
+	});
+
 	const oauthProviderGets = (requests: RecordedRequest[]) =>
 		requests.filter(
 			(r) =>
@@ -780,6 +802,18 @@ describe("neon-auth", () => {
 		await testCliCommand(serverArgs("update", "--mcp"), {
 			code: 1,
 			stderr: "ERROR: --mcp cannot be enabled. Configure MCP with --mcp-resource <url>, or remove it with --no-mcp.",
+			onRequest: (r) => requests.push(r),
+		});
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-server update rejects --no-resources before any request", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(serverArgs("update", "--no-resources"), {
+			code: 1,
+			stderr: "ERROR: --no-resources is not supported. To remove resources, use `neon-auth config oauth-server resource remove <url...>`.",
 			onRequest: (r) => requests.push(r),
 		});
 		expect(requests).toEqual([]);
@@ -1350,6 +1384,75 @@ describe("neon-auth", () => {
 			expect(requests).toEqual([]);
 		});
 	}
+
+	for (const flag of ["--resources", "--redirect-uris"]) {
+		test(`oauth-client create rejects --no-${flag.slice(2)} before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			const given = {
+				"--redirect-uris": "https://app.example.com/callback",
+				"--resources": "https://api.example.com",
+			};
+			const other =
+				flag === "--resources" ? "--redirect-uris" : "--resources";
+			await testCliCommand(
+				clientArgs(
+					"create",
+					"--name",
+					"App",
+					"--type",
+					"public",
+					`--no-${flag.slice(2)}`,
+					other,
+					given[other],
+				),
+				{
+					code: 1,
+					stderr: `ERROR: --no-${flag.slice(2)} is not supported. ${flag} must list at least one value.`,
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(requests).toEqual([]);
+		});
+
+		test(`oauth-client update rejects --no-${flag.slice(2)} before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				clientArgs("update", "client-abc123", `--no-${flag.slice(2)}`),
+				{
+					code: 1,
+					stderr: `ERROR: --no-${flag.slice(2)} is not supported. ${flag} must list at least one value.`,
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(requests).toEqual([]);
+		});
+	}
+
+	test("oauth-client update sends skip_consent true", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs("update", "client-abc123", "--skip-consent"),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPatchBodies(requests)).toEqual([{ skip_consent: true }]);
+	});
+
+	test("oauth-client update --no-skip-consent sends skip_consent false", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs("update", "client-abc123", "--no-skip-consent"),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPatchBodies(requests)).toEqual([{ skip_consent: false }]);
+	});
 
 	test("oauth-client delete", async ({ testCliCommand }) => {
 		await testCliCommand([
