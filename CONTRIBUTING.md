@@ -228,10 +228,10 @@ needs a browser or an outside party — OAuth, magic link, OTP delivery — is o
 
 ### In CI
 
-These run as the `e2e (live Neon)` workflow on every pull request from this repository, using a
-maintained throwaway org. The gateway suite runs as `e2e (live AI Gateway)` and the auth suite
-as `e2e (live Neon Auth)`, both path-filtered to their package and `tests/e2e-harness/` so
-their spend tracks the code they cover. All three workflows map the repository secret
+These run as the `Live Neon e2e`, `Live Neon Auth e2e`, and `Live AI Gateway e2e` jobs in the CI
+workflow, using a maintained throwaway org. Each starts only after lint, build, and unit tests
+pass, and only when an affected package is one it covers (`tests/e2e-harness/` changes affect all
+three), so spend tracks the code they cover. All three jobs map the repository secret
 `NEON_TEST_API_KEY` onto `NEON_API_KEY` and the repository variable `NEON_TEST_ORG_ID` onto
 `NEON_ORG_ID`, so the contract is identical to your local one.
 

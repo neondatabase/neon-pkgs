@@ -1,7 +1,8 @@
 description: >-
     Lists the workspace packages a pull request affects (changed packages plus their
     dependents), or every package when a repo-wide file changed or the event is not a
-    pull request. Run after ./.github/actions/prepare on a checkout with fetch-depth 0.
+    pull request. Also flags which live suites are relevant; on a push those follow only
+    the pushed commits. Run after ./.github/actions/prepare on a checkout with fetch-depth 0.
 
 name: Affected packages
 
@@ -9,6 +10,14 @@ inputs:
     workflow:
         description: Path of the calling workflow file; a change to it affects every package.
         required: true
+    suite:
+        description: >-
+            On a manual dispatch, the single live suite to run (e2e-live, e2e-auth, e2e-gateway,
+            or psql-conformance) with no package checks; 'all' runs everything. Ignored on other events.
+        default: all
+    e2e:
+        description: "'true' to also compute the live-suite flags (e2e_live, e2e_auth, e2e_gateway, psql); they are 'false' otherwise."
+        default: "false"
 
 outputs:
     all:
@@ -26,6 +35,18 @@ outputs:
     tools:
         description: "'true' when @neon/tools is affected"
         value: ${{ steps.detect.outputs.tools }}
+    e2e_live:
+        description: "'true' when a package covered by `pnpm test:e2e:live` is affected"
+        value: ${{ steps.detect.outputs.e2e_live }}
+    e2e_auth:
+        description: "'true' when @neon/auth is affected"
+        value: ${{ steps.detect.outputs.e2e_auth }}
+    e2e_gateway:
+        description: "'true' when @neon/ai-sdk-provider is affected"
+        value: ${{ steps.detect.outputs.e2e_gateway }}
+    psql:
+        description: "'true' when the psql implementation or its conformance harness changed"
+        value: ${{ steps.detect.outputs.psql }}
 
 runs:
     using: composite
@@ -33,9 +54,12 @@ runs:
         - id: detect
           shell: bash
           env:
+              SUITE: ${{ inputs.suite }}
+              E2E: ${{ inputs.e2e }}
               EVENT_NAME: ${{ github.event_name }}
               BASE_REF: ${{ github.base_ref }}
               WORKFLOW: ${{ inputs.workflow }}
+              BEFORE: ${{ github.event.before }}
           run: |
               set -euo pipefail
 
@@ -43,18 +67,36 @@ runs:
               # without touching a package directory.
               repo_wide='^(pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|tsconfig\.base\.json|biome\.json|\.npmrc|codecov\.yml|\.node-version|mise\.toml|scripts/.*|\.github/actions/.*)$'
 
+              # The subset of those that also changes what the live suites run. Lint, formatter,
+              # coverage, and script changes cannot, and the suites spend real projects and model calls.
+              e2e_repo_wide='^(pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|tsconfig\.base\.json|\.npmrc|\.node-version|mise\.toml|\.github/actions/.*)$'
+
               # pnpm selects changed packages from `git diff --name-only`, which lists only the
               # destination of a rename and so hides the package a file moved out of.
               git config diff.renames false
 
+              case "$SUITE" in
+                  all | e2e-live | e2e-auth | e2e-gateway | psql-conformance) ;;
+                  *)
+                      echo "::error::unknown suite '$SUITE'"
+                      exit 1
+                      ;;
+              esac
+
               all=false
+              e2e_all=false
+              changed=
               base="origin/$BASE_REF"
               if [[ "$EVENT_NAME" != pull_request ]]; then
                   all=true
+                  e2e_all=true
               else
                   changed=$(git diff --no-renames --name-only "$base...HEAD")
                   if grep -Eq "$repo_wide" <<<"$changed" || grep -Fxq "$WORKFLOW" <<<"$changed"; then
                       all=true
+                  fi
+                  if grep -Eq "$e2e_repo_wide" <<<"$changed" || grep -Fxq "$WORKFLOW" <<<"$changed"; then
+                      e2e_all=true
                   fi
               fi
 
@@ -74,10 +116,102 @@ runs:
               cli=$(jq -r 'any(.[]; . == "cli" or . == "neonctl")' <<<"$dirs")
               tools=$(jq -r 'any(.[]; . == "@neon/tools")' <<<"$packages")
 
+              e2e_live=false
+              e2e_auth=false
+              e2e_gateway=false
+              psql=false
+              # Only callers that gate the live suites ask for them: the detection costs extra pnpm
+              # calls and fails on an unparseable test:e2e:live script.
+              if [[ "$E2E" == true ]]; then
+                  # The live suites cost real projects and model calls, so a push to main runs
+                  # only the suites its own commits affect; build and unit tests still run in full.
+                  # Scheduled runs and `suite: all` dispatches keep every suite.
+                  e2e_list=$list
+                  e2e_since=
+                  if [[ "$EVENT_NAME" == push && ! "$BEFORE" =~ ^0*$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+                      changed=$(git diff --no-renames --name-only "$BEFORE" HEAD)
+                      e2e_all=false
+                      if grep -Eq "$e2e_repo_wide" <<<"$changed" || grep -Fxq "$WORKFLOW" <<<"$changed"; then
+                          e2e_all=true
+                      else
+                          e2e_since=$BEFORE
+                      fi
+                  elif [[ "$EVENT_NAME" == pull_request && "$e2e_all" == false && "$all" == true ]]; then
+                      e2e_since=$base
+                  fi
+                  if [[ -n "$e2e_since" ]]; then
+                      e2e_list=$(pnpm --filter "...[$e2e_since]" --changed-files-ignore-pattern='**/*.md' ls --depth -1 --json | jq -c --arg root "$PWD" '[.[] | select(.path != $root)]')
+                      e2e_list=${e2e_list:-[]}
+                  fi
+                  e2e_packages=$(jq -c '[.[].name]' <<<"$e2e_list")
+
+                  # The packages `pnpm test:e2e:live` runs are the `--filter` arguments of that root script.
+                  # Only plain package names are understood: a graph selector (`...name` also selects
+                  # dependents, `name...` dependencies), glob, or unknown package would misread or
+                  # silently drop its suite, so any of them fails here.
+                  live_args=$(jq -r '
+                      .scripts["test:e2e:live"] | [splits("\\s+")] as $w
+                      | range(0; $w | length)
+                      | select($w[.] == "--filter" or ($w[.] | startswith("--filter=")))
+                      | (if $w[.] == "--filter" then $w[. + 1] else $w[.][9:] end)
+                      | if . == null or . == "" then "(missing)" else . end
+                  ' package.json)
+                  workspace_names=$(pnpm --recursive ls --depth -1 --json | jq -c '[.[].name]')
+                  live_packages='[]'
+                  while IFS= read -r arg; do
+                      [[ -n "$arg" ]] || continue
+                      name=$(sed -E "s/^[\"']//; s/[\"']\$//" <<<"$arg")
+                      if ! jq -e --arg n "$name" 'index($n) != null' <<<"$workspace_names" >/dev/null; then
+                          echo "::error::cannot resolve --filter '$arg' in the test:e2e:live script of package.json to a workspace package"
+                          exit 1
+                      fi
+                      live_packages=$(jq -c --arg n "$name" '. + [$n]' <<<"$live_packages")
+                  done <<<"$live_args"
+                  if [[ "$live_packages" == '[]' ]]; then
+                      echo "::error::no --filter packages found in the test:e2e:live script of package.json"
+                      exit 1
+                  fi
+                  e2e_live=$(jq -r --argjson live "$live_packages" 'any(.[]; IN($live[]))' <<<"$e2e_packages")
+                  e2e_auth=$(jq -r 'any(.[]; . == "@neon/auth")' <<<"$e2e_packages")
+                  e2e_gateway=$(jq -r 'any(.[]; . == "@neon/ai-sdk-provider")' <<<"$e2e_packages")
+
+                  # The conformance harness is not a separate package, so the changed paths decide.
+                  psql=$e2e_all
+                  # Each grep reads all of its input: `grep -q` in a pipeline exits early, the writer
+                  # then dies of SIGPIPE, and pipefail turns a match into a failed condition.
+                  psql_paths=$(grep -E '^packages/cli/(src/psql|tests/psql-conformance)/' <<<"$changed" || true)
+                  if [[ -n "$psql_paths" ]] && grep -vE '\.md$' <<<"$psql_paths" >/dev/null; then
+                      psql=true
+                  fi
+              fi
+
+              # A single-suite dispatch skips the package checks and runs only the chosen suite.
+              if [[ "$EVENT_NAME" == workflow_dispatch && "$SUITE" != all ]]; then
+                  all=false
+                  packages='[]'
+                  dirs='[]'
+                  cli=false
+                  tools=false
+                  e2e_live=false
+                  e2e_auth=false
+                  e2e_gateway=false
+                  psql=false
+                  case "$SUITE" in
+                      e2e-live) e2e_live=true ;;
+                      e2e-auth) e2e_auth=true ;;
+                      e2e-gateway) e2e_gateway=true ;;
+                      psql-conformance) psql=true ;;
+                  esac
+              fi
+
               {
                   echo "all=$all"
                   echo "packages=$packages"
                   echo "dirs=$dirs"
                   echo "cli=$cli"
                   echo "tools=$tools"
+                  echo "e2e_live=$e2e_live"
+                  echo "e2e_auth=$e2e_auth"
+                  echo "e2e_gateway=$e2e_gateway"
+                  echo "psql=$psql"
               } | tee -a "$GITHUB_OUTPUT"
