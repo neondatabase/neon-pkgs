@@ -202,6 +202,14 @@ exports[`neon-auth > oauth-client create rejects --no-redirect-uris before any r
 
 exports[`neon-auth > oauth-client create rejects --no-resources before any request 1`] = `""`;
 
+exports[`neon-auth > oauth-client create rejects blank --redirect-uris "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects blank --redirect-uris "" before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects blank --resources "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects blank --resources "" before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-client create rejects empty --redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client create rejects empty --resources before any request 1`] = `""`;
@@ -341,6 +349,14 @@ exports[`neon-auth > oauth-client update rejects --no-redirect-uris before any r
 
 exports[`neon-auth > oauth-client update rejects --no-resources before any request 1`] = `""`;
 
+exports[`neon-auth > oauth-client update rejects blank --redirect-uris "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update rejects blank --redirect-uris "" before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update rejects blank --resources "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update rejects blank --resources "" before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-client update rejects empty --redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client update rejects empty --resources before any request 1`] = `""`;
@@ -448,6 +464,10 @@ resources:
 
 exports[`neon-auth > oauth-server update --resources reads the stored config once when it also merges MCP flags 1`] = `""`;
 
+exports[`neon-auth > oauth-server update --resources rejects blank value "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --resources rejects blank value "" before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-server update --resources rejects the --mcp-resource value without reading the stored config 1`] = `""`;
 
 exports[`neon-auth > oauth-server update --resources rejects the stored MCP resource 1`] = `""`;
@@ -469,7 +489,6 @@ login_page: https://app.example.com/login
 consent_page: https://app.example.com/consent
 mcp:
   resource: https://example.com/mcp
-  dynamic_registration: true
   client_id_metadata_documents: true
 resources:
   - identifier: https://api.example.com
@@ -484,7 +503,18 @@ consent_page: https://app.example.com/consent
 mcp:
   resource: https://stored.example.com/mcp
   dynamic_registration: false
-  client_id_metadata_documents: false
+resources:
+  - identifier: https://api.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update fills only the stored MCP resource 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://stored.example.com/mcp
+  client_id_metadata_documents: true
 resources:
   - identifier: https://api.example.com
 "
@@ -496,8 +526,6 @@ login_page: https://app.example.com/login
 consent_page: https://app.example.com/consent
 mcp:
   resource: https://new.example.com/mcp
-  dynamic_registration: true
-  client_id_metadata_documents: false
 resources:
   - identifier: https://stored.example.com/mcp
 "
@@ -512,19 +540,6 @@ exports[`neon-auth > oauth-server update rejects --no-resources before any reque
 exports[`neon-auth > oauth-server update rejects an empty MCP resource before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-server update rejects empty --resources before any request 1`] = `""`;
-
-exports[`neon-auth > oauth-server update reuses the stored MCP resource and booleans 1`] = `
-"enabled: true
-login_page: https://app.example.com/login
-consent_page: https://app.example.com/consent
-mcp:
-  resource: https://stored.example.com/mcp
-  dynamic_registration: true
-  client_id_metadata_documents: true
-resources:
-  - identifier: https://api.example.com
-"
-`;
 
 exports[`neon-auth > oauth-server update sends login and consent pages without mcp or resources 1`] = `
 "enabled: true
@@ -584,6 +599,17 @@ mcp:
   resource: https://new.example.com/mcp
   dynamic_registration: false
   client_id_metadata_documents: true
+resources:
+  - identifier: https://api.example.com
+"
+`;
+
+exports[`neon-auth > oauth-server update with only --mcp-resource makes no GET 1`] = `
+"enabled: true
+login_page: https://app.example.com/login
+consent_page: https://app.example.com/consent
+mcp:
+  resource: https://new/mcp
 resources:
   - identifier: https://api.example.com
 "
@@ -655,14 +681,27 @@ exports[`neon-auth > resource add dedupes URLs repeated in the input 1`] = `
 "
 `;
 
-exports[`neon-auth > resource add rejects duplicates 1`] = `""`;
+exports[`neon-auth > resource add rejects blank URL "  " before any request 1`] = `""`;
+
+exports[`neon-auth > resource add rejects blank URL "" before any request 1`] = `""`;
 
 exports[`neon-auth > resource add rejects the MCP resource 1`] = `""`;
+
+exports[`neon-auth > resource add sends no PATCH when every URL is already configured 1`] = `
+"- identifier: https://api.example.com
+"
+`;
 
 exports[`neon-auth > resource add sends the full list without mcp 1`] = `
 "- identifier: https://api.example.com
 - identifier: https://new.example.com
 - identifier: https://new2.example.com
+"
+`;
+
+exports[`neon-auth > resource add skips URLs that are already configured 1`] = `
+"- identifier: https://api.example.com
+- identifier: https://new.example.com
 "
 `;
 
@@ -691,15 +730,27 @@ exports[`neon-auth > resource remove does not warn when no client is linked 1`] 
 "
 `;
 
-exports[`neon-auth > resource remove rejects unknown URLs before any change 1`] = `""`;
+exports[`neon-auth > resource remove rejects blank URL "  " before any request 1`] = `""`;
 
-exports[`neon-auth > resource remove succeeds without a warning when the client lookup fails 1`] = `
-"- identifier: https://b.example.com
+exports[`neon-auth > resource remove rejects blank URL "" before any request 1`] = `""`;
+
+exports[`neon-auth > resource remove skips URLs that are not configured 1`] = `
+"- identifier: https://a.example.com
 "
 `;
 
 exports[`neon-auth > resource remove warns about linked clients 1`] = `
 "[]
+"
+`;
+
+exports[`neon-auth > resource remove warns and succeeds when the client lookup fails 1`] = `
+"- identifier: https://b.example.com
+"
+`;
+
+exports[`neon-auth > resource remove with nothing to remove sends no PATCH and skips the client lookup 1`] = `
+"- identifier: https://api.example.com
 "
 `;
 

@@ -486,7 +486,7 @@ describe("neon-auth", () => {
 			)
 			.map((r) => r.body);
 
-	test("oauth-server update reuses the stored MCP resource and booleans", async ({
+	test("oauth-server update fills only the stored MCP resource", async ({
 		testCliCommand,
 	}) => {
 		const requests: RecordedRequest[] = [];
@@ -508,10 +508,40 @@ describe("neon-auth", () => {
 			{
 				mcp: {
 					resource: "https://stored.example.com/mcp",
-					dynamic_registration: true,
 					client_id_metadata_documents: true,
 				},
 			},
+		]);
+	});
+
+	test("oauth-server update with only --mcp-resource makes no GET", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			[
+				"neon-auth",
+				"config",
+				"oauth-server",
+				"update",
+				"--mcp-resource",
+				"https://new/mcp",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(
+			requests.filter(
+				(r) =>
+					r.method === "GET" &&
+					r.path.endsWith("/plugins/oauth-provider"),
+			),
+		).toEqual([]);
+		expect(mcpPatchBodies(requests)).toEqual([
+			{ mcp: { resource: "https://new/mcp" } },
 		]);
 	});
 
@@ -849,8 +879,6 @@ describe("neon-auth", () => {
 			{
 				mcp: {
 					resource: "https://new.example.com/mcp",
-					dynamic_registration: true,
-					client_id_metadata_documents: false,
 				},
 				resources: [{ identifier: "https://stored.example.com/mcp" }],
 			},
@@ -1034,13 +1062,40 @@ describe("neon-auth", () => {
 		]);
 	});
 
-	test("resource add rejects duplicates", async ({ testCliCommand }) => {
+	test("resource add skips URLs that are already configured", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"resource",
+				"add",
+				"https://api.example.com",
+				"https://new.example.com",
+			),
+			{
+				stderr: "WARNING: Already configured, skipped: https://api.example.com",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([
+			{
+				resources: [
+					{ identifier: "https://api.example.com" },
+					{ identifier: "https://new.example.com" },
+				],
+			},
+		]);
+	});
+
+	test("resource add sends no PATCH when every URL is already configured", async ({
+		testCliCommand,
+	}) => {
 		const requests: RecordedRequest[] = [];
 		await testCliCommand(
 			serverArgs("resource", "add", "https://api.example.com"),
 			{
-				code: 1,
-				stderr: "ERROR: Already configured: https://api.example.com.",
+				stderr: "WARNING: Already configured, skipped: https://api.example.com",
 				onRequest: (r) => requests.push(r),
 			},
 		);
@@ -1108,7 +1163,7 @@ describe("neon-auth", () => {
 		]);
 	});
 
-	test("resource remove succeeds without a warning when the client lookup fails", async ({
+	test("resource remove warns and succeeds when the client lookup fails", async ({
 		testCliCommand,
 	}) => {
 		const requests: RecordedRequest[] = [];
@@ -1116,12 +1171,21 @@ describe("neon-auth", () => {
 			serverArgs("resource", "remove", "https://a.example.com"),
 			{
 				mockDir: "neon-auth-oauth-server-resources-clients-fail",
-				stderr: "",
+				stderr: "WARNING: Removed, but could not check for clients still linked to it.",
 				onRequest: (r) => requests.push(r),
 			},
 		);
 		expect(patchBodies(requests)).toEqual([
 			{ resources: [{ identifier: "https://b.example.com" }] },
+		]);
+		expect(
+			requests
+				.filter((r) => r.path.includes("/auth/"))
+				.map((r) => `${r.method} ${r.path}`),
+		).toEqual([
+			expect.stringMatching(/^GET .*\/auth\/plugins\/oauth-provider$/),
+			expect.stringMatching(/^PATCH .*\/auth\/plugins\/oauth-provider$/),
+			expect.stringMatching(/^GET .*\/auth\/oauth-provider\/clients$/),
 		]);
 	});
 
@@ -1163,19 +1227,45 @@ describe("neon-auth", () => {
 		).toEqual([]);
 	});
 
-	test("resource remove rejects unknown URLs before any change", async ({
+	test("resource remove skips URLs that are not configured", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"resource",
+				"remove",
+				"https://nope.example.com",
+				"https://b.example.com",
+			),
+			{
+				mockDir: RESOURCES_MOCK,
+				stderr: "WARNING: Not configured, skipped: https://nope.example.com",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([
+			{ resources: [{ identifier: "https://a.example.com" }] },
+		]);
+	});
+
+	test("resource remove with nothing to remove sends no PATCH and skips the client lookup", async ({
 		testCliCommand,
 	}) => {
 		const requests: RecordedRequest[] = [];
 		await testCliCommand(
 			serverArgs("resource", "remove", "https://nope.example.com"),
 			{
-				code: 1,
-				stderr: "ERROR: Not configured: https://nope.example.com.",
+				stderr: "WARNING: Not configured, skipped: https://nope.example.com",
 				onRequest: (r) => requests.push(r),
 			},
 		);
 		expect(patchBodies(requests)).toEqual([]);
+		expect(
+			requests.filter((r) =>
+				r.path.endsWith("/auth/oauth-provider/clients"),
+			),
+		).toEqual([]);
 	});
 
 	// --- OAuth clients ---
@@ -1414,6 +1504,90 @@ describe("neon-auth", () => {
 			});
 			expect(requests).toEqual([]);
 		});
+	}
+
+	for (const blank of ["", "  "]) {
+		test(`oauth-server update --resources rejects blank value "${blank}" before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(serverArgs("update", "--resources", blank), {
+				code: 1,
+				stderr: "ERROR: --resources must not contain empty values.",
+				onRequest: (r) => requests.push(r),
+			});
+			expect(requests).toEqual([]);
+		});
+
+		for (const action of ["add", "remove"]) {
+			test(`resource ${action} rejects blank URL "${blank}" before any request`, async ({
+				testCliCommand,
+			}) => {
+				const requests: RecordedRequest[] = [];
+				await testCliCommand(
+					serverArgs(
+						"resource",
+						action,
+						"https://ok.example.com",
+						blank,
+					),
+					{
+						code: 1,
+						stderr: "ERROR: URLs must not be empty.",
+						onRequest: (r) => requests.push(r),
+					},
+				);
+				expect(requests).toEqual([]);
+			});
+		}
+
+		for (const flag of ["--resources", "--redirect-uris"]) {
+			test(`oauth-client create rejects blank ${flag} "${blank}" before any request`, async ({
+				testCliCommand,
+			}) => {
+				const requests: RecordedRequest[] = [];
+				const given: Record<string, string> = {
+					"--redirect-uris": "https://app.example.com/callback",
+					"--resources": "https://api.example.com",
+				};
+				const other =
+					flag === "--resources" ? "--redirect-uris" : "--resources";
+				await testCliCommand(
+					clientArgs(
+						"create",
+						"--name",
+						"App",
+						"--type",
+						"public",
+						flag,
+						blank,
+						other,
+						given[other],
+					),
+					{
+						code: 1,
+						stderr: `ERROR: ${flag} must not contain empty values.`,
+						onRequest: (r) => requests.push(r),
+					},
+				);
+				expect(requests).toEqual([]);
+			});
+
+			test(`oauth-client update rejects blank ${flag} "${blank}" before any request`, async ({
+				testCliCommand,
+			}) => {
+				const requests: RecordedRequest[] = [];
+				await testCliCommand(
+					clientArgs("update", "client-abc123", flag, blank),
+					{
+						code: 1,
+						stderr: `ERROR: ${flag} must not contain empty values.`,
+						onRequest: (r) => requests.push(r),
+					},
+				);
+				expect(requests).toEqual([]);
+			});
+		}
 	}
 
 	for (const flag of ["--resources", "--redirect-uris"]) {

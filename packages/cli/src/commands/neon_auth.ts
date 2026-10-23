@@ -1785,9 +1785,8 @@ type OAuthServerUpdateProps = AuthBranchProps & {
 };
 
 /**
- * The API requires `mcp.resource` whenever `mcp` is sent, and the spec says both that `mcp`
- * is replaced as a whole and that omitted booleans keep their stored value. Filling every
- * field from the stored config is correct under either reading.
+ * The API requires `mcp.resource` whenever `mcp` is sent and keeps stored booleans that are
+ * omitted, so only the resource is filled in from the stored config.
  */
 const resolveMcpUpdate = async (
 	props: OAuthServerUpdateProps,
@@ -1805,13 +1804,7 @@ const resolveMcpUpdate = async (
 	) {
 		return undefined;
 	}
-	const stored =
-		mcpResource !== undefined &&
-		dynamicRegistration !== undefined &&
-		clientIdMetadataDocuments !== undefined
-			? undefined
-			: await getStoredMcp();
-	const resource = mcpResource ?? stored?.resource;
+	const resource = mcpResource ?? (await getStoredMcp())?.resource;
 	if (!resource) {
 		throw new Error(
 			"No MCP resource is configured yet. Pass --mcp-resource <url> together with the other --mcp-* flags.",
@@ -1819,10 +1812,8 @@ const resolveMcpUpdate = async (
 	}
 	return {
 		resource,
-		dynamic_registration:
-			dynamicRegistration ?? stored?.dynamic_registration,
-		client_id_metadata_documents:
-			clientIdMetadataDocuments ?? stored?.client_id_metadata_documents,
+		dynamic_registration: dynamicRegistration,
+		client_id_metadata_documents: clientIdMetadataDocuments,
 	};
 };
 
@@ -1833,7 +1824,10 @@ const unique = (values: string[]) => [...new Set(values)];
 const isNegatedList = (values: unknown) =>
 	values === false || (Array.isArray(values) && values.includes(false));
 
-/** Fails before any request when a list flag was passed with no values. */
+const hasBlank = (values?: string[]) =>
+	values?.some((value) => value.trim() === "") ?? false;
+
+/** Fails before any request when a list flag was passed with no values or a blank one. */
 const requireNonEmptyLists = (lists: [flag: string, values?: string[]][]) => {
 	for (const [flag, values] of lists) {
 		if (isNegatedList(values)) {
@@ -1844,6 +1838,15 @@ const requireNonEmptyLists = (lists: [flag: string, values?: string[]][]) => {
 		if (values?.length === 0) {
 			throw new Error(`${flag} must list at least one value.`);
 		}
+		if (hasBlank(values)) {
+			throw new Error(`${flag} must not contain empty values.`);
+		}
+	}
+};
+
+const requireNonBlankUrls = (urls: string[]) => {
+	if (hasBlank(urls)) {
+		throw new Error("URLs must not be empty.");
 	}
 };
 
@@ -1895,6 +1898,9 @@ const validateOAuthServerUpdate = (props: OAuthServerUpdateProps) => {
 		throw new Error(
 			"--resources must list at least one URL. To remove resources, use `neon-auth config oauth-server resource remove <url...>`.",
 		);
+	}
+	if (hasBlank(props.resources)) {
+		throw new Error("--resources must not contain empty values.");
 	}
 };
 
@@ -2014,24 +2020,42 @@ const oauthResourceList = async (props: AuthBranchProps) => {
 };
 
 const oauthResourceAdd = async (props: AuthBranchProps & { url: string[] }) => {
+	requireNonBlankUrls(props.url);
 	const urls = unique(props.url);
 	const { branchId, mcpResource, stored } = await getStoredOAuthServer(props);
-	const duplicates = urls.filter((url) => stored.includes(url));
-	if (duplicates.length > 0) {
-		throw new Error(`Already configured: ${duplicates.join(", ")}.`);
-	}
 	rejectMcpResourceCollision(urls, mcpResource);
-	await replaceOAuthResources(props, branchId, [...stored, ...urls]);
+	const existing = urls.filter((url) => stored.includes(url));
+	if (existing.length > 0) {
+		log.warning(`Already configured, skipped: ${existing.join(", ")}`);
+	}
+	const added = urls.filter((url) => !stored.includes(url));
+	if (added.length === 0) {
+		reportOAuthResources(
+			props,
+			stored.map((identifier) => ({ identifier })),
+		);
+		return;
+	}
+	await replaceOAuthResources(props, branchId, [...stored, ...added]);
 };
 
 const oauthResourceRemove = async (
 	props: AuthBranchProps & { url: string[] },
 ) => {
-	const urls = unique(props.url);
+	requireNonBlankUrls(props.url);
+	const requested = unique(props.url);
 	const { branchId, stored } = await getStoredOAuthServer(props);
-	const unknown = urls.filter((url) => !stored.includes(url));
+	const unknown = requested.filter((url) => !stored.includes(url));
 	if (unknown.length > 0) {
-		throw new Error(`Not configured: ${unknown.join(", ")}.`);
+		log.warning(`Not configured, skipped: ${unknown.join(", ")}`);
+	}
+	const urls = requested.filter((url) => stored.includes(url));
+	if (urls.length === 0) {
+		reportOAuthResources(
+			props,
+			stored.map((identifier) => ({ identifier })),
+		);
+		return;
 	}
 	await replaceOAuthResources(
 		props,
@@ -2054,6 +2078,9 @@ const oauthResourceRemove = async (
 		log.debug(
 			"Could not look up clients linked to the removed resource: %s",
 			err,
+		);
+		log.warning(
+			"Removed, but could not check for clients still linked to it.",
 		);
 		return;
 	}
