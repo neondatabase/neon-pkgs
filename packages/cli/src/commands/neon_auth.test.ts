@@ -554,27 +554,115 @@ describe("neon-auth", () => {
 		]);
 	});
 
-	test("oauth-server update rejects an empty MCP resource", async ({
+	const BASE = ["--project-id", "test", "--branch", "test_branch"];
+	const serverArgs = (...rest: string[]) => [
+		"neon-auth",
+		"config",
+		"oauth-server",
+		...rest,
+		...BASE,
+	];
+	const clientArgs = (...rest: string[]) => [
+		"neon-auth",
+		"oauth-client",
+		...rest,
+		...BASE,
+	];
+
+	test("oauth-server update rejects an empty MCP resource before any request", async ({
 		testCliCommand,
 	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(serverArgs("update", "--mcp-resource", ""), {
+			code: 1,
+			stderr: "ERROR: --mcp-resource must not be empty. To remove the MCP configuration, use --no-mcp.",
+			onRequest: (r) => requests.push(r),
+		});
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-server update rejects empty --resources before any request", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(serverArgs("update", "--resources"), {
+			code: 1,
+			stderr: "ERROR: --resources must list at least one URL. To remove resources, use `neon-auth config oauth-server resource remove <url...>`.",
+			onRequest: (r) => requests.push(r),
+		});
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-server update sets up MCP for the first time", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
 		await testCliCommand(
-			[
-				"neon-auth",
-				"config",
-				"oauth-server",
+			serverArgs(
 				"update",
+				"--enabled",
 				"--mcp-resource",
-				"",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
+				"https://example.com/mcp",
+				"--mcp-client-id-metadata-documents",
+			),
 			{
-				code: 1,
-				stderr: "ERROR: --mcp-resource must not be empty. The API has no way to remove the MCP configuration once set; point it at another URL instead.",
+				mockDir: "neon-auth-oauth-server-no-mcp",
+				onRequest: (r) => requests.push(r),
 			},
 		);
+		expect(mcpPatchBodies(requests)).toEqual([
+			{
+				enabled: true,
+				mcp: {
+					resource: "https://example.com/mcp",
+					client_id_metadata_documents: true,
+				},
+			},
+		]);
+	});
+
+	test("oauth-server update --no-mcp clears the MCP configuration", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(serverArgs("update", "--no-mcp"), {
+			onRequest: (r) => requests.push(r),
+		});
+		expect(mcpPatchBodies(requests)).toEqual([{ mcp: { resource: "" } }]);
+		expect(
+			requests.filter(
+				(r) =>
+					r.method === "GET" &&
+					r.path.endsWith("/plugins/oauth-provider"),
+			),
+		).toEqual([]);
+	});
+
+	test("oauth-server update --no-mcp conflicts with the other MCP flags", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"update",
+				"--no-mcp",
+				"--mcp-resource",
+				"https://example.com/mcp",
+			),
+			{
+				code: 1,
+				stderr: "ERROR: --no-mcp cannot be combined with --mcp-resource, --mcp-client-id-metadata-documents or --mcp-dynamic-registration.",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-server update rejects --mcp", async ({ testCliCommand }) => {
+		await testCliCommand(serverArgs("update", "--mcp"), {
+			code: 1,
+			stderr: "ERROR: --mcp cannot be enabled. Configure MCP with --mcp-resource <url>, or remove it with --no-mcp.",
+		});
 	});
 
 	test("oauth-server update without any flag fails", async ({
@@ -593,7 +681,7 @@ describe("neon-auth", () => {
 			],
 			{
 				code: 1,
-				stderr: "ERROR: Nothing to update. Pass at least one of --enabled, --login-page, --consent-page, --resources, --mcp-resource, --mcp-client-id-metadata-documents.",
+				stderr: "ERROR: Nothing to update. Pass at least one of --enabled, --login-page, --consent-page, --resources, --no-mcp, --mcp-resource, --mcp-client-id-metadata-documents.",
 			},
 		);
 	});
@@ -684,6 +772,141 @@ describe("neon-auth", () => {
 			"--branch",
 			"test_branch",
 		]);
+	});
+
+	// --- OAuth server resources ---
+
+	const RESOURCES_MOCK = "neon-auth-oauth-server-resources";
+	const patchBodies = (requests: RecordedRequest[]) =>
+		requests.filter((r) => r.method === "PATCH").map((r) => r.body);
+
+	test("resource list", async ({ testCliCommand }) => {
+		await testCliCommand(serverArgs("resource", "list"));
+	});
+
+	test("resource list table", async ({ testCliCommand }) => {
+		await testCliCommand(serverArgs("resource", "list"), {
+			outputTable: true,
+		});
+	});
+
+	test("resource list when empty", async ({ testCliCommand }) => {
+		await testCliCommand(serverArgs("resource", "list"), {
+			mockDir: "neon-auth-oauth-server-resources-empty",
+			outputTable: true,
+			stdout: "No protected resources are configured",
+		});
+	});
+
+	test("resource add sends the full list without mcp", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"resource",
+				"add",
+				"https://new.example.com",
+				"https://new2.example.com",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(patchBodies(requests)).toEqual([
+			{
+				resources: [
+					{ identifier: "https://api.example.com" },
+					{ identifier: "https://new.example.com" },
+					{ identifier: "https://new2.example.com" },
+				],
+			},
+		]);
+	});
+
+	test("resource add rejects duplicates", async ({ testCliCommand }) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "add", "https://api.example.com"),
+			{
+				code: 1,
+				stderr: "ERROR: Already configured: https://api.example.com.",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([]);
+	});
+
+	test("resource add rejects the MCP resource", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			serverArgs("resource", "add", "https://stored.example.com/mcp"),
+			{
+				code: 1,
+				stderr: "ERROR: https://stored.example.com/mcp is the MCP resource and cannot also be a protected resource.",
+			},
+		);
+	});
+
+	test("resource add rejects more than 10 resources", async ({
+		testCliCommand,
+	}) => {
+		const urls = Array.from(
+			{ length: 10 },
+			(_, i) => `https://n${i}.example.com`,
+		);
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(serverArgs("resource", "add", ...urls), {
+			code: 1,
+			stderr: "ERROR: A branch supports at most 10 protected resources; adding 10 to 1 would make 11.",
+			onRequest: (r) => requests.push(r),
+		});
+		expect(patchBodies(requests)).toEqual([]);
+	});
+
+	test("resource remove warns about linked clients", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "remove", "https://api.example.com"),
+			{
+				stderr: 'WARNING: Clients still linked to a removed resource: "My MCP client" (client-abc123). Their token requests for it will fail with invalid_target until it is added again.',
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([{ resources: [] }]);
+	});
+
+	test("resource remove does not warn when no client is linked", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "remove", "https://b.example.com"),
+			{
+				mockDir: RESOURCES_MOCK,
+				stderr: "",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([
+			{ resources: [{ identifier: "https://a.example.com" }] },
+		]);
+	});
+
+	test("resource remove rejects unknown URLs before any change", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "remove", "https://nope.example.com"),
+			{
+				code: 1,
+				stderr: "ERROR: Not configured: https://nope.example.com.",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(patchBodies(requests)).toEqual([]);
 	});
 
 	// --- OAuth clients ---
@@ -789,21 +1012,50 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	const clientPatchBodies = (requests: RecordedRequest[]) =>
+		requests.filter((r) => r.method === "PATCH").map((r) => r.body);
+
 	test("oauth-client update", async ({ testCliCommand }) => {
-		await testCliCommand([
-			"neon-auth",
-			"oauth-client",
-			"update",
-			"client-abc123",
-			"--name",
-			"Renamed",
-			"--disabled",
-			"--project-id",
-			"test",
-			"--branch",
-			"test_branch",
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs(
+				"update",
+				"client-abc123",
+				"--name",
+				"Renamed",
+				"--disabled",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPatchBodies(requests)).toEqual([
+			{ name: "Renamed", disabled: true },
 		]);
 	});
+
+	test("oauth-client update --no-disabled re-enables the client", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs("update", "client-abc123", "--no-disabled"),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPatchBodies(requests)).toEqual([{ disabled: false }]);
+	});
+
+	for (const flag of ["--resources", "--redirect-uris"]) {
+		test(`oauth-client update rejects empty ${flag} before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(clientArgs("update", "client-abc123", flag), {
+				code: 1,
+				stderr: `ERROR: ${flag} must list at least one value; the API does not accept an empty list.`,
+				onRequest: (r) => requests.push(r),
+			});
+			expect(requests).toEqual([]);
+		});
+	}
 
 	test("oauth-client delete", async ({ testCliCommand }) => {
 		await testCliCommand([

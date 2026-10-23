@@ -379,7 +379,7 @@ export const builder = (argv: yargs.Argv) => {
 									},
 									resources: {
 										describe:
-											"Protected resource URLs to link the client to; replaces the stored list",
+											"Protected resource URLs to link the client to; replaces the stored list (at least one)",
 										type: "string",
 										array: true,
 									},
@@ -766,14 +766,19 @@ export const builder = (argv: yargs.Argv) => {
 											},
 											resources: {
 												describe:
-													"Protected resource URLs that clients can be linked to; replaces the stored list",
+													"Protected resource URLs that clients can be linked to; replaces the stored list. Use `resource add|remove` for incremental changes",
 												type: "string",
 												array: true,
 											},
 											"mcp-resource": {
 												describe:
-													"MCP server URL that MCP clients are linked to. Defaults to the stored value when another --mcp-* flag is given. Once set, the MCP configuration cannot be removed, only pointed at another URL",
+													"MCP server URL that MCP clients are linked to. Defaults to the stored value when another --mcp-* flag is given. To remove the MCP configuration, use --no-mcp",
 												type: "string",
+											},
+											mcp: {
+												describe:
+													"Remove the MCP configuration (only --no-mcp is accepted)",
+												type: "boolean",
 											},
 											"mcp-client-id-metadata-documents":
 												{
@@ -795,6 +800,59 @@ export const builder = (argv: yargs.Argv) => {
 								async (args) => {
 									await oauthServerUpdate(args as any);
 								},
+							)
+							.command(
+								"resource",
+								"Manage the protected resources of the OAuth server",
+								(yargs) =>
+									yargs
+										.usage(
+											"$0 neon-auth config oauth-server resource <sub-command> [options]",
+										)
+										.command(
+											"list",
+											"List protected resources",
+											(yargs) => yargs,
+											async (args) => {
+												await oauthResourceList(
+													args as any,
+												);
+											},
+										)
+										.command(
+											"add <url...>",
+											"Add protected resources",
+											(yargs) =>
+												yargs.positional("url", {
+													describe:
+														"Protected resource URLs to add",
+													type: "string",
+													array: true,
+													demandOption: true,
+												}),
+											async (args) => {
+												await oauthResourceAdd(
+													args as any,
+												);
+											},
+										)
+										.command(
+											"remove <url...>",
+											"Remove protected resources",
+											(yargs) =>
+												yargs.positional("url", {
+													describe:
+														"Protected resource URLs to remove",
+													type: "string",
+													array: true,
+													demandOption: true,
+												}),
+											async (args) => {
+												await oauthResourceRemove(
+													args as any,
+												);
+											},
+										),
 							);
 					},
 				)
@@ -1720,6 +1778,7 @@ type OAuthServerUpdateProps = AuthBranchProps & {
 	loginPage?: string;
 	consentPage?: string;
 	resources?: string[];
+	mcp?: boolean;
 	mcpResource?: string;
 	mcpDynamicRegistration?: boolean;
 	mcpClientIdMetadataDocuments?: boolean;
@@ -1739,11 +1798,6 @@ const resolveMcpUpdate = async (
 		mcpDynamicRegistration: dynamicRegistration,
 		mcpClientIdMetadataDocuments: clientIdMetadataDocuments,
 	} = props;
-	if (mcpResource === "") {
-		throw new Error(
-			"--mcp-resource must not be empty. The API has no way to remove the MCP configuration once set; point it at another URL instead.",
-		);
-	}
 	if (
 		mcpResource === undefined &&
 		dynamicRegistration === undefined &&
@@ -1777,6 +1831,35 @@ const resolveMcpUpdate = async (
 	};
 };
 
+/** Checked before any request so a malformed invocation never reaches the API. */
+const validateOAuthServerUpdate = (props: OAuthServerUpdateProps) => {
+	if (props.mcp === true) {
+		throw new Error(
+			"--mcp cannot be enabled. Configure MCP with --mcp-resource <url>, or remove it with --no-mcp.",
+		);
+	}
+	if (
+		props.mcp === false &&
+		(props.mcpResource !== undefined ||
+			props.mcpClientIdMetadataDocuments !== undefined ||
+			props.mcpDynamicRegistration !== undefined)
+	) {
+		throw new Error(
+			"--no-mcp cannot be combined with --mcp-resource, --mcp-client-id-metadata-documents or --mcp-dynamic-registration.",
+		);
+	}
+	if (props.mcpResource === "") {
+		throw new Error(
+			"--mcp-resource must not be empty. To remove the MCP configuration, use --no-mcp.",
+		);
+	}
+	if (props.resources?.length === 0) {
+		throw new Error(
+			"--resources must list at least one URL. To remove resources, use `neon-auth config oauth-server resource remove <url...>`.",
+		);
+	}
+};
+
 const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 	requireUpdateFields(
 		[
@@ -1784,6 +1867,7 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 			props.loginPage,
 			props.consentPage,
 			props.resources,
+			props.mcp,
 			props.mcpResource,
 			props.mcpClientIdMetadataDocuments,
 			props.mcpDynamicRegistration,
@@ -1793,12 +1877,18 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 			"--login-page",
 			"--consent-page",
 			"--resources",
+			"--no-mcp",
 			"--mcp-resource",
 			"--mcp-client-id-metadata-documents",
 		],
 	);
+	validateOAuthServerUpdate(props);
 	const branchId = await resolveBranch(props);
-	const mcp = await resolveMcpUpdate(props, branchId);
+	// The API clears the MCP configuration when `resource` is the empty string.
+	const mcp =
+		props.mcp === false
+			? { resource: "" }
+			: await resolveMcpUpdate(props, branchId);
 	const { data } = await props.apiClient.updateNeonAuthOAuthProviderPlugin(
 		props.projectId,
 		branchId,
@@ -1817,6 +1907,111 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 	printKvBlock(
 		"OAuth server configuration updated",
 		printOAuthServerEntries(data),
+	);
+};
+
+// --- OAuth server resources ---
+
+/** The API caps the list at this many protected resources. */
+const MAX_OAUTH_RESOURCES = 10;
+
+const getStoredOAuthServer = async (props: AuthBranchProps) => {
+	const branchId = await resolveBranch(props);
+	const { data } = await props.apiClient.getNeonAuthOAuthProviderPlugin(
+		props.projectId,
+		branchId,
+	);
+	return {
+		branchId,
+		mcpResource: data.mcp?.resource,
+		stored: (data.resources ?? []).map((r) => r.identifier),
+	};
+};
+
+const reportOAuthResources = (
+	props: AuthBranchProps,
+	resources: { identifier: string }[],
+) => {
+	if (resources.length === 0 && props.output === "table") {
+		printMessage("No protected resources are configured");
+		return;
+	}
+	writer(props).end(resources, { fields: ["identifier"] });
+};
+
+/** The API replaces the whole list, so every change is a full-list PATCH. */
+const replaceOAuthResources = async (
+	props: AuthBranchProps,
+	branchId: string,
+	identifiers: string[],
+) => {
+	const { data } = await props.apiClient.updateNeonAuthOAuthProviderPlugin(
+		props.projectId,
+		branchId,
+		{ resources: identifiers.map((identifier) => ({ identifier })) },
+	);
+	reportOAuthResources(props, data.resources ?? []);
+};
+
+const oauthResourceList = async (props: AuthBranchProps) => {
+	const { stored } = await getStoredOAuthServer(props);
+	reportOAuthResources(
+		props,
+		stored.map((identifier) => ({ identifier })),
+	);
+};
+
+const oauthResourceAdd = async (props: AuthBranchProps & { url: string[] }) => {
+	const urls = [...new Set(props.url)];
+	const { branchId, mcpResource, stored } = await getStoredOAuthServer(props);
+	const duplicates = urls.filter((url) => stored.includes(url));
+	if (duplicates.length > 0) {
+		throw new Error(`Already configured: ${duplicates.join(", ")}.`);
+	}
+	if (mcpResource && urls.includes(mcpResource)) {
+		throw new Error(
+			`${mcpResource} is the MCP resource and cannot also be a protected resource.`,
+		);
+	}
+	if (stored.length + urls.length > MAX_OAUTH_RESOURCES) {
+		throw new Error(
+			`A branch supports at most ${MAX_OAUTH_RESOURCES} protected resources; adding ${urls.length} to ${stored.length} would make ${stored.length + urls.length}.`,
+		);
+	}
+	await replaceOAuthResources(props, branchId, [...stored, ...urls]);
+};
+
+const oauthResourceRemove = async (
+	props: AuthBranchProps & { url: string[] },
+) => {
+	const urls = [...new Set(props.url)];
+	const { branchId, stored } = await getStoredOAuthServer(props);
+	const unknown = urls.filter((url) => !stored.includes(url));
+	if (unknown.length > 0) {
+		throw new Error(`Not configured: ${unknown.join(", ")}.`);
+	}
+	// The API keeps a removed resource linked to its clients, where it silently
+	// fails token requests, so surface those clients before the change.
+	const { data } = await props.apiClient.listNeonAuthOAuthClients(
+		props.projectId,
+		branchId,
+	);
+	const linked = data.clients.filter((client) =>
+		client.resources.some((resource) => urls.includes(resource)),
+	);
+	if (linked.length > 0) {
+		log.warning(
+			`Clients still linked to a removed resource: ${linked
+				.map((client) => `"${client.name}" (${client.client_id})`)
+				.join(
+					", ",
+				)}. Their token requests for it will fail with invalid_target until it is added again.`,
+		);
+	}
+	await replaceOAuthResources(
+		props,
+		branchId,
+		stored.filter((url) => !urls.includes(url)),
 	);
 };
 
@@ -1939,6 +2134,16 @@ const oauthClientUpdate = async (
 		disabled?: boolean;
 	},
 ) => {
+	for (const [flag, values] of [
+		["--redirect-uris", props.redirectUris],
+		["--resources", props.resources],
+	] as const) {
+		if (values?.length === 0) {
+			throw new Error(
+				`${flag} must list at least one value; the API does not accept an empty list.`,
+			);
+		}
+	}
 	requireUpdateFields(
 		[
 			props.name,
