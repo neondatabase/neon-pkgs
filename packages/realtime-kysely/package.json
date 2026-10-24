@@ -54,7 +54,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@neon/realtime": "^0.1.0",
+    "@neon/realtime": "^0.2.0",
     "kysely": ">=0.28.17 <0.30.0"
   },
   "engines": {

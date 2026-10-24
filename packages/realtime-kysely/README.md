@@ -13,7 +13,7 @@ backend SDK while preserving Kysely's inferred result-row type.
 npm install @neon/realtime @neon/realtime-kysely kysely
 ```
 
-> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.1, and Kysely 0.28.17 or
+> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and Kysely 0.28.17 or
 > 0.29.x. Both `@neon/realtime` and Kysely are peer dependencies. Kysely 0.29
 > itself requires Node.js >= 22.
 

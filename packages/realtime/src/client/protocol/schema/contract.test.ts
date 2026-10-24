@@ -1,15 +1,19 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
-import protocolSchema from "../../../../schema/realtime-protocol-v1.schema.json";
-import capabilitySchema from "../../../../schema/realtime-query-capability-v1.schema.json";
+import protocolSchema from "../../../../schema/realtime-protocol.schema.json";
+import capabilitySchema from "../../../../schema/realtime-query-capability.schema.json";
 import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v1.fixtures.json";
-import protocolFixtures from "./realtime-protocol-v1.fixtures.json";
+import orderedFixtures from "./ordered-changes.fixtures.json";
+import protocolFixtures from "./realtime-protocol.fixtures.json";
 
 describe("Realtime protocol contracts", () => {
 	it("accepts every public protocol fixture marked valid", () => {
 		const validate = validator(protocolSchema);
-		for (const fixture of protocolFixtures.valid) {
+		for (const fixture of [
+			...protocolFixtures.valid,
+			...orderedFixtures.valid,
+		]) {
 			expect(validate(fixture), JSON.stringify(validate.errors)).toBe(
 				true,
 			);
@@ -18,7 +22,10 @@ describe("Realtime protocol contracts", () => {
 
 	it("rejects every public protocol fixture marked invalid", () => {
 		const validate = validator(protocolSchema);
-		for (const fixture of protocolFixtures.invalid) {
+		for (const fixture of [
+			...protocolFixtures.invalid,
+			...orderedFixtures.invalid,
+		]) {
 			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
 		}
 	});

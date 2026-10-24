@@ -1,0 +1,182 @@
+{
+  "valid": [
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "after_row_key": null
+        }
+      ]
+    },
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "after_row_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "after_row_key": ""
+        }
+      ]
+    },
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "after_row_key": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        }
+      ]
+    },
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "after_row_key": 1
+        }
+      ]
+    },
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "ab",
+          "after_row_key": null
+        }
+      ]
+    },
+    {
+      "type": "keyed_results",
+      "publication_id": "moves",
+      "index": 0,
+      "txids": [
+        "1"
+      ],
+      "targets": [
+        {
+          "live_id": "9",
+          "epoch": "1",
+          "sequence": "1"
+        }
+      ],
+      "changes": [
+        {
+          "op": "move",
+          "row_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "after_row_key": null,
+          "values": []
+        }
+      ]
+    }
+  ]
+}

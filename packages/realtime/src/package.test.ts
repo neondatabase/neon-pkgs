@@ -6,6 +6,7 @@ import {
 	realpathSync,
 	rmSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,9 +16,29 @@ import { describe, expect, it } from "vitest";
 const packageRoot = dirname(
 	fileURLToPath(new URL("../package.json", import.meta.url)),
 );
-const schemaSubpaths = [
-	"schema/realtime-query-capability-v1.schema.json",
-	"schema/realtime-protocol-v1.schema.json",
+const packageRequire = createRequire(import.meta.url);
+const schemas = [
+	{
+		path: "schema/realtime-protocol.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
+		exports: [
+			"schema/realtime-protocol.schema.json",
+			"schema/realtime-protocol-v2.schema.json",
+		],
+	},
+	{
+		path: "schema/realtime-query-capability.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-query-capability-v1.schema.json",
+		exports: [
+			"schema/realtime-query-capability.schema.json",
+			"schema/realtime-query-capability-v1.schema.json",
+		],
+	},
+	{
+		path: "schema/legacy/realtime-protocol-v1.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-protocol-v1.schema.json",
+		exports: ["schema/realtime-protocol-v1.schema.json"],
+	},
 ] as const;
 
 describe("@neon/realtime package", () => {
@@ -63,19 +84,27 @@ describe("@neon/realtime package", () => {
 		expect(manifest.peerDependenciesMeta.ws?.optional).toBe(true);
 	});
 
-	it("publishes the canonical schemas directly", () => {
+	it("publishes current schemas and resolves versioned exports to their own contracts", () => {
 		const manifest = JSON.parse(
 			readFileSync(join(packageRoot, "package.json"), "utf8"),
 		) as {
 			readonly exports: Readonly<Record<string, string>>;
 		};
 
-		for (const schemaSubpath of schemaSubpaths) {
-			const exportedPath = manifest.exports[`./${schemaSubpath}`];
-			expect(exportedPath).toBe(`./${schemaSubpath}`);
-			expect(
-				realpathSync(join(packageRoot, exportedPath as string)),
-			).toBe(realpathSync(join(packageRoot, schemaSubpath)));
+		for (const schema of schemas) {
+			for (const subpath of schema.exports) {
+				const exportedPath = manifest.exports[`./${subpath}`];
+				expect(exportedPath).toBe(`./${schema.path}`);
+				const resolved = packageRequire.resolve(
+					`@neon/realtime/${subpath}`,
+				);
+				expect(realpathSync(resolved)).toBe(
+					realpathSync(join(packageRoot, schema.path)),
+				);
+				expect(JSON.parse(readFileSync(resolved, "utf8")).$id).toBe(
+					schema.id,
+				);
+			}
 		}
 
 		const packDestination = mkdtempSync(
@@ -102,8 +131,8 @@ describe("@neon/realtime package", () => {
 				["-tf", join(packDestination, tarballs[0] as string)],
 				{ encoding: "utf8" },
 			).split(/\r?\n/);
-			for (const schemaSubpath of schemaSubpaths) {
-				expect(files).toContain(`package/${schemaSubpath}`);
+			for (const schema of schemas) {
+				expect(files).toContain(`package/${schema.path}`);
 			}
 		} finally {
 			rmSync(packDestination, { recursive: true, force: true });
