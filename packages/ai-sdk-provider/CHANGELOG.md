@@ -1,5 +1,17 @@
 # @neon/ai-sdk-provider
 
+## 1.2.0
+
+### Minor Changes
+
+- dce6878: Typed model autocomplete now follows [neon.com/models](https://neon.com/models), adding `claude-haiku-5-5`, `claude-sonnet-5-5`, `gpt-6-sol`, `gpt-6-luna`, `gpt-6-1-sol`, `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon`, `glm-5-3`, `grok-4-7`, and `deepseek-v4-1-flash`, plus `bge-large-en` for `neon.embeddingModel()`.
+
+  The provider no longer sends parameters these models reject: `temperature`, `topP`, and penalties for `gemini-3-7-flash`, `gemini-3-8-flash`, and `gemini-4-argon`, and penalties for Grok and DeepSeek models.
+
+### Patch Changes
+
+- ef89775: The gpt-6 models now get the same Responses-route handling as gpt-5: `reasoningEffort` is sent instead of ignored, `temperature` and `topP` are dropped with a warning instead of returning a 400, and system messages use the `developer` role. `getNeonModelCapabilities()` now reports `temperature` and `topP` as unsupported for `gpt-5-5`, `gpt-5-6`, and `gpt-6` models.
+
 ## 1.1.0
 
 ### Minor Changes
