@@ -1,5 +1,18 @@
 # @neon/tools
 
+## 2.4.0
+
+### Minor Changes
+
+- c745d8e: Add `neon.projects.count()`, which returns the number of active projects in the organization without paging through `projects.list()` (`GET /projects/count`, beta). It takes `{ org_id? }` and defaults to the client's `orgId`. `@neon/tools` publishes it as the `projects.count` selector (`count_projects`), and `@neon/effect` exposes it as an `Effect<number>`.
+- d23ace5: Add `countProjects` (`GET /projects/count`, beta) from the live Neon API spec: it returns `{ count }` for the active projects in an organization without paging through them. It is in `@neon/sdk/raw`, and `@neon/tools/schemas` exports its `zCountProjectsQuery` schema. The consumption history metric docs now list the Neon Functions metrics (`functions_active_capacity_microseconds`, `functions_waiting_capacity_microseconds`, `functions_invocations`, `functions_egress_bytes`).
+
+### Patch Changes
+
+- Updated dependencies [c745d8e]
+- Updated dependencies [d23ace5]
+  - @neon/sdk@7.5.0
+
 ## 2.3.0
 
 ### Minor Changes
