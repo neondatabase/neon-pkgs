@@ -64,11 +64,10 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 	);
 
 	e2eTest(
-		"projects.count counts a project in the client's org",
+		"projects.count includes a project it just created",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();
 			if (scope.kind !== "org-or-user") return;
-			if (!process.env.NEON_ORG_ID?.trim()) return;
 			const neon = makeClient();
 
 			const project = expectOk(
