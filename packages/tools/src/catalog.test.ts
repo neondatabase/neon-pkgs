@@ -157,6 +157,169 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({ delete_data: true });
 	});
 
+	test("keeps OAuth credentials out of agent tool schemas where they cannot be used safely", () => {
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"auth.oauthProviders.add",
+				"auth.oauthProviders.update",
+			] as const,
+		});
+		const addSchema = z.toJSONSchema(
+			tools["auth.oauthProviders.add"].inputSchema,
+		);
+		const updateSchema = z.toJSONSchema(
+			tools["auth.oauthProviders.update"].inputSchema,
+		);
+
+		expect(addSchema.properties).not.toHaveProperty("client_id");
+		expect(updateSchema.properties).not.toHaveProperty("client_id");
+		for (const [tool, schema] of [
+			[tools["auth.oauthProviders.add"], addSchema],
+			[tools["auth.oauthProviders.update"], updateSchema],
+		] as const) {
+			expect(schema.properties).toHaveProperty("microsoft_tenant_id");
+			expect(JSON.stringify(schema)).not.toContain("client_secret");
+			expect(tool.description).not.toContain("client_secret");
+			expect(tool.description).toContain("Neon Console");
+		}
+	});
+
+	test("adds an OAuth provider with shared credentials and redacts its response", async () => {
+		const requests: Request[] = [];
+		const tool = createNeonTool("auth.oauthProviders.add", {
+			apiKey: "test-key",
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					id: "google",
+					type: "shared",
+					client_secret: "dummy-response-secret",
+				});
+			},
+		});
+
+		const result = await tool.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			id: "google",
+		});
+
+		expect(requests).toHaveLength(1);
+		expect(await requests[0].json()).toEqual({ id: "google" });
+		expect(result.data).toEqual({ id: "google", type: "shared" });
+	});
+
+	test("rejects OAuth provider secrets and custom adds before fetch", async () => {
+		const requests: Request[] = [];
+		const options = {
+			apiKey: "test-key",
+			fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({ id: "github", type: "standard" });
+			},
+		};
+		const addTool = createNeonTool("auth.oauthProviders.add", options);
+		const updateTool = createNeonTool(
+			"auth.oauthProviders.update",
+			options,
+		);
+		const submitted = "dummy-secret-that-must-not-be-echoed";
+
+		const addSecretResult = addTool.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			id: "github",
+			client_secret: submitted,
+		} as never);
+		await expect(addSecretResult).rejects.toThrow("client_secret");
+		await expect(addSecretResult).rejects.not.toThrow(submitted);
+
+		const updateSecretResult = updateTool.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			oauth_provider_id: "github",
+			client_secret: submitted,
+		} as never);
+		await expect(updateSecretResult).rejects.toThrow("client_secret");
+		await expect(updateSecretResult).rejects.not.toThrow(submitted);
+
+		await expect(
+			addTool.execute({
+				project_id: "project-id",
+				branch_id: "branch-id",
+				id: "github",
+				client_id: "dummy-client-id",
+			} as never),
+		).rejects.toThrow("client_id");
+		await expect(
+			updateTool.execute({
+				project_id: "project-id",
+				branch_id: "branch-id",
+				oauth_provider_id: "github",
+				client_id: "dummy-client-id",
+			} as never),
+		).rejects.toThrow("client_id");
+		expect(requests).toHaveLength(0);
+	});
+
+	test("updates the Microsoft tenant without replacing OAuth credentials", async () => {
+		const requests: Request[] = [];
+		const tool = createNeonTool("auth.oauthProviders.update", {
+			apiKey: "test-key",
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					id: "microsoft",
+					type: "standard",
+					client_id: "new-client-id",
+					client_secret: "dummy-response-secret",
+				});
+			},
+		});
+
+		const result = await tool.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+			oauth_provider_id: "microsoft",
+			microsoft_tenant_id: "tenant-id",
+		});
+
+		expect(await requests[0].json()).toEqual({
+			microsoft_tenant_id: "tenant-id",
+		});
+		expect(result.data).toEqual({
+			id: "microsoft",
+			type: "standard",
+			client_id: "new-client-id",
+		});
+	});
+
+	test("redacts OAuth client secrets from provider lists", async () => {
+		const tool = createNeonTool("auth.oauthProviders.list", {
+			apiKey: "test-key",
+			fetch: async () =>
+				jsonResponse({
+					providers: [
+						{
+							id: "google",
+							type: "standard",
+							client_id: "client-id",
+							client_secret: "dummy-response-secret",
+						},
+					],
+				}),
+		});
+
+		const result = await tool.execute({
+			project_id: "project-id",
+			branch_id: "branch-id",
+		});
+		expect(result.data).toEqual([
+			{ id: "google", type: "standard", client_id: "client-id" },
+		]);
+	});
+
 	test("maps apiKeys.create key_name", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

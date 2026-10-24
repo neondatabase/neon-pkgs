@@ -342,6 +342,8 @@ The adapter maps approval requirements to Mastra's `requireApproval` field and f
 
 Every non-read operation is conservatively marked as potentially destructive and requires approval. Reads that return connection credentials also require approval.
 
+OAuth client secrets are not model-facing inputs. `auth.oauthProviders.add` supports Neon-managed shared credentials when available. Configure providers that require custom credentials in the [Neon Console](https://console.neon.tech). `auth.oauthProviders.update` changes the Microsoft tenant ID while preserving existing credentials. Make client ID and secret changes together in the Neon Console. OAuth provider results also omit secrets.
+
 Binary request fields accept base64 strings:
 
 ```ts
