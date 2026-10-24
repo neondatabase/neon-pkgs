@@ -51,6 +51,43 @@ oauthTools["projects.list"].execute(
 	{ apiKey: async () => "oauth-access-token" },
 );
 
+const oauthProviderTools = createNeonTools({
+	apiKey: "test-key",
+	tools: ["auth.oauthProviders.add", "auth.oauthProviders.update"] as const,
+});
+oauthProviderTools["auth.oauthProviders.add"].execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	id: "google",
+	// @ts-expect-error OAuth client secrets are not model-facing tool inputs
+	client_secret: "do-not-send",
+});
+oauthProviderTools["auth.oauthProviders.add"].execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	id: "google",
+	// @ts-expect-error Custom OAuth credentials are configured together in the Console
+	client_id: "custom-client-id",
+});
+oauthProviderTools["auth.oauthProviders.update"].execute({
+	project_id: "project-id",
+	branch_id: "branch-id",
+	oauth_provider_id: "google",
+	// @ts-expect-error Custom OAuth credentials are configured together in the Console
+	client_id: "new-client-id",
+});
+oauthProviderTools["auth.oauthProviders.update"]
+	.execute({
+		project_id: "project-id",
+		branch_id: "branch-id",
+		oauth_provider_id: "microsoft",
+		microsoft_tenant_id: "tenant-id",
+	})
+	.then((result) => {
+		// @ts-expect-error OAuth client secrets are omitted from tool results
+		result.data.client_secret;
+	});
+
 // @ts-expect-error createNeonTool preserves the request schema
 listProjects.execute({ name: "wrong-operation" });
 

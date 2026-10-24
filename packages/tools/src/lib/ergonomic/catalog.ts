@@ -1,3 +1,4 @@
+import type { NeonAuthOauthProvider } from "@neon/sdk";
 import * as z from "zod";
 import { decodeBase64 } from "../binary.js";
 import {
@@ -28,6 +29,19 @@ const logReadAnnotations = {
 	idempotentHint: true,
 	openWorldHint: false,
 } as const;
+
+const oauthProviderListDescription =
+	"Lists the OAuth providers configured for the branch. OAuth client secrets are omitted from the result.";
+const oauthProviderAddDescription =
+	"Adds an OAuth provider using Neon-managed shared credentials when available. OAuth client secrets are not accepted by agent tools. Configure custom OAuth provider credentials in the Neon Console: https://console.neon.tech.";
+const oauthProviderUpdateDescription =
+	"Updates the Microsoft tenant ID on an OAuth provider while preserving its existing credentials. Configure or replace custom OAuth provider credentials together in the Neon Console: https://console.neon.tech.";
+
+const withoutOAuthClientSecret = ({
+	client_secret: _,
+	...provider
+}: NeonAuthOauthProvider): Omit<NeonAuthOauthProvider, "client_secret"> =>
+	provider;
 
 export type ToolFactory = (typeof toolFactories)[NeonToolId];
 
@@ -1333,47 +1347,52 @@ export const toolFactories = {
 		fromGenerated(options, {
 			id: "auth.oauthProviders.list",
 			generated: "listBranchNeonAuthOauthProviders",
-			run: (neon, input, signal) =>
-				neon.auth.oauthProviders.list(
+			description: oauthProviderListDescription,
+			run: async (neon, input, signal) => {
+				const providers = await neon.auth.oauthProviders.list(
 					{ projectId: input.project_id, branchId: input.branch_id },
-					{
-						signal,
-					},
-				),
+					{ signal },
+				);
+				return providers.map(withoutOAuthClientSecret);
+			},
 		}),
 	"auth.oauthProviders.add": (options) =>
 		fromGenerated(options, {
 			id: "auth.oauthProviders.add",
 			generated: "addBranchNeonAuthOauthProvider",
-			run: (neon, input, signal) =>
-				neon.auth.oauthProviders.add(
+			omit: ["client_id", "client_secret"],
+			description: oauthProviderAddDescription,
+			run: async (neon, input, signal) => {
+				const provider = await neon.auth.oauthProviders.add(
 					{
 						projectId: input.project_id,
 						branchId: input.branch_id,
 						id: input.id,
-						client_id: input.client_id,
-						client_secret: input.client_secret,
 						microsoft_tenant_id: input.microsoft_tenant_id,
 					},
 					{ signal },
-				),
+				);
+				return withoutOAuthClientSecret(provider);
+			},
 		}),
 	"auth.oauthProviders.update": (options) =>
 		fromGenerated(options, {
 			id: "auth.oauthProviders.update",
 			generated: "updateBranchNeonAuthOauthProvider",
-			run: (neon, input, signal) =>
-				neon.auth.oauthProviders.update(
+			omit: ["client_id", "client_secret"],
+			description: oauthProviderUpdateDescription,
+			run: async (neon, input, signal) => {
+				const provider = await neon.auth.oauthProviders.update(
 					{
 						projectId: input.project_id,
 						branchId: input.branch_id,
 						providerId: input.oauth_provider_id,
-						client_id: input.client_id,
-						client_secret: input.client_secret,
 						microsoft_tenant_id: input.microsoft_tenant_id,
 					},
 					{ signal },
-				),
+				);
+				return withoutOAuthClientSecret(provider);
+			},
 		}),
 	"auth.oauthProviders.delete": (options) =>
 		fromGenerated(options, {

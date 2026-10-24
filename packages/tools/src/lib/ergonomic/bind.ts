@@ -260,6 +260,7 @@ type GeneratedArg<G extends NeonOperationId> = z.input<GeneratedSchema<G>>;
 
 type FromGeneratedMeta = {
 	list?: boolean;
+	description?: string;
 	annotations?: NeonToolAnnotations;
 	requiresApproval?: boolean;
 };
@@ -335,8 +336,8 @@ export function fromGenerated(
 		id: publishedId(spec.id),
 		title: generated.title,
 		description: spec.list
-			? `${generated.description.trimEnd()}${ALL_PAGES}`
-			: generated.description,
+			? `${(spec.description ?? generated.description).trimEnd()}${ALL_PAGES}`
+			: (spec.description ?? generated.description),
 		inputSchema,
 		annotations: spec.annotations ?? generated.annotations,
 		requiresApproval: spec.requiresApproval ?? generated.requiresApproval,
