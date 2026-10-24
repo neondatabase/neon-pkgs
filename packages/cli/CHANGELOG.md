@@ -1,5 +1,11 @@
 # neon
 
+## 8.11.2
+
+### Patch Changes
+
+- 45de1d8: `neon functions new` and `neon functions templates list` validate registry files against the JSON Schemas published at neon.com, instead of a copy in the CLI.
+
 ## 8.11.1
 
 ### Patch Changes
