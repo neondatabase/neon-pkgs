@@ -1111,7 +1111,7 @@ Variables a template needs are declared on each function in `neon.ts` (`env: { A
 
 Nothing is written until every check passes: a file that already exists with different contents needs `--force`, and a slug `neon.ts` already declares needs `--slug`, `--force`, or `--no-add-to-config`. A `separate` template sets its own slugs, so `--slug` only changes its directory; remove the existing declarations from `neon.ts`, or use `--force` or `--no-add-to-config`.
 
-The registry lives in [`registry/`](https://github.com/neondatabase/examples/tree/main/registry) in `neondatabase/examples`. The CLI reads the index from `https://neon.com/functions/registry/registry.json`, which serves `main` through a CDN cache, and falls back to raw GitHub when neon.com is unreachable. Template files are always read from raw GitHub. Set `NEON_FUNCTION_REGISTRY_DIR` to a local checkout to try templates before they are merged, or `NEON_FUNCTION_REGISTRY_URL` to read an index from somewhere else.
+The registry lives in [`registry/`](https://github.com/neondatabase/examples/tree/main/registry) in `neondatabase/examples`. The CLI reads the index from `https://neon.com/functions/registry/registry.json`, which serves `main` through a CDN cache, and falls back to raw GitHub when neon.com is unreachable. Template files are always read from raw GitHub. Index and template JSON are validated against the schemas at `https://neon.com/functions/registry/schemas/` (same GitHub fallback). Set `NEON_FUNCTION_REGISTRY_DIR` to a local checkout to try templates before they are merged, or `NEON_FUNCTION_REGISTRY_URL` to read an index from somewhere else.
 
 ## Function triggers (`triggers`)
 

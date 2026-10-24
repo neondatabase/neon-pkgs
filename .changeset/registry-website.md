@@ -3,4 +3,4 @@
 "neonctl": patch
 ---
 
-Allow an optional `website` https URL on Function Registry index entries.
+`neon functions new` and `neon functions templates list` validate registry files against the JSON Schemas published at neon.com, instead of a copy in the CLI.

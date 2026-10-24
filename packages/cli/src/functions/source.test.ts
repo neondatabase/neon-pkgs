@@ -10,7 +10,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MAX_JSON_BYTES, REGISTRY_CONTRACT } from "./registry";
+import { MAX_JSON_BYTES } from "./registry";
 import {
 	DEFAULT_REGISTRY_URL,
 	describeRegistrySource,
@@ -118,18 +118,6 @@ describe("openRegistry from a directory", () => {
 			JSON.stringify({ templates }),
 		);
 
-	const writeTemplate = (fields: Record<string, unknown>) =>
-		writeFileSync(
-			join(dir, "demo/template.json"),
-			JSON.stringify({
-				id: "demo",
-				title: "Demo",
-				description: "d",
-				layout: "router",
-				...fields,
-			}),
-		);
-
 	it("rejects a malformed index entry instead of skipping it", async () => {
 		writeIndex([
 			{
@@ -146,50 +134,22 @@ describe("openRegistry from a directory", () => {
 			},
 		]);
 		await expect(openRegistry({ kind: "dir", dir })).rejects.toThrow(
-			'Invalid function registry: templates[1] ("Bad") has a bad id.',
+			/templates\/1\/id/,
 		);
 	});
 
 	it("rejects an index with more entries than the CLI reads", async () => {
 		writeIndex(
-			Array.from(
-				{ length: REGISTRY_CONTRACT.maxIndexEntries + 1 },
-				(_, i) => ({
-					id: `t${i}`,
-					title: "T",
-					description: "d",
-					path: `t${i}/template.json`,
-				}),
-			),
+			Array.from({ length: 501 }, (_, i) => ({
+				id: `t${i}`,
+				title: "T",
+				description: "d",
+				path: `t${i}/template.json`,
+			})),
 		);
 		await expect(openRegistry({ kind: "dir", dir })).rejects.toThrow(
-			/more than the \d+ the CLI reads/,
+			/must NOT have more than 500 items/,
 		);
-	});
-
-	it("rejects a multiline environment description", async () => {
-		writeTemplate({
-			environment: [
-				{ name: "API_KEY", description: "Key\nAPI_KEY=leaked" },
-			],
-		});
-		await expect(loadDemo()).rejects.toThrow(/one-line description/);
-	});
-
-	it("rejects an operation source that is not TypeScript", async () => {
-		writeTemplate({
-			operations: [
-				{
-					id: "send",
-					title: "Send",
-					description: "d",
-					source: "functions/send.tsx",
-					recommended: true,
-					route: "/send",
-				},
-			],
-		});
-		await expect(loadDemo()).rejects.toThrow(/malformed operations/);
 	});
 });
 
