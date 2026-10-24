@@ -54,20 +54,36 @@ export type RegistryIndexEntry = {
 	website?: string;
 };
 
-export type SchemaValidate = {
-	(data: unknown): boolean;
+export type SchemaValidate<T> = {
+	check(data: unknown): data is T;
 	errorsText(): string;
 };
 
-const assertValid = (
-	validate: SchemaValidate,
+export type RegistryIndexDocument = {
+	templates: Array<
+		Omit<RegistryIndexEntry, "path"> & {
+			path: string;
+		}
+	>;
+};
+
+export type TemplateDocument = Omit<
+	FunctionTemplate,
+	"dependencies" | "environment"
+> & {
+	dependencies?: string[];
+	environment?: FunctionTemplateEnvironment[];
+};
+
+function assertValid<T>(
+	validate: SchemaValidate<T>,
 	data: unknown,
 	label: string,
-): void => {
-	if (!validate(data)) {
+): asserts data is T {
+	if (!validate.check(data)) {
 		throw new Error(`${label}: ${validate.errorsText()}`);
 	}
-};
+}
 
 export const recommendedOperations = (
 	operations: readonly FunctionTemplateOperation[],
@@ -91,18 +107,17 @@ export const resolveOperationById = (
 
 export const parseRegistryIndex = (
 	text: string,
-	validate: SchemaValidate,
+	validate: SchemaValidate<RegistryIndexDocument>,
 ): RegistryIndexEntry[] => {
 	const data: unknown = JSON.parse(text);
 	assertValid(validate, data, "Invalid function registry");
-	const items = (data as { templates: RegistryIndexEntry[] }).templates;
 	const seen = new Set<string>();
-	return items.map((item, index) => {
+	return data.templates.map((item, index) => {
 		const at = `templates[${index}] ("${item.id}")`;
 		if (seen.has(item.id)) {
 			throw new Error(`Invalid function registry: ${at} repeats an id.`);
 		}
-		if (!item.path || !isContainedRelativePath(item.path)) {
+		if (!isContainedRelativePath(item.path)) {
 			throw new Error(
 				`Invalid function registry: ${at} has a missing or unsafe path.`,
 			);
@@ -114,28 +129,32 @@ export const parseRegistryIndex = (
 
 export const parseTemplateItem = (
 	text: string,
-	validate: SchemaValidate,
+	validate: SchemaValidate<TemplateDocument>,
 	expectedId?: string,
 ): FunctionTemplate => {
 	const data: unknown = JSON.parse(text);
 	assertValid(validate, data, "Invalid template.json");
-	const template = data as FunctionTemplate;
-	if (expectedId !== undefined && template.id !== expectedId) {
+	if (expectedId !== undefined && data.id !== expectedId) {
 		throw new Error("Invalid template.json: bad or mismatched id.");
 	}
-	template.dependencies ??= [];
-	template.environment ??= [];
-	if (template.operations) {
-		for (const operation of template.operations) {
-			if (!isContainedRelativePath(operation.source)) {
-				throw new Error(
-					`Invalid template.json for "${template.id}": malformed operations.`,
-				);
-			}
-			if (template.layout !== "separate") {
-				operation.route ??= `/${operation.id}`;
-			}
+	const operations = data.operations?.map((operation) => {
+		if (!isContainedRelativePath(operation.source)) {
+			throw new Error(
+				`Invalid template.json for "${data.id}": malformed operations.`,
+			);
 		}
-	}
-	return template;
+		return data.layout === "separate"
+			? operation
+			: { ...operation, route: operation.route ?? `/${operation.id}` };
+	});
+	return {
+		id: data.id,
+		...(data.provider ? { provider: data.provider } : {}),
+		title: data.title,
+		description: data.description,
+		layout: data.layout,
+		dependencies: data.dependencies ?? [],
+		environment: data.environment ?? [],
+		...(operations ? { operations } : {}),
+	};
 };

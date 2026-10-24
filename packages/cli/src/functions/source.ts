@@ -8,8 +8,10 @@ import {
 	MAX_TOTAL_BYTES,
 	parseRegistryIndex,
 	parseTemplateItem,
+	type RegistryIndexDocument,
 	type RegistryIndexEntry,
 	type SchemaValidate,
+	type TemplateDocument,
 } from "./registry.js";
 
 export const DEFAULT_REGISTRY_URL =
@@ -157,15 +159,15 @@ const REGISTRY_SCHEMA_FILE = "schemas/registry.schema.json";
 const TEMPLATE_SCHEMA_FILE = "schemas/template.schema.json";
 
 type CompiledSchemas = {
-	registry: SchemaValidate;
-	template: SchemaValidate;
+	registry: SchemaValidate<RegistryIndexDocument>;
+	template: SchemaValidate<TemplateDocument>;
 };
 
 let publishedSchemas: Promise<CompiledSchemas> | undefined;
 
 const compileSchemas = async (
-	registrySchema: unknown,
-	templateSchema: unknown,
+	registrySchema: object,
+	templateSchema: object,
 ): Promise<CompiledSchemas> => {
 	const [{ default: Ajv2020 }, { default: addFormats }] = await Promise.all([
 		import("ajv/dist/2020.js"),
@@ -173,15 +175,16 @@ const compileSchemas = async (
 	]);
 	const ajv = new Ajv2020({ allErrors: true, strict: false });
 	addFormats(ajv);
-	const wrap = (schema: unknown): SchemaValidate => {
-		const check = ajv.compile(schema);
-		const validate: SchemaValidate = (data) => check(data);
-		validate.errorsText = () => ajv.errorsText(check.errors);
-		return validate;
+	const wrap = <T>(schema: object): SchemaValidate<T> => {
+		const check = ajv.compile<T>(schema);
+		return {
+			check: (data: unknown): data is T => check(data),
+			errorsText: () => ajv.errorsText(check.errors),
+		};
 	};
 	return {
-		registry: wrap(registrySchema),
-		template: wrap(templateSchema),
+		registry: wrap<RegistryIndexDocument>(registrySchema),
+		template: wrap<TemplateDocument>(templateSchema),
 	};
 };
 
@@ -189,10 +192,23 @@ const readPublishedSchemas = async (
 	index: string,
 ): Promise<CompiledSchemas> => {
 	const read = urlReader(new URL(index));
-	return compileSchemas(
-		JSON.parse(await read(REGISTRY_SCHEMA_FILE, MAX_JSON_BYTES)),
-		JSON.parse(await read(TEMPLATE_SCHEMA_FILE, MAX_JSON_BYTES)),
+	const registrySchema: unknown = JSON.parse(
+		await read(REGISTRY_SCHEMA_FILE, MAX_JSON_BYTES),
 	);
+	const templateSchema: unknown = JSON.parse(
+		await read(TEMPLATE_SCHEMA_FILE, MAX_JSON_BYTES),
+	);
+	if (
+		typeof registrySchema !== "object" ||
+		registrySchema === null ||
+		typeof templateSchema !== "object" ||
+		templateSchema === null
+	) {
+		throw new RegistryError(
+			"Published Function Registry schemas were not JSON objects.",
+		);
+	}
+	return compileSchemas(registrySchema, templateSchema);
 };
 
 const loadPublishedSchemas = (): Promise<CompiledSchemas> => {
