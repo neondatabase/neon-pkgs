@@ -628,6 +628,46 @@
                 }
             }
         },
+        "/projects/count": {
+            "get": {
+                "summary": "Retrieve projects count",
+                "description": "Retrieves the number of active projects you can access in the specified organization, without paging through the list of projects.\nProjects that are being created or deleted are not counted.\nIf using a personal API key, include the `org_id` parameter to specify which organization to work with.\nIf using an org API key, `org_id` is automatically inferred from the key.\n",
+                "tags": [
+                    "Project"
+                ],
+                "x-stability-level": "beta",
+                "operationId": "countProjects",
+                "parameters": [
+                    {
+                        "name": "org_id",
+                        "description": "Count projects in the organization with this `org_id`.",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9-]{1,60}$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Returned the number of projects in the organization",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProjectsCountResponse"
+                                },
+                                "example": {
+                                    "count": 42
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/GeneralError"
+                    }
+                }
+            }
+        },
         "/projects/shared": {
             "get": {
                 "summary": "List shared projects",
@@ -747,7 +787,7 @@
             ],
             "get": {
                 "summary": "Retrieve project details",
-                "description": "Retrieves information about the specified project.\nReturned details include the project settings, compute configuration, history retention, owner information, and current usage metrics.\n",
+                "description": "Retrieves information about the specified project.\nReturned details include the project settings, compute configuration, history retention, owner information, and current usage metrics.\nThe usage metrics are not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.\n",
                 "tags": [
                     "Project"
                 ],
@@ -4346,7 +4386,7 @@
             ],
             "get": {
                 "summary": "Retrieve branch details",
-                "description": "Retrieves information about the specified branch.\nA `branch_id` value has a `br-` prefix.\n\nEach Neon project is initially created with a root and default branch named `main`.\nA project can contain one or more branches.\nA parent branch is identified by a `parent_id` value, which is the `id` of the parent branch.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
+                "description": "Retrieves information about the specified branch.\nA `branch_id` value has a `br-` prefix.\n\nEach Neon project is initially created with a root and default branch named `main`.\nA project can contain one or more branches.\nA parent branch is identified by a `parent_id` value, which is the `id` of the parent branch.\nFor related information, see [Manage branches](https://neon.com/docs/manage/branches/).\nThe usage metrics are not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.\n",
                 "tags": [
                     "Branch"
                 ],
@@ -7118,7 +7158,7 @@
         "/consumption_history/v2/projects": {
             "get": {
                 "summary": "Retrieve project consumption metrics",
-                "description": "Returns consumption metrics for up to `limit` projects per page. If `project_ids` is omitted,\nprojects in the organization are included across pages (use `cursor`). If `project_ids` is\nprovided, the response is limited to those projects (up to 100). Available for accounts on\nLaunch, Scale, Agent, Business, and Enterprise plans.\n\nHistory starts when the account upgrades to an eligible plan.\n\nThe `metrics` query parameter is required. Supported values:\n`compute_unit_seconds`, `root_branch_bytes_month`, `child_branch_bytes_month`,\n`instant_restore_bytes_month`, `public_network_transfer_bytes`, `private_network_transfer_bytes`,\n`extra_branches_month`, `snapshot_storage_bytes_month`.\n\nConsumption metrics within each project are returned in ascending time order (oldest first).\nThis request does not wake project computes.\n",
+                "description": "Returns consumption metrics for up to `limit` projects per page. If `project_ids` is omitted,\nprojects in the organization are included across pages (use `cursor`). If `project_ids` is\nprovided, the response is limited to those projects (up to 100). Available for accounts on\nLaunch, Scale, Agent, Business, and Enterprise plans.\n\nHistory starts when the account upgrades to an eligible plan.\n\nThe `metrics` query parameter is required. Supported values:\n`compute_unit_seconds`, `root_branch_bytes_month`, `child_branch_bytes_month`,\n`instant_restore_bytes_month`, `public_network_transfer_bytes`, `private_network_transfer_bytes`,\n`extra_branches_month`, `snapshot_storage_bytes_month`,\n`functions_active_capacity_microseconds`, `functions_waiting_capacity_microseconds`,\n`functions_invocations`, `functions_egress_bytes`.\n\nConsumption metrics within each project are returned in ascending time order (oldest first).\nThis request does not wake project computes.\n",
                 "tags": [
                     "Consumption"
                 ],
@@ -7199,7 +7239,7 @@
                     {
                         "name": "metrics",
                         "required": true,
-                        "description": "Required. List the metrics to return. Supported values:\n- `compute_unit_seconds`\n- `root_branch_bytes_month`\n- `child_branch_bytes_month`\n- `instant_restore_bytes_month`\n- `public_network_transfer_bytes`\n- `private_network_transfer_bytes`\n- `extra_branches_month`\n- `snapshot_storage_bytes_month`\n\nPass multiple values as repeated query parameters or a comma-separated list:\n- `metrics=compute_unit_seconds&metrics=extra_branches_month`\n- `metrics=compute_unit_seconds,extra_branches_month`\n",
+                        "description": "Required. List the metrics to return. Supported values:\n- `compute_unit_seconds`\n- `root_branch_bytes_month`\n- `child_branch_bytes_month`\n- `instant_restore_bytes_month`\n- `public_network_transfer_bytes`\n- `private_network_transfer_bytes`\n- `extra_branches_month`\n- `snapshot_storage_bytes_month`\n- `functions_active_capacity_microseconds`\n- `functions_waiting_capacity_microseconds`\n- `functions_invocations`\n- `functions_egress_bytes`\n\nPass multiple values as repeated query parameters or a comma-separated list:\n- `metrics=compute_unit_seconds&metrics=extra_branches_month`\n- `metrics=compute_unit_seconds,extra_branches_month`\n",
                         "in": "query",
                         "schema": {
                             "$ref": "#/components/schemas/ConsumptionHistoryQueryMetrics"
@@ -7273,7 +7313,7 @@
         "/consumption_history/v2/branches": {
             "get": {
                 "summary": "Retrieve branch consumption metrics",
-                "description": "Returns consumption metrics for each branch across one or more projects listed in\n`project_ids` (1 to 100 projects). Available for accounts on paid usage-based Launch, Scale,\nAgent, and Enterprise plans.\n\nHistory starts when the account first ingests branch-level consumption data.\n\nThe `metrics` query parameter is required. Only these six values are supported on this\nendpoint:\n`compute_unit_seconds`, `root_branch_bytes_month`, `child_branch_bytes_month`,\n`instant_restore_bytes_month`, `public_network_transfer_bytes`, `private_network_transfer_bytes`.\n\nThis endpoint does not support `extra_branches_month` or `snapshot_storage_bytes_month`.\nUse `GET /consumption_history/v2/projects` for those.\n\nConsumption metrics within each branch are returned in ascending time order (oldest first).\nThis request does not wake project computes.\n",
+                "description": "Returns consumption metrics for each branch across one or more projects listed in\n`project_ids` (1 to 100 projects). Available for accounts on paid usage-based Launch, Scale,\nAgent, and Enterprise plans.\n\nHistory starts when the account first ingests branch-level consumption data.\n\nThe `metrics` query parameter is required. These values are supported on this\nendpoint:\n`compute_unit_seconds`, `root_branch_bytes_month`, `child_branch_bytes_month`,\n`instant_restore_bytes_month`, `public_network_transfer_bytes`, `private_network_transfer_bytes`,\n`functions_active_capacity_microseconds`, `functions_waiting_capacity_microseconds`,\n`functions_invocations`, `functions_egress_bytes`.\n\nThis endpoint does not support `extra_branches_month` or `snapshot_storage_bytes_month`.\nUse `GET /consumption_history/v2/projects` for those.\n\nConsumption metrics within each branch are returned in ascending time order (oldest first).\nThis request does not wake project computes.\n",
                 "tags": [
                     "Consumption"
                 ],
@@ -7370,7 +7410,7 @@
                     {
                         "name": "metrics",
                         "required": true,
-                        "description": "Required. List the metrics to return. Only these values are supported:\n- `compute_unit_seconds`\n- `root_branch_bytes_month`\n- `child_branch_bytes_month`\n- `instant_restore_bytes_month`\n- `public_network_transfer_bytes`\n- `private_network_transfer_bytes`\n\nNot supported on this endpoint: `extra_branches_month`, `snapshot_storage_bytes_month`.\nUse `GET /consumption_history/v2/projects` for those.\n\nPass multiple values as repeated query parameters or a comma-separated list:\n- `metrics=compute_unit_seconds&metrics=public_network_transfer_bytes`\n- `metrics=compute_unit_seconds,public_network_transfer_bytes`\n",
+                        "description": "Required. List the metrics to return. Only these values are supported:\n- `compute_unit_seconds`\n- `root_branch_bytes_month`\n- `child_branch_bytes_month`\n- `instant_restore_bytes_month`\n- `public_network_transfer_bytes`\n- `private_network_transfer_bytes`\n- `functions_active_capacity_microseconds`\n- `functions_waiting_capacity_microseconds`\n- `functions_invocations`\n- `functions_egress_bytes`\n\nNot supported on this endpoint: `extra_branches_month`, `snapshot_storage_bytes_month`.\nUse `GET /consumption_history/v2/projects` for those.\n\nPass multiple values as repeated query parameters or a comma-separated list:\n- `metrics=compute_unit_seconds&metrics=public_network_transfer_bytes`\n- `metrics=compute_unit_seconds,public_network_transfer_bytes`\n",
                         "in": "query",
                         "schema": {
                             "$ref": "#/components/schemas/ConsumptionHistoryQueryMetrics"
@@ -11609,7 +11649,7 @@
                         "type": "boolean"
                     },
                     "active_time": {
-                        "description": "Control plane observed endpoints of this project being active this amount of wall-clock time.\n",
+                        "description": "Control plane observed endpoints of this project being active this amount of wall-clock time.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/projects`.\n",
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0
@@ -11754,25 +11794,25 @@
                         "minimum": 0
                     },
                     "data_transfer_bytes": {
-                        "description": "Bytes. Egress traffic from the Neon cloud to the client for given project over the billing period.\nIncludes deleted endpoints. The value has some lag. The value is reset at the beginning of each billing period.\n",
+                        "description": "Bytes. Egress traffic from the Neon cloud to the client for given project over the billing period.\nIncludes deleted endpoints. The value has some lag. The value is reset at the beginning of each billing period.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/projects`.\n",
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0
                     },
                     "written_data_bytes": {
-                        "description": "Bytes. Amount of WAL that travelled through Postgres storage for given project across all branches.\nThe value has some lag. The value is reset at the beginning of each billing period.\n",
+                        "description": "Bytes. Amount of WAL that travelled through Postgres storage for given project across all branches.\nThe value has some lag. The value is reset at the beginning of each billing period.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/projects`.\n",
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0
                     },
                     "compute_time_seconds": {
-                        "description": "Seconds. The number of CPU seconds used by the project's compute endpoints, including compute endpoints that have been deleted.\nThe value has some lag. The value is reset at the beginning of each billing period.\nExamples:\n1. An endpoint that uses 1 CPU for 1 second is equal to `compute_time=1`.\n2. An endpoint that uses 2 CPUs simultaneously for 1 second is equal to `compute_time=2`.\n",
+                        "description": "Seconds. The number of CPU seconds used by the project's compute endpoints, including compute endpoints that have been deleted.\nThe value has some lag. The value is reset at the beginning of each billing period.\nExamples:\n1. An endpoint that uses 1 CPU for 1 second is equal to `compute_time=1`.\n2. An endpoint that uses 2 CPUs simultaneously for 1 second is equal to `compute_time=2`.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/projects`.\n",
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0
                     },
                     "active_time_seconds": {
-                        "description": "Seconds. Control plane observed endpoints of this project being active this amount of wall-clock time.\nThe value has some lag.\nThe value is reset at the beginning of each billing period.\n",
+                        "description": "Seconds. Control plane observed endpoints of this project being active this amount of wall-clock time.\nThe value has some lag.\nThe value is reset at the beginning of each billing period.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/projects`.\n",
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0
@@ -12216,6 +12256,20 @@
                             "type": "string",
                             "pattern": "^[a-z0-9-]{1,60}$"
                         }
+                    }
+                }
+            },
+            "ProjectsCountResponse": {
+                "type": "object",
+                "required": [
+                    "count"
+                ],
+                "properties": {
+                    "count": {
+                        "description": "The total number of projects matching the query criteria.",
+                        "type": "integer",
+                        "minimum": 0,
+                        "example": 42
                     }
                 }
             },
@@ -12962,22 +13016,22 @@
                     "compute_time_seconds": {
                         "type": "integer",
                         "format": "int64",
-                        "description": "Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size). Divide by 3600 for CU-hours."
+                        "description": "Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size). Divide by 3600 for CU-hours.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/branches`.\n"
                     },
                     "active_time_seconds": {
                         "type": "integer",
                         "format": "int64",
-                        "description": "Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size). Distinct from `compute_time_seconds`, which is CU-weighted."
+                        "description": "Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size). Distinct from `compute_time_seconds`, which is CU-weighted.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/branches`.\n"
                     },
                     "written_data_bytes": {
                         "type": "integer",
                         "format": "int64",
-                        "description": "Data written by this branch during the current billing period, in bytes."
+                        "description": "Data written by this branch during the current billing period, in bytes.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/branches`.\n"
                     },
                     "data_transfer_bytes": {
                         "type": "integer",
                         "format": "int64",
-                        "description": "Total data transferred out of the branch, in bytes. Used as a consumption metric."
+                        "description": "Total data transferred out of the branch, in bytes. Used as a consumption metric.\nNot intended for billing or metering. For billing, use `/consumption_history/v2/branches`.\n"
                     },
                     "created_at": {
                         "description": "A timestamp indicating when the branch was created\n",

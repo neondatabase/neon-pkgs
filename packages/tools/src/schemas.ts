@@ -20,6 +20,7 @@ export {
 	zAssignProjectVpcEndpointPath,
 	zCountProjectBranchesPath,
 	zCountProjectBranchesQuery,
+	zCountProjectsQuery,
 	zCreateApiKeyBody,
 	zCreateBranchNeonAuthNewUserBody,
 	zCreateBranchNeonAuthNewUserPath,

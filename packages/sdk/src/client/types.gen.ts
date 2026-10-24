@@ -420,6 +420,7 @@ export type ProjectListItem = {
     store_passwords: boolean;
     /**
      * Control plane observed endpoints of this project being active this amount of wall-clock time.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     active_time: number;
@@ -519,12 +520,14 @@ export type Project = {
     /**
      * Bytes. Egress traffic from the Neon cloud to the client for given project over the billing period.
      * Includes deleted endpoints. The value has some lag. The value is reset at the beginning of each billing period.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     data_transfer_bytes: number;
     /**
      * Bytes. Amount of WAL that travelled through Postgres storage for given project across all branches.
      * The value has some lag. The value is reset at the beginning of each billing period.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     written_data_bytes: number;
@@ -534,6 +537,7 @@ export type Project = {
      * Examples:
      * 1. An endpoint that uses 1 CPU for 1 second is equal to `compute_time=1`.
      * 2. An endpoint that uses 2 CPUs simultaneously for 1 second is equal to `compute_time=2`.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     compute_time_seconds: number;
@@ -541,6 +545,7 @@ export type Project = {
      * Seconds. Control plane observed endpoints of this project being active this amount of wall-clock time.
      * The value has some lag.
      * The value is reset at the beginning of each billing period.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     active_time_seconds: number;
@@ -832,6 +837,13 @@ export type ProjectsResponse = {
      *
      */
     unavailable_project_ids?: Array<string>;
+};
+
+export type ProjectsCountResponse = {
+    /**
+     * The total number of projects matching the query criteria.
+     */
+    count: number;
 };
 
 export type ProjectPermission = {
@@ -1260,18 +1272,26 @@ export type Branch = {
     cpu_used_sec: number;
     /**
      * Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size). Divide by 3600 for CU-hours.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     compute_time_seconds: number;
     /**
      * Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size). Distinct from `compute_time_seconds`, which is CU-weighted.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     active_time_seconds: number;
     /**
      * Data written by this branch during the current billing period, in bytes.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     written_data_bytes: number;
     /**
      * Total data transferred out of the branch, in bytes. Used as a consumption metric.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     data_transfer_bytes: number;
     /**
@@ -5654,6 +5674,50 @@ export type CreateProjectResponses = {
 };
 
 export type CreateProjectResponse = CreateProjectResponses[keyof CreateProjectResponses];
+
+export type CountProjectsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Count projects in the organization with this `org_id`.
+         */
+        org_id?: string;
+    };
+    url: '/projects/count';
+};
+
+export type CountProjectsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CountProjectsError = CountProjectsErrors[keyof CountProjectsErrors];
+
+export type CountProjectsResponses = {
+    /**
+     * Returned the number of projects in the organization
+     */
+    200: ProjectsCountResponse;
+};
+
+export type CountProjectsResponse = CountProjectsResponses[keyof CountProjectsResponses];
 
 export type ListSharedProjectsData = {
     body?: never;
@@ -11697,6 +11761,10 @@ export type GetConsumptionHistoryPerProjectV2Data = {
          * - `private_network_transfer_bytes`
          * - `extra_branches_month`
          * - `snapshot_storage_bytes_month`
+         * - `functions_active_capacity_microseconds`
+         * - `functions_waiting_capacity_microseconds`
+         * - `functions_invocations`
+         * - `functions_egress_bytes`
          *
          * Pass multiple values as repeated query parameters or a comma-separated list:
          * - `metrics=compute_unit_seconds&metrics=extra_branches_month`
@@ -11839,6 +11907,10 @@ export type GetConsumptionHistoryPerBranchV2Data = {
          * - `instant_restore_bytes_month`
          * - `public_network_transfer_bytes`
          * - `private_network_transfer_bytes`
+         * - `functions_active_capacity_microseconds`
+         * - `functions_waiting_capacity_microseconds`
+         * - `functions_invocations`
+         * - `functions_egress_bytes`
          *
          * Not supported on this endpoint: `extra_branches_month`, `snapshot_storage_bytes_month`.
          * Use `GET /consumption_history/v2/projects` for those.
