@@ -31,6 +31,12 @@
 						"pattern": "^https://",
 						"maxLength": 2048,
 						"description": "Display-only logo. The CLI never fetches it."
+					},
+					"website": {
+						"type": "string",
+						"format": "uri",
+						"pattern": "^https://",
+						"maxLength": 2048
 					}
 				}
 			}
