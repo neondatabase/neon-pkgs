@@ -64,6 +64,30 @@ describe.sequential("e2e — @neon/sdk workflows against the real API", () => {
 	);
 
 	e2eTest(
+		"projects.count counts a project in the client's org",
+		async ({ track }) => {
+			const scope = await detectApiKeyScope();
+			if (scope.kind !== "org-or-user") return;
+			if (!process.env.NEON_ORG_ID?.trim()) return;
+			const neon = makeClient();
+
+			const project = expectOk(
+				await neon.projects.create({
+					name: uniqueProjectName("sdk-count"),
+					region_id: DEFAULT_REGION,
+				}),
+			);
+			track(project.id);
+
+			// Other suites create and delete projects in the same org concurrently, so
+			// only the lower bound is stable.
+			const count = expectOk(await neon.projects.count());
+			expect(Number.isInteger(count)).toBe(true);
+			expect(count).toBeGreaterThanOrEqual(1);
+		},
+	);
+
+	e2eTest(
 		"branches.list walks real cursors across pages",
 		async ({ track }) => {
 			const scope = await detectApiKeyScope();

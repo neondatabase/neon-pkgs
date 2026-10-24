@@ -1,4 +1,5 @@
 import {
+	countProjects,
 	createProject,
 	deleteProject,
 	getProject,
@@ -15,6 +16,7 @@ import {
 	updateProject,
 } from "../../client/sdk.gen.js";
 import type {
+	CountProjectsData,
 	ListProjectMembersData,
 	ListProjectsData,
 	Project,
@@ -47,6 +49,7 @@ export interface TransferProjectsInput {
 }
 
 type ListQuery = Omit<NonNullable<ListProjectsData["query"]>, "cursor">;
+type CountQuery = NonNullable<CountProjectsData["query"]>;
 type CreateInput = ProjectCreateRequest["project"];
 type UpdateInput = ProjectUpdateRequest["project"];
 type MemberListQuery = Omit<
@@ -63,6 +66,7 @@ export type RemoveRoleOptions<Throw extends boolean = boolean> =
 	CallOptions<Throw>;
 
 export type ProjectListParams = ListQuery;
+export type ProjectCountParams = CountQuery;
 export interface ProjectGetParams {
 	projectId: string;
 }
@@ -442,6 +446,34 @@ export class Projects<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+		);
+	}
+
+	/**
+	 * Number of active projects in the organization, without paging through
+	 * {@link Projects.list}. Projects being created or deleted are not counted.
+	 *
+	 * @apiCall GET /projects/count
+	 */
+	count(params?: ProjectCountParams): Promise<Outcome<number, DThrow>>;
+	count<Throw extends boolean = DThrow>(
+		params: ProjectCountParams | undefined,
+		opts: CallOptions<Throw>,
+	): Promise<Outcome<number, Throw>>;
+	count(
+		query: ProjectCountParams = {},
+		opts?: CallOptions,
+	): Promise<number | NeonResult<number>> {
+		return this.#ctx.run(
+			opts,
+			(client, signal) =>
+				countProjects({
+					client,
+					query: { org_id: this.#ctx.defaults.orgId, ...query },
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.count,
 		);
 	}
 

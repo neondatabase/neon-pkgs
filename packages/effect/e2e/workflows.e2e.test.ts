@@ -70,6 +70,9 @@ describe.sequential("e2e — @neon/effect against the real API", () => {
 			projectId,
 			projectId,
 		]);
+
+		const count = await run(make(config()).projects.count());
+		expect(count).toBeGreaterThanOrEqual(1);
 	});
 
 	e2eTest("maps real 404 and 401 responses to tagged errors", async () => {

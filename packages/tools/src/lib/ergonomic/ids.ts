@@ -9,6 +9,7 @@ export type HiddenToolId = (typeof hiddenToolIds)[number];
 
 export const toolIds = [
 	"projects.list",
+	"projects.count",
 	"projects.get",
 	"projects.create",
 	"projects.createAndConnect",

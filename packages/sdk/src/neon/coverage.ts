@@ -18,6 +18,7 @@
 export const WRAPPED: ReadonlySet<string> = new Set([
 	// projects
 	"listProjects",
+	"countProjects",
 	"getProject",
 	"createProject",
 	"updateProject",
