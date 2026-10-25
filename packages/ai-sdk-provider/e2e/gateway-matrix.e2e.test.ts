@@ -347,14 +347,7 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 					}),
 				);
 				expect(result.warnings ?? []).toEqual([]);
-				const usage = (
-					result as {
-						response?: {
-							body?: { usage?: Record<string, number> };
-						};
-					}
-				).response?.body?.usage;
-				return usage?.reasoning_tokens ?? 0;
+				return result.usage.outputTokenDetails.reasoningTokens ?? 0;
 			};
 
 			const [minimal, high] = [
