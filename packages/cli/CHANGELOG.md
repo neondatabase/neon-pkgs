@@ -1,5 +1,12 @@
 # neon
 
+## 8.11.4
+
+### Patch Changes
+
+- eb65072: The standalone `neon` binaries now embed Node.js 22.23.2 instead of 22.21.1, which picks up the Node.js security fixes from January and June 2026.
+- da0467f: On Node.js older than 20.19, `neon` now exits with `neon requires Node.js 20.19 or newer (found <version>).` instead of crashing inside a dependency (`crypto is not defined`, `File is not defined`).
+
 ## 8.11.3
 
 ### Patch Changes
