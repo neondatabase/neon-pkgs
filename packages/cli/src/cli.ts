@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Evaluated before any other module, so an unsupported Node.js exits with a clear
+// message instead of failing inside a dependency.
+import "./node_version.js";
 import { tryCurrentBranchFastPath } from "./current_branch_fast_path.js";
 
 // Fast path for the offline `(config) status --current-branch` probe (used by shell
