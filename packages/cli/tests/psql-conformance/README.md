@@ -294,53 +294,33 @@ curl -s https://api.github.com/repos/postgres/postgres/git/refs/tags/REL_18_2 \
 
 ## CI integration
 
-The conformance suite runs on every PR that touches the TS psql or the
-harness — see `.github/workflows/psql-conformance.yml`. The workflow:
+The conformance suite is the `psql-conformance` job in `.github/workflows/ci.yml`.
+The job:
 
-- triggers on PRs that change `src/psql/**`, `src/utils/psql.ts`,
-  `src/commands/{branches,connection_string,projects}.ts`, or
-  `tests/psql-conformance/**` (plus pushes to `main` / `feat/ts-psql`);
-- fans out across a **PG matrix** (one job per supported major — see
-  below) — each job boots its own `postgres:<major>` GHA service
-  container and exposes it via `PGCONFORMANCE_PG_HOST=127.0.0.1` /
-  `PGCONFORMANCE_PG_PORT=5432`;
-- runs `bun run build` then `bun run test:conformance` with
-  `PSQL_BINARY` pointed at `dist/cli.js`;
+- runs after lint, build, and unit tests pass, on pull requests and pushes to
+  `main` that change `src/psql/**` or `tests/psql-conformance/**` (or a
+  repo-wide file or `ci.yml` itself), nightly, and on `workflow_dispatch`;
+- fans out across a **PG matrix** (one job per PG major — see below); each job
+  boots its own `postgres:<major>` container through
+  `@testcontainers/postgresql`, pinned by `PGCONFORMANCE_PG_IMAGE`;
+- builds `neon` with its workspace dependencies, then runs `pnpm test:conformance`
+  with `PSQL_BINARY` pointed at the standalone shim `dist/psql/cli.js`;
 - uploads each job's `psql-conformance.log` under a per-version
   artifact name (`psql-conformance-pg-<major>`) for triage.
 
 ### PG version matrix
 
-Neon supports PG 14 through PG 18, so the conformance job runs as a
-matrix over `pg: ['14', '15', '16', '17', '18']`. Key points:
+Neon supports PG 14 through PG 18, and the job also runs `19beta1` to track
+upstream psql parity ahead of the server GA, so the matrix is
+`pg: ['14', '15', '16', '17', '18', '19beta1']`. Key points:
 
 - `fail-fast: false` — every PG version runs, even if one fails, so a
   PG-18-only break does not hide a PG-15 break.
-- Each matrix job is gated by `continue-on-error: true` on the
-  conformance step (same as the single-version setup); flipping to
-  blocking is a follow-up — see the criteria below.
 - The job name encodes the matrix value (`psql-conformance (pg-18)`),
   so the GitHub check list is self-describing.
-- `concurrency: psql-conformance-${{ github.ref }}` with
-  `cancel-in-progress: true` so re-pushing a branch cancels the
-  in-flight matrix.
 
-### Non-blocking phase
+### Failure behavior
 
-The conformance step is **non-blocking** (`continue-on-error: true`)
-during the bootstrap phase, so a failure surfaces as a warning on the
-PR check list but does **not** gate merge. The flag lives on the
-`Run conformance suite` step itself; the rest of the job (build,
-install, artifact upload) still fails fast.
-
-Flip to blocking when **all** of the following hold:
-
-1. The conformance reporter's `coverage` headline is **>= 95%**.
-2. `main` has stayed green on conformance for at least one week.
-
-When that bar is met:
-
-- drop `continue-on-error: true` from the `Run conformance suite` step
-  in `psql-conformance.yml`;
-- (optionally) add the `psql-conformance` job to the required-checks
-  set in the repo's branch protection rules.
+A failure in any matrix row fails the workflow run. The job is not a required status
+check on `main`, so it does not block merging by itself. Deferred per-subtest work is tracked inline in the spec files with
+`it.todo` / `it.skip` rather than by relaxing the job.

@@ -62,7 +62,7 @@ pnpm test:e2e:live
 
 | | |
 | --- | --- |
-| **Workflow** | `.github/workflows/e2e-live.yml` — every PR, every push to `main`, plus `workflow_dispatch` |
+| **Workflow** | the `e2e-live` job in `.github/workflows/ci.yml` — after lint, build, and unit tests pass, on pull requests and pushes to `main` that affect `@neon/sdk`, `@neon/config`, `@neon/config-runtime`, `@neon/env`, `@neon/effect`, or `neon`; nightly; and on `workflow_dispatch` (choose the `suite` input `e2e-live` to run only this suite, skipping lint, build, and unit tests; the default `all` runs every suite) |
 | **Org** | `org-autumn-tree-56376911` ("neon-pkgs Integration Test Org"), Launch plan |
 | **Skipped for** | Fork and Dependabot PRs — GitHub does not expose repository secrets to untrusted PR code |
 | **Runner** | Protected runner group. The Neon API is reachable from it. |
@@ -107,6 +107,15 @@ curl -X POST "https://console.neon.tech/api/v2/organizations/<org-id>/api_keys" 
 Org-scoped is strongly preferred over user-scoped: the key can only see the throwaway
 org, so the orphan sweep physically cannot reach anything else.
 
+##### Nightly failure alert
+
+The nightly run (`schedule` in `ci.yml`) is the backstop for the psql conformance matrix and
+for live suites that pull request and push detection skip. When any job in a scheduled run
+fails or is cancelled (a job stopped by its timeout), the `nightly-failure` job comments on the
+open issue labelled `nightly-ci`, or opens one titled "Nightly CI failed", listing the run URL
+and the failed and cancelled jobs separately. Close the issue once
+the nightly is green again so the next failure opens a fresh one.
+
 ##### How CI supplies them, and adding a new one
 
 The workflow maps repository secrets and variables onto the same env var names the
@@ -139,7 +148,7 @@ To wire up a **new** variable end to end:
    gh variable set NEON_TEST_SOMETHING --repo neondatabase/neon-pkgs --body "<value>"
    ```
 
-5. **Map it in the workflow's `env:` block** in `.github/workflows/e2e-live.yml`,
+5. **Map it in the job's `env:` block** of `e2e-live` in `.github/workflows/ci.yml`,
    using the local name as the key and `secrets.*` / `vars.*` as the value.
 6. **Verify on a PR from this repository.** Fork PRs get neither secrets nor variables,
    so the job is skipped there and a green fork run proves nothing about the wiring.
@@ -157,11 +166,11 @@ in-flight project is never deleted underneath it.
 ##### The AI Gateway suite (`@neon/ai-sdk-provider`)
 
 `pnpm --filter @neon/ai-sdk-provider test:e2e` is a separate live suite. It runs as its own
-workflow rather than inside `test:e2e:live`:
+job (`e2e-gateway` in `.github/workflows/ci.yml`) rather than inside `test:e2e:live`:
 
 | | |
 | --- | --- |
-| **Workflow** | `.github/workflows/e2e-gateway.yml` — path-filtered to `packages/ai-sdk-provider/**` and `tests/e2e-harness/**`, plus pushes to `main` and `workflow_dispatch` |
+| **Workflow** | the `e2e-gateway` job in `.github/workflows/ci.yml` — runs after lint, build, and unit tests pass, on pull requests and pushes to `main` that affect `@neon/ai-sdk-provider` (including `tests/e2e-harness/` changes), nightly, and on `workflow_dispatch` (`suite` input `e2e-gateway` runs it alone) |
 | **Why separate** | A run makes well over a hundred inference requests: `sdk-version-matrix` generates text with **every** model the branch serves on both AI SDK 6 and 7. Attaching that to every pull request would spend on changes it cannot cover |
 | **Credentials** | The same `NEON_TEST_API_KEY`. **No gateway token is stored** |
 
@@ -195,13 +204,13 @@ barrel: the barrel re-exports the `e2eTest` fixture, which imports `vitest`, and
 
 ##### The Neon Auth suite (`@neon/auth`)
 
-`pnpm --filter @neon/auth test:e2e` is a separate live suite, run by its own workflow for the
-same reason the gateway suite's is: auth provisioning belongs to changes that can affect it,
+`pnpm --filter @neon/auth test:e2e` is a separate live suite, run by the `e2e-auth` job in
+`.github/workflows/ci.yml` for the same reason the gateway suite's is: auth provisioning belongs to changes that can affect it,
 not to every pull request.
 
 | | |
 | --- | --- |
-| **Workflow** | `.github/workflows/e2e-auth.yml` — path-filtered to `packages/auth/**` and `tests/e2e-harness/**`, plus pushes to `main` and `workflow_dispatch` |
+| **Workflow** | the `e2e-auth` job in `.github/workflows/ci.yml` — runs after lint, build, and unit tests pass, on pull requests and pushes to `main` that affect `@neon/auth` (including `tests/e2e-harness/` changes), nightly, and on `workflow_dispatch` (`suite` input `e2e-auth` runs it alone) |
 | **Credentials** | The same `NEON_TEST_API_KEY`. Nothing auth-specific is stored |
 
 `e2e/global-setup.ts` provisions everything from that key: a throwaway project, Neon Auth

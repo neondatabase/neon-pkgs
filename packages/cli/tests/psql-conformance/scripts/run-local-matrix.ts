@@ -7,7 +7,7 @@
  * prints a summary table comparing pass / fail / skipped counts per
  * version.
  *
- * Mirrors `.github/workflows/psql-conformance.yml`'s matrix without
+ * Mirrors the `psql-conformance` job matrix in `.github/workflows/ci.yml` without
  * requiring GitHub Actions. Useful for:
  *   - Pre-PR sanity check across the full PG range
  *   - Local triage of a single failing version (`--pg 17` flag)
