@@ -120,7 +120,7 @@
 		"@types/which": "3.0.4",
 		"@types/yargs": "^17.0.35",
 		"@vitest/coverage-v8": "catalog:",
-		"@yao-pkg/pkg": "6.10.0",
+		"@yao-pkg/pkg": "6.23.0",
 		"emocks": "3.0.4",
 		"express": "4.19.2",
 		"hono": "^4.12.25",

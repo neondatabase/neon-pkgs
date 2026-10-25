@@ -34,6 +34,7 @@ runs:
       with:
         cache: ${{ inputs.install == 'true' && 'pnpm' || '' }}
         node-version-file: .node-version
+        check-latest: true
     - if: inputs.install == 'true'
       run: pnpm install --frozen-lockfile
       shell: bash
