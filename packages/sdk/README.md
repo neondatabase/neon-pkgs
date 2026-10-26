@@ -947,7 +947,7 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `oauthClients.get({ projectId, branchId, clientId })` | `NeonAuthOAuthClient` | |
 | `oauthClients.create({ projectId, branchId, name, redirect_uris, type, resources, skip_consent? })` | `NeonAuthOAuthClientCreated` | confidential clients get a one-time `client_secret` |
 | `oauthClients.update({ projectId, branchId, clientId, …input })` | `NeonAuthOAuthClient` | `redirect_uris` and `resources` replace the stored lists |
-| `oauthClients.delete({ projectId, branchId, clientId })` | **→void** | |
+| `oauthClients.delete({ projectId, branchId, clientId })` | **→void** | tokens already issued to the client are not revoked |
 | `oauthClients.rotateSecret({ projectId, branchId, clientId })` | `NeonAuthOAuthClientSecret` | new one-time `client_secret`; the old one stops working immediately |
 | `trustedDomains.list({ projectId, branchId })` | `NeonAuthRedirectUriWhitelistDomain[]` | redirect-URI whitelist |
 | `trustedDomains.add({ projectId, branchId, domain, auth_provider })` | **→void** | redirect-URI whitelist |
