@@ -986,10 +986,14 @@ describe("neon-auth", () => {
 				stderr: "WARNING: --mcp-dynamic-registration is deprecated. Use --mcp-client-id-metadata-documents instead.",
 			},
 		);
-		expect(mcpPatchBodies(requests)).toHaveLength(1);
-		expect(mcpPatchBodies(requests)[0]).toMatchObject({
-			mcp: { dynamic_registration: false },
-		});
+		expect(mcpPatchBodies(requests)).toEqual([
+			{
+				mcp: {
+					resource: "https://stored.example.com/mcp",
+					dynamic_registration: false,
+				},
+			},
+		]);
 	});
 
 	test("oauth-server update sends no mcp without an mcp flag", async ({
@@ -1121,6 +1125,65 @@ describe("neon-auth", () => {
 					{ identifier: "https://api.example.com" },
 					{ identifier: "https://new.example.com" },
 				],
+			},
+		]);
+	});
+
+	test("resource add trims the URL before sending", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "add", " https://c.example.com "),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(patchBodies(requests)).toEqual([
+			{
+				resources: [
+					{ identifier: "https://api.example.com" },
+					{ identifier: "https://c.example.com" },
+				],
+			},
+		]);
+	});
+
+	test("resource remove trims the URL before matching", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs("resource", "remove", "https://a.example.com "),
+			{ mockDir: RESOURCES_MOCK, onRequest: (r) => requests.push(r) },
+		);
+		expect(patchBodies(requests)).toEqual([
+			{ resources: [{ identifier: "https://b.example.com" }] },
+		]);
+	});
+
+	test("oauth-server update trims its URL flags", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			serverArgs(
+				"update",
+				"--login-page",
+				" https://login.example.com ",
+				"--consent-page",
+				" https://consent.example.com ",
+				"--mcp-resource",
+				" https://mcp.example.com ",
+				"--resources",
+				" https://r.example.com ",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(patchBodies(requests)).toEqual([
+			{
+				login_page: "https://login.example.com",
+				consent_page: "https://consent.example.com",
+				mcp: { resource: "https://mcp.example.com" },
+				resources: [{ identifier: "https://r.example.com" }],
 			},
 		]);
 	});
@@ -1423,6 +1486,35 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	test("oauth-client create trims redirect URIs and resources", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs(
+				"create",
+				"--name",
+				"App",
+				"--type",
+				"public",
+				"--redirect-uris",
+				" https://app.example.com/cb ",
+				"https://app.example.com/cb",
+				"--resources",
+				" https://api.example.com ",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPostBodies(requests)).toEqual([
+			{
+				name: "App",
+				type: "public",
+				redirect_uris: ["https://app.example.com/cb"],
+				resources: ["https://api.example.com"],
+			},
+		]);
+	});
+
 	test("oauth-client get", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"neon-auth",
@@ -1516,6 +1608,21 @@ describe("neon-auth", () => {
 				stderr: "ERROR: --resources must not contain empty values.",
 				onRequest: (r) => requests.push(r),
 			});
+			expect(requests).toEqual([]);
+		});
+
+		test(`oauth-server update --mcp-resource rejects blank value "${blank}" before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				serverArgs("update", "--mcp-resource", blank),
+				{
+					code: 1,
+					stderr: "ERROR: --mcp-resource must not be empty. To remove the MCP configuration, use --no-mcp.",
+					onRequest: (r) => requests.push(r),
+				},
+			);
 			expect(requests).toEqual([]);
 		});
 

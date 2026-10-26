@@ -1817,8 +1817,13 @@ const resolveMcpUpdate = async (
 	};
 };
 
-/** Order-preserving dedupe: repeated values would otherwise be sent to the API as duplicates. */
-const unique = (values: string[]) => [...new Set(values)];
+/**
+ * Order-preserving dedupe after trimming: padded input would otherwise miss stored values
+ * and reach the API as a distinct string, and repeats would be sent as duplicates.
+ */
+const unique = (values: string[]) => [
+	...new Set(values.map((value) => value.trim())),
+];
 
 /** yargs negation turns `--no-<flag>` on an array option into `[false]`, which bypasses empty-array checks. */
 const isNegatedList = (values: unknown) =>
@@ -1884,7 +1889,7 @@ const validateOAuthServerUpdate = (props: OAuthServerUpdateProps) => {
 			"--no-mcp-resource is not supported. To remove the MCP configuration, use --no-mcp.",
 		);
 	}
-	if (props.mcpResource === "") {
+	if (props.mcpResource?.trim() === "") {
 		throw new Error(
 			"--mcp-resource must not be empty. To remove the MCP configuration, use --no-mcp.",
 		);
@@ -1927,6 +1932,9 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 		],
 	);
 	validateOAuthServerUpdate(props);
+	const loginPage = props.loginPage?.trim();
+	const consentPage = props.consentPage?.trim();
+	const mcpResource = props.mcpResource?.trim();
 	const branchId = await resolveBranch(props);
 	let storedMcp: Promise<OAuthServerConfig["mcp"]> | undefined;
 	const getStoredMcp = () =>
@@ -1937,7 +1945,7 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 	const mcp =
 		props.mcp === false
 			? { resource: "" }
-			: await resolveMcpUpdate(props, getStoredMcp);
+			: await resolveMcpUpdate({ ...props, mcpResource }, getStoredMcp);
 	const resources = props.resources && unique(props.resources);
 	if (resources && props.mcp !== false) {
 		rejectMcpResourceCollision(
@@ -1955,8 +1963,8 @@ const oauthServerUpdate = async (props: OAuthServerUpdateProps) => {
 		branchId,
 		{
 			enabled: props.enabled,
-			login_page: props.loginPage,
-			consent_page: props.consentPage,
+			login_page: loginPage,
+			consent_page: consentPage,
 			mcp,
 			resources: resources?.map((identifier) => ({ identifier })),
 		},

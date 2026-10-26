@@ -214,6 +214,20 @@ exports[`neon-auth > oauth-client create rejects empty --redirect-uris before an
 
 exports[`neon-auth > oauth-client create rejects empty --resources before any request 1`] = `""`;
 
+exports[`neon-auth > oauth-client create trims redirect URIs and resources 1`] = `
+"client_id: client-abc123
+name: App
+type: public
+redirect_uris:
+  - https://app.example.com/cb
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
 exports[`neon-auth > oauth-client delete 1`] = `
 "
 OAuth client "client-abc123" deleted
@@ -435,6 +449,10 @@ OAuth server configuration
 "
 `;
 
+exports[`neon-auth > oauth-server update --mcp-resource rejects blank value "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --mcp-resource rejects blank value "" before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-server update --no-mcp clears the MCP configuration 1`] = `
 "enabled: true
 login_page: https://app.example.com/login
@@ -591,6 +609,17 @@ OAuth server configuration updated
 "
 `;
 
+exports[`neon-auth > oauth-server update trims its URL flags 1`] = `
+"enabled: true
+login_page: https://login.example.com
+consent_page: https://consent.example.com
+mcp:
+  resource: https://mcp.example.com
+resources:
+  - identifier: https://r.example.com
+"
+`;
+
 exports[`neon-auth > oauth-server update with every MCP flag skips reading the stored config 1`] = `
 "enabled: true
 login_page: https://app.example.com/login
@@ -705,6 +734,12 @@ exports[`neon-auth > resource add skips URLs that are already configured 1`] = `
 "
 `;
 
+exports[`neon-auth > resource add trims the URL before sending 1`] = `
+"- identifier: https://api.example.com
+- identifier: https://c.example.com
+"
+`;
+
 exports[`neon-auth > resource list 1`] = `
 "- identifier: https://api.example.com
 "
@@ -736,6 +771,11 @@ exports[`neon-auth > resource remove rejects blank URL "" before any request 1`]
 
 exports[`neon-auth > resource remove skips URLs that are not configured 1`] = `
 "- identifier: https://a.example.com
+"
+`;
+
+exports[`neon-auth > resource remove trims the URL before matching 1`] = `
+"- identifier: https://b.example.com
 "
 `;
 
