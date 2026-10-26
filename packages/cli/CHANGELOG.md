@@ -1,5 +1,11 @@
 # neon
 
+## 8.12.1
+
+### Patch Changes
+
+- Command telemetry now reports which Neon agent skills are installed in the user-level skills lock and in this directory's `skills-lock.json`, with each skill's lock hash and whether it is outdated. It is read from local files without a network request; `--no-analytics` turns it off.
+
 ## 8.12.0
 
 ### Minor Changes
