@@ -39,12 +39,24 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 
 	it("auth.oauthServer.get and update hit the oauth-provider plugin path", async () => {
 		const requests: Request[] = [];
+		const serverConfig = {
+			enabled: false,
+			login_page: "https://login.example.com",
+			mcp: { resource: "https://mcp-get.example.com" },
+		};
+		const updatedConfig = {
+			enabled: true,
+			login_page: "https://login.example.com",
+			mcp: { resource: "https://mcp.example.com" },
+		};
+		const responses = [serverConfig, updatedConfig];
+		let call = 0;
 		const neon = createNeonClient({
 			apiKey: "test",
 			retries: 0,
 			fetch: async (input, init) => {
 				requests.push(new Request(input, init));
-				return new Response(JSON.stringify({ enabled: true }), {
+				return new Response(JSON.stringify(responses[call++] ?? {}), {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				});
@@ -54,14 +66,14 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 			projectId: "p-1",
 			branchId: "br-1",
 		});
-		expect(got.data).toEqual({ enabled: true });
+		expect(got.data).toEqual(serverConfig);
 		const updated = await neon.auth.oauthServer.update({
 			projectId: "p-1",
 			branchId: "br-1",
 			enabled: true,
 			mcp: { resource: "https://mcp.example.com" },
 		});
-		expect(updated.data).toEqual({ enabled: true });
+		expect(updated.data).toEqual(updatedConfig);
 		expect(
 			requests.map((r) => `${r.method} ${new URL(r.url).pathname}`),
 		).toEqual([
@@ -76,12 +88,21 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 
 	it("auth.oauthClients covers the client lifecycle and keeps the one-time secret", async () => {
 		const requests: Request[] = [];
+		const listedClient = { client_id: "c-list", name: "Listed" };
+		const gotClient = { client_id: "c-get", name: "Fetched" };
+		const createdClient = {
+			client_id: "c-new",
+			name: "app",
+			client_secret: "s1",
+		};
+		const updatedClient = { client_id: "c-upd", name: "Renamed" };
+		const rotatedSecret = { client_secret: "s2" };
 		const responses = [
-			[200, { clients: [{ client_id: "c1" }] }],
-			[200, { client_id: "c1" }],
-			[201, { client_id: "c1", client_secret: "s1" }],
-			[200, { client_id: "c1" }],
-			[200, { client_id: "c1", client_secret: "s2" }],
+			[200, { clients: [listedClient] }],
+			[200, gotClient],
+			[201, createdClient],
+			[200, updatedClient],
+			[200, rotatedSecret],
 			[204, undefined],
 		] as const;
 		let call = 0;
@@ -102,9 +123,13 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 		});
 		const ids = { projectId: "p-1", branchId: "br-1" };
 		expect((await neon.auth.oauthClients.list(ids)).data).toEqual([
-			{ client_id: "c1" },
+			listedClient,
 		]);
-		await neon.auth.oauthClients.get({ ...ids, clientId: "c1" });
+		const got = await neon.auth.oauthClients.get({
+			...ids,
+			clientId: "c1",
+		});
+		expect(got.data).toEqual(gotClient);
 		const created = await neon.auth.oauthClients.create({
 			...ids,
 			name: "app",
@@ -112,22 +137,24 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 			type: "confidential",
 			resources: [],
 		});
-		expect(created.data?.client_secret).toBe("s1");
-		await neon.auth.oauthClients.update({
+		expect(created.data).toEqual(createdClient);
+		const updated = await neon.auth.oauthClients.update({
 			...ids,
 			clientId: "c1",
 			disabled: true,
 		});
+		expect(updated.data).toEqual(updatedClient);
 		const rotated = await neon.auth.oauthClients.rotateSecret({
 			...ids,
 			clientId: "c1",
 		});
-		expect(rotated.data?.client_secret).toBe("s2");
+		expect(rotated.data).toEqual(rotatedSecret);
 		const deleted = await neon.auth.oauthClients.delete({
 			...ids,
 			clientId: "c1",
 		});
 		expect(deleted.error).toBeUndefined();
+		expect(deleted.data).toBeUndefined();
 		const base =
 			"/api/v2/projects/p-1/branches/br-1/auth/oauth-provider/clients";
 		expect(
