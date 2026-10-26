@@ -1,7 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import {
+	base64Candidates,
+	base64CellPattern,
+} from "./base64-cell.test-helpers.js";
 import {
 	decodeServerFrame,
 	decodeServerMessage,
@@ -38,10 +43,33 @@ const SERVER_TYPES = new Set([
 	"pong",
 ]);
 const ROW_KEY = "a".repeat(64);
+const FOUR_MIB = 4 * 1024 * 1024;
 
 function rejectServerMessage(value: unknown): void {
 	const text = typeof value === "string" ? value : JSON.stringify(value);
 	expect(() => decodeServerMessage(text)).toThrow(ProtocolError);
+}
+
+function batchWithBase64Cell(base64: string): object {
+	return {
+		type: "baseline_sync_batch",
+		live_id: "9",
+		epoch: "1",
+		baseline_sync_attempt: "1",
+		index: 0,
+		rows: [{ row_key: ROW_KEY, values: [{ base64 }] }],
+	};
+}
+
+// True when the frame decodes; only a ProtocolError means "rejected".
+function decodesCleanly(frame: string): boolean {
+	try {
+		decodeServerMessage(frame);
+		return true;
+	} catch (error) {
+		if (error instanceof ProtocolError) return false;
+		throw error;
+	}
 }
 
 describe("Realtime v1 JSON codec", () => {
@@ -270,6 +298,50 @@ describe("Realtime v1 JSON codec", () => {
 				decodeServerMessage(JSON.stringify(snapshot(base64))),
 			).toThrow("is not canonical base64");
 		}
+	});
+
+	it("decodes a 4 MiB bytea cell, the Realtime row limit", () => {
+		const base64 = Buffer.alloc(FOUR_MIB, 0x41).toString("base64");
+		expect(base64).toHaveLength(5_592_408);
+		const batch = batchWithBase64Cell(base64);
+		expect(decodeServerMessage(JSON.stringify(batch))).toEqual(batch);
+	});
+
+	it("decodes base64 cells past the length where V8's RegExp overflows", () => {
+		// 4,500,004 characters, well past the ~4.47M-character overflow point.
+		const base64 = Buffer.alloc(3_375_003, 0x41).toString("base64");
+		expect(base64).toHaveLength(4_500_004);
+		const batch = batchWithBase64Cell(base64);
+		expect(decodeServerMessage(JSON.stringify(batch))).toEqual(batch);
+	});
+
+	it("still rejects noncanonical base64 cells at the same size", () => {
+		const canonical = Buffer.alloc(3_375_003, 0x41).toString("base64");
+		const middle = 2_000_000;
+		for (const invalid of [
+			`${canonical.slice(0, -4)}QUJ=`,
+			`${canonical.slice(0, middle)}*${canonical.slice(middle + 1)}`,
+			`${canonical.slice(0, middle)}QQ==${canonical.slice(middle + 4)}`,
+			`${canonical}Q`,
+		]) {
+			expect(() =>
+				decodeServerMessage(
+					JSON.stringify(batchWithBase64Cell(invalid)),
+				),
+			).toThrow("is not canonical base64");
+		}
+	});
+
+	it("accepts exactly the base64 cells the schema pattern accepts", () => {
+		const pattern = new RegExp(base64CellPattern, "u");
+		fc.assert(
+			fc.property(base64Candidates, (base64) => {
+				expect(
+					decodesCleanly(JSON.stringify(batchWithBase64Cell(base64))),
+				).toBe(pattern.test(base64));
+			}),
+			{ numRuns: 500 },
+		);
 	});
 
 	it("rejects malformed nested rows, cells, changes, and fields", () => {
