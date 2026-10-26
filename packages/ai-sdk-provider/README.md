@@ -183,6 +183,8 @@ for await (const part of result.fullStream) {
 }
 ```
 
+The image model defaults to `gpt-image-2`. Pass `model` to pick another one. `gpt-image-1` throws `UnsupportedFunctionalityError`, because OpenAI has deprecated it.
+
 ### Edit a generated image
 
 The gateway does not support stored Responses API items (`store: true`, `previousResponseId`, or `conversation`), which the Responses API uses to reuse tool results across turns. For image edits, pass the returned bytes back as image input; otherwise the model does not receive the original image and generates a new one.
