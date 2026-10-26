@@ -183,7 +183,16 @@ describe("special mappings", () => {
 				) {
 					return jsonResponse({ clients: [] });
 				}
-				return jsonResponse({ client_secret: "secret" });
+				if (request.url.endsWith("/rotate_secret")) {
+					return jsonResponse({ client_secret: "cs_rotated_2b7c" });
+				}
+				if (request.method === "POST") {
+					return jsonResponse({
+						client_id: "created-id",
+						client_secret: "cs_created_8f3a",
+					});
+				}
+				return jsonResponse({});
 			},
 		});
 		const ids = { project_id: "project-id", branch_id: "branch-id" };
@@ -192,7 +201,11 @@ describe("special mappings", () => {
 		await tools["auth.oauthServer.get"].execute(ids);
 		await tools["auth.oauthServer.update"].execute({
 			...ids,
+			enabled: true,
+			login_page: "https://login.example.com",
+			consent_page: "https://consent.example.com",
 			mcp: { resource: "https://mcp.example.com" },
+			resources: [{ identifier: "https://res-server.example.com" }],
 		});
 		await tools["auth.oauthClients.list"].execute(ids);
 		await tools["auth.oauthClients.get"].execute(client);
@@ -201,11 +214,16 @@ describe("special mappings", () => {
 			name: "app",
 			redirect_uris: ["https://app.example.com/cb"],
 			type: "confidential",
-			resources: ["https://mcp.example.com"],
+			resources: ["https://create-res.example.com"],
+			skip_consent: true,
 		});
 		await tools["auth.oauthClients.update"].execute({
 			...client,
+			name: "renamed",
+			redirect_uris: ["https://renamed.example.com/cb"],
+			skip_consent: false,
 			disabled: true,
+			resources: ["https://update-res.example.com"],
 		});
 		const rotated =
 			await tools["auth.oauthClients.rotateSecret"].execute(client);
@@ -228,11 +246,30 @@ describe("special mappings", () => {
 			`DELETE ${base}/oauth-provider/clients/clientid`,
 		]);
 		expect(await requests[1].json()).toEqual({
+			enabled: true,
+			login_page: "https://login.example.com",
+			consent_page: "https://consent.example.com",
 			mcp: { resource: "https://mcp.example.com" },
+			resources: [{ identifier: "https://res-server.example.com" }],
 		});
-		expect(await requests[5].json()).toEqual({ disabled: true });
-		expect(JSON.stringify(created)).toContain("secret");
-		expect(JSON.stringify(rotated)).toContain("secret");
+		expect(await requests[4].json()).toEqual({
+			name: "app",
+			redirect_uris: ["https://app.example.com/cb"],
+			type: "confidential",
+			resources: ["https://create-res.example.com"],
+			skip_consent: true,
+		});
+		expect(await requests[5].json()).toEqual({
+			name: "renamed",
+			redirect_uris: ["https://renamed.example.com/cb"],
+			skip_consent: false,
+			disabled: true,
+			resources: ["https://update-res.example.com"],
+		});
+		expect(created).toEqual({
+			data: { client_id: "created-id", client_secret: "cs_created_8f3a" },
+		});
+		expect(rotated).toEqual({ data: { client_secret: "cs_rotated_2b7c" } });
 		for (const id of [
 			"auth.oauthServer.update",
 			"auth.oauthClients.create",
@@ -241,6 +278,13 @@ describe("special mappings", () => {
 			"auth.oauthClients.rotateSecret",
 		] as const) {
 			expect(tools[id].requiresApproval).toBe(true);
+			expect(tools[id].annotations.readOnlyHint).toBe(false);
+		}
+		for (const id of [
+			"auth.oauthClients.delete",
+			"auth.oauthClients.rotateSecret",
+		] as const) {
+			expect(tools[id].annotations.destructiveHint).toBe(true);
 		}
 		for (const id of [
 			"auth.oauthServer.get",
@@ -248,6 +292,7 @@ describe("special mappings", () => {
 			"auth.oauthClients.get",
 		] as const) {
 			expect(tools[id].requiresApproval).toBe(false);
+			expect(tools[id].annotations.readOnlyHint).toBe(true);
 		}
 	});
 

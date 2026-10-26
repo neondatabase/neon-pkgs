@@ -150,12 +150,25 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 	});
 
 	it("auth.oauthClients rejects a missing clientId before any request", async () => {
-		const neon = neonReturning(200, {});
-		const { error } = await neon.auth.oauthClients.get({
+		let fetchCalls = 0;
+		const neon = createNeonClient({
+			apiKey: "test",
+			retries: 0,
+			fetch: async () => {
+				fetchCalls += 1;
+				return new Response("{}", { status: 200 });
+			},
+		});
+		const { data, error } = await neon.auth.oauthClients.get({
 			projectId: "p-1",
 			branchId: "br-1",
 		} as never);
-		expect(error).toBeDefined();
+		expect(data).toBeUndefined();
+		expect(error?.name).toBe("NeonClientError");
+		expect(error?.message).toBe(
+			"auth.oauthClients.get requires clientId in its parameter object (string).",
+		);
+		expect(fetchCalls).toBe(0);
 	});
 
 	it("projects.permissions.list unwraps project_permissions", async () => {
