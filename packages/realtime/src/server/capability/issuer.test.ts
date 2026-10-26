@@ -23,7 +23,7 @@ const QUERY: PreparedLiveQuery = {
 };
 const validateCapability = capabilityValidator();
 
-describe("Realtime v1 capability issuer", () => {
+describe("Realtime v2 capability issuer", () => {
 	it("extracts the encryption key from one opaque secret", () => {
 		const parsed = parseRealtimeSecret(SECRET);
 		expect(parsed).toEqual({ key: KEY });
@@ -35,7 +35,7 @@ describe("Realtime v1 capability issuer", () => {
 			"app",
 			"full",
 			() => 1_700_000_000_123,
-		)(QUERY);
+		)(QUERY, "drizzle");
 
 		const { header, claims } = await decrypt(sealedQuery.capability, KEY);
 		expect(
@@ -45,13 +45,18 @@ describe("Realtime v1 capability issuer", () => {
 		expect(header).toEqual({
 			alg: "dir",
 			enc: "A256GCM",
-			v: 1,
+			v: 2,
 		});
 		expect(claims).toMatchObject({
-			v: 1,
+			v: 2,
 			aud: "realtime-proxy",
 			database: "app",
 			error_details: "full",
+			issuer: {
+				sdk: "javascript",
+				release_line: "0.2",
+				query_source: "drizzle",
+			},
 			query_fingerprint: sealedQuery.queryFingerprint,
 			sql: QUERY.sql,
 			parameters: [{ type_oid: 23, value: "Nw==" }],
@@ -69,7 +74,14 @@ describe("Realtime v1 capability issuer", () => {
 		)(QUERY);
 
 		const { claims } = await decrypt(sealedQuery.capability, KEY);
-		expect(claims).toMatchObject({ error_details: "safe" });
+		expect(claims).toMatchObject({
+			error_details: "safe",
+			issuer: {
+				sdk: "javascript",
+				release_line: "0.2",
+				query_source: "custom",
+			},
+		});
 	});
 
 	it("uses a fresh 96-bit IV without changing the query fingerprint", async () => {

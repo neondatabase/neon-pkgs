@@ -105,7 +105,7 @@ describe("RealtimeClient", () => {
 		expect(webSocketFactory).toHaveBeenCalledOnce();
 		expect(webSocketFactory).toHaveBeenCalledWith(
 			"ws://live.test/v1",
-			"neon.realtime.v2",
+			"neon.realtime.v3",
 		);
 		client.close();
 	});
@@ -612,8 +612,12 @@ describe("RealtimeClient", () => {
 		const socket = connectAndAdmit();
 		baselineSync(socket, "before");
 
-		expect(socket.protocols).toBe("neon.realtime.v2");
-		expect(socket.sent[0]).toMatchObject({ type: "subscribe" });
+		expect(socket.protocols).toBe("neon.realtime.v3");
+		expect(socket.sent).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ type: "subscribe" }),
+			]),
+		);
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,

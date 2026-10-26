@@ -55,7 +55,7 @@ function validCompactJweHeader(capability: string): boolean {
 			Object.keys(header).sort().join(",") === "alg,enc,v" &&
 			header.alg === "dir" &&
 			header.enc === "A256GCM" &&
-			header.v === 1
+			(header.v === 1 || header.v === 2)
 		);
 	} catch {
 		return false;

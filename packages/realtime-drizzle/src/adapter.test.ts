@@ -145,6 +145,7 @@ describe("concrete Drizzle query adapter", () => {
 		expect(fetch).not.toHaveBeenCalled();
 
 		const prepared = drizzleAdapter().prepare(query);
+		expect(drizzleAdapter().querySource).toBe("drizzle");
 		expect(prepared.sql).toContain("$1");
 		expect(prepared.sql).toContain("$2");
 		expect(prepared.sql).toContain("$3");

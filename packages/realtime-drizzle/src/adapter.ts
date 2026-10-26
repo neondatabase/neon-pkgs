@@ -18,6 +18,7 @@ import {
  */
 export function drizzleAdapter(): RealtimeAdapter<ConcretePgSelectQuery> {
 	return Object.freeze({
+		querySource: "drizzle",
 		prepare(query: ConcretePgSelectQuery) {
 			const compiled = query.toSQL();
 			assertResultNamesMatchSelection(query);
