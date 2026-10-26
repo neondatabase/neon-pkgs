@@ -11,8 +11,10 @@ import {
 	planSkillsCheck,
 	type RemoteFolder,
 	readLockedSkills,
+	type SkillsTelemetryScope,
 	skillContentHash,
 	skillStatus,
+	skillsTelemetry,
 } from "./freshness.js";
 
 const TREE = "a".repeat(40);
@@ -32,7 +34,15 @@ const neon = (
 	folder: "skills/neon",
 	hash,
 	hashKind,
+	pinned: false,
 });
+
+const PINNED_AUTH = {
+	skill: "neon-auth",
+	source: "neondatabase/agent-skills",
+	folder: "skills/neon-auth",
+	pinned: true,
+};
 
 describe("parseSkillsLock", () => {
 	const lock = (neonEntry: Record<string, string>) =>
@@ -44,7 +54,7 @@ describe("parseSkillsLock", () => {
 					skillPath: "skills/neon/SKILL.md",
 					...neonEntry,
 				},
-				pinned: {
+				"neon-auth": {
 					source: "neondatabase/agent-skills",
 					skillPath: "skills/neon-auth/SKILL.md",
 					ref: "v1",
@@ -60,18 +70,27 @@ describe("parseSkillsLock", () => {
 			},
 		});
 
-	test("reads the hash field each scope's lock writes", () => {
+	test("reads the hash field each scope's lock writes, and marks pinned entries", () => {
 		const both = lock({ skillFolderHash: TREE, computedHash: CONTENT });
-		expect(parseSkillsLock(both, "global")).toEqual([neon("global", TREE)]);
+		expect(parseSkillsLock(both, "global")).toEqual([
+			neon("global", TREE),
+			{ ...PINNED_AUTH, scope: "global", hash: TREE, hashKind: "tree" },
+		]);
 		expect(parseSkillsLock(both, "project")).toEqual([
 			neon("project", CONTENT),
+			{
+				...PINNED_AUTH,
+				scope: "project",
+				hash: CONTENT,
+				hashKind: "content",
+			},
 		]);
 	});
 
 	test("treats a 64-character global hash as a content hash", () => {
 		expect(
-			parseSkillsLock(lock({ skillFolderHash: CONTENT }), "global"),
-		).toEqual([neon("global", CONTENT, "content")]);
+			parseSkillsLock(lock({ skillFolderHash: CONTENT }), "global")[0],
+		).toEqual(neon("global", CONTENT, "content"));
 	});
 
 	test("skips names that could carry terminal controls", () => {
@@ -94,6 +113,30 @@ describe("parseSkillsLock", () => {
 });
 
 describe("readLockedSkills", () => {
+	test("leaves pinned skills out of the update check", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-skills-lock-"));
+		try {
+			const path = join(dir, "skills-lock.json");
+			writeFileSync(
+				path,
+				JSON.stringify({
+					version: 1,
+					skills: {
+						neon: {
+							source: "neondatabase/agent-skills",
+							skillPath: "skills/neon/SKILL.md",
+							computedHash: CONTENT,
+							ref: "v1",
+						},
+					},
+				}),
+			);
+			expect(readLockedSkills(path, "project")).toEqual([]);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("reports a malformed lock without quoting its contents", () => {
 		const dir = mkdtempSync(join(tmpdir(), "neon-skills-lock-"));
 		try {
@@ -293,6 +336,113 @@ describe("planSkillsCheck", () => {
 				now,
 			}).refresh,
 		).toBe(true);
+	});
+});
+
+describe("skillsTelemetry", () => {
+	const checkedAt = Date.UTC(2026, 9, 26);
+	const none = { skills: [], modifiedAt: 0 };
+	const installed = (skill: LockedSkill, modifiedAt = checkedAt - 1000) => ({
+		skills: [skill],
+		modifiedAt,
+	});
+	const cache = (folders: Record<string, RemoteFolder>, at = checkedAt) => ({
+		checkedAt: at,
+		folders,
+	});
+
+	test("says explicitly when a scope has no Neon skills", () => {
+		expect(
+			skillsTelemetry({ global: none, project: none }, undefined),
+		).toEqual({
+			checkedAt: null,
+			global: { installed: false },
+			project: { installed: false },
+		});
+	});
+
+	test("reports each skill's lock hash and whether it is outdated", () => {
+		expect(
+			skillsTelemetry(
+				{
+					global: installed(neon("global", TREE)),
+					project: installed(neon("project", CONTENT)),
+				},
+				cache({ [KEY]: { tree: TREE, content: NEW_CONTENT } }),
+			),
+		).toEqual({
+			checkedAt,
+			global: {
+				installed: true,
+				skills: { neon: { hash: TREE, outdated: false } },
+			},
+			project: {
+				installed: true,
+				skills: { neon: { hash: CONTENT, outdated: true } },
+			},
+		});
+	});
+
+	test("reports a pinned skill as installed with outdated unknown", () => {
+		expect(
+			skillsTelemetry(
+				{
+					global: none,
+					project: installed({
+						...neon("project", CONTENT),
+						pinned: true,
+					}),
+				},
+				cache({ [KEY]: { tree: TREE, content: NEW_CONTENT } }),
+			).project,
+		).toEqual({
+			installed: true,
+			skills: { neon: { hash: CONTENT, outdated: null } },
+		});
+	});
+
+	test("leaves outdated unknown when the cache cannot answer", () => {
+		const unknown = (scope: SkillsTelemetryScope) =>
+			scope.installed ? scope.skills.neon?.outdated : "not installed";
+		const project = (
+			remote: RemoteFolder,
+			options: { modifiedAt?: number; at?: number } = {},
+		) =>
+			skillsTelemetry(
+				{
+					global: none,
+					project: installed(
+						neon("project", CONTENT),
+						options.modifiedAt,
+					),
+				},
+				cache({ [KEY]: remote }, options.at),
+			).project;
+
+		expect(unknown(project({ tree: TREE }))).toBeNull();
+		expect(
+			unknown(project({ tree: TREE, content: CONTENT, pending: true })),
+		).toBeNull();
+		expect(
+			unknown(
+				project(
+					{ tree: TREE, content: CONTENT },
+					{ modifiedAt: checkedAt + 1 },
+				),
+			),
+		).toBeNull();
+		expect(
+			unknown(project({ tree: TREE, content: CONTENT }, { at: 0 })),
+		).toBeNull();
+		expect(
+			skillsTelemetry(
+				{ global: none, project: installed(neon("project", CONTENT)) },
+				undefined,
+			),
+		).toMatchObject({
+			checkedAt: null,
+			project: { skills: { neon: { hash: CONTENT, outdated: null } } },
+		});
 	});
 });
 

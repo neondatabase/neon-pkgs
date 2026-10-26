@@ -46,6 +46,11 @@ export type LockedSkill = {
 	folder: string;
 	hash: string;
 	hashKind: "tree" | "content";
+	/**
+	 * Installed from a `ref`. `neon skills` never pins one, and a pinned skill tracks that ref
+	 * rather than the default branch, so the update check leaves it out.
+	 */
+	pinned: boolean;
 };
 
 /** Where the skills CLI keeps its user-level lock. */
@@ -70,9 +75,6 @@ const skillFolder = (skillPath: string): string =>
 	skillPath.replace(/\\/g, "/").replace(/\/?SKILL\.md$/i, "");
 
 /**
- * Entries pinned to a `ref` are left out: `neon skills` never pins one, and a pinned skill
- * tracks that ref rather than the repository's default branch.
- *
  * The global lock's `skillFolderHash` is usually a tree SHA, but the skills CLI stores a
  * content SHA-256 there when it installed from a Git clone; it tells them apart by length.
  */
@@ -92,7 +94,6 @@ export const parseSkillsLock = (
 			!SKILL_NAME.test(skill) ||
 			typeof source !== "string" ||
 			!NEON_SOURCES.has(source) ||
-			ref !== undefined ||
 			typeof skillPath !== "string" ||
 			typeof hash !== "string" ||
 			hash === ""
@@ -105,12 +106,20 @@ export const parseSkillsLock = (
 			scope === "global" && /^[0-9a-f]{40}$/i.test(hash)
 				? "tree"
 				: "content";
-		skills.push({ scope, skill, source, folder, hash, hashKind });
+		skills.push({
+			scope,
+			skill,
+			source,
+			folder,
+			hash,
+			hashKind,
+			pinned: ref !== undefined,
+		});
 	}
 	return skills;
 };
 
-export const readLockedSkills = (
+const readAllLockedSkills = (
 	path: string,
 	scope: SkillsScope,
 ): LockedSkill[] => {
@@ -123,6 +132,13 @@ export const readLockedSkills = (
 		throw new Error(`${path} is not valid JSON.`);
 	}
 };
+
+/** The skills the update check covers: every Neon skill in the lock except pinned ones. */
+export const readLockedSkills = (
+	path: string,
+	scope: SkillsScope,
+): LockedSkill[] =>
+	readAllLockedSkills(path, scope).filter((skill) => !skill.pinned);
 
 const MAX_LOCK_BYTES = 1024 * 1024;
 
@@ -563,6 +579,107 @@ const spawnSkillsCheckWorker = (cachePath: string, cwd: string): void => {
 	}
 };
 
+type Lock = { skills: LockedSkill[]; modifiedAt: number };
+type Locks = Record<SkillsScope, Lock>;
+
+/** Every Neon skill in the lock, pinned ones included. */
+const readLock = (path: string, scope: SkillsScope): Lock => ({
+	skills: readAllLockedSkills(path, scope),
+	modifiedAt: statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 0,
+});
+
+const readLocks = (cwd: string): Locks => ({
+	global: readLock(globalLockPath(), "global"),
+	project: readLock(projectLockPath(cwd), "project"),
+});
+
+export type SkillsTelemetryScope =
+	| { installed: false }
+	| {
+			installed: true;
+			skills: Record<string, { hash: string; outdated: boolean | null }>;
+	  };
+
+/** The `skills` property on `cli_command_success`. */
+export type SkillsTelemetry = {
+	checkedAt: number | null;
+	global: SkillsTelemetryScope;
+	project: SkillsTelemetryScope;
+};
+
+/**
+ * `outdated` is `null` when the cache cannot answer: no successful check yet, a check still
+ * pending for the folder, a lock written after the last check, a folder gone upstream, or a
+ * pinned skill.
+ */
+export const skillsTelemetry = (
+	locks: Locks,
+	cache: SkillsCheckCache | undefined,
+): SkillsTelemetry => {
+	const scope = ({ skills, modifiedAt }: Lock): SkillsTelemetryScope => {
+		if (skills.length === 0) return { installed: false };
+		const known =
+			cache !== undefined &&
+			cache.checkedAt > 0 &&
+			modifiedAt <= cache.checkedAt;
+		return {
+			installed: true,
+			skills: Object.fromEntries(
+				skills.map((skill) => {
+					const remote = cache?.folders[folderKey(skill)];
+					const status =
+						known && !skill.pinned && remote?.pending !== true
+							? skillStatus(skill, remote)
+							: undefined;
+					return [
+						skill.skill,
+						{
+							hash: skill.hash,
+							outdated:
+								status === "outdated"
+									? true
+									: status === "up to date"
+										? false
+										: null,
+						},
+					];
+				}),
+			),
+		};
+	};
+	return {
+		checkedAt:
+			cache !== undefined && cache.checkedAt > 0 ? cache.checkedAt : null,
+		global: scope(locks.global),
+		project: scope(locks.project),
+	};
+};
+
+/**
+ * Reads only local files. `undefined` when a lock can't be read, which leaves the property
+ * off the event rather than reporting skills as not installed.
+ */
+export const readSkillsTelemetry = ({
+	configDir,
+	cwd,
+}: {
+	configDir: string;
+	cwd: string;
+}): SkillsTelemetry | undefined => {
+	try {
+		return skillsTelemetry(
+			readLocks(cwd),
+			readSkillsCheckCache(skillsCheckCachePath(configDir)),
+		);
+	} catch (error) {
+		log.debug(
+			"Leaving skills out of telemetry: %s",
+			error instanceof Error ? error.message : String(error),
+		);
+		return undefined;
+	}
+};
+
 /**
  * Warns at most once a day when a Neon skill in the user-level lock or this directory's
  * `skills-lock.json` is behind its source, from a cache a background worker refreshes daily.
@@ -576,13 +693,9 @@ export const notifyIfSkillsOutdated = ({
 	cwd: string;
 	now?: number;
 }): void => {
-	const lockPaths = [globalLockPath(), projectLockPath(cwd)] as const;
-	let skills: LockedSkill[];
+	let locks: Locks;
 	try {
-		skills = [
-			...readLockedSkills(lockPaths[0], "global"),
-			...readLockedSkills(lockPaths[1], "project"),
-		];
+		locks = readLocks(cwd);
 	} catch (error) {
 		log.debug(
 			"Skipping the skills check: %s",
@@ -590,6 +703,9 @@ export const notifyIfSkillsOutdated = ({
 		);
 		return;
 	}
+	const skills = [...locks.global.skills, ...locks.project.skills].filter(
+		(skill) => !skill.pinned,
+	);
 	if (skills.length === 0) return;
 
 	const cachePath = skillsCheckCachePath(configDir);
@@ -598,10 +714,8 @@ export const notifyIfSkillsOutdated = ({
 		skills,
 		cache,
 		lockModifiedAt: Math.max(
-			...lockPaths.map(
-				(path) =>
-					statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 0,
-			),
+			locks.global.modifiedAt,
+			locks.project.modifiedAt,
 		),
 		now,
 	});

@@ -4,6 +4,8 @@ import {
 	analyticsMiddleware,
 	closeAnalytics,
 	initAnalyticsClientMiddleware,
+	isAnalyticsActive,
+	recordCommandSuccessExtras,
 	sendError,
 	takeCommandSuccessExtras,
 	trackCommandSuccess,
@@ -384,7 +386,22 @@ void (async () => {
 	while (attempts < MAX_ATTEMPTS) {
 		try {
 			const args = await builder.argv;
+			const configDir =
+				typeof args.configDir === "string"
+					? args.configDir
+					: defaultDir;
 
+			if (isAnalyticsActive()) {
+				const { readSkillsTelemetry } = await import(
+					"./skills/freshness.js"
+				);
+				const skills = readSkillsTelemetry({
+					configDir,
+					cwd: process.cwd(),
+				});
+				if (skills !== undefined)
+					recordCommandSuccessExtras({ skills });
+			}
 			// Send analytics for a successful attempt
 			trackCommandSuccess(args);
 			if (args._.length === 0 || args.help) {
@@ -395,10 +412,7 @@ void (async () => {
 			await closeAnalytics();
 			const notifier = {
 				commandPath: args._.map(String),
-				configDir:
-					typeof args.configDir === "string"
-						? args.configDir
-						: defaultDir,
+				configDir,
 				currentBranch: Boolean(args.currentBranch),
 				output: typeof args.output === "string" ? args.output : "table",
 			};

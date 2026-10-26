@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import {
 	createServer,
 	type IncomingMessage,
@@ -143,6 +143,59 @@ describe("analytics account lookup", () => {
 				accountId: "acct-1",
 				authMethod: "api_key_user",
 				authData: "key-1",
+			});
+		} finally {
+			await api.close();
+		}
+	});
+
+	it("sends the installed skills on cli_command_success", async () => {
+		const api = await listen((req, res) => {
+			if (req.url?.startsWith("/auth")) {
+				json(res, { account_id: "acct-1", auth_method: "api_key_org" });
+			}
+		});
+		try {
+			const { analytics, args } = await setup(api.url);
+			const { readSkillsTelemetry } = await import(
+				"./skills/freshness.js"
+			);
+			const home = mkdtempSync(join(tmpdir(), "neon-analytics-home-"));
+			const cwd = mkdtempSync(join(tmpdir(), "neon-analytics-cwd-"));
+			writeFileSync(
+				join(cwd, "skills-lock.json"),
+				JSON.stringify({
+					version: 1,
+					skills: {
+						neon: {
+							source: "neondatabase/agent-skills",
+							skillPath: "skills/neon/SKILL.md",
+							computedHash: "c".repeat(64),
+						},
+					},
+				}),
+			);
+			vi.stubEnv("XDG_STATE_HOME", home);
+
+			analytics.analyticsMiddleware(args);
+			const skills = readSkillsTelemetry({
+				configDir: args.configDir,
+				cwd,
+			});
+			expect(skills).toBeDefined();
+			if (skills !== undefined) {
+				analytics.recordCommandSuccessExtras({ skills });
+			}
+			analytics.trackCommandSuccess(args);
+			await analytics.closeAnalytics();
+
+			expect(events.at(-1)?.properties?.skills).toEqual({
+				checkedAt: null,
+				global: { installed: false },
+				project: {
+					installed: true,
+					skills: { neon: { hash: "c".repeat(64), outdated: null } },
+				},
 			});
 		} finally {
 			await api.close();

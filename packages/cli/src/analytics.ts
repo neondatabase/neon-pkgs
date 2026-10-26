@@ -14,6 +14,7 @@ import { getCliAgent, getGithubEnvVars, isCi } from "./env.js";
 import { type ErrorCode, isUnexpectedError } from "./errors.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
+import type { SkillsTelemetry } from "./skills/freshness.js";
 
 const WRITE_KEY = "3SQXn5ejjXWLEJ8xU2PRYhAotLtTaeeV";
 
@@ -522,6 +523,9 @@ export const trackEvent = (
 	log.debug("Sent CLI event: %s", event);
 };
 
+/** Whether this process sends telemetry: analytics is on and the client was created. */
+export const isAnalyticsActive = (): boolean => client !== undefined;
+
 /**
  * Tracks cli_command_success. The account fields come from the lookup, which may still be in
  * flight when the command finishes, so they are read when the event is sent.
@@ -562,6 +566,7 @@ export type CommandSuccessExtras = {
 	agent_setup?: CommandAgentSetup;
 	init_kind?: CommandInitKind;
 	scope?: CommandInstallScope;
+	skills?: SkillsTelemetry;
 };
 
 let commandSuccessExtras: CommandSuccessExtras = {};
