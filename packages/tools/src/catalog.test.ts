@@ -158,6 +158,27 @@ describe("special mappings", () => {
 	});
 
 	test("maps the OAuth server and OAuth client tools onto the SDK", async () => {
+		const listedClients = [
+			{
+				client_id: "listed-a",
+				name: "App A",
+				type: "confidential",
+				redirect_uris: ["https://a.example.com/cb"],
+				resources: ["https://res-a.example.com"],
+				skip_consent: false,
+				disabled: false,
+				created_at: "2026-01-02T03:04:05.000Z",
+			},
+			{
+				client_id: "listed-b",
+				name: "App B",
+				type: "public",
+				redirect_uris: ["https://b.example.com/cb"],
+				resources: [],
+				skip_consent: true,
+				disabled: true,
+			},
+		];
 		const requests: Request[] = [];
 		const tools = createNeonTools({
 			apiKey: "test-key",
@@ -181,7 +202,7 @@ describe("special mappings", () => {
 					request.url.endsWith("/clients") &&
 					request.method === "GET"
 				) {
-					return jsonResponse({ clients: [] });
+					return jsonResponse({ clients: listedClients });
 				}
 				if (request.url.endsWith("/rotate_secret")) {
 					return jsonResponse({ client_secret: "cs_rotated_2b7c" });
@@ -207,7 +228,7 @@ describe("special mappings", () => {
 			mcp: { resource: "https://mcp.example.com" },
 			resources: [{ identifier: "https://res-server.example.com" }],
 		});
-		await tools["auth.oauthClients.list"].execute(ids);
+		const listed = await tools["auth.oauthClients.list"].execute(ids);
 		await tools["auth.oauthClients.get"].execute(client);
 		const created = await tools["auth.oauthClients.create"].execute({
 			...ids,
@@ -266,6 +287,7 @@ describe("special mappings", () => {
 			disabled: true,
 			resources: ["https://update-res.example.com"],
 		});
+		expect(listed).toEqual({ data: listedClients });
 		expect(created).toEqual({
 			data: { client_id: "created-id", client_secret: "cs_created_8f3a" },
 		});
