@@ -74,7 +74,7 @@ const runCs = async (handler: Handler) => {
 				{
 					stdio: "pipe",
 					execArgv: ["--unhandled-rejections=strict"],
-					env: { PATH: process.env.PATH },
+					env: { PATH: process.env.PATH, NO_UPDATE_NOTIFIER: "1" },
 				},
 			);
 			let stdout = "";

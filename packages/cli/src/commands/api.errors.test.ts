@@ -80,7 +80,14 @@ const run = (
 					configDir,
 					"--no-analytics",
 				],
-				{ stdio: "pipe", env: { PATH: process.env.PATH, ...env } },
+				{
+					stdio: "pipe",
+					env: {
+						PATH: process.env.PATH,
+						NO_UPDATE_NOTIFIER: "1",
+						...env,
+					},
+				},
 			);
 			let stdout = "";
 			let stderr = "";
