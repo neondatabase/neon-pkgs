@@ -9,6 +9,8 @@ import type {
 	Endpoint,
 	GrantedCredentialScope,
 	NeonAuthIntegration,
+	NeonAuthOAuthClientSecret,
+	NeonAuthOAuthProviderConfig,
 	NeonAuthOauthProvider,
 	Operation,
 	Project,
@@ -295,6 +297,16 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 			id: "google",
 		}),
 	).resolves.toEqualTypeOf<NeonResult<NeonAuthOauthProvider>>();
+	expectTypeOf(
+		neon.auth.oauthServer.get({ projectId: "p", branchId: "br" }),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthOAuthProviderConfig>>();
+	expectTypeOf(
+		neon.auth.oauthClients.rotateSecret({
+			projectId: "p",
+			branchId: "br",
+			clientId: "c",
+		}),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthOAuthClientSecret>>();
 	expectTypeOf(
 		neon.projects.permissions.list({ projectId: "p" }),
 	).resolves.toEqualTypeOf<NeonResult<ProjectPermission[]>>();

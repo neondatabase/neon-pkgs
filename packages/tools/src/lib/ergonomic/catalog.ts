@@ -1396,6 +1396,129 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
+	"auth.oauthServer.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthServer.get",
+			generated: "getNeonAuthOAuthProviderPlugin",
+			run: (neon, input, signal) =>
+				neon.auth.oauthServer.get(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthServer.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthServer.update",
+			generated: "updateNeonAuthOAuthProviderPlugin",
+			run: (neon, input, signal) =>
+				neon.auth.oauthServer.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+						login_page: input.login_page,
+						consent_page: input.consent_page,
+						mcp: input.mcp,
+						resources: input.resources,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthClients.list": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthClients.list",
+			generated: "listNeonAuthOAuthClients",
+			run: (neon, input, signal) =>
+				neon.auth.oauthClients.list(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthClients.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthClients.get",
+			generated: "getNeonAuthOAuthClient",
+			run: (neon, input, signal) =>
+				neon.auth.oauthClients.get(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						clientId: input.client_id,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthClients.create": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthClients.create",
+			generated: "createNeonAuthOAuthClient",
+			run: (neon, input, signal) =>
+				neon.auth.oauthClients.create(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						name: input.name,
+						redirect_uris: input.redirect_uris,
+						type: input.type,
+						resources: input.resources,
+						skip_consent: input.skip_consent,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthClients.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthClients.update",
+			generated: "updateNeonAuthOAuthClient",
+			run: (neon, input, signal) =>
+				neon.auth.oauthClients.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						clientId: input.client_id,
+						name: input.name,
+						redirect_uris: input.redirect_uris,
+						skip_consent: input.skip_consent,
+						disabled: input.disabled,
+						resources: input.resources,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthClients.delete": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthClients.delete",
+			generated: "deleteNeonAuthOAuthClient",
+			run: (neon, input, signal) =>
+				neon.auth.oauthClients.delete(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						clientId: input.client_id,
+					},
+					{ signal },
+				),
+		}),
+	"auth.oauthClients.rotateSecret": (options) =>
+		fromGenerated(options, {
+			id: "auth.oauthClients.rotateSecret",
+			generated: "rotateNeonAuthOAuthClientSecret",
+			run: (neon, input, signal) =>
+				neon.auth.oauthClients.rotateSecret(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						clientId: input.client_id,
+					},
+					{ signal },
+				),
+		}),
 	"auth.trustedDomains.list": (options) =>
 		fromGenerated(options, {
 			id: "auth.trustedDomains.list",

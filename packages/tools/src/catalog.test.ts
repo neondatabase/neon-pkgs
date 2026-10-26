@@ -157,6 +157,100 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({ delete_data: true });
 	});
 
+	test("maps the OAuth server and OAuth client tools onto the SDK", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"auth.oauthServer.get",
+				"auth.oauthServer.update",
+				"auth.oauthClients.list",
+				"auth.oauthClients.get",
+				"auth.oauthClients.create",
+				"auth.oauthClients.update",
+				"auth.oauthClients.delete",
+				"auth.oauthClients.rotateSecret",
+			] as const,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				if (request.method === "DELETE") {
+					return new Response(null, { status: 204 });
+				}
+				if (
+					request.url.endsWith("/clients") &&
+					request.method === "GET"
+				) {
+					return jsonResponse({ clients: [] });
+				}
+				return jsonResponse({ client_secret: "secret" });
+			},
+		});
+		const ids = { project_id: "project-id", branch_id: "branch-id" };
+		const client = { ...ids, client_id: "clientid" };
+
+		await tools["auth.oauthServer.get"].execute(ids);
+		await tools["auth.oauthServer.update"].execute({
+			...ids,
+			mcp: { resource: "https://mcp.example.com" },
+		});
+		await tools["auth.oauthClients.list"].execute(ids);
+		await tools["auth.oauthClients.get"].execute(client);
+		const created = await tools["auth.oauthClients.create"].execute({
+			...ids,
+			name: "app",
+			redirect_uris: ["https://app.example.com/cb"],
+			type: "confidential",
+			resources: ["https://mcp.example.com"],
+		});
+		await tools["auth.oauthClients.update"].execute({
+			...client,
+			disabled: true,
+		});
+		const rotated =
+			await tools["auth.oauthClients.rotateSecret"].execute(client);
+		await tools["auth.oauthClients.delete"].execute(client);
+
+		const base = "/projects/project-id/branches/branch-id/auth";
+		expect(
+			requests.map(
+				(r) =>
+					`${r.method} ${new URL(r.url).pathname.replace("/api/v2", "")}`,
+			),
+		).toEqual([
+			`GET ${base}/plugins/oauth-provider`,
+			`PATCH ${base}/plugins/oauth-provider`,
+			`GET ${base}/oauth-provider/clients`,
+			`GET ${base}/oauth-provider/clients/clientid`,
+			`POST ${base}/oauth-provider/clients`,
+			`PATCH ${base}/oauth-provider/clients/clientid`,
+			`POST ${base}/oauth-provider/clients/clientid/rotate_secret`,
+			`DELETE ${base}/oauth-provider/clients/clientid`,
+		]);
+		expect(await requests[1].json()).toEqual({
+			mcp: { resource: "https://mcp.example.com" },
+		});
+		expect(await requests[5].json()).toEqual({ disabled: true });
+		expect(JSON.stringify(created)).toContain("secret");
+		expect(JSON.stringify(rotated)).toContain("secret");
+		for (const id of [
+			"auth.oauthServer.update",
+			"auth.oauthClients.create",
+			"auth.oauthClients.update",
+			"auth.oauthClients.delete",
+			"auth.oauthClients.rotateSecret",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(true);
+		}
+		for (const id of [
+			"auth.oauthServer.get",
+			"auth.oauthClients.list",
+			"auth.oauthClients.get",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(false);
+		}
+	});
+
 	test("maps apiKeys.create key_name", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

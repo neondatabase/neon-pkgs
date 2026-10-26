@@ -941,6 +941,14 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `oauthProviders.add({ projectId, branchId, …input })` | `NeonAuthOauthProvider` | |
 | `oauthProviders.update({ projectId, branchId, providerId, …input })` | `NeonAuthOauthProvider` | |
 | `oauthProviders.delete({ projectId, branchId, providerId })` | **→void** | |
+| `oauthServer.get({ projectId, branchId })` | `NeonAuthOAuthProviderConfig` | OAuth provider plugin: makes Neon Auth an OAuth 2.1 authorization server (incl. MCP), distinct from social-login `oauthProviders` |
+| `oauthServer.update({ projectId, branchId, …input })` | `NeonAuthOAuthProviderConfig` | `resources` replaces the stored list; `mcp.resource` is required whenever `mcp` is sent |
+| `oauthClients.list({ projectId, branchId })` | `NeonAuthOAuthClient[]` | clients of the OAuth server |
+| `oauthClients.get({ projectId, branchId, clientId })` | `NeonAuthOAuthClient` | |
+| `oauthClients.create({ projectId, branchId, name, redirect_uris, type, resources, skip_consent? })` | `NeonAuthOAuthClientCreated` | confidential clients get a one-time `client_secret` |
+| `oauthClients.update({ projectId, branchId, clientId, …input })` | `NeonAuthOAuthClient` | `redirect_uris` and `resources` replace the stored lists |
+| `oauthClients.delete({ projectId, branchId, clientId })` | **→void** | |
+| `oauthClients.rotateSecret({ projectId, branchId, clientId })` | `NeonAuthOAuthClientSecret` | new one-time `client_secret`; the old one stops working immediately |
 | `trustedDomains.list({ projectId, branchId })` | `NeonAuthRedirectUriWhitelistDomain[]` | redirect-URI whitelist |
 | `trustedDomains.add({ projectId, branchId, domain, auth_provider })` | **→void** | redirect-URI whitelist |
 | `trustedDomains.delete({ projectId, branchId, auth_provider, domains })` | **→void** | redirect-URI whitelist |
