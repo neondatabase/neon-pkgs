@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.3.0
+
+### Minor Changes
+
+- d162fd0: `neon.tools.imageGeneration()` now sends `gpt-image-2` when no `model` is given, and throws `UnsupportedFunctionalityError` for `gpt-image-1`, which OpenAI has deprecated.
+
 ## 1.2.0
 
 ### Minor Changes
