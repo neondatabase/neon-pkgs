@@ -123,8 +123,13 @@ export type RemoteFolder = {
 	pending?: true;
 };
 
+/**
+ * `checkedAt` is when the last successful check read GitHub; `attemptedAt` is when a check
+ * was last started, which throttles the next one.
+ */
 export type SkillsCheckCache = {
 	checkedAt: number;
+	attemptedAt?: number;
 	folders: Record<string, RemoteFolder>;
 };
 
@@ -183,7 +188,14 @@ export const parseSkillsCheckCache = (
 			const folder = parseRemoteFolder(entry);
 			if (folder !== undefined) folders[key] = folder;
 		}
-		return { checkedAt: value.checkedAt, folders };
+		const { attemptedAt } = value;
+		return {
+			checkedAt: value.checkedAt,
+			...(typeof attemptedAt === "number" && Number.isFinite(attemptedAt)
+				? { attemptedAt }
+				: {}),
+			folders,
+		};
 	} catch {
 		return undefined;
 	}
@@ -481,20 +493,18 @@ export const planSkillsCheck = ({
 					settled(skill) &&
 					skillStatus(skill, remote(skill)) === "outdated",
 			);
-	const toCheck = lockChanged
-		? [...skills]
-		: skills.filter(
-				(skill) =>
-					settled(skill) &&
-					skillStatus(skill, remote(skill)) === undefined,
-			);
+	const toCheck = skills.filter(
+		(skill) =>
+			settled(skill) &&
+			(lockChanged || skillStatus(skill, remote(skill)) === undefined),
+	);
 	return {
 		outdated,
 		toCheck,
 		refresh:
 			cache === undefined ||
 			toCheck.length > 0 ||
-			now - cache.checkedAt >= DAY_MS,
+			now - (cache.attemptedAt ?? cache.checkedAt) >= DAY_MS,
 	};
 };
 
@@ -585,7 +595,7 @@ export const notifyIfSkillsOutdated = ({
 	if (
 		writeJsonFile(
 			cachePath,
-			{ checkedAt: now, folders },
+			{ checkedAt: cache?.checkedAt ?? 0, attemptedAt: now, folders },
 			"skills check cache",
 		)
 	) {

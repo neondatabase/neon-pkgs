@@ -116,7 +116,7 @@ describe("skillStatus", () => {
 });
 
 describe("planSkillsCheck", () => {
-	const now = 10_000_000;
+	const now = Date.UTC(2026, 9, 26);
 	const checked = (folders: Record<string, RemoteFolder>) => ({
 		checkedAt: now - 1000,
 		folders,
@@ -169,6 +169,43 @@ describe("planSkillsCheck", () => {
 				now,
 			}),
 		).toEqual({ outdated: [], toCheck: [skill], refresh: true });
+	});
+
+	test("keeps holding back after another directory starts a check", () => {
+		const updated = neon("project", NEW_CONTENT);
+		const cache = {
+			checkedAt: now - 3000,
+			attemptedAt: now - 1000,
+			folders: {
+				[KEY]: { tree: TREE, content: CONTENT },
+				"neondatabase/agent-skills:skills/neon-auth": {
+					pending: true as const,
+				},
+			},
+		};
+		expect(
+			planSkillsCheck({
+				skills: [updated],
+				cache,
+				lockModifiedAt: now - 2000,
+				now,
+			}),
+		).toEqual({ outdated: [], toCheck: [updated], refresh: true });
+	});
+
+	test("waits a day after a check that never finished", () => {
+		expect(
+			planSkillsCheck({
+				skills: [neon("global", TREE)],
+				cache: {
+					checkedAt: now - 3 * 24 * 60 * 60 * 1000,
+					attemptedAt: now - 1000,
+					folders: { [KEY]: { tree: TREE } },
+				},
+				lockModifiedAt: 0,
+				now,
+			}).refresh,
+		).toBe(false);
 	});
 
 	test("refreshes a day-old cache", () => {
