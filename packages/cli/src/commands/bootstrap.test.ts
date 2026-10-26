@@ -31,6 +31,9 @@ const deployTemplate = vi.hoisted(() =>
 );
 vi.mock("../init/deploy.js", () => ({ deployTemplate }));
 
+// --deploy is staging-only, so its tests point the CLI at the staging API host.
+const STAGING = { NEON_API_HOST: "https://console-stage.neon.build/api/v2" };
+
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
 type FixtureFile =
@@ -772,40 +775,47 @@ describe("bootstrap", () => {
 		expect(takeCommandSuccessExtras()).toEqual({});
 	});
 	test("--deploy refuses --no-install", async () => {
-		const { code, stderr } = await runBootstrap(server, [
-			dest,
-			"--template",
-			"hono",
-			"--deploy",
-			"--default",
-			"--no-install",
-		]);
+		const { code, stderr } = await runBootstrap(
+			server,
+			[
+				dest,
+				"--template",
+				"hono",
+				"--deploy",
+				"--default",
+				"--no-install",
+			],
+			STAGING,
+		);
 		expect(code).toBe(1);
 		expect(stderr).toContain("remove --no-install and --no-link");
 	});
 
 	test("--deploy outside a terminal needs -y", async () => {
-		const { code, stderr } = await runBootstrap(server, [
-			dest,
-			"--template",
-			"hono",
-			"--deploy",
-		]);
+		const { code, stderr } = await runBootstrap(
+			server,
+			[dest, "--template", "hono", "--deploy"],
+			STAGING,
+		);
 		expect(code).toBe(1);
 		expect(stderr).toContain("--deploy outside a terminal needs -y");
 	});
 
 	test("--deploy refuses a template without neon.ts", async () => {
-		const { code, stderr } = await runBootstrap(server, [
-			dest,
-			"--template",
-			"hono",
-			"--deploy",
-			"--default",
-			"--force",
-			"--no-git",
-			"--no-agent-setup",
-		]);
+		const { code, stderr } = await runBootstrap(
+			server,
+			[
+				dest,
+				"--template",
+				"hono",
+				"--deploy",
+				"--default",
+				"--force",
+				"--no-git",
+				"--no-agent-setup",
+			],
+			STAGING,
+		);
 		expect(code).toBe(1);
 		expect(stderr).toContain('Template "hono" has no neon.ts');
 	});
@@ -822,7 +832,7 @@ describe("bootstrap", () => {
 			const result = await handler({
 				apiClient: {} as never,
 				apiKey: "test-key",
-				apiHost: "https://console.neon.tech/api/v2",
+				apiHost: STAGING.NEON_API_HOST,
 				output: "table",
 				contextFile: join(target, ".neon"),
 				directory: target,
@@ -883,5 +893,32 @@ describe("bootstrap", () => {
 		);
 		// -y never prompts for an input.
 		expect(deployTemplate.mock.calls[0]?.[0]).not.toHaveProperty("ask");
+	});
+	test("--deploy is refused outside staging", async () => {
+		const { code, stderr } = await runBootstrap(server, [
+			dest,
+			"--template",
+			"hono",
+			"--deploy",
+			"--default",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"Deploying templates with `neon bootstrap --deploy` is coming soon!",
+		);
+		// Refused before anything is scaffolded.
+		expect(existsSync(join(dest, "package.json"))).toBe(false);
+	});
+
+	test("help lists --deploy only against staging", async () => {
+		const production = await runBootstrap(server, ["--help"]);
+		expect(production.code, production.stderr).toBe(0);
+		expect(production.stdout).not.toContain("--deploy");
+		expect(production.stdout).not.toContain("--project-name");
+
+		const staging = await runBootstrap(server, ["--help"], STAGING);
+		expect(staging.code, staging.stderr).toBe(0);
+		expect(staging.stdout).toContain("--deploy");
+		expect(staging.stdout).toContain("--project-name");
 	});
 });

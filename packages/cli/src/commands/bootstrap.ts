@@ -63,6 +63,11 @@ import {
 	resolvePackageManager,
 	runCommand,
 } from "../utils/package_manager.js";
+import {
+	StagingOnlyError,
+	stagingFeaturesEnabled,
+	stagingFeaturesEnabledForArgv,
+} from "../utils/staging.js";
 import { writer } from "../writer.js";
 
 export type BootstrapProps = CommonProps & {
@@ -141,8 +146,10 @@ export const command = "bootstrap [directory]";
 export const describe =
 	"Scaffold a new project from a Neon starter template, then install agent tooling and link a Neon project";
 
-export const builder = (argv: yargs.Argv) =>
-	argv
+export const builder = (argv: yargs.Argv) => {
+	// --deploy is staging-only until template deploys launch: hidden from help elsewhere.
+	const hideDeploy = !stagingFeaturesEnabledForArgv();
+	return argv
 		.usage("$0 bootstrap [directory] [options]")
 		.positional("directory", {
 			describe:
@@ -208,26 +215,31 @@ export const builder = (argv: yargs.Argv) =>
 				coerce: coerceAgentFlag,
 			},
 			deploy: {
+				hidden: hideDeploy,
 				describe:
 					"Deploy the template's neon.ts into a new Neon project: install, create and link the project, write the template's inputs to .env.local, then run `neon deploy --env .env.local`. Its deploy.after hook must succeed",
 				type: "boolean",
 				default: false,
 			},
 			env: {
+				hidden: hideDeploy,
 				describe:
 					"With --deploy: a value for one of the template's inputs, as KEY=VALUE (repeatable). Inputs without one are generated, defaulted, or asked for",
 				type: "array",
 				string: true,
 			},
 			"org-id": {
+				hidden: hideDeploy,
 				describe: "With --deploy: organization for the new project",
 				type: "string",
 			},
 			"region-id": {
+				hidden: hideDeploy,
 				describe: "With --deploy: region for the new project",
 				type: "string",
 			},
 			"project-name": {
+				hidden: hideDeploy,
 				describe:
 					"With --deploy: name for the new project (default: the directory name)",
 				type: "string",
@@ -246,8 +258,14 @@ export const builder = (argv: yargs.Argv) =>
 			"Skip the pickers; if several orgs or projects exist, link prints IDs and exits",
 		)
 		.example(
-			"$0 bootstrap my-queue --template queue --deploy -y --region-id aws-us-east-2",
-			"Scaffold the queue template and deploy it into a new project",
+			hideDeploy
+				? []
+				: [
+						[
+							"$0 bootstrap my-queue --template queue --deploy -y --region-id aws-us-east-2",
+							"Scaffold the queue template and deploy it into a new project",
+						],
+					],
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -265,10 +283,18 @@ export const builder = (argv: yargs.Argv) =>
 			),
 		)
 		.strict();
+};
+
+/** `--deploy` outside staging. */
+export const DEPLOY_COMING_SOON =
+	"Deploying templates with `neon bootstrap --deploy` is coming soon!";
 
 export const handler = async (
 	props: BootstrapProps,
 ): Promise<NestedBootstrapResult | undefined> => {
+	if (props.deploy && !stagingFeaturesEnabled(props.apiHost)) {
+		throw new StagingOnlyError(DEPLOY_COMING_SOON);
+	}
 	if (props.listTemplates) {
 		const templates = await fetchTemplates();
 		if (props.output === "json" || props.output === "yaml") {
