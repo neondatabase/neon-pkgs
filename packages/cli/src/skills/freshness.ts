@@ -55,6 +55,9 @@ export const lockPath = (scope: SkillsScope, cwd: string): string =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The Agent Skills name rule. A lock is repository content, and names reach the terminal. */
+const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
 const skillFolder = (skillPath: string): string =>
 	skillPath.replace(/\\/g, "/").replace(/\/?SKILL\.md$/i, "");
 
@@ -78,6 +81,7 @@ export const parseSkillsLock = (
 		const { source, skillPath, ref } = entry;
 		const hash = entry[field];
 		if (
+			!SKILL_NAME.test(skill) ||
 			typeof source !== "string" ||
 			!NEON_SOURCES.has(source) ||
 			ref !== undefined ||

@@ -69,6 +69,20 @@ describe("parseSkillsLock", () => {
 		).toEqual([neon("global", CONTENT, "content")]);
 	});
 
+	test("skips names that could carry terminal controls", () => {
+		const raw = JSON.stringify({
+			version: 1,
+			skills: {
+				"neon\u001b]52;c;cHJvb2Y=\u0007\nWARNING: forged": {
+					source: "neondatabase/agent-skills",
+					skillPath: "skills/neon/SKILL.md",
+					computedHash: CONTENT,
+				},
+			},
+		});
+		expect(parseSkillsLock(raw, "project")).toEqual([]);
+	});
+
 	test("throws on a lock that is not JSON", () => {
 		expect(() => parseSkillsLock("{", "project")).toThrow();
 	});
