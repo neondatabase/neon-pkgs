@@ -123,7 +123,7 @@
           "properties": {
             "type": { "const": "subscribe" },
             "request_id": { "$ref": "#/$defs/u64" },
-            "authorization": { "type": "string", "minLength": 1, "maxLength": 262144 }
+            "authorization": { "type": "string", "minLength": 1 }
           },
           "additionalProperties": false
         },
@@ -133,7 +133,7 @@
           "properties": {
             "type": { "const": "renew" },
             "live_id": { "$ref": "#/$defs/u64" },
-            "authorization": { "type": "string", "minLength": 1, "maxLength": 262144 }
+            "authorization": { "type": "string", "minLength": 1 }
           },
           "additionalProperties": false
         },

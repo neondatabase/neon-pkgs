@@ -99,6 +99,47 @@ describe("Realtime v1 capability issuer", () => {
 		expect(int4.queryFingerprint).not.toBe(int8.queryFingerprint);
 	});
 
+	it("seals capabilities larger than the former 256 KiB limit", async () => {
+		const parameters = Array.from({ length: 20 }, () => ({
+			typeOid: 25,
+			value: "x".repeat(16_000),
+		}));
+		const sealedQuery = await createCapabilityIssuer(
+			parseRealtimeSecret(SECRET),
+			"app",
+		)({
+			sql: `select ${parameters.map((_, index) => `$${index + 1}`).join(", ")}`,
+			parameters,
+		});
+
+		expect(utf8(sealedQuery.capability).length).toBeGreaterThan(256 * 1024);
+		const { header, claims } = await decrypt(sealedQuery.capability, KEY);
+		expect(
+			validateCapability({ protected: header, claims }),
+			JSON.stringify(validateCapability.errors),
+		).toBe(true);
+	});
+
+	it("seals query shapes beyond the former schema limits", async () => {
+		const parameters = Array.from({ length: 257 }, (_, index) => ({
+			typeOid: 25,
+			value: index === 0 ? "x".repeat(16_387) : "x",
+		}));
+		const sql = `select 1 /* ${"x".repeat(32_768)} */`;
+		const sealedQuery = await createCapabilityIssuer(
+			parseRealtimeSecret(SECRET),
+			"app",
+		)({ sql, parameters });
+
+		const { header, claims } = await decrypt(sealedQuery.capability, KEY);
+		expect(claims).toMatchObject({ sql });
+		expect(claims.parameters).toHaveLength(257);
+		expect(
+			validateCapability({ protected: header, claims }),
+			JSON.stringify(validateCapability.errors),
+		).toBe(true);
+	});
+
 	it("keeps generated capability types synchronized with the schema", () => {
 		const generator = fileURLToPath(
 			new URL(

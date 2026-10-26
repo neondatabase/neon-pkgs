@@ -13,7 +13,6 @@ import type { RealtimeSecret } from "./secret.js";
 const SEALED_QUERY_LIFETIME_SECONDS = 60;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
-const MAX_TOKEN_BYTES = 256 * 1024;
 
 export interface IssuedSealedLiveQuery {
 	readonly capability: string;
@@ -100,9 +99,6 @@ async function encryptCompactJwe(
 		encodeBase64Url(ciphertext),
 		encodeBase64Url(tag),
 	].join(".");
-	if (utf8(token).length > MAX_TOKEN_BYTES) {
-		throw new Error("Live-query capability exceeds the size limit");
-	}
 	return token;
 }
 
