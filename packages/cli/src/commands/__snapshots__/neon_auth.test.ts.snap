@@ -198,9 +198,15 @@ OAuth client
 "
 `;
 
+exports[`neon-auth > oauth-client create rejects --no-name before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-client create rejects --no-redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client create rejects --no-resources before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects blank --name "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client create rejects blank --name "" before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client create rejects blank --redirect-uris "  " before any request 1`] = `""`;
 
@@ -215,6 +221,20 @@ exports[`neon-auth > oauth-client create rejects empty --redirect-uris before an
 exports[`neon-auth > oauth-client create rejects empty --resources before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client create trims redirect URIs and resources 1`] = `
+"client_id: client-abc123
+name: App
+type: public
+redirect_uris:
+  - https://app.example.com/cb
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
+exports[`neon-auth > oauth-client create trims the name 1`] = `
 "client_id: client-abc123
 name: App
 type: public
@@ -359,9 +379,15 @@ created_at: 2026-01-01T00:00:00Z
 "
 `;
 
+exports[`neon-auth > oauth-client update rejects --no-name before any request 1`] = `""`;
+
 exports[`neon-auth > oauth-client update rejects --no-redirect-uris before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client update rejects --no-resources before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update rejects blank --name "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-client update rejects blank --name "" before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-client update rejects blank --redirect-uris "  " before any request 1`] = `""`;
 
@@ -384,6 +410,35 @@ redirect_uris:
 resources:
   - https://api.example.com
 skip_consent: true
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
+exports[`neon-auth > oauth-client update trims and dedupes redirect URIs and resources 1`] = `
+"client_id: client-abc123
+name: My MCP client
+type: confidential
+redirect_uris:
+  - https://app.example.com/cb
+  - https://app.example.com/other
+resources:
+  - https://api.example.com
+skip_consent: false
+disabled: false
+created_at: 2026-01-01T00:00:00Z
+"
+`;
+
+exports[`neon-auth > oauth-client update trims the name 1`] = `
+"client_id: client-abc123
+name: Renamed
+type: confidential
+redirect_uris:
+  - https://app.example.com/callback
+resources:
+  - https://api.example.com
+skip_consent: false
 disabled: false
 created_at: 2026-01-01T00:00:00Z
 "
@@ -448,6 +503,14 @@ OAuth server configuration
 
 "
 `;
+
+exports[`neon-auth > oauth-server update --consent-page rejects blank value "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --consent-page rejects blank value "" before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --login-page rejects blank value "  " before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-server update --login-page rejects blank value "" before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-server update --mcp-resource rejects blank value "  " before any request 1`] = `""`;
 
@@ -550,6 +613,10 @@ resources:
 `;
 
 exports[`neon-auth > oauth-server update rejects --mcp 1`] = `""`;
+
+exports[`neon-auth > oauth-server update rejects --no-consent-page before any request 1`] = `""`;
+
+exports[`neon-auth > oauth-server update rejects --no-login-page before any request 1`] = `""`;
 
 exports[`neon-auth > oauth-server update rejects --no-mcp-resource before any request 1`] = `""`;
 

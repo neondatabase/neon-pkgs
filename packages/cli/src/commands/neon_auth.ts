@@ -1849,6 +1849,19 @@ const requireNonEmptyLists = (lists: [flag: string, values?: string[]][]) => {
 	}
 };
 
+/**
+ * yargs negation turns `--no-<flag>` on a string option into `false`, and `--flag ""` yields an
+ * empty string; both would otherwise crash on `.trim()` or be sent to the API.
+ */
+const requireNonBlankString = (flag: string, value: unknown, hint: string) => {
+	if (value === false) {
+		throw new Error(`--no-${flag.slice(2)} is not supported. ${hint}`);
+	}
+	if (typeof value === "string" && value.trim() === "") {
+		throw new Error(`${flag} must not be empty.`);
+	}
+};
+
 const requireNonBlankUrls = (urls: string[]) => {
 	if (hasBlank(urls)) {
 		throw new Error("URLs must not be empty.");
@@ -1869,6 +1882,16 @@ const rejectMcpResourceCollision = (
 
 /** Checked before any request so a malformed invocation never reaches the API. */
 const validateOAuthServerUpdate = (props: OAuthServerUpdateProps) => {
+	requireNonBlankString(
+		"--login-page",
+		props.loginPage,
+		"Pass --login-page <url>.",
+	);
+	requireNonBlankString(
+		"--consent-page",
+		props.consentPage,
+		"Pass --consent-page <url>.",
+	);
 	if (props.mcp === true) {
 		throw new Error(
 			"--mcp cannot be enabled. Configure MCP with --mcp-resource <url>, or remove it with --no-mcp.",
@@ -2175,6 +2198,7 @@ const oauthClientCreate = async (
 		skipConsent?: boolean;
 	},
 ) => {
+	requireNonBlankString("--name", props.name, "Pass --name <name>.");
 	requireNonEmptyLists([
 		["--redirect-uris", props.redirectUris],
 		["--resources", props.resources],
@@ -2184,7 +2208,7 @@ const oauthClientCreate = async (
 		props.projectId,
 		branchId,
 		{
-			name: props.name,
+			name: props.name.trim(),
 			type: props.type,
 			redirect_uris: unique(props.redirectUris),
 			resources: unique(props.resources),
@@ -2226,6 +2250,7 @@ const oauthClientUpdate = async (
 		disabled?: boolean;
 	},
 ) => {
+	requireNonBlankString("--name", props.name, "Pass --name <name>.");
 	requireNonEmptyLists([
 		["--redirect-uris", props.redirectUris],
 		["--resources", props.resources],
@@ -2252,7 +2277,7 @@ const oauthClientUpdate = async (
 		branchId,
 		props.clientId,
 		{
-			name: props.name,
+			name: props.name?.trim(),
 			redirect_uris: props.redirectUris && unique(props.redirectUris),
 			resources: props.resources && unique(props.resources),
 			skip_consent: props.skipConsent,

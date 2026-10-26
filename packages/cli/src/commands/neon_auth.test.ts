@@ -861,6 +861,23 @@ describe("neon-auth", () => {
 		expect(requests).toEqual([]);
 	});
 
+	for (const [flag, label] of [
+		["login-page", "login page"],
+		["consent-page", "consent page"],
+	]) {
+		test(`oauth-server update rejects --no-${flag} before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(serverArgs("update", `--no-${flag}`), {
+				code: 1,
+				stderr: `ERROR: --no-${flag} is not supported. Pass --${flag} <url>.`,
+				onRequest: (r) => requests.push(r),
+			});
+			expect(requests, label).toEqual([]);
+		});
+	}
+
 	test("oauth-server update lets --resources reuse the stored MCP resource when --mcp-resource replaces it", async ({
 		testCliCommand,
 	}) => {
@@ -1515,6 +1532,113 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	test("oauth-client create trims the name", async ({ testCliCommand }) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs(
+				"create",
+				"--name",
+				"  App  ",
+				"--type",
+				"public",
+				"--redirect-uris",
+				"https://app.example.com/cb",
+				"--resources",
+				"https://api.example.com",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPostBodies(requests)).toEqual([
+			{
+				name: "App",
+				type: "public",
+				redirect_uris: ["https://app.example.com/cb"],
+				resources: ["https://api.example.com"],
+			},
+		]);
+	});
+
+	for (const name of ["", "  "]) {
+		test(`oauth-client create rejects blank --name "${name}" before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				clientArgs(
+					"create",
+					"--name",
+					name,
+					"--type",
+					"public",
+					"--redirect-uris",
+					"https://app.example.com/cb",
+					"--resources",
+					"https://api.example.com",
+				),
+				{
+					code: 1,
+					stderr: "ERROR: --name must not be empty.",
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(requests).toEqual([]);
+		});
+
+		test(`oauth-client update rejects blank --name "${name}" before any request`, async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				clientArgs("update", "client-abc123", "--name", name),
+				{
+					code: 1,
+					stderr: "ERROR: --name must not be empty.",
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(requests).toEqual([]);
+		});
+	}
+
+	test("oauth-client create rejects --no-name before any request", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs(
+				"create",
+				"--no-name",
+				"--type",
+				"public",
+				"--redirect-uris",
+				"https://app.example.com/cb",
+				"--resources",
+				"https://api.example.com",
+			),
+			{
+				code: 1,
+				stderr: "ERROR: --no-name is not supported. Pass --name <name>.",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(requests).toEqual([]);
+	});
+
+	test("oauth-client update rejects --no-name before any request", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs("update", "client-abc123", "--no-name"),
+			{
+				code: 1,
+				stderr: "ERROR: --no-name is not supported. Pass --name <name>.",
+				onRequest: (r) => requests.push(r),
+			},
+		);
+		expect(requests).toEqual([]);
+	});
+
 	test("oauth-client get", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"neon-auth",
@@ -1545,6 +1669,44 @@ describe("neon-auth", () => {
 		);
 		expect(clientPatchBodies(requests)).toEqual([
 			{ name: "Renamed", disabled: true },
+		]);
+	});
+
+	test("oauth-client update trims the name", async ({ testCliCommand }) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs("update", "client-abc123", "--name", "  Renamed  "),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPatchBodies(requests)).toEqual([{ name: "Renamed" }]);
+	});
+
+	test("oauth-client update trims and dedupes redirect URIs and resources", async ({
+		testCliCommand,
+	}) => {
+		const requests: RecordedRequest[] = [];
+		await testCliCommand(
+			clientArgs(
+				"update",
+				"client-abc123",
+				"--redirect-uris",
+				" https://app.example.com/cb ",
+				"https://app.example.com/cb",
+				"https://app.example.com/other",
+				"--resources",
+				" https://api.example.com ",
+				"https://api.example.com",
+			),
+			{ onRequest: (r) => requests.push(r) },
+		);
+		expect(clientPatchBodies(requests)).toEqual([
+			{
+				redirect_uris: [
+					"https://app.example.com/cb",
+					"https://app.example.com/other",
+				],
+				resources: ["https://api.example.com"],
+			},
 		]);
 	});
 
@@ -1625,6 +1787,20 @@ describe("neon-auth", () => {
 			);
 			expect(requests).toEqual([]);
 		});
+
+		for (const flag of ["--login-page", "--consent-page"]) {
+			test(`oauth-server update ${flag} rejects blank value "${blank}" before any request`, async ({
+				testCliCommand,
+			}) => {
+				const requests: RecordedRequest[] = [];
+				await testCliCommand(serverArgs("update", flag, blank), {
+					code: 1,
+					stderr: `ERROR: ${flag} must not be empty.`,
+					onRequest: (r) => requests.push(r),
+				});
+				expect(requests).toEqual([]);
+			});
+		}
 
 		for (const action of ["add", "remove"]) {
 			test(`resource ${action} rejects blank URL "${blank}" before any request`, async ({
