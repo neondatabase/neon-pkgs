@@ -26,6 +26,7 @@ describe("Claimable Neon response validation", () => {
 				project: {
 					id: "project-test",
 					branch_id: "br-test",
+					region_id: "aws-eu-central-1",
 					expires_at: "2026-08-14T12:00:00.000Z",
 				},
 				capabilities: [
@@ -42,6 +43,7 @@ describe("Claimable Neon response validation", () => {
 			project: {
 				id: "project-test",
 				branchId: "br-test",
+				regionId: "aws-eu-central-1",
 				expiresAt: "2026-08-14T12:00:00.000Z",
 			},
 			capabilities: [

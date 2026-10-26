@@ -420,6 +420,7 @@ export type ProjectListItem = {
     store_passwords: boolean;
     /**
      * Control plane observed endpoints of this project being active this amount of wall-clock time.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     active_time: number;
@@ -519,12 +520,14 @@ export type Project = {
     /**
      * Bytes. Egress traffic from the Neon cloud to the client for given project over the billing period.
      * Includes deleted endpoints. The value has some lag. The value is reset at the beginning of each billing period.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     data_transfer_bytes: number;
     /**
      * Bytes. Amount of WAL that travelled through Postgres storage for given project across all branches.
      * The value has some lag. The value is reset at the beginning of each billing period.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     written_data_bytes: number;
@@ -534,6 +537,7 @@ export type Project = {
      * Examples:
      * 1. An endpoint that uses 1 CPU for 1 second is equal to `compute_time=1`.
      * 2. An endpoint that uses 2 CPUs simultaneously for 1 second is equal to `compute_time=2`.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     compute_time_seconds: number;
@@ -541,6 +545,7 @@ export type Project = {
      * Seconds. Control plane observed endpoints of this project being active this amount of wall-clock time.
      * The value has some lag.
      * The value is reset at the beginning of each billing period.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/projects`.
      *
      */
     active_time_seconds: number;
@@ -832,6 +837,13 @@ export type ProjectsResponse = {
      *
      */
     unavailable_project_ids?: Array<string>;
+};
+
+export type ProjectsCountResponse = {
+    /**
+     * The total number of projects matching the query criteria.
+     */
+    count: number;
 };
 
 export type ProjectPermission = {
@@ -1260,18 +1272,26 @@ export type Branch = {
     cpu_used_sec: number;
     /**
      * Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size). Divide by 3600 for CU-hours.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     compute_time_seconds: number;
     /**
      * Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size). Distinct from `compute_time_seconds`, which is CU-weighted.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     active_time_seconds: number;
     /**
      * Data written by this branch during the current billing period, in bytes.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     written_data_bytes: number;
     /**
      * Total data transferred out of the branch, in bytes. Used as a consumption metric.
+     * Not intended for billing or metering. For billing, use `/consumption_history/v2/branches`.
+     *
      */
     data_transfer_bytes: number;
     /**
@@ -3316,6 +3336,191 @@ export type NeonAuthPhoneNumberConfigUpdate = {
     otp_expires_in?: number;
 };
 
+export type NeonAuthOAuthProviderResource = {
+    /**
+     * Absolute URL identifying a protected resource. Issued access tokens carry it as their audience.
+     */
+    identifier: string;
+};
+
+export type NeonAuthOAuthProviderMcp = {
+    /**
+     * The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to. Required for either to be accepted.
+     */
+    resource?: string;
+    /**
+     * Legacy: whether MCP clients may register themselves via dynamic client registration (RFC 7591). Deprecated in favor of Client ID Metadata Documents (CIMD), which are controlled by `client_id_metadata_documents`. Defaults to false, and takes effect only when an MCP resource is configured; reads report false otherwise. When false, only CIMD clients and clients created through the OAuth clients API can be used, and they can still be linked to the MCP resource.
+     */
+    dynamic_registration?: boolean;
+    /**
+     * Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL. Recommended over dynamic registration. When false, new CIMD clients are rejected and existing CIMD clients fail closed.
+     */
+    client_id_metadata_documents?: boolean;
+};
+
+export type NeonAuthOAuthProviderMcpUpdate = {
+    /**
+     * The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to. Required for either to be accepted.
+     */
+    resource: string;
+    /**
+     * Whether MCP clients may register themselves via dynamic client registration (RFC 7591). When omitted, the stored value is kept.
+     */
+    dynamic_registration?: boolean;
+    /**
+     * Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL. When omitted, the stored value is kept.
+     */
+    client_id_metadata_documents?: boolean;
+};
+
+export type NeonAuthOAuthProviderConfig = {
+    /**
+     * Whether the OAuth provider plugin is enabled.
+     */
+    enabled: boolean;
+    /**
+     * URL of the page that authorization requests redirect to for sign-in.
+     */
+    login_page?: string;
+    /**
+     * URL of the page that authorization requests redirect to for consent.
+     */
+    consent_page?: string;
+    mcp?: NeonAuthOAuthProviderMcp;
+    /**
+     * Protected resources that clients can be linked to.
+     */
+    resources?: Array<NeonAuthOAuthProviderResource>;
+};
+
+export type NeonAuthOAuthProviderConfigUpdate = {
+    /**
+     * Whether the OAuth provider plugin is enabled.
+     */
+    enabled?: boolean;
+    /**
+     * URL of the page that authorization requests redirect to for sign-in.
+     */
+    login_page?: string;
+    /**
+     * URL of the page that authorization requests redirect to for consent.
+     */
+    consent_page?: string;
+    mcp?: NeonAuthOAuthProviderMcpUpdate;
+    /**
+     * Protected resources that clients can be linked to. When provided, replaces the stored list.
+     */
+    resources?: Array<NeonAuthOAuthProviderResource>;
+};
+
+/**
+ * Confidential clients authenticate with a client secret. Public clients have no secret.
+ */
+export type NeonAuthOAuthClientType = 'confidential' | 'public';
+
+export type NeonAuthOAuthClient = {
+    /**
+     * The OAuth client ID.
+     */
+    client_id: string;
+    /**
+     * Display name of the client.
+     */
+    name: string;
+    type: NeonAuthOAuthClientType;
+    /**
+     * Redirect URIs the client may use.
+     */
+    redirect_uris: Array<string>;
+    /**
+     * Identifiers of the protected resources the client is linked to.
+     */
+    resources: Array<string>;
+    /**
+     * Whether users are not asked for consent when authorizing this client.
+     */
+    skip_consent: boolean;
+    /**
+     * Whether the client is disabled.
+     */
+    disabled: boolean;
+    /**
+     * When the client was created.
+     */
+    created_at?: string;
+};
+
+export type NeonAuthOAuthClientCreated = NeonAuthOAuthClient & {
+    /**
+     * The client secret. Returned only for confidential clients and only in this response.
+     */
+    client_secret?: string;
+};
+
+export type ListNeonAuthOAuthClientsResponse = {
+    /**
+     * OAuth clients registered for the branch.
+     */
+    clients: Array<NeonAuthOAuthClient>;
+};
+
+export type NeonAuthOAuthClientCreateRequest = {
+    /**
+     * Display name of the client.
+     */
+    name: string;
+    /**
+     * Redirect URIs the client may use. Must be https, or http on loopback hosts when localhost is allowed.
+     */
+    redirect_uris: Array<string>;
+    type: NeonAuthOAuthClientType;
+    /**
+     * Identifiers of the protected resources to link the client to. Each must be configured on the OAuth provider plugin.
+     */
+    resources: Array<string>;
+    /**
+     * Whether to skip the consent prompt for this client.
+     */
+    skip_consent?: boolean;
+};
+
+/**
+ * At least one field must be provided.
+ */
+export type NeonAuthOAuthClientUpdateRequest = {
+    /**
+     * Display name of the client.
+     */
+    name?: string;
+    /**
+     * Redirect URIs the client may use. When provided, replaces the stored list.
+     */
+    redirect_uris?: Array<string>;
+    /**
+     * Whether to skip the consent prompt for this client.
+     */
+    skip_consent?: boolean;
+    /**
+     * Whether the client is disabled.
+     */
+    disabled?: boolean;
+    /**
+     * Identifiers of the protected resources to link the client to. When provided, replaces the stored list.
+     */
+    resources?: Array<string>;
+};
+
+export type NeonAuthOAuthClientSecret = {
+    /**
+     * The OAuth client ID.
+     */
+    client_id: string;
+    /**
+     * The new client secret. Shown only once.
+     */
+    client_secret: string;
+};
+
 export type NeonAuthTransferAuthProviderProjectRequest = {
     /**
      * The Neon project ID. Returned as `id` from `GET /projects`.
@@ -3352,6 +3557,7 @@ export type NeonAuthPluginConfigs = {
     organization?: NeonAuthOrganizationConfig;
     magic_link?: NeonAuthMagicLinkConfig;
     phone_number?: NeonAuthPhoneNumberConfig;
+    oauth_provider?: NeonAuthOAuthProviderConfig;
     email_provider?: NeonAuthEmailServerConfigResponse;
     email_and_password?: NeonAuthEmailAndPasswordConfig;
     /**
@@ -5468,6 +5674,50 @@ export type CreateProjectResponses = {
 };
 
 export type CreateProjectResponse = CreateProjectResponses[keyof CreateProjectResponses];
+
+export type CountProjectsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Count projects in the organization with this `org_id`.
+         */
+        org_id?: string;
+    };
+    url: '/projects/count';
+};
+
+export type CountProjectsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CountProjectsError = CountProjectsErrors[keyof CountProjectsErrors];
+
+export type CountProjectsResponses = {
+    /**
+     * Returned the number of projects in the organization
+     */
+    200: ProjectsCountResponse;
+};
+
+export type CountProjectsResponse = CountProjectsResponses[keyof CountProjectsResponses];
 
 export type ListSharedProjectsData = {
     body?: never;
@@ -8586,6 +8836,406 @@ export type UpdateNeonAuthPhoneNumberPluginResponses = {
 
 export type UpdateNeonAuthPhoneNumberPluginResponse = UpdateNeonAuthPhoneNumberPluginResponses[keyof UpdateNeonAuthPhoneNumberPluginResponses];
 
+export type GetNeonAuthOAuthProviderPluginData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/plugins/oauth-provider';
+};
+
+export type GetNeonAuthOAuthProviderPluginErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetNeonAuthOAuthProviderPluginError = GetNeonAuthOAuthProviderPluginErrors[keyof GetNeonAuthOAuthProviderPluginErrors];
+
+export type GetNeonAuthOAuthProviderPluginResponses = {
+    /**
+     * Returns the OAuth provider plugin configuration
+     */
+    200: NeonAuthOAuthProviderConfig;
+};
+
+export type GetNeonAuthOAuthProviderPluginResponse = GetNeonAuthOAuthProviderPluginResponses[keyof GetNeonAuthOAuthProviderPluginResponses];
+
+export type UpdateNeonAuthOAuthProviderPluginData = {
+    body: NeonAuthOAuthProviderConfigUpdate;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/plugins/oauth-provider';
+};
+
+export type UpdateNeonAuthOAuthProviderPluginErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type UpdateNeonAuthOAuthProviderPluginError = UpdateNeonAuthOAuthProviderPluginErrors[keyof UpdateNeonAuthOAuthProviderPluginErrors];
+
+export type UpdateNeonAuthOAuthProviderPluginResponses = {
+    /**
+     * The OAuth provider plugin configuration has been updated
+     */
+    200: NeonAuthOAuthProviderConfig;
+};
+
+export type UpdateNeonAuthOAuthProviderPluginResponse = UpdateNeonAuthOAuthProviderPluginResponses[keyof UpdateNeonAuthOAuthProviderPluginResponses];
+
+export type ListNeonAuthOAuthClientsData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients';
+};
+
+export type ListNeonAuthOAuthClientsErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type ListNeonAuthOAuthClientsError = ListNeonAuthOAuthClientsErrors[keyof ListNeonAuthOAuthClientsErrors];
+
+export type ListNeonAuthOAuthClientsResponses = {
+    /**
+     * Returns the OAuth clients
+     */
+    200: ListNeonAuthOAuthClientsResponse;
+};
+
+export type ListNeonAuthOAuthClientsResponse2 = ListNeonAuthOAuthClientsResponses[keyof ListNeonAuthOAuthClientsResponses];
+
+export type CreateNeonAuthOAuthClientData = {
+    body: NeonAuthOAuthClientCreateRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients';
+};
+
+export type CreateNeonAuthOAuthClientErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type CreateNeonAuthOAuthClientError = CreateNeonAuthOAuthClientErrors[keyof CreateNeonAuthOAuthClientErrors];
+
+export type CreateNeonAuthOAuthClientResponses = {
+    /**
+     * The OAuth client has been created
+     */
+    201: NeonAuthOAuthClientCreated;
+};
+
+export type CreateNeonAuthOAuthClientResponse = CreateNeonAuthOAuthClientResponses[keyof CreateNeonAuthOAuthClientResponses];
+
+export type DeleteNeonAuthOAuthClientData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The OAuth client ID
+         */
+        client_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}';
+};
+
+export type DeleteNeonAuthOAuthClientErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type DeleteNeonAuthOAuthClientError = DeleteNeonAuthOAuthClientErrors[keyof DeleteNeonAuthOAuthClientErrors];
+
+export type DeleteNeonAuthOAuthClientResponses = {
+    /**
+     * The OAuth client has been deleted
+     */
+    204: void;
+};
+
+export type DeleteNeonAuthOAuthClientResponse = DeleteNeonAuthOAuthClientResponses[keyof DeleteNeonAuthOAuthClientResponses];
+
+export type GetNeonAuthOAuthClientData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The OAuth client ID
+         */
+        client_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}';
+};
+
+export type GetNeonAuthOAuthClientErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type GetNeonAuthOAuthClientError = GetNeonAuthOAuthClientErrors[keyof GetNeonAuthOAuthClientErrors];
+
+export type GetNeonAuthOAuthClientResponses = {
+    /**
+     * Returns the OAuth client
+     */
+    200: NeonAuthOAuthClient;
+};
+
+export type GetNeonAuthOAuthClientResponse = GetNeonAuthOAuthClientResponses[keyof GetNeonAuthOAuthClientResponses];
+
+export type UpdateNeonAuthOAuthClientData = {
+    body: NeonAuthOAuthClientUpdateRequest;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The OAuth client ID
+         */
+        client_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}';
+};
+
+export type UpdateNeonAuthOAuthClientErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type UpdateNeonAuthOAuthClientError = UpdateNeonAuthOAuthClientErrors[keyof UpdateNeonAuthOAuthClientErrors];
+
+export type UpdateNeonAuthOAuthClientResponses = {
+    /**
+     * The OAuth client has been updated
+     */
+    200: NeonAuthOAuthClient;
+};
+
+export type UpdateNeonAuthOAuthClientResponse = UpdateNeonAuthOAuthClientResponses[keyof UpdateNeonAuthOAuthClientResponses];
+
+export type RotateNeonAuthOAuthClientSecretData = {
+    body?: never;
+    path: {
+        /**
+         * The Neon project ID
+         */
+        project_id: string;
+        /**
+         * The Neon branch ID
+         */
+        branch_id: string;
+        /**
+         * The OAuth client ID
+         */
+        client_id: string;
+    };
+    query?: never;
+    url: '/projects/{project_id}/branches/{branch_id}/auth/oauth-provider/clients/{client_id}/rotate_secret';
+};
+
+export type RotateNeonAuthOAuthClientSecretErrors = {
+    /**
+     * General Error.
+     *
+     * The request may or may not be safe to retry, depending on the HTTP method, response status code,
+     * and whether a response was received.
+     *
+     * - If no response is returned from the API, a network error or timeout likely occurred.
+     * - In some cases, the request may have reached the server and been successfully processed, but the response failed to reach the client. As a result, retrying non-idempotent requests can lead to unintended results.
+     *
+     * The following HTTP methods are considered non-idempotent: `POST`, `PATCH`, `DELETE`, and `PUT`. Retrying these methods is generally **not safe**.
+     * The following methods are considered idempotent: `GET`, `HEAD`, and `OPTIONS`. Retrying these methods is **safe** in the event of a network error or timeout.
+     *
+     * Any request that returns a `503 Service Unavailable` response is always safe to retry.
+     *
+     * Any request that returns a `423 Locked` response is safe to retry. `423 Locked` indicates that the resource is temporarily locked, for example, due to another operation in progress.
+     *
+     */
+    '4XX': GeneralError;
+};
+
+export type RotateNeonAuthOAuthClientSecretError = RotateNeonAuthOAuthClientSecretErrors[keyof RotateNeonAuthOAuthClientSecretErrors];
+
+export type RotateNeonAuthOAuthClientSecretResponses = {
+    /**
+     * The client secret has been rotated
+     */
+    200: NeonAuthOAuthClientSecret;
+};
+
+export type RotateNeonAuthOAuthClientSecretResponse = RotateNeonAuthOAuthClientSecretResponses[keyof RotateNeonAuthOAuthClientSecretResponses];
+
 export type GetNeonAuthWebhookConfigData = {
     body?: never;
     path: {
@@ -11111,6 +11761,10 @@ export type GetConsumptionHistoryPerProjectV2Data = {
          * - `private_network_transfer_bytes`
          * - `extra_branches_month`
          * - `snapshot_storage_bytes_month`
+         * - `functions_active_capacity_microseconds`
+         * - `functions_waiting_capacity_microseconds`
+         * - `functions_invocations`
+         * - `functions_egress_bytes`
          *
          * Pass multiple values as repeated query parameters or a comma-separated list:
          * - `metrics=compute_unit_seconds&metrics=extra_branches_month`
@@ -11253,6 +11907,10 @@ export type GetConsumptionHistoryPerBranchV2Data = {
          * - `instant_restore_bytes_month`
          * - `public_network_transfer_bytes`
          * - `private_network_transfer_bytes`
+         * - `functions_active_capacity_microseconds`
+         * - `functions_waiting_capacity_microseconds`
+         * - `functions_invocations`
+         * - `functions_egress_bytes`
          *
          * Not supported on this endpoint: `extra_branches_month`, `snapshot_storage_bytes_month`.
          * Use `GET /consumption_history/v2/projects` for those.

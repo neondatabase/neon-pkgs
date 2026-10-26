@@ -168,6 +168,8 @@ export const test = originalTest.extend<Fixtures>({
 					...(options.cwd ? { cwd: options.cwd } : {}),
 					env: {
 						PATH: `${join(process.cwd(), "mocks/bin")}:${process.env.PATH}`,
+						// This env does not inherit test-setup.ts's NO_UPDATE_NOTIFIER.
+						NO_UPDATE_NOTIFIER: "1",
 						...(options.env ?? {}),
 					},
 				},

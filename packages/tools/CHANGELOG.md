@@ -1,5 +1,43 @@
 # @neon/tools
 
+## 2.4.0
+
+### Minor Changes
+
+- c745d8e: Add `neon.projects.count()`, which returns the number of active projects in the organization without paging through `projects.list()` (`GET /projects/count`, beta). It takes `{ org_id? }` and defaults to the client's `orgId`. `@neon/tools` publishes it as the `projects.count` selector (`count_projects`), and `@neon/effect` exposes it as an `Effect<number>`.
+- d23ace5: Add `countProjects` (`GET /projects/count`, beta) from the live Neon API spec: it returns `{ count }` for the active projects in an organization without paging through them. It is in `@neon/sdk/raw`, and `@neon/tools/schemas` exports its `zCountProjectsQuery` schema. The consumption history metric docs now list the Neon Functions metrics (`functions_active_capacity_microseconds`, `functions_waiting_capacity_microseconds`, `functions_invocations`, `functions_egress_bytes`).
+
+### Patch Changes
+
+- Updated dependencies [c745d8e]
+- Updated dependencies [d23ace5]
+  - @neon/sdk@7.5.0
+
+## 2.3.0
+
+### Minor Changes
+
+- cb6a151: Refresh the vendored Neon API spec for Neon Auth OAuth provider MCP settings. `NeonAuthOAuthProviderMcp` and `NeonAuthOAuthProviderMcpUpdate` gain `client_id_metadata_documents`, which controls whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL. `dynamic_registration` is now documented as legacy and defaults to `false`. The `@neon/tools/schemas` request schemas accept the new field.
+
+### Patch Changes
+
+- Updated dependencies [8b0e72b]
+- Updated dependencies [cb6a151]
+  - @neon/sdk@7.4.0
+
+## 2.2.0
+
+### Minor Changes
+
+- 0cee585: Add the Neon Auth OAuth provider endpoints from the latest Neon API spec. `@neon/sdk/raw` gains `getNeonAuthOAuthProviderPlugin`, `updateNeonAuthOAuthProviderPlugin`, and `listNeonAuthOAuthClients` / `createNeonAuthOAuthClient` / `getNeonAuthOAuthClient` / `updateNeonAuthOAuthClient` / `deleteNeonAuthOAuthClient` / `rotateNeonAuthOAuthClientSecret`; `@neon/tools/schemas` gains their request schemas.
+- e0eed3d: Publish `realtime.secret` as a tool. It returns the branch's Realtime secret and requires approval.
+
+### Patch Changes
+
+- 8ac70da: Raise the `zod` dependency range to `^4.5.4`.
+- Updated dependencies [0cee585]
+  - @neon/sdk@7.3.0
+
 ## 2.1.0
 
 ### Minor Changes

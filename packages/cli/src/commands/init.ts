@@ -85,7 +85,8 @@ export const builder = (yargs: yargs.Argv) =>
 			type: "string",
 		})
 		.option("region-id", {
-			describe: "Forwarded to link: region for a new project",
+			describe:
+				"Region for a new project, forwarded to link or to the claimable project",
 			type: "string",
 		})
 		.option("branch", {

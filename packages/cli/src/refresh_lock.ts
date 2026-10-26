@@ -7,7 +7,7 @@ const STALE_MS = 60_000;
 const delay = (ms: number): Promise<void> =>
 	new Promise((resolve) => setTimeout(resolve, ms));
 
-const isEexist = (err: unknown): boolean =>
+export const isEexist = (err: unknown): boolean =>
 	err instanceof Error && (err as NodeJS.ErrnoException).code === "EEXIST";
 
 const isStale = (path: string): boolean => {

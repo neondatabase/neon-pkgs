@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import yargs from "yargs";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import {
+	CLAIMABLE_ACCOUNT_FLAGS,
 	CLAIMABLE_ALREADY_LINKED,
 	CLAIMABLE_MCP_API_KEY,
 	INIT_NEEDS_YES,
@@ -1161,6 +1162,55 @@ describe("init handler", () => {
 		expect(mcp?.options).toMatchObject({ oauth: true });
 		expect(mcp?.options.agent).toEqual(["mcporter"]);
 		expect(createClaimable).toHaveBeenCalled();
+	});
+
+	test("-y --claimable --region-id creates the claimable project in that region", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-region-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				claimable: true,
+				regionId: "aws-eu-central-1",
+				agentSetup: false,
+				config: false,
+				hasLocalCredentials: () => false,
+				createClaimable,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(createClaimable).toHaveBeenCalledWith(
+			expect.objectContaining({ regionId: "aws-eu-central-1" }),
+		);
+	});
+
+	test("--claimable with an account link flag fails", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-org-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					yes: true,
+					claimable: true,
+					orgId: "org-test",
+					regionId: "aws-eu-central-1",
+					agentSetup: false,
+					config: false,
+					createClaimable,
+					contextFile: join(cwd, ".neon"),
+				}),
+			),
+		).rejects.toThrow(CLAIMABLE_ACCOUNT_FLAGS);
+		expect(createClaimable).not.toHaveBeenCalled();
 	});
 
 	test("--claimable in an already linked directory fails", async () => {

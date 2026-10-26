@@ -5,6 +5,7 @@ import {
 	generateText as generateTextV6,
 } from "ai";
 import {
+	experimental_decide as decide,
 	embedMany as embedManyV7,
 	embed as embedV7,
 	generateText as generateTextV7,
@@ -91,6 +92,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 interface CurrentModels {
 	chat: string[];
 	embedding: string[];
+	decision: string[];
 }
 
 /** Chat models report `["text"]` here, embedding models `["embeddings"]`. */
@@ -133,18 +135,32 @@ async function fetchCurrentModels(): Promise<CurrentModels> {
 
 	const chat = new Set<string>();
 	const embedding = new Set<string>();
+	const decision = new Set<string>();
 	for (const model of payload.data) {
 		if (!isRecord(model) || typeof model.id !== "string") continue;
+		// System One models also report `["text"]` but are served only on
+		// `/typesafe/v1/systemone`, so they cannot generate text.
+		if (
+			Array.isArray(model.dialects) &&
+			model.dialects.includes("systemone")
+		) {
+			decision.add(model.id);
+			continue;
+		}
 		const outputs = outputModalities(model);
 		if (outputs.includes("text")) chat.add(model.id);
 		if (outputs.includes("embeddings")) embedding.add(model.id);
 	}
-	if (chat.size === 0 || embedding.size === 0) {
+	if (chat.size === 0 || embedding.size === 0 || decision.size === 0) {
 		throw new Error(
-			`The gateway /v1/models endpoint returned ${chat.size} text and ${embedding.size} embedding models`,
+			`The gateway /v1/models endpoint returned ${chat.size} text, ${embedding.size} embedding and ${decision.size} decision models`,
 		);
 	}
-	return { chat: [...chat].sort(), embedding: [...embedding].sort() };
+	return {
+		chat: [...chat].sort(),
+		embedding: [...embedding].sort(),
+		decision: [...decision].sort(),
+	};
 }
 
 function isNumberArray(value: unknown): value is number[] {
@@ -353,6 +369,92 @@ describe("e2e — every currently enabled embedding model on AI SDK 6 and 7", ()
 		const [runner] = SDK_RUNNERS;
 		await expect(
 			runner.embed(neon.embeddingModel("nope-embedding"), "branching"),
+		).rejects.toThrow(/unknown model/);
+	}, 60_000);
+});
+
+const DECISION_QUESTIONS = {
+	billing: {
+		type: "boolean",
+		instructions: "Is the user asking about billing?",
+		criteria: { true: "Billing related", false: "Not billing" },
+	},
+	team: {
+		type: "choice",
+		instructions: "Which team should own this?",
+		criteria: { payments: "Payments", frontend: "Frontend" },
+	},
+	urgency: {
+		type: "score",
+		instructions: "How urgent is this?",
+		criteria: ["Later", "This week", "Now"],
+	},
+} as const;
+
+describe("e2e — every currently enabled decision model on AI SDK 7", () => {
+	let modelIds: string[] = [];
+
+	beforeAll(async () => {
+		modelIds = (await fetchCurrentModels()).decision;
+	});
+
+	it("decides with every systemone /v1/models entry", async () => {
+		const failures: string[] = [];
+		for (const modelId of modelIds) {
+			try {
+				const { answers } = await withRateLimitRetry(() =>
+					decide({
+						model: neon.decisionModel(modelId),
+						state: [
+							{
+								type: "text",
+								text: "I was charged twice this month.",
+							},
+							{ type: "json", value: { tier: "enterprise" } },
+						],
+						questions: DECISION_QUESTIONS,
+					}),
+				);
+				expect(answers.billing.type).toBe("boolean");
+				expect(answers.team.type).toBe("choice");
+				expect(answers.urgency.type).toBe("score");
+			} catch (error) {
+				failures.push(
+					`${modelId}: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
+		expect(failures, `Decision failures:\n${failures.join("\n")}`).toEqual(
+			[],
+		);
+	}, 180_000);
+
+	it("sends one JSON state value as JSON", async () => {
+		const { answers } = await withRateLimitRetry(() =>
+			decide({
+				model: neon.decisionModel(modelIds[0]),
+				state: {
+					ticket: "Refund me, I was charged twice",
+					tier: "enterprise",
+				},
+				questions: {
+					refund: {
+						type: "boolean",
+						instructions: "Is the customer asking for money back?",
+					},
+				},
+			}),
+		);
+		expect(answers.refund.type).toBe("boolean");
+	}, 180_000);
+
+	it("surfaces the gateway's reason for an unknown decision model", async () => {
+		await expect(
+			decide({
+				model: neon.decisionModel("nope-decision"),
+				state: "x",
+				questions: { a: { type: "boolean", instructions: "y" } },
+			}),
 		).rejects.toThrow(/unknown model/);
 	}, 60_000);
 });

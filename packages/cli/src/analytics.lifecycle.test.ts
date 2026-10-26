@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import {
 	createServer,
 	type IncomingMessage,
@@ -19,6 +19,7 @@ type SegmentEvent = {
 	type: string;
 	event?: string;
 	userId?: string;
+	anonymousId?: string;
 	properties?: Record<string, unknown>;
 };
 
@@ -57,6 +58,8 @@ let collector: Awaited<ReturnType<typeof listen>>;
 
 beforeEach(async () => {
 	vi.resetModules();
+	// The anonymous id isn't stored in CI, which is where this suite runs.
+	vi.stubEnv("CI", "");
 	events = [];
 	collector = await listen(async (req, res) => {
 		const body = JSON.parse(await readBody(req)) as {
@@ -68,17 +71,22 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	vi.unstubAllEnvs();
 	await collector.close();
 });
 
 /** Fresh module state per test: the analytics client, queue, and auth context are singletons. */
 const setup = async (apiUrl: string) => {
 	const analytics = await import("./analytics.js");
+	const { getOrCreateAnonymousId } = await import("./anonymous_id.js");
 	const { setAuthContext } = await import("./auth_context.js");
+	const configDir = mkdtempSync(join(tmpdir(), "neon-analytics-"));
+	const anonymousId = getOrCreateAnonymousId(configDir);
+	expect(anonymousId).toBeDefined();
 	analytics.useAnalyticsClientForTests(
 		new Analytics({ writeKey: "test", host: collector.url }),
+		anonymousId,
 	);
-	const configDir = mkdtempSync(join(tmpdir(), "neon-analytics-"));
 	setAuthContext({ source: "api-key", apiKeyFrom: "flag", configDir });
 	const args = {
 		analytics: true,
@@ -88,7 +96,7 @@ const setup = async (apiUrl: string) => {
 		_: ["projects", "list"],
 		output: "json",
 	};
-	return { analytics, args };
+	return { analytics, args, anonymousId };
 };
 
 const sent = () => events.map((e) => (e.type === "track" ? e.event : e.type));
@@ -109,7 +117,7 @@ describe("analytics account lookup", () => {
 			}
 		});
 		try {
-			const { analytics, args } = await setup(api.url);
+			const { analytics, args, anonymousId } = await setup(api.url);
 
 			expect(analytics.analyticsMiddleware(args)).toBeUndefined();
 			analytics.trackEvent("command_step", { step: 1 });
@@ -126,13 +134,68 @@ describe("analytics account lookup", () => {
 				"command_step",
 				"cli_command_success",
 			]);
+			// Once the user is known, every event carries both ids so they can be linked.
 			for (const event of events) {
 				expect(event.userId).toBe("user-1");
+				expect(event.anonymousId).toBe(anonymousId);
 			}
 			expect(events.at(-1)?.properties).toMatchObject({
 				accountId: "acct-1",
 				authMethod: "api_key_user",
 				authData: "key-1",
+			});
+		} finally {
+			await api.close();
+		}
+	});
+
+	it("sends the installed skills on cli_command_success", async () => {
+		const api = await listen((req, res) => {
+			if (req.url?.startsWith("/auth")) {
+				json(res, { account_id: "acct-1", auth_method: "api_key_org" });
+			}
+		});
+		try {
+			const { analytics, args } = await setup(api.url);
+			const { readSkillsTelemetry } = await import(
+				"./skills/freshness.js"
+			);
+			const home = mkdtempSync(join(tmpdir(), "neon-analytics-home-"));
+			const cwd = mkdtempSync(join(tmpdir(), "neon-analytics-cwd-"));
+			writeFileSync(
+				join(cwd, "skills-lock.json"),
+				JSON.stringify({
+					version: 1,
+					skills: {
+						neon: {
+							source: "neondatabase/agent-skills",
+							skillPath: "skills/neon/SKILL.md",
+							computedHash: "c".repeat(64),
+						},
+					},
+				}),
+			);
+			vi.stubEnv("XDG_STATE_HOME", home);
+
+			analytics.analyticsMiddleware(args);
+			const skills = readSkillsTelemetry({
+				configDir: args.configDir,
+				cwd,
+			});
+			expect(skills).toBeDefined();
+			if (skills !== undefined) {
+				analytics.recordCommandSuccessExtras({ skills });
+			}
+			analytics.trackCommandSuccess(args);
+			await analytics.closeAnalytics();
+
+			expect(events.at(-1)?.properties?.skills).toEqual({
+				checkedAt: null,
+				global: { installed: false },
+				project: {
+					installed: true,
+					skills: { neon: { hash: "c".repeat(64), outdated: null } },
+				},
 			});
 		} finally {
 			await api.close();
@@ -147,7 +210,7 @@ describe("analytics account lookup", () => {
 			});
 		});
 		try {
-			const { analytics, args } = await setup(api.url);
+			const { analytics, args, anonymousId } = await setup(api.url);
 
 			analytics.analyticsMiddleware(args);
 			analytics.trackCommandSuccess(args);
@@ -161,7 +224,11 @@ describe("analytics account lookup", () => {
 				"CLI Started",
 				"cli_command_success",
 			]);
-			expect(events[1]?.userId).toBe("anonymous");
+			// No user was resolved: the shared anonymous user, with this installation's id.
+			for (const event of events) {
+				expect(event.userId).toBe("anonymous");
+				expect(event.anonymousId).toBe(anonymousId);
+			}
 		} finally {
 			await api.close();
 		}
@@ -182,7 +249,7 @@ describe("analytics account lookup", () => {
 			}
 		});
 		try {
-			const { analytics, args } = await setup(api.url);
+			const { analytics, args, anonymousId } = await setup(api.url);
 
 			analytics.analyticsMiddleware(args);
 			analytics.trackCommandSuccess(args);
@@ -194,6 +261,7 @@ describe("analytics account lookup", () => {
 				authMethod: "api_key_user",
 			});
 			expect(events.at(-1)?.userId).toBe("anonymous");
+			expect(events.at(-1)?.anonymousId).toBe(anonymousId);
 		} finally {
 			await api.close();
 		}
@@ -243,7 +311,7 @@ describe("analytics account lookup", () => {
 			}
 		});
 		try {
-			const { analytics, args } = await setup(api.url);
+			const { analytics, args, anonymousId } = await setup(api.url);
 
 			analytics.analyticsMiddleware({ ...args, apiKey: "a" });
 			analytics.sendError(new Error("token expired"), "AUTH_FAILED");
@@ -263,6 +331,9 @@ describe("analytics account lookup", () => {
 				["CLI Started", "user-b"],
 				["cli_command_success", "user-b"],
 			]);
+			for (const event of events) {
+				expect(event.anonymousId).toBe(anonymousId);
+			}
 			expect(events.at(-1)?.properties).toMatchObject({
 				accountId: "acct-b",
 				authData: "b",

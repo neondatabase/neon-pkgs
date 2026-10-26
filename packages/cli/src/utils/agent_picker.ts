@@ -1,6 +1,6 @@
 import prompts from "prompts";
 
-import { isCi } from "../env.js";
+import { isInteractiveTerminal } from "../env.js";
 import {
 	type AgentType,
 	getAgentDisplayName,
@@ -37,7 +37,7 @@ export type ResolveAgentSelectionOptions = {
 };
 
 export const canPickAgentsInteractively = (): boolean =>
-	!isCi() && Boolean(process.stdout.isTTY) && Boolean(process.stdin.isTTY);
+	isInteractiveTerminal();
 
 const restoreCursorOnAbort =
 	(exit: boolean) => (state: { aborted: boolean }) => {

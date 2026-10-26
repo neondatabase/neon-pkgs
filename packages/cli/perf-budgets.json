@@ -2336,7 +2336,7 @@
 			}
 		},
 		"status --current-branch": {
-			"modules": 6,
+			"modules": 7,
 			"requests": {},
 			"inventory": {
 				"dist/cli.js": 1,
@@ -2344,6 +2344,7 @@
 				"dist/current_branch_fast_path.js": 1,
 				"dist/env.js": 1,
 				"dist/log.js": 1,
+				"dist/node_version.js": 1,
 				"dist/utils/cli_name.js": 1
 			}
 		}

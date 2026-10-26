@@ -56,7 +56,9 @@ import {
 	isConfigAdd,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isDocsCommand,
 	isFeedbackCommand,
+	isFunctionsTemplateCommand,
 	isGitLocalCommand,
 	isInspectDbUrl,
 	isMcpCommand,
@@ -332,8 +334,8 @@ export const authFlow = async ({
 };
 
 /**
- * Persist before identity lookup so a lookup failure cannot discard the new session.
- * Merge the identity only while that session remains current on disk.
+ * One write, after the lookup: a second write that adds `user_id` could fail the keyring size
+ * check after the first had already replaced the previous credential.
  */
 const persistNewSession = async (
 	at: CredentialLocation,
@@ -341,21 +343,13 @@ const persistNewSession = async (
 	apiClient: NeonApiClient,
 	configDir: string,
 ): Promise<{ id?: string; email?: string }> => {
-	const stored = oauthCredentialsFromTokenSet(credentials, null);
-	writeOAuthCredentials(configDir, at, stored);
 	const identity = await fetchIdentity(apiClient);
-	if (identity.id) {
-		const current = storeFor(configDir).read(at);
-		if (
-			current !== null &&
-			current.credentials.access_token === stored.access_token
-		) {
-			writeOAuthCredentials(configDir, at, {
-				...current.credentials,
-				user_id: identity.id,
-			});
-		}
-	}
+	const stored = oauthCredentialsFromTokenSet(credentials, null);
+	writeOAuthCredentials(
+		configDir,
+		at,
+		identity.id ? { ...stored, user_id: identity.id } : stored,
+	);
 	return identity;
 };
 
@@ -542,8 +536,11 @@ const oauthCredentialsFromTokenSet = (
 			? tokenSet.refresh_token
 			: previous?.refresh_token;
 	const stored: StoredCredentials = {
-		...tokenSet,
 		type: OAUTH,
+		...(typeof tokenSet.access_token === "string" &&
+		tokenSet.access_token !== ""
+			? { access_token: tokenSet.access_token }
+			: {}),
 		expires_at: tokenSet.expires_at,
 		...(typeof refreshTokenValue === "string" && refreshTokenValue !== ""
 			? { refresh_token: refreshTokenValue }
@@ -643,6 +640,10 @@ export const ensureAuth = async (
 		return;
 	}
 
+	if (isFunctionsTemplateCommand(props)) {
+		return;
+	}
+
 	// `profile` reads and edits credential files on disk. Authenticating first would mean
 	// a browser login just to list profiles, and would make a lapsed profile unremovable.
 	if (isProfileCommand(props)) {
@@ -681,7 +682,11 @@ export const ensureAuth = async (
 		return;
 	}
 
-	if (isAskCommand(props) || isFeedbackCommand(props)) {
+	if (
+		isAskCommand(props) ||
+		isFeedbackCommand(props) ||
+		isDocsCommand(props)
+	) {
 		return;
 	}
 

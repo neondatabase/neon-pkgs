@@ -1,5 +1,6 @@
 import { createClientInfoInjector } from "@neon-internals/internal";
 import pkg from "../../package.json" with { type: "json" };
+import type { NeonAuthAdapterName } from "../core/adapter-name";
 import { BETTER_AUTH_VERSION } from "./better-auth-version";
 
 export type { ClientInfo } from "@neon-internals/internal";
@@ -13,3 +14,10 @@ export const injectClientInfo = createClientInfoInjector(
 	pkg.version,
 	{ betterAuthVersion: BETTER_AUTH_VERSION },
 );
+
+export function createAdapterClientInfoInjector(adapter?: NeonAuthAdapterName) {
+	return createClientInfoInjector(pkg.name, pkg.version, {
+		betterAuthVersion: BETTER_AUTH_VERSION,
+		adapter,
+	});
+}

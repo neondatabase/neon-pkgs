@@ -23,3 +23,4 @@ catalog:
     "@vitest/coverage-v8": ^3.0.9
     console-fail-test: 0.5.0
     ws: ^8.21.2
+    base64-js: ^1.5.1

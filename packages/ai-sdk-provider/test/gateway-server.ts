@@ -17,6 +17,7 @@ export interface TestGateway {
 export interface ReceivedRequest {
 	method: string;
 	path: string;
+	headers: Record<string, string | string[] | undefined>;
 	body: Record<string, unknown> | undefined;
 }
 
@@ -42,6 +43,7 @@ export async function startTestGateway(
 			requests.push({
 				method: req.method ?? "",
 				path: req.url ?? "",
+				headers: req.headers,
 				body: raw
 					? (JSON.parse(raw) as Record<string, unknown>)
 					: undefined,

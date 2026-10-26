@@ -31,7 +31,7 @@ import { createRealtime } from "@neon/realtime/server";
 | --- | --- |
 | `@neon/realtime/server` | Seal raw SQL or adapter-native queries on an application backend. |
 | `@neon/realtime/client` | Subscribe from a browser and consume materialized or raw changes. |
-| `@neon/realtime` | Convenience export of both surfaces; prefer the dedicated entry points in application code. |
+| `@neon/realtime` | Convenience export of both surfaces; React Native resolves this entry point to the client surface only. Prefer the dedicated entry points in application code. |
 
 ## Seal a query on the backend
 
@@ -204,6 +204,27 @@ remains available with status `connecting`. `stale` specifically means that the
 capability has expired and the low-level client is waiting for the application
 to call `renew()`. Recoverable connection failures retry with capped jittered
 backoff until the connection recovers or the client is closed.
+
+### React Native WebSocket origins
+
+React Native's WebSocket implementation sends an `Origin` header derived from
+the Realtime endpoint. If the branch restricts Realtime to browser origins,
+provide a custom WebSocket factory that sends one of those allowed origins:
+
+```ts
+const client = createRealtimeClient({
+  url: websocketUrl,
+  webSocketFactory: (url, protocols) =>
+    new WebSocket(url, protocols, {
+      headers: { origin: "https://app.example.com" },
+    }),
+});
+```
+
+The third constructor argument is a React Native extension and is unavailable
+in browsers. An origin allowlist is a browser security boundary; native clients
+can choose their own header value, so do not treat it as native-app
+authentication.
 
 Some subscription errors also retry automatically:
 
@@ -442,6 +463,28 @@ The core defaults align with node-postgres and Neon Serverless for built-in
 types, while the optional presets cover common driver and ORM differences.
 Framework date serialization and server/browser timezone alignment remain
 application concerns.
+
+The sealed query's inferred row type describes the **live, decoded rows**, even
+when a JSON-aware RPC framework such as Hono or tRPC transforms the types of
+actual HTTP response data. If a typed API response contains a query producing
+`{ id: number; created_at: Date }` and initial rows serialized as JSON, restore
+the date strings before subscribing:
+
+```ts
+// payload.query retains its Date row type; payload.initialData contains strings.
+const initialData = payload.initialData.map((row) => ({
+  ...row,
+  created_at: new Date(row.created_at),
+}));
+const subscription = client.subscribe(payload.query, { initialData });
+// subscription.getSnapshot().data: readonly { id: number; created_at: Date }[] | undefined
+```
+
+In this example, passing the unconverted `payload.initialData` is a type error.
+No conversion is necessary when the application's serializer already restores
+`Date` values. Realtime does not provide an HTTP/SSR deserializer or infer row
+types from untyped JSON; preserve the typed sealed query through your
+application's API boundary.
 
 ## Integrations and examples
 

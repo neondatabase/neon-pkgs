@@ -1,3 +1,4 @@
+import { decodeBase64 } from "../base64.js";
 import { ProtocolError } from "../protocol/codec.js";
 import type { WireCell, WireColumn } from "../protocol/messages.js";
 import { pgTypeOids } from "./oids.js";
@@ -87,10 +88,7 @@ function decodeCell(
 			);
 		}
 		try {
-			const binary = atob(cell.base64);
-			input = Uint8Array.from(binary, (character) =>
-				character.charCodeAt(0),
-			);
+			input = decodeBase64(cell.base64);
 		} catch (cause) {
 			throw new ProtocolError(
 				cause instanceof Error

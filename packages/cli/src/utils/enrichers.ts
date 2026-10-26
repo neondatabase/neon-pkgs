@@ -1,6 +1,11 @@
 import type { Branch, Database } from "@neon/sdk";
 import { isNeonApiError, messageFromBody } from "../api.js";
-import { isConfigAdd, isConfigInit, isCurrentBranchProbe } from "../context.js";
+import {
+	isConfigAdd,
+	isConfigInit,
+	isCurrentBranchProbe,
+	isFunctionsTemplateCommand,
+} from "../context.js";
 import type { BranchScopeProps, CommonProps, OrgScopeProps } from "../types.js";
 import { looksLikeBranchId } from "./formats.js";
 
@@ -302,6 +307,9 @@ export const fillSingleProject = async (
 
 	// `config add` edits the local neon.ts and never needs a project either.
 	if (isConfigAdd(props as any)) {
+		return props;
+	}
+	if (isFunctionsTemplateCommand(props as any)) {
 		return props;
 	}
 	if (props.projectId) {

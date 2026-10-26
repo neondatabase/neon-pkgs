@@ -1,5 +1,24 @@
 # @neondatabase/config-runtime
 
+## 1.10.3
+
+### Patch Changes
+
+- @neon/config@1.9.4
+
+## 1.10.2
+
+### Patch Changes
+
+- @neon/config@1.9.3
+
+## 1.10.1
+
+### Patch Changes
+
+- Updated dependencies [8ac70da]
+  - @neon/config@1.9.2
+
 ## 1.10.0
 
 ### Minor Changes

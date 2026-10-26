@@ -19,6 +19,10 @@ import {
 	type SupportedBetterAuthClientPlugins,
 } from "../../core/adapter-core";
 import {
+	createAdapterBuilder,
+	type NeonAuthAdapterName,
+} from "../../core/adapter-name";
+import {
 	mapBetterAuthIdentity,
 	mapBetterAuthSession,
 	normalizeBetterAuthError,
@@ -63,6 +67,7 @@ class SupabaseAuthAdapterImpl
 	extends NeonAuthAdapterCore
 	implements SupabaseAuthClientInterface
 {
+	static readonly adapterName = "supabase" satisfies NeonAuthAdapterName;
 	admin: SupabaseAuthClientInterface["admin"] = undefined as never;
 	mfa: SupabaseAuthClientInterface["mfa"] = undefined as never;
 	oauth: SupabaseAuthClientInterface["oauth"] = undefined as never;
@@ -1528,16 +1533,5 @@ export type SupabaseAuthAdapterBuilder = (
 export function SupabaseAuthAdapter(
 	options?: SupabaseAuthAdapterOptions,
 ): SupabaseAuthAdapterBuilder {
-	return (url: string, fetchOptions?: { headers?: Record<string, string> }) =>
-		new SupabaseAuthAdapterImpl({
-			baseURL: url,
-			...options,
-			fetchOptions: {
-				...options?.fetchOptions,
-				headers: {
-					...options?.fetchOptions?.headers,
-					...fetchOptions?.headers,
-				},
-			},
-		});
+	return createAdapterBuilder(SupabaseAuthAdapterImpl, options);
 }

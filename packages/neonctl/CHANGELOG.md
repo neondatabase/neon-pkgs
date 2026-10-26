@@ -1,5 +1,102 @@
 # neonctl
 
+## 8.12.0
+
+### Patch Changes
+
+- Updated dependencies [e5b7475]
+  - neon@8.12.0
+
+## 8.11.4
+
+### Patch Changes
+
+- Updated dependencies [eb65072]
+- Updated dependencies [da0467f]
+  - neon@8.11.4
+
+## 8.11.3
+
+### Patch Changes
+
+- neon@8.11.3
+
+## 8.11.2
+
+### Patch Changes
+
+- 45de1d8: `neon functions new` and `neon functions templates list` validate registry files against the JSON Schemas published at neon.com, instead of a copy in the CLI.
+- Updated dependencies [45de1d8]
+  - neon@8.11.2
+
+## 8.11.1
+
+### Patch Changes
+
+- bfa8a0e: `neon functions new` now saves a template's dependencies at the exact version the template pins (`-E`), instead of the package manager's default caret range. The printed install command does the same.
+- Updated dependencies [bfa8a0e]
+  - neon@8.11.1
+
+## 8.11.0
+
+### Minor Changes
+
+- 93b8226: Add `neon functions new [template]` and `neon functions templates list`. Templates come from the Neon Function Registry (`registry/` in neondatabase/examples): the index is read from neon.com, falling back to GitHub, and template files are read from GitHub. The scaffolded functions are declared in `neon.ts`. Set `NEON_FUNCTION_REGISTRY_DIR` to use a local copy, or `NEON_FUNCTION_REGISTRY_URL` to use another index.
+
+### Patch Changes
+
+- Updated dependencies [93b8226]
+  - neon@8.11.0
+
+## 8.10.3
+
+### Patch Changes
+
+- Updated dependencies [59f8325]
+  - neon@8.10.3
+
+## 8.10.2
+
+### Patch Changes
+
+- Updated dependencies [9aac61e]
+  - neon@8.10.2
+
+## 8.10.1
+
+### Patch Changes
+
+- Updated dependencies [7398b8d]
+  - neon@8.10.1
+
+## 8.10.0
+
+### Patch Changes
+
+- Updated dependencies [f1b2376]
+- Updated dependencies [f3596ca]
+  - neon@8.10.0
+
+## 8.9.0
+
+### Patch Changes
+
+- Updated dependencies [049b64c]
+  - neon@8.9.0
+
+## 8.8.0
+
+### Patch Changes
+
+- Updated dependencies [6ea34bc]
+  - neon@8.8.0
+
+## 8.7.2
+
+### Patch Changes
+
+- neon@8.7.2
+
 ## 8.7.1
 
 ### Patch Changes

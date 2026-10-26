@@ -4,11 +4,20 @@ import { getAgentDisplayName } from "../init/agents.js";
 import { AGENT_SKILLS_SKIP_MESSAGE } from "../init/copy.js";
 import { log } from "../log.js";
 import { skillsHelpValues, skillsYesHelp } from "../skills/catalog.js";
+import {
+	lockPath,
+	neonSkillsUpdateCommand,
+	readLockedSkills,
+	refreshSkillsCheckCache,
+	type SkillsScope,
+	scopeLabel,
+	skillsCheckCachePath,
+	skillsStatusRows,
+} from "../skills/freshness.js";
 import { assertSkillsCanRun, resolveSkillsPlan } from "../skills/plan.js";
 import {
 	assertSkillsNode,
 	neonSkillsRetryCommand,
-	neonSkillsUpdateRetryCommand,
 	runSkillsCli,
 	skillsAddArgs,
 	skillsMetadata,
@@ -53,9 +62,6 @@ type SkillsUpdateRow = {
 	detail?: string;
 	error?: string;
 };
-
-const scopeLabel = (scope: "global" | "project"): string =>
-	scope === "project" ? "this directory" : "user-level";
 
 const coerceAgents = (value: unknown): string[] => {
 	if (value === undefined) return [];
@@ -149,6 +155,51 @@ export const builder = (argv: yargs.Argv) =>
 						return true;
 					}),
 			(args) => updateHandler(args as unknown as SkillsProps),
+		)
+		.command(
+			"status",
+			"Check whether installed Neon skills match their source",
+			(yargs) =>
+				yargs
+					.usage("$0 skills status [options]")
+					.options({
+						global: {
+							type: "boolean",
+							default: false,
+							describe:
+								"Check user-level skills (skills CLI -g). Default is this directory",
+						},
+					})
+					.example(
+						"$0 skills status",
+						"Neon skills in this directory's skills-lock.json",
+					)
+					.example(
+						"$0 skills status --global",
+						"User-level Neon skills",
+					)
+					.strict()
+					.hide("agent")
+					.hide("skill")
+					.hide("yes")
+					.check((args) => {
+						noPassthrough("skills status")(args);
+						const agents = args.agent;
+						const skills = args.skill;
+						if (
+							(Array.isArray(agents) && agents.length > 0) ||
+							(Array.isArray(skills) && skills.length > 0)
+						) {
+							throw new Error(
+								"neon skills status does not take --agent or --skill. It checks every Neon skill in this directory (or --global).",
+							);
+						}
+						return true;
+					}),
+			(args) =>
+				statusHandler(
+					args as unknown as SkillsProps & { configDir: string },
+				),
 		)
 		.options({
 			yes: {
@@ -426,7 +477,35 @@ const updateHandler = async (props: SkillsProps) => {
 			failure.includes("needs npx (Node.js)") ||
 				failure.includes("needs Node.js")
 				? failure
-				: `${failure}\nRetry with: ${neonSkillsUpdateRetryCommand(scope === "global")}`,
+				: `${failure}\nRetry with: ${neonSkillsUpdateCommand(scope)}`,
 		);
+	}
+};
+
+const statusHandler = async (props: SkillsProps & { configDir: string }) => {
+	const scope: SkillsScope = props.global === true ? "global" : "project";
+	const skills = readLockedSkills(lockPath(scope, process.cwd()), scope);
+	const folders =
+		skills.length === 0
+			? {}
+			: await refreshSkillsCheckCache({
+					cachePath: skillsCheckCachePath(props.configDir),
+					skills,
+				});
+	const rows = skillsStatusRows(skills, folders);
+
+	const out = writer(props);
+	out.write(rows, {
+		fields: ["scope", "skill", "status"],
+		title: "Skills",
+		emptyMessage:
+			scope === "project"
+				? "No Neon skills in this directory's skills-lock.json. For user-level skills, run: neon skills status --global"
+				: "No user-level Neon skills in the skills CLI lock.",
+	});
+	out.end();
+
+	if (rows.some((row) => row.status === "outdated")) {
+		log.info("Update them: %s", neonSkillsUpdateCommand(scope));
 	}
 };

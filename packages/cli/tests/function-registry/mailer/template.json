@@ -1,0 +1,14 @@
+{
+	"id": "mailer",
+	"provider": "Mailer",
+	"title": "Mailer",
+	"description": "Separate layout with env.",
+	"layout": "separate",
+	"dependencies": ["mailer-sdk@1.2.3"],
+	"environment": [{ "name": "MAILER_API_KEY", "description": "API key for the mailer." }],
+	"operations": [
+		{ "id": "send", "title": "Send", "description": "Send a message.", "source": "functions/send.ts", "slug": "mailsend", "recommended": true },
+		{ "id": "get", "title": "Get", "description": "Get a message.", "source": "functions/get.ts", "slug": "mailget", "recommended": true },
+		{ "id": "cancel", "title": "Cancel", "description": "Cancel a message.", "source": "functions/cancel.ts", "slug": "mailcancel", "recommended": false }
+	]
+}

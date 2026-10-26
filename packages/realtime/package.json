@@ -1,6 +1,6 @@
 {
   "name": "@neon/realtime",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Typed backend and browser SDKs for live queries.",
   "keywords": [
     "neon",
@@ -26,6 +26,11 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "react-native": {
+        "types": "./dist/index.react-native.d.ts",
+        "import": "./dist/index.react-native.js",
+        "default": "./dist/index.react-native.js"
+      },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
@@ -63,6 +68,7 @@
     "tsc": "tsc"
   },
   "dependencies": {
+    "base64-js": "catalog:",
     "postgres-array": "^3.0.4"
   },
   "devDependencies": {

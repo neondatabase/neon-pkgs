@@ -1,10 +1,14 @@
 import {
 	createInternalNeonAuth,
+	getAdapterName,
 	type NeonAuthAdapter,
 	type NeonAuthConfig,
 } from "@neon/auth";
 import type { BetterAuthReactAdapterInstance } from "@neon/auth/react/adapters";
-import type { BetterAuthVanillaAdapterInstance } from "@neon/auth/vanilla/adapters";
+import {
+	BetterAuthVanillaAdapter,
+	type BetterAuthVanillaAdapterInstance,
+} from "@neon/auth/vanilla/adapters";
 import {
 	fetchWithToken,
 	NeonPostgrestClient,
@@ -274,11 +278,15 @@ export function createClientImpl<
 	const { auth: authConfig, dataApi: dataApiConfig } = config;
 
 	// Build client info once - sub-packages will see it and skip their own injection
-	const clientInfoHeader = buildNeonJsClientInfo();
+	// Same default createInternalNeonAuth applies; resolving it here lets one
+	// builder feed both the header and the auth client.
+	const adapter = (authConfig.adapter ??
+		BetterAuthVanillaAdapter()) as NonNullable<typeof authConfig.adapter>;
+	const clientInfoHeader = buildNeonJsClientInfo(getAdapterName(adapter));
 
 	// Step 1: Instantiate auth adapter
 	const auth = createInternalNeonAuth<TAuthAdapter>(authConfig.url, {
-		adapter: authConfig.adapter,
+		adapter,
 		allowAnonymous: authConfig.allowAnonymous ?? false,
 		fetchOptions: {
 			headers: {

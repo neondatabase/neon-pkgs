@@ -1,5 +1,32 @@
 # @neon/effect
 
+## 0.2.0
+
+### Minor Changes
+
+- c745d8e: Add `neon.projects.count()`, which returns the number of active projects in the organization without paging through `projects.list()` (`GET /projects/count`, beta). It takes `{ org_id? }` and defaults to the client's `orgId`. `@neon/tools` publishes it as the `projects.count` selector (`count_projects`), and `@neon/effect` exposes it as an `Effect<number>`.
+
+### Patch Changes
+
+- Updated dependencies [c745d8e]
+- Updated dependencies [d23ace5]
+  - @neon/sdk@7.5.0
+
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [8b0e72b]
+- Updated dependencies [cb6a151]
+  - @neon/sdk@7.4.0
+
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [0cee585]
+  - @neon/sdk@7.3.0
+
 ## 0.1.3
 
 ### Patch Changes

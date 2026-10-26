@@ -53,6 +53,13 @@ export const toolFactories = {
 					input.limit,
 				),
 		}),
+	"projects.count": (options) =>
+		fromGenerated(options, {
+			id: "projects.count",
+			generated: "countProjects",
+			run: (neon, input, signal) =>
+				neon.projects.count({ org_id: input.org_id }, { signal }),
+		}),
 	"projects.get": (options) =>
 		fromGenerated(options, {
 			id: "projects.get",
@@ -1082,6 +1089,17 @@ export const toolFactories = {
 			generated: "disableProjectBranchRealtime",
 			run: (neon, input, signal) =>
 				neon.realtime.disable(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"realtime.secret": (options) =>
+		fromGenerated(options, {
+			id: "realtime.secret",
+			generated: "getProjectBranchRealtimeSecret",
+			requiresApproval: true,
+			run: (neon, input, signal) =>
+				neon.realtime.secret(
 					{ projectId: input.project_id, branchId: input.branch_id },
 					{ signal },
 				),

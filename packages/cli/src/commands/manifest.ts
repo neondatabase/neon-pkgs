@@ -205,6 +205,11 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./feedback.js"),
 	},
 	{
+		command: "docs",
+		describe: "Search neon.com docs, guides, and more",
+		load: () => import("./docs.js"),
+	},
+	{
 		command: "data-api",
 		describe: "Manage the Neon Data API for a database",
 		load: () => import("./data_api.js"),

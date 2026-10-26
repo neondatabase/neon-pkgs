@@ -317,6 +317,31 @@ export const shouldRunUpdateNotifier = ({
 	commandPath[0] !== "completion" &&
 	!isCurrentBranchProbe({ commandPath, currentBranch });
 
+/**
+ * The skills notice drops the terminal checks: coding agents run the CLI without a TTY,
+ * and they are the ones that act on it. `neon skills` itself reports skill state.
+ */
+export const shouldRunSkillsNotifier = ({
+	commandPath,
+	currentBranch,
+	output,
+}: Pick<
+	UpdateNotifierOptions,
+	"commandPath" | "currentBranch" | "output"
+>): boolean =>
+	commandPath[0] !== "skills" &&
+	commandPath[0] !== "skill" &&
+	shouldRunUpdateNotifier({
+		commandPath,
+		currentBranch,
+		disabled: "NO_UPDATE_NOTIFIER" in process.env,
+		isCi: isCi(),
+		isPackaged: isPackagedExecutable(),
+		output,
+		stderrIsTty: true,
+		stdoutIsTty: true,
+	});
+
 export const notifyIfUpdateAvailable = ({
 	commandPath,
 	configDir,

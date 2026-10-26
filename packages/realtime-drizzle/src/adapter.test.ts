@@ -44,6 +44,7 @@ const messages = pgTable("adapter_messages", {
 	channelId: text("channel_id").notNull(),
 	authorId: text("author_id").notNull(),
 	body: text("body").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 	sequence: integer("sequence").notNull(),
 	note: text("note"),
 	published: boolean("published").notNull(),
@@ -115,6 +116,7 @@ describe("concrete Drizzle query adapter", () => {
 				messageId: sql<number>`${messages.id}`.as("messageId"),
 				channelId: sql<string>`${messages.channelId}`.as("channelId"),
 				body: messages.body,
+				createdAt: sql<Date>`${messages.createdAt}`.as("createdAt"),
 				note: messages.note,
 			})
 			.from(messages)
@@ -133,6 +135,7 @@ describe("concrete Drizzle query adapter", () => {
 				messageId: number;
 				channelId: string;
 				body: string;
+				createdAt: Date;
 				note: string | null;
 			}>
 		>();

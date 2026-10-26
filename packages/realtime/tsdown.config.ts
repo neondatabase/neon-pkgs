@@ -7,6 +7,7 @@ export default defineConfig({
 	dts: true,
 	entry: [
 		"src/index.ts",
+		"src/index.react-native.ts",
 		"src/client.ts",
 		"src/server.ts",
 		"src/client/**/*.ts",

@@ -268,6 +268,17 @@ describe("formatInstallCommand", () => {
 		);
 	});
 
+	it.each([
+		["npm", "npm install -E mailer-sdk@1.2.3"],
+		["pnpm", "pnpm add -E mailer-sdk@1.2.3"],
+		["yarn", "yarn add -E mailer-sdk@1.2.3"],
+		["bun", "bun add -E mailer-sdk@1.2.3"],
+	] as const)("saves an exact version with %s", (pm, expected) => {
+		expect(
+			formatInstallCommand(pm, ["mailer-sdk@1.2.3"], { exact: true }),
+		).toBe(expected);
+	});
+
 	it("ignores the dev flag when installing the whole manifest", () => {
 		expect(formatInstallCommand("pnpm", [], { dev: true })).toBe(
 			"pnpm install",

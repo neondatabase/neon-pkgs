@@ -1,3 +1,5 @@
+import { decodeBase64 } from "./base64.js";
+
 /**
  * JSON-compatible sealed representation of one exact live query.
  *
@@ -13,8 +15,11 @@ export interface SealedLiveQuery<Row> {
 	readonly queryFingerprint: string;
 	/** Capability expiry as Unix milliseconds. */
 	readonly expiresAt: number;
-	/** @internal Carries the inferred row type without adding runtime data. */
-	readonly __row?: Row;
+	/**
+	 * @internal A scalar phantom keeps JSON-aware framework types from
+	 * serializing the live row type. This property is not present at runtime.
+	 */
+	readonly __row?: string & { readonly __type: Row };
 }
 
 export function validateSealedQuery<Row>(query: SealedLiveQuery<Row>): void {
@@ -43,9 +48,7 @@ function validCompactJweHeader(capability: string): boolean {
 		const encodedHeader = segments[0];
 		if (!encodedHeader) return false;
 		const header = JSON.parse(
-			new TextDecoder("utf-8", { fatal: true }).decode(
-				decodeBase64Url(encodedHeader),
-			),
+			decodeAscii(decodeBase64Url(encodedHeader)),
 		) as unknown;
 		return (
 			isRecord(header) &&
@@ -59,11 +62,19 @@ function validCompactJweHeader(capability: string): boolean {
 	}
 }
 
+function decodeAscii(value: Uint8Array): string {
+	let decoded = "";
+	for (const byte of value) {
+		if (byte > 0x7f) throw new Error();
+		decoded += String.fromCharCode(byte);
+	}
+	return decoded;
+}
+
 function decodeBase64Url(value: string): Uint8Array {
 	if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error();
 	const standard = value.replace(/-/g, "+").replace(/_/g, "/");
-	const binary = atob(standard + "=".repeat((4 - (standard.length % 4)) % 4));
-	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+	return decodeBase64(standard + "=".repeat((4 - (standard.length % 4)) % 4));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

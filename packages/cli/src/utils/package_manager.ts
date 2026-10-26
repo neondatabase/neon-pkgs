@@ -235,7 +235,7 @@ export const recommendedCliUpgradeCommand = (
 };
 
 /** Where an added package lands in `package.json`. */
-export type AddOptions = { dev?: boolean };
+export type AddOptions = { dev?: boolean; exact?: boolean };
 
 /**
  * The argv for an install with `pm`: every dependency in the manifest when
@@ -256,6 +256,7 @@ export const installArgs = (
 				pm === "npm" ? "install" : "add",
 				// All four accept -D for devDependencies, bun included.
 				...(options?.dev ? ["-D"] : []),
+				...(options?.exact ? ["-E"] : []),
 				...packages,
 			]
 		: ["install"];

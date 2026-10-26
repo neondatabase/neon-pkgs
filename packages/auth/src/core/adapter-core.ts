@@ -1,5 +1,5 @@
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import type { BetterAuthClientOptions } from "better-auth/client";
-
 import {
 	adminClient,
 	emailOTPClient,
@@ -10,7 +10,8 @@ import {
 } from "better-auth/client/plugins";
 import { anonymousTokenClient } from "../plugins/anonymous-token";
 import type { BetterAuthInstance } from "../types";
-import { injectClientInfo } from "../utils/client-info";
+import { createAdapterClientInfoInjector } from "../utils/client-info";
+import type { NeonAuthAdapterName } from "./adapter-name";
 import { normalizeBetterAuthError } from "./better-auth-helpers";
 import {
 	BETTER_AUTH_METHODS_HOOKS,
@@ -24,7 +25,7 @@ export interface NeonAuthAdapterCoreAuthOptions
 
 export const FORCE_FETCH_HEADER = "X-Force-Fetch";
 
-const supportedBetterAuthClientPlugins = [
+const coreBetterAuthClientPlugins = [
 	jwtClient(),
 	adminClient(),
 	organizationClient(),
@@ -33,6 +34,14 @@ const supportedBetterAuthClientPlugins = [
 	phoneNumberClient(),
 	anonymousTokenClient(),
 ] satisfies BetterAuthClientOptions["plugins"];
+
+// The OAuth provider plugin's inferred type embeds the whole server plugin and
+// cannot be serialized into a declaration file, so the list is annotated to
+// refer to the package export instead.
+const supportedBetterAuthClientPlugins: (
+	| (typeof coreBetterAuthClientPlugins)[number]
+	| ReturnType<typeof oauthProviderClient>
+)[] = [...coreBetterAuthClientPlugins, oauthProviderClient()];
 
 export type SupportedBetterAuthClientPlugins =
 	typeof supportedBetterAuthClientPlugins;
@@ -52,6 +61,12 @@ export abstract class NeonAuthAdapterCore {
 
 	//#region Constructor
 	constructor(betterAuthClientOptions: NeonAuthAdapterCoreAuthOptions) {
+		const Adapter = new.target as {
+			readonly adapterName?: NeonAuthAdapterName;
+		};
+		const injectClientInfo = createAdapterClientInfoInjector(
+			Adapter.adapterName,
+		);
 		// Preserve user's onSuccess callback if they provided one
 		const userOnSuccess = betterAuthClientOptions.fetchOptions?.onSuccess;
 		const userOnRequest = betterAuthClientOptions.fetchOptions?.onRequest;

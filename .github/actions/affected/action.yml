@@ -1,0 +1,83 @@
+description: >-
+    Lists the workspace packages a pull request affects (changed packages plus their
+    dependents), or every package when a repo-wide file changed or the event is not a
+    pull request. Run after ./.github/actions/prepare on a checkout with fetch-depth 0.
+
+name: Affected packages
+
+inputs:
+    workflow:
+        description: Path of the calling workflow file; a change to it affects every package.
+        required: true
+
+outputs:
+    all:
+        description: "'true' when every package must be checked"
+        value: ${{ steps.detect.outputs.all }}
+    packages:
+        description: JSON array of affected workspace package names
+        value: ${{ steps.detect.outputs.packages }}
+    dirs:
+        description: JSON array of affected directory names under packages/
+        value: ${{ steps.detect.outputs.dirs }}
+    cli:
+        description: "'true' when the neon or neonctl package is affected"
+        value: ${{ steps.detect.outputs.cli }}
+    tools:
+        description: "'true' when @neon/tools is affected"
+        value: ${{ steps.detect.outputs.tools }}
+
+runs:
+    using: composite
+    steps:
+        - id: detect
+          shell: bash
+          env:
+              EVENT_NAME: ${{ github.event_name }}
+              BASE_REF: ${{ github.base_ref }}
+              WORKFLOW: ${{ inputs.workflow }}
+          run: |
+              set -euo pipefail
+
+              # Files every package inherits from; a change here can break any of them
+              # without touching a package directory.
+              repo_wide='^(pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|tsconfig\.base\.json|biome\.json|\.npmrc|codecov\.yml|\.node-version|mise\.toml|scripts/.*|\.github/actions/.*)$'
+
+              # pnpm selects changed packages from `git diff --name-only`, which lists only the
+              # destination of a rename and so hides the package a file moved out of.
+              git config diff.renames false
+
+              all=false
+              base="origin/$BASE_REF"
+              if [[ "$EVENT_NAME" != pull_request ]]; then
+                  all=true
+              else
+                  changed=$(git diff --no-renames --name-only "$base...HEAD")
+                  if grep -Eq "$repo_wide" <<<"$changed" || grep -Fxq "$WORKFLOW" <<<"$changed"; then
+                      all=true
+                  fi
+              fi
+
+              # --changed-files-ignore-pattern keeps docs and changesets from selecting a package.
+              if [[ "$all" == true ]]; then
+                  selection=(--recursive)
+              else
+                  selection=(--filter "...[$base]" --changed-files-ignore-pattern='**/*.md')
+              fi
+
+              # The workspace root is listed as a package; it is not one of the checked units.
+              list=$(pnpm "${selection[@]}" ls --depth -1 --json | jq -c --arg root "$PWD" '[.[] | select(.path != $root)]')
+              list=${list:-[]}
+
+              packages=$(jq -c '[.[].name]' <<<"$list")
+              dirs=$(jq -c --arg prefix "$PWD/packages/" '[.[] | select(.path | startswith($prefix)) | .path[($prefix | length):]]' <<<"$list")
+              cli=$(jq -r 'any(.[]; . == "cli" or . == "neonctl")' <<<"$dirs")
+              tools=$(jq -r 'any(.[]; . == "@neon/tools")' <<<"$packages")
+
+              {
+                  echo "all=$all"
+                  echo "packages=$packages"
+                  echo "dirs=$dirs"
+                  echo "cli=$cli"
+                  echo "tools=$tools"
+              } | tee -a "$GITHUB_OUTPUT"

@@ -35,6 +35,9 @@ describe("NeonEffectClient", () => {
 		expectTypeOf(neon.user.me()).toEqualTypeOf<
 			Effect.Effect<CurrentUserInfoResponse, NeonEffectError>
 		>();
+		expectTypeOf(neon.projects.count()).toEqualTypeOf<
+			Effect.Effect<number, NeonEffectError>
+		>();
 		expectTypeOf(neon.operations.waitFor({ operations })).toEqualTypeOf<
 			Effect.Effect<void, NeonEffectError>
 		>();

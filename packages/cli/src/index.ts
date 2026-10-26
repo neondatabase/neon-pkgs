@@ -4,6 +4,8 @@ import {
 	analyticsMiddleware,
 	closeAnalytics,
 	initAnalyticsClientMiddleware,
+	isAnalyticsActive,
+	recordCommandSuccessExtras,
 	sendError,
 	takeCommandSuccessExtras,
 	trackCommandSuccess,
@@ -38,7 +40,10 @@ import { rewriteUnknownAgentArg } from "./init/plan.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 import { recoverFromSSO } from "./sso_recovery.js";
-import { notifyIfUpdateAvailable } from "./update_notifier.js";
+import {
+	notifyIfUpdateAvailable,
+	shouldRunSkillsNotifier,
+} from "./update_notifier.js";
 import { getCliName } from "./utils/cli_name.js";
 import { fillInArgs, resolveApiKeyFromEnv } from "./utils/middlewares.js";
 import {
@@ -381,7 +386,22 @@ void (async () => {
 	while (attempts < MAX_ATTEMPTS) {
 		try {
 			const args = await builder.argv;
+			const configDir =
+				typeof args.configDir === "string"
+					? args.configDir
+					: defaultDir;
 
+			if (isAnalyticsActive()) {
+				const { readSkillsTelemetry } = await import(
+					"./skills/freshness.js"
+				);
+				const skills = readSkillsTelemetry({
+					configDir,
+					cwd: process.cwd(),
+				});
+				if (skills !== undefined)
+					recordCommandSuccessExtras({ skills });
+			}
 			// Send analytics for a successful attempt
 			trackCommandSuccess(args);
 			if (args._.length === 0 || args.help) {
@@ -390,16 +410,25 @@ void (async () => {
 			}
 
 			await closeAnalytics();
-			notifyIfUpdateAvailable({
+			const notifier = {
 				commandPath: args._.map(String),
-				configDir:
-					typeof args.configDir === "string"
-						? args.configDir
-						: defaultDir,
+				configDir,
 				currentBranch: Boolean(args.currentBranch),
-				currentVersion: pkg.version,
 				output: typeof args.output === "string" ? args.output : "table",
+			};
+			notifyIfUpdateAvailable({
+				...notifier,
+				currentVersion: pkg.version,
 			});
+			if (shouldRunSkillsNotifier(notifier)) {
+				const { notifyIfSkillsOutdated } = await import(
+					"./skills/freshness.js"
+				);
+				notifyIfSkillsOutdated({
+					configDir: notifier.configDir,
+					cwd: process.cwd(),
+				});
+			}
 			break;
 		} catch (err) {
 			takeCommandSuccessExtras();

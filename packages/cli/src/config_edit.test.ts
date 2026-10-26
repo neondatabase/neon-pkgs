@@ -106,6 +106,24 @@ describe("editNeonConfig on the starter policy", () => {
 		);
 	});
 
+	it("declares a function's env from process.env", () => {
+		const sendemail = {
+			kind: "function",
+			slug: "sendemail",
+			name: "Send Email",
+			source: "./functions/sendemail.ts",
+			env: ["RESEND_API_KEY"],
+		} as const;
+		const ts = editNeonConfig(STARTER, sendemail);
+		expect(ts.source).toContain(
+			'sendemail: { name: "Send Email", source: "./functions/sendemail.ts", env: { RESEND_API_KEY: process.env.RESEND_API_KEY! } },',
+		);
+		const js = editNeonConfig(STARTER, { ...sendemail, typescript: false });
+		expect(js.source).toContain(
+			"env: { RESEND_API_KEY: process.env.RESEND_API_KEY } },",
+		);
+	});
+
 	it("creates the functions block in the starter order", () => {
 		const { source, changes } = editNeonConfig(STARTER, fn("sendemail"));
 

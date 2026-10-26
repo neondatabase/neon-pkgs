@@ -15,6 +15,7 @@ import * as databases from "./databases.js";
 import * as deploy from "./deploy.js";
 import * as dev from "./dev.js";
 import * as diff from "./diff.js";
+import * as docs from "./docs.js";
 import * as env from "./env.js";
 import * as feedback from "./feedback.js";
 import * as functions from "./functions.js";
@@ -75,6 +76,7 @@ export default [
 	skills,
 	ask,
 	feedback,
+	docs,
 	dataApi,
 	realtime,
 	functions,

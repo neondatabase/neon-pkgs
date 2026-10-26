@@ -26,7 +26,10 @@ import {
  * `forceReasoning: true` covers a gap in the shared model's own detection,
  * which matches a bare `gpt-5` prefix. The gateway also accepts the legacy
  * `databricks-` form, and `databricks-gpt-5-2` fails that match while still
- * being a reasoning model.
+ * being a reasoning model. The gpt-6 models are reasoning models too and fail
+ * that match entirely. Without it, the shared model does not send
+ * `reasoningEffort`, does not request `reasoning.encrypted_content`, and passes
+ * `temperature` and `topP` through to a route that rejects them.
  */
 
 const STATELESS_HELP =
@@ -34,7 +37,7 @@ const STATELESS_HELP =
 
 /** Models the gateway serves as reasoning models on this route. */
 export function isReasoningModelId(modelId: string): boolean {
-	return /gpt-5/.test(modelId.toLowerCase());
+	return /gpt-[56]/.test(modelId.toLowerCase());
 }
 
 /**

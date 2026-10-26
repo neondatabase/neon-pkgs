@@ -46,6 +46,9 @@ stable unique string or number for every row. Standard collection options such
 as `id`, `schema`, garbage collection, collation, and mutation handlers are
 forwarded to TanStack DB.
 
+The sealed query preserves its live row type, including values such as `Date`,
+through JSON-aware RPC typing.
+
 The integration synchronizes eagerly. It applies each complete-row replacement
 or incremental change batch as one TanStack sync transaction. Realtime
 `connecting` maps to a loading collection until the first complete result and
@@ -93,6 +96,9 @@ For SSR, use TanStack DB's normal `DbClient`, dehydration, and
 request-scoped collection with the initial rows; the browser hydrates it and
 starts ordinary Realtime synchronization. Do not pass `initialData` to
 `realtimeCollectionOptions()` because TanStack DB owns collection hydration.
+Ensure the application's serializer or decoder restores values such as `Date`
+before hydrating. The live row type describes decoded values, not their JSON
+representation; the adapter does not deserialize HTTP or SSR payloads.
 
 ## API
 

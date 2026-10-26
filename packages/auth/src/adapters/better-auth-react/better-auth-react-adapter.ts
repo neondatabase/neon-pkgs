@@ -4,6 +4,10 @@ import {
 	type NeonAuthAdapterCoreAuthOptions,
 	type SupportedBetterAuthClientPlugins,
 } from "../../core/adapter-core";
+import {
+	createAdapterBuilder,
+	type NeonAuthAdapterName,
+} from "../../core/adapter-name";
 
 export type BetterAuthReactAdapterOptions = Omit<
 	NeonAuthAdapterCoreAuthOptions,
@@ -14,6 +18,8 @@ export type BetterAuthReactAdapterOptions = Omit<
  * Internal implementation class - use BetterAuthReactAdapter factory function instead
  */
 class BetterAuthReactAdapterImpl extends NeonAuthAdapterCore {
+	static readonly adapterName =
+		"better-auth-react" satisfies NeonAuthAdapterName;
 	private _betterAuth: ReturnType<
 		typeof createAuthClient<{ plugins: SupportedBetterAuthClientPlugins }>
 	>;
@@ -58,16 +64,5 @@ type BetterAuthReactAdapterBuilder = (
 export function BetterAuthReactAdapter(
 	options?: BetterAuthReactAdapterOptions,
 ): BetterAuthReactAdapterBuilder {
-	return (url: string, fetchOptions?: { headers?: Record<string, string> }) =>
-		new BetterAuthReactAdapterImpl({
-			baseURL: url,
-			...options,
-			fetchOptions: {
-				...options?.fetchOptions,
-				headers: {
-					...options?.fetchOptions?.headers,
-					...fetchOptions?.headers,
-				},
-			},
-		});
+	return createAdapterBuilder(BetterAuthReactAdapterImpl, options);
 }

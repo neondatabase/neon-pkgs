@@ -95,9 +95,40 @@ is being obtained and `connecting` indicates active resubscription or transport
 recovery. Changing the sealed query starts a new logical query; changing only
 the refresh callback does not.
 
-For SSR, execute the same query on the server and pass its rows as
+### Server-rendered initial data
+
+For SSR, execute the same query on the server and pass its decoded rows as
 `initialData`. React renders them immediately with status `connecting`, and the
 first authoritative live-query result reconciles any intervening changes.
+
+`initialData` must match the sealed query's live row type and the client's
+configured PostgreSQL parsers. HTTP serialization does not change that type:
+for example, a query whose rows contain `created_at: Date` still produces `Date`
+rows even if a JSON-aware RPC framework types the initial HTTP rows with
+`created_at: string`.
+
+Restore those values in application code before calling the hook:
+
+```tsx
+// A typed API response: query produces Date rows, initialData has JSON strings.
+const initialData = payload.initialData.map((row) => ({
+  ...row,
+  created_at: new Date(row.created_at),
+}));
+
+const { data } = useLiveQuery(payload.query, { initialData });
+// data: readonly { id: number; created_at: Date }[] | undefined
+```
+
+In this example, passing the serialized rows directly is a type error. No
+explicit row annotation or cast is needed for the conversion above. If your
+transport already restores dates, pass its rows directly.
+
+Convert before the first render that consumes the rows, not in an effect.
+The server render and the browser's initial hydration render must receive
+equivalent decoded values. Converting only on the server is insufficient if
+the data is subsequently serialized to JSON again. The hook does not perform
+this conversion; use your application's serializer or decoder.
 
 ### Optimistic mutations
 

@@ -3,9 +3,8 @@
 # The suite provisions a throwaway project from the NEON_TEST_API_KEY secret, enables
 # Neon Auth on its default branch with email verification off (so headless signups
 # succeed), and deletes both afterwards. It runs as its own path-filtered workflow
-# rather than inside the shared e2e-live job: that job runs on every pull request under
-# one budget, and auth provisioning plus real signups should only spend that budget when
-# the auth package (or the harness) changes.
+# rather than inside the shared e2e-live job: auth provisioning plus real signups should
+# only spend budget when the auth package (or the harness) changes.
 #
 # Fork and Dependabot pull requests skip the job: GitHub does not expose repository secrets
 # to untrusted pull request code, so the suite could only fail there.

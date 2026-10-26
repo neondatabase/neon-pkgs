@@ -1,5 +1,14 @@
 # @neon/realtime-tanstack
 
+## 0.1.1
+
+### Patch Changes
+
+- 5216b7d: Infer live rows from the sealed query instead of weakening the result type to accept incompatible initial data or refresh callbacks.
+- Updated dependencies [7f758b9]
+- Updated dependencies [5216b7d]
+  - @neon/realtime@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

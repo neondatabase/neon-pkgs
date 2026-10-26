@@ -17,6 +17,12 @@ declare global {
 
 export const X_NEON_CLIENT_INFO_HEADER = "X-Neon-Client-Info";
 
+/** Closed set of values reported in the `adapter` field of X-Neon-Client-Info. */
+export type NeonAuthAdapterName =
+	| "supabase"
+	| "better-auth-vanilla"
+	| "better-auth-react";
+
 export interface ClientInfo {
 	sdk: string;
 	version: string;
@@ -26,7 +32,11 @@ export interface ClientInfo {
 	arch: string;
 	framework?: string;
 	betterAuthVersion?: string;
+	/** Which @neon/auth adapter issued the request; omitted when none is in play. */
+	adapter?: NeonAuthAdapterName;
 }
+
+type ClientInfoExtras = Pick<ClientInfo, "betterAuthVersion" | "adapter">;
 
 /**
  * Type guard for checking if a property exists on globalThis
@@ -74,7 +84,7 @@ function detectFramework(): string | undefined {
 export function getClientInfo(
 	sdkName: string,
 	sdkVersion: string,
-	extras?: Pick<ClientInfo, "betterAuthVersion">,
+	extras?: ClientInfoExtras,
 ): ClientInfo {
 	const base: ClientInfo = {
 		sdk: sdkName,
@@ -159,13 +169,17 @@ export function getClientInfo(
 		result.betterAuthVersion = extras.betterAuthVersion;
 	}
 
+	if (extras?.adapter) {
+		result.adapter = extras.adapter;
+	}
+
 	return result;
 }
 
 export function createClientInfoInjector(
 	defaultSdkName: string,
 	defaultSdkVersion: string,
-	extras?: Pick<ClientInfo, "betterAuthVersion">,
+	extras?: ClientInfoExtras,
 ) {
 	// Cache client info at factory creation time (module init)
 	const cachedClientInfo = JSON.stringify(

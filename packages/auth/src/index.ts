@@ -8,6 +8,10 @@ export {
 	isAuthApiError,
 	isAuthError,
 } from "./adapters/supabase/auth-interface";
+/**
+ * @internal Used by @neon/neon-js to label X-Neon-Client-Info; not a supported API.
+ */
+export { getAdapterName } from "./core/adapter-name";
 export type {
 	NeonAuth,
 	NeonAuthAdapter,

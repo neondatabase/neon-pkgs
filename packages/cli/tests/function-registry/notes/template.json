@@ -1,0 +1,11 @@
+{
+	"id": "notes",
+	"title": "Notes API",
+	"description": "Router layout.",
+	"layout": "router",
+	"operations": [
+		{ "id": "list", "title": "List", "description": "List notes.", "source": "functions/list.ts", "recommended": true },
+		{ "id": "get", "title": "Get", "description": "Get a note.", "source": "functions/get.ts", "route": "/note", "recommended": true },
+		{ "id": "health", "title": "Health", "description": "Health check.", "source": "functions/health.ts", "recommended": false }
+	]
+}

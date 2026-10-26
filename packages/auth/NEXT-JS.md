@@ -431,6 +431,159 @@ The `auth` provides access to all Neon Auth APIs:
 - **Organization**: `organization.create()`, `organization.list()`, `organization.inviteMember()`, `organization.removeMember()`, etc.
 - **Admin**: `admin.listUsers()`, `admin.banUser()`, `admin.setRole()`, `admin.createUser()`, etc.
 - **Email OTP**: `emailOtp.sendVerificationOtp()`, `emailOtp.verifyEmail()`
+- **OAuth provider**: `oauth2.publicClient()`, `oauth2.consent()`, `oauth2.getConsents()`, etc.
+
+## OAuth provider (MCP)
+
+A Neon Auth project can act as an OAuth 2.1 provider, for example to let MCP clients sign in your users. The provider's login and consent pages are pages of your app, and the client exposes the `oauth2` namespace for them; no configuration is needed:
+
+```typescript
+// lib/auth/client.ts
+"use client"
+
+import { createAuthClient } from '@neon/auth/next';
+
+export const authClient = createAuthClient();
+```
+
+When the page URL carries the signed `sig` and `ba_param` query parameters that the provider appended on redirect, the client adds them as `oauth_query` to every non-GET request, so a sign-in on the login page resumes the authorization. Without those parameters requests are unchanged.
+
+A login page resumes the authorization in two cases: the user signs in on it, or the user is already signed in. On every load, including the redirect back from a social sign-in, call `getSession()` to check the sign-in and then `oauth2.continue({ selected: true })`. Use the same path for the login page URL configured for the OAuth provider in Neon Auth and the middleware's `loginUrl`, so the middleware never redirects away from it. Failed requests reject with an error that has a `status`:
+
+```tsx
+'use client';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { authClient } from '@/lib/auth/client';
+
+const message = (err: unknown) => (err instanceof Error ? err.message : 'Sign-in failed');
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isOAuthVisit = params.has('client_id');
+    // `login` and `create` ask the user to sign in again, so continuing would come back here.
+    const mustSignInAgain =
+      isOAuthVisit && /\b(login|create)\b/.test(params.get('prompt') ?? '');
+
+    (async () => {
+      try {
+        const { data: session } = await authClient.getSession();
+        if (!session || mustSignInAgain) return setChecking(false);
+        if (!isOAuthVisit) return router.replace('/');
+        // Keeps the loading state: the SDK navigates to the consent page or back to the client.
+        await authClient.oauth2.continue({ selected: true });
+      } catch (err) {
+        // 400: the link expired, and only the client app can start a new authorization.
+        if (isOAuthVisit && (err as { status?: number } | undefined)?.status === 400) setExpired(true);
+        else setError(message(err));
+        setChecking(false);
+      }
+    })();
+  }, [router]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      const { data } = await authClient.signIn.email({
+        email: String(form.get('email')),
+        password: String(form.get('password')),
+      });
+      // On an OAuth visit the SDK is already navigating to the consent page or back to the client.
+      if (!data?.redirect) router.push('/');
+    } catch (err) {
+      setError(message(err));
+    }
+  }
+
+  async function signInWithGoogle() {
+    try {
+      // Come back to this page so the check above can continue the authorization.
+      await authClient.signIn.social({ provider: 'google', callbackURL: window.location.href });
+    } catch (err) {
+      setError(message(err));
+    }
+  }
+
+  if (checking) return <p>Loading...</p>;
+  if (expired) return <p role="alert">This sign-in link has expired. Go back to the app and try again.</p>;
+
+  return (
+    <form onSubmit={onSubmit}>
+      <input name="email" type="email" required />
+      <input name="password" type="password" required />
+      <button type="submit">Sign in</button>
+      <button type="button" onClick={signInWithGoogle}>
+        Continue with Google
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </form>
+  );
+}
+```
+
+On success `oauth2.continue()` navigates to the consent page or back to the client app, like `oauth2.consent()` below. A 400 means the link has expired; show a message rather than the form, because signing in again can't resume it. Other errors, such as a network failure, leave the form available to retry. The same component works in a Vite SPA with `createAuthClient()` from `@neon/auth` and your router's navigate function in place of `useRouter`.
+
+A consent page reads the client from the URL and answers with `oauth2.consent`:
+
+```tsx
+'use client';
+import { useEffect, useState } from 'react';
+import { authClient } from '@/lib/auth/client';
+
+export default function ConsentPage() {
+  const [scope, setScope] = useState<string | null>(null);
+  const [client, setClient] = useState<{ client_name?: string; logo_uri?: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Read the query in an effect: the page also renders on the server, where `window` is undefined.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setScope(params.get('scope'));
+    authClient.oauth2
+      .publicClient({ query: { client_id: params.get('client_id') ?? '' } })
+      .then(({ data }) => setClient(data))
+      .catch(() => setError('This request could not be completed. Go back to the app and try again.'));
+  }, []);
+
+  const answer = (accept: boolean) =>
+    authClient.oauth2
+      .consent({ accept })
+      .catch(() => setError('This request could not be completed. Go back to the app and try again.'));
+
+  if (error) return <p role="alert">{error}</p>;
+
+  return (
+    <div>
+      <p>{client?.client_name ?? 'An application'} wants to access: {scope}</p>
+      <button onClick={() => answer(true)}>Allow</button>
+      <button onClick={() => answer(false)}>Deny</button>
+    </div>
+  );
+}
+```
+
+`oauth2.consent()` navigates the browser itself: it returns `{ redirect: true, url }`, and better-auth's default redirect fetch plugin sets `window.location.href`, so the page does not need to follow it. Pass `scope` (a space-separated subset of the requested scopes) to grant less than was requested; without it every requested scope is granted. Both `publicClient` and `consent` need a signed-in user.
+
+Send `Content-Security-Policy: frame-ancestors 'none'` as a response header on the login and consent pages so they cannot be framed (browsers ignore `frame-ancestors` in a `<meta>` tag), and never build consent URLs yourself: the provider redirects with a signed query that `oauth2.consent()` forwards as it is.
+
+The browser client's `oauth2.*` mirrors the full plugin. Neon mounts these endpoints:
+
+| Group | Endpoints | In `createNeonAuth()` | Notes |
+| --- | --- | --- | --- |
+| Login and consent actions | `consent`, `continue`, `publicClient`, `publicClientPrelogin` | Yes | Drive your login and consent pages. |
+| The user's own grants | `getConsent`, `getConsents`, `updateConsent`, `deleteConsent` | Yes | Let a signed-in user review and revoke what they granted. |
+| Client management | `create-client`, `get-client`, `get-clients`, `update-client`, `delete-client`, `client/rotate-secret` | No | Neon rejects these for end users with 401; manage clients through the Neon Console or API. |
+| OAuth protocol | `authorize`, `token`, `introspect`, `revoke`, `userinfo`, `register` | No | Use client credentials or bearer tokens with form bodies or redirects. Relying parties and MCP servers should use `@neon/oauth`. |
+| RP-initiated logout | `end-session`, `end-session/confirm` | No | Browser redirect flow. |
+
+`createNeonAuth()` and `createAuthServer()` expose only the first two groups. A server-side consent example is not documented, because `oauth_query` has to be the signed query the provider redirected with and is only built automatically in the browser.
 
 ## Project Structure
 
