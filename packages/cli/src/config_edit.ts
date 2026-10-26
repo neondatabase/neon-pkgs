@@ -24,6 +24,13 @@ import { renderKey } from "./config_template.js";
  * place an edit into is refused with the exact lines to add by hand.
  */
 
+export const TYPESCRIPT_EXTENSION = /\.(?:ts|mts|cts)$/;
+
+export const asRelativeModulePath = (path: string): string =>
+	path.startsWith("./") || path.startsWith("../") || path.startsWith("/")
+		? path
+		: `./${path}`;
+
 export class ConfigEditError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -39,7 +46,14 @@ export type ConfigEdit =
 			allowedOrigins?: readonly string[];
 	  }
 	| { kind: "realtime"; enabled: false }
-	| { kind: "function"; slug: string; name: string; source: string }
+	| {
+			kind: "function";
+			slug: string;
+			name: string;
+			source: string;
+			env?: readonly string[];
+			typescript?: boolean;
+	  }
 	| { kind: "bucket"; name: string; access: "private" | "public_read" };
 
 export type ConfigEditResult = {
@@ -532,13 +546,23 @@ const apply = (source: string, edit: ConfigEdit): ConfigEditResult => {
 				run((parsed) => setToggle(parsed, "dataApi"));
 			}
 			break;
-		case "function":
+		case "function": {
+			const assertion = edit.typescript === false ? "" : "!";
+			const env = edit.env?.length
+				? `, env: { ${edit.env
+						.map(
+							(name) =>
+								`${renderKey(name)}: process.env.${name}${assertion}`,
+						)
+						.join(", ")} }`
+				: "";
 			run((parsed) =>
 				addNamed(parsed, "functions", edit.slug, [
-					`${renderKey(edit.slug)}: { name: ${JSON.stringify(edit.name)}, source: ${JSON.stringify(edit.source)} },`,
+					`${renderKey(edit.slug)}: { name: ${JSON.stringify(edit.name)}, source: ${JSON.stringify(edit.source)}${env} },`,
 				]),
 			);
 			break;
+		}
 		case "bucket":
 			run((parsed) =>
 				addNamed(parsed, "buckets", edit.name, [

@@ -153,6 +153,7 @@ export type {
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
+	ProjectCountParams,
 	ProjectCreateAndConnectParams,
 	ProjectCreateParams,
 	ProjectDeleteParams,

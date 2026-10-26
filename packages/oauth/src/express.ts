@@ -2,6 +2,8 @@
  * `@neon/oauth/express` — Express middleware for sign-in, bearer-token guards and client metadata.
  * Express is imported for types only; the app provides it at runtime.
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
 import type { Request, RequestHandler } from "express";
@@ -15,12 +17,15 @@ import type {
 } from "./adapter";
 import { nodeBearerAuth, nodeClientMetadata, nodeOAuthClient } from "./node";
 
-/** An Express request that has passed {@link expressBearerAuth}: `auth` is the verified token. */
-export type AuthedRequest = Request & { auth: AuthResult };
+/** An Express request that has passed {@link expressBearerAuth}: `auth` and `authResult` are both the verified token. */
+export type AuthedRequest = Request & {
+	auth: AuthResult;
+	authResult: AuthResult;
+};
 
 /**
  * Express middleware that requires a valid bearer token, for a generic API. On success it sets the
- * verified {@link AuthResult} on `req.auth` and calls `next()`.
+ * verified {@link AuthResult} on `req.auth` and `req.authResult` and calls `next()`.
  *
  * Otherwise it sends the guard's error response (401 or 403 with a challenge, 503, or 500; see
  * `BearerGuard`). For an MCP server use `expressMcp` from `@neon/oauth/mcp/express`.
@@ -28,8 +33,9 @@ export type AuthedRequest = Request & { auth: AuthResult };
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns Middleware; read the result as `(req as AuthedRequest).auth`.
- * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
- *   `resource` is available. It is passed to `next(err)`.
+ * @throws {OAuthConfigError} When the middleware is created, if neither `opts.audience` nor a
+ *   configured `resource` is available. It also throws if `opts.resourceMetadataUrl` is `true` and the
+ *   audience is not an absolute URL.
  * @see {@link expressOAuthClient} for the sign-in routes.
  *
  * @example
@@ -98,6 +104,7 @@ export function expressOAuthClient(
  * `client_id`; other requests call `next()`.
  *
  * @param doc The result of `createClientMetadataDocument`.
+ * @returns Middleware to mount with `app.use`.
  * @see `routeClientMetadata` for the framework-agnostic form.
  *
  * @example

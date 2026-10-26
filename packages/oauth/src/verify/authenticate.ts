@@ -15,14 +15,29 @@ export interface BearerSource<O extends BearerAuthOptions> {
 	requireBearerAuth(opts: O): BearerGuard;
 }
 
-/** Runs `source`'s bearer guard on `request` and returns the {@link AuthOutcome}. */
+/**
+ * Builds `source`'s bearer guard once and returns a function that runs it on each request.
+ * Throws `OAuthConfigError` here, not per request, when the guard is misconfigured. No network I/O
+ * happens until the first request.
+ */
+export function createAuthenticator<O extends BearerAuthOptions>(
+	source: BearerSource<O>,
+	opts: O,
+): (request: Request) => Promise<AuthOutcome> {
+	const guard = source.requireBearerAuth(opts);
+	return async (request) => {
+		const result = await guard(request);
+		return result instanceof Response
+			? { ok: false, response: result }
+			: { ok: true, auth: result };
+	};
+}
+
+/** Builds `source`'s bearer guard for this one call, runs it on `request` and returns the {@link AuthOutcome}. */
 export async function authenticateWith<O extends BearerAuthOptions>(
 	source: BearerSource<O>,
 	request: Request,
 	opts: O,
 ): Promise<AuthOutcome> {
-	const result = await source.requireBearerAuth(opts)(request);
-	return result instanceof Response
-		? { ok: false, response: result }
-		: { ok: true, auth: result };
+	return createAuthenticator(source, opts)(request);
 }

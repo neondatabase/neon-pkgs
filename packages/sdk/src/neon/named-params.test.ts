@@ -8,6 +8,7 @@ const unchanged = new Set([
 	"regions.list",
 	"apiKeys.list",
 	"projects.list",
+	"projects.count",
 	"projects.create",
 	"projects.createAndConnect",
 	"projects.transfer",

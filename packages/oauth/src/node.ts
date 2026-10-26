@@ -2,6 +2,8 @@
  * `@neon/oauth/node` — `node:http` middleware for sign-in, bearer-token guards and client
  * metadata, plus the helpers they are built on.
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
 import type { IncomingMessage } from "node:http";
@@ -14,7 +16,6 @@ import type {
 	OAuthRouteOptions,
 } from "./adapter";
 import {
-	authenticate,
 	resolveBasePath,
 	routeClientMetadata,
 	routeOAuthClient,
@@ -26,15 +27,20 @@ import {
 	nodeMiddleware,
 	toNodeHandler,
 } from "./internal/node";
+import { createAuthenticator } from "./verify/authenticate";
 
 export type { FetchHandler, NodeMiddleware, NodeNext };
 export { nodeMiddleware, toNodeHandler };
-/** A `node:http` request after {@link nodeBearerAuth} has run: `auth` is the verified token. */
-export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
+/** A `node:http` request after {@link nodeBearerAuth} has run: `auth` and `authResult` are both the verified token. */
+export type AuthedIncomingMessage = IncomingMessage & {
+	auth?: AuthResult;
+	authResult?: AuthResult;
+};
 
 /**
  * `node:http` middleware (`(req, res, next)`) that requires a valid bearer token, for a generic
- * API. On success it sets the verified {@link AuthResult} on `req.auth` and calls `next()`.
+ * API. On success it sets the verified {@link AuthResult} on `req.auth` and `req.authResult` and
+ * calls `next()`.
  *
  * Otherwise it sends the guard's error response (401 or 403 with a challenge, 503, or 500; see
  * `BearerGuard`). For an MCP server use `nodeMcp` from `@neon/oauth/mcp/node`.
@@ -42,8 +48,9 @@ export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns Middleware; read the result from `req.auth` (see {@link AuthedIncomingMessage}).
- * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
- *   `resource` is available. It is passed to `next(err)`.
+ * @throws {OAuthConfigError} When the middleware is created, if neither `opts.audience` nor a
+ *   configured `resource` is available. It also throws if `opts.resourceMetadataUrl` is `true` and the
+ *   audience is not an absolute URL.
  * @see {@link nodeOAuthClient} for the sign-in routes.
  *
  * @example
@@ -61,7 +68,7 @@ export type AuthedIncomingMessage = IncomingMessage & { auth?: AuthResult };
  * createServer((req, res) =>
  *   guard(req, res, (err) => {
  *     if (err) {
- *       res.statusCode = 500; // e.g. a missing audience: OAuthConfigError
+ *       res.statusCode = 500;
  *       return res.end();
  *     }
  *     const { auth } = req as Required<AuthedIncomingMessage>;
@@ -75,10 +82,13 @@ export function nodeBearerAuth(
 	source: AuthSource,
 	opts: OAuthBearerOptions = {},
 ): NodeMiddleware {
+	const authenticate = createAuthenticator(source, opts);
 	return nodeMiddleware(async (request, req) => {
-		const outcome = await authenticate(source, request, opts);
+		const outcome = await authenticate(request);
 		if (!outcome.ok) return outcome.response;
-		(req as AuthedIncomingMessage).auth = outcome.auth;
+		const authed = req as AuthedIncomingMessage;
+		authed.auth = outcome.auth;
+		authed.authResult = outcome.auth;
 		return undefined;
 	});
 }

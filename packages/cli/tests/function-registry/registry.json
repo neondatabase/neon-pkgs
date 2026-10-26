@@ -1,0 +1,7 @@
+{
+	"templates": [
+		{ "id": "hello", "title": "Hello", "description": "No operations.", "path": "hello/template.json" },
+		{ "id": "notes", "title": "Notes API", "description": "Router layout.", "path": "notes/template.json" },
+		{ "id": "mailer", "provider": "Mailer", "title": "Mailer", "description": "Separate layout with env.", "path": "mailer/template.json" }
+	]
+}

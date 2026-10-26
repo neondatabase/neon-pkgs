@@ -1,4 +1,5 @@
 import { openai as openaiProvider } from "@ai-sdk/openai";
+import { UnsupportedFunctionalityError } from "@ai-sdk/provider";
 import { z } from "zod/v4";
 
 export type NeonImageGenerationArgs = {
@@ -8,6 +9,7 @@ export type NeonImageGenerationArgs = {
 		fileId?: string;
 		imageUrl?: string;
 	};
+	/** Image model. Defaults to `gpt-image-2`; `gpt-image-1` is rejected. */
 	model?: string;
 	moderation?: "auto";
 	outputCompression?: number;
@@ -16,6 +18,8 @@ export type NeonImageGenerationArgs = {
 	quality?: "auto" | "low" | "medium" | "high";
 	size?: "auto" | "1024x1024" | "1024x1536" | "1536x1024";
 };
+
+const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 
 const imageGenerationInputSchema = z.object({});
 const imageGenerationOutputSchema = z.object({ result: z.string() });
@@ -29,6 +33,16 @@ const imageGenerationOutputSchema = z.object({ result: z.string() });
  * interface accepted by both SDK versions.
  */
 export function imageGeneration(args: NeonImageGenerationArgs = {}) {
+	if (args.model === "gpt-image-1") {
+		throw new UnsupportedFunctionalityError({
+			functionality: "image generation with gpt-image-1",
+			message:
+				"OpenAI has deprecated `gpt-image-1`, so image generation with it " +
+				"fails on the Neon AI Gateway. Use `gpt-image-2`, which " +
+				"`neon.tools.imageGeneration()` uses when `model` is omitted.",
+		});
+	}
+
 	const type: "provider" = "provider";
 	const id: "openai.image_generation" = "openai.image_generation";
 	const isProviderExecuted: true = true;
@@ -36,7 +50,7 @@ export function imageGeneration(args: NeonImageGenerationArgs = {}) {
 	return {
 		type,
 		id,
-		args: { ...args },
+		args: { ...args, model: args.model ?? DEFAULT_IMAGE_MODEL },
 		inputSchema: imageGenerationInputSchema,
 		outputSchema: imageGenerationOutputSchema,
 		isProviderExecuted,

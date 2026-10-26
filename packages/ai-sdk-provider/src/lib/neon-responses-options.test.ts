@@ -99,6 +99,18 @@ describe("forceReasoning", () => {
 		});
 	});
 
+	it.each([
+		"gpt-6-astra",
+		"gpt-6-sol",
+		"gpt-6-luna",
+		"gpt-6-1-sol",
+		"databricks-gpt-6-sol",
+	])("is set for %s, which upstream does not match", (modelId) => {
+		// The shared model's detection matches a bare `gpt-5` prefix, so gpt-6
+		// would otherwise drop reasoningEffort and keep temperature and topP.
+		expect(openaiOptions(modelId)).toMatchObject({ forceReasoning: true });
+	});
+
 	it("treats undefined as unset", () => {
 		expect(
 			openaiOptions("databricks-gpt-5-2", { forceReasoning: undefined }),

@@ -18,6 +18,7 @@
 export const WRAPPED: ReadonlySet<string> = new Set([
 	// projects
 	"listProjects",
+	"countProjects",
 	"getProject",
 	"createProject",
 	"updateProject",
@@ -169,6 +170,7 @@ export const EXPECTED_OPERATIONS: ReadonlySet<string> = new Set([
 	"assignOrganizationVpcEndpoint",
 	"assignProjectVpcEndpoint",
 	"countProjectBranches",
+	"countProjects",
 	"createApiKey",
 	"createBranchNeonAuthNewUser",
 	"createCredential",

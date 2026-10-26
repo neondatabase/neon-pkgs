@@ -69,20 +69,24 @@ Which ids your branch serves is account-specific during the beta; `GET $NEON_AI_
 
 Upstream backends behind the gateway accept different subsets of the OpenAI-style parameters the AI SDK emits, and sending one an upstream rejects is a hard `400`. The provider drops those before the request and records a warning in `result.warnings`, so a call succeeds instead of failing on a parameter you passed in good faith.
 
-These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour and its warning wording are the AI SDK's rather than described here — but `getNeonModelCapabilities` still answers for those ids, and the `gpt-5` row below is what it reports rather than something this provider drops.
+These rules apply on the Anthropic Messages and Chat Completions routes. The Responses route (every `gpt-*` id) relies on the upstream OpenAI model's own stripping instead, so its behaviour and its warning wording are the AI SDK's rather than described here. `getNeonModelCapabilities` still answers for those ids, and the `gpt-5` and `gpt-6` rows below are what it reports rather than something this provider drops.
 
 | Models | Dropped |
 | --- | --- |
-| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, `claude-fable-5-1`) | `temperature`, `topP` |
+| Claude 4.7 and newer (`claude-opus-4-7`, `claude-opus-4-8`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5`, `claude-fable-5-1`, `claude-haiku-5-5`, `claude-sonnet-5-5`) | `temperature`, `topP` |
 | All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
-| `glm-5-2`, `glm-5-3-flash`, `inkling`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
+| `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `inkling`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
+| Grok, DeepSeek | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
 | `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
 | `gemini-3-6-flash` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
+| `gemini-3-7-flash`, `gemini-3-8-flash`, `gemini-4-argon` | `temperature`, `topP`, `frequencyPenalty`, `presencePenalty` |
 | Every other Gemini | nothing |
-| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5-pro` (reported only — Responses strips these upstream) | `temperature`, `topP` |
+| `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-5`, `gpt-5-5-pro`, `gpt-5-6-luna`, `gpt-5-6-sol`, `gpt-5-6-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-6-1-sol` (reported only; Responses strips these upstream) | `temperature`, `topP` |
+
+On the Responses API, the gateway accepts `temperature` and `topP` only when reasoning effort is `none`, so the `gpt-*` rows describe each model's default effort. `gpt-6-astra`, `gpt-6-1-sol`, `gpt-5`, and `gpt-5-5-pro` don't accept effort `none`, so they never accept either parameter. The upstream OpenAI model drops both for every `gpt-5*` and `gpt-6*` id, even when reasoning effort is `none`.
 
 **`temperature` on a Claude 5 model therefore has no effect.** That is the gateway's behaviour, not a provider choice; sending it returns `does not support the temperature parameter`. Steer those models with Anthropic's own effort control instead — note that this is `effort`, not the OpenAI-style `reasoningEffort`, which every Claude id drops:
 
@@ -104,7 +108,7 @@ getNeonModelCapabilities('gpt-6-astra').supportsTemperature; // false
 getNeonModelCapabilities('glm-5-2').supportsPenalties; // false
 ```
 
-**The rules are per model, not per family.** Two Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash` rejects `temperature` and `topP` outright, so reading a row for "Gemini" is not enough — check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions. `getNeonModelCapabilities('gpt-6-astra').supportsTemperature` is `false` because [neon.com/models.json](https://neon.com/models.json) lists `temperature: false` for that id; it is not a live gateway measurement.
+**The rules are per model, not per family.** Some Gemini ids reject penalties while their siblings accept them, and `gemini-3-6-flash`, `gemini-3-7-flash`, `gemini-3-8-flash`, and `gemini-4-argon` reject `temperature` and `topP` outright, so reading a row for "Gemini" is not enough; check the id. Every dropped-options table row was measured against the gateway rather than inherited from the upstream provider's own documentation, which disagrees in both directions.
 
 A model none of these rules match is left untouched, so a brand-new id gets the gateway's own error rather than a guess. That is also why the table can lag: an id added since the last release inherits the permissive default until someone measures it.
 
@@ -128,7 +132,34 @@ const { embeddings } = await embedMany({
 });
 ```
 
-Both models return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` ignores it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NeonEmbeddingModelId` autocompletes the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
+`qwen3-embedding-0-6b`, `gte-large-en`, and `bge-large-en` return 1024-dimensional vectors. `qwen3-embedding-0-6b` honors `providerOptions.neon.dimensions` for shorter vectors; `gte-large-en` and `bge-large-en` ignore it. The gateway accepts at most 150 inputs per request, so `embedMany()` splits larger lists into batches of 150. `NeonEmbeddingModelId` autocompletes the known ids; any other string is passed through to the gateway. `textEmbeddingModel()` is a deprecated alias.
+
+## Decisions
+
+`neon.decisionModel()` calls TypeSafe's System One decision models, such as Jev, on the gateway's `/typesafe/v1/systemone` endpoint with the same base URL and token. It works with AI SDK 7's `experimental_decide` and needs `ai@7.0.133` or newer; earlier 7.0 releases pass the decision state in a different shape.
+
+```ts
+import { neon } from "@neon/ai-sdk-provider";
+import { experimental_decide as decide } from "ai";
+
+const { answers } = await decide({
+  model: neon.decisionModel("typesafeai-jev-1-14-0"),
+  state: "I was charged twice this month.",
+  questions: {
+    billing: {
+      type: "boolean",
+      instructions: "Is the user asking about billing?",
+      criteria: { true: "Billing related", false: "Not billing" },
+    },
+  },
+});
+
+answers.billing; // { type: "boolean", probability: 0.97 }
+```
+
+A `boolean` question is sent as a System One `noul` question; `choice` and `score` questions are sent as they are. Probabilities and scores come back rounded to two decimals, and the per-answer `confidence` System One reports for `choice` and `score` is in `providerMetadata.neon.confidence`. State can be text or JSON; file parts throw `UnsupportedFunctionalityError`.
+
+System One models are rolling out to the gateway. `GET $NEON_AI_GATEWAY_BASE_URL/v1/models` lists the ones your branch serves, with `dialects: ["systemone"]`. `NeonDecisionModelId` accepts any string.
 
 ## Image generation
 
@@ -151,6 +182,8 @@ for await (const part of result.fullStream) {
   }
 }
 ```
+
+The image model defaults to `gpt-image-2`. Pass `model` to pick another one. `gpt-image-1` throws `UnsupportedFunctionalityError`, because OpenAI has deprecated it.
 
 ### Edit a generated image
 

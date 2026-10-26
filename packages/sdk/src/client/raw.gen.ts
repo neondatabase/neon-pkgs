@@ -12,6 +12,7 @@ import {
 	assignOrganizationVpcEndpoint as _assignOrganizationVpcEndpoint,
 	assignProjectVpcEndpoint as _assignProjectVpcEndpoint,
 	countProjectBranches as _countProjectBranches,
+	countProjects as _countProjects,
 	createApiKey as _createApiKey,
 	createBranchNeonAuthNewUser as _createBranchNeonAuthNewUser,
 	createCredential as _createCredential,
@@ -206,6 +207,7 @@ export const addProjectJwks = wrapRaw(_addProjectJwks);
 export const assignOrganizationVpcEndpoint = wrapRaw(_assignOrganizationVpcEndpoint);
 export const assignProjectVpcEndpoint = wrapRaw(_assignProjectVpcEndpoint);
 export const countProjectBranches = wrapRaw(_countProjectBranches);
+export const countProjects = wrapRaw(_countProjects);
 export const createApiKey = wrapRaw(_createApiKey);
 export const createBranchNeonAuthNewUser = wrapRaw(_createBranchNeonAuthNewUser);
 export const createCredential = wrapRaw(_createCredential);

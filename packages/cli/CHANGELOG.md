@@ -1,5 +1,68 @@
 # neon
 
+## 8.11.4
+
+### Patch Changes
+
+- eb65072: The standalone `neon` binaries now embed Node.js 22.23.2 instead of 22.21.1, which picks up the Node.js security fixes from January and June 2026.
+- da0467f: On Node.js older than 20.19, `neon` now exits with `neon requires Node.js 20.19 or newer (found <version>).` instead of crashing inside a dependency (`crypto is not defined`, `File is not defined`).
+
+## 8.11.3
+
+### Patch Changes
+
+- Updated dependencies [c745d8e]
+- Updated dependencies [d23ace5]
+  - @neon/sdk@7.5.0
+  - @neon/config@1.9.4
+  - @neon/config-runtime@1.10.3
+
+## 8.11.2
+
+### Patch Changes
+
+- 45de1d8: `neon functions new` and `neon functions templates list` validate registry files against the JSON Schemas published at neon.com, instead of a copy in the CLI.
+
+## 8.11.1
+
+### Patch Changes
+
+- bfa8a0e: `neon functions new` now saves a template's dependencies at the exact version the template pins (`-E`), instead of the package manager's default caret range. The printed install command does the same.
+
+## 8.11.0
+
+### Minor Changes
+
+- 93b8226: Add `neon functions new [template]` and `neon functions templates list`. Templates come from the Neon Function Registry (`registry/` in neondatabase/examples): the index is read from neon.com, falling back to GitHub, and template files are read from GitHub. The scaffolded functions are declared in `neon.ts`. Set `NEON_FUNCTION_REGISTRY_DIR` to use a local copy, or `NEON_FUNCTION_REGISTRY_URL` to use another index.
+
+## 8.10.3
+
+### Patch Changes
+
+- 59f8325: `neon docs search` and `neon ask` send their caller headers as `x-caller-*`. The Neon Functions proxy dropped the earlier `x-neon-*` names, so the service never saw the CLI as the caller, and `--no-analytics` did not stop a search from being recorded. `neon ask --no-analytics` now also asks the service to record nothing, including the prompt and answer.
+
+## 8.10.2
+
+### Patch Changes
+
+- 9aac61e: `neon docs search` prints each result as a "Title › Section" line cut to the terminal width, with the full URL under it, instead of a three-column table that wrapped in narrow terminals. JSON and YAML output are unchanged.
+
+## 8.10.1
+
+### Patch Changes
+
+- 7398b8d: `neon docs search` tells the Neon search service it is the CLI, with the CLI version and the detected coding agent, so searches can be counted by caller. With `--no-analytics` it asks the service to record nothing.
+
+## 8.10.0
+
+### Minor Changes
+
+- f1b2376: Add `neon docs search <query>` to search neon.com (docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog) from the terminal, with `--category` and `--limit`. It needs no Neon login.
+
+### Patch Changes
+
+- f3596ca: `neon login --keyring` on Windows no longer fails after the browser step. OAuth sessions now store only the fields the CLI reads, which fits Windows Credential Manager's 1,280-character limit, and a credential that still doesn't fit fails before anything is written with a message that names the command to run instead.
+
 ## 8.9.0
 
 ### Minor Changes

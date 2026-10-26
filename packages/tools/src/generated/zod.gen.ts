@@ -233,6 +233,10 @@ export const zAcceptProjectTransferRequestSatisfiesPlanError = z.strictObject({
     }))
 });
 
+export const zProjectsCountResponse = z.strictObject({
+    count: z.int().gte(0)
+});
+
 export const zProjectPermission = z.strictObject({
     id: z.string(),
     granted_to_email: z.email().min(1).max(256),
@@ -2505,6 +2509,10 @@ export const zListProjectsQuery = z.strictObject({
 });
 
 export const zCreateProjectBody = zProjectCreateRequest;
+
+export const zCountProjectsQuery = z.strictObject({
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+});
 
 export const zListSharedProjectsQuery = z.strictObject({
     cursor: z.string().optional(),

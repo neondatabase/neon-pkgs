@@ -220,7 +220,7 @@ function padEndWidth(s: string, width: number): string {
 	return pad > 0 ? clipped + " ".repeat(pad) : clipped;
 }
 
-function truncateTo(s: string, max: number): string {
+export function truncateTo(s: string, max: number): string {
 	if (max <= 0) {
 		return "";
 	}

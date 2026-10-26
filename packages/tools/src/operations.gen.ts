@@ -18,6 +18,7 @@ export const operationIds = [
 	"assignOrganizationVPCEndpoint",
 	"assignProjectVPCEndpoint",
 	"countProjectBranches",
+	"countProjects",
 	"createApiKey",
 	"createBranchNeonAuthNewUser",
 	"createCredential",
@@ -497,6 +498,35 @@ export const operationFactories = {
 					raw.countProjectBranches({
 			path: optionalGroup({ "project_id": input["project_id"] }, true),
 			query: optionalGroup({ "search": input["search"] }, false),
+			client,
+			signal,
+			throwOnError: true,
+		}),
+			}),
+			client,
+		),
+	"countProjects": (client: Client) =>
+		bindOperation(
+			defineOperation({
+				operationId: "countProjects",
+				id: "count_projects",
+				title: "Retrieve projects count",
+				description: "Retrieves the number of active projects you can access in the specified organization, without paging through the list of projects.",
+				inputSchema: z.strictObject({
+	"org_id": zod.zCountProjectsQuery.shape["org_id"].optional(),
+}),
+				annotations: { readOnlyHint: true, openWorldHint: false },
+				requiresApproval: false,
+				metadata: {
+					method: "GET",
+					path: "/projects/count",
+					stability: "beta",
+					deprecated: false,
+					tags: ["Project"],
+				},
+				invoke: (client, input, signal) =>
+					raw.countProjects({
+			query: optionalGroup({ "org_id": input["org_id"] }, false),
 			client,
 			signal,
 			throwOnError: true,

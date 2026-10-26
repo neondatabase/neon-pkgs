@@ -68,19 +68,54 @@ export interface NeonModelCapabilities {
 const GEMINI_NO_PENALTIES = new Set([
 	"gemini-3-5-flash-lite",
 	"gemini-3-6-flash",
+	"gemini-3-7-flash",
+	"gemini-3-8-flash",
+	"gemini-4-argon",
 ]);
 
 /** Gemini models that reject `temperature` and `topP` outright. */
-const GEMINI_NO_SAMPLING = new Set(["gemini-3-6-flash"]);
+const GEMINI_NO_SAMPLING = new Set([
+	"gemini-3-6-flash",
+	"gemini-3-7-flash",
+	"gemini-3-8-flash",
+	"gemini-4-argon",
+]);
 
 /**
  * GPT-5 ids that reject `temperature` despite carrying a minor version.
  *
  * The version rule below reads `gpt-5-5-pro` as 5.5 and concludes it takes
  * sampling parameters. It does not — the Responses API answers
- * `Unsupported parameter: temperature`.
+ * `Unsupported parameter: temperature`. Measured the same for `top_p`, and for
+ * gpt-5.5 and the gpt-5.6 family at their default reasoning effort.
+ *
+ * The Responses API accepts `temperature` and `top_p` only when reasoning effort
+ * is `none`, so these values describe each model's default effort. gpt-5.1
+ * through gpt-5.4 default to `none` and accept both; with effort `low` they
+ * reject them too. gpt-5.5 and gpt-5.6 accept both when effort is `none`.
  */
-const GPT5_NO_SAMPLING = new Set(["gpt-5-5-pro"]);
+const GPT5_NO_SAMPLING = new Set([
+	"gpt-5-5",
+	"gpt-5-5-pro",
+	"gpt-5-6-luna",
+	"gpt-5-6-sol",
+	"gpt-5-6-terra",
+]);
+
+/**
+ * GPT-6 ids that reject `temperature` and `top_p` on the Responses API at their
+ * default reasoning effort
+ * (`Unsupported parameter: 'temperature' is not supported with this model`).
+ * gpt-6-sol and gpt-6-luna accept both when effort is `none`; gpt-6-astra and
+ * gpt-6-1-sol reject effort `none`, so they never accept them.
+ * Exact ids: a future gpt-6-* is unmeasured.
+ */
+const GPT6_NO_SAMPLING = new Set([
+	"gpt-6-1-sol",
+	"gpt-6-astra",
+	"gpt-6-luna",
+	"gpt-6-sol",
+]);
 
 /**
  * The gateway accepts an optional `databricks-` prefix on any id, so strip it
@@ -173,10 +208,10 @@ export function getNeonModelCapabilities(
 	// Newer Gemini models are stricter, and not in a way the id predicts: the
 	// gateway rejects penalties on `gemini-3-5-flash-lite` while accepting them
 	// on `gemini-3-1-flash-lite`, so neither the version nor the `-lite` suffix
-	// is the rule. `gemini-3-6-flash` refuses temperature and topP outright
-	// ("does not support the temperature parameter"). Both are listed by id
-	// because that is what was measured; a new Gemini model inherits the
-	// permissive default until someone measures it.
+	// is the rule. The `GEMINI_NO_SAMPLING` ids refuse temperature and topP
+	// outright ("does not support the temperature parameter"). Both sets above
+	// are listed by id because that is what was measured; a new Gemini model
+	// inherits the permissive default until someone measures it.
 	if (id.includes("gemini")) {
 		const canonical = canonicalId(id);
 		const acceptsSampling = !GEMINI_NO_SAMPLING.has(canonical);
@@ -212,13 +247,12 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	// Catalog `temperature: false` on gpt-6-astra; the gpt-5 minor-version rule
-	// does not match gpt-6. Exact id: a future gpt-6-* is unmeasured.
-	if (canonicalId(id) === "gpt-6-astra") {
+	// The gpt-5 minor-version rule does not match gpt-6.
+	if (GPT6_NO_SAMPLING.has(canonicalId(id))) {
 		return {
 			family: "openai",
 			supportsTemperature: false,
-			supportsTopP: true,
+			supportsTopP: false,
 			temperatureTopPMutuallyExclusive: false,
 			supportsPenalties: true,
 			supportsSeed: true,
@@ -264,7 +298,13 @@ export function getNeonModelCapabilities(
 		};
 	}
 
-	if (id.includes("glm") || id.includes("inkling") || id.includes("kimi")) {
+	if (
+		id.includes("glm") ||
+		id.includes("inkling") ||
+		id.includes("kimi") ||
+		id.includes("grok") ||
+		id.includes("deepseek")
+	) {
 		return { family: "other", ...PERMISSIVE, supportsPenalties: false };
 	}
 

@@ -56,7 +56,9 @@ import {
 	isConfigAdd,
 	isConfigInit,
 	isCurrentBranchProbe,
+	isDocsCommand,
 	isFeedbackCommand,
+	isFunctionsTemplateCommand,
 	isGitLocalCommand,
 	isInspectDbUrl,
 	isMcpCommand,
@@ -638,6 +640,10 @@ export const ensureAuth = async (
 		return;
 	}
 
+	if (isFunctionsTemplateCommand(props)) {
+		return;
+	}
+
 	// `profile` reads and edits credential files on disk. Authenticating first would mean
 	// a browser login just to list profiles, and would make a lapsed profile unremovable.
 	if (isProfileCommand(props)) {
@@ -676,7 +682,11 @@ export const ensureAuth = async (
 		return;
 	}
 
-	if (isAskCommand(props) || isFeedbackCommand(props)) {
+	if (
+		isAskCommand(props) ||
+		isFeedbackCommand(props) ||
+		isDocsCommand(props)
+	) {
 		return;
 	}
 

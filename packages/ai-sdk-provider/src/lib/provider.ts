@@ -21,6 +21,7 @@ import {
 	type ProviderV3,
 } from "@ai-sdk/provider";
 import {
+	createJsonErrorResponseHandler,
 	type FetchFunction,
 	generateId,
 	loadApiKey,
@@ -32,6 +33,10 @@ import { z } from "zod/v4";
 import { NeonAnthropicLanguageModel } from "./neon-anthropic-language-model.js";
 import { NeonChatLanguageModel } from "./neon-chat-language-model.js";
 import type { NeonChatModelId } from "./neon-chat-options.js";
+import {
+	NeonDecisionModel,
+	type NeonDecisionModelId,
+} from "./neon-decision-model.js";
 import {
 	NEON_MAX_EMBEDDINGS_PER_CALL,
 	type NeonEmbeddingModelId,
@@ -138,6 +143,12 @@ export interface NeonProvider extends ProviderV3 {
 
 	/** @deprecated Use `embeddingModel` instead. */
 	textEmbeddingModel(modelId: NeonEmbeddingModelId): EmbeddingModelV3;
+
+	/**
+	 * Creates a Neon AI Gateway System One decision model for AI SDK 7's
+	 * `experimental_decide` (`ai@7.0.133` and newer).
+	 */
+	decisionModel(modelId: NeonDecisionModelId): NeonDecisionModel;
 }
 
 export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
@@ -236,6 +247,19 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 			maxEmbeddingsPerCall: NEON_MAX_EMBEDDINGS_PER_CALL,
 		});
 
+	const createDecisionModel = (modelId: NeonDecisionModelId) =>
+		new NeonDecisionModel(modelId, {
+			provider: "neon.decision",
+			url: () => `${getHost()}/typesafe/v1/systemone`,
+			headers: getHeaders,
+			fetch: wrapFetchWithGatewayErrorNormalization(
+				options.fetch,
+				"openai",
+			),
+			failedResponseHandler:
+				createJsonErrorResponseHandler(neonErrorStructure),
+		});
+
 	const createLanguageModel = (modelId: NeonChatModelId): LanguageModelV3 => {
 		switch (getNeonModelRoute(modelId)) {
 			case "anthropic":
@@ -256,6 +280,7 @@ export function createNeon(options: NeonProviderSettings = {}): NeonProvider {
 
 	provider.embeddingModel = createEmbeddingModel;
 	provider.textEmbeddingModel = createEmbeddingModel;
+	provider.decisionModel = createDecisionModel;
 	provider.imageModel = (modelId: string) => {
 		throw new NoSuchModelError({ modelId, modelType: "imageModel" });
 	};

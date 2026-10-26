@@ -1,4 +1,4 @@
-import { AuthServerUnavailableError } from "./errors";
+import { AuthServerUnavailableError, OAuthConfigError } from "./errors";
 import type { AuthResult, Verifier } from "./verifier";
 
 /** Options shared by every bearer guard. */
@@ -53,6 +53,7 @@ export type BearerGuard = (request: Request) => Promise<AuthResult | Response>;
  * This is what `resourceMetadataUrl: true` puts in `WWW-Authenticate` challenges.
  *
  * @param resource The protected resource's absolute URL.
+ * @returns The metadata URL.
  * @throws {TypeError} If `resource` is not an absolute URL.
  */
 export function protectedResourceMetadataUrl(resource: string): string {
@@ -75,6 +76,7 @@ export function protectedResourceMetadataUrl(resource: string): string {
  * @param audience The `aud` the token must carry.
  * @param opts Required scopes, `onError` and `resourceMetadataUrl`.
  * @returns A guard that never throws.
+ * @throws {OAuthConfigError} If `opts.resourceMetadataUrl` is `true` and `audience` is not an absolute URL.
  *
  * @example
  * ```ts
@@ -98,6 +100,11 @@ export function createBearerGuard(
 	opts: BearerAuthOptions & { resourceMetadataUrl?: string | true },
 ): BearerGuard {
 	const required = opts.requiredScopes ?? [];
+	if (opts.resourceMetadataUrl === true && !URL.canParse(audience)) {
+		throw new OAuthConfigError(
+			`resourceMetadataUrl: true derives the metadata URL from the audience, which must then be an absolute URL, got "${audience}".`,
+		);
+	}
 	const metadataUrl =
 		opts.resourceMetadataUrl === true
 			? protectedResourceMetadataUrl(audience)

@@ -18,7 +18,7 @@ import {
 	setContext,
 	updateContextFile,
 } from "../context.js";
-import { isCi } from "../env.js";
+import { isInteractiveTerminal } from "../env.js";
 import { log } from "../log.js";
 import { hasNeonConfigFile, projectDir } from "../project.js";
 import type { CommonProps } from "../types.js";
@@ -71,8 +71,7 @@ type Inputs = {
 	branch?: string;
 };
 
-const canPromptInteractively = (): boolean =>
-	!isCi() && Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
+const canPromptInteractively = (): boolean => isInteractiveTerminal();
 
 const nonInteractiveLinkCommands = (): string[] => {
 	const cli = getCliName();

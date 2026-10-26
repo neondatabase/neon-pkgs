@@ -7,8 +7,9 @@ import type { AddressInfo } from "node:net";
 
 import express from "express";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	type AuthSource,
 	authenticate,
 	clientMetadataResponse,
 	routeClientMetadata,
@@ -31,7 +32,7 @@ import {
 import { nodeBearerAuth, nodeClientMetadata, toNodeHandler } from "./node";
 import type { FakeAuthServer } from "./testing/fake-auth-server";
 import { startFakeAuthServer } from "./testing/fake-auth-server";
-import { createVerifier } from "./verify";
+import { createVerifier, OAuthConfigError } from "./verify";
 
 const API = "http://api.test/api";
 
@@ -307,6 +308,27 @@ describe("express adapter", () => {
 			).json(),
 		).toEqual({ sub: "user-1" });
 	});
+
+	it("sets req.authResult to the same AuthResult as req.auth", async () => {
+		const app = express();
+		app.get(
+			"/api",
+			expressBearerAuth(oauth(), { audience: API }),
+			(req, res) => {
+				const r = req as AuthedRequest;
+				void res.json({
+					same: r.authResult === r.auth,
+					sub: r.authResult.sub,
+				});
+			},
+		);
+		const url = await listen(app);
+		expect(
+			await (
+				await fetch(`${url}/api`, { headers: await apiBearer() })
+			).json(),
+		).toEqual({ same: true, sub: "user-1" });
+	});
 });
 
 describe("next adapter", () => {
@@ -397,6 +419,93 @@ describe("verifier-only source (createVerifier from @neon/oauth/verify)", () => 
 		expect(() => verifier().requireBearerAuth()).toThrow(
 			/audience.*resource/,
 		);
+	});
+
+	it.each([
+		["honoBearerAuth", () => honoBearerAuth(verifier())],
+		["expressBearerAuth", () => expressBearerAuth(verifier())],
+		["nodeBearerAuth", () => nodeBearerAuth(verifier())],
+		["withAuth", () => withAuth(verifier(), () => new Response())],
+	])("%s throws OAuthConfigError when created without an audience", (_n, create) => {
+		expect(create).toThrow(OAuthConfigError);
+	});
+
+	it("creating a guard does no network I/O", () => {
+		const spy = vi.spyOn(globalThis, "fetch");
+		try {
+			const v = createVerifier({ baseUrl: fake.issuer, resource: API });
+			honoBearerAuth(v);
+			expressBearerAuth(v);
+			nodeBearerAuth(v);
+			withAuth(v, () => new Response());
+			expect(spy).not.toHaveBeenCalled();
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("throws OAuthConfigError for resourceMetadataUrl: true with a non-URL audience", () => {
+		expect(() =>
+			nodeBearerAuth(verifier(), {
+				audience: "not a url",
+				resourceMetadataUrl: true,
+			}),
+		).toThrow(OAuthConfigError);
+	});
+
+	type Send = (headers: Record<string, string>) => Promise<Response>;
+	it.each<[string, (src: AuthSource) => Promise<Send>]>([
+		[
+			"nodeBearerAuth",
+			async (src) => {
+				const mw = nodeBearerAuth(src, { audience: API });
+				const url = await listen((req, res) =>
+					mw(req, res, () => res.end("ok")),
+				);
+				return (headers) => fetch(url, { headers });
+			},
+		],
+		[
+			"expressBearerAuth",
+			async (src) => {
+				const app = express();
+				app.get(
+					"/",
+					expressBearerAuth(src, { audience: API }),
+					(_req, res) => void res.send("ok"),
+				);
+				const url = await listen(app);
+				return (headers) => fetch(url, { headers });
+			},
+		],
+		[
+			"honoBearerAuth",
+			async (src) => {
+				const app = new Hono();
+				app.get("/", honoBearerAuth(src, { audience: API }), (c) =>
+					c.text("ok"),
+				);
+				return async (headers) =>
+					app.request("http://api.test/", { headers });
+			},
+		],
+		[
+			"withAuth",
+			async (src) => {
+				const GET = withAuth(src, () => new Response("ok"), {
+					audience: API,
+				});
+				return async (headers) =>
+					GET(new Request(API, { headers }), undefined);
+			},
+		],
+	])("%s builds the guard once for many requests", async (_name, make) => {
+		const requireBearerAuth = vi.fn(verifier().requireBearerAuth);
+		const send = await make({ requireBearerAuth });
+		for (let i = 0; i < 2; i++) {
+			expect((await send(await apiBearer())).status).toBe(200);
+		}
+		expect(requireBearerAuth).toHaveBeenCalledTimes(1);
 	});
 });
 

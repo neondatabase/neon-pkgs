@@ -3,6 +3,8 @@
  * and client metadata. Route handlers are already Web `Request` to `Response`, so these are thin.
  * Server Components, Server Actions and middleware are not covered.
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
 import type {
@@ -14,11 +16,11 @@ import type {
 	OAuthRouteOptions,
 } from "./adapter";
 import {
-	authenticate,
 	clientMetadataResponse,
 	resolveBasePath,
 	routeOAuthClient,
 } from "./adapter";
+import { createAuthenticator } from "./verify/authenticate";
 
 /**
  * A route handler that runs only for authenticated requests.
@@ -44,8 +46,9 @@ export type AuthedHandler<C> = (
  * @param handler Runs only for authenticated requests; see {@link AuthedHandler}.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns A route handler `(request, routeContext) => Promise<Response>` to export as `GET`, `POST`, ...
- * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
- *   `resource` is available. The returned promise rejects.
+ * @throws {OAuthConfigError} When the handler is created, if neither `opts.audience` nor a configured
+ *   `resource` is available. It also throws if `opts.resourceMetadataUrl` is `true` and the
+ *   audience is not an absolute URL.
  *
  * @example
  * ```ts
@@ -71,8 +74,9 @@ export function withAuth<C = unknown>(
 	handler: AuthedHandler<C>,
 	opts: OAuthBearerOptions = {},
 ): (request: Request, routeContext: C) => Promise<Response> {
+	const authenticate = createAuthenticator(source, opts);
 	return async (request, routeContext) => {
-		const outcome = await authenticate(source, request, opts);
+		const outcome = await authenticate(request);
 		return outcome.ok
 			? handler(request, outcome.auth, routeContext)
 			: outcome.response;

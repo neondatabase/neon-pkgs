@@ -5,13 +5,15 @@
  * request and response to and from these, and does not reimplement routing or challenges. Use
  * them directly for runtimes with no adapter (Bun, Deno, Workers, a plain fetch handler).
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
 
 import type { OAuthClient } from "./client";
 import type { ClientMetadataDocument } from "./client/metadata-document";
 import type { OAuth } from "./index";
-import type { McpAuth } from "./mcp/resource-server";
+import type { McpAuth } from "./mcp/mcp-auth";
 import {
 	type AuthOutcome,
 	authenticateWith,
@@ -55,7 +57,9 @@ export type {
  *   unavailable) or 500 (unexpected failure) `Response` to send as-is. A throwing `opts.onError`
  *   is ignored.
  * @throws {OAuthConfigError} If neither `opts.audience` nor a configured `resource` is available
- *   (verifier and `createOAuth()` sources only).
+ *   (verifier and `createOAuth()` sources only), or if `opts.resourceMetadataUrl` is `true` and the
+ *   audience is not an absolute URL. The returned promise rejects. Each call builds its
+ *   guard from `opts`; the framework guards build theirs once, when the middleware is created.
  * @see {@link routeOAuthClient} for the sign-in routes.
  *
  * @example

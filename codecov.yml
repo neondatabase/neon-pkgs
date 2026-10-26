@@ -1,0 +1,86 @@
+# CI only runs the tests of packages a pull request affects, and uploads coverage for
+# just those, one upload per package carrying only that package's flag (the directory
+# name under packages/). Carryforward keeps every other flag at its last result on the
+# base branch instead of reading as a coverage drop; an upload tagged with several flags
+# is a single session and would let carryforward cleanup delete the others' carried data.
+#
+# Each package directory needs an entry below; add one when creating a package.
+flag_management:
+    default_rules:
+        carryforward: true
+    individual_flags:
+        - name: ai-sdk-provider
+          paths:
+              - packages/ai-sdk-provider/
+        - name: auth
+          paths:
+              - packages/auth/
+        - name: cli
+          paths:
+              - packages/cli/
+        - name: config
+          paths:
+              - packages/config/
+        - name: config-runtime
+          paths:
+              - packages/config-runtime/
+        - name: effect
+          paths:
+              - packages/effect/
+        - name: env
+          paths:
+              - packages/env/
+        - name: functions
+          paths:
+              - packages/functions/
+        - name: get-db
+          paths:
+              - packages/get-db/
+        - name: neon-js
+          paths:
+              - packages/neon-js/
+        - name: neon-new
+          paths:
+              - packages/neon-new/
+        - name: neonctl
+          paths:
+              - packages/neonctl/
+        - name: neondb
+          paths:
+              - packages/neondb/
+        - name: oauth
+          paths:
+              - packages/oauth/
+        - name: postgrest-js
+          paths:
+              - packages/postgrest-js/
+        - name: realtime
+          paths:
+              - packages/realtime/
+        - name: realtime-drizzle
+          paths:
+              - packages/realtime-drizzle/
+        - name: realtime-kysely
+          paths:
+              - packages/realtime-kysely/
+        - name: realtime-react
+          paths:
+              - packages/realtime-react/
+        - name: realtime-tanstack
+          paths:
+              - packages/realtime-tanstack/
+        - name: sdk
+          paths:
+              - packages/sdk/
+        - name: tools
+          paths:
+              - packages/tools/
+        - name: vite-plugin-db
+          paths:
+              - packages/vite-plugin-db/
+        - name: vite-plugin-neon-new
+          paths:
+              - packages/vite-plugin-neon-new/
+        - name: vite-plugin-postgres
+          paths:
+              - packages/vite-plugin-postgres/

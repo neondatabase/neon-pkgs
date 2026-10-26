@@ -2,6 +2,8 @@
  * `@neon/oauth/hono` — Hono middleware for sign-in, bearer-token guards and client metadata.
  * Hono is imported for types only; the app provides it at runtime.
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
 import type { MiddlewareHandler } from "hono";
@@ -14,11 +16,11 @@ import type {
 	OAuthRouteOptions,
 } from "./adapter";
 import {
-	authenticate,
 	resolveBasePath,
 	routeClientMetadata,
 	routeOAuthClient,
 } from "./adapter";
+import { createAuthenticator } from "./verify/authenticate";
 
 /** Hono context variables set by {@link honoBearerAuth}. Create the app as `new Hono<AuthVariables>()` to read `c.get("auth")` in handlers. */
 export type AuthVariables = { Variables: { auth: AuthResult } };
@@ -33,8 +35,9 @@ export type AuthVariables = { Variables: { auth: AuthResult } };
  * @param source A `createOAuth()` instance or `createVerifier()` verifier.
  * @param opts Audience, required scopes, `resourceMetadataUrl` and `onError`. See {@link OAuthBearerOptions}.
  * @returns Middleware typed with {@link AuthVariables}.
- * @throws {OAuthConfigError} Every request fails with it if neither `opts.audience` nor a configured
- *   `resource` is available. Hono passes it to its error handler.
+ * @throws {OAuthConfigError} When the middleware is created, if neither `opts.audience` nor a
+ *   configured `resource` is available. It also throws if `opts.resourceMetadataUrl` is `true` and the
+ *   audience is not an absolute URL.
  * @see {@link honoOAuthClient} for the sign-in routes.
  *
  * @example
@@ -57,8 +60,9 @@ export function honoBearerAuth(
 	source: AuthSource,
 	opts: OAuthBearerOptions = {},
 ): MiddlewareHandler<AuthVariables> {
+	const authenticate = createAuthenticator(source, opts);
 	return async (c, next) => {
-		const outcome = await authenticate(source, c.req.raw, opts);
+		const outcome = await authenticate(c.req.raw);
 		if (!outcome.ok) return outcome.response;
 		c.set("auth", outcome.auth);
 		await next();
@@ -111,6 +115,7 @@ export function honoOAuthClient(
  * `client_id`; other requests fall through.
  *
  * @param doc The result of `createClientMetadataDocument`.
+ * @returns Middleware to mount with `app.use`.
  * @see {@link routeClientMetadata} for the framework-agnostic form.
  *
  * @example

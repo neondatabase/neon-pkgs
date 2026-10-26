@@ -1005,6 +1005,18 @@ neon feedback --message "The branch docs were unclear" --output json
 
 Default table output is `Feedback received. Thank you!`. `--output json` and `--output yaml` print `{ "received": true }`. Messages are limited to 10,000 characters. Do not include passwords, API keys, connection strings, or other secrets.
 
+## Search neon.com (`docs search`)
+
+`neon docs search <query>` searches neon.com: the docs, API reference, PostgreSQL tutorial, guides, FAQs, changelog, and blog. It does not log in and does not use your Neon account. It uses the same search as the neon.com search box. The search service records the query, the CLI version, and the detected coding agent; `--no-analytics` turns that off.
+
+```bash
+neon docs search "reset a branch"
+neon docs search "create branch" --category api --category docs
+neon docs search "pg_dump" --limit 5 --output json
+```
+
+`--category` limits results to `docs`, `api`, `postgresql`, `guides`, `faqs`, `blog`, or `changelog`; repeat it for more than one. `--limit` is 1 to 40, default 10. Default output is one block per result: `Title › Section` on one line, cut to the terminal width, and the full URL under it. `--output json` and `--output yaml` print an array of hits with `title`, `url`, `category`, `breadcrumb`, `heading`, and `excerpt`, in rank order. No match prints `No results for "<query>".` and exits 0 (`[]` in JSON).
+
 ## Install the Neon plugin (`plugins`)
 
 `neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
@@ -1078,6 +1090,28 @@ neon snapshots schedule set --branch main --schedule '[{"frequency":"weekly","da
 ```
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
+## Function templates (`functions new`)
+
+`neon functions new <template>` fetches a template from the Neon Function Registry, writes its modules into `functions/<slug>/` next to `neon.ts`, and declares the result in `neon.ts` (creating it when missing), the same way `config add function` does.
+
+```bash
+neon functions templates list
+neon functions new
+neon functions new basic
+neon functions new basic --slug hello --no-add-to-config
+neon functions new <template> --operation <id> --operation <id> --install
+```
+
+Without a template, a terminal asks which one to use; anything else exits with the available IDs. Like `bootstrap`, it asks once whether to install the template's dependencies (plus `@neon/config` and `@neon/env` when it creates `neon.ts`): `--yes` installs, `--no-install` skips, and a run without a terminal leaves the install command under `Next:`.
+
+A template's `layout` decides what you get. `router` writes one module per operation plus a generated `index.ts` that dispatches on the URL path, and declares one function. `separate` declares each operation as its own function under the slug the template gives it. Without `--operation` or `--all-operations`, a TTY asks which operations to include and anything else uses the template's recommended ones.
+
+Variables a template needs are declared on each function in `neon.ts` (`env: { API_KEY: process.env.API_KEY! }`) and added, without values, to `.env.example` next to it. Values are never written to `.env` or `.env.local` for you: a blank placeholder there would deploy as an empty string and delete the live value. Put the real value in the file `env pull` uses and deploy with `neon config apply --env .env.local`. `neon dev` reads function env from your shell, so export it there as well.
+
+Nothing is written until every check passes: a file that already exists with different contents needs `--force`, and a slug `neon.ts` already declares needs `--slug`, `--force`, or `--no-add-to-config`. A `separate` template sets its own slugs, so `--slug` only changes its directory; remove the existing declarations from `neon.ts`, or use `--force` or `--no-add-to-config`.
+
+The registry lives in [`registry/`](https://github.com/neondatabase/examples/tree/main/registry) in `neondatabase/examples`. The CLI reads the index from `https://neon.com/functions/registry/registry.json`, which serves `main` through a CDN cache, and falls back to raw GitHub when neon.com is unreachable. Template files are always read from raw GitHub. Index and template JSON are validated against the schemas at `https://neon.com/functions/registry/schemas/` (same GitHub fallback). Set `NEON_FUNCTION_REGISTRY_DIR` to a local checkout to try templates before they are merged, or `NEON_FUNCTION_REGISTRY_URL` to read an index from somewhere else.
 
 ## Function triggers (`triggers`)
 
@@ -1531,7 +1565,7 @@ Global options are supported with any Neon CLI command.
 
 - <a id="analytics"></a>`--analytics`
 
-  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt`. When the CLI fails on an internal bug (a JavaScript `TypeError`, `ReferenceError`, `RangeError`, or `SyntaxError`), it also sends that error to Neon's Sentry: the error type, the message only when it is a standard JavaScript message that names nothing but code (any other message is replaced), the stack trace with file paths cut to the package (`neon/dist/...`), the CLI and Node.js versions, and whether it ran in CI or a coding agent. To opt-out of analytics data collection and error reports, specify `--no-analytics` or `--analytics false`.
+  Analytics are enabled by default to gather information about the CLI commands and options that are used by our customers. This data collection assists in offering support, and allows for a better understanding of typical usage patterns so that we can improve user experience. Neon does not collect user-defined data, such as project IDs or command payloads, except the question passed to `neon ask --prompt` and the query passed to `neon docs search`. The Neon search service records each `neon docs search` query with the CLI version and the detected coding agent; with `--no-analytics` it records nothing. When the CLI fails on an internal bug (a JavaScript `TypeError`, `ReferenceError`, `RangeError`, or `SyntaxError`), it also sends that error to Neon's Sentry: the error type, the message only when it is a standard JavaScript message that names nothing but code (any other message is replaced), the stack trace with file paths cut to the package (`neon/dist/...`), the CLI and Node.js versions, and whether it ran in CI or a coding agent. To opt-out of analytics data collection and error reports, specify `--no-analytics` or `--analytics false`.
 
 - <a id="version"></a>`-v, --version`
 

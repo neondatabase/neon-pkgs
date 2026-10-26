@@ -53,6 +53,13 @@ export const toolFactories = {
 					input.limit,
 				),
 		}),
+	"projects.count": (options) =>
+		fromGenerated(options, {
+			id: "projects.count",
+			generated: "countProjects",
+			run: (neon, input, signal) =>
+				neon.projects.count({ org_id: input.org_id }, { signal }),
+		}),
 	"projects.get": (options) =>
 		fromGenerated(options, {
 			id: "projects.get",

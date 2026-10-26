@@ -3,13 +3,15 @@
  * protected-resource metadata. Route handlers are already Web `Request` to `Response`, so these
  * are thin.
  *
+ * **Stability: beta.** Minor versions may include breaking changes.
+ *
  * @module
  */
-import { authenticateWith } from "../verify/authenticate";
+import { createAuthenticator } from "../verify/authenticate";
 import type { BearerAuthOptions } from "../verify/bearer";
 import type { AuthResult } from "../verify/verifier";
-import type { McpAuth } from "./resource-server";
-import { routeMcpMetadata } from "./resource-server";
+import type { McpAuth } from "./mcp-auth";
+import { routeMcpMetadata } from "./mcp-auth";
 
 /**
  * An MCP route handler that runs only for authenticated requests.
@@ -28,7 +30,7 @@ export type AuthedHandler<C> = (
  *
  * A missing or invalid token gets the guard's error response (401 or 403 with a challenge, 503, or
  * 500; see `BearerGuard`); otherwise `handler` runs with the verified
- * {@link AuthResult}. Next route handlers have no middleware, hence a wrapper. It does not serve the
+ * {@link AuthResult}. Next.js route handlers have no middleware, hence a wrapper. It does not serve the
  * metadata routes: add {@link createMetadataHandlers} for those. Create `auth` once in a shared
  * module (for example `lib/mcp-auth.ts`) and import it in both route files. The example's
  * Web-standard transport needs `@modelcontextprotocol/sdk` 1.25.0 or later.
@@ -63,8 +65,9 @@ export function withMcpAuth<C = unknown>(
 	handler: AuthedHandler<C>,
 	opts: BearerAuthOptions = {},
 ): (request: Request, routeContext: C) => Promise<Response> {
+	const authenticate = createAuthenticator(auth, opts);
 	return async (request, routeContext) => {
-		const outcome = await authenticateWith(auth, request, opts);
+		const outcome = await authenticate(request);
 		return outcome.ok
 			? handler(request, outcome.auth, routeContext)
 			: outcome.response;
