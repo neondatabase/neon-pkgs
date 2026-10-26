@@ -1,0 +1,46 @@
+{
+	"name": "convex-to-postgres",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Migrate a Convex deployment to Postgres: generate DDL from a Convex schema and transform a `convex export` snapshot into Postgres.",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"tsc": "tsc"
+	},
+	"dependencies": {
+		"fflate": "^0.8.2",
+		"jiti": "^2.7.0",
+		"pg": "^8.20.0"
+	},
+	"devDependencies": {
+		"@testcontainers/postgresql": "^11.14.0",
+		"@types/node": "catalog:",
+		"@types/pg": "^8.11.10",
+		"@vitest/coverage-v8": "catalog:",
+		"convex": "^1.47.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	}
+}
