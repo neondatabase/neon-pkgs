@@ -3,6 +3,9 @@ packages:
     # Private, never published, bundled into their consumers. Kept out of
     # `packages/` so that folder means exactly one thing: packages we ship.
     - "internals/*"
+    # Private, never published developer tooling (migration helpers, etc.).
+    # Kept out of `packages/` so that folder means exactly one thing: packages we ship.
+    - "tools/*"
     # Test-only, never published. Same reason.
     - "tests/e2e-harness"
 

@@ -1,0 +1,10 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"include": [
+		"src",
+		"integration",
+		"vitest.config.ts",
+		"vitest.integration.config.ts",
+		"tsdown.config.ts"
+	]
+}
