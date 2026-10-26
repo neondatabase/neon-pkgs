@@ -9,6 +9,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,47 +34,55 @@ const lockEntry = (folder: string, hash: Record<string, string>) => ({
 	...hash,
 });
 
-/** One user-level skill a day behind, one project skill current, one project skill behind. */
+const hex = (char: string, length: number) => char.repeat(length);
+
+/**
+ * One user-level skill behind, one project skill current, one project skill behind. The locks
+ * were written an hour before the cached check.
+ */
 const machine = (): string => {
 	const root = mkdtempSync(join(tmpdir(), "neon-skills-notice-"));
 	roots.push(root);
 	for (const dir of ["config", "home/.agents", "app"]) {
 		mkdirSync(join(root, dir), { recursive: true });
 	}
-	writeFileSync(
-		join(root, "home/.agents/.skill-lock.json"),
-		JSON.stringify({
+	const locks = {
+		"home/.agents/.skill-lock.json": {
 			version: 3,
 			skills: {
-				neon: lockEntry("skills/neon", { skillFolderHash: "old-tree" }),
+				neon: lockEntry("skills/neon", {
+					skillFolderHash: hex("a", 40),
+				}),
 			},
-		}),
-	);
-	writeFileSync(
-		join(root, "app/skills-lock.json"),
-		JSON.stringify({
+		},
+		"app/skills-lock.json": {
 			version: 1,
 			skills: {
 				"neon-auth": lockEntry("skills/neon-auth", {
-					computedHash: "auth-content",
+					computedHash: hex("c", 64),
 				}),
 				"neon-postgres": lockEntry("skills/neon-postgres", {
-					computedHash: "old-content",
+					computedHash: hex("d", 64),
 				}),
 			},
-		}),
-	);
+		},
+	};
+	const installedAt = new Date(Date.now() - 60 * 60 * 1000);
+	for (const [path, lock] of Object.entries(locks)) {
+		writeFileSync(join(root, path), JSON.stringify(lock));
+		utimesSync(join(root, path), installedAt, installedAt);
+	}
 	writeJson(root, "skills-check.json", {
 		checkedAt: Date.now(),
 		folders: {
-			[`${SOURCE}:skills/neon`]: { tree: "new-tree" },
+			[`${SOURCE}:skills/neon`]: { tree: hex("b", 40) },
 			[`${SOURCE}:skills/neon-auth`]: {
-				tree: "t",
-				content: "auth-content",
+				tree: hex("1", 40),
+				content: hex("c", 64),
 			},
 			[`${SOURCE}:skills/neon-postgres`]: {
-				tree: "t",
-				content: "new-content",
+				tree: hex("2", 40),
+				content: hex("e", 64),
 			},
 		},
 	});

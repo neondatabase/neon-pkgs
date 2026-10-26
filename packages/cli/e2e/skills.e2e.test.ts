@@ -115,34 +115,37 @@ describe("neon skills status", () => {
 });
 
 describe("outdated skills notice", () => {
-	it("checks in the background, then warns on the next command", async () => {
+	const KEY = "neondatabase/agent-skills:skills/neon";
+
+	/** Waits for the background check to leave a settled result for the `neon` folder. */
+	const checkedFolder = async (config: string) => {
+		const cachePath = join(config, "skills-check.json");
+		const folder = () =>
+			existsSync(cachePath)
+				? JSON.parse(readFileSync(cachePath, "utf8")).folders[KEY]
+				: undefined;
+		for (let i = 0; i < 60; i += 1) {
+			if (folder()?.content && !folder()?.pending) break;
+			await sleep(500);
+		}
+		return folder();
+	};
+
+	it("checks in the background, warns on the next command, and stops after an update", async () => {
 		const { app, config, neon } = machine();
 		const install = await neon(
 			["skills", "-y", "-s", "neon", "--agent", "cursor"],
 			false,
 		);
 		expect(install.code, install.stderr).toBe(0);
-		rewriteLock(join(app, "skills-lock.json"), "neon", "computedHash");
+		const lockPath = join(app, "skills-lock.json");
+		const installed = readFileSync(lockPath, "utf8");
+		rewriteLock(lockPath, "neon", "computedHash");
 
 		const first = await neon(["profile", "list"], false);
 		expect(first.code, first.stderr).toBe(0);
 		expect(first.stderr).not.toContain("Neon agent skills");
-
-		const cachePath = join(config, "skills-check.json");
-		const key = "neondatabase/agent-skills:skills/neon";
-		for (let i = 0; i < 60; i += 1) {
-			if (
-				existsSync(cachePath) &&
-				JSON.parse(readFileSync(cachePath, "utf8")).folders[key]
-					?.content
-			) {
-				break;
-			}
-			await sleep(500);
-		}
-		expect(
-			JSON.parse(readFileSync(cachePath, "utf8")).folders[key],
-		).toMatchObject({
+		expect(await checkedFolder(config)).toMatchObject({
 			tree: expect.stringMatching(/^[0-9a-f]{40}$/),
 			content: expect.stringMatching(/^[0-9a-f]{64}$/),
 		});
@@ -156,5 +159,14 @@ describe("outdated skills notice", () => {
 				"  neon skills update -y",
 			].join("\n"),
 		);
+
+		// An update writes the lock after the cached check.
+		writeFileSync(lockPath, installed);
+		rmSync(join(config, "notices.json"));
+		const afterUpdate = await neon(["profile", "list"], false);
+		expect(afterUpdate.stderr).not.toContain("Neon agent skills");
+		await checkedFolder(config);
+		const next = await neon(["profile", "list"], false);
+		expect(next.stderr).not.toContain("Neon agent skills");
 	});
 });

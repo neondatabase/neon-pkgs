@@ -4,51 +4,69 @@ import {
 	type LockedSkill,
 	parseSkillsCheckCache,
 	parseSkillsLock,
+	planSkillsCheck,
+	type RemoteFolder,
 	skillContentHash,
 	skillStatus,
 } from "./freshness.js";
 
-const neon = (scope: LockedSkill["scope"], hash: string): LockedSkill => ({
+const TREE = "a".repeat(40);
+const NEW_TREE = "b".repeat(40);
+const CONTENT = "c".repeat(64);
+const NEW_CONTENT = "d".repeat(64);
+const KEY = "neondatabase/agent-skills:skills/neon";
+
+const neon = (
+	scope: LockedSkill["scope"],
+	hash: string,
+	hashKind: LockedSkill["hashKind"] = scope === "global" ? "tree" : "content",
+): LockedSkill => ({
 	scope,
 	skill: "neon",
 	source: "neondatabase/agent-skills",
 	folder: "skills/neon",
 	hash,
+	hashKind,
 });
 
 describe("parseSkillsLock", () => {
-	const lock = JSON.stringify({
-		version: 3,
-		skills: {
-			neon: {
-				source: "neondatabase/agent-skills",
-				skillPath: "skills/neon/SKILL.md",
-				skillFolderHash: "tree-sha",
-				computedHash: "content-sha",
+	const lock = (neonEntry: Record<string, string>) =>
+		JSON.stringify({
+			version: 3,
+			skills: {
+				neon: {
+					source: "neondatabase/agent-skills",
+					skillPath: "skills/neon/SKILL.md",
+					...neonEntry,
+				},
+				pinned: {
+					source: "neondatabase/agent-skills",
+					skillPath: "skills/neon-auth/SKILL.md",
+					ref: "v1",
+					skillFolderHash: TREE,
+					computedHash: CONTENT,
+				},
+				other: {
+					source: "vercel-labs/agent-skills",
+					skillPath: "skills/x/SKILL.md",
+					skillFolderHash: TREE,
+					computedHash: CONTENT,
+				},
 			},
-			pinned: {
-				source: "neondatabase/agent-skills",
-				skillPath: "skills/neon-auth/SKILL.md",
-				ref: "v1",
-				skillFolderHash: "tree-sha",
-				computedHash: "content-sha",
-			},
-			other: {
-				source: "vercel-labs/agent-skills",
-				skillPath: "skills/x/SKILL.md",
-				skillFolderHash: "tree-sha",
-				computedHash: "content-sha",
-			},
-		},
+		});
+
+	test("reads the hash field each scope's lock writes", () => {
+		const both = lock({ skillFolderHash: TREE, computedHash: CONTENT });
+		expect(parseSkillsLock(both, "global")).toEqual([neon("global", TREE)]);
+		expect(parseSkillsLock(both, "project")).toEqual([
+			neon("project", CONTENT),
+		]);
 	});
 
-	test("reads the hash field the scope's lock writes", () => {
-		expect(parseSkillsLock(lock, "global")).toEqual([
-			neon("global", "tree-sha"),
-		]);
-		expect(parseSkillsLock(lock, "project")).toEqual([
-			neon("project", "content-sha"),
-		]);
+	test("treats a 64-character global hash as a content hash", () => {
+		expect(
+			parseSkillsLock(lock({ skillFolderHash: CONTENT }), "global"),
+		).toEqual([neon("global", CONTENT, "content")]);
 	});
 
 	test("throws on a lock that is not JSON", () => {
@@ -57,33 +75,114 @@ describe("parseSkillsLock", () => {
 });
 
 describe("skillStatus", () => {
-	test("compares the global lock with the tree SHA", () => {
+	test("compares a tree hash with the tree SHA", () => {
 		expect(
-			skillStatus(neon("global", "a"), { tree: "a", content: "b" }),
+			skillStatus(neon("global", TREE), {
+				tree: TREE,
+				content: NEW_CONTENT,
+			}),
 		).toBe("up to date");
-		expect(skillStatus(neon("global", "a"), { tree: "c" })).toBe(
+		expect(skillStatus(neon("global", TREE), { tree: NEW_TREE })).toBe(
 			"outdated",
 		);
 	});
 
-	test("compares a project lock with the content hash", () => {
+	test("compares a content hash with the content hash", () => {
 		expect(
-			skillStatus(neon("project", "b"), { tree: "a", content: "b" }),
+			skillStatus(neon("project", CONTENT), {
+				tree: TREE,
+				content: CONTENT,
+			}),
 		).toBe("up to date");
 		expect(
-			skillStatus(neon("project", "b"), { tree: "a", content: "c" }),
+			skillStatus(neon("global", CONTENT, "content"), {
+				tree: TREE,
+				content: NEW_CONTENT,
+			}),
 		).toBe("outdated");
 	});
 
-	test("has no answer before the folder is fetched", () => {
-		expect(skillStatus(neon("project", "b"), undefined)).toBeUndefined();
-		expect(skillStatus(neon("project", "b"), {})).toBeUndefined();
+	test("has no answer before the needed hash is fetched", () => {
 		expect(
-			skillStatus(neon("project", "b"), { tree: "a" }),
+			skillStatus(neon("project", CONTENT), undefined),
 		).toBeUndefined();
-		expect(skillStatus(neon("global", "a"), { missing: true })).toBe(
+		expect(
+			skillStatus(neon("project", CONTENT), { tree: TREE }),
+		).toBeUndefined();
+		expect(skillStatus(neon("global", TREE), { missing: true })).toBe(
 			"not found upstream",
 		);
+	});
+});
+
+describe("planSkillsCheck", () => {
+	const now = 10_000_000;
+	const checked = (folders: Record<string, RemoteFolder>) => ({
+		checkedAt: now - 1000,
+		folders,
+	});
+
+	test("warns from a fresh cache without checking again", () => {
+		const skill = neon("project", CONTENT);
+		expect(
+			planSkillsCheck({
+				skills: [skill],
+				cache: checked({
+					[KEY]: { tree: NEW_TREE, content: NEW_CONTENT },
+				}),
+				lockModifiedAt: now - 5000,
+				now,
+			}),
+		).toEqual({ outdated: [skill], toCheck: [], refresh: false });
+	});
+
+	test("checks a project skill whose folder only has a tree SHA cached", () => {
+		const skill = neon("project", CONTENT);
+		expect(
+			planSkillsCheck({
+				skills: [skill],
+				cache: checked({ [KEY]: { tree: TREE } }),
+				lockModifiedAt: now - 5000,
+				now,
+			}),
+		).toEqual({ outdated: [], toCheck: [skill], refresh: true });
+	});
+
+	test("waits for a pending check instead of starting another", () => {
+		expect(
+			planSkillsCheck({
+				skills: [neon("project", CONTENT)],
+				cache: checked({ [KEY]: { tree: TREE, pending: true } }),
+				lockModifiedAt: now - 5000,
+				now,
+			}),
+		).toEqual({ outdated: [], toCheck: [], refresh: false });
+	});
+
+	test("holds back the warning after the lock changes, and checks again", () => {
+		const skill = neon("project", NEW_CONTENT);
+		expect(
+			planSkillsCheck({
+				skills: [skill],
+				cache: checked({ [KEY]: { tree: TREE, content: CONTENT } }),
+				lockModifiedAt: now - 500,
+				now,
+			}),
+		).toEqual({ outdated: [], toCheck: [skill], refresh: true });
+	});
+
+	test("refreshes a day-old cache", () => {
+		expect(
+			planSkillsCheck({
+				skills: [neon("global", TREE)],
+				cache: {
+					checkedAt: now - 24 * 60 * 60 * 1000,
+					folders: { [KEY]: { tree: TREE } },
+				},
+				lockModifiedAt: 0,
+				now,
+			}).refresh,
+		).toBe(true);
 	});
 });
 
@@ -109,10 +208,18 @@ describe("parseSkillsCheckCache", () => {
 			parseSkillsCheckCache(
 				JSON.stringify({
 					checkedAt: 1,
-					folders: { a: { tree: "t" }, b: { tree: 1 }, c: {} },
+					folders: {
+						a: { tree: "t" },
+						b: { tree: 1 },
+						c: { pending: true },
+						d: { pending: "yes" },
+					},
 				}),
 			),
-		).toEqual({ checkedAt: 1, folders: { a: { tree: "t" }, c: {} } });
+		).toEqual({
+			checkedAt: 1,
+			folders: { a: { tree: "t" }, c: { pending: true } },
+		});
 	});
 
 	test("rejects a cache without a check time", () => {
@@ -124,9 +231,9 @@ describe("formatSkillsNotice", () => {
 	test("groups by scope and names the update command for each", () => {
 		expect(
 			formatSkillsNotice([
-				neon("global", "a"),
-				{ ...neon("global", "a"), skill: "neon-functions" },
-				{ ...neon("project", "b"), skill: "neon-postgres" },
+				neon("global", TREE),
+				{ ...neon("global", TREE), skill: "neon-functions" },
+				{ ...neon("project", CONTENT), skill: "neon-postgres" },
 			]),
 		).toBe(
 			[

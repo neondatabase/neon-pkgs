@@ -91,4 +91,6 @@ jobs:
               env:
                   NEON_API_KEY: ${{ secrets.NEON_TEST_API_KEY }}
                   NEON_ORG_ID: ${{ vars.NEON_TEST_ORG_ID }}
+                  # The skills suite reads GitHub; anonymous requests share the runner's IP limit.
+                  GITHUB_TOKEN: ${{ github.token }}
               run: pnpm test:e2e:live

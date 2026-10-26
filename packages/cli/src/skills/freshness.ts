@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,9 +28,8 @@ export const neonSkillsUpdateCommand = (scope: SkillsScope): string =>
 		: "neon skills update -y";
 
 /**
- * A Neon skill as a skills CLI lock file records it. `hash` is that lock's own field: the
- * git tree SHA of the skill folder in the global lock (`skillFolderHash`), a SHA-256 of the
- * folder's files in a project's `skills-lock.json` (`computedHash`).
+ * A Neon skill as a skills CLI lock file records it. `hash` is the git tree SHA of the skill
+ * folder (`tree`) or a SHA-256 of its files (`content`).
  */
 export type LockedSkill = {
 	scope: SkillsScope;
@@ -38,6 +37,7 @@ export type LockedSkill = {
 	source: string;
 	folder: string;
 	hash: string;
+	hashKind: "tree" | "content";
 };
 
 /** Where the skills CLI keeps its user-level lock. */
@@ -61,6 +61,9 @@ const skillFolder = (skillPath: string): string =>
 /**
  * Entries pinned to a `ref` are left out: `neon skills` never pins one, and a pinned skill
  * tracks that ref rather than the repository's default branch.
+ *
+ * The global lock's `skillFolderHash` is usually a tree SHA, but the skills CLI stores a
+ * content SHA-256 there when it installed from a Git clone; it tells them apart by length.
  */
 export const parseSkillsLock = (
 	raw: string,
@@ -86,7 +89,11 @@ export const parseSkillsLock = (
 		}
 		const folder = skillFolder(skillPath);
 		if (folder === "") continue;
-		skills.push({ scope, skill, source, folder, hash });
+		const hashKind =
+			scope === "global" && /^[0-9a-f]{40}$/i.test(hash)
+				? "tree"
+				: "content";
+		skills.push({ scope, skill, source, folder, hash, hashKind });
 	}
 	return skills;
 };
@@ -105,11 +112,15 @@ export const readLockedSkills = (
 	}
 };
 
-/** What the skill folder looks like on the source's default branch. */
+/**
+ * What the skill folder looks like on the source's default branch. `pending` marks a folder
+ * a background check was started for, so a failed check is not restarted on every command.
+ */
 export type RemoteFolder = {
 	tree?: string;
 	content?: string;
 	missing?: true;
+	pending?: true;
 };
 
 export type SkillsCheckCache = {
@@ -130,18 +141,19 @@ export const skillStatus = (
 	remote: RemoteFolder | undefined,
 ): SkillStatus | undefined => {
 	if (remote?.missing === true) return "not found upstream";
-	const latest = skill.scope === "global" ? remote?.tree : remote?.content;
+	const latest = skill.hashKind === "tree" ? remote?.tree : remote?.content;
 	if (latest === undefined) return undefined;
 	return latest === skill.hash ? "up to date" : "outdated";
 };
 
 const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
 	if (!isRecord(value)) return undefined;
-	const { tree, content, missing } = value;
+	const { tree, content, missing, pending } = value;
 	if (
 		(tree !== undefined && typeof tree !== "string") ||
 		(content !== undefined && typeof content !== "string") ||
-		(missing !== undefined && missing !== true)
+		(missing !== undefined && missing !== true) ||
+		(pending !== undefined && pending !== true)
 	) {
 		return undefined;
 	}
@@ -149,6 +161,7 @@ const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
 		...(tree === undefined ? {} : { tree }),
 		...(content === undefined ? {} : { content }),
 		...(missing === undefined ? {} : { missing }),
+		...(pending === undefined ? {} : { pending }),
 	};
 };
 
@@ -312,7 +325,7 @@ type FolderRequest = { source: string; folder: string; content: boolean };
 
 /**
  * The folders to fetch: the given skills, plus every folder already in the cache so
- * results for other directories stay current. Only project installs need file contents.
+ * results for other directories stay current.
  */
 const folderRequests = (
 	skills: readonly LockedSkill[],
@@ -341,7 +354,7 @@ const folderRequests = (
 		add({
 			source: skill.source,
 			folder: skill.folder,
-			content: skill.scope === "project",
+			content: skill.hashKind === "content",
 		});
 	}
 	return [...requests.values()];
@@ -434,6 +447,57 @@ export const formatSkillsNotice = (
 	].join("\n");
 };
 
+export type SkillsCheckPlan = {
+	/** Skills to warn about. */
+	outdated: LockedSkill[];
+	/** Skills whose folders a background check should fetch now. */
+	toCheck: LockedSkill[];
+	refresh: boolean;
+};
+
+/**
+ * `pending` folders are left alone until the next daily check. A lock written after the last
+ * check (an install or an update) holds back the warning and checks every skill again,
+ * because the cache can be older than what was just installed.
+ */
+export const planSkillsCheck = ({
+	skills,
+	cache,
+	lockModifiedAt,
+	now,
+}: {
+	skills: readonly LockedSkill[];
+	cache: SkillsCheckCache | undefined;
+	lockModifiedAt: number;
+	now: number;
+}): SkillsCheckPlan => {
+	const remote = (skill: LockedSkill) => cache?.folders[folderKey(skill)];
+	const settled = (skill: LockedSkill) => remote(skill)?.pending !== true;
+	const lockChanged = cache !== undefined && lockModifiedAt > cache.checkedAt;
+	const outdated = lockChanged
+		? []
+		: skills.filter(
+				(skill) =>
+					settled(skill) &&
+					skillStatus(skill, remote(skill)) === "outdated",
+			);
+	const toCheck = lockChanged
+		? [...skills]
+		: skills.filter(
+				(skill) =>
+					settled(skill) &&
+					skillStatus(skill, remote(skill)) === undefined,
+			);
+	return {
+		outdated,
+		toCheck,
+		refresh:
+			cache === undefined ||
+			toCheck.length > 0 ||
+			now - cache.checkedAt >= DAY_MS,
+	};
+};
+
 const spawnSkillsCheckWorker = (cachePath: string, cwd: string): void => {
 	const workerPath = fileURLToPath(
 		new URL("./check_worker.js", import.meta.url),
@@ -470,11 +534,12 @@ export const notifyIfSkillsOutdated = ({
 	cwd: string;
 	now?: number;
 }): void => {
+	const lockPaths = [globalLockPath(), projectLockPath(cwd)] as const;
 	let skills: LockedSkill[];
 	try {
 		skills = [
-			...readLockedSkills(globalLockPath(), "global"),
-			...readLockedSkills(projectLockPath(cwd), "project"),
+			...readLockedSkills(lockPaths[0], "global"),
+			...readLockedSkills(lockPaths[1], "project"),
 		];
 	} catch (error) {
 		log.debug(
@@ -487,13 +552,18 @@ export const notifyIfSkillsOutdated = ({
 
 	const cachePath = skillsCheckCachePath(configDir);
 	const cache = readSkillsCheckCache(cachePath);
-	const notice = formatSkillsNotice(
-		skills.filter(
-			(skill) =>
-				skillStatus(skill, cache?.folders[folderKey(skill)]) ===
-				"outdated",
+	const plan = planSkillsCheck({
+		skills,
+		cache,
+		lockModifiedAt: Math.max(
+			...lockPaths.map(
+				(path) =>
+					statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 0,
+			),
 		),
-	);
+		now,
+	});
+	const notice = formatSkillsNotice(plan.outdated);
 	if (notice !== undefined) {
 		showNotice({
 			configDir,
@@ -503,21 +573,15 @@ export const notifyIfSkillsOutdated = ({
 			now,
 		});
 	}
+	if (!plan.refresh) return;
 
-	const unseen = skills.filter(
-		(skill) => cache?.folders[folderKey(skill)] === undefined,
-	);
-	if (
-		cache !== undefined &&
-		unseen.length === 0 &&
-		now - cache.checkedAt < DAY_MS
-	) {
-		return;
-	}
-	// Placeholders mark this directory's skills as requested, so a failed check waits a day
-	// instead of retrying on every command.
 	const folders = { ...cache?.folders };
-	for (const skill of unseen) folders[folderKey(skill)] = {};
+	for (const skill of plan.toCheck) {
+		folders[folderKey(skill)] = {
+			...folders[folderKey(skill)],
+			pending: true,
+		};
+	}
 	if (
 		writeJsonFile(
 			cachePath,
