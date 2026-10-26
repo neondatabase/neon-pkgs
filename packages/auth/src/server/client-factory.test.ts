@@ -1,5 +1,7 @@
 import {
+	afterAll,
 	afterEach,
+	beforeAll,
 	beforeEach,
 	describe,
 	expect,
@@ -7,6 +9,10 @@ import {
 	test,
 	vi,
 } from "vitest";
+import {
+	type LocalBetterAuth,
+	startLocalBetterAuth,
+} from "../test/local-better-auth";
 import { createAuthServer } from "./client-factory";
 import type { RequestContext } from "./request-context";
 import type { NeonAuthServer } from "./types";
@@ -517,85 +523,95 @@ describe("createAuthServer client-info header", () => {
 	});
 });
 
-describe("createAuthServer oauth2", () => {
-	const originalFetch = globalThis.fetch;
-	let fetchMock: ReturnType<typeof vi.fn>;
+describe("createAuthServer against Better Auth with the OAuth provider", () => {
+	let local: LocalBetterAuth;
 
-	beforeEach(() => {
-		fetchMock = vi.fn(async () => Response.json({ ok: true }));
-		globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+	beforeAll(async () => {
+		local = await startLocalBetterAuth();
 	});
 
-	afterEach(() => {
-		globalThis.fetch = originalFetch;
+	afterAll(async () => {
+		await local.close();
 	});
 
 	const make = () =>
 		createAuthServer({
-			baseUrl: TEST_BASE_URL,
-			context: makeContext,
+			baseUrl: local.authUrl,
+			context: () => ({
+				...makeContext(),
+				getOrigin: () => local.origin,
+			}),
 			cookieSecret: TEST_SECRET,
 		});
 
-	const lastCall = () => {
-		const [url, init] = fetchMock.mock.calls.at(-1) as [
-			string,
-			RequestInit,
-		];
-		return { url: new URL(url), init };
+	// Better Auth answers an unknown path or method with 404; anything else
+	// means the route exists and accepted the method.
+	const expectRouted = (method: string, path: string) => {
+		const request = local.last();
+		expect(request.method).toBe(method);
+		expect(request.path).toBe(`/api/auth/${path}`);
+		expect(request.status).not.toBe(404);
+		return request;
 	};
 
+	const postCase = <B>(
+		path: string,
+		body: B,
+		send: (body: B) => Promise<unknown>,
+	) => ({ path, body, run: () => send(body) });
+
 	const postCases = [
-		["consent", "consent", { accept: true, scope: "openid" }],
-		["continue", "continue", { selected: true }],
-		[
-			"publicClientPrelogin",
+		postCase("consent", { accept: true, scope: "openid" }, (b) =>
+			make().oauth2.consent(b),
+		),
+		postCase("continue", { selected: true }, (b) =>
+			make().oauth2.continue(b),
+		),
+		postCase(
 			"public-client-prelogin",
 			{ client_id: "c1", oauth_query: "sig=s" },
-		],
-		[
-			"updateConsent",
+			(b) => make().oauth2.publicClientPrelogin(b),
+		),
+		postCase(
 			"update-consent",
 			{ id: "k1", update: { scopes: ["openid"] } },
-		],
-		["deleteConsent", "delete-consent", { id: "k1" }],
-	] as const;
+			(b) => make().oauth2.updateConsent(b),
+		),
+		postCase("delete-consent", { id: "k1" }, (b) =>
+			make().oauth2.deleteConsent(b),
+		),
+	];
 
-	test.each(
-		postCases,
-	)("oauth2.%s POSTs JSON to /oauth2/%s", async (name, path, body) => {
-		await (make().oauth2[name] as (b: unknown) => Promise<unknown>)(body);
-		const { url, init } = lastCall();
-		expect(url.pathname.endsWith(`/oauth2/${path}`)).toBe(true);
-		expect(init.method).toBe("POST");
-		expect(JSON.parse(init.body as string)).toEqual(body);
+	test.each(postCases)("POSTs JSON to /oauth2/$path", async ({
+		path,
+		body,
+		run,
+	}) => {
+		await run();
+		expect(expectRouted("POST", `oauth2/${path}`).body).toEqual(body);
 	});
 
 	test("oauth2.publicClient GETs /oauth2/public-client with client_id", async () => {
 		await make().oauth2.publicClient({ query: { client_id: "c1" } });
-		const { url, init } = lastCall();
-		expect(url.pathname.endsWith("/oauth2/public-client")).toBe(true);
-		expect(url.searchParams.get("client_id")).toBe("c1");
-		expect(init.method).toBe("GET");
+		expect(
+			expectRouted("GET", "oauth2/public-client").query.get("client_id"),
+		).toBe("c1");
 	});
 
 	test("oauth2.getConsent GETs /oauth2/get-consent with id", async () => {
 		await make().oauth2.getConsent({ query: { id: "k1" } });
-		const { url, init } = lastCall();
-		expect(url.pathname.endsWith("/oauth2/get-consent")).toBe(true);
-		expect(url.searchParams.get("id")).toBe("k1");
-		expect(init.method).toBe("GET");
+		expect(expectRouted("GET", "oauth2/get-consent").query.get("id")).toBe(
+			"k1",
+		);
 	});
 
 	test("oauth2.getConsents GETs /oauth2/get-consents", async () => {
 		await make().oauth2.getConsents();
-		const { url, init } = lastCall();
-		expect(url.pathname.endsWith("/oauth2/get-consents")).toBe(true);
-		expect(init.method).toBe("GET");
+		expectRouted("GET", "oauth2/get-consents");
 	});
 
 	test("oauth2 exposes only the user actions Neon routes", () => {
-		const oauth2 = make().oauth2 as Record<string, unknown>;
+		const oauth2: Record<string, unknown> = make().oauth2;
 		for (const included of [
 			"consent",
 			"continue",
@@ -632,147 +648,49 @@ describe("createAuthServer oauth2", () => {
 			| "getConsents"
 		>();
 	});
-});
-
-describe("createAuthServer endpoint paths", () => {
-	let fetchMock: ReturnType<typeof vi.fn>;
-
-	beforeEach(() => {
-		fetchMock = vi.fn();
-		vi.stubGlobal("fetch", fetchMock);
-	});
-
-	afterEach(() => {
-		vi.unstubAllGlobals();
-	});
-
-	const makeServer = () =>
-		createAuthServer({
-			baseUrl: TEST_BASE_URL,
-			context: makeContext,
-			cookieSecret: TEST_SECRET,
-		});
 
 	test("revokeOtherSessions POSTs to /revoke-other-sessions", async () => {
-		fetchMock.mockResolvedValueOnce(
-			Response.json({ status: true }, { status: 200 }),
-		);
-
-		await (
-			makeServer() as unknown as {
-				revokeOtherSessions: () => Promise<unknown>;
-			}
-		).revokeOtherSessions();
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(new URL(url).pathname).toBe("/revoke-other-sessions");
-		expect(init.method).toBe("POST");
+		await make().revokeOtherSessions();
+		expectRouted("POST", "revoke-other-sessions");
 	});
 
 	test("emailOtp.resetPassword POSTs to /email-otp/reset-password", async () => {
-		fetchMock.mockResolvedValueOnce(
-			Response.json({ success: true }, { status: 200 }),
+		const body = {
+			email: "a@b.com",
+			otp: "123456",
+			password: "new-password",
+		};
+		await make().emailOtp.resetPassword(body);
+		expect(expectRouted("POST", "email-otp/reset-password").body).toEqual(
+			body,
 		);
-
-		await (
-			makeServer() as unknown as {
-				emailOtp: {
-					resetPassword: (args: unknown) => Promise<unknown>;
-				};
-			}
-		).emailOtp.resetPassword({
-			email: "a@b.com",
-			otp: "123456",
-			password: "new-password",
-		});
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(new URL(url).pathname).toBe("/email-otp/reset-password");
-		expect(init.method).toBe("POST");
-		expect(JSON.parse(init.body as string)).toEqual({
-			email: "a@b.com",
-			otp: "123456",
-			password: "new-password",
-		});
 	});
 
 	test("verifyEmail GETs /verify-email with the token in the query string", async () => {
-		fetchMock.mockResolvedValueOnce(
-			Response.json({ status: true }, { status: 200 }),
-		);
-
-		await (
-			makeServer() as unknown as {
-				verifyEmail: (args: unknown) => Promise<unknown>;
-			}
-		).verifyEmail({ query: { token: "tok-123" } });
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		const parsed = new URL(url);
-		expect(parsed.pathname).toBe("/verify-email");
-		expect(parsed.searchParams.get("token")).toBe("tok-123");
-		expect(init.method).toBe("GET");
-		expect(init.body).toBeUndefined();
+		await make().verifyEmail({ query: { token: "tok-123" } });
+		const request = expectRouted("GET", "verify-email");
+		expect(request.query.get("token")).toBe("tok-123");
+		expect(request.body).toBeUndefined();
 	});
 
-	test("jwks GETs /.well-known/jwks.json with no body", async () => {
-		fetchMock.mockResolvedValueOnce(
-			Response.json({ keys: [] }, { status: 200 }),
-		);
-
-		await (
-			makeServer() as unknown as {
-				jwks: () => Promise<unknown>;
-			}
-		).jwks();
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(new URL(url).pathname).toBe("/.well-known/jwks.json");
-		expect(init.method).toBe("GET");
-		expect(init.body).toBeUndefined();
+	test("jwks GETs /.well-known/jwks.json and returns the key set", async () => {
+		const { data, error } = await make().jwks();
+		expect(error).toBeNull();
+		expect(expectRouted("GET", ".well-known/jwks.json").status).toBe(200);
+		expect(Array.isArray(data?.keys)).toBe(true);
 	});
 
 	test("admin.listUserSessions POSTs to /admin/list-user-sessions", async () => {
-		fetchMock.mockResolvedValueOnce(
-			Response.json({ sessions: [] }, { status: 200 }),
-		);
-
-		await (
-			makeServer() as unknown as {
-				admin: {
-					listUserSessions: (args: unknown) => Promise<unknown>;
-				};
-			}
-		).admin.listUserSessions({ userId: "user-1" });
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(new URL(url).pathname).toBe("/admin/list-user-sessions");
-		expect(init.method).toBe("POST");
-		expect(JSON.parse(init.body as string)).toEqual({ userId: "user-1" });
+		await make().admin.listUserSessions({ userId: "user-1" });
+		expect(expectRouted("POST", "admin/list-user-sessions").body).toEqual({
+			userId: "user-1",
+		});
 	});
 
 	test("organization.checkSlug POSTs to /organization/check-slug", async () => {
-		fetchMock.mockResolvedValueOnce(
-			Response.json({ status: true }, { status: 200 }),
-		);
-
-		await (
-			makeServer() as unknown as {
-				organization: {
-					checkSlug: (args: unknown) => Promise<unknown>;
-				};
-			}
-		).organization.checkSlug({ slug: "acme" });
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(new URL(url).pathname).toBe("/organization/check-slug");
-		expect(init.method).toBe("POST");
-		expect(JSON.parse(init.body as string)).toEqual({ slug: "acme" });
+		await make().organization.checkSlug({ slug: "acme" });
+		expect(expectRouted("POST", "organization/check-slug").body).toEqual({
+			slug: "acme",
+		});
 	});
 });
