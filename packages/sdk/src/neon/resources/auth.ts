@@ -852,8 +852,8 @@ export class AuthUsers<DThrow extends boolean> {
 
 /**
  * Branch-scoped Neon Auth. Enable/disable the integration, tune its config, and manage
- * OAuth providers, the OAuth server (provider plugin) and its clients, trusted domains, and users. The legacy project-scoped auth endpoints are
- * deprecated and stay raw-only.
+ * OAuth providers, the OAuth server (provider plugin) and its clients, trusted domains,
+ * and users. The legacy project-scoped auth endpoints are deprecated and stay raw-only.
  */
 export class Auth<DThrow extends boolean> {
 	readonly #ctx: RequestContext;
