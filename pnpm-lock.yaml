@@ -523,6 +523,43 @@ importers:
         specifier: 'catalog:'
         version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1)
 
+  packages/convex-to-postgres:
+    dependencies:
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+      pg:
+        specifier: ^8.20.0
+        version: 8.23.1
+    devDependencies:
+      '@testcontainers/postgresql':
+        specifier: ^11.14.0
+        version: 11.14.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.17
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.20.0
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 3.0.9(vitest@3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1))
+      convex:
+        specifier: ^1.47.0
+        version: 1.48.0(react@19.2.8)
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1)
+
   packages/effect:
     dependencies:
       '@neon/sdk':
@@ -1170,43 +1207,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1)
-
-  tools/convex-to-postgres:
-    dependencies:
-      fflate:
-        specifier: ^0.8.2
-        version: 0.8.3
-      jiti:
-        specifier: ^2.7.0
-        version: 2.7.0
-      pg:
-        specifier: ^8.20.0
-        version: 8.23.1
-    devDependencies:
-      '@testcontainers/postgresql':
-        specifier: ^11.14.0
-        version: 11.14.0
-      '@types/node':
-        specifier: 'catalog:'
-        version: 20.19.17
-      '@types/pg':
-        specifier: ^8.11.10
-        version: 8.20.0
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 3.0.9(vitest@3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1))
-      convex:
-        specifier: ^1.47.0
-        version: 1.48.0(react@19.2.8)
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

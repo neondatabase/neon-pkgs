@@ -1,4 +1,4 @@
-// Public API for convex-to-postgres.
+// Public API for @neon/convex-to-postgres.
 //
 // The schema/data generation functions (`parseExportedSchema`, `generateDdl`,
 // `generateStagingDdl`, `generateTransformSql`) are pure: they take data and

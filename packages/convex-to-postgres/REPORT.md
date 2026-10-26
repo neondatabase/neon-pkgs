@@ -2,7 +2,7 @@
 
 This report records what the integration suite proved by running the generator against a real Postgres (via testcontainers) over a corpus of real Convex schemas and a full round-trip of a real `convex export` snapshot. It covers the supported feature surface, the Convex export facts the round-trip confirmed, the round-trip results, and a recommendation on using schema auto-generation as the default path in the migration documentation.
 
-All results below come from `pnpm --filter convex-to-postgres test:integration` (Docker required): Suite A applies generated DDL for every loadable corpus schema, Suite B round-trips a real export, and Suite C round-trips a second deployed app.
+All results below come from `pnpm --filter @neon/convex-to-postgres test:integration` (Docker required): Suite A applies generated DDL for every loadable corpus schema, Suite B round-trips a real export, and Suite C round-trips a second deployed app.
 
 ## Generator fixes made during Phase B
 

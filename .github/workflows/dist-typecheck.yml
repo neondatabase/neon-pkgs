@@ -63,6 +63,7 @@ jobs:
                       {"name": "@neon/env", "dir": "env"},
                       {"name": "@neon/functions", "dir": "functions"},
                       {"name": "@neon/ai-sdk-provider", "dir": "ai-sdk-provider"},
+                      {"name": "@neon/convex-to-postgres", "dir": "convex-to-postgres"},
                       {"name": "@neon/tools", "dir": "tools"},
                       {"name": "@neon/sdk", "dir": "sdk"},
                       {"name": "@neon/effect", "dir": "effect"},

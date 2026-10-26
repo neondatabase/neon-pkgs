@@ -1,10 +1,10 @@
-# convex-to-postgres
+# @neon/convex-to-postgres
 
-Migrate a [Convex](https://convex.dev) deployment to Postgres. This is a private,
-unpublished workspace tool (it is not released to npm). It does two jobs:
+Migrate a [Convex](https://convex.dev) deployment to [Neon](https://neon.com)
+Postgres. It does two jobs:
 
 1. **Schema generation.** Parse a Convex schema and emit Postgres DDL (`CREATE
-   TABLE` + `CREATE INDEX`) as raw SQL.
+   TABLE` + `CREATE INDEX`, including Neon Lakebase Search indexes) as raw SQL.
 2. **Data transform and import.** Turn a `convex export` snapshot into Postgres
    rows and load them, preserving numeric precision that a JavaScript
    `JSON.parse` would destroy.
@@ -15,7 +15,15 @@ no environment, and never prints. The I/O entry points (`loadConvexSchema`,
 `generateSeedSql`, `importConvexExport`) layer file, zip, and database access on
 top.
 
-> **Requirements:** Node.js >= 20.19.
+## Install
+
+```bash
+npm install @neon/convex-to-postgres
+```
+
+> **Requirements:** Node.js >= 20.19. The generated search and vector DDL targets
+> a Neon Lakebase branch — it relies on the `lakebase_text` / `lakebase_vector`
+> extensions — while the rest of the output is portable Postgres.
 
 ## Job 1: schema generation
 
@@ -23,7 +31,7 @@ Point the loader at a Convex `schema.ts`, or hand it the JSON from
 `SchemaDefinition.export()`, and get DDL back.
 
 ```ts
-import { generateDdl, loadConvexSchema } from "convex-to-postgres";
+import { generateDdl, loadConvexSchema } from "@neon/convex-to-postgres";
 
 const schema = await loadConvexSchema("./convex/schema.ts");
 const { sql, warnings } = generateDdl(schema, { idStrategy: "uuid" });
@@ -255,7 +263,7 @@ typed transform, and the staging drop, all wrapped in one transaction with
 deferred foreign keys. Apply the schema DDL first, then run the seed:
 
 ```ts
-import { generateDdl, generateSeedSql, loadConvexSchema } from "convex-to-postgres";
+import { generateDdl, generateSeedSql, loadConvexSchema } from "@neon/convex-to-postgres";
 import { writeFileSync } from "node:fs";
 
 const schema = await loadConvexSchema("./convex/schema.ts");
@@ -277,7 +285,7 @@ inside one transaction, and returns the per-table row counts. Pass either a
 `client`. Set `applySchema: true` to run the generated DDL first.
 
 ```ts
-import { importConvexExport, loadConvexSchema } from "convex-to-postgres";
+import { importConvexExport, loadConvexSchema } from "@neon/convex-to-postgres";
 
 const schema = await loadConvexSchema("./convex/schema.ts");
 

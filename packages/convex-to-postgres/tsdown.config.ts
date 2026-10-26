@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-	name: "convex-to-postgres",
+	name: "@neon/convex-to-postgres",
 	bundle: false,
 	clean: true,
 	dts: true,
