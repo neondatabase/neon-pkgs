@@ -12,7 +12,7 @@ import { writeJsonFile } from "./utils/json_file.js";
  */
 const NOTICES_FILE = "notices.json";
 
-export type NoticeId = "update" | "duplicate-installs";
+export type NoticeId = "update" | "duplicate-installs" | "skills";
 
 /** Notice id to the epoch milliseconds it was last shown. */
 export type NoticeLog = Record<string, number>;

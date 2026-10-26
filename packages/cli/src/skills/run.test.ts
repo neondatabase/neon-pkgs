@@ -4,7 +4,6 @@ import pkg from "../pkg.js";
 import {
 	assertSkillsNode,
 	neonSkillsRetryCommand,
-	neonSkillsUpdateRetryCommand,
 	nodeMeetsMinimum,
 	npxCommand,
 	SKILLS_MIN_NODE,
@@ -143,17 +142,6 @@ describe("neonSkillsRetryCommand", () => {
 			}),
 		).toBe(
 			"neon skills -s neon -s neon-ai-gateway --agent cursor --global -y",
-		);
-	});
-});
-
-describe("neonSkillsUpdateRetryCommand", () => {
-	test("is the neon command, not npx", () => {
-		expect(neonSkillsUpdateRetryCommand(false)).toBe(
-			"neon skills update -y",
-		);
-		expect(neonSkillsUpdateRetryCommand(true)).toBe(
-			"neon skills update --global -y",
 		);
 	});
 });

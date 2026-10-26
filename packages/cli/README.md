@@ -58,6 +58,13 @@ of them is Homebrew, the warning recommends `brew uninstall neonctl`, which
 leaves `neon` running the other install, such as npm. While duplicates remain, the update notice is held back;
 `NO_UPDATE_NOTIFIER=1` silences both.
 
+Commands also warn once a day when Neon agent skills are behind their source, in this
+directory's `skills-lock.json` or the user-level skills lock (see
+[`neon skills status`](#install-neon-agent-skills-skills)). This warning runs without a
+terminal too, so coding agents see it. It checks GitHub once a day in the background and
+follows the same CI, machine-readable output, standalone binary, and
+`NO_UPDATE_NOTIFIER=1` rules.
+
 ## Connect
 
 Run the following command to authenticate a connection to Neon:
@@ -973,7 +980,13 @@ $ neon skills --global
 $ neon skills update
 $ neon skills update -y
 $ neon skills update --global -y
+
+# Check whether installed Neon skills are behind their source.
+$ neon skills status
+$ neon skills status --global
 ```
+
+`neon skills status` compares each Neon skill in this directory's `skills-lock.json` (or, with `--global`, the user-level skills lock) with the skill folder on its source repository's default branch, and prints `up to date`, `outdated`, or `not found upstream` per skill. It reads GitHub anonymously; set `GITHUB_TOKEN` or `GH_TOKEN` if the GitHub API rate limit is reached. Skills installed through an agent plugin are not in either lock and are not listed.
 
 On a TTY the command asks which agents and which skills, then installs. Detected agents start selected from project-folder markers such as `.cursor`. Default skills start selected. `neon-postgres-agent-platforms` is offered and starts unselected.
 

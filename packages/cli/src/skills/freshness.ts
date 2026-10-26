@@ -1,0 +1,530 @@
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { log } from "../log.js";
+import { showNotice } from "../notices.js";
+import { writeJsonFile } from "../utils/json_file.js";
+import { AGENT_SKILLS_SOURCE, PLATFORMS_SKILLS_SOURCE } from "./catalog.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CACHE_FILE = "skills-check.json";
+const FETCH_TIMEOUT_MS = 10_000;
+const NEON_SOURCES: ReadonlySet<string> = new Set([
+	AGENT_SKILLS_SOURCE,
+	PLATFORMS_SKILLS_SOURCE,
+]);
+
+export type SkillsScope = "global" | "project";
+
+export const scopeLabel = (scope: SkillsScope): string =>
+	scope === "project" ? "this directory" : "user-level";
+
+export const neonSkillsUpdateCommand = (scope: SkillsScope): string =>
+	scope === "global"
+		? "neon skills update --global -y"
+		: "neon skills update -y";
+
+/**
+ * A Neon skill as a skills CLI lock file records it. `hash` is that lock's own field: the
+ * git tree SHA of the skill folder in the global lock (`skillFolderHash`), a SHA-256 of the
+ * folder's files in a project's `skills-lock.json` (`computedHash`).
+ */
+export type LockedSkill = {
+	scope: SkillsScope;
+	skill: string;
+	source: string;
+	folder: string;
+	hash: string;
+};
+
+/** Where the skills CLI keeps its user-level lock. */
+export const globalLockPath = (env: NodeJS.ProcessEnv = process.env): string =>
+	env.XDG_STATE_HOME
+		? join(env.XDG_STATE_HOME, "skills", ".skill-lock.json")
+		: join(homedir(), ".agents", ".skill-lock.json");
+
+export const projectLockPath = (cwd: string): string =>
+	join(cwd, "skills-lock.json");
+
+export const lockPath = (scope: SkillsScope, cwd: string): string =>
+	scope === "global" ? globalLockPath() : projectLockPath(cwd);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const skillFolder = (skillPath: string): string =>
+	skillPath.replace(/\\/g, "/").replace(/\/?SKILL\.md$/i, "");
+
+/**
+ * Entries pinned to a `ref` are left out: `neon skills` never pins one, and a pinned skill
+ * tracks that ref rather than the repository's default branch.
+ */
+export const parseSkillsLock = (
+	raw: string,
+	scope: SkillsScope,
+): LockedSkill[] => {
+	const value: unknown = JSON.parse(raw);
+	if (!isRecord(value) || !isRecord(value.skills)) return [];
+	const field = scope === "global" ? "skillFolderHash" : "computedHash";
+	const skills: LockedSkill[] = [];
+	for (const [skill, entry] of Object.entries(value.skills)) {
+		if (!isRecord(entry)) continue;
+		const { source, skillPath, ref } = entry;
+		const hash = entry[field];
+		if (
+			typeof source !== "string" ||
+			!NEON_SOURCES.has(source) ||
+			ref !== undefined ||
+			typeof skillPath !== "string" ||
+			typeof hash !== "string" ||
+			hash === ""
+		) {
+			continue;
+		}
+		const folder = skillFolder(skillPath);
+		if (folder === "") continue;
+		skills.push({ scope, skill, source, folder, hash });
+	}
+	return skills;
+};
+
+export const readLockedSkills = (
+	path: string,
+	scope: SkillsScope,
+): LockedSkill[] => {
+	if (!existsSync(path)) return [];
+	try {
+		return parseSkillsLock(readFileSync(path, "utf8"), scope);
+	} catch (error) {
+		throw new Error(
+			`Could not read ${path}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+};
+
+/** What the skill folder looks like on the source's default branch. */
+export type RemoteFolder = {
+	tree?: string;
+	content?: string;
+	missing?: true;
+};
+
+export type SkillsCheckCache = {
+	checkedAt: number;
+	folders: Record<string, RemoteFolder>;
+};
+
+const folderKey = ({
+	source,
+	folder,
+}: Pick<LockedSkill, "source" | "folder">): string => `${source}:${folder}`;
+
+export type SkillStatus = "up to date" | "outdated" | "not found upstream";
+
+/** `undefined` when the remote side has not been fetched yet. */
+export const skillStatus = (
+	skill: LockedSkill,
+	remote: RemoteFolder | undefined,
+): SkillStatus | undefined => {
+	if (remote?.missing === true) return "not found upstream";
+	const latest = skill.scope === "global" ? remote?.tree : remote?.content;
+	if (latest === undefined) return undefined;
+	return latest === skill.hash ? "up to date" : "outdated";
+};
+
+const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
+	if (!isRecord(value)) return undefined;
+	const { tree, content, missing } = value;
+	if (
+		(tree !== undefined && typeof tree !== "string") ||
+		(content !== undefined && typeof content !== "string") ||
+		(missing !== undefined && missing !== true)
+	) {
+		return undefined;
+	}
+	return {
+		...(tree === undefined ? {} : { tree }),
+		...(content === undefined ? {} : { content }),
+		...(missing === undefined ? {} : { missing }),
+	};
+};
+
+export const parseSkillsCheckCache = (
+	raw: string,
+): SkillsCheckCache | undefined => {
+	try {
+		const value: unknown = JSON.parse(raw);
+		if (
+			!isRecord(value) ||
+			typeof value.checkedAt !== "number" ||
+			!Number.isFinite(value.checkedAt) ||
+			!isRecord(value.folders)
+		) {
+			return undefined;
+		}
+		const folders: Record<string, RemoteFolder> = {};
+		for (const [key, entry] of Object.entries(value.folders)) {
+			const folder = parseRemoteFolder(entry);
+			if (folder !== undefined) folders[key] = folder;
+		}
+		return { checkedAt: value.checkedAt, folders };
+	} catch {
+		return undefined;
+	}
+};
+
+const readSkillsCheckCache = (
+	cachePath: string,
+): SkillsCheckCache | undefined => {
+	try {
+		return parseSkillsCheckCache(readFileSync(cachePath, "utf8"));
+	} catch {
+		return undefined;
+	}
+};
+
+export const skillsCheckCachePath = (configDir: string): string =>
+	join(configDir, CACHE_FILE);
+
+/**
+ * The digest the skills CLI writes to `computedHash`: every file's folder-relative path and
+ * then its bytes, in `localeCompare` order of path.
+ */
+export const skillContentHash = (
+	files: readonly { path: string; bytes: Uint8Array }[],
+): string => {
+	const hash = createHash("sha256");
+	for (const file of [...files].sort((a, b) =>
+		a.path.localeCompare(b.path),
+	)) {
+		hash.update(file.path);
+		hash.update(file.bytes);
+	}
+	return hash.digest("hex");
+};
+
+const gitBlobSha = (bytes: Uint8Array): string =>
+	createHash("sha1")
+		.update(`blob ${bytes.byteLength}\0`)
+		.update(bytes)
+		.digest("hex");
+
+type TreeEntry = { path: string; mode: string; type: string; sha: string };
+
+const isTreeEntry = (value: unknown): value is TreeEntry =>
+	isRecord(value) &&
+	typeof value.path === "string" &&
+	typeof value.mode === "string" &&
+	typeof value.type === "string" &&
+	typeof value.sha === "string";
+
+const githubHeaders = (env: NodeJS.ProcessEnv): Record<string, string> => {
+	const token = env.GITHUB_TOKEN || env.GH_TOKEN;
+	return {
+		Accept: "application/vnd.github+json",
+		"User-Agent": "neon-cli",
+		...(token ? { Authorization: `Bearer ${token}` } : {}),
+	};
+};
+
+const fetchTree = async (
+	source: string,
+	env: NodeJS.ProcessEnv,
+): Promise<TreeEntry[]> => {
+	const response = await fetch(
+		`https://api.github.com/repos/${source}/git/trees/HEAD?recursive=1`,
+		{
+			headers: githubHeaders(env),
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		},
+	);
+	if (!response.ok) {
+		if (
+			(response.status === 403 || response.status === 429) &&
+			response.headers.get("x-ratelimit-remaining") === "0"
+		) {
+			throw new Error(
+				`GitHub API rate limit reached while checking ${source}. Set GITHUB_TOKEN and retry.`,
+			);
+		}
+		throw new Error(
+			`GitHub returned ${response.status} for the file tree of ${source}.`,
+		);
+	}
+	const body: unknown = await response.json();
+	if (!isRecord(body) || !Array.isArray(body.tree)) {
+		throw new Error(
+			`GitHub returned an unexpected file tree for ${source}.`,
+		);
+	}
+	if (body.truncated === true) {
+		throw new Error(`GitHub truncated the file tree of ${source}.`);
+	}
+	return body.tree.filter(isTreeEntry);
+};
+
+/** The files the skills CLI hashes: regular files, outside `.git` and `node_modules`. */
+const folderFiles = (tree: readonly TreeEntry[], folder: string) =>
+	tree.filter((entry) => {
+		if (entry.type !== "blob" || entry.mode === "120000") return false;
+		if (!entry.path.startsWith(`${folder}/`)) return false;
+		const dirs = entry.path
+			.slice(folder.length + 1)
+			.split("/")
+			.slice(0, -1);
+		return !dirs.includes(".git") && !dirs.includes("node_modules");
+	});
+
+const fetchContentHash = async (
+	source: string,
+	folder: string,
+	tree: readonly TreeEntry[],
+): Promise<string> => {
+	const files = await Promise.all(
+		folderFiles(tree, folder).map(async (entry) => {
+			const path = entry.path
+				.split("/")
+				.map(encodeURIComponent)
+				.join("/");
+			const response = await fetch(
+				`https://raw.githubusercontent.com/${source}/HEAD/${path}`,
+				{ signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+			);
+			if (!response.ok) {
+				throw new Error(
+					`GitHub returned ${response.status} for ${entry.path} in ${source}.`,
+				);
+			}
+			const bytes = new Uint8Array(await response.arrayBuffer());
+			if (gitBlobSha(bytes) !== entry.sha) {
+				throw new Error(`${source} changed during the check. Retry.`);
+			}
+			return { path: entry.path.slice(folder.length + 1), bytes };
+		}),
+	);
+	return skillContentHash(files);
+};
+
+type FolderRequest = { source: string; folder: string; content: boolean };
+
+/**
+ * The folders to fetch: the given skills, plus every folder already in the cache so
+ * results for other directories stay current. Only project installs need file contents.
+ */
+const folderRequests = (
+	skills: readonly LockedSkill[],
+	previous: Record<string, RemoteFolder>,
+): FolderRequest[] => {
+	const requests = new Map<string, FolderRequest>();
+	const add = (request: FolderRequest) => {
+		const key = folderKey(request);
+		const existing = requests.get(key);
+		requests.set(key, {
+			...request,
+			content: request.content || existing?.content === true,
+		});
+	};
+	for (const [key, remote] of Object.entries(previous)) {
+		const split = key.lastIndexOf(":");
+		const source = key.slice(0, split);
+		if (split <= 0 || !NEON_SOURCES.has(source)) continue;
+		add({
+			source,
+			folder: key.slice(split + 1),
+			content: remote.content !== undefined,
+		});
+	}
+	for (const skill of skills) {
+		add({
+			source: skill.source,
+			folder: skill.folder,
+			content: skill.scope === "project",
+		});
+	}
+	return [...requests.values()];
+};
+
+/**
+ * Fetches the default-branch state of every requested skill folder and writes it to the
+ * cache. File contents are downloaded only for folders whose tree changed since the cache.
+ */
+export const refreshSkillsCheckCache = async ({
+	cachePath,
+	skills,
+	env = process.env,
+	now = Date.now(),
+}: {
+	cachePath: string;
+	skills: readonly LockedSkill[];
+	env?: NodeJS.ProcessEnv;
+	now?: number;
+}): Promise<Record<string, RemoteFolder>> => {
+	const previous = readSkillsCheckCache(cachePath)?.folders ?? {};
+	const requests = folderRequests(skills, previous);
+	const folders: Record<string, RemoteFolder> = {};
+	for (const source of new Set(requests.map((request) => request.source))) {
+		const tree = await fetchTree(source, env);
+		for (const request of requests) {
+			if (request.source !== source) continue;
+			const key = folderKey(request);
+			const node = tree.find(
+				(entry) =>
+					entry.type === "tree" && entry.path === request.folder,
+			);
+			if (node === undefined) {
+				folders[key] = { missing: true };
+				continue;
+			}
+			const prior = previous[key];
+			let content = prior?.tree === node.sha ? prior.content : undefined;
+			if (request.content && content === undefined) {
+				content = await fetchContentHash(source, request.folder, tree);
+			}
+			folders[key] = {
+				tree: node.sha,
+				...(content === undefined ? {} : { content }),
+			};
+		}
+	}
+	writeJsonFile(cachePath, { checkedAt: now, folders }, "skills check cache");
+	return folders;
+};
+
+export type SkillsStatusRow = {
+	scope: string;
+	skill: string;
+	status: SkillStatus;
+};
+
+export const skillsStatusRows = (
+	skills: readonly LockedSkill[],
+	folders: Record<string, RemoteFolder>,
+): SkillsStatusRow[] =>
+	skills.map((skill) => {
+		const status = skillStatus(skill, folders[folderKey(skill)]);
+		if (status === undefined) {
+			throw new Error(
+				`No result for ${skill.skill} from ${skill.source}. Retry the check.`,
+			);
+		}
+		return { scope: scopeLabel(skill.scope), skill: skill.skill, status };
+	});
+
+export const formatSkillsNotice = (
+	outdated: readonly LockedSkill[],
+): string | undefined => {
+	if (outdated.length === 0) return undefined;
+	const scopes = (["global", "project"] as const).filter((scope) =>
+		outdated.some((skill) => skill.scope === scope),
+	);
+	return [
+		"Neon agent skills have updates:",
+		...scopes.map(
+			(scope) =>
+				`  ${scopeLabel(scope)}: ${outdated
+					.filter((skill) => skill.scope === scope)
+					.map((skill) => skill.skill)
+					.join(", ")}`,
+		),
+		"Update them:",
+		...scopes.map((scope) => `  ${neonSkillsUpdateCommand(scope)}`),
+	].join("\n");
+};
+
+const spawnSkillsCheckWorker = (cachePath: string, cwd: string): void => {
+	const workerPath = fileURLToPath(
+		new URL("./check_worker.js", import.meta.url),
+	);
+	if (!existsSync(workerPath)) return;
+	try {
+		const child = spawn(process.execPath, [workerPath, cachePath, cwd], {
+			detached: true,
+			stdio: "ignore",
+			windowsHide: true,
+		});
+		child.on("error", (error) => {
+			log.debug("Skills check failed to start: %s", error.message);
+		});
+		child.unref();
+	} catch (error) {
+		log.debug(
+			"Could not start the skills check: %s",
+			error instanceof Error ? error.message : String(error),
+		);
+	}
+};
+
+/**
+ * Warns at most once a day when a Neon skill in the user-level lock or this directory's
+ * `skills-lock.json` is behind its source, from a cache a background worker refreshes daily.
+ */
+export const notifyIfSkillsOutdated = ({
+	configDir,
+	cwd,
+	now = Date.now(),
+}: {
+	configDir: string;
+	cwd: string;
+	now?: number;
+}): void => {
+	let skills: LockedSkill[];
+	try {
+		skills = [
+			...readLockedSkills(globalLockPath(), "global"),
+			...readLockedSkills(projectLockPath(cwd), "project"),
+		];
+	} catch (error) {
+		log.debug(
+			"Skipping the skills check: %s",
+			error instanceof Error ? error.message : String(error),
+		);
+		return;
+	}
+	if (skills.length === 0) return;
+
+	const cachePath = skillsCheckCachePath(configDir);
+	const cache = readSkillsCheckCache(cachePath);
+	const notice = formatSkillsNotice(
+		skills.filter(
+			(skill) =>
+				skillStatus(skill, cache?.folders[folderKey(skill)]) ===
+				"outdated",
+		),
+	);
+	if (notice !== undefined) {
+		showNotice({
+			configDir,
+			id: "skills",
+			intervalMs: DAY_MS,
+			message: notice,
+			now,
+		});
+	}
+
+	const unseen = skills.filter(
+		(skill) => cache?.folders[folderKey(skill)] === undefined,
+	);
+	if (
+		cache !== undefined &&
+		unseen.length === 0 &&
+		now - cache.checkedAt < DAY_MS
+	) {
+		return;
+	}
+	// Placeholders mark this directory's skills as requested, so a failed check waits a day
+	// instead of retrying on every command.
+	const folders = { ...cache?.folders };
+	for (const skill of unseen) folders[folderKey(skill)] = {};
+	if (
+		writeJsonFile(
+			cachePath,
+			{ checkedAt: now, folders },
+			"skills check cache",
+		)
+	) {
+		spawnSkillsCheckWorker(cachePath, cwd);
+	}
+};
