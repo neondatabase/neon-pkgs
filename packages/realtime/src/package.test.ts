@@ -20,24 +20,34 @@ const packageRequire = createRequire(import.meta.url);
 const schemas = [
 	{
 		path: "schema/realtime-protocol.schema.json",
-		id: "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-protocol-v3.schema.json",
 		exports: [
 			"schema/realtime-protocol.schema.json",
-			"schema/realtime-protocol-v2.schema.json",
+			"schema/realtime-protocol-v3.schema.json",
 		],
 	},
 	{
 		path: "schema/realtime-query-capability.schema.json",
-		id: "https://neon.tech/schemas/realtime/realtime-query-capability-v1.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-query-capability-v2.schema.json",
 		exports: [
 			"schema/realtime-query-capability.schema.json",
-			"schema/realtime-query-capability-v1.schema.json",
+			"schema/realtime-query-capability-v2.schema.json",
 		],
 	},
 	{
 		path: "schema/legacy/realtime-protocol-v1.schema.json",
 		id: "https://neon.tech/schemas/realtime/realtime-protocol-v1.schema.json",
 		exports: ["schema/realtime-protocol-v1.schema.json"],
+	},
+	{
+		path: "schema/legacy/realtime-protocol-v2.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
+		exports: ["schema/realtime-protocol-v2.schema.json"],
+	},
+	{
+		path: "schema/legacy/realtime-query-capability-v1.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-query-capability-v1.schema.json",
+		exports: ["schema/realtime-query-capability-v1.schema.json"],
 	},
 ] as const;
 

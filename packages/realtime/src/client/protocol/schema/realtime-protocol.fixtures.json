@@ -1,5 +1,6 @@
 {
   "valid": [
+    { "type": "client_info", "sdk": "javascript", "release_line": "0.2" },
     { "type": "subscribe", "request_id": "1", "authorization": "token" },
     { "type": "renew", "live_id": "1", "authorization": "token" },
     { "type": "unsubscribe", "live_id": "1" },
@@ -30,6 +31,9 @@
     { "type": "connection_error", "code": "protocol_error", "message": "invalid sequence" }
   ],
   "invalid": [
+    { "type": "client_info", "sdk": "javascript", "release_line": "0.3" },
+    { "type": "client_info", "sdk": "typescript", "release_line": "0.2" },
+    { "type": "client_info", "sdk": "javascript", "release_line": "0.2", "version": "0.2.0" },
     { "type": "hello", "database": "app" },
     { "type": "hello", "database": "app", "extra": true },
     { "type": "subscribe", "request_id": "0", "authorization": "token" },

@@ -18,6 +18,7 @@ import orderedFixtures from "./schema/ordered-changes.fixtures.json";
 import fixtures from "./schema/realtime-protocol.fixtures.json";
 
 const CLIENT_TYPES = new Set([
+	"client_info",
 	"subscribe",
 	"renew",
 	"unsubscribe",
@@ -73,7 +74,7 @@ function decodesCleanly(frame: string): boolean {
 	}
 }
 
-describe("Realtime v2 JSON codec", () => {
+describe("Realtime v3 JSON codec", () => {
 	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
 		for (const fixture of orderedFixtures.valid)
 			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
@@ -450,6 +451,11 @@ describe("Realtime v2 JSON codec", () => {
 
 	it("serializes every client command with wire field names", () => {
 		const messages: ClientMessage[] = [
+			{
+				type: "client_info",
+				sdk: "javascript",
+				release_line: "0.2",
+			},
 			{ type: "subscribe", request_id: "1", authorization: "token" },
 			{ type: "renew", live_id: "1", authorization: "token" },
 			{ type: "unsubscribe", live_id: "1" },
@@ -461,7 +467,7 @@ describe("Realtime v2 JSON codec", () => {
 		).toEqual(
 			fixtures.valid
 				.filter(({ type }) => CLIENT_TYPES.has(type))
-				.slice(0, 5),
+				.slice(0, 6),
 		);
 	});
 

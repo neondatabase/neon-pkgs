@@ -8,7 +8,11 @@ import type {
 	RealtimeLogger,
 	RealtimeLogLevel,
 } from "../client/types.js";
-import type { PreparedLiveQuery, RealtimeAdapter } from "./adapter.js";
+import type {
+	PreparedLiveQuery,
+	RealtimeAdapter,
+	RealtimeAdapterSource,
+} from "./adapter.js";
 import {
 	createCapabilityIssuer,
 	parseRealtimeSecret,
@@ -25,6 +29,7 @@ export type {
 	PreparedLiveQuery,
 	PreparedLiveQueryParameter,
 	RealtimeAdapter,
+	RealtimeAdapterSource,
 } from "./adapter.js";
 export type {
 	PostgresParameterHelpers,
@@ -53,6 +58,12 @@ type QueryRow<Query> = Query extends
 
 type SealInput<Query> = { readonly query: Query };
 type SealableQuery<Query> = Query | RawSqlQuery<unknown>;
+type QuerySource = RealtimeAdapterSource | "raw_sql";
+
+interface PreparedQuery {
+	readonly query: PreparedLiveQuery;
+	readonly source: QuerySource;
+}
 
 /**
  * Server-only Realtime capability issuer.
@@ -194,16 +205,24 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 	);
 	const prepare = <ConcreteQuery extends SealableQuery<Query>>(
 		query: ConcreteQuery,
-	): PreparedLiveQuery => {
-		const prepared = isRawSqlQuery(query)
-			? prepareRawSqlQuery(query)
-			: prepareWithConfiguredAdapter(query as Query, adapter);
-		return snapshotPreparedQuery(prepared);
+	): PreparedQuery => {
+		if (isRawSqlQuery(query)) {
+			return {
+				query: snapshotPreparedQuery(prepareRawSqlQuery(query)),
+				source: "raw_sql",
+			};
+		}
+		return {
+			query: snapshotPreparedQuery(
+				prepareWithConfiguredAdapter(query as Query, adapter),
+			),
+			source: adapter?.querySource ?? "custom",
+		};
 	};
 	const sealPrepared = async <Row>(
-		prepared: PreparedLiveQuery,
+		prepared: PreparedQuery,
 	): Promise<SealedLiveQuery<Row>> =>
-		Object.freeze(await issueCapability(prepared));
+		Object.freeze(await issueCapability(prepared.query, prepared.source));
 	const seal = async <ConcreteQuery extends SealableQuery<Query>>(
 		input: SealInput<ConcreteQuery>,
 	): Promise<SealedLiveQuery<QueryRow<ConcreteQuery>>> =>

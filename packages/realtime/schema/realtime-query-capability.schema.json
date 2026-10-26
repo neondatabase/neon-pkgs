@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neon.tech/schemas/realtime/realtime-query-capability-v1.schema.json",
-  "title": "Neon Realtime query capability v1",
+  "$id": "https://neon.tech/schemas/realtime/realtime-query-capability-v2.schema.json",
+  "title": "Neon Realtime query capability v2",
   "description": "Strict decoded JWE protected-header and claims contract. Compact serialization and cryptographic requirements are recorded in x-jweCompact.",
   "type": "object",
   "additionalProperties": false,
@@ -35,7 +35,17 @@
       "properties": {
         "alg": { "const": "dir" },
         "enc": { "const": "A256GCM" },
-        "v": { "const": 1 }
+        "v": { "const": 2 }
+      }
+    },
+    "issuerMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sdk", "release_line", "query_source"],
+      "properties": {
+        "sdk": { "const": "javascript" },
+        "release_line": { "enum": ["0.1", "0.2"] },
+        "query_source": { "enum": ["raw_sql", "drizzle", "kysely", "custom"] }
       }
     },
     "parameter": {
@@ -71,6 +81,7 @@
         "aud",
         "database",
         "error_details",
+        "issuer",
         "query_fingerprint",
         "sql",
         "parameters",
@@ -78,13 +89,14 @@
         "exp"
       ],
       "properties": {
-        "v": { "const": 1 },
+        "v": { "const": 2 },
         "aud": { "const": "realtime-proxy" },
         "database": { "$ref": "#/$defs/databaseName" },
         "error_details": {
           "description": "Controls whether subscription errors use safe client-facing messages or include full database diagnostics.",
           "enum": ["safe", "full"]
         },
+        "issuer": { "$ref": "#/$defs/issuerMetadata" },
         "query_fingerprint": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",

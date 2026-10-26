@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import protocolSchema from "../../../../schema/realtime-protocol.schema.json";
 import capabilitySchema from "../../../../schema/realtime-query-capability.schema.json";
-import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v1.fixtures.json";
+import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v2.fixtures.json";
 import orderedFixtures from "./ordered-changes.fixtures.json";
 import protocolFixtures from "./realtime-protocol.fixtures.json";
 
