@@ -347,15 +347,22 @@ describe("e2e — Neon AI Gateway capability matrix", () => {
 					}),
 				);
 				expect(result.warnings ?? []).toEqual([]);
-				return result.usage.outputTokenDetails.reasoningTokens ?? 0;
+				const body = result.response.body as
+					| { usage?: unknown }
+					| undefined;
+				return {
+					tokens:
+						result.usage.outputTokenDetails.reasoningTokens ?? 0,
+					// The failure is intermittent and hasn't reproduced outside CI, so the
+					// message carries what the gateway team needs to trace the call.
+					trace: `request id ${result.response.headers?.["x-request-id"]}, usage ${JSON.stringify(body?.usage)}`,
+				};
 			};
 
-			const [minimal, high] = [
-				await reason("minimal"),
-				await reason("high"),
-			];
-			expect(minimal).toBe(0);
-			expect(high).toBeGreaterThan(0);
+			const minimal = await reason("minimal");
+			const high = await reason("high");
+			expect(minimal.tokens, `minimal: ${minimal.trace}`).toBe(0);
+			expect(high.tokens, `high: ${high.trace}`).toBeGreaterThan(0);
 		}, 240_000);
 	});
 
