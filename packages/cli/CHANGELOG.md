@@ -1,5 +1,11 @@
 # neon
 
+## 8.12.0
+
+### Minor Changes
+
+- e5b7475: Add `neon skills status` (`--global` for user-level skills) to show which installed Neon skills are behind their source. Other commands now warn once a day when Neon skills in this directory or at user level are outdated; `NO_UPDATE_NOTIFIER=1` disables the warning.
+
 ## 8.11.4
 
 ### Patch Changes
