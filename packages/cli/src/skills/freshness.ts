@@ -1,6 +1,14 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import {
+	closeSync,
+	constants,
+	existsSync,
+	fstatSync,
+	openSync,
+	readFileSync,
+	statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,12 +115,32 @@ export const readLockedSkills = (
 	scope: SkillsScope,
 ): LockedSkill[] => {
 	if (!existsSync(path)) return [];
-	const raw = readFileSync(path, "utf8");
+	const raw = readLockFile(path);
 	try {
 		return parseSkillsLock(raw, scope);
 	} catch {
 		// The parser quotes the input, which can hold terminal controls.
 		throw new Error(`${path} is not valid JSON.`);
+	}
+};
+
+const MAX_LOCK_BYTES = 1024 * 1024;
+
+/**
+ * A project lock is repository content: a FIFO would block the open and `/dev/zero` the read,
+ * on every command run in that directory.
+ */
+const readLockFile = (path: string): string => {
+	const fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+	try {
+		const stat = fstatSync(fd);
+		if (!stat.isFile()) throw new Error(`${path} is not a regular file.`);
+		if (stat.size > MAX_LOCK_BYTES) {
+			throw new Error(`${path} is larger than ${MAX_LOCK_BYTES} bytes.`);
+		}
+		return readFileSync(fd, "utf8");
+	} finally {
+		closeSync(fd);
 	}
 };
 

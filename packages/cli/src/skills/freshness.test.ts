@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -101,6 +102,45 @@ describe("readLockedSkills", () => {
 			expect(() => readLockedSkills(path, "project")).toThrow(
 				new Error(`${path} is not valid JSON.`),
 			);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("refuses a lock that is not a regular file, and follows a link to one", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-skills-lock-"));
+		try {
+			const zero = join(dir, "zero.json");
+			symlinkSync("/dev/zero", zero);
+			expect(() => readLockedSkills(zero, "project")).toThrow(
+				new Error(`${zero} is not a regular file.`),
+			);
+
+			const fifo = join(dir, "fifo.json");
+			execFileSync("mkfifo", [fifo]);
+			expect(() => readLockedSkills(fifo, "project")).toThrow(
+				new Error(`${fifo} is not a regular file.`),
+			);
+
+			const real = join(dir, "real.json");
+			writeFileSync(
+				real,
+				JSON.stringify({
+					version: 1,
+					skills: {
+						neon: {
+							source: "neondatabase/agent-skills",
+							skillPath: "skills/neon/SKILL.md",
+							computedHash: CONTENT,
+						},
+					},
+				}),
+			);
+			const link = join(dir, "skills-lock.json");
+			symlinkSync(real, link);
+			expect(readLockedSkills(link, "project")).toEqual([
+				neon("project", CONTENT),
+			]);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
