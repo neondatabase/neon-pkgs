@@ -43,4 +43,25 @@ type TopLevelEndpointKeys<T> = {
 }[keyof T];
 
 type ServerAuthMethods = TopLevelEndpointKeys<typeof API_ENDPOINTS>;
-export type NeonAuthServer = Pick<VanillaBetterAuthClient, ServerAuthMethods>;
+
+/** Keeps only the members of `T` that the endpoint tree `E` implements. */
+type PickEndpoints<T, E> = {
+	[P in keyof E & keyof T]: E[P] extends { path: string }
+		? T[P]
+		: PickEndpoints<T[P], E[P]>;
+};
+
+/**
+ * `oauth2` is narrowed to the endpoints the server mounts: the client type
+ * also carries client management and protocol calls that Neon rejects or that
+ * belong to relying parties.
+ */
+export type NeonAuthServer = Pick<
+	VanillaBetterAuthClient,
+	Exclude<ServerAuthMethods, "oauth2">
+> & {
+	oauth2: PickEndpoints<
+		VanillaBetterAuthClient["oauth2"],
+		(typeof API_ENDPOINTS)["oauth2"]
+	>;
+};

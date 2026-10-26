@@ -1,5 +1,5 @@
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import type { BetterAuthClientOptions } from "better-auth/client";
-
 import {
 	adminClient,
 	emailOTPClient,
@@ -25,7 +25,7 @@ export interface NeonAuthAdapterCoreAuthOptions
 
 export const FORCE_FETCH_HEADER = "X-Force-Fetch";
 
-const supportedBetterAuthClientPlugins = [
+const coreBetterAuthClientPlugins = [
 	jwtClient(),
 	adminClient(),
 	organizationClient(),
@@ -34,6 +34,14 @@ const supportedBetterAuthClientPlugins = [
 	phoneNumberClient(),
 	anonymousTokenClient(),
 ] satisfies BetterAuthClientOptions["plugins"];
+
+// The OAuth provider plugin's inferred type embeds the whole server plugin and
+// cannot be serialized into a declaration file, so the list is annotated to
+// refer to the package export instead.
+const supportedBetterAuthClientPlugins: (
+	| (typeof coreBetterAuthClientPlugins)[number]
+	| ReturnType<typeof oauthProviderClient>
+)[] = [...coreBetterAuthClientPlugins, oauthProviderClient()];
 
 export type SupportedBetterAuthClientPlugins =
 	typeof supportedBetterAuthClientPlugins;

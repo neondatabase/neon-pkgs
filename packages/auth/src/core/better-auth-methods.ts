@@ -387,9 +387,48 @@ function isSessionResponseData(
 	);
 }
 
+// Routes of the @better-auth/oauth-provider plugin. They are listed by name
+// because a base URL can itself end in `/oauth2`, where any other path under
+// it (`/oauth2/sign-out`, `/oauth2/get-session`) is a normal Better Auth route.
+export const OAUTH2_ENDPOINTS = [
+	"authorize",
+	"token",
+	"consent",
+	"continue",
+	"introspect",
+	"revoke",
+	"userinfo",
+	"register",
+	"end-session",
+	"end-session/confirm",
+	"create-client",
+	"get-client",
+	"get-clients",
+	"update-client",
+	"delete-client",
+	"client/rotate-secret",
+	"public-client",
+	"public-client-prelogin",
+	"get-consent",
+	"get-consents",
+	"update-consent",
+	"delete-consent",
+];
+
+const OAUTH2_ENDPOINT_TAIL = new RegExp(
+	`/oauth2/(?:${OAUTH2_ENDPOINTS.join("|")})/?$`,
+);
+
 export function deriveBetterAuthMethodFromUrl(
 	url: string,
 ): keyof typeof BETTER_AUTH_METHODS_HOOKS | undefined {
+	// The OAuth provider's `/oauth2/token` would otherwise match the `/token`
+	// session check below and be answered from the session cache. Only the path
+	// tail is matched, so an `oauth2` host, query string, or earlier path segment
+	// does not suppress classification.
+	if (OAUTH2_ENDPOINT_TAIL.test(new URL(url, "http://localhost").pathname)) {
+		return undefined;
+	}
 	if (url.includes("/sign-in/anonymous")) {
 		return "anonymousSignIn";
 	}

@@ -170,6 +170,75 @@ function MyComponent() {
 }
 ```
 
+## OAuth provider (MCP)
+
+A Neon Auth project can act as an OAuth 2.1 provider, for example to let MCP clients sign in your users. The provider's login and consent pages are pages of your app, and the client exposes the `oauth2` namespace for them; no configuration is needed:
+
+```typescript
+import { createAuthClient } from '@neon/auth';
+
+export const auth = createAuthClient('https://your-auth-server.com');
+```
+
+When the page URL carries the signed `sig` and `ba_param` query parameters that the provider appended on redirect, the client adds them as `oauth_query` to every non-GET request, so a sign-in on the login page resumes the authorization. Without those parameters requests are unchanged.
+
+A login page resumes the authorization in two cases: the user signs in on it, or the user is already signed in. On every load, including the redirect back from a social sign-in, call `getSession()` to check the sign-in and then `oauth2.continue({ selected: true })` (use the same path for the login page URL configured for the OAuth provider in Neon Auth and the middleware's `loginUrl`), which navigates to the consent page or back to the client app. Skip it when `prompt` contains `login` or `create`, which ask the user to sign in again. A 400 from `continue` means the link has expired; show a message instead of the form. After `signIn.email`, skip your own redirect when `data.redirect` is true: the SDK is already navigating. See the [login page example](./NEXT-JS.md#oauth-provider-mcp) in the Next.js guide; the same component works in a Vite SPA.
+
+A consent page reads the client from the URL and answers with `oauth2.consent`:
+
+```tsx
+'use client';
+import { useEffect, useState } from 'react';
+import { auth } from '@/lib/auth/client';
+
+export default function ConsentPage() {
+  const [scope, setScope] = useState<string | null>(null);
+  const [client, setClient] = useState<{ client_name?: string; logo_uri?: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Read the query in an effect: the page also renders on the server, where `window` is undefined.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setScope(params.get('scope'));
+    auth.oauth2
+      .publicClient({ query: { client_id: params.get('client_id') ?? '' } })
+      .then(({ data }) => setClient(data))
+      .catch(() => setError('This request could not be completed. Go back to the app and try again.'));
+  }, []);
+
+  const answer = (accept: boolean) =>
+    auth.oauth2
+      .consent({ accept })
+      .catch(() => setError('This request could not be completed. Go back to the app and try again.'));
+
+  if (error) return <p role="alert">{error}</p>;
+
+  return (
+    <div>
+      <p>{client?.client_name ?? 'An application'} wants to access: {scope}</p>
+      <button onClick={() => answer(true)}>Allow</button>
+      <button onClick={() => answer(false)}>Deny</button>
+    </div>
+  );
+}
+```
+
+`oauth2.consent()` navigates the browser itself: it returns `{ redirect: true, url }`, and better-auth's default redirect fetch plugin sets `window.location.href`, so the page does not need to follow it. Pass `scope` (a space-separated subset of the requested scopes) to grant less than was requested; without it every requested scope is granted. Both `publicClient` and `consent` need a signed-in user.
+
+Send `Content-Security-Policy: frame-ancestors 'none'` as a response header on the login and consent pages so they cannot be framed (browsers ignore `frame-ancestors` in a `<meta>` tag), and never build consent URLs yourself: the provider redirects with a signed query that `oauth2.consent()` forwards as it is.
+
+The browser client's `oauth2.*` mirrors the full plugin. Neon mounts these endpoints:
+
+| Group | Endpoints | In `createNeonAuth()` | Notes |
+| --- | --- | --- | --- |
+| Login and consent actions | `consent`, `continue`, `publicClient`, `publicClientPrelogin` | Yes | Drive your login and consent pages. |
+| The user's own grants | `getConsent`, `getConsents`, `updateConsent`, `deleteConsent` | Yes | Let a signed-in user review and revoke what they granted. |
+| Client management | `create-client`, `get-client`, `get-clients`, `update-client`, `delete-client`, `client/rotate-secret` | No | Neon rejects these for end users with 401; manage clients through the Neon Console or API. |
+| OAuth protocol | `authorize`, `token`, `introspect`, `revoke`, `userinfo`, `register` | No | Use client credentials or bearer tokens with form bodies or redirects. Relying parties and MCP servers should use `@neon/oauth`. |
+| RP-initiated logout | `end-session`, `end-session/confirm` | No | Browser redirect flow. |
+
+`createNeonAuth()` and `createAuthServer()` expose only the first two groups. A server-side consent example is not documented, because `oauth_query` has to be the signed query the provider redirected with and is only built automatically in the browser.
+
 ## Anonymous Access
 
 Enable `allowAnonymous` to let unauthenticated users access data via RLS policies:

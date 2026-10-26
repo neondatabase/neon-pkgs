@@ -1,6 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	expectTypeOf,
+	test,
+	vi,
+} from "vitest";
 import { createAuthServer } from "./client-factory";
 import type { RequestContext } from "./request-context";
+import type { NeonAuthServer } from "./types";
 
 const TEST_SECRET = "test-secret-at-least-32-characters-long!";
 const TEST_BASE_URL = "https://auth.example.com";
@@ -505,5 +514,265 @@ describe("createAuthServer client-info header", () => {
 		const info = JSON.parse(headers.get("X-Neon-Client-Info") as string);
 		expect(info.betterAuthVersion).toMatch(/^\d+\.\d+\.\d+$/);
 		expect(headers.get("Origin")).toBe("https://app.example.com");
+	});
+});
+
+describe("createAuthServer oauth2", () => {
+	const originalFetch = globalThis.fetch;
+	let fetchMock: ReturnType<typeof vi.fn>;
+
+	beforeEach(() => {
+		fetchMock = vi.fn(async () => Response.json({ ok: true }));
+		globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	const make = () =>
+		createAuthServer({
+			baseUrl: TEST_BASE_URL,
+			context: makeContext,
+			cookieSecret: TEST_SECRET,
+		});
+
+	const lastCall = () => {
+		const [url, init] = fetchMock.mock.calls.at(-1) as [
+			string,
+			RequestInit,
+		];
+		return { url: new URL(url), init };
+	};
+
+	const postCases = [
+		["consent", "consent", { accept: true, scope: "openid" }],
+		["continue", "continue", { selected: true }],
+		[
+			"publicClientPrelogin",
+			"public-client-prelogin",
+			{ client_id: "c1", oauth_query: "sig=s" },
+		],
+		[
+			"updateConsent",
+			"update-consent",
+			{ id: "k1", update: { scopes: ["openid"] } },
+		],
+		["deleteConsent", "delete-consent", { id: "k1" }],
+	] as const;
+
+	test.each(
+		postCases,
+	)("oauth2.%s POSTs JSON to /oauth2/%s", async (name, path, body) => {
+		await (make().oauth2[name] as (b: unknown) => Promise<unknown>)(body);
+		const { url, init } = lastCall();
+		expect(url.pathname.endsWith(`/oauth2/${path}`)).toBe(true);
+		expect(init.method).toBe("POST");
+		expect(JSON.parse(init.body as string)).toEqual(body);
+	});
+
+	test("oauth2.publicClient GETs /oauth2/public-client with client_id", async () => {
+		await make().oauth2.publicClient({ query: { client_id: "c1" } });
+		const { url, init } = lastCall();
+		expect(url.pathname.endsWith("/oauth2/public-client")).toBe(true);
+		expect(url.searchParams.get("client_id")).toBe("c1");
+		expect(init.method).toBe("GET");
+	});
+
+	test("oauth2.getConsent GETs /oauth2/get-consent with id", async () => {
+		await make().oauth2.getConsent({ query: { id: "k1" } });
+		const { url, init } = lastCall();
+		expect(url.pathname.endsWith("/oauth2/get-consent")).toBe(true);
+		expect(url.searchParams.get("id")).toBe("k1");
+		expect(init.method).toBe("GET");
+	});
+
+	test("oauth2.getConsents GETs /oauth2/get-consents", async () => {
+		await make().oauth2.getConsents();
+		const { url, init } = lastCall();
+		expect(url.pathname.endsWith("/oauth2/get-consents")).toBe(true);
+		expect(init.method).toBe("GET");
+	});
+
+	test("oauth2 exposes only the user actions Neon routes", () => {
+		const oauth2 = make().oauth2 as Record<string, unknown>;
+		for (const included of [
+			"consent",
+			"continue",
+			"deleteConsent",
+			"getConsent",
+			"getConsents",
+			"publicClient",
+			"publicClientPrelogin",
+			"updateConsent",
+		]) {
+			expect(typeof oauth2[included]).toBe("function");
+		}
+		for (const excluded of [
+			"token",
+			"introspect",
+			"revoke",
+			"register",
+			"createClient",
+			"getClients",
+		]) {
+			expect(oauth2[excluded]).toBeUndefined();
+		}
+	});
+
+	test("the server type has only the routed oauth2 methods", () => {
+		expectTypeOf<keyof NeonAuthServer["oauth2"]>().toEqualTypeOf<
+			| "consent"
+			| "continue"
+			| "publicClientPrelogin"
+			| "updateConsent"
+			| "deleteConsent"
+			| "publicClient"
+			| "getConsent"
+			| "getConsents"
+		>();
+	});
+});
+
+describe("createAuthServer endpoint paths", () => {
+	let fetchMock: ReturnType<typeof vi.fn>;
+
+	beforeEach(() => {
+		fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	const makeServer = () =>
+		createAuthServer({
+			baseUrl: TEST_BASE_URL,
+			context: makeContext,
+			cookieSecret: TEST_SECRET,
+		});
+
+	test("revokeOtherSessions POSTs to /revoke-other-sessions", async () => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ status: true }, { status: 200 }),
+		);
+
+		await (
+			makeServer() as unknown as {
+				revokeOtherSessions: () => Promise<unknown>;
+			}
+		).revokeOtherSessions();
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(new URL(url).pathname).toBe("/revoke-other-sessions");
+		expect(init.method).toBe("POST");
+	});
+
+	test("emailOtp.resetPassword POSTs to /email-otp/reset-password", async () => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ success: true }, { status: 200 }),
+		);
+
+		await (
+			makeServer() as unknown as {
+				emailOtp: {
+					resetPassword: (args: unknown) => Promise<unknown>;
+				};
+			}
+		).emailOtp.resetPassword({
+			email: "a@b.com",
+			otp: "123456",
+			password: "new-password",
+		});
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(new URL(url).pathname).toBe("/email-otp/reset-password");
+		expect(init.method).toBe("POST");
+		expect(JSON.parse(init.body as string)).toEqual({
+			email: "a@b.com",
+			otp: "123456",
+			password: "new-password",
+		});
+	});
+
+	test("verifyEmail GETs /verify-email with the token in the query string", async () => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ status: true }, { status: 200 }),
+		);
+
+		await (
+			makeServer() as unknown as {
+				verifyEmail: (args: unknown) => Promise<unknown>;
+			}
+		).verifyEmail({ query: { token: "tok-123" } });
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		const parsed = new URL(url);
+		expect(parsed.pathname).toBe("/verify-email");
+		expect(parsed.searchParams.get("token")).toBe("tok-123");
+		expect(init.method).toBe("GET");
+		expect(init.body).toBeUndefined();
+	});
+
+	test("jwks GETs /.well-known/jwks.json with no body", async () => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ keys: [] }, { status: 200 }),
+		);
+
+		await (
+			makeServer() as unknown as {
+				jwks: () => Promise<unknown>;
+			}
+		).jwks();
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(new URL(url).pathname).toBe("/.well-known/jwks.json");
+		expect(init.method).toBe("GET");
+		expect(init.body).toBeUndefined();
+	});
+
+	test("admin.listUserSessions POSTs to /admin/list-user-sessions", async () => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ sessions: [] }, { status: 200 }),
+		);
+
+		await (
+			makeServer() as unknown as {
+				admin: {
+					listUserSessions: (args: unknown) => Promise<unknown>;
+				};
+			}
+		).admin.listUserSessions({ userId: "user-1" });
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(new URL(url).pathname).toBe("/admin/list-user-sessions");
+		expect(init.method).toBe("POST");
+		expect(JSON.parse(init.body as string)).toEqual({ userId: "user-1" });
+	});
+
+	test("organization.checkSlug POSTs to /organization/check-slug", async () => {
+		fetchMock.mockResolvedValueOnce(
+			Response.json({ status: true }, { status: 200 }),
+		);
+
+		await (
+			makeServer() as unknown as {
+				organization: {
+					checkSlug: (args: unknown) => Promise<unknown>;
+				};
+			}
+		).organization.checkSlug({ slug: "acme" });
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(new URL(url).pathname).toBe("/organization/check-slug");
+		expect(init.method).toBe("POST");
+		expect(JSON.parse(init.body as string)).toEqual({ slug: "acme" });
 	});
 });

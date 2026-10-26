@@ -81,7 +81,7 @@
 		"NEXT-JS.md"
 	],
 	"scripts": {
-		"build": "tsc --noEmit && tsdown",
+		"build": "tsc --noEmit && tsdown && tsc -p dist-check/tsconfig.json",
 		"prepare": "npm run build",
 		"test": "vitest",
 		"test:node": "node --run test",
@@ -94,6 +94,7 @@
 		"@neon/e2e-harness": "workspace:*",
 		"@types/node": "catalog:",
 		"@vitest/coverage-v8": "catalog:",
+		"kysely": "0.28.17",
 		"msw": "2.6.8",
 		"next": "16.2.11",
 		"rolldown": "1.2.8",
@@ -103,9 +104,13 @@
 		"vitest": "catalog:"
 	},
 	"dependencies": {
+		"@better-auth/core": "1.7.6",
+		"@better-auth/oauth-provider": "1.7.6",
+		"@better-auth/utils": "0.4.2",
 		"@better-fetch/fetch": "1.3.2",
 		"@supabase/auth-js": "2.79.0",
 		"better-auth": "1.7.6",
+		"better-call": "1.4.0",
 		"jose": "6.2.5",
 		"zod": "^4.5.4"
 	},

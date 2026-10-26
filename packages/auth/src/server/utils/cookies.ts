@@ -39,12 +39,21 @@ export const extractNeonAuthCookies = (headers: Headers | string): string => {
 };
 
 /**
- * The upstream parser yields `NaN` for a malformed `Max-Age`; serializing that
- * would emit `Max-Age=NaN`, so a non-numeric value is dropped. Zero is kept
- * because it is how a cookie is expired.
+ * Narrows a parsed `Max-Age` attribute to a finite number of seconds.
+ *
+ * The upstream parser types unrecognised attributes as
+ * `string | number | boolean | Date` and produces `NaN` for a malformed
+ * `Max-Age`, so the value must be validated before it is re-serialized.
  */
-const toMaxAge = (value: unknown): number | undefined =>
-	typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const toMaxAge = (value: unknown): number | undefined => {
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? value : undefined;
+	}
+	if (typeof value === "string" && /^-?\d+$/.test(value.trim())) {
+		return Number.parseInt(value, 10);
+	}
+	return undefined;
+};
 
 /**
  * Parses the `set-cookie` header from Neon Auth response into a list of cookies.

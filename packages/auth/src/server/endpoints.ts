@@ -42,6 +42,12 @@ type ValidEndpointTree<T> = {
 			: never;
 };
 
+/**
+ * The SDK's assumption about the Neon Auth server: its jwt plugin is configured with this
+ * `jwksPath` (neon-auth `src/auth/config/jwt.ts`), so the JWKS is not at Better Auth's default.
+ */
+export const NEON_AUTH_JWKS_PATH = "/.well-known/jwks.json";
+
 export const API_ENDPOINTS = {
 	// Session & token
 	getSession: { path: "get-session", method: "GET" },
@@ -77,12 +83,13 @@ export const API_ENDPOINTS = {
 	// changeEmail: { path: 'change-email', method: 'POST' }
 	changePassword: { path: "change-password", method: "POST" },
 	sendVerificationEmail: { path: "send-verification-email", method: "POST" },
-	verifyEmail: { path: "verify-email", method: "POST" },
+	verifyEmail: { path: "verify-email", method: "GET" },
 	resetPassword: { path: "reset-password", method: "POST" },
 	requestPasswordReset: { path: "request-password-reset", method: "POST" },
 
 	// JWT
 	token: { path: "token", method: "GET" },
+	jwks: { path: NEON_AUTH_JWKS_PATH.replace(/^\//, ""), method: "GET" },
 	getAnonymousToken: { path: "token/anonymous", method: "GET" },
 
 	// Admin (requires admin role)
@@ -94,7 +101,7 @@ export const API_ENDPOINTS = {
 		updateUser: { path: "admin/update-user", method: "POST" },
 		banUser: { path: "admin/ban-user", method: "POST" },
 		unbanUser: { path: "admin/unban-user", method: "POST" },
-		listUserSessions: { path: "admin/list-user-sessions", method: "GET" },
+		listUserSessions: { path: "admin/list-user-sessions", method: "POST" },
 		revokeUserSession: {
 			path: "admin/revoke-user-session",
 			method: "POST",
@@ -121,7 +128,7 @@ export const API_ENDPOINTS = {
 			method: "GET",
 		},
 		setActive: { path: "organization/set-active", method: "POST" },
-		checkSlug: { path: "organization/check-slug", method: "GET" },
+		checkSlug: { path: "organization/check-slug", method: "POST" },
 
 		// Member management
 		listMembers: { path: "organization/list-members", method: "GET" },
@@ -185,6 +192,24 @@ export const API_ENDPOINTS = {
 	// Magic Link
 	magicLink: {
 		verify: { path: "magic-link/verify", method: "GET" },
+	},
+
+	// OAuth provider: the session-cookie user actions Neon routes. Client
+	// management is rejected by Neon for end users, and the protocol endpoints
+	// (token, introspect, revoke, register, userinfo, authorize, endSession) are
+	// for relying parties that authenticate with client credentials.
+	oauth2: {
+		consent: { path: "oauth2/consent", method: "POST" },
+		continue: { path: "oauth2/continue", method: "POST" },
+		publicClientPrelogin: {
+			path: "oauth2/public-client-prelogin",
+			method: "POST",
+		},
+		updateConsent: { path: "oauth2/update-consent", method: "POST" },
+		deleteConsent: { path: "oauth2/delete-consent", method: "POST" },
+		publicClient: { path: "oauth2/public-client", method: "GET" },
+		getConsent: { path: "oauth2/get-consent", method: "GET" },
+		getConsents: { path: "oauth2/get-consents", method: "GET" },
 	},
 } as const satisfies ValidEndpointTree<VanillaBetterAuthClient>;
 
