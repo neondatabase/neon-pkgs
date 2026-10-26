@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import prompts, { type InitialReturnValue } from "prompts";
 import type yargs from "yargs";
 import {
@@ -9,6 +9,7 @@ import {
 import { isCi } from "../env.js";
 import type { InitAuthOptions } from "../init/auth.js";
 import {
+	BootstrapInputError,
 	type BootstrapTemplate,
 	ensureTargetUsable,
 	FALLBACK_TEMPLATES,
@@ -68,6 +69,14 @@ export type BootstrapProps = CommonProps & {
 	directory?: string;
 	template?: string;
 	force: boolean;
+	/** Deploy the template into a new Neon project after scaffolding. */
+	deploy?: boolean;
+	/** `--env KEY=VALUE` values for a deployed template's inputs. */
+	env?: string[];
+	/** With --deploy: the new project's organization, region, and name. */
+	orgId?: string;
+	regionId?: string;
+	projectName?: string;
 	listTemplates: boolean;
 	agent?: string[];
 	default: boolean;
@@ -123,6 +132,7 @@ export type NestedBootstrapResult = {
 	skippedLinkForDeps: boolean;
 	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
+	deployed: boolean;
 };
 
 // The directory positional is optional: omitting it in an interactive terminal
@@ -197,6 +207,31 @@ export const builder = (argv: yargs.Argv) =>
 					"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
 				coerce: coerceAgentFlag,
 			},
+			deploy: {
+				describe:
+					"Deploy the template's neon.ts into a new Neon project: install, create and link the project, write the template's inputs to .env.local, then run `neon deploy --env .env.local`. Its deploy.after hook must succeed",
+				type: "boolean",
+				default: false,
+			},
+			env: {
+				describe:
+					"With --deploy: a value for one of the template's inputs, as KEY=VALUE (repeatable). Inputs without one are generated, defaulted, or asked for",
+				type: "array",
+				string: true,
+			},
+			"org-id": {
+				describe: "With --deploy: organization for the new project",
+				type: "string",
+			},
+			"region-id": {
+				describe: "With --deploy: region for the new project",
+				type: "string",
+			},
+			"project-name": {
+				describe:
+					"With --deploy: name for the new project (default: the directory name)",
+				type: "string",
+			},
 		})
 		.example(
 			"$0 bootstrap my-app",
@@ -209,6 +244,10 @@ export const builder = (argv: yargs.Argv) =>
 		.example(
 			"$0 bootstrap my-app --default",
 			"Skip the pickers; if several orgs or projects exist, link prints IDs and exits",
+		)
+		.example(
+			"$0 bootstrap my-queue --template queue --deploy -y --region-id aws-us-east-2",
+			"Scaffold the queue template and deploy it into a new project",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -271,6 +310,9 @@ export const handler = async (
 	// prompt path even on a TTY.
 	const interactive =
 		!props.default && Boolean(process.stdout.isTTY) && !isCi();
+	if (props.deploy) {
+		assertDeployable(props, interactive);
+	}
 	const template =
 		props.selectedTemplate ??
 		(await resolveSelectedTemplate(
@@ -283,6 +325,12 @@ export const handler = async (
 	await scaffold(template, targetDir);
 	recordScaffoldedTemplate(template.id);
 	printScaffolded(template, targetDir);
+	if (props.deploy && !hasNeonConfig(targetDir)) {
+		throw new BootstrapInputError(
+			`Template "${template.id}" has no neon.ts, so there is nothing to deploy. Re-run without --deploy.`,
+			"TEMPLATE_NOT_DEPLOYABLE",
+		);
+	}
 	const result = await runPostScaffoldSteps(
 		props,
 		targetDir,
@@ -422,6 +470,7 @@ const nestedResult = (
 		skippedLinkForDeps: boolean;
 		agentSetup: InitAgentSetupResult;
 		agentsRan: boolean;
+		deployed: boolean;
 	},
 ): NestedBootstrapResult => ({
 	templateTitle: template.title,
@@ -462,6 +511,7 @@ const runPostScaffoldSteps = async (
 			linked: false,
 			skippedLinkForDeps: false,
 			agentsRan: false,
+			deployed: false,
 		};
 		finishPostScaffold({
 			heading: "Project scaffolded.",
@@ -469,6 +519,7 @@ const runPostScaffoldSteps = async (
 			targetDir,
 			pm: defaultPm,
 			...outcome,
+			deployRequested: props.deploy === true,
 			suggestLink: true,
 			skipPrint: props.skipDoneSummary === true,
 		});
@@ -516,6 +567,7 @@ const runPostScaffoldSteps = async (
 		targetDir,
 		pm,
 		...outcome,
+		deployRequested: props.deploy === true,
 		suggestLink: !outcome.linked,
 		skipPrint: props.skipDoneSummary === true,
 	});
@@ -562,6 +614,7 @@ const runDefaultSteps = async (
 		targetDir,
 		pm,
 		...outcome,
+		deployRequested: props.deploy === true,
 		suggestLink: !outcome.linked,
 		skipPrint: props.skipDoneSummary === true,
 	});
@@ -591,6 +644,7 @@ const executePostScaffold = async (
 	skippedLinkForDeps: boolean;
 	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
+	deployed: boolean;
 }> => {
 	const kids = {
 		// Bootstrap's other output (scaffold messages, the done summary) is hardcoded
@@ -675,6 +729,7 @@ const executePostScaffold = async (
 		}
 		const acceptedLink =
 			choices.yes ||
+			props.deploy === true ||
 			(await (props.pickLink ?? pickInitLinkInteractively)());
 		if (!acceptedLink) {
 			continue;
@@ -693,6 +748,7 @@ const executePostScaffold = async (
 			config: props.linkNoConfig !== true,
 			cwd: targetDir,
 			...props.linkInputs,
+			...(props.deploy ? deployLinkInputs(props, targetDir) : {}),
 			...(props.configDir ? { configDir: props.configDir } : {}),
 			...(props.profile ? { profile: props.profile } : {}),
 			...(props.oauthHost ? { oauthHost: props.oauthHost } : {}),
@@ -707,6 +763,25 @@ const executePostScaffold = async (
 		await linkProject(linkProps);
 		linked = true;
 	}
+	let deployed = false;
+	if (props.deploy && !installFailed && !gitFailed) {
+		if (!linked) {
+			throw new BootstrapInputError(
+				"--deploy needs a linked project, and the link step didn't run.",
+				"DEPLOY_NOT_LINKED",
+			);
+		}
+		// Loaded only for --deploy: it pulls in `config apply` and its runtime.
+		const { deployTemplate } = await import("../init/deploy.js");
+		log.info("Deploying the template's neon.ts…");
+		await deployTemplate({
+			...kids.auth,
+			cwd: targetDir,
+			env: props.env ?? [],
+			...(choices.yes ? {} : { ask: askTemplateInput }),
+		});
+		deployed = true;
+	}
 	return {
 		installed,
 		installFailed,
@@ -716,7 +791,63 @@ const executePostScaffold = async (
 		skippedLinkForDeps,
 		agentSetup,
 		agentsRan,
+		deployed,
 	};
+};
+
+/**
+ * `--deploy` needs dependencies (to evaluate neon.ts and bundle functions), a linked
+ * project, and either a terminal or `-y` to answer the questions.
+ */
+const assertDeployable = (
+	props: BootstrapProps,
+	interactive: boolean,
+): void => {
+	if (props.install === false || props.link === false) {
+		throw new BootstrapInputError(
+			"--deploy installs dependencies and links a new project; remove --no-install and --no-link.",
+			"DEPLOY_NEEDS_INSTALL_AND_LINK",
+		);
+	}
+	if (!interactive && !props.default) {
+		throw new BootstrapInputError(
+			"--deploy outside a terminal needs -y. Pass --env KEY=VALUE for any template input that has no default.",
+			"DEPLOY_NEEDS_YES",
+		);
+	}
+};
+
+/**
+ * The link step's inputs under `--deploy`: always a new project, so a template never
+ * deploys into a project that already holds data.
+ */
+const deployLinkInputs = (
+	props: BootstrapProps,
+	targetDir: string,
+): Partial<InitLinkProps> => ({
+	projectName: props.projectName ?? basename(targetDir),
+	...(props.regionId ? { regionId: props.regionId } : {}),
+	...(props.orgId ? { orgId: props.orgId } : {}),
+	// `config apply` pulls env after it deploys; the template's neon.ts can't be evaluated
+	// before its inputs are written.
+	envPull: false,
+	config: false,
+});
+
+const askTemplateInput = async (input: {
+	name: string;
+	description?: string;
+	secret?: boolean;
+}): Promise<string | undefined> => {
+	const { value } = await prompts({
+		onState: onPromptState,
+		type: input.secret ? "password" : "text",
+		name: "value",
+		message: input.description
+			? `${input.name} (${input.description})`
+			: input.name,
+	});
+	return typeof value === "string" ? value : undefined;
 };
 
 const isGitRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
@@ -829,6 +960,8 @@ const printDoneSummary = (input: {
 	linked: boolean;
 	skippedLinkForDeps: boolean;
 	suggestLink: boolean;
+	deployed?: boolean;
+	deployRequested?: boolean;
 }): void => {
 	const unfinished = input.installFailed || input.gitFailed;
 	const heading = unfinished ? "Setup did not finish." : input.heading;
@@ -857,6 +990,11 @@ const printDoneSummary = (input: {
 	if (input.suggestLink) {
 		next.push(`${getCliName()} link`);
 	}
+	if (input.deployed) {
+		next.push(
+			`Inputs and secrets are in .env.local. Redeploy with \`${getCliName()} deploy --env .env.local\`.`,
+		);
+	}
 	if (!unfinished) {
 		next.push("See the README to run it.");
 	}
@@ -876,6 +1014,16 @@ const printDoneSummary = (input: {
 					}),
 				},
 				{ label: "Project", value: project },
+				...(input.deployRequested
+					? [
+							{
+								label: "Deploy",
+								value: input.deployed
+									? "deployed"
+									: "not deployed",
+							},
+						]
+					: []),
 			],
 			next,
 		}),

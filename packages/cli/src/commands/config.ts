@@ -210,6 +210,11 @@ export type ConfigProps = BranchScopeProps & {
 	runtimeApi?: NeonApi;
 	/** Global `--color` flag (default true); `--no-color` sets it false to force plain output. */
 	color?: boolean;
+	/**
+	 * Fail `apply` when the `deploy.after` hook fails, instead of warning. Not a flag:
+	 * `bootstrap --deploy` sets it, because there the hook is part of the install.
+	 */
+	strictHooks?: boolean;
 };
 
 export const envFlag = {
@@ -1566,6 +1571,7 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 				git,
 				event,
 				cwd,
+				strict: props.strictHooks === true,
 			});
 		}
 	}
