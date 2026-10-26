@@ -1,3 +1,4 @@
+import { UnsupportedFunctionalityError } from "@ai-sdk/provider";
 import { streamText } from "ai";
 import { describe, expect, it } from "vitest";
 import {
@@ -77,8 +78,10 @@ describe("neon.tools.imageGeneration", () => {
 			apiKey: "test-token",
 		});
 
-		expect(() =>
-			neon.tools.imageGeneration({ model: "gpt-image-1" }),
-		).toThrow(/Use `gpt-image-2`/);
+		const build = () =>
+			neon.tools.imageGeneration({ model: "gpt-image-1" });
+
+		expect(build).toThrow(UnsupportedFunctionalityError);
+		expect(build).toThrow(/Use `gpt-image-2`/);
 	});
 });
