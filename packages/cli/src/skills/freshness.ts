@@ -107,12 +107,12 @@ export const readLockedSkills = (
 	scope: SkillsScope,
 ): LockedSkill[] => {
 	if (!existsSync(path)) return [];
+	const raw = readFileSync(path, "utf8");
 	try {
-		return parseSkillsLock(readFileSync(path, "utf8"), scope);
-	} catch (error) {
-		throw new Error(
-			`Could not read ${path}: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		return parseSkillsLock(raw, scope);
+	} catch {
+		// The parser quotes the input, which can hold terminal controls.
+		throw new Error(`${path} is not valid JSON.`);
 	}
 };
 

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
 	formatSkillsNotice,
@@ -6,6 +9,7 @@ import {
 	parseSkillsLock,
 	planSkillsCheck,
 	type RemoteFolder,
+	readLockedSkills,
 	skillContentHash,
 	skillStatus,
 } from "./freshness.js";
@@ -85,6 +89,21 @@ describe("parseSkillsLock", () => {
 
 	test("throws on a lock that is not JSON", () => {
 		expect(() => parseSkillsLock("{", "project")).toThrow();
+	});
+});
+
+describe("readLockedSkills", () => {
+	test("reports a malformed lock without quoting its contents", () => {
+		const dir = mkdtempSync(join(tmpdir(), "neon-skills-lock-"));
+		try {
+			const path = join(dir, "skills-lock.json");
+			writeFileSync(path, "\u001b]52;c;eA==\u0007");
+			expect(() => readLockedSkills(path, "project")).toThrow(
+				new Error(`${path} is not valid JSON.`),
+			);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });
 
