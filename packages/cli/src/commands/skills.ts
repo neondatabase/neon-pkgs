@@ -500,7 +500,7 @@ const statusHandler = async (props: SkillsProps & { configDir: string }) => {
 		title: "Skills",
 		emptyMessage:
 			scope === "project"
-				? "No Neon skills in this directory's skills-lock.json."
+				? "No Neon skills in this directory's skills-lock.json. For user-level skills, run: neon skills status --global"
 				: "No user-level Neon skills in the skills CLI lock.",
 	});
 	out.end();
