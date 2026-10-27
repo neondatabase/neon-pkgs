@@ -8,6 +8,7 @@ import type {
 	RawLiveQueryUpdate,
 } from "@neon/realtime";
 import { describe, expect, it, vi } from "vitest";
+import YAML from "yaml";
 import yargs from "yargs";
 import { stripAnsi } from "../human_table.js";
 import {
@@ -393,6 +394,152 @@ describe("subscribe command", () => {
 		expect(text).not.toContain("row-1");
 		expect(text).not.toContain("row-2");
 		expect(text).not.toContain("row-3");
+	});
+
+	it("reports moves without losing rows or misclassifying later changes", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, output.out, "table"),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+
+		subscription.emitRows([
+			{ rowId: "row-1", row: { id: 1, value: "first" } },
+			{ rowId: "row-2", row: { id: 2, value: "second" } },
+		]);
+		subscription.emitChanges(
+			[],
+			[{ type: "move", rowId: "row-2", afterRowId: null }],
+			["42"],
+		);
+		subscription.emitChanges(
+			[],
+			[
+				{
+					type: "upsert",
+					rowId: "row-2",
+					row: { id: 2, value: "updated" },
+				},
+				{
+					type: "upsert",
+					rowId: "row-3",
+					row: { id: 3, value: "inserted" },
+				},
+				{ type: "remove", rowId: "row-1" },
+				{ type: "move", rowId: "row-3", afterRowId: "row-2" },
+			],
+			["43"],
+		);
+		subscription.emitChanges(
+			[],
+			[{ type: "remove", rowId: "row-3" }],
+			["44"],
+		);
+		controller.abort();
+		await run;
+
+		const text = stripAnsi(output.text());
+		expect(text).toContain("Transaction 42 · +0 ~0 -0 ↔1");
+		expect(text).toContain("Transaction 43 · +1 ~1 -1 ↔1");
+		expect(text.match(/↔ move/g)).toHaveLength(2);
+		expect(text.match(/\+ insert/g)).toHaveLength(1);
+		expect(text.match(/~ update/g)).toHaveLength(1);
+		expect(text.match(/- delete/g)).toHaveLength(2);
+		const deletion = text.slice(text.indexOf("Transaction 44"));
+		expect(deletion).toContain("- delete");
+		expect(deletion).toContain("inserted");
+	});
+
+	it("shows raw move destinations and counts moves separately", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(true, controller.signal, output.out, "table"),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+
+		subscription.emitRows([
+			{ rowId: "row-1", row: { id: 1 } },
+			{ rowId: "row-2", row: { id: 2 } },
+		]);
+		subscription.emitChanges(
+			[],
+			[
+				{ type: "move", rowId: "row-2", afterRowId: null },
+				{ type: "move", rowId: "row-1", afterRowId: "row-2" },
+			],
+			["42"],
+		);
+		subscription.emitChanges(
+			[],
+			[
+				{ type: "upsert", rowId: "row-3", row: { id: 3 } },
+				{ type: "remove", rowId: "row-1" },
+				{ type: "move", rowId: "row-3", afterRowId: "row-2" },
+			],
+			["43"],
+		);
+		controller.abort();
+		await run;
+
+		const text = stripAnsi(output.text());
+		expect(text).toContain("0 upserts, 0 removals, 2 moves");
+		expect(text).toContain("1 upsert, 1 removal, 1 move");
+		expect(text).toContain("After Row ID");
+		expect(text).toMatch(/move\s+row-2\s+\(head\)/);
+		expect(text).toMatch(/move\s+row-1\s+row-2/);
+	});
+
+	it.each([
+		"json",
+		"yaml",
+	] as const)("preserves raw move variants and nullable predecessors in %s output", async (format) => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(true, controller.signal, output.out, format),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+
+		const rows = [
+			{ rowId: "row-1", row: { id: 1 } },
+			{ rowId: "row-2", row: { id: 2 } },
+		];
+		const changes: readonly LiveQueryChange<Row>[] = [
+			{ type: "upsert", rowId: "row-3", row: { id: 3 } },
+			{ type: "remove", rowId: "row-1" },
+			{ type: "move", rowId: "row-2", afterRowId: null },
+			{ type: "move", rowId: "row-3", afterRowId: "row-2" },
+		];
+		subscription.emitRows(rows);
+		subscription.emitChanges([], changes, ["42"]);
+		controller.abort();
+		await run;
+
+		const events =
+			format === "json"
+				? output
+						.text()
+						.trim()
+						.split("\n")
+						.map((line) => JSON.parse(line))
+				: YAML.parseAllDocuments(output.text()).map((doc) =>
+						doc.toJSON(),
+					);
+		expect(events).toEqual([
+			{ type: "rows", rows },
+			{ type: "changes", txids: ["42"], changes },
+		]);
 	});
 
 	it("surfaces a terminal subscription error and closes the client", async () => {

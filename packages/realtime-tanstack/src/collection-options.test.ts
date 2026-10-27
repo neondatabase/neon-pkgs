@@ -33,6 +33,41 @@ afterEach(async () => {
 });
 
 describe("Realtime TanStack DB collection", () => {
+	it("ignores moves in its unordered keyed collection without deleting rows", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+		client.latest().reset([
+			{ rowId: "a", row: { id: 1, title: "a" } },
+			{ rowId: "b", row: { id: 2, title: "b" } },
+		]);
+		await preload;
+		client
+			.latest()
+			.batch([{ type: "move", rowId: "b", afterRowId: null }], ["42"]);
+		await expect(collection.utils.awaitTxId("42")).resolves.toBe(true);
+		expect(collection.get(1)).toMatchObject({ title: "a" });
+		expect(collection.get(2)).toMatchObject({ title: "b" });
+		client.latest().batch(
+			[
+				{
+					type: "upsert",
+					rowId: "a",
+					row: { id: 1, title: "updated" },
+				},
+				{ type: "remove", rowId: "b" },
+				{ type: "upsert", rowId: "c", row: { id: 3, title: "c" } },
+				{ type: "move", rowId: "c", afterRowId: null },
+			],
+			["43"],
+		);
+		await eventually(() => {
+			expect(collection.get(1)).toMatchObject({ title: "updated" });
+			expect(collection.has(2)).toBe(false);
+			expect(collection.get(3)).toMatchObject({ title: "c" });
+		});
+	});
+
 	it("confirms real-client no-op progress after queuing preceding authoritative changes", async () => {
 		const wire = wireClient();
 		let startMutation!: () => void;

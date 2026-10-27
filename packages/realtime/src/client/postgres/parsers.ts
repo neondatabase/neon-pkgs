@@ -15,7 +15,7 @@ export type PostgreSQLBytesParser<Value = unknown> = (
 	value: Uint8Array,
 ) => Value;
 
-/** Parser input selected by the fixed Realtime protocol v1 OID/codec mapping. */
+/** Parser input selected by the fixed Realtime OID/codec mapping. */
 export type PostgreSQLParserForOid<Oid extends number> =
 	Oid extends typeof pgTypeOids.bytea
 		? PostgreSQLBytesParser

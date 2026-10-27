@@ -13,7 +13,7 @@ backend SDK while preserving Drizzle's inferred result-row type.
 npm install @neon/realtime @neon/realtime-drizzle drizzle-orm
 ```
 
-> **Requirements:** Node.js >= 20.19 and `@neon/realtime` 0.1. The backend query
+> **Requirements:** Node.js >= 20.19 and `@neon/realtime` 0.2. The backend query
 > adapter additionally requires Drizzle ORM 0.45. The core SDK is a peer
 > dependency; Drizzle is an optional peer so the client-only entry stays light.
 
@@ -111,7 +111,7 @@ The preset keeps PostgreSQL `date` as a string and interprets zone-less
 `timestamp` as UTC, matching Drizzle's default PostgreSQL column modes. Other
 values use the core node-postgres-compatible defaults.
 
-Realtime v1 deliberately selects one parser per PostgreSQL OID. It does not
+Realtime deliberately selects one parser per PostgreSQL OID. It does not
 carry Drizzle's per-column modes to the browser. Applications using `date({
 mode: "date" })`, string-mode timestamps, `bigint` number/BigInt modes, numeric
 number/BigInt modes, or custom column decoders must register the corresponding

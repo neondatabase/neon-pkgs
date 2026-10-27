@@ -89,6 +89,8 @@ export type RealtimeCollectionOptions<
 /**
  * Create TanStack DB collection options backed by a raw live-query subscription.
  * Complete-row replacements and committed change batches are applied atomically.
+ * This is an unordered keyed collection: move operations do not change membership
+ * or values and are ignored. Use core materialized subscriptions for server order.
  *
  * @typeParam Row - Object row synchronized into the collection.
  * @typeParam Key - Stable key returned by `getKey`.
@@ -236,6 +238,8 @@ function createRealtimeCollectionOptions<
 						> = [];
 
 						for (const change of changes) {
+							// Collection membership and values are independent of server order.
+							if (change.type === "move") continue;
 							if (change.type === "upsert") {
 								const key = config.getKey(change.row);
 								const previousKey = nextRowIds.get(
@@ -275,7 +279,7 @@ function createRealtimeCollectionOptions<
 										value: change.row,
 									});
 								}
-							} else {
+							} else if (change.type === "remove") {
 								const key = nextRowIds.get(change.rowId);
 								if (key === undefined) {
 									throw new Error(

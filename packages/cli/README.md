@@ -327,9 +327,12 @@ neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER B
 The default terminal output is append-only. It identifies the selected project,
 branch, and database; prints the initial result once; reports connection-state
 changes; and then prints each published change set with its transaction IDs, a compact
-`+insert ~update -delete` summary, and the affected rows. It does not take over the
-terminal or require keyboard navigation. Pass `--changes` to display the raw `rows`
-and `changes` events instead of the materialized view.
+`+insert ~update -delete` summary, and the affected rows. Row moves appear as
+`↔ move` with a separate `↔` count and retain the row's values. It does not take
+over the terminal or require keyboard navigation. Pass `--changes` to display the
+raw `rows` and `changes` events instead of the materialized view. Raw table output
+includes each move's `after_row_id` destination, with `(head)` for the first
+position, and counts moves separately from removals.
 
 For scripts and agents, JSON output is a JSON Lines stream with one complete event
 per line. YAML output uses one document per event:

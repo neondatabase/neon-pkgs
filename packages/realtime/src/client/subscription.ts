@@ -13,6 +13,7 @@ import type {
 	WireColumn,
 	WireRow,
 } from "./protocol/messages.js";
+import { applyMaterializedChanges } from "./reconciliation/ordered-changes.js";
 import type {
 	ReconciledBatch,
 	ReconciliationTarget,
@@ -63,12 +64,11 @@ export class Subscription<Row>
 {
 	private state: LiveQueryState;
 	private snapshot: LiveQuerySnapshot<Row>;
-	private readonly rows?: Map<string, Row>;
+	private rows?: Map<string, Row>;
 	private initialized: boolean;
 	private columns?: readonly WireColumn[];
 	private stagedReset?: {
 		readonly rows: readonly RawLiveQueryRow<Row>[];
-		readonly materializedRows?: Map<string, Row>;
 	};
 	private readonly appliedBatches = new Map<
 		readonly WireChange[],
@@ -104,7 +104,11 @@ export class Subscription<Row>
 		}
 		this.initialized = initialData !== undefined;
 		this.state = connectingState;
-		this.snapshot = this.makeSnapshot();
+		this.snapshot = this.makeSnapshot(
+			this.rows && this.initialized
+				? Object.freeze([...this.rows.values()])
+				: undefined,
+		);
 	}
 
 	currentQuery(): SealedLiveQuery<Row> {
@@ -195,46 +199,85 @@ export class Subscription<Row>
 		this.events.baselineSyncStarted();
 	}
 
-	installReset(wireRows: readonly WireRow[]): void {
-		if (this.closed) return;
-		const rows = this.decodeReset(wireRows);
-		this.stagedReset = {
-			rows,
-			materializedRows: this.rows
-				? new Map(rows.map(({ rowId, row }) => [rowId, row]))
-				: undefined,
-		};
-	}
-
-	applyBatch(wireChanges: readonly WireChange[]): void {
-		if (this.closed) return;
-		const changes = Object.freeze(
-			wireChanges.map((change): LiveQueryChange<Row> => {
-				if (change.op === "remove") {
+	prepare(
+		wireRows: readonly WireRow[] | undefined,
+		batches: readonly ReconciledBatch[],
+	): () => void {
+		if (this.closed) return () => {};
+		const reset =
+			wireRows === undefined ? undefined : this.decodeReset(wireRows);
+		const decodedBatches = new Map<
+			readonly WireChange[],
+			readonly LiveQueryChange<Row>[]
+		>();
+		let hasMoves = false;
+		for (const batch of batches) {
+			const changes = Object.freeze(
+				batch.changes.map((change): LiveQueryChange<Row> => {
+					if (change.op === "remove") {
+						return Object.freeze({
+							type: "remove",
+							rowId: change.row_key,
+						});
+					}
+					if (change.op === "move") {
+						hasMoves = true;
+						return Object.freeze({
+							type: "move",
+							rowId: change.row_key,
+							afterRowId: change.after_row_key,
+						});
+					}
 					return Object.freeze({
-						type: "remove",
+						type: "upsert",
 						rowId: change.row_key,
+						row: decodeRow<Row>(
+							change.values,
+							this.requireColumns(),
+							this.requireParsers(),
+						),
 					});
-				}
-				const row = decodeRow<Row>(
-					change.values,
-					this.requireColumns(),
-					this.requireParsers(),
-				);
-				return Object.freeze({
-					type: "upsert",
-					rowId: change.row_key,
-					row,
-				});
-			}),
-		);
-		const targetRows = this.stagedReset?.materializedRows ?? this.rows;
-		for (const change of changes) {
-			if (change.type === "remove") targetRows?.delete(change.rowId);
-			else targetRows?.set(change.rowId, change.row);
+				}),
+			);
+			decodedBatches.set(batch.changes, changes);
 		}
-		this.appliedBatches.set(wireChanges, changes);
-		if (!this.stagedReset) this.snapshot = this.makeSnapshot();
+		const incrementalContents = reset === undefined && !hasMoves;
+		let candidate = this.rows
+			? reset
+				? new Map(reset.map(({ rowId, row }) => [rowId, row]))
+				: incrementalContents
+					? this.rows
+					: new Map(this.rows)
+			: undefined;
+		if (candidate && !incrementalContents) {
+			for (const changes of decodedBatches.values())
+				candidate = applyMaterializedChanges(candidate, changes);
+		}
+		let data =
+			candidate &&
+			!incrementalContents &&
+			(reset !== undefined || this.initialized)
+				? Object.freeze([...candidate.values()])
+				: undefined;
+		// Decode and validate moves before any target installs. Content-only live
+		// updates can then mutate the existing Map without cloning the full window.
+		// Resets and their complete replay backlog always use a private candidate.
+		return () => {
+			if (this.closed) return;
+			if (candidate && incrementalContents) {
+				for (const changes of decodedBatches.values())
+					applyMaterializedChanges(candidate, changes);
+				data = this.initialized
+					? Object.freeze([...candidate.values()])
+					: undefined;
+			}
+			this.rows = candidate;
+			this.stagedReset = reset ? { rows: reset } : undefined;
+			for (const [changes, decoded] of decodedBatches)
+				this.appliedBatches.set(changes, decoded);
+			if (reset) this.initialized = true;
+			this.snapshot = this.makeSnapshot(data);
+		};
 	}
 
 	decodeFailed(error: unknown): void {
@@ -248,14 +291,7 @@ export class Subscription<Row>
 		if (this.closed) return;
 		const staged = this.stagedReset;
 		if (!staged) throw new Error("Realtime published an uninstalled reset");
-		if (this.rows && staged.materializedRows) {
-			this.rows.clear();
-			for (const [rowId, row] of staged.materializedRows)
-				this.rows.set(rowId, row);
-		}
 		this.stagedReset = undefined;
-		this.initialized = true;
-		this.snapshot = this.makeSnapshot();
 		this.transactions.applySnapshot(mvcc);
 		this.notify(
 			this.updateListeners,
@@ -412,11 +448,7 @@ export class Subscription<Row>
 		}
 	}
 
-	private makeSnapshot(): LiveQuerySnapshot<Row> {
-		const data =
-			this.materialized && this.rows && this.initialized
-				? Object.freeze([...this.rows.values()])
-				: undefined;
+	private makeSnapshot(data = this.snapshot?.data): LiveQuerySnapshot<Row> {
 		return Object.freeze({ ...this.state, data });
 	}
 }

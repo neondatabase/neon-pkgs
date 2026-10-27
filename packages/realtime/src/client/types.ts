@@ -307,7 +307,7 @@ export interface RawLiveQueryRow<Row> {
 }
 
 /**
- * A row upsert or removal in an atomic publication batch.
+ * A row upsert, removal, or sequential move in an atomic publication batch.
  *
  * @typeParam Row - Row produced by the subscribed query.
  */
@@ -325,6 +325,14 @@ export type LiveQueryChange<Row> =
 			readonly type: "remove";
 			/** Opaque identity invalidated by the next complete `rows` update. */
 			readonly rowId: string;
+	  }
+	| {
+			/** Splice this row immediately after its predecessor, or at the head. */
+			readonly type: "move";
+			/** Existing row in the result after applying the batch's contents. */
+			readonly rowId: string;
+			/** Existing predecessor; null places the row at the head. */
+			readonly afterRowId: string | null;
 	  };
 
 /**
