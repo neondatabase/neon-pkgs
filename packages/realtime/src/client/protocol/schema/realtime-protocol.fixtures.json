@@ -1,12 +1,13 @@
 {
   "valid": [
-    { "type": "client_info", "metadata": "{\"sdk\":\"javascript\",\"release_line\":\"0.2\"}" },
+    { "type": "client_info", "metadata": "{\"sdk\":\"javascript\",\"release_line\":\"0.2\",\"version\":\"0.2.0\"}" },
     { "type": "subscribe", "request_id": "1", "authorization": "token" },
     { "type": "renew", "live_id": "1", "authorization": "token" },
     { "type": "unsubscribe", "live_id": "1" },
     { "type": "ping", "token": "heartbeat-1" },
     { "type": "pong", "token": "heartbeat-1" },
     { "type": "ready" },
+    { "type": "client_warning", "code": "client_too_old", "minimum_version": "0.2.0", "message": "Upgrade @neon/realtime to version 0.2.0 or newer." },
     { "type": "progress", "mvcc": { "xmin": "100", "xmax": "110", "xip": ["103"] } },
     { "type": "progress", "mvcc": { "xmin": "100", "xmax": "103", "xip": [] } },
     { "type": "subscribed", "request_id": "1", "live_id": "2", "epoch": "1", "first_sequence": "1", "columns": [{ "name": "id", "type_oid": 23, "typmod": -1, "codec": "pg_text" }] },
@@ -35,6 +36,8 @@
     { "type": "client_info", "metadata": "" },
     { "type": "client_info", "metadata": {} },
     { "type": "client_info", "metadata": "{}", "sdk": "javascript" },
+    { "type": "client_warning", "code": "client_too_old", "minimum_version": "0.2", "message": "upgrade" },
+    { "type": "client_warning", "code": "future", "minimum_version": "0.2.0", "message": "upgrade" },
     { "type": "hello", "database": "app" },
     { "type": "hello", "database": "app", "extra": true },
     { "type": "subscribe", "request_id": "0", "authorization": "token" },
