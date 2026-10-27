@@ -1,5 +1,11 @@
 # neon
 
+## 8.12.2
+
+### Patch Changes
+
+- 27133cc: `neon skills update` reports `none` instead of `updated` when every Neon skill in this directory is already up to date.
+
 ## 8.12.1
 
 ### Patch Changes
