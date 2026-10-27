@@ -18,6 +18,12 @@
       "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]{1,64}$"
     },
     "releaseLine": { "enum": ["0.1", "0.2"] },
+    "clientVersion": {
+      "type": "string",
+      "$comment": "Canonical stable SemVer used only for compatibility checks, never as a metric label.",
+      "maxLength": 32,
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+    },
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "base64Cell": {
       "type": "object",
@@ -137,11 +143,12 @@
         {
           "type": "object",
           "$comment": "Bounded connection metadata. The client sends this once after Ready and before any subscription command.",
-          "required": ["type", "sdk", "release_line"],
+          "required": ["type", "sdk", "release_line", "version"],
           "properties": {
             "type": { "const": "client_info" },
             "sdk": { "const": "javascript" },
-            "release_line": { "$ref": "#/$defs/releaseLine" }
+            "release_line": { "$ref": "#/$defs/releaseLine" },
+            "version": { "$ref": "#/$defs/clientVersion" }
           },
           "additionalProperties": false
         },
@@ -343,6 +350,18 @@
             "code": {
               "enum": ["protocol_error", "invalid_payload", "message_too_large", "resource_exhausted", "slow_consumer", "heartbeat_timeout", "backend_session_lost", "backend_protocol_error", "fence_failed", "internal_error"]
             },
+            "message": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "$comment": "Non-terminal compatibility warning. The connection and subscriptions remain usable.",
+          "required": ["type", "code", "minimum_version", "message"],
+          "properties": {
+            "type": { "const": "client_warning" },
+            "code": { "const": "client_too_old" },
+            "minimum_version": { "$ref": "#/$defs/clientVersion" },
             "message": { "type": "string" }
           },
           "additionalProperties": false

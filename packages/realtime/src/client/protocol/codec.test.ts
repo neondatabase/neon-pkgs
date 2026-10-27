@@ -36,6 +36,7 @@ const SERVER_TYPES = new Set([
 	"commit",
 	"subscription_error",
 	"connection_error",
+	"client_warning",
 	"ping",
 	"pong",
 ]);
@@ -383,6 +384,7 @@ describe("Realtime v3 JSON codec", () => {
 				type: "client_info",
 				sdk: "javascript",
 				release_line: "0.2",
+				version: "0.2.0",
 			},
 			{ type: "subscribe", request_id: "1", authorization: "token" },
 			{ type: "renew", live_id: "1", authorization: "token" },
