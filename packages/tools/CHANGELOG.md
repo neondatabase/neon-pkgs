@@ -1,5 +1,16 @@
 # @neon/tools
 
+## 2.5.0
+
+### Minor Changes
+
+- d7b777c: Add `neon.auth.oauthServer.get|update` for the Neon Auth OAuth provider plugin (OAuth 2.1 authorization server, including MCP) and `neon.auth.oauthClients.list|get|create|update|delete|rotateSecret` for its OAuth clients, with matching `auth.oauthServer.*` and `auth.oauthClients.*` tools.
+
+### Patch Changes
+
+- Updated dependencies [d7b777c]
+  - @neon/sdk@7.6.0
+
 ## 2.4.0
 
 ### Minor Changes

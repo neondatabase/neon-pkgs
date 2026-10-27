@@ -1,5 +1,18 @@
 # neon
 
+## 8.13.0
+
+### Minor Changes
+
+- 739de60: Add `neon neon-auth config oauth-server get|update` to configure the Neon Auth OAuth 2.1 authorization server (including MCP support, which `--no-mcp` removes), `neon neon-auth config oauth-server resource list|add|remove` to manage its protected resources incrementally, and `neon neon-auth oauth-client list|create|get|update|delete|rotate-secret` to manage its OAuth clients.
+
+### Patch Changes
+
+- Updated dependencies [d7b777c]
+  - @neon/sdk@7.6.0
+  - @neon/config@1.9.5
+  - @neon/config-runtime@1.10.4
+
 ## 8.12.2
 
 ### Patch Changes
