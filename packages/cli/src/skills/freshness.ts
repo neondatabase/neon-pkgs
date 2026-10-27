@@ -167,6 +167,8 @@ const readLockFile = (path: string): string => {
 export type RemoteFolder = {
 	tree?: string;
 	content?: string;
+	/** The content hash of the folder as a `core.autocrlf=true` checkout writes it. */
+	contentCrlf?: string;
 	missing?: true;
 	pending?: true;
 };
@@ -194,17 +196,23 @@ export const skillStatus = (
 	remote: RemoteFolder | undefined,
 ): SkillStatus | undefined => {
 	if (remote?.missing === true) return "not found upstream";
-	const latest = skill.hashKind === "tree" ? remote?.tree : remote?.content;
-	if (latest === undefined) return undefined;
-	return latest === skill.hash ? "up to date" : "outdated";
+	if (skill.hashKind === "tree") {
+		if (remote?.tree === undefined) return undefined;
+		return remote.tree === skill.hash ? "up to date" : "outdated";
+	}
+	if (remote?.content === undefined) return undefined;
+	return skill.hash === remote.content || skill.hash === remote.contentCrlf
+		? "up to date"
+		: "outdated";
 };
 
 const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
 	if (!isRecord(value)) return undefined;
-	const { tree, content, missing, pending } = value;
+	const { tree, content, contentCrlf, missing, pending } = value;
 	if (
 		(tree !== undefined && typeof tree !== "string") ||
 		(content !== undefined && typeof content !== "string") ||
+		(contentCrlf !== undefined && typeof contentCrlf !== "string") ||
 		(missing !== undefined && missing !== true) ||
 		(pending !== undefined && pending !== true)
 	) {
@@ -213,6 +221,7 @@ const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {
 	return {
 		...(tree === undefined ? {} : { tree }),
 		...(content === undefined ? {} : { content }),
+		...(contentCrlf === undefined ? {} : { contentCrlf }),
 		...(missing === undefined ? {} : { missing }),
 		...(pending === undefined ? {} : { pending }),
 	};
@@ -277,6 +286,45 @@ export const skillContentHash = (
 		hash.update(file.bytes);
 	}
 	return hash.digest("hex");
+};
+
+const LF = 0x0a;
+const CR = 0x0d;
+/** Control bytes Git counts as printable text: backspace, tab, form feed, escape. */
+const PRINTABLE_CONTROLS: ReadonlySet<number> = new Set([
+	0x08, 0x09, 0x0c, 0x1b,
+]);
+
+/**
+ * The bytes Git writes for a blob when `core.autocrlf=true`, the Git for Windows default. The
+ * skills CLI hashes that checkout, so a Windows install records a hash of these bytes. Mirrors
+ * Git's `convert.c`: a blob that has any CR, a NUL, or mostly non-printable bytes is written
+ * unchanged, and every LF in any other blob becomes CRLF.
+ */
+export const autocrlfCheckout = (bytes: Uint8Array): Uint8Array => {
+	let lf = 0;
+	let printable = 0;
+	let nonprintable = 0;
+	for (const byte of bytes) {
+		if (byte === CR || byte === 0) return bytes;
+		if (byte === LF) lf += 1;
+		else if (
+			byte === 0x7f ||
+			(byte < 0x20 && !PRINTABLE_CONTROLS.has(byte))
+		)
+			nonprintable += 1;
+		else printable += 1;
+	}
+	// Git does not count a trailing DOS end-of-file marker as binary.
+	if (bytes[bytes.length - 1] === 0x1a) nonprintable -= 1;
+	if (lf === 0 || printable >> 7 < nonprintable) return bytes;
+	const out = new Uint8Array(bytes.length + lf);
+	let at = 0;
+	for (const byte of bytes) {
+		if (byte === LF) out[at++] = CR;
+		out[at++] = byte;
+	}
+	return out;
 };
 
 const gitBlobSha = (bytes: Uint8Array): string =>
@@ -351,11 +399,11 @@ const folderFiles = (tree: readonly TreeEntry[], folder: string) =>
 		return !dirs.includes(".git") && !dirs.includes("node_modules");
 	});
 
-const fetchContentHash = async (
+const fetchContentHashes = async (
 	source: string,
 	folder: string,
 	tree: readonly TreeEntry[],
-): Promise<string> => {
+): Promise<{ content: string; contentCrlf: string }> => {
 	const files = await Promise.all(
 		folderFiles(tree, folder).map(async (entry) => {
 			const path = entry.path
@@ -378,7 +426,15 @@ const fetchContentHash = async (
 			return { path: entry.path.slice(folder.length + 1), bytes };
 		}),
 	);
-	return skillContentHash(files);
+	return {
+		content: skillContentHash(files),
+		contentCrlf: skillContentHash(
+			files.map((file) => ({
+				...file,
+				bytes: autocrlfCheckout(file.bytes),
+			})),
+		),
+	};
 };
 
 type FolderRequest = { source: string; folder: string; content: boolean };
@@ -452,14 +508,16 @@ export const refreshSkillsCheckCache = async ({
 				continue;
 			}
 			const prior = previous[key];
-			let content = prior?.tree === node.sha ? prior.content : undefined;
-			if (request.content && content === undefined) {
-				content = await fetchContentHash(source, request.folder, tree);
+			let hashes =
+				prior?.tree === node.sha &&
+				prior.content !== undefined &&
+				prior.contentCrlf !== undefined
+					? { content: prior.content, contentCrlf: prior.contentCrlf }
+					: undefined;
+			if (request.content && hashes === undefined) {
+				hashes = await fetchContentHashes(source, request.folder, tree);
 			}
-			folders[key] = {
-				tree: node.sha,
-				...(content === undefined ? {} : { content }),
-			};
+			folders[key] = { tree: node.sha, ...hashes };
 		}
 	}
 	writeJsonFile(cachePath, { checkedAt: now, folders }, "skills check cache");

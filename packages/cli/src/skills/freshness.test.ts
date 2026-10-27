@@ -1,9 +1,17 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+	autocrlfCheckout,
 	formatSkillsNotice,
 	type LockedSkill,
 	parseSkillsCheckCache,
@@ -216,6 +224,16 @@ describe("skillStatus", () => {
 				content: NEW_CONTENT,
 			}),
 		).toBe("outdated");
+	});
+
+	test("matches a content hash taken from a core.autocrlf=true checkout", () => {
+		expect(
+			skillStatus(neon("project", CONTENT), {
+				tree: TREE,
+				content: NEW_CONTENT,
+				contentCrlf: CONTENT,
+			}),
+		).toBe("up to date");
 	});
 
 	test("has no answer before the needed hash is fetched", () => {
@@ -446,9 +464,9 @@ describe("skillsTelemetry", () => {
 	});
 });
 
-describe("skillContentHash", () => {
-	const bytes = (text: string) => new TextEncoder().encode(text);
+const bytes = (text: string) => new TextEncoder().encode(text);
 
+describe("skillContentHash", () => {
 	test("does not depend on file order", () => {
 		const a = { path: "SKILL.md", bytes: bytes("a") };
 		const b = { path: "references/b.md", bytes: bytes("b") };
@@ -459,6 +477,74 @@ describe("skillContentHash", () => {
 		expect(
 			skillContentHash([{ path: "a.md", bytes: bytes("x") }]),
 		).not.toBe(skillContentHash([{ path: "b.md", bytes: bytes("x") }]));
+	});
+});
+
+describe("autocrlfCheckout", () => {
+	const blobs: Record<string, Uint8Array> = {
+		"lf.md": bytes("# Title\n\nBody with ünïcode\n"),
+		"no-newline.md": bytes("one line"),
+		"crlf.md": bytes("a\r\nb\r\n"),
+		"mixed.md": bytes("a\r\nb\nc\n"),
+		"lone-cr.md": bytes("a\rb\nc\n"),
+		"nul.bin": new Uint8Array([0x41, 0x0a, 0x00, 0x42, 0x0a]),
+		"controls.bin": new Uint8Array([
+			...Array.from({ length: 40 }, () => 0x01),
+			0x0a,
+			...bytes("text\n"),
+		]),
+		"eof-marker.txt": new Uint8Array([...bytes("a\nb\n"), 0x1a]),
+		"tabs-escape.txt": bytes("a\tb\u001b[0m\fc\bd\n"),
+		"empty.txt": new Uint8Array(),
+	};
+
+	test("writes the bytes Git checks out under core.autocrlf=true", () => {
+		const root = mkdtempSync(join(tmpdir(), "autocrlf-"));
+		try {
+			const env = {
+				...process.env,
+				GIT_CONFIG_GLOBAL: "/dev/null",
+				GIT_CONFIG_NOSYSTEM: "1",
+			};
+			const git = (cwd: string, ...args: string[]) =>
+				execFileSync("git", args, { cwd, env, stdio: "pipe" });
+			const repo = join(root, "repo");
+			mkdirSync(repo);
+			git(repo, "init", "-q");
+			for (const [name, content] of Object.entries(blobs)) {
+				writeFileSync(join(repo, name), content);
+			}
+			git(repo, "add", ".");
+			git(
+				repo,
+				"-c",
+				"user.name=t",
+				"-c",
+				"user.email=t@t",
+				"commit",
+				"-qm",
+				"blobs",
+			);
+			git(
+				root,
+				"-c",
+				"core.autocrlf=true",
+				"clone",
+				"-q",
+				repo,
+				"checkout",
+			);
+			for (const [name, content] of Object.entries(blobs)) {
+				expect(
+					Buffer.from(autocrlfCheckout(content)).toString("hex"),
+					name,
+				).toBe(
+					readFileSync(join(root, "checkout", name)).toString("hex"),
+				);
+			}
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });
 

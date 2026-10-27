@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 /** A HOME, config directory, and project directory nothing else has touched. */
-const machine = () => {
+const machine = (extraEnv: Record<string, string> = {}) => {
 	const root = mkdtempSync(join(tmpdir(), "neon-skills-e2e-"));
 	cleanups.push(() => rmSync(root, { recursive: true, force: true }));
 	const dirs = {
@@ -34,6 +34,7 @@ const machine = () => {
 		XDG_STATE_HOME: undefined,
 		NO_UPDATE_NOTIFIER: undefined,
 		CI: "",
+		...extraEnv,
 	};
 	const neon = (args: string[], json = true) =>
 		runCli(args, {
@@ -83,6 +84,23 @@ describe("neon skills status", () => {
 		rewriteLock(join(app, "skills-lock.json"), "neon", "computedHash");
 		expect(await statusOf(neon, [])).toEqual([
 			{ scope: "this directory", skill: "neon", status: "outdated" },
+		]);
+	});
+
+	it("matches a project install checked out with core.autocrlf=true", async () => {
+		const { neon } = machine({
+			GIT_CONFIG_COUNT: "1",
+			GIT_CONFIG_KEY_0: "core.autocrlf",
+			GIT_CONFIG_VALUE_0: "true",
+		});
+		const install = await neon(
+			["skills", "-y", "-s", "neon", "--agent", "cursor"],
+			false,
+		);
+		expect(install.code, install.stderr).toBe(0);
+
+		expect(await statusOf(neon, [])).toEqual([
+			{ scope: "this directory", skill: "neon", status: "up to date" },
 		]);
 	});
 
