@@ -79,10 +79,12 @@ const machine = (): string => {
 			[`${SOURCE}:skills/neon-auth`]: {
 				tree: hex("1", 40),
 				content: hex("c", 64),
+				contentCrlf: hex("7", 64),
 			},
 			[`${SOURCE}:skills/neon-postgres`]: {
 				tree: hex("2", 40),
 				content: hex("e", 64),
+				contentCrlf: hex("f", 64),
 			},
 		},
 	});
