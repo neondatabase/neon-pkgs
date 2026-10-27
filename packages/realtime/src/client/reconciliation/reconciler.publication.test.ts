@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { decodeServerMessage } from "../protocol/codec.js";
 import { BaselineSyncPublicationReconciler } from "./reconciler.js";
 import {
 	accept,
@@ -17,6 +18,46 @@ import {
 } from "./reconciler.test-helpers.js";
 
 describe("publication reconciliation", () => {
+	it.each([
+		"text",
+		"bytes",
+	])("installs complete 4 MiB %s cells from multipart publications", (codec) => {
+		const state = target();
+		const reconciler = subscribed(state);
+		completeEmptyBaselineSync(reconciler);
+		state.applyBatch.mockClear();
+		state.publishBatch.mockClear();
+		const payload = "x".repeat(4 * 1024 * 1024 - 5);
+		const value =
+			codec === "text"
+				? payload
+				: { base64: Buffer.from(payload).toString("base64") };
+		accept(reconciler, { type: "open", publication_id: "large" });
+		const first = keyedResults("large", 0, "1", "1", [
+			{ op: "upsert", row_key: ROW_A, values: [value] },
+		]);
+		const decoded = decodeServerMessage(JSON.stringify(first));
+		if (decoded.type !== "keyed_results")
+			throw new Error("expected keyed results");
+		accept(reconciler, decoded);
+		accept(
+			reconciler,
+			keyedResults("large", 1, "1", "1", [upsert(ROW_B, "second")]),
+		);
+		expect(state.applyBatch).not.toHaveBeenCalled();
+		expect(state.publishBatch).not.toHaveBeenCalled();
+		accept(reconciler, commit("large", 2));
+		expect(state.applyBatch).toHaveBeenCalledTimes(1);
+		const installed = state.applyBatch.mock.calls[0]?.[0];
+		expect(installed).toHaveLength(2);
+		expect(installed?.[0]?.values[0]).toEqual(value);
+		expect(installed?.[1]?.values[0]).toBe("second");
+		keyedPublication(reconciler, "next", "1", "2", [
+			upsert(ROW_A, "small"),
+		]);
+		expect(state.publishBatch).toHaveBeenCalledTimes(2);
+	});
+
 	it("joins fragments, advances a target sequence once, and installs atomically", () => {
 		const observations: string[] = [];
 		const left = target(observations, "left");
