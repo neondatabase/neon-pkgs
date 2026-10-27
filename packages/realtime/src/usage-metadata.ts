@@ -1,3 +1,5 @@
+export { REALTIME_CLIENT_VERSION } from "./version.gen.js";
+
 /** Release cohort emitted by the 0.2 SDK. Keep this catalog bounded. */
 export const REALTIME_RELEASE_LINE = "0.2" as const;
 
@@ -8,4 +10,5 @@ export const REALTIME_SDK = "javascript" as const;
 export const REALTIME_CLIENT_METADATA = JSON.stringify({
 	sdk: REALTIME_SDK,
 	release_line: REALTIME_RELEASE_LINE,
+	version: REALTIME_CLIENT_VERSION,
 });
