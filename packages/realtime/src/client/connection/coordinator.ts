@@ -1,4 +1,8 @@
-import { REALTIME_RELEASE_LINE, REALTIME_SDK } from "../../usage-metadata.js";
+import {
+	REALTIME_CLIENT_VERSION,
+	REALTIME_RELEASE_LINE,
+	REALTIME_SDK,
+} from "../../usage-metadata.js";
 import {
 	type ClientEventSink,
 	SILENT_CLIENT_EVENTS,
@@ -146,6 +150,7 @@ export class ConnectionCoordinator {
 	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
+	private warnedMinimumClientVersion?: string;
 	private requestId = 0n;
 	private ready = false;
 	private disposed = false;
@@ -393,6 +398,7 @@ export class ConnectionCoordinator {
 				type: "client_info",
 				sdk: REALTIME_SDK,
 				release_line: REALTIME_RELEASE_LINE,
+				version: REALTIME_CLIENT_VERSION,
 			});
 			this.events.connection.ready();
 			this.pendingConnectionError = undefined;
@@ -425,6 +431,9 @@ export class ConnectionCoordinator {
 			case "connection_error":
 				this.connectionError(message.code, message.message);
 				return;
+			case "client_warning":
+				this.clientWarning(message);
+				return;
 			case "ping":
 				this.send({ type: "pong", token: message.token });
 				return;
@@ -442,6 +451,14 @@ export class ConnectionCoordinator {
 				this.reconciler.accept(message, mvcc);
 				return;
 		}
+	}
+
+	private clientWarning(
+		message: Extract<ServerMessage, { type: "client_warning" }>,
+	): void {
+		if (this.warnedMinimumClientVersion === message.minimum_version) return;
+		this.warnedMinimumClientVersion = message.minimum_version;
+		console.error(`[Neon Realtime] ${message.message}`);
 	}
 
 	private admitted(

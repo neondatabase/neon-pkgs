@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
+import { REALTIME_CLIENT_VERSION } from "../../usage-metadata.js";
 import { createClientEventSink } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
 import type { WebSocketLike } from "../types.js";
@@ -277,6 +278,7 @@ describe("ConnectionCoordinator", () => {
 				type: "client_info",
 				sdk: "javascript",
 				release_line: "0.2",
+				version: REALTIME_CLIENT_VERSION,
 			},
 			{
 				type: "subscribe",
@@ -302,6 +304,39 @@ describe("ConnectionCoordinator", () => {
 		expect(callbacks.admitted).toHaveBeenCalledWith([
 			{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
 		]);
+	});
+
+	it("reports an outdated client without interrupting subscriptions", () => {
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined);
+		const callbacks = target();
+		const coordinator = createCoordinator();
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const socket = defined(FakeWebSocket.instances[0]);
+		socket.open();
+		socket.receive({ type: "ready" });
+		socket.receive({
+			type: "client_warning",
+			code: "client_too_old",
+			minimum_version: "0.2.0",
+			message:
+				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		});
+		socket.receive({
+			type: "subscribed",
+			request_id: "1",
+			live_id: "41",
+			epoch: "1",
+			first_sequence: "1",
+			columns: [],
+		});
+
+		expect(consoleError).toHaveBeenCalledWith(
+			"[Neon Realtime] This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		);
+		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+		expect(callbacks.admitted).toHaveBeenCalledOnce();
 	});
 
 	it("serializes overlapping renewals so the newest capability wins", async () => {
