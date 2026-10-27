@@ -48,8 +48,7 @@ describe("Legacy Realtime protocol compatibility", () => {
 			validateFormats: false,
 		}).compile(legacySchema);
 		for (const fixture of protocolFixtures.valid.filter(
-			({ type }) =>
-				type !== "client_info" && type !== "client_warning",
+			({ type }) => type !== "client_info" && type !== "client_warning",
 		)) {
 			expect(validate(fixture), JSON.stringify(validate.errors)).toBe(
 				true,
