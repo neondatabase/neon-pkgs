@@ -161,6 +161,11 @@ describe("skillsUpdateHadNothing", () => {
 		expect(
 			skillsUpdateHadNothing("✓ All global skills are up to date"),
 		).toBe(true);
+		expect(
+			skillsUpdateHadNothing(
+				"Checking for skill updates…\n\nUpdating for: Universal\nChecking 2 skill(s)…\n\n\u001b[38;5;145m✓ All project skills are up to date\u001b[0m\n",
+			),
+		).toBe(true);
 		expect(skillsUpdateHadNothing("✓ Updated 1 skill(s)")).toBe(false);
 	});
 });

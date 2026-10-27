@@ -121,9 +121,9 @@ export const npxCommand = (args: readonly string[]): string =>
 const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
 const UPDATE_BANNER = /^Checking for skill updates/i;
 const UPDATE_NOTHING =
-	/No (?:project|global) skills (?:to update|to check|tracked in lock file|can be updated in place)|All global skills are up to date/i;
+	/No (?:project|global) skills (?:to update|to check|tracked in lock file|can be updated in place)|All (?:project|global) skills are up to date/i;
 const UPDATE_RESULT =
-	/No (?:project|global) skills (?:to update|to check|tracked in lock file|can be updated in place)\.?|All global skills are up to date|(?:✓\s*)?Updated \d+ skills?(?:\(s\))?|(?:✗\s*)?Failed to update \d+ skills?(?:\(s\))?/i;
+	/No (?:project|global) skills (?:to update|to check|tracked in lock file|can be updated in place)\.?|All (?:project|global) skills are up to date|(?:✓\s*)?Updated \d+ skills?(?:\(s\))?|(?:✗\s*)?Failed to update \d+ skills?(?:\(s\))?/i;
 
 const stripAnsi = (text: string): string =>
 	text.replace(ANSI, "").replace(/\r/g, "");
