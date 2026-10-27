@@ -5,8 +5,8 @@ these files so their changes remain easy to review:
 
 | Contract | Canonical source and package export | Current identity |
 | --- | --- | --- |
-| WebSocket messages | `realtime-protocol.schema.json` | Protocol v2 |
-| Decoded query capabilities | `realtime-query-capability.schema.json` | Capability v1 |
+| WebSocket messages | `realtime-protocol.schema.json` | Protocol v3 |
+| Decoded query capabilities | `realtime-query-capability.schema.json` | Capability v2 |
 
 Import them through `@neon/realtime/schema/<filename>`. The version remains in
 `$id` and `title`; `$schema` identifies the JSON Schema dialect. Protocol and
@@ -17,23 +17,18 @@ After editing an active schema, run `pnpm --filter @neon/realtime generate` to
 refresh the generated TypeScript types and standalone protocol validator.
 Build and test scripts check that the generated files match the active schemas.
 
-## Legacy protocol and export compatibility
+## Legacy contracts and export compatibility
 
-`legacy/realtime-protocol-v1.schema.json` is a frozen snapshot. No generator or
-runtime code consumes it. Its only schema-validation consumer is the isolated
-`src/client/protocol/schema/legacy/contract.test.ts`, which checks the exact
-bytes pinned by the transition proxy and the old content-only contract.
-The shared protocol fixtures belong to the active codec and contract tests.
+The schemas under `legacy/` are frozen snapshots. No generator or runtime code
+consumes them. The isolated legacy contract test checks their exact bytes and
+their original contracts. Shared fixtures belong to the active codec and
+contract tests.
 
 Existing versioned package exports retain their original contracts:
 
-- `@neon/realtime/schema/realtime-protocol-v2.schema.json` aliases the active
-  protocol schema, currently v2.
-- `@neon/realtime/schema/realtime-query-capability-v1.schema.json` aliases the
-  active capability schema, currently v1.
-- `@neon/realtime/schema/realtime-protocol-v1.schema.json` resolves to the frozen
-  legacy snapshot. This export is deprecated; prefer the active schema or pin
-  an older package/commit when the v1 contract is specifically required.
+- Protocol v1/v2 and capability v1 versioned exports resolve to their frozen
+  legacy snapshots.
+- Protocol v3 and capability v2 versioned exports alias the active schemas.
 
 Keep the legacy export throughout 0.2. Remove its snapshot, export, package-test
 entry and isolated legacy tests at the next compatibility-breaking release,
@@ -60,13 +55,12 @@ schemas with the proxy's `make realtime-protocol-schema-check` and
 `make realtime-query-capability-schema-check` targets. Old commit pins need no
 migration.
 
-The transition server from Hadron #11138 accepts `neon.realtime.v1` and
-`neon.realtime.v2` and delivers ordered results as complete replacements, so
-existing v1 clients and the new v2 SDK can connect during rollout. This SDK
-still requests v2 only. Enabling incremental ordered delivery and requiring
-v2 belongs to the separate activation deployment after the client upgrade.
+Deploy the proxy changes that accept `neon.realtime.v3` and capability v2
+before releasing this SDK. The proxy retains protocol v2 and capability v1
+support so existing clients and server SDKs continue to work without metadata.
+This SDK requests v3 only and emits capability v2.
 
-V2 keeps the existing envelopes and adds `move` with required `row_key` and
+V2 added `move` with required `row_key` and
 `after_row_key`; the latter is a row key or null for head. Validate normalized
 program structure after joining fragments, then validate row/anchor existence
 against the private candidate result.
@@ -75,3 +69,8 @@ The live-query API names such as `useLiveQuery` and `SealedLiveQuery`, the `live
 lifecycle state and `live_id` wire field are unchanged. The single-key secret
 uses the opaque prefix `nrt_live_1`. The fingerprint domain remains
 `neon-live-query-fingerprint-v1\0`.
+
+V3 adds one bounded `client_info` message after `ready` and before subscription
+commands. Capability v2 adds authenticated, bounded issuer metadata. Release
+lines and query sources are closed enums so downstream metric cardinality is
+fixed.

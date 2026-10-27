@@ -37,9 +37,14 @@ describe("Realtime backend SDK", () => {
 			queryFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
 		});
 		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
-			v: 1,
+			v: 2,
 			database: "app",
 			error_details: "safe",
+			issuer: {
+				sdk: "javascript",
+				release_line: "0.2",
+				query_source: "raw_sql",
+			},
 			parameters: [{ type_oid: 0, value: "YWxpY2U=" }],
 		});
 		expect(fetch).not.toHaveBeenCalled();
@@ -135,7 +140,9 @@ describe("Realtime backend SDK", () => {
 			adapter: { prepare },
 		});
 
-		await realtime.seal({ query: { owner: "adapter" } });
+		const adapterSealedQuery = await realtime.seal({
+			query: { owner: "adapter" },
+		});
 		const rawSealedQuery = await realtime.seal({
 			query: messagesByOwner("raw"),
 		});
@@ -145,6 +152,33 @@ describe("Realtime backend SDK", () => {
 		>();
 		expect(prepare).toHaveBeenCalledOnce();
 		expect(prepare).toHaveBeenCalledWith({ owner: "adapter" });
+		expect(
+			await capabilityClaims(adapterSealedQuery.capability),
+		).toMatchObject({
+			issuer: { query_source: "custom" },
+		});
+		expect(await capabilityClaims(rawSealedQuery.capability)).toMatchObject(
+			{
+				issuer: { query_source: "raw_sql" },
+			},
+		);
+	});
+
+	it("records a configured adapter's bounded query source", async () => {
+		const realtime = createRealtime<object>({
+			secret: SECRET,
+			db: "app",
+			adapter: {
+				querySource: "drizzle",
+				prepare: () => ({ sql: "select 1", parameters: [] }),
+			},
+		});
+
+		const sealedQuery = await realtime.seal({ query: {} });
+
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
+			issuer: { query_source: "drizzle" },
+		});
 	});
 
 	it("snapshots caller-owned raw parameter arrays", () => {

@@ -14,12 +14,20 @@ export interface PreparedLiveQuery {
 	readonly parameters: readonly PreparedLiveQueryParameter[];
 }
 
+/** Bounded query-builder family recorded in encrypted capabilities. */
+export type RealtimeAdapterSource = "drizzle" | "kysely" | "custom";
+
 /**
  * Converts an ORM-native query into the prepared live-query representation.
  *
  * @typeParam Query - Query object accepted by the adapter.
  */
 export interface RealtimeAdapter<Query> {
+	/**
+	 * Query-builder family used for aggregate Realtime usage metrics. Official
+	 * adapters set this automatically; custom adapters may omit it.
+	 */
+	readonly querySource?: RealtimeAdapterSource;
 	/**
 	 * Convert an adapter-native query into parameterized SQL and text-format
 	 * parameter values. Adapters may supply PostgreSQL type OID hints; `0`

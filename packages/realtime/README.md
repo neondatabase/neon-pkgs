@@ -117,6 +117,11 @@ adapter when creating the backend SDK.
 For typed Kysely queries, install `@neon/realtime-kysely` and configure its
 adapter in the same way.
 
+Custom `RealtimeAdapter` implementations may set `querySource: "custom"`.
+Official adapters identify their fixed query-builder family automatically.
+Realtime records only this bounded category; it does not accept arbitrary
+adapter names or versions.
+
 ## Subscribe directly from a trusted environment
 
 A trusted, long-lived process can let the SDK hide capability issuance and
@@ -546,27 +551,23 @@ Custom raw consumers should follow the complete-batch staging and validation
 requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
-The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
-transition server that accepts v1 and v2 before releasing upgraded clients.
-During transition, ordered queries receive complete replacements. Activation
-replaces the server deployment, closes old sessions, requires v2, and enables
-ordered patches. An old browser tab must upgrade or reload to reconnect.
-There is no v1 fallback, subscription opt-in, or mode acknowledgment. A server
-can roll back to replacement-only delivery while continuing to accept v2.
+The SDK requests only `neon.realtime.v3`, including on reconnect. Deploy a
+server that accepts v3 before releasing upgraded clients. The proxy continues
+to accept v2 clients; those connections simply have no client metadata. There
+is no client-side protocol fallback, subscription opt-in, or mode
+acknowledgment.
 
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
 `@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
-v1). Their filenames stay stable across revisions; `$id` and `title` retain each
+v2). Their filenames stay stable across revisions; `$id` and `title` retain each
 contract's version.
 
-Existing versioned exports continue to resolve to their original contracts. The
-v1 protocol export is deprecated and resolves to a frozen legacy snapshot,
-separate from the active generator and tests. It remains available throughout
-0.2 and is scheduled for removal at the next compatibility-breaking release.
-This layout change preserves the wire contracts and Hadron #11138's existing
-pins; its transition server continues to accept both v1 and v2 clients.
+Existing versioned exports continue to resolve to their original contracts.
+Protocol v1/v2 and capability v1 resolve to frozen legacy snapshots, separate
+from the active generator and tests. The new versioned v3/v2 exports alias the
+active contracts.
 See the [schema maintenance notes](schema/README.md) for generation, legacy
 removal and downstream synchronization.
