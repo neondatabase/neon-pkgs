@@ -201,9 +201,10 @@ export const skillStatus = (
 		return remote.tree === skill.hash ? "up to date" : "outdated";
 	}
 	if (remote?.content === undefined) return undefined;
-	return skill.hash === remote.content || skill.hash === remote.contentCrlf
-		? "up to date"
-		: "outdated";
+	if (skill.hash === remote.content) return "up to date";
+	// A cache written before `contentCrlf` existed cannot rule out an autocrlf checkout.
+	if (remote.contentCrlf === undefined) return undefined;
+	return skill.hash === remote.contentCrlf ? "up to date" : "outdated";
 };
 
 const parseRemoteFolder = (value: unknown): RemoteFolder | undefined => {

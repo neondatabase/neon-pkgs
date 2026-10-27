@@ -29,6 +29,7 @@ const TREE = "a".repeat(40);
 const NEW_TREE = "b".repeat(40);
 const CONTENT = "c".repeat(64);
 const NEW_CONTENT = "d".repeat(64);
+const NEW_CONTENT_CRLF = "e".repeat(64);
 const KEY = "neondatabase/agent-skills:skills/neon";
 
 const neon = (
@@ -222,6 +223,7 @@ describe("skillStatus", () => {
 			skillStatus(neon("global", CONTENT, "content"), {
 				tree: TREE,
 				content: NEW_CONTENT,
+				contentCrlf: NEW_CONTENT_CRLF,
 			}),
 		).toBe("outdated");
 	});
@@ -262,12 +264,28 @@ describe("planSkillsCheck", () => {
 			planSkillsCheck({
 				skills: [skill],
 				cache: checked({
-					[KEY]: { tree: NEW_TREE, content: NEW_CONTENT },
+					[KEY]: {
+						tree: NEW_TREE,
+						content: NEW_CONTENT,
+						contentCrlf: NEW_CONTENT_CRLF,
+					},
 				}),
 				lockModifiedAt: now - 5000,
 				now,
 			}),
 		).toEqual({ outdated: [skill], toCheck: [], refresh: false });
+	});
+
+	test("checks again instead of warning from a cache without the autocrlf hash", () => {
+		const skill = neon("project", CONTENT);
+		expect(
+			planSkillsCheck({
+				skills: [skill],
+				cache: checked({ [KEY]: { tree: TREE, content: NEW_CONTENT } }),
+				lockModifiedAt: now - 5000,
+				now,
+			}),
+		).toEqual({ outdated: [], toCheck: [skill], refresh: true });
 	});
 
 	test("checks a project skill whose folder only has a tree SHA cached", () => {
@@ -386,7 +404,13 @@ describe("skillsTelemetry", () => {
 					global: installed(neon("global", TREE)),
 					project: installed(neon("project", CONTENT)),
 				},
-				cache({ [KEY]: { tree: TREE, content: NEW_CONTENT } }),
+				cache({
+					[KEY]: {
+						tree: TREE,
+						content: NEW_CONTENT,
+						contentCrlf: NEW_CONTENT_CRLF,
+					},
+				}),
 			),
 		).toEqual({
 			checkedAt,
