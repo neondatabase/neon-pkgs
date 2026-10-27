@@ -1,5 +1,12 @@
 # neon
 
+## 8.13.1
+
+### Patch Changes
+
+- caa9d2c: `neon skills` and `neon skills update` run `npx skills@latest`, so they always use the latest skills CLI instead of an older copy installed globally or cached by npx.
+- a0066b8: `neon skills status` and the outdated-skills notice no longer report every Neon skill as outdated when the skills were installed through a Git checkout with `core.autocrlf=true`, the Git for Windows default.
+
 ## 8.13.0
 
 ### Minor Changes
