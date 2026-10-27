@@ -69,6 +69,9 @@ export const assertSkillsNode = (version = process.version): void => {
 	);
 };
 
+/** A bare `skills` makes npx run any copy already installed globally or cached, however old. */
+const SKILLS_PACKAGE = "skills@latest";
+
 export const skillsAddArgs = (options: {
 	source: string;
 	skills: readonly string[];
@@ -79,7 +82,7 @@ export const skillsAddArgs = (options: {
 	if (options.skills.length === 0) {
 		throw new Error("skills add needs at least one --skill.");
 	}
-	const args = ["-y", "skills", "add", options.source];
+	const args = ["-y", SKILLS_PACKAGE, "add", options.source];
 	for (const skill of options.skills) {
 		args.push("--skill", skill);
 	}
@@ -155,7 +158,7 @@ export const skillsUpdateDetail = (output: string): string | undefined => {
 
 export const skillsUpdateArgs = (options: { global: boolean }): string[] => [
 	"-y",
-	"skills",
+	SKILLS_PACKAGE,
 	"update",
 	options.global ? "-g" : "-p",
 	"-y",

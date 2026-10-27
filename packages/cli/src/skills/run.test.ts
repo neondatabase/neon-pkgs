@@ -88,7 +88,7 @@ describe("skillsAddArgs", () => {
 		});
 		expect(args).toEqual([
 			"-y",
-			"skills",
+			"skills@latest",
 			"add",
 			"neondatabase/agent-skills",
 			"--skill",
@@ -200,7 +200,7 @@ describe("skillsUpdateArgs", () => {
 	test("defaults to project scope", () => {
 		expect(skillsUpdateArgs({ global: false })).toEqual([
 			"-y",
-			"skills",
+			"skills@latest",
 			"update",
 			"-p",
 			"-y",
@@ -210,7 +210,7 @@ describe("skillsUpdateArgs", () => {
 	test("uses -g for user-level updates", () => {
 		expect(skillsUpdateArgs({ global: true })).toEqual([
 			"-y",
-			"skills",
+			"skills@latest",
 			"update",
 			"-g",
 			"-y",

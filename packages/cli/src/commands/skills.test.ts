@@ -132,7 +132,7 @@ describe("neon skills", () => {
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
 			[
 				"-y",
-				"skills",
+				"skills@latest",
 				"add",
 				"neondatabase/agent-skills",
 				...skillArgv(defaultSkillIds),
@@ -251,7 +251,7 @@ describe("neon skills", () => {
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
 			[
 				"-y",
-				"skills",
+				"skills@latest",
 				"add",
 				"neondatabase/agent-skills",
 				"--skill",
@@ -268,7 +268,7 @@ describe("neon skills", () => {
 			],
 			[
 				"-y",
-				"skills",
+				"skills@latest",
 				"add",
 				"neondatabase/neon-for-agent-platforms",
 				"--skill",
@@ -327,7 +327,7 @@ describe("neon skills", () => {
 			{ scope: "this directory", status: "updated" },
 		]);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
-			["-y", "skills", "update", "-p", "-y"],
+			["-y", "skills@latest", "update", "-p", "-y"],
 		]);
 	});
 
@@ -345,7 +345,7 @@ describe("neon skills", () => {
 			{ scope: "this directory", status: "updated" },
 		]);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
-			["-y", "skills", "update", "-p", "-y"],
+			["-y", "skills@latest", "update", "-p", "-y"],
 		]);
 	});
 
@@ -416,7 +416,7 @@ describe("neon skills", () => {
 			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
-			["-y", "skills", "update", "-g", "-y"],
+			["-y", "skills@latest", "update", "-g", "-y"],
 		]);
 	});
 
