@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
+import { NeonApiError } from "../api.js";
+import { AuthRefreshError } from "../auth.js";
 import { collectDetectedAgents } from "./detect.js";
 import {
 	initEndProperties,
+	initErrorCode,
 	initFlagsFromArgv,
 	initStartProperties,
 } from "./funnel.js";
@@ -212,9 +215,100 @@ describe("init funnel payloads", () => {
 			config: null,
 			services: null,
 			outcome: "aborted",
+			errors: [],
 		});
 		expect(end.mode).toBeNull();
 		expect(end.agent_setup).toBeNull();
 		expect(end.outcome).toBe("aborted");
+		expect(end.error_step).toBeNull();
+		expect(end.error_code).toBeNull();
+		expect(end.error_message).toBeNull();
+		expect(end.error_steps).toEqual([]);
+	});
+
+	test("end reports the first failure and every failed step", () => {
+		const plugins = new Error(
+			"\u001b[31mplugins CLI timed out after 120 seconds.\u001b[39m nak_live_0123abcd",
+		);
+		const end = initEndProperties({
+			initRunId: "run-1",
+			mode: "recommended",
+			agentSetup: "plugin",
+			agentsInstalled: [],
+			link: "linked",
+			config: "created",
+			services: ["postgres"],
+			outcome: "error",
+			errors: [
+				{ step: "plugins", error: plugins },
+				{ step: "env_pull", error: new Error("env pull failed") },
+				{ step: "plugins", error: new Error("second plugins failure") },
+			],
+		});
+		expect(end.error_step).toBe("plugins");
+		expect(end.error_code).toBe("UNKNOWN_ERROR");
+		expect(end.error_message).toBe(
+			"plugins CLI timed out after 120 seconds. nak_live_<redacted>",
+		);
+		expect(end.error_steps).toEqual(["plugins", "env_pull"]);
+	});
+
+	test("end caps the error message", () => {
+		const end = initEndProperties({
+			initRunId: "run-1",
+			mode: null,
+			agentSetup: null,
+			agentsInstalled: [],
+			link: null,
+			config: null,
+			services: null,
+			outcome: "error",
+			errors: [{ step: "setup", error: new Error("x".repeat(5_000)) }],
+		});
+		expect(end.error_message).toHaveLength(2_000);
+	});
+});
+
+describe("initErrorCode", () => {
+	test.each([
+		["a plain error", new Error("plugins CLI failed."), "UNKNOWN_ERROR"],
+		[
+			"init's own failure",
+			new Error("Setup did not finish."),
+			"NEON_INIT_FAILED",
+		],
+		[
+			"a connection failure",
+			Object.assign(new TypeError("fetch failed"), {
+				cause: { code: "ENOTFOUND" },
+			}),
+			"NETWORK_ERROR",
+		],
+		[
+			"an expired session",
+			new AuthRefreshError("expired", { terminal: true }),
+			"AUTH_FAILED",
+		],
+		["a 404", new NeonApiError("not found", { status: 404 }), "API_ERROR"],
+		[
+			"a 401",
+			new NeonApiError("unauthorized", { status: 401 }),
+			"AUTH_FAILED",
+		],
+		[
+			"an SSO denial masked as 404",
+			new NeonApiError("not found", {
+				status: 404,
+				data: { code: "SSO_AUTHORIZATION_REQUIRED" },
+			}),
+			"AUTH_FAILED",
+		],
+		[
+			"a request timeout",
+			new NeonApiError("timeout", { code: "ECONNABORTED" }),
+			"REQUEST_TIMEOUT",
+		],
+	])("classifies %s like the top-level handler", (_label, error, code) => {
+		expect(initErrorCode(error)).toBe(code);
 	});
 });

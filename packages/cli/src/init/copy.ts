@@ -288,6 +288,37 @@ export const mcpKeyFailedNext = (
 	`${mcp} --oauth`,
 ];
 
+export const AGENTS_NOT_INSTALLED = "not installed";
+
+const TOOLING_FAILED: Record<"plugins" | "skills" | "mcp", string> = {
+	plugins: "The Neon plugin was not installed",
+	skills: "Neon skills were not installed",
+	mcp: "The Neon MCP server was not configured",
+};
+
+/** The headline of a failure whose message may continue with a child process's output. */
+const firstLine = (message: string): string =>
+	(message.split("\n")[0] ?? "").trim().replace(/:$/, "");
+
+export const toolingFailedNext = (
+	failures: readonly {
+		kind: "plugins" | "skills" | "mcp";
+		message: string;
+		command: string;
+	}[],
+): string[] =>
+	failures.flatMap((failure, index) => {
+		const reason = firstLine(failure.message);
+		return [
+			...(index > 0 ? [""] : []),
+			reason.length > 0
+				? `${TOOLING_FAILED[failure.kind]}: ${reason}`
+				: `${TOOLING_FAILED[failure.kind]}.`,
+			"Retry with:",
+			failure.command,
+		];
+	});
+
 export const mcpAfterLinkNext = (mcp: string): string[] => [
 	"Then configure the Neon MCP server for that project:",
 	mcp,

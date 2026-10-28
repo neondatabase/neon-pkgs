@@ -30,6 +30,7 @@ import type { AgentType } from "../mcp/agents.js";
 import { test as cliTest } from "../test_utils/fixtures.js";
 import { npmEnvForIsolatedHome } from "../test_utils/npm_env.js";
 import { builder } from "./init.js";
+import type { PluginsInstallOutcome } from "./plugins.js";
 
 vi.mock("../analytics.js", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../analytics.js")>();
@@ -406,6 +407,248 @@ describe("init handler", () => {
 		expect(out).toMatch(/neon deploy/);
 		expect(out).not.toMatch(/neon link/);
 		expect(out).not.toMatch(/claim create/);
+	});
+
+	describe("when an agent setup step fails", () => {
+		const timedOut =
+			"plugins CLI timed out after 120 seconds:\nplugins banner";
+		const failingPlugins = (
+			ops: ReturnType<typeof makeOperations>,
+			agents: AgentType[],
+		) =>
+			vi.fn(
+				async (
+					options: Record<string, unknown>,
+				): Promise<PluginsInstallOutcome> => {
+					ops.calls.push({ kind: "plugins", options });
+					return {
+						scope: "global",
+						rows: agents.map((agent) => ({
+							scope: "user",
+							plugin: "neon-postgres",
+							agent,
+							status: "failed",
+							error: "plugins CLI failed",
+						})),
+						failed: [{ agents, message: timedOut }],
+					};
+				},
+			);
+		const initEnd = async () => {
+			const { trackEvent } = await import("../analytics.js");
+			return vi
+				.mocked(trackEvent)
+				.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+		};
+
+		test("signed out with org, project, branch, and services still writes .neon and neon.ts", async () => {
+			const cwd = mkdtempSync(
+				join(tmpdir(), "neon-init-plugin-fails-pin-"),
+			);
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const ops = makeOperations();
+			const initConfig = vi.fn().mockResolvedValue(undefined);
+			const stdout = vi
+				.spyOn(process.stdout, "write")
+				.mockReturnValue(true);
+			const { handler } = await import("./init.js");
+			const { trackEvent } = await import("../analytics.js");
+			vi.mocked(trackEvent).mockClear();
+
+			await expect(
+				handler(
+					baseProps({
+						cwd,
+						operations: {
+							...ops,
+							installPlugins: failingPlugins(ops, ["cursor"]),
+						},
+						yes: true,
+						orgId: "org-example",
+						projectId: "prj-example",
+						branch: "br-example",
+						services: ["postgres"],
+						initConfig,
+						analytics: true,
+						hasLocalCredentials: () => false,
+						detectProjectAgents: () => ["cursor"],
+						contextFile: join(cwd, ".neon"),
+					}),
+				),
+			).rejects.toThrow(/plugins CLI timed out after 120 seconds/);
+
+			expect(
+				JSON.parse(readFileSync(join(cwd, ".neon"), "utf8")),
+			).toEqual({
+				orgId: "org-example",
+				projectId: "prj-example",
+				branch: "br-example",
+			});
+			expect(initConfig).toHaveBeenCalledWith(
+				expect.objectContaining({ cwd, services: ["postgres"] }),
+			);
+			const out = stdoutText(stdout);
+			expect(out).toContain("Neon setup failed.");
+			expect(out).toMatch(/Agents\s+not installed/);
+			expect(out).toMatch(/Project\s+linked, not verified/);
+			expect(out).toMatch(/Config\s+neon\.ts created/);
+			expect(out).toContain(
+				"The Neon plugin was not installed: plugins CLI timed out after 120 seconds",
+			);
+			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toMatch(/neon login/);
+			expect(await initEnd()).toEqual(
+				expect.objectContaining({
+					outcome: "error",
+					link: "linked",
+					config: "created",
+					agents_installed: [],
+					error_step: "plugins",
+					error_code: "UNKNOWN_ERROR",
+					error_message: expect.stringMatching(
+						/^plugins CLI timed out after 120 seconds:\nplugins banner\nRetry with: neon plugins/,
+					),
+					error_steps: ["plugins"],
+				}),
+			);
+		});
+
+		test("a failed plugin does not skip skills and MCP for the other agents", async () => {
+			const cwd = mkdtempSync(
+				join(tmpdir(), "neon-init-plugin-fails-mixed-"),
+			);
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const ops = makeOperations();
+			const linkProject = vi.fn().mockResolvedValue(undefined);
+			const stdout = vi
+				.spyOn(process.stdout, "write")
+				.mockReturnValue(true);
+			const { handler } = await import("./init.js");
+			const { trackEvent } = await import("../analytics.js");
+			vi.mocked(trackEvent).mockClear();
+
+			await expect(
+				handler(
+					baseProps({
+						cwd,
+						operations: {
+							...ops,
+							installPlugins: failingPlugins(ops, ["cursor"]),
+						},
+						yes: true,
+						config: false,
+						linkProject,
+						analytics: true,
+						contextFile: join(cwd, ".neon"),
+						detectProjectAgents: () => ["cursor", "opencode"],
+					}),
+				),
+			).rejects.toThrow(/plugins CLI timed out/);
+
+			expect(stepKinds(ops)).toEqual(["plugins", "skills", "mcp"]);
+			expect(linkProject).toHaveBeenCalled();
+			const out = stdoutText(stdout);
+			expect(out).toMatch(/Agents\s+skills and MCP: opencode/);
+			expect(out).not.toMatch(/Agents\s+[^\n]*plugin/);
+			expect(await initEnd()).toEqual(
+				expect.objectContaining({
+					outcome: "error",
+					link: "linked",
+					agents_installed: ["opencode"],
+					error_step: "plugins",
+				}),
+			);
+		});
+
+		test("a later failure keeps the plugin failure first and still names its retry", async () => {
+			const cwd = mkdtempSync(
+				join(tmpdir(), "neon-init-plugin-then-env-"),
+			);
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const ops = makeOperations();
+			const envPull = vi
+				.fn()
+				.mockRejectedValue(new Error("env pull failed"));
+			const stdout = vi
+				.spyOn(process.stdout, "write")
+				.mockReturnValue(true);
+			const { handler } = await import("./init.js");
+			const { trackEvent } = await import("../analytics.js");
+			vi.mocked(trackEvent).mockClear();
+
+			await expect(
+				handler(
+					baseProps({
+						cwd,
+						operations: {
+							...ops,
+							installPlugins: failingPlugins(ops, ["cursor"]),
+						},
+						yes: true,
+						envPull,
+						linkProject: vi.fn(async () => {
+							writeFileSync(
+								join(cwd, ".neon"),
+								JSON.stringify({
+									projectId: "prj-example",
+									branch: "main",
+								}),
+							);
+						}),
+						analytics: true,
+						contextFile: join(cwd, ".neon"),
+						detectProjectAgents: () => ["cursor"],
+					}),
+				),
+			).rejects.toThrow("env pull failed");
+
+			const out = stdoutText(stdout);
+			expect(out).toContain(
+				"The Neon plugin was not installed: plugins CLI timed out after 120 seconds",
+			);
+			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(await initEnd()).toEqual(
+				expect.objectContaining({
+					outcome: "error",
+					error_step: "plugins",
+					error_steps: ["plugins", "env_pull"],
+				}),
+			);
+		});
+
+		test("a link failure is recorded as the link step", async () => {
+			const cwd = mkdtempSync(join(tmpdir(), "neon-init-link-step-"));
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const { handler } = await import("./init.js");
+			const { trackEvent } = await import("../analytics.js");
+			vi.mocked(trackEvent).mockClear();
+
+			await expect(
+				handler(
+					baseProps({
+						cwd,
+						operations: makeOperations(),
+						yes: true,
+						linkProject: vi
+							.fn()
+							.mockRejectedValue(new Error("link failed")),
+						analytics: true,
+						contextFile: join(cwd, ".neon"),
+						detectProjectAgents: () => ["cursor"],
+					}),
+				),
+			).rejects.toThrow("link failed");
+
+			expect(await initEnd()).toEqual(
+				expect.objectContaining({
+					outcome: "error",
+					agents_installed: ["cursor"],
+					error_step: "link",
+					error_message: "link failed",
+					error_steps: ["link"],
+				}),
+			);
+		});
 	});
 
 	test.each([

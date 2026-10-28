@@ -94,8 +94,8 @@ const TOOLING_STEP_LABELS: Record<ToolingStep["kind"], string> = {
 	mcp: PROGRESS.mcp,
 };
 
-/** Reconstructs a display-only, `neon <command> <flags>` style string for a step. Never executed — only ever logged. */
-const toolingStepCommandText = (step: ToolingStep): string => {
+/** The `<command> <flags>` a user can run to repeat this step on its own. Never executed here. */
+export const toolingStepCommandText = (step: ToolingStep): string => {
 	const flags: string[] = [];
 	switch (step.kind) {
 		case "plugins": {

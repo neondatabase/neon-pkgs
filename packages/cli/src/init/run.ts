@@ -59,6 +59,7 @@ import {
 	shouldPrintInitBanner,
 } from "./chrome.js";
 import {
+	AGENTS_NOT_INSTALLED,
 	CANCELLED_BODY,
 	CLAIMABLE_ACCOUNT_FLAGS,
 	CLAIMABLE_ALREADY_LINKED,
@@ -85,6 +86,7 @@ import {
 	PROGRESS,
 	PROJECT_PINNED_OFFLINE,
 	skippedLinkNext,
+	toolingFailedNext,
 	unattendedUnauthedNext,
 } from "./copy.js";
 import { detectInitEnvironment } from "./detect.js";
@@ -93,8 +95,10 @@ import {
 	emitInitStart,
 	finishInitFunnel,
 	type InitFunnelAgentSetup,
+	type InitFunnelErrorStep,
 	type InitFunnelOutcome,
 	initStartProperties,
+	recordInitError,
 } from "./funnel.js";
 import {
 	type InitLinkInputs,
@@ -124,8 +128,13 @@ import {
 	recommendedTooling,
 	resolveNamedAgents,
 	splitInitTooling,
+	type ToolingStep,
 } from "./plan.js";
-import { runToolingSteps, type ToolingOperations } from "./tooling.js";
+import {
+	runToolingSteps,
+	type ToolingOperations,
+	toolingStepCommandText,
+} from "./tooling.js";
 import {
 	pickAgentSetupInteractively,
 	pickInitAgentsInteractively,
@@ -534,6 +543,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	const funnel = createInitFunnel();
 	let outcome: InitFunnelOutcome = "error";
 	let printed = false;
+	let step: InitFunnelErrorStep = "setup";
 
 	try {
 		const detectOpts = {
@@ -867,10 +877,45 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			/** Formatted `--project-id` value for MCP that waits on a deferred link. */
 			deferredPin?: string;
 		} = {};
-		const reportedTooling = (): InitToolingPlan =>
-			mcpState.error === undefined && mcpState.deferredPin === undefined
-				? tooling
-				: withoutMcp(tooling);
+		// Reported after project setup, so an agent that cannot install does not leave the
+		// directory without the link and neon.ts it asked for.
+		const toolingFailures: {
+			kind: ToolingStep["kind"];
+			command: string;
+			error: unknown;
+		}[] = [];
+		const reportedTooling = (): InitToolingPlan => {
+			const dropped = new Set(
+				toolingFailures.map((failure) => failure.kind),
+			);
+			if (
+				mcpState.error !== undefined ||
+				mcpState.deferredPin !== undefined
+			) {
+				dropped.add("mcp");
+			}
+			return withoutKinds(tooling, dropped);
+		};
+		const agentsRow = (): string => {
+			const reported = reportedTooling();
+			return toolingFailures.length > 0 && reported.setup === "skip"
+				? AGENTS_NOT_INSTALLED
+				: agentsRowValue({
+						tooling: reported,
+						installed: funnel.agentsInstalled,
+					});
+		};
+		const toolingFailedNextLines = (): string[] =>
+			toolingFailedNext(
+				toolingFailures.map((failure) => ({
+					kind: failure.kind,
+					message:
+						failure.error instanceof Error
+							? failure.error.message
+							: String(failure.error),
+					command: failure.command,
+				})),
+			);
 		const mcpCommand = (projectIdArg: string | undefined): string =>
 			[
 				`${getCliName()} mcp -y`,
@@ -899,32 +944,47 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				: mcpAfterLinkNext(
 						`${mcpCommand(mcpState.deferredPin)}${mcpOauth ? " --oauth" : ""}`,
 					);
+		// One step at a time, so a plugin that cannot install does not skip skills or MCP
+		// for the other agents.
 		const runTooling = async (
 			steps: ReturnType<typeof planInitToolingSteps>,
 			plan: InitToolingPlan,
 		): Promise<void> => {
-			let ran = plan;
-			try {
-				await runToolingSteps(steps, {
-					cwd,
-					output: props.output,
-					auth,
-					operations: props.operations,
-					narrate: "human",
-					mcpOauthFallback: !mcpAuthChosen,
-				});
-			} catch (error) {
-				if (!(error instanceof CannotMintApiKeyError)) {
-					throw error;
+			for (const toolingStep of steps) {
+				let completed: ToolingStep["kind"][];
+				try {
+					completed = await runToolingSteps([toolingStep], {
+						cwd,
+						output: props.output,
+						auth,
+						operations: props.operations,
+						narrate: "human",
+						mcpOauthFallback: !mcpAuthChosen,
+					});
+				} catch (error) {
+					if (error instanceof InitCancelled) {
+						throw error;
+					}
+					if (error instanceof CannotMintApiKeyError) {
+						mcpState.error = error;
+						mcpState.reason = "cannot-mint";
+					} else {
+						toolingFailures.push({
+							kind: toolingStep.kind,
+							command: `${getCliName()} ${toolingStepCommandText(toolingStep)}`,
+							error,
+						});
+					}
+					recordInitError(funnel, toolingStep.kind, error);
+					continue;
 				}
-				mcpState.error = error;
-				mcpState.reason = "cannot-mint";
-				ran = withoutMcp(plan);
+				if (completed.includes(toolingStep.kind)) {
+					funnel.agentsInstalled = uniqueAgents([
+						...funnel.agentsInstalled,
+						...agentsForStep(plan, toolingStep.kind),
+					]);
+				}
 			}
-			funnel.agentsInstalled = uniqueAgents([
-				...funnel.agentsInstalled,
-				...agentsFromTooling(ran),
-			]);
 		};
 
 		const toolingSteps = planInitToolingSteps({
@@ -940,6 +1000,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			await runTooling(toolingSteps, earlyTooling);
 		}
 
+		step = "link";
 		let projectSetup: InitProjectSetupChoice | "skip" | "already" = "skip";
 		let claimExpiresAt: string | undefined;
 		const noLink = props.link === false;
@@ -1024,6 +1085,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 
 		if (projectSetup === "claimable") {
+			step = "claimable";
 			printInitProgress(PROGRESS.claim);
 			const createClaim = props.createClaimable ?? defaultCreateClaimable;
 			await createClaim({
@@ -1046,6 +1108,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			);
 			claimExpiresAt = stored?.expiresAt;
 		} else if (projectSetup === "link") {
+			step = "link";
 			printInitProgress(
 				detection.authenticated ? PROGRESS.link : PROGRESS.auth,
 			);
@@ -1065,6 +1128,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			linkInputs.projectName === undefined &&
 			linkInputs.regionId === undefined;
 		if (pinnedOffline) {
+			step = "link";
 			await runLink({ ...linkProps, checks: false, envPull: false });
 			funnel.link = "linked";
 		}
@@ -1091,6 +1155,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		) {
 			mcpState.error = new Error(MCP_API_KEY_NEEDS_AUTH);
 			mcpState.reason = "signed-out";
+			recordInitError(funnel, "mcp", mcpState.error);
 			const linkedId = readContextFile(contextFile).projectId;
 			if (
 				props.mcpProjectScoped === true &&
@@ -1099,6 +1164,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				mcpState.pinId = linkedId;
 			}
 		} else if (delayMcp && tooling.setup !== "skip") {
+			step = "mcp";
 			const linkedId = readContextFile(contextFile).projectId;
 			let pinId: string | undefined;
 			if (props.mcpProjectScoped === true) {
@@ -1136,6 +1202,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			}
 		}
 
+		step = "config";
 		const canAskConfig =
 			props.pickConfig !== undefined || detection.interactive;
 		const configResolution = resolveInitConfigChoice({
@@ -1238,7 +1305,13 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							heading: failed.heading,
 							body: failed.body,
 							rows: [],
-							next: joinNext(failed.next, mcpFailedNext()),
+							next: joinNext(
+								failed.next,
+								joinNext(
+									toolingFailedNextLines(),
+									mcpFailedNext(),
+								),
+							),
 						}),
 					);
 					printed = true;
@@ -1272,6 +1345,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					});
 
 		if (envPullPlan.kind !== "skip") {
+			step = "env_pull";
 			try {
 				if (
 					typeof context.projectId !== "string" ||
@@ -1313,10 +1387,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						rows: [
 							{
 								label: "Agents",
-								value: agentsRowValue({
-									tooling: reportedTooling(),
-									installed: funnel.agentsInstalled,
-								}),
+								value: agentsRow(),
 							},
 							{
 								label: "Project",
@@ -1330,7 +1401,10 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								),
 							},
 						],
-						next: joinNext(failed.next, mcpFailedNext()),
+						next: joinNext(
+							failed.next,
+							joinNext(toolingFailedNextLines(), mcpFailedNext()),
+						),
 					}),
 				);
 				printed = true;
@@ -1428,7 +1502,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		) {
 			outcome = "success";
 		}
-		if (mcpState.error !== undefined) {
+		const deferredError = toolingFailures[0]?.error ?? mcpState.error;
+		if (deferredError !== undefined) {
 			outcome = "error";
 		}
 
@@ -1438,10 +1513,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				rows: [
 					{
 						label: "Agents",
-						value: agentsRowValue({
-							tooling: reportedTooling(),
-							installed: funnel.agentsInstalled,
-						}),
+						value: agentsRow(),
 					},
 					{
 						label: "Project",
@@ -1457,12 +1529,15 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						value: configRowValue(funnel.config, existingFilename),
 					},
 				],
-				next: joinNext(mcpFailedNext(), next),
+				next: joinNext(
+					joinNext(toolingFailedNextLines(), mcpFailedNext()),
+					next,
+				),
 			}),
 		);
 		printed = true;
-		if (mcpState.error !== undefined) {
-			throw mcpState.error;
+		if (deferredError !== undefined) {
+			throw deferredError;
 		}
 
 		takeCommandSuccessExtras();
@@ -1489,6 +1564,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			throw error;
 		}
 		outcome = "error";
+		recordInitError(funnel, step, error);
 		throw error;
 	} finally {
 		finishInitFunnel(funnel, outcome, analytics);
@@ -1516,17 +1592,47 @@ const joinNext = (
 		? [...first, ...second]
 		: [...first, "", ...second];
 
-const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan => {
-	if (tooling.setup === "mixed") {
-		return { ...tooling, mcpAgents: [] };
+const withoutKinds = (
+	tooling: InitToolingPlan,
+	kinds: ReadonlySet<ToolingStep["kind"]>,
+): InitToolingPlan => {
+	switch (tooling.setup) {
+		case "skip":
+			return tooling;
+		case "plugin":
+			return kinds.has("plugins") ? { setup: "skip" } : tooling;
+		case "skills":
+			return kinds.has("skills") ? { setup: "skip" } : tooling;
+		case "skills-mcp": {
+			const skillsAgents = kinds.has("skills")
+				? []
+				: tooling.skillsAgents;
+			const mcpAgents = kinds.has("mcp") ? [] : tooling.mcpAgents;
+			return skillsAgents.length === 0 && mcpAgents.length === 0
+				? { setup: "skip" }
+				: { ...tooling, skillsAgents, mcpAgents };
+		}
+		case "mixed": {
+			const skillsAgents = kinds.has("skills")
+				? []
+				: tooling.skillsAgents;
+			const mcpAgents = kinds.has("mcp") ? [] : tooling.mcpAgents;
+			if (!kinds.has("plugins")) {
+				return { ...tooling, skillsAgents, mcpAgents };
+			}
+			return skillsAgents.length === 0 && mcpAgents.length === 0
+				? { setup: "skip" }
+				: { setup: "skills-mcp", skillsAgents, mcpAgents };
+		}
+		default: {
+			const _exhaustive: never = tooling;
+			return _exhaustive;
+		}
 	}
-	if (tooling.setup === "skills-mcp") {
-		return tooling.skillsAgents.length === 0
-			? { setup: "skip" }
-			: { ...tooling, mcpAgents: [] };
-	}
-	return tooling;
 };
+
+const withoutMcp = (tooling: InitToolingPlan): InitToolingPlan =>
+	withoutKinds(tooling, new Set(["mcp"]));
 
 /** The Neon plugin bundles the skills. */
 const installsSkills = (tooling: InitToolingPlan): boolean =>
@@ -1534,27 +1640,29 @@ const installsSkills = (tooling: InitToolingPlan): boolean =>
 		? tooling.skillsAgents.length > 0
 		: tooling.setup !== "skip";
 
-const agentsFromTooling = (tooling: InitToolingPlan): AgentType[] => {
-	switch (tooling.setup) {
-		case "skip":
-			return [];
-		case "plugin":
-			return [...tooling.agents];
+const agentsForStep = (
+	tooling: InitToolingPlan,
+	kind: ToolingStep["kind"],
+): AgentType[] => {
+	switch (kind) {
+		case "plugins":
+			return tooling.setup === "plugin"
+				? [...tooling.agents]
+				: tooling.setup === "mixed"
+					? [...tooling.pluginAgents]
+					: [];
 		case "skills":
-			return [...tooling.agents];
-		case "skills-mcp":
-			return uniqueAgents([
-				...tooling.skillsAgents,
-				...tooling.mcpAgents,
-			]);
-		case "mixed":
-			return uniqueAgents([
-				...tooling.pluginAgents,
-				...tooling.skillsAgents,
-				...tooling.mcpAgents,
-			]);
+			return tooling.setup === "skills"
+				? [...tooling.agents]
+				: tooling.setup === "skills-mcp" || tooling.setup === "mixed"
+					? [...tooling.skillsAgents]
+					: [];
+		case "mcp":
+			return tooling.setup === "skills-mcp" || tooling.setup === "mixed"
+				? [...tooling.mcpAgents]
+				: [];
 		default: {
-			const _exhaustive: never = tooling;
+			const _exhaustive: never = kind;
 			return _exhaustive;
 		}
 	}

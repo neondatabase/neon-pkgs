@@ -441,7 +441,7 @@ const getErrorAnalyticsEventContext = (
 // joins argv, so `credentials reveal <tokenId>` would otherwise ship the key id.
 const CREDENTIAL_TOKEN_ID = /\bnak_live_[0-9a-f]+\b/gi;
 
-const redactCredentialTokenIds = (text: string): string =>
+export const redactCredentialTokenIds = (text: string): string =>
 	text.replace(CREDENTIAL_TOKEN_ID, "nak_live_<redacted>");
 
 export const getErrorAnalyticsEventProperties = (

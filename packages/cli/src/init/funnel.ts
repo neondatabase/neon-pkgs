@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { trackEvent } from "../analytics.js";
+import { stripVTControlCharacters } from "node:util";
+import { redactCredentialTokenIds, trackEvent } from "../analytics.js";
+import { codeFromBody, isNeonApiError } from "../api.js";
+import { AuthRefreshError } from "../auth.js";
+import { type ErrorCode, isNetworkError, matchErrorCode } from "../errors.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { NeonService } from "../neon_services.js";
 import pkg from "../pkg.js";
@@ -25,6 +29,17 @@ export type InitFunnelConfig = "created" | "existing" | "skipped";
 
 export type InitFunnelOutcome = "success" | "pending" | "error" | "aborted";
 
+/** `setup` is everything after `cli_init_start` and before the first install or link. */
+export type InitFunnelErrorStep =
+	| "setup"
+	| "plugins"
+	| "skills"
+	| "mcp"
+	| "link"
+	| "claimable"
+	| "config"
+	| "env_pull";
+
 export type InitFunnelStart = {
 	init_run_id: string;
 	cli_version: string;
@@ -47,6 +62,12 @@ export type InitFunnelEnd = {
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
 	outcome: InitFunnelOutcome;
+	/** The first failure, which the later steps of a run that kept going do not overwrite. */
+	error_step: InitFunnelErrorStep | null;
+	error_code: ErrorCode | null;
+	error_message: string | null;
+	/** Every step that failed, in order. */
+	error_steps: InitFunnelErrorStep[];
 };
 
 const FLAG_ALIASES: Readonly<Record<string, string>> = {
@@ -132,6 +153,50 @@ export const initStartProperties = (input: {
 	ci: input.detection.ci,
 });
 
+export type InitFunnelError = {
+	step: InitFunnelErrorStep;
+	error: unknown;
+};
+
+/** Longer messages are cut so one plugin CLI dump cannot dominate the event. */
+const ERROR_MESSAGE_LIMIT = 2_000;
+
+/**
+ * The `errCode` the top-level failure handler (`index.ts`) sends on `CLI Error` for the same
+ * error, so a run's `error_code` and its `CLI Error` event agree.
+ */
+export const initErrorCode = (error: unknown): ErrorCode => {
+	if (error instanceof AuthRefreshError) {
+		return "AUTH_FAILED";
+	}
+	if (isNetworkError(error)) {
+		return "NETWORK_ERROR";
+	}
+	if (isNeonApiError(error)) {
+		if (error.code === "ECONNABORTED") {
+			return "REQUEST_TIMEOUT";
+		}
+		const bodyCode = codeFromBody(error.data);
+		if (
+			error.status === 401 ||
+			bodyCode === "SSO_AUTHORIZATION_REQUIRED" ||
+			bodyCode === "SSO_ORG_CREDS_ONLY"
+		) {
+			return "AUTH_FAILED";
+		}
+		return "API_ERROR";
+	}
+	return matchErrorCode(error instanceof Error ? error.message : undefined);
+};
+
+export const initErrorMessage = (error: unknown): string => {
+	const raw = error instanceof Error ? error.message : String(error);
+	return redactCredentialTokenIds(stripVTControlCharacters(raw)).slice(
+		0,
+		ERROR_MESSAGE_LIMIT,
+	);
+};
+
 export const initEndProperties = (input: {
 	initRunId: string;
 	mode: InitMode | null;
@@ -141,17 +206,26 @@ export const initEndProperties = (input: {
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
 	outcome: InitFunnelOutcome;
-}): InitFunnelEnd => ({
-	init_run_id: input.initRunId,
-	cli_version: pkg.version,
-	mode: input.mode,
-	agent_setup: input.agentSetup,
-	agents_installed: input.agentsInstalled,
-	link: input.link,
-	config: input.config,
-	services: input.services,
-	outcome: input.outcome,
-});
+	errors: readonly InitFunnelError[];
+}): InitFunnelEnd => {
+	const first = input.errors[0];
+	return {
+		init_run_id: input.initRunId,
+		cli_version: pkg.version,
+		mode: input.mode,
+		agent_setup: input.agentSetup,
+		agents_installed: input.agentsInstalled,
+		link: input.link,
+		config: input.config,
+		services: input.services,
+		outcome: input.outcome,
+		error_step: first?.step ?? null,
+		error_code: first === undefined ? null : initErrorCode(first.error),
+		error_message:
+			first === undefined ? null : initErrorMessage(first.error),
+		error_steps: [...new Set(input.errors.map((entry) => entry.step))],
+	};
+};
 
 export const emitInitStart = (properties: InitFunnelStart): void => {
 	trackEvent(CLI_INIT_START, properties);
@@ -169,6 +243,7 @@ export type InitFunnelState = {
 	link: InitFunnelLink | null;
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
+	errors: InitFunnelError[];
 	ended: boolean;
 };
 
@@ -182,8 +257,21 @@ export const createInitFunnel = (
 	link: null,
 	config: null,
 	services: null,
+	errors: [],
 	ended: false,
 });
+
+/** Records a failure once: a deferred error rethrown at the end keeps the step it failed in. */
+export const recordInitError = (
+	state: InitFunnelState,
+	step: InitFunnelErrorStep,
+	error: unknown,
+): void => {
+	if (state.errors.some((entry) => entry.error === error)) {
+		return;
+	}
+	state.errors.push({ step, error });
+};
 
 export const finishInitFunnel = (
 	state: InitFunnelState,
@@ -204,6 +292,7 @@ export const finishInitFunnel = (
 			config: state.config,
 			services: state.services,
 			outcome,
+			errors: state.errors,
 		}),
 	);
 };
