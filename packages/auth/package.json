@@ -104,13 +104,10 @@
 		"vitest": "catalog:"
 	},
 	"dependencies": {
-		"@better-auth/core": "1.7.6",
-		"@better-auth/oauth-provider": "1.7.6",
-		"@better-auth/utils": "0.4.2",
+		"@better-auth/oauth-provider": "~1.7.12",
 		"@better-fetch/fetch": "1.3.2",
 		"@supabase/auth-js": "2.79.0",
-		"better-auth": "1.7.6",
-		"better-call": "1.4.0",
+		"better-auth": "~1.7.12",
 		"jose": "6.2.5",
 		"zod": "^4.5.4"
 	},

@@ -8,7 +8,7 @@ import { SupabaseAuthAdapter } from "../adapters/supabase/supabase-adapter";
 import { NeonAuthAdapterCore } from "../core/adapter-core";
 import { createInternalNeonAuth } from "../neon-auth";
 import type { BetterAuthInstance } from "../types";
-import { BETTER_AUTH_VERSION } from "./better-auth-version";
+import { BETTER_AUTH_VERSION, floorOfRange } from "./better-auth-version";
 
 class TestAdapter extends NeonAuthAdapterCore {
 	getBetterAuthInstance(): BetterAuthInstance {
@@ -98,19 +98,28 @@ describe("X-Neon-Client-Info sent by the auth adapter", () => {
 		expect(isModernBetterAuth("1.7.6")).toBe(true);
 	});
 
-	test("the better-auth dependency is pinned exactly in package.json", () => {
+	test("reports a bare x.y.z version", () => {
+		expect(BETTER_AUTH_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+	});
+
+	test("reports the floor of the better-auth dependency range", () => {
 		const pkg = readJson("../../package.json") as {
 			dependencies: Record<string, string>;
 		};
-		expect(pkg.dependencies["better-auth"]).toMatch(/^\d+\.\d+\.\d+$/);
+		expect(BETTER_AUTH_VERSION).toBe(
+			floorOfRange(pkg.dependencies["better-auth"] as string),
+		);
 	});
 
-	test("matches the better-auth version installed on disk", () => {
+	test("shares major.minor with the better-auth installed on disk", () => {
 		// better-auth does not export ./package.json, so read it directly.
 		const installed = readJson(
 			"../../node_modules/better-auth/package.json",
+		) as { version: string };
+		const majorMinor = (v: string) => v.split(".").slice(0, 2).join(".");
+		expect(majorMinor(BETTER_AUTH_VERSION)).toBe(
+			majorMinor(installed.version),
 		);
-		expect(BETTER_AUTH_VERSION).toBe(installed.version);
 	});
 });
 
@@ -153,5 +162,26 @@ describe("X-Neon-Client-Info adapter field", () => {
 	test("reports the default adapter when none is configured", async () => {
 		const info = await sentClientInfo(undefined);
 		expect(info.adapter).toBe("better-auth-vanilla");
+	});
+});
+
+describe("floorOfRange", () => {
+	test.each([
+		["~1.7.12", "1.7.12"],
+		["^1.7.12", "1.7.12"],
+		["=1.7.12", "1.7.12"],
+		["1.7.12", "1.7.12"],
+	])("%s -> %s", (range, floor) => {
+		expect(floorOfRange(range)).toBe(floor);
+	});
+
+	test.each([
+		"1.7",
+		"~1.7.x",
+		">=1.7.12",
+		"latest",
+		"",
+	])("throws for %j", (range) => {
+		expect(() => floorOfRange(range)).toThrow();
 	});
 });

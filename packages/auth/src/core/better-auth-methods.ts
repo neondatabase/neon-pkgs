@@ -407,6 +407,7 @@ export const OAUTH2_ENDPOINTS = [
 	"update-client",
 	"delete-client",
 	"client/rotate-secret",
+	"client/rotate-keys",
 	"public-client",
 	"public-client-prelogin",
 	"get-consent",
