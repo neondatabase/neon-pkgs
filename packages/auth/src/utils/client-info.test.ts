@@ -98,17 +98,13 @@ describe("X-Neon-Client-Info sent by the auth adapter", () => {
 		expect(isModernBetterAuth("1.7.6")).toBe(true);
 	});
 
-	test("reports a bare x.y.z version", () => {
-		expect(BETTER_AUTH_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-	});
-
-	test("reports the floor of the better-auth dependency range", () => {
+	test("declares better-auth as an exact or ~ specifier and reports its floor", () => {
 		const pkg = readJson("../../package.json") as {
 			dependencies: Record<string, string>;
 		};
-		expect(BETTER_AUTH_VERSION).toBe(
-			floorOfRange(pkg.dependencies["better-auth"] as string),
-		);
+		const specifier = pkg.dependencies["better-auth"] as string;
+		expect(specifier).toMatch(/^[~=]?\d+\.\d+\.\d+$/);
+		expect(BETTER_AUTH_VERSION).toBe(specifier.replace(/^[~=]/, ""));
 	});
 
 	test("shares major.minor with the better-auth installed on disk", () => {
@@ -168,7 +164,6 @@ describe("X-Neon-Client-Info adapter field", () => {
 describe("floorOfRange", () => {
 	test.each([
 		["~1.7.12", "1.7.12"],
-		["^1.7.12", "1.7.12"],
 		["=1.7.12", "1.7.12"],
 		["1.7.12", "1.7.12"],
 	])("%s -> %s", (range, floor) => {
@@ -179,9 +174,28 @@ describe("floorOfRange", () => {
 		"1.7",
 		"~1.7.x",
 		">=1.7.12",
+		"^1.7.12",
+		"^1.7",
+		">=1.7.12 <1.8",
+		"1.7.12 - 1.8.0",
+		"~1.7.12 || ~1.8.0",
+		"1.x",
+		"*",
+		"~~1.7.12",
+		"1.7.12-beta.1",
+		"1.7.12+build.5",
+		" 1.7.12",
 		"latest",
 		"",
 	])("throws for %j", (range) => {
 		expect(() => floorOfRange(range)).toThrow();
+	});
+});
+
+describe("floorOfRange with a missing dependency", () => {
+	test("throws the descriptive error instead of a TypeError", () => {
+		expect(() => floorOfRange(undefined as never)).toThrow(
+			/Cannot derive a bare x\.y\.z better-auth version/,
+		);
 	});
 });

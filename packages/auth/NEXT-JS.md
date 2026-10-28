@@ -579,7 +579,7 @@ The browser client's `oauth2.*` mirrors the full plugin. Neon mounts these endpo
 | --- | --- | --- | --- |
 | Login and consent actions | `consent`, `continue`, `publicClient`, `publicClientPrelogin` | Yes | Drive your login and consent pages. |
 | The user's own grants | `getConsent`, `getConsents`, `updateConsent`, `deleteConsent` | Yes | Let a signed-in user review and revoke what they granted. |
-| Client management | `create-client`, `get-client`, `get-clients`, `update-client`, `delete-client`, `client/rotate-secret` | No | Neon rejects these for end users with 401; manage clients through the Neon Console or API. |
+| Client management | `create-client`, `get-client`, `get-clients`, `update-client`, `delete-client`, `client/rotate-secret`, `client/rotate-keys` | No | Neon rejects these for end users with 401; manage clients through the Neon Console or API. |
 | OAuth protocol | `authorize`, `token`, `introspect`, `revoke`, `userinfo`, `register` | No | Use client credentials or bearer tokens with form bodies or redirects. Relying parties and MCP servers should use `@neon/oauth`. |
 | RP-initiated logout | `end-session`, `end-session/confirm` | No | Browser redirect flow. |
 
