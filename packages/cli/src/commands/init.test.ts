@@ -493,7 +493,7 @@ describe("init handler", () => {
 			expect(out).toMatch(/Project\s+linked, not verified/);
 			expect(out).toMatch(/Config\s+neon\.ts created/);
 			expect(out).toContain(
-				"The Neon plugin was not installed: plugins CLI timed out after 120 seconds",
+				"The Neon plugin was not installed. Retry with:",
 			);
 			expect(out).toContain("neon plugins -y --global --agent cursor");
 			expect(out).toMatch(/neon login/);
@@ -607,7 +607,7 @@ describe("init handler", () => {
 
 			const out = stdoutText(stdout);
 			expect(out).toContain(
-				"The Neon plugin was not installed: plugins CLI timed out after 120 seconds",
+				"The Neon plugin was not installed. Retry with:",
 			);
 			expect(out).toContain("neon plugins -y --global --agent cursor");
 			expect(await initEnd()).toEqual(
@@ -653,7 +653,7 @@ describe("init handler", () => {
 			const out = stdoutText(stdout);
 			expect(out).toContain("Neon setup failed.");
 			expect(out).toContain(
-				"The Neon plugin was not installed: plugins CLI timed out after 120 seconds",
+				"The Neon plugin was not installed. Retry with:",
 			);
 			expect(out).toContain("neon plugins -y --global --agent cursor");
 		});

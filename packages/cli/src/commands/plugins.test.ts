@@ -508,6 +508,24 @@ describe("neon plugins", () => {
 		expect(stderr).not.toMatch(/Command failed with exit code/);
 	});
 
+	test("agents that fail the same way print the child output once", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin } = scratch();
+		mkdirSync(join(cwd, ".claude"));
+		const { stderr } = await testCliCommand(["plugins", "-y"], {
+			...runOptions(home, cwd, bin, {
+				PLUGINS_CHILD_EXIT: "1",
+				PLUGINS_CHILD_STDERR: "boom",
+			}),
+			code: 1,
+		});
+		expect(stderr.match(/boom/g)?.length).toBe(1);
+		expect(stderr).toMatch(
+			/Retry with: neon plugins --agent claude-code --agent cursor -y/,
+		);
+	});
+
 	test("failed --global retry keeps user-level scope", async ({
 		testCliCommand,
 	}) => {

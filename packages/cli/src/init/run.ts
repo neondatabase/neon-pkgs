@@ -912,10 +912,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			toolingFailedNext(
 				toolingFailures.map((failure) => ({
 					kind: failure.kind,
-					message:
-						failure.error instanceof Error
-							? failure.error.message
-							: String(failure.error),
 					command: failure.command,
 				})),
 			);

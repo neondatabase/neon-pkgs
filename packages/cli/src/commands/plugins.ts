@@ -245,7 +245,8 @@ export const pluginsInstallError = (
 	if (first.message.includes("needs npx (Node.js)")) {
 		return new Error(first.message);
 	}
-	const detail = failed.map((row) => row.message).join("\n");
+	// Agents that failed for the same reason share one copy of the plugins CLI output.
+	const detail = [...new Set(failed.map((row) => row.message))].join("\n");
 	if (failed.length === rows.length) {
 		return new Error(`${detail}\nRetry with: ${retry}`);
 	}
