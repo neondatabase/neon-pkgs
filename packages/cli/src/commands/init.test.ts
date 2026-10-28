@@ -560,15 +560,18 @@ describe("init handler", () => {
 			);
 		});
 
-		test("a later failure keeps the plugin failure first and still names its retry", async () => {
+		test("a later failure is the one reported, and the plugin retry is still named", async () => {
 			const cwd = mkdtempSync(
 				join(tmpdir(), "neon-init-plugin-then-env-"),
 			);
 			writeFileSync(join(cwd, "package.json"), "{}\n");
 			const ops = makeOperations();
+			const { NeonApiError } = await import("../api.js");
 			const envPull = vi
 				.fn()
-				.mockRejectedValue(new Error("env pull failed"));
+				.mockRejectedValue(
+					new NeonApiError("timeout", { code: "ECONNABORTED" }),
+				);
 			const stdout = vi
 				.spyOn(process.stdout, "write")
 				.mockReturnValue(true);
@@ -600,7 +603,7 @@ describe("init handler", () => {
 						detectProjectAgents: () => ["cursor"],
 					}),
 				),
-			).rejects.toThrow("env pull failed");
+			).rejects.toThrow("timeout");
 
 			const out = stdoutText(stdout);
 			expect(out).toContain(
@@ -610,7 +613,9 @@ describe("init handler", () => {
 			expect(await initEnd()).toEqual(
 				expect.objectContaining({
 					outcome: "error",
-					error_step: "plugins",
+					error_step: "env_pull",
+					error_code: "REQUEST_TIMEOUT",
+					error_message: "timeout",
 					error_steps: ["plugins", "env_pull"],
 				}),
 			);

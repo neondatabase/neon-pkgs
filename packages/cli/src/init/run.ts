@@ -99,6 +99,7 @@ import {
 	type InitFunnelOutcome,
 	initStartProperties,
 	recordInitError,
+	recordInitExit,
 } from "./funnel.js";
 import {
 	type InitLinkInputs,
@@ -1564,7 +1565,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			throw error;
 		}
 		outcome = "error";
-		recordInitError(funnel, step, error);
+		recordInitExit(funnel, step, error);
 		throw error;
 	} finally {
 		finishInitFunnel(funnel, outcome, analytics);

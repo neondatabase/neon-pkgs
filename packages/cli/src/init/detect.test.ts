@@ -226,7 +226,29 @@ describe("init funnel payloads", () => {
 		expect(end.error_steps).toEqual([]);
 	});
 
-	test("end reports the first failure and every failed step", () => {
+	test("end reports the failure the run exited with", () => {
+		const exit = new Error("env pull failed");
+		const end = initEndProperties({
+			initRunId: "run-1",
+			mode: "recommended",
+			agentSetup: "plugin",
+			agentsInstalled: [],
+			link: "linked",
+			config: "created",
+			services: ["postgres"],
+			outcome: "error",
+			errors: [
+				{ step: "plugins", error: new Error("plugins CLI failed.") },
+				{ step: "env_pull", error: exit },
+			],
+			exitError: exit,
+		});
+		expect(end.error_step).toBe("env_pull");
+		expect(end.error_message).toBe("env pull failed");
+		expect(end.error_steps).toEqual(["plugins", "env_pull"]);
+	});
+
+	test("end reports the first failure when none ended the run, and every failed step", () => {
 		const plugins = new Error(
 			"\u001b[31mplugins CLI timed out after 120 seconds.\u001b[39m nak_live_0123abcd",
 		);

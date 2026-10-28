@@ -62,7 +62,7 @@ export type InitFunnelEnd = {
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
 	outcome: InitFunnelOutcome;
-	/** The first failure, which the later steps of a run that kept going do not overwrite. */
+	/** The failure `neon init` exited with, which `CLI Error` reports too; else the first recorded. */
 	error_step: InitFunnelErrorStep | null;
 	error_code: ErrorCode | null;
 	error_message: string | null;
@@ -207,8 +207,11 @@ export const initEndProperties = (input: {
 	services: NeonService[] | null;
 	outcome: InitFunnelOutcome;
 	errors: readonly InitFunnelError[];
+	exitError?: unknown;
 }): InitFunnelEnd => {
-	const first = input.errors[0];
+	const reported =
+		input.errors.find((entry) => entry.error === input.exitError) ??
+		input.errors[0];
 	return {
 		init_run_id: input.initRunId,
 		cli_version: pkg.version,
@@ -219,10 +222,11 @@ export const initEndProperties = (input: {
 		config: input.config,
 		services: input.services,
 		outcome: input.outcome,
-		error_step: first?.step ?? null,
-		error_code: first === undefined ? null : initErrorCode(first.error),
+		error_step: reported?.step ?? null,
+		error_code:
+			reported === undefined ? null : initErrorCode(reported.error),
 		error_message:
-			first === undefined ? null : initErrorMessage(first.error),
+			reported === undefined ? null : initErrorMessage(reported.error),
 		error_steps: [...new Set(input.errors.map((entry) => entry.step))],
 	};
 };
@@ -244,6 +248,7 @@ export type InitFunnelState = {
 	config: InitFunnelConfig | null;
 	services: NeonService[] | null;
 	errors: InitFunnelError[];
+	exitError: unknown;
 	ended: boolean;
 };
 
@@ -258,6 +263,7 @@ export const createInitFunnel = (
 	config: null,
 	services: null,
 	errors: [],
+	exitError: undefined,
 	ended: false,
 });
 
@@ -271,6 +277,15 @@ export const recordInitError = (
 		return;
 	}
 	state.errors.push({ step, error });
+};
+
+export const recordInitExit = (
+	state: InitFunnelState,
+	step: InitFunnelErrorStep,
+	error: unknown,
+): void => {
+	recordInitError(state, step, error);
+	state.exitError = error;
 };
 
 export const finishInitFunnel = (
@@ -293,6 +308,7 @@ export const finishInitFunnel = (
 			services: state.services,
 			outcome,
 			errors: state.errors,
+			exitError: state.exitError,
 		}),
 	);
 };
