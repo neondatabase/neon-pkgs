@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ConvexSchema } from "./model.js";
 import { parseExportedSchema } from "./parse.js";
@@ -14,10 +15,15 @@ import { parseExportedSchema } from "./parse.js";
 export async function loadConvexSchema(
 	schemaTsPath: string,
 ): Promise<ConvexSchema> {
-	const url = pathToFileURL(schemaTsPath).href;
+	// Absolute before it reaches jiti, which resolves a relative id against the
+	// file it was created for -- the schema itself -- rather than the cwd.
+	const path = resolve(schemaTsPath);
 	const createJiti = await loadCreateJiti();
-	const jiti = createJiti(url, { interopDefault: true, moduleCache: false });
-	const mod: unknown = await jiti.import(schemaTsPath);
+	const jiti = createJiti(pathToFileURL(path).href, {
+		interopDefault: true,
+		moduleCache: false,
+	});
+	const mod: unknown = await jiti.import(path);
 
 	const schemaDef = extractDefault(mod);
 	if (!hasExport(schemaDef)) {
