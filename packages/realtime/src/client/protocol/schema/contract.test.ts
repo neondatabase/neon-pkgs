@@ -30,6 +30,65 @@ describe("Realtime protocol contracts", () => {
 		}
 	});
 
+	it("accepts bounded canonical future release lines", () => {
+		const validateProtocol = validator(protocolSchema);
+		const validateCapability = validator(capabilitySchema);
+		const capability = capabilityFixtures.valid[0];
+
+		for (const releaseLine of ["1", "42.7"]) {
+			expect(
+				validateProtocol({
+					type: "client_info",
+					sdk: "javascript",
+					release_line: releaseLine,
+				}),
+				JSON.stringify(validateProtocol.errors),
+			).toBe(true);
+			expect(
+				validateCapability({
+					...capability,
+					claims: {
+						...capability.claims,
+						issuer: {
+							...capability.claims.issuer,
+							release_line: releaseLine,
+						},
+					},
+				}),
+				JSON.stringify(validateCapability.errors),
+			).toBe(true);
+		}
+
+		for (const releaseLine of [
+			"00.3",
+			"0.03",
+			"0.3.0",
+			"12345678901234567",
+		]) {
+			expect(
+				validateProtocol({
+					type: "client_info",
+					sdk: "javascript",
+					release_line: releaseLine,
+				}),
+				releaseLine,
+			).toBe(false);
+			expect(
+				validateCapability({
+					...capability,
+					claims: {
+						...capability.claims,
+						issuer: {
+							...capability.claims.issuer,
+							release_line: releaseLine,
+						},
+					},
+				}),
+				releaseLine,
+			).toBe(false);
+		}
+	});
+
 	it("accepts only the agreed decoded query capability shape", () => {
 		const validate = validator(capabilitySchema);
 		for (const fixture of capabilityFixtures.valid) {
