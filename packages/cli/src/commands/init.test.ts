@@ -621,6 +621,43 @@ describe("init handler", () => {
 			);
 		});
 
+		test("a link failure after a plugin failure still names the plugin retry", async () => {
+			const cwd = mkdtempSync(
+				join(tmpdir(), "neon-init-plugin-then-link-"),
+			);
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const ops = makeOperations();
+			const stdout = vi
+				.spyOn(process.stdout, "write")
+				.mockReturnValue(true);
+			const { handler } = await import("./init.js");
+
+			await expect(
+				handler(
+					baseProps({
+						cwd,
+						operations: {
+							...ops,
+							installPlugins: failingPlugins(ops, ["cursor"]),
+						},
+						yes: true,
+						linkProject: vi
+							.fn()
+							.mockRejectedValue(new Error("link failed")),
+						contextFile: join(cwd, ".neon"),
+						detectProjectAgents: () => ["cursor"],
+					}),
+				),
+			).rejects.toThrow("link failed");
+
+			const out = stdoutText(stdout);
+			expect(out).toContain("Neon setup failed.");
+			expect(out).toContain(
+				"The Neon plugin was not installed: plugins CLI timed out after 120 seconds",
+			);
+			expect(out).toContain("neon plugins -y --global --agent cursor");
+		});
+
 		test("a link failure is recorded as the link step", async () => {
 			const cwd = mkdtempSync(join(tmpdir(), "neon-init-link-step-"));
 			writeFileSync(join(cwd, "package.json"), "{}\n");

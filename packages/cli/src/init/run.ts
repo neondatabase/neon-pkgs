@@ -545,6 +545,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	let outcome: InitFunnelOutcome = "error";
 	let printed = false;
 	let step: InitFunnelErrorStep = "setup";
+	// Agent setup failures deferred so far, for an exit that never reaches a summary.
+	let deferredFailureNext = (): string[] => [];
 
 	try {
 		const detectOpts = {
@@ -939,6 +941,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 								: undefined,
 						),
 					);
+		deferredFailureNext = () =>
+			joinNext(toolingFailedNextLines(), mcpFailedNext());
 		const mcpDeferredNext = (): string[] =>
 			mcpState.deferredPin === undefined
 				? []
@@ -1566,6 +1570,16 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		}
 		outcome = "error";
 		recordInitExit(funnel, step, error);
+		const deferred = deferredFailureNext();
+		if (!printed && deferred.length > 0) {
+			printInitDone(
+				formatInitDone({
+					heading: headingForKind("error"),
+					rows: [],
+					next: deferred,
+				}),
+			);
+		}
 		throw error;
 	} finally {
 		finishInitFunnel(funnel, outcome, analytics);
