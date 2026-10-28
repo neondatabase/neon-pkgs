@@ -31,7 +31,9 @@
     { "type": "connection_error", "code": "protocol_error", "message": "invalid sequence" }
   ],
   "invalid": [
-    { "type": "client_info", "sdk": "javascript", "release_line": "0.3" },
+    { "type": "client_info", "sdk": "javascript", "release_line": "00.3" },
+    { "type": "client_info", "sdk": "javascript", "release_line": "0.03" },
+    { "type": "client_info", "sdk": "javascript", "release_line": "0.3.0" },
     { "type": "client_info", "sdk": "typescript", "release_line": "0.2" },
     { "type": "client_info", "sdk": "javascript", "release_line": "0.2", "version": "0.2.0" },
     { "type": "hello", "database": "app" },

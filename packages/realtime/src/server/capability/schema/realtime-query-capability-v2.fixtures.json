@@ -46,7 +46,7 @@
         "aud": "realtime-proxy",
         "database": "app",
         "error_details": "safe",
-        "issuer": { "sdk": "javascript", "release_line": "0.3", "query_source": "raw_sql" },
+        "issuer": { "sdk": "javascript", "release_line": "0.03", "query_source": "raw_sql" },
         "query_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "sql": "select 1",
         "parameters": [],

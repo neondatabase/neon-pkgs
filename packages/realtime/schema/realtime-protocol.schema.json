@@ -17,7 +17,12 @@
       "type": "string",
       "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]{1,64}$"
     },
-    "releaseLine": { "enum": ["0.1", "0.2"] },
+    "releaseLine": {
+      "type": "string",
+      "$comment": "Canonical major or major.minor release cohort. Servers map unrecognized lines to a bounded unknown telemetry bucket.",
+      "maxLength": 16,
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?$"
+    },
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "base64Cell": {
       "type": "object",
