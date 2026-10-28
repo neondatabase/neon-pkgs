@@ -9,13 +9,18 @@ Postgres. It does two jobs:
    rows and load them, preserving numeric precision that a JavaScript
    `JSON.parse` would destroy.
 
-The pure core (`parseExportedSchema`, `generateDdl`, `generateStagingDdl`,
-`generateTransformSql`) takes data and returns SQL strings. It reads no files,
-no environment, and never prints. The I/O entry points (`loadConvexSchema`,
-`generateSeedSql`, `importConvexExport`) layer file, zip, and database access on
-top.
+Both jobs run from the command line with `npx @neon/convex-to-postgres` (see
+[CLI](#cli)) or from code as a library.
+
+The library's pure core (`parseExportedSchema`, `generateDdl`,
+`generateStagingDdl`, `generateTransformSql`) takes data and returns SQL
+strings. It reads no files, no environment, and never prints. The I/O entry
+points (`loadConvexSchema`, `generateDataSql`, `generateSeedSql`,
+`importConvexExport`) layer file, zip, and database access on top.
 
 ## Install
+
+The CLI needs no install: run it with `npx`. To use the library:
 
 ```bash
 npm install @neon/convex-to-postgres
@@ -25,10 +30,117 @@ npm install @neon/convex-to-postgres
 > a Neon Lakebase branch — it relies on the `lakebase_text` / `lakebase_vector`
 > extensions — while the rest of the output is portable Postgres.
 
+## CLI
+
+```bash
+npx @neon/convex-to-postgres <schema | seed | import> [options]
+```
+
+Run it from your Convex project root. Every command reads `./convex/schema.ts`
+unless you pass `--schema <path>`. The file is evaluated, so run it where the
+project's dependencies (including `convex`) are installed. SQL goes to stdout,
+so it pipes straight into `psql`. Warnings and progress go to stderr.
+
+Start with a snapshot of your deployment:
+
+```bash
+npx convex export --path snapshot.zip
+```
+
+### Migrate in one step
+
+```bash
+npx @neon/convex-to-postgres import --export snapshot.zip --apply-schema \
+  --database-url "$DATABASE_URL"
+```
+
+`import` creates the tables (`--apply-schema`), loads every document in one
+transaction, then builds the search/vector indexes and runs `VACUUM ANALYZE`.
+`--database-url` defaults to `DATABASE_URL`. Without `--apply-schema`, the tables
+must already exist.
+
+### Review the schema, then load
+
+```bash
+npx @neon/convex-to-postgres schema > schema.sql
+npx @neon/convex-to-postgres seed --export snapshot.zip > seed.sql
+
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f seed.sql
+```
+
+The warnings `schema` prints are the things to check by hand: a dropped foreign
+key, a mixed-type union stored as `jsonb`, a skipped index. `seed` writes one
+self-contained script for the tables exactly as `schema` generated them. To
+change those tables, use `--split`.
+
+### Edit the schema and still migrate the data (`--split`)
+
+```bash
+npx @neon/convex-to-postgres seed --export snapshot.zip --split migration
+```
+
+| File | What it does | Edit it? |
+| --- | --- | --- |
+| `01-schema.sql` | Extensions, `CREATE TABLE`, foreign keys, btree indexes | Yes: rename, retype, flatten |
+| `02-load.sql` | Staging tables `_convex_<table>(doc jsonb)` and every raw document, in one transaction | No |
+| `03-transform.sql` | `INSERT INTO <table> (...) SELECT ... FROM _convex_<table>`, then drops the staging tables | Yes: match your schema edits |
+| `04-indexes.sql` | Search/vector indexes, then `VACUUM ANALYZE`. Only written when the schema has search or vector indexes | Rarely |
+
+This works because the staging load does not depend on the target schema. Every
+original document sits in `_convex_<table>.doc`, and only `03-transform.sql` is
+shaped by the schema. A schema edit is therefore one matching edit to the
+transform. To rename `author` to `author_name`, change the column in
+`01-schema.sql` and in the transform's column list; the `doc->>'author'`
+expression stays. A retype is a different cast, and flattening a nested object
+is a new column read with `doc->'meta'->>'field'`.
+
+Run the files in order:
+
+```bash
+for f in migration/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break; done
+```
+
+`--split` refuses to overwrite files from an earlier run, because they may hold
+your edits. Pass `--force` to regenerate them.
+
+Convex does not enforce references, so a real export can contain an id whose
+target row was deleted. The deferred foreign keys reject it when the transform
+commits, and the error's `detail` line names the key.
+
+### Commands and options
+
+| Command | Required | Optional |
+| --- | --- | --- |
+| `schema` | | `--schema <path>`, `--out <file>` |
+| `seed` | `--export <zip-or-dir>` | `--schema <path>`, `--out <file>`, `--split <dir>`, `--force` |
+| `import` | `--export <zip-or-dir>`, and `--database-url <url>` or `DATABASE_URL` | `--schema <path>`, `--apply-schema` |
+
+The generation options below apply to all three commands. Pass the same ones to
+every command so table names, column names, and types line up between files.
+
+| Flag | Library option | Default |
+| --- | --- | --- |
+| `--id-strategy uuid\|text` | `idStrategy` | `uuid` |
+| `--no-snake-case` | `snakeCase: false` | snake_case on |
+| `--no-check-constraints` | `checkConstraints: false` | `CHECK`s on |
+| `--search-language <config>` | `searchLanguage` | `english` |
+| `--vector-ops <opclass>` | `vectorOps` | `vector_cosine_ops` |
+| `--search-k1 <number>` | `searchK1` | `1.2` |
+| `--search-b <number>` | `searchB` | `0.75` |
+| `--max-ann-dimensions <n>` | `maxAnnDimensions` | no cap |
+
+Every command takes `--help`. A command exits `0` on success and `1` on any
+failure, with a message on stderr that names the flag to fix.
+
+The rest of this README covers the library and the mapping rules both
+interfaces share.
+
 ## Job 1: schema generation
 
-Point the loader at a Convex `schema.ts`, or hand it the JSON from
-`SchemaDefinition.export()`, and get DDL back.
+The CLI's `schema` command does this. From code, point the loader at a Convex
+`schema.ts`, or hand it the JSON from `SchemaDefinition.export()`, and get DDL
+back.
 
 ```ts
 import { generateDdl, loadConvexSchema } from "@neon/convex-to-postgres";
@@ -42,7 +154,8 @@ for (const warning of warnings) console.warn(warning);
 
 `generateDdl` returns `{ sql, warnings }`. Warnings cover anything that could not
 be represented faithfully: a foreign key dropped because its target is outside
-the generated schema, an index on a nested path, or a search / vector index.
+the generated schema, an index on a nested path, or a vector index skipped by
+`maxAnnDimensions`.
 They are collected and returned, never thrown, so a caller can print a report and
 still use the SQL.
 
@@ -257,10 +370,11 @@ Instead it:
 
 ### Generate a seed script
 
-`generateSeedSql` reads an extracted export directory and returns one
-self-contained SQL string: staging DDL, the raw rows as `jsonb` literals, the
-typed transform, and the staging drop, all wrapped in one transaction with
-deferred foreign keys. Apply the schema DDL first, then run the seed:
+The CLI's `seed` command does this. `generateSeedSql` reads an extracted export
+directory and returns one self-contained SQL string: staging DDL, the raw rows
+as `jsonb` literals, the typed transform, and the staging drop, all wrapped in
+one transaction with deferred foreign keys. Apply the schema DDL first, then run
+the seed:
 
 ```ts
 import { generateDdl, generateSeedSql, loadConvexSchema } from "@neon/convex-to-postgres";
@@ -277,12 +391,18 @@ psql "postgres://user:password@host/dbname" -f schema.sql
 psql "postgres://user:password@host/dbname" -f seed.sql
 ```
 
+`generateDataSql` returns just the load half (staging tables plus the raw rows,
+with no transaction or transform), which is what `seed --split` writes to
+`02-load.sql`. Pair it with `generateTransformSql` and `generateStagingDropSql`
+to run a hand-edited transform.
+
 ### Import programmatically
 
-`importConvexExport` loads an export (a directory or a `.zip`) through `pg`,
-inside one transaction, and returns the per-table row counts. Pass either a
-`connectionString` (a `pg.Client` is created and closed internally) or your own
-`client`. Set `applySchema: true` to run the generated DDL first.
+The CLI's `import` command does this. `importConvexExport` loads an export (a
+directory or a `.zip`) through `pg`, inside one transaction, and returns the
+per-table row counts. Pass either a `connectionString` (a `pg.Client` is created
+and closed internally) or your own `client`. Set `applySchema: true` to run the
+generated DDL first.
 
 ```ts
 import { importConvexExport, loadConvexSchema } from "@neon/convex-to-postgres";
@@ -336,6 +456,7 @@ extensions.
 | `generateStagingDdl(schema, options?)` | pure | `CREATE TABLE _convex_<t>(doc jsonb NOT NULL)` per table. |
 | `generateStagingDropSql(schema, options?)` | pure | `DROP TABLE` for every staging table. |
 | `generateTransformSql(schema, options?)` | pure | `INSERT ... SELECT` from staging into the typed tables. |
+| `generateDataSql(schema, exportDir, options?)` | reads fs | Staging DDL plus raw jsonb inserts: the load half of the seed script. |
 | `generateSeedSql(schema, exportDir, options?)` | reads fs | One self-contained seed script. |
 | `importConvexExport(options)` | pg + fs | Load an export (dir or `.zip`) in one transaction; returns row counts. |
 | `openExportSource(source)` | fs | Low-level reader over a directory or `.zip` export. |

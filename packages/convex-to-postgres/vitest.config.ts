@@ -16,6 +16,9 @@ export default defineConfig({
 				"src/data/import.ts",
 				"src/data/read-export.ts",
 				"src/schema/load.ts",
+				// The bin entry only wires process IO into `runCli`; the integration
+				// suite spawns the built file.
+				"src/cli.ts",
 			],
 			reporter: ["html", "lcov"],
 		},

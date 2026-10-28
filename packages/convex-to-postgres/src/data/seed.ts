@@ -25,26 +25,12 @@ export function generateSeedSql(
 	exportDir: string,
 	options?: GenerateOptions,
 ): string {
-	const plan = planSchema(schema, options);
 	const parts: string[] = [
 		"BEGIN;",
 		"",
-		"-- Staging tables (raw Convex documents as jsonb)",
-		generateStagingDdl(schema, options).trimEnd(),
-		"",
-	];
-
-	for (const table of plan.tables) {
-		const inserts = stagingInserts(
-			exportDir,
-			table.convexName,
-			table.stagingName,
-		);
-		if (inserts.length === 0) continue;
-		parts.push(`-- Data for ${table.convexName}`, ...inserts, "");
-	}
-
-	parts.push(
+		// Kept untrimmed: its trailing newline is the blank line before the next
+		// section, which keeps a table-less schema's output unchanged too.
+		generateDataSql(schema, exportDir, options),
 		"-- Transform staged documents into the typed tables",
 		generateTransformSql(schema, options).trimEnd(),
 		"",
@@ -53,7 +39,7 @@ export function generateSeedSql(
 		"",
 		"COMMIT;",
 		"",
-	);
+	];
 
 	// Lakebase BM25/ANN indexes (and the btrees backing their filter fields) are
 	// built AFTER the load, outside the transaction. Indexes-after-load gives BM25
@@ -71,6 +57,41 @@ export function generateSeedSql(
 	}
 
 	return parts.join("\n");
+}
+
+/**
+ * Build the load half of {@link generateSeedSql}: the jsonb staging tables
+ * followed by one `INSERT` per raw JSONL line, with no transaction and no
+ * transform. The staging tables are left in place, so a hand-edited
+ * {@link generateTransformSql} can run against them afterwards -- the staged
+ * documents do not depend on the target schema, only the transform does.
+ *
+ * Lines are embedded verbatim as jsonb literals, exactly as in
+ * {@link generateSeedSql}. `exportDir` is an extracted export directory; a
+ * table whose `documents.jsonl` is absent gets a staging table and no rows.
+ */
+export function generateDataSql(
+	schema: ConvexSchema,
+	exportDir: string,
+	options?: GenerateOptions,
+): string {
+	const plan = planSchema(schema, options);
+	const parts: string[] = [
+		"-- Staging tables (raw Convex documents as jsonb)",
+		generateStagingDdl(schema, options).trimEnd(),
+	];
+
+	for (const table of plan.tables) {
+		const inserts = stagingInserts(
+			exportDir,
+			table.convexName,
+			table.stagingName,
+		);
+		if (inserts.length === 0) continue;
+		parts.push("", `-- Data for ${table.convexName}`, ...inserts);
+	}
+
+	return `${parts.join("\n")}\n`;
 }
 
 function stagingInserts(

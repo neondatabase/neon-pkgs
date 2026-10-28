@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { parseExportedSchema } from "../schema/parse.js";
 import { field, schema, table, v } from "../test-fixtures.js";
-import { generateSeedSql } from "./seed.js";
+import { generateDataSql, generateSeedSql } from "./seed.js";
 
 const BIG_INT = "9007199254740993"; // 2^53 + 1, unrepresentable as a JS number
 
@@ -109,6 +109,29 @@ describe("generateSeedSql", () => {
 	test("a schema with no search/vector indexes ends at COMMIT (no VACUUM)", () => {
 		expect(sql).not.toContain("VACUUM");
 		expect(sql.trimEnd().endsWith("COMMIT;")).toBe(true);
+	});
+});
+
+describe("generateDataSql", () => {
+	test("stages the raw rows without a transaction, transform, or drop", () => {
+		const data = generateDataSql(parsed, exportDir);
+		expect(data).toContain(
+			"CREATE TABLE _convex_messages (doc jsonb NOT NULL);",
+		);
+		expect(data).toContain(
+			`INSERT INTO _convex_messages (doc) VALUES ('${messageLine}'::jsonb);`,
+		);
+		expect(data).not.toContain("BEGIN;");
+		expect(data).not.toContain("COMMIT;");
+		expect(data).not.toContain("INSERT INTO messages (");
+		expect(data).not.toContain("DROP TABLE");
+		expect(data.endsWith(";\n")).toBe(true);
+	});
+
+	test("is the load half of generateSeedSql, verbatim", () => {
+		expect(sql).toContain(
+			`BEGIN;\n\n${generateDataSql(parsed, exportDir)}\n`,
+		);
 	});
 });
 

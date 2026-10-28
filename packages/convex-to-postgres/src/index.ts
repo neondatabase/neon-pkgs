@@ -13,7 +13,7 @@ export type {
 export { importConvexExport } from "./data/import.js";
 export type { ExportSource } from "./data/read-export.js";
 export { openExportSource } from "./data/read-export.js";
-export { generateSeedSql } from "./data/seed.js";
+export { generateDataSql, generateSeedSql } from "./data/seed.js";
 export {
 	generateStagingDdl,
 	generateStagingDropSql,

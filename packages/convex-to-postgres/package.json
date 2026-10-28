@@ -9,7 +9,8 @@
 		"migration",
 		"lakebase",
 		"database",
-		"platform"
+		"platform",
+		"cli"
 	],
 	"repository": {
 		"type": "git",
@@ -21,6 +22,9 @@
 		"url": "https://neon.com"
 	},
 	"type": "module",
+	"bin": {
+		"convex-to-postgres": "dist/cli.js"
+	},
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"exports": {
@@ -40,7 +44,7 @@
 		"prepare": "npm run build",
 		"test": "vitest --passWithNoTests",
 		"test:ci": "vitest run --passWithNoTests",
-		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"test:integration": "pnpm build && vitest run --config vitest.integration.config.ts",
 		"tsc": "tsc"
 	},
 	"dependencies": {
