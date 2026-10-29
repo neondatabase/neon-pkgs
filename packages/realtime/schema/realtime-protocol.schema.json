@@ -362,7 +362,7 @@
               "maxLength": 64,
               "pattern": "^[a-z][a-z0-9_]*$"
             },
-            "message": { "type": "string", "maxLength": 4096 }
+            "message": { "type": "string" }
           },
           "additionalProperties": false
         },
