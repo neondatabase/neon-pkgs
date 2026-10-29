@@ -48,7 +48,10 @@ describe("Legacy Realtime protocol compatibility", () => {
 			);
 		}
 		for (const fixture of [
-			{ type: "client_info", sdk: "javascript", release_line: "0.2" },
+			{
+				type: "client_info",
+				metadata: '{"sdk":"javascript","release_line":"0.2"}',
+			},
 			...protocolFixtures.invalid,
 			...orderedFixtures.valid,
 		]) {
