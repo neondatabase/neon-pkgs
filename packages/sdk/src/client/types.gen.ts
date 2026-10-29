@@ -3597,12 +3597,25 @@ export type NeonAuthOauthProvider = {
      */
     client_id?: string;
     /**
-     * OAuth client secret for the provider.
+     * Masked OAuth client secret for the provider. For `apple`, a masked fingerprint of the Sign in with Apple `.p8` private key; the key itself is never returned.
+     *
      */
     client_secret?: string;
+    /**
+     * Tenant ID of the Microsoft OAuth provider. Present only for the Microsoft OAuth provider when a tenant is configured.
+     */
+    microsoft_tenant_id?: string;
+    /**
+     * Apple Developer Team ID. Present only for the Apple OAuth provider.
+     */
+    apple_team_id?: string;
+    /**
+     * Key ID of the Sign in with Apple private key. Present only for the Apple OAuth provider.
+     */
+    apple_key_id?: string;
 };
 
-export type NeonAuthOauthProviderId = 'google' | 'github' | 'microsoft' | 'vercel';
+export type NeonAuthOauthProviderId = 'google' | 'github' | 'microsoft' | 'vercel' | 'apple';
 
 export type NeonAuthOauthProviderType = 'standard' | 'shared';
 
@@ -3613,13 +3626,22 @@ export type NeonAuthAddOAuthProviderRequest = {
      */
     client_id?: string;
     /**
-     * OAuth client secret for the provider.
+     * OAuth client secret for the provider. For `apple`, the contents of the Sign in with Apple `.p8` private key. For `microsoft`, the client secret value from Microsoft Entra ID.
+     *
      */
     client_secret?: string;
     /**
      * Tenant ID for the Microsoft OAuth provider. Only relevant when the OAuth provider is Microsoft; omit or leave blank for other providers.
      */
     microsoft_tenant_id?: string;
+    /**
+     * Apple Developer Team ID. Only relevant when the OAuth provider is Apple; omit for other providers.
+     */
+    apple_team_id?: string;
+    /**
+     * Key ID of the Sign in with Apple private key supplied in `client_secret`. Only relevant when the OAuth provider is Apple; omit for other providers.
+     */
+    apple_key_id?: string;
 };
 
 export type NeonAuthUpdateOAuthProviderRequest = {
@@ -3629,12 +3651,22 @@ export type NeonAuthUpdateOAuthProviderRequest = {
     client_id?: string;
     /**
      * OAuth client secret for the provider. Omit to leave the existing secret unchanged.
+     * For `apple`, a new `.p8` private key must be sent together with its `apple_key_id` in the same request; omit both to keep the stored key.
+     *
      */
     client_secret?: string;
     /**
      * The tenant ID scoping the Microsoft OAuth provider. Supply this field when the provider type is microsoft; it has no effect for other provider types.
      */
     microsoft_tenant_id?: string;
+    /**
+     * Apple Developer Team ID. Supply this field when the provider is apple; it has no effect for other providers.
+     */
+    apple_team_id?: string;
+    /**
+     * Key ID of the Sign in with Apple private key supplied in `client_secret`. Supply this field when the provider is apple; it has no effect for other providers.
+     */
+    apple_key_id?: string;
 };
 
 export type SharedEmailServer = {

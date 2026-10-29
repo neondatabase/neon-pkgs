@@ -1604,7 +1604,8 @@ export const zNeonAuthOauthProviderId = z.enum([
     'google',
     'github',
     'microsoft',
-    'vercel'
+    'vercel',
+    'apple'
 ]);
 
 export const zNeonAuthOauthProviderType = z.enum(['standard', 'shared']);
@@ -1613,7 +1614,10 @@ export const zNeonAuthOauthProvider = z.strictObject({
     id: zNeonAuthOauthProviderId,
     type: zNeonAuthOauthProviderType,
     client_id: z.string().optional(),
-    client_secret: z.string().optional()
+    client_secret: z.string().optional(),
+    microsoft_tenant_id: z.string().optional(),
+    apple_team_id: z.string().optional(),
+    apple_key_id: z.string().optional()
 });
 
 export const zListNeonAuthOauthProvidersResponse = z.strictObject({
@@ -1624,13 +1628,17 @@ export const zNeonAuthAddOAuthProviderRequest = z.strictObject({
     id: zNeonAuthOauthProviderId,
     client_id: z.string().optional(),
     client_secret: z.string().optional(),
-    microsoft_tenant_id: z.string().optional()
+    microsoft_tenant_id: z.string().optional(),
+    apple_team_id: z.string().optional(),
+    apple_key_id: z.string().optional()
 });
 
 export const zNeonAuthUpdateOAuthProviderRequest = z.strictObject({
     client_id: z.string().optional(),
     client_secret: z.string().optional(),
-    microsoft_tenant_id: z.string().optional()
+    microsoft_tenant_id: z.string().optional(),
+    apple_team_id: z.string().optional(),
+    apple_key_id: z.string().optional()
 });
 
 export const zSharedEmailServer = z.strictObject({

@@ -253,6 +253,8 @@ export const operationFactories = {
 	"client_id": zod.zAddBranchNeonAuthOauthProviderBody.shape["client_id"],
 	"client_secret": zod.zAddBranchNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zAddBranchNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
+	"apple_team_id": zod.zAddBranchNeonAuthOauthProviderBody.shape["apple_team_id"],
+	"apple_key_id": zod.zAddBranchNeonAuthOauthProviderBody.shape["apple_key_id"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
@@ -266,7 +268,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.addBranchNeonAuthOauthProvider({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
-			body: optionalGroup({ "id": input["id"], "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"] }, true),
+			body: optionalGroup({ "id": input["id"], "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"], "apple_team_id": input["apple_team_id"], "apple_key_id": input["apple_key_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -352,6 +354,8 @@ export const operationFactories = {
 	"client_id": zod.zAddNeonAuthOauthProviderBody.shape["client_id"],
 	"client_secret": zod.zAddNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zAddNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
+	"apple_team_id": zod.zAddNeonAuthOauthProviderBody.shape["apple_team_id"],
+	"apple_key_id": zod.zAddNeonAuthOauthProviderBody.shape["apple_key_id"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
@@ -365,7 +369,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.addNeonAuthOauthProvider({
 			path: optionalGroup({ "project_id": input["project_id"] }, true),
-			body: optionalGroup({ "id": input["id"], "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"] }, true),
+			body: optionalGroup({ "id": input["id"], "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"], "apple_team_id": input["apple_team_id"], "apple_key_id": input["apple_key_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -5554,6 +5558,8 @@ export const operationFactories = {
 	"client_id": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["client_id"],
 	"client_secret": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
+	"apple_team_id": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["apple_team_id"],
+	"apple_key_id": zod.zUpdateBranchNeonAuthOauthProviderBody.shape["apple_key_id"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
@@ -5567,7 +5573,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.updateBranchNeonAuthOauthProvider({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"], "oauth_provider_id": input["oauth_provider_id"] }, true),
-			body: optionalGroup({ "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"] }, true),
+			body: optionalGroup({ "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"], "apple_team_id": input["apple_team_id"], "apple_key_id": input["apple_key_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,
@@ -5856,6 +5862,8 @@ export const operationFactories = {
 	"client_id": zod.zUpdateNeonAuthOauthProviderBody.shape["client_id"],
 	"client_secret": zod.zUpdateNeonAuthOauthProviderBody.shape["client_secret"],
 	"microsoft_tenant_id": zod.zUpdateNeonAuthOauthProviderBody.shape["microsoft_tenant_id"],
+	"apple_team_id": zod.zUpdateNeonAuthOauthProviderBody.shape["apple_team_id"],
+	"apple_key_id": zod.zUpdateNeonAuthOauthProviderBody.shape["apple_key_id"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
@@ -5869,7 +5877,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.updateNeonAuthOauthProvider({
 			path: optionalGroup({ "project_id": input["project_id"], "oauth_provider_id": input["oauth_provider_id"] }, true),
-			body: optionalGroup({ "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"] }, true),
+			body: optionalGroup({ "client_id": input["client_id"], "client_secret": input["client_secret"], "microsoft_tenant_id": input["microsoft_tenant_id"], "apple_team_id": input["apple_team_id"], "apple_key_id": input["apple_key_id"] }, true),
 			client,
 			signal,
 			throwOnError: true,

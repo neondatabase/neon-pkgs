@@ -566,16 +566,16 @@ pnpm exec node scripts/check-dist-types.mjs packages/sdk
 **Automated spec refresh (`.github/workflows/sdk-spec-refresh.yml`):**
 
 The live spec at https://neon.com/api_spec/release/v2.json can drift ahead of the
-vendored copy on `main`. A scheduled workflow keeps maintainers aware:
+vendored copy on `main`. A scheduled workflow detects the drift; it never opens a PR:
 
 | | |
 | --- | --- |
 | **When** | Daily at 09:00 UTC; also `workflow_dispatch` |
-| **What** | `spec:pull` → `generate` → `build` on `@neon/sdk` |
-| **Output** | Opens or updates a PR on branch `bot/sdk-spec-refresh` titled `chore(@neon/sdk): refresh OpenAPI spec` — **only when something changed** |
+| **What** | `spec:pull` → `generate` on `@neon/sdk` and `@neon/tools` → `build` |
+| **Output** | Fails the run when the spec or generated files differ from the commit. A red run is the signal to refresh locally and open the PR by hand (`chore(@neon/sdk): refresh OpenAPI spec`) |
 | **Runner** | Protected runner group + JFrog. The spec is pulled from neon.com. |
 
-**The bot PR is a starting point, not merge-ready.** The workflow deliberately does
+**A refresh is not merge-ready after `generate`.** The workflow deliberately does
 not run `test:ci`. CI will fail on `packages/sdk/src/neon/coverage.test.ts` until
 someone updates `packages/sdk/src/neon/coverage.ts`:
 
