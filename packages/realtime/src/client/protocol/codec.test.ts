@@ -73,6 +73,17 @@ function decodesCleanly(frame: string): boolean {
 }
 
 describe("Realtime v1 JSON codec", () => {
+	it("decodes resource-limit subscription errors with their SQLSTATE", () => {
+		const message = {
+			type: "subscription_error",
+			live_id: "2",
+			code: "resource_limit_exceeded",
+			message: "subscription exceeded resource limits",
+			sqlstate: "54000",
+		};
+		expect(decodeServerMessage(JSON.stringify(message))).toEqual(message);
+	});
+
 	it("decodes every valid server fixture", () => {
 		const validServerFixtures = fixtures.valid.filter(({ type }) =>
 			SERVER_TYPES.has(type),
