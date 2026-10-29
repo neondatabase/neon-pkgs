@@ -552,10 +552,9 @@ requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
 The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
-server that accepts the optional `client_info` message before releasing this
-SDK. Existing v2 clients remain compatible because they may omit the message;
-those connections simply have no client metadata. There is no client-side
-protocol fallback, subscription opt-in, or mode acknowledgment.
+server that requires the one-time `client_info` message before releasing this
+SDK. Protocol v1 remains available for previously released clients. There is no
+client-side protocol fallback, subscription opt-in, or mode acknowledgment.
 
 ## Protocol schemas
 
