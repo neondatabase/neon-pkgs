@@ -332,6 +332,7 @@ describe("neon-auth", () => {
 		test("--oauth-client-secret-file reports a missing file before any API call", async ({
 			testCliCommand,
 		}) => {
+			const requests: RecordedRequest[] = [];
 			await testCliCommand(
 				[
 					"neon-auth",
@@ -349,8 +350,208 @@ describe("neon-auth", () => {
 					stderr: expect.stringContaining(
 						"Could not read --oauth-client-secret-file /nonexistent/secret.txt",
 					),
+					onRequest: (r) => requests.push(r),
 				},
 			);
+			expect(providerBodies(requests, "POST")).toEqual([]);
+		});
+
+		test("--oauth-client-secret-file rejects a file holding only a newline before any request", async ({
+			testCliCommand,
+		}) => {
+			await withSecretFile("\n", async (path) => {
+				for (const action of ["add", "update"]) {
+					const requests: RecordedRequest[] = [];
+					await testCliCommand(
+						[
+							"neon-auth",
+							"oauth-provider",
+							action,
+							...branchArgs,
+							"--provider-id",
+							"github",
+							"--oauth-client-secret-file",
+							path,
+						],
+						{
+							code: 1,
+							snapshot: false,
+							stderr: expect.stringContaining("is empty"),
+							onRequest: (r) => requests.push(r),
+						},
+					);
+					expect(providerBodies(requests, "POST")).toEqual([]);
+					expect(providerBodies(requests, "PATCH")).toEqual([]);
+				}
+			});
+		});
+
+		test("--oauth-client-secret-file strips CRLF line endings from the secret", async ({
+			testCliCommand,
+		}) => {
+			await withSecretFile("crlf-secret\r\n\r\n", async (path) => {
+				const requests: RecordedRequest[] = [];
+				await testCliCommand(
+					[
+						"neon-auth",
+						"oauth-provider",
+						"add",
+						...branchArgs,
+						"--provider-id",
+						"github",
+						"--oauth-client-id",
+						"gh-client",
+						"--oauth-client-secret-file",
+						path,
+					],
+					{ snapshot: false, onRequest: (r) => requests.push(r) },
+				);
+				expect(providerBodies(requests, "POST")).toEqual([
+					{
+						id: "github",
+						client_id: "gh-client",
+						client_secret: "crlf-secret",
+					},
+				]);
+			});
+		});
+
+		test("update microsoft sends the tenant ID and prints it", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"update",
+					...branchArgs,
+					"--provider-id",
+					"microsoft",
+					"--microsoft-tenant-id",
+					"organizations",
+				],
+				{ output: "table", onRequest: (r) => requests.push(r) },
+			);
+			expect(providerBodies(requests, "PATCH")).toEqual([
+				{ microsoft_tenant_id: "organizations" },
+			]);
+		});
+
+		test("update apple prints the team and key IDs", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"update",
+					...branchArgs,
+					"--provider-id",
+					"apple",
+					"--oauth-client-secret",
+					"new-key",
+					"--apple-team-id",
+					"TEAM123456",
+					"--apple-key-id",
+					"NEWKEY1234",
+				],
+				{ output: "table" },
+			);
+		});
+
+		test("update apple rejects --apple-key-id without a new client secret", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"update",
+					...branchArgs,
+					"--provider-id",
+					"apple",
+					"--apple-key-id",
+					"NEWKEY1234",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: "ERROR: --apple-key-id identifies the new private key, so it requires --oauth-client-secret or --oauth-client-secret-file.",
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(providerBodies(requests, "PATCH")).toEqual([]);
+		});
+
+		describe("INVALID_SHARED_OAUTH_PROVIDER hint", () => {
+			const rejected = { mockDir: "neon-auth-oauth-shared-rejected" };
+			const appleHint = [
+				"--oauth-client-id <Services ID>",
+				"--oauth-client-secret-file <.p8>",
+				"--apple-team-id",
+				"--apple-key-id",
+			];
+			const microsoftHint = [
+				"--oauth-client-id",
+				"--oauth-client-secret",
+				"--microsoft-tenant-id",
+			];
+
+			test.for([
+				["add", "apple", appleHint],
+				["update", "apple", appleHint],
+				["add", "microsoft", microsoftHint],
+				["update", "microsoft", microsoftHint],
+			] as const)("%s %s names the provider's own flags", async ([
+				action,
+				provider,
+				flags,
+			], { testCliCommand }) => {
+				const { stderr } = await testCliCommand(
+					[
+						"neon-auth",
+						"oauth-provider",
+						action,
+						...branchArgs,
+						"--provider-id",
+						provider,
+					],
+					{
+						...rejected,
+						code: 1,
+						snapshot: false,
+						stderr: expect.stringContaining(
+							`The "${provider}" provider requires your own OAuth app credentials.`,
+						),
+					},
+				);
+				for (const flag of flags) expect(stderr).toContain(flag);
+			});
+
+			test("update google keeps the generic hint", async ({
+				testCliCommand,
+			}) => {
+				await testCliCommand(
+					[
+						"neon-auth",
+						"oauth-provider",
+						"update",
+						...branchArgs,
+						"--provider-id",
+						"google",
+					],
+					{
+						...rejected,
+						code: 1,
+						snapshot: false,
+						stderr: expect.stringContaining(
+							"Re-run with --oauth-client-id and --oauth-client-secret to provide them.",
+						),
+					},
+				);
+			});
 		});
 	});
 

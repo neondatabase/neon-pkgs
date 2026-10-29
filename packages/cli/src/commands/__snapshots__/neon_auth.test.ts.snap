@@ -484,6 +484,37 @@ Register an application in Microsoft Entra ID > App registrations, and add the f
 "
 `;
 
+exports[`neon-auth > oauth-provider apple and microsoft > update apple prints the team and key IDs 1`] = `
+"
+OAuth provider updated
+  ID:         apple
+  Type:       standard
+  Client ID:  com.example.services
+  Team ID:    TEAM123456
+  Key ID:     NEWKEY1234
+
+
+Create a Services ID in the Apple Developer portal, enable Sign in with Apple for it, and add the following return URL (Apple requires HTTPS and does not accept localhost):
+  URL:  https://auth.test.neon.tech/callback/apple
+
+"
+`;
+
+exports[`neon-auth > oauth-provider apple and microsoft > update microsoft sends the tenant ID and prints it 1`] = `
+"
+OAuth provider updated
+  ID:         microsoft
+  Type:       standard
+  Client ID:  ms-client
+  Tenant ID:  organizations
+
+
+Register an application in Microsoft Entra ID > App registrations, and add the following redirect URI under the Web platform:
+  URL:  https://auth.test.neon.tech/callback/microsoft
+
+"
+`;
+
 exports[`neon-auth > oauth-provider delete 1`] = `
 "
 OAuth provider "google" deleted
