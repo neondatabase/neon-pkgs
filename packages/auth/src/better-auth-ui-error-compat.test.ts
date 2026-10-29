@@ -1,6 +1,7 @@
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import type { AuthHttpError } from "./core/better-auth-helpers";
 import { createAuthClient } from "./index";
 import { BetterAuthReactAdapter } from "./react";
 import { BetterAuthVanillaAdapter } from "./vanilla";
@@ -12,16 +13,23 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-// Mirrors `getAuthErrorCode` from `@better-auth-ui/core@1.7.30`
-// (lib/auth-error-message.ts:22-25): the code is read from the Better Fetch
-// error body (`error.error`) first, then from the error itself, and upper-cased.
+// Mirrors `getAuthErrorCode` and the `status` read in `getAuthErrorMessage` from
+// `@better-auth-ui/core@1.7.30` (`lib/auth-error-message.ts`). The fixture must
+// be re-checked against the source on a better-auth-ui bump.
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === "object" && value !== null
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
 function getAuthErrorCode(error: unknown): string | undefined {
-	const asRecord = (v: unknown) =>
-		typeof v === "object" && v !== null
-			? (v as Record<string, unknown>)
-			: undefined;
 	const body = asRecord(asRecord(error)?.error) ?? asRecord(error);
 	return typeof body?.code === "string" ? body.code.toUpperCase() : undefined;
+}
+
+function getAuthErrorStatus(error: unknown): unknown {
+	const body = asRecord(asRecord(error)?.error) ?? asRecord(error);
+	return body?.status ?? asRecord(error)?.status;
 }
 
 async function caught(fn: () => Promise<unknown>): Promise<unknown> {
@@ -67,9 +75,7 @@ describe.each(
 			),
 		);
 
-		const error = (await caught(signIn)) as Record<string, unknown> & {
-			error: Record<string, unknown>;
-		};
+		const error = (await caught(signIn)) as AuthHttpError;
 
 		expect(error.error).toMatchObject({
 			code: "EMAIL_NOT_VERIFIED",
@@ -80,6 +86,24 @@ describe.each(
 		expect(error.code).toBe("email_not_confirmed");
 		expect(error).toBeInstanceOf(Error);
 		expect(getAuthErrorCode(error)).toBe("EMAIL_NOT_VERIFIED");
+		expect(getAuthErrorStatus(error)).toBe(403);
+	});
+
+	test("a body without code resolves no code and reads the raw status", async () => {
+		server.use(
+			http.post(`${BASE_URL}/api/auth/sign-in/email`, () =>
+				HttpResponse.json(
+					{ message: "Slow down" },
+					{ status: 429, statusText: "Too Many Requests" },
+				),
+			),
+		);
+
+		const error = (await caught(signIn)) as AuthHttpError;
+
+		expect(error.error).toEqual({ message: "Slow down", status: 429 });
+		expect(getAuthErrorCode(error)).toBeUndefined();
+		expect(getAuthErrorStatus(error)).toBe(429);
 	});
 
 	test("401 INVALID_EMAIL_OR_PASSWORD exposes error.code", async () => {
@@ -95,9 +119,7 @@ describe.each(
 			),
 		);
 
-		const error = (await caught(signIn)) as Record<string, unknown> & {
-			error: Record<string, unknown>;
-		};
+		const error = (await caught(signIn)) as AuthHttpError;
 
 		expect(error.error).toMatchObject({
 			code: "INVALID_EMAIL_OR_PASSWORD",

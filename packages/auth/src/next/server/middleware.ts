@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import type { NeonAuthMiddlewareConfig } from "@/server/config";
-import { validateCookieConfig } from "@/server/config";
+import { validateCookieConfig, validatePublicRoutes } from "@/server/config";
 import {
 	DEFAULT_AUTH_SKIP_ROUTES,
 	processAuthMiddleware,
@@ -20,7 +20,7 @@ import {
  * @param config.loginUrl - The URL to redirect to when the user is not authenticated (default: '/auth/sign-in')
  * @param config.publicRoutes - Extra routes that skip authentication, merged with the default auth routes. Each entry matches the exact path and its subpaths (e.g. `['/', '/pricing']`)
  * @returns A middleware function that can be used in the Next.js app.
- * @throws Error if `cookies.secret` is less than 32 characters
+ * @throws Error if `cookies.secret` is less than 32 characters, or a `publicRoutes` entry is empty, slash-only (other than `'/'`) or lacks a leading `/`
  *
  * @example
  * ```ts
@@ -47,6 +47,7 @@ export function neonAuthMiddleware(config: NeonAuthMiddlewareConfig) {
 	} = config;
 
 	validateCookieConfig(cookies);
+	validatePublicRoutes(publicRoutes);
 	const skipRoutes = [...DEFAULT_AUTH_SKIP_ROUTES, ...publicRoutes];
 	return async (request: NextRequest) => {
 		const pathname = request.nextUrl.pathname;

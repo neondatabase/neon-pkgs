@@ -7,4 +7,6 @@ export const ERRORS = {
 		"cookies.secret must be at least 32 characters long for security. Generate a secure secret with: openssl rand -base64 32",
 	INVALID_SESSION_DATA_TTL:
 		"cookies.sessionDataTtl must be a positive number (in seconds)",
+	INVALID_PUBLIC_ROUTE:
+		"publicRoutes entries must be paths that start with '/' and name a route, for example '/pricing' ('/' alone is allowed and matches only the home page). Received",
 };

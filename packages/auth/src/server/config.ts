@@ -97,7 +97,10 @@ export type NeonAuthMiddlewareConfig = NeonAuthConfig & {
 	 * Additional routes that do not require authentication, merged with the
 	 * default auth routes. Each entry matches the exact path and its
 	 * slash-delimited subpaths (`/pricing` matches `/pricing` and
-	 * `/pricing/team`, but not `/pricing-internal`).
+	 * `/pricing/team`, but not `/pricing-internal`). `'/'` matches only `/`, not
+	 * the whole site. Entries must start with `/`; empty or slash-only entries
+	 * other than `'/'` (for example `''` or `'//'`) throw when the middleware is
+	 * created.
 	 * @example ['/', '/pricing']
 	 */
 	publicRoutes?: string[];
@@ -123,5 +126,22 @@ export function validateCookieConfig(cookies: SessionCookieConfig): void {
 
 	if (cookies.sessionDataTtl !== undefined && cookies.sessionDataTtl <= 0) {
 		throw new Error(ERRORS.INVALID_SESSION_DATA_TTL);
+	}
+}
+
+/**
+ * Validates `publicRoutes` entries. An entry that is empty, lacks a leading
+ * `/`, or is made only of slashes (other than `'/'` itself) would either never
+ * match or, once trailing slashes are trimmed, match every path and make the
+ * whole app public, so it is rejected instead of being silently accepted.
+ */
+export function validatePublicRoutes(publicRoutes: readonly string[]): void {
+	for (const route of publicRoutes) {
+		const namesRoute = route === "/" || /[^/]/.test(route);
+		if (!route.startsWith("/") || !namesRoute) {
+			throw new Error(
+				`${ERRORS.INVALID_PUBLIC_ROUTE}: ${JSON.stringify(route)}`,
+			);
+		}
 	}
 }

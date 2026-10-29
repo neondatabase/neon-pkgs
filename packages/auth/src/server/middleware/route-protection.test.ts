@@ -20,10 +20,12 @@ describe("DEFAULT_AUTH_SKIP_ROUTES", () => {
 	});
 
 	// Auth views of @better-auth-ui/core@1.7.30 that a signed-out user must be
-	// able to open: viewPaths.auth (lib/view-paths.ts:127-138) under the "/auth"
-	// base path (lib/base-paths.ts:29), plus the magicLink (:44-47), emailOtp
-	// (:123-127), twoFactor (:107-111), phoneNumber (:142-149) and organization
-	// acceptInvitation (:259-262) plugin view paths.
+	// able to open: `viewPaths.auth` under the default "/auth" base path, plus the
+	// default auth view paths of its magic-link, email-otp, two-factor,
+	// phone-number and organization (accept-invitation) plugins. The list is a
+	// hand-kept fixture because the package's required peer dependencies make it
+	// impractical to install here; regenerate it from those sources when
+	// bumping @better-auth-ui/core.
 	const betterAuthUiPublicViews = [
 		"callback",
 		"error",

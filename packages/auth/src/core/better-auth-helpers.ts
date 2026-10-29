@@ -92,17 +92,34 @@ export function normalizeBetterAuthError(
 }
 
 /**
+ * Error thrown for a non-OK Better Auth response: the normalized
+ * {@link AuthError} plus the Better Fetch error fields.
+ *
+ * `error` is the parsed JSON response body when that body is an object, or an
+ * empty object when it is not (a non-object JSON value, or a non-JSON body such
+ * as an HTML 502 from a proxy). In both cases `error.status` is then set to the
+ * raw HTTP status, replacing any `status` in the body. `status` on the error
+ * itself stays the normalized (Supabase-style) value.
+ */
+export type AuthHttpError = AuthError & {
+	error: Record<string, unknown> & { status: number };
+	statusText: string;
+};
+
+/**
  * Builds the error thrown for a non-OK Better Auth response.
  *
  * The error is the normalized {@link AuthError} (Supabase-style `.code` and
  * `.status`), and also carries `statusText` and the parsed response body as
  * `.error`, which is the shape Better Fetch uses for thrown errors. Consumers that branch
  * on the raw Better Auth code (for example `@better-auth-ui/*`, which reads
- * `error.error?.code ?? error.code`) depend on `.error`.
+ * `error.error?.code ?? error.code`) depend on `.error`. They also read
+ * `error.error.status ?? error.status` to pick the 401, 403 and 429 messages,
+ * so `.error.status` carries the raw HTTP status that `.status` does not.
  */
 export async function createHttpResponseError(
 	response: Response,
-): Promise<AuthError> {
+): Promise<AuthHttpError> {
 	const body: unknown = await response
 		.clone()
 		.json()
@@ -121,7 +138,7 @@ export async function createHttpResponseError(
 	});
 	return Object.assign(error, {
 		statusText: response.statusText,
-		error: record,
+		error: { ...record, status: response.status },
 	});
 }
 

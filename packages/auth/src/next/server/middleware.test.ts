@@ -52,3 +52,37 @@ describe("neonAuthMiddleware publicRoutes", () => {
 		expect(response.headers.get("location")).toBeNull();
 	});
 });
+
+describe("neonAuthMiddleware publicRoutes validation", () => {
+	test.each([
+		["an empty string", ""],
+		["a slash-only entry", "//"],
+		["an entry without a leading slash", "pricing"],
+	])("rejects %s", (_name, route) => {
+		expect(() =>
+			neonAuthMiddleware({ ...config, publicRoutes: [route] }),
+		).toThrow(/publicRoutes entries must be paths/);
+	});
+
+	test("rejects the empty entry left by a trailing comma in a split list", () => {
+		const publicRoutes = "/pricing,/about,".split(",");
+		expect(() => neonAuthMiddleware({ ...config, publicRoutes })).toThrow(
+			/publicRoutes entries must be paths/,
+		);
+	});
+
+	test("accepts valid entries, and '/' matches only the home page", async () => {
+		const publicRoutes = ["/", "/pricing", "/docs/"];
+		expect(() =>
+			neonAuthMiddleware({ ...config, publicRoutes }),
+		).not.toThrow();
+
+		const home = await run("/", { publicRoutes });
+		expect(home.headers.get("location")).toBeNull();
+
+		const other = await run("/dashboard", { publicRoutes });
+		expect(other.headers.get("location")).toBe(
+			"https://app.example.com/auth/sign-in",
+		);
+	});
+});
