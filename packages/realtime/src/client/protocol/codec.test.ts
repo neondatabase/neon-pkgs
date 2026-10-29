@@ -46,7 +46,7 @@ function rejectServerMessage(value: unknown): void {
 	expect(() => decodeServerMessage(text)).toThrow(ProtocolError);
 }
 
-describe("Realtime v3 JSON codec", () => {
+describe("Realtime v2 JSON codec", () => {
 	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
 		for (const fixture of orderedFixtures.valid)
 			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(

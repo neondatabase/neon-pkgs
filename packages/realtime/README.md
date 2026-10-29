@@ -551,23 +551,23 @@ Custom raw consumers should follow the complete-batch staging and validation
 requirements above. TanStack collections retain unordered keyed semantics;
 their local queries must establish any desired order.
 
-The SDK requests only `neon.realtime.v3`, including on reconnect. Deploy a
-server that accepts v3 before releasing upgraded clients. The proxy continues
-to accept v2 clients; those connections simply have no client metadata. There
-is no client-side protocol fallback, subscription opt-in, or mode
-acknowledgment.
+The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
+server that accepts the optional `client_info` message before releasing this
+SDK. Existing v2 clients remain compatible because they may omit the message;
+those connections simply have no client metadata. There is no client-side
+protocol fallback, subscription opt-in, or mode acknowledgment.
 
 ## Protocol schemas
 
 The package exports the active protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v3) and
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
 `@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
 v2). Their filenames stay stable across revisions; `$id` and `title` retain each
 contract's version.
 
 Existing versioned exports continue to resolve to their original contracts.
-Protocol v1/v2 and capability v1 resolve to frozen legacy snapshots, separate
-from the active generator and tests. The new versioned v3/v2 exports alias the
-active contracts.
+Protocol v1 and capability v1 resolve to frozen legacy snapshots, separate from
+the active generator and tests. The versioned protocol v2 and capability v2
+exports alias the active contracts.
 See the [schema maintenance notes](schema/README.md) for generation, legacy
 removal and downstream synchronization.

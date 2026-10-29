@@ -263,12 +263,12 @@ describe("ConnectionCoordinator", () => {
 		expect(entries.map((entry) => entry.event)).toEqual(["query_expired"]);
 	});
 
-	it("negotiates v3 and identifies the client before subscribing", () => {
+	it("negotiates v2 and identifies the client before subscribing", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.realtime.v3");
+		expect(socket.protocols).toBe("neon.realtime.v2");
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
