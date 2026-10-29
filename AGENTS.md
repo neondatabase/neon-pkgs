@@ -576,8 +576,8 @@ vendored copy on `main`. A scheduled workflow detects the drift; it never opens 
 | **Runner** | Protected runner group + JFrog. The spec is pulled from neon.com. |
 
 **A refresh is not merge-ready after `generate`.** The workflow deliberately does
-not run `test:ci`. CI will fail on `packages/sdk/src/neon/coverage.test.ts` until
-someone updates `packages/sdk/src/neon/coverage.ts`:
+not run `test:ci`. When operations are added or removed, CI will fail on
+`packages/sdk/src/neon/coverage.test.ts` until someone updates `packages/sdk/src/neon/coverage.ts`:
 
 1. Review added/removed operations in `sdk.gen.ts`.
 2. Wrap new ops in the ergonomic layer where warranted (and add them to `WRAPPED`),
