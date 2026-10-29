@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
+import type { RealtimeAdapterSource as PublicRealtimeAdapterSource } from "../server.js";
 import {
 	createRealtime,
 	pgParam,
@@ -22,6 +23,12 @@ afterEach(() => {
 });
 
 describe("Realtime backend SDK", () => {
+	it("exports the bounded adapter source type", () => {
+		expectTypeOf<PublicRealtimeAdapterSource>().toEqualTypeOf<
+			"drizzle" | "kysely" | "custom"
+		>();
+	});
+
 	it("seals a typed raw SQL query without an adapter or network request", async () => {
 		const fetch = vi.fn();
 		vi.stubGlobal("fetch", fetch);

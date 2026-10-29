@@ -13,6 +13,7 @@ export type {
 	RawSqlParameter,
 	RawSqlQuery,
 	RealtimeAdapter,
+	RealtimeAdapterSource,
 	RealtimeDirectServer,
 	RealtimeDirectServerOptions,
 	RealtimeServer,

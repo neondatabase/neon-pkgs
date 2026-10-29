@@ -20,10 +20,10 @@ const packageRequire = createRequire(import.meta.url);
 const schemas = [
 	{
 		path: "schema/realtime-protocol.schema.json",
-		id: "https://neon.tech/schemas/realtime/realtime-protocol-v3.schema.json",
+		id: "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
 		exports: [
 			"schema/realtime-protocol.schema.json",
-			"schema/realtime-protocol-v3.schema.json",
+			"schema/realtime-protocol-v2.schema.json",
 		],
 	},
 	{
@@ -38,11 +38,6 @@ const schemas = [
 		path: "schema/legacy/realtime-protocol-v1.schema.json",
 		id: "https://neon.tech/schemas/realtime/realtime-protocol-v1.schema.json",
 		exports: ["schema/realtime-protocol-v1.schema.json"],
-	},
-	{
-		path: "schema/legacy/realtime-protocol-v2.schema.json",
-		id: "https://neon.tech/schemas/realtime/realtime-protocol-v2.schema.json",
-		exports: ["schema/realtime-protocol-v2.schema.json"],
 	},
 	{
 		path: "schema/legacy/realtime-query-capability-v1.schema.json",

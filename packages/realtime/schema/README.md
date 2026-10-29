@@ -5,7 +5,7 @@ these files so their changes remain easy to review:
 
 | Contract | Canonical source and package export | Current identity |
 | --- | --- | --- |
-| WebSocket messages | `realtime-protocol.schema.json` | Protocol v3 |
+| WebSocket messages | `realtime-protocol.schema.json` | Protocol v2 |
 | Decoded query capabilities | `realtime-query-capability.schema.json` | Capability v2 |
 
 Import them through `@neon/realtime/schema/<filename>`. The version remains in
@@ -26,9 +26,9 @@ contract tests.
 
 Existing versioned package exports retain their original contracts:
 
-- Protocol v1/v2 and capability v1 versioned exports resolve to their frozen
+- Protocol v1 and capability v1 versioned exports resolve to their frozen
   legacy snapshots.
-- Protocol v3 and capability v2 versioned exports alias the active schemas.
+- Protocol v2 and capability v2 versioned exports alias the active schemas.
 
 Keep the legacy export throughout 0.2. Remove its snapshot, export, package-test
 entry and isolated legacy tests at the next compatibility-breaking release,
@@ -55,10 +55,11 @@ schemas with the proxy's `make realtime-protocol-schema-check` and
 `make realtime-query-capability-schema-check` targets. Old commit pins need no
 migration.
 
-Deploy the proxy changes that accept `neon.realtime.v3` and capability v2
-before releasing this SDK. The proxy retains protocol v2 and capability v1
-support so existing clients and server SDKs continue to work without metadata.
-This SDK requests v3 only and emits capability v2.
+Deploy the proxy changes that accept optional client metadata over
+`neon.realtime.v2` and capability v2 before releasing this SDK. Existing v2
+clients may omit `client_info`, and the proxy retains capability v1 support, so
+existing clients and server SDKs continue to work without metadata. This SDK
+requests v2 and emits capability v2.
 
 V2 added `move` with required `row_key` and
 `after_row_key`; the latter is a row key or null for head. Validate normalized
@@ -70,7 +71,8 @@ lifecycle state and `live_id` wire field are unchanged. The single-key secret
 uses the opaque prefix `nrt_live_1`. The fingerprint domain remains
 `neon-live-query-fingerprint-v1\0`.
 
-V3 adds one bounded `client_info` message after `ready` and before subscription
-commands. Capability v2 adds authenticated, bounded issuer metadata. Release
-lines and query sources are closed enums so downstream metric cardinality is
-fixed.
+Protocol v2 includes one bounded `client_info` message after `ready` and before
+subscription commands. Capability v2 adds authenticated, bounded issuer
+metadata. Query sources and downstream release-line buckets are closed;
+unrecognized canonical release lines normalize to `unknown`, so metric
+cardinality remains fixed.
