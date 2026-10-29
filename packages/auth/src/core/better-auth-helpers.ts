@@ -92,6 +92,40 @@ export function normalizeBetterAuthError(
 }
 
 /**
+ * Builds the error thrown for a non-OK Better Auth response.
+ *
+ * The error is the normalized {@link AuthError} (Supabase-style `.code` and
+ * `.status`), and also carries `statusText` and the parsed response body as
+ * `.error`, which is the shape Better Fetch uses for thrown errors. Consumers that branch
+ * on the raw Better Auth code (for example `@better-auth-ui/*`, which reads
+ * `error.error?.code ?? error.code`) depend on `.error`.
+ */
+export async function createHttpResponseError(
+	response: Response,
+): Promise<AuthError> {
+	const body: unknown = await response
+		.clone()
+		.json()
+		.catch(() => ({}));
+	const record =
+		typeof body === "object" && body !== null
+			? (body as { message?: string; code?: string })
+			: {};
+	const error = normalizeBetterAuthError({
+		status: response.status,
+		statusText: response.statusText,
+		message:
+			record.message || `HTTP ${response.status} ${response.statusText}`,
+		code: record.code,
+		body,
+	});
+	return Object.assign(error, {
+		statusText: response.statusText,
+		error: record,
+	});
+}
+
+/**
  * Map HTTP status code to AuthErrorCode
  * Uses message content for disambiguation when status code is ambiguous
  */
