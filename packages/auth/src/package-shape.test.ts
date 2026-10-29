@@ -48,7 +48,12 @@ describe("@neon/auth dependency shape", () => {
 
 	it("declares ranges that intersect every @better-auth/oauth-provider peer range", () => {
 		for (const [peer, peerRange] of Object.entries(providerPeers)) {
-			const ours = ownPkg.dependencies?.[peer] as string;
+			const ours = ownPkg.dependencies?.[peer];
+			expect(
+				ours,
+				`${peer} must be declared in dependencies`,
+			).toBeDefined();
+			if (ours === undefined) continue;
 			expect(
 				semver.intersects(ours, peerRange),
 				`${peer}: ${ours} vs ${peerRange}`,
@@ -58,7 +63,12 @@ describe("@neon/auth dependency shape", () => {
 
 	it("installs a version of every peer that satisfies both ranges", () => {
 		for (const [peer, peerRange] of Object.entries(providerPeers)) {
-			const ours = ownPkg.dependencies?.[peer] as string;
+			const ours = ownPkg.dependencies?.[peer];
+			expect(
+				ours,
+				`${peer} must be declared in dependencies`,
+			).toBeDefined();
+			if (ours === undefined) continue;
 			const installed = installedVersion(peer);
 			expect(
 				semver.satisfies(installed, ours),
