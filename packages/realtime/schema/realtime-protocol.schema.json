@@ -141,7 +141,7 @@
       "oneOf": [
         {
           "type": "object",
-          "$comment": "Bounded connection metadata. The client sends this once after Ready and before any subscription command.",
+          "$comment": "Bounded connection metadata. A v2 client must send this exactly once after Ready and before any subscription command.",
           "required": ["type", "sdk", "release_line"],
           "properties": {
             "type": { "const": "client_info" },
