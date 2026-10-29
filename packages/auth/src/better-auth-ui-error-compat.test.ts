@@ -33,35 +33,43 @@ async function caught(fn: () => Promise<unknown>): Promise<unknown> {
 	throw new Error("expected the call to throw");
 }
 
-const adapters = {
-	react: () => BetterAuthReactAdapter(),
-	vanilla: () => BetterAuthVanillaAdapter(),
+// better-auth-ui calls the client with `throw: true`.
+const signInInput = {
+	email: "a@b.co",
+	password: "pw",
+	fetchOptions: { throw: true as const },
+};
+
+const signInFns = {
+	react: () =>
+		createAuthClient(BASE_URL, {
+			adapter: BetterAuthReactAdapter(),
+		}).signIn.email(signInInput),
+	vanilla: () =>
+		createAuthClient(BASE_URL, {
+			adapter: BetterAuthVanillaAdapter(),
+		}).signIn.email(signInInput),
 };
 
 describe.each(
-	Object.entries(adapters),
-)("raw Better Auth error body on thrown errors (%s adapter)", (_name, makeAdapter) => {
-	const signIn = () => {
-		const auth = createAuthClient(BASE_URL, { adapter: makeAdapter() });
-		// better-auth-ui calls the client with `throw: true`.
-		return auth.signIn.email({
-			email: "a@b.co",
-			password: "pw",
-			fetchOptions: { throw: true },
-		});
-	};
-
+	Object.entries(signInFns),
+)("raw Better Auth error body on thrown errors (%s adapter)", (_name, signIn) => {
 	test("403 EMAIL_NOT_VERIFIED exposes error.code and keeps the Supabase-style code", async () => {
 		server.use(
 			http.post(`${BASE_URL}/api/auth/sign-in/email`, () =>
 				HttpResponse.json(
-					{ code: "EMAIL_NOT_VERIFIED", message: "Email not verified" },
+					{
+						code: "EMAIL_NOT_VERIFIED",
+						message: "Email not verified",
+					},
 					{ status: 403, statusText: "Forbidden" },
 				),
 			),
 		);
 
-		const error = (await caught(signIn)) as Record<string, any>;
+		const error = (await caught(signIn)) as Record<string, unknown> & {
+			error: Record<string, unknown>;
+		};
 
 		expect(error.error).toMatchObject({
 			code: "EMAIL_NOT_VERIFIED",
@@ -87,7 +95,9 @@ describe.each(
 			),
 		);
 
-		const error = (await caught(signIn)) as Record<string, any>;
+		const error = (await caught(signIn)) as Record<string, unknown> & {
+			error: Record<string, unknown>;
+		};
 
 		expect(error.error).toMatchObject({
 			code: "INVALID_EMAIL_OR_PASSWORD",

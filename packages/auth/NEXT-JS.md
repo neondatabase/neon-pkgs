@@ -101,6 +101,15 @@ export const config = {
 }
 ```
 
+The middleware lets signed-out users reach the auth API (`/api/auth`) and the auth pages (`/auth/sign-in`, `/auth/reset-password`, `/auth/verify-email`, and the other views of `@neondatabase/auth-ui` and `@better-auth-ui/react`). Everything else requires a session. To make more routes public, pass `publicRoutes`; each entry matches the exact path and its subpaths, and is added to the defaults:
+
+```typescript
+export default auth.middleware({
+  loginUrl: '/auth/sign-in',
+  publicRoutes: ['/', '/pricing'],
+});
+```
+
 **Server Components:**
 ```typescript
 // app/dashboard/page.tsx

@@ -94,6 +94,14 @@ export type NeonAuthMiddlewareConfig = NeonAuthConfig & {
 	 */
 	loginUrl?: string;
 	/**
+	 * Additional routes that do not require authentication, merged with the
+	 * default auth routes. Each entry matches the exact path and its
+	 * slash-delimited subpaths (`/pricing` matches `/pricing` and
+	 * `/pricing/team`, but not `/pricing-internal`).
+	 * @example ['/', '/pricing']
+	 */
+	publicRoutes?: string[];
+	/**
 	 * Pre-resolved sink from {@link resolveNeonAuthLogging}. Set by {@link createNeonAuth} so middleware shares the same logging configuration as the API handler without resolving per request.
 	 */
 	log?: ResolvedNeonAuthLogging;

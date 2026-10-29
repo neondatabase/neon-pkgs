@@ -5,22 +5,61 @@ import {
 } from "./route-protection";
 
 describe("DEFAULT_AUTH_SKIP_ROUTES", () => {
-	// Behavior pin: this list was historically inlined in
-	// `packages/auth/src/next/server/middleware.ts` as `SKIP_ROUTES`. Promoting
-	// it to a toolkit-level export MUST preserve order and entries exactly so
-	// that the Next.js middleware skip behavior is byte-for-byte unchanged.
-	// Any intentional addition/removal should be a deliberate change paired
-	// with a CHANGELOG entry.
-	test("preserves the legacy Next.js skip list verbatim", () => {
-		expect([...DEFAULT_AUTH_SKIP_ROUTES]).toEqual([
-			"/api/auth",
-			"/auth/callback",
-			"/auth/sign-in",
-			"/auth/sign-up",
-			"/auth/magic-link",
-			"/auth/email-otp",
-			"/auth/forgot-password",
-		]);
+	test("keeps the entries used by @neondatabase/auth-ui", () => {
+		expect([...DEFAULT_AUTH_SKIP_ROUTES]).toEqual(
+			expect.arrayContaining([
+				"/api/auth",
+				"/auth/callback",
+				"/auth/sign-in",
+				"/auth/sign-up",
+				"/auth/magic-link",
+				"/auth/email-otp",
+				"/auth/forgot-password",
+			]),
+		);
+	});
+
+	// Auth views of @better-auth-ui/core@1.7.30 that a signed-out user must be
+	// able to open: viewPaths.auth (lib/view-paths.ts:127-138) under the "/auth"
+	// base path (lib/base-paths.ts:29), plus the magicLink (:44-47), emailOtp
+	// (:123-127), twoFactor (:107-111), phoneNumber (:142-149) and organization
+	// acceptInvitation (:259-262) plugin view paths.
+	const betterAuthUiPublicViews = [
+		"callback",
+		"error",
+		"redirect",
+		"sign-in",
+		"sign-up",
+		"forgot-password",
+		"reset-password",
+		"reset-link-sent",
+		"sign-out",
+		"verify-email",
+		"magic-link",
+		"magic-link-sent",
+		"email-otp",
+		"two-factor",
+		"phone-number",
+		"phone-number-forgot-password",
+		"phone-number-reset-password",
+		"accept-invitation",
+	];
+
+	test.each(betterAuthUiPublicViews)("does not protect /auth/%s", (view) => {
+		expect(
+			shouldProtectRoute(`/auth/${view}`, DEFAULT_AUTH_SKIP_ROUTES),
+		).toBe(false);
+	});
+
+	test.each([
+		"/settings",
+		"/settings/account",
+		"/settings/security",
+		"/auth",
+	])("still protects %s", (pathname) => {
+		expect(shouldProtectRoute(pathname, DEFAULT_AUTH_SKIP_ROUTES)).toBe(
+			true,
+		);
 	});
 });
 

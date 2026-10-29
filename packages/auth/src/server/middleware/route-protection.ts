@@ -3,7 +3,14 @@ import type { SessionData } from "../types";
 /**
  * Default list of route prefixes that {@link processAuthMiddleware} skips when
  * deciding whether to enforce authentication. Includes the auth API mount
- * (`/api/auth`) and the auth-ui pages added by `@neondatabase/auth-ui`.
+ * (`/api/auth`) and the auth pages a signed-out user has to reach: the
+ * `@neondatabase/auth-ui` pages and the `@better-auth-ui/react` 1.7 auth views
+ * (core `viewPaths.auth` plus the magic-link, email-OTP, two-factor,
+ * phone-number and organization invitation plugin views) under their default
+ * `/auth` base path.
+ *
+ * The list is explicit on purpose: `/auth` as a whole is not public, and
+ * `/settings/*` views stay protected.
  *
  * Framework adapters use this as the default for their middleware integrations.
  * Application authors can compose it with their own public routes:
@@ -18,13 +25,24 @@ import type { SessionData } from "../types";
  */
 export const DEFAULT_AUTH_SKIP_ROUTES = [
 	"/api/auth",
-	// Routes added by `@neondatabase/auth-ui`
 	"/auth/callback",
 	"/auth/sign-in",
 	"/auth/sign-up",
 	"/auth/magic-link",
+	"/auth/magic-link-sent",
 	"/auth/email-otp",
+	"/auth/two-factor",
+	"/auth/phone-number",
+	"/auth/phone-number-forgot-password",
+	"/auth/phone-number-reset-password",
 	"/auth/forgot-password",
+	"/auth/reset-password",
+	"/auth/reset-link-sent",
+	"/auth/verify-email",
+	"/auth/sign-out",
+	"/auth/error",
+	"/auth/redirect",
+	"/auth/accept-invitation",
 ] as const;
 
 /**
