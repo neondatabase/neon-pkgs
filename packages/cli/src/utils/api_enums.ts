@@ -9,6 +9,8 @@
 // a same-named type whose union is identical to the corresponding `@neon/sdk`
 // type, so values stay assignable in both directions.
 
+import type { NeonAuthOauthProviderId as SdkNeonAuthOauthProviderId } from "@neon/sdk";
+
 export const EndpointType = {
 	ReadOnly: "read_only",
 	ReadWrite: "read_write",
@@ -24,6 +26,18 @@ export const NeonAuthOauthProviderId = {
 } as const;
 export type NeonAuthOauthProviderId =
 	(typeof NeonAuthOauthProviderId)[keyof typeof NeonAuthOauthProviderId];
+
+// Fails to compile when the SDK union gains or loses a provider, since the
+// call sites cast to this type and would otherwise not notice.
+type Equals<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+		? true
+		: false;
+const _oauthProviderIdMatchesSdk: Equals<
+	NeonAuthOauthProviderId,
+	SdkNeonAuthOauthProviderId
+> = true;
+void _oauthProviderIdMatchesSdk;
 
 export const NeonAuthOauthProviderType = {
 	Standard: "standard",
