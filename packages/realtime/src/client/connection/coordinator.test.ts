@@ -318,7 +318,6 @@ describe("ConnectionCoordinator", () => {
 		first.receive({
 			type: "client_warning",
 			code: "client_too_old",
-			minimum_version: "0.2.0",
 			message:
 				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
 		});
@@ -334,8 +333,8 @@ describe("ConnectionCoordinator", () => {
 		second.receive({
 			type: "client_warning",
 			code: "client_too_old",
-			minimum_version: "0.2.0",
-			message: "duplicate warning",
+			message:
+				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
 		});
 
 		expect(consoleError).toHaveBeenCalledOnce();

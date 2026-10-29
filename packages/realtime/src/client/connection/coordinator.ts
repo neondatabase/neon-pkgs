@@ -146,7 +146,7 @@ export class ConnectionCoordinator {
 	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
-	private warnedMinimumClientVersion?: string;
+	private readonly reportedClientWarnings = new Set<string>();
 	private requestId = 0n;
 	private ready = false;
 	private disposed = false;
@@ -450,8 +450,9 @@ export class ConnectionCoordinator {
 	private clientWarning(
 		message: Extract<ServerMessage, { type: "client_warning" }>,
 	): void {
-		if (this.warnedMinimumClientVersion === message.minimum_version) return;
-		this.warnedMinimumClientVersion = message.minimum_version;
+		const warningKey = `${message.code}\0${message.message}`;
+		if (this.reportedClientWarnings.has(warningKey)) return;
+		this.reportedClientWarnings.add(warningKey);
 		reportClientWarning(message.message);
 	}
 
