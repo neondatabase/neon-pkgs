@@ -82,3 +82,51 @@ describe("JSON-safe transport", () => {
 		}
 	});
 });
+
+describe("auth.oauthProviders field forwarding", () => {
+	const appleFields = {
+		client_id: "com.example.service",
+		client_secret: "-----BEGIN PRIVATE KEY-----",
+		apple_team_id: "TEAM123456",
+		apple_key_id: "KEY1234567",
+	};
+	const scope = { project_id: "project-id", branch_id: "branch-id" };
+
+	const setup = () => {
+		const bodies: unknown[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["auth.oauthProviders.add", "auth.oauthProviders.update"],
+			fetch: async (request, init) => {
+				bodies.push(await requestFrom(request, init).json());
+				return new Response(
+					JSON.stringify({ id: "apple", type: "standard" }),
+					{
+						headers: { "content-type": "application/json" },
+					},
+				);
+			},
+		});
+		return { bodies, tools };
+	};
+
+	test("add sends the Apple fields in the request body", async () => {
+		const { bodies, tools } = setup();
+		await tools["auth.oauthProviders.add"].execute({
+			...scope,
+			id: "apple",
+			...appleFields,
+		});
+		expect(bodies[0]).toMatchObject({ id: "apple", ...appleFields });
+	});
+
+	test("update sends the Apple fields in the request body", async () => {
+		const { bodies, tools } = setup();
+		await tools["auth.oauthProviders.update"].execute({
+			...scope,
+			oauth_provider_id: "apple",
+			...appleFields,
+		});
+		expect(bodies[0]).toMatchObject(appleFields);
+	});
+});
