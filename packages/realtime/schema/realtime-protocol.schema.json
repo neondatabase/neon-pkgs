@@ -141,12 +141,11 @@
       "oneOf": [
         {
           "type": "object",
-          "$comment": "Bounded connection metadata. A v2 client must send this exactly once after Ready and before any subscription command.",
-          "required": ["type", "sdk", "release_line"],
+          "$comment": "Bounded, extensible connection metadata encoded as JSON. A v2 client must send this exactly once after Ready and before any subscription command.",
+          "required": ["type", "metadata"],
           "properties": {
             "type": { "const": "client_info" },
-            "sdk": { "const": "javascript" },
-            "release_line": { "$ref": "#/$defs/releaseLine" }
+            "metadata": { "type": "string", "minLength": 2, "maxLength": 4096 }
           },
           "additionalProperties": false
         },

@@ -1,4 +1,4 @@
-import { REALTIME_RELEASE_LINE, REALTIME_SDK } from "../../usage-metadata.js";
+import { REALTIME_CLIENT_METADATA } from "../../usage-metadata.js";
 import {
 	type ClientEventSink,
 	SILENT_CLIENT_EVENTS,
@@ -391,8 +391,7 @@ export class ConnectionCoordinator {
 			this.ready = true;
 			this.send({
 				type: "client_info",
-				sdk: REALTIME_SDK,
-				release_line: REALTIME_RELEASE_LINE,
+				metadata: REALTIME_CLIENT_METADATA,
 			});
 			this.events.connection.ready();
 			this.pendingConnectionError = undefined;

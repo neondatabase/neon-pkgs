@@ -275,8 +275,7 @@ describe("ConnectionCoordinator", () => {
 		expect(socket.wireMessages).toEqual([
 			{
 				type: "client_info",
-				sdk: "javascript",
-				release_line: "0.2",
+				metadata: '{"sdk":"javascript","release_line":"0.2"}',
 			},
 			{
 				type: "subscribe",

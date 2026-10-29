@@ -381,8 +381,7 @@ describe("Realtime v2 JSON codec", () => {
 		const messages: ClientMessage[] = [
 			{
 				type: "client_info",
-				sdk: "javascript",
-				release_line: "0.2",
+				metadata: '{"sdk":"javascript","release_line":"0.2"}',
 			},
 			{ type: "subscribe", request_id: "1", authorization: "token" },
 			{ type: "renew", live_id: "1", authorization: "token" },

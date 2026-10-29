@@ -30,20 +30,30 @@ describe("Realtime protocol contracts", () => {
 		}
 	});
 
-	it("accepts bounded canonical future release lines", () => {
-		const validateProtocol = validator(protocolSchema);
+	it("keeps bounded client metadata extensible", () => {
+		const validate = validator(protocolSchema);
+		expect(
+			validate({
+				type: "client_info",
+				metadata: JSON.stringify({
+					sdk: "javascript",
+					release_line: "0.2",
+					future_field: { value: true },
+				}),
+			}),
+			JSON.stringify(validate.errors),
+		).toBe(true);
+
+		for (const metadata of ["", "x".repeat(4097), {}]) {
+			expect(validate({ type: "client_info", metadata })).toBe(false);
+		}
+	});
+
+	it("accepts bounded canonical future capability release lines", () => {
 		const validateCapability = validator(capabilitySchema);
 		const capability = capabilityFixtures.valid[0];
 
 		for (const releaseLine of ["1", "42.7"]) {
-			expect(
-				validateProtocol({
-					type: "client_info",
-					sdk: "javascript",
-					release_line: releaseLine,
-				}),
-				JSON.stringify(validateProtocol.errors),
-			).toBe(true);
 			expect(
 				validateCapability({
 					...capability,
@@ -65,14 +75,6 @@ describe("Realtime protocol contracts", () => {
 			"0.3.0",
 			"12345678901234567",
 		]) {
-			expect(
-				validateProtocol({
-					type: "client_info",
-					sdk: "javascript",
-					release_line: releaseLine,
-				}),
-				releaseLine,
-			).toBe(false);
 			expect(
 				validateCapability({
 					...capability,
