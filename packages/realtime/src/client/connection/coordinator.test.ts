@@ -304,37 +304,43 @@ describe("ConnectionCoordinator", () => {
 		]);
 	});
 
-	it("reports an outdated client without interrupting subscriptions", () => {
+	it("isolates and deduplicates client warnings across reconnects", async () => {
+		vi.useFakeTimers();
 		const consoleError = vi
 			.spyOn(console, "error")
-			.mockImplementation(() => undefined);
+			.mockImplementation(() => {
+				throw new Error("broken console");
+			});
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
-		const socket = defined(FakeWebSocket.instances[0]);
-		socket.open();
-		socket.receive({ type: "ready" });
-		socket.receive({
+		const first = admit();
+		first.receive({
 			type: "client_warning",
 			code: "client_too_old",
 			minimum_version: "0.2.0",
 			message:
 				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
 		});
-		socket.receive({
-			type: "subscribed",
-			request_id: "1",
-			live_id: "41",
-			epoch: "1",
-			first_sequence: "1",
-			columns: [],
-		});
-
 		expect(consoleError).toHaveBeenCalledWith(
 			"[Neon Realtime] This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
 		);
-		expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+		expect(first.readyState).toBe(FakeWebSocket.OPEN);
 		expect(callbacks.admitted).toHaveBeenCalledOnce();
+
+		first.disconnect();
+		await vi.advanceTimersByTimeAsync(1);
+		const second = admit();
+		second.receive({
+			type: "client_warning",
+			code: "client_too_old",
+			minimum_version: "0.2.0",
+			message: "duplicate warning",
+		});
+
+		expect(consoleError).toHaveBeenCalledOnce();
+		expect(second.readyState).toBe(FakeWebSocket.OPEN);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(2);
 	});
 
 	it("serializes overlapping renewals so the newest capability wins", async () => {
