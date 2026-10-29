@@ -216,7 +216,7 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 			query: snapshotPreparedQuery(
 				prepareWithConfiguredAdapter(query as Query, adapter),
 			),
-			source: adapter?.querySource ?? "custom",
+			source: normalizeAdapterSource(adapter?.querySource),
 		};
 	};
 	const sealPrepared = async <Row>(
@@ -259,6 +259,12 @@ export function createRealtime<Query = RawSqlQuery<unknown>>(
 		subscribe,
 		close: () => directClient.close(),
 	});
+}
+
+function normalizeAdapterSource(source: unknown): RealtimeAdapterSource {
+	return source === "drizzle" || source === "kysely" || source === "custom"
+		? source
+		: "custom";
 }
 
 function snapshotPreparedQuery(query: PreparedLiveQuery): PreparedLiveQuery {
