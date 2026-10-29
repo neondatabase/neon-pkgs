@@ -8,7 +8,11 @@ import { SupabaseAuthAdapter } from "../adapters/supabase/supabase-adapter";
 import { NeonAuthAdapterCore } from "../core/adapter-core";
 import { createInternalNeonAuth } from "../neon-auth";
 import type { BetterAuthInstance } from "../types";
-import { BETTER_AUTH_VERSION, floorOfRange } from "./better-auth-version";
+import {
+	BETTER_AUTH_VERSION,
+	floorOfRange,
+	SUPPORTED_SPECIFIER,
+} from "./better-auth-version";
 
 class TestAdapter extends NeonAuthAdapterCore {
 	getBetterAuthInstance(): BetterAuthInstance {
@@ -103,7 +107,7 @@ describe("X-Neon-Client-Info sent by the auth adapter", () => {
 			dependencies: Record<string, string>;
 		};
 		const specifier = pkg.dependencies["better-auth"] as string;
-		expect(specifier).toMatch(/^[~=]?\d+\.\d+\.\d+$/);
+		expect(specifier).toMatch(SUPPORTED_SPECIFIER);
 		expect(BETTER_AUTH_VERSION).toBe(specifier.replace(/^[~=]/, ""));
 	});
 

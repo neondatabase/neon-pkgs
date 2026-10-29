@@ -1,32 +1,73 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import semver from "semver";
 import { describe, expect, it } from "vitest";
+import { SUPPORTED_SPECIFIER } from "./utils/better-auth-version";
 
-const readJson = (path: string) =>
-	JSON.parse(readFileSync(path, "utf8")) as {
-		dependencies?: Record<string, string>;
-		peerDependencies?: Record<string, string>;
-	};
+type PackageJson = {
+	version?: string;
+	dependencies?: Record<string, string>;
+	peerDependencies?: Record<string, string>;
+};
 
-const ownPkg = readJson(join(__dirname, "..", "package.json"));
-const providerPeers = Object.keys(
+const here = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = path.join(here, "..");
+const readJson = (file: string) =>
+	JSON.parse(readFileSync(file, "utf8")) as PackageJson;
+
+const ownPkg = readJson(path.join(packageRoot, "package.json"));
+const providerPeers =
 	readJson(
-		join(
-			__dirname,
-			"..",
+		path.join(
+			packageRoot,
 			"node_modules",
 			"@better-auth",
 			"oauth-provider",
 			"package.json",
 		),
-	).peerDependencies ?? {},
-);
+	).peerDependencies ?? {};
+
+const installedVersion = (name: string) =>
+	readJson(
+		path.join(
+			packageRoot,
+			"node_modules",
+			...name.split("/"),
+			"package.json",
+		),
+	).version as string;
 
 describe("@neon/auth dependency shape", () => {
 	it("declares every @better-auth/oauth-provider peer as a direct dependency", () => {
-		expect(providerPeers.length).toBeGreaterThan(0);
-		for (const peer of providerPeers) {
+		expect(Object.keys(providerPeers).length).toBeGreaterThan(0);
+		for (const peer of Object.keys(providerPeers)) {
 			expect(ownPkg.dependencies, peer).toHaveProperty([peer]);
+		}
+	});
+
+	it("declares ranges that intersect every @better-auth/oauth-provider peer range", () => {
+		for (const [peer, peerRange] of Object.entries(providerPeers)) {
+			const ours = ownPkg.dependencies?.[peer] as string;
+			expect(
+				semver.intersects(ours, peerRange),
+				`${peer}: ${ours} vs ${peerRange}`,
+			).toBe(true);
+		}
+	});
+
+	it("installs a version of every peer that satisfies both ranges", () => {
+		for (const [peer, peerRange] of Object.entries(providerPeers)) {
+			const ours = ownPkg.dependencies?.[peer] as string;
+			const installed = installedVersion(peer);
+			expect(
+				semver.satisfies(installed, ours),
+				`${peer}@${installed} vs ${ours}`,
+			).toBe(true);
+			expect(
+				semver.satisfies(installed, peerRange),
+				`${peer}@${installed} vs ${peerRange}`,
+			).toBe(true);
 		}
 	});
 
@@ -35,6 +76,6 @@ describe("@neon/auth dependency shape", () => {
 		"@better-auth/core",
 		"@better-auth/oauth-provider",
 	])("declares %s as a ~ or bare-version range", (name) => {
-		expect(ownPkg.dependencies?.[name]).toMatch(/^~?\d+\.\d+\.\d+$/);
+		expect(ownPkg.dependencies?.[name]).toMatch(SUPPORTED_SPECIFIER);
 	});
 });

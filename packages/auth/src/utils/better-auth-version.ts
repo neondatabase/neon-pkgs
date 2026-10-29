@@ -8,7 +8,7 @@ import pkg from "../../package.json" with { type: "json" };
 // "^x.y.z" admits later minors, and compound, wildcard and prerelease forms
 // have no single floor. The resolved version cannot be read at runtime because
 // better-auth does not export its package.json.
-const SUPPORTED_SPECIFIER = /^[~=]?(\d+\.\d+\.\d+)$/;
+export const SUPPORTED_SPECIFIER = /^[~=]?(\d+\.\d+\.\d+)$/;
 
 export function floorOfRange(range: string): string {
 	const match =

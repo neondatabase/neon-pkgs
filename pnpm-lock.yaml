@@ -173,7 +173,7 @@ importers:
         specifier: ~1.7.12
         version: 1.7.12(@opentelemetry/api@1.9.0)(drizzle-orm@0.45.2(@neondatabase/serverless@1.0.1)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(kysely@0.28.17)(pg@8.23.1))(next@16.2.11(@opentelemetry/api@1.9.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(pg@8.23.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0))
       better-call:
-        specifier: ^1.4.4
+        specifier: ~1.4.4
         version: 1.4.4(zod@4.5.4)
       jose:
         specifier: 6.2.5
@@ -197,6 +197,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
+      '@types/semver':
+        specifier: 7.7.1
+        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 3.0.9(vitest@3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.0))
@@ -212,6 +215,9 @@ importers:
       rolldown:
         specifier: 1.2.8
         version: 1.2.8
+      semver:
+        specifier: 7.7.2
+        version: 7.7.2
       tsdown:
         specifier: 'catalog:'
         version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
@@ -7791,7 +7797,7 @@ snapshots:
       https-proxy-agent: 7.0.6
       node-fetch: 2.7.0
       nopt: 8.1.0
-      semver: 7.8.2
+      semver: 7.7.2
       tar: 7.4.3
     transitivePeerDependencies:
       - encoding
