@@ -20,6 +20,7 @@ export const NeonAuthOauthProviderId = {
 	Github: "github",
 	Microsoft: "microsoft",
 	Vercel: "vercel",
+	Apple: "apple",
 } as const;
 export type NeonAuthOauthProviderId =
 	(typeof NeonAuthOauthProviderId)[keyof typeof NeonAuthOauthProviderId];

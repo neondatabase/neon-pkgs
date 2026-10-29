@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect } from "vitest";
 import { type RecordedRequest, test } from "../test_utils/fixtures";
 
@@ -157,6 +159,199 @@ describe("neon-auth", () => {
 			"--provider-id",
 			"google",
 		]);
+	});
+
+	describe("oauth-provider apple and microsoft", () => {
+		const branchArgs = ["--project-id", "test", "--branch", "test_branch"];
+		const providerBodies = (requests: RecordedRequest[], method: string) =>
+			requests
+				.filter(
+					(r) =>
+						r.method === method &&
+						r.path.includes("/oauth_providers"),
+				)
+				.map((r) => r.body);
+		const withSecretFile = async (
+			contents: string,
+			run: (path: string) => Promise<void>,
+		) => {
+			const dir = mkdtempSync(join(tmpdir(), "neon-oauth-secret-"));
+			try {
+				const path = join(dir, "AuthKey_ABC123DEFG.p8");
+				writeFileSync(path, contents);
+				await run(path);
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
+			}
+		};
+
+		test("add microsoft passes the tenant ID and prints the callback URL", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"add",
+					...branchArgs,
+					"--provider-id",
+					"microsoft",
+					"--oauth-client-id",
+					"ms-client",
+					"--oauth-client-secret",
+					"ms-secret",
+					"--microsoft-tenant-id",
+					"contoso.onmicrosoft.com",
+				],
+				{ output: "table", onRequest: (r) => requests.push(r) },
+			);
+			expect(providerBodies(requests, "POST")).toEqual([
+				{
+					id: "microsoft",
+					client_id: "ms-client",
+					client_secret: "ms-secret",
+					microsoft_tenant_id: "contoso.onmicrosoft.com",
+				},
+			]);
+		});
+
+		test("add apple reads the private key from --oauth-client-secret-file and prints its key IDs", async ({
+			testCliCommand,
+		}) => {
+			const pem =
+				"-----BEGIN PRIVATE KEY-----\nMIGTAgEA\n-----END PRIVATE KEY-----";
+			await withSecretFile(`${pem}\n`, async (path) => {
+				const requests: RecordedRequest[] = [];
+				await testCliCommand(
+					[
+						"neon-auth",
+						"oauth-provider",
+						"add",
+						...branchArgs,
+						"--provider-id",
+						"apple",
+						"--oauth-client-id",
+						"com.example.services",
+						"--oauth-client-secret-file",
+						path,
+						"--apple-team-id",
+						"TEAM123456",
+						"--apple-key-id",
+						"ABC123DEFG",
+					],
+					{ output: "table", onRequest: (r) => requests.push(r) },
+				);
+				expect(providerBodies(requests, "POST")).toEqual([
+					{
+						id: "apple",
+						client_id: "com.example.services",
+						client_secret: pem,
+						apple_team_id: "TEAM123456",
+						apple_key_id: "ABC123DEFG",
+					},
+				]);
+			});
+		});
+
+		test("update apple sends a rotated key together with its key ID", async ({
+			testCliCommand,
+		}) => {
+			await withSecretFile("new-key", async (path) => {
+				const requests: RecordedRequest[] = [];
+				await testCliCommand(
+					[
+						"neon-auth",
+						"oauth-provider",
+						"update",
+						...branchArgs,
+						"--provider-id",
+						"apple",
+						"--oauth-client-secret-file",
+						path,
+						"--apple-key-id",
+						"NEWKEY1234",
+					],
+					{ snapshot: false, onRequest: (r) => requests.push(r) },
+				);
+				expect(providerBodies(requests, "PATCH")).toEqual([
+					{ client_secret: "new-key", apple_key_id: "NEWKEY1234" },
+				]);
+			});
+		});
+
+		test("update apple rejects a client secret change without --apple-key-id", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"update",
+					...branchArgs,
+					"--provider-id",
+					"apple",
+					"--oauth-client-secret",
+					"new-key",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: "ERROR: Changing the apple client secret requires --apple-key-id, the Key ID of the new private key.",
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(providerBodies(requests, "PATCH")).toEqual([]);
+		});
+
+		test("--oauth-client-secret-file conflicts with --oauth-client-secret", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"add",
+					...branchArgs,
+					"--provider-id",
+					"github",
+					"--oauth-client-secret",
+					"a",
+					"--oauth-client-secret-file",
+					"/dev/null",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: expect.stringContaining("mutually exclusive"),
+				},
+			);
+		});
+
+		test("--oauth-client-secret-file reports a missing file before any API call", async ({
+			testCliCommand,
+		}) => {
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"add",
+					...branchArgs,
+					"--provider-id",
+					"github",
+					"--oauth-client-secret-file",
+					"/nonexistent/secret.txt",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: expect.stringContaining(
+						"Could not read --oauth-client-secret-file /nonexistent/secret.txt",
+					),
+				},
+			);
+		});
 	});
 
 	// --- Domain ---

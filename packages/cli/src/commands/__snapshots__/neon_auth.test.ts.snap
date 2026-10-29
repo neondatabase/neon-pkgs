@@ -453,6 +453,37 @@ client_id: ""
 "
 `;
 
+exports[`neon-auth > oauth-provider apple and microsoft > add apple reads the private key from --oauth-client-secret-file and prints its key IDs 1`] = `
+"
+OAuth provider added
+  ID:         apple
+  Type:       standard
+  Client ID:  com.example.services
+  Team ID:    TEAM123456
+  Key ID:     ABC123DEFG
+
+
+Create a Services ID in the Apple Developer portal, enable Sign in with Apple for it, and add the following return URL (Apple requires HTTPS and does not accept localhost):
+  URL:  https://auth.test.neon.tech/callback/apple
+
+"
+`;
+
+exports[`neon-auth > oauth-provider apple and microsoft > add microsoft passes the tenant ID and prints the callback URL 1`] = `
+"
+OAuth provider added
+  ID:         microsoft
+  Type:       standard
+  Client ID:  ms-client
+  Tenant ID:  contoso.onmicrosoft.com
+
+
+Register an application in Microsoft Entra ID > App registrations, and add the following redirect URI under the Web platform:
+  URL:  https://auth.test.neon.tech/callback/microsoft
+
+"
+`;
+
 exports[`neon-auth > oauth-provider delete 1`] = `
 "
 OAuth provider "google" deleted
