@@ -452,7 +452,7 @@ export class ConnectionCoordinator {
 	): void {
 		if (this.warnedMinimumClientVersion === message.minimum_version) return;
 		this.warnedMinimumClientVersion = message.minimum_version;
-		console.error(`[Neon Realtime] ${message.message}`);
+		reportClientWarning(message.message);
 	}
 
 	private admitted(
@@ -1027,6 +1027,16 @@ export class ConnectionCoordinator {
 			publicationCommitted: (bodyCount) =>
 				this.events.connection.publicationCommitted(bodyCount),
 		};
+	}
+}
+
+function reportClientWarning(message: string): void {
+	try {
+		if (typeof console !== "undefined") {
+			console.error(`[Neon Realtime] ${message}`);
+		}
+	} catch {
+		// Console implementations must never interrupt live-query delivery.
 	}
 }
 
