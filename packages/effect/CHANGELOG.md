@@ -1,5 +1,12 @@
 # @neon/effect
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [207d650]
+  - @neon/sdk@7.6.1
+
 ## 0.2.1
 
 ### Patch Changes

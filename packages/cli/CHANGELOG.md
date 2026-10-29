@@ -1,5 +1,14 @@
 # neon
 
+## 8.13.3
+
+### Patch Changes
+
+- Updated dependencies [207d650]
+  - @neon/sdk@7.6.1
+  - @neon/config@1.9.6
+  - @neon/config-runtime@1.10.5
+
 ## 8.13.2
 
 ### Patch Changes
