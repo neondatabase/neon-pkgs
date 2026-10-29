@@ -6,6 +6,7 @@ import {
 	createRealtime,
 	pgParam,
 	type RawSqlQuery,
+	type RealtimeAdapter,
 	rawSql,
 	type SealedLiveQuery,
 } from "./realtime.js";
@@ -185,6 +186,24 @@ describe("Realtime backend SDK", () => {
 
 		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
 			issuer: { query_source: "drizzle" },
+		});
+	});
+
+	it("normalizes an invalid runtime adapter source to custom", async () => {
+		const adapter = {
+			querySource: "prisma",
+			prepare: () => ({ sql: "select 1", parameters: [] }),
+		} as unknown as RealtimeAdapter<object>;
+		const realtime = createRealtime<object>({
+			secret: SECRET,
+			db: "app",
+			adapter,
+		});
+
+		const sealedQuery = await realtime.seal({ query: {} });
+
+		expect(await capabilityClaims(sealedQuery.capability)).toMatchObject({
+			issuer: { query_source: "custom" },
 		});
 	});
 
