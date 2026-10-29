@@ -8,7 +8,11 @@ import { SupabaseAuthAdapter } from "../adapters/supabase/supabase-adapter";
 import { NeonAuthAdapterCore } from "../core/adapter-core";
 import { createInternalNeonAuth } from "../neon-auth";
 import type { BetterAuthInstance } from "../types";
-import { BETTER_AUTH_VERSION } from "./better-auth-version";
+import {
+	BETTER_AUTH_VERSION,
+	floorOfRange,
+	SUPPORTED_SPECIFIER,
+} from "./better-auth-version";
 
 class TestAdapter extends NeonAuthAdapterCore {
 	getBetterAuthInstance(): BetterAuthInstance {
@@ -98,19 +102,24 @@ describe("X-Neon-Client-Info sent by the auth adapter", () => {
 		expect(isModernBetterAuth("1.7.6")).toBe(true);
 	});
 
-	test("the better-auth dependency is pinned exactly in package.json", () => {
+	test("declares better-auth as an exact or ~ specifier and reports its floor", () => {
 		const pkg = readJson("../../package.json") as {
 			dependencies: Record<string, string>;
 		};
-		expect(pkg.dependencies["better-auth"]).toMatch(/^\d+\.\d+\.\d+$/);
+		const specifier = pkg.dependencies["better-auth"] as string;
+		expect(specifier).toMatch(SUPPORTED_SPECIFIER);
+		expect(BETTER_AUTH_VERSION).toBe(specifier.replace(/^[~=]/, ""));
 	});
 
-	test("matches the better-auth version installed on disk", () => {
+	test("shares major.minor with the better-auth installed on disk", () => {
 		// better-auth does not export ./package.json, so read it directly.
 		const installed = readJson(
 			"../../node_modules/better-auth/package.json",
+		) as { version: string };
+		const majorMinor = (v: string) => v.split(".").slice(0, 2).join(".");
+		expect(majorMinor(BETTER_AUTH_VERSION)).toBe(
+			majorMinor(installed.version),
 		);
-		expect(BETTER_AUTH_VERSION).toBe(installed.version);
 	});
 });
 
@@ -153,5 +162,44 @@ describe("X-Neon-Client-Info adapter field", () => {
 	test("reports the default adapter when none is configured", async () => {
 		const info = await sentClientInfo(undefined);
 		expect(info.adapter).toBe("better-auth-vanilla");
+	});
+});
+
+describe("floorOfRange", () => {
+	test.each([
+		["~1.7.12", "1.7.12"],
+		["=1.7.12", "1.7.12"],
+		["1.7.12", "1.7.12"],
+	])("%s -> %s", (range, floor) => {
+		expect(floorOfRange(range)).toBe(floor);
+	});
+
+	test.each([
+		"1.7",
+		"~1.7.x",
+		">=1.7.12",
+		"^1.7.12",
+		"^1.7",
+		">=1.7.12 <1.8",
+		"1.7.12 - 1.8.0",
+		"~1.7.12 || ~1.8.0",
+		"1.x",
+		"*",
+		"~~1.7.12",
+		"1.7.12-beta.1",
+		"1.7.12+build.5",
+		" 1.7.12",
+		"latest",
+		"",
+	])("throws for %j", (range) => {
+		expect(() => floorOfRange(range)).toThrow();
+	});
+});
+
+describe("floorOfRange with a missing dependency", () => {
+	test("throws the descriptive error instead of a TypeError", () => {
+		expect(() => floorOfRange(undefined as never)).toThrow(
+			/Cannot derive a bare x\.y\.z better-auth version/,
+		);
 	});
 });
