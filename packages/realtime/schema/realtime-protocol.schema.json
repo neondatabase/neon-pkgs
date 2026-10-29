@@ -23,12 +23,6 @@
       "maxLength": 16,
       "pattern": "^(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?$"
     },
-    "clientVersion": {
-      "type": "string",
-      "$comment": "Canonical stable SemVer used only for compatibility checks, never as a metric label.",
-      "maxLength": 32,
-      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
-    },
     "rowKey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "base64Cell": {
       "type": "object",
@@ -359,13 +353,16 @@
         },
         {
           "type": "object",
-          "$comment": "Non-terminal compatibility warning. The connection and subscriptions remain usable.",
-          "required": ["type", "code", "minimum_version", "message"],
+          "$comment": "Non-terminal client warning. The connection and subscriptions remain usable.",
+          "required": ["type", "code", "message"],
           "properties": {
             "type": { "const": "client_warning" },
-            "code": { "const": "client_too_old" },
-            "minimum_version": { "$ref": "#/$defs/clientVersion" },
-            "message": { "type": "string" }
+            "code": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "message": { "type": "string", "maxLength": 4096 }
           },
           "additionalProperties": false
         },
