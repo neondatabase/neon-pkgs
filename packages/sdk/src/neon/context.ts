@@ -8,6 +8,7 @@ import {
 } from "./deadline.js";
 import { type NeonErrorUnion, toNeonError } from "./errors.js";
 import { validateCallOptions } from "./params.js";
+import { explainRegionUnavailable } from "./region-availability.js";
 import { err, finalize, type NeonResult, ok } from "./result.js";
 import { withRetries } from "./retry.js";
 import { hasOperations, type WaitBudget, waitForOperations } from "./wait.js";
@@ -52,6 +53,7 @@ export interface CallOptions<Throw extends boolean = boolean> {
 interface RawResult<D> {
 	data?: D | undefined;
 	error?: unknown;
+	request?: Request | undefined;
 	response?: Response | undefined;
 }
 
@@ -201,7 +203,12 @@ export class RequestContext {
 			if (raw.error !== undefined) {
 				return {
 					ok: false,
-					error: toNeonError(raw.error, raw.response),
+					error: await explainRegionUnavailable(
+						toNeonError(raw.error, raw.response),
+						raw.request?.url ?? raw.response?.url,
+						this.#config.client,
+						deadline.signal,
+					),
 				};
 			}
 			return { ok: true, data: raw.data, response: raw.response };

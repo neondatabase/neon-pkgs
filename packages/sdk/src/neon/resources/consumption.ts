@@ -86,6 +86,7 @@ export class Consumption<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+			this.#ctx.client,
 		);
 	}
 
@@ -130,6 +131,7 @@ export class Consumption<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+			this.#ctx.client,
 		);
 	}
 
@@ -174,6 +176,7 @@ export class Consumption<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+			this.#ctx.client,
 		);
 	}
 }

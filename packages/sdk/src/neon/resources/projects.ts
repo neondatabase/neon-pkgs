@@ -297,6 +297,7 @@ export class Members<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+			this.#ctx.client,
 		);
 	}
 
@@ -446,6 +447,7 @@ export class Projects<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+			this.#ctx.client,
 		);
 	}
 
