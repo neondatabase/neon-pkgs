@@ -95,12 +95,12 @@ type BindableToolsInput<T extends CreateNeonToolsInput> = T & {
 
 const assertKnownNameKeys = (
 	names: NeonToolNameOverrides | undefined,
-	tools: ReadonlyArray<{ operationId: string; id: string }>,
+	tools: ReadonlyArray<{ selector: string; id: string }>,
 ): void => {
 	if (names === undefined || typeof names === "function") {
 		return;
 	}
-	const known = new Set(tools.flatMap((tool) => [tool.operationId, tool.id]));
+	const known = new Set(tools.flatMap((tool) => [tool.selector, tool.id]));
 	const unknown = Object.keys(names).filter((key) => !known.has(key));
 	if (unknown.length > 0) {
 		throw new TypeError(
