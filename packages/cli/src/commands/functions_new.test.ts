@@ -144,12 +144,12 @@ describe("functions new", () => {
 		expect(second).not.toHaveProperty("envExample");
 	});
 
-	it("points deploy at the env file and the shell at dev", async () => {
+	it("points deploy at the env file and notes that dev loads it automatically", async () => {
 		const result = await run({ template: "mailer", operations: ["send"] });
 
 		expect(result.cancelled === false && result.nextSteps).toEqual(
 			expect.arrayContaining([
-				"Set MAILER_API_KEY (API key for the mailer.) in .env.local. `neon dev` reads it from your shell, so export it there too.",
+				"Set MAILER_API_KEY (API key for the mailer.) in .env.local (`neon dev` loads it automatically).",
 				"Next: `neon dev` to run it locally, `neon config apply --env .env.local` to deploy.",
 			]),
 		);
@@ -285,7 +285,7 @@ describe("functions new", () => {
 		expect(text.match(/Next:/g)).toHaveLength(1);
 		expect(text).not.toContain("`");
 		expect(text).toMatch(
-			/Next:\n {2}.*mailer-sdk@1\.2\.3\n {2}Set MAILER_API_KEY in \.env\.local, and export it for neon dev\n {2}neon dev\n {2}neon config apply --env \.env\.local\n$/,
+			/Next:\n {2}.*mailer-sdk@1\.2\.3\n {2}Set MAILER_API_KEY in \.env\.local \(neon dev loads it automatically\)\n {2}neon dev\n {2}neon config apply --env \.env\.local\n$/,
 		);
 	});
 

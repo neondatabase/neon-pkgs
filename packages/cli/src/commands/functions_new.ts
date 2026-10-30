@@ -367,12 +367,11 @@ export const scaffoldFromTemplate = async (
 	const envFile = displayPath(resolveEnvFilePath(location), cwd);
 	const names = environment.join(", ");
 	if (variables && register) {
-		const them = environment.length === 1 ? "it" : "them";
 		nextSteps.push(
-			`Set ${variables} in ${envFile}. \`${cli} dev\` reads ${them} from your shell, so export ${them} there too.`,
+			`Set ${variables} in ${envFile} (\`${cli} dev\` loads it automatically).`,
 		);
 		next.push(
-			`Set ${names} in ${envFile}, and export ${them} for ${cli} dev`,
+			`Set ${names} in ${envFile} (${cli} dev loads it automatically)`,
 		);
 	} else if (variables) {
 		nextSteps.push(`Set ${variables} in your shell.`);
