@@ -376,10 +376,10 @@ describe("neon-auth", () => {
 			expect(providerBodies(requests, "POST")).toEqual([]);
 		});
 
-		test("--oauth-client-secret-file rejects a file holding only a newline before any request", async ({
+		test("--oauth-client-secret-file rejects a file holding only line endings before any request", async ({
 			testCliCommand,
 		}) => {
-			await withSecretFile("\n", async (path) => {
+			await withSecretFile("\r\n\n", async (path) => {
 				for (const action of ["add", "update"]) {
 					const requests: RecordedRequest[] = [];
 					await testCliCommand(
