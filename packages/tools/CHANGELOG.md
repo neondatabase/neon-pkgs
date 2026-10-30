@@ -1,5 +1,12 @@
 # @neon/tools
 
+## 2.5.2
+
+### Patch Changes
+
+- Updated dependencies [9b8d302]
+  - @neon/sdk@7.7.0
+
 ## 2.5.1
 
 ### Patch Changes
