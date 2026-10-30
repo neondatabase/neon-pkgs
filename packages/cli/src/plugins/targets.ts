@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { detectProjectAgents } from "add-mcp";
 import which from "which";
@@ -9,6 +10,7 @@ import {
 	tryResolveAddMcpAgentId,
 	uniqueAgentIds,
 } from "../init/agents.js";
+import { pluginsChildEnv } from "./child_env.js";
 
 export type PluginsInstallScope = "global" | "project";
 
@@ -18,11 +20,22 @@ export type PluginsMappedTarget = {
 };
 
 /**
+ * An agent CLI the plugins CLI runs to install into that agent. `product` is what
+ * `--version` prints before the version; `minVersion` is the first release whose plugin
+ * commands accept the plugins CLI's calls.
+ */
+export type PluginsCommand = {
+	name: string;
+	product?: string;
+	minVersion?: string;
+};
+
+/**
  * A plugins CLI target and what installing into it needs. With `command`, the plugins CLI
- * runs that agent CLI and fails with ENOENT when it is missing; without one, it writes
+ * runs that agent CLI and fails when it is missing or broken; without one, it writes
  * files. `e2e/plugins.e2e.test.ts` checks every entry against the real plugins CLI.
  */
-export type PluginsTarget = { target: string; command?: string };
+export type PluginsTarget = { target: string; command?: PluginsCommand };
 
 const CLAUDE_CODE: PluginsTarget = { target: "claude-code" };
 
@@ -32,8 +45,16 @@ const PLUGINS_TARGET_BY_TYPE: { [K in AgentType]?: PluginsTarget } = {
 	"claude-code": CLAUDE_CODE,
 	"claude-desktop": CLAUDE_CODE,
 	codex: { target: "codex" },
-	"github-copilot-cli": { target: "github-copilot", command: "copilot" },
-	"grok-build": { target: "grok", command: "grok" },
+	// 0.0.399 and earlier reject `copilot plugin install <name>@<marketplace>`.
+	"github-copilot-cli": {
+		target: "github-copilot",
+		command: {
+			name: "copilot",
+			product: "GitHub Copilot CLI",
+			minVersion: "0.0.400",
+		},
+	},
+	"grok-build": { target: "grok", command: { name: "grok" } },
 };
 
 export const pluginsTargets = (): PluginsTarget[] => [
@@ -42,7 +63,17 @@ export const pluginsTargets = (): PluginsTarget[] => [
 
 const USER_SCOPE_ONLY_TARGETS = new Set(["vscode", "github-copilot", "grok"]);
 
-export type MissingPluginsCommand = { agent: AgentType; command: string };
+export type PluginsCommandProblem =
+	| { kind: "missing" }
+	| { kind: "broken"; detail: string }
+	| { kind: "unrecognized" }
+	| { kind: "outdated"; version: string };
+
+export type UnusablePluginsCommand = {
+	agent: AgentType;
+	command: PluginsCommand;
+	problem: PluginsCommandProblem;
+};
 
 /** npx runs the plugins CLI with every `node_modules/.bin` from `cwd` up to the root ahead of PATH. */
 const pluginsCommandSearchPath = (cwd: string, path: string): string => {
@@ -57,25 +88,164 @@ const pluginsCommandSearchPath = (cwd: string, path: string): string => {
 	return [...bins, path].join(delimiter);
 };
 
-export const missingPluginsCommands = (
+const VERSION_TIMEOUT_MS = 10_000;
+
+const versionParts = (version: string): number[] =>
+	version.split(".").map((part) => Number.parseInt(part, 10));
+
+/** Exported for tests. */
+export const versionAtLeast = (version: string, minimum: string): boolean => {
+	const have = versionParts(version);
+	const need = versionParts(minimum);
+	for (let i = 0; i < 3; i++) {
+		const a = have[i] ?? 0;
+		const b = need[i] ?? 0;
+		if (a !== b) return a > b;
+	}
+	return true;
+};
+
+/** Exported for tests. */
+export const pluginsCommandVersionProblem = (
+	command: PluginsCommand,
+	output: string,
+): PluginsCommandProblem | undefined => {
+	if (command.product === undefined) {
+		return undefined;
+	}
+	const label = `${command.product} `;
+	const at = output.indexOf(label);
+	const version =
+		at === -1
+			? undefined
+			: output.slice(at + label.length).match(/^\d+\.\d+\.\d+/)?.[0];
+	if (version === undefined) {
+		return { kind: "unrecognized" };
+	}
+	if (
+		command.minVersion !== undefined &&
+		!versionAtLeast(version, command.minVersion)
+	) {
+		return { kind: "outdated", version };
+	}
+	return undefined;
+};
+
+const firstLine = (text: string): string =>
+	text
+		.split("\n")
+		.map((line) => line.trim())
+		.find((line) => line.length > 0) ?? "";
+
+/**
+ * Runs `<command> --version` the way the plugins CLI spawns the command (no shell, the npx
+ * search PATH, its child env), so a command it could not run is caught before it runs.
+ */
+const probePluginsCommand = (
+	command: PluginsCommand,
+	options: { cwd: string; searchPath: string },
+): PluginsCommandProblem | undefined => {
+	const resolved = which.sync(command.name, {
+		nothrow: true,
+		path: options.searchPath,
+	});
+	if (resolved === null) {
+		return { kind: "missing" };
+	}
+	const result = spawnSync(resolved, ["--version"], {
+		cwd: options.cwd,
+		env: pluginsChildEnv(),
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
+		timeout: VERSION_TIMEOUT_MS,
+		windowsHide: true,
+	});
+	if (result.error !== undefined) {
+		const code =
+			"code" in result.error && typeof result.error.code === "string"
+				? result.error.code
+				: undefined;
+		return {
+			kind: "broken",
+			detail:
+				code === "ETIMEDOUT"
+					? `timed out after ${VERSION_TIMEOUT_MS / 1000} seconds`
+					: (code ?? result.error.message),
+		};
+	}
+	const output = `${result.stdout}\n${result.stderr}`;
+	if (result.status !== 0) {
+		const line = firstLine(result.stderr) || firstLine(result.stdout);
+		return {
+			kind: "broken",
+			detail:
+				line.length > 0
+					? line.slice(0, 160).replace(/\.$/, "")
+					: result.signal !== null
+						? `killed by ${result.signal}`
+						: `exit code ${result.status}`,
+		};
+	}
+	return pluginsCommandVersionProblem(command, output);
+};
+
+/**
+ * Agents whose plugin installs through a CLI that is missing, does not run, is not the
+ * expected product, or is too old. Only agents with a `command` are probed, so file-based
+ * targets never spawn anything.
+ */
+export const unusablePluginsCommands = (
 	agents: readonly AgentType[],
 	options: { cwd: string; path?: string },
-): MissingPluginsCommand[] => {
+): UnusablePluginsCommand[] => {
 	const searchPath = pluginsCommandSearchPath(
 		options.cwd,
 		options.path ?? process.env.PATH ?? "",
 	);
-	const missing: MissingPluginsCommand[] = [];
+	const unusable: UnusablePluginsCommand[] = [];
 	for (const agent of uniqueAgentIds(agents)) {
 		const command = getPluginsTarget(agent)?.command;
-		if (
-			command !== undefined &&
-			which.sync(command, { nothrow: true, path: searchPath }) === null
-		) {
-			missing.push({ agent, command });
+		if (command === undefined) continue;
+		const problem = probePluginsCommand(command, {
+			cwd: options.cwd,
+			searchPath,
+		});
+		if (problem !== undefined) {
+			unusable.push({ agent, command, problem });
 		}
 	}
-	return missing;
+	return unusable;
+};
+
+/** Completes `"<command>" …` in a warning or error. */
+export const pluginsCommandProblemText = (
+	row: UnusablePluginsCommand,
+): string => {
+	const { command, problem } = row;
+	const product = command.product ?? `"${command.name}"`;
+	switch (problem.kind) {
+		case "missing":
+			return "was not found on PATH";
+		case "broken":
+			return `did not run ("${command.name} --version" failed: ${problem.detail})`;
+		case "unrecognized":
+			return `is not ${product} ("${command.name} --version" printed no ${product} version)`;
+		case "outdated":
+			return `is ${product} ${problem.version}, older than the ${command.minVersion} its plugin needs`;
+		default: {
+			const _exhaustive: never = problem;
+			return _exhaustive;
+		}
+	}
+};
+
+/** What to do about the problem, as an imperative clause. */
+export const pluginsCommandFix = (row: UnusablePluginsCommand): string => {
+	const { command, problem } = row;
+	if (problem.kind === "missing") {
+		return "Install it or add it to PATH";
+	}
+	return `Install or update ${command.product ?? `"${command.name}"`}`;
 };
 
 function getPluginsTarget(agent: string): PluginsTarget | undefined {

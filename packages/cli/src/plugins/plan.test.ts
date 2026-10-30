@@ -102,7 +102,7 @@ describe("resolvePluginsPlan", () => {
 			agents: ["cursor"],
 			skipped: [],
 			userScopeSkipped: [],
-			missingCommands: [],
+			unusableCommands: [],
 			targets: [{ agents: ["cursor"], target: "cursor" }],
 		});
 	});
@@ -416,7 +416,10 @@ describe("resolvePluginsPlan agent commands", () => {
 		const cwd = tmpDir();
 		const bin = emptyPath();
 		const copilot = join(bin, "copilot");
-		writeFileSync(copilot, "#!/bin/sh\nexit 0\n");
+		writeFileSync(
+			copilot,
+			'#!/bin/sh\necho "GitHub Copilot CLI 1.0.104."\n',
+		);
 		chmodSync(copilot, 0o755);
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
@@ -428,6 +431,28 @@ describe("resolvePluginsPlan agent commands", () => {
 		expect(plan.targets).toEqual([
 			{ agents: ["github-copilot-cli"], target: "github-copilot" },
 		]);
-		expect(plan.missingCommands).toEqual([]);
+		expect(plan.unusableCommands).toEqual([]);
+	});
+
+	test("--agent with an outdated Copilot CLI fails before installing", async () => {
+		const cwd = tmpDir();
+		const bin = emptyPath();
+		const copilot = join(bin, "copilot");
+		writeFileSync(
+			copilot,
+			'#!/bin/sh\necho "GitHub Copilot CLI 0.0.399."\n',
+		);
+		chmodSync(copilot, 0o755);
+		await expect(
+			resolvePluginsPlan(
+				planOptions(cwd, {
+					agents: ["github-copilot-cli"],
+					global: true,
+					commandPath: bin,
+				}),
+			),
+		).rejects.toThrow(
+			'Cannot install the Neon plugin for GitHub Copilot CLI: "copilot" is GitHub Copilot CLI 0.0.399, older than the 0.0.400 its plugin needs. Install or update GitHub Copilot CLI, then retry.',
+		);
 	});
 });

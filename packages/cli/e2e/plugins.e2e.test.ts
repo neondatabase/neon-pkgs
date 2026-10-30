@@ -28,7 +28,8 @@ const agentlessMachine = (): { home: string; cwd: string; path: string } => {
 };
 
 describe("plugins CLI install requirements", () => {
-	for (const { target, command } of pluginsTargets()) {
+	for (const { target, command: agentCommand } of pluginsTargets()) {
+		const command = agentCommand?.name;
 		it(`${target} ${command === undefined ? "installs without an agent CLI" : `needs "${command}"`}`, () => {
 			const machine = agentlessMachine();
 			if (command !== undefined) {

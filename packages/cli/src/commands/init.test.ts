@@ -1147,6 +1147,75 @@ describe("init handler", () => {
 		});
 	});
 
+	describe("when a plugin's agent CLI cannot run it", () => {
+		const fakeCommand = (name: string, body: string): string => {
+			const bin = mkdtempSync(join(tmpdir(), "neon-init-agent-cli-"));
+			writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`);
+			chmodSync(join(bin, name), 0o755);
+			vi.stubEnv("PATH", `${bin}:${process.env.PATH ?? ""}`);
+			return bin;
+		};
+
+		test("Recommended installs skills and MCP for an outdated Copilot CLI", async () => {
+			const cwd = mkdtempSync(join(tmpdir(), "neon-init-old-copilot-"));
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			fakeCommand("copilot", 'echo "GitHub Copilot CLI 0.0.399."');
+			const ops = makeOperations();
+			const stderr = vi
+				.spyOn(process.stderr, "write")
+				.mockReturnValue(true);
+			const { handler } = await import("./init.js");
+
+			await handler(
+				baseProps({
+					cwd,
+					operations: ops,
+					yes: true,
+					config: false,
+					link: false,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents: () => ["cursor", "github-copilot-cli"],
+				}),
+			);
+
+			expect(ops.calls[0]).toMatchObject({
+				kind: "plugins",
+				options: { agents: ["cursor"] },
+			});
+			expect(
+				ops.calls
+					.filter((call) => call.kind !== "plugins")
+					.map((call) => call.kind),
+			).toEqual(["skills", "mcp"]);
+			expect(stdoutText(stderr)).toContain(
+				'GitHub Copilot CLI: "copilot" is GitHub Copilot CLI 0.0.399, older than the 0.0.400 its plugin needs, so its plugin cannot install. Installing Neon skills and MCP instead.',
+			);
+		});
+
+		test("--no-agent-setup never runs the agent CLI", async () => {
+			const cwd = mkdtempSync(join(tmpdir(), "neon-init-no-probe-"));
+			writeFileSync(join(cwd, "package.json"), "{}\n");
+			const marker = join(cwd, "probed");
+			fakeCommand("copilot", `touch "${marker}"`);
+			const { handler } = await import("./init.js");
+
+			await handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					agentSetup: false,
+					config: false,
+					link: false,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents: () => ["github-copilot-cli"],
+				}),
+			);
+
+			expect(existsSync(marker)).toBe(false);
+		});
+	});
+
 	test("Recommended mixed agents install plugin and skills/MCP", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-mixed-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

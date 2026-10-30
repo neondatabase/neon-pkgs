@@ -318,7 +318,11 @@ plugins CLI (`npx plugins add`) for every target in `PLUGINS_TARGET_BY_TYPE`
 (`src/plugins/targets.ts`) in an empty HOME with no agent CLIs on PATH. A target with a
 `command` must fail with ENOENT and one without must install. When it fails, the plugins
 CLI changed how that target installs: update the table, since `neon plugins` and
-`neon init` skip or reroute agents based on it.
+`neon init` skip or reroute agents based on it. For a target with a `command`,
+`unusablePluginsCommands` runs `<command> --version` (no shell, the npx search PATH,
+`pluginsChildEnv`) and skips the agent when the command is missing, exits non-zero,
+does not print `<product> X.Y.Z`, or is older than `minVersion`. Copilot CLI's minimum is
+0.0.400: 0.0.399 and earlier reject `copilot plugin install <name>@<marketplace>`.
 
 ### Linting & Formatting
 
