@@ -532,6 +532,13 @@ exports[`neon-auth > oauth-provider list 1`] = `
 "
 `;
 
+exports[`neon-auth > oauth-provider list table shows only the list columns 1`] = `
+"ID         Type      Client ID
+microsoft  standard  ms-client
+apple      standard  com.example.services
+"
+`;
+
 exports[`neon-auth > oauth-provider update 1`] = `
 "id: google
 type: standard

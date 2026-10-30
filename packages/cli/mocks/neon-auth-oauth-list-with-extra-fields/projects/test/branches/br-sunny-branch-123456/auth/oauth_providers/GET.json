@@ -1,0 +1,17 @@
+{
+  "providers": [
+    {
+      "id": "microsoft",
+      "type": "standard",
+      "client_id": "ms-client",
+      "microsoft_tenant_id": "contoso.onmicrosoft.com"
+    },
+    {
+      "id": "apple",
+      "type": "standard",
+      "client_id": "com.example.services",
+      "apple_team_id": "TEAM123456",
+      "apple_key_id": "ABC123DEFG"
+    }
+  ]
+}

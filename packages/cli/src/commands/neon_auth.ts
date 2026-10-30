@@ -86,15 +86,20 @@ const SUPPORTED_OAUTH_PROVIDERS = [
 	NeonAuthOauthProviderId.Apple,
 ] as const;
 
+const PROVIDERS_WITHOUT_SHARED_APP = [
+	NeonAuthOauthProviderId.Microsoft,
+	NeonAuthOauthProviderId.Apple,
+] as const;
+
+const OWN_CREDENTIALS_NOTE = `${PROVIDERS_WITHOUT_SHARED_APP.join(" and ")} always need your own credentials`;
+
 const OAUTH_CREDENTIAL_OPTIONS = {
 	"oauth-client-id": {
-		describe:
-			"OAuth client ID from your provider app. For apple, the Services ID. Omit to use Neon's shared OAuth app, where one exists; apple and microsoft always need your own credentials.",
+		describe: `OAuth client ID from your provider app. For apple, the Services ID. Omit to use Neon's shared OAuth app, where one exists; ${OWN_CREDENTIALS_NOTE}.`,
 		type: "string",
 	},
 	"oauth-client-secret": {
-		describe:
-			"OAuth client secret from your provider app. Omit to use Neon's shared OAuth app, where one exists; apple and microsoft always need your own credentials.",
+		describe: `OAuth client secret from your provider app. Omit to use Neon's shared OAuth app, where one exists; ${OWN_CREDENTIALS_NOTE}.`,
 		type: "string",
 	},
 	"oauth-client-secret-file": {
@@ -1207,8 +1212,8 @@ const resolveClientSecret = (props: {
 	return secret;
 };
 
-// Apple and Microsoft have no shared app, and Apple's credentials span four flags, so the hint
-// names the flags the provider actually needs.
+// Providers without a shared app need their own credentials, and Apple's span four flags, so the
+// hint names the flags the provider actually needs.
 const sharedProviderRejectedMessage = (providerId: string): string => {
 	let flags: string;
 	switch (providerId) {
@@ -1311,7 +1316,7 @@ const oauthProviderUpdate = async (
 			);
 		}
 		// The API takes a new private key and its Key ID together, or neither to keep the stored key.
-		if (props.appleKeyId && clientSecret === undefined) {
+		if (props.appleKeyId !== undefined && clientSecret === undefined) {
 			throw new Error(
 				"--apple-key-id identifies the new private key, so it requires --oauth-client-secret or --oauth-client-secret-file.",
 			);

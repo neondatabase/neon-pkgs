@@ -117,6 +117,26 @@ describe("neon-auth", () => {
 		]);
 	});
 
+	test("oauth-provider list table shows only the list columns", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"neon-auth",
+				"oauth-provider",
+				"list",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				output: "table",
+				mockDir: "neon-auth-oauth-list-with-extra-fields",
+			},
+		);
+	});
+
 	test("oauth-provider add", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"neon-auth",
@@ -441,6 +461,7 @@ describe("neon-auth", () => {
 		test("update apple prints the team and key IDs", async ({
 			testCliCommand,
 		}) => {
+			const requests: RecordedRequest[] = [];
 			await testCliCommand(
 				[
 					"neon-auth",
@@ -456,8 +477,40 @@ describe("neon-auth", () => {
 					"--apple-key-id",
 					"NEWKEY1234",
 				],
-				{ output: "table" },
+				{ output: "table", onRequest: (r) => requests.push(r) },
 			);
+			expect(providerBodies(requests, "PATCH")).toEqual([
+				{
+					client_secret: "new-key",
+					apple_team_id: "TEAM123456",
+					apple_key_id: "NEWKEY1234",
+				},
+			]);
+		});
+
+		test("update apple rejects an empty --apple-key-id without a new client secret", async ({
+			testCliCommand,
+		}) => {
+			const requests: RecordedRequest[] = [];
+			await testCliCommand(
+				[
+					"neon-auth",
+					"oauth-provider",
+					"update",
+					...branchArgs,
+					"--provider-id",
+					"apple",
+					"--apple-key-id",
+					"",
+				],
+				{
+					code: 1,
+					snapshot: false,
+					stderr: "ERROR: --apple-key-id identifies the new private key, so it requires --oauth-client-secret or --oauth-client-secret-file.",
+					onRequest: (r) => requests.push(r),
+				},
+			);
+			expect(providerBodies(requests, "PATCH")).toEqual([]);
 		});
 
 		test("update apple rejects --apple-key-id without a new client secret", async ({
