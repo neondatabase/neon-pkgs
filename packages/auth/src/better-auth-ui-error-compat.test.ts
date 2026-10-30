@@ -110,6 +110,22 @@ describe.each(
 		expect(getAuthErrorStatus(error)).toBe(429);
 	});
 
+	test("the HTTP status wins over a status carried in the response body", async () => {
+		server.use(
+			http.post(`${BASE_URL}/api/auth/sign-in/email`, () =>
+				HttpResponse.json(
+					{ message: "x", status: 400 },
+					{ status: 429, statusText: "Too Many Requests" },
+				),
+			),
+		);
+
+		const error = (await caught(signIn)) as AuthHttpError;
+
+		expect(error.error.status).toBe(429);
+		expect(error.error.message).toBe("x");
+	});
+
 	test("401 INVALID_EMAIL_OR_PASSWORD exposes error.code", async () => {
 		server.use(
 			http.post(`${BASE_URL}/api/auth/sign-in/email`, () =>

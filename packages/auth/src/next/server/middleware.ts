@@ -18,9 +18,9 @@ import {
  * @param config.logLevel - Minimum log level; `'silent'` disables Neon Auth console output (default: `warn`)
  * @param config.log - Pre-resolved logging sink (set by {@link createNeonAuth})
  * @param config.loginUrl - The URL to redirect to when the user is not authenticated (default: '/auth/sign-in')
- * @param config.publicRoutes - Extra routes that skip authentication, merged with the default auth routes. Each entry matches the exact path and its subpaths (e.g. `['/', '/pricing']`)
+ * @param config.publicRoutes - Extra routes that skip authentication; see {@link NeonAuthMiddlewareConfig.publicRoutes}.
  * @returns A middleware function that can be used in the Next.js app.
- * @throws Error if `cookies.secret` is less than 32 characters, or a `publicRoutes` entry is empty, slash-only (other than `'/'`) or lacks a leading `/`
+ * @throws Error if `cookies.secret` is less than 32 characters, or a `publicRoutes` entry is invalid (see {@link NeonAuthMiddlewareConfig.publicRoutes})
  *
  * @example
  * ```ts

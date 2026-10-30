@@ -98,9 +98,10 @@ export type NeonAuthMiddlewareConfig = NeonAuthConfig & {
 	 * default auth routes. Each entry matches the exact path and its
 	 * slash-delimited subpaths (`/pricing` matches `/pricing` and
 	 * `/pricing/team`, but not `/pricing-internal`). `'/'` matches only `/`, not
-	 * the whole site. Entries must start with `/`; empty or slash-only entries
-	 * other than `'/'` (for example `''` or `'//'`) throw when the middleware is
-	 * created.
+	 * the whole site. Trailing slashes are trimmed (`/pricing/` is the same as
+	 * `/pricing`). Entries must start with `/`; invalid entries (`''`, `'//'`, or
+	 * no leading `/`) throw when the middleware is created. Entries are merged
+	 * with the default auth routes, not substituted for them.
 	 * @example ['/', '/pricing']
 	 */
 	publicRoutes?: string[];

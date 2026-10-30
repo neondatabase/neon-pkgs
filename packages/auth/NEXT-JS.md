@@ -101,7 +101,7 @@ export const config = {
 }
 ```
 
-The middleware lets signed-out users reach the auth API (`/api/auth`) and the auth pages (`/auth/sign-in`, `/auth/reset-password`, `/auth/verify-email`, and the other views of `@neondatabase/auth-ui` and `@better-auth-ui/react`). Everything else requires a session. To make more routes public, pass `publicRoutes`; each entry matches the exact path and its subpaths, and is added to the defaults:
+The middleware lets signed-out users reach the auth API (`/api/auth`) and the auth pages (`/auth/sign-in`, `/auth/reset-password`, `/auth/verify-email`, and the other views of `@neondatabase/auth-ui` and `@better-auth-ui/react`). Everything else requires a session. To make more routes public, pass `publicRoutes`; each entry matches the exact path and its slash-delimited subpaths (`/pricing` matches `/pricing/team` but not `/pricing-internal`), `'/'` matches only the home page, and trailing slashes are trimmed. Entries are added to the defaults, and invalid entries (`''`, `'//'`, or no leading `/`) throw when the middleware is created:
 
 ```typescript
 export default auth.middleware({

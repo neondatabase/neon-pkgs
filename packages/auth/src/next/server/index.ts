@@ -176,7 +176,7 @@ export function createNeonAuth(config: NeonAuthConfig) {
 	 *
 	 * @param middlewareConfig - Optional middleware configuration
 	 * @param middlewareConfig.loginUrl - URL to redirect to when not authenticated (default: '/auth/sign-in')
-	 * @param middlewareConfig.publicRoutes - Extra routes that skip authentication, merged with the default auth routes. Each entry matches the exact path and its subpaths (e.g. `['/', '/pricing']`)
+	 * @param middlewareConfig.publicRoutes - Extra routes that skip authentication; see {@link NeonAuthMiddlewareConfig.publicRoutes}.
 	 * @returns Middleware function for Next.js
 	 *
 	 * @example
