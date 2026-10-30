@@ -1,5 +1,12 @@
 # @neon/auth
 
+## 0.8.1
+
+### Patch Changes
+
+- d7fe270: `better-auth` is now a `~1.7.12` range instead of an exact pin, so apps that use `@better-auth-ui/*` resolve a single copy of `better-auth` without pins or overrides. The SDK still reports the bare floor version (`1.7.12`) to Neon Auth. `@better-auth/core` (`~1.7.12`), `@better-auth/utils` (`^0.5.0`) and `better-call` (`~1.4.4`) are declared as ranges so the `@better-auth/oauth-provider` peers resolve under strict-peer and Plug'n'Play installs while still deduping with `better-auth`'s own copies. Requires a Neon Auth server running `better-auth` 1.7.12 or later, so release only after that rollout. Adds `client/rotate-keys` to the recognised OAuth provider routes.
+- cac2b65: Make `@neon/auth` work with Better Auth UI 1.7. Errors thrown for failed auth requests now also carry the raw Better Auth response as `error` (for example `error.error.code === "EMAIL_NOT_VERIFIED"`), so Better Auth UI shows localized messages and redirects to email verification; `error.error.status` carries the raw HTTP status, and `code` and `status` are unchanged. `auth.middleware()` now treats the Better Auth UI 1.7 auth views as public by default: `/auth/error`, `/auth/redirect`, `/auth/sign-out`, `/auth/accept-invitation`, and the password-reset, verify-email, magic-link, email-OTP, two-factor and phone-number views under `/auth`. If your app serves its own protected pages at any of these paths, they are now reachable while signed out. `/auth` itself and `/settings/*` stay protected. It also accepts a new `publicRoutes` option to make additional routes public; an empty, slash-only or non-`/`-prefixed entry throws when the middleware is created.
+
 ## 0.8.0
 
 ### Minor Changes

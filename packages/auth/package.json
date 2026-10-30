@@ -1,6 +1,6 @@
 {
 	"name": "@neon/auth",
-	"version": "0.8.0",
+	"version": "0.8.1",
 	"description": "TypeScript SDK for Neon Auth - authentication for PostgreSQL with multiple adapter support",
 	"keywords": [
 		"neon",
