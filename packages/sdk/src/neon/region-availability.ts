@@ -2,7 +2,7 @@
  * Realtime, Neon Functions and their triggers, Object Storage, and the AI Gateway
  * run in a subset of regions. Outside them the Neon API answers 404 with a message
  * that does not say why, so the SDK names the project's region and the regions that
- * have the feature.
+ * have the feature, and keeps the API's message in case the 404 has another cause.
  */
 
 import type { Client } from "../client/client/index.js";
@@ -62,9 +62,10 @@ function listRegions(regions: readonly string[]): string {
 export function regionUnavailableMessage(
 	feature: PlatformFeature,
 	regionId: string,
+	apiMessage: string,
 ): string {
 	const [is, runs] = feature.plural ? ["are", "run"] : ["is", "runs"];
-	return `${feature.name} ${is} not available for this project: it is in ${regionId}. ${feature.name} ${runs} in ${listRegions(PLATFORM_FEATURE_REGIONS)}. Create a project in one of those regions to use it.`;
+	return `${feature.name} ${is} not available for this project: it is in ${regionId}. ${feature.name} ${runs} in ${listRegions(PLATFORM_FEATURE_REGIONS)}. Create a project in one of those regions to use it. (API error: "${apiMessage}")`;
 }
 
 function projectIdFromUrl(url: string | undefined): string | undefined {
@@ -102,11 +103,14 @@ export async function explainRegionUnavailable(
 	)
 		return error;
 
-	return new NeonNotFoundError(regionUnavailableMessage(feature, regionId), {
-		status: error.status,
-		code: error.code,
-		requestId: error.requestId,
-		response: error.response,
-		body: error.body,
-	});
+	return new NeonNotFoundError(
+		regionUnavailableMessage(feature, regionId, error.message),
+		{
+			status: error.status,
+			code: error.code,
+			requestId: error.requestId,
+			response: error.response,
+			body: error.body,
+		},
+	);
 }

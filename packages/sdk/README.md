@@ -118,10 +118,10 @@ The `error` channel carries a typed hierarchy (all `Error` subclasses with a `ki
 
 The error channel is typed as `NeonErrorUnion`, the union of every row below the base.
 
-Realtime, Neon Functions and their triggers, Object Storage, and the AI Gateway run in `aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, and `aws-ap-southeast-1`. For a project in another region, those calls fail with a `NeonNotFoundError` whose message names the project's region (read with one extra `GET /projects/{project_id}`):
+Realtime, Neon Functions and their triggers, Object Storage, and the AI Gateway run in `aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, and `aws-ap-southeast-1`. For a project in another region, those calls fail with a `NeonNotFoundError` whose message names the project's region (read with one extra `GET /projects/{project_id}`) and ends with the API's own message:
 
 ```text
-Realtime is not available for this project: it is in aws-us-west-2. Realtime runs in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1. Create a project in one of those regions to use it.
+Realtime is not available for this project: it is in aws-us-west-2. Realtime runs in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1. Create a project in one of those regions to use it. (API error: "Realtime is not available for this project")
 ```
 
 `status`, `code`, and `body` keep the API's values.

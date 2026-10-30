@@ -58,7 +58,7 @@ describe("feature-unavailable 404s", () => {
 
 		expect(result.error).toBeInstanceOf(NeonNotFoundError);
 		expect(result.error?.message).toBe(
-			"Realtime is not available for this project: it is in aws-us-west-2. Realtime runs in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1. Create a project in one of those regions to use it.",
+			'Realtime is not available for this project: it is in aws-us-west-2. Realtime runs in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1. Create a project in one of those regions to use it. (API error: "Realtime is not available for this project")',
 		);
 		expect(calls).toEqual([
 			"/api/v2/projects/proud-dew-48310209/branches/br-flat-bread/realtime",
@@ -95,6 +95,9 @@ describe("feature-unavailable 404s", () => {
 		const result = await call(neon);
 		expect(result.error).toBeInstanceOf(NeonNotFoundError);
 		expect(result.error?.message.startsWith(expected)).toBe(true);
+		expect(
+			result.error?.message.endsWith(`(API error: "${message}")`),
+		).toBe(true);
 	});
 
 	it("keeps the API message when the project is in a supported region", async () => {
