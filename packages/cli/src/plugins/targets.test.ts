@@ -14,6 +14,7 @@ import {
 	detectInstallablePluginsAgents,
 	detectPluginsAgents,
 	mappedPluginsTargets,
+	missingPluginsCommands,
 	type PluginsCommandProblem,
 	pluginsCommandProblemText,
 	pluginsInstallableAgents,
@@ -115,9 +116,10 @@ describe("unusablePluginsCommands", () => {
 	const COPILOT = {
 		name: "copilot",
 		product: "GitHub Copilot CLI",
+		versionPrefix: "GitHub Copilot CLI",
 		minVersion: "0.0.400",
 	};
-	const GROK = { name: "grok" };
+	const GROK = { name: "grok", product: "Grok Build", versionPrefix: "grok" };
 
 	test("reports copilot and grok when neither is on PATH", () => {
 		const root = tmp();
@@ -157,7 +159,11 @@ describe("unusablePluginsCommands", () => {
 		const root = tmp();
 		const bin = join(root, "bin");
 		installCommand(bin, "copilot", `echo "${version}"`);
-		installCommand(bin, "grok", "echo 'grok 0.1.42 [stable]'");
+		installCommand(
+			bin,
+			"grok",
+			"echo 'grok 0.2.118 (1e1687c1cf6a) [stable]'",
+		);
 		expect(
 			unusablePluginsCommands(["github-copilot-cli", "grok-build"], {
 				cwd: root,
@@ -217,9 +223,67 @@ describe("unusablePluginsCommands", () => {
 		]);
 	});
 
+	test("reports a grok that is another product", () => {
+		const root = tmp();
+		const bin = join(root, "bin");
+		installCommand(bin, "grok", "echo 'some-other-product 9.9.9'");
+		expect(
+			unusablePluginsCommands(["grok-build"], { cwd: root, path: bin }),
+		).toEqual([
+			{
+				agent: "grok-build",
+				command: GROK,
+				problem: { kind: "unrecognized" },
+			},
+		]);
+	});
+
+	test("runs the command with the npx search PATH, so its own helpers resolve", () => {
+		const root = tmp();
+		const localBin = join(root, "node_modules", ".bin");
+		installCommand(
+			localBin,
+			"copilot-helper",
+			'echo "GitHub Copilot CLI 1.0.104."',
+		);
+		installCommand(localBin, "copilot", "copilot-helper");
+		const nested = join(root, "apps", "web");
+		mkdirSync(nested, { recursive: true });
+		expect(
+			unusablePluginsCommands(["github-copilot-cli"], {
+				cwd: nested,
+				path: "",
+			}),
+		).toEqual([]);
+	});
+
+	test("missingPluginsCommands finds commands without running them", () => {
+		const root = tmp();
+		const bin = join(root, "bin");
+		const marker = join(root, "ran");
+		installCommand(bin, "copilot", `touch "${marker}"; exit 1`);
+		expect(
+			missingPluginsCommands(["github-copilot-cli", "grok-build"], {
+				cwd: root,
+				path: bin,
+			}),
+		).toEqual([
+			{
+				agent: "grok-build",
+				command: GROK,
+				problem: { kind: "missing" },
+			},
+		]);
+		expect(existsSync(marker)).toBe(false);
+	});
+
 	test("finds a command in node_modules/.bin above cwd, like npx", () => {
 		const root = tmp();
-		installCommand(join(root, "node_modules", ".bin"), "grok", "exit 0");
+		installCommand(
+			join(root, "node_modules", ".bin"),
+			"grok",
+			"echo 'grok 0.2.118 [stable]'",
+		);
 		const nested = join(root, "apps", "web");
 		mkdirSync(nested, { recursive: true });
 		expect(
@@ -270,6 +334,7 @@ describe("pluginsCommandProblemText", () => {
 		command: {
 			name: "copilot",
 			product: "GitHub Copilot CLI",
+			versionPrefix: "GitHub Copilot CLI",
 			minVersion: "0.0.400",
 		},
 		problem,

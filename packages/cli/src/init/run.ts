@@ -26,6 +26,7 @@ import { CannotMintApiKeyError } from "../mcp/mint.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { type NeonService, servicesFlagValue } from "../neon_services.js";
 import {
+	missingPluginsCommands,
 	pluginsCommandProblemText,
 	pluginsInstallableAgents,
 	type UnusablePluginsCommand,
@@ -712,6 +713,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			probedPluginCommands ??= unusablePluginsCommands(targets, { cwd });
 			return probedPluginCommands;
 		};
+		let missingCommands: UnusablePluginsCommand[] | undefined;
+		const missingPluginCommands = (): UnusablePluginsCommand[] => {
+			missingCommands ??= missingPluginsCommands(targets, { cwd });
+			return missingCommands;
+		};
 		const unavailablePluginAgents = (): AgentType[] =>
 			unusablePluginCommands().map((row) => row.agent);
 		const pluginReady = (agents: readonly AgentType[]): AgentType[] =>
@@ -800,13 +806,20 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							named,
 							available,
 							detected: detection.detectedAgents,
+							// Detected agents are not run before the user picks; installing a
+							// picked agent probes its command.
 							...(setup === "plugin"
 								? {
-										preselected: pluginReady(
-											detection.detectedAgents,
-										),
+										preselected:
+											detection.detectedAgents.filter(
+												(id) =>
+													!missingPluginCommands().some(
+														(row) =>
+															row.agent === id,
+													),
+											),
 										unusableCommands:
-											unusablePluginCommands(),
+											missingPluginCommands(),
 									}
 								: {}),
 							interactive: detection.interactive,

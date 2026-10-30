@@ -1,5 +1,6 @@
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	rmSync,
@@ -432,6 +433,30 @@ describe("resolvePluginsPlan agent commands", () => {
 			{ agents: ["github-copilot-cli"], target: "github-copilot" },
 		]);
 		expect(plan.unusableCommands).toEqual([]);
+	});
+
+	test("--agent cursor in a terminal never runs a detected Copilot CLI", async () => {
+		const cwd = tmpDir();
+		const bin = emptyPath();
+		const marker = join(cwd, "ran");
+		writeFileSync(join(bin, "copilot"), `#!/bin/sh\ntouch "${marker}"\n`);
+		chmodSync(join(bin, "copilot"), 0o755);
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: ["cursor"],
+				global: true,
+				interactive: true,
+				commandPath: bin,
+				detectInstalledAgents: async () => [
+					"github-copilot-cli",
+					"cursor",
+				],
+			}),
+		);
+		expect(plan.targets).toEqual([
+			{ agents: ["cursor"], target: "cursor" },
+		]);
+		expect(existsSync(marker)).toBe(false);
 	});
 
 	test("--agent with an outdated Copilot CLI fails before installing", async () => {

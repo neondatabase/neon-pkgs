@@ -16,6 +16,7 @@ import {
 	getPluginsTargetName,
 	isUserScopeOnlyPluginsTarget,
 	mappedPluginsTargets,
+	missingPluginsCommands,
 	type PluginsInstallScope,
 	type PluginsMappedTarget,
 	pluginsCommandFix,
@@ -110,10 +111,11 @@ export async function resolvePluginsPlan(
 				})
 			: scoped;
 	// The picker keeps detected agents first but checks only the ones whose plugin can
-	// install; `-y` keeps the full list so it can warn about the ones it skips.
+	// install; `-y` keeps the full list so it can warn about the ones it skips. Detected
+	// agents are not run here: only the ones selected below are probed.
 	const unusableDetected = new Map(
-		(prompt
-			? unusablePluginsCommands(detected, commandLookup(options))
+		(prompt && options.agents.length === 0
+			? missingPluginsCommands(detected, commandLookup(options))
 			: []
 		).map((row) => [row.agent, row]),
 	);
