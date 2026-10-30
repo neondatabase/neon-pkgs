@@ -331,9 +331,8 @@ See the [Next.js Setup Guide](./NEXT-JS.md) for comprehensive documentation incl
 
 - Setting up auth server instance with `createNeonAuth()` for handler, middleware and api methods  
 - Client-side auth with `createAuthClient()` for client components
-- Configuring the `NeonAuthUIProvider` with Email OTP, Social Login, and Organizations
-- Creating auth pages (`AuthView`, `AccountView`, `OrganizationView`)
-- Importing styles (with or without Tailwind CSS)
+- Setting up Better Auth UI 1.7 (`AuthProvider`, `<Auth>`, `<Settings>`) with the shadcn CLI
+- Protecting routes with `auth.middleware({ loginUrl, publicRoutes })`
 - Using `authClient.useSession()` hook in client components
 
 ## Server toolkit (for framework adapter authors)
@@ -368,86 +367,28 @@ for a walkthrough.
 
 ## UI Components
 
-Pre-built login forms and auth pages live in `@neondatabase/auth-ui`, a
-separate package. `@neon/auth` does not ship the `react/ui` / `ui/*`
-compatibility re-exports that older `@neondatabase/auth` releases carried —
-install and import from `@neondatabase/auth-ui` directly.
-
-If you're migrating off those deprecated re-export paths on an older
-`@neondatabase/auth` release, change imports from `@neondatabase/auth/react/ui`
-(and `@neondatabase/auth/ui/*`) to the matching `@neondatabase/auth-ui` paths.
-
-### 1. Import CSS
-
-Install the UI package alongside `@neon/auth`:
+Pre-built sign-in, sign-up, settings, and user menu components come from [Better Auth UI](https://better-auth-ui.com) 1.7: `@better-auth-ui/core` and `@better-auth-ui/react` provide the data layer, and `npx shadcn add` copies the components into your app. `@neon/auth` works with them directly: pass `createAuthClient()` as `authClient`, with no adapter. The deprecated `@neondatabase/auth-ui` is not needed.
 
 ```bash
-npm install @neondatabase/auth-ui
+npm i @neon/auth @better-auth-ui/core @better-auth-ui/react @tanstack/react-query
+npx shadcn@latest init
+npx shadcn@latest add @better-auth-ui/auth @better-auth-ui/settings @better-auth-ui/user-button
+npm i better-auth@~1.7.12
 ```
 
-> **Note:** `@neondatabase/auth-ui` still depends on the legacy `@neondatabase/auth`
-> release (an exact peer dependency, imported at runtime). Installing it alongside
-> `@neon/auth` also installs `@neondatabase/auth`, and the UI provider's types resolve
-> against that legacy package until `@neondatabase/auth-ui` is updated to accept `@neon/auth`.
+Run the last command after your final `shadcn add`: the registry items list a bare `better-auth`, which installs the npm `latest` tag (which can be a pre-release) as a second copy. Don't add `overrides` or exact pins, and don't call `betterAuth()`: Neon hosts the auth server.
 
-**Without Tailwind CSS:**
-```typescript
-import '@neondatabase/auth-ui/css';
-```
+For Next.js, follow the [Next.js Setup Guide](./NEXT-JS.md#5-set-up-the-auth-provider) for the provider, the `/auth/[path]` and `/settings/[path]` pages, and route protection.
 
-**With Tailwind CSS v4:**
-```css
-@import 'tailwindcss';
-@import '@neondatabase/auth-ui/tailwind';
-```
+For React with Vite there is no server middleware, so:
 
-### 2. Setup Provider
+- Create the client with `createAuthClient(import.meta.env.VITE_NEON_AUTH_URL)` from `@neon/auth` and pass it to `AuthProvider` as `authClient`.
+- Pass `Link` from your router (for example TanStack Router or React Router) and a `navigate={({ to, replace }) => ...}` that runs `getSafeRedirectTo(to, window.location.origin)` from `@better-auth-ui/core` and maps a result starting with `//` to `"/"` before it calls your router. Render `<Toaster />` once.
+- In the copied `components/auth/auth-redirect.tsx`, change `window.location.replace(action.to)` to `window.location.replace(action.to.startsWith("//") ? "/" : action.to)`. Both checks work around `@better-auth-ui/core` 1.7.30 returning protocol-relative paths such as `//example.com` for some crafted `?redirectTo=` values, and can go once Better Auth UI fixes `getSafeRedirectTo`.
+- Guard protected routes with a session check, such as a router loader that calls `authClient.getSession()` and redirects to `/auth/sign-in` when there is no user.
+- Add `http://localhost:5173` and your production origin as trusted origins for the Neon Auth branch first.
 
-```typescript
-"use client"
-
-import { NeonAuthUIProvider } from "@neondatabase/auth-ui"
-import { createAuthClient } from "@neon/auth"
-import "@neondatabase/auth-ui/css"
-
-const authClient = createAuthClient('https://your-auth-url.com')
-
-export function AuthProvider({ children }) {
-  return (
-    <NeonAuthUIProvider authClient={authClient} redirectTo="/dashboard">
-      {children}
-    </NeonAuthUIProvider>
-  )
-}
-```
-
-### 3. Use Components
-
-**Option A: Full Auth Pages (Recommended)**
-
-Use `AuthView` to render complete auth flows based on the URL path:
-
-```typescript
-import { AuthView } from "@neondatabase/auth-ui"
-
-// Renders sign-in, sign-up, forgot-password, etc. based on path
-<AuthView path="sign-in" />
-```
-
-**Option B: Individual Components**
-
-```typescript
-import { SignInForm, UserButton } from "@neondatabase/auth-ui"
-
-<SignInForm />
-<UserButton />
-```
-
-Available components: `SignInForm`, `SignUpForm`, `UserButton`, `AuthView`, `AccountView`, `OrganizationView`
-
-For Next.js with dynamic routes, see the [Next.js Setup Guide](./NEXT-JS.md).
-
-For full documentation and theming, see [`@neondatabase/auth-ui`](https://github.com/neondatabase/neon-js/tree/main/packages/auth-ui).
+For the provider props and redirect validation, see the [UI components reference](https://neon.com/docs/auth/reference/ui-components).
 
 ## Related Packages
 

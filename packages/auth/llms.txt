@@ -10,7 +10,7 @@
 |----------|---------|
 | Auth only (no database queries) | `@neon/auth` |
 | Auth + Database queries | `@neon/auth` + `@neon/postgrest-js` |
-| Pre-built UI components | Add `@neondatabase/auth-ui` |
+| Pre-built UI components | Add Better Auth UI 1.7 (`@better-auth-ui/core` + `@better-auth-ui/react`, components via `npx shadcn add`) |
 
 ## Installation
 
@@ -309,20 +309,47 @@ await auth.signIn.email({ email, password });
 | `onAuthStateChange` not firing | Not subscribed | Call returns unsubscribe function, store reference |
 | Token expired immediately | Clock skew | Check server/client time sync |
 
-## CSS for UI Components
+## UI Components (Better Auth UI 1.7)
 
-Choose based on your project setup:
+Neon hosts the auth server. Do NOT call `betterAuth()`, add a database adapter, or run Better Auth migrations.
 
-```css
-/* Without Tailwind - pre-built bundle (~47KB) */
-@import '@neondatabase/auth-ui/css';
+Run these commands in this order:
 
-/* With Tailwind CSS v4 - theme tokens only */
-@import 'tailwindcss';
-@import '@neondatabase/auth-ui/tailwind';
+```bash
+npm i @neon/auth @better-auth-ui/core @better-auth-ui/react @tanstack/react-query
+npx shadcn@latest init
+npx shadcn@latest add @better-auth-ui/auth @better-auth-ui/settings @better-auth-ui/user-button
+# only if the app uses Email OTP:
+npx shadcn@latest add @better-auth-ui/email-otp
+npm i better-auth@~1.7.12
 ```
 
-Never import both paths - causes duplicate styles.
+The last command must run after the final `shadcn add`: the registry items list a bare `better-auth`, which installs the npm `latest` tag (which can be a pre-release) as a second copy.
+
+Next.js wiring (full code in [NEXT-JS.md](./NEXT-JS.md)):
+
+- `lib/auth/client.ts`: `createAuthClient()` from `@neon/auth/next` (no arguments).
+- `app/providers.tsx`: `QueryClientProvider`, then the copied `AuthProvider` from `@/components/auth/auth-provider` with `authClient`, `Link` from `next/link`, `redirectTo`, and a `navigate` that does `const path = getSafeRedirectTo(to, window.location.origin); const target = path.startsWith('//') ? '/' : path;` (`getSafeRedirectTo` from `@better-auth-ui/core`) and then `replace ? router.replace(target) : router.push(target)`, plus one `<Toaster />` from `@/components/ui/sonner`.
+- `app/auth/[path]/page.tsx` renders `<Auth path={path} />`; `app/settings/[path]/page.tsx` renders `<Settings path={path} />`. Valid paths are `Object.values(viewPaths.auth)` and `Object.values(viewPaths.settings)` from `@better-auth-ui/core`.
+- `app/api/auth/[...path]/route.ts`: `export const { GET, POST, PUT, DELETE, PATCH } = auth.handler();`
+- `proxy.ts`: `export default auth.middleware({ loginUrl: '/auth/sign-in', publicRoutes: ['/'] });`
+
+Redirect safety: `@better-auth-ui/core` 1.7.30 can return protocol-relative paths such as `//example.com` from `getSafeRedirectTo` for some crafted `?redirectTo=` values, which is an open redirect after sign-in. Keep the `//` check in `navigate`, and in the copied `components/auth/auth-redirect.tsx` change `window.location.replace(action.to)` to `window.location.replace(action.to.startsWith('//') ? '/' : action.to)`. Both can go once Better Auth UI fixes `getSafeRedirectTo`.
+
+Middleware: `/api/auth` and every Better Auth UI 1.7 signed-out view are public by default; `/auth` itself and `/settings/*` stay protected. `publicRoutes` adds your own public pages: each entry matches the exact path and its slash-delimited subpaths, `'/'` matches only the home page, and entries must start with `/`.
+
+React/Vite: `createAuthClient(import.meta.env.VITE_NEON_AUTH_URL)` from `@neon/auth`; pass `Link` and a router-based `navigate` (with the same `//` check) to `AuthProvider`; guard routes with a session check that redirects to `/auth/sign-in`; add the dev and production origins as trusted origins on the Neon Auth branch.
+
+Thrown errors are `AuthHttpError`: `.code` and `.status` are Supabase-style, and `.error` is the raw Better Auth body `{ code, message, status }`.
+
+Do NOT:
+
+- Drop the `//` check in `navigate` or the `auth-redirect.tsx` patch.
+- Add `overrides`, `resolutions`, or exact pins for `better-auth` or its plugins.
+- Install `@neondatabase/auth-ui` or use `NeonAuthUIProvider`, `AuthView`, or `AccountView` (deprecated).
+- Write a custom `proxy.ts` wrapper or re-list the default auth routes; use `auth.middleware({ loginUrl, publicRoutes })`.
+- Import CSS from a UI package; the copied components use your app's Tailwind build.
+- Run `betterAuth()` or a database adapter; Neon hosts auth.
 
 ## Optional
 
