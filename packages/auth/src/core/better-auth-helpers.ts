@@ -95,10 +95,11 @@ export function normalizeBetterAuthError(
  * Error thrown for a non-OK Better Auth response: the normalized
  * {@link AuthError} plus the Better Fetch error fields.
  *
- * `error` is the parsed JSON response body when that body is an object, or an
- * empty object when it is not (a non-object JSON value, or a non-JSON body such
- * as an HTML 502 from a proxy). In both cases `error.status` is then set to the
- * raw HTTP status, replacing any `status` in the body. `status` on the error
+ * `error` is the parsed JSON response body when that body is a plain object.
+ * For any other body (a JSON array, string or other non-object value, or a
+ * non-JSON body such as an HTML 502 from a proxy) it is `{ status }` only. In
+ * every case `error.status` is the raw HTTP status, replacing any `status` in
+ * the body. `status` on the error
  * itself stays the normalized (Supabase-style) value.
  */
 export type AuthHttpError = AuthError & {
@@ -113,9 +114,10 @@ export type AuthHttpError = AuthError & {
  * `.status`), and also carries `statusText` and the parsed response body as
  * `.error`, which is the shape Better Fetch uses for thrown errors. Consumers that branch
  * on the raw Better Auth code (for example `@better-auth-ui/*`, which reads
- * `error.error?.code ?? error.code`) depend on `.error`. They also read
- * `error.error.status ?? error.status` to pick the 401, 403 and 429 messages,
- * so `.error.status` carries the raw HTTP status that `.status` does not.
+ * `code` from `.error` when it is an object and only otherwise from the top-level
+ * error) depend on `.error`. They also read `.error.status`, falling back to
+ * `.status`, to pick the 401, 403 and 429 messages, so `.error.status` carries
+ * the raw HTTP status that `.status` does not.
  */
 export async function createHttpResponseError(
 	response: Response,
@@ -125,7 +127,7 @@ export async function createHttpResponseError(
 		.json()
 		.catch(() => ({}));
 	const record =
-		typeof body === "object" && body !== null
+		typeof body === "object" && body !== null && !Array.isArray(body)
 			? (body as { message?: string; code?: string })
 			: {};
 	const error = normalizeBetterAuthError({

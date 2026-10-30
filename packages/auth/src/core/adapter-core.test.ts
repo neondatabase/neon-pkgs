@@ -239,6 +239,36 @@ describe("NeonAuthAdapterCore customFetchImpl error normalization", () => {
 			expect(error.message).toMatch(/HTTP 502/);
 		});
 
+		test.each([
+			["a JSON array body", "[1,2]"],
+			["a JSON string body", '"oops"'],
+		])("%s yields only the raw status in .error", async (_name, payload) => {
+			const adapter = new TestAdapter({
+				baseURL: "https://auth.example.com",
+			});
+			const customFetchImpl = adapter.getCustomFetchImpl();
+
+			fetchMock.mockResolvedValueOnce(
+				new Response(payload, {
+					status: 500,
+					statusText: "Internal Server Error",
+					headers: { "Content-Type": "application/json" },
+				}),
+			);
+
+			let thrown: unknown;
+			try {
+				await customFetchImpl(TEST_URL, {
+					method: "POST",
+					headers: { [FORCE_FETCH_HEADER]: "1" },
+				});
+			} catch (error) {
+				thrown = error;
+			}
+
+			expect((thrown as AuthHttpError).error).toEqual({ status: 500 });
+		});
+
 		test("strips X-Force-Fetch header before sending", async () => {
 			const adapter = new TestAdapter({
 				baseURL: "https://auth.example.com",

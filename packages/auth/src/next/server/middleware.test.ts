@@ -80,6 +80,11 @@ describe("neonAuthMiddleware publicRoutes validation", () => {
 		const home = await run("/", { publicRoutes });
 		expect(home.headers.get("location")).toBeNull();
 
+		for (const path of ["/docs", "/docs/intro"]) {
+			const docs = await run(path, { publicRoutes });
+			expect(docs.headers.get("location")).toBeNull();
+		}
+
 		const other = await run("/dashboard", { publicRoutes });
 		expect(other.headers.get("location")).toBe(
 			"https://app.example.com/auth/sign-in",

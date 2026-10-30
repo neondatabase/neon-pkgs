@@ -14,8 +14,12 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 // Mirrors `getAuthErrorCode` and the `status` read in `getAuthErrorMessage` from
-// `@better-auth-ui/core@1.7.30` (`lib/auth-error-message.ts`). The fixture must
-// be re-checked against the source on a better-auth-ui bump.
+// `@better-auth-ui/core@1.7.30` (`lib/auth-error-message.ts`), where
+// `body = asRecord(asRecord(error)?.error) ?? asRecord(error)`. The code comes
+// from `body.code` and the status from `body.status ?? asRecord(error)?.status`.
+// There is no top-level `.code` fallback when `.error` is an object; the
+// top-level object is used only when `.error` is not an object. Re-check
+// against the source on a better-auth-ui bump.
 function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === "object" && value !== null
 		? (value as Record<string, unknown>)
@@ -89,7 +93,7 @@ describe.each(
 		expect(getAuthErrorStatus(error)).toBe(403);
 	});
 
-	test("a body without code resolves no code and reads the raw status", async () => {
+	test("a raw { message } body gives better-auth-ui no code, so it falls back to the status message", async () => {
 		server.use(
 			http.post(`${BASE_URL}/api/auth/sign-in/email`, () =>
 				HttpResponse.json(

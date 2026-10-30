@@ -17,6 +17,7 @@ export {
 	isAuthApiError,
 	isAuthError,
 } from "@/adapters/supabase/auth-interface";
+export type { AuthHttpError } from "@/core/better-auth-helpers";
 
 export {
 	type NeonAuthLogger,

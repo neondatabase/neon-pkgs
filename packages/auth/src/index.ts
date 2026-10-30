@@ -12,6 +12,7 @@ export {
  * @internal Used by @neon/neon-js to label X-Neon-Client-Info; not a supported API.
  */
 export { getAdapterName } from "./core/adapter-name";
+export type { AuthHttpError } from "./core/better-auth-helpers";
 export type {
 	NeonAuth,
 	NeonAuthAdapter,
