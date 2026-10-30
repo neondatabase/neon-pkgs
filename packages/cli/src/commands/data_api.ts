@@ -5,6 +5,7 @@ import type {
 } from "@neon/sdk";
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
+import { isGenTypesDbUrl } from "../context.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -97,7 +98,9 @@ export const builder = (argv: yargs.Argv) =>
 				type: "string",
 			},
 		})
-		.middleware(fillSingleProjectUnlessDbUrl as any)
+		.middleware((args: any) =>
+			isGenTypesDbUrl(args) ? args : fillSingleProjectUnlessDbUrl(args),
+		)
 		.command(
 			"create",
 			"Provision the Neon Data API for a database",
@@ -178,7 +181,7 @@ export const builder = (argv: yargs.Argv) =>
 						"db-url": {
 							type: "string",
 							describe:
-								"Postgres connection string. Skips the Neon API; defaults to the connection for --project-id, --branch, --role-name and --database",
+								"Postgres connection string. Skips the Neon API. Without it, DATABASE_URL is used unless --project-id, --branch, --database or --role-name is passed; otherwise the connection is resolved for those flags and the linked project",
 						},
 						"role-name": {
 							type: "string",
@@ -195,8 +198,8 @@ export const builder = (argv: yargs.Argv) =>
 							alias: "s",
 							type: "array",
 							string: true,
-							default: ["public"],
-							describe: "Schema to include (repeatable)",
+							describe:
+								"Schema to include (repeatable). Defaults to the schemas the Data API exposes for the branch, or public with a connection string or when the Data API is not enabled",
 						},
 						"postgrest-v9-compat": {
 							type: "boolean",
@@ -206,7 +209,8 @@ export const builder = (argv: yargs.Argv) =>
 						},
 						"query-timeout": {
 							type: "string",
-							describe: "Query timeout, such as 30s, 1m or 90s",
+							describe:
+								"Query timeout: 30s, 1m, or a bare number of seconds (default 30s)",
 						},
 					})
 					.example(

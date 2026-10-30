@@ -3,7 +3,17 @@ import { parse } from "pg-connection-string";
 import type { PoolConfig } from "../vendor/postgres-meta/lib/types.js";
 
 // pg 8.23 reads it; @types/pg 8.20 predates it.
-export type NeonPoolConfig = PoolConfig & { enableChannelBinding?: boolean };
+export type NeonPoolConfig = PoolConfig & {
+	enableChannelBinding?: boolean;
+	/**
+	 * Set for `sslmode=prefer`: if the server answers that it has no TLS, the
+	 * caller retries the connection with `ssl: false`. node-postgres cannot fall
+	 * back by itself.
+	 */
+	plaintextFallback?: boolean;
+};
+
+const UNSUPPORTED_CLIENT_CERT_PARAMS = ["sslcert", "sslkey", "sslca"];
 
 const SSL_PARAMS = [
 	"ssl",
@@ -18,16 +28,47 @@ const SSL_PARAMS = [
 ];
 
 /**
+ * `ssl=true|1` (Heroku/Prisma style) means a required TLS connection and
+ * `ssl=false|0` means none; an explicit `sslmode` wins.
+ */
+const resolveSslMode = (
+	sslmode: string | null,
+	ssl: string | null,
+): string | null => {
+	if (sslmode !== null || ssl === null) {
+		return sslmode;
+	}
+	if (ssl === "true" || ssl === "1") {
+		return "require";
+	}
+	if (ssl === "false" || ssl === "0") {
+		return "disable";
+	}
+	throw new Error(`Unsupported ssl "${ssl}". Use true, 1, false or 0.`);
+};
+
+/**
  * Builds the pg pool config from a connection URL without ever handing the URL's
  * `ssl*` parameters to pg or to the vendored `db.ts` `init`. `init` rewrites a
  * connection string's `sslmode` into `rejectUnauthorized = (sslmode === 'verify-full')`
  * and drops `sslrootcert`, which would leave Neon's `sslmode=require` URLs
- * unverified. Every mode except `disable` and `no-verify` verifies the server
- * certificate; `no-verify` is the only explicit opt-out.
+ * unverified. `require`, `verify-ca` and `verify-full`
+ * verify the server certificate; `no-verify` and `prefer` encrypt without verifying,
+ * and `disable` and `allow` use plaintext.
  */
 export const buildPoolConfig = (connectionString: string): NeonPoolConfig => {
 	const url = new URL(connectionString);
-	const sslmode = url.searchParams.get("sslmode");
+	for (const param of UNSUPPORTED_CLIENT_CERT_PARAMS) {
+		if (url.searchParams.has(param)) {
+			throw new Error(
+				"sslcert/sslkey/sslca are not supported by data-api gen-types; use sslrootcert for a custom CA",
+			);
+		}
+	}
+	const sslmode = resolveSslMode(
+		url.searchParams.get("sslmode"),
+		url.searchParams.get("ssl"),
+	);
 	const sslrootcert = url.searchParams.get("sslrootcert");
 	const channelBinding = url.searchParams.get("channel_binding");
 	for (const param of SSL_PARAMS) {
@@ -52,7 +93,14 @@ export const buildPoolConfig = (connectionString: string): NeonPoolConfig => {
 			config.ssl = { rejectUnauthorized: false };
 			break;
 		case "allow":
+			// libpq tries plaintext first for `allow`.
+			config.ssl = false;
+			break;
 		case "prefer":
+			// libpq's `prefer` encrypts without authenticating the server.
+			config.ssl = { rejectUnauthorized: false };
+			config.plaintextFallback = true;
+			break;
 		case "require":
 		case "verify-ca":
 		case "verify-full": {
@@ -74,7 +122,7 @@ export const buildPoolConfig = (connectionString: string): NeonPoolConfig => {
 		}
 		default:
 			throw new Error(
-				`Unsupported sslmode "${sslmode}". Use disable, require, verify-ca, verify-full or no-verify.`,
+				`Unsupported sslmode "${sslmode}". Use disable, allow, prefer, require, verify-ca, verify-full or no-verify.`,
 			);
 	}
 

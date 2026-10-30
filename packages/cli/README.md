@@ -1185,9 +1185,9 @@ neon data-api gen-types --out-file src/types/db.ts -s public -s auth
 neon data-api gen-types --out-file - > database.types.ts   # stdout, like supabase gen types
 ```
 
-The connection verifies the server certificate for `sslmode=require`, `verify-ca` and `verify-full`, honors `sslrootcert`, and enforces `channel_binding=require`. Only `sslmode=no-verify` turns verification off.
+The connection verifies the server certificate for `sslmode=require`, `verify-ca` and `verify-full`, honors `sslrootcert`, and enforces `channel_binding=require`. `sslmode=no-verify` turns verification off. `sslmode=prefer` encrypts without verifying the certificate and retries without TLS if the server has none; `sslmode=allow` uses plaintext. `ssl=true` / `ssl=1` count as `sslmode=require` and `ssl=false` / `ssl=0` as `sslmode=disable`. `sslcert`, `sslkey` and `sslca` are rejected; use `sslrootcert` for a custom CA.
 
-Without `--db-url` the connection is resolved like [`connection-string`](#commands): `--project-id`, `--branch`, `--database` and `--role-name`, falling back to the linked project. Flags carried over from `neon-js gen-types`: `--db-url`, `--schema` / `-s` (repeatable, default `public`), `--postgrest-v9-compat`, `--query-timeout`. `--output` / `-o` is the CLI-wide output format, so the file path moved to `--out-file` (default `database.types.ts`).
+The connection string is taken from `--db-url`, then from the `DATABASE_URL` environment variable (both skip Neon sign-in) unless `--project-id`, `--branch`, `--database` or `--role-name` is passed, and otherwise resolved like [`connection-string`](#commands) from those flags, falling back to the linked project. Explicit flags win over `DATABASE_URL` because `neon dev` and hooks set it in child processes. Without `--schema`, the types cover the schemas the Data API exposes for that branch and database (`public` with a connection string or when the Data API is not enabled). Connecting times out after 10 seconds and each query after 30 seconds; `--query-timeout` (`30s`, `1m`, or a bare number of seconds) changes the query limit. Flags carried over from `neon-js gen-types`: `--db-url`, `--schema` / `-s` (repeatable), `--postgrest-v9-compat`, `--query-timeout`. `--output` / `-o` is the CLI-wide output format, so the file path moved to `--out-file` (default `database.types.ts`).
 
 ## Logs (`logs`)
 

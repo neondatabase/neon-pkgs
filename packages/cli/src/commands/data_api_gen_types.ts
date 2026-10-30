@@ -1,7 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { isNeonApiError } from "../api.js";
+import { genTypesDbUrl } from "../context.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
+import { branchIdFromProps } from "../utils/enrichers.js";
 import { generateTypes } from "../utils/generate_types.js";
 import { resolveConnectionUri } from "../utils/inspect_db.js";
 
@@ -11,7 +14,7 @@ export type GenTypesProps = BranchScopeProps & {
 	roleName?: string;
 	dbUrl?: string;
 	outFile: string;
-	schema: string[];
+	schema?: string[];
 	postgrestV9Compat: boolean;
 	queryTimeout?: string;
 };
@@ -33,18 +36,32 @@ export const parseDuration = (duration: string): number => {
 	);
 };
 
-const resolveConnectionString = async (
+const FALLBACK_SCHEMAS = ["public"];
+
+/**
+ * The schemas the Data API serves for this branch and database, so the types
+ * match what clients can query. Falls back to `public` when the Data API is
+ * not enabled (404).
+ */
+const dataApiSchemas = async (
 	props: GenTypesProps,
-): Promise<string> => {
-	const dbUrl = props.dbUrl?.trim();
-	if (dbUrl) {
-		return dbUrl;
+	branchId: string,
+	database: string,
+): Promise<string[]> => {
+	try {
+		const { data } = await props.apiClient.getProjectBranchDataApi(
+			props.projectId,
+			branchId,
+			database,
+		);
+		const schemas = data.settings?.db_schemas;
+		return schemas && schemas.length > 0 ? schemas : FALLBACK_SCHEMAS;
+	} catch (error) {
+		if (isNeonApiError(error) && error.status === 404) {
+			return FALLBACK_SCHEMAS;
+		}
+		throw error;
 	}
-	const { connectionUri } = await resolveConnectionUri({
-		...props,
-		databaseName: props.database,
-	});
-	return connectionUri;
 };
 
 export const genTypes = async (props: GenTypesProps): Promise<void> => {
@@ -53,9 +70,23 @@ export const genTypes = async (props: GenTypesProps): Promise<void> => {
 		? parseDuration(props.queryTimeout)
 		: undefined;
 
+	let connectionString = genTypesDbUrl(props);
+	let schemas = props.schema?.length ? props.schema : undefined;
+	if (connectionString === undefined) {
+		const branchId = await branchIdFromProps(props);
+		const { connectionUri, database } = await resolveConnectionUri({
+			...props,
+			branch: branchId,
+			databaseName: props.database,
+		});
+		connectionString = connectionUri;
+		schemas ??= await dataApiSchemas(props, branchId, database);
+	}
+	schemas ??= FALLBACK_SCHEMAS;
+
 	const types = await generateTypes({
-		connectionString: await resolveConnectionString(props),
-		schemas: props.schema,
+		connectionString,
+		schemas,
 		detectOneToOneRelationships: !props.postgrestV9Compat,
 		queryTimeout,
 	});
@@ -72,6 +103,6 @@ export const genTypes = async (props: GenTypesProps): Promise<void> => {
 	mkdirSync(path.dirname(props.outFile), { recursive: true });
 	writeFileSync(props.outFile, types);
 	log.info(
-		`Generated types for schemas ${props.schema.join(", ")} at ${props.outFile}`,
+		`Generated types for schemas ${schemas.join(", ")} at ${props.outFile}`,
 	);
 };

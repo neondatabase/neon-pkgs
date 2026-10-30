@@ -40,8 +40,6 @@ describe("buildPoolConfig", () => {
 		"require",
 		"verify-ca",
 		"verify-full",
-		"prefer",
-		"allow",
 	])("sslmode=%s verifies the server certificate", (sslmode) => {
 		const { ssl } = buildPoolConfig(`${BASE}?sslmode=${sslmode}`);
 		expect(ssl).toMatchObject({ rejectUnauthorized: true });
@@ -58,9 +56,53 @@ describe("buildPoolConfig", () => {
 		expect(buildPoolConfig(`${BASE}?sslmode=disable`).ssl).toBe(false);
 	});
 
-	test("rejects an unknown sslmode instead of guessing", () => {
+	test("sslmode=allow uses plaintext", () => {
+		const config = buildPoolConfig(`${BASE}?sslmode=allow`);
+		expect(config.ssl).toBe(false);
+		expect(config.plaintextFallback).toBeUndefined();
+	});
+
+	test("sslmode=prefer encrypts without verifying and allows a plaintext retry", () => {
+		const config = buildPoolConfig(`${BASE}?sslmode=prefer`);
+		expect(config.ssl).toEqual({ rejectUnauthorized: false });
+		expect(config.plaintextFallback).toBe(true);
+	});
+
+	test("rejects an unknown sslmode and lists the valid ones", () => {
 		expect(() => buildPoolConfig(`${BASE}?sslmode=bogus`)).toThrow(
-			/Unsupported sslmode "bogus"/,
+			/Unsupported sslmode "bogus".*disable, allow, prefer, require, verify-ca, verify-full or no-verify/,
+		);
+	});
+
+	test.each([
+		"sslcert",
+		"sslkey",
+		"sslca",
+	])("rejects %s instead of dropping it", (param) => {
+		expect(() =>
+			buildPoolConfig(`${BASE}?sslmode=require&${param}=/tmp/x.pem`),
+		).toThrow(/sslcert\/sslkey\/sslca are not supported/);
+	});
+
+	test.each(["true", "1"])("ssl=%s means sslmode=require", (value) => {
+		expect(buildPoolConfig(`${BASE}?ssl=${value}`).ssl).toEqual(
+			buildPoolConfig(`${BASE}?sslmode=require`).ssl,
+		);
+	});
+
+	test.each(["false", "0"])("ssl=%s means sslmode=disable", (value) => {
+		expect(buildPoolConfig(`${BASE}?ssl=${value}`).ssl).toBe(false);
+	});
+
+	test("an explicit sslmode wins over ssl", () => {
+		expect(buildPoolConfig(`${BASE}?ssl=true&sslmode=disable`).ssl).toBe(
+			false,
+		);
+	});
+
+	test("rejects an unknown ssl value", () => {
+		expect(() => buildPoolConfig(`${BASE}?ssl=maybe`)).toThrow(
+			/Unsupported ssl "maybe"/,
 		);
 	});
 

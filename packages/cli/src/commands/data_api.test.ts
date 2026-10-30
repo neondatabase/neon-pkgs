@@ -239,7 +239,7 @@ describe("data-api", () => {
 			snapshot: false,
 			env: { CI: "true" },
 			stderr: expect.stringMatching(
-				/ERROR: connect ECONNREFUSED 127\.0\.0\.1:1/,
+				/ERROR: Introspecting 127\.0\.0\.1\/\w+ failed: connect ECONNREFUSED 127\.0\.0\.1:1/,
 			),
 		});
 	});
@@ -259,7 +259,7 @@ describe("data-api", () => {
 				snapshot: false,
 				env: { CI: "true" },
 				stderr: expect.stringMatching(
-					/ERROR: connect ECONNREFUSED 127\.0\.0\.1:1/,
+					/ERROR: Introspecting 127\.0\.0\.1\/\w+ failed: connect ECONNREFUSED 127\.0\.0\.1:1/,
 				),
 			},
 		);

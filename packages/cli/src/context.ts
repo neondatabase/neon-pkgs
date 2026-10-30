@@ -198,18 +198,53 @@ export const isInspectDbUrl = (args: {
 	typeof args.dbUrl === "string" &&
 	args.dbUrl.length > 0;
 
+const NEON_TARGET_FLAGS = new Set([
+	"--project-id",
+	"--projectId",
+	"--branch",
+	"--database",
+	"--database-name",
+	"--databaseName",
+	"--role-name",
+	"--roleName",
+]);
+
 /**
- * `data-api gen-types --db-url` introspects that Postgres directly and never calls the Neon API.
- * Like {@link isInspectDbUrl}, an empty `--db-url` still resolves the branch through the API.
+ * Raw argv is scanned because these flags are filled from `.neon` by
+ * `enrichFromContext` before the handler runs, so parsed values cannot tell a typed
+ * flag from a linked one.
  */
+const argvNamesNeonTarget = (argv: readonly string[]): boolean =>
+	argv.some((arg) => NEON_TARGET_FLAGS.has(arg.split("=", 1)[0] ?? ""));
+
+/**
+ * The Postgres URI `data-api gen-types` introspects directly, never calling the Neon API.
+ * Precedence: a nonempty `--db-url`, then (only when no `--project-id`, `--branch`,
+ * `--database` or `--role-name` was typed) `DATABASE_URL`. Otherwise undefined and the
+ * branch is resolved through the API. `neon dev` and hooks inject `DATABASE_URL` into
+ * child processes, so explicit Neon flags must win over it.
+ */
+export const genTypesDbUrl = (
+	args: { dbUrl?: string },
+	argv: readonly string[] = process.argv,
+): string | undefined => {
+	const flag = args.dbUrl?.trim();
+	if (flag) {
+		return flag;
+	}
+	if (argvNamesNeonTarget(argv)) {
+		return undefined;
+	}
+	return process.env.DATABASE_URL?.trim() || undefined;
+};
+
 export const isGenTypesDbUrl = (args: {
 	_: (string | number)[];
 	dbUrl?: string;
 }): boolean =>
 	args._[0] === "data-api" &&
 	args._[1] === "gen-types" &&
-	typeof args.dbUrl === "string" &&
-	args.dbUrl.length > 0;
+	genTypesDbUrl(args) !== undefined;
 
 /** Raw argv is required because auth middleware runs before MCP flags are parsed. */
 export const isMcpOauth = (args: { _: (string | number)[] }): boolean =>

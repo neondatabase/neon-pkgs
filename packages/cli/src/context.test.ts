@@ -7,13 +7,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
 	applyContext,
 	currentContextFile,
 	enrichFromContext,
 	ensureGitignored,
+	genTypesDbUrl,
 	gitBranchMap,
 	gitBranchMapping,
 	isAskCommand,
@@ -207,6 +208,55 @@ describe("isInspectDbUrl", () => {
 });
 
 describe("isGenTypesDbUrl", () => {
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	test("a blank --db-url does not skip auth", () => {
+		vi.stubEnv("DATABASE_URL", "");
+		expect(
+			isGenTypesDbUrl({ _: ["data-api", "gen-types"], dbUrl: " " }),
+		).toBe(false);
+	});
+
+	test("a nonempty DATABASE_URL skips auth when --db-url is absent", () => {
+		vi.stubEnv("DATABASE_URL", "postgresql://localhost/postgres");
+		expect(isGenTypesDbUrl({ _: ["data-api", "gen-types"] })).toBe(true);
+		expect(isGenTypesDbUrl({ _: ["data-api", "get"] })).toBe(false);
+	});
+
+	test.each([
+		["--branch", "preview"],
+		["--branch=preview"],
+		["--project-id", "p"],
+		["--database", "d"],
+		["--database-name", "d"],
+		["--role-name", "r"],
+	])("explicit Neon flag %s beats DATABASE_URL, so auth is required", (...flag) => {
+		vi.stubEnv("DATABASE_URL", "postgresql://localhost/postgres");
+		const argv = ["node", "neon", "data-api", "gen-types", ...flag];
+		expect(genTypesDbUrl({}, argv)).toBeUndefined();
+		const original = process.argv;
+		process.argv = argv;
+		try {
+			expect(isGenTypesDbUrl({ _: ["data-api", "gen-types"] })).toBe(
+				false,
+			);
+		} finally {
+			process.argv = original;
+		}
+	});
+
+	test("--db-url beats both DATABASE_URL and explicit Neon flags", () => {
+		vi.stubEnv("DATABASE_URL", "postgresql://env/postgres");
+		expect(
+			genTypesDbUrl({ dbUrl: " postgresql://flag/db " }, [
+				"--branch",
+				"preview",
+			]),
+		).toBe("postgresql://flag/db");
+	});
+
 	test("is true for data-api gen-types with a nonempty --db-url", () => {
 		expect(
 			isGenTypesDbUrl({
@@ -217,6 +267,7 @@ describe("isGenTypesDbUrl", () => {
 	});
 
 	test("is false without a nonempty --db-url or on another command", () => {
+		vi.stubEnv("DATABASE_URL", "");
 		expect(isGenTypesDbUrl({ _: ["data-api", "gen-types"] })).toBe(false);
 		expect(
 			isGenTypesDbUrl({ _: ["data-api", "gen-types"], dbUrl: "" }),

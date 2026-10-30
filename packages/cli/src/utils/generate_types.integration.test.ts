@@ -42,7 +42,23 @@ describe.skipIf(!RUN)("generateTypes — integration", () => {
 			create table authors (id serial primary key, name text not null);
 			create table books (id serial primary key, author_id int references authors (id));
 			create schema extra;
-			create table extra.notes (body text);`);
+			create table extra.notes (body text);
+			create schema shape;
+			create type shape.mood as enum ('sad', 'ok', 'happy');
+			create type shape.address as (street text, zip int);
+			create table shape.people (
+				id serial primary key,
+				mood shape.mood not null,
+				home shape.address
+			);
+			create table shape.pets (
+				id serial primary key,
+				owner_id int not null references shape.people (id),
+				name text
+			);
+			create view shape.pet_names as select id, name from shape.pets;
+			create function shape.pet_count(owner int) returns int
+				language sql stable as 'select count(*)::int from shape.pets where owner_id = owner';`);
 
 		// Self-signed server certificate that no default trust store knows.
 		certDir = mkdtempSync(path.join(tmpdir(), "gen-types-tls-"));
@@ -108,6 +124,17 @@ describe.skipIf(!RUN)("generateTypes — integration", () => {
 		).toContain("notes: {");
 	});
 
+	it("generates the Database shape for relationships, views, enums, composites and functions", async () => {
+		const types = await generateTypes({
+			...options(),
+			schemas: ["shape"],
+		});
+
+		expect(types).toMatchFileSnapshot(
+			"__snapshots__/generate_types.shape.ts.snap",
+		);
+	});
+
 	it("omits isOneToOne when one-to-one detection is off", async () => {
 		expect(await generateTypes(options())).toContain("isOneToOne");
 		expect(
@@ -125,8 +152,33 @@ describe.skipIf(!RUN)("generateTypes — integration", () => {
 				connectionString:
 					"postgresql://u:p@127.0.0.1:1/db?sslmode=disable",
 			}),
-		).rejects.toThrow(/ECONNREFUSED/);
+		).rejects.toThrow(
+			/Introspecting 127\.0\.0\.1\/db failed: .*ECONNREFUSED/s,
+		);
 	});
+
+	it("does not leak the password into the error", async () => {
+		await expect(
+			generateTypes({
+				...options(),
+				connectionString:
+					"postgresql://u:s3cret@127.0.0.1:1/db?sslmode=disable",
+			}),
+		).rejects.not.toThrow(/s3cret/);
+	});
+
+	it("gives up on an unreachable host instead of hanging", async () => {
+		const started = Date.now();
+		await expect(
+			generateTypes({
+				...options(),
+				connectionString:
+					"postgresql://u:p@10.255.255.1:5432/db?sslmode=disable",
+				queryTimeout: 1_500,
+			}),
+		).rejects.toThrow(/Introspecting/);
+		expect(Date.now() - started).toBeLessThan(10_000);
+	}, 20_000);
 
 	describe("TLS", () => {
 		const tls = (query: string) => ({
@@ -142,6 +194,32 @@ describe.skipIf(!RUN)("generateTypes — integration", () => {
 			await expect(
 				generateTypes(tls(`sslmode=${sslmode}`)),
 			).rejects.toThrow(/self[- ]signed|certificate/i);
+		});
+
+		it("sslmode=prefer encrypts without verifying the certificate", async () => {
+			expect(await generateTypes(tls("sslmode=prefer"))).toContain(
+				"authors: {",
+			);
+		});
+
+		it("sslmode=prefer falls back to plaintext when the server has no TLS", async () => {
+			const plain = url.replace("sslmode=disable", "sslmode=prefer");
+			expect(
+				await generateTypes({ ...options(), connectionString: plain }),
+			).toContain("authors: {");
+		});
+
+		it("sslmode=allow connects without TLS", async () => {
+			const plain = url.replace("sslmode=disable", "sslmode=allow");
+			expect(
+				await generateTypes({ ...options(), connectionString: plain }),
+			).toContain("authors: {");
+		});
+
+		it("hints at sslrootcert when the certificate is untrusted", async () => {
+			await expect(generateTypes(tls("sslmode=require"))).rejects.toThrow(
+				/Introspecting .* failed: .*sslrootcert/s,
+			);
 		});
 
 		it("sslmode=no-verify accepts the untrusted certificate", async () => {
