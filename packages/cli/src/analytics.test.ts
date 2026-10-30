@@ -151,12 +151,14 @@ describe("getErrorAnalyticsEventProperties", () => {
 				version: "2.33.2",
 				ci: true,
 				agent: "codex",
+				tty: { stdin: false, stdout: false },
 			},
 		);
 
 		expect(properties).toMatchObject({
 			agent: "codex",
 			ci: true,
+			tty: { stdin: false, stdout: false },
 			errCode: "API_ERROR",
 			message: "branch already exists",
 			version: "2.33.2",
@@ -266,6 +268,17 @@ describe("getAnalyticsEventProperties", () => {
 		vi.stubEnv("OPENCODE", undefined);
 		vi.stubEnv("GEMINI_CLI", undefined);
 		vi.stubEnv("COPILOT_CLI", undefined);
+		for (const name of [
+			"KILO",
+			"QWEN_CODE",
+			"ANTIGRAVITY_AGENT",
+			"AMP_CURRENT_THREAD_ID",
+			"CLINE_ACTIVE",
+			"OPENCLAW_SHELL",
+			"AI_AGENT",
+		]) {
+			vi.stubEnv(name, undefined);
+		}
 		vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", "1");
 
 		expect(
