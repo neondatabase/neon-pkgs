@@ -9,26 +9,25 @@ A Next.js integration for **Neon Auth** (`@neon/auth`). This guide demonstrates 
 - 🔐 **Email OTP Authentication** - Passwordless login with email verification
 - 🔗 **Social Login** - Google OAuth integration
 - 👥 **Organizations** - Multi-tenant organization support
-- 🎨 **Pre-built UI Components** - Beautiful, customizable auth views
+- 🎨 **Pre-built UI Components** - Customizable auth views from Better Auth UI, copied into your app with shadcn
 - ⚡ **React Server Components** - Access session data in RSC
 - 🌙 **Dark Mode Support** - Built-in theme support
 
 ## Setup Guide
 
-### 1. Install the Package
+### 1. Install the Packages
 
 ```bash
-npm install @neon/auth @neondatabase/auth-ui
-# or
-pnpm add @neon/auth @neondatabase/auth-ui
-# or
-yarn add @neon/auth @neondatabase/auth-ui
+npm i @neon/auth @better-auth-ui/core @better-auth-ui/react @tanstack/react-query
+npx shadcn@latest init
+npx shadcn@latest add @better-auth-ui/auth @better-auth-ui/settings @better-auth-ui/user-button
+# add @better-auth-ui/email-otp as well if you use Email OTP
+npm i better-auth@~1.7.12
 ```
 
-> **Note:** `@neondatabase/auth-ui` still depends on the legacy `@neondatabase/auth`
-> release (an exact peer dependency, imported at runtime). Installing it alongside
-> `@neon/auth` also installs `@neondatabase/auth`, and the UI provider's types resolve
-> against that legacy package until `@neondatabase/auth-ui` is updated to accept `@neon/auth`.
+[Better Auth UI](https://better-auth-ui.com) 1.7 copies its components into your app with the shadcn CLI; `@better-auth-ui/react` is the data layer behind them. Run the last command after your final `shadcn add`: the registry items list a bare `better-auth`, which installs the npm `latest` tag (which can be a pre-release) as a second copy next to the version `@neon/auth` uses.
+
+Don't add `overrides`, `resolutions`, or exact pins for `better-auth`, and don't call `betterAuth()` yourself: Neon hosts the auth server.
 
 ### 2. Set Environment Variables
 
@@ -80,7 +79,7 @@ Create a route file inside `/api/auth/[...path]` directory with following conten
 // app/api/auth/[...path]/route.ts
 import { auth } from '@/lib/auth/server';
 
-export const { GET, POST } = auth.handler();
+export const { GET, POST, PUT, DELETE, PATCH } = auth.handler();
 ```
 
 **Proxy:**
@@ -91,7 +90,10 @@ Create a `proxy.ts` file in your project root to protect routes and handle sessi
 // proxy.ts
 import { auth } from '@/lib/auth/server';
 
-export default auth.middleware({ loginUrl: '/auth/sign-in' });
+export default auth.middleware({
+  loginUrl: '/auth/sign-in',
+  publicRoutes: ['/'],
+});
 
 export const config = {
   matcher: [
@@ -101,14 +103,9 @@ export const config = {
 }
 ```
 
-The middleware lets signed-out users reach the auth API (`/api/auth`) and the auth pages (`/auth/sign-in`, `/auth/reset-password`, `/auth/verify-email`, and the other views of `@neondatabase/auth-ui` and `@better-auth-ui/react`). Everything else requires a session. To make more routes public, pass `publicRoutes`; each entry matches the exact path and its slash-delimited subpaths (`/pricing` matches `/pricing/team` but not `/pricing-internal`), `'/'` matches only the home page, and trailing slashes are trimmed. Entries are added to the defaults, and invalid entries (`''`, `'//'`, or no leading `/`) throw when the middleware is created:
+The middleware lets signed-out users reach the auth API (`/api/auth`) and every signed-out Better Auth UI 1.7 view (`/auth/sign-in`, `/auth/reset-password`, `/auth/verify-email`, and the rest). `/auth` itself and `/settings/*` stay protected. Everything else requires a session, so you don't need a custom `proxy.ts` wrapper for the auth views.
 
-```typescript
-export default auth.middleware({
-  loginUrl: '/auth/sign-in',
-  publicRoutes: ['/', '/pricing'],
-});
-```
+`publicRoutes` adds your own public pages to those defaults. Each entry matches the exact path and its slash-delimited subpaths (`/pricing` matches `/pricing` and `/pricing/team`, but not `/pricing-internal`). `'/'` matches only the home page, not the whole site. Trailing slashes are trimmed (`/pricing/` is the same as `/pricing`). Entries must start with `/`; invalid entries (`''`, `'//'`, or no leading `/`) throw when the middleware is created.
 
 **Server Components:**
 ```typescript
@@ -154,50 +151,68 @@ import { createAuthClient } from "@neon/auth/next"
 export const authClient = createAuthClient()
 ```
 
-### 5. Set Up the Neon Auth UI Provider
+### 5. Set Up the Auth Provider
 
-Create a providers component and wrap your application with `NeonAuthUIProvider`:
+Create a providers component with a TanStack Query `QueryClientProvider` and the `AuthProvider` that `shadcn add` copied to `components/auth/auth-provider`. Pass the client from step 4 as `authClient`; it needs no adapter or type cast.
 
-```typescript
+```tsx
 // app/providers.tsx
 "use client"
 
-import { NeonAuthUIProvider } from "@neondatabase/auth-ui"
+import { getSafeRedirectTo } from "@better-auth-ui/core"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 
+import { AuthProvider } from "@/components/auth/auth-provider"
+import { Toaster } from "@/components/ui/sonner"
 import { authClient } from "@/lib/auth/client"
 
 export function Providers({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const [queryClient] = useState(() => new QueryClient())
 
   return (
-    <NeonAuthUIProvider
-      authClient={authClient}
-      navigate={router.push}
-      replace={router.replace}
-      onSessionChange={() => {
-        // Clear router cache (protected routes)
-        router.refresh()
-      }}
-      emailOTP
-      social={{
-        providers: ["google"],
-      }}
-      redirectTo="/dashboard"
-      Link={Link}
-      organization={{}}
-    >
-      {children}
-    </NeonAuthUIProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider
+        authClient={authClient}
+        navigate={({ to, replace }) => {
+          const path = getSafeRedirectTo(to, window.location.origin)
+          const target = path.startsWith("//") ? "/" : path
+          if (replace) router.replace(target)
+          else router.push(target)
+        }}
+        Link={Link}
+        redirectTo="/dashboard"
+      >
+        {children}
+        <Toaster />
+      </AuthProvider>
+    </QueryClientProvider>
   )
 }
 ```
 
+Render `<Toaster />` once: the components report errors as toasts. Set `emailAndPassword={{ requireEmailVerification: true }}` if your branch has **Verify email at signup** on, and pass Better Auth UI plugins through `plugins` (for example `plugins={[emailOtpPlugin()]}` with `emailOtpPlugin` from the `lib/auth/email-otp-plugin` file that `@better-auth-ui/email-otp` copies). A UI plugin doesn't enable the matching Neon Auth plugin; configure that on the branch first.
+
+#### Validate redirect targets
+
+After sign-in, the components call `navigate` with the `?redirectTo=` value from the URL. Check it before you navigate, as in the example above, so a link like `/auth/sign-in?redirectTo=https://example.com` can't send a signed-in user to another site. `getSafeRedirectTo` returns `/` for other origins, but `@better-auth-ui/core` 1.7.30 can still return a protocol-relative path such as `//example.com` for some crafted inputs, so also reject a result that starts with `//`.
+
+The `/auth/redirect` view navigates without `navigate`. Apply the same check to the copied `components/auth/auth-redirect.tsx`:
+
+```tsx
+// components/auth/auth-redirect.tsx
+window.location.replace(action.to) // before
+window.location.replace(action.to.startsWith("//") ? "/" : action.to) // after
+```
+
+Both checks can go once Better Auth UI fixes this in `getSafeRedirectTo`.
+
 Then wrap your layout:
 
-```typescript
+```tsx
 // app/layout.tsx
 import { Providers } from "./providers"
 import "./globals.css"
@@ -217,49 +232,24 @@ export default function RootLayout({
 }
 ```
 
-### 6. Import CSS Styles
+### 6. Styling
 
-Choose the import method based on your project setup:
+The copied components are compiled by your app's Tailwind build and use the shadcn/ui theme variables that `shadcn init` added to your global CSS. There are no CSS files to import; edit the theme variables or the files in `components/auth/` to restyle them.
 
-#### Option A: Without Tailwind CSS (recommended for most users)
-
-If your project doesn't use Tailwind CSS, import the pre-built CSS bundle:
-
-```typescript
-// In your root layout or app entry point
-import "@neondatabase/auth-ui/css"
-```
-
-This includes all necessary styles with no additional configuration required.
-
-#### Option B: With Tailwind CSS
-
-If your project already uses Tailwind CSS v4, import the Tailwind-ready CSS to avoid duplicate styles:
-
-```css
-/* In your main CSS file (e.g., globals.css) */
-@import "tailwindcss";
-@import "@neondatabase/auth-ui/tailwind";
-```
-
-This imports only the theme variables and component scanning directive. Your Tailwind build will generate the necessary utility classes, avoiding duplication with your existing Tailwind setup.
-
-### 7. Create Auth Pages
+### 7. Create Auth and Settings Pages
 
 #### Auth Page (Sign In, Sign Up, etc.)
 
-Create a dynamic route file at `app/auth/[path]/page.tsx` to handle all authentication views:
+Create a dynamic route file at `app/auth/[path]/page.tsx` to handle all authentication views. The valid paths come from `viewPaths.auth` in `@better-auth-ui/core`:
 
-```typescript
+```tsx
 // app/auth/[path]/page.tsx
-import { AuthView } from "@neondatabase/auth-ui"
-import { authViewPaths } from "@neondatabase/auth-ui/server"
+import { viewPaths } from "@better-auth-ui/core"
+import { notFound } from "next/navigation"
 
-export const dynamicParams = false
+import { Auth } from "@/components/auth/auth"
 
-export function generateStaticParams() {
-  return Object.values(authViewPaths).map((path) => ({ path }))
-}
+const validAuthPaths = new Set<string>(Object.values(viewPaths.auth))
 
 export default async function AuthPage({
   params,
@@ -267,80 +257,59 @@ export default async function AuthPage({
   params: Promise<{ path: string }>
 }) {
   const { path } = await params
+  if (!validAuthPaths.has(path)) notFound()
 
   return (
     <main className="container flex grow flex-col items-center justify-center p-4">
-      <AuthView path={path} />
+      <Auth path={path} />
     </main>
   )
 }
 ```
 
-This automatically handles the following authentication routes:
+This serves every auth view, including `/auth/sign-in`, `/auth/sign-up`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/verify-email`, `/auth/magic-link`, `/auth/two-factor`, `/auth/callback`, `/auth/sign-out`, and `/auth/accept-invitation`. See `viewPaths.auth` for the full list. If you use Email OTP, also allow `Object.values(emailOtpPlugin().viewPaths.auth ?? {})` with `emailOtpPlugin` from `@better-auth-ui/core/plugins/email-otp`.
 
-- `/auth/sign-in` - Sign in page
-- `/auth/sign-up` - Sign up page
-- `/auth/magic-link` - Magic link authentication
-- `/auth/forgot-password` - Password reset request
-- `/auth/two-factor` - Two-factor authentication
-- `/auth/recover-account` - Account recovery
-- `/auth/reset-password` - Password reset
-- `/auth/sign-out` - Sign out
-- `/auth/callback` - OAuth callback
-- `/auth/accept-invitation` - Accept team invitation
+#### Settings Page
 
-#### Account Page
+The user menu's **Settings** link opens `/settings/account`. Create `app/settings/[path]/page.tsx` for it:
 
-```typescript
-// app/account/[path]/page.tsx
-import { AccountView } from "@neondatabase/auth-ui"
-import { accountViewPaths } from "@neondatabase/auth-ui/server"
+```tsx
+// app/settings/[path]/page.tsx
+import { viewPaths } from "@better-auth-ui/core"
+import { notFound } from "next/navigation"
 
-export const dynamicParams = false
+import { Settings } from "@/components/auth/settings/settings"
 
-export function generateStaticParams() {
-  return Object.values(accountViewPaths).map((path) => ({ path }))
-}
+const validSettingsPaths = new Set<string>(Object.values(viewPaths.settings))
 
-export default async function AccountPage({
+export default async function SettingsPage({
   params,
 }: {
   params: Promise<{ path: string }>
 }) {
   const { path } = await params
+  if (!validSettingsPaths.has(path)) notFound()
 
   return (
     <main className="container p-4">
-      <AccountView path={path} />
+      <Settings path={path} />
     </main>
   )
 }
 ```
 
-#### Organization Page
+#### User Button
 
-```typescript
-// app/organization/[path]/page.tsx
-import { OrganizationView } from "@neondatabase/auth-ui"
-import { organizationViewPaths } from "@neondatabase/auth-ui/server"
+Add the user menu to a header with the copied `UserButton`. Pass `hideSettings` if you skip the settings page:
 
-export const dynamicParams = false
+```tsx
+import { UserButton } from "@/components/auth/user/user-button"
 
-export function generateStaticParams() {
-  return Object.values(organizationViewPaths).map((path) => ({ path }))
-}
-
-export default async function OrganizationPage({
-  params,
-}: {
-  params: Promise<{ path: string }>
-}) {
-  const { path } = await params
-
+export function Header() {
   return (
-    <main className="container p-4">
-      <OrganizationView path={path} />
-    </main>
+    <header>
+      <UserButton size="icon" />
+    </header>
   )
 }
 ```
@@ -594,6 +563,10 @@ The browser client's `oauth2.*` mirrors the full plugin. Neon mounts these endpo
 
 `createNeonAuth()` and `createAuthServer()` expose only the first two groups. A server-side consent example is not documented, because `oauth_query` has to be the signed query the provider redirected with and is only built automatically in the browser.
 
+## Handling Errors
+
+A failed `authClient` request throws an `AuthHttpError` (a public type export of `@neon/auth/next`). `.code` and `.status` are Supabase-style. `.error` is the raw Better Auth body, `{ code, message, status }`, where `status` is the raw HTTP status. Better Auth UI reads that body to show specific messages, such as invalid credentials.
+
 ## Project Structure
 
 ```
@@ -605,17 +578,18 @@ app/
 ├── auth/
 │   └── [path]/
 │       └── page.tsx          # Auth views (sign-in, sign-up, etc.)
-├── account/
+├── settings/
 │   └── [path]/
-│       └── page.tsx          # Account management views
-├── organization/
-│   └── [path]/
-│       └── page.tsx          # Organization views
+│       └── page.tsx          # Account and security settings views
 ├── dashboard/
 │   └── page.tsx              # Protected dashboard page
-├── providers.tsx             # NeonAuthUIProvider setup
+├── providers.tsx             # QueryClientProvider and AuthProvider setup
 ├── layout.tsx                # Root layout with providers
-└── globals.css               # Global styles with Neon Auth CSS
+└── globals.css               # Global styles with the shadcn theme
+
+components/
+├── auth/                     # Components copied by `shadcn add @better-auth-ui/*`
+└── ui/                       # shadcn/ui primitives
 
 lib/
 └── auth
@@ -628,6 +602,7 @@ proxy.ts                       # Next.js middleware for session validation and r
 ## Learn More
 
 - [Neon Auth Documentation](https://neon.com/docs/guides/neon-auth)
-- [better-auth-ui Documentation](https://better-auth-ui.com/integrations/next-js)
+- [Better Auth UI Documentation](https://better-auth-ui.com/docs)
+- [UI Components Reference](https://neon.com/docs/auth/reference/ui-components)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Better Auth Session Management](https://www.better-auth.com/docs/concepts/session-management)

@@ -4,7 +4,7 @@ import type { SessionData } from "../types";
  * Default list of route prefixes that {@link processAuthMiddleware} skips when
  * deciding whether to enforce authentication. Includes the auth API mount
  * (`/api/auth`) and the auth pages a signed-out user has to reach: the
- * `@neondatabase/auth-ui` pages and the `@better-auth-ui/react` 1.7 auth views
+ * `@better-auth-ui/react` 1.7 auth views
  * (core `viewPaths.auth` plus the magic-link, email-OTP, two-factor,
  * phone-number and organization invitation plugin views) under their default
  * `/auth` base path.

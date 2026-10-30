@@ -5,7 +5,7 @@ import {
 } from "./route-protection";
 
 describe("DEFAULT_AUTH_SKIP_ROUTES", () => {
-	test("keeps the entries used by @neondatabase/auth-ui", () => {
+	test("keeps the core Better Auth UI auth views", () => {
 		expect([...DEFAULT_AUTH_SKIP_ROUTES]).toEqual(
 			expect.arrayContaining([
 				"/api/auth",
