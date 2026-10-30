@@ -358,6 +358,9 @@ export type ConfigInitProps = {
 	 */
 	profile?: string;
 	configDir?: string;
+	/** The OAuth issuer and client a stored session refreshes against, as the global options set them. */
+	oauthHost?: string;
+	clientId?: string;
 	/**
 	 * Branch scoping for `--from-branch`, supplied by the `config` command's `--project-id` /
 	 * `--branch` options, the `.neon` context middleware, and the global auth middleware. All
@@ -483,6 +486,12 @@ const resolveInitDataApiChoice = async (
 					apiHost: props.apiHost ?? DEFAULT_API_HOST,
 					...(props.profile !== undefined
 						? { profile: props.profile }
+						: {}),
+					...(props.oauthHost !== undefined
+						? { oauthHost: props.oauthHost }
+						: {}),
+					...(props.clientId !== undefined
+						? { clientId: props.clientId }
 						: {}),
 				});
 		if (access === null) {

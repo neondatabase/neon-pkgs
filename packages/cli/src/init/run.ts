@@ -469,6 +469,8 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 		| "branch"
 		| "configDir"
 		| "profile"
+		| "oauthHost"
+		| "clientId"
 	> = {};
 	if (input.project) {
 		try {
@@ -483,6 +485,12 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 					: {}),
 				...(input.project.auth.profile !== undefined
 					? { profile: input.project.auth.profile }
+					: {}),
+				...(input.project.auth.oauthHost !== undefined
+					? { oauthHost: input.project.auth.oauthHost }
+					: {}),
+				...(input.project.auth.clientId !== undefined
+					? { clientId: input.project.auth.clientId }
 					: {}),
 			};
 		} catch (error) {
