@@ -5,12 +5,13 @@ import type {
 } from "@neon/sdk";
 import type yargs from "yargs";
 import { isNeonApiError, retryOnLock } from "../api.js";
+import { isGenTypesDbUrl } from "../context.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	branchIdFromProps,
-	fillSingleProject,
+	fillSingleProjectUnlessDbUrl,
 	resolveSingleDatabase,
 } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
@@ -91,11 +92,15 @@ export const builder = (argv: yargs.Argv) =>
 				type: "string",
 			},
 			database: {
+				// The shared connection resolver tells users to pass --database-name.
+				alias: "database-name",
 				describe: "Database name",
 				type: "string",
 			},
 		})
-		.middleware(fillSingleProject as any)
+		.middleware((args: any) =>
+			isGenTypesDbUrl(args) ? args : fillSingleProjectUnlessDbUrl(args),
+		)
 		.command(
 			"create",
 			"Provision the Neon Data API for a database",
@@ -166,6 +171,56 @@ export const builder = (argv: yargs.Argv) =>
 			"Tear down the Neon Data API for a database",
 			(yargs) => yargs,
 			(args) => deleteDataApi(args as any),
+		)
+		.command(
+			"gen-types",
+			"Generate TypeScript types from the database schema",
+			(yargs) =>
+				yargs
+					.options({
+						"db-url": {
+							type: "string",
+							describe:
+								"Postgres connection string. Skips the Neon API. Without it, DATABASE_URL is used unless --project-id, --branch, --database or --role-name is passed; otherwise the connection is resolved for those flags and the linked project",
+						},
+						"role-name": {
+							type: "string",
+							describe:
+								"Role to connect as. Ignored with --db-url",
+						},
+						"out-file": {
+							type: "string",
+							default: "database.types.ts",
+							describe:
+								"File to write the types to, or - for stdout",
+						},
+						schema: {
+							alias: "s",
+							type: "array",
+							string: true,
+							describe:
+								"Schema to include (repeatable). Defaults to the schemas the Data API exposes for the branch, or public with a connection string or when the Data API is not enabled",
+						},
+						"postgrest-v9-compat": {
+							type: "boolean",
+							default: false,
+							describe:
+								"Disable one-to-one relationship detection",
+						},
+						"query-timeout": {
+							type: "string",
+							describe:
+								"Query timeout: 30s, 1m, or a bare number of seconds (default 30s)",
+						},
+					})
+					.example(
+						"$0 data-api gen-types --db-url postgresql://user:pass@host/db",
+						"Generate types from any Postgres",
+					),
+			async (args) => {
+				const { genTypes } = await import("./data_api_gen_types.js");
+				await genTypes(args as any);
+			},
 		);
 
 export const handler = (args: yargs.Argv) => {

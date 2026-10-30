@@ -1,6 +1,6 @@
 import type yargs from "yargs";
-import type { BranchScopeProps, CommonProps } from "../types.js";
-import { fillSingleProject } from "../utils/enrichers.js";
+import type { BranchScopeProps } from "../types.js";
+import { fillSingleProjectUnlessDbUrl } from "../utils/enrichers.js";
 import {
 	formatInspectQueryError,
 	resolveInspectTargets,
@@ -22,19 +22,6 @@ type InspectProps = BranchScopeProps & {
 	roleName?: string;
 	databaseName?: string;
 	dbUrl?: string;
-};
-
-/**
- * `fillSingleProject` hits the API to auto-resolve a project. When the user
- * passes `--db-url` we bypass the Neon API entirely, so skip it.
- */
-const fillSingleProjectUnlessDbUrl = async (
-	props: CommonProps & { projectId?: string; orgId?: string; dbUrl?: string },
-) => {
-	if (props.dbUrl) {
-		return props;
-	}
-	return fillSingleProject(props);
 };
 
 const runSubcommand = async (name: InspectSubcommand, props: InspectProps) => {
