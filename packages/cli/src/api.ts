@@ -45,7 +45,7 @@ export type ApiCallProps = {
 	requestTimeoutMs?: number;
 };
 
-const DEFAULT_API_HOST = "https://console.neon.tech/api/v2";
+export const DEFAULT_API_HOST = "https://console.neon.tech/api/v2";
 const REQUEST_TIMEOUT_MS = 60_000;
 const USER_AGENT = `neonctl v${pkg.version}`;
 

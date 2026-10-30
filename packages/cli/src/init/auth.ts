@@ -1,7 +1,7 @@
-import { isNeonApiError } from "../api.js";
+import { DEFAULT_API_HOST, isNeonApiError } from "../api.js";
 import { defaultClientID } from "../auth.js";
 import { recoverFrom401 } from "../auth_recovery.js";
-import { ensureAuth } from "../commands/auth.js";
+import { ensureAuth, existingApiClient } from "../commands/auth.js";
 import { type EnvPullProps, type PullOutcome, pull } from "../commands/env.js";
 import {
 	type McpInstallOutcome,
@@ -98,23 +98,32 @@ export const runAuthenticatedMcp = async (
 };
 
 /**
- * Resolves Neon auth the same way `neon config init --from-branch` would — the one `config
- * init` path that reads the API — and returns the resolved client for an in-process
- * `initCmd`. Init calls this only after a successful link, so the credentials are already on
- * disk and this never pops a login on its own.
+ * The client and key `neon config init` may read the linked branch with. Init calls this only
+ * after a link is verified, but a pin that was already in place can have no credentials on
+ * disk, so this never starts a login: with nothing usable it returns an empty result and the
+ * scaffold declares the Neon Auth default with a warning, as a failed read does.
  */
 export const resolveInitConfigApi = async (
 	options: InitAuthOptions,
-): Promise<Pick<CommonProps, "apiClient" | "apiKey" | "apiHost">> => {
-	const authenticated = authContext({ ...options, fromBranch: true }, [
-		"config",
-		"init",
-	]);
-	await ensureAuth(authenticated);
+): Promise<Partial<Pick<CommonProps, "apiClient" | "apiKey" | "apiHost">>> => {
+	const access = await existingApiClient({
+		configDir: options.configDir ?? defaultDir,
+		apiHost: options.apiHost ?? DEFAULT_API_HOST,
+		...(options.profile !== undefined ? { profile: options.profile } : {}),
+		...(options.oauthHost !== undefined
+			? { oauthHost: options.oauthHost }
+			: {}),
+		...(options.clientId !== undefined
+			? { clientId: options.clientId }
+			: {}),
+	});
+	if (access === null) {
+		return {};
+	}
 	return {
-		apiClient: authenticated.apiClient,
-		apiKey: authenticated.apiKey,
-		apiHost: authenticated.apiHost,
+		apiClient: access.apiClient,
+		apiKey: access.apiKey,
+		apiHost: options.apiHost,
 	};
 };
 

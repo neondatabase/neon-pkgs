@@ -6,6 +6,8 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -39,6 +41,7 @@ import type {
 } from "@neon/config";
 import { resolveConfig } from "@neon/config";
 import { loadConfigFromFile, type NeonApi } from "@neon/config-runtime";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { unzipSync } from "fflate";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -1657,6 +1660,96 @@ describe("config init --services data-api", () => {
 		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
 		expect(source).toContain("auth: true,");
 		expect(source).toContain("dataApi: true,");
+	});
+
+	describe("without the auth middleware (standalone `config init`)", () => {
+		let server: Server;
+		let apiHost: string;
+		const requestedPaths: string[] = [];
+
+		beforeEach(async () => {
+			requestedPaths.length = 0;
+			server = createServer((req, res) => {
+				requestedPaths.push(req.url ?? "");
+				res.writeHead(200, { "content-type": "application/json" });
+				res.end(
+					JSON.stringify({
+						branches: [
+							{ id: BRANCH_ID, name: BRANCH_NAME, default: true },
+						],
+					}),
+				);
+			});
+			await new Promise<void>((resolve) =>
+				server.listen(0, "127.0.0.1", resolve),
+			);
+			const { port } = server.address() as AddressInfo;
+			apiHost = `http://127.0.0.1:${port}/api/v2`;
+		});
+
+		afterEach(async () => {
+			recordCredentialInputs({
+				apiKeyFlag: "",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir: "",
+			});
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+		});
+
+		it("reads the linked branch with the API key it was given and declares the external Data API", async () => {
+			recordCredentialInputs({
+				apiKeyFlag: "napi_standalone",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir: "",
+			});
+
+			await initCmd({
+				cwd,
+				install: false,
+				services: ["data-api"],
+				projectId: PROJECT_ID,
+				apiHost,
+				configDir: cwd,
+				runtimeApi: new ExternalDataApiNeonApi(),
+			});
+
+			expect(
+				requestedPaths.some((path) => path.includes(PROJECT_ID)),
+			).toBe(true);
+			const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+			expect(source).toContain('authProvider: "external",');
+			expect(source).not.toContain("auth: true,");
+			expect(source).not.toContain("dataApi: true");
+		});
+
+		it("never starts a login when no credential is on hand, and keeps the Neon Auth scaffold", async () => {
+			recordCredentialInputs({
+				apiKeyFlag: "",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir: "",
+			});
+
+			await initCmd({
+				cwd,
+				install: false,
+				services: ["data-api"],
+				projectId: PROJECT_ID,
+				apiHost,
+				configDir: cwd,
+				runtimeApi: new ExternalDataApiNeonApi(),
+			});
+
+			expect(requestedPaths).toEqual([]);
+			const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+			expect(source).toContain("auth: true,");
+			expect(source).toContain("dataApi: true,");
+		});
 	});
 });
 

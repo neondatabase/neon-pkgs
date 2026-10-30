@@ -462,7 +462,13 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 	// same neon.ts it always has, and says so.
 	let project: Pick<
 		ConfigInitProps,
-		"apiClient" | "apiKey" | "apiHost" | "projectId" | "branch"
+		| "apiClient"
+		| "apiKey"
+		| "apiHost"
+		| "projectId"
+		| "branch"
+		| "configDir"
+		| "profile"
 	> = {};
 	if (input.project) {
 		try {
@@ -471,6 +477,12 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 				projectId: input.project.projectId,
 				...(input.project.branch !== undefined
 					? { branch: input.project.branch }
+					: {}),
+				...(input.project.auth.configDir !== undefined
+					? { configDir: input.project.auth.configDir }
+					: {}),
+				...(input.project.auth.profile !== undefined
+					? { profile: input.project.auth.profile }
 					: {}),
 			};
 		} catch (error) {
