@@ -1,5 +1,15 @@
 # neon
 
+## 8.14.0
+
+### Minor Changes
+
+- 87ddfb2: `neon neon-auth oauth-provider add` and `update` now support the `microsoft` and `apple` providers. New flags: `--microsoft-tenant-id`, `--apple-team-id`, `--apple-key-id`, and `--oauth-client-secret-file` to read the client secret (such as the Apple `.p8` private key) from a file. Changing the Apple client secret requires `--apple-key-id`.
+
+### Patch Changes
+
+- 2f01541: `neon neon-auth oauth-provider add` and `update` now name the right flags when Neon rejects a shared OAuth app for `apple` or `microsoft`. `update` for `apple` rejects `--apple-key-id` without a new client secret before sending a request, `--oauth-client-secret-file` strips every trailing line ending, and the `--oauth-client-id` and `--oauth-client-secret` help no longer implies every provider has a shared app.
+
 ## 8.13.3
 
 ### Patch Changes
