@@ -70,6 +70,20 @@ package's file before changing it:
 | [`@neon/env`](./packages/env/CONTRIBUTING.md) | Why the credential-reuse half lives in `internals/env-core` rather than on the published surface, and the branch-credential rules |
 | [`neon` CLI](./packages/cli/CONTRIBUTING.md) | Human `-o table` output: no boxes, TTY-aware columns |
 
+## Which layer a change belongs in
+
+The `neon` CLI and the Neon MCP server ([`mcp-server-neon`](https://github.com/neondatabase/mcp-server-neon)) share the packages here. Both use `@neon/sdk`. The MCP server, Mastra, and Eve adapters also use `@neon/tools`, which builds agent tool descriptors on the SDK.
+
+Put a change in the lowest layer where every consumer that needs it gets it:
+
+| Layer | Belongs there |
+| --- | --- |
+| `@neon/sdk` ergonomic layer | API behavior every caller wants: error mapping and messages, retries, readiness waits, pagination, workflows |
+| `@neon/tools` | What an agent sees: tool names, descriptions, argument schemas, result shapes |
+| `neon` CLI, `mcp-server-neon` | Only what is specific to that consumer: transport, auth, hosting, output rendering |
+
+Decide the layer before writing the change, and name it in the PR with the reason. A fix made in the CLI or the MCP server that every SDK caller would want is in the wrong place. The reverse holds too: don't add a shared abstraction for a consumer that doesn't exist yet.
+
 ## CLI for agents
 
 `--help` lists every value an enum flag accepts. If `-y` cannot decide, the error names the flag (and values) to pass. Every command exposes flags for every interactive question so it can run with no TTY (`--agent`, `--project-id`, `--skill`, `--global`, `--oauth`, `--project`, `--template`, …). Coding-agent targeting is `--agent <name>` on `skills`, `plugins`, `mcp`, `init`, and `bootstrap`; detection on `-y`; or omit `-y` in a terminal to pick. `init` and `bootstrap` pass `--agent` to plugins, or to skills and mcp, not both. `link` has no `--agent`. Details: [`AGENTS.md`](./AGENTS.md) (CLI package) and [`packages/cli/AGENTS.md`](./packages/cli/AGENTS.md). Table output: [`packages/cli/CONTRIBUTING.md`](./packages/cli/CONTRIBUTING.md).
