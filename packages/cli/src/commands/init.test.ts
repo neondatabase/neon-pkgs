@@ -1196,7 +1196,7 @@ describe("init handler", () => {
 			const cwd = mkdtempSync(join(tmpdir(), "neon-init-no-probe-"));
 			writeFileSync(join(cwd, "package.json"), "{}\n");
 			const marker = join(cwd, "probed");
-			fakeCommand("copilot", `touch "${marker}"`);
+			fakeCommand("copilot", `printf ran > "${marker}"`);
 			const { handler } = await import("./init.js");
 
 			await handler(

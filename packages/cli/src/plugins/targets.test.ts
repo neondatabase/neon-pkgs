@@ -261,7 +261,7 @@ describe("unusablePluginsCommands", () => {
 		const root = tmp();
 		const bin = join(root, "bin");
 		const marker = join(root, "ran");
-		installCommand(bin, "copilot", `touch "${marker}"; exit 1`);
+		installCommand(bin, "copilot", `printf ran > "${marker}"; exit 1`);
 		expect(
 			missingPluginsCommands(["github-copilot-cli", "grok-build"], {
 				cwd: root,
@@ -313,7 +313,7 @@ describe("unusablePluginsCommands", () => {
 		const bin = join(root, "bin");
 		const marker = join(root, "ran");
 		for (const name of ["claude", "cursor", "codex", "code"]) {
-			installCommand(bin, name, `touch "${marker}"`);
+			installCommand(bin, name, `printf ran > "${marker}"`);
 		}
 		expect(
 			unusablePluginsCommands(

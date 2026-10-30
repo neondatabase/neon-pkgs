@@ -439,7 +439,10 @@ describe("resolvePluginsPlan agent commands", () => {
 		const cwd = tmpDir();
 		const bin = emptyPath();
 		const marker = join(cwd, "ran");
-		writeFileSync(join(bin, "copilot"), `#!/bin/sh\ntouch "${marker}"\n`);
+		writeFileSync(
+			join(bin, "copilot"),
+			`#!/bin/sh\nprintf ran > "${marker}"\n`,
+		);
 		chmodSync(join(bin, "copilot"), 0o755);
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
