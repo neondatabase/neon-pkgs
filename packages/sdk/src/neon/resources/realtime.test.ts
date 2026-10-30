@@ -199,7 +199,9 @@ describe("realtime", () => {
 		}));
 		const { error } = await neon.realtime.enable(selectors);
 		expect(error).toBeInstanceOf(NeonNotFoundError);
-		expect(calls).toHaveLength(1);
+		expect(
+			calls.filter((call) => call.url.endsWith("/realtime")),
+		).toHaveLength(1);
 	});
 
 	it("times out with NeonWaitTimeoutError while still pending", async () => {

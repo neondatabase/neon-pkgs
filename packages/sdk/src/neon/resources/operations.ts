@@ -67,6 +67,7 @@ export class Operations<DThrow extends boolean> {
 			}),
 			() => this.#ctx.deadlineFor(opts),
 			this.#ctx.shouldThrow(opts),
+			this.#ctx.client,
 		);
 	}
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { createClient } from "../client/client/index.js";
 import { createNeonClient } from "./client.js";
 import { createDeadline } from "./deadline.js";
 import { NeonApiError, NeonClientError } from "./errors.js";
 import { paginate } from "./paginate.js";
+
+const unusedClient = createClient();
 
 function unboundedDeadline() {
 	return createDeadline(Number.POSITIVE_INFINITY);
@@ -16,6 +19,7 @@ describe("paginate throwOnError", () => {
 			() => ({ items: [] }),
 			unboundedDeadline,
 			false,
+			unusedClient,
 		);
 
 		const page = await list.page();
@@ -47,6 +51,7 @@ describe("paginate throwOnError", () => {
 			(data) => data,
 			unboundedDeadline,
 			true,
+			unusedClient,
 		);
 
 		const page = await list.page();
@@ -66,6 +71,7 @@ describe("paginate throwOnError", () => {
 			(data) => data,
 			unboundedDeadline,
 			true,
+			unusedClient,
 		);
 
 		await expect(list.page("c1")).rejects.toBe(error);

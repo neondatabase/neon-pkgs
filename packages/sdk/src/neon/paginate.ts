@@ -1,5 +1,7 @@
+import type { Client } from "../client/client/index.js";
 import { cancelled, type Deadline, runBounded } from "./deadline.js";
 import { isNeonError, toNeonError } from "./errors.js";
+import { explainRegionUnavailable } from "./region-availability.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "./result.js";
 
 export interface Page<T> {
@@ -11,6 +13,7 @@ export interface Page<T> {
 interface RawResult<D> {
 	data?: D | undefined;
 	error?: unknown;
+	request?: Request | undefined;
 	response?: Response | undefined;
 }
 
@@ -38,6 +41,7 @@ class PaginatedList<T, D> implements Paginated<T, boolean> {
 	readonly #mapPage: (data: D) => Page<T>;
 	readonly #newDeadline: () => Deadline;
 	readonly #shouldThrow: boolean;
+	readonly #client: Client;
 
 	constructor(
 		fetchPage: (
@@ -47,11 +51,13 @@ class PaginatedList<T, D> implements Paginated<T, boolean> {
 		mapPage: (data: D) => Page<T>,
 		newDeadline: () => Deadline,
 		shouldThrow: boolean,
+		client: Client,
 	) {
 		this.#fetchPage = fetchPage;
 		this.#mapPage = mapPage;
 		this.#newDeadline = newDeadline;
 		this.#shouldThrow = shouldThrow;
+		this.#client = client;
 	}
 
 	async #page(
@@ -81,7 +87,16 @@ class PaginatedList<T, D> implements Paginated<T, boolean> {
 			// Re-deriving one from the response would mislabel a fault the SDK
 			// found in a 200 body as an API error with a 2xx status.
 			if (isNeonError(raw?.error)) return err(raw.error);
-			return err(toNeonError(raw?.error, raw?.response));
+			const error = toNeonError(raw?.error, raw?.response);
+			const explained = await runBounded(deadline, () =>
+				explainRegionUnavailable(
+					error,
+					raw?.request?.url ?? raw?.response?.url,
+					this.#client,
+					deadline.signal,
+				),
+			);
+			return err(cancelled(deadline) ?? explained ?? error);
 		}
 		return ok(this.#mapPage(raw.data));
 	}
@@ -160,6 +175,13 @@ export function paginate<T, D>(
 	mapPage: (data: D) => Page<T>,
 	newDeadline: () => Deadline,
 	shouldThrow: boolean,
+	client: Client,
 ): Paginated<T, boolean> {
-	return new PaginatedList(fetchPage, mapPage, newDeadline, shouldThrow);
+	return new PaginatedList(
+		fetchPage,
+		mapPage,
+		newDeadline,
+		shouldThrow,
+		client,
+	);
 }
