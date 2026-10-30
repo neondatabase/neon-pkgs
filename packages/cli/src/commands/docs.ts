@@ -194,7 +194,7 @@ export function siteSearchHeaders(opts: {
 		"Content-Type": "application/json",
 		"User-Agent": `neon/${opts.version}`,
 		"x-caller-source": "cli",
-		...(opts.agent
+		...(opts.analytics && opts.agent
 			? { "x-caller-client": encodeURIComponent(opts.agent) }
 			: {}),
 		...(opts.analytics ? {} : { "x-caller-analytics": "off" }),

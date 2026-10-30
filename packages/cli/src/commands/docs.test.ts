@@ -441,11 +441,11 @@ describe("siteSearchHeaders", () => {
 		});
 	});
 
-	test("omits the client without an agent and opts out without analytics", () => {
+	test("omits the client and opts out without analytics", () => {
 		expect(
 			siteSearchHeaders({
 				analytics: false,
-				agent: undefined,
+				agent: "claude-code",
 				version: "8.10.0",
 			}),
 		).toEqual({
@@ -458,7 +458,7 @@ describe("siteSearchHeaders", () => {
 });
 
 describe("neon docs search caller headers", () => {
-	test("sends source, version, agent, and the analytics opt-out", async ({
+	test("sends source, version, and the analytics opt-out, without the agent", async ({
 		testCliCommand,
 	}) => {
 		const seen: Array<Record<string, string | string[] | undefined>> = [];
@@ -490,7 +490,7 @@ describe("neon docs search caller headers", () => {
 			expect(headers["user-agent"]).toBe(`neon/${pkg.version}`);
 			expect(headers["x-caller-analytics"]).toBe("off");
 		}
-		expect(seen[0]?.["x-caller-client"]).toBe("claude-code");
+		expect(seen[0]?.["x-caller-client"]).toBeUndefined();
 		expect(seen[1]?.["x-caller-client"]).toBeUndefined();
 	});
 });
