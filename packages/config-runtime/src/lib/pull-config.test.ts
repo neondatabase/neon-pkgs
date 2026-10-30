@@ -264,6 +264,7 @@ describe("pullConfig", () => {
 		// The branch is seeded with a default `neondb` database, which pullConfig probes.
 		api.seedNeonDataApi(projectId, "br-main", "neondb", {
 			url: "https://example.test/data-api/neondb",
+			authProvider: "neon_auth",
 		});
 
 		const pulled = await pullConfig({
@@ -274,6 +275,100 @@ describe("pullConfig", () => {
 
 		expect(pulled.config.dataApi).toBe(true);
 		expect(pulled.config.auth).toBeUndefined();
+	});
+
+	test("declares an external Data API with its wiring and without auth", async () => {
+		const api = new FakeNeonApi();
+		const projectId = "proj-dataapi-external";
+		api.seedProject({
+			project: {
+				id: projectId,
+				name: "dataapi-external",
+				regionId: "aws-us-east-1",
+				pgVersion: 17,
+			},
+			branches: [
+				{ branch: { id: "br-main", name: "main", isDefault: true } },
+			],
+		});
+		api.seedNeonDataApi(projectId, "br-main", "neondb", {
+			url: "https://example.test/data-api/neondb",
+			authProvider: "external",
+			jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+			providerName: "Clerk",
+			jwtAudience: "my-api",
+		});
+
+		const pulled = await pullConfig({
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(pulled.config.dataApi).toEqual({
+			authProvider: "external",
+			jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+			providerName: "Clerk",
+			jwtAudience: "my-api",
+		});
+		expect(pulled.config.auth).toBeUndefined();
+	});
+
+	test("declares a Data API with an unreported provider by the branch's Neon Auth state", async () => {
+		const seed = (projectId: string) => {
+			const api = new FakeNeonApi();
+			api.seedProject({
+				project: {
+					id: projectId,
+					name: projectId,
+					regionId: "aws-us-east-1",
+					pgVersion: 17,
+				},
+				branches: [
+					{
+						branch: {
+							id: "br-main",
+							name: "main",
+							isDefault: true,
+						},
+					},
+				],
+			});
+			// No `authProvider`: a Data API created before the API recorded it.
+			api.seedNeonDataApi(projectId, "br-main", "neondb", {
+				url: "https://example.test/data-api/neondb",
+			});
+			return api;
+		};
+
+		// Neon Auth off: the Data API cannot be verifying Neon Auth tokens, so a bare `true`
+		// (which means Neon Auth) would be wrong and would enable it on the next apply.
+		const withoutAuth = seed("proj-dataapi-unknown");
+		const pulledWithoutAuth = await pullConfig({
+			api: withoutAuth,
+			projectId: "proj-dataapi-unknown",
+			branchId: "br-main",
+		});
+		expect(pulledWithoutAuth.config.dataApi).toEqual({
+			authProvider: "external",
+		});
+		expect(pulledWithoutAuth.config.auth).toBeUndefined();
+
+		// Neon Auth on: the default provider is the likely one.
+		const withAuth = seed("proj-dataapi-unknown-auth");
+		withAuth.seedNeonAuth("proj-dataapi-unknown-auth", "br-main", {
+			projectId: "auth-proj",
+			publishableClientKey: "pub",
+			secretServerKey: "secret",
+			jwksUrl: "https://auth.example.test/.well-known/jwks.json",
+		});
+		const pulledWithAuth = await pullConfig({
+			api: withAuth,
+			projectId: "proj-dataapi-unknown-auth",
+			branchId: "br-main",
+		});
+		expect(pulledWithAuth.config.dataApi).toBe(true);
+		expect(pulledWithAuth.config.auth).toBe(true);
 	});
 
 	test("sets both auth and dataApi when both are enabled", async () => {

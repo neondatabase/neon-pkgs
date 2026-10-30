@@ -65,6 +65,22 @@ const serviceSubsets = (): NeonService[][] => {
 const views: { name: string; view: NeonConfigView; branch: string }[] = [
 	{ name: "empty", view: {}, branch: "main" },
 	{
+		name: "external data-api",
+		view: {
+			dataApi: {
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+			},
+		},
+		branch: "main",
+	},
+	{
+		name: "external data-api without wiring",
+		view: { dataApi: { authProvider: "external" } },
+		branch: "main",
+	},
+	{
 		name: "services only",
 		view: { auth: true, dataApi: true },
 		branch: "main",
@@ -146,6 +162,26 @@ describe("the scaffolded neon.ts is already formatted", () => {
 		const source = renderNeonConfig([...services]);
 		expect(format(source)).toBe(source);
 		expectCleanWhitespace(source);
+	});
+
+	it.each(
+		serviceSubsets()
+			.filter((s) => s.includes("data-api"))
+			.map((s) => [s.join("+"), s] as const),
+	)("services with an external data-api: %s", (_label, services) => {
+		for (const dataApi of [
+			{ kind: "external" as const },
+			{
+				kind: "external" as const,
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+				jwtAudience: "my-api",
+			},
+		]) {
+			const source = renderNeonConfig([...services], { dataApi });
+			expect(format(source)).toBe(source);
+			expectCleanWhitespace(source);
+		}
 	});
 
 	it("the scaffolded function handler", () => {

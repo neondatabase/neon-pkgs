@@ -540,6 +540,101 @@ describe("collectCursorPages", () => {
 	});
 });
 
+describe("getNeonDataApi", () => {
+	const DATA_API_PATH = "/projects/proj-1/branches/br-1/data-api/neondb";
+
+	const withDataApiServer = async (
+		body: Record<string, unknown>,
+		run: (api: ReturnType<typeof createRealNeonApi>) => Promise<void>,
+	) => {
+		const server = createServer((req, res) => {
+			const path = new URL(req.url ?? "/", "http://localhost").pathname;
+			req.resume();
+			req.on("end", () => {
+				res.setHeader("content-type", "application/json");
+				res.statusCode = path === DATA_API_PATH ? 200 : 500;
+				res.end(JSON.stringify(body));
+			});
+		});
+		try {
+			await new Promise<void>((resolve) => server.listen(0, resolve));
+			const address = server.address();
+			if (address === null || typeof address === "string") {
+				throw new Error("test server has no port");
+			}
+			await run(
+				createRealNeonApi({
+					apiKey: "test-key",
+					baseUrl: `http://localhost:${address.port}`,
+				}),
+			);
+		} finally {
+			server.closeAllConnections();
+			await new Promise((resolve) => server.close(resolve));
+		}
+	};
+
+	test("carries the auth provider and external wiring when the API reports them", async () => {
+		await withDataApiServer(
+			{
+				url: "https://data.example/neondb",
+				status: "active",
+				auth_provider: "external",
+				jwks_url: "https://idp.example/.well-known/jwks.json",
+				provider_name: "Clerk",
+				jwt_audience: "my-api",
+			},
+			async (api) => {
+				const snapshot = await api.getNeonDataApi(
+					"proj-1",
+					"br-1",
+					"neondb",
+				);
+				expect(snapshot).toEqual({
+					url: "https://data.example/neondb",
+					status: "active",
+					authProvider: "external",
+					jwksUrl: "https://idp.example/.well-known/jwks.json",
+					providerName: "Clerk",
+					jwtAudience: "my-api",
+				});
+			},
+		);
+	});
+
+	test("leaves the provider absent for a response that predates it, and ignores unknown values", async () => {
+		await withDataApiServer(
+			{ url: "https://data.example/neondb", status: "active" },
+			async (api) => {
+				const snapshot = await api.getNeonDataApi(
+					"proj-1",
+					"br-1",
+					"neondb",
+				);
+				expect(snapshot).toEqual({
+					url: "https://data.example/neondb",
+					status: "active",
+				});
+			},
+		);
+		await withDataApiServer(
+			{
+				url: "https://data.example/neondb",
+				status: "active",
+				auth_provider: "something-new",
+			},
+			async (api) => {
+				const snapshot = await api.getNeonDataApi(
+					"proj-1",
+					"br-1",
+					"neondb",
+				);
+				expect(snapshot?.authProvider).toBeUndefined();
+			},
+		);
+	});
+});
+
 describe("enableNeonAuth", () => {
 	const AUTH_PATH = "/projects/proj-1/branches/br-1/auth";
 	const API_MESSAGE =

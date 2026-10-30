@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import { afterEach, describe, expect, test } from "vitest";
-import { runAuthenticatedMcp } from "./auth.js";
+import { resolveInitConfigApi, runAuthenticatedMcp } from "./auth.js";
 
 const host = "https://console.neon.tech/api/v2";
 
@@ -95,5 +95,35 @@ describe("runAuthenticatedMcp", () => {
 				agent: ["cursor"],
 			}),
 		).rejects.toThrow(/Authentication required/);
+	});
+});
+
+describe("resolveInitConfigApi", () => {
+	const dirs: string[] = [];
+
+	afterEach(() => {
+		clearCredentialInputs();
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	// Regression test: a pinned project with no credentials on disk reached the login flow
+	// under `neon init -y`, because the lookup went through ensureAuth's fromBranch path. The
+	// lookup must come back empty instead of starting a login.
+	test("returns no client rather than starting a login when no credential is on hand", async () => {
+		clearCredentialInputs();
+		const configDir = mkdtempSync(join(tmpdir(), "neon-init-config-api-"));
+		dirs.push(configDir);
+
+		const access = await resolveInitConfigApi({
+			apiClient: undefined as never,
+			apiKey: "",
+			apiHost: host,
+			contextFile: join(configDir, ".neon"),
+			configDir,
+		});
+
+		expect(access).toEqual({});
 	});
 });

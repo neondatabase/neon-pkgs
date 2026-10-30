@@ -38,6 +38,7 @@ import {
 	AuthRefreshError,
 	auth,
 	classifyRefreshFailure,
+	defaultClientID,
 	refreshToken,
 } from "../auth.js";
 import { setAuthContext } from "../auth_context.js";
@@ -610,6 +611,61 @@ export const usableCredential = async (
 	}
 };
 
+/**
+ * The API client for a credential this invocation already holds — the `--api-key` flag or
+ * `NEON_API_KEY`, or the selected profile's stored key or OAuth session, refreshed when
+ * expired — along with the key it uses. Never starts a login, so a read that only enriches a
+ * local file cannot interrupt it. Null when there is no such credential.
+ *
+ * Selection follows {@link ensureAuth} exactly; only the fallback differs. `ensureAuth` may
+ * log in, and a caller that is only reading a branch to improve a scaffold must not.
+ */
+export const existingApiClient = async (props: {
+	configDir: string;
+	apiHost: string;
+	profile?: string;
+	oauthHost?: string;
+	clientId?: string;
+}): Promise<{ apiKey: string; apiClient: NeonApiClient } | null> => {
+	const selection = selectCredential({
+		...credentialInputs(),
+		profileFlag: props.profile,
+	});
+
+	if (selection.source !== "profile") {
+		return {
+			apiKey: selection.apiKey,
+			apiClient: getApiClient({
+				apiKey: selection.apiKey,
+				apiHost: props.apiHost,
+			}),
+		};
+	}
+
+	const usable = await usableCredential(
+		{
+			configDir: props.configDir,
+			apiHost: props.apiHost,
+			oauthHost:
+				props.oauthHost ??
+				process.env.NEON_OAUTH_HOST ??
+				"https://oauth2.neon.tech",
+			clientId: props.clientId ?? defaultClientID,
+		},
+		locationForAuth(props.configDir, selection.profile),
+	);
+	if (usable === null) {
+		return null;
+	}
+	return {
+		apiKey: usable.apiKey,
+		apiClient: getApiClient({
+			apiKey: usable.apiKey,
+			apiHost: props.apiHost,
+		}),
+	};
+};
+
 export const ensureAuth = async (
 	props: AuthProps & {
 		apiKey: string;
@@ -630,7 +686,8 @@ export const ensureAuth = async (
 	}
 
 	// `config init` only scaffolds a neon.ts and installs npm packages locally; it
-	// never calls the Neon API, so skip auth entirely — no token refresh, no login.
+	// never needs the Neon API to scaffold, so skip auth entirely — no token refresh, no login.
+	// `--services data-api` reads the branch through `existingApiClient` instead, which never logs in.
 	if (isConfigInit(props)) {
 		return;
 	}

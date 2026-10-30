@@ -673,7 +673,7 @@ export default defineConfig({
 
 ### Getting a `neon.ts` (`config init`)
 
-`neon config init` scaffolds the policy and installs `@neon/config` / `@neon/env`, so a project can go straight to `plan` / `apply`. It is purely local — no auth, no API calls. In an interactive terminal it asks which services the policy should declare:
+`neon config init` scaffolds the policy and installs `@neon/config` / `@neon/env`, so a project can go straight to `plan` / `apply`. It is local — no auth and no API calls — except `--services data-api`, which reads the linked branch's Data API with a credential already on hand (never a login) so the scaffold declares the right auth. In an interactive terminal it asks which services the policy should declare:
 
 ```
 ? Which Neon services should neon.ts declare? (space to toggle, enter to confirm) ›

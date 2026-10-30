@@ -69,6 +69,7 @@ export const builder = (yargs: yargs.Argv) =>
 				describe: "Services to declare in neon.ts",
 				also:
 					"postgres alone writes the starter policy; every branch has Postgres. " +
+					"data-api also declares auth unless the linked branch's Data API already uses an external identity provider. " +
 					"Implies creating neon.ts. Cannot be combined with --no-config.",
 			}),
 		)

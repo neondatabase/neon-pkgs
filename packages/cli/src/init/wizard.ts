@@ -343,7 +343,7 @@ export const pickInitServicesInteractively = async (): Promise<
 				value: "data-api",
 				title: "Data API",
 				description:
-					"Declare an HTTP API for Postgres. Also declares Managed Better Auth.",
+					"Declare an HTTP API for Postgres. Also declares Managed Better Auth, unless the branch's Data API already uses an external identity provider.",
 			},
 			{
 				value: "functions",

@@ -34,7 +34,8 @@ import {
 } from "@neon/config-runtime";
 import chalk from "chalk";
 import type yargs from "yargs";
-import { getApiClient, type NeonApiClient } from "../api.js";
+import { DEFAULT_API_HOST, getApiClient, type NeonApiClient } from "../api.js";
+import { defaultDir } from "../config.js";
 import {
 	asRelativeModulePath,
 	type ConfigEdit,
@@ -44,6 +45,8 @@ import {
 import { type NeonConfigView, toNeonConfigView } from "../config_format.js";
 import { declaredNeonServices } from "../config_services.js";
 import {
+	type DataApiTemplateChoice,
+	dataApiChoiceFromView,
 	FUNCTION_FILENAME,
 	FUNCTION_SLUG,
 	FUNCTION_TEMPLATE,
@@ -111,6 +114,7 @@ import {
 import { pickServicesInteractively } from "../utils/service_picker.js";
 import { zipBundle } from "../utils/zip.js";
 import { writer } from "../writer.js";
+import { existingApiClient } from "./auth.js";
 import { autoPullEnvAfterPin } from "./env.js";
 
 // A static esbuild import would make pkg snapshot its native binary.
@@ -345,10 +349,18 @@ export type ConfigInitProps = {
 	pickServices?: () => Promise<NeonService[]>;
 	/**
 	 * `--from-branch`: seed the policy from a branch's live Neon state instead of asking.
-	 * The one path in `config init` that reaches the API — {@link isConfigInit} stops
-	 * skipping auth and project resolution when it is set.
+	 * {@link isConfigInit} stops skipping auth and project resolution when it is set.
 	 */
 	fromBranch?: boolean;
+	/**
+	 * The profile and config directory the Data API read takes its stored credential from,
+	 * as the global `--profile` and `--config-dir` options set them.
+	 */
+	profile?: string;
+	configDir?: string;
+	/** The OAuth issuer and client a stored session refreshes against, as the global options set them. */
+	oauthHost?: string;
+	clientId?: string;
 	/**
 	 * Branch scoping for `--from-branch`, supplied by the `config` command's `--project-id` /
 	 * `--branch` options, the `.neon` context middleware, and the global auth middleware. All
@@ -446,6 +458,70 @@ const seedFromBranch = async (
 	});
 	const rendered = renderNeonConfigFromView(view, live.branch.name);
 	return { ...rendered, branchName: live.branch.name };
+};
+
+/**
+ * Which `dataApi` entry to scaffold for `data-api`. A linked branch whose Data API already
+ * verifies an external IdP gets the external form, so the policy does not go on to enable
+ * Neon Auth over it on the first `neon deploy`. The read goes through {@link liveConfigView},
+ * the same path as `--from-branch`, so both agree on what the branch has.
+ *
+ * Anything short of a clear answer — no project to read, no credentials, a failed read, no
+ * Data API on the branch — falls back to today's Neon Auth scaffold. The read must never make
+ * `init` fail: a user without the Data API loses nothing, and one with it is told how to fix
+ * the file by hand.
+ */
+const resolveInitDataApiChoice = async (
+	props: ConfigInitProps,
+): Promise<DataApiTemplateChoice> => {
+	const { projectId } = props;
+	if (!projectId) return { kind: "neon" };
+	try {
+		// The auth middleware supplies the client for `--from-branch`. The plain scaffold skips
+		// that middleware, so it reads with whatever credential is already on hand and never logs in.
+		const access = props.apiClient
+			? { apiClient: props.apiClient, apiKey: props.apiKey }
+			: await existingApiClient({
+					configDir: props.configDir ?? defaultDir,
+					apiHost: props.apiHost ?? DEFAULT_API_HOST,
+					...(props.profile !== undefined
+						? { profile: props.profile }
+						: {}),
+					...(props.oauthHost !== undefined
+						? { oauthHost: props.oauthHost }
+						: {}),
+					...(props.clientId !== undefined
+						? { clientId: props.clientId }
+						: {}),
+				});
+		if (access === null) {
+			log.warning(
+				'Not signed in, so the Data API on the linked branch could not be read; declaring it with Neon Auth. If it verifies an external identity provider, set dataApi.authProvider to "external" in neon.ts before deploying.',
+			);
+			return { kind: "neon" };
+		}
+		const ref = await resolveBranchRef({
+			apiClient: access.apiClient,
+			projectId,
+			...(props.branch !== undefined ? { branch: props.branch } : {}),
+		});
+		const { view } = await liveConfigView({
+			projectId,
+			branchId: ref.branchId,
+			...(access.apiKey ? { apiKey: access.apiKey } : {}),
+			...(props.apiHost ? { apiHost: props.apiHost } : {}),
+			...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
+		});
+		return view.dataApi === undefined
+			? { kind: "neon" }
+			: dataApiChoiceFromView(view.dataApi);
+	} catch (error) {
+		log.warning(
+			'Couldn\'t read the Data API on the linked branch (%s); declaring it with Neon Auth. If it verifies an external identity provider, set dataApi.authProvider to "external" in neon.ts before deploying.',
+			error instanceof Error ? error.message : String(error),
+		);
+		return { kind: "neon" };
+	}
 };
 
 /** The install command to print, prefixed with a `cd` when the project is not the cwd. */
@@ -563,7 +639,13 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 		}
 	} else {
 		const services = await resolveServices(props);
-		writeFileSync(join(cwd, "neon.ts"), renderNeonConfig(services));
+		const dataApi = services.includes("data-api")
+			? await resolveInitDataApiChoice(props)
+			: undefined;
+		writeFileSync(
+			join(cwd, "neon.ts"),
+			renderNeonConfig(services, dataApi ? { dataApi } : {}),
+		);
 		if (!props.silent) {
 			if (services.length === 0) {
 				log.info("Created neon.ts with a starter policy.");
@@ -573,6 +655,12 @@ export const initCmd = async (props: ConfigInitProps): Promise<void> => {
 				);
 				log.info("Created neon.ts declaring %s.", declared.join(", "));
 			}
+		}
+		if (dataApi?.kind === "external") {
+			log.info(
+				'The branch\'s Data API verifies an external identity provider%s, so neon.ts declares it with authProvider "external" and does not enable Neon Auth.',
+				dataApi.providerName ? ` (${dataApi.providerName})` : "",
+			);
 		}
 		if (services.includes("functions")) {
 			scaffoldFunction(cwd);
@@ -930,7 +1018,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.command(
 						"data-api",
-						"Enable the Data API (dataApi: true) and Neon Auth, which the default provider requires",
+						'Enable the Data API (dataApi: true) and Neon Auth, which the default provider requires. For an external identity provider, set dataApi.authProvider to "external" instead',
 						addSharedOptions,
 						(args) =>
 							addCmd(
@@ -1082,7 +1170,7 @@ export const builder = (argv: yargs.Argv) =>
 						describe:
 							"Seed neon.ts from a branch's live Neon state instead of asking. Uses the " +
 							"branch pinned in .neon, or --branch <name|id>, or the project's default " +
-							"branch. The only mode of `config init` that calls the Neon API.",
+							"branch. Needs credentials and a project.",
 						type: "boolean",
 						// No `default`: yargs counts a defaulted key as provided, so
 						// `default: false` makes `conflicts` reject every `--services` run.

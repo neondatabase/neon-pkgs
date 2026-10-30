@@ -28,9 +28,24 @@ export const formatDurationSeconds = (totalSeconds: number): string => {
  * signal (a disabled service, an empty preview), so `config status` reads like a minimal
  * `neon.ts`.
  */
+/**
+ * The `dataApi` entry of a {@link NeonConfigView}: `true` for a Neon Auth Data API, or the
+ * external-IdP object a user would write for one that verifies a third-party provider's
+ * tokens. The provider is fixed when the Data API is created, so a view that collapsed both
+ * to `true` would make `config init --from-branch` declare Neon Auth over an external one.
+ */
+export type NeonConfigViewDataApi =
+	| true
+	| {
+			authProvider: "external";
+			jwksUrl?: string;
+			providerName?: string;
+			jwtAudience?: string;
+	  };
+
 export type NeonConfigView = {
 	auth?: true;
-	dataApi?: true;
+	dataApi?: NeonConfigViewDataApi;
 	preview?: {
 		functions?: Record<string, { name: string }>;
 		buckets?: Record<string, { access: string }>;
@@ -72,7 +87,7 @@ export const toNeonConfigView = (
 	const view: NeonConfigView = {};
 
 	if (resolved.authEnabled) view.auth = true;
-	if (resolved.dataApiEnabled) view.dataApi = true;
+	if (resolved.dataApiEnabled) view.dataApi = toDataApiView(resolved.dataApi);
 
 	const previewView = toPreviewView(preview);
 	if (previewView) view.preview = previewView;
@@ -85,6 +100,21 @@ export const toNeonConfigView = (
 	if (resolved.postgres?.computeSettings) branch.postgres = resolved.postgres;
 	if (Object.keys(branch).length > 0) view.branch = branch;
 
+	return view;
+};
+
+const toDataApiView = (
+	dataApi: ResolvedBranchConfig["dataApi"],
+): NeonConfigViewDataApi => {
+	if (dataApi?.authProvider !== "external") return true;
+	const view: Exclude<NeonConfigViewDataApi, true> = {
+		authProvider: "external",
+	};
+	if (dataApi.jwksUrl !== undefined) view.jwksUrl = dataApi.jwksUrl;
+	if (dataApi.providerName !== undefined)
+		view.providerName = dataApi.providerName;
+	if (dataApi.jwtAudience !== undefined)
+		view.jwtAudience = dataApi.jwtAudience;
 	return view;
 };
 

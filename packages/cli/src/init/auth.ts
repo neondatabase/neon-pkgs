@@ -1,7 +1,7 @@
-import { isNeonApiError } from "../api.js";
+import { DEFAULT_API_HOST, isNeonApiError } from "../api.js";
 import { defaultClientID } from "../auth.js";
 import { recoverFrom401 } from "../auth_recovery.js";
-import { ensureAuth } from "../commands/auth.js";
+import { ensureAuth, existingApiClient } from "../commands/auth.js";
 import { type EnvPullProps, type PullOutcome, pull } from "../commands/env.js";
 import {
 	type McpInstallOutcome,
@@ -95,6 +95,36 @@ export const runAuthenticatedMcp = async (
 		await recoverFrom401(false);
 		throw authenticationFailed();
 	}
+};
+
+/**
+ * The client and key `neon config init` may read the linked branch with. Init calls this only
+ * after a link is verified, but a pin that was already in place can have no credentials on
+ * disk, so this never starts a login: with nothing usable it returns an empty result and the
+ * scaffold declares the Neon Auth default with a warning, as a failed read does.
+ */
+export const resolveInitConfigApi = async (
+	options: InitAuthOptions,
+): Promise<Partial<Pick<CommonProps, "apiClient" | "apiKey" | "apiHost">>> => {
+	const access = await existingApiClient({
+		configDir: options.configDir ?? defaultDir,
+		apiHost: options.apiHost ?? DEFAULT_API_HOST,
+		...(options.profile !== undefined ? { profile: options.profile } : {}),
+		...(options.oauthHost !== undefined
+			? { oauthHost: options.oauthHost }
+			: {}),
+		...(options.clientId !== undefined
+			? { clientId: options.clientId }
+			: {}),
+	});
+	if (access === null) {
+		return {};
+	}
+	return {
+		apiClient: access.apiClient,
+		apiKey: access.apiKey,
+		apiHost: options.apiHost,
+	};
 };
 
 /**
