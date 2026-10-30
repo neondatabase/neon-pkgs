@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { loadHookConfig, shapeHookEnv } from "./hooks.js";
+import { loadHookConfig, runDeployAfterHook, shapeHookEnv } from "./hooks.js";
 
 describe("shapeHookEnv", () => {
 	test("maps postgres, defaulting missing URLs to empty strings", () => {
@@ -140,5 +140,36 @@ describe("loadHookConfig", () => {
 			"export default { this is not valid TS",
 		);
 		expect(await loadHookConfig(cwd)).toBeUndefined();
+	});
+});
+
+describe("runDeployAfterHook", () => {
+	const failingHook = (strict?: boolean) => ({
+		hooks: {
+			deploy: {
+				after: () => {
+					throw new Error("migration failed");
+				},
+			},
+		},
+		branch: { projectId: "p", id: "br-1", name: "main" } as never,
+		env: { postgres: { databaseUrl: "", databaseUrlUnpooled: "" } },
+		result: {} as never,
+		git: {} as never,
+		event: { type: "neon-deploy" } as const,
+		cwd: tmpdir(),
+		...(strict === undefined ? {} : { strict }),
+	});
+
+	test("warns and continues when the hook fails", async () => {
+		await expect(
+			runDeployAfterHook(failingHook()),
+		).resolves.toBeUndefined();
+	});
+
+	test("fails when strict", async () => {
+		await expect(runDeployAfterHook(failingHook(true))).rejects.toThrow(
+			"The `deploy.after` hook failed: migration failed",
+		);
 	});
 });

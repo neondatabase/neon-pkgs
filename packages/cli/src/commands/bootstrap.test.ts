@@ -23,6 +23,17 @@ import YAML from "yaml";
 import { takeCommandSuccessExtras } from "../analytics.js";
 import { AGENT_SETUP_MESSAGE } from "../init/copy.js";
 
+const deployTemplate = vi.hoisted(() =>
+	vi.fn(async (_options: Record<string, unknown>) => ({
+		envFile: "",
+		generated: [] as string[],
+	})),
+);
+vi.mock("../init/deploy.js", () => ({ deployTemplate }));
+
+// --deploy is staging-only, so its tests point the CLI at the staging API host.
+const STAGING = { NEON_API_HOST: "https://console-stage.neon.build/api/v2" };
+
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
 // lands as a regular file, an executable, or a symlink.
 type FixtureFile =
@@ -60,6 +71,23 @@ const FIXTURE: Record<string, FixtureFile> = {
 		type: "file",
 		mode: 0o644,
 		content: "selected catalog template\n",
+	},
+	// A deployable template: a neon.ts plus the inputs its deploy needs.
+	"with-queue/package.json": {
+		type: "file",
+		mode: 0o644,
+		content: '{\n  "name": "with-queue",\n  "private": true\n}\n',
+	},
+	"with-queue/neon.ts": {
+		type: "file",
+		mode: 0o644,
+		content: "export default {};\n",
+	},
+	"with-queue/template.json": {
+		type: "file",
+		mode: 0o644,
+		content:
+			'{ "id": "queue", "inputs": [{ "name": "QUEUE_API_KEY", "secret": true, "generate": "token" }] }\n',
 	},
 };
 
@@ -745,5 +773,152 @@ describe("bootstrap", () => {
 			}
 		}
 		expect(takeCommandSuccessExtras()).toEqual({});
+	});
+	test("--deploy refuses --no-install", async () => {
+		const { code, stderr } = await runBootstrap(
+			server,
+			[
+				dest,
+				"--template",
+				"hono",
+				"--deploy",
+				"--default",
+				"--no-install",
+			],
+			STAGING,
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("remove --no-install and --no-link");
+	});
+
+	test("--deploy outside a terminal needs -y", async () => {
+		const { code, stderr } = await runBootstrap(
+			server,
+			[dest, "--template", "hono", "--deploy"],
+			STAGING,
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain("--deploy outside a terminal needs -y");
+	});
+
+	test("--deploy refuses a template without neon.ts", async () => {
+		const { code, stderr } = await runBootstrap(
+			server,
+			[
+				dest,
+				"--template",
+				"hono",
+				"--deploy",
+				"--default",
+				"--force",
+				"--no-git",
+				"--no-agent-setup",
+			],
+			STAGING,
+		);
+		expect(code).toBe(1);
+		expect(stderr).toContain('Template "hono" has no neon.ts');
+	});
+
+	test("--deploy links a new project, then deploys with the --env values", async () => {
+		const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+		const previousCodeload = process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+		process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = base;
+		const target = join(dest, "my-queue");
+		const linked: Record<string, unknown>[] = [];
+		deployTemplate.mockClear();
+		const { handler } = await import("./bootstrap.js");
+		try {
+			const result = await handler({
+				apiClient: {} as never,
+				apiKey: "test-key",
+				apiHost: STAGING.NEON_API_HOST,
+				output: "table",
+				contextFile: join(target, ".neon"),
+				directory: target,
+				force: false,
+				listTemplates: false,
+				default: true,
+				install: true,
+				git: false,
+				link: true,
+				agentSetup: false,
+				analytics: false,
+				printBanner: false,
+				skipDoneSummary: true,
+				deploy: true,
+				env: ["QUEUE_API_KEY=from-flag"],
+				regionId: "aws-us-east-2",
+				linkProject: async (props) => {
+					linked.push({ ...props });
+				},
+				selectedTemplate: {
+					id: "queue",
+					title: "Job queue",
+					description: "A durable job queue.",
+					requires: ["database", "functions"],
+					source: {
+						owner: "neondatabase",
+						repo: "examples",
+						ref: "main",
+						subdir: "with-queue",
+					},
+				},
+			});
+			expect(result?.deployed).toBe(true);
+		} finally {
+			if (previousCodeload === undefined) {
+				delete process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD;
+			} else {
+				process.env.NEON_BOOTSTRAP_GITHUB_CODELOAD = previousCodeload;
+			}
+		}
+
+		// Always a new project, named after the directory, with no env pull before the
+		// template's inputs exist.
+		expect(linked).toHaveLength(1);
+		expect(linked[0]).toMatchObject({
+			projectName: "my-queue",
+			regionId: "aws-us-east-2",
+			envPull: false,
+			config: false,
+		});
+		expect(linked[0]).not.toHaveProperty("projectId");
+		expect(deployTemplate).toHaveBeenCalledTimes(1);
+		expect(deployTemplate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cwd: target,
+				env: ["QUEUE_API_KEY=from-flag"],
+			}),
+		);
+		// -y never prompts for an input.
+		expect(deployTemplate.mock.calls[0]?.[0]).not.toHaveProperty("ask");
+	});
+	test("--deploy is refused outside staging", async () => {
+		const { code, stderr } = await runBootstrap(server, [
+			dest,
+			"--template",
+			"hono",
+			"--deploy",
+			"--default",
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"Deploying templates with `neon bootstrap --deploy` is coming soon!",
+		);
+		// Refused before anything is scaffolded.
+		expect(existsSync(join(dest, "package.json"))).toBe(false);
+	});
+
+	test("help lists --deploy only against staging", async () => {
+		const production = await runBootstrap(server, ["--help"]);
+		expect(production.code, production.stderr).toBe(0);
+		expect(production.stdout).not.toContain("--deploy");
+		expect(production.stdout).not.toContain("--project-name");
+
+		const staging = await runBootstrap(server, ["--help"], STAGING);
+		expect(staging.code, staging.stderr).toBe(0);
+		expect(staging.stdout).toContain("--deploy");
+		expect(staging.stdout).toContain("--project-name");
 	});
 });

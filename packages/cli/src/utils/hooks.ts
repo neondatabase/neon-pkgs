@@ -173,7 +173,10 @@ export const runCreateAfterHook = async (args: {
 	);
 };
 
-/** Run the `deploy.after` hook (if any). Failures degrade to a warning (apply already ran). */
+/**
+ * Run the `deploy.after` hook (if any). Failures degrade to a warning (apply already ran),
+ * unless `strict` is set.
+ */
 export const runDeployAfterHook = async (args: {
 	hooks: Hooks | undefined;
 	branch: HookBranch;
@@ -182,32 +185,45 @@ export const runDeployAfterHook = async (args: {
 	git: GitContext;
 	event: DeployEvent;
 	cwd: string;
+	/**
+	 * Fail instead of warning when the hook fails. `bootstrap --deploy` sets it: there the
+	 * hook sets up the template (migrations, a smoke test), so the install hasn't succeeded
+	 * until it has.
+	 */
+	strict?: boolean;
 }): Promise<void> => {
 	const hook = args.hooks?.deploy?.after;
 	if (!hook) return;
-	await runAfter("deploy.after", () =>
-		runHook(
-			hook,
-			{
-				branch: args.branch,
-				env: args.env,
-				result: args.result,
-				git: args.git,
-				event: args.event,
-			},
-			{ cwd: args.cwd, env: hookEnvToProcessEnv(args.env), onOutput },
-		),
+	await runAfter(
+		"deploy.after",
+		() =>
+			runHook(
+				hook,
+				{
+					branch: args.branch,
+					env: args.env,
+					result: args.result,
+					git: args.git,
+					event: args.event,
+				},
+				{ cwd: args.cwd, env: hookEnvToProcessEnv(args.env), onOutput },
+			),
+		{ strict: args.strict === true },
 	);
 };
 
 const runAfter = async (
 	label: string,
 	run: () => Promise<unknown>,
+	{ strict = false }: { strict?: boolean } = {},
 ): Promise<void> => {
 	try {
 		await run();
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
+		if (strict) {
+			throw new Error(`The \`${label}\` hook failed: ${message}`);
+		}
 		log.warning(
 			"The `%s` hook failed: %s\nThe branch change already succeeded; re-run the hook " +
 				"manually if needed.",
