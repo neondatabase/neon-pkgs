@@ -1,5 +1,12 @@
 # @neondatabase/env
 
+## 1.6.8
+
+### Patch Changes
+
+- Updated dependencies [02fa3c4]
+  - @neon/config@1.10.0
+
 ## 1.6.7
 
 ### Patch Changes
