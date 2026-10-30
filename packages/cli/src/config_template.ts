@@ -24,8 +24,9 @@ export const REQUIRED_PACKAGES = [CONFIG_PACKAGE, ENV_PACKAGE] as const;
  * from these names to the `neon.ts` fields (`aiGateway`, `functions`, `buckets`, `dataApi`).
  *
  * Postgres is absent because every branch has it, so there is nothing to declare. Selecting
- * `data-api` also writes `auth: true`: the default Data API provider requires Neon Auth, and
- * `defineConfig` type-errors the file without it.
+ * `data-api` also writes `auth: true` unless the caller says the Data API verifies an external
+ * provider (see {@link DataApiTemplateChoice}): the default Data API provider requires Neon
+ * Auth, and `defineConfig` type-errors the file without it.
  */
 export const CONFIG_INIT_SERVICES = NEON_SERVICES.filter(
 	(service) => service !== "postgres",
@@ -111,17 +112,82 @@ const renderGaServices = (services: readonly NeonService[]): string => {
 };
 
 /**
+ * How the scaffolded `dataApi` entry verifies tokens. `neon` is the default and writes
+ * `dataApi: true` plus `auth: true`. `external` is for a branch whose Data API already
+ * verifies a third-party IdP: it writes the object form and leaves `auth` alone, because
+ * declaring Neon Auth there would make the next `neon deploy` enable it unasked.
+ */
+export type DataApiTemplateChoice =
+	| { kind: "neon" }
+	| {
+			kind: "external";
+			jwksUrl?: string;
+			providerName?: string;
+			jwtAudience?: string;
+	  };
+
+/** The template choice for a view's `dataApi` entry (`config status` / `--from-branch`). */
+export const dataApiChoiceFromView = (
+	dataApi: NonNullable<NeonConfigView["dataApi"]>,
+): DataApiTemplateChoice => {
+	if (dataApi === true) return { kind: "neon" };
+	const { authProvider: _provider, ...wiring } = dataApi;
+	return { kind: "external", ...wiring };
+};
+
+/**
+ * The `dataApi` entry, ending in a newline. The external form carries whatever wiring is
+ * known; without a JWKS URL it still type-checks (the URL is optional) and still declares the
+ * Data API, so a comment says where the URL lives rather than inventing one.
+ */
+const renderDataApiEntry = (choice: DataApiTemplateChoice): string => {
+	if (choice.kind === "neon") {
+		return `${at(1, "dataApi: true,").join("\n")}\n`;
+	}
+	const fields: string[] = at(1 + 1, `authProvider: "external",`);
+	if (choice.jwksUrl === undefined) {
+		fields.push(
+			...at(
+				2,
+				"// The JWKS URL is registered on the project; add `jwksUrl` to declare it here too.",
+			),
+		);
+	} else {
+		fields.push(...at(2, `jwksUrl: ${renderScalar(choice.jwksUrl)},`));
+	}
+	if (choice.providerName !== undefined) {
+		fields.push(
+			...at(2, `providerName: ${renderScalar(choice.providerName)},`),
+		);
+	}
+	if (choice.jwtAudience !== undefined) {
+		fields.push(
+			...at(2, `jwtAudience: ${renderScalar(choice.jwtAudience)},`),
+		);
+	}
+	return `${block(1, "dataApi", fields).join("\n")}\n`;
+};
+
+/**
  * Render the `neon.ts` policy `config init` writes. With no services this is the starter
  * policy — an explicit `auth: false`, no service keys beyond that, and a `branch` closure that gives
  * new non-default branches a 7-day TTL — so the picker's "skip everything" answer and a
  * non-interactive run produce the identical file.
  *
- * `data-api` writes `dataApi: true` and forces `auth: true`. The default provider is Neon
- * Auth; omitting auth is a `defineConfig` type error rather than a deploy-time surprise.
+ * `data-api` writes `dataApi: true` and forces `auth: true` unless `options.dataApi` says the
+ * branch's Data API verifies an external provider. The default provider is Neon Auth;
+ * omitting auth is a `defineConfig` type error rather than a deploy-time surprise.
  */
-export const renderNeonConfig = (services: readonly NeonService[]): string => {
-	const auth = services.includes("auth") || services.includes("data-api");
-	const dataApi = services.includes("data-api") ? "  dataApi: true,\n" : "";
+export const renderNeonConfig = (
+	services: readonly NeonService[],
+	options: { dataApi?: DataApiTemplateChoice } = {},
+): string => {
+	const dataApiChoice = options.dataApi ?? { kind: "neon" };
+	const declaresDataApi = services.includes("data-api");
+	const auth =
+		services.includes("auth") ||
+		(declaresDataApi && dataApiChoice.kind !== "external");
+	const dataApi = declaresDataApi ? renderDataApiEntry(dataApiChoice) : "";
 	const realtimeDeclaration = services.includes("realtime")
 		? "  preview: {\n    realtime: true,\n  },\n"
 		: "";
@@ -271,7 +337,9 @@ export const renderNeonConfigFromView = (
 ): { source: string; seeded: boolean } => {
 	const services = [
 		view.auth ? "  auth: true," : "",
-		view.dataApi ? "  dataApi: true," : "",
+		view.dataApi
+			? renderDataApiEntry(dataApiChoiceFromView(view.dataApi)).trimEnd()
+			: "",
 	].filter((line) => line !== "");
 	const gaServices = renderSeededGaServices(view, branchName);
 	const branch = renderSeededBranch(view);

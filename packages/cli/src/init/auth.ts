@@ -98,6 +98,27 @@ export const runAuthenticatedMcp = async (
 };
 
 /**
+ * Resolves Neon auth the same way `neon config init --from-branch` would — the one `config
+ * init` path that reads the API — and returns the resolved client for an in-process
+ * `initCmd`. Init calls this only after a successful link, so the credentials are already on
+ * disk and this never pops a login on its own.
+ */
+export const resolveInitConfigApi = async (
+	options: InitAuthOptions,
+): Promise<Pick<CommonProps, "apiClient" | "apiKey" | "apiHost">> => {
+	const authenticated = authContext({ ...options, fromBranch: true }, [
+		"config",
+		"init",
+	]);
+	await ensureAuth(authenticated);
+	return {
+		apiClient: authenticated.apiClient,
+		apiKey: authenticated.apiKey,
+		apiHost: authenticated.apiHost,
+	};
+};
+
+/**
  * Resolves Neon auth the same way a standalone `neon env pull` invocation would, then runs
  * `pull` — the same function `link`/`checkout` already call directly via
  * `autoPullEnvAfterPin` (see `commands/env.ts`).

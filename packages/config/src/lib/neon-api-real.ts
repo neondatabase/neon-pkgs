@@ -76,6 +76,7 @@ import type {
 	NeonRealtimeSnapshot,
 	NeonRoleSnapshot,
 	NeonTriggerSnapshot,
+	RemoteDataApiAuthProvider,
 	UpdateBranchInput,
 	UpdateTriggerInput,
 } from "./neon-api.js";
@@ -205,6 +206,24 @@ function dataApiCreateRequest(
 	return req;
 }
 
+/**
+ * The auth-provider fields of `DataAPIReponse`. Read off the raw response rather than the
+ * generated type: the vendored spec predates them, and a response that lacks them is a
+ * valid older Data API rather than an error.
+ */
+interface DataApiAuthFields {
+	auth_provider?: unknown;
+	jwks_url?: unknown;
+	provider_name?: unknown;
+	jwt_audience?: unknown;
+}
+
+const REMOTE_DATA_API_AUTH_PROVIDERS: ReadonlySet<string> = new Set([
+	"neon_auth",
+	"external",
+	"none",
+]);
+
 /** Map a `DataAPIReponse` (GET) onto our {@link NeonDataApiSnapshot}. */
 function dataApiSnapshotFromResponse(
 	data: DataApiReponse,
@@ -213,6 +232,18 @@ function dataApiSnapshotFromResponse(
 	if (data.status !== undefined) snapshot.status = data.status;
 	const settings = dataApiSettingsFromApi(data.settings);
 	if (settings) snapshot.settings = settings;
+	const auth = data as DataApiAuthFields;
+	if (
+		typeof auth.auth_provider === "string" &&
+		REMOTE_DATA_API_AUTH_PROVIDERS.has(auth.auth_provider)
+	) {
+		snapshot.authProvider = auth.auth_provider as RemoteDataApiAuthProvider;
+	}
+	if (typeof auth.jwks_url === "string") snapshot.jwksUrl = auth.jwks_url;
+	if (typeof auth.provider_name === "string")
+		snapshot.providerName = auth.provider_name;
+	if (typeof auth.jwt_audience === "string")
+		snapshot.jwtAudience = auth.jwt_audience;
 	return snapshot;
 }
 

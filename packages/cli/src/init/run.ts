@@ -7,7 +7,11 @@ import {
 import { DEFAULT_CLAIMABLE_ORIGIN } from "../claimable/api.js";
 import { readLinkedClaimableCredentials } from "../claimable/state.js";
 import { create as createClaimableProject } from "../commands/claim.js";
-import { ConfigInstallFailed, initCmd } from "../commands/config.js";
+import {
+	type ConfigInitProps,
+	ConfigInstallFailed,
+	initCmd,
+} from "../commands/config.js";
 import type { EnvPullProps, PullOutcome } from "../commands/env.js";
 import { quoteFlagValue, runLink } from "../commands/link.js";
 import { defaultDir } from "../config.js";
@@ -38,6 +42,7 @@ import {
 import {
 	pullInitEnv as defaultPullInitEnv,
 	type InitAuthOptions,
+	resolveInitConfigApi,
 } from "./auth.js";
 import { InitCancelled, raceSigint, restoreCursor } from "./cancelled.js";
 import {
@@ -154,6 +159,12 @@ export type InitConfigFn = (input: {
 	services?: readonly string[];
 	packageManager?: PackageManager;
 	install: boolean;
+	/**
+	 * The linked project, passed only when `data-api` is declared and init has credentials
+	 * for it, so the scaffolded `dataApi` follows the branch's live auth provider instead of
+	 * assuming Neon Auth.
+	 */
+	project?: { projectId: string; branch?: string; auth: InitAuthOptions };
 }) => Promise<void>;
 
 export type InitClaimFn = (input: {
@@ -447,6 +458,28 @@ const pickOrDetectAgents = async (input: {
 };
 
 const defaultInitConfig: InitConfigFn = async (input) => {
+	// A failed credential read must not fail init: `initCmd` without a client writes the
+	// same neon.ts it always has, and says so.
+	let project: Pick<
+		ConfigInitProps,
+		"apiClient" | "apiKey" | "apiHost" | "projectId" | "branch"
+	> = {};
+	if (input.project) {
+		try {
+			project = {
+				...(await resolveInitConfigApi(input.project.auth)),
+				projectId: input.project.projectId,
+				...(input.project.branch !== undefined
+					? { branch: input.project.branch }
+					: {}),
+			};
+		} catch (error) {
+			log.warning(
+				"Couldn't authenticate to read the Data API on the linked branch (%s); declaring it with Neon Auth.",
+				error instanceof Error ? error.message : String(error),
+			);
+		}
+	}
 	await initCmd({
 		cwd: input.cwd,
 		install: input.install,
@@ -456,6 +489,7 @@ const defaultInitConfig: InitConfigFn = async (input) => {
 		...(input.packageManager !== undefined
 			? { packageManager: input.packageManager }
 			: {}),
+		...project,
 	});
 };
 
@@ -1288,12 +1322,35 @@ export const runInit = async (props: InitProps): Promise<void> => {
 				printInitProgress(PROGRESS.config);
 			}
 			printInitProgress(PROGRESS.install(pm));
+			// Only a verified link has credentials to read the branch with; a skipped or
+			// offline pin would turn the lookup into a login prompt.
+			const readableProject =
+				funnel.link !== "skipped" &&
+				!pinnedOffline &&
+				declared.includes("data-api")
+					? readContextFile(contextFile)
+					: undefined;
+			const readableBranch =
+				readableProject !== undefined
+					? contextBranch(readableProject)
+					: undefined;
 			try {
 				await (props.initConfig ?? defaultInitConfig)({
 					cwd,
 					install: true,
 					packageManager: pm,
 					...(planned !== undefined ? { services: planned } : {}),
+					...(typeof readableProject?.projectId === "string"
+						? {
+								project: {
+									projectId: readableProject.projectId,
+									...(readableBranch !== undefined
+										? { branch: readableBranch }
+										: {}),
+									auth,
+								},
+							}
+						: {}),
 				});
 			} catch (error) {
 				if (error instanceof ConfigInstallFailed) {

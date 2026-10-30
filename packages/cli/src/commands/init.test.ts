@@ -200,6 +200,67 @@ describe("init handler", () => {
 		expect(ops.calls).toEqual([]);
 	});
 
+	test("-y --services data-api hands the linked project to the config step", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-data-api-"));
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({ projectId: "prj-old", branch: "main" }),
+		);
+		const ops = makeOperations();
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+				initConfig,
+				services: ["data-api"],
+			}),
+		);
+
+		expect(initConfig).toHaveBeenCalledWith(
+			expect.objectContaining({
+				services: ["data-api"],
+				project: expect.objectContaining({
+					projectId: "prj-old",
+					branch: "main",
+				}),
+			}),
+		);
+	});
+
+	test("the config step gets no project to read when data-api is not declared", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-no-data-api-"));
+		writeFileSync(
+			join(cwd, ".neon"),
+			JSON.stringify({ projectId: "prj-old", branch: "main" }),
+		);
+		const ops = makeOperations();
+		const initConfig = vi.fn().mockResolvedValue(undefined);
+		vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				operations: ops,
+				yes: true,
+				contextFile: join(cwd, ".neon"),
+				initConfig,
+				services: ["auth"],
+			}),
+		);
+
+		expect(initConfig).toHaveBeenCalledWith(
+			expect.objectContaining({ services: ["auth"] }),
+		);
+		expect(initConfig.mock.calls[0]?.[0]).not.toHaveProperty("project");
+	});
+
 	test("empty -y is Recommended in place: skills fallback, link, default neon.ts", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-empty-y-"));
 		const ops = makeOperations();

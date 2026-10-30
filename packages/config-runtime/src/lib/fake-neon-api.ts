@@ -601,7 +601,21 @@ export class FakeNeonApi implements NeonApi {
 		const snapshot: NeonDataApiSnapshot = {
 			url: `https://${branchId}.fake.neon.tech/data-api/${databaseName}`,
 			status: "ready",
+			// The real API records the create-time provider; an omitted one is "none".
+			authProvider:
+				input?.authProvider === "external"
+					? "external"
+					: input?.authProvider === "neon"
+						? "neon_auth"
+						: "none",
 		};
+		if (input?.authProvider === "external") {
+			if (input.jwksUrl !== undefined) snapshot.jwksUrl = input.jwksUrl;
+			if (input.providerName !== undefined)
+				snapshot.providerName = input.providerName;
+			if (input.jwtAudience !== undefined)
+				snapshot.jwtAudience = input.jwtAudience;
+		}
 		if (input?.settings) snapshot.settings = { ...input.settings };
 		this.neonDataApi.set(key, snapshot);
 		return clone(snapshot);

@@ -54,7 +54,7 @@ const CHOICES: { value: NeonService; title: string; description: string }[] = [
 		value: "data-api",
 		title: "Data API",
 		description:
-			"PostgREST-compatible HTTP API. Also declares Auth; the default provider needs it.",
+			"PostgREST-compatible HTTP API. Also declares Auth, which the default provider needs, unless the linked branch's Data API already uses an external identity provider.",
 	},
 	{
 		value: "functions",

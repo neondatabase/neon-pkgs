@@ -4,11 +4,14 @@ import {
 	type ComputeSettings,
 	type Config,
 	createNeonApiFromOptions,
+	type DataApiExternalAuthConfig,
+	type DataApiInput,
 	ErrorCode,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonBucketSnapshot,
 	type NeonCredentialMeta,
+	type NeonDataApiSnapshot,
 	type NeonDatabaseSnapshot,
 	type NeonEndpointSnapshot,
 	type NeonFunctionSnapshot,
@@ -177,8 +180,42 @@ export async function pullConfig(
 		credentials,
 		authEnabled: auth !== null,
 		dataApiEnabled: dataApi !== null,
+		dataApi,
 		realtime,
 	});
+}
+
+/**
+ * The `dataApi` a pulled policy declares for a live Data API. The provider is fixed when the
+ * Data API is created, so a bare `true` (Neon Auth) is only right when that is what the
+ * branch has; writing it over an external-IdP Data API would make the next apply enable Neon
+ * Auth. When the API does not report the provider (older Data APIs), the branch's Neon Auth
+ * state is the best available answer: with Neon Auth off, the Data API cannot be using it.
+ */
+export function pulledDataApiConfig(
+	dataApi: NeonDataApiSnapshot,
+	authEnabled: boolean,
+): DataApiInput {
+	const external = (): DataApiExternalAuthConfig => {
+		const config: DataApiExternalAuthConfig = { authProvider: "external" };
+		if (dataApi.jwksUrl !== undefined) config.jwksUrl = dataApi.jwksUrl;
+		if (dataApi.providerName !== undefined)
+			config.providerName = dataApi.providerName;
+		if (dataApi.jwtAudience !== undefined)
+			config.jwtAudience = dataApi.jwtAudience;
+		return config;
+	};
+	switch (dataApi.authProvider) {
+		case "neon_auth":
+			return true;
+		case "external":
+			return external();
+		default:
+			// "none" has no policy spelling; `external` without a JWKS declares the Data API
+			// while leaving Neon Auth alone, which is the one thing a provider-less Data API
+			// and an unknown one have in common.
+			return authEnabled ? true : external();
+	}
 }
 
 /**
@@ -253,6 +290,12 @@ export function buildPulledBranchConfig(
 		authEnabled?: boolean;
 		/** Whether a Neon Data API integration is enabled on the branch. */
 		dataApiEnabled?: boolean;
+		/**
+		 * The live Data API, when enabled. Its auth provider decides the shape of the emitted
+		 * `dataApi` (see {@link pulledDataApiConfig}); with only `dataApiEnabled` the policy
+		 * falls back to a bare `true`.
+		 */
+		dataApi?: NeonDataApiSnapshot | null;
 		/** Realtime state when the adapter supports the branch endpoint. */
 		realtime?: NeonRealtimeSnapshot | null;
 	},
@@ -289,9 +332,15 @@ export function buildPulledBranchConfig(
 	const policyPreview: NonNullable<Config["preview"]> = {};
 	if (previewState?.realtime?.enabled) policyPreview.realtime = true;
 	if (Object.keys(bucketDefs).length > 0) policyPreview.buckets = bucketDefs;
+	const authEnabled = previewState?.authEnabled === true;
+	const dataApi = previewState?.dataApi
+		? pulledDataApiConfig(previewState.dataApi, authEnabled)
+		: previewState?.dataApiEnabled
+			? true
+			: undefined;
 	const config: Config = {
-		...(previewState?.authEnabled ? { auth: true } : {}),
-		...(previewState?.dataApiEnabled ? { dataApi: true } : {}),
+		...(authEnabled ? { auth: true } : {}),
+		...(dataApi !== undefined ? { dataApi } : {}),
 		...(Object.keys(policyPreview).length > 0
 			? { preview: policyPreview }
 			: {}),

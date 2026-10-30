@@ -1567,6 +1567,99 @@ class LoadedBranchNeonApi extends FakeNeonApi {
 	}
 }
 
+describe("config init --services data-api", () => {
+	let cwd: string;
+
+	beforeEach(() => {
+		cwd = mkdtempSync(join(tmpdir(), "neonctl-init-data-api-"));
+	});
+
+	afterEach(() => {
+		rmSync(cwd, { recursive: true, force: true });
+	});
+
+	/** A branch whose Data API verifies Clerk tokens and has no Neon Auth. */
+	class ExternalDataApiNeonApi extends FakeNeonApi {
+		override async listBranches(): Promise<NeonBranchSnapshot[]> {
+			return [
+				{
+					id: BRANCH_ID,
+					name: BRANCH_NAME,
+					isDefault: true,
+					protected: false,
+				},
+			];
+		}
+
+		override async getNeonAuth(): Promise<NeonAuthSnapshot | null> {
+			return null;
+		}
+
+		override async getNeonDataApi(): Promise<NeonDataApiSnapshot> {
+			return {
+				url: "https://dataapi.fake.neon.tech",
+				status: "ready",
+				authProvider: "external",
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+			};
+		}
+	}
+
+	class UnreadableDataApiNeonApi extends LoadedBranchNeonApi {
+		override async getNeonDataApi(): Promise<NeonDataApiSnapshot> {
+			throw new Error("data api read failed");
+		}
+	}
+
+	const linkedProps = (api: NeonApi) => ({
+		cwd,
+		install: false,
+		services: ["data-api"],
+		apiClient: fakeApiClient as never,
+		projectId: PROJECT_ID,
+		runtimeApi: api,
+	});
+
+	it("declares an external Data API the way the branch has it, without Neon Auth", async () => {
+		await initCmd(linkedProps(new ExternalDataApiNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("auth: false,");
+		expect(source).not.toContain("dataApi: true");
+		expect(source).toContain('authProvider: "external",');
+		expect(source).toContain(
+			'jwksUrl: "https://idp.example.com/.well-known/jwks.json",',
+		);
+		expect(source).toContain('providerName: "Clerk",');
+	});
+
+	it("declares a Neon Auth Data API as before", async () => {
+		await initCmd(linkedProps(new LoadedBranchNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("auth: true,");
+		expect(source).toContain("dataApi: true,");
+		expect(source).not.toContain("authProvider");
+	});
+
+	it("writes the Neon Auth scaffold when no project is linked", async () => {
+		await initCmd({ cwd, install: false, services: ["data-api"] });
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("auth: true,");
+		expect(source).toContain("dataApi: true,");
+	});
+
+	it("falls back to the Neon Auth scaffold when the branch cannot be read", async () => {
+		await initCmd(linkedProps(new UnreadableDataApiNeonApi()));
+
+		const source = readFileSync(join(cwd, "neon.ts"), "utf8");
+		expect(source).toContain("auth: true,");
+		expect(source).toContain("dataApi: true,");
+	});
+});
+
 describe("config init --from-branch", () => {
 	let cwd: string;
 

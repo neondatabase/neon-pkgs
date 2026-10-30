@@ -210,6 +210,8 @@ Two invariants are enforced **both** at author time (TypeScript) and at runtime 
 
 The auth wiring (`authProvider`, `jwksUrl`, …) is set when the Data API is first **enabled** and is immutable afterwards. The runtime `settings` are reconcilable: changing them is treated as an **update** and requires `updateExisting: true` (`apply`) / `--update-existing` (CLI), like compute/TTL/`protected` drift.
 
+Because the provider cannot change, `neon init --services data-api` and `config pull` declare what the live Data API has rather than assuming Neon Auth: when the linked branch's Data API verifies an external IdP (or the API does not say and Neon Auth is off on the branch), they write `dataApi: { authProvider: "external", … }` with whatever wiring the API reports and leave `auth` alone. Otherwise they write `dataApi: true` with `auth: true`.
+
 ## Functions
 
 The three operations mirror the Terraform mental model: **`inspect`** (read live state), **`plan`** (dry-run diff), **`apply`** (reconcile).

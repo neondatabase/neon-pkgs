@@ -110,6 +110,14 @@ export interface NeonAuthSnapshot {
 }
 
 /**
+ * How a live Data API verifies tokens, in the Neon API's own spelling: `neon_auth` is Neon
+ * Auth, `external` a third-party IdP's JWKS, `none` a Data API created without a provider.
+ * Distinct from the policy-side {@link DataApiAuthProvider} (`"neon"` / `"external"`), which
+ * has no way to say "none".
+ */
+export type RemoteDataApiAuthProvider = "neon_auth" | "external" | "none";
+
+/**
  * Public, fetchable bits of a Neon Data API integration on a specific branch — the subset of
  * the Neon API `DataAPIReponse` we model. `settings` is only populated for SubZero-backed
  * integrations (the API returns `null` otherwise), so it is used for settings-drift diffing
@@ -122,6 +130,16 @@ export interface NeonDataApiSnapshot {
 	status?: string;
 	/** Current runtime settings (SubZero only); `null`/absent when not reported. */
 	settings?: DataApiSettings | null;
+	/**
+	 * The auth provider the Data API was created with, when the API reports it. Absent for
+	 * Data APIs created before the API recorded it — callers that need an answer fall back to
+	 * the branch's Neon Auth state.
+	 */
+	authProvider?: RemoteDataApiAuthProvider;
+	/** External-provider wiring, reported only alongside `authProvider: "external"`. */
+	jwksUrl?: string;
+	providerName?: string;
+	jwtAudience?: string;
 }
 
 /**

@@ -96,6 +96,52 @@ export default defineConfig({
 		expect(rendered).not.toContain("buckets");
 	});
 
+	it("declares an external data-api without auth, with the wiring the branch reports", () => {
+		const rendered = renderNeonConfig(["data-api"], {
+			dataApi: {
+				kind: "external",
+				jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+				providerName: "Clerk",
+				jwtAudience: "my-api",
+			},
+		});
+		expect(rendered).toContain("auth: false,");
+		expect(rendered).not.toContain("dataApi: true");
+		expect(rendered).toContain(`  dataApi: {
+    authProvider: "external",
+    jwksUrl: "https://idp.example.com/.well-known/jwks.json",
+    providerName: "Clerk",
+    jwtAudience: "my-api",
+  },
+`);
+	});
+
+	it("keeps auth when it is selected alongside an external data-api", () => {
+		const rendered = renderNeonConfig(["auth", "data-api"], {
+			dataApi: { kind: "external" },
+		});
+		expect(rendered).toContain("auth: true,");
+		expect(rendered).toContain('authProvider: "external",');
+	});
+
+	it("points at the project's JWKS when the external wiring is unknown", () => {
+		const rendered = renderNeonConfig(["data-api"], {
+			dataApi: { kind: "external" },
+		});
+		expect(rendered).toContain("auth: false,");
+		expect(rendered).toContain('authProvider: "external",');
+		expect(rendered).not.toContain("jwksUrl:");
+		expect(rendered).toContain(
+			"// The JWKS URL is registered on the project",
+		);
+	});
+
+	it("renders the Neon Auth data-api identically with and without the choice", () => {
+		expect(
+			renderNeonConfig(["data-api"], { dataApi: { kind: "neon" } }),
+		).toBe(renderNeonConfig(["data-api"]));
+	});
+
 	it("emits only the selected GA service keys", () => {
 		const rendered = renderNeonConfig(["object-storage"]);
 		expect(rendered).toContain("auth: false,");
