@@ -10,7 +10,7 @@ import { type AuthContext, getAuthContext } from "./auth_context.js";
 import { credentialsPath } from "./config.js";
 import { isCurrentBranchProbe } from "./context.js";
 import { storeFor } from "./credential_io.js";
-import { getCliAgent, getGithubEnvVars, isCi } from "./env.js";
+import { getCliAgent, getGithubEnvVars, getTty, isCi } from "./env.js";
 import { type ErrorCode, isUnexpectedError } from "./errors.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
@@ -140,6 +140,7 @@ type AnalyticsEventProperties = {
 	};
 	ci: boolean;
 	agent: ReturnType<typeof getCliAgent>;
+	tty: ReturnType<typeof getTty>;
 	githubEnvVars: ReturnType<typeof getGithubEnvVars>;
 };
 
@@ -147,6 +148,7 @@ type ErrorEventContext = {
 	version: string;
 	ci: boolean;
 	agent: ReturnType<typeof getCliAgent>;
+	tty: ReturnType<typeof getTty>;
 };
 
 /** Lets tests send to a local collector; the CLI itself always uses track.neon.tech. */
@@ -435,6 +437,7 @@ const getErrorAnalyticsEventContext = (
 	version: pkg.version,
 	ci: isCi(),
 	agent: getCliAgent(process.env),
+	tty: getTty(),
 });
 
 // `nak_live_…` is the credential token id (also AWS_ACCESS_KEY_ID). CLI Started
@@ -624,5 +627,6 @@ export const getAnalyticsEventProperties = (
 	},
 	ci: isCi(),
 	agent: getCliAgent(process.env),
+	tty: getTty(),
 	githubEnvVars: getGithubEnvVars(process.env),
 });

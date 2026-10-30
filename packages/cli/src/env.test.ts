@@ -1,3 +1,7 @@
+import { execFile } from "node:child_process";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { getCliAgent, getGithubEnvVars } from "./env";
 
@@ -72,6 +76,45 @@ describe("getCliAgent", () => {
 		).toBe("github-copilot-cli");
 	});
 
+	it("attributes a Kilo command as Kilo, not OpenCode", () => {
+		expect(
+			getCliAgent({ KILO: "1", OPENCODE: "1", KILO_PID: "4242" }),
+		).toBe("kilo");
+	});
+
+	it.each([
+		[{ ANTIGRAVITY_AGENT: "1" }, "antigravity"],
+		[{ QWEN_CODE: "1" }, "qwen-code"],
+		[{ AMP_CURRENT_THREAD_ID: "T-123" }, "amp"],
+		[{ CLINE_ACTIVE: "true" }, "cline"],
+		[{ OPENCLAW_SHELL: "exec" }, "openclaw"],
+	])("attributes %o as %s", (env, agent) => {
+		expect(getCliAgent(env)).toBe(agent);
+	});
+
+	it("does not attribute a command typed in OpenClaw's local shell", () => {
+		expect(getCliAgent({ OPENCLAW_SHELL: "tui-local" })).toBeUndefined();
+	});
+
+	it("falls back to the agent AI_AGENT declares", () => {
+		expect(
+			getCliAgent({ AI_AGENT: "hermes-agent", HERMES_AGENT: "true" }),
+		).toBe("hermes-agent");
+		expect(getCliAgent({ AI_AGENT: " Crush " })).toBe("crush");
+	});
+
+	it("prefers a specific marker over AI_AGENT", () => {
+		expect(getCliAgent({ AI_AGENT: "v0", CURSOR_AGENT: "1" })).toBe(
+			"cursor",
+		);
+	});
+
+	it("drops an AI_AGENT value that is not a short slug", () => {
+		expect(getCliAgent({ AI_AGENT: "" })).toBeUndefined();
+		expect(getCliAgent({ AI_AGENT: "my agent" })).toBeUndefined();
+		expect(getCliAgent({ AI_AGENT: "a".repeat(65) })).toBeUndefined();
+	});
+
 	it("does not attribute disabled harness markers", () => {
 		expect(getCliAgent({ OPENCODE: "0" })).toBeUndefined();
 		expect(getCliAgent({ GEMINI_CLI: "" })).toBeUndefined();
@@ -128,6 +171,18 @@ describe("getCliAgent", () => {
 				CODEX_THREAD_ID: "thread-123",
 			}),
 		).toBeUndefined();
+	});
+});
+
+describe("getTty", () => {
+	it("reports no terminal when an agent runs the CLI with piped stdio", async () => {
+		const env = pathToFileURL(join(process.cwd(), "dist/env.js")).href;
+		const { stdout } = await promisify(execFile)(process.execPath, [
+			"--input-type=module",
+			"-e",
+			`const { getTty } = await import(${JSON.stringify(env)}); process.stdout.write(JSON.stringify(getTty()));`,
+		]);
+		expect(JSON.parse(stdout)).toEqual({ stdin: false, stdout: false });
 	});
 });
 
