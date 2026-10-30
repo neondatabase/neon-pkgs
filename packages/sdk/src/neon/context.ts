@@ -201,14 +201,18 @@ export class RequestContext {
 				return { ok: false, error: toNeonError(undefined, undefined) };
 			}
 			if (raw.error !== undefined) {
-				return {
-					ok: false,
-					error: await explainRegionUnavailable(
-						toNeonError(raw.error, raw.response),
+				const error = toNeonError(raw.error, raw.response);
+				const explained = await runBounded(deadline, () =>
+					explainRegionUnavailable(
+						error,
 						raw.request?.url ?? raw.response?.url,
 						this.#config.client,
 						deadline.signal,
 					),
+				);
+				return {
+					ok: false,
+					error: cancelled(deadline) ?? explained ?? error,
 				};
 			}
 			return { ok: true, data: raw.data, response: raw.response };

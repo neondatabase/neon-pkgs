@@ -132,3 +132,55 @@ describe("feature-unavailable 404s", () => {
 		expect(calls).toHaveLength(1);
 	});
 });
+
+describe("the region lookup stays inside the request deadline", () => {
+	function stallingLookup(config: { requestTimeoutMs?: number }) {
+		let fetched = false;
+		return createNeonClient({
+			// Key reads after the first request are the region lookup's; they never
+			// resolve, as a stalled credential refresh would not.
+			apiKey: () => (fetched ? new Promise<string>(() => {}) : "test"),
+			retries: 0,
+			throwOnError: false,
+			requestTimeoutMs: config.requestTimeoutMs,
+			fetch: async () => {
+				fetched = true;
+				return new Response(
+					JSON.stringify({
+						message: "Realtime is not available for this project",
+					}),
+					{
+						status: 404,
+						headers: { "content-type": "application/json" },
+					},
+				);
+			},
+		});
+	}
+
+	it("answers within requestTimeoutMs when the lookup stalls", async () => {
+		const neon = stallingLookup({ requestTimeoutMs: 100 });
+		const started = Date.now();
+		const result = await neon.realtime.get(target);
+		expect(result.error?.kind).toBe("timeout");
+		expect(Date.now() - started).toBeLessThan(1_000);
+	});
+
+	it("answers within requestTimeoutMs for a paginated list", async () => {
+		const neon = stallingLookup({ requestTimeoutMs: 100 });
+		const started = Date.now();
+		const result = await neon.functions.list(target).page();
+		expect(result.error?.kind).toBe("timeout");
+		expect(Date.now() - started).toBeLessThan(1_000);
+	});
+
+	it("honors the caller's signal during the lookup", async () => {
+		const neon = stallingLookup({});
+		const controller = new AbortController();
+		setTimeout(() => controller.abort(), 50);
+		const result = await neon.realtime.get(target, {
+			signal: controller.signal,
+		});
+		expect(result.error?.kind).toBe("aborted");
+	});
+});

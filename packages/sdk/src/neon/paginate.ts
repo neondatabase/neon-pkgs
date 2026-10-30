@@ -87,14 +87,16 @@ class PaginatedList<T, D> implements Paginated<T, boolean> {
 			// Re-deriving one from the response would mislabel a fault the SDK
 			// found in a 200 body as an API error with a 2xx status.
 			if (isNeonError(raw?.error)) return err(raw.error);
-			return err(
-				await explainRegionUnavailable(
-					toNeonError(raw?.error, raw?.response),
+			const error = toNeonError(raw?.error, raw?.response);
+			const explained = await runBounded(deadline, () =>
+				explainRegionUnavailable(
+					error,
 					raw?.request?.url ?? raw?.response?.url,
 					this.#client,
 					deadline.signal,
 				),
 			);
+			return err(cancelled(deadline) ?? explained ?? error);
 		}
 		return ok(this.#mapPage(raw.data));
 	}
