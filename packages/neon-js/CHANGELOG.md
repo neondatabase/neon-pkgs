@@ -1,5 +1,12 @@
 # @neon/neon-js
 
+## 0.10.2
+
+### Patch Changes
+
+- Updated dependencies [b45fa37]
+  - @neon/auth@0.8.2
+
 ## 0.10.1
 
 ### Patch Changes
