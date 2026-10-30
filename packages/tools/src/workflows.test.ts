@@ -6,6 +6,8 @@ import {
 	type NeonToolsClientOptions,
 } from "./index.js";
 
+type TestClientOptions = Omit<NeonToolsClientOptions, "throwOnError">;
+
 const jsonResponse = (body: unknown, status = 201) =>
 	new Response(JSON.stringify(body), {
 		status,
@@ -39,7 +41,7 @@ const projectWithUriBody = {
 	],
 };
 
-const createBranchOnlyTools = (options: NeonToolsClientOptions = {}) => {
+const createBranchOnlyTools = (options: TestClientOptions = {}) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
@@ -53,7 +55,7 @@ const createBranchOnlyTools = (options: NeonToolsClientOptions = {}) => {
 	return { requests, tools };
 };
 
-const createBranchTools = (options: NeonToolsClientOptions = {}) => {
+const createBranchTools = (options: TestClientOptions = {}) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
