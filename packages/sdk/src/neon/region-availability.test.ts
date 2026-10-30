@@ -123,6 +123,27 @@ describe("feature-unavailable 404s", () => {
 		);
 	});
 
+	it.each([
+		["realtime.get", (n: Neon) => n.realtime.get(target)],
+		[
+			"functions.list().page()",
+			(n: Neon) => n.functions.list(target).page(),
+		],
+	])("keeps the API 404 when the project lookup has an empty body (%s)", async (_, call) => {
+		const { neon } = neonAnswering((url) =>
+			/\/projects\/[^/]+$/.test(url.pathname)
+				? { status: 204 }
+				: notAvailable(
+						url.pathname.endsWith("/functions")
+							? "platform functions not available for this project"
+							: "Realtime is not available for this project",
+					),
+		);
+		const result = await call(neon);
+		expect(result.error).toBeInstanceOf(NeonNotFoundError);
+		expect(result.error?.message).not.toContain("it is in");
+	});
+
 	it("does not look up the project for other 404s", async () => {
 		const { neon, calls } = neonAnswering(() =>
 			notAvailable("branch not found"),

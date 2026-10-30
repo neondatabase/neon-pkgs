@@ -95,8 +95,12 @@ export async function explainRegionUnavailable(
 		throwOnError: false,
 		signal,
 	}).catch(() => ({ data: undefined }));
-	const regionId = data?.project.region_id;
-	if (!regionId || PLATFORM_FEATURE_REGIONS.includes(regionId)) return error;
+	const regionId = data?.project?.region_id;
+	if (
+		typeof regionId !== "string" ||
+		PLATFORM_FEATURE_REGIONS.includes(regionId)
+	)
+		return error;
 
 	return new NeonNotFoundError(regionUnavailableMessage(feature, regionId), {
 		status: error.status,
