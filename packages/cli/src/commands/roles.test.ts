@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
-import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
 
@@ -139,68 +138,28 @@ describe("roles", () => {
 		);
 	});
 
-	test("delete of a missing name reports not found and exits 0", async ({
+	test("delete of a missing name reports it on stderr and exits 0", async ({
 		testCliCommand,
 	}) => {
-		const { stdout } = await testCliCommand(
-			[
-				"roles",
-				"delete",
-				"gone_role",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
-			{ snapshot: false, stderr: "" },
-		);
-		expect(YAML.parse(stdout)).toEqual({
-			deleted: false,
-			message: missingRoleMessage,
-		});
-	});
-
-	test("delete of a missing name prints the message on stderr in table mode", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand(
-			[
-				"roles",
-				"delete",
-				"gone_role",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
-			{
-				output: "table",
-				snapshot: false,
-				stderr: missingRoleMessage,
-			},
-		);
-		expect(stdout).toBe("");
-	});
-
-	test("delete of a missing name emits json and exits 0", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand(
-			[
-				"roles",
-				"delete",
-				"gone_role",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
-			{ output: "json", snapshot: false, stderr: "" },
-		);
-		expect(JSON.parse(stdout)).toEqual({
-			deleted: false,
-			message: missingRoleMessage,
-		});
+		for (const output of ["table", "json", "yaml"] as const) {
+			await testCliCommand(
+				[
+					"roles",
+					"delete",
+					"gone_role",
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					output,
+					snapshot: false,
+					stdout: "",
+					stderr: missingRoleMessage,
+				},
+			);
+		}
 	});
 
 	for (const flag of ["--no-login", "--no-login=true"]) {

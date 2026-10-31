@@ -1,11 +1,11 @@
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
+import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	fillSingleProject,
 	resolveBranchFromProps,
 } from "../utils/enrichers.js";
-import { reportMissingDelete } from "../utils/missing_delete.js";
 import { writer } from "../writer.js";
 
 const ROLES_FIELDS = ["name", "created_at"] as const;
@@ -106,21 +106,22 @@ export const deleteRole = async (
 	props: BranchScopeProps & { role: string },
 ) => {
 	const { branchId, branch } = await resolveBranchFromProps(props);
-	const { data, status } = await retryOnLock(() =>
+	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchRole(
 			props.projectId,
 			branchId,
 			props.role,
 		),
 	);
-	// 204 is empty; some clients still parse that as `{}`, so require the record.
-	if (status === 200 && data?.role) {
+	// A 204 (role already gone) carries no body; only a 200 returns the role.
+	if (data) {
 		writer(props).end(data.role, {
 			fields: ROLES_FIELDS,
 			humanTitle: `Role deleted from ${branch?.name ?? branchId}`,
 		});
 		return;
 	}
-	const message = `Role "${props.role}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`;
-	reportMissingDelete(props, message);
+	log.info(
+		`Role "${props.role}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`,
+	);
 };

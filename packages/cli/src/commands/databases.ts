@@ -1,13 +1,12 @@
 import type { Role } from "@neon/sdk";
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
-
+import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	fillSingleProject,
 	resolveBranchFromProps,
 } from "../utils/enrichers.js";
-import { reportMissingDelete } from "../utils/missing_delete.js";
 import { writer } from "../writer.js";
 
 export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
@@ -124,7 +123,7 @@ export const deleteDb = async (
 	props: BranchScopeProps & { database: string },
 ) => {
 	const { branchId, branch } = await resolveBranchFromProps(props);
-	const { data, status } = await retryOnLock(() =>
+	const { data } = await retryOnLock(() =>
 		props.apiClient.deleteProjectBranchDatabase(
 			props.projectId,
 			branchId,
@@ -132,14 +131,15 @@ export const deleteDb = async (
 		),
 	);
 
-	// 204 is empty; some clients still parse that as `{}`, so require the record.
-	if (status === 200 && data?.database) {
+	// A 204 (database already gone) carries no body; only a 200 returns it.
+	if (data) {
 		writer(props).end(data.database, {
 			fields: DATABASE_FIELDS,
 			humanTitle: `Database deleted from ${branch?.name ?? branchId}`,
 		});
 		return;
 	}
-	const message = `Database "${props.database}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`;
-	reportMissingDelete(props, message);
+	log.info(
+		`Database "${props.database}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`,
+	);
 };

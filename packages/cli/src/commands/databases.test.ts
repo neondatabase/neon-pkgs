@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
-import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
 
@@ -143,67 +142,27 @@ describe("databases", () => {
 		);
 	});
 
-	test("delete of a missing name reports not found and exits 0", async ({
+	test("delete of a missing name reports it on stderr and exits 0", async ({
 		testCliCommand,
 	}) => {
-		const { stdout } = await testCliCommand(
-			[
-				"databases",
-				"delete",
-				"gone_db",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
-			{ snapshot: false, stderr: "" },
-		);
-		expect(YAML.parse(stdout)).toEqual({
-			deleted: false,
-			message: missingDbMessage,
-		});
-	});
-
-	test("delete of a missing name prints the message on stderr in table mode", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand(
-			[
-				"databases",
-				"delete",
-				"gone_db",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
-			{
-				output: "table",
-				snapshot: false,
-				stderr: missingDbMessage,
-			},
-		);
-		expect(stdout).toBe("");
-	});
-
-	test("delete of a missing name emits json and exits 0", async ({
-		testCliCommand,
-	}) => {
-		const { stdout } = await testCliCommand(
-			[
-				"databases",
-				"delete",
-				"gone_db",
-				"--project-id",
-				"test",
-				"--branch",
-				"test_branch",
-			],
-			{ output: "json", snapshot: false, stderr: "" },
-		);
-		expect(JSON.parse(stdout)).toEqual({
-			deleted: false,
-			message: missingDbMessage,
-		});
+		for (const output of ["table", "json", "yaml"] as const) {
+			await testCliCommand(
+				[
+					"databases",
+					"delete",
+					"gone_db",
+					"--project-id",
+					"test",
+					"--branch",
+					"test_branch",
+				],
+				{
+					output,
+					snapshot: false,
+					stdout: "",
+					stderr: missingDbMessage,
+				},
+			);
+		}
 	});
 });
