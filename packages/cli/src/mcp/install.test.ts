@@ -588,6 +588,48 @@ describe("trackedProjectMcpConfig", () => {
 		).toBe(join(".github", "mcp.json"));
 	});
 
+	test("Copilot CLI refuses a tracked .github/mcp.json when Claude Code's .mcp.json was not created", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".github"));
+		const github = '{ "mcpServers": {} }\n';
+		writeFileSync(join(cwd, ".github", "mcp.json"), github);
+		execFileSync("git", ["-C", cwd, "init"], { stdio: "ignore" });
+		execFileSync("git", ["-C", cwd, "add", "--", ".github/mcp.json"], {
+			stdio: "ignore",
+		});
+		chmodSync(cwd, 0o555);
+		try {
+			const results = mcpInstallOrder([
+				"github-copilot-cli",
+				"claude-code",
+			]).map((agent) =>
+				installNeonMcpServer({
+					agent,
+					scope: "project",
+					cwd,
+					auth: { kind: "api-key", apiKey: "napi_test_secret" },
+				}),
+			);
+			expect(results).toEqual([
+				{
+					ok: false,
+					unsupported: false,
+					error: expect.stringMatching(/^Could not create/),
+				},
+				{
+					ok: false,
+					unsupported: false,
+					error: `${join(".github", "mcp.json")} is tracked by git. Untrack it before writing an API key, or pass --oauth.`,
+				},
+			]);
+		} finally {
+			chmodSync(cwd, 0o755);
+		}
+		expect(readFileSync(join(cwd, ".github", "mcp.json"), "utf8")).toBe(
+			github,
+		);
+	});
+
 	test("with Claude Code in the same install, Copilot CLI writes the untracked .mcp.json", () => {
 		const cwd = tmpProject();
 		mkdirSync(join(cwd, ".github"));

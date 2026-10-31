@@ -424,6 +424,19 @@ export function installNeonMcpServer(options: {
 			};
 		}
 	}
+	if (options.scope === "project" && auth.kind === "api-key") {
+		const tracked = trackedProjectMcpConfig({
+			agents: [options.agent],
+			cwd,
+		});
+		if (tracked) {
+			return {
+				ok: false,
+				unsupported: false,
+				error: `${tracked} is tracked by git. Untrack it before writing an API key, or pass --oauth.`,
+			};
+		}
+	}
 	const result = upsertServer(options.agent, NEON_MCP_NAME, server, {
 		local: options.scope === "project",
 		cwd,
