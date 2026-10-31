@@ -284,6 +284,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
       open:
         specifier: ^10.2.0
         version: 10.2.0

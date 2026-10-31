@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { type AgentType, agents, upsertServer } from "add-mcp";
+import { type ParseError, parse as parseJsonc } from "jsonc-parser";
 
 import { getCliName } from "../utils/cli_name.js";
 
@@ -157,36 +158,55 @@ function neonApiKeyFromFile(
 	} catch {
 		return undefined;
 	}
-	try {
-		const parsed: unknown = JSON.parse(raw);
+	const errors: ParseError[] = [];
+	const parsed: unknown = parseJsonc(raw, errors, {
+		allowTrailingComma: true,
+	});
+	if (errors.length === 0) {
 		return bearerFromNeonMcpConfig(
 			neonServers(nestedValue(parsed, configKey)),
 		);
-	} catch {
-		const neonBlock = raw.match(
-			/\[mcp_servers\.Neon\][\s\S]*?(?=\n\[|$)/,
-		)?.[0];
-		if (!neonBlock) {
-			return undefined;
-		}
-		const url = neonBlock.match(/^url\s*=\s*"([^"]*)"/m)?.[1];
-		if (!url || !isNeonMcpUrl(url)) {
-			return undefined;
-		}
-		return BEARER_RE.exec(neonBlock)?.[1];
 	}
+	const neonBlock = raw.match(/\[mcp_servers\.Neon\][\s\S]*?(?=\n\[|$)/)?.[0];
+	if (!neonBlock) {
+		return undefined;
+	}
+	const url = neonBlock.match(/^url\s*=\s*"([^"]*)"/m)?.[1];
+	if (!url || !isNeonMcpUrl(url)) {
+		return undefined;
+	}
+	return BEARER_RE.exec(neonBlock)?.[1];
 }
 
-/** The file add-mcp's `upsertServer` writes for this agent and scope. */
+/**
+ * Claude Code installs first so that a GitHub Copilot CLI install in the same run resolves to
+ * the `.mcp.json` Claude Code creates, rather than to `.github/mcp.json`.
+ */
+export function mcpInstallOrder(selected: readonly AgentType[]): AgentType[] {
+	return [
+		...selected.filter((agent) => agent === "claude-code"),
+		...selected.filter((agent) => agent !== "claude-code"),
+	];
+}
+
+/** The file add-mcp's `upsertServer` writes for this agent when `selected` install in `mcpInstallOrder`. */
 function configPathFor(
 	agent: AgentType,
 	scope: McpInstallScope,
 	cwd: string,
+	selected: readonly AgentType[],
 ): string | undefined {
 	const spec = agents[agent];
 	const local = scope === "project";
 	if (local && !spec.localConfigPath) {
 		return undefined;
+	}
+	if (
+		local &&
+		agent === "github-copilot-cli" &&
+		selected.includes("claude-code")
+	) {
+		return join(cwd, ".mcp.json");
 	}
 	if (spec.resolveConfigPath) {
 		return spec.resolveConfigPath(spec, { local, cwd });
@@ -217,7 +237,12 @@ export function existingNeonApiKey(options: {
 	cwd: string;
 }): string | undefined {
 	for (const agent of options.agents) {
-		const path = configPathFor(agent, options.scope, options.cwd);
+		const path = configPathFor(
+			agent,
+			options.scope,
+			options.cwd,
+			options.agents,
+		);
 		if (!path) {
 			continue;
 		}
@@ -249,7 +274,12 @@ export function trackedProjectMcpConfig(options: {
 	cwd: string;
 }): string | undefined {
 	for (const agent of options.agents) {
-		const path = configPathFor(agent, "project", options.cwd);
+		const path = configPathFor(
+			agent,
+			"project",
+			options.cwd,
+			options.agents,
+		);
 		if (!path) {
 			continue;
 		}
@@ -294,6 +324,10 @@ function createClaudeProjectConfig(cwd: string): string | undefined {
 	}
 	writeFileSync(path, '{\n  "mcpServers": {}\n}\n');
 	return path;
+}
+
+function errorMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
 }
 
 function gitignoreProjectConfig(path: string): string | undefined {
@@ -378,16 +412,32 @@ export function installNeonMcpServer(options: {
 			: { type: "http" as const, url };
 
 	const cwd = options.cwd ?? process.cwd();
-	const created =
-		options.agent === "claude-code" && options.scope === "project"
-			? createClaudeProjectConfig(cwd)
-			: undefined;
+	let created: string | undefined;
+	if (options.agent === "claude-code" && options.scope === "project") {
+		try {
+			created = createClaudeProjectConfig(cwd);
+		} catch (err) {
+			return {
+				ok: false,
+				unsupported: false,
+				error: `Could not create ${join(cwd, ".mcp.json")}: ${errorMessage(err)}`,
+			};
+		}
+	}
 	const result = upsertServer(options.agent, NEON_MCP_NAME, server, {
 		local: options.scope === "project",
 		cwd,
 	});
 	if (!result.success && created) {
-		rmSync(created, { force: true });
+		try {
+			rmSync(created, { force: true });
+		} catch (err) {
+			return {
+				ok: false,
+				unsupported: false,
+				error: `${redactSecrets(result.error ?? "Failed to write Neon MCP server config")} Could not remove ${created}: ${errorMessage(err)}`,
+			};
+		}
 	}
 
 	if (result.success) {

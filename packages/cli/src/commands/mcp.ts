@@ -6,6 +6,7 @@ import { log } from "../log.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	mcpInstallOrder,
 	NEON_MCP_CATEGORIES,
 	NEON_MCP_URL,
 	type NeonMcpAuth,
@@ -327,7 +328,7 @@ export const setupNeonMcp = async (
 	const rows: McpInstallRow[] = [];
 	let successes = 0;
 	const failedAgents: string[] = [];
-	for (const agent of install) {
+	for (const agent of mcpInstallOrder(install)) {
 		const result = installNeonMcpServer({
 			agent,
 			scope: plan.scope,

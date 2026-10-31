@@ -76,6 +76,7 @@
 		"diff": "5.2.0",
 		"execa": "^9.5.2",
 		"fflate": "^0.8.3",
+		"jsonc-parser": "3.3.1",
 		"open": "^10.2.0",
 		"openid-client": "6.8.1",
 		"pg": "^8.20.0",
