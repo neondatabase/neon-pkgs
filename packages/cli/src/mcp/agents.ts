@@ -1,11 +1,18 @@
 import {
 	type AgentType,
 	agents,
+	detectProjectAgents as detectAddMcpProjectAgents,
 	detectGlobalAgents,
 	getAgentTypes,
 } from "add-mcp";
 
 export type { AgentType };
+
+// The skills CLI has no Mastra Code agent, so Neon cannot install its skills there.
+const UNSUPPORTED_AGENTS: ReadonlySet<AgentType> = new Set(["mastracode"]);
+
+const isSupportedAgent = (id: AgentType): boolean =>
+	!UNSUPPORTED_AGENTS.has(id);
 
 // add-mcp does not export aliases, so Neon preserves CLI compatibility here.
 const AGENT_ALIASES = {
@@ -34,10 +41,25 @@ const AGENT_ALIASES = {
 	zed: "zed",
 	grok: "grok-build",
 	"grok-build": "grok-build",
+	"factory-droid": "factory-droid",
+	droid: "factory-droid",
+	factory: "factory-droid",
+	fx: "fx",
+	hermes: "hermes",
+	"hermes-agent": "hermes",
+	junie: "junie",
+	"kilo-code": "kilo-code",
+	kilo: "kilo-code",
+	"kimi-code": "kimi-code",
+	kimi: "kimi-code",
+	"kimi-code-cli": "kimi-code",
+	"kiro-cli": "kiro-cli",
+	kiro: "kiro-cli",
+	pi: "pi",
 } as const satisfies Record<string, AgentType>;
 
 export function listMcpAgentIds(): AgentType[] {
-	return getAgentTypes();
+	return getAgentTypes().filter(isSupportedAgent);
 }
 
 export function getAgentDisplayName(id: AgentType): string {
@@ -69,7 +91,11 @@ export function resolveAddMcpAgentId(rawAgent: string): AgentType {
 }
 
 export async function detectInstalledAgents(): Promise<AgentType[]> {
-	return detectGlobalAgents();
+	return (await detectGlobalAgents()).filter(isSupportedAgent);
+}
+
+export function detectProjectAgents(cwd: string): AgentType[] {
+	return detectAddMcpProjectAgents(cwd).filter(isSupportedAgent);
 }
 
 export function uniqueAgentIds(ids: readonly AgentType[]): AgentType[] {

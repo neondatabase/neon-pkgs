@@ -22,9 +22,9 @@ import {
 	resolveInitAgentSetup,
 	resolveNamedAgents,
 	resolveYesAgentList,
-	rewriteUnknownAgentArg,
 	splitInitTooling,
 } from "./plan.js";
+import { rewriteUnknownAgentArg } from "./unknown_agent_arg.js";
 
 describe("directoryIsEmpty", () => {
 	test("treats an empty list as empty", () => {

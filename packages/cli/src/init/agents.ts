@@ -5,6 +5,7 @@ import {
 	agentSupportsHttpMcp,
 	agentSupportsProjectMcp,
 	detectInstalledAgents,
+	detectProjectAgents,
 	getAgentDisplayName,
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
@@ -17,6 +18,7 @@ export {
 	agentSupportsHttpMcp,
 	agentSupportsProjectMcp,
 	detectInstalledAgents,
+	detectProjectAgents,
 	getAgentDisplayName,
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
@@ -40,6 +42,14 @@ const SKILLS_AGENT_BY_TYPE: { [K in AgentType]?: string } = {
 	windsurf: "windsurf",
 	zed: "zed",
 	"grok-build": "grok",
+	"factory-droid": "droid",
+	fx: "fx",
+	hermes: "hermes-agent",
+	junie: "junie",
+	"kilo-code": "kilo",
+	"kimi-code": "kimi-code-cli",
+	"kiro-cli": "kiro-cli",
+	pi: "pi",
 };
 
 export function getSkillsAgentName(agent: string): string | undefined {

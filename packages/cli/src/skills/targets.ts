@@ -1,8 +1,7 @@
-import { detectProjectAgents } from "add-mcp";
-
 import {
 	type AgentType,
 	detectInstalledAgents,
+	detectProjectAgents,
 	getSkillsAgentName,
 	listMcpAgentIds,
 	supportsSkills,
