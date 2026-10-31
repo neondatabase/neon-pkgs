@@ -250,6 +250,7 @@ export const setupNeonMcp = async (
 	const { install, skipped } = resolveInstallTargets({
 		agents: plan.agents,
 		scope: plan.scope,
+		auth: plan.auth,
 	});
 	const url = neonMcpUrl({
 		readOnly: plan.readOnly,
@@ -338,6 +339,11 @@ export const setupNeonMcp = async (
 			successes += 1;
 			rows.push({ agent, status: "installed" });
 			log.info("Wrote %s", result.path);
+			if (agent === "pi") {
+				log.warning(
+					"Pi reads MCP servers through pi-mcp-adapter. Install it with `pi install npm:pi-mcp-adapter`, then run /reload in Pi.",
+				);
+			}
 		} else {
 			rows.push({
 				agent,

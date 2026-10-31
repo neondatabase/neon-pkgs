@@ -1,7 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import {
+	chmodSync,
+	existsSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
 import { type AgentType, agents, upsertServer } from "add-mcp";
+
+import { getCliName } from "../utils/cli_name.js";
 
 export const NEON_MCP_URL = "https://mcp.neon.tech/mcp";
 export const NEON_MCP_NAME = "Neon";
@@ -89,6 +97,9 @@ export type NeonMcpInstallResult =
 const BEARER_RE = /Bearer\s+([^\s"]+)/i;
 
 function nestedValue(root: unknown, key: string): unknown {
+	if (key === "") {
+		return root;
+	}
 	let current = root;
 	for (const part of key.split(".")) {
 		if (!current || typeof current !== "object" || Array.isArray(current)) {
@@ -166,27 +177,38 @@ function neonApiKeyFromFile(
 	}
 }
 
+/** The file add-mcp's `upsertServer` writes for this agent and scope. */
 function configPathFor(
 	agent: AgentType,
 	scope: McpInstallScope,
 	cwd: string,
 ): string | undefined {
 	const spec = agents[agent];
-	if (scope === "project") {
-		if (!spec.localConfigPath) {
-			return undefined;
-		}
-		return join(cwd, spec.localConfigPath);
+	const local = scope === "project";
+	if (local && !spec.localConfigPath) {
+		return undefined;
 	}
-	return spec.configPath;
+	if (spec.resolveConfigPath) {
+		return spec.resolveConfigPath(spec, { local, cwd });
+	}
+	return local && spec.localConfigPath
+		? join(cwd, spec.localConfigPath)
+		: spec.configPath;
 }
 
-function configKeyFor(agent: AgentType, scope: McpInstallScope): string {
+/** Where an existing Neon entry can sit, depending on the file's current layout. */
+function configKeysFor(agent: AgentType, scope: McpInstallScope): string[] {
 	const spec = agents[agent];
-	if (scope === "project" && spec.localConfigKey) {
-		return spec.localConfigKey;
+	if (agent === "opencode") {
+		return ["mcp.servers", "mcp"];
 	}
-	return spec.configKey;
+	if (agent === "github-copilot-cli" && scope === "project") {
+		return ["mcpServers", ""];
+	}
+	if (scope === "project" && spec.localConfigKey) {
+		return [spec.localConfigKey];
+	}
+	return [spec.configKey];
 }
 
 export function existingNeonApiKey(options: {
@@ -199,12 +221,11 @@ export function existingNeonApiKey(options: {
 		if (!path) {
 			continue;
 		}
-		const key = neonApiKeyFromFile(
-			path,
-			configKeyFor(agent, options.scope),
-		);
-		if (key) {
-			return key;
+		for (const configKey of configKeysFor(agent, options.scope)) {
+			const key = neonApiKeyFromFile(path, configKey);
+			if (key) {
+				return key;
+			}
 		}
 	}
 	return undefined;
@@ -228,10 +249,11 @@ export function trackedProjectMcpConfig(options: {
 	cwd: string;
 }): string | undefined {
 	for (const agent of options.agents) {
-		const relativePath = agents[agent].localConfigPath;
-		if (!relativePath) {
+		const path = configPathFor(agent, "project", options.cwd);
+		if (!path) {
 			continue;
 		}
+		const relativePath = relative(options.cwd, path);
 		if (isTrackedByGit(options.cwd, relativePath)) {
 			return relativePath;
 		}
@@ -242,6 +264,7 @@ export function trackedProjectMcpConfig(options: {
 export function mcpUnsupportedReason(
 	agent: AgentType,
 	scope: McpInstallScope,
+	auth?: NeonMcpAuth["kind"],
 ): string | undefined {
 	const spec = agents[agent];
 	if (!spec.supportedTransports.includes("http")) {
@@ -253,7 +276,24 @@ export function mcpUnsupportedReason(
 	if (scope === "project" && !spec.localConfigPath) {
 		return `${spec.displayName} does not support project-level MCP config.`;
 	}
+	if (agent === "fx" && auth === "api-key") {
+		return `fx does not accept an API key in its MCP config. Run \`${getCliName()} mcp --oauth --agent fx\`.`;
+	}
 	return undefined;
+}
+
+/**
+ * add-mcp refuses a project-level Claude Code install while `.github/mcp.json` exists without
+ * `.mcp.json`, because GitHub Copilot CLI reads `.mcp.json` first once it exists. Neon writes
+ * Claude Code's file anyway, so it creates `.mcp.json` before calling add-mcp.
+ */
+function createClaudeProjectConfig(cwd: string): string | undefined {
+	const path = join(cwd, ".mcp.json");
+	if (existsSync(path) || !existsSync(join(cwd, ".github", "mcp.json"))) {
+		return undefined;
+	}
+	writeFileSync(path, '{\n  "mcpServers": {}\n}\n');
+	return path;
 }
 
 function gitignoreProjectConfig(path: string): string | undefined {
@@ -317,7 +357,11 @@ export function installNeonMcpServer(options: {
 	const url = options.url ?? NEON_MCP_URL;
 
 	// add-mcp can write unusable HTTP entries; project installs cannot fall back to global config.
-	const unsupported = mcpUnsupportedReason(options.agent, options.scope);
+	const unsupported = mcpUnsupportedReason(
+		options.agent,
+		options.scope,
+		auth.kind,
+	);
 	if (unsupported) {
 		return { ok: false, unsupported: true, error: unsupported };
 	}
@@ -333,10 +377,18 @@ export function installNeonMcpServer(options: {
 				}
 			: { type: "http" as const, url };
 
+	const cwd = options.cwd ?? process.cwd();
+	const created =
+		options.agent === "claude-code" && options.scope === "project"
+			? createClaudeProjectConfig(cwd)
+			: undefined;
 	const result = upsertServer(options.agent, NEON_MCP_NAME, server, {
 		local: options.scope === "project",
-		cwd: options.cwd,
+		cwd,
 	});
+	if (!result.success && created) {
+		rmSync(created, { force: true });
+	}
 
 	if (result.success) {
 		if (auth.kind === "api-key") {

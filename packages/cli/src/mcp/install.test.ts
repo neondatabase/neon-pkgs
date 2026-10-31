@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
 	chmodSync,
 	mkdirSync,
@@ -18,6 +19,7 @@ import {
 	NEON_MCP_URL,
 	neonMcpUrl,
 	parseMcpCategories,
+	trackedProjectMcpConfig,
 } from "./install.js";
 
 const dirs: string[] = [];
@@ -143,6 +145,65 @@ describe("installNeonMcpServer", () => {
 		if (result.ok) return;
 		expect(result.unsupported).toBe(true);
 		expect(result.error).toMatch(/project-level/i);
+	});
+
+	test("writes Claude Code's .mcp.json when only .github/mcp.json exists", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".github"));
+		const github =
+			'{ "mcpServers": { "other": { "url": "https://example.com/mcp" } } }\n';
+		writeFileSync(join(cwd, ".github", "mcp.json"), github);
+
+		const result = installNeonMcpServer({
+			agent: "claude-code",
+			scope: "project",
+			cwd,
+		});
+
+		expect(result).toEqual({ ok: true, path: join(cwd, ".mcp.json") });
+		const written = JSON.parse(
+			readFileSync(join(cwd, ".mcp.json"), "utf8"),
+		);
+		expect(Object.keys(written.mcpServers)).toEqual(["Neon"]);
+		expect(readFileSync(join(cwd, ".github", "mcp.json"), "utf8")).toBe(
+			github,
+		);
+	});
+
+	test("writes GitHub Copilot CLI into an existing .github/mcp.json", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".github"));
+		writeFileSync(
+			join(cwd, ".github", "mcp.json"),
+			'{ "mcpServers": {} }\n',
+		);
+
+		const result = installNeonMcpServer({
+			agent: "github-copilot-cli",
+			scope: "project",
+			cwd,
+		});
+
+		expect(result).toEqual({
+			ok: true,
+			path: join(cwd, ".github", "mcp.json"),
+		});
+	});
+
+	test("skips fx with an API key", () => {
+		const cwd = tmpProject();
+		const result = installNeonMcpServer({
+			agent: "fx",
+			scope: "global",
+			cwd,
+			auth: { kind: "api-key", apiKey: "napi_test_secret" },
+		});
+
+		expect(result).toEqual({
+			ok: false,
+			unsupported: true,
+			error: expect.stringMatching(/mcp --oauth --agent fx/),
+		});
 	});
 
 	test("writes a custom Neon MCP URL into the config", () => {
@@ -340,13 +401,12 @@ http_headers = { Authorization = "Bearer napi_toml" }
 		).toBe("napi_toml");
 	});
 
-	test("reuses a Bearer from a project Copilot CLI servers key", () => {
+	test("reuses a Bearer from a project Copilot CLI .mcp.json", () => {
 		const cwd = tmpProject();
-		mkdirSync(join(cwd, ".vscode"), { recursive: true });
 		writeFileSync(
-			join(cwd, ".vscode", "mcp.json"),
+			join(cwd, ".mcp.json"),
 			JSON.stringify({
-				servers: {
+				mcpServers: {
 					Neon: {
 						url: NEON_MCP_URL,
 						headers: { Authorization: "Bearer napi_copilot" },
@@ -361,6 +421,52 @@ http_headers = { Authorization = "Bearer napi_toml" }
 				cwd,
 			}),
 		).toBe("napi_copilot");
+	});
+
+	test("reuses a Bearer from a bare server map in .github/mcp.json", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".github"));
+		writeFileSync(
+			join(cwd, ".github", "mcp.json"),
+			JSON.stringify({
+				Neon: {
+					url: NEON_MCP_URL,
+					headers: { Authorization: "Bearer napi_github" },
+				},
+			}),
+		);
+		expect(
+			existingNeonApiKey({
+				agents: ["github-copilot-cli"],
+				scope: "project",
+				cwd,
+			}),
+		).toBe("napi_github");
+	});
+
+	test("reuses a Bearer from an OpenCode opencode.json server map", () => {
+		const cwd = tmpProject();
+		writeFileSync(
+			join(cwd, "opencode.json"),
+			JSON.stringify({
+				mcp: {
+					servers: {
+						Neon: {
+							type: "remote",
+							url: NEON_MCP_URL,
+							headers: { Authorization: "Bearer napi_opencode" },
+						},
+					},
+				},
+			}),
+		);
+		expect(
+			existingNeonApiKey({
+				agents: ["opencode"],
+				scope: "project",
+				cwd,
+			}),
+		).toBe("napi_opencode");
 	});
 
 	test("skips a config path that is a directory", () => {
@@ -413,5 +519,21 @@ describe("installNeonMcpServer write failures", () => {
 		if (result.ok) return;
 		expect(result.unsupported).toBe(false);
 		expect(result.error).toMatch(/gitignore/i);
+	});
+});
+
+describe("trackedProjectMcpConfig", () => {
+	test("checks the file add-mcp writes, including .github/mcp.json", () => {
+		const cwd = tmpProject();
+		mkdirSync(join(cwd, ".github"));
+		writeFileSync(join(cwd, ".github", "mcp.json"), "{}\n");
+		execFileSync("git", ["-C", cwd, "init"], { stdio: "ignore" });
+		execFileSync("git", ["-C", cwd, "add", "--", ".github/mcp.json"], {
+			stdio: "ignore",
+		});
+
+		expect(
+			trackedProjectMcpConfig({ agents: ["github-copilot-cli"], cwd }),
+		).toBe(join(".github", "mcp.json"));
 	});
 });
