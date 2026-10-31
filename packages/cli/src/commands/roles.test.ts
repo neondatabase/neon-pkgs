@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
+import YAML from "yaml";
 
 import { test } from "../test_utils/fixtures";
+
+const missingRoleMessage =
+	'Role "gone_role" not found on branch test_branch; nothing to delete.';
 
 describe("roles", () => {
 	test("list", async ({ testCliCommand }) => {
@@ -135,23 +139,69 @@ describe("roles", () => {
 		);
 	});
 
-	test("delete of a role that is already gone prints nothing", async ({
+	test("delete of a missing name reports not found and exits 1", async ({
 		testCliCommand,
 	}) => {
-		for (const output of ["table", "json", "yaml"] as const) {
-			await testCliCommand(
-				[
-					"roles",
-					"delete",
-					"gone_role",
-					"--project-id",
-					"test",
-					"--branch",
-					"test_branch",
-				],
-				{ output, snapshot: false, stdout: "" },
-			);
-		}
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"delete",
+				"gone_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ code: 1, snapshot: false, stderr: "" },
+		);
+		expect(YAML.parse(stdout)).toEqual({
+			deleted: false,
+			message: missingRoleMessage,
+		});
+	});
+
+	test("delete of a missing name prints ERROR in table mode", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"delete",
+				"gone_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				code: 1,
+				output: "table",
+				snapshot: false,
+				stderr: `ERROR: ${missingRoleMessage}`,
+			},
+		);
+		expect(stdout).toBe("");
+	});
+
+	test("delete of a missing name emits json and exits 1", async ({
+		testCliCommand,
+	}) => {
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"delete",
+				"gone_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{ code: 1, output: "json", snapshot: false, stderr: "" },
+		);
+		expect(JSON.parse(stdout)).toEqual({
+			deleted: false,
+			message: missingRoleMessage,
+		});
 	});
 
 	for (const flag of ["--no-login", "--no-login=true"]) {
