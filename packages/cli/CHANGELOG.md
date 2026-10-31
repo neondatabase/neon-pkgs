@@ -1,5 +1,13 @@
 # neon
 
+## 8.15.1
+
+### Patch Changes
+
+- b540206: Skip the CLI update and outdated-skills notices when a command sets a nonzero exit code without throwing.
+- 309ab5b: `neon functions new` removes the instruction to export template environment variables for `neon dev`, noting instead that `neon dev` loads `.env.local` automatically.
+- 538c8e2: `neon plugins` and `neon init` check that GitHub Copilot CLI and Grok Build actually run before installing the Neon plugin through them. A `copilot` that is not the real CLI (such as VS Code's launcher without Copilot CLI installed), a Copilot CLI older than 0.0.400, or a `grok` whose `--version` fails is now skipped with a warning naming the reason, and `neon init` installs Neon skills and MCP for that agent instead. Before, the install failed.
+
 ## 8.15.0
 
 ### Minor Changes
