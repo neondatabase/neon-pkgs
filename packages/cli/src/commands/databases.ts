@@ -1,7 +1,7 @@
 import type { Role } from "@neon/sdk";
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
-
+import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	fillSingleProject,
@@ -137,5 +137,9 @@ export const deleteDb = async (
 			fields: DATABASE_FIELDS,
 			humanTitle: `Database deleted from ${branch?.name ?? branchId}`,
 		});
+		return;
 	}
+	log.info(
+		`Database "${props.database}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`,
+	);
 };

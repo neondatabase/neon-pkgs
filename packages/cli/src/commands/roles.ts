@@ -1,5 +1,6 @@
 import type yargs from "yargs";
 import { retryOnLock } from "../api.js";
+import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
 import {
 	fillSingleProject,
@@ -118,5 +119,9 @@ export const deleteRole = async (
 			fields: ROLES_FIELDS,
 			humanTitle: `Role deleted from ${branch?.name ?? branchId}`,
 		});
+		return;
 	}
+	log.info(
+		`Role "${props.role}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`,
+	);
 };

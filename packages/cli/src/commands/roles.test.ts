@@ -3,6 +3,9 @@ import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
+const missingRoleMessage =
+	'Role "gone_role" not found on branch test_branch; nothing to delete.';
+
 describe("roles", () => {
 	test("list", async ({ testCliCommand }) => {
 		await testCliCommand([
@@ -135,7 +138,7 @@ describe("roles", () => {
 		);
 	});
 
-	test("delete of a role that is already gone prints nothing", async ({
+	test("delete of a missing name reports it on stderr and exits 0", async ({
 		testCliCommand,
 	}) => {
 		for (const output of ["table", "json", "yaml"] as const) {
@@ -149,7 +152,12 @@ describe("roles", () => {
 					"--branch",
 					"test_branch",
 				],
-				{ output, snapshot: false, stdout: "" },
+				{
+					output,
+					snapshot: false,
+					stdout: "",
+					stderr: missingRoleMessage,
+				},
 			);
 		}
 	});

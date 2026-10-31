@@ -3,6 +3,9 @@ import { describe, expect } from "vitest";
 
 import { test } from "../test_utils/fixtures";
 
+const missingDbMessage =
+	'Database "gone_db" not found on branch test_branch; nothing to delete.';
+
 describe("databases", () => {
 	test("list", async ({ testCliCommand }) => {
 		await testCliCommand([
@@ -139,7 +142,7 @@ describe("databases", () => {
 		);
 	});
 
-	test("delete of a database that is already gone prints nothing", async ({
+	test("delete of a missing name reports it on stderr and exits 0", async ({
 		testCliCommand,
 	}) => {
 		for (const output of ["table", "json", "yaml"] as const) {
@@ -153,7 +156,12 @@ describe("databases", () => {
 					"--branch",
 					"test_branch",
 				],
-				{ output, snapshot: false, stdout: "" },
+				{
+					output,
+					snapshot: false,
+					stdout: "",
+					stderr: missingDbMessage,
+				},
 			);
 		}
 	});
