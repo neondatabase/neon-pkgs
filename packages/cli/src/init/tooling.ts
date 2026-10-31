@@ -1,4 +1,3 @@
-import { detectProjectAgents } from "add-mcp";
 import {
 	type McpInstallOutcome,
 	mcpInstallError,
@@ -20,7 +19,7 @@ import {
 	skillsInstallError,
 } from "../commands/skills.js";
 import { log } from "../log.js";
-import type { AgentType } from "../mcp/agents.js";
+import { type AgentType, detectProjectAgents } from "../mcp/agents.js";
 import { CannotMintApiKeyError } from "../mcp/mint.js";
 import type { CommonProps } from "../types.js";
 import {

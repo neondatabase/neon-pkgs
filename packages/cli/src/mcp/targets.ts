@@ -1,13 +1,16 @@
-import { detectProjectAgents } from "add-mcp";
-
 import {
 	type AgentType,
 	detectInstalledAgents,
+	detectProjectAgents,
 	listMcpAgentIds,
 	resolveAddMcpAgentId,
 	uniqueAgentIds,
 } from "./agents.js";
-import { type McpInstallScope, mcpUnsupportedReason } from "./install.js";
+import {
+	type McpInstallScope,
+	mcpUnsupportedReason,
+	type NeonMcpAuth,
+} from "./install.js";
 
 export type SkippedMcpTarget = {
 	agent: AgentType;
@@ -41,12 +44,13 @@ export async function detectMcpAgents(options: {
 export function resolveInstallTargets(options: {
 	agents: string[];
 	scope: McpInstallScope;
+	auth?: NeonMcpAuth["kind"];
 }): ResolvedMcpTargets {
 	const requested = uniqueAgentIds(options.agents.map(resolveAddMcpAgentId));
 	const install: AgentType[] = [];
 	const skipped: SkippedMcpTarget[] = [];
 	for (const agent of requested) {
-		const error = mcpUnsupportedReason(agent, options.scope);
+		const error = mcpUnsupportedReason(agent, options.scope, options.auth);
 		if (error) {
 			skipped.push({ agent, error });
 		} else {

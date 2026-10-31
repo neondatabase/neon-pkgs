@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { detectProjectAgents } from "add-mcp";
 import which from "which";
 
 import {
 	type AgentType,
 	detectInstalledAgents,
+	detectProjectAgents,
 	listMcpAgentIds,
 	tryResolveAddMcpAgentId,
 	uniqueAgentIds,
@@ -60,13 +60,19 @@ const PLUGINS_TARGET_BY_TYPE: { [K in AgentType]?: PluginsTarget } = {
 		target: "grok",
 		command: { name: "grok", product: "Grok Build", versionPrefix: "grok" },
 	},
+	"kimi-code": { target: "kimi" },
 };
 
 export const pluginsTargets = (): PluginsTarget[] => [
 	...new Set(Object.values(PLUGINS_TARGET_BY_TYPE)),
 ];
 
-const USER_SCOPE_ONLY_TARGETS = new Set(["vscode", "github-copilot", "grok"]);
+const USER_SCOPE_ONLY_TARGETS = new Set([
+	"vscode",
+	"github-copilot",
+	"grok",
+	"kimi",
+]);
 
 export type PluginsCommandProblem =
 	| { kind: "missing" }

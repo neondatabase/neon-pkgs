@@ -8,10 +8,9 @@ import {
 	locationOf,
 	resolveProfile,
 } from "@neon-internals/cli-core/profiles";
-import { detectProjectAgents } from "add-mcp";
 import { storeFor } from "../credential_io.js";
 import { isCi } from "../env.js";
-import type { AgentType } from "../mcp/agents.js";
+import { type AgentType, detectProjectAgents } from "../mcp/agents.js";
 import { canPickAgentsInteractively } from "../utils/agent_picker.js";
 import { detectInstalledAgents, uniqueAgentIds } from "./agents.js";
 import { detectAgent } from "./detect_host.js";

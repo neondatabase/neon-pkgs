@@ -155,6 +155,10 @@ describe("resolvePluginsPlan", () => {
 				}),
 			),
 		).rejects.toThrow(/Unknown agent: "eve"/);
+	});
+
+	test("Kimi Code plugins are user-level", async () => {
+		const cwd = tmpDir();
 		await expect(
 			resolvePluginsPlan(
 				planOptions(cwd, {
@@ -163,7 +167,18 @@ describe("resolvePluginsPlan", () => {
 					agents: ["kimi"],
 				}),
 			),
-		).rejects.toThrow(/Unknown agent: "kimi"/);
+		).rejects.toThrow(
+			/Kimi Code: plugins are user-level\. Pass --global\./,
+		);
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				yes: true,
+				interactive: false,
+				global: true,
+				agents: ["kimi"],
+			}),
+		);
+		expect(plan.scope).toBe("global");
 	});
 
 	test("skips MCP agents that cannot install plugins", async () => {

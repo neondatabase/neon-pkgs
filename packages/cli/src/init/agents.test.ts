@@ -10,8 +10,11 @@ import {
 } from "./agents.js";
 
 describe("add-mcp agent ids", () => {
-	test("MCP picker is every add-mcp agent", () => {
-		expect(listMcpAgentIds()).toEqual(getAgentTypes());
+	test("MCP picker is every add-mcp agent except Mastra Code", () => {
+		expect(listMcpAgentIds()).toEqual(
+			getAgentTypes().filter((id) => id !== "mastracode"),
+		);
+		expect(tryResolveAddMcpAgentId("mastracode")).toBeUndefined();
 		expect(listMcpAgentIds()).toContain("windsurf");
 		expect(listMcpAgentIds()).toContain("grok-build");
 	});
@@ -20,6 +23,11 @@ describe("add-mcp agent ids", () => {
 		expect(resolveAddMcpAgentId("claude")).toBe("claude-code");
 		expect(resolveAddMcpAgentId("grok")).toBe("grok-build");
 		expect(resolveAddMcpAgentId("copilot")).toBe("vscode");
+		expect(resolveAddMcpAgentId("kimi")).toBe("kimi-code");
+		expect(resolveAddMcpAgentId("droid")).toBe("factory-droid");
+		expect(resolveAddMcpAgentId("kilo")).toBe("kilo-code");
+		expect(resolveAddMcpAgentId("kiro")).toBe("kiro-cli");
+		expect(resolveAddMcpAgentId("hermes-agent")).toBe("hermes");
 		expect(tryResolveAddMcpAgentId("not-an-agent")).toBeUndefined();
 	});
 
@@ -36,5 +44,16 @@ describe("add-mcp agent ids", () => {
 		expect(getSkillsAgentName("mcporter")).toBeUndefined();
 		expect(supportsSkills("mcporter")).toBe(false);
 		expect(supportsSkills("cursor")).toBe(true);
+	});
+
+	test("maps every new add-mcp agent to its skills CLI agent", () => {
+		expect(getSkillsAgentName("factory-droid")).toBe("droid");
+		expect(getSkillsAgentName("fx")).toBe("fx");
+		expect(getSkillsAgentName("hermes")).toBe("hermes-agent");
+		expect(getSkillsAgentName("junie")).toBe("junie");
+		expect(getSkillsAgentName("kilo-code")).toBe("kilo");
+		expect(getSkillsAgentName("kimi-code")).toBe("kimi-code-cli");
+		expect(getSkillsAgentName("kiro-cli")).toBe("kiro-cli");
+		expect(getSkillsAgentName("pi")).toBe("pi");
 	});
 });

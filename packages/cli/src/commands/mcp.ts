@@ -6,6 +6,7 @@ import { log } from "../log.js";
 import {
 	existingNeonApiKey,
 	installNeonMcpServer,
+	mcpInstallOrder,
 	NEON_MCP_CATEGORIES,
 	NEON_MCP_URL,
 	type NeonMcpAuth,
@@ -250,6 +251,7 @@ export const setupNeonMcp = async (
 	const { install, skipped } = resolveInstallTargets({
 		agents: plan.agents,
 		scope: plan.scope,
+		auth: plan.auth,
 	});
 	const url = neonMcpUrl({
 		readOnly: plan.readOnly,
@@ -326,7 +328,7 @@ export const setupNeonMcp = async (
 	const rows: McpInstallRow[] = [];
 	let successes = 0;
 	const failedAgents: string[] = [];
-	for (const agent of install) {
+	for (const agent of mcpInstallOrder(install)) {
 		const result = installNeonMcpServer({
 			agent,
 			scope: plan.scope,
@@ -338,6 +340,11 @@ export const setupNeonMcp = async (
 			successes += 1;
 			rows.push({ agent, status: "installed" });
 			log.info("Wrote %s", result.path);
+			if (agent === "pi") {
+				log.warning(
+					"Pi reads MCP servers through pi-mcp-adapter. Install it with `pi install npm:pi-mcp-adapter`, then run /reload in Pi.",
+				);
+			}
 		} else {
 			rows.push({
 				agent,

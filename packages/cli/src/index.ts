@@ -36,7 +36,7 @@ import {
 	showUsageErrorHelp,
 	UsageError,
 } from "./help.js";
-import { rewriteUnknownAgentArg } from "./init/plan.js";
+import { rewriteUnknownAgentArg } from "./init/unknown_agent_arg.js";
 import { log } from "./log.js";
 import pkg from "./pkg.js";
 import { recoverFromSSO } from "./sso_recovery.js";
