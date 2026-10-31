@@ -298,6 +298,8 @@ const duplicateInstallNotice = (): string | undefined => {
 
 const isPackagedExecutable = (): boolean => "pkg" in process;
 
+const commandSucceeded = (): boolean => (process.exitCode ?? 0) === 0;
+
 export const shouldRunUpdateNotifier = ({
 	commandPath,
 	currentBranch,
@@ -343,6 +345,7 @@ export const shouldRunSkillsNotifier = ({
 		output,
 		stderrIsTty: true,
 		stdoutIsTty: true,
+		succeeded: commandSucceeded(),
 	});
 
 export const notifyIfUpdateAvailable = ({
@@ -362,7 +365,7 @@ export const notifyIfUpdateAvailable = ({
 			output,
 			stderrIsTty: process.stderr.isTTY === true,
 			stdoutIsTty: process.stdout.isTTY === true,
-			succeeded: (process.exitCode ?? 0) === 0,
+			succeeded: commandSucceeded(),
 		})
 	) {
 		return;
