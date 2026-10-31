@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { execa } from "execa";
-
-const TELEMETRY_BLOCKERS = ["DISABLE_TELEMETRY", "DO_NOT_TRACK"] as const;
+import { pluginsChildEnv } from "./child_env.js";
 
 export const PLUGIN_SOURCE = "neondatabase/agent-skills";
 export const NEON_PLUGIN_NAME = "neon-postgres";
@@ -19,22 +18,6 @@ export const PLUGIN_SKILLS = [
 export const PLUGINS_CLI_TIMEOUT_MS = 120_000;
 
 export type PluginsCliScope = "user" | "project";
-
-export const pluginsChildEnv = (
-	base: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv => {
-	const env = { ...base };
-	// The plugins CLI needs its own install ping even though Neon records the parent command.
-	for (const key of TELEMETRY_BLOCKERS) {
-		delete env[key];
-	}
-	for (const key of Object.keys(env)) {
-		if (key.toUpperCase() === "NEON_API_KEY") {
-			delete env[key];
-		}
-	}
-	return env;
-};
 
 export const pluginsScopeFlag = (global: boolean): PluginsCliScope =>
 	global ? "user" : "project";

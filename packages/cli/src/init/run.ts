@@ -26,9 +26,11 @@ import { CannotMintApiKeyError } from "../mcp/mint.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
 import { type NeonService, servicesFlagValue } from "../neon_services.js";
 import {
-	type MissingPluginsCommand,
 	missingPluginsCommands,
+	pluginsCommandProblemText,
 	pluginsInstallableAgents,
+	type UnusablePluginsCommand,
+	unusablePluginsCommands,
 } from "../plugins/targets.js";
 import { hasNeonConfigFile, neonConfigFilename } from "../project.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
@@ -318,20 +320,21 @@ const pluginScopeFor = (
 	return globalOnly ? "global" : "project";
 };
 
-const warnMissingPluginCommands = (
-	missing: readonly MissingPluginsCommand[],
+const warnUnusablePluginCommands = (
+	unusable: readonly UnusablePluginsCommand[],
 	tooling: InitToolingPlan,
 ): void => {
 	if (tooling.setup !== "skills-mcp" && tooling.setup !== "mixed") {
 		return;
 	}
 	const routed = new Set([...tooling.skillsAgents, ...tooling.mcpAgents]);
-	for (const { agent, command } of missing) {
-		if (routed.has(agent)) {
+	for (const row of unusable) {
+		if (routed.has(row.agent)) {
 			log.warning(
-				'%s: "%s" was not found on PATH, so its plugin cannot install. Installing Neon skills and MCP instead.',
-				getAgentDisplayName(agent),
-				command,
+				'%s: "%s" %s, so its plugin cannot install. Installing Neon skills and MCP instead.',
+				getAgentDisplayName(row.agent),
+				row.command.name,
+				pluginsCommandProblemText(row),
 			);
 		}
 	}
@@ -414,7 +417,7 @@ const pickOrDetectAgents = async (input: {
 	pickAgents?: InitProps["pickAgents"];
 	/** What the picker preselects when it differs from what `-y` would install. */
 	preselected?: readonly AgentType[];
-	missingCommands?: readonly MissingPluginsCommand[];
+	unusableCommands?: readonly UnusablePluginsCommand[];
 	interactive: boolean;
 	setup: "plugin" | "skills" | "mcp";
 }): Promise<AgentType[] | undefined> => {
@@ -448,8 +451,8 @@ const pickOrDetectAgents = async (input: {
 			available: [...input.available],
 			detected,
 			preselected,
-			...(input.missingCommands !== undefined
-				? { missingCommands: input.missingCommands }
+			...(input.unusableCommands !== undefined
+				? { unusableCommands: input.unusableCommands }
 				: {}),
 			setup: input.setup,
 		});
@@ -704,12 +707,21 @@ export const runInit = async (props: InitProps): Promise<void> => {
 
 		const recommended = mode === "recommended";
 		const targets = named.length > 0 ? named : detection.detectedAgents;
-		const missingPluginCommands = missingPluginsCommands(targets, { cwd });
-		const unavailablePluginAgents = missingPluginCommands.map(
-			(row) => row.agent,
-		);
+		// Spawns `<command> --version`, so only the branches that may install a plugin run it.
+		let probedPluginCommands: UnusablePluginsCommand[] | undefined;
+		const unusablePluginCommands = (): UnusablePluginsCommand[] => {
+			probedPluginCommands ??= unusablePluginsCommands(targets, { cwd });
+			return probedPluginCommands;
+		};
+		let missingCommands: UnusablePluginsCommand[] | undefined;
+		const missingPluginCommands = (): UnusablePluginsCommand[] => {
+			missingCommands ??= missingPluginsCommands(targets, { cwd });
+			return missingCommands;
+		};
+		const unavailablePluginAgents = (): AgentType[] =>
+			unusablePluginCommands().map((row) => row.agent);
 		const pluginReady = (agents: readonly AgentType[]): AgentType[] =>
-			agents.filter((id) => !unavailablePluginAgents.includes(id));
+			agents.filter((id) => !unavailablePluginAgents().includes(id));
 
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
@@ -730,16 +742,16 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							named,
 							"global",
 							"global",
-							unavailablePluginAgents,
+							unavailablePluginAgents(),
 						)
 					: recommendedTooling(
 							detection.detectedAgents,
-							unavailablePluginAgents,
+							unavailablePluginAgents(),
 						);
 			if (named.length === 0 && detection.detectedAgents.length === 0) {
 				printInitProgress(NO_AGENTS_FALLBACK_STATUS);
 			}
-			warnMissingPluginCommands(missingPluginCommands, tooling);
+			warnUnusablePluginCommands(unusablePluginCommands(), tooling);
 			mcpAuth =
 				!detection.authenticated &&
 				(tooling.setup === "skills-mcp" || tooling.setup === "mixed")
@@ -768,9 +780,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					autoAgents,
 					pluginScope,
 					mcpConfigLocation,
-					unavailablePluginAgents,
+					unavailablePluginAgents(),
 				);
-				warnMissingPluginCommands(missingPluginCommands, tooling);
+				warnUnusablePluginCommands(unusablePluginCommands(), tooling);
 				if (tooling.setup === "skip" && yes && named.length === 0) {
 					tooling = recommendedTooling([]);
 					printInitProgress(NO_AGENTS_FALLBACK_STATUS);
@@ -794,12 +806,20 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							named,
 							available,
 							detected: detection.detectedAgents,
+							// Detected agents are not run before the user picks; installing a
+							// picked agent probes its command.
 							...(setup === "plugin"
 								? {
-										preselected: pluginReady(
-											detection.detectedAgents,
-										),
-										missingCommands: missingPluginCommands,
+										preselected:
+											detection.detectedAgents.filter(
+												(id) =>
+													!missingPluginCommands().some(
+														(row) =>
+															row.agent === id,
+													),
+											),
+										unusableCommands:
+											missingPluginCommands(),
 									}
 								: {}),
 							interactive: detection.interactive,

@@ -2,13 +2,12 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-
+import { pluginsChildEnv } from "./child_env.js";
 import {
 	neonPluginsRetryCommand,
 	PLUGIN_SKILLS,
 	PLUGIN_SOURCE,
 	pluginsAddArgs,
-	pluginsChildEnv,
 	pluginsCliFailureMessage,
 	runPluginsCli,
 } from "./run.js";

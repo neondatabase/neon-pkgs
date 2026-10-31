@@ -13,7 +13,10 @@ import {
 	pluginsAddArgs,
 	runPluginsCli,
 } from "../plugins/run.js";
-import { pluginsInstallableAgents } from "../plugins/targets.js";
+import {
+	pluginsCommandProblemText,
+	pluginsInstallableAgents,
+} from "../plugins/targets.js";
 import type { CommonProps } from "../types.js";
 import {
 	canPickAgentsInteractively,
@@ -169,11 +172,12 @@ export const installPlugins = async (
 			getAgentDisplayName(agent),
 		);
 	}
-	for (const { agent, command } of plan.missingCommands) {
+	for (const row of plan.unusableCommands) {
 		log.warning(
-			'Skipping %s: the plugin installs through "%s", which was not found on PATH.',
-			getAgentDisplayName(agent),
-			command,
+			'Skipping %s: the plugin installs through "%s", which %s.',
+			getAgentDisplayName(row.agent),
+			row.command.name,
+			pluginsCommandProblemText(row),
 		);
 	}
 

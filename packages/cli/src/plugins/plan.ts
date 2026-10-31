@@ -15,12 +15,15 @@ import {
 	detectPluginsAgents,
 	getPluginsTargetName,
 	isUserScopeOnlyPluginsTarget,
-	type MissingPluginsCommand,
 	mappedPluginsTargets,
 	missingPluginsCommands,
 	type PluginsInstallScope,
 	type PluginsMappedTarget,
+	pluginsCommandFix,
+	pluginsCommandProblemText,
 	pluginsInstallableAgents,
+	type UnusablePluginsCommand,
+	unusablePluginsCommands,
 } from "./targets.js";
 
 export type PluginsPlan = {
@@ -29,7 +32,7 @@ export type PluginsPlan = {
 	skipped: AgentType[];
 	userScopeSkipped: AgentType[];
 	/** Detected agents left out because the plugins CLI needs their command. */
-	missingCommands: MissingPluginsCommand[];
+	unusableCommands: UnusablePluginsCommand[];
 	targets: PluginsMappedTarget[];
 };
 
@@ -46,14 +49,14 @@ export type ResolvePluginsPlanOptions = {
 	commandPath?: string;
 };
 
-export const missingPluginsCommandsError = (
-	missing: readonly MissingPluginsCommand[],
+export const unusablePluginsCommandsError = (
+	unusable: readonly UnusablePluginsCommand[],
 ): Error =>
 	new Error(
-		missing
+		unusable
 			.map(
-				({ agent, command }) =>
-					`Cannot install the Neon plugin for ${getAgentDisplayName(agent)}: "${command}" was not found on PATH. Install it or add it to PATH, then retry.`,
+				(row) =>
+					`Cannot install the Neon plugin for ${getAgentDisplayName(row.agent)}: "${row.command.name}" ${pluginsCommandProblemText(row)}. ${pluginsCommandFix(row)}, then retry.`,
 			)
 			.join("\n"),
 	);
@@ -108,26 +111,27 @@ export async function resolvePluginsPlan(
 				})
 			: scoped;
 	// The picker keeps detected agents first but checks only the ones whose plugin can
-	// install; `-y` keeps the full list so it can warn about the ones it skips.
-	const missingDetected = new Map(
-		(prompt
+	// install; `-y` keeps the full list so it can warn about the ones it skips. Detected
+	// agents are not run here: only the ones selected below are probed.
+	const unusableDetected = new Map(
+		(prompt && options.agents.length === 0
 			? missingPluginsCommands(detected, commandLookup(options))
 			: []
-		).map((row) => [row.agent, row.command]),
+		).map((row) => [row.agent, row]),
 	);
 	const choices = agentChoicesFrom(available, detected).map((choice) => {
-		const command = missingDetected.get(choice.id);
-		return command === undefined
+		const row = unusableDetected.get(choice.id);
+		return row === undefined
 			? choice
 			: {
 					...choice,
-					description: `detected, but "${command}" is not on PATH`,
+					description: `detected, but "${row.command.name}" ${pluginsCommandProblemText(row)}`,
 				};
 	});
 	const selected = await resolveAgentSelection({
 		specified: options.agents,
 		choices,
-		detected: detected.filter((id) => !missingDetected.has(id)),
+		detected: detected.filter((id) => !unusableDetected.has(id)),
 		message:
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
 		nonInteractiveMessage: noDetectedAgentsMessage({
@@ -172,23 +176,23 @@ export async function resolvePluginsPlan(
 		agents.push(id);
 	}
 
-	const missingCommands = missingPluginsCommands(
+	const unusableCommands = unusablePluginsCommands(
 		agents,
 		commandLookup(options),
 	);
-	if (missingCommands.length > 0) {
+	if (unusableCommands.length > 0) {
 		const detectedOnly = options.agents.length === 0 && !prompt;
 		if (!detectedOnly) {
-			throw missingPluginsCommandsError(missingCommands);
+			throw unusablePluginsCommandsError(unusableCommands);
 		}
-		const missingAgents = new Set(missingCommands.map((row) => row.agent));
+		const missingAgents = new Set(unusableCommands.map((row) => row.agent));
 		const installable = agents.filter((id) => !missingAgents.has(id));
 		return {
 			scope,
 			agents: installable,
 			skipped,
 			userScopeSkipped,
-			missingCommands,
+			unusableCommands,
 			targets:
 				installable.length === 0
 					? []
@@ -215,7 +219,7 @@ export async function resolvePluginsPlan(
 		agents,
 		skipped,
 		userScopeSkipped,
-		missingCommands,
+		unusableCommands,
 		targets: mappedPluginsTargets(agents, scope),
 	};
 }

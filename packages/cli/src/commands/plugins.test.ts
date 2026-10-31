@@ -396,7 +396,10 @@ describe("neon plugins", () => {
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
 		mkdirSync(join(home, ".copilot"));
-		writeFileSync(join(bin, "copilot"), "#!/bin/sh\nexit 0\n");
+		writeFileSync(
+			join(bin, "copilot"),
+			'#!/bin/sh\necho "GitHub Copilot CLI 1.0.104."\n',
+		);
 		chmodSync(join(bin, "copilot"), 0o755);
 		await testCliCommand(
 			["plugins", "-y", "--global"],
@@ -407,6 +410,31 @@ describe("neon plugins", () => {
 				(argv: string[]) => argv[argv.indexOf("-t") + 1],
 			),
 		).toEqual(["github-copilot"]);
+	});
+
+	test("-y --global skips a Copilot CLI too old for the plugin and installs the rest", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
+		mkdirSync(join(home, ".copilot"));
+		mkdirSync(join(home, ".codex"));
+		writeFileSync(
+			join(bin, "copilot"),
+			'#!/bin/sh\necho "GitHub Copilot CLI 0.0.399."\n',
+		);
+		chmodSync(join(bin, "copilot"), 0o755);
+		const { stderr } = await testCliCommand(
+			["plugins", "-y", "--global"],
+			runOptions(home, cwd, bin, { PATH: `${bin}:${nodeOnlyBin()}` }),
+		);
+		expect(
+			JSON.parse(readFileSync(argvFile, "utf8")).map(
+				(argv: string[]) => argv[argv.indexOf("-t") + 1],
+			),
+		).toEqual(["codex"]);
+		expect(strip(stderr)).toContain(
+			'Skipping GitHub Copilot CLI: the plugin installs through "copilot", which is GitHub Copilot CLI 0.0.399, older than the 0.0.400 its plugin needs.',
+		);
 	});
 
 	test("vscode requires --global", async ({ testCliCommand }) => {
@@ -677,7 +705,7 @@ describe("neon plugins picker", () => {
 			}
 			const rendered = strip(output);
 			term.write("\x1b[B");
-			const hint = 'detected, but "copilot" is not on PATH';
+			const hint = 'detected, but "copilot" was not found on PATH';
 			while (!strip(output).includes(hint) && Date.now() < deadline) {
 				await new Promise((resolve) => setTimeout(resolve, 50));
 			}
