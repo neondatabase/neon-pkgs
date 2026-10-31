@@ -143,7 +143,7 @@ describe("databases", () => {
 		);
 	});
 
-	test("delete of a missing name reports not found and exits 1", async ({
+	test("delete of a missing name reports not found and exits 0", async ({
 		testCliCommand,
 	}) => {
 		const { stdout } = await testCliCommand(
@@ -156,7 +156,7 @@ describe("databases", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ code: 1, snapshot: false, stderr: "" },
+			{ snapshot: false, stderr: "" },
 		);
 		expect(YAML.parse(stdout)).toEqual({
 			deleted: false,
@@ -164,7 +164,7 @@ describe("databases", () => {
 		});
 	});
 
-	test("delete of a missing name prints ERROR in table mode", async ({
+	test("delete of a missing name prints the message on stderr in table mode", async ({
 		testCliCommand,
 	}) => {
 		const { stdout } = await testCliCommand(
@@ -178,16 +178,15 @@ describe("databases", () => {
 				"test_branch",
 			],
 			{
-				code: 1,
 				output: "table",
 				snapshot: false,
-				stderr: `ERROR: ${missingDbMessage}`,
+				stderr: missingDbMessage,
 			},
 		);
 		expect(stdout).toBe("");
 	});
 
-	test("delete of a missing name emits json and exits 1", async ({
+	test("delete of a missing name emits json and exits 0", async ({
 		testCliCommand,
 	}) => {
 		const { stdout } = await testCliCommand(
@@ -200,7 +199,7 @@ describe("databases", () => {
 				"--branch",
 				"test_branch",
 			],
-			{ code: 1, output: "json", snapshot: false, stderr: "" },
+			{ output: "json", snapshot: false, stderr: "" },
 		);
 		expect(JSON.parse(stdout)).toEqual({
 			deleted: false,

@@ -1,10 +1,10 @@
+import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
 import { writer } from "../writer.js";
 
 /**
- * Report a delete that returned HTTP 204. Table mode throws so the CLI
- * prints ERROR on stderr; JSON/YAML keep the payload on stdout, so we
- * set exitCode instead of throwing.
+ * Report a delete that returned HTTP 204. The API treats deleting a missing
+ * name as success, so the exit code stays 0 and cleanup scripts keep working.
  */
 export const reportMissingDelete = (
 	props: Pick<CommonProps, "output">,
@@ -15,8 +15,7 @@ export const reportMissingDelete = (
 			{ deleted: false, message },
 			{ fields: ["deleted", "message"] },
 		);
-		process.exitCode = 1;
 		return;
 	}
-	throw new Error(message);
+	log.info(message);
 };
