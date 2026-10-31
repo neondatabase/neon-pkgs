@@ -97,7 +97,7 @@
 		"@vitest/coverage-v8": "catalog:",
 		"kysely": "0.28.17",
 		"msw": "2.6.8",
-		"next": "16.2.11",
+		"next": "16.4.1",
 		"rolldown": "1.2.8",
 		"semver": "7.7.2",
 		"tsdown": "catalog:",
