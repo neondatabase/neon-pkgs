@@ -14,8 +14,9 @@ npm install @neon/realtime @neon/realtime-tanstack \
   @tanstack/db @standard-schema/spec
 ```
 
-> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.1, and TanStack DB 0.9.
-> All three supporting libraries are peer dependencies.
+> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.1, and TanStack DB
+> 1.x starting with 1.0.0-rc.1. All three supporting libraries are peer
+> dependencies.
 
 ## Usage
 
@@ -53,8 +54,14 @@ The integration synchronizes eagerly. It applies each complete-row replacement
 or incremental change batch as one TanStack sync transaction. Realtime
 `connecting` maps to a loading collection until the first complete result and
 `live` maps to ready. Once ready, a collection retains its usable rows while a
-subscription is `connecting` or `stale`; terminal errors put the collection into
-its error state.
+subscription is `connecting` or `stale` and reports the interruption through
+`collection.health.failureReason`. A later `live` state clears that recoverable
+failure.
+
+A terminal error before the first result puts the collection into its `error`
+state. After the collection is ready, a terminal error keeps the last rows and
+the `ready` status while exposing the failure through `collection.health.error`.
+Framework live-query hooks report the latter as `isSyncError`.
 
 ## Optimistic mutations
 

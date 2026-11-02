@@ -51,7 +51,7 @@ export interface RealtimeCollectionConfig<
 	Key extends string | number = string | number,
 	Schema extends StandardSchemaV1 = never,
 > extends Omit<
-		BaseCollectionConfig<Row, Key, Schema, RealtimeCollectionUtils, void>,
+		BaseCollectionConfig<Row, Key, Schema, RealtimeCollectionUtils>,
 		"syncMode" | "utils"
 	> {
 	/** Reusable low-level Realtime client. */
@@ -150,27 +150,51 @@ function createRealtimeCollectionOptions<
 				begin,
 				write,
 				commit,
-				truncate,
 				markReady,
-				markError,
+				reportError,
+				reportHealthy,
+				fail,
 			}) => {
 				let cleaned = false;
+				let stopped = false;
+				let ready = false;
+				let detached = false;
+				let interrupted: Error | undefined;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
 				const subscription = client.subscribe(initialQuery, {
 					materialize: false,
 				});
 				activeSubscription = subscription;
+				let unsubscribeUpdate: () => void = () => undefined;
+				let unsubscribeState: () => void = () => undefined;
+				let queryRefresh: QueryRefreshController<Row> | undefined;
 
-				const reportError = (error: unknown) => {
-					if (!cleaned) markError(error);
+				const detach = () => {
+					if (detached) return;
+					detached = true;
+					queryRefresh?.stop();
+					unsubscribeUpdate();
+					unsubscribeState();
+					subscription.unsubscribe();
+					if (activeSubscription === subscription) {
+						activeSubscription = undefined;
+					}
 				};
-				const queryRefresh = new QueryRefreshController({
+				const stop = (error: unknown) => {
+					if (cleaned || stopped) return;
+					stopped = true;
+					detach();
+					rowIds.clear();
+					keys.clear();
+					fail(error);
+				};
+				queryRefresh = new QueryRefreshController({
 					query: initialQuery,
 					refreshQuery,
 					renewSubscription: (replacement) =>
 						subscription.renew(replacement),
-					onRefreshExhausted: reportError,
+					onRefreshExhausted: stop,
 					subscription,
 				});
 				const observeReceipt = (
@@ -182,11 +206,33 @@ function createRealtimeCollectionOptions<
 					} else {
 						void receipt.then(
 							() => {
-								if (!cleaned) onApplied?.();
+								if (!cleaned && !stopped) onApplied?.();
 							},
-							(error) => reportError(error),
+							(error) => stop(error),
 						);
 					}
+				};
+				const reportRecovered = () => {
+					if (ready && interrupted) {
+						const recovered = interrupted;
+						interrupted = undefined;
+						reportHealthy(recovered);
+					}
+				};
+				const markSynchronized = () => {
+					if (!ready) {
+						ready = true;
+						markReady();
+					}
+					reportRecovered();
+				};
+				const reportInterruption = () => {
+					if (!ready || interrupted) return;
+					interrupted = new Error(
+						"Realtime synchronization is interrupted while automatic recovery continues",
+					);
+					interrupted.name = "RealtimeSyncInterruptedError";
+					reportError(interrupted);
 				};
 
 				const installReset = (
@@ -211,16 +257,15 @@ function createRealtimeCollectionOptions<
 							nextKeys.set(key, rowId);
 						}
 
-						begin();
-						truncate();
+						begin({ snapshot: true });
 						for (const { row } of rows)
 							write({ type: "insert", value: row });
 						const receipt = commit();
 						rowIds = nextRowIds;
 						keys = nextKeys;
-						observeReceipt(receipt, markReady);
+						observeReceipt(receipt, markSynchronized);
 					} catch (error) {
-						reportError(error);
+						stop(error);
 					}
 				};
 
@@ -295,34 +340,32 @@ function createRealtimeCollectionOptions<
 						keys = nextKeys;
 						observeReceipt(receipt);
 					} catch (error) {
-						reportError(error);
+						stop(error);
 					}
 				};
 
 				const stateChanged = (state: LiveQueryState) => {
-					if (state.status === "error") markError(state.error);
-					// Initial connecting maps to loading; complete rows make the
-					// collection ready. Reconnection and stale capability states retain
-					// an already-ready collection, while closed uses normal sync cleanup.
+					if (state.status === "error") stop(state.error);
+					else if (
+						state.status === "connecting" ||
+						state.status === "stale"
+					)
+						reportInterruption();
+					else if (state.status === "live") reportRecovered();
+					// Initial connecting maps to loading. Closed is emitted by normal
+					// subscription cleanup and does not represent a sync failure.
 				};
 
-				const unsubscribeUpdate = subscription.onUpdate((update) => {
+				unsubscribeUpdate = subscription.onUpdate((update) => {
 					if (update.type === "rows") installReset(update.rows);
 					else applyBatch(update.changes);
 				});
-				const unsubscribeState =
-					subscription.onStateChange(stateChanged);
+				unsubscribeState = subscription.onStateChange(stateChanged);
 				queryRefresh.start();
 
 				return () => {
 					cleaned = true;
-					queryRefresh.stop();
-					unsubscribeUpdate();
-					unsubscribeState();
-					subscription.unsubscribe();
-					if (activeSubscription === subscription) {
-						activeSubscription = undefined;
-					}
+					detach();
 					rowIds.clear();
 					keys.clear();
 				};
