@@ -250,6 +250,57 @@ describe("Realtime TanStack DB collection", () => {
 		expect(collection.health.failureReason).toBeNull();
 	});
 
+	it("reports an interruption that begins while a snapshot is waiting to apply", async () => {
+		const client = new TestClient<MessageRow>();
+		let startPersistence!: () => void;
+		const persistenceStarted = new Promise<void>((resolve) => {
+			startPersistence = resolve;
+		});
+		let finishPersistence!: () => void;
+		const persistenceFinished = new Promise<void>((resolve) => {
+			finishPersistence = resolve;
+		});
+		const collection = createCollection(
+			realtimeCollectionOptions({
+				id: "delayed-snapshot-messages",
+				client,
+				query: query("query-1"),
+				getKey: (message) => message.id,
+				onUpdate: async () => {
+					startPersistence();
+					await persistenceFinished;
+				},
+			}),
+		);
+		cleanups.push(() => collection.cleanup());
+		const preload = collection.preload();
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+		await preload;
+
+		const mutation = collection.update(1, (draft) => {
+			draft.title = "optimistic";
+		});
+		await persistenceStarted;
+		const reload = collection.reload();
+		client
+			.latest()
+			.reset([{ rowId: "a", row: { id: 1, title: "authoritative" } }]);
+		client.latest().state({ status: "connecting", error: undefined });
+
+		finishPersistence();
+		await Promise.all([mutation.when("settled"), reload]);
+
+		expect(collection.status).toBe("ready");
+		expect(collection.health.failureReason).toMatchObject({
+			cause: expect.objectContaining({
+				name: "RealtimeSyncInterruptedError",
+			}),
+		});
+
+		client.latest().state({ status: "live", error: undefined });
+		expect(collection.health.failureReason).toBeNull();
+	});
+
 	it("fails the initial load on a terminal Realtime error", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
@@ -261,6 +312,23 @@ describe("Realtime TanStack DB collection", () => {
 		await expect(preload).rejects.toBe(failure);
 		expect(collection.status).toBe("error");
 		expect(collection.health.error?.cause).toBe(failure);
+		expect(client.latest().unsubscribed).toBe(true);
+	});
+
+	it("fails the initial load when the shared Realtime client closes", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+
+		client.latest().state({ status: "closed", error: undefined });
+
+		await expect(preload).rejects.toMatchObject({
+			name: "RealtimeSubscriptionClosedError",
+		});
+		expect(collection.status).toBe("error");
+		expect(collection.health.error?.cause).toMatchObject({
+			name: "RealtimeSubscriptionClosedError",
+		});
 		expect(client.latest().unsubscribed).toBe(true);
 	});
 
@@ -457,6 +525,21 @@ describe("Realtime TanStack DB collection", () => {
 		await expect(pending).rejects.toThrow("cleaned up");
 		expect(client.latest().unsubscribed).toBe(true);
 	});
+
+	it("preserves terminal Realtime errors for transaction waiters", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+		await preload;
+		const pending = collection.utils.awaitTxId("10");
+		const failure = liveError("ACCESS_DENIED");
+
+		client.latest().state({ status: "error", error: failure });
+
+		await expect(pending).rejects.toBe(failure);
+		await expect(collection.utils.awaitTxId("11")).rejects.toBe(failure);
+	});
 });
 
 function createTestCollection(
@@ -652,14 +735,18 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	unsubscribe = (): void => {
 		this.unsubscribed = true;
 		this.currentState = { status: "closed", error: undefined };
+		this.rejectWaiters(new Error("Live-query subscription is closed"));
+	};
+
+	private rejectWaiters(error: Error): void {
 		for (const waiters of this.txWaiters.values()) {
 			for (const waiter of waiters) {
 				if (waiter.timer !== undefined) clearTimeout(waiter.timer);
-				waiter.reject(new Error("Live-query subscription is closed"));
+				waiter.reject(error);
 			}
 		}
 		this.txWaiters.clear();
-	};
+	}
 
 	reset(rows: readonly RawLiveQueryRow<Row>[]): void {
 		this.currentState = { status: "live", error: undefined };
@@ -689,6 +776,10 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	}
 
 	state(state: LiveQueryState): void {
+		if (state.status === "error") this.rejectWaiters(state.error);
+		else if (state.status === "closed") {
+			this.rejectWaiters(new Error("Live-query subscription is closed"));
+		}
 		this.currentState = state;
 		for (const listener of this.stateListeners) listener(state);
 	}

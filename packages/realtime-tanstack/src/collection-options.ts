@@ -31,7 +31,8 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 * @param timeout - Optional maximum wait in milliseconds. By default, the
 	 * promise remains pending until the transaction arrives or the collection is
 	 * cleaned up.
-	 * @throws If a supplied timeout elapses or the collection is cleaned up.
+	 * @throws If a supplied timeout elapses, synchronization stops terminally,
+	 * or the collection is cleaned up.
 	 */
 	awaitTxId(txid: string, timeout?: number): Promise<boolean>;
 }
@@ -120,15 +121,26 @@ function createRealtimeCollectionOptions<
 ): RealtimeCollectionOptions<Row, Key, Schema> {
 	const { client, query: initialQuery, refreshQuery, ...baseConfig } = config;
 	let activeSubscription: RawLiveQuerySubscription<Row> | undefined;
+	let inactiveSubscriptionFailure: { readonly error: unknown } | undefined;
+	const terminalSubscriptionFailures = new WeakMap<
+		RawLiveQuerySubscription<Row>,
+		{ readonly error: unknown }
+	>();
 	const utils: RealtimeCollectionUtils = Object.freeze({
 		awaitTxId: async (txid, timeout) => {
 			const subscription = activeSubscription;
 			if (!subscription) {
+				if (inactiveSubscriptionFailure) {
+					throw inactiveSubscriptionFailure.error;
+				}
 				throw new Error("Realtime collection is not syncing");
 			}
 			try {
 				await subscription.awaitTxId(txid, timeout);
 			} catch (error) {
+				const terminalFailure =
+					terminalSubscriptionFailures.get(subscription);
+				if (terminalFailure) throw terminalFailure.error;
 				if (activeSubscription !== subscription) {
 					throw new Error("Realtime collection was cleaned up", {
 						cause: error,
@@ -159,13 +171,16 @@ function createRealtimeCollectionOptions<
 				let stopped = false;
 				let ready = false;
 				let detached = false;
-				let interrupted: Error | undefined;
+				let interrupted:
+					| { readonly error: Error; reported: boolean }
+					| undefined;
 				let rowIds = new Map<string, Key>();
 				let keys = new Map<Key, string>();
 				const subscription = client.subscribe(initialQuery, {
 					materialize: false,
 				});
 				activeSubscription = subscription;
+				inactiveSubscriptionFailure = undefined;
 				let unsubscribeUpdate: () => void = () => undefined;
 				let unsubscribeState: () => void = () => undefined;
 				let queryRefresh: QueryRefreshController<Row> | undefined;
@@ -184,6 +199,14 @@ function createRealtimeCollectionOptions<
 				const stop = (error: unknown) => {
 					if (cleaned || stopped) return;
 					stopped = true;
+					const terminalFailure = { error };
+					terminalSubscriptionFailures.set(
+						subscription,
+						terminalFailure,
+					);
+					if (activeSubscription === subscription) {
+						inactiveSubscriptionFailure = terminalFailure;
+					}
 					detach();
 					rowIds.clear();
 					keys.clear();
@@ -213,10 +236,11 @@ function createRealtimeCollectionOptions<
 					}
 				};
 				const reportRecovered = () => {
-					if (ready && interrupted) {
-						const recovered = interrupted;
-						interrupted = undefined;
-						reportHealthy(recovered);
+					if (!interrupted) return;
+					const recovered = interrupted;
+					interrupted = undefined;
+					if (ready && recovered.reported) {
+						reportHealthy(recovered.error);
 					}
 				};
 				const markSynchronized = () => {
@@ -224,15 +248,22 @@ function createRealtimeCollectionOptions<
 						ready = true;
 						markReady();
 					}
-					reportRecovered();
+					if (interrupted && !interrupted.reported) {
+						reportError(interrupted.error);
+						interrupted.reported = true;
+					}
 				};
 				const reportInterruption = () => {
-					if (!ready || interrupted) return;
-					interrupted = new Error(
+					if (interrupted) return;
+					const error = new Error(
 						"Realtime synchronization is interrupted while automatic recovery continues",
 					);
-					interrupted.name = "RealtimeSyncInterruptedError";
-					reportError(interrupted);
+					error.name = "RealtimeSyncInterruptedError";
+					interrupted = { error, reported: false };
+					if (ready) {
+						reportError(error);
+						interrupted.reported = true;
+					}
 				};
 
 				const installReset = (
@@ -346,14 +377,18 @@ function createRealtimeCollectionOptions<
 
 				const stateChanged = (state: LiveQueryState) => {
 					if (state.status === "error") stop(state.error);
-					else if (
+					else if (state.status === "closed") {
+						const error = new Error("Realtime subscription closed");
+						error.name = "RealtimeSubscriptionClosedError";
+						stop(error);
+					} else if (
 						state.status === "connecting" ||
 						state.status === "stale"
 					)
 						reportInterruption();
 					else if (state.status === "live") reportRecovered();
-					// Initial connecting maps to loading. Closed is emitted by normal
-					// subscription cleanup and does not represent a sync failure.
+					// Initial connecting maps to loading. Normal cleanup detaches this
+					// listener before closing, so an observed closed state is terminal.
 				};
 
 				unsubscribeUpdate = subscription.onUpdate((update) => {
@@ -365,6 +400,12 @@ function createRealtimeCollectionOptions<
 
 				return () => {
 					cleaned = true;
+					if (
+						inactiveSubscriptionFailure ===
+						terminalSubscriptionFailures.get(subscription)
+					) {
+						inactiveSubscriptionFailure = undefined;
+					}
 					detach();
 					rowIds.clear();
 					keys.clear();
