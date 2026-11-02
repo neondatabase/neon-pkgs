@@ -70,6 +70,7 @@ describe("openRegistry from a directory", () => {
 						title: "Demo",
 						description: "d",
 						path: "demo/template.json",
+						categories: ["first-party"],
 					},
 				],
 			}),
@@ -125,6 +126,7 @@ describe("openRegistry from a directory", () => {
 				title: "Demo",
 				description: "d",
 				path: "demo/template.json",
+				categories: ["first-party"],
 			},
 			{
 				id: "Bad",
@@ -190,6 +192,7 @@ describe("openRegistry with the default sources", () => {
 				title: "Demo",
 				description: "A demo.",
 				path: "demo/template.json",
+				categories: ["first-party"],
 			},
 		],
 	});

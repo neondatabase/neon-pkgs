@@ -1,7 +1,7 @@
 {
 	"templates": [
-		{ "id": "hello", "title": "Hello", "description": "No operations.", "path": "hello/template.json" },
-		{ "id": "notes", "title": "Notes API", "description": "Router layout.", "path": "notes/template.json" },
-		{ "id": "mailer", "provider": "Mailer", "title": "Mailer", "description": "Separate layout with env.", "path": "mailer/template.json" }
+		{ "id": "hello", "title": "Hello", "description": "No operations.", "path": "hello/template.json", "categories": ["first-party"] },
+		{ "id": "notes", "title": "Notes API", "description": "Router layout.", "path": "notes/template.json", "categories": ["first-party"] },
+		{ "id": "mailer", "provider": "Mailer", "title": "Mailer", "description": "Separate layout with env.", "path": "mailer/template.json", "categories": ["first-party"] }
 	]
 }
