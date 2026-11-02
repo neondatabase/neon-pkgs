@@ -1,5 +1,11 @@
 # neon
 
+## 8.16.1
+
+### Patch Changes
+
+- 3e4b737: Stop listing the retired `neon-postgres-branches` and `neon-postgres-egress-optimizer` skill IDs now that their workflows are included in `neon-postgres`.
+
 ## 8.16.0
 
 ### Minor Changes
