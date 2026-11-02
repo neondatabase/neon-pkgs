@@ -1,5 +1,11 @@
 # neon
 
+## 8.17.0
+
+### Minor Changes
+
+- 4c038fa: `neon claim create --project-name <name>` and `neon init --claimable --project-name <name>` name the claimable project. The project keeps that name after it is claimed.
+
 ## 8.16.1
 
 ### Patch Changes
