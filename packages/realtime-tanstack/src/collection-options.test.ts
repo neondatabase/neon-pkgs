@@ -315,6 +315,20 @@ describe("Realtime TanStack DB collection", () => {
 		expect(client.latest().unsubscribed).toBe(true);
 	});
 
+	it("fails when Realtime is terminal before listeners are installed", async () => {
+		const failure = liveError("ACCESS_DENIED");
+		const client = new TestClient<MessageRow>({
+			status: "error",
+			error: failure,
+		});
+		const collection = createTestCollection(client);
+
+		await expect(collection.preload()).rejects.toBe(failure);
+		expect(collection.status).toBe("error");
+		expect(collection.health.error?.cause).toBe(failure);
+		expect(client.latest().unsubscribed).toBe(true);
+	});
+
 	it("fails the initial load when the shared Realtime client closes", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
@@ -630,6 +644,12 @@ function wireClient() {
 
 class TestClient<Row extends object> implements RealtimeClient {
 	readonly subscriptions: TestRawSubscription<Row>[] = [];
+	constructor(
+		private readonly initialState: LiveQueryState = {
+			status: "connecting",
+			error: undefined,
+		},
+	) {}
 
 	subscribe<CurrentRow>(
 		_query: SealedLiveQuery<CurrentRow>,
@@ -650,7 +670,9 @@ class TestClient<Row extends object> implements RealtimeClient {
 		if (options?.materialize !== false) {
 			throw new Error("Test client expects a raw subscription");
 		}
-		const subscription = new TestRawSubscription<CurrentRow>();
+		const subscription = new TestRawSubscription<CurrentRow>(
+			this.initialState,
+		);
 		this.subscriptions.push(
 			subscription as unknown as TestRawSubscription<Row>,
 		);
@@ -688,10 +710,11 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 		readonly timeout: number | undefined;
 	}> = [];
 	unsubscribed = false;
-	private currentState: LiveQueryState = {
-		status: "connecting",
-		error: undefined,
-	};
+	private currentState: LiveQueryState;
+
+	constructor(initialState: LiveQueryState) {
+		this.currentState = initialState;
+	}
 
 	getState = (): LiveQueryState => this.currentState;
 
