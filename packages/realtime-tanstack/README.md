@@ -101,7 +101,8 @@ const todos = createCollection(realtimeCollectionOptions({
 `awaitTxId()` also handles the race where the live batch arrives before the HTTP
 response. It resolves after covered row changes enter TanStack DB's causal sync
 queue and waits indefinitely by default. Pass an optional timeout in milliseconds
-to bound the wait.
+to bound the wait. Pending and subsequent waits reject if synchronization stops
+terminally; collection cleanup also rejects an outstanding wait.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.

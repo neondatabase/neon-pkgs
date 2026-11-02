@@ -29,8 +29,8 @@ export interface RealtimeCollectionUtils extends UtilsRecord {
 	 *
 	 * @param txid - PostgreSQL transaction ID as a decimal string.
 	 * @param timeout - Optional maximum wait in milliseconds. By default, the
-	 * promise remains pending until the transaction arrives or the collection is
-	 * cleaned up.
+	 * promise remains pending until the transaction arrives, synchronization
+	 * stops terminally, or the collection is cleaned up.
 	 * @throws If a supplied timeout elapses, synchronization stops terminally,
 	 * or the collection is cleaned up.
 	 */
@@ -400,7 +400,11 @@ function createRealtimeCollectionOptions<
 					else applyBatch(update.changes);
 				});
 				unsubscribeState = subscription.onStateChange(stateChanged);
-				queryRefresh.start();
+				const state = subscription.getState();
+				if (state.status === "error" || state.status === "closed") {
+					stateChanged(state);
+				}
+				if (!stopped) queryRefresh.start();
 
 				return () => {
 					cleaned = true;
