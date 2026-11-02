@@ -346,7 +346,12 @@ describe("seed --split", () => {
 		expect(stderr).toContain(
 			"Wrote 01-schema.sql, 02-load.sql, 03-transform.sql, 04-indexes.sql to mig/",
 		);
-		expect(stderr).toContain("ON_ERROR_STOP=1");
+		// A subshell with `set -e`: stops at the first failing file and exits
+		// non-zero (a `|| break` loop always exits 0).
+		expect(stderr).toContain(
+			'  (set -e; for f in mig/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done)\n',
+		);
+		expect(stderr).not.toContain("|| break");
 		expect(stderr).toContain("warning: ");
 
 		const schemaSql = read("mig", SPLIT_FILES.schema);

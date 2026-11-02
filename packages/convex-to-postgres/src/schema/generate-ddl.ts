@@ -146,6 +146,10 @@ function columnDefinition(column: PlannedColumn): string {
 		parts.push("NOT NULL");
 	}
 
+	if (column.defaultExpr !== undefined) {
+		parts.push(`DEFAULT ${column.defaultExpr}`);
+	}
+
 	if (column.checkIn !== undefined && column.checkIn.length > 0) {
 		const values = column.checkIn.map((v) => quoteSqlString(v)).join(", ");
 		parts.push(

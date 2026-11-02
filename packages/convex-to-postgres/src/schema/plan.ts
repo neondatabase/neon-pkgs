@@ -23,6 +23,15 @@ export interface PlannedColumn {
 	references?: string;
 	/** String-literal values for a `CHECK (col IN (...))` constraint. */
 	checkIn?: string[];
+	/**
+	 * SQL expression for the column's `DEFAULT` clause. Only the synthesized
+	 * columns have one: `id` (`gen_random_uuid()`, cast to text for the text
+	 * strategy) and `created_at` (`now()`). Convex fills `_id` and
+	 * `_creationTime` on every insert, so an app insert that omits them must
+	 * still succeed after the migration. The transform always supplies both
+	 * columns explicitly, so imported rows keep their Convex ids and times.
+	 */
+	defaultExpr?: string;
 	/** SQL expression that reads this column's value out of the staged `doc jsonb`. */
 	selectExpr: string;
 	/**
@@ -414,6 +423,10 @@ function idColumn(options: ResolvedOptions): PlannedColumn {
 		pgType,
 		notNull: true,
 		isPrimaryKey: true,
+		defaultExpr:
+			options.idStrategy === "uuid"
+				? "gen_random_uuid()"
+				: "gen_random_uuid()::text",
 		selectExpr:
 			options.idStrategy === "uuid"
 				? "md5(doc->>'_id')::uuid"
@@ -428,6 +441,7 @@ function creationTimeColumn(): PlannedColumn {
 		pgType: "timestamptz",
 		notNull: true,
 		isPrimaryKey: false,
+		defaultExpr: "now()",
 		// Convex stores a fractional-millisecond epoch; to_timestamp takes seconds.
 		selectExpr:
 			"to_timestamp((doc->>'_creationTime')::double precision / 1000)",

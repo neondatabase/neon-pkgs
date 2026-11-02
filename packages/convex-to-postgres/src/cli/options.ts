@@ -196,8 +196,9 @@ ${GENERATE_OPTIONS_HELP}
 	seed: `Usage: ${INVOCATION} seed --export <path> [options]
 
 Print one SQL script that loads a \`convex export\` snapshot into the tables
-\`schema\` creates: staging tables, the raw documents, the typed transform in
-one transaction, then the search/vector indexes and VACUUM ANALYZE.
+\`schema\` creates: staging tables, the raw documents, and the typed transform
+in one transaction. When the schema has search or vector indexes, the script
+then builds them and runs VACUUM ANALYZE.
 
 With --split, write the steps as separate files to edit before running them in
 order: 01-schema.sql, 02-load.sql, 03-transform.sql, and 04-indexes.sql when
@@ -216,8 +217,9 @@ ${GENERATE_OPTIONS_HELP}
 `,
 	import: `Usage: ${INVOCATION} import --export <path> [options]
 
-Load a \`convex export\` snapshot into Postgres in one transaction, then build
-the search/vector indexes. Progress and row counts go to stderr.
+Load a \`convex export\` snapshot into Postgres in one transaction. When the
+schema has search or vector indexes, it then builds them and runs VACUUM
+ANALYZE. Progress and row counts go to stderr.
 
 Options:
 ${EXPORT_FLAG_HELP}

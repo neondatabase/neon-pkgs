@@ -390,7 +390,9 @@ function splitSummary(splitDir: string, written: string[]): string {
 	return [
 		`Wrote ${written.join(", ")} to ${dir}/`,
 		"Edit them as needed, then run them in order:",
-		`  for f in ${dir}/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break; done`,
+		// The subshell's `set -e` stops at the first failing file and exits with
+		// psql's non-zero status, without closing an interactive shell.
+		`  (set -e; for f in ${dir}/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done)`,
 		"",
 	].join("\n");
 }

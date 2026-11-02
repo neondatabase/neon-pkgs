@@ -54,8 +54,9 @@ npx @neon/convex-to-postgres import --export snapshot.zip --apply-schema \
   --database-url "$DATABASE_URL"
 ```
 
-`import` creates the tables (`--apply-schema`), loads every document in one
-transaction, then builds the search/vector indexes and runs `VACUUM ANALYZE`.
+`import` creates the tables (`--apply-schema`) and loads every document in one
+transaction. When the schema has search or vector indexes, it then builds them
+and runs `VACUUM ANALYZE`; otherwise it stops after the load.
 `--database-url` defaults to `DATABASE_URL`. Without `--apply-schema`, the tables
 must already exist.
 
@@ -95,10 +96,11 @@ transform. To rename `author` to `author_name`, change the column in
 expression stays. A retype is a different cast, and flattening a nested object
 is a new column read with `doc->'meta'->>'field'`.
 
-Run the files in order:
+Run the files in order. The subshell's `set -e` stops at the first file that
+fails and exits non-zero, without closing your terminal:
 
 ```bash
-for f in migration/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break; done
+(set -e; for f in migration/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done)
 ```
 
 `--split` refuses to overwrite files from an earlier run, because they may hold
@@ -164,19 +166,21 @@ Example output for a two-table schema (`users`, `messages` with
 
 ```sql
 CREATE TABLE users (
-    id uuid PRIMARY KEY,
-    created_at timestamptz NOT NULL,
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at timestamptz NOT NULL DEFAULT now(),
     name text NOT NULL
 );
 
 CREATE TABLE messages (
-    id uuid PRIMARY KEY,
-    created_at timestamptz NOT NULL,
-    author_id uuid NOT NULL REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED,
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    author_id uuid NOT NULL,
     body text NOT NULL
 );
 
 CREATE INDEX messages_by_author ON messages (author_id);
+
+ALTER TABLE messages ADD CONSTRAINT messages_author_id_fkey FOREIGN KEY (author_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED;
 ```
 
 ### Type mapping
@@ -210,11 +214,18 @@ The two synthesized columns on every table:
 
 | Convex field | Postgres column | Transform expression |
 | --- | --- | --- |
-| `_id` | `id` (primary key) | `md5(doc->>'_id')::uuid` or `doc->>'_id'` |
-| `_creationTime` | `created_at timestamptz NOT NULL` | `to_timestamp((doc->>'_creationTime')::double precision / 1000)` |
+| `_id` | `id uuid PRIMARY KEY DEFAULT gen_random_uuid()` or `id text PRIMARY KEY DEFAULT gen_random_uuid()::text` | `md5(doc->>'_id')::uuid` or `doc->>'_id'` |
+| `_creationTime` | `created_at timestamptz NOT NULL DEFAULT now()` | `to_timestamp((doc->>'_creationTime')::double precision / 1000)` |
 
 Convex stores `_creationTime` as a fractional-millisecond epoch, so the transform
 divides by 1000 to hand `to_timestamp` seconds.
+
+Convex sets `_creationTime` on every insert, so `created_at` defaults to
+`now()`: after the migration, an insert that omits it still succeeds. Convex
+sets `_id` too, so `id` defaults to `gen_random_uuid()` (cast to `text` for the
+text strategy): an insert may set `id` itself, otherwise the default applies.
+The transform always supplies both columns, so imported rows keep their original
+Convex ids and creation times.
 
 ### Id strategy: `uuid` (default) or `text`
 
@@ -327,8 +338,10 @@ Postgres does not ship `lakebase_text` / `lakebase_vector`.
 `generateDdl` emits the extensions, the `CREATE TABLE`s (including the generated
 `tsvector` and `vector` columns), and the plain btree indexes. The BM25/ANN
 indexes and their filter-field btrees come from a separate `generateIndexDdl`
-call, which `importConvexExport` runs after the load (followed by
-`VACUUM ANALYZE`), and which `generateSeedSql` appends after its `COMMIT`.
+call. `importConvexExport` runs it after the load, then runs `VACUUM ANALYZE`;
+`generateSeedSql` appends it after its `COMMIT`, followed by `VACUUM ANALYZE;`.
+Both skip the index build and the `VACUUM ANALYZE` when the schema has no search
+or vector indexes.
 Indexing after the bulk load gives BM25 accurate corpus statistics and ANN a
 well-tuned layout; building them first works too, just less well tuned. `VACUUM`
 cannot run inside a transaction, which is the other reason it is separate.
@@ -373,8 +386,10 @@ Instead it:
 The CLI's `seed` command does this. `generateSeedSql` reads an extracted export
 directory and returns one self-contained SQL string: staging DDL, the raw rows
 as `jsonb` literals, the typed transform, and the staging drop, all wrapped in
-one transaction with deferred foreign keys. Apply the schema DDL first, then run
-the seed:
+one transaction with deferred foreign keys. When the schema has search or vector
+indexes, the script then builds them after the `COMMIT` and ends with
+`VACUUM ANALYZE;`. Otherwise it ends at the `COMMIT`. Apply the schema DDL
+first, then run the seed:
 
 ```ts
 import { generateDdl, generateSeedSql, loadConvexSchema } from "@neon/convex-to-postgres";

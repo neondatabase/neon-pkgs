@@ -108,12 +108,30 @@ describe("generateDdl id strategies", () => {
 });
 
 describe("generateDdl synthesized columns", () => {
-	const { sql } = ddl(
-		schema([table({ name: "t", fields: { x: field(v.string()) } })]),
-	);
+	const s = schema([table({ name: "t", fields: { x: field(v.string()) } })]);
+	const { sql } = ddl(s);
 
-	test("creation time maps to created_at timestamptz NOT NULL", () => {
-		expect(sql).toContain("created_at timestamptz NOT NULL");
+	// Convex fills `_creationTime` on every insert, so after the migration an app
+	// insert that omits created_at must still succeed.
+	test("creation time maps to created_at timestamptz NOT NULL DEFAULT now()", () => {
+		expect(sql).toContain("created_at timestamptz NOT NULL DEFAULT now(),");
+	});
+
+	test("the text id strategy also defaults created_at to now()", () => {
+		expect(ddl(s, { idStrategy: "text" }).sql).toContain(
+			"created_at timestamptz NOT NULL DEFAULT now(),",
+		);
+	});
+
+	// Convex fills `_id` on every insert too, so an app insert that omits id gets
+	// a generated one, and one that supplies id keeps it.
+	test.each([
+		["uuid", "id uuid PRIMARY KEY DEFAULT gen_random_uuid(),"],
+		["text", "id text PRIMARY KEY DEFAULT gen_random_uuid()::text,"],
+	] as const)("the %s id defaults to a generated id", (idStrategy, line) => {
+		const out = ddl(s, { idStrategy }).sql;
+		expect(out).toContain(line);
+		expect(out.match(/DEFAULT/g)).toHaveLength(2);
 	});
 
 	test("id comes before created_at before user columns", () => {
@@ -364,6 +382,8 @@ describe("generateDdl schemaless fallback", () => {
 			schema([table({ name: "freeform", documentType: v.any() })]),
 		);
 		expect(sql).toContain("CREATE TABLE freeform (");
+		expect(sql).toContain("id uuid PRIMARY KEY DEFAULT gen_random_uuid(),");
+		expect(sql).toContain("created_at timestamptz NOT NULL DEFAULT now(),");
 		expect(sql).toContain("doc jsonb NOT NULL");
 		expect(
 			warnings.some(
