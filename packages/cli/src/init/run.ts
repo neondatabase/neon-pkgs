@@ -177,6 +177,7 @@ export type InitClaimFn = (input: {
 	apiKey: string;
 	profile?: string;
 	regionId?: string;
+	projectName?: string;
 }) => Promise<void>;
 
 export type InitProps = CommonProps & {
@@ -529,6 +530,9 @@ const defaultCreateClaimable: InitClaimFn = async (input) => {
 		cwd: input.cwd,
 		...(input.profile !== undefined ? { profile: input.profile } : {}),
 		...(input.regionId !== undefined ? { regionId: input.regionId } : {}),
+		...(input.projectName !== undefined
+			? { projectName: input.projectName }
+			: {}),
 	});
 };
 
@@ -593,10 +597,11 @@ export const runInit = async (props: InitProps): Promise<void> => {
 	const hasAccountLinkInputs =
 		props.orgId !== undefined ||
 		props.projectId !== undefined ||
-		props.projectName !== undefined ||
 		props.branch !== undefined;
 	const hasExplicitLinkInputs =
-		hasAccountLinkInputs || props.regionId !== undefined;
+		hasAccountLinkInputs ||
+		props.projectName !== undefined ||
+		props.regionId !== undefined;
 
 	const funnel = createInitFunnel();
 	let outcome: InitFunnelOutcome = "error";
@@ -1174,6 +1179,9 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					: {}),
 				...(props.regionId !== undefined
 					? { regionId: props.regionId }
+					: {}),
+				...(props.projectName !== undefined
+					? { projectName: props.projectName }
 					: {}),
 			});
 			funnel.link = "claimable";

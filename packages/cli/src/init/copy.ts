@@ -73,7 +73,7 @@ export const CLAIMABLE_MCP_API_KEY =
 export const CLAIMABLE_NO_LINK =
 	"--claimable cannot be combined with --no-link.";
 export const CLAIMABLE_ACCOUNT_FLAGS =
-	"--claimable cannot be combined with --org-id, --project-id, --project-name, or --branch.";
+	"--claimable cannot be combined with --org-id, --project-id, or --branch.";
 export const CLAIMABLE_ALREADY_LINKED =
 	"--claimable cannot run in a directory that is already linked. Omit --claimable, or unlink first.";
 

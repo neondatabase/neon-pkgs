@@ -19,6 +19,7 @@ type ClaimStatus = {
 
 type BareProject = {
 	id: string;
+	name: string;
 	region_id: string;
 };
 
@@ -210,6 +211,43 @@ describe.sequential("e2e — neon claim against live Claimable Neon", () => {
 				dirs,
 			);
 			expect(fetched.region_id).toBe("aws-eu-central-1");
+		} finally {
+			if (projectId !== undefined) {
+				const deleted = await runCli(
+					["claim", "delete", projectId, "--yes", ...claimHostArgs()],
+					{
+						...anonymous,
+						configDir: dirs.configDir,
+						contextFile: dirs.contextFile,
+					},
+				);
+				expect(deleted.code, deleted.stderr).toBe(0);
+			}
+		}
+	});
+
+	e2eTest("names the project with --project-name", async () => {
+		const dirs = isolatedDirs();
+		let projectId: string | undefined;
+		try {
+			const created = await runAnonymousJson<CreatedClaim>(
+				[
+					"claim",
+					"create",
+					"--project-name",
+					"neon-cli-claim-e2e-named",
+					"--no-env-pull",
+					...claimHostArgs(),
+				],
+				dirs,
+			);
+			projectId = created.project_id;
+
+			const fetched = await runAnonymousJson<BareProject>(
+				["projects", "get", created.project_id],
+				dirs,
+			);
+			expect(fetched.name).toBe("neon-cli-claim-e2e-named");
 		} finally {
 			if (projectId !== undefined) {
 				const deleted = await runCli(

@@ -368,6 +368,7 @@ export class ClaimableClient {
 		capabilities: readonly ClaimableCapability[];
 		source: string;
 		regionId?: string;
+		projectName?: string;
 		dataApi?: {
 			auth_provider: "neon_auth" | "external";
 			jwks_url?: string;
@@ -385,6 +386,9 @@ export class ClaimableClient {
 					source: input.source,
 					...(input.regionId !== undefined
 						? { region_id: input.regionId }
+						: {}),
+					...(input.projectName !== undefined
+						? { project_name: input.projectName }
 						: {}),
 					...(input.dataApi !== undefined
 						? { data_api: input.dataApi }
