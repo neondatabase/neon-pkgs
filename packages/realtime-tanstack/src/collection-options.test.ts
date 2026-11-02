@@ -138,7 +138,7 @@ describe("Realtime TanStack DB collection", () => {
 			type: "progress",
 			mvcc: { xmin: "45", xmax: "45", xip: [] },
 		});
-		await mutation.isPersisted.promise;
+		await mutation.when("settled");
 		await eventually(() =>
 			expect(collection.get(1)).toMatchObject({ title: "authoritative" }),
 		);
@@ -253,7 +253,7 @@ describe("Realtime TanStack DB collection", () => {
 			["77"],
 		);
 
-		await mutation.isPersisted.promise;
+		await mutation.when("settled");
 		await eventually(() => {
 			expect(collection.get(1)).toMatchObject({ title: "authoritative" });
 		});
@@ -262,7 +262,7 @@ describe("Realtime TanStack DB collection", () => {
 	it.each([
 		"connecting",
 		"stale",
-	] as const)("keeps a ready collection ready while Realtime is %s", async (status) => {
+	] as const)("reports recoverable Realtime %s state through collection health", async (status) => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
 		const preload = collection.preload();
@@ -273,18 +273,101 @@ describe("Realtime TanStack DB collection", () => {
 
 		expect(collection.status).toBe("ready");
 		expect(collection.get(1)).toMatchObject({ title: "one" });
+		expect(collection.health.failureReason).toMatchObject({
+			cause: expect.objectContaining({
+				name: "RealtimeSyncInterruptedError",
+			}),
+		});
+		expect(collection.health.error).toBeNull();
+
+		client.latest().state({ status: "live", error: undefined });
+
+		expect(collection.health.failureReason).toBeNull();
 	});
 
-	it("maps Neon errors and unexpected closure to collection errors", async () => {
+	it("fails the initial load on a terminal Realtime error", async () => {
 		const client = new TestClient<MessageRow>();
 		const collection = createTestCollection(client);
-		void collection.preload();
+		const preload = collection.preload();
 		const failure = liveError("ACCESS_DENIED");
 
 		client.latest().state({ status: "error", error: failure });
 
+		await expect(preload).rejects.toBe(failure);
 		expect(collection.status).toBe("error");
-		expect(collection._lifecycle.getSyncError()).toBe(failure);
+		expect(collection.health.error?.cause).toBe(failure);
+		expect(client.latest().unsubscribed).toBe(true);
+	});
+
+	it("keeps ready rows visible when Realtime stops terminally", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+		await preload;
+		const failure = liveError("ACCESS_DENIED");
+
+		client.latest().state({ status: "error", error: failure });
+
+		expect(collection.status).toBe("ready");
+		expect(collection.get(1)).toMatchObject({ title: "one" });
+		expect(collection.health.error?.cause).toBe(failure);
+		expect(collection.health.failureReason).toBeNull();
+		expect(client.latest().unsubscribed).toBe(true);
+	});
+
+	it("reloads a failed collection from a fresh authoritative snapshot", async () => {
+		const client = new TestClient<MessageRow>();
+		const collection = createTestCollection(client);
+		const preload = collection.preload();
+		client.latest().reset([
+			{ rowId: "a", row: { id: 1, title: "one" } },
+			{ rowId: "b", row: { id: 2, title: "removed" } },
+		]);
+		await preload;
+		client.latest().state({
+			status: "error",
+			error: liveError("BACKEND_UNAVAILABLE"),
+		});
+
+		const reload = collection.reload();
+		expect(client.subscriptions).toHaveLength(2);
+		expect(collection.status).toBe("ready");
+		expect(collection.get(2)).toMatchObject({ title: "removed" });
+
+		client
+			.latest()
+			.reset([{ rowId: "c", row: { id: 3, title: "replacement" } }]);
+		await reload;
+
+		expect(collection.has(1)).toBe(false);
+		expect(collection.has(2)).toBe(false);
+		expect(collection.get(3)).toMatchObject({ title: "replacement" });
+		expect(collection.health.error).toBeNull();
+	});
+
+	it("stops when query refresh returns a different query", async () => {
+		const client = new TestClient<MessageRow>();
+		const replacement = {
+			...query("query-2"),
+			queryFingerprint: "22".repeat(32),
+		};
+		const collection = createTestCollection(
+			client,
+			query("query-1", 9),
+			async () => replacement,
+		);
+		const preload = collection.preload();
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+		await preload;
+
+		await eventually(() => {
+			expect(collection.health.error?.message).toBe(
+				"Live-query renewal must be for the same query",
+			);
+		});
+		expect(collection.status).toBe("ready");
+		expect(client.latest().unsubscribed).toBe(true);
 	});
 
 	it("renews expiring query without changing the collection API", async () => {
