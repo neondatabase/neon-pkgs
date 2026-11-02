@@ -14,7 +14,7 @@ Requires Node.js 20.19+. The sign-in client's cookie encryption uses `node:crypt
 
 ## Prerequisites
 
-Set these up in Neon first. The [OAuth provider guide](https://neon.com/docs/auth/guides/plugins/oauth-provider) covers each step (the plugin is currently in private preview).
+Set these up in Neon first. The [OAuth provider guide](https://neon.com/docs/auth/guides/plugins/oauth-provider) covers each step.
 
 - **`NEON_AUTH_BASE_URL`:** the Auth URL of your branch, which is the OAuth issuer, e.g. `https://ep-example.neonauth.us-east-1.aws.neon.tech/neondb/auth`. Copy it from the Neon Console, or read `base_url` from `GET .../auth`. It differs on every branch.
 - **A protected resource:** enable the OAuth provider on the branch (Console: **Settings** > **Better Auth** > **Plugins**) and add your API identifier (or MCP server URL) as a resource. It is an absolute URL that becomes the token's `aud`; it does not need to resolve. Use the same value as `resource` below.
