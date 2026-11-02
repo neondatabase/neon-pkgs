@@ -1579,6 +1579,31 @@ describe("init handler", () => {
 		expect(createClaimable).toHaveBeenCalled();
 	});
 
+	test("-y --claimable --project-name names the claimable project", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-name-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const createClaimable = vi.fn().mockResolvedValue(undefined);
+		const { handler } = await import("./init.js");
+
+		await handler(
+			baseProps({
+				cwd,
+				yes: true,
+				claimable: true,
+				projectName: "my-app",
+				agentSetup: false,
+				config: false,
+				hasLocalCredentials: () => false,
+				createClaimable,
+				contextFile: join(cwd, ".neon"),
+			}),
+		);
+
+		expect(createClaimable).toHaveBeenCalledWith(
+			expect.objectContaining({ projectName: "my-app" }),
+		);
+	});
+
 	test("-y --claimable --region-id creates the claimable project in that region", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-claim-region-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");

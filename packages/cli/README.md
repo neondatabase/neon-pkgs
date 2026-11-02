@@ -99,6 +99,9 @@ neon claim create --service auth --service data-api
 
 # Create the project in another region (default: aws-us-east-2)
 neon claim create --region-id aws-eu-central-1
+
+# Name the project (default: a generated name). The project keeps the name when claimed
+neon claim create --project-name my-app
 ```
 
 When the current directory has a `neon.ts`, `claim create` also requests every service
@@ -907,7 +910,7 @@ $ neon init -y --agent cursor --project-id <project-id> \
     --mcp-auth oauth --mcp-config-location project --mcp-project-scoped
 ```
 
-Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is Recommended. `-y` with `--skill`, MCP flags, `--no-agent-setup`, or `--claimable` is Custom: those flags, Recommended defaults for the rest. `--skill` selects skills (not the plugin). MCP flags select skills and MCP. `--agent` skips agent selection and, without `-y`, selects Custom. `--no-link` skips project linking without asking. `--no-config` skips `neon.ts`. `--services` implies creating `neon.ts`. `--org-id`, `--project-id`, `--project-name`, `--region-id`, and `--branch` select linking. With `--claimable`, `--region-id` picks the claimable project's region.
+Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is Recommended. `-y` with `--skill`, MCP flags, `--no-agent-setup`, or `--claimable` is Custom: those flags, Recommended defaults for the rest. `--skill` selects skills (not the plugin). MCP flags select skills and MCP. `--agent` skips agent selection and, without `-y`, selects Custom. `--no-link` skips project linking without asking. `--no-config` skips `neon.ts`. `--services` implies creating `neon.ts`. `--org-id`, `--project-id`, `--project-name`, `--region-id`, and `--branch` select linking. With `--claimable`, `--region-id` picks the claimable project's region and `--project-name` names it.
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 

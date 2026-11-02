@@ -59,6 +59,7 @@ type ClaimProps = {
 type CreateProps = ClaimProps & {
 	services?: readonly ClaimableService[];
 	regionId?: string;
+	projectName?: string;
 	config?: string;
 	file?: string;
 	envPull: boolean;
@@ -218,6 +219,11 @@ export const builder = (argv: yargs.Argv) =>
 					.option("region-id", {
 						describe:
 							"Region ID for the new project (e.g. aws-eu-central-1). Defaults to aws-us-east-2",
+						type: "string",
+					})
+					.option("project-name", {
+						describe:
+							"Name for the new project. The project keeps it when claimed",
 						type: "string",
 					})
 					.option("file", {
@@ -437,6 +443,9 @@ export const create = async (props: CreateProps): Promise<void> => {
 		capabilities: claimableCapabilities(props.services ?? []),
 		source: "neon_cli",
 		...(props.regionId !== undefined ? { regionId: props.regionId } : {}),
+		...(props.projectName !== undefined
+			? { projectName: props.projectName }
+			: {}),
 		...(props.dataApi ? { dataApi: props.dataApi } : {}),
 	});
 	const stored: StoredClaimableCredentials = {
