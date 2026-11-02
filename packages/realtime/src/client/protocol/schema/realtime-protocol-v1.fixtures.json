@@ -27,6 +27,7 @@
     { "type": "subscription_error", "live_id": "2", "code": "backend_overloaded", "message": "backend overloaded", "retry_after_ms": 2000 },
     { "type": "subscription_error", "live_id": "2", "code": "backend_overloaded", "message": "backend overloaded", "retry_after_ms": 4294967295, "sqlstate": "53300" },
     { "type": "subscription_error", "live_id": "2", "code": "backend_overloaded", "message": "backend overloaded" },
+    { "type": "subscription_error", "live_id": "2", "code": "resource_limit_exceeded", "message": "subscription exceeded resource limits", "sqlstate": "54000" },
     { "type": "connection_error", "code": "protocol_error", "message": "invalid sequence" }
   ],
   "invalid": [

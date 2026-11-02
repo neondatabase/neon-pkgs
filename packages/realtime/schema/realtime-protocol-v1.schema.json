@@ -299,7 +299,7 @@
             "type": { "const": "subscription_error" },
             "live_id": { "$ref": "#/$defs/u64" },
             "code": {
-              "enum": ["authorization_expired", "renewal_failed", "upstream_cancelled", "backend_overloaded", "baseline_sync_failed", "protocol_error"]
+              "enum": ["authorization_expired", "renewal_failed", "upstream_cancelled", "backend_overloaded", "baseline_sync_failed", "resource_limit_exceeded", "protocol_error"]
             },
             "message": { "type": "string" },
             "sqlstate": { "$ref": "#/$defs/sqlstate" },

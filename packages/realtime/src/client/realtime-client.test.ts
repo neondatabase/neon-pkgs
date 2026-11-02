@@ -1320,6 +1320,43 @@ describe("RealtimeClient", () => {
 		client.close();
 	});
 
+	it.each([
+		false,
+		true,
+	])("makes resource-limit errors terminal after baseline completion=%s", async (completed) => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		if (completed) baselineSync(socket, "before");
+		const waiting = subscription.awaitTxId("42");
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "resource_limit_exceeded",
+			message: "subscription exceeded resource limits",
+			sqlstate: "54000",
+		});
+		const error = {
+			code: "resource_limit_exceeded",
+			retryable: false,
+			sqlState: "54000",
+		};
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "error",
+			error,
+		});
+		await expect(waiting).rejects.toMatchObject(error);
+		await expect(subscription.awaitTxId("43")).rejects.toMatchObject(error);
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(
+			socket.sent.filter((message) => message.type === "subscribe"),
+		).toHaveLength(1);
+		expect(FakeWebSocket.instances).toHaveLength(1);
+		client.close();
+	});
+
 	it("contains parser failures to one subscription on a shared connection", () => {
 		useFakeWebSocket();
 		const original = new Error("application parser failed");
