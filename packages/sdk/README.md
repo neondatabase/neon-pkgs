@@ -436,7 +436,7 @@ const { data: uri } = await neon.postgres.connectionString({
 | --- | --- |
 | `list({ projectId, branchId })` | `Role[]` |
 | `get({ projectId, branchId, roleName })` | `Role` |
-| `create({ projectId, branchId, name, no_login? })` | `Role` |
+| `create({ projectId, branchId, name, no_login?, access?, databaseName?, schemas? })` | `Role` (carries the password unless `no_login`) |
 | `delete({ projectId, branchId, roleName })` | **→void** |
 | `password({ projectId, branchId, roleName })` | `string` (reveals the password) |
 | `resetPassword({ projectId, branchId, roleName })` | `Role` (carries the new password) |
@@ -448,6 +448,36 @@ const { data: password } = await neon.postgres.roles.password(roleParams);
 const { data: role } = await neon.postgres.roles.resetPassword(roleParams);
 // role.password holds the new secret
 ```
+
+`access` decides what the role may do:
+
+| `access` | How it is created | What the role gets |
+| --- | --- | --- |
+| `"admin"` (default) | Neon API | Membership in `neon_superuser`: every database, CREATEDB, CREATEROLE, BYPASSRLS, REPLICATION. It cannot be narrowed later |
+| `"read_only"` | SQL as the database owner | CONNECT on `databaseName`, USAGE on `schemas`, SELECT on their tables |
+| `"read_write"` | SQL as the database owner | The same, plus INSERT, UPDATE, DELETE on tables and USAGE, SELECT on sequences |
+
+```ts
+const { data: reader } = await neon.postgres.roles.create(
+  {
+    projectId,
+    branchId,
+    name: "app_reader",
+    access: "read_only",
+    databaseName: "neondb", // optional when the branch has one database
+    schemas: ["public"], // default
+  },
+  { waitForReadiness: true },
+);
+// reader.password is generated and stored by Neon, like any API-created role
+```
+
+For `read_only` and `read_write`, the SDK connects as the database's owner, runs `CREATE ROLE` and the grants in one transaction over Neon's HTTP SQL endpoint (`https://api.<region host>/sql`, the protocol `@neondatabase/serverless` uses), then calls `resetPassword` so Neon generates the password. Limits:
+
+- Grants cover tables and sequences in `schemas` that the database owner owns, now and later (`ALTER DEFAULT PRIVILEGES FOR ROLE <owner>`). Objects other roles own are not covered.
+- The role keeps what `PUBLIC` already has in the database, such as CONNECT and TEMP. Nothing is revoked from `PUBLIC`.
+- The database owner needs a password Neon can reveal, the branch needs a read-write compute, and the project must allow public network access to reach the HTTP SQL endpoint.
+- A Postgres error rolls the transaction back: the error is a `NeonApiError` with the SQLSTATE in `code` (`42710` for a duplicate name). When the SQL request's outcome is unknown, or the role was created but the password reset failed, the error is a `NeonClientError` that says which, with the original error as `cause`.
 
 #### `neon.postgres.databases`
 

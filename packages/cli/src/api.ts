@@ -480,6 +480,22 @@ export type RequestParams = {
 	headers?: Record<string, string>;
 };
 
+/** The fetch {@link getApiClient} sends requests with, for clients built outside it. */
+export const cliFetch = (
+	requestTimeoutMs = REQUEST_TIMEOUT_MS,
+): typeof fetch => {
+	const fetchWithTimeout = makeTimedFetch(
+		validateRequestTimeout(requestTimeoutMs),
+	);
+	return (input, init) => {
+		const request = new Request(input, init);
+		request.headers.set("User-Agent", USER_AGENT);
+		return fetchWithTimeout(request);
+	};
+};
+
+export { httpError, RETRY_COUNT };
+
 export const getApiClient = ({
 	apiKey,
 	apiHost,

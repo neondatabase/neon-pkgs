@@ -1022,6 +1022,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.17
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 3.0.9(vitest@3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1))
@@ -1031,6 +1034,9 @@ importers:
       es-module-lexer:
         specifier: 2.3.1
         version: 2.3.1
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       tsdown:
         specifier: 'catalog:'
         version: 0.14.1(@arethetypeswrong/core@0.18.3)(typescript@5.9.3)
@@ -8459,7 +8465,7 @@ snapshots:
   '@types/pg@8.20.0':
     dependencies:
       '@types/node': 24.3.1
-      pg-protocol: 1.14.0
+      pg-protocol: 1.16.1
       pg-types: 2.2.0
 
   '@types/prompts@2.4.9':
