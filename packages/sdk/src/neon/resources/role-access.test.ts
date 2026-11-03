@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NeonClientError } from "../errors.js";
 import {
 	bootstrapPassword,
+	enableLoginStatement,
 	parseRoleAccess,
 	roleAccessStatements,
 } from "./role-access.js";
@@ -72,7 +73,7 @@ describe("roleAccessStatements", () => {
 
 	it("grants read_only table access and future-table defaults", () => {
 		expect(roleAccessStatements({ ...base, access: "read_only" })).toEqual([
-			`CREATE ROLE "App ""Reader""" LOGIN PASSWORD 'abc123'`,
+			`CREATE ROLE "App ""Reader""" NOLOGIN PASSWORD 'abc123'`,
 			`GRANT CONNECT ON DATABASE "neondb" TO "App ""Reader"""`,
 			`GRANT USAGE ON SCHEMA "public" TO "App ""Reader"""`,
 			`GRANT SELECT ON ALL TABLES IN SCHEMA "public" TO "App ""Reader"""`,
@@ -106,6 +107,12 @@ describe("roleAccessStatements", () => {
 				bootstrapPassword: "x'; DROP ROLE neondb_owner; --",
 			}),
 		).toThrow(NeonClientError);
+	});
+
+	it("enables login with a quoted identifier", () => {
+		expect(enableLoginStatement('App "Reader"')).toBe(
+			`ALTER ROLE "App ""Reader""" LOGIN`,
+		);
 	});
 
 	it("generates alphanumeric bootstrap passwords", () => {

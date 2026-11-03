@@ -472,12 +472,12 @@ const { data: reader } = await neon.postgres.roles.create(
 // reader.password is generated and stored by Neon, like any API-created role
 ```
 
-For `read_only` and `read_write`, the SDK connects as the database's owner, runs `CREATE ROLE` and the grants in one transaction over Neon's HTTP SQL endpoint (`https://api.<region host>/sql`, the protocol `@neondatabase/serverless` uses), then calls `resetPassword` so Neon generates the password. Limits:
+For `read_only` and `read_write`, the SDK connects as the database's owner and runs `CREATE ROLE ... NOLOGIN` and the grants in one transaction over Neon's HTTP SQL endpoint (`https://api.<region host>/sql`, the protocol `@neondatabase/serverless` uses). It then calls `resetPassword`, waits until the compute applies Neon's generated password, and only then runs `ALTER ROLE ... LOGIN`. Limits:
 
 - Grants cover tables and sequences in `schemas` that the database owner owns, now and later (`ALTER DEFAULT PRIVILEGES FOR ROLE <owner>`). Objects other roles own are not covered.
 - The role keeps what `PUBLIC` already has in the database, such as CONNECT and TEMP. Nothing is revoked from `PUBLIC`.
 - The database owner needs a password Neon can reveal, the branch needs a read-write compute, and the project must allow public network access to reach the HTTP SQL endpoint.
-- A Postgres error rolls the transaction back: the error is a `NeonApiError` with the SQLSTATE in `code` (`42710` for a duplicate name). When the SQL request's outcome is unknown, or the role was created but the password reset failed, the error is a `NeonClientError` that says which, with the original error as `cause`.
+- A Postgres error rolls the transaction back: the error is a `NeonApiError` with the SQLSTATE in `code` (`42710` for a duplicate name). When the SQL request's outcome is unknown, or the role was created but setting its password or enabling login failed, the error is a `NeonClientError` that says which, with the original error as `cause`. A role left behind by those failures cannot log in; delete it with `roles.delete` and create it again.
 
 #### `neon.postgres.databases`
 

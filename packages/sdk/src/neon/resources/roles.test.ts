@@ -28,6 +28,12 @@ function scopedClient(steps: Record<string, Step>) {
 	return { neon, calls, requests };
 }
 
+async function sqlStatements(request: Request | undefined): Promise<string[]> {
+	if (!request) throw new Error("no SQL request was sent");
+	const body: { queries: { query: string }[] } = await request.clone().json();
+	return body.queries.map((query) => query.query);
+}
+
 const json = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), {
 		status,
@@ -85,7 +91,33 @@ describe("roles.create with scoped access", () => {
 		expect(error?.message).toContain("without one result per statement");
 	});
 
-	it("says the role exists when the password reset fails after commit", async () => {
+	it("creates the role NOLOGIN and enables login only after the reset", async () => {
+		const { neon, calls, requests } = scopedClient({
+			...preflight,
+			"POST /sql": async () => {
+				const statements = await sqlStatements(requests.at(-1));
+				return json({ results: statements.map(() => ({ rows: [] })) });
+			},
+			"POST /api/v2/projects/p/branches/br/roles/app_reader/reset_password":
+				() => json({ role: { name: "app_reader", password: "npg_x" } }),
+		});
+		const { data } = await neon.postgres.roles.create(input);
+		expect(data?.password).toBe("npg_x");
+		expect(calls.slice(-3)).toEqual([
+			"POST /sql",
+			"POST /api/v2/projects/p/branches/br/roles/app_reader/reset_password",
+			"POST /sql",
+		]);
+		const sql = requests.filter((request) => request.url.endsWith("/sql"));
+		expect((await sqlStatements(sql[0]))[0]).toMatch(
+			/^CREATE ROLE "app_reader" NOLOGIN PASSWORD '[0-9a-f]{64}'$/,
+		);
+		expect(await sqlStatements(sql[1])).toEqual([
+			'ALTER ROLE "app_reader" LOGIN',
+		]);
+	});
+
+	it("says the role cannot log in when the password reset fails after commit", async () => {
 		const { neon, calls } = scopedClient({
 			...preflight,
 			"POST /sql": () =>
@@ -98,9 +130,9 @@ describe("roles.create with scoped access", () => {
 		const { error } = await neon.postgres.roles.create(input);
 		expect(error).toBeInstanceOf(NeonClientError);
 		expect(error?.message).toContain(
-			'Role "app_reader" was created with read_only access',
+			'Role "app_reader" was created with read_only access but cannot log in',
 		);
-		expect(error?.message).toContain("roles.resetPassword");
+		expect(error?.message).toContain("roles.delete");
 		expect(calls.at(-1)).toBe(
 			"POST /api/v2/projects/p/branches/br/roles/app_reader/reset_password",
 		);

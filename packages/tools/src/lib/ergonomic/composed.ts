@@ -140,7 +140,7 @@ export const createRoleInputSchema = z
 		access: z
 			.enum(["admin", "read_only", "read_write"])
 			.describe(
-				"What the role may do. Default admin: the role joins neon_superuser. read_only: SELECT. read_write: SELECT, INSERT, UPDATE, DELETE and sequence use. Scoped roles get no DDL.",
+				"What the role may do. Default admin: the role joins neon_superuser. read_only: SELECT. read_write: SELECT, INSERT, UPDATE, DELETE and sequence use. Scoped roles get these grants on top of whatever PUBLIC already has in the database.",
 			)
 			.optional(),
 		database_name: z

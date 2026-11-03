@@ -111,9 +111,10 @@ const TABLE_PRIVILEGES: Record<ScopedRoleAccess, string> = {
  * Default privileges are `FOR ROLE <owner>`: they cover tables the owner creates later,
  * not tables other roles own.
  *
- * `bootstrapPassword` is replaced by a Neon-generated password right after the
- * transaction commits; the API refuses to reset the password of a role that has none. It
- * must contain no quote characters, because `CREATE ROLE` cannot take a bind parameter.
+ * The role is created `NOLOGIN` either way. The API refuses to reset the password of a
+ * role that has none, so a login role gets `bootstrapPassword`, which statement logging
+ * may record; {@link enableLoginStatement} runs only after Neon has replaced it. It must
+ * contain no quote characters, because `CREATE ROLE` cannot take a bind parameter.
  */
 export function roleAccessStatements(input: {
 	name: string;
@@ -136,7 +137,7 @@ export function roleAccessStatements(input: {
 	const statements = [
 		input.bootstrapPassword === undefined
 			? `CREATE ROLE ${role} NOLOGIN`
-			: `CREATE ROLE ${role} LOGIN PASSWORD '${input.bootstrapPassword}'`,
+			: `CREATE ROLE ${role} NOLOGIN PASSWORD '${input.bootstrapPassword}'`,
 		`GRANT CONNECT ON DATABASE ${quoteIdentifier(input.databaseName)} TO ${role}`,
 	];
 	const tables = TABLE_PRIVILEGES[input.access];
@@ -155,6 +156,10 @@ export function roleAccessStatements(input: {
 		}
 	}
 	return statements;
+}
+
+export function enableLoginStatement(name: string): string {
+	return `ALTER ROLE ${quoteIdentifier(name)} LOGIN`;
 }
 
 /** 32 random bytes as hex: alphanumeric, so it is safe inside a SQL string literal. */

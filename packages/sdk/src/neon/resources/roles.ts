@@ -17,15 +17,20 @@ import type {
 import type { CallOptions, RequestContext } from "../context.js";
 import { cancelled } from "../deadline.js";
 import {
+	type NeonAbortError,
 	NeonApiError,
 	NeonClientError,
-	NeonWaitTimeoutError,
+	type NeonRequestTimeoutError,
 } from "../errors.js";
 import { invalidParamsResult, validateParams } from "../params.js";
 import { err, finalize, type NeonResult, type Outcome, ok } from "../result.js";
-import { runSqlTransaction } from "../sql-over-http.js";
+import {
+	runSqlTransaction,
+	type SqlTransactionOutcome,
+} from "../sql-over-http.js";
 import {
 	bootstrapPassword,
+	enableLoginStatement,
 	parseRoleAccess,
 	type RoleAccess,
 	roleAccessStatements,
@@ -268,77 +273,125 @@ export class Roles<DThrow extends boolean> {
 			schemas: input.schemas,
 			bootstrapPassword: input.noLogin ? undefined : bootstrapPassword(),
 		});
+		const createSql = await this.#runSql(uri.data, statements, opts);
+		if (createSql.kind === "cancelled") return err(createSql.error);
+		if (createSql.kind === "rolled_back") {
+			return err(
+				new NeonApiError(
+					`Could not create role "${name}"; nothing was changed. Postgres: ${createSql.message ?? "the statement failed"}`,
+					{
+						status: createSql.response.status,
+						code: createSql.code,
+						response: createSql.response,
+						body: createSql.body,
+					},
+				),
+			);
+		}
+		if (createSql.kind === "uncertain") {
+			return err(
+				new NeonClientError(
+					`Could not confirm whether role "${name}" was created: ${createSql.reason}. If it exists it cannot log in; check roles.list and delete it before retrying.`,
+					{ cause: createSql.cause },
+				),
+			);
+		}
+
+		const rolePath = {
+			project_id: projectId,
+			branch_id: branchId,
+			role_name: name,
+		};
+		if (input.noLogin) {
+			const created = await this.#ctx.execute(
+				opts,
+				(client, signal) =>
+					getProjectBranchRole({
+						client,
+						path: rolePath,
+						throwOnError: false,
+						signal,
+					}),
+				(data) => data.role,
+			);
+			if (created.error === undefined) return created;
+			return err(
+				new NeonClientError(
+					`Role "${name}" was created with ${access} access, but reading it back failed: ${created.error.message}`,
+					{ cause: created.error },
+				),
+			);
+		}
+
+		const cannotLogIn = (reason: string, cause: unknown) =>
+			err<Role>(
+				new NeonClientError(
+					`Role "${name}" was created with ${access} access but cannot log in: ${reason}. Delete it with roles.delete and create it again.`,
+					{ cause },
+				),
+			);
+		// Login is enabled only once the compute has applied Neon's password, so the
+		// bootstrap password never works, even while the reset is in flight.
+		const reset = await this.#ctx.execute(
+			{ ...opts, waitForReadiness: true },
+			(client, signal) =>
+				resetProjectBranchRolePassword({
+					client,
+					path: rolePath,
+					throwOnError: false,
+					signal,
+				}),
+			(data) => data.role,
+		);
+		if (reset.error) {
+			return cannotLogIn(
+				`Neon did not finish setting its password (${reset.error.message})`,
+				reset.error,
+			);
+		}
+		const loginSql = await this.#runSql(
+			uri.data,
+			[enableLoginStatement(name)],
+			opts,
+		);
+		if (loginSql.kind === "committed") return ok(reset.data);
+		if (loginSql.kind === "rolled_back") {
+			return cannotLogIn(
+				`enabling login failed (Postgres: ${loginSql.message ?? "the statement failed"})`,
+				loginSql.body,
+			);
+		}
+		if (loginSql.kind === "uncertain") {
+			return cannotLogIn(
+				`could not confirm that login was enabled (${loginSql.reason})`,
+				loginSql.cause,
+			);
+		}
+		return cannotLogIn("the call was cancelled", loginSql.error);
+	}
+
+	/** One SQL transaction under its own request deadline; never started once cancelled. */
+	async #runSql(
+		connectionString: string,
+		statements: readonly string[],
+		opts: CallOptions | undefined,
+	): Promise<
+		| SqlTransactionOutcome
+		| { kind: "cancelled"; error: NeonAbortError | NeonRequestTimeoutError }
+	> {
 		const deadline = this.#ctx.deadlineFor(opts);
 		try {
 			const before = cancelled(deadline);
-			if (before) return err(before);
-			const outcome = await runSqlTransaction({
-				connectionString: uri.data,
+			if (before) return { kind: "cancelled", error: before };
+			return await runSqlTransaction({
+				connectionString,
 				statements,
 				fetch: this.#ctx.client.getConfig().fetch ?? globalThis.fetch,
 				deadline,
 			});
-			if (outcome.kind === "rolled_back") {
-				return err(
-					new NeonApiError(
-						`Could not create role "${name}"; nothing was changed. Postgres: ${outcome.message ?? "the statement failed"}`,
-						{
-							status: outcome.response.status,
-							code: outcome.code,
-							response: outcome.response,
-							body: outcome.body,
-						},
-					),
-				);
-			}
-			if (outcome.kind === "uncertain") {
-				return err(
-					new NeonClientError(
-						`Could not confirm whether role "${name}" was created: ${outcome.reason}. Check roles.list before retrying.`,
-						{ cause: outcome.cause },
-					),
-				);
-			}
 		} finally {
 			deadline.dispose();
 		}
-
-		const created = await this.#ctx.execute(
-			opts,
-			(client, signal) =>
-				input.noLogin
-					? getProjectBranchRole({
-							client,
-							path: {
-								project_id: projectId,
-								branch_id: branchId,
-								role_name: name,
-							},
-							throwOnError: false,
-							signal,
-						})
-					: resetProjectBranchRolePassword({
-							client,
-							path: {
-								project_id: projectId,
-								branch_id: branchId,
-								role_name: name,
-							},
-							throwOnError: false,
-							signal,
-						}),
-			(data) => data.role,
-		);
-		if (created.error === undefined) return ok(created.data);
-		if (created.error instanceof NeonWaitTimeoutError) return created;
-		return err(
-			new NeonClientError(
-				input.noLogin
-					? `Role "${name}" was created with ${access} access, but reading it back failed: ${created.error.message}`
-					: `Role "${name}" was created with ${access} access, but Neon did not return a password: ${created.error.message} Call roles.resetPassword to get one.`,
-				{ cause: created.error },
-			),
-		);
 	}
 
 	async #resolveDatabase(
