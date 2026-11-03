@@ -357,6 +357,26 @@ generated schema. A reference to a Convex system table (`_storage`,
 `_scheduled_functions`, ...) or any table not in the schema yields a correctly
 typed column with no `REFERENCES` clause, plus a warning.
 
+Convex enforced none of this, so a few behaviors change after the migration:
+
+- **No `ON DELETE` action.** Postgres's default applies: deleting a row that
+  other rows still reference fails when the transaction commits, where Convex
+  left the references dangling. Add `ON DELETE CASCADE` or `ON DELETE SET NULL`
+  where your code deleted or cleared the children itself.
+- **Deferred checks.** Because the constraints are `INITIALLY DEFERRED`, a
+  violation is reported at `COMMIT`, not at the statement that caused it. Run
+  `SET CONSTRAINTS ALL IMMEDIATE` in a transaction to check each statement as it
+  runs.
+- **No `UNIQUE` constraints.** Convex indexes don't enforce uniqueness, so each
+  becomes a plain index. Add a unique constraint for any key your code kept
+  unique, such as an email or a slug. `INSERT ... ON CONFLICT` needs one.
+- **Lock a parent row with `FOR NO KEY UPDATE`.** A foreign-key check takes a
+  `FOR KEY SHARE` lock on the row it points at. `SELECT ... FOR UPDATE` blocks
+  that lock until you commit, so two transactions that each lock a row and then
+  insert children of the other's row can deadlock when their deferred checks
+  run. `FOR NO KEY UPDATE` still stops concurrent updates to the row without
+  blocking the checks; use it unless you change the row's `id`.
+
 ### Unions and literals
 
 - A union whose members are all literals of the same JavaScript scalar type maps
