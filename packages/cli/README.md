@@ -337,6 +337,22 @@ raw `rows` and `changes` events instead of the materialized view. Raw table outp
 includes each move's `after_row_id` destination, with `(head)` for the first
 position, and counts moves separately from removals.
 
+If Realtime rejects the query, the command prints the reason (the PostgreSQL error, or
+Realtime's own, such as `unsupported query: set-returning function`), the Realtime
+error code, and the PostgreSQL SQLSTATE when there is one, then exits 1:
+
+```text
+[2026-11-03T12:00:00.000Z] Subscription failed — column "nope" does not exist (upstream_rejected, SQLSTATE 42703)
+ERROR: column "nope" does not exist (upstream_rejected, SQLSTATE 42703)
+```
+
+With `--output json` or `--output yaml`, only the `ERROR:` line is printed, on stderr.
+The command subscribes in Realtime's `debugMode` by default, because it already runs
+with the branch's Realtime secret and connection string. Some failures, such as
+`baseline_sync_failed`, still carry no detail beyond the code. Pass `--no-debug` (or
+`--debug false`) to subscribe without it and see the safe errors a browser client gets,
+which leave out the PostgreSQL error and SQLSTATE.
+
 For scripts and agents, JSON output is a JSON Lines stream with one complete event
 per line. YAML output uses one document per event:
 
