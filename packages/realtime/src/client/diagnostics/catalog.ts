@@ -28,6 +28,10 @@ export const EVENT_CATALOG = {
 		level: "debug",
 		message: "Realtime connection heartbeat timed out",
 	},
+	connection_listener_failed: {
+		level: "warn",
+		message: "A Realtime connection state listener failed",
+	},
 	connection_lost: {
 		level: "warn",
 		message: "Realtime connection was lost; reconnecting",

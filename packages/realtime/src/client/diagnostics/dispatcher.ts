@@ -42,7 +42,7 @@ export function logToConsole(entry: RealtimeLogEntry): void {
 	method.call(console, entry);
 }
 
-const scheduleMicrotask =
+export const scheduleMicrotask: (callback: () => void) => void =
 	typeof queueMicrotask === "function"
 		? queueMicrotask
 		: (callback: () => void) => {

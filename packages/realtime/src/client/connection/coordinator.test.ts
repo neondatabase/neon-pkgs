@@ -202,6 +202,59 @@ describe("ConnectionCoordinator", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it("leaves no timers after closing a socket that cannot be terminated", async () => {
+		vi.useFakeTimers();
+		const coordinator = createCoordinator({
+			heartbeat: { idleMs: 20, timeoutMs: 10 },
+			reconnect: {
+				baseMs: 1,
+				capMs: 1,
+				stabilityMs: 1_000,
+				maxElapsedMs: 10_000,
+				random: () => 0,
+			},
+		});
+		coordinator.subscribe({ capability: "token" }, target());
+		admit().disconnect();
+		await vi.advanceTimersByTimeAsync(1);
+		// Node's built-in WebSocket has no terminate(). Against a peer that
+		// keeps TCP open after the close handshake, it never emits close.
+		const socket = defined(FakeWebSocket.instances[1]);
+		Object.defineProperty(socket, "terminate", { value: undefined });
+		socket.emitCloseOnClose = false;
+		socket.open();
+		socket.receive({ type: "ready" });
+		expect(coordinator.connectionStatus()).toBe("connected");
+		// Heartbeat idle probe, reconnect stability, and reconnect deadline.
+		expect(vi.getTimerCount()).toBe(3);
+
+		coordinator.close();
+
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSING);
+		expect(vi.getTimerCount()).toBe(0);
+		expect(coordinator.connectionStatus()).toBe("closed");
+	});
+
+	it("reports idle when the last subscription ends while waiting to reconnect", () => {
+		vi.useFakeTimers();
+		const statusMayHaveChanged = vi.fn();
+		const coordinator = createCoordinator({ statusMayHaveChanged });
+		expect(coordinator.connectionStatus()).toBe("idle");
+		const handle = coordinator.subscribe({ capability: "token" }, target());
+		expect(coordinator.connectionStatus()).toBe("connecting");
+		admit();
+		expect(coordinator.connectionStatus()).toBe("connected");
+		defined(FakeWebSocket.instances[0]).disconnect();
+		expect(coordinator.connectionStatus()).toBe("reconnecting");
+		statusMayHaveChanged.mockClear();
+
+		handle.unsubscribe();
+
+		expect(statusMayHaveChanged).toHaveBeenCalled();
+		expect(coordinator.connectionStatus()).toBe("idle");
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("logs connection recovery once per multiplexed connection", async () => {
 		vi.useFakeTimers();
 		const entries: Array<{ event: string; subscriptionId?: string }> = [];

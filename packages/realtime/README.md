@@ -205,6 +205,77 @@ capability has expired and the low-level client is waiting for the application
 to call `renew()`. Recoverable connection failures retry with capped jittered
 backoff until the connection recovers or the client is closed.
 
+### Connection state
+
+The client also reports the state of the WebSocket connection that its
+subscriptions share, so an application can show one "reconnecting" notice
+instead of inferring an outage from every subscription:
+
+```ts
+import type { RealtimeConnectionState } from "@neon/realtime/client";
+
+const showConnection = (state: RealtimeConnectionState) => {
+  offlineNotice.hidden =
+    state.status !== "reconnecting" && state.status !== "error";
+};
+
+showConnection(client.getConnectionState());
+const stopWatching = client.onConnectionStateChange(showConnection);
+```
+
+| Status | Meaning |
+| --- | --- |
+| `idle` | No connection is open because no subscription needs one: before the first subscription, or after the last one ends. |
+| `connecting` | The client is opening a connection, and no attempt has failed yet. |
+| `connected` | The connection is ready. Its subscriptions may still be loading their first result. |
+| `reconnecting` | An attempt failed or the connection was lost. The client is retrying with backoff, and its subscriptions are `connecting` with their last rows. |
+| `error` | The connection cannot recover, for example after a protocol error. `error` holds the cause, every subscription has failed, and new subscriptions fail immediately. Create a new client to try again. |
+| `closed` | `client.close()` was called. |
+
+The client retries recoverable failures indefinitely, so an unreachable
+endpoint or a network outage shows as `reconnecting`, not `error`.
+`getConnectionState()` returns the same frozen object until the state changes,
+so it can back React's `useSyncExternalStore()`. Listeners run from a microtask
+after a transition and receive the latest state, so a listener may subscribe
+or call `close()` without interrupting connection handling. A listener that
+throws is reported as `connection_listener_failed` and does not affect the
+others.
+
+### Node.js clients
+
+The low-level client also runs in Node.js, for example in scripts and tests.
+Install `ws` and pass it as the WebSocket factory:
+
+```ts
+import { createRealtimeClient } from "@neon/realtime/client";
+import WebSocket from "ws";
+
+const client = createRealtimeClient({
+  url: process.env.NEON_REALTIME_URL!,
+  webSocketFactory: (url, protocols) => new WebSocket(url, protocols),
+});
+
+// Subscribe and wait for results, then:
+client.close(); // The process can now exit.
+```
+
+Don't use Node's built-in WebSocket here. The Realtime service answers the
+close handshake but leaves the TCP connection for the client to close. Node's
+built-in WebSocket waits for the server to close it and cannot be terminated,
+so the process keeps running after `close()`. `ws` closes the connection
+itself, and the client terminates a `ws` socket whose close handshake has not
+finished within one second.
+
+Node clients don't need an `Origin` header. A branch's allowed origins apply
+only to connections that send one, and neither `ws` nor Node's built-in
+WebSocket sends one by default. If you set one, for example with
+`new WebSocket(url, protocols, { origin })`, it must be an allowed origin, or
+the service rejects the connection with HTTP 403.
+
+A trusted process that holds the Realtime secret can use
+[direct subscriptions](#subscribe-directly-from-a-trusted-environment) instead.
+They use `ws` without a factory.
+
 ### React Native WebSocket origins
 
 React Native's WebSocket implementation sends an `Origin` header derived from
@@ -281,7 +352,7 @@ The levels are cumulative:
 | --- | --- |
 | `silent` | Nothing; this is the default |
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
-| `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
+| `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, renewal failures, and listener failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
 | `debug` | All entries, including retry scheduling, heartbeats, baseline syncs, publications, and state transitions |
 
@@ -290,7 +361,7 @@ Each entry has a stable `event` name:
 | Minimum level | Events |
 | --- | --- |
 | `error` | `connection_failed`, `connection_reconnect_exhausted`, `subscription_failed`, `subscription_row_decoding_failed`, `query_refresh_stopped` |
-| `warn` | `connection_lost`, `query_expired`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
+| `warn` | `connection_lost`, `connection_listener_failed`, `query_expired`, `query_refresh_callback_failed`, `subscription_renewal_failed`, `subscription_listener_failed` |
 | `info` | `connection_ready`, `connection_recovered`, `subscription_live`, `subscription_renewed`, `client_closed` |
 | `debug` | `connection_attempt_started`, `connection_reconnect_scheduled`, `connection_stable`, `connection_heartbeat_ping_sent`, `connection_heartbeat_pong_received`, `connection_heartbeat_timeout`, `connection_publication_committed`, `subscription_started`, `subscription_admitted`, `subscription_renewal_started`, `subscription_unsubscribed`, `subscription_state_changed`, `subscription_baseline_sync_started`, `subscription_baseline_sync_completed`, `subscription_reset_required`, `subscription_retry_scheduled`, `query_refresh_scheduled`, `query_refresh_callback_started`, `query_refresh_callback_succeeded` |
 
@@ -395,17 +466,24 @@ subscription behind the same public object. Its next complete result replaces
 the retained rows and returns it to `live`.
 
 After a mutation returns its PostgreSQL transaction ID, use `awaitTxId()` to
-wait until that transaction has been applied to this subscription:
+wait until this subscription has caught up with that transaction:
 
 ```ts
 const { txid } = await updateMessage(messageId, { body: "Updated" });
-await subscription.awaitTxId(txid);
+await subscription.awaitTxId(txid, 10_000);
 ```
 
-The subscription remembers recently applied transaction IDs, so this is safe
-when the live batch arrives before the mutation response. An optional timeout
-in milliseconds can bound the wait. Without one, the promise remains pending
-until the transaction arrives or the subscription closes.
+`awaitTxId()` resolves once the subscription has applied a state that includes
+the transaction, whether or not the write changed this query's rows. Besides
+the transaction IDs in change batches, the subscription tracks the MVCC
+snapshot of each result and progress update it applies, so a write that touched
+none of this query's rows resolves as soon as the subscription has caught up
+past it. Recently applied transaction IDs are remembered, so this is also safe
+when the live batch arrives before the mutation response.
+
+The wait continues through reconnects, capability expiry, and renewal, so pass
+a timeout in milliseconds. Without one, the promise remains pending until the
+subscription applies the transaction, fails, or closes.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.

@@ -54,7 +54,22 @@ export interface ConnectionCoordinatorOptions {
 	readonly reconnect?: boolean | ReconnectOptions;
 	readonly heartbeat?: boolean | HeartbeatOptions;
 	readonly events?: ClientEventSink;
+	/**
+	 * Called synchronously after any transition that may change
+	 * {@link ConnectionCoordinator.connectionStatus}. It can run in the middle
+	 * of connection handling, so it must not change coordinator state.
+	 */
+	readonly statusMayHaveChanged?: () => void;
 }
+
+/** Lifecycle of the shared connection, derived from transport state. */
+export type ConnectionStatus =
+	| "idle"
+	| "connecting"
+	| "connected"
+	| "reconnecting"
+	| "failed"
+	| "closed";
 
 export interface ConnectionHandle {
 	renew(query: ConnectionSealedQuery): Promise<void>;
@@ -246,6 +261,32 @@ export class ConnectionCoordinator {
 		this.detachingLiveIds.clear();
 		this.reconciler.clear();
 		this.closeSocket(NORMAL_CLOSE, "client closed");
+		this.statusMayHaveChanged();
+	}
+
+	/**
+	 * Current connection lifecycle. `reconnecting` covers a scheduled retry,
+	 * and an attempt made within a reconnect episode, which ends once a
+	 * reconnected socket stays ready for the stability window. Active
+	 * subscriptions without a socket are always about to retry: a lost
+	 * socket either schedules one or fails the connection.
+	 */
+	connectionStatus(): ConnectionStatus {
+		if (this.disposed) return "closed";
+		if (this.terminalConnection) return "failed";
+		if (this.socket) {
+			if (this.ready) return "connected";
+			return this.reconnect?.active ? "reconnecting" : "connecting";
+		}
+		return this.reconnectTimer !== undefined ||
+			this.activeSubscriptions.size > 0
+			? "reconnecting"
+			: "idle";
+	}
+
+	/** The error that stopped the connection, once its status is `failed`. */
+	connectionFailure(): ConnectionCoordinatorError | undefined {
+		return this.terminalConnection;
 	}
 
 	private renew(
@@ -338,6 +379,7 @@ export class ConnectionCoordinator {
 		} catch (error) {
 			this.noteConnectionLost(error);
 			this.scheduleReconnect();
+			this.statusMayHaveChanged();
 			return;
 		}
 		this.socket = socket;
@@ -360,6 +402,7 @@ export class ConnectionCoordinator {
 				this.closeSocket(APPLICATION_CLOSE, "connection failed");
 			}
 		});
+		this.statusMayHaveChanged();
 	}
 
 	private receive(text: string): void {
@@ -395,6 +438,7 @@ export class ConnectionCoordinator {
 			for (const subscription of this.activeSubscriptions) {
 				this.sendSubscribe(subscription);
 			}
+			this.statusMayHaveChanged();
 			return;
 		}
 
@@ -713,6 +757,7 @@ export class ConnectionCoordinator {
 		) {
 			this.scheduleReconnect();
 		}
+		this.statusMayHaveChanged();
 	}
 
 	private scheduleReconnect(): void {
@@ -907,6 +952,7 @@ export class ConnectionCoordinator {
 			this.terminateSubscription(subscription, error);
 		}
 		this.closeSocket(APPLICATION_CLOSE, "protocol failure");
+		this.statusMayHaveChanged();
 	}
 
 	private rejectRenewals(
@@ -999,6 +1045,11 @@ export class ConnectionCoordinator {
 		this.reconnect?.reset();
 		this.pendingConnectionError = undefined;
 		this.events.connection.episodeEnded();
+		this.statusMayHaveChanged();
+	}
+
+	private statusMayHaveChanged(): void {
+		this.options.statusMayHaveChanged?.();
 	}
 
 	private noteConnectionLost(error?: unknown): void {

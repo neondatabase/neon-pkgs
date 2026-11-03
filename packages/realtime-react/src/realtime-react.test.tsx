@@ -522,6 +522,14 @@ class TestClient<Row> implements RealtimeClient {
 		return subscription;
 	}
 
+	getConnectionState(): ReturnType<RealtimeClient["getConnectionState"]> {
+		return { status: "connected", error: undefined };
+	}
+
+	onConnectionStateChange(): () => void {
+		return () => undefined;
+	}
+
 	close(): void {}
 }
 
