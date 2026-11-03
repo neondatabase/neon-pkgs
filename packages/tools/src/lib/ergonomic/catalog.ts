@@ -15,6 +15,7 @@ import {
 	createBranchTool,
 	createProjectAndConnectTool,
 	createProjectTool,
+	createRoleTool,
 	getDefaultTool,
 	resetFromParentTool,
 	restoreSnapshotTool,
@@ -475,21 +476,7 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
-	"postgres.roles.create": (options) =>
-		fromGenerated(options, {
-			id: "postgres.roles.create",
-			generated: "createProjectBranchRole",
-			run: (neon, input, signal) =>
-				neon.postgres.roles.create(
-					{
-						projectId: input.project_id,
-						branchId: input.branch_id,
-						name: input.name,
-						no_login: input.no_login,
-					},
-					{ signal },
-				),
-		}),
+	"postgres.roles.create": createRoleTool,
 	"postgres.roles.delete": (options) =>
 		fromGenerated(options, {
 			id: "postgres.roles.delete",

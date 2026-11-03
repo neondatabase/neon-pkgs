@@ -116,6 +116,23 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, and `credentials.reveal`. Waiting is what the write tools already do. `realtime.secret` is a GET that requires approval: it returns the branch's Realtime secret, which an application backend seals queries with. After `realtime.rotateSecret`, it returns the new value once `pending` is `false`. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
 
+## Roles
+
+`postgres.roles.create` (`create_postgres_roles`) defaults to `access: "admin"`, which joins `neon_superuser`. Pass `read_only` or `read_write` for a least-privilege credential. Scoped roles are created with SQL as the database owner; see [`@neon/sdk`'s `neon.postgres.roles`](../sdk/README.md#neonpostgresroles) for the grants and limits.
+
+```ts
+const tools = createNeonTools({ apiKey, tools: ["postgres.roles.create"] });
+const { data: role } = await tools["postgres.roles.create"].execute({
+	project_id: "project-id",
+	branch_id: "br-main",
+	name: "app_reader",
+	access: "read_only",
+	database_name: "neondb",
+	schemas: ["public"],
+});
+// role.password is the generated password
+```
+
 ## Optional host add-ons
 
 ### Descriptions

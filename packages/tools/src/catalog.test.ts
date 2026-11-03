@@ -778,6 +778,57 @@ describe("special mappings", () => {
 		);
 	});
 
+	test("postgres.roles.create takes access and rejects scope fields on admin", () => {
+		const tool = createNeonTool("postgres.roles.create", {
+			apiKey: "test-key",
+		});
+		expect(tool.id).toBe("create_postgres_roles");
+		expect(tool.description).toContain("neon_superuser");
+		const schema = z.toJSONSchema(tool.inputSchema);
+		expect(Object.keys(schema.properties ?? {})).toEqual([
+			"project_id",
+			"branch_id",
+			"name",
+			"no_login",
+			"access",
+			"database_name",
+			"schemas",
+		]);
+		const base = { project_id: "p", branch_id: "br", name: "app" };
+		expect(
+			tool.inputSchema.safeParse({ ...base, access: "read_only" })
+				.success,
+		).toBe(true);
+		for (const input of [
+			{ ...base, database_name: "neondb" },
+			{ ...base, access: "admin", schemas: ["public"] },
+			{ ...base, access: "read_only", schemas: [] },
+			{ ...base, access: "readonly" },
+		]) {
+			expect(
+				tool.inputSchema.safeParse(input).success,
+				JSON.stringify(input),
+			).toBe(false);
+		}
+	});
+
+	test("postgres.roles.create without access sends the same body as before", async () => {
+		const requests: Request[] = [];
+		const tool = createNeonTool("postgres.roles.create", {
+			apiKey: "test-key",
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse(
+					{ role: { name: "app" }, operations: [] },
+					201,
+				);
+			},
+		});
+		await tool.execute({ project_id: "p", branch_id: "br", name: "app" });
+		expect(requests).toHaveLength(1);
+		expect(await requests[0].json()).toEqual({ role: { name: "app" } });
+	});
+
 	test("branches.delete has no hard_delete input", () => {
 		const tool = createNeonTool("branches.delete", { apiKey: "test-key" });
 		const schema = z.toJSONSchema(tool.inputSchema);

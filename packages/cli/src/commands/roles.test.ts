@@ -123,6 +123,35 @@ describe("roles", () => {
 		);
 	});
 
+	test("create rejects --database without a scoped --access", async ({
+		testCliCommand,
+	}) => {
+		const requests: string[] = [];
+		const { stderr } = await testCliCommand(
+			[
+				"roles",
+				"create",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+				"--name",
+				"test_role",
+				"--database",
+				"neondb",
+			],
+			{
+				code: 1,
+				snapshot: false,
+				onRequest: (request) => requests.push(request.path),
+			},
+		);
+		expect(stderr).toContain(
+			"--database and --schema need --access read_only or --access read_write",
+		);
+		expect(requests).toEqual([]);
+	});
+
 	test("delete names the branch in the table", async ({ testCliCommand }) => {
 		await testCliCommand(
 			[

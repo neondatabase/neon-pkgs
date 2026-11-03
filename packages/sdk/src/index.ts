@@ -189,6 +189,7 @@ export type {
 	RealtimeSecretParams,
 } from "./neon/resources/realtime.js";
 export type {
+	RoleAccess,
 	RolesCreateParams,
 	RolesDeleteParams,
 	RolesGetParams,
