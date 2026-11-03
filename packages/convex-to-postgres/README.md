@@ -76,6 +76,24 @@ key, a mixed-type union stored as `jsonb`, a skipped index. `seed` writes one
 self-contained script for the tables exactly as `schema` generated them. To
 change those tables, use `--split`.
 
+When the schema has search or vector indexes, `schema.sql` ends with the
+statements that build them, as SQL comments:
+
+```sql
+-- Search and vector indexes, built after the data loads. `import
+-- --apply-schema` and `seed` (04-indexes.sql with --split) build them for
+-- you, so they're commented out here: running them now would make that step
+-- fail on an index that already exists. If you load the data some other
+-- way, run them after it:
+--
+-- CREATE INDEX events_calendar_id ON events (calendar_id);
+-- CREATE INDEX events_title_bm25 ON events USING lakebase_bm25 (title_tsv) WITH (k1 = 1.2, b = 0.75);
+-- VACUUM ANALYZE;
+```
+
+`seed.sql` builds them after its `COMMIT`, and so does `import`, so the two
+files above run in order as they are.
+
 ### Edit the schema and still migrate the data (`--split`)
 
 ```bash

@@ -230,7 +230,9 @@ export const COMMAND_HELP: Record<Command, string> = {
 
 Print the Postgres DDL for a Convex schema: extensions, CREATE TABLE, foreign
 keys, and btree indexes. Search and vector indexes are built after the data
-load, by \`seed\` and \`import\`. Warnings (the things to review by hand) go to
+load, by \`seed\` and \`import\`, so \`schema\` lists them at the end as SQL
+comments: running them before \`seed\` or \`import\` would make those fail on an
+index that already exists. Warnings (the things to review by hand) go to
 stderr, so stdout is pure SQL.
 
 Options:

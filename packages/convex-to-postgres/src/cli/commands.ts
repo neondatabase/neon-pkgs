@@ -99,7 +99,10 @@ async function dispatch(args: string[], io: CliIo): Promise<number> {
 	}
 }
 
-/** `schema`: print the pre-load DDL; warnings go to stderr. */
+/**
+ * `schema`: print the pre-load DDL, then the post-load indexes as comments;
+ * warnings go to stderr.
+ */
 export async function runSchema(args: string[], io: CliIo): Promise<number> {
 	const values = parseCommandArgs("schema", args, {
 		schema: { type: "string" },
@@ -113,9 +116,35 @@ export async function runSchema(args: string[], io: CliIo): Promise<number> {
 		io,
 	);
 	const ddl = generateDdl(schema, options);
-	emit(ddl.sql, values.out, io);
+	emit(schemaSql(ddl.sql, generateIndexDdl(schema, options)), values.out, io);
 	writeWarnings([...warnings, ...ddl.warnings], io);
 	return 0;
+}
+
+/** The header over the commented-out post-load indexes in `schema`'s output. */
+export const POST_LOAD_INDEXES_HEADER = [
+	"-- Search and vector indexes, built after the data loads. `import",
+	"-- --apply-schema` and `seed` (04-indexes.sql with --split) build them for",
+	"-- you, so they're commented out here: running them now would make that step",
+	"-- fail on an index that already exists. If you load the data some other",
+	"-- way, run them after it:",
+	"--",
+].join("\n");
+
+/**
+ * `schema`'s output: the pre-load DDL, then, when the schema has search or
+ * vector indexes, the post-load index statements and `VACUUM ANALYZE` as SQL
+ * comments under {@link POST_LOAD_INDEXES_HEADER}. Comments keep the
+ * documented `schema.sql` then `seed.sql` flow (and `schema | psql` then
+ * `import`) working, because both build the indexes themselves.
+ */
+export function schemaSql(ddlSql: string, indexSql: string): string {
+	const statements = indexSql.trimEnd();
+	if (statements.length === 0) return ddlSql;
+	const commented = [...statements.split("\n"), "VACUUM ANALYZE;"]
+		.map((line) => `-- ${line}`)
+		.join("\n");
+	return `${ddlSql}\n${POST_LOAD_INDEXES_HEADER}\n${commented}\n`;
 }
 
 /** `seed`: print one self-contained seed script, or the `--split` step files. */

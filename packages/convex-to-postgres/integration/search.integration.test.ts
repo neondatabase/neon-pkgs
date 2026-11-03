@@ -1,6 +1,12 @@
 import { rmSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { importConvexExport, parseExportedSchema } from "../src/index.js";
+import { schemaSql } from "../src/cli/commands.js";
+import {
+	generateDdl,
+	generateIndexDdl,
+	importConvexExport,
+	parseExportedSchema,
+} from "../src/index.js";
 import { field, schema, table, v } from "../src/test-fixtures.js";
 import { freshSchemaClient, writeExportDir } from "./helpers.js";
 
@@ -125,6 +131,55 @@ describe("Suite E: GIN search index, end to end", () => {
 			expect(text).toContain("events_title_gin");
 		} finally {
 			await ctx.client.query("RESET enable_seqscan");
+		}
+	});
+});
+
+describe("Suite E: `schema` output, then import", () => {
+	test("the commented-out indexes don't run, so import builds each one once", async () => {
+		const parsed = parseExportedSchema(exported);
+		const gin = { searchIndex: "gin" } as const;
+		const exportDir = writeExportDir({
+			events: [
+				{
+					_id: "event0",
+					_creationTime: 1792787860912.5,
+					calendarId: "work",
+					title: "Team standup",
+				},
+			],
+		});
+		const ctx = await freshSchemaClient("search_schema_then_import");
+		try {
+			// `schema | psql`: the DDL runs, the trailing comment block doesn't.
+			await ctx.client.query(
+				schemaSql(
+					generateDdl(parsed, gin).sql,
+					generateIndexDdl(parsed, gin),
+				),
+			);
+			const before = await ctx.client.query(
+				"SELECT count(*)::int AS n FROM pg_indexes WHERE schemaname = $1 AND indexname = 'events_title_gin'",
+				[ctx.schema],
+			);
+			expect((before.rows[0] as { n: number }).n).toBe(0);
+
+			// `import` without --apply-schema loads into those tables, then
+			// builds the post-load indexes without colliding.
+			await importConvexExport({
+				schema: parsed,
+				source: exportDir,
+				client: ctx.client,
+				...gin,
+			});
+			const after = await ctx.client.query(
+				"SELECT count(*)::int AS n FROM pg_indexes WHERE schemaname = $1 AND indexname IN ('events_title_gin', 'events_calendar_id')",
+				[ctx.schema],
+			);
+			expect((after.rows[0] as { n: number }).n).toBe(2);
+		} finally {
+			await ctx.cleanup();
+			rmSync(exportDir, { recursive: true, force: true });
 		}
 	});
 });

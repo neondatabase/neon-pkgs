@@ -25,7 +25,13 @@ import { generateDdl, generateIndexDdl } from "../schema/generate-ddl.js";
 import type { ExportedSchema } from "../schema/model.js";
 import { parseExportedSchema } from "../schema/parse.js";
 import { field, schema, table, v } from "../test-fixtures.js";
-import { type CliIo, runCli, SPLIT_FILES } from "./commands.js";
+import {
+	type CliIo,
+	POST_LOAD_INDEXES_HEADER,
+	runCli,
+	SPLIT_FILES,
+	schemaSql,
+} from "./commands.js";
 import { COMMAND_HELP, TOP_HELP } from "./options.js";
 
 const BIG_INT = "9007199254740993"; // 2^53 + 1, unrepresentable as a JS number
@@ -211,11 +217,37 @@ describe("schema", () => {
 		const ddl = generateDdl(parsed);
 		const { code, stdout, stderr } = await run(["schema"]);
 		expect(code).toBe(0);
-		expect(stdout).toBe(ddl.sql);
+		expect(stdout.startsWith(ddl.sql)).toBe(true);
 		expect(ddl.warnings.length).toBeGreaterThan(0);
 		for (const warning of ddl.warnings) {
 			expect(stderr).toContain(`warning: ${warning}\n`);
 		}
+	});
+
+	test("ends with the post-load indexes, commented out under a header", async () => {
+		const { stdout } = await run(["schema"]);
+		expect(stdout).toBe(
+			[
+				generateDdl(parsed).sql,
+				POST_LOAD_INDEXES_HEADER,
+				"-- CREATE INDEX messages_body_bm25 ON messages USING lakebase_bm25 (body_tsv) WITH (k1 = 1.2, b = 0.75);",
+				"-- VACUUM ANALYZE;",
+				"",
+			].join("\n"),
+		);
+		expect(POST_LOAD_INDEXES_HEADER).toContain("import\n-- --apply-schema");
+		// Every line after the DDL is a comment, so piping the output into
+		// psql runs exactly the DDL.
+		const tail = stdout.slice(generateDdl(parsed).sql.length).trimEnd();
+		for (const line of tail.split("\n").slice(1)) {
+			expect(line.startsWith("--")).toBe(true);
+		}
+	});
+
+	test("a schema with no search or vector index prints the DDL only", () => {
+		expect(schemaSql("CREATE TABLE t ();\n", "")).toBe(
+			"CREATE TABLE t ();\n",
+		);
 	});
 
 	test("maps generation flags onto the generator options", async () => {
@@ -235,8 +267,17 @@ describe("schema", () => {
 			"--search-k1",
 			"2",
 		]);
-		expect(stdout).toBe(generateDdl(parsed, options).sql);
-		expect(stdout).not.toBe(generateDdl(parsed).sql);
+		expect(stdout).toBe(
+			schemaSql(
+				generateDdl(parsed, options).sql,
+				generateIndexDdl(parsed, options),
+			),
+		);
+		expect(stdout).toContain("-- CREATE INDEX");
+		expect(stdout).toContain("lakebase_bm25");
+		expect(stdout).not.toBe(
+			schemaSql(generateDdl(parsed).sql, generateIndexDdl(parsed)),
+		);
 	});
 
 	test("--schema points at another schema file", async () => {
@@ -252,7 +293,7 @@ describe("schema", () => {
 			"channels",
 		]);
 		expect(code).toBe(0);
-		expect(stdout).toBe(excluded.sql);
+		expect(stdout.startsWith(excluded.sql)).toBe(true);
 		expect(stdout).not.toContain("CREATE TABLE channels");
 		expect(stderr).toContain(
 			'reference to table "channels", which is excluded',
@@ -285,7 +326,7 @@ describe("schema", () => {
 		expect(stdout).toBe("");
 		expect(stderr).toContain("Wrote schema.sql");
 		expect(readFileSync(join(project, "schema.sql"), "utf8")).toBe(
-			generateDdl(parsed).sql,
+			schemaSql(generateDdl(parsed).sql, generateIndexDdl(parsed)),
 		);
 	});
 
@@ -666,7 +707,9 @@ describe("Convex Auth tables", () => {
 			{ loadAuthTableNames: loader(AUTH_NAMES) },
 		);
 		expect(code).toBe(0);
-		expect(stdout).toBe(generateDdl(parsed).sql);
+		expect(stdout).toBe(
+			schemaSql(generateDdl(parsed).sql, generateIndexDdl(parsed)),
+		);
 		expect(stderr).toContain(
 			"warning: --skip-auth-tables: the schema has none of Convex Auth's tables, so nothing was skipped.\n",
 		);
