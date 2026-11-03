@@ -229,6 +229,20 @@ text strategy): an insert may set `id` itself, otherwise the default applies.
 The transform always supplies both columns, so imported rows keep their original
 Convex ids and creation times.
 
+A field of your own whose column name would also be `created_at` or `id` is
+renamed, and the tool prints a warning with the new name:
+
+- A `v.number()` field that becomes `created_at`, usually `createdAt` holding
+  epoch milliseconds, is renamed `created_at_ms`. Optional and nullable numbers
+  count too.
+- Any other collision gets a numeric suffix: a `v.string()` `createdAt` becomes
+  `created_at_1`, and a field named `id` becomes `id_1`. So does a `v.number()`
+  `createdAt` when the table already has a `created_at_ms` column.
+
+Indexes and foreign keys on a renamed field use the new name, and the transform
+still reads the original field. With `--no-snake-case`, `createdAt` keeps its
+name and doesn't collide.
+
 ### Id strategy: `uuid` (default) or `text`
 
 A Convex `_id` is an opaque, roughly 32-character string. How it becomes a

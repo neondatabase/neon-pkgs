@@ -201,7 +201,16 @@ function planTable(
 
 	// Finalize column names before deriving vector/search columns from them: the
 	// `tsvector` column name and the ANN target depend on the resolved pg name.
-	dedupeColumnNames(table.name, columns, warnings);
+	dedupeColumnNames(
+		table.name,
+		columns,
+		new Set(
+			table.columns
+				.filter((column) => isNumber(column.validator))
+				.map((column) => column.name),
+		),
+		warnings,
+	);
 	const columnByConvexName = new Map(
 		columns.map((column) => [column.convexName, column] as const),
 	);
@@ -412,6 +421,9 @@ function planFilterIndexes(
 	return indexes;
 }
 
+/** The name a colliding `v.number()` `createdAt` field gets. */
+const CREATED_AT_MS = "created_at_ms";
+
 /**
  * Rename any user column whose Postgres name collides with an earlier column.
  * The synthesized `id` / `created_at` columns are added first, so a Convex field
@@ -419,16 +431,35 @@ function planFilterIndexes(
  * `_creationTime`) would otherwise emit a duplicate column and a `CREATE TABLE`
  * error. The value extraction (`selectExpr`, keyed on the original Convex field
  * name) is unaffected -- only the Postgres column name changes.
+ *
+ * A `v.number()` field that becomes `created_at` (usually `createdAt`, an
+ * app-set epoch-milliseconds time next to `_creationTime`) is renamed
+ * `created_at_ms`, a name that says what it holds. Every other collision, or
+ * that one when `created_at_ms` is already a column, gets a numeric suffix.
  */
 function dedupeColumnNames(
 	tableName: string,
 	columns: PlannedColumn[],
+	numberFields: ReadonlySet<string>,
 	warnings: string[],
 ): void {
 	const seen = new Set<string>();
 	for (const column of columns) {
 		if (!seen.has(column.pgName)) {
 			seen.add(column.pgName);
+			continue;
+		}
+		if (
+			column.pgName === "created_at" &&
+			numberFields.has(column.convexName) &&
+			!seen.has(CREATED_AT_MS) &&
+			!columns.some((other) => other.pgName === CREATED_AT_MS)
+		) {
+			warnings.push(
+				`table "${tableName}": field "${column.convexName}" collides with the synthesized created_at column (from _creationTime); renamed to "${CREATED_AT_MS}".`,
+			);
+			column.pgName = CREATED_AT_MS;
+			seen.add(CREATED_AT_MS);
 			continue;
 		}
 		let suffix = 1;
@@ -563,6 +594,14 @@ function selectExprFor(
 			// missing/optional field yields NULL from the `->` accessor.
 			return `(${jsonValueAccessor(convexField)})::text::vector`;
 	}
+}
+
+/** `v.number()` (`v.float64()`), optionally nullable via `v.union(..., v.null())`. */
+function isNumber(validator: ConvexValidator): boolean {
+	if (validator.type === "number") return true;
+	if (validator.type !== "union") return false;
+	const nonNull = validator.value.filter((member) => member.type !== "null");
+	return nonNull.length === 1 && nonNull[0].type === "number";
 }
 
 /** A union that includes a `v.null()` member makes its column nullable. */

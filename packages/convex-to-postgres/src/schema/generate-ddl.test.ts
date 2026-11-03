@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { generateTransformSql } from "../data/transform.js";
 import { field, schema, table, v } from "../test-fixtures.js";
 import { generateDdl, generateIndexDdl } from "./generate-ddl.js";
 import { parseExportedSchema } from "./parse.js";
@@ -430,6 +431,92 @@ describe("generateDdl column name collisions", () => {
 			"ALTER TABLE primitive_types ADD CONSTRAINT primitive_types_id_1_fkey FOREIGN KEY (id_1) REFERENCES empty (id) DEFERRABLE INITIALLY DEFERRED;",
 		);
 		expect(warnings.some((w) => w.includes("renamed"))).toBe(true);
+	});
+
+	test("a v.number() `createdAt` becomes created_at_ms, and the warning prints the new name", () => {
+		const parsed = parseExportedSchema(
+			schema([
+				table({
+					name: "messages",
+					fields: {
+						threadId: field(v.string()),
+						createdAt: field(v.number()),
+					},
+					indexes: [
+						{
+							indexDescriptor: "by_thread_createdAt",
+							fields: ["threadId", "createdAt"],
+						},
+					],
+				}),
+			]),
+		);
+		const { sql, warnings } = generateDdl(parsed);
+		expect(sql).toContain("created_at timestamptz NOT NULL DEFAULT now()");
+		expect(sql).toContain("created_at_ms double precision NOT NULL");
+		// An index on the field follows the rename.
+		expect(sql).toContain(
+			'CREATE INDEX "messages_by_thread_createdAt" ON messages (thread_id, created_at_ms);',
+		);
+		expect(warnings).toEqual([
+			`table "messages": field "createdAt" collides with the synthesized created_at column (from _creationTime); renamed to "created_at_ms".`,
+		]);
+		// The value is still read from the original field.
+		expect(generateTransformSql(parsed)).toContain(
+			"INSERT INTO messages (id, created_at, thread_id, created_at_ms)",
+		);
+		expect(generateTransformSql(parsed)).toContain(
+			"(doc->>'createdAt')::double precision\nFROM _convex_messages;",
+		);
+	});
+
+	test.each([
+		["optional", field(v.number(), true)],
+		["nullable", field(v.union(v.number(), v.null()))],
+	])("an %s v.number() `createdAt` is renamed the same way", (_label, entry) => {
+		const { sql } = ddl(
+			schema([table({ name: "m", fields: { createdAt: entry } })]),
+		);
+		expect(sql).toMatch(/created_at_ms double precision,?\n/);
+	});
+
+	test("a `createdAt` that isn't a v.number() keeps the numeric suffix", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({ name: "m", fields: { createdAt: field(v.string()) } }),
+			]),
+		);
+		expect(sql).toContain("created_at_1 text NOT NULL");
+		expect(warnings).toEqual([
+			`table "m": column "created_at" collides with a synthesized or earlier column; renamed to "created_at_1".`,
+		]);
+	});
+
+	test("when created_at_ms is already a field, `createdAt` falls back to the suffix", () => {
+		const { sql } = ddl(
+			schema([
+				table({
+					name: "m",
+					fields: {
+						createdAt: field(v.number()),
+						createdAtMs: field(v.number()),
+					},
+				}),
+			]),
+		);
+		expect(sql).toContain("created_at_1 double precision NOT NULL");
+		expect(sql).toContain("created_at_ms double precision NOT NULL");
+	});
+
+	test("with snakeCase off, `createdAt` doesn't collide and keeps its name", () => {
+		const { sql, warnings } = ddl(
+			schema([
+				table({ name: "m", fields: { createdAt: field(v.number()) } }),
+			]),
+			{ snakeCase: false },
+		);
+		expect(sql).toContain('"createdAt" double precision NOT NULL');
+		expect(warnings).toEqual([]);
 	});
 
 	test("a reserved-keyword column is emitted quoted", () => {
