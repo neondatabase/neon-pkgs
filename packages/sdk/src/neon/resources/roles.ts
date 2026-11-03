@@ -249,6 +249,9 @@ export class Roles<DThrow extends boolean> {
 			(data) => data.uri,
 		);
 		if (uri.error) {
+			if (uri.error.kind !== "api" && uri.error.kind !== "not_found") {
+				return err(uri.error);
+			}
 			return err(
 				new NeonClientError(
 					`Could not connect as "${owner}", the owner of database "${database.data.name}", to create role "${name}"; nothing was changed. A ${access} role is created with SQL by the database owner, which needs a password Neon can reveal and a read-write compute on the branch. ${uri.error.message}`,
