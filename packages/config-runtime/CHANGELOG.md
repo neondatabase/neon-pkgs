@@ -1,5 +1,11 @@
 # @neondatabase/config-runtime
 
+## 1.11.1
+
+### Patch Changes
+
+- @neon/config@1.10.1
+
 ## 1.11.0
 
 ### Minor Changes
