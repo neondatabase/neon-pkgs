@@ -68,7 +68,7 @@ describe("roles.create with scoped access", () => {
 		expect(calls).not.toContain("POST /sql");
 	});
 
-	it("reports an uncertain outcome when the SQL request fails", async () => {
+	it("reports an uncertain outcome when the SQL request fails, without assuming it created the role", async () => {
 		const { neon } = scopedClient({
 			...preflight,
 			"POST /sql": () => {
@@ -80,6 +80,30 @@ describe("roles.create with scoped access", () => {
 		expect(error?.message).toContain(
 			'Could not confirm whether role "app_reader" was created',
 		);
+		expect(error?.message).toContain(
+			"may also have existed before the call",
+		);
+	});
+
+	it("does not claim login is off when the ALTER ROLE response is lost", async () => {
+		let sqlCalls = 0;
+		const { neon } = scopedClient({
+			...preflight,
+			"POST /sql": () => {
+				sqlCalls += 1;
+				if (sqlCalls === 2) throw new TypeError("fetch failed");
+				return json({
+					results: Array.from({ length: 5 }, () => ({ rows: [] })),
+				});
+			},
+			"POST /api/v2/projects/p/branches/br/roles/app_reader/reset_password":
+				() => json({ role: { name: "app_reader", password: "npg_x" } }),
+		});
+		const { error } = await neon.postgres.roles.create(input);
+		expect(error?.message).toContain(
+			"could not confirm that login was enabled",
+		);
+		expect(error?.message).not.toContain("cannot log in");
 	});
 
 	it("reports an uncertain outcome when the SQL response has the wrong shape", async () => {

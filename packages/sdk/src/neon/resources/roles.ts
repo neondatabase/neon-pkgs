@@ -291,7 +291,7 @@ export class Roles<DThrow extends boolean> {
 		if (createSql.kind === "uncertain") {
 			return err(
 				new NeonClientError(
-					`Could not confirm whether role "${name}" was created: ${createSql.reason}. If it exists it cannot log in; check roles.list and delete it before retrying.`,
+					`Could not confirm whether role "${name}" was created: ${createSql.reason}. Check roles.list before retrying. A role this call created cannot log in yet; a role with this name may also have existed before the call, so delete it only if this call created it.`,
 					{ cause: createSql.cause },
 				),
 			);
@@ -362,9 +362,11 @@ export class Roles<DThrow extends boolean> {
 			);
 		}
 		if (loginSql.kind === "uncertain") {
-			return cannotLogIn(
-				`could not confirm that login was enabled (${loginSql.reason})`,
-				loginSql.cause,
+			return err(
+				new NeonClientError(
+					`Role "${name}" was created with ${access} access and Neon set its password, but the SDK could not confirm that login was enabled: ${loginSql.reason}. If logging in with the password from roles.password fails, delete it with roles.delete and create it again.`,
+					{ cause: loginSql.cause },
+				),
 			);
 		}
 		return cannotLogIn("the call was cancelled", loginSql.error);
