@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`postgres computes > get 1`] = `
+"ID                        ep-compute-test-123456
+Branch ID                 br-sunny-branch-123456
+Type                      read_write
+Current State             active
+Host                      ep-compute-test-123456.us-east-2.aws.neon.tech
+Region ID                 aws-us-east-2
+Autoscaling Limit Min Cu  0.25
+Autoscaling Limit Max Cu  2
+Suspend Timeout Seconds   0
+Disabled                  false
+Last Active               2026-11-04T19:00:00Z
+Created At                2026-11-01T00:00:00Z
+"
+`;
+
+exports[`postgres computes > list --branch resolves the branch name and lists its computes 1`] = `
+"Computes on test_branch
+ID                   Branch ID               Type
+ep-cool-king-930914  br-sunny-branch-123456  read_write
+ep-cool-king-933333  br-sunny-branch-123456  read_only
+"
+`;
+
+exports[`postgres computes > list without a branch lists every compute in the project 1`] = `
+"- id: ep-test
+  created_at: 2019-01-01T00:00:00Z
+  type: read_only
+"
+`;
+
+exports[`postgres computes > start --no-wait prints the accepted compute without polling 1`] = `
+"Compute ep-compute-test-123456: start accepted, not yet applied
+ID                        ep-compute-test-123456
+Branch ID                 br-sunny-branch-123456
+Type                      read_write
+Current State             idle
+Pending State             active
+Host                      ep-compute-test-123456.us-east-2.aws.neon.tech
+Region ID                 aws-us-east-2
+Autoscaling Limit Min Cu  0.25
+Autoscaling Limit Max Cu  2
+Suspend Timeout Seconds   0
+Disabled                  false
+Last Active               2026-11-04T19:00:00Z
+Created At                2026-11-01T00:00:00Z
+"
+`;
+
+exports[`postgres computes > start waits for the operation, then reads the compute again 1`] = `
+"Compute ep-compute-test-123456 started
+ID                        ep-compute-test-123456
+Branch ID                 br-sunny-branch-123456
+Type                      read_write
+Current State             active
+Host                      ep-compute-test-123456.us-east-2.aws.neon.tech
+Region ID                 aws-us-east-2
+Autoscaling Limit Min Cu  0.25
+Autoscaling Limit Max Cu  2
+Suspend Timeout Seconds   0
+Disabled                  false
+Last Active               2026-11-04T19:00:00Z
+Created At                2026-11-01T00:00:00Z
+"
+`;
