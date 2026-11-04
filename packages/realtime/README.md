@@ -289,7 +289,7 @@ The levels are cumulative:
 
 | Level | Includes |
 | --- | --- |
-| `silent` | Nothing; this is the default |
+| `silent` | No structured diagnostics; this is the default |
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
 | `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
