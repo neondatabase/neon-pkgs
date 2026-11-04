@@ -2,7 +2,7 @@ import type { QueryRefreshEventSink } from "./diagnostics.js";
 import { subscriptionEventsFor } from "./diagnostics.js";
 import type { NoInferCompat } from "./no-infer.js";
 import { type SealedLiveQuery, validateSealedQuery } from "./sealed-query.js";
-import type { RawLiveQuerySubscription } from "./types.js";
+import type { LiveQueryState, RawLiveQuerySubscription } from "./types.js";
 
 const REFRESH_EARLY_MS = 10_000;
 const REFRESH_RETRY_MS = 1_000;
@@ -24,8 +24,13 @@ interface QueryRefreshControllerOptions<Row> {
 	 * Subscription whose diagnostic context receives refresh lifecycle events.
 	 * Renewal behavior remains defined by `renewSubscription`, which also
 	 * supports integrations that construct the controller before subscribing.
+	 * Refreshes stop once this subscription is in error or closed.
 	 */
 	readonly subscription?: RawLiveQuerySubscription<NoInferCompat<Row>>;
+}
+
+interface StatefulSubscription {
+	getState(): LiveQueryState;
 }
 
 /**
@@ -34,7 +39,9 @@ interface QueryRefreshControllerOptions<Row> {
  * Most applications should supply `refreshQuery` to their React or
  * TanStack DB integration instead of constructing this class. Integration
  * authors can use it to refresh shortly before expiry and keep retrying across
- * capability expiry or an arbitrarily long transport outage.
+ * capability expiry or an arbitrarily long transport outage. Refreshes stop
+ * once the associated subscription is in error or closed, because neither
+ * state can accept a replacement capability.
  *
  * @typeParam Row - Row produced by the sealed query.
  */
@@ -47,10 +54,12 @@ export class QueryRefreshController<Row> {
 	private active = false;
 	private generation = 0;
 	private refreshEvents: QueryRefreshEventSink;
+	private subscription?: StatefulSubscription;
 
 	constructor(private readonly options: QueryRefreshControllerOptions<Row>) {
 		this.query = options.query;
 		this.refreshQuery = options.refreshQuery;
+		this.subscription = options.subscription;
 		this.refreshEvents = subscriptionEventsFor(
 			options.subscription,
 		).refresh;
@@ -77,10 +86,14 @@ export class QueryRefreshController<Row> {
 		}
 	}
 
-	/** Associate the active subscription managed by this controller. */
+	/**
+	 * Associate the active subscription managed by this controller. Refreshes
+	 * stop once it is in error or closed.
+	 */
 	setSubscription(
 		subscription: RawLiveQuerySubscription<Row> | undefined,
 	): void {
+		this.subscription = subscription;
 		this.refreshEvents = subscriptionEventsFor(subscription).refresh;
 	}
 
@@ -138,6 +151,10 @@ export class QueryRefreshController<Row> {
 			this.refreshStopped
 		)
 			return;
+		if (this.subscriptionEnded()) {
+			this.refreshStopped = true;
+			return;
+		}
 		this.refreshInFlight = true;
 		const generation = this.generation;
 		this.refreshEvents.callbackStarted();
@@ -179,10 +196,21 @@ export class QueryRefreshController<Row> {
 			if (this.isCurrent(generation) && this.query === query)
 				this.options.onSubscriptionRenewed?.();
 		} catch {
-			if (this.isCurrent(generation) && this.query === query) {
-				this.scheduleRefresh(REFRESH_RETRY_MS);
+			if (!this.isCurrent(generation) || this.query !== query) return;
+			if (this.subscriptionEnded()) {
+				// A failed or closed subscription rejects every renewal, so
+				// retrying would only keep requesting capabilities.
+				this.refreshStopped = true;
+				this.clearTimer();
+				return;
 			}
+			this.scheduleRefresh(REFRESH_RETRY_MS);
 		}
+	}
+
+	private subscriptionEnded(): boolean {
+		const status = this.subscription?.getState().status;
+		return status === "error" || status === "closed";
 	}
 
 	private assertSameQuery(query: SealedLiveQuery<Row>): void {
