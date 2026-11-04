@@ -1,5 +1,21 @@
 # neon
 
+## 8.19.0
+
+### Minor Changes
+
+- f01cc55: `neon neon-auth config email-password update --revoke-sessions-on-password-reset` revokes all of a user's sessions when their password is reset, and `email-password get` and `update` show the setting.
+
+### Patch Changes
+
+- 27f8fd0: Handle row moves in `neon realtime subscribe` without reporting deletions or
+  misclassifying later updates. Show moves and their counts separately in the
+  terminal log, and include each move's destination in raw table output.
+- Updated dependencies [891072b]
+  - @neon/sdk@7.8.1
+  - @neon/config@1.10.3
+  - @neon/config-runtime@1.11.3
+
 ## 8.18.1
 
 ### Patch Changes

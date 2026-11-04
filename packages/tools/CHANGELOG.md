@@ -1,5 +1,13 @@
 # @neon/tools
 
+## 2.6.1
+
+### Patch Changes
+
+- 891072b: Refresh the vendored OpenAPI spec. The Neon Auth email and password config gains `revoke_sessions_on_password_reset`, which revokes all of a user's sessions when their password is reset, and `zUpdateNeonAuthEmailAndPasswordConfigBody` in `@neon/tools/schemas` accepts it.
+- Updated dependencies [891072b]
+  - @neon/sdk@7.8.1
+
 ## 2.6.0
 
 ### Minor Changes

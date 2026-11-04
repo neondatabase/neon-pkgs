@@ -1,5 +1,16 @@
 # neonctl
 
+## 8.19.0
+
+### Patch Changes
+
+- 27f8fd0: Handle row moves in `neon realtime subscribe` without reporting deletions or
+  misclassifying later updates. Show moves and their counts separately in the
+  terminal log, and include each move's destination in raw table output.
+- Updated dependencies [f01cc55]
+- Updated dependencies [27f8fd0]
+  - neon@8.19.0
+
 ## 8.18.1
 
 ### Patch Changes
