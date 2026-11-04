@@ -14,6 +14,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import express from "express";
 import { gzipSync } from "fflate";
 import { type IPty, spawn as spawnPty } from "node-pty";
@@ -21,6 +22,7 @@ import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import YAML from "yaml";
 import { takeCommandSuccessExtras } from "../analytics.js";
+import { clearAuthContext } from "../auth_context.js";
 import type { BootstrapTemplate } from "../init/bootstrap.js";
 import { AGENT_SETUP_MESSAGE } from "../init/copy.js";
 
@@ -909,15 +911,34 @@ describe("bootstrap", () => {
 		}, 30_000);
 
 		test("--deploy fails with neon deploy's error when an env var is unset", async () => {
-			await expect(
-				bootstrapBot({
-					deploy: true,
-					realDeploy: true,
-					envLocal: "DATABASE_URL=postgres://x\n",
-				}),
-			).rejects.toThrow(
-				'Environment variable "BOT_TOKEN" for function "bot" is undefined',
-			);
+			// The in-process deploy authenticates like `neon deploy --api-key test-key`.
+			recordCredentialInputs({
+				apiKeyFlag: "test-key",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir: join(dest, "config"),
+			});
+			try {
+				await expect(
+					bootstrapBot({
+						deploy: true,
+						realDeploy: true,
+						envLocal: "DATABASE_URL=postgres://x\n",
+					}),
+				).rejects.toThrow(
+					'Environment variable "BOT_TOKEN" for function "bot" is undefined',
+				);
+			} finally {
+				clearAuthContext();
+				recordCredentialInputs({
+					apiKeyFlag: "",
+					apiKeyEnv: "",
+					profileEnv: "",
+					profileFlag: "",
+					configDir: "",
+				});
+			}
 		}, 30_000);
 
 		test("--deploy refuses --no-install and --no-link", async () => {
