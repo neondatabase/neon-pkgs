@@ -125,6 +125,28 @@ describe("roles", () => {
 		});
 	});
 
+	test("reset-password keeps an unreadable response body out of the error", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(
+			[
+				"roles",
+				"reset-password",
+				"malformed_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"br-sunny-branch-123456",
+			],
+			{
+				code: 1,
+				snapshot: false,
+				stderr: "ERROR: Could not read the Neon API response (200 OK) to /projects/test/branches/br-sunny-branch-123456/roles/malformed_role/reset_password: the body is not valid JSON",
+			},
+		);
+		expect(stderr).not.toContain("SENTINEL");
+	});
+
 	test("delete", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"roles",

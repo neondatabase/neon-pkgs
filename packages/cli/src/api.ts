@@ -299,7 +299,7 @@ function httpError(response: Response, body: unknown): NeonApiError {
  * The cause's message is left out: `JSON.parse` quotes the input, and the body can carry a
  * password or token that would reach stderr and analytics.
  */
-function unreadableBodyError(
+export function unreadableBodyError(
 	response: Response,
 	cause: unknown,
 ): UnreadableResponseError {
