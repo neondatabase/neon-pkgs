@@ -1,6 +1,6 @@
 import fc from "fast-check";
 
-import protocolSchema from "../../../schema/realtime-protocol-v1.schema.json";
+import protocolSchema from "../../../schema/legacy/realtime-protocol-v1.schema.json";
 
 /** The canonical base64 cell pattern, read from the public schema. */
 export const base64CellPattern: string =
