@@ -50,8 +50,15 @@ export type {
 } from "./neon/resources/account.js";
 export type { AiGatewayGetParams } from "./neon/resources/ai-gateway.js";
 export type {
+	AuthAllowLocalhostGetParams,
+	AuthAllowLocalhostUpdateParams,
 	AuthCreateParams,
 	AuthDisableParams,
+	AuthEmailAndPasswordGetParams,
+	AuthEmailAndPasswordUpdateParams,
+	AuthEmailProviderGetParams,
+	AuthEmailProviderSendTestParams,
+	AuthEmailProviderUpdateParams,
 	AuthGetParams,
 	AuthOauthClientsCreateParams,
 	AuthOauthClientsDeleteParams,
@@ -65,6 +72,11 @@ export type {
 	AuthOauthProvidersUpdateParams,
 	AuthOauthServerGetParams,
 	AuthOauthServerUpdateParams,
+	AuthPluginsGetParams,
+	AuthPluginsMagicLinkUpdateParams,
+	AuthPluginsOrganizationUpdateParams,
+	AuthPluginsPhoneNumberGetParams,
+	AuthPluginsPhoneNumberUpdateParams,
 	AuthTrustedDomainsAddParams,
 	AuthTrustedDomainsDeleteParams,
 	AuthTrustedDomainsListParams,
@@ -72,6 +84,8 @@ export type {
 	AuthUsersCreateParams,
 	AuthUsersDeleteParams,
 	AuthUsersUpdateRoleParams,
+	AuthWebhooksGetParams,
+	AuthWebhooksUpdateParams,
 } from "./neon/resources/auth.js";
 export type {
 	BranchCompareSchemaParams,

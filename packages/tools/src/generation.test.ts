@@ -67,13 +67,17 @@ describe("generated operation coverage", () => {
 		}
 	});
 
-	test("published catalog marks public-capable bucket creation open-world", () => {
+	test("published catalog marks public-capable bucket creation and test emails open-world", () => {
+		const openWorld = new Set([
+			"storage.buckets.create",
+			"auth.emailProvider.sendTest",
+		]);
 		for (const id of toolIds) {
 			expect(
 				createNeonTool(id, { apiKey: "test-key" }).annotations
 					.openWorldHint,
 				id,
-			).toBe(id === "storage.buckets.create");
+			).toBe(openWorld.has(id));
 		}
 	});
 

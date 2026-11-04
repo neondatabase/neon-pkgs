@@ -8,10 +8,13 @@ import type {
 	CustomDomain,
 	Endpoint,
 	GrantedCredentialScope,
+	NeonAuthEmailServerConfigResponse,
 	NeonAuthIntegration,
 	NeonAuthOAuthClientSecret,
 	NeonAuthOAuthProviderConfig,
 	NeonAuthOauthProvider,
+	NeonAuthPluginConfigs,
+	NeonAuthWebhookConfig,
 	Operation,
 	Project,
 	ProjectBranchLogRecord,
@@ -307,6 +310,25 @@ it("phase-1 namespaces (auth, permissions, recover, branch endpoints) are typed"
 			clientId: "c",
 		}),
 	).resolves.toEqualTypeOf<NeonResult<NeonAuthOAuthClientSecret>>();
+	expectTypeOf(
+		neon.auth.emailProvider.update({
+			projectId: "p",
+			branchId: "br",
+			type: "standard",
+			host: "smtp.example.com",
+			password: "pw",
+		}),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthEmailServerConfigResponse>>();
+	expectTypeOf(
+		neon.auth.plugins.get({ projectId: "p", branchId: "br" }),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthPluginConfigs>>();
+	expectTypeOf(
+		neon.auth.webhooks.update({
+			projectId: "p",
+			branchId: "br",
+			enabled: false,
+		}),
+	).resolves.toEqualTypeOf<NeonResult<NeonAuthWebhookConfig>>();
 	expectTypeOf(
 		neon.projects.permissions.list({ projectId: "p" }),
 	).resolves.toEqualTypeOf<NeonResult<ProjectPermission[]>>();
