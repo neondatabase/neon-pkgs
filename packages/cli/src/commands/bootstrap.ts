@@ -7,8 +7,10 @@ import {
 	recordScaffoldedTemplate,
 } from "../analytics.js";
 import { isCi } from "../env.js";
+import { resolveEnvFilePath } from "../env_file.js";
 import type { InitAuthOptions } from "../init/auth.js";
 import {
+	BootstrapInputError,
 	type BootstrapTemplate,
 	ensureTargetUsable,
 	FALLBACK_TEMPLATES,
@@ -24,6 +26,7 @@ import {
 	printInitDone,
 	shouldPrintInitBanner,
 } from "../init/chrome.js";
+import type { InitDeployOptions } from "../init/deploy.js";
 import {
 	type InitLinkInputs,
 	type InitLinkProps,
@@ -68,6 +71,8 @@ export type BootstrapProps = CommonProps & {
 	directory?: string;
 	template?: string;
 	force: boolean;
+	/** Run `neon deploy` after setup instead of asking. */
+	deploy?: boolean;
 	listTemplates: boolean;
 	agent?: string[];
 	default: boolean;
@@ -88,6 +93,8 @@ export type BootstrapProps = CommonProps & {
 	pickAgentSetup?: () => Promise<InitAgentSetup>;
 	pickLink?: () => Promise<boolean>;
 	linkProject?: RunLink;
+	/** Overrides the in-process `neon deploy` (tests). */
+	deployProject?: (options: InitDeployOptions) => Promise<void>;
 	hasProjectPlugins?: (cwd: string) => Promise<boolean>;
 	detectProjectAgents?: (
 		cwd: string,
@@ -123,6 +130,9 @@ export type NestedBootstrapResult = {
 	skippedLinkForDeps: boolean;
 	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
+	deployed: boolean;
+	/** The done summary's deploy next step, when it has one. */
+	deployNext?: string;
 };
 
 // The directory positional is optional: omitting it in an interactive terminal
@@ -197,6 +207,12 @@ export const builder = (argv: yargs.Argv) =>
 					"Coding agent to install into (repeatable). Forwarded to plugins, or to skills and mcp. Skips agent selection. Values listed below",
 				coerce: coerceAgentFlag,
 			},
+			deploy: {
+				describe:
+					"Run `neon deploy` once dependencies are installed and the project is linked, without asking. Fails if neon.ts reads an env var that is not set yet",
+				type: "boolean",
+				default: false,
+			},
 		})
 		.example(
 			"$0 bootstrap my-app",
@@ -209,6 +225,10 @@ export const builder = (argv: yargs.Argv) =>
 		.example(
 			"$0 bootstrap my-app --default",
 			"Skip the pickers; if several orgs or projects exist, link prints IDs and exits",
+		)
+		.example(
+			"$0 bootstrap my-app --template hono --default --deploy",
+			"Scaffold, install, link, and deploy without prompting",
 		)
 		.example(
 			"$0 bootstrap --list-templates --output json",
@@ -271,6 +291,9 @@ export const handler = async (
 	// prompt path even on a TTY.
 	const interactive =
 		!props.default && Boolean(process.stdout.isTTY) && !isCi();
+	if (props.deploy) {
+		assertDeployable(props, interactive);
+	}
 	const template =
 		props.selectedTemplate ??
 		(await resolveSelectedTemplate(
@@ -283,6 +306,12 @@ export const handler = async (
 	await scaffold(template, targetDir);
 	recordScaffoldedTemplate(template.id);
 	printScaffolded(template, targetDir);
+	if (props.deploy && !hasNeonConfig(targetDir)) {
+		throw new BootstrapInputError(
+			`Template "${template.id}" has no neon.ts, so there is nothing to deploy. Re-run without --deploy.`,
+			"TEMPLATE_NOT_DEPLOYABLE",
+		);
+	}
 	const result = await runPostScaffoldSteps(
 		props,
 		targetDir,
@@ -422,6 +451,8 @@ const nestedResult = (
 		skippedLinkForDeps: boolean;
 		agentSetup: InitAgentSetupResult;
 		agentsRan: boolean;
+		deployed: boolean;
+		deployNext?: string;
 	},
 ): NestedBootstrapResult => ({
 	templateTitle: template.title,
@@ -462,6 +493,7 @@ const runPostScaffoldSteps = async (
 			linked: false,
 			skippedLinkForDeps: false,
 			agentsRan: false,
+			deployed: false,
 		};
 		finishPostScaffold({
 			heading: "Project scaffolded.",
@@ -469,6 +501,7 @@ const runPostScaffoldSteps = async (
 			targetDir,
 			pm: defaultPm,
 			...outcome,
+			hasNeonConfig: neonConfig,
 			suggestLink: true,
 			skipPrint: props.skipDoneSummary === true,
 		});
@@ -477,7 +510,8 @@ const runPostScaffoldSteps = async (
 
 	let pm: PackageManager = defaultPm;
 	const wantInstall =
-		props.install && (await confirm(installPrompt(inferred)));
+		props.install &&
+		(props.deploy === true || (await confirm(installPrompt(inferred))));
 	if (wantInstall) {
 		pm = inferred ?? (await selectPackageManager());
 	}
@@ -516,6 +550,7 @@ const runPostScaffoldSteps = async (
 		targetDir,
 		pm,
 		...outcome,
+		hasNeonConfig: neonConfig,
 		suggestLink: !outcome.linked,
 		skipPrint: props.skipDoneSummary === true,
 	});
@@ -562,6 +597,7 @@ const runDefaultSteps = async (
 		targetDir,
 		pm,
 		...outcome,
+		hasNeonConfig: neonConfig,
 		suggestLink: !outcome.linked,
 		skipPrint: props.skipDoneSummary === true,
 	});
@@ -591,6 +627,8 @@ const executePostScaffold = async (
 	skippedLinkForDeps: boolean;
 	agentSetup: InitAgentSetupResult;
 	agentsRan: boolean;
+	deployed: boolean;
+	deployNext?: string;
 }> => {
 	const kids = {
 		// Bootstrap's other output (scaffold messages, the done summary) is hardcoded
@@ -675,6 +713,7 @@ const executePostScaffold = async (
 		}
 		const acceptedLink =
 			choices.yes ||
+			props.deploy === true ||
 			(await (props.pickLink ?? pickInitLinkInteractively)());
 		if (!acceptedLink) {
 			continue;
@@ -707,6 +746,14 @@ const executePostScaffold = async (
 		await linkProject(linkProps);
 		linked = true;
 	}
+	const deploy =
+		installFailed || gitFailed
+			? { deployed: false }
+			: await runDeployStep(props, targetDir, {
+					interactive: !choices.yes,
+					ready: choices.hasNeonConfig && installed && linked,
+					auth: kids.auth,
+				});
 	return {
 		installed,
 		installFailed,
@@ -716,7 +763,82 @@ const executePostScaffold = async (
 		skippedLinkForDeps,
 		agentSetup,
 		agentsRan,
+		...deploy,
 	};
+};
+
+/**
+ * `--deploy` installs and links without asking, so flags that skip those steps contradict
+ * it. Outside a terminal, only `-y` runs the post-scaffold steps at all.
+ */
+const assertDeployable = (
+	props: BootstrapProps,
+	interactive: boolean,
+): void => {
+	if (props.install === false || props.link === false) {
+		throw new BootstrapInputError(
+			"--deploy needs installed dependencies and a linked project. Remove --no-install and --no-link.",
+			"DEPLOY_NEEDS_INSTALL_AND_LINK",
+		);
+	}
+	if (!interactive && !props.default) {
+		throw new BootstrapInputError(
+			"--deploy outside an interactive terminal needs --default (-y).",
+			"DEPLOY_NEEDS_DEFAULT",
+		);
+	}
+};
+
+/**
+ * The last step. `--deploy` always deploys and lets `neon deploy` report unset env. Otherwise
+ * a linked, installed template with neon.ts is offered a deploy in a terminal once every
+ * function env var it reads is set; when some are not, the done summary names them.
+ */
+const runDeployStep = async (
+	props: BootstrapProps,
+	targetDir: string,
+	input: { interactive: boolean; ready: boolean; auth: InitAuthOptions },
+): Promise<{ deployed: boolean; deployNext?: string }> => {
+	if (!props.deploy && !input.ready) {
+		return { deployed: false };
+	}
+	const envFile = resolveEnvFilePath({
+		cwd: targetDir,
+		contextFile: input.auth.contextFile,
+	});
+	const envFileName = relative(targetDir, envFile);
+	const deployWithEnv = `${getCliName()} deploy --env ${envFileName}`;
+	// Link's env pull can fail and leave no env file; `neon deploy --env` refuses a missing one.
+	const deployCommand = existsSync(envFile)
+		? deployWithEnv
+		: `${getCliName()} deploy`;
+	// Loaded only here: it pulls in `config apply` and the neon.ts loader.
+	const { deployInitProject, missingDeployEnv } = await import(
+		"../init/deploy.js"
+	);
+	const options: InitDeployOptions = {
+		...input.auth,
+		cwd: targetDir,
+		envFile,
+	};
+	if (!props.deploy) {
+		const missing = await missingDeployEnv(options);
+		if (missing.length > 0) {
+			return {
+				deployed: false,
+				deployNext: `Set ${missing.join(", ")} in ${envFileName}, then run \`${deployWithEnv}\``,
+			};
+		}
+		if (
+			!input.interactive ||
+			!(await confirm("Deploy this project to Neon now?"))
+		) {
+			return { deployed: false, deployNext: deployCommand };
+		}
+	}
+	log.info("Deploying with `%s`…", deployCommand);
+	await (props.deployProject ?? deployInitProject)(options);
+	return { deployed: true };
 };
 
 const isGitRepo = (dir: string): boolean => existsSync(join(dir, ".git"));
@@ -829,6 +951,9 @@ const printDoneSummary = (input: {
 	linked: boolean;
 	skippedLinkForDeps: boolean;
 	suggestLink: boolean;
+	hasNeonConfig: boolean;
+	deployed: boolean;
+	deployNext?: string;
 }): void => {
 	const unfinished = input.installFailed || input.gitFailed;
 	const heading = unfinished ? "Setup did not finish." : input.heading;
@@ -857,6 +982,9 @@ const printDoneSummary = (input: {
 	if (input.suggestLink) {
 		next.push(`${getCliName()} link`);
 	}
+	if (input.deployNext) {
+		next.push(input.deployNext);
+	}
 	if (!unfinished) {
 		next.push("See the README to run it.");
 	}
@@ -876,6 +1004,16 @@ const printDoneSummary = (input: {
 					}),
 				},
 				{ label: "Project", value: project },
+				...(input.hasNeonConfig
+					? [
+							{
+								label: "Deploy",
+								value: input.deployed
+									? "deployed"
+									: "not deployed",
+							},
+						]
+					: []),
 			],
 			next,
 		}),

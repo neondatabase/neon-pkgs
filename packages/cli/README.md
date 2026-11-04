@@ -866,6 +866,8 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Linking uses `neon link -y`: the only organization and project are selected, or their IDs are printed and the command exits. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
+When the template has a `neon.ts` and its dependencies are installed and the project is linked, bootstrap checks the env vars its functions read against the env file link pulled into (`.env.local`). If all are set, a terminal asks `Deploy this project to Neon now?` and runs `neon deploy --env .env.local`; `--default` leaves that command under `Next:`. If some are unset, `Next:` names them. `--deploy` installs, links, and deploys without asking, and fails with `neon deploy`'s error when an env var is unset. It refuses `--no-install` and `--no-link`, and needs `--default` outside a terminal.
+
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
 ```bash
@@ -877,6 +879,9 @@ $ neon bootstrap . --template hono
 
 # Skip agent selection; install the plugin for those agents
 $ neon bootstrap my-app --agent cursor --agent claude-code
+
+# Scaffold, install, link, and deploy without prompting
+$ neon bootstrap my-app --template hono --default --deploy
 
 # List templates
 $ neon bootstrap --list-templates
@@ -1173,6 +1178,26 @@ neon credentials revoke nak_live_…
 `create` always issues a customer-managed (`user`) credential. `--scope` is repeatable; `--help` lists the values. `reveal` and `rotate` print `api_token` and `s3_secret_access_key`. Rotation keeps the same `token_id` (it is the `AWS_ACCESS_KEY_ID`) and is not idempotent: a retry after a lost response mints another secret.
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
+
+## Postgres (`postgres`)
+
+`neon postgres` (aliases `neon pg` and `neon lakebase`) groups the Postgres commands: `computes`, `databases`, `roles`, `connection-string` (`cs`), and `psql`. `neon postgres roles list` and `neon roles list` run the same command; the top-level spellings keep working.
+
+`neon postgres computes` (aliases `compute`, `endpoints`, `endpoint`) manages the computes in a project:
+
+```bash
+neon postgres computes list                  # the .neon branch's computes, else every compute in the project
+neon postgres computes list --branch main
+neon postgres computes list --all-branches   # every compute in the project, even when .neon pins a branch
+neon postgres computes get ep-cool-king-123456
+neon postgres computes update ep-cool-king-123456 --cu 0.25-2 --suspend-timeout 600
+neon postgres computes suspend ep-cool-king-123456
+neon postgres computes start ep-cool-king-123456
+neon postgres computes restart ep-cool-king-123456
+neon postgres computes delete ep-cool-king-123456
+```
+
+`update`, `start`, `suspend`, `restart`, and `delete` wait until the change is applied. `update`, `start`, `suspend`, and `restart` then print the compute as the API reports it; `delete` prints a confirmation on stderr. `--no-wait` returns as soon as the API accepts the request. `update` sends only the flags you pass and fails without one. To add a compute, use `neon branches add-compute`.
 
 ## Database diagnostics (`inspect`)
 
@@ -1506,10 +1531,11 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
+| postgres (`pg`, `lakebase`)                                                | `computes`, `databases`, `roles`, `connection-string`, `psql`                                                | Manage Postgres and connect to it  |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
 | function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `get`, `create`, `reset-password`, `delete`                                                          | Manage roles                       |
-| [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
+| [operations](https://neon.com/docs/reference/cli-operations)               | `list`, `get`                                                                                                | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |

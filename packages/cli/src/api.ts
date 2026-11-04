@@ -320,6 +320,18 @@ export function unreadableBodyError(
 }
 
 /**
+ * Encode one segment of a path built outside the SDK. `encodeURIComponent` leaves `.` and
+ * `..` intact, and URL parsing then resolves them as dot segments, so the request would go to
+ * a different route.
+ */
+export function pathSegment(name: string, value: string): string {
+	if (value === "." || value === "..") {
+		throw new Error(`Path parameter ${name} cannot be "${value}".`);
+	}
+	return encodeURIComponent(value);
+}
+
+/**
  * Translate a thrown `fetch` failure into a {@link NeonApiError}. A request
  * timeout uses `ECONNABORTED` (matching the old axios behaviour, and excluded
  * from `isNetworkError`'s connectivity codes so it's still reported as a
@@ -525,6 +537,14 @@ export const getApiClient = ({
 			result = await run();
 		} catch (err) {
 			throw networkError(err);
+		}
+		// The SDK rejected the input before sending; its message is the one to show.
+		if (
+			result.error instanceof Error &&
+			"kind" in result.error &&
+			result.error.kind === "client"
+		) {
+			throw result.error;
 		}
 		const response = result.response;
 		if (!response) {

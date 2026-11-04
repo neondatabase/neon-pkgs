@@ -25,9 +25,9 @@ const ROLE_ACCESS: readonly RoleAccess[] = ["admin", "read_only", "read_write"];
 export const command = "roles";
 export const describe = "Manage roles";
 export const aliases = ["role"];
-export const builder = (argv: yargs.Argv) =>
+export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 	argv
-		.usage("$0 roles <sub-command> [options]")
+		.usage(`$0 ${usage} <sub-command> [options]`)
 		.options({
 			"project-id": {
 				describe: "Project ID",
@@ -120,6 +120,8 @@ export const builder = (argv: yargs.Argv) =>
 			(yargs) => yargs,
 			(args) => deleteRole(args as any),
 		);
+
+export const builder = builderFor("roles");
 
 export const handler = (args: yargs.Argv) => {
 	return args;

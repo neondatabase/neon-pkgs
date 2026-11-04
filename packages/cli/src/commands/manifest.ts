@@ -92,6 +92,13 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./branches.js"),
 	},
 	{
+		command: "postgres",
+		aliases: ["pg", "lakebase"],
+		describe:
+			"Manage Postgres computes, databases, and roles, and connect with psql or a connection string",
+		load: () => import("./postgres.js"),
+	},
+	{
 		command: "databases",
 		aliases: ["database", "db"],
 		describe: "Manage databases",

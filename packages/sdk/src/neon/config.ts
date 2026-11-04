@@ -1,7 +1,8 @@
-import { createClient, createConfig } from "../client/client/index.js";
+import { createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
 import { resolveTimeoutMs } from "./deadline.js";
 import { NeonError } from "./errors.js";
+import { createClient } from "./raw-wrap.js";
 import { resolveRetries } from "./retry.js";
 import type { WaitBudget } from "./wait.js";
 

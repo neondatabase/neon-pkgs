@@ -12,6 +12,7 @@
 import type { Readable } from "node:stream";
 
 import type { NeonApiClient } from "./api.js";
+import { pathSegment } from "./api.js";
 
 export type ApiClient = NeonApiClient;
 
@@ -142,12 +143,13 @@ export type ListObjectsParams = {
 };
 
 const bucketsPath = (projectId: string, branchId: string) =>
-	`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(
+	`/projects/${pathSegment("project_id", projectId)}/branches/${pathSegment(
+		"branch_id",
 		branchId,
 	)}/buckets`;
 
 const bucketPath = (projectId: string, branchId: string, bucketName: string) =>
-	`${bucketsPath(projectId, branchId)}/${encodeURIComponent(bucketName)}`;
+	`${bucketsPath(projectId, branchId)}/${pathSegment("bucket_name", bucketName)}`;
 
 /**
  * Create a bucket on a branch.
@@ -264,7 +266,8 @@ export const getProjectBranchBucketObject = (
 	},
 ): Promise<ApiResponseWithHeaders<Readable>> =>
 	apiClient.request<Readable>({
-		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${pathSegment(
+			"object_key",
 			objectKey,
 		)}/download`,
 		method: "GET",
@@ -295,7 +298,8 @@ export const deleteProjectBranchBucketObject = (
 	},
 ): Promise<ApiResponse<undefined>> =>
 	apiClient.request<undefined>({
-		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${pathSegment(
+			"object_key",
 			objectKey,
 		)}`,
 		method: "DELETE",
@@ -376,7 +380,8 @@ export const presignUpload = (
 		body.expires_in_seconds = expiresInSeconds;
 	}
 	return apiClient.request<PresignResponse>({
-		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${encodeURIComponent(
+		path: `${bucketPath(projectId, branchId, bucketName)}/objects/${pathSegment(
+			"object_key",
 			objectKey,
 		)}/presign`,
 		method: "POST",

@@ -5,6 +5,20 @@ import { writer } from "../writer.js";
 
 const OPERATIONS_FIELDS = ["id", "action", "status", "created_at"] as const;
 
+const OPERATION_DETAIL_FIELDS = [
+	"id",
+	"action",
+	"status",
+	"branch_id",
+	"endpoint_id",
+	"error",
+	"failures_count",
+	"retry_at",
+	"total_duration_ms",
+	"created_at",
+	"updated_at",
+] as const;
+
 export const command = "operations";
 export const describe = "Manage operations";
 export const aliases = ["operation"];
@@ -23,6 +37,12 @@ export const builder = (argv: yargs.Argv) =>
 			"List operations",
 			(yargs) => yargs,
 			(args) => list(args as any),
+		)
+		.command(
+			"get <id>",
+			"Get an operation",
+			(yargs) => yargs,
+			(args) => get(args as any),
 		);
 
 export const handler = (args: yargs.Argv) => {
@@ -36,5 +56,17 @@ export const list = async (props: ProjectScopeProps & { limit: number }) => {
 	});
 	writer(props).end(data.operations, {
 		fields: OPERATIONS_FIELDS,
+	});
+};
+
+export const get = async (props: ProjectScopeProps & { id: string }) => {
+	const { fromSdkError, getNeonClient } = await import("../neon_client.js");
+	const operation = await getNeonClient(props)
+		.operations.get({ projectId: props.projectId, operationId: props.id })
+		.catch((error: unknown) => {
+			throw fromSdkError(error, props.apiHost);
+		});
+	writer(props).end(operation, {
+		fields: OPERATION_DETAIL_FIELDS,
 	});
 };
