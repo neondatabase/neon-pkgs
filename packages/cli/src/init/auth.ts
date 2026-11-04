@@ -40,7 +40,7 @@ const authenticationFailed = (): Error => new Error("Authentication failed.");
  * `ensureAuth`'s per-command branches (`isMcpCommand`, `isSkillsCommand`, ...) treat this
  * exactly like the standalone command it names — mirrors `init/link.ts`'s `runAuthenticatedLink`.
  */
-const authContext = <T extends InitAuthOptions>(
+export const authContext = <T extends InitAuthOptions>(
 	options: T,
 	command: readonly string[],
 ) => ({

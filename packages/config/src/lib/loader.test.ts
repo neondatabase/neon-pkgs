@@ -115,13 +115,14 @@ export default defineConfig({
 });`,
 		});
 		try {
-			const { config } = await loadConfigFromFile({
+			const { config, omittedFunctionEnv } = await loadConfigFromFile({
 				cwd: repo.root,
 				unsetFunctionEnv: "omit",
 			});
 			expect(config.preview?.functions?.hello?.env).toEqual({
 				KEEP: "present",
 			});
+			expect(omittedFunctionEnv).toEqual(["SECRET"]);
 			expect(process.env[key]).toBeUndefined();
 		} finally {
 			delete process.env[key];
@@ -153,6 +154,40 @@ export default defineConfig({
 			expect(config.preview?.functions?.hello?.env).toEqual({});
 		} finally {
 			delete process.env[key];
+			repo.cleanup();
+		}
+	}, 30_000);
+
+	test("omittedFunctionEnv names each unset key once, and is empty when every key is set", async () => {
+		const key = "NEON_PKGS_UNSET_FN_ENV_LOADER_SHARED";
+		delete process.env[key];
+		const repo = makeTempRepo({
+			"neon.ts": `export default {
+  preview: {
+    functions: {
+      one: { name: "One", source: "./one.ts", env: { SHARED: process.env.${key} } },
+      two: { name: "Two", source: "./two.ts", env: { SHARED: process.env.${key}, OTHER: process.env.${key}_OTHER } },
+    },
+  },
+};`,
+		});
+		try {
+			const unset = await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			expect(unset.omittedFunctionEnv).toEqual(["SHARED", "OTHER"]);
+
+			process.env[key] = "set";
+			process.env[`${key}_OTHER`] = "set";
+			const set = await loadConfigFromFile({
+				cwd: repo.root,
+				unsetFunctionEnv: "omit",
+			});
+			expect(set.omittedFunctionEnv).toEqual([]);
+		} finally {
+			delete process.env[key];
+			delete process.env[`${key}_OTHER`];
 			repo.cleanup();
 		}
 	}, 30_000);
