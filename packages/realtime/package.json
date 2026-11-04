@@ -1,6 +1,6 @@
 {
   "name": "@neon/realtime",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Typed backend and browser SDKs for live queries.",
   "keywords": [
     "neon",
