@@ -1,5 +1,15 @@
 # neon
 
+## 8.20.1
+
+### Patch Changes
+
+- Updated dependencies [27f8fd0]
+- Updated dependencies [83d1b99]
+- Updated dependencies [4a020a0]
+- Updated dependencies [35b7679]
+  - @neon/realtime@0.2.0
+
 ## 8.20.0
 
 ### Minor Changes
