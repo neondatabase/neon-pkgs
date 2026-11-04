@@ -16,7 +16,8 @@
     "auto_sign_in_after_verification": true,
     "send_verification_email_on_sign_up": false,
     "send_verification_email_on_sign_in": false,
-    "disable_sign_up": false
+    "disable_sign_up": false,
+    "revoke_sessions_on_password_reset": false
   },
   "oauth_providers": [
     {

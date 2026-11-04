@@ -61,6 +61,7 @@ auto_sign_in_after_verification: true
 send_verification_email_on_sign_up: true
 send_verification_email_on_sign_in: false
 disable_sign_up: false
+revoke_sessions_on_password_reset: false
 "
 `;
 
@@ -72,6 +73,7 @@ auto_sign_in_after_verification: true
 send_verification_email_on_sign_up: true
 send_verification_email_on_sign_in: false
 disable_sign_up: false
+revoke_sessions_on_password_reset: true
 "
 `;
 
@@ -822,6 +824,7 @@ email_and_password:
   send_verification_email_on_sign_up: false
   send_verification_email_on_sign_in: false
   disable_sign_up: false
+  revoke_sessions_on_password_reset: false
 oauth_providers:
   - id: google
     type: shared

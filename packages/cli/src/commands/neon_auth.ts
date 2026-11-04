@@ -134,6 +134,7 @@ const EMAIL_PASSWORD_FIELDS = [
 	"send_verification_email_on_sign_up",
 	"send_verification_email_on_sign_in",
 	"disable_sign_up",
+	"revoke_sessions_on_password_reset",
 ] as const;
 
 const EMAIL_PROVIDER_FIELDS = [
@@ -601,6 +602,11 @@ export const builder = (argv: yargs.Argv) => {
 										"disable-sign-up": {
 											describe:
 												"Disable new user sign ups",
+											type: "boolean",
+										},
+										"revoke-sessions-on-password-reset": {
+											describe:
+												"Revoke all of a user's sessions when their password is reset",
 											type: "boolean",
 										},
 									}),
@@ -1560,6 +1566,7 @@ const printEmailPasswordEntries = (data: {
 	send_verification_email_on_sign_up: boolean;
 	send_verification_email_on_sign_in: boolean;
 	disable_sign_up: boolean;
+	revoke_sessions_on_password_reset: boolean;
 }): [string, string][] => [
 	["Enabled:", String(data.enabled)],
 	["Verification Method:", data.email_verification_method],
@@ -1577,6 +1584,10 @@ const printEmailPasswordEntries = (data: {
 		String(data.send_verification_email_on_sign_in),
 	],
 	["Disable Sign Up:", String(data.disable_sign_up)],
+	[
+		"Revoke Sessions On Reset:",
+		String(data.revoke_sessions_on_password_reset),
+	],
 ];
 
 const emailPasswordGet = async (props: AuthBranchProps) => {
@@ -1604,6 +1615,7 @@ const emailPasswordUpdate = async (
 		sendVerificationEmailOnSignUp?: boolean;
 		sendVerificationEmailOnSignIn?: boolean;
 		disableSignUp?: boolean;
+		revokeSessionsOnPasswordReset?: boolean;
 	},
 ) => {
 	const branchId = await resolveBranch(props);
@@ -1621,6 +1633,8 @@ const emailPasswordUpdate = async (
 			send_verification_email_on_sign_in:
 				props.sendVerificationEmailOnSignIn,
 			disable_sign_up: props.disableSignUp,
+			revoke_sessions_on_password_reset:
+				props.revokeSessionsOnPasswordReset,
 		},
 	);
 	if (props.output === "json" || props.output === "yaml") {

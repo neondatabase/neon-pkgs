@@ -675,6 +675,7 @@ describe("neon-auth", () => {
 			"test_branch",
 			"--enabled",
 			"--require-email-verification",
+			"--revoke-sessions-on-password-reset",
 		]);
 	});
 
