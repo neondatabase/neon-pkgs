@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.10.2
+
+### Patch Changes
+
+- 9807763: A top-level `realtime` key in `neon.ts` now reports that Realtime is in public beta and is configured under `preview: { realtime: true }`.
+
 ## 1.10.1
 
 ### Patch Changes
