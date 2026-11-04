@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "pg-connection-string";
 import type { PoolConfig } from "../vendor/postgres-meta/lib/types.js";
 
-// pg 8.23 reads it; @types/pg 8.20 predates it.
+// node-postgres reads it at runtime, but @types/pg does not declare it.
 export type NeonPoolConfig = PoolConfig & {
 	enableChannelBinding?: boolean;
 	/**

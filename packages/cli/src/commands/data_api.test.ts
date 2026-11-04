@@ -239,9 +239,35 @@ describe("data-api", () => {
 			snapshot: false,
 			env: { CI: "true" },
 			stderr: expect.stringMatching(
-				/ERROR: Introspecting 127\.0\.0\.1\/\w+ failed: connect ECONNREFUSED 127\.0\.0\.1:1/,
+				/ERROR: Introspecting 127\.0\.0\.1\/db1 failed: connect ECONNREFUSED 127\.0\.0\.1:1/,
 			),
 		});
+	});
+
+	test("gen-types resolves a point-in-time branch like connection-string", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"data-api",
+				"gen-types",
+				"--project-id",
+				"test-project-123456",
+				"--branch",
+				"main@2026-01-01T00:00:00Z",
+				"--database-name",
+				"db1",
+			],
+			{
+				mockDir: "single_org_multidb",
+				code: 1,
+				snapshot: false,
+				env: { CI: "true" },
+				stderr: expect.stringMatching(
+					/ERROR: Introspecting .*\/db1 failed:/,
+				),
+			},
+		);
 	});
 
 	// Nothing listens on 127.0.0.1:1, so these drive the hermetic `--db-url` path: the
@@ -261,6 +287,66 @@ describe("data-api", () => {
 				stderr: expect.stringMatching(
 					/ERROR: Introspecting 127\.0\.0\.1\/\w+ failed: connect ECONNREFUSED 127\.0\.0\.1:1/,
 				),
+			},
+		);
+	});
+
+	test("gen-types uses DATABASE_URL without Neon credentials", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["data-api", "gen-types"], {
+			apiKey: false,
+			code: 1,
+			snapshot: false,
+			env: { CI: "true", DATABASE_URL: UNREACHABLE_DB_URL },
+			stderr: expect.stringMatching(
+				/ERROR: Introspecting 127\.0\.0\.1\/postgres failed: connect ECONNREFUSED 127\.0\.0\.1:1/,
+			),
+		});
+	});
+
+	test("gen-types with DATABASE_URL and an explicit --branch still needs Neon credentials", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["data-api", "gen-types", "--branch", "main"], {
+			apiKey: false,
+			code: 1,
+			snapshot: false,
+			env: { CI: "true", DATABASE_URL: UNREACHABLE_DB_URL },
+			stderr: "ERROR: Cannot run interactive auth in CI",
+		});
+	});
+
+	test("gen-types treats a blank --db-url as absent", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(["data-api", "gen-types", "--db-url", " "], {
+			apiKey: false,
+			code: 1,
+			snapshot: false,
+			env: { CI: "true" },
+			stderr: "ERROR: Cannot run interactive auth in CI",
+		});
+	});
+
+	test("gen-types rejects a zero --query-timeout", async ({
+		testCliCommand,
+	}) => {
+		await testCliCommand(
+			[
+				"data-api",
+				"gen-types",
+				"--db-url",
+				UNREACHABLE_DB_URL,
+				"--query-timeout",
+				"0s",
+			],
+			{
+				apiKey: false,
+				code: 1,
+				snapshot: false,
+				env: { CI: "true" },
+				stderr: expect.stringMatching(/greater than 0/),
 			},
 		);
 	});

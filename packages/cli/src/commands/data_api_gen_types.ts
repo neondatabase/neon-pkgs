@@ -4,8 +4,7 @@ import { isNeonApiError } from "../api.js";
 import { genTypesDbUrl } from "../context.js";
 import { log } from "../log.js";
 import type { BranchScopeProps } from "../types.js";
-import { branchIdFromProps } from "../utils/enrichers.js";
-import { generateTypes } from "../utils/generate_types.js";
+import { describeTarget, generateTypes } from "../utils/generate_types.js";
 import { resolveConnectionUri } from "../utils/inspect_db.js";
 
 export type GenTypesProps = BranchScopeProps & {
@@ -30,10 +29,16 @@ export const parseDuration = (duration: string): number => {
 			`Invalid duration format: ${duration}. Use a format like "30s", "1m" or "90s"`,
 		);
 	}
-	return (
+	const ms =
 		Number.parseInt(match[1], 10) *
-		UNIT_MS[(match[2] ?? "s") as keyof typeof UNIT_MS]
-	);
+		UNIT_MS[(match[2] ?? "s") as keyof typeof UNIT_MS];
+	// pg treats a zero timeout as "wait forever".
+	if (ms <= 0) {
+		throw new Error(
+			`Invalid duration: ${duration}. It must be greater than 0`,
+		);
+	}
+	return ms;
 };
 
 const FALLBACK_SCHEMAS = ["public"];
@@ -72,15 +77,20 @@ export const genTypes = async (props: GenTypesProps): Promise<void> => {
 
 	let connectionString = genTypesDbUrl(props);
 	let schemas = props.schema?.length ? props.schema : undefined;
+	let source: string;
 	if (connectionString === undefined) {
-		const branchId = await branchIdFromProps(props);
-		const { connectionUri, database } = await resolveConnectionUri({
-			...props,
-			branch: branchId,
-			databaseName: props.database,
-		});
+		// resolveConnectionUri splits a point-in-time suffix (`main@<timestamp>`) off the
+		// branch, so it receives the name as typed and returns the base branch id.
+		const { connectionUri, database, branchId } =
+			await resolveConnectionUri({
+				...props,
+				databaseName: props.database,
+			});
 		connectionString = connectionUri;
 		schemas ??= await dataApiSchemas(props, branchId, database);
+		source = `project ${props.projectId}, branch ${branchId}, database ${database}`;
+	} else {
+		source = `${props.dbUrl?.trim() ? "--db-url" : "DATABASE_URL"} ${describeTarget(connectionString)}`;
 	}
 	schemas ??= FALLBACK_SCHEMAS;
 
@@ -103,6 +113,6 @@ export const genTypes = async (props: GenTypesProps): Promise<void> => {
 	mkdirSync(path.dirname(props.outFile), { recursive: true });
 	writeFileSync(props.outFile, types);
 	log.info(
-		`Generated types for schemas ${schemas.join(", ")} at ${props.outFile}`,
+		`Generated types for schemas ${schemas.join(", ")} at ${props.outFile} from ${source}`,
 	);
 };

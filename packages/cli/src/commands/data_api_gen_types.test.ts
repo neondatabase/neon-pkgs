@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const generateTypes = vi.hoisted(() => vi.fn());
 const resolveConnectionUri = vi.hoisted(() => vi.fn());
-const branchIdFromProps = vi.hoisted(() => vi.fn());
-vi.mock("../utils/generate_types.js", () => ({ generateTypes }));
+vi.mock("../utils/generate_types.js", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../utils/generate_types.js")>()),
+	generateTypes,
+}));
 vi.mock("../utils/inspect_db.js", () => ({ resolveConnectionUri }));
-vi.mock("../utils/enrichers.js", () => ({ branchIdFromProps }));
 
 import { NeonApiError } from "../api.js";
+import { log } from "../log.js";
 import {
 	type GenTypesProps,
 	genTypes,
@@ -29,6 +31,15 @@ describe("parseDuration", () => {
 	test.each(["", "1d", "-5s", "1.5m", "ten"])("rejects %j", (input) => {
 		expect(() => parseDuration(input)).toThrow(/Invalid duration format/);
 	});
+
+	test.each([
+		"0",
+		"0s",
+		"0m",
+		"00h",
+	])("rejects the zero duration %j", (input) => {
+		expect(() => parseDuration(input)).toThrow(/greater than 0/);
+	});
 });
 
 describe("genTypes", () => {
@@ -38,11 +49,11 @@ describe("genTypes", () => {
 		generateTypes
 			.mockReset()
 			.mockResolvedValue("export type Database = {}\n");
-		branchIdFromProps.mockReset().mockResolvedValue("br-1");
 		resolveConnectionUri.mockReset().mockResolvedValue({
 			connectionUri:
 				"postgresql://role:pw@ep-1.neon.tech/db1?sslmode=require",
 			database: "db1",
+			branchId: "br-1",
 		});
 		vi.stubEnv("DATABASE_URL", "");
 	});
@@ -82,7 +93,7 @@ describe("genTypes", () => {
 		expect(resolveConnectionUri).toHaveBeenCalledWith(
 			expect.objectContaining({
 				projectId: "proj-1",
-				branch: "br-1",
+				branch: "main",
 				databaseName: "db1",
 				roleName: "app",
 			}),
@@ -154,6 +165,34 @@ describe("genTypes", () => {
 			);
 		});
 
+		test("falls back to public when the Data API lists no schemas", async () => {
+			const get = vi
+				.fn()
+				.mockResolvedValue({ data: { settings: { db_schemas: [] } } });
+			await genTypes(withApi(get));
+
+			expect(generateTypes).toHaveBeenCalledWith(
+				expect.objectContaining({ schemas: ["public"] }),
+			);
+		});
+
+		test("looks up a point-in-time branch by its base branch id", async () => {
+			const get = vi.fn().mockResolvedValue({
+				data: { settings: { db_schemas: ["api"] } },
+			});
+			await genTypes({
+				...withApi(get),
+				branch: "main@2026-01-01T00:00:00Z",
+			});
+
+			expect(resolveConnectionUri).toHaveBeenCalledWith(
+				expect.objectContaining({
+					branch: "main@2026-01-01T00:00:00Z",
+				}),
+			);
+			expect(get).toHaveBeenCalledWith("proj-1", "br-1", "db1");
+		});
+
 		test("an explicit --schema skips the Data API lookup", async () => {
 			const get = vi.fn();
 			await genTypes({ ...withApi(get), schema: ["auth"] });
@@ -208,6 +247,42 @@ describe("genTypes", () => {
 			schemas: ["public", "auth"],
 			detectOneToOneRelationships: false,
 			queryTimeout: 60_000,
+		});
+	});
+
+	describe("source log line", () => {
+		const logged = async (run: () => Promise<void>): Promise<string> => {
+			const info = vi.spyOn(log, "info").mockImplementation(() => {});
+			try {
+				await run();
+				return info.mock.calls.map(String).join("\n");
+			} finally {
+				info.mockRestore();
+			}
+		};
+
+		test("names DATABASE_URL and the host/db, never the credentials", async () => {
+			vi.stubEnv(
+				"DATABASE_URL",
+				"postgresql://env:s3cret@db.example/app",
+			);
+			const line = await logged(() => genTypes(props()));
+			expect(line).toContain("DATABASE_URL db.example/app");
+			expect(line).not.toContain("s3cret");
+			expect(line).not.toContain("env:");
+		});
+
+		test("names --db-url", async () => {
+			const line = await logged(() =>
+				genTypes(props({ dbUrl: "postgresql://u:pw@h/d" })),
+			);
+			expect(line).toContain("--db-url h/d");
+			expect(line).not.toContain("pw");
+		});
+
+		test("names the project, branch and database resolved through the API", async () => {
+			const line = await logged(() => genTypes(props()));
+			expect(line).toContain("project proj-1, branch br-1, database db1");
 		});
 	});
 

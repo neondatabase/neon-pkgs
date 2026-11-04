@@ -8,6 +8,7 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import pg from "pg";
@@ -167,18 +168,42 @@ describe.skipIf(!RUN)("generateTypes — integration", () => {
 		).rejects.not.toThrow(/s3cret/);
 	});
 
-	it("gives up on an unreachable host instead of hanging", async () => {
-		const started = Date.now();
-		await expect(
-			generateTypes({
-				...options(),
-				connectionString:
-					"postgresql://u:p@10.255.255.1:5432/db?sslmode=disable",
-				queryTimeout: 1_500,
-			}),
-		).rejects.toThrow(/Introspecting/);
-		expect(Date.now() - started).toBeLessThan(10_000);
+	it("gives up on a server that never answers instead of hanging", async () => {
+		const sockets = new Set<import("node:net").Socket>();
+		const server: Server = createServer((socket) => {
+			sockets.add(socket);
+		});
+		await new Promise<void>((resolve) =>
+			server.listen(0, "127.0.0.1", resolve),
+		);
+		const { port } = server.address() as { port: number };
+		try {
+			const started = Date.now();
+			await expect(
+				generateTypes({
+					...options(),
+					connectionString: `postgresql://u:p@127.0.0.1:${port}/db?sslmode=disable`,
+					queryTimeout: 1_500,
+				}),
+			).rejects.toThrow(
+				/Introspecting 127\.0\.0\.1\/db failed: .*timeout.*--query-timeout/is,
+			);
+			expect(Date.now() - started).toBeLessThan(10_000);
+		} finally {
+			for (const socket of sockets) {
+				socket.destroy();
+			}
+			await new Promise((resolve) => server.close(resolve));
+		}
 	}, 20_000);
+
+	it("times out against the live database with the --query-timeout hint", async () => {
+		await expect(
+			generateTypes({ ...options(), queryTimeout: 1 }),
+		).rejects.toThrow(
+			/Introspecting .* failed: .*timeout.*--query-timeout/is,
+		);
+	});
 
 	describe("TLS", () => {
 		const tls = (query: string) => ({

@@ -11,7 +11,7 @@ import type { BranchScopeProps } from "../types.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
 	branchIdFromProps,
-	fillSingleProjectUnlessDbUrl,
+	fillSingleProject,
 	resolveSingleDatabase,
 } from "../utils/enrichers.js";
 import { writer } from "../writer.js";
@@ -99,7 +99,7 @@ export const builder = (argv: yargs.Argv) =>
 			},
 		})
 		.middleware((args: any) =>
-			isGenTypesDbUrl(args) ? args : fillSingleProjectUnlessDbUrl(args),
+			isGenTypesDbUrl(args) ? args : fillSingleProject(args),
 		)
 		.command(
 			"create",

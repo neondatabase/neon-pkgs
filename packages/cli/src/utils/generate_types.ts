@@ -25,7 +25,7 @@ const TLS_ERROR =
 	/self[- ]signed|certificate|unable to verify|UNABLE_TO_|ERR_TLS|SSL/i;
 const TIMEOUT_ERROR = /timeout|timed out|ETIMEDOUT/i;
 
-const describeTarget = (connectionString: string): string => {
+export const describeTarget = (connectionString: string): string => {
 	try {
 		const url = new URL(connectionString);
 		return `${url.hostname}${url.pathname}`;
