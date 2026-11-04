@@ -17,6 +17,8 @@ export type CommandEntry = {
 	 * message. See `utils/staging.ts`.
 	 */
 	stagingOnly?: string;
+	/** Runs as typed but is left out of `neon --help`, for spellings kept for existing users. */
+	hidden?: boolean;
 };
 
 /**
@@ -90,6 +92,13 @@ export const commandManifest: CommandEntry[] = [
 		aliases: ["branch"],
 		describe: "Manage branches",
 		load: () => import("./branches.js"),
+	},
+	{
+		command: "postgres",
+		aliases: ["pg", "lakebase"],
+		describe:
+			"Manage Postgres computes, databases, and roles, and connect with psql or a connection string",
+		load: () => import("./postgres.js"),
 	},
 	{
 		command: "databases",

@@ -18,9 +18,9 @@ export const SSL_MODES = [
 export const command = "connection-string [branch]";
 export const aliases = ["cs"];
 export const describe = "Get connection string";
-export const builder = (argv: yargs.Argv) => {
+export const builderFor = (usage: string) => (argv: yargs.Argv) => {
 	return argv
-		.usage("$0 connection-string [branch] [options]")
+		.usage(`$0 ${usage} [branch] [options]`)
 		.example("$0 cs main", "Get connection string for the main branch")
 		.example(
 			"$0 cs main@2024-01-01T00:00:00Z",
@@ -89,6 +89,8 @@ export const builder = (argv: yargs.Argv) => {
 		})
 		.middleware(fillSingleProject as any);
 };
+
+export const builder = builderFor("connection-string");
 
 export const handler = async (
 	props: BranchScopeProps & {

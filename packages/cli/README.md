@@ -1174,6 +1174,25 @@ neon credentials revoke nak_live_…
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
+## Postgres (`postgres`)
+
+`neon postgres` (aliases `neon pg` and `neon lakebase`) groups the Postgres commands: `computes`, `databases`, `roles`, `connection-string` (`cs`), and `psql`. `neon postgres roles list` and `neon roles list` run the same command; the top-level spellings keep working.
+
+`neon postgres computes` (aliases `compute`, `endpoints`, `endpoint`) manages the computes in a project:
+
+```bash
+neon postgres computes list                  # the .neon branch's computes, else every compute in the project
+neon postgres computes list --branch main
+neon postgres computes get ep-cool-king-123456
+neon postgres computes update ep-cool-king-123456 --cu 0.25-2 --suspend-timeout 600
+neon postgres computes suspend ep-cool-king-123456
+neon postgres computes start ep-cool-king-123456
+neon postgres computes restart ep-cool-king-123456
+neon postgres computes delete ep-cool-king-123456
+```
+
+`update`, `start`, `suspend`, `restart`, and `delete` wait until the change is applied, then print the compute as the API reports it. `--no-wait` returns as soon as the API accepts the request. `update` sends only the flags you pass and fails without one. To add a compute, use `neon branches add-compute`.
+
 ## Database diagnostics (`inspect`)
 
 `neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Oldest group first. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
@@ -1506,6 +1525,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
+| postgres (`pg`, `lakebase`)                                                | `computes`, `databases`, `roles`, `connection-string`, `psql`                                                | Manage Postgres and connect to it  |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
 | function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
