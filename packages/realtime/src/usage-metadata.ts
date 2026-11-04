@@ -1,3 +1,8 @@
+import pkg from "../package.json" with { type: "json" };
+
+/** Exact package version used only for server compatibility checks. */
+export const REALTIME_CLIENT_VERSION: string = pkg.version;
+
 /** Release cohort emitted by the 0.2 SDK. Keep this catalog bounded. */
 export const REALTIME_RELEASE_LINE = "0.2" as const;
 
@@ -8,4 +13,5 @@ export const REALTIME_SDK = "javascript" as const;
 export const REALTIME_CLIENT_METADATA = JSON.stringify({
 	sdk: REALTIME_SDK,
 	release_line: REALTIME_RELEASE_LINE,
+	version: REALTIME_CLIENT_VERSION,
 });

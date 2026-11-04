@@ -353,6 +353,21 @@
         },
         {
           "type": "object",
+          "$comment": "Non-terminal client warning. The connection and subscriptions remain usable.",
+          "required": ["type", "code", "message"],
+          "properties": {
+            "type": { "const": "client_warning" },
+            "code": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "message": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "required": ["type", "token"],
           "properties": {
             "type": { "enum": ["ping", "pong"] },

@@ -146,6 +146,7 @@ export class ConnectionCoordinator {
 	private stabilityTimer?: ReconnectTimer;
 	private reconnectGeneration = 0;
 	private reconnectEpisodeGeneration = 0;
+	private readonly reportedClientWarnings = new Set<string>();
 	private requestId = 0n;
 	private ready = false;
 	private disposed = false;
@@ -424,6 +425,9 @@ export class ConnectionCoordinator {
 			case "connection_error":
 				this.connectionError(message.code, message.message);
 				return;
+			case "client_warning":
+				this.clientWarning(message);
+				return;
 			case "ping":
 				this.send({ type: "pong", token: message.token });
 				return;
@@ -441,6 +445,15 @@ export class ConnectionCoordinator {
 				this.reconciler.accept(message, mvcc);
 				return;
 		}
+	}
+
+	private clientWarning(
+		message: Extract<ServerMessage, { type: "client_warning" }>,
+	): void {
+		const warningKey = `${message.code}\0${message.message}`;
+		if (this.reportedClientWarnings.has(warningKey)) return;
+		this.reportedClientWarnings.add(warningKey);
+		reportClientWarning(message.message);
 	}
 
 	private admitted(
@@ -1015,6 +1028,16 @@ export class ConnectionCoordinator {
 			publicationCommitted: (bodyCount) =>
 				this.events.connection.publicationCommitted(bodyCount),
 		};
+	}
+}
+
+function reportClientWarning(message: string): void {
+	try {
+		if (typeof console !== "undefined") {
+			console.error(`[Neon Realtime] ${message}`);
+		}
+	} catch {
+		// Console implementations must never interrupt live-query delivery.
 	}
 }
 

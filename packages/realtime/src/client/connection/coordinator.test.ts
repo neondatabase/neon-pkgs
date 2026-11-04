@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
+import { REALTIME_CLIENT_VERSION } from "../../usage-metadata.js";
 import { createClientEventSink } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
 import type { WebSocketLike } from "../types.js";
@@ -275,7 +276,7 @@ describe("ConnectionCoordinator", () => {
 		expect(socket.wireMessages).toEqual([
 			{
 				type: "client_info",
-				metadata: '{"sdk":"javascript","release_line":"0.2"}',
+				metadata: `{"sdk":"javascript","release_line":"0.2","version":"${REALTIME_CLIENT_VERSION}"}`,
 			},
 			{
 				type: "subscribe",
@@ -301,6 +302,48 @@ describe("ConnectionCoordinator", () => {
 		expect(callbacks.admitted).toHaveBeenCalledWith([
 			{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
 		]);
+	});
+
+	it("reports client warnings outside diagnostics and deduplicates them across reconnects", async () => {
+		vi.useFakeTimers();
+		const logger = vi.fn();
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {
+				throw new Error("broken console");
+			});
+		const callbacks = target();
+		const coordinator = createCoordinator({
+			events: createClientEventSink({ logLevel: "silent", logger }),
+		});
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = admit();
+		first.receive({
+			type: "client_warning",
+			code: "client_too_old",
+			message:
+				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		});
+		expect(consoleError).toHaveBeenCalledWith(
+			"[Neon Realtime] This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		);
+		expect(first.readyState).toBe(FakeWebSocket.OPEN);
+		expect(callbacks.admitted).toHaveBeenCalledOnce();
+
+		first.disconnect();
+		await vi.advanceTimersByTimeAsync(1);
+		const second = admit();
+		second.receive({
+			type: "client_warning",
+			code: "client_too_old",
+			message:
+				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		});
+
+		expect(consoleError).toHaveBeenCalledOnce();
+		expect(logger).not.toHaveBeenCalled();
+		expect(second.readyState).toBe(FakeWebSocket.OPEN);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(2);
 	});
 
 	it("serializes overlapping renewals so the newest capability wins", async () => {

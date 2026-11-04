@@ -280,11 +280,16 @@ const client = createRealtimeClient({
 });
 ```
 
+Server-issued client warnings are an intentional exception: each distinct
+warning is written once to `console.error`, regardless of `logLevel` or
+`logger`. This keeps urgent compatibility notices visible in browser developer
+tools without interrupting the connection or active subscriptions.
+
 The levels are cumulative:
 
 | Level | Includes |
 | --- | --- |
-| `silent` | Nothing; this is the default |
+| `silent` | No structured diagnostics; this is the default |
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
 | `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
