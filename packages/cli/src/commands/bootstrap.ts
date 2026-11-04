@@ -806,7 +806,12 @@ const runDeployStep = async (
 		cwd: targetDir,
 		contextFile: input.auth.contextFile,
 	});
-	const deployCommand = `${getCliName()} deploy --env ${relative(targetDir, envFile)}`;
+	const envFileName = relative(targetDir, envFile);
+	const deployWithEnv = `${getCliName()} deploy --env ${envFileName}`;
+	// Link's env pull can fail and leave no env file; `neon deploy --env` refuses a missing one.
+	const deployCommand = existsSync(envFile)
+		? deployWithEnv
+		: `${getCliName()} deploy`;
 	// Loaded only here: it pulls in `config apply` and the neon.ts loader.
 	const { deployInitProject, missingDeployEnv } = await import(
 		"../init/deploy.js"
@@ -821,7 +826,7 @@ const runDeployStep = async (
 		if (missing.length > 0) {
 			return {
 				deployed: false,
-				deployNext: `Set ${missing.join(", ")} in ${relative(targetDir, envFile)}, then run \`${deployCommand}\``,
+				deployNext: `Set ${missing.join(", ")} in ${envFileName}, then run \`${deployWithEnv}\``,
 			};
 		}
 		if (

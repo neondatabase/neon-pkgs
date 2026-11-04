@@ -787,20 +787,32 @@ describe("bootstrap", () => {
 			npm_config_fund: "false",
 		};
 
-		// Runs `bootstrap -y` in process on the bot template. `link` writes the dotenv file
-		// the way its env pull does, with `envLocal` as its content.
+		// Runs `bootstrap -y` in process on the bot template. `link` pins a project and, unless
+		// `envLocal` is omitted, writes the dotenv file the way its env pull does.
 		const bootstrapBot = async (options: {
 			deploy?: boolean;
-			envLocal: string;
+			envLocal?: string;
+			realDeploy?: boolean;
+			/** `BOT_TOKEN` exported in the shell. */
+			botToken?: string;
 		}) => {
 			const base = `http://localhost:${(server.address() as AddressInfo).port}`;
-			const saved = { ...process.env };
-			Object.assign(process.env, {
+			const overrides: Record<string, string | undefined> = {
 				NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
 				CI: "true",
+				BOT_TOKEN: options.botToken,
 				...NPM_OFFLINE,
-			});
-			delete process.env.BOT_TOKEN;
+			};
+			const saved = Object.fromEntries(
+				Object.keys(overrides).map((key) => [key, process.env[key]]),
+			);
+			const setEnv = (values: Record<string, string | undefined>) => {
+				for (const [key, value] of Object.entries(values)) {
+					if (value === undefined) delete process.env[key];
+					else process.env[key] = value;
+				}
+			};
+			setEnv(overrides);
 			const deployed: Record<string, unknown>[] = [];
 			const { handler } = await import("./bootstrap.js");
 			try {
@@ -825,23 +837,39 @@ describe("bootstrap", () => {
 					selectedTemplate: BOT_TEMPLATE,
 					linkProject: async () => {
 						writeFileSync(
-							join(dest, ".env.local"),
-							options.envLocal,
+							join(dest, ".neon"),
+							JSON.stringify({
+								projectId: "p-bot",
+								branch: "main",
+							}),
 						);
+						if (options.envLocal !== undefined) {
+							writeFileSync(
+								join(dest, ".env.local"),
+								options.envLocal,
+							);
+						}
 					},
-					deployProject: async (deployOptions) => {
-						deployed.push({ ...deployOptions });
-					},
+					...(options.realDeploy
+						? {}
+						: {
+								deployProject: async (
+									deployOptions: Record<string, unknown>,
+								) => {
+									deployed.push({ ...deployOptions });
+								},
+							}),
 				});
 				return { result, deployed };
 			} finally {
-				process.env = saved;
+				setEnv(saved);
 			}
 		};
 
 		test("-y names the unset env vars instead of deploying", async () => {
+			delete process.env.BOT_LEAK_CHECK;
 			const { result, deployed } = await bootstrapBot({
-				envLocal: "DATABASE_URL=postgres://x\n",
+				envLocal: "BOT_LEAK_CHECK=from-env-file\n",
 			});
 			expect(deployed).toEqual([]);
 			expect(result?.deployed).toBe(false);
@@ -849,7 +877,7 @@ describe("bootstrap", () => {
 				"Set BOT_TOKEN in .env.local, then run `neon deploy --env .env.local`",
 			);
 			// The check loads .env.local without leaving it in the environment.
-			expect(process.env.DATABASE_URL).not.toBe("postgres://x");
+			expect(process.env.BOT_LEAK_CHECK).toBeUndefined();
 		}, 30_000);
 
 		test("-y suggests the deploy once every env var is set", async () => {
@@ -858,6 +886,11 @@ describe("bootstrap", () => {
 			});
 			expect(deployed).toEqual([]);
 			expect(result?.deployNext).toBe("neon deploy --env .env.local");
+		}, 30_000);
+
+		test("-y suggests a bare deploy when link left no env file", async () => {
+			const { result } = await bootstrapBot({ botToken: "exported" });
+			expect(result?.deployNext).toBe("neon deploy");
 		}, 30_000);
 
 		test("--deploy deploys with the pulled env file, even with env unset", async () => {
@@ -873,6 +906,18 @@ describe("bootstrap", () => {
 					contextFile: join(dest, ".neon"),
 				}),
 			]);
+		}, 30_000);
+
+		test("--deploy fails with neon deploy's error when an env var is unset", async () => {
+			await expect(
+				bootstrapBot({
+					deploy: true,
+					realDeploy: true,
+					envLocal: "DATABASE_URL=postgres://x\n",
+				}),
+			).rejects.toThrow(
+				'Environment variable "BOT_TOKEN" for function "bot" is undefined',
+			);
 		}, 30_000);
 
 		test("--deploy refuses --no-install and --no-link", async () => {
