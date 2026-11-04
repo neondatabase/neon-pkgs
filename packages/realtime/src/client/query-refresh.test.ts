@@ -5,7 +5,7 @@ import {
 } from "./diagnostics.js";
 import { QueryRefreshController } from "./query-refresh.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
-import type { RawLiveQuerySubscription } from "./types.js";
+import type { LiveQueryState, RawLiveQuerySubscription } from "./types.js";
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -267,12 +267,119 @@ describe("QueryRefreshController", () => {
 		expect(events).toContain("query_refresh_stopped");
 		controller.stop();
 	});
+
+	it.each([
+		"error",
+		"closed",
+	] as const)("does not refresh a subscription that is %s", async (status) => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 20));
+		const renewSubscription = vi.fn(async () => undefined);
+		const subscription = statefulSubscription({ status: "live" });
+		const controller = new QueryRefreshController({
+			query: query(20),
+			refreshQuery,
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+		});
+		// Integrations that subscribe after constructing the controller, such
+		// as the React store, associate the subscription afterwards.
+		controller.setSubscription(subscription);
+
+		controller.start();
+		subscription.setState(endedState(status));
+		await vi.advanceTimersByTimeAsync(60_000);
+
+		expect(refreshQuery).not.toHaveBeenCalled();
+		expect(renewSubscription).not.toHaveBeenCalled();
+		controller.stop();
+	});
+
+	it("stops retrying when the subscription fails during renewal", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 60));
+		const subscription = statefulSubscription({ status: "live" });
+		// A failed subscription rejects renewal, as the client does for a
+		// subscription whose wire state has failed.
+		const renewSubscription = vi.fn(async () => {
+			subscription.setState(endedState("error"));
+			throw new Error("Realtime connection cannot recover");
+		});
+		const onRefreshExhausted = vi.fn();
+		const controller = new QueryRefreshController({
+			query: query(20),
+			refreshQuery,
+			renewSubscription,
+			onRefreshExhausted,
+			subscription,
+		});
+
+		controller.start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(120_000);
+
+		expect(refreshQuery).toHaveBeenCalledOnce();
+		expect(renewSubscription).toHaveBeenCalledOnce();
+		expect(onRefreshExhausted).not.toHaveBeenCalled();
+		controller.stop();
+	});
+
+	it("keeps retrying renewal while the subscription can recover", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const refreshQuery = vi.fn(async () => query(Date.now() / 1_000 + 60));
+		const renewSubscription = vi.fn(async () => {
+			throw new Error("transport unavailable");
+		});
+		const controller = new QueryRefreshController({
+			query: query(20),
+			refreshQuery,
+			renewSubscription,
+			onRefreshExhausted: vi.fn(),
+			subscription: statefulSubscription({ status: "connecting" }),
+		});
+
+		controller.start();
+		await vi.advanceTimersByTimeAsync(13_000);
+
+		expect(refreshQuery).toHaveBeenCalledTimes(4);
+		controller.stop();
+	});
 });
+
+function statefulSubscription(state: {
+	readonly status: "connecting" | "live";
+}): RawLiveQuerySubscription<unknown> & {
+	setState(next: LiveQueryState): void;
+} {
+	let current: LiveQueryState = { ...state, error: undefined };
+	return Object.assign({} as RawLiveQuerySubscription<unknown>, {
+		getState: () => current,
+		setState: (next: LiveQueryState) => {
+			current = next;
+		},
+	});
+}
+
+function endedState(status: "error" | "closed"): LiveQueryState {
+	return status === "error"
+		? {
+				status,
+				error: Object.assign(new Error("Live query failed"), {
+					code: "connection_lost",
+					retryable: false,
+				}),
+			}
+		: { status, error: undefined };
+}
 
 function loggedSubscription(
 	events: string[],
 ): RawLiveQuerySubscription<unknown> {
-	const subscription = {} as RawLiveQuerySubscription<unknown>;
+	const subscription = statefulSubscription({ status: "live" });
 	const clientEvents = createClientEventSink({
 		logLevel: "debug",
 		logger: (entry) => events.push(entry.event),
