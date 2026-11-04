@@ -67,13 +67,18 @@ describe("generated operation coverage", () => {
 		}
 	});
 
-	test("published catalog marks public-capable bucket creation open-world", () => {
+	test("published catalog marks tools that reach outside the account open-world", () => {
+		const openWorld = new Set([
+			"storage.buckets.create",
+			"organizations.invitations.create",
+			"organizations.spendingLimit.set",
+		]);
 		for (const id of toolIds) {
 			expect(
 				createNeonTool(id, { apiKey: "test-key" }).annotations
 					.openWorldHint,
 				id,
-			).toBe(id === "storage.buckets.create");
+			).toBe(openWorld.has(id));
 		}
 	});
 

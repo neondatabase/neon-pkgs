@@ -1687,6 +1687,154 @@ export const toolFactories = {
 			run: (neon, input, signal) =>
 				neon.apiKeys.revoke({ keyId: input.key_id }, { signal }),
 		}),
+	"organizations.get": (options) =>
+		fromGenerated(options, {
+			id: "organizations.get",
+			generated: "getOrganization",
+			run: (neon, input, signal) =>
+				neon.organizations.get({ orgId: input.org_id }, { signal }),
+		}),
+	"organizations.members.list": (options) =>
+		fromGenerated(options, {
+			id: "organizations.members.list",
+			generated: "getOrganizationMembers",
+			omit: ["cursor"],
+			list: true,
+			run: (neon, input, signal) =>
+				collectPages(
+					neon.organizations.members.list(
+						{
+							orgId: input.org_id,
+							sort_by: input.sort_by,
+							sort_order: input.sort_order,
+							limit: input.limit,
+						},
+						{ signal },
+					),
+					input.limit,
+				),
+		}),
+	"organizations.members.get": (options) =>
+		fromGenerated(options, {
+			id: "organizations.members.get",
+			generated: "getOrganizationMember",
+			run: (neon, input, signal) =>
+				neon.organizations.members.get(
+					{ orgId: input.org_id, memberId: input.member_id },
+					{ signal },
+				),
+		}),
+	"organizations.members.update": (options) =>
+		fromGenerated(options, {
+			id: "organizations.members.update",
+			generated: "updateOrganizationMember",
+			run: (neon, input, signal) =>
+				neon.organizations.members.update(
+					{
+						orgId: input.org_id,
+						memberId: input.member_id,
+						role: input.role,
+					},
+					{ signal },
+				),
+		}),
+	"organizations.members.remove": (options) =>
+		fromGenerated(options, {
+			id: "organizations.members.remove",
+			generated: "removeOrganizationMember",
+			run: (neon, input, signal) =>
+				neon.organizations.members.remove(
+					{ orgId: input.org_id, memberId: input.member_id },
+					{ signal },
+				),
+		}),
+	"organizations.invitations.list": (options) =>
+		fromGenerated(options, {
+			id: "organizations.invitations.list",
+			generated: "getOrganizationInvitations",
+			run: (neon, input, signal) =>
+				neon.organizations.invitations.list(
+					{ orgId: input.org_id },
+					{ signal },
+				),
+		}),
+	"organizations.invitations.create": (options) =>
+		fromGenerated(options, {
+			id: "organizations.invitations.create",
+			generated: "createOrganizationInvitations",
+			run: (neon, input, signal) =>
+				neon.organizations.invitations.create(
+					{ orgId: input.org_id, invitations: input.invitations },
+					{ signal },
+				),
+		}),
+	"organizations.spendingLimit.get": (options) =>
+		fromGenerated(options, {
+			id: "organizations.spendingLimit.get",
+			generated: "getOrganizationSpendingLimit",
+			run: (neon, input, signal) =>
+				neon.organizations.spendingLimit.get(
+					{ orgId: input.org_id },
+					{ signal },
+				),
+		}),
+	"organizations.spendingLimit.set": (options) =>
+		fromGenerated(options, {
+			id: "organizations.spendingLimit.set",
+			generated: "setOrganizationSpendingLimit",
+			run: (neon, input, signal) =>
+				neon.organizations.spendingLimit.set(
+					{
+						orgId: input.org_id,
+						spendingLimitCents: input.spending_limit_cents,
+					},
+					{ signal },
+				),
+		}),
+	"organizations.spendingLimit.delete": (options) =>
+		fromGenerated(options, {
+			id: "organizations.spendingLimit.delete",
+			generated: "deleteOrganizationSpendingLimit",
+			run: (neon, input, signal) =>
+				neon.organizations.spendingLimit.delete(
+					{ orgId: input.org_id },
+					{ signal },
+				),
+		}),
+	"organizations.apiKeys.list": (options) =>
+		fromGenerated(options, {
+			id: "organizations.apiKeys.list",
+			generated: "listOrgApiKeys",
+			run: (neon, input, signal) =>
+				neon.organizations.apiKeys.list(
+					{ orgId: input.org_id },
+					{ signal },
+				),
+		}),
+	"organizations.apiKeys.create": (options) =>
+		fromGenerated(options, {
+			id: "organizations.apiKeys.create",
+			generated: "createOrgApiKey",
+			run: (neon, input, signal) =>
+				neon.organizations.apiKeys.create(
+					{
+						orgId: input.org_id,
+						keyName: input.key_name,
+						projectId: input.project_id,
+					},
+					{ signal },
+				),
+		}),
+	"organizations.apiKeys.revoke": (options) =>
+		fromGenerated(options, {
+			id: "organizations.apiKeys.revoke",
+			generated: "revokeOrgApiKey",
+			run: (neon, input, signal) =>
+				neon.organizations.apiKeys.revoke(
+					{ orgId: input.org_id, keyId: input.key_id },
+					{ signal },
+				),
+		}),
 	"regions.list": (options) =>
 		bindTool(
 			options,

@@ -75,6 +75,16 @@ describe.sequential("e2e — @neon/effect against the real API", () => {
 		expect(count).toBeGreaterThanOrEqual(1);
 	});
 
+	e2eTest("streams organization members", async () => {
+		const members = await run(
+			make(config()).organizations.members.list().pipe(Stream.runCollect),
+		);
+		expect(members.length).toBeGreaterThan(0);
+		for (const { member } of members) {
+			expect(member.org_id).toBe(config().orgId);
+		}
+	});
+
 	e2eTest("maps real 404 and 401 responses to tagged errors", async () => {
 		const neon = make(config());
 
