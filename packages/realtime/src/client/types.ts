@@ -490,13 +490,16 @@ export interface RealtimeClientOptions {
 	 */
 	readonly parsers?: PostgreSQLParsers;
 	/**
-	 * Minimum client diagnostic level. The default, `silent`, emits nothing.
+	 * Minimum client diagnostic level. The default, `silent`, emits no
+	 * structured diagnostics. Server-issued client warnings are always written
+	 * to `console.error` independently of this setting.
 	 * When enabled without {@link logger}, entries are written to `console`.
 	 */
 	readonly logLevel?: RealtimeLogLevel;
 	/**
 	 * Structured diagnostic sink. It is called only for events enabled by
-	 * {@link logLevel}; exceptions from the sink are ignored.
+	 * {@link logLevel}; exceptions from the sink are ignored. Server-issued
+	 * client warnings do not use this sink.
 	 */
 	readonly logger?: RealtimeLogger;
 }

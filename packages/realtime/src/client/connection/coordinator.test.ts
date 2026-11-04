@@ -304,15 +304,18 @@ describe("ConnectionCoordinator", () => {
 		]);
 	});
 
-	it("isolates and deduplicates client warnings across reconnects", async () => {
+	it("reports client warnings outside diagnostics and deduplicates them across reconnects", async () => {
 		vi.useFakeTimers();
+		const logger = vi.fn();
 		const consoleError = vi
 			.spyOn(console, "error")
 			.mockImplementation(() => {
 				throw new Error("broken console");
 			});
 		const callbacks = target();
-		const coordinator = createCoordinator();
+		const coordinator = createCoordinator({
+			events: createClientEventSink({ logLevel: "silent", logger }),
+		});
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const first = admit();
 		first.receive({
@@ -338,6 +341,7 @@ describe("ConnectionCoordinator", () => {
 		});
 
 		expect(consoleError).toHaveBeenCalledOnce();
+		expect(logger).not.toHaveBeenCalled();
 		expect(second.readyState).toBe(FakeWebSocket.OPEN);
 		expect(callbacks.admitted).toHaveBeenCalledTimes(2);
 	});
