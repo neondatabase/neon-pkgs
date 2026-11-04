@@ -320,13 +320,6 @@ function unreadableBodyError(
 }
 
 /**
- * Translate a thrown `fetch` failure into a {@link NeonApiError}. A request
- * timeout uses `ECONNABORTED` (matching the old axios behaviour, and excluded
- * from `isNetworkError`'s connectivity codes so it's still reported as a
- * timeout). A connection failure keeps its real socket code (e.g.
- * `ECONNREFUSED`) so `isNetworkError` recognises it as a connectivity problem.
- */
-/**
  * Encode one segment of a path built outside the SDK. `encodeURIComponent` leaves `.` and
  * `..` intact, and URL parsing then resolves them as dot segments, so the request would go to
  * a different route.
@@ -338,6 +331,13 @@ export function pathSegment(name: string, value: string): string {
 	return encodeURIComponent(value);
 }
 
+/**
+ * Translate a thrown `fetch` failure into a {@link NeonApiError}. A request
+ * timeout uses `ECONNABORTED` (matching the old axios behaviour, and excluded
+ * from `isNetworkError`'s connectivity codes so it's still reported as a
+ * timeout). A connection failure keeps its real socket code (e.g.
+ * `ECONNREFUSED`) so `isNetworkError` recognises it as a connectivity problem.
+ */
 function networkError(err: unknown): NeonApiError {
 	if (isAbortError(err)) {
 		return new NeonApiError("Request timed out", { code: "ECONNABORTED" });

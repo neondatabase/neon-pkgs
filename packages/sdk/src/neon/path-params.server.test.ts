@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createClient as createGeneratedClient } from "../client/client/index.js";
 import {
 	createClient,
 	createConfig,
@@ -72,8 +73,8 @@ describe("dot-segment path parameters", () => {
 		expect(received).toEqual([]);
 	});
 
-	it("rejects them in raw calls on a caller-built client", async () => {
-		const client = createClient(
+	it("rejects them in raw calls on a client without the validator", async () => {
+		const client = createGeneratedClient(
 			createConfig({ auth: () => "test", baseUrl }),
 		);
 		const res = await createOrgApiKey({
