@@ -57,6 +57,7 @@ import type {
 	HookEnv,
 	Hooks,
 	LoadConfigOptions,
+	LoadedConfig,
 	NeonApi,
 	NeonAuthSnapshot,
 	NeonBranchSnapshot,
@@ -207,6 +208,7 @@ describe("config type-export surface", () => {
 		expectTypeOf<RemoteServiceState>().not.toBeAny();
 		expectTypeOf<RemoteState>().not.toBeAny();
 		expectTypeOf<LoadConfigOptions>().not.toBeAny();
+		expectTypeOf<LoadedConfig>().not.toBeAny();
 	});
 });
 

@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
-	type Config,
 	ConfigLoadError,
 	type LoadConfigOptions,
+	type LoadedConfig,
 	loadConfigFromFile,
 } from "@neon/config";
 import { currentContextFile } from "./context.js";
@@ -54,7 +54,7 @@ export const projectConfigPath = (
 export const loadProjectConfig = async (
 	options: ProjectLocation &
 		Pick<LoadConfigOptions, "path" | "unsetFunctionEnv">,
-): Promise<{ config: Config; resolvedPath: string }> => {
+): Promise<LoadedConfig> => {
 	const { cwd, unsetFunctionEnv } = options;
 	const path = options.path ?? projectConfigPath(options);
 	if (path === undefined) {
