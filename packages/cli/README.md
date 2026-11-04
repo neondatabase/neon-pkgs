@@ -866,6 +866,8 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Linking uses `neon link -y`: the only organization and project are selected, or their IDs are printed and the command exits. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
+When the template has a `neon.ts` and its dependencies are installed and the project is linked, bootstrap checks the env vars its functions read against the env file link pulled into (`.env.local`). If all are set, a terminal asks `Deploy this project to Neon now?` and runs `neon deploy --env .env.local`; `--default` leaves that command under `Next:`. If some are unset, `Next:` names them. `--deploy` installs, links, and deploys without asking, and fails with `neon deploy`'s error when an env var is unset. It refuses `--no-install` and `--no-link`, and needs `--default` outside a terminal.
+
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
 ```bash
@@ -877,6 +879,9 @@ $ neon bootstrap . --template hono
 
 # Skip agent selection; install the plugin for those agents
 $ neon bootstrap my-app --agent cursor --agent claude-code
+
+# Scaffold, install, link, and deploy without prompting
+$ neon bootstrap my-app --template hono --default --deploy
 
 # List templates
 $ neon bootstrap --list-templates
@@ -1530,7 +1535,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
 | function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
-| [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
+| [operations](https://neon.com/docs/reference/cli-operations)               | `list`, `get`                                                                                                | Manage operations                  |
 | logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |

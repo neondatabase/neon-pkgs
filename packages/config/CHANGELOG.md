@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.11.0
+
+### Minor Changes
+
+- 3833f9f: `loadConfigFromFile` returns `omittedFunctionEnv`: the function env keys that `unsetFunctionEnv: "omit"` dropped because their value was undefined.
+
 ## 1.10.3
 
 ### Patch Changes
