@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 export default function (req, res) {
   expect(req.body).toHaveProperty('enabled');
   expect(req.body).toHaveProperty('require_email_verification');
+  expect(req.body).toHaveProperty('revoke_sessions_on_password_reset', true);
   res.send({
     enabled: req.body.enabled ?? true,
     email_verification_method: req.body.email_verification_method ?? 'link',
@@ -14,5 +15,7 @@ export default function (req, res) {
     send_verification_email_on_sign_in:
       req.body.send_verification_email_on_sign_in ?? false,
     disable_sign_up: req.body.disable_sign_up ?? false,
+    revoke_sessions_on_password_reset:
+      req.body.revoke_sessions_on_password_reset ?? false,
   });
 }
