@@ -31,6 +31,100 @@ describe("roles", () => {
 		]);
 	});
 
+	test("get", async ({ testCliCommand }) => {
+		const requests: string[] = [];
+		await testCliCommand(
+			[
+				"roles",
+				"get",
+				"test_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"br-sunny-branch-123456",
+			],
+			{
+				output: "table",
+				onRequest: (r) => requests.push(`${r.method} ${r.path}`),
+			},
+		);
+		expect(requests).toEqual([
+			"GET /projects/test/branches/br-sunny-branch-123456/roles/test_role",
+		]);
+	});
+
+	test("get on an unknown role exits 1", async ({ testCliCommand }) => {
+		await testCliCommand(
+			[
+				"roles",
+				"get",
+				"missing_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"br-sunny-branch-123456",
+			],
+			{ code: 1, snapshot: false, stderr: "ERROR: Not Found" },
+		);
+	});
+
+	test("reset-password waits for the operation and prints the new password", async ({
+		testCliCommand,
+	}) => {
+		const requests: string[] = [];
+		await testCliCommand(
+			[
+				"roles",
+				"reset-password",
+				"test_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"test_branch",
+			],
+			{
+				output: "table",
+				onRequest: (r) => requests.push(`${r.method} ${r.path}`),
+			},
+		);
+		expect(requests).toContain(
+			"POST /projects/test/branches/br-sunny-branch-123456/roles/test_role/reset_password",
+		);
+		expect(requests.at(-1)).toBe(
+			"GET /projects/test/operations/op-role-reset",
+		);
+	});
+
+	test("reset-password --no-wait does not poll", async ({
+		testCliCommand,
+	}) => {
+		const requests: string[] = [];
+		const { stdout } = await testCliCommand(
+			[
+				"roles",
+				"reset-password",
+				"test_role",
+				"--project-id",
+				"test",
+				"--branch",
+				"br-sunny-branch-123456",
+				"--no-wait",
+			],
+			{
+				output: "json",
+				snapshot: false,
+				onRequest: (r) => requests.push(`${r.method} ${r.path}`),
+			},
+		);
+		expect(requests).toEqual([
+			"POST /projects/test/branches/br-sunny-branch-123456/roles/test_role/reset_password",
+		]);
+		expect(JSON.parse(stdout)).toMatchObject({
+			name: "test_role",
+			password: "new_test_pwd",
+		});
+	});
+
 	test("delete", async ({ testCliCommand }) => {
 		await testCliCommand([
 			"roles",

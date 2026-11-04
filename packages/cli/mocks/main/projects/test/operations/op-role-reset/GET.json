@@ -1,0 +1,14 @@
+{
+  "operation": {
+    "id": "op-role-reset",
+    "project_id": "test",
+    "branch_id": "br-sunny-branch-123456",
+    "endpoint_id": "ep-cool-king-930914",
+    "action": "apply_config",
+    "status": "finished",
+    "failures_count": 0,
+    "created_at": "2026-11-04T19:00:00Z",
+    "updated_at": "2026-11-04T19:00:02Z",
+    "total_duration_ms": 2000
+  }
+}
