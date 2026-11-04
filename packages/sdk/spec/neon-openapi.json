@@ -17054,7 +17054,8 @@
                     "auto_sign_in_after_verification",
                     "send_verification_email_on_sign_up",
                     "send_verification_email_on_sign_in",
-                    "disable_sign_up"
+                    "disable_sign_up",
+                    "revoke_sessions_on_password_reset"
                 ],
                 "properties": {
                     "enabled": {
@@ -17084,6 +17085,10 @@
                     "disable_sign_up": {
                         "type": "boolean",
                         "description": "Whether to disable new user sign ups"
+                    },
+                    "revoke_sessions_on_password_reset": {
+                        "type": "boolean",
+                        "description": "Whether all of a user's sessions are revoked when their password is reset"
                     }
                 }
             },
@@ -17117,6 +17122,10 @@
                     "disable_sign_up": {
                         "type": "boolean",
                         "description": "Whether to disable new user sign ups. When omitted, the current setting is not changed."
+                    },
+                    "revoke_sessions_on_password_reset": {
+                        "type": "boolean",
+                        "description": "Whether all of a user's sessions are revoked when their password is reset. When omitted, the current setting is not changed."
                     }
                 }
             },
