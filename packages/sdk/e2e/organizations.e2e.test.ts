@@ -3,16 +3,10 @@ import { describe, expect, it } from "vitest";
 import { expectOk, makeClient } from "./helpers.js";
 
 /**
- * A cap no test org reaches, so setting it cannot fire the over-limit notification. A
- * concurrent run that reads it as the "previous" limit treats it as unset, so overlapping
- * runs still leave the org without a limit.
- */
-const SENTINEL_LIMIT_CENTS = 100_000_000;
-
-/**
- * Member role changes, member removal, and invitations are covered by the unit suite
- * only: the test org's one member is a real admin, and an invitation emails a real
- * address and cannot be withdrawn through the API.
+ * Member role changes, member removal, invitations, and setting a spending limit are
+ * covered by the unit suite only: the test org's one member is a real admin, an
+ * invitation emails a real address and cannot be withdrawn through the API, and runs
+ * from different pull requests share the org, so a set-and-restore can interleave.
  */
 describe.sequential("e2e — @neon/sdk organizations against the real API", () => {
 	it("reads the organization, its members, and its invitations", async () => {
@@ -80,34 +74,21 @@ describe.sequential("e2e — @neon/sdk organizations against the real API", () =
 		expect(after.map((key) => key.id)).not.toContain(created.id);
 	});
 
-	it("sets the spending limit and restores the previous one", async () => {
+	it("reaches the spending limit endpoints without changing the limit", async () => {
 		const neon = makeClient();
 
-		const read = expectOk(await neon.organizations.spendingLimit.get());
-		const previous =
-			read.spending_limit_cents === SENTINEL_LIMIT_CENTS
-				? null
-				: read.spending_limit_cents;
-		try {
-			const set = expectOk(
-				await neon.organizations.spendingLimit.set({
-					spendingLimitCents: SENTINEL_LIMIT_CENTS,
-				}),
-			);
-			expect(set.spending_limit_cents).toBe(SENTINEL_LIMIT_CENTS);
-		} finally {
-			if (previous === null) {
-				expectOk(await neon.organizations.spendingLimit.delete());
-			} else {
-				expectOk(
-					await neon.organizations.spendingLimit.set({
-						spendingLimitCents: previous,
-					}),
-				);
-			}
-		}
+		const { spending_limit_cents: current } = expectOk(
+			await neon.organizations.spendingLimit.get(),
+		);
+		expect(current === null || Number.isInteger(current)).toBe(true);
 
-		const restored = expectOk(await neon.organizations.spendingLimit.get());
-		expect(restored.spending_limit_cents).toBe(previous);
+		const { error } = await neon.organizations.spendingLimit.set({
+			spendingLimitCents: 0,
+		});
+		expect(error?.message).toContain("spending_limit_cents");
+
+		if (current === null) {
+			expectOk(await neon.organizations.spendingLimit.delete());
+		}
 	});
 });
