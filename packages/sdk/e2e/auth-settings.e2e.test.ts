@@ -19,11 +19,12 @@ import { expectOk, makeClient } from "./helpers.js";
  */
 describe.sequential("e2e — @neon/sdk Neon Auth branch settings", () => {
 	let neon: NeonClient<false>;
+	let projectId: string;
 	let ids: { projectId: string; branchId: string };
 
 	beforeAll(async () => {
 		neon = makeClient();
-		const projectId = await createProject({
+		projectId = await createProject({
 			name: uniqueProjectName("sdk-auth-settings"),
 		});
 		const main = expectOk(await neon.branches.getDefault({ projectId }));
@@ -32,7 +33,7 @@ describe.sequential("e2e — @neon/sdk Neon Auth branch settings", () => {
 	});
 
 	afterAll(async () => {
-		if (ids?.projectId) await deleteProject(ids.projectId);
+		if (projectId) await deleteProject(projectId);
 	});
 
 	it("allowLocalhost round-trips", async () => {
