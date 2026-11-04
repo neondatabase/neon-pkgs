@@ -613,7 +613,11 @@ describe("RealtimeClient", () => {
 		baselineSync(socket, "before");
 
 		expect(socket.protocols).toBe("neon.realtime.v2");
-		expect(socket.sent[0]).toMatchObject({ type: "subscribe" });
+		expect(socket.sent).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ type: "subscribe" }),
+			]),
+		);
 		expect(subscription.getSnapshot()).toEqual({
 			status: "live",
 			error: undefined,

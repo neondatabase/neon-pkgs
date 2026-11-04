@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import protocolSchema from "../../../../schema/realtime-protocol.schema.json";
 import capabilitySchema from "../../../../schema/realtime-query-capability.schema.json";
-import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v1.fixtures.json";
+import capabilityFixtures from "../../../server/capability/schema/realtime-query-capability-v2.fixtures.json";
 import orderedFixtures from "./ordered-changes.fixtures.json";
 import protocolFixtures from "./realtime-protocol.fixtures.json";
 
@@ -27,6 +27,67 @@ describe("Realtime protocol contracts", () => {
 			...orderedFixtures.invalid,
 		]) {
 			expect(validate(fixture), JSON.stringify(fixture)).toBe(false);
+		}
+	});
+
+	it("keeps bounded client metadata extensible", () => {
+		const validate = validator(protocolSchema);
+		expect(
+			validate({
+				type: "client_info",
+				metadata: JSON.stringify({
+					sdk: "javascript",
+					release_line: "0.2",
+					future_field: { value: true },
+				}),
+			}),
+			JSON.stringify(validate.errors),
+		).toBe(true);
+
+		for (const metadata of ["", "x".repeat(4097), {}]) {
+			expect(validate({ type: "client_info", metadata })).toBe(false);
+		}
+	});
+
+	it("accepts bounded canonical future capability release lines", () => {
+		const validateCapability = validator(capabilitySchema);
+		const capability = capabilityFixtures.valid[0];
+
+		for (const releaseLine of ["1", "42.7"]) {
+			expect(
+				validateCapability({
+					...capability,
+					claims: {
+						...capability.claims,
+						issuer: {
+							...capability.claims.issuer,
+							release_line: releaseLine,
+						},
+					},
+				}),
+				JSON.stringify(validateCapability.errors),
+			).toBe(true);
+		}
+
+		for (const releaseLine of [
+			"00.3",
+			"0.03",
+			"0.3.0",
+			"12345678901234567",
+		]) {
+			expect(
+				validateCapability({
+					...capability,
+					claims: {
+						...capability.claims,
+						issuer: {
+							...capability.claims.issuer,
+							release_line: releaseLine,
+						},
+					},
+				}),
+				releaseLine,
+			).toBe(false);
 		}
 	});
 

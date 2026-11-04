@@ -25,6 +25,7 @@ interface KyselySelectQuery {
  */
 export function kyselyAdapter(): RealtimeAdapter<KyselySelectQuery> {
 	return Object.freeze({
+		querySource: "kysely",
 		prepare(query: KyselySelectQuery): PreparedLiveQuery {
 			const queryNode = query.toOperationNode();
 			const compiled = new PostgresQueryCompiler().compileQuery(

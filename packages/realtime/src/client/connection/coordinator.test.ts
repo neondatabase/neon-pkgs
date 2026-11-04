@@ -21,7 +21,12 @@ class FakeWebSocket implements WebSocketLike {
 	static readonly CLOSED = 3;
 	static instances: FakeWebSocket[] = [];
 	readyState = FakeWebSocket.CONNECTING;
-	readonly sent: Record<string, unknown>[] = [];
+	readonly wireMessages: Record<string, unknown>[] = [];
+	get sent(): Record<string, unknown>[] {
+		return this.wireMessages.filter(
+			(message) => message.type !== "client_info",
+		);
+	}
 	readonly protocols: string | string[];
 	onSend?: (message: Record<string, unknown>) => void;
 	onClose?: () => void;
@@ -48,7 +53,7 @@ class FakeWebSocket implements WebSocketLike {
 
 	send(data: string): void {
 		const message = JSON.parse(data) as Record<string, unknown>;
-		this.sent.push(message);
+		this.wireMessages.push(message);
 		this.onSend?.(message);
 	}
 
@@ -258,7 +263,7 @@ describe("ConnectionCoordinator", () => {
 		expect(entries.map((entry) => entry.event)).toEqual(["query_expired"]);
 	});
 
-	it("negotiates neon.realtime.v2, waits for ready, and routes admission", () => {
+	it("negotiates v2 and identifies the client before subscribing", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
@@ -267,6 +272,17 @@ describe("ConnectionCoordinator", () => {
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
+		expect(socket.wireMessages).toEqual([
+			{
+				type: "client_info",
+				metadata: '{"sdk":"javascript","release_line":"0.2"}',
+			},
+			{
+				type: "subscribe",
+				request_id: "1",
+				authorization: "token",
+			},
+		]);
 		expect(socket.sent[0]).toEqual({
 			type: "subscribe",
 			request_id: "1",

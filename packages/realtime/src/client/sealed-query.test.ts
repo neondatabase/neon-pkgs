@@ -36,10 +36,14 @@ describe("sealed query row types", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("validates the ASCII protected header without TextDecoder", () => {
+	it.each([
+		1, 2,
+	])("validates capability v%s without TextDecoder", (version) => {
 		vi.stubGlobal("TextDecoder", undefined);
 
-		expect(() => validateSealedQuery(sealedQuery())).not.toThrow();
+		expect(() =>
+			validateSealedQuery(sealedQuery({}, version)),
+		).not.toThrow();
 	});
 
 	it("validates the protected header without atob", () => {
@@ -112,9 +116,15 @@ describe("sealed query row types", () => {
 
 function sealedQuery(
 	extraHeader: Record<string, unknown> = {},
+	version = 1,
 ): SealedLiveQuery<unknown> {
 	const header = Buffer.from(
-		JSON.stringify({ alg: "dir", enc: "A256GCM", v: 1, ...extraHeader }),
+		JSON.stringify({
+			alg: "dir",
+			enc: "A256GCM",
+			v: version,
+			...extraHeader,
+		}),
 	).toString("base64url");
 	return {
 		capability: `${header}..iv.ciphertext.tag`,

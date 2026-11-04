@@ -62,6 +62,7 @@ describe("Kysely query adapter", () => {
 		>();
 		expect(JSON.stringify(sealedQuery)).not.toContain(channelId);
 		const prepared = kyselyAdapter().prepare(query);
+		expect(kyselyAdapter().querySource).toBe("kysely");
 		expect(prepared.sql).toBe(
 			'select "id", "body", "note", "sent_at" from "messages" where "channel_id" = $1',
 		);
