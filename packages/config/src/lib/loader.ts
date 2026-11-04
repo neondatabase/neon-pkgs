@@ -55,10 +55,7 @@ export interface LoadConfigOptions {
  */
 export async function loadConfigFromFile(
 	options: LoadConfigOptions = {},
-): Promise<{
-	config: Config;
-	resolvedPath: string;
-}> {
+): Promise<LoadedConfig> {
 	// The omit reload replaces process.env, which is process-global, including
 	// across duplicate @neon/config copies. Queue loads on globalThis.
 	return await withSerializedConfigLoad(() =>
@@ -66,26 +63,38 @@ export async function loadConfigFromFile(
 	);
 }
 
-async function loadConfigFromFileUnlocked(options: LoadConfigOptions): Promise<{
+export interface LoadedConfig {
 	config: Config;
 	resolvedPath: string;
-}> {
+	/**
+	 * Function env keys whose value was undefined and that `unsetFunctionEnv: "omit"`
+	 * dropped, deduplicated across functions. Always empty in `"error"` mode, which
+	 * throws instead.
+	 */
+	omittedFunctionEnv: string[];
+}
+
+async function loadConfigFromFileUnlocked(
+	options: LoadConfigOptions,
+): Promise<LoadedConfig> {
 	if (options.unsetFunctionEnv !== "omit") {
-		return await loadConfigOnce(options);
+		return { ...(await loadConfigOnce(options)), omittedFunctionEnv: [] };
 	}
 
 	try {
-		return await loadConfigOnce(options);
+		return { ...(await loadConfigOnce(options)), omittedFunctionEnv: [] };
 	} catch (err) {
 		const keys = unsetFunctionEnvKeys(err);
 		if (keys === null) throw err;
+		const omitted = new Set(keys);
 		// The user's neon.ts may resolve another @neon/config copy, so the reload
 		// input must satisfy its validation.
 		return await withPlaceholderFunctionEnv(async () => {
 			const loaded = await loadConfigOnce(options);
 			return {
 				...loaded,
-				config: withoutFunctionEnvKeys(loaded.config, new Set(keys)),
+				config: withoutFunctionEnvKeys(loaded.config, omitted),
+				omittedFunctionEnv: [...omitted],
 			};
 		});
 	}

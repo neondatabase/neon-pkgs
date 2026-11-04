@@ -14,6 +14,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { recordCredentialInputs } from "@neon-internals/cli-core/auth_selection";
 import express from "express";
 import { gzipSync } from "fflate";
 import { type IPty, spawn as spawnPty } from "node-pty";
@@ -21,6 +22,8 @@ import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import YAML from "yaml";
 import { takeCommandSuccessExtras } from "../analytics.js";
+import { clearAuthContext } from "../auth_context.js";
+import type { BootstrapTemplate } from "../init/bootstrap.js";
 import { AGENT_SETUP_MESSAGE } from "../init/copy.js";
 
 // A fixture file in the template repo: its POSIX `mode`/`type` decide whether it
@@ -60,6 +63,24 @@ const FIXTURE: Record<string, FixtureFile> = {
 		type: "file",
 		mode: 0o644,
 		content: "selected catalog template\n",
+	},
+	// A template whose function reads an env var the user has to set before deploying.
+	"with-bot/package.json": {
+		type: "file",
+		mode: 0o644,
+		content: '{\n  "name": "with-bot",\n  "private": true\n}\n',
+	},
+	"with-bot/neon.ts": {
+		type: "file",
+		mode: 0o644,
+		content: `export default {
+  preview: {
+    functions: {
+      bot: { name: "Bot", source: "./bot.ts", env: { BOT_TOKEN: process.env.BOT_TOKEN } },
+    },
+  },
+};
+`,
 	},
 };
 
@@ -745,5 +766,227 @@ describe("bootstrap", () => {
 			}
 		}
 		expect(takeCommandSuccessExtras()).toEqual({});
+	});
+
+	describe("deploy", () => {
+		const BOT_TEMPLATE: BootstrapTemplate = {
+			id: "bot",
+			title: "Bot",
+			description: "A bot on Neon Functions.",
+			requires: ["database"],
+			source: {
+				owner: "neondatabase",
+				repo: "examples",
+				ref: "main",
+				subdir: "with-bot",
+			},
+		};
+		// The fixture package.json has no dependencies, so npm installs offline.
+		const NPM_OFFLINE = {
+			npm_config_user_agent: "npm/11.0.0 node/v22.0.0",
+			npm_config_offline: "true",
+			npm_config_audit: "false",
+			npm_config_fund: "false",
+		};
+
+		// Runs `bootstrap -y` in process on the bot template. `link` pins a project and, unless
+		// `envLocal` is omitted, writes the dotenv file the way its env pull does.
+		const bootstrapBot = async (options: {
+			deploy?: boolean;
+			envLocal?: string;
+			realDeploy?: boolean;
+			/** `BOT_TOKEN` exported in the shell. */
+			botToken?: string;
+		}) => {
+			const base = `http://localhost:${(server.address() as AddressInfo).port}`;
+			const overrides: Record<string, string | undefined> = {
+				NEON_BOOTSTRAP_GITHUB_CODELOAD: base,
+				CI: "true",
+				BOT_TOKEN: options.botToken,
+				...NPM_OFFLINE,
+			};
+			const saved = Object.fromEntries(
+				Object.keys(overrides).map((key) => [key, process.env[key]]),
+			);
+			const setEnv = (values: Record<string, string | undefined>) => {
+				for (const [key, value] of Object.entries(values)) {
+					if (value === undefined) delete process.env[key];
+					else process.env[key] = value;
+				}
+			};
+			setEnv(overrides);
+			const deployed: Record<string, unknown>[] = [];
+			const { handler } = await import("./bootstrap.js");
+			try {
+				const result = await handler({
+					apiClient: {} as never,
+					apiKey: "test-key",
+					apiHost: "https://console.neon.tech/api/v2",
+					output: "table",
+					contextFile: join(dest, ".neon"),
+					directory: dest,
+					force: true,
+					listTemplates: false,
+					default: true,
+					install: true,
+					git: false,
+					link: true,
+					agentSetup: false,
+					analytics: false,
+					printBanner: false,
+					skipDoneSummary: true,
+					...(options.deploy ? { deploy: true } : {}),
+					selectedTemplate: BOT_TEMPLATE,
+					linkProject: async () => {
+						writeFileSync(
+							join(dest, ".neon"),
+							JSON.stringify({
+								projectId: "p-bot",
+								branch: "main",
+							}),
+						);
+						if (options.envLocal !== undefined) {
+							writeFileSync(
+								join(dest, ".env.local"),
+								options.envLocal,
+							);
+						}
+					},
+					...(options.realDeploy
+						? {}
+						: {
+								deployProject: async (
+									deployOptions: Record<string, unknown>,
+								) => {
+									deployed.push({ ...deployOptions });
+								},
+							}),
+				});
+				return { result, deployed };
+			} finally {
+				setEnv(saved);
+			}
+		};
+
+		test("-y names the unset env vars instead of deploying", async () => {
+			delete process.env.BOT_LEAK_CHECK;
+			const { result, deployed } = await bootstrapBot({
+				envLocal: "BOT_LEAK_CHECK=from-env-file\n",
+			});
+			expect(deployed).toEqual([]);
+			expect(result?.deployed).toBe(false);
+			expect(result?.deployNext).toBe(
+				"Set BOT_TOKEN in .env.local, then run `neon deploy --env .env.local`",
+			);
+			// The check loads .env.local without leaving it in the environment.
+			expect(process.env.BOT_LEAK_CHECK).toBeUndefined();
+		}, 30_000);
+
+		test("-y suggests the deploy once every env var is set", async () => {
+			const { result, deployed } = await bootstrapBot({
+				envLocal: "BOT_TOKEN=secret\n",
+			});
+			expect(deployed).toEqual([]);
+			expect(result?.deployNext).toBe("neon deploy --env .env.local");
+		}, 30_000);
+
+		test("-y suggests a bare deploy when link left no env file", async () => {
+			const { result } = await bootstrapBot({ botToken: "exported" });
+			expect(result?.deployNext).toBe("neon deploy");
+		}, 30_000);
+
+		test("--deploy deploys with the pulled env file, even with env unset", async () => {
+			const { result, deployed } = await bootstrapBot({
+				deploy: true,
+				envLocal: "DATABASE_URL=postgres://x\n",
+			});
+			expect(result?.deployed).toBe(true);
+			expect(deployed).toEqual([
+				expect.objectContaining({
+					cwd: dest,
+					envFile: join(dest, ".env.local"),
+					contextFile: join(dest, ".neon"),
+				}),
+			]);
+		}, 30_000);
+
+		test("--deploy fails with neon deploy's error when an env var is unset", async () => {
+			// The in-process deploy authenticates like `neon deploy --api-key test-key`.
+			recordCredentialInputs({
+				apiKeyFlag: "test-key",
+				apiKeyEnv: "",
+				profileEnv: "",
+				profileFlag: "",
+				configDir: join(dest, "config"),
+			});
+			try {
+				await expect(
+					bootstrapBot({
+						deploy: true,
+						realDeploy: true,
+						envLocal: "DATABASE_URL=postgres://x\n",
+					}),
+				).rejects.toThrow(
+					'Environment variable "BOT_TOKEN" for function "bot" is undefined',
+				);
+			} finally {
+				clearAuthContext();
+				recordCredentialInputs({
+					apiKeyFlag: "",
+					apiKeyEnv: "",
+					profileEnv: "",
+					profileFlag: "",
+					configDir: "",
+				});
+			}
+		}, 30_000);
+
+		test("--deploy refuses --no-install and --no-link", async () => {
+			for (const flag of ["--no-install", "--no-link"]) {
+				const { code, stderr } = await runBootstrap(server, [
+					dest,
+					"--template",
+					"hono",
+					"--default",
+					"--deploy",
+					flag,
+				]);
+				expect(code).toBe(1);
+				expect(stderr).toContain(
+					"--deploy needs installed dependencies and a linked project.",
+				);
+			}
+			expect(existsSync(join(dest, "package.json"))).toBe(false);
+		});
+
+		test("--deploy outside a terminal needs --default", async () => {
+			const { code, stderr } = await runBootstrap(server, [
+				dest,
+				"--template",
+				"hono",
+				"--deploy",
+			]);
+			expect(code).toBe(1);
+			expect(stderr).toContain(
+				"--deploy outside an interactive terminal needs --default (-y).",
+			);
+		});
+
+		test("--deploy refuses a template without neon.ts", async () => {
+			const { code, stderr } = await runBootstrap(server, [
+				dest,
+				"--template",
+				"hono",
+				"--default",
+				"--deploy",
+				"--force",
+				"--no-git",
+				"--no-agent-setup",
+			]);
+			expect(code).toBe(1);
+			expect(stderr).toContain(
+				'Template "hono" has no neon.ts, so there is nothing to deploy.',
+			);
+		});
 	});
 });
