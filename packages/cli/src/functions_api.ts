@@ -1,4 +1,4 @@
-import { ContentType } from "./api.js";
+import { ContentType, pathSegment } from "./api.js";
 import type { CommonProps } from "./types.js";
 
 export type DeploymentStatus = "pending" | "building" | "completed" | "failed";
@@ -33,7 +33,8 @@ export type NeonFunction = {
 type ApiClient = CommonProps["apiClient"];
 
 const functionsPath = (projectId: string, branchId: string) =>
-	`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(
+	`/projects/${pathSegment("project_id", projectId)}/branches/${pathSegment(
+		"branch_id",
 		branchId,
 	)}/functions`;
 
@@ -70,7 +71,7 @@ export const getFunction = async (
 	slug: string,
 ): Promise<NeonFunction> => {
 	const { data } = await apiClient.request<{ function: NeonFunction }>({
-		path: `${functionsPath(projectId, branchId)}/${encodeURIComponent(slug)}`,
+		path: `${functionsPath(projectId, branchId)}/${pathSegment("slug", slug)}`,
 		method: "GET",
 		secure: true,
 		format: "json",
@@ -85,7 +86,7 @@ export const deleteFunction = async (
 	slug: string,
 ): Promise<void> => {
 	await apiClient.request({
-		path: `${functionsPath(projectId, branchId)}/${encodeURIComponent(slug)}`,
+		path: `${functionsPath(projectId, branchId)}/${pathSegment("slug", slug)}`,
 		method: "DELETE",
 		secure: true,
 	});
@@ -116,7 +117,8 @@ export const createDeployment = async (
 	// The deploy POST returns an operation the CLI cannot poll; the body is
 	// ignored. We only need the request to succeed.
 	await apiClient.request({
-		path: `${functionsPath(projectId, branchId)}/${encodeURIComponent(
+		path: `${functionsPath(projectId, branchId)}/${pathSegment(
+			"slug",
 			slug,
 		)}/deployments`,
 		method: "POST",
