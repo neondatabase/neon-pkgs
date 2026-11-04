@@ -1,5 +1,12 @@
 # neon
 
+## 8.21.0
+
+### Minor Changes
+
+- f4359f2: Add `neon operations get <id>`, which prints one operation's action, status, error, failure count, retry time, and duration.
+- 37992e6: Add `neon postgres` (aliases `pg` and `lakebase`) with `computes`, `databases`, `roles`, `connection-string`, and `psql`. `neon postgres computes` lists, gets, updates, starts, suspends, restarts, and deletes computes, and waits for each change to be applied unless you pass `--no-wait`. The top-level `roles`, `databases`, `connection-string`, and `psql` commands are unchanged.
+
 ## 8.20.1
 
 ### Patch Changes
