@@ -1183,6 +1183,7 @@ All sub-commands honor the [global options](#global-options), including `--outpu
 ```bash
 neon postgres computes list                  # the .neon branch's computes, else every compute in the project
 neon postgres computes list --branch main
+neon postgres computes list --all-branches   # every compute in the project, even when .neon pins a branch
 neon postgres computes get ep-cool-king-123456
 neon postgres computes update ep-cool-king-123456 --cu 0.25-2 --suspend-timeout 600
 neon postgres computes suspend ep-cool-king-123456
@@ -1191,7 +1192,7 @@ neon postgres computes restart ep-cool-king-123456
 neon postgres computes delete ep-cool-king-123456
 ```
 
-`update`, `start`, `suspend`, `restart`, and `delete` wait until the change is applied, then print the compute as the API reports it. `--no-wait` returns as soon as the API accepts the request. `update` sends only the flags you pass and fails without one. To add a compute, use `neon branches add-compute`.
+`update`, `start`, `suspend`, `restart`, and `delete` wait until the change is applied. `update`, `start`, `suspend`, and `restart` then print the compute as the API reports it; `delete` prints a confirmation on stderr. `--no-wait` returns as soon as the API accepts the request. `update` sends only the flags you pass and fails without one. To add a compute, use `neon branches add-compute`.
 
 ## Database diagnostics (`inspect`)
 

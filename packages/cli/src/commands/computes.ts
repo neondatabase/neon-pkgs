@@ -76,6 +76,12 @@ export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 						describe: "Branch ID or name",
 						type: "string",
 					},
+					"all-branches": {
+						describe:
+							"List every compute in the project, ignoring --branch and the branch .neon pins",
+						type: "boolean",
+						default: false,
+					},
 				}),
 			(args) => list(args as any),
 		)
@@ -165,9 +171,11 @@ const writeCompute = (
 	});
 };
 
-export const list = async (props: ProjectScopeProps & { branch?: string }) => {
+export const list = async (
+	props: ProjectScopeProps & { branch?: string; allBranches: boolean },
+) => {
 	const { neon, fail } = await sdk(props);
-	if (props.branch === undefined) {
+	if (props.allBranches || props.branch === undefined) {
 		const computes = await neon.postgres.endpoints
 			.list({ projectId: props.projectId })
 			.catch((error: unknown) => {

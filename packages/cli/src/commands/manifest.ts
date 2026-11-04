@@ -17,8 +17,6 @@ export type CommandEntry = {
 	 * message. See `utils/staging.ts`.
 	 */
 	stagingOnly?: string;
-	/** Runs as typed but is left out of `neon --help`, for spellings kept for existing users. */
-	hidden?: boolean;
 };
 
 /**

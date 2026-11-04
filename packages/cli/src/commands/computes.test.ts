@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect } from "vitest";
 import type { RecordedRequest } from "../test_utils/fixtures";
 import { test } from "../test_utils/fixtures";
@@ -47,6 +50,41 @@ describe("postgres computes", () => {
 		);
 	});
 
+	test("list follows the branch .neon pins, and --all-branches lists the project", async ({
+		testCliCommand,
+	}) => {
+		const contextFile = join(
+			mkdtempSync(join(tmpdir(), "neon-computes-context-")),
+			".neon",
+		);
+		writeFileSync(
+			contextFile,
+			JSON.stringify({ projectId: "test", branch: "test_branch" }),
+		);
+		const linked = recorder();
+		await testCliCommand(
+			["postgres", "computes", "list", "--context-file", contextFile],
+			{ onRequest: linked.onRequest, snapshot: false },
+		);
+		expect(linked.calls()).toContain(
+			"GET /projects/test/branches/br-sunny-branch-123456/endpoints",
+		);
+
+		const all = recorder();
+		await testCliCommand(
+			[
+				"postgres",
+				"computes",
+				"list",
+				"--all-branches",
+				"--context-file",
+				contextFile,
+			],
+			{ onRequest: all.onRequest, snapshot: false },
+		);
+		expect(all.calls()).toEqual(["GET /projects/test/endpoints"]);
+	});
+
 	test("get", async ({ testCliCommand }) => {
 		await testCliCommand(
 			["postgres", "computes", "get", COMPUTE, "--project-id", "test"],
@@ -86,6 +124,32 @@ describe("postgres computes", () => {
 			{ onRequest: seen.onRequest, output: "table" },
 		);
 		expect(seen.calls()).toEqual([`POST ${COMPUTE_PATH}/start`]);
+	});
+
+	test("a failed operation exits 1 and skips the final read", async ({
+		testCliCommand,
+	}) => {
+		const seen = recorder();
+		await testCliCommand(
+			[
+				"postgres",
+				"computes",
+				"start",
+				"ep-compute-failing-123456",
+				"--project-id",
+				"test",
+			],
+			{
+				onRequest: seen.onRequest,
+				code: 1,
+				snapshot: false,
+				stderr: 'ERROR: Operation op-compute-fail (start_compute) ended with status "failed": compute failed to start.',
+			},
+		);
+		expect(seen.calls()).toEqual([
+			"POST /projects/test/endpoints/ep-compute-failing-123456/start",
+			"GET /projects/test/operations/op-compute-fail",
+		]);
 	});
 
 	test("suspend", async ({ testCliCommand }) => {
