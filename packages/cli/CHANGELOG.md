@@ -1,5 +1,13 @@
 # neon
 
+## 8.18.1
+
+### Patch Changes
+
+- Updated dependencies [9807763]
+  - @neon/config@1.10.2
+  - @neon/config-runtime@1.11.2
+
 ## 8.18.0
 
 ### Minor Changes
