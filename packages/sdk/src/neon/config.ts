@@ -1,8 +1,8 @@
-import { createClient, createConfig } from "../client/client/index.js";
+import { createConfig } from "../client/client/index.js";
 import type { ResolvedConfig } from "./context.js";
 import { resolveTimeoutMs } from "./deadline.js";
 import { NeonError } from "./errors.js";
-import { validatePathParams } from "./raw-wrap.js";
+import { createClient } from "./raw-wrap.js";
 import { resolveRetries } from "./retry.js";
 import type { WaitBudget } from "./wait.js";
 
@@ -82,12 +82,6 @@ export function resolveConfig(config: NeonConfig<boolean>): ResolvedConfig {
 			auth,
 			baseUrl: config.baseUrl ?? DEFAULT_BASE_URL,
 			...(config.fetch ? { fetch: config.fetch } : {}),
-			requestValidator: async (options) => {
-				if (typeof options !== "object" || options === null) return;
-				if (!("path" in options)) return;
-				const invalid = validatePathParams(options.path);
-				if (invalid) throw invalid;
-			},
 		}),
 	);
 

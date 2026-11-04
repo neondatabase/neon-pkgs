@@ -17,7 +17,6 @@ export {
 	type Client,
 	type Config,
 	type CreateClientConfig,
-	createClient,
 	createConfig,
 } from "./client/client/index.js";
 export { client } from "./client/client.gen.js";
@@ -27,6 +26,7 @@ export * from "./client/raw.gen.js";
 export type * from "./client/types.gen.js";
 // The wrapper primitive, for advanced users composing their own raw calls.
 export {
+	createClient,
 	type RawData,
 	type RawOptions,
 	type RawResult,

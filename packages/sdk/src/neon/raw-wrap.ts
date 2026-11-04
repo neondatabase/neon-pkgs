@@ -15,6 +15,11 @@
  */
 
 import {
+	type Client,
+	type Config,
+	createClient as createGeneratedClient,
+} from "../client/client/index.js";
+import {
 	NeonAbortError,
 	NeonClientError,
 	type NeonErrorUnion,
@@ -35,6 +40,29 @@ export function validatePathParams(path: unknown): NeonClientError | undefined {
 		}
 	}
 	return undefined;
+}
+
+/**
+ * The generated `createClient`, plus {@link validatePathParams} on every request made through
+ * the client, including direct calls such as `client.get({ url, path })`. A caller-supplied
+ * `requestValidator` runs after it.
+ */
+export function createClient(config: Config = {}): Client {
+	const callerValidator = config.requestValidator;
+	return createGeneratedClient({
+		...config,
+		requestValidator: async (options) => {
+			if (
+				typeof options === "object" &&
+				options !== null &&
+				"path" in options
+			) {
+				const invalid = validatePathParams(options.path);
+				if (invalid) throw invalid;
+			}
+			await callerValidator?.(options);
+		},
+	});
 }
 
 /**

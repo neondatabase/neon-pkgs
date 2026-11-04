@@ -93,6 +93,40 @@ describe("dot-segment path parameters", () => {
 		expect(received).toEqual([]);
 	});
 
+	it("rejects them in direct calls on a client from createClient", async () => {
+		const client = createClient(
+			createConfig({ auth: () => "test", baseUrl }),
+		);
+		const res = await client.get({
+			url: "/projects/{project_id}/branches/{branch_id}/endpoints",
+			path: { project_id: "p-1", branch_id: ".." },
+		});
+		expect(res.error).toBeInstanceOf(NeonClientError);
+		expect(received).toEqual([]);
+	});
+
+	it("still runs a caller-supplied requestValidator", async () => {
+		const validated: unknown[] = [];
+		const client = createClient(
+			createConfig({
+				auth: () => "test",
+				baseUrl,
+				requestValidator: async (options) => {
+					validated.push(options);
+				},
+			}),
+		);
+		const res = await deleteProjectBranchDatabase({
+			client,
+			path: { project_id: "p-1", branch_id: "br-1", database_name: "db" },
+		});
+		expect(res.error).toBeUndefined();
+		expect(validated).toHaveLength(1);
+		expect(received).toEqual([
+			"DELETE /api/v2/projects/p-1/branches/br-1/databases/db",
+		]);
+	});
+
 	it("sends values that only contain dots to the named route", async () => {
 		const neon = createNeonClient({ apiKey: "test", baseUrl, retries: 0 });
 		for (const databaseName of ["...", "a..b", ".env"]) {

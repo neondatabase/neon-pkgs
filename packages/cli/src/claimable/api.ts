@@ -1,3 +1,5 @@
+import { pathSegment } from "../api.js";
+
 const REQUEST_TIMEOUT_MS = 60_000;
 const JWT_BEARER_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
@@ -417,7 +419,7 @@ export class ClaimableClient {
 	): Promise<ClaimableCredentials> {
 		return parseCredentialsResponse(
 			await this.request(
-				`/v1/projects/${encodeURIComponent(projectId)}/credentials`,
+				`/v1/projects/${pathSegment("project_id", projectId)}/credentials`,
 				{ accessToken },
 			),
 		);
@@ -429,7 +431,7 @@ export class ClaimableClient {
 	): Promise<ClaimCode> {
 		return parseClaimCodeResponse(
 			await this.request(
-				`/v1/projects/${encodeURIComponent(projectId)}/claim`,
+				`/v1/projects/${pathSegment("project_id", projectId)}/claim`,
 				{ method: "POST", accessToken },
 			),
 		);
@@ -441,17 +443,20 @@ export class ClaimableClient {
 	): Promise<ClaimStatus> {
 		return parseClaimStatusResponse(
 			await this.request(
-				`/v1/projects/${encodeURIComponent(projectId)}/claim`,
+				`/v1/projects/${pathSegment("project_id", projectId)}/claim`,
 				{ accessToken },
 			),
 		);
 	}
 
 	async deleteProject(projectId: string, accessToken: string): Promise<void> {
-		await this.request(`/v1/projects/${encodeURIComponent(projectId)}`, {
-			method: "DELETE",
-			accessToken,
-		});
+		await this.request(
+			`/v1/projects/${pathSegment("project_id", projectId)}`,
+			{
+				method: "DELETE",
+				accessToken,
+			},
+		);
 	}
 
 	private async request(

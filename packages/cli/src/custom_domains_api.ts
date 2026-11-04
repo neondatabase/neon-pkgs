@@ -1,9 +1,11 @@
+import { pathSegment } from "./api.js";
 import type { CommonProps } from "./types.js";
 
 type ApiClient = CommonProps["apiClient"];
 
 const customDomainsPath = (projectId: string, branchId: string) =>
-	`/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(
+	`/projects/${pathSegment("project_id", projectId)}/branches/${pathSegment(
+		"branch_id",
 		branchId,
 	)}/custom-domains`;
 
@@ -64,7 +66,7 @@ export const deleteCustomDomain = async (
 	domain: string,
 ): Promise<void> => {
 	await apiClient.request({
-		path: `${customDomainsPath(projectId, branchId)}/${encodeURIComponent(domain)}`,
+		path: `${customDomainsPath(projectId, branchId)}/${pathSegment("domain", domain)}`,
 		method: "DELETE",
 		secure: true,
 	});
