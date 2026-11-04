@@ -1,5 +1,17 @@
 # neon
 
+## 8.20.0
+
+### Minor Changes
+
+- 3833f9f: `neon bootstrap` can deploy the template once it is installed and linked. In a terminal, it asks "Deploy this project to Neon now?" when every env var the template's `neon.ts` reads is set; otherwise the done summary names the vars to set before `neon deploy --env .env.local`. `--deploy` deploys without asking.
+
+### Patch Changes
+
+- Updated dependencies [3833f9f]
+  - @neon/config@1.11.0
+  - @neon/config-runtime@1.11.4
+
 ## 8.19.0
 
 ### Minor Changes
