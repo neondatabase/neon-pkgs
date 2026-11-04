@@ -1,5 +1,40 @@
 # @neon/realtime
 
+## 0.2.0
+
+### Minor Changes
+
+- 27f8fd0: Preserve server order in core materialized subscriptions and React, including
+  incremental row moves, without changing `subscribe()` or `useLiveQuery()` call
+  signatures. Validate ordered patches before installing materialized results, and
+  expose a baseline plus its queued updates as one materialized snapshot.
+
+  This is a breaking upgrade at the 0.2.0 compatibility boundary:
+
+  - Upgrade `@neon/realtime` and any official adapters used by the application
+    together to 0.2.0. The adapters now require core `^0.2.0`.
+  - Connections and reconnects now require `neon.realtime.v2`, with no v1 fallback.
+  - Custom raw consumers must handle the new `LiveQueryChange` variant
+    `{ type: "move", rowId: string, afterRowId: string | null }`. It moves an
+    existing row immediately after its predecessor, or to the head for `null`,
+    without a row payload. Apply contents first, then moves in received order;
+    stage and validate each complete batch before exposing the result.
+  - TanStack DB collections continue to synchronize membership and values as an
+    unordered keyed collection and ignore moves. Collection iteration does not
+    preserve server order, including for `ORDER BY`/`LIMIT` queries; use a TanStack
+    local query to establish order, or core/React to preserve the server sequence.
+
+- 83d1b99: Report the exact client version during connection setup and display non-terminal upgrade warnings from the Realtime proxy.
+
+### Patch Changes
+
+- 4a020a0: Decode Realtime rows with large bytea values. Values above about 3 MiB were rejected with a protocol error, because the base64 check ran as a regular expression that overflowed V8's call stack. The check now runs in linear time and accepts exactly the same canonical base64 as before, so rows up to the 4 MiB server limit decode.
+- 35b7679: Send bounded SDK release-line and query-source metadata for aggregate Realtime
+  usage metrics. Protocol v2 clients send one `client_info` message after `ready`
+  and before subscription commands; sealed capabilities use capability v2.
+  Official Drizzle and Kysely adapters identify their query source, while custom
+  adapters default to the fixed `custom` category.
+
 ## 0.1.2
 
 ### Patch Changes
