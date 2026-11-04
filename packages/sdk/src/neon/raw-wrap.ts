@@ -14,7 +14,28 @@
  * and headers without dropping to the low-level client.
  */
 
-import { NeonAbortError, type NeonErrorUnion, toNeonError } from "./errors.js";
+import {
+	NeonAbortError,
+	NeonClientError,
+	type NeonErrorUnion,
+	toNeonError,
+} from "./errors.js";
+
+/**
+ * `encodeURIComponent` leaves `.` and `..` intact, and URL parsing then resolves them as
+ * dot segments (`%2E%2E` too), so the request would go to a different route.
+ */
+export function validatePathParams(path: unknown): NeonClientError | undefined {
+	if (path === null || typeof path !== "object") return undefined;
+	for (const [name, value] of Object.entries(path)) {
+		if (value === "." || value === "..") {
+			return new NeonClientError(
+				`Path parameter ${name} cannot be "${value}".`,
+			);
+		}
+	}
+	return undefined;
+}
 
 /**
  * Did the caller's own signal end this call?
@@ -105,6 +126,11 @@ export function wrapRaw<F extends AnyRawFn>(fn: F & AnyRawFn) {
 		options: RawOptions<F> & { throwOnError?: boolean },
 	): Promise<RawData<F> | RawResult<RawData<F>>> {
 		const shouldThrow = options.throwOnError === true;
+		const invalid = validatePathParams(options.path);
+		if (invalid) {
+			if (shouldThrow) throw invalid;
+			return { data: undefined, error: invalid };
+		}
 		const raw: RawFieldsResult<RawData<F>> = await fn({
 			...options,
 			throwOnError: false,
