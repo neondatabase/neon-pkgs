@@ -9,6 +9,7 @@ import { normalizeExternalPackage } from "./external-packages.js";
 import {
 	branchTuningSchema,
 	configInputSchema,
+	configInputUnknownKeyHints,
 	formatZodIssues,
 } from "./schema.js";
 import type {
@@ -215,7 +216,9 @@ export function defineConfig<
 
 	const parsed = configInputSchema.safeParse(input);
 	if (!parsed.success) {
-		throw new ConfigValidationError(formatZodIssues(parsed.error));
+		throw new ConfigValidationError(
+			formatZodIssues(parsed.error, configInputUnknownKeyHints),
+		);
 	}
 
 	return Object.freeze({ ...input }) as Config<
