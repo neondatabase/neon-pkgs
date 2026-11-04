@@ -5694,6 +5694,7 @@ export const operationFactories = {
 	"send_verification_email_on_sign_up": zod.zUpdateNeonAuthEmailAndPasswordConfigBody.shape["send_verification_email_on_sign_up"],
 	"send_verification_email_on_sign_in": zod.zUpdateNeonAuthEmailAndPasswordConfigBody.shape["send_verification_email_on_sign_in"],
 	"disable_sign_up": zod.zUpdateNeonAuthEmailAndPasswordConfigBody.shape["disable_sign_up"],
+	"revoke_sessions_on_password_reset": zod.zUpdateNeonAuthEmailAndPasswordConfigBody.shape["revoke_sessions_on_password_reset"],
 }),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 				requiresApproval: true,
@@ -5707,7 +5708,7 @@ export const operationFactories = {
 				invoke: (client, input, signal) =>
 					raw.updateNeonAuthEmailAndPasswordConfig({
 			path: optionalGroup({ "project_id": input["project_id"], "branch_id": input["branch_id"] }, true),
-			body: optionalGroup({ "enabled": input["enabled"], "email_verification_method": input["email_verification_method"], "require_email_verification": input["require_email_verification"], "auto_sign_in_after_verification": input["auto_sign_in_after_verification"], "send_verification_email_on_sign_up": input["send_verification_email_on_sign_up"], "send_verification_email_on_sign_in": input["send_verification_email_on_sign_in"], "disable_sign_up": input["disable_sign_up"] }, true),
+			body: optionalGroup({ "enabled": input["enabled"], "email_verification_method": input["email_verification_method"], "require_email_verification": input["require_email_verification"], "auto_sign_in_after_verification": input["auto_sign_in_after_verification"], "send_verification_email_on_sign_up": input["send_verification_email_on_sign_up"], "send_verification_email_on_sign_in": input["send_verification_email_on_sign_in"], "disable_sign_up": input["disable_sign_up"], "revoke_sessions_on_password_reset": input["revoke_sessions_on_password_reset"] }, true),
 			client,
 			signal,
 			throwOnError: true,

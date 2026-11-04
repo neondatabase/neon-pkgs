@@ -1713,7 +1713,8 @@ export const zNeonAuthEmailAndPasswordConfig = z.strictObject({
     auto_sign_in_after_verification: z.boolean(),
     send_verification_email_on_sign_up: z.boolean(),
     send_verification_email_on_sign_in: z.boolean(),
-    disable_sign_up: z.boolean()
+    disable_sign_up: z.boolean(),
+    revoke_sessions_on_password_reset: z.boolean()
 });
 
 /**
@@ -1737,7 +1738,8 @@ export const zNeonAuthEmailAndPasswordConfigUpdate = z.strictObject({
     auto_sign_in_after_verification: z.boolean().optional(),
     send_verification_email_on_sign_up: z.boolean().optional(),
     send_verification_email_on_sign_in: z.boolean().optional(),
-    disable_sign_up: z.boolean().optional()
+    disable_sign_up: z.boolean().optional(),
+    revoke_sessions_on_password_reset: z.boolean().optional()
 });
 
 export const zNeonAuthIntegration = z.strictObject({
