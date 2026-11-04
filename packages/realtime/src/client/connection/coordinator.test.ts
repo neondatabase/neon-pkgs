@@ -258,12 +258,12 @@ describe("ConnectionCoordinator", () => {
 		expect(entries.map((entry) => entry.event)).toEqual(["query_expired"]);
 	});
 
-	it("negotiates neon.realtime.v1, waits for ready, and routes admission", () => {
+	it("negotiates neon.realtime.v2, waits for ready, and routes admission", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.realtime.v1");
+		expect(socket.protocols).toBe("neon.realtime.v2");
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
@@ -1387,8 +1387,7 @@ function target(): ConnectionCallbacks & {
 } {
 	const reconciliation: ReconciliationTarget = {
 		baselineSyncStarted: vi.fn(),
-		installReset: vi.fn(),
-		applyBatch: vi.fn(),
+		prepare: vi.fn(() => () => {}),
 		publishReset: vi.fn(),
 		publishBatch: vi.fn(),
 		applyProgress: vi.fn(),

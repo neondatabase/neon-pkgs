@@ -14,7 +14,7 @@ npm install @neon/realtime @neon/realtime-tanstack \
   @tanstack/db @standard-schema/spec
 ```
 
-> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.1, and TanStack DB 0.9.
+> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and TanStack DB 0.9.
 > All three supporting libraries are peer dependencies.
 
 ## Usage
@@ -55,6 +55,14 @@ or incremental change batch as one TanStack sync transaction. Realtime
 `live` maps to ready. Once ready, a collection retains its usable rows while a
 subscription is `connecting` or `stale`; terminal errors put the collection into
 its error state.
+
+This adapter represents an **unordered keyed collection**. It synchronizes
+membership and values and explicitly ignores move operations. TanStack's local
+queries can establish their own order; collection iteration does not preserve
+the server sequence, including for a query with `ORDER BY` or `LIMIT`. Use the
+core materialized API or React integration when server order is required.
+Upgrade core and this adapter together to 0.2.0 after deploying a server that
+accepts `neon.realtime.v2`.
 
 ## Optimistic mutations
 

@@ -300,12 +300,16 @@ const renderTableEvent = (
 	const rows = event.changes.map((change) => ({
 		type: change.type,
 		row_id: change.rowId,
+		after_row_id:
+			change.type === "move"
+				? (change.afterRowId ?? "(head)")
+				: undefined,
 		row: change.type === "upsert" ? change.row : undefined,
 	}));
 	renderRows(
 		out,
 		rows,
-		["type", "row_id", "row"],
+		["type", "row_id", "after_row_id", "row"],
 		`${timestamp(now)} ${transactionLabel(event.txids)} · ${rawChangeSummary(event.changes)}`,
 		"Changes event contains no row changes.",
 	);
@@ -345,7 +349,7 @@ const renderMaterializedRows = (
 };
 
 type ClassifiedChange = {
-	operation: "+ insert" | "~ update" | "- delete";
+	operation: "+ insert" | "~ update" | "- delete" | "↔ move";
 	row?: QueryRow;
 };
 
@@ -361,6 +365,7 @@ const renderHumanChanges = (
 	);
 	const updated = changes.filter((change) => change.operation === "~ update");
 	const deleted = changes.filter((change) => change.operation === "- delete");
+	const moved = changes.filter((change) => change.operation === "↔ move");
 	const rowFieldsInChanges = rowFields(
 		changes.flatMap((change) => (change.row ? [change.row] : [])),
 	);
@@ -373,7 +378,7 @@ const renderHumanChanges = (
 		out,
 		rows,
 		[operationField, ...rowFieldsInChanges],
-		`${timestamp(now)} ${transactionLabel(event.txids)} · +${inserted.length} ~${updated.length} -${deleted.length}`,
+		`${timestamp(now)} ${transactionLabel(event.txids)} · +${inserted.length} ~${updated.length} -${deleted.length}${moved.length ? ` ↔${moved.length}` : ""}`,
 		"Transaction contains no row changes.",
 	);
 };
@@ -396,17 +401,27 @@ const classifyChanges = (
 	changes: readonly LiveQueryChange<QueryRow>[],
 	rowsById: Map<string, QueryRow>,
 ): ClassifiedChange[] =>
-	changes.map((change) => {
-		if (change.type === "upsert") {
-			const operation = rowsById.has(change.rowId)
-				? "~ update"
-				: "+ insert";
-			rowsById.set(change.rowId, change.row);
-			return { operation, row: change.row };
+	changes.map((change): ClassifiedChange => {
+		switch (change.type) {
+			case "upsert": {
+				const operation = rowsById.has(change.rowId)
+					? "~ update"
+					: "+ insert";
+				rowsById.set(change.rowId, change.row);
+				return { operation, row: change.row };
+			}
+			case "remove": {
+				const row = rowsById.get(change.rowId);
+				rowsById.delete(change.rowId);
+				return { operation: "- delete", ...(row ? { row } : {}) };
+			}
+			case "move":
+				return { operation: "↔ move", row: rowsById.get(change.rowId) };
+			default: {
+				const exhaustive: never = change;
+				throw new Error(`Unsupported Realtime change: ${exhaustive}`);
+			}
 		}
-		const row = rowsById.get(change.rowId);
-		rowsById.delete(change.rowId);
-		return { operation: "- delete", ...(row ? { row } : {}) };
 	});
 
 const uniqueOperationField = (fields: readonly string[]): string => {
@@ -427,8 +442,11 @@ const rawChangeSummary = (
 	changes: readonly LiveQueryChange<QueryRow>[],
 ): string => {
 	const upserts = changes.filter((change) => change.type === "upsert").length;
-	const removals = changes.length - upserts;
-	return `${upserts} upsert${upserts === 1 ? "" : "s"}, ${removals} removal${removals === 1 ? "" : "s"}`;
+	const removals = changes.filter(
+		(change) => change.type === "remove",
+	).length;
+	const moves = changes.filter((change) => change.type === "move").length;
+	return `${upserts} upsert${upserts === 1 ? "" : "s"}, ${removals} removal${removals === 1 ? "" : "s"}${moves ? `, ${moves} move${moves === 1 ? "" : "s"}` : ""}`;
 };
 
 const rowCount = (count: number): string =>
