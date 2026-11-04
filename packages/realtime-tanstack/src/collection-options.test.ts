@@ -554,6 +554,94 @@ describe("Realtime TanStack DB collection", () => {
 		await expect(pending).rejects.toBe(failure);
 		await expect(collection.utils.awaitTxId("11")).rejects.toBe(failure);
 	});
+
+	it.each([
+		"after cleanup",
+		"on reload",
+	] as const)("subscribes with the newest renewed query %s", async (restart) => {
+		const client = new TestClient<MessageRow>();
+		const renewed = query("query-2");
+		const refreshQuery = vi.fn(async () => renewed);
+		const collection = createTestCollection(
+			client,
+			query("query-1", 9),
+			refreshQuery,
+		);
+		const preload = collection.preload();
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+		await preload;
+		await eventually(() =>
+			expect(client.latest().renewals).toEqual([renewed]),
+		);
+
+		let restarted: Promise<void>;
+		if (restart === "after cleanup") {
+			await collection.cleanup();
+			restarted = collection.preload();
+		} else {
+			restarted = collection.reload();
+		}
+
+		expect(client.subscriptions).toHaveLength(2);
+		expect(client.latest().query).toBe(renewed);
+		client.latest().reset([{ rowId: "a", row: { id: 1, title: "two" } }]);
+		await restarted;
+		expect(collection.get(1)).toMatchObject({ title: "two" });
+		expect(refreshQuery).toHaveBeenCalledOnce();
+	});
+
+	describe("awaitTxId before the collection starts syncing", () => {
+		it("waits for synchronization to start", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+
+			const confirmed = collection.utils.awaitTxId("42", 10_000);
+			expect(client.subscriptions).toHaveLength(0);
+			const preload = collection.preload();
+			client
+				.latest()
+				.reset([{ rowId: "a", row: { id: 1, title: "one" } }]);
+			await preload;
+			client.latest().batch(
+				[
+					{
+						type: "upsert",
+						rowId: "a",
+						row: { id: 1, title: "two" },
+					},
+				],
+				["42"],
+			);
+
+			await expect(confirmed).resolves.toBe(true);
+			const [awaited] = client.latest().awaitedTransactions;
+			expect(awaited?.txid).toBe("42");
+			expect(awaited?.timeout).toBeLessThanOrEqual(10_000);
+		});
+
+		it("times out within the supplied timeout", async () => {
+			const client = new TestClient<MessageRow>();
+			const collection = createTestCollection(client);
+
+			await expect(collection.utils.awaitTxId("9", 1)).rejects.toThrow(
+				"Timed out waiting for live-query transaction 9",
+			);
+			expect(client.subscriptions).toHaveLength(0);
+		});
+
+		it("rejects when synchronization fails as it starts", async () => {
+			const failure = liveError("ACCESS_DENIED");
+			const client = new TestClient<MessageRow>({
+				status: "error",
+				error: failure,
+			});
+			const collection = createTestCollection(client);
+			const pending = collection.utils.awaitTxId("12");
+
+			await expect(collection.preload()).rejects.toBe(failure);
+			await expect(pending).rejects.toBe(failure);
+		});
+	});
 });
 
 function createTestCollection(
@@ -660,7 +748,7 @@ class TestClient<Row extends object> implements RealtimeClient {
 		_options: RawLiveQueryOptions,
 	): RawLiveQuerySubscription<CurrentRow>;
 	subscribe<CurrentRow>(
-		_query: SealedLiveQuery<CurrentRow>,
+		query: SealedLiveQuery<CurrentRow>,
 		options?:
 			| MaterializedLiveQueryOptions<CurrentRow>
 			| RawLiveQueryOptions,
@@ -671,6 +759,7 @@ class TestClient<Row extends object> implements RealtimeClient {
 			throw new Error("Test client expects a raw subscription");
 		}
 		const subscription = new TestRawSubscription<CurrentRow>(
+			query,
 			this.initialState,
 		);
 		this.subscriptions.push(
@@ -712,7 +801,10 @@ class TestRawSubscription<Row> implements RawLiveQuerySubscription<Row> {
 	unsubscribed = false;
 	private currentState: LiveQueryState;
 
-	constructor(initialState: LiveQueryState) {
+	constructor(
+		readonly query: SealedLiveQuery<Row>,
+		initialState: LiveQueryState,
+	) {
 		this.currentState = initialState;
 	}
 

@@ -42,6 +42,11 @@ export const todos = createCollection(realtimeCollectionOptions({
 }));
 ```
 
+You don't need `RealtimeProvider` from `@neon/realtime-react`. Pass the client
+to `realtimeCollectionOptions()` and read the collection with TanStack DB, for
+example with `useLiveQuery` from `@tanstack/react-db`. `RealtimeProvider` and
+`useRealtimeClient()` are only one way to share a client through React context.
+
 `client`, `query`, and `getKey` are required. `getKey` must return a
 stable unique string or number for every row. Standard collection options such
 as `id`, `schema`, garbage collection, collation, and mutation handlers are
@@ -62,6 +67,18 @@ A terminal error before the first result puts the collection into its `error`
 state. After the collection is ready, a terminal error keeps the last rows and
 the `ready` status while exposing the failure through `collection.health.error`.
 Framework live-query hooks report the latter as `isSyncError`.
+
+## Restarts and expired queries
+
+TanStack DB cleans up a collection that nothing has observed for its `gcTime`
+and starts it again when something observes it, and `collection.reload()`
+starts a new sync run. Each new run subscribes with the newest sealed query the
+collection has: the last one `refreshQuery` returned, or `query` if it never
+refreshed. If that query has expired, the run calls `refreshQuery` straight
+away and loads once the fresh query is accepted. Without `refreshQuery`, a run
+that starts after the query expired never receives rows: a restarted
+collection stays loading and a reload never completes. Pass `refreshQuery` to
+any collection that can outlive its query.
 
 ## Optimistic mutations
 
@@ -95,6 +112,12 @@ response. It resolves after covered row changes enter TanStack DB's causal sync
 queue and waits indefinitely by default. Pass an optional timeout in milliseconds
 to bound the wait. Pending and subsequent waits reject if synchronization stops
 terminally; collection cleanup also rejects an outstanding wait.
+
+If the collection hasn't started syncing yet, `awaitTxId()` waits for it to
+start, within the same timeout. It doesn't start synchronization itself.
+TanStack DB starts it for `insert()`, `update()`, and `delete()`, so mutation
+handlers are covered; anywhere else, make sure something observes or preloads
+the collection, or pass a timeout.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.
