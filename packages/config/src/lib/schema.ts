@@ -794,14 +794,32 @@ function validateParentReference(args: {
  * and unknown-key issues from `strictObject` are normalised so the message contains the
  * substring "unknown key" — keeping pre-zod assertions in test suites and downstream tools
  * stable.
+ *
+ * `unknownKeyHints` maps the rendered path of an unknown key to a sentence appended to its
+ * issue, for keys the user most likely meant to write somewhere else.
  */
-export function formatZodIssues(error: z.ZodError): string[] {
+export function formatZodIssues(
+	error: z.ZodError,
+	unknownKeyHints: Readonly<Record<string, string>> = {},
+): string[] {
 	return error.issues.map((issue) => {
 		const path = renderPath(issue.path);
-		const message = normaliseIssueMessage(issue);
+		let message = normaliseIssueMessage(issue);
+		if (issue.code === "unrecognized_keys") {
+			for (const key of issue.keys) {
+				const hint = unknownKeyHints[path ? `${path}.${key}` : key];
+				if (hint) message += `. ${hint}`;
+			}
+		}
 		return path ? `${path}: ${message}` : message;
 	});
 }
+
+/** Hints for unknown keys at the top level of the `defineConfig` input. */
+export const configInputUnknownKeyHints: Readonly<Record<string, string>> = {
+	realtime:
+		"Realtime is in public beta and is configured under preview: `preview: { realtime: true }`",
+};
 
 function renderPath(path: ReadonlyArray<PropertyKey>): string {
 	let out = "";
