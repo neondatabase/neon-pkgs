@@ -42,6 +42,18 @@ describe("defineConfig", () => {
 		]);
 	});
 
+	test("adds no hint to an unknown key named after an Object.prototype member", () => {
+		let caught: unknown;
+		try {
+			defineConfig({ constructor: true } as never);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(ConfigValidationError);
+		if (!(caught instanceof ConfigValidationError)) throw caught;
+		expect(caught.issues).toEqual(['unknown key: "constructor"']);
+	});
+
 	test("rejects a non-object input", () => {
 		expect(() => defineConfig(null as never)).toThrow(
 			ConfigValidationError,

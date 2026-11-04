@@ -800,14 +800,14 @@ function validateParentReference(args: {
  */
 export function formatZodIssues(
 	error: z.ZodError,
-	unknownKeyHints: Readonly<Record<string, string>> = {},
+	unknownKeyHints: ReadonlyMap<string, string> = new Map(),
 ): string[] {
 	return error.issues.map((issue) => {
 		const path = renderPath(issue.path);
 		let message = normaliseIssueMessage(issue);
 		if (issue.code === "unrecognized_keys") {
 			for (const key of issue.keys) {
-				const hint = unknownKeyHints[path ? `${path}.${key}` : key];
+				const hint = unknownKeyHints.get(path ? `${path}.${key}` : key);
 				if (hint) message += `. ${hint}`;
 			}
 		}
@@ -816,10 +816,12 @@ export function formatZodIssues(
 }
 
 /** Hints for unknown keys at the top level of the `defineConfig` input. */
-export const configInputUnknownKeyHints: Readonly<Record<string, string>> = {
-	realtime:
+export const configInputUnknownKeyHints: ReadonlyMap<string, string> = new Map([
+	[
+		"realtime",
 		"Realtime is in public beta and is configured under preview: `preview: { realtime: true }`",
-};
+	],
+]);
 
 function renderPath(path: ReadonlyArray<PropertyKey>): string {
 	let out = "";
