@@ -3761,7 +3761,7 @@ export const zGetConsumptionHistoryPerProjectV2Query = z.strictObject({
         'monthly'
     ]).describe("Specify the granularity of consumption metrics."),
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Organization ID."),
-    metrics: z.array(z.string()).describe("Required.")
+    metrics: z.array(z.string()).describe("Required. List the metrics to return.")
 });
 
 export const zGetConsumptionHistoryPerBranchV2Query = z.strictObject({
@@ -3777,7 +3777,7 @@ export const zGetConsumptionHistoryPerBranchV2Query = z.strictObject({
         'monthly'
     ]).describe("Specify the granularity of consumption metrics."),
     org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Organization ID."),
-    metrics: z.array(z.string()).describe("Required.")
+    metrics: z.array(z.string()).describe("Required. List the metrics to return.")
 });
 
 export const zGetOrganizationPath = z.strictObject({

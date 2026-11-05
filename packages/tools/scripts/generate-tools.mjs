@@ -157,7 +157,8 @@ const firstSentence = (text) => {
 		return "";
 	}
 	let sentence = leadingSentence(normalized).trim();
-	if (/^deprecated\.?$/i.test(sentence)) {
+	// A bare label says nothing an agent can act on; keep the sentence after it.
+	if (/^(?:deprecated|required|optional)\.?$/i.test(sentence)) {
 		const rest = normalized.slice(sentence.length).trim();
 		if (rest.length > 0) {
 			sentence = `${sentence} ${leadingSentence(rest).trim()}`;

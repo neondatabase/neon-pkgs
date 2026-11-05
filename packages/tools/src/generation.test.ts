@@ -245,6 +245,9 @@ describe("generated operation coverage", () => {
 		expect(
 			description("projects.members.setRole", "confirm_self_demotion"),
 		).toBe("Set true to lower your own role on the project.");
+		expect(description("consumption.perProjectV2", "metrics")).toBe(
+			"Required. List the metrics to return.",
+		);
 		expect(description("credentials.revoke", "token_id")).toBe(
 			"The opaque credential id (e.g. nak_live_<32hex>).",
 		);
