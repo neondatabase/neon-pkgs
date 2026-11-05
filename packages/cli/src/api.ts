@@ -506,7 +506,7 @@ export const cliFetch = (
 	};
 };
 
-export { httpError, RETRY_COUNT };
+export { httpError, isAbortError, networkError, RETRY_COUNT };
 
 export const getApiClient = ({
 	apiKey,

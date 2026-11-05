@@ -1401,7 +1401,7 @@
 			}
 		},
 		"orgs list": {
-			"modules": 449,
+			"modules": 450,
 			"requests": {
 				"GET /users/me/organizations": 1
 			},
@@ -1469,6 +1469,7 @@
 				"dist/update_notifier.js": 1,
 				"dist/utils/auth.js": 1,
 				"dist/utils/cli_name.js": 1,
+				"dist/utils/flags.js": 1,
 				"dist/utils/help_text.js": 1,
 				"dist/utils/json_file.js": 1,
 				"dist/utils/middlewares.js": 1,

@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getApiClient, isNeonApiError } from "./api.js";
 import { isNetworkError } from "./errors.js";
+import { fromSdkError, getNeonClient } from "./neon_client.js";
 
 /**
  * What the user sees when the Neon API accepts a connection and then never answers.
@@ -90,6 +91,23 @@ describe("a request that times out", () => {
 			expect(err.code).toBe("ECONNABORTED");
 			expect(err.message).toBe("Request timed out");
 		}
+	});
+
+	it("classifies the @neon/sdk client path the same way", async () => {
+		const neon = getNeonClient({
+			apiKey: "test",
+			apiHost,
+			requestTimeoutMs: 150,
+		});
+		const err = await neon.organizations.apiKeys
+			.list({ orgId: "org-1" })
+			.then(
+				() => new Error("expected the request to time out"),
+				(error: unknown) => fromSdkError(error, apiHost),
+			);
+		if (!isNeonApiError(err)) throw err;
+		expect(err.code).toBe("ECONNABORTED");
+		expect(isNetworkError(err)).toBe(false);
 	});
 });
 

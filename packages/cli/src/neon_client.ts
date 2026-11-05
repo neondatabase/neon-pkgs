@@ -7,6 +7,8 @@ import {
 	cliFetch,
 	DEFAULT_API_HOST,
 	httpError,
+	isAbortError,
+	networkError,
 	RETRY_COUNT,
 	unreadableBodyError,
 } from "./api.js";
@@ -31,7 +33,8 @@ export const getNeonClient = ({
 
 /**
  * Map an error from {@link getNeonClient} for the top-level handler. A management API
- * response becomes the CLI's `NeonApiError`, so 401 and SSO recovery apply. Anything else
+ * response becomes the CLI's `NeonApiError`, so 401 and SSO recovery apply, and a request
+ * timeout becomes the same `ECONNABORTED` error the raw client throws. Anything else
  * keeps the SDK's message and drops its `cause`, so a socket code deep in the chain cannot
  * turn a "role was created, but…" message into the generic connectivity hint.
  */
@@ -42,6 +45,9 @@ export function fromSdkError(error: unknown, apiHost?: string): Error {
 		return error.response.ok
 			? unreadableBodyError(error.response, error.body)
 			: httpError(error.response, error.body);
+	}
+	if (isAbortError(error)) {
+		return networkError(error);
 	}
 	return new Error(error instanceof Error ? error.message : String(error));
 }
