@@ -12,6 +12,7 @@ import type yargs from "yargs";
 import { readContextFile } from "../context.js";
 import { log } from "../log.js";
 import type { CommonProps } from "../types.js";
+import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
 
 const ORG_FIELDS = ["id", "name", "plan"] as const;
@@ -40,8 +41,16 @@ const orgIdOption = {
 		describe:
 			"Organization ID. Defaults to the linked organization, or your only one",
 		type: "string",
+		coerce: single("org-id"),
 	},
 } as const;
+
+/**
+ * An empty, negated, misspelled, or `--`-separated `--org-id` must fail rather than fall
+ * back to the linked organization: these commands change members, invitations, and billing.
+ */
+const guarded = (yargs: yargs.Argv) =>
+	yargs.strict().check(noPassthrough("orgs"));
 
 const roleOption = (describe: string) =>
 	({
@@ -78,7 +87,9 @@ export const builder = (argv: yargs.Argv) => {
 							"Organization ID. Defaults to --org-id, the linked organization, or your only one",
 						type: "string",
 					})
-					.options(orgIdOption),
+					.options(orgIdOption)
+					.strict()
+					.check(noPassthrough("orgs")),
 			async (args) => await get(args as unknown as GetProps),
 		)
 		.command("members", "Manage organization members", (yargs) =>
@@ -88,7 +99,7 @@ export const builder = (argv: yargs.Argv) => {
 				.command(
 					"list",
 					"List members and their organization role",
-					(yargs) => yargs,
+					guarded,
 					async (args) =>
 						await listMembers(args as unknown as OrgProps),
 				)
@@ -96,10 +107,12 @@ export const builder = (argv: yargs.Argv) => {
 					"get <member-id>",
 					"Show a member",
 					(yargs) =>
-						yargs.positional("member-id", {
-							describe: "Member ID, from `orgs members list`",
-							type: "string",
-						}),
+						guarded(
+							yargs.positional("member-id", {
+								describe: "Member ID, from `orgs members list`",
+								type: "string",
+							}),
+						),
 					async (args) =>
 						await getMember(args as unknown as MemberProps),
 				)
@@ -112,7 +125,9 @@ export const builder = (argv: yargs.Argv) => {
 								describe: "Member ID, from `orgs members list`",
 								type: "string",
 							})
-							.options(roleOption("The new organization role")),
+							.options(roleOption("The new organization role"))
+							.strict()
+							.check(noPassthrough("orgs")),
 					async (args) =>
 						await updateMember(
 							args as unknown as UpdateMemberProps,
@@ -122,10 +137,12 @@ export const builder = (argv: yargs.Argv) => {
 					"remove <member-id>",
 					"Remove a member from the organization. Admin only",
 					(yargs) =>
-						yargs.positional("member-id", {
-							describe: "Member ID, from `orgs members list`",
-							type: "string",
-						}),
+						guarded(
+							yargs.positional("member-id", {
+								describe: "Member ID, from `orgs members list`",
+								type: "string",
+							}),
+						),
 					async (args) =>
 						await removeMember(args as unknown as MemberProps),
 				),
@@ -137,7 +154,7 @@ export const builder = (argv: yargs.Argv) => {
 				.command(
 					"list",
 					"List invitations",
-					(yargs) => yargs,
+					guarded,
 					async (args) =>
 						await listInvitations(args as unknown as OrgProps),
 				)
@@ -145,18 +162,21 @@ export const builder = (argv: yargs.Argv) => {
 					"create",
 					"Invite people by email. Each one is emailed, and anyone with a Neon account joins immediately",
 					(yargs) =>
-						yargs.options({
-							email: {
-								describe:
-									"Email address to invite. Repeat to invite several",
-								type: "string",
-								array: true,
-								demandOption: true,
-							},
-							...roleOption(
-								"The organization role every invitee gets",
-							),
-						}),
+						yargs
+							.options({
+								email: {
+									describe:
+										"Email address to invite. Repeat to invite several",
+									type: "string",
+									array: true,
+									demandOption: true,
+								},
+								...roleOption(
+									"The organization role every invitee gets",
+								),
+							})
+							.strict()
+							.check(noPassthrough("orgs")),
 					async (args) =>
 						await createInvitations(
 							args as unknown as CreateInvitationsProps,
@@ -173,7 +193,7 @@ export const builder = (argv: yargs.Argv) => {
 					.command(
 						"get",
 						"Show the monthly spending limit",
-						(yargs) => yargs,
+						guarded,
 						async (args) =>
 							await getSpendingLimit(args as unknown as OrgProps),
 					)
@@ -181,11 +201,13 @@ export const builder = (argv: yargs.Argv) => {
 						"set <usd>",
 						"Set the monthly spending limit. Neon emails at 80% and 100% and keeps computes running. Admin only",
 						(yargs) =>
-							yargs.positional("usd", {
-								describe:
-									"Monthly limit in US dollars, e.g. 500 or 250.50",
-								type: "string",
-							}),
+							guarded(
+								yargs.positional("usd", {
+									describe:
+										"Monthly limit in US dollars, e.g. 500 or 250.50",
+									type: "string",
+								}),
+							),
 						async (args) =>
 							await setSpendingLimit(
 								args as unknown as SetSpendingLimitProps,
@@ -194,7 +216,7 @@ export const builder = (argv: yargs.Argv) => {
 					.command(
 						"delete",
 						"Remove the monthly spending limit. Admin only",
-						(yargs) => yargs,
+						guarded,
 						async (args) =>
 							await deleteSpendingLimit(
 								args as unknown as OrgProps,

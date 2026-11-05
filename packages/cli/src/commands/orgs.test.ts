@@ -235,6 +235,37 @@ describe("orgs", () => {
 		);
 	});
 
+	test("a malformed --org-id fails before any request instead of using .neon", async ({
+		testCliCommand,
+	}) => {
+		const linked = linkedTo("org-linked-production");
+		for (const flags of [
+			["--org-id", ""],
+			["--no-org-id"],
+			["--org_id", "org-7"],
+			["--org-id", "org-7", "--org-id", "org-8"],
+			["--", "--org-id", "org-7"],
+		]) {
+			const seen = recorder();
+			await testCliCommand(
+				[
+					"orgs",
+					"invitations",
+					"create",
+					"--email",
+					"a@example.com",
+					"--role",
+					"admin",
+					"--context-file",
+					linked,
+					...flags,
+				],
+				{ onRequest: seen.onRequest, code: 1, snapshot: false },
+			);
+			expect(seen.calls(), flags.join(" ")).toEqual([]);
+		}
+	});
+
 	test("parseUsdCents reads dollars as text", () => {
 		expect(parseUsdCents("500")).toBe(50_000);
 		expect(parseUsdCents("0.29")).toBe(29);
