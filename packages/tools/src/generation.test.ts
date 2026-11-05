@@ -192,6 +192,70 @@ describe("generated operation coverage", () => {
 		}
 	});
 
+	test("every public tool and every top-level input is described within budget", () => {
+		const undocumented: string[] = [];
+		for (const id of toolIds) {
+			const tool = createNeonTool(id, { apiKey: "test-key" });
+			expect(tool.description.trim(), id).not.toBe("");
+			expect(tool.description.length, id).toBeLessThanOrEqual(500);
+
+			const schema = z.toJSONSchema(tool.inputSchema, { io: "input" });
+			for (const [name, property] of Object.entries(
+				schema.properties ?? {},
+			)) {
+				const description =
+					typeof property === "object" &&
+					typeof property.description === "string"
+						? property.description
+						: "";
+				if (description.trim() === "") {
+					undocumented.push(`${tool.id}.${name}`);
+					continue;
+				}
+				expect(
+					description.length,
+					`${tool.id}.${name}`,
+				).toBeLessThanOrEqual(240);
+				expect(description, `${tool.id}.${name}`).not.toMatch(
+					/\[[^\]]+\]\([^)]+\)/,
+				);
+			}
+		}
+		expect(undocumented).toEqual([]);
+	});
+
+	test("input descriptions come from the OpenAPI first sentence or input-descriptions.json", () => {
+		const description = (id: (typeof toolIds)[number], name: string) => {
+			const tool = createNeonTool(id, { apiKey: "test-key" });
+			const schema = z.toJSONSchema(tool.inputSchema, { io: "input" });
+			const property = schema.properties?.[name];
+			return typeof property === "object"
+				? property.description
+				: undefined;
+		};
+		expect(description("storage.objects.presign", "object_key")).toBe(
+			"The object key.",
+		);
+		expect(description("storage.objects.presign", "operation")).toBe(
+			"The transfer direction.",
+		);
+		expect(description("projects.create", "settings")).toBe(
+			"Project-level settings applied at creation.",
+		);
+		expect(
+			description("projects.members.setRole", "confirm_self_demotion"),
+		).toBe("Set true to lower your own role on the project.");
+		expect(description("consumption.perProjectV2", "metrics")).toBe(
+			"Required. List the metrics to return.",
+		);
+		expect(description("credentials.revoke", "token_id")).toBe(
+			"The opaque credential id (e.g. nak_live_<32hex>).",
+		);
+		expect(description("functions.deploy", "zip")).toBe(
+			"Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment.",
+		);
+	});
+
 	test("composed create descriptions stay handwritten", () => {
 		const create = createNeonTool("projects.create", {
 			apiKey: "test-key",

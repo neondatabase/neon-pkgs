@@ -10,8 +10,8 @@ export const zProvisioner = z.string();
  * Cursor-based pagination. The `cursor` value reflects the endpoint's sort field (for example, an ID or timestamp), so pass it back unchanged.
  */
 export const zPagination = z.strictObject({
-    cursor: z.string().min(1)
-});
+    cursor: z.string().min(1).describe("Cursor marking the last item in this response.")
+}).describe("Cursor-based pagination.");
 
 export const zPaginationResponse = z.strictObject({
     pagination: zPagination.optional()
@@ -20,121 +20,124 @@ export const zPaginationResponse = z.strictObject({
 /**
  * Empty response.
  */
-export const zEmptyResponse = z.record(z.string(), z.unknown());
+export const zEmptyResponse = z.record(z.string(), z.unknown()).describe("Empty response.");
+
+export const zPlanDetails = z.strictObject({
+    name: z.string().describe("Plan name, for example `free`, `launch`, or `scale`."),
+    version: z.strictObject({
+        major: z.int(),
+        minor: z.int()
+    }).describe("Version of the plan, expressed as `major` and `minor` components.").optional()
+});
 
 export const zPlanVersion = z.strictObject({
     major: z.int(),
     minor: z.int()
 });
 
-export const zPlanDetails = z.strictObject({
-    name: z.string(),
-    version: zPlanVersion.optional()
-});
-
 /**
  * Add a new JWKS to a specific endpoint of a project
  */
 export const zAddProjectJwksRequest = z.strictObject({
-    jwks_url: z.string(),
-    provider_name: z.string(),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    jwt_audience: z.string().optional(),
-    role_names: z.array(z.string()).min(0).max(10).optional(),
-    skip_role_creation: z.boolean().optional()
-});
+    jwks_url: z.string().describe("URL of the provider's JWKS endpoint used to verify JWTs."),
+    provider_name: z.string().describe("The name of the authentication provider (e.g., Clerk, Stytch, Auth0)"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID.").optional(),
+    jwt_audience: z.string().describe("Expected `aud` claim in incoming JWTs.").optional(),
+    role_names: z.array(z.string()).min(0).max(10).describe("Deprecated. The roles the JWKS should be mapped to.").optional(),
+    skip_role_creation: z.boolean().describe("Deprecated. Only used with Neon RLS.").optional()
+}).describe("Add a new JWKS to a specific endpoint of a project");
 
 export const zJwks = z.strictObject({
-    id: z.string(),
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    jwks_url: z.string(),
-    provider_name: z.string(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    jwt_audience: z.string().optional(),
-    role_names: z.array(z.string()).optional()
+    id: z.string().describe("The JWKS configuration's ID."),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID.").optional(),
+    jwks_url: z.string().describe("URL of the provider's JWKS endpoint used to verify JWTs."),
+    provider_name: z.string().describe("The name of the authentication provider (e.g., Clerk, Stytch, Auth0)"),
+    created_at: z.iso.datetime().describe("The date and time when the JWKS was created"),
+    updated_at: z.iso.datetime().describe("The date and time when the JWKS was last modified"),
+    jwt_audience: z.string().describe("Expected JWT `aud` claim value configured for this JWKS.").optional(),
+    role_names: z.array(z.string()).describe("Database role names that are permitted to authenticate using this JWKS configuration.").optional()
 });
 
 /**
  * The list of configured JWKS definitions for a project
  */
 export const zProjectJwksResponse = z.strictObject({
-    jwks: z.array(zJwks)
-});
+    jwks: z.array(zJwks).describe("JWKS configurations associated with the project.")
+}).describe("The list of configured JWKS definitions for a project");
 
 /**
  * Category of an advisor issue
  */
-export const zAdvisorCategory = z.enum(['SECURITY', 'PERFORMANCE']);
+export const zAdvisorCategory = z.enum(['SECURITY', 'PERFORMANCE']).describe("Category of an advisor issue");
 
 export const zAdvisorIssue = z.strictObject({
-    name: z.string(),
-    title: z.string(),
-    level: z.string(),
-    facing: z.enum(['EXTERNAL', 'INTERNAL']),
-    categories: z.array(zAdvisorCategory),
-    description: z.string(),
-    detail: z.string(),
-    remediation: z.string(),
-    metadata: z.record(z.string(), z.unknown()),
-    cache_key: z.string()
+    name: z.string().describe("Unique identifier for the issue type"),
+    title: z.string().describe("Human-readable title"),
+    level: z.string().describe("Severity level of the issue"),
+    facing: z.enum(['EXTERNAL', 'INTERNAL']).describe("Whether this issue affects external API exposure or is internal only"),
+    categories: z.array(zAdvisorCategory).describe("Categories this issue belongs to"),
+    description: z.string().describe("Detailed description of what this check detects"),
+    detail: z.string().describe("Specific details about this instance of the issue"),
+    remediation: z.string().describe("URL to documentation on how to fix this issue"),
+    metadata: z.record(z.string(), z.unknown()).describe("Additional context-specific metadata"),
+    cache_key: z.string().describe("Unique key for caching this issue result")
 });
 
 export const zApiKeyCreateRequest = z.strictObject({
-    key_name: z.string().max(64)
+    key_name: z.string().max(64).describe("A user-specified API key name.")
 });
 
 export const zOrgApiKeyCreateRequest = zApiKeyCreateRequest.merge(z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("If set, the API key can access only this project").optional()
 }));
 
 export const zApiKeyCreateResponse = z.strictObject({
-    id: z.int(),
-    key: z.string(),
-    name: z.string(),
-    created_at: z.iso.datetime(),
-    created_by: z.uuid()
+    id: z.int().describe("The API key's unique numeric ID."),
+    key: z.string().describe("The generated 64-bit token required to access the Neon API"),
+    name: z.string().describe("The user-specified API key name"),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the API key was created"),
+    created_by: z.uuid().describe("ID of the user who created this API key")
 });
 
 export const zOrgApiKeyCreateResponse = zApiKeyCreateResponse.merge(z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("If set, the API key can access only this project").optional()
 }));
 
 export const zApiKeyRevokeResponse = z.strictObject({
-    id: z.int(),
-    name: z.string(),
-    created_at: z.iso.datetime(),
-    created_by: z.uuid(),
+    id: z.int().describe("The API key's unique numeric ID."),
+    name: z.string().describe("The user-specified API key name"),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the API key was created"),
+    created_by: z.uuid().describe("ID of the user who created this API key"),
     last_used_at: z.iso.datetime().nullish(),
-    last_used_from_addr: z.string(),
-    revoked: z.boolean()
+    last_used_from_addr: z.string().describe("The IP address from which the API key was last used"),
+    revoked: z.boolean().describe("A `true` or `false` value indicating whether the API key is revoked")
 });
 
 export const zOrgApiKeyRevokeResponse = zApiKeyRevokeResponse.merge(z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("If set, the API key can access only this project").optional()
 }));
 
 /**
  * The user data of the user that created this API key.
  */
 export const zApiKeyCreatorData = z.strictObject({
-    id: z.uuid(),
-    name: z.string(),
-    image: z.string()
-});
+    id: z.uuid().describe("ID of the user who created this API key"),
+    name: z.string().describe("Display name of the user who created the API key."),
+    image: z.string().describe("The URL to the user's avatar image.")
+}).describe("The user data of the user that created this API key.");
 
 export const zApiKeysListResponseItem = z.strictObject({
-    id: z.int(),
-    name: z.string(),
-    created_at: z.iso.datetime(),
+    id: z.int().describe("The API key's unique numeric ID."),
+    name: z.string().describe("The user-specified API key name"),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the API key was created"),
     created_by: zApiKeyCreatorData,
     last_used_at: z.iso.datetime().nullish(),
-    last_used_from_addr: z.string()
+    last_used_from_addr: z.string().describe("The IP address from which the API key was last used")
 });
 
 export const zOrgApiKeysListResponseItem = zApiKeysListResponseItem.merge(z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("If set, the API key can access only this project").optional()
 }));
 
 /**
@@ -177,7 +180,42 @@ export const zOperationAction = z.enum([
     'mark_migration_prepared',
     'update_catalog',
     'epc_sync'
-]);
+]).describe("The action performed by the operation");
+
+/**
+ * An asynchronous action Neon performs on your resources (for example, starting a compute or creating a branch). Fields such as `action`, `status`, and `total_duration_ms` describe the operation and its progress.
+ */
+export const zOperation = z.strictObject({
+    id: z.uuid().describe("The operation ID"),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project this operation ran on."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this operation ran on.").optional(),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the compute endpoint this operation ran on.").optional(),
+    action: zOperationAction,
+    status: z.enum([
+        'scheduling',
+        'running',
+        'finished',
+        'failed',
+        'error',
+        'cancelling',
+        'cancelled',
+        'skipped'
+    ]).describe("Current lifecycle state of the operation."),
+    error: z.string().describe("Human-readable message describing why the operation failed.").optional(),
+    failures_count: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("The number of times the operation failed"),
+    retry_at: z.iso.datetime().describe("A timestamp indicating when the operation was last retried").optional(),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the operation was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the operation status was last updated"),
+    total_duration_ms: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("The total duration of the operation in milliseconds")
+}).describe("An asynchronous action Neon performs on your resources (for example, starting a compute or creating a branch).");
+
+export const zOperationResponse = z.strictObject({
+    operation: zOperation
+});
+
+export const zOperationsResponse = z.strictObject({
+    operations: z.array(zOperation)
+});
 
 /**
  * Lifecycle state of the operation. `scheduling`: queued, not yet started. `running`: actively executing. `finished`: completed successfully. `failed`: ended with a failure. `error`: ended with a terminal error. `cancelling`: cancellation requested but not yet complete. `cancelled`: stopped before completion. `skipped`: bypassed without executing.
@@ -191,57 +229,31 @@ export const zOperationStatus = z.enum([
     'cancelling',
     'cancelled',
     'skipped'
-]);
-
-/**
- * An asynchronous action Neon performs on your resources (for example, starting a compute or creating a branch). Fields such as `action`, `status`, and `total_duration_ms` describe the operation and its progress.
- */
-export const zOperation = z.strictObject({
-    id: z.uuid(),
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    action: zOperationAction,
-    status: zOperationStatus,
-    error: z.string().optional(),
-    failures_count: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
-    retry_at: z.iso.datetime().optional(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    total_duration_ms: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
-});
-
-export const zOperationResponse = z.strictObject({
-    operation: zOperation
-});
-
-export const zOperationsResponse = z.strictObject({
-    operations: z.array(zOperation)
-});
+]).describe("Lifecycle state of the operation.");
 
 export const zProjectTransferRequestResponse = z.strictObject({
-    id: z.uuid(),
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    created_at: z.iso.datetime(),
-    expires_at: z.iso.datetime()
+    id: z.uuid().describe("The unique identifier for the transfer request"),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project that is being transferred"),
+    created_at: z.iso.datetime().describe("The timestamp when the transfer request was created"),
+    expires_at: z.iso.datetime().describe("The timestamp when the transfer request will expire")
 });
 
 export const zAcceptProjectTransferRequestSatisfiesPlanError = z.strictObject({
     reasons: z.array(z.strictObject({
-        message: z.string(),
-        code: z.string()
-    }))
+        message: z.string().describe("Description of why the plan is not satisfied"),
+        code: z.string().describe("A short code identifying the reason")
+    })).describe("List of reasons why the target account's plan cannot satisfy the transfer requirements.")
 });
 
 export const zProjectsCountResponse = z.strictObject({
-    count: z.int().gte(0)
+    count: z.int().gte(0).describe("The total number of projects matching the query criteria.")
 });
 
 export const zProjectPermission = z.strictObject({
-    id: z.string(),
-    granted_to_email: z.email().min(1).max(256),
-    granted_at: z.iso.datetime(),
-    revoked_at: z.iso.datetime().optional()
+    id: z.string().describe("The project permission's ID."),
+    granted_to_email: z.email().min(1).max(256).describe("Email address of the user who has been granted access to the project."),
+    granted_at: z.iso.datetime().describe("Timestamp when the permission was granted."),
+    revoked_at: z.iso.datetime().describe("Timestamp when the permission was revoked.").optional()
 });
 
 export const zProjectPermissions = z.strictObject({
@@ -249,7 +261,7 @@ export const zProjectPermissions = z.strictObject({
 });
 
 export const zGrantPermissionToProjectRequest = z.strictObject({
-    email: z.email().min(1).max(256)
+    email: z.email().min(1).max(256).describe("Email address of the user to grant project access to.")
 });
 
 /**
@@ -261,7 +273,7 @@ export const zProjectRole = z.enum([
     'viewer',
     'editor',
     'admin'
-]);
+]).describe("Per-project role.");
 
 /**
  * The caller's effective permission for a project when
@@ -275,7 +287,7 @@ export const zProjectPermissionLevel = z.enum([
     'VIEWER',
     'EDITOR',
     'ADMIN'
-]);
+]).describe("The caller's effective permission for a project when per-project permissions are enabled.");
 
 /**
  * How a member's project access is granted.
@@ -286,7 +298,7 @@ export const zProjectMemberGrantSource = z.enum([
     'org_role_default',
     'org_admin_override',
     'unassigned'
-]);
+]).describe("How a member's project access is granted.");
 
 /**
  * Organization-level role used by project member role management.
@@ -298,13 +310,13 @@ export const zProjectMemberOrgRole = z.enum([
     'editor',
     'viewer',
     'collaborator'
-]);
+]).describe("Organization-level role used by project member role management.");
 
 export const zProjectMember = z.strictObject({
-    member_id: z.uuid(),
-    user_id: z.uuid(),
-    email: z.email().min(1).max(256).optional(),
-    name: z.string().optional(),
+    member_id: z.uuid().describe("The organization member ID."),
+    user_id: z.uuid().describe("The user ID for the organization member."),
+    email: z.email().min(1).max(256).describe("Email address of the user who has been granted access to the project.").optional(),
+    name: z.string().describe("The user's display name.").optional(),
     org_role: zProjectMemberOrgRole,
     project_role: zProjectRole.optional(),
     org_default_project_permission: zProjectPermissionLevel.optional(),
@@ -321,82 +333,86 @@ export const zProjectMemberRoleResponse = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     member_id: z.uuid(),
     user_id: z.uuid(),
-    email: z.email().min(1).max(256).optional(),
-    name: z.string().optional(),
+    email: z.email().min(1).max(256).describe("Email address of the user who has been granted access to the project.").optional(),
+    name: z.string().describe("The user's display name.").optional(),
     org_role: zProjectMemberOrgRole,
-    project_role: zProjectRole.optional(),
+    project_role: z.enum([
+        'viewer',
+        'editor',
+        'admin'
+    ]).describe("The resulting effective project role after applying org-admin default access, explicit grants, and creator fallback.").optional(),
     org_default_project_permission: zProjectPermissionLevel.optional(),
     explicit_project_permission: zProjectPermissionLevel.optional(),
     effective_project_permission: zProjectPermissionLevel.optional(),
-    credential_rotation_recommended: z.boolean().optional(),
-    org_api_key_rotation_recommended: z.boolean().optional()
+    credential_rotation_recommended: z.boolean().describe("Hint that database credentials may need rotation after the role change.").optional(),
+    org_api_key_rotation_recommended: z.boolean().describe("Hint that project-scoped org API keys created by the target user may need rotation.").optional()
 });
 
 export const zConsumptionHistoryPerTimeframe = z.strictObject({
-    timeframe_start: z.iso.datetime(),
-    timeframe_end: z.iso.datetime(),
-    active_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
-    compute_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
-    written_data_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
-    synthetic_storage_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
-    data_storage_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }),
-    logical_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).optional(),
-    logical_size_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).optional()
+    timeframe_start: z.iso.datetime().describe("The specified start date-time for the reported consumption."),
+    timeframe_end: z.iso.datetime().describe("The specified end date-time for the reported consumption."),
+    active_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Seconds."),
+    compute_time_seconds: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Seconds."),
+    written_data_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Bytes."),
+    synthetic_storage_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Deprecated: always returns 0."),
+    data_storage_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Deprecated: always returns 0."),
+    logical_size_bytes: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Bytes.").optional(),
+    logical_size_bytes_hour: z.int().min(0, { error: 'Invalid value: Expected uint64 to be >= 0' }).describe("Bytes-Hour.").optional()
 });
 
 export const zConsumptionHistoryPerPeriod = z.strictObject({
-    period_id: z.uuid(),
-    period_plan: z.string(),
-    period_start: z.iso.datetime(),
-    period_end: z.iso.datetime().optional(),
-    consumption: z.array(zConsumptionHistoryPerTimeframe)
+    period_id: z.uuid().describe("The ID assigned to the specified billing period."),
+    period_plan: z.string().describe("The billing plan applicable during the billing period."),
+    period_start: z.iso.datetime().describe("The start date-time of the billing period."),
+    period_end: z.iso.datetime().describe("The end date-time of the billing period, available for the past periods only.").optional(),
+    consumption: z.array(zConsumptionHistoryPerTimeframe).describe("Consumption metric records for the billing period.")
 });
 
 export const zConsumptionHistoryPerProject = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    periods: z.array(zConsumptionHistoryPerPeriod)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+    periods: z.array(zConsumptionHistoryPerPeriod).describe("Consumption periods for the project, each covering a discrete billing interval.")
 });
 
 export const zConsumptionHistoryPerProjectResponse = z.strictObject({
-    projects: z.array(zConsumptionHistoryPerProject)
+    projects: z.array(zConsumptionHistoryPerProject).describe("Per-project consumption history records included in the response.")
 });
 
 export const zConsumptionMetricValue = z.strictObject({
-    metric_name: z.string(),
-    value: z.int()
+    metric_name: z.string().describe("Name of the consumption metric, such as compute_time or data_storage_bytes_hour."),
+    value: z.int().describe("Measured quantity for the metric named by `metric_name`.")
 });
 
 export const zConsumptionHistoryPerTimeframeV2 = z.strictObject({
-    timeframe_start: z.iso.datetime().optional(),
-    timeframe_end: z.iso.datetime().optional(),
-    metrics: z.array(zConsumptionMetricValue).optional()
+    timeframe_start: z.iso.datetime().describe("The specified start date-time for the reported consumption.").optional(),
+    timeframe_end: z.iso.datetime().describe("The specified end date-time for the reported consumption.").optional(),
+    metrics: z.array(zConsumptionMetricValue).describe("Consumption metric values recorded for the timeframe.").optional()
 });
 
 export const zConsumptionHistoryPerPeriodV2 = z.strictObject({
-    period_id: z.uuid(),
-    period_plan: z.string(),
-    period_start: z.iso.datetime(),
-    period_end: z.iso.datetime().optional(),
-    consumption: z.array(zConsumptionHistoryPerTimeframeV2)
+    period_id: z.uuid().describe("The ID assigned to the specified billing period."),
+    period_plan: z.string().describe("The billing plan applicable during the billing period."),
+    period_start: z.iso.datetime().describe("The start date-time of the billing period."),
+    period_end: z.iso.datetime().describe("The end date-time of the billing period, available for the past periods only.").optional(),
+    consumption: z.array(zConsumptionHistoryPerTimeframeV2).describe("Consumption metric records for the billing period.")
 });
 
 export const zConsumptionHistoryPerProjectV2 = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    periods: z.array(zConsumptionHistoryPerPeriodV2)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+    periods: z.array(zConsumptionHistoryPerPeriodV2).describe("Consumption periods recorded for this project.")
 });
 
 export const zConsumptionHistoryPerProjectV2Response = z.strictObject({
-    projects: z.array(zConsumptionHistoryPerProjectV2)
+    projects: z.array(zConsumptionHistoryPerProjectV2).describe("Per-project consumption history entries for the requested time range.")
 });
 
 export const zConsumptionHistoryPerBranchV2 = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    periods: z.array(zConsumptionHistoryPerPeriodV2)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project that owns this branch."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID."),
+    periods: z.array(zConsumptionHistoryPerPeriodV2).describe("Consumption history records for the branch, grouped by billing period.")
 });
 
 export const zConsumptionHistoryPerBranchV2Response = z.strictObject({
-    branches: z.array(zConsumptionHistoryPerBranchV2)
+    branches: z.array(zConsumptionHistoryPerBranchV2).describe("Per-branch consumption history records returned for the requested time range.")
 });
 
 export const zConsumptionHistoryGranularity = z.enum([
@@ -414,15 +430,15 @@ export const zProjectAuditLogLevel = z.enum([
 ]);
 
 export const zAvailablePreloadLibrary = z.strictObject({
-    library_name: z.string(),
-    description: z.string(),
-    is_default: z.boolean(),
-    is_experimental: z.boolean(),
-    version: z.string()
+    library_name: z.string().describe("Name of the Postgres shared preload library as it appears in the `shared_preload_libraries` parameter (for example, `pg_stat_statements`)."),
+    description: z.string().describe("Human-readable explanation of the library's purpose and behavior."),
+    is_default: z.boolean().describe("Whether this library is loaded by default in the `shared_preload_libraries` configuration for new compute endpoints."),
+    is_experimental: z.boolean().describe("Marks the library as experimental."),
+    version: z.string().describe("Version of the preload library.")
 });
 
 export const zAvailablePreloadLibraries = z.strictObject({
-    libraries: z.array(zAvailablePreloadLibrary).optional()
+    libraries: z.array(zAvailablePreloadLibrary).describe("Preload libraries available for the project's Postgres version.").optional()
 });
 
 /**
@@ -433,7 +449,7 @@ export const zAvailablePreloadLibraries = z.strictObject({
  * * 'archived' - the branch is stored in cost-effective archival Postgres storage. Expect slow query response times.
  *
  */
-export const zBranchState = z.string();
+export const zBranchState = z.string().describe("The branch’s state, indicating if it is initializing, ready for use, or archived.");
 
 /**
  * Could be `restored`, `finalized` or `detaching`.
@@ -441,16 +457,16 @@ export const zBranchState = z.string();
  * A `restored` or `finalized` branch may begin `detaching` as a one-time performance optimisation, after which it will continue in its original state
  *
  */
-export const zBranchRestoreStatus = z.string();
+export const zBranchRestoreStatus = z.string().describe("Could be `restored`, `finalized` or `detaching`.");
 
 /**
  * An action that is currently restricted for the branch and the reason why.
  *
  */
 export const zBranchRestrictedAction = z.strictObject({
-    name: z.string(),
-    reason: z.string()
-});
+    name: z.string().describe("The name of a restricted action on a branch."),
+    reason: z.string().describe("A human-readable explanation of why the action is restricted.")
+}).describe("An action that is currently restricted for the branch and the reason why.");
 
 /**
  * Recovery information for a deleted branch. Only present when listing deleted branches
@@ -460,133 +476,200 @@ export const zBranchRestrictedAction = z.strictObject({
  *
  */
 export const zBranchRecoveryInfo = z.strictObject({
-    deleted_at: z.iso.datetime(),
-    recoverable_until: z.iso.datetime(),
-    deletion_method: z.enum(['user', 'ttl'])
-});
+    deleted_at: z.iso.datetime().describe("Timestamp when the branch was deleted"),
+    recoverable_until: z.iso.datetime().describe("Timestamp when the recovery window expires and the branch will be permanently deleted"),
+    deletion_method: z.enum(['user', 'ttl']).describe("How the branch was deleted: 'user' for manual deletion, 'ttl' for TTL expiration")
+}).describe("Recovery information for a deleted branch.");
 
 export const zBranch = z.strictObject({
-    id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    parent_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    parent_lsn: z.string().optional(),
-    parent_timestamp: z.iso.datetime().optional(),
-    name: z.string(),
+    id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID."),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project this branch belongs to."),
+    parent_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The `branch_id` of the parent branch").optional(),
+    parent_lsn: z.string().describe("The Log Sequence Number (LSN) on the parent branch from which this branch was created.").optional(),
+    parent_timestamp: z.iso.datetime().describe("The point in time on the parent branch from which this branch was created.").optional(),
+    name: z.string().describe("The branch name"),
     current_state: zBranchState,
     pending_state: zBranchState.optional(),
-    state_changed_at: z.iso.datetime(),
-    logical_size: z.int().optional(),
-    creation_source: z.string(),
-    primary: z.boolean().optional(),
-    default: z.boolean(),
-    protected: z.boolean(),
-    cpu_used_sec: z.int(),
-    compute_time_seconds: z.int(),
-    active_time_seconds: z.int(),
-    written_data_bytes: z.int(),
-    data_transfer_bytes: z.int(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    ttl_interval_seconds: z.int().optional(),
-    expires_at: z.iso.datetime().optional(),
-    last_reset_at: z.iso.datetime().optional(),
+    state_changed_at: z.iso.datetime().describe("A UTC timestamp indicating when the `current_state` began"),
+    logical_size: z.int().describe("The logical size of the branch, in bytes").optional(),
+    creation_source: z.string().describe("The branch creation source"),
+    primary: z.boolean().describe("Deprecated. Use the `default` field.").optional(),
+    default: z.boolean().describe("Whether the branch is the project's default branch"),
+    protected: z.boolean().describe("Whether the branch is protected."),
+    cpu_used_sec: z.int().describe("Deprecated. Use `compute_time_seconds` instead."),
+    compute_time_seconds: z.int().describe("Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size)."),
+    active_time_seconds: z.int().describe("Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size)."),
+    written_data_bytes: z.int().describe("Data written by this branch during the current billing period, in bytes."),
+    data_transfer_bytes: z.int().describe("Total data transferred out of the branch, in bytes."),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the branch was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the branch was last updated"),
+    ttl_interval_seconds: z.int().describe("The time-to-live (TTL) duration originally configured for the branch, in seconds.").optional(),
+    expires_at: z.iso.datetime().describe("The timestamp when the branch is scheduled to expire and be automatically deleted.").optional(),
+    last_reset_at: z.iso.datetime().describe("A timestamp indicating when the branch was last reset").optional(),
     created_by: z.strictObject({
-        name: z.string().optional(),
-        image: z.string().optional()
-    }).optional(),
-    init_source: z.string().optional(),
+        name: z.string().describe("Display name of the user who created the branch.").optional(),
+        image: z.string().describe("The URL to the user's avatar image.").optional()
+    }).describe("The resolved user model that contains details of the user/org/integration/api_key used for branch creation.").optional(),
+    init_source: z.string().describe("Source of initialization for the branch.").optional(),
     restore_status: zBranchRestoreStatus.optional(),
-    restored_from: z.string().optional(),
-    restored_as: z.string().optional(),
-    restricted_actions: z.array(zBranchRestrictedAction).optional(),
+    restored_from: z.string().describe("ID of the snapshot that was the restore source for this branch").optional(),
+    restored_as: z.string().describe("ID of the target branch which was replaced when this branch was restored").optional(),
+    restricted_actions: z.array(zBranchRestrictedAction).describe("A list of actions that are currently restricted for this branch and the reason why.").optional(),
     recovery: zBranchRecoveryInfo.optional()
 });
 
 export const zBranchUpdateRequest = z.strictObject({
     branch: z.strictObject({
-        name: z.string().min(1).max(256).optional(),
-        protected: z.boolean().optional(),
+        name: z.string().min(1).max(256).describe("New display name for the branch.").optional(),
+        protected: z.boolean().describe("Whether the branch is protected.").optional(),
         expires_at: z.iso.datetime().nullish()
-    })
+    }).describe("Branch attributes to update.")
 });
 
 export const zBranchRestoreRequest = z.strictObject({
-    source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    source_lsn: z.string().optional(),
-    source_timestamp: z.iso.datetime().optional(),
-    preserve_under_name: z.string().optional()
+    source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The `branch_id` of the restore source branch."),
+    source_lsn: z.string().describe("A Postgres LSN (for example, `0/1A2B3C4`) on the source branch to restore from.").optional(),
+    source_timestamp: z.iso.datetime().describe("A point in time on the source branch to restore from, in RFC 3339 format.").optional(),
+    preserve_under_name: z.string().describe("Name under which to save the current branch state before restoring.").optional()
 });
 
 export const zBranchResponse = z.strictObject({
-    branch: zBranch
+    branch: z.strictObject({
+        id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID."),
+        project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project this branch belongs to."),
+        parent_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The `branch_id` of the parent branch").optional(),
+        parent_lsn: z.string().describe("The Log Sequence Number (LSN) on the parent branch from which this branch was created.").optional(),
+        parent_timestamp: z.iso.datetime().describe("The point in time on the parent branch from which this branch was created.").optional(),
+        name: z.string().describe("The branch name"),
+        current_state: zBranchState,
+        pending_state: zBranchState.optional(),
+        state_changed_at: z.iso.datetime().describe("A UTC timestamp indicating when the `current_state` began"),
+        logical_size: z.int().describe("The logical size of the branch, in bytes").optional(),
+        creation_source: z.string().describe("The branch creation source"),
+        primary: z.boolean().describe("Deprecated. Use the `default` field.").optional(),
+        default: z.boolean().describe("Whether the branch is the project's default branch"),
+        protected: z.boolean().describe("Whether the branch is protected."),
+        cpu_used_sec: z.int().describe("Deprecated. Use `compute_time_seconds` instead."),
+        compute_time_seconds: z.int().describe("Total Postgres compute time consumed by this branch during the current billing period, in CU-seconds (weighted by compute size)."),
+        active_time_seconds: z.int().describe("Total time this branch's compute has been active during the current billing period, in seconds (not weighted by compute size)."),
+        written_data_bytes: z.int().describe("Data written by this branch during the current billing period, in bytes."),
+        data_transfer_bytes: z.int().describe("Total data transferred out of the branch, in bytes."),
+        created_at: z.iso.datetime().describe("A timestamp indicating when the branch was created"),
+        updated_at: z.iso.datetime().describe("A timestamp indicating when the branch was last updated"),
+        ttl_interval_seconds: z.int().describe("The time-to-live (TTL) duration originally configured for the branch, in seconds.").optional(),
+        expires_at: z.iso.datetime().describe("The timestamp when the branch is scheduled to expire and be automatically deleted.").optional(),
+        last_reset_at: z.iso.datetime().describe("A timestamp indicating when the branch was last reset").optional(),
+        created_by: z.strictObject({
+            name: z.string().describe("Display name of the user who created the branch.").optional(),
+            image: z.string().describe("The URL to the user's avatar image.").optional()
+        }).describe("The resolved user model that contains details of the user/org/integration/api_key used for branch creation.").optional(),
+        init_source: z.string().describe("Source of initialization for the branch.").optional(),
+        restore_status: zBranchRestoreStatus.optional(),
+        restored_from: z.string().describe("ID of the snapshot that was the restore source for this branch").optional(),
+        restored_as: z.string().describe("ID of the target branch which was replaced when this branch was restored").optional(),
+        restricted_actions: z.array(zBranchRestrictedAction).describe("A list of actions that are currently restricted for this branch and the reason why.").optional(),
+        recovery: zBranchRecoveryInfo.optional()
+    }).describe("Branch returned by the request.")
+});
+
+export const zBranchSchemaResponse = z.strictObject({
+    sql: z.string().describe("Branch schema expressed as SQL DDL statements.").optional(),
+    json: z.strictObject({
+        tables: z.array(z.strictObject({
+            schema: z.string().describe("Postgres schema (namespace) that contains the table, for example `public`."),
+            name: z.string().describe("Name of the table within the schema."),
+            columns: z.array(z.strictObject({
+                name: z.string().describe("Name of the column."),
+                type: z.string().describe("Postgres data type of the column, for example \"integer\" or \"text\"."),
+                nullable: z.boolean().describe("Whether the column allows NULL values").optional(),
+                generated: z.boolean().describe("Whether the column is a generated (computed) column").optional()
+            })).describe("Columns belonging to this table, each describing a column's name and attributes."),
+            constraints: z.array(z.strictObject({
+                type: z.string().describe("Type of constraint."),
+                columns: z.array(z.string()).min(1).describe("Column names participating in this constraint"),
+                name: z.string().describe("Optional name of the constraint").optional(),
+                referenced_table: z.strictObject({
+                    schema: z.string().describe("Schema of the referenced table"),
+                    table: z.string().describe("Name of the referenced table"),
+                    columns: z.array(z.string()).describe("Names of the referenced columns")
+                }).describe("For foreign keys - the referenced table information").optional()
+            })).describe("Table constraints defined in the branch schema, such as primary key, foreign key, unique, and check constraints.").optional()
+        })).describe("Tables present in the branch schema.")
+    }).describe("Branch schema represented as a structured JSON object, parallel to the SQL DDL in `sql`.").optional()
 });
 
 export const zBranchSchemaCompareResponse = z.strictObject({
-    diff: z.string().optional()
+    diff: z.string().describe("Unified diff of the SQL schema changes between the compared branches.").optional()
 });
 
 export const zBranchesResponse = z.strictObject({
-    branches: z.array(zBranch)
+    branches: z.array(zBranch).describe("Branches in the project.")
 });
 
 export const zBranchesCountResponse = z.strictObject({
-    count: z.int()
+    count: z.int().describe("Total number of branches in the project.")
 });
 
 export const zMaskingRule = z.strictObject({
-    database_name: z.string(),
-    schema_name: z.string(),
-    table_name: z.string(),
-    column_name: z.string(),
-    masking_function: z.string().optional(),
-    masking_value: z.string().optional()
+    database_name: z.string().describe("The name of the database containing the table to be masked"),
+    schema_name: z.string().describe("The name of the schema containing the table to be masked"),
+    table_name: z.string().describe("The name of the table containing the column to be masked"),
+    column_name: z.string().describe("The name of the column to be masked"),
+    masking_function: z.string().describe("The PostgreSQL Anonymizer masking function to apply.").optional(),
+    masking_value: z.string().describe("A literal value to set on the column when masking.").optional()
 });
 
 export const zMaskingRulesResponse = z.strictObject({
-    masking_rules: z.array(zMaskingRule)
+    masking_rules: z.array(zMaskingRule).describe("List of masking rules for the branch")
 });
 
 export const zMaskingRulesUpdateRequest = z.strictObject({
-    masking_rules: z.array(zMaskingRule)
+    masking_rules: z.array(zMaskingRule).describe("List of masking rules to apply to the branch.")
 });
 
 /**
  * Metadata about the most recent anonymization attempt for the branch.
  */
 export const zAnonymizationRunMetadata = z.strictObject({
-    started_at: z.iso.datetime().optional(),
-    completed_at: z.iso.datetime().optional(),
-    triggered_by: z.uuid().optional(),
-    triggered_by_username: z.string().optional(),
-    masked_columns: z.int().optional()
-});
+    started_at: z.iso.datetime().describe("Timestamp indicating when the latest anonymization attempt started.").optional(),
+    completed_at: z.iso.datetime().describe("Timestamp indicating when the latest anonymization attempt completed.").optional(),
+    triggered_by: z.uuid().describe("UUID of the user who triggered the latest anonymization attempt.").optional(),
+    triggered_by_username: z.string().describe("Username of the user who triggered the latest anonymization attempt.").optional(),
+    masked_columns: z.int().describe("Number of columns that had masking rules applied during the attempt.").optional()
+}).describe("Metadata about the most recent anonymization attempt for the branch.");
 
 export const zAnonymizedBranchStatusResponse = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    state: z.string(),
-    status_message: z.string().optional(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    failed_at: z.iso.datetime().optional(),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project this branch belongs to."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the anonymized branch."),
+    state: z.string().describe("The current state of the anonymized branch."),
+    status_message: z.string().describe("A descriptive message about the current status or any errors").optional(),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the anonymized branch was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the anonymized branch status was last updated"),
+    failed_at: z.iso.datetime().describe("A timestamp indicating when the anonymized branch operation failed (if applicable)").optional(),
     last_run: zAnonymizationRunMetadata.optional()
 });
 
 export const zConnectionParameters = z.strictObject({
-    database: z.string(),
-    password: z.string(),
-    role: z.string(),
-    host: z.string(),
-    pooler_host: z.string()
+    database: z.string().describe("Name of the Postgres database used in the connection URI."),
+    password: z.string().describe("Authentication password for the role, used in the connection URI."),
+    role: z.string().describe("Postgres role used to authenticate the database connection."),
+    host: z.string().describe("Hostname of the compute endpoint."),
+    pooler_host: z.string().describe("PgBouncer (transaction mode) pooled host, the `-pooler` variant of `host`.")
 });
 
 export const zConnectionDetails = z.strictObject({
-    connection_uri: z.string(),
-    connection_parameters: zConnectionParameters
+    connection_uri: z.string().describe("The connection URI is defined as specified here: Connection URIs The connection URI can be used to connect to a Postgres database with psql or defined in a DATABASE_URL environment variable."),
+    connection_parameters: z.strictObject({
+        database: z.string().describe("Name of the Postgres database used in the connection URI."),
+        password: z.string().describe("Authentication password for the role, used in the connection URI."),
+        role: z.string().describe("Postgres role used to authenticate the database connection."),
+        host: z.string().describe("Hostname of the compute endpoint."),
+        pooler_host: z.string().describe("PgBouncer (transaction mode) pooled host, the `-pooler` variant of `host`.")
+    }).describe("Individual components of the connection URI (host, port, database, role, and password) as discrete fields, for programmatic use rather than parsing the sibling `connection_uri` string.")
 });
 
 export const zConnectionUriResponse = z.strictObject({
-    uri: z.string()
+    uri: z.string().describe("The connection URI.")
 });
 
 /**
@@ -596,12 +679,12 @@ export const zEndpointState = z.enum([
     'init',
     'active',
     'idle'
-]);
+]).describe("Lifecycle state of the compute endpoint.");
 
 /**
  * Compute endpoint type. `read_write`: the primary read-write endpoint (one per branch). `read_only`: a read replica endpoint (multiple allowed per branch).
  */
-export const zEndpointType = z.enum(['read_only', 'read_write']);
+export const zEndpointType = z.enum(['read_only', 'read_write']).describe("Compute endpoint type.");
 
 /**
  * Deprecated. The connection pooler mode. Neon supports PgBouncer in `transaction` mode only. Removal scheduled for June 20, 2026.
@@ -609,7 +692,7 @@ export const zEndpointType = z.enum(['read_only', 'read_write']);
  *
  * @deprecated
  */
-export const zEndpointPoolerMode = z.enum(['transaction']);
+export const zEndpointPoolerMode = z.enum(['transaction']).describe("Deprecated. The connection pooler mode.");
 
 /**
  * Duration of inactivity in seconds after which the compute endpoint is
@@ -620,7 +703,7 @@ export const zEndpointPoolerMode = z.enum(['transaction']);
  * [Scale to zero configuration](https://neon.com/docs/manage/endpoints#scale-to-zero-configuration).
  *
  */
-export const zSuspendTimeoutSeconds = z.int().gte(-1).lte(604800);
+export const zSuspendTimeoutSeconds = z.int().gte(-1).lte(604800).describe("Duration of inactivity in seconds after which the compute endpoint is automatically suspended.");
 
 /**
  * A list of IP addresses that are allowed to connect to the compute endpoint.
@@ -629,9 +712,9 @@ export const zSuspendTimeoutSeconds = z.int().gte(-1).lte(604800);
  *
  */
 export const zAllowedIps = z.strictObject({
-    ips: z.array(z.string()).optional(),
-    protected_branches_only: z.boolean().optional()
-});
+    ips: z.array(z.string()).describe("A list of IP addresses that are allowed to connect to the endpoint.").optional(),
+    protected_branches_only: z.boolean().describe("If true, the list will be applied only to protected branches.").optional()
+}).describe("A list of IP addresses that are allowed to connect to the compute endpoint.");
 
 /**
  * A maintenance window is a time period during which Neon may perform maintenance on the project's infrastructure.
@@ -640,109 +723,127 @@ export const zAllowedIps = z.strictObject({
  *
  */
 export const zMaintenanceWindow = z.strictObject({
-    weekdays: z.array(z.int()),
-    start_time: z.string(),
-    end_time: z.string()
-});
+    weekdays: z.array(z.int()).describe("A list of weekdays when the maintenance window is active."),
+    start_time: z.string().describe("Start time of the maintenance window, in the format of \"HH:MM\"."),
+    end_time: z.string().describe("End time of the maintenance window, in the format of \"HH:MM\".")
+}).describe("A maintenance window is a time period during which Neon may perform maintenance on the project's infrastructure.");
 
 /**
  * The shared libraries to preload into the project's compute instances.
  *
  */
 export const zPreloadLibraries = z.strictObject({
-    use_defaults: z.boolean().optional(),
-    enabled_libraries: z.array(z.string()).optional()
-});
+    use_defaults: z.boolean().describe("When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.").optional(),
+    enabled_libraries: z.array(z.string()).describe("Names of shared preload libraries to enable for the project.").optional()
+}).describe("The shared libraries to preload into the project's compute instances.");
 
 export const zConnectionUrisResponse = z.strictObject({
-    connection_uris: z.array(zConnectionDetails)
+    connection_uris: z.array(zConnectionDetails).describe("Connection URIs for the project.")
 });
 
 export const zConnectionUrisOptionalResponse = z.strictObject({
-    connection_uris: z.array(zConnectionDetails).optional()
+    connection_uris: z.array(zConnectionDetails).describe("Connection URIs for the compute endpoint, including credentials.").optional()
 });
 
 export const zVpcEndpoint = z.strictObject({
-    vpc_endpoint_id: z.string(),
-    label: z.string()
+    vpc_endpoint_id: z.string().describe("Cloud provider identifier for the VPC endpoint."),
+    label: z.string().describe("A descriptive label for the VPC endpoint")
 });
 
 export const zVpcEndpointsResponse = z.strictObject({
-    endpoints: z.array(zVpcEndpoint)
+    endpoints: z.array(zVpcEndpoint).describe("List of VPC endpoints returned by the request.")
 });
 
 export const zVpcEndpointWithRegion = zVpcEndpoint.merge(z.strictObject({
-    region_id: z.string()
+    region_id: z.string().describe("The region where the VPC endpoint is located")
 }));
 
 export const zVpcEndpointsWithRegionResponse = z.strictObject({
-    endpoints: z.array(zVpcEndpointWithRegion)
+    endpoints: z.array(zVpcEndpointWithRegion).describe("VPC endpoints associated with the region.")
 });
 
 export const zVpcEndpointDetails = z.strictObject({
-    vpc_endpoint_id: z.string(),
-    label: z.string(),
-    state: z.string(),
-    num_restricted_projects: z.int(),
-    example_restricted_projects: z.array(z.string())
+    vpc_endpoint_id: z.string().describe("Cloud provider identifier for the VPC endpoint."),
+    label: z.string().describe("A descriptive label for the VPC endpoint"),
+    state: z.string().describe("The current state of the VPC endpoint."),
+    num_restricted_projects: z.int().describe("The number of projects that are restricted to use this VPC endpoint."),
+    example_restricted_projects: z.array(z.string()).describe("A list of example projects that are restricted to use this VPC endpoint.")
 });
 
 export const zVpcEndpointAssignment = z.strictObject({
-    label: z.string()
+    label: z.string().describe("Human-readable name for the VPC endpoint assignment, used to identify it within the organization.")
 });
 
 export const zRealtimeOptions = z.strictObject({
-    allowed_origins: z.array(z.string().min(1).max(2048).regex(/^(\*|https?:\/\/[^\/?#@,*\s]+)$/)).max(16).optional()
+    allowed_origins: z.array(z.string().min(1).max(2048).regex(/^(\*|https?:\/\/[^\/?#@,*\s]+)$/)).max(16).describe("The browser origins allowed to connect, each `http` or `https` with a host and optional port and no path.").optional()
 });
 
 export const zRealtime = z.strictObject({
-    enabled: z.boolean(),
-    pending: z.boolean(),
+    enabled: z.boolean().describe("Whether Realtime is enabled for the branch."),
+    pending: z.boolean().describe("Whether a provisioning, settings, rotation or deprovisioning change is still being applied."),
     invocation_url: z.string().optional(),
     revision: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).optional(),
     allowed_origins: z.array(z.string()).optional()
 });
 
 export const zRealtimeSecret = z.strictObject({
-    secret: z.string().min(1),
-    pending: z.boolean()
+    secret: z.string().min(1).describe("The key the application backend issues Realtime tokens with, `nrt_live_1` followed by the unpadded base64url 32-byte AES-256-GCM key."),
+    pending: z.boolean().describe("Whether a change is still being applied.")
 });
 
 export const zRole = z.strictObject({
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    name: z.string(),
-    password: z.string().optional(),
-    protected: z.boolean().optional(),
-    authentication_method: z.string().optional(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime()
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this role belongs to."),
+    name: z.string().describe("Postgres role name within the branch."),
+    password: z.string().describe("The role password").optional(),
+    protected: z.boolean().describe("Whether or not the role is system-protected").optional(),
+    authentication_method: z.string().describe("Authentication method configured for this role: `password`, `oauth`, `oidc`, or `no_login`.").optional(),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the role was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the role was last updated")
 });
 
 export const zRoleCreateRequest = z.strictObject({
     role: z.strictObject({
-        name: z.string(),
-        no_login: z.boolean().optional()
-    })
+        name: z.string().describe("The role name."),
+        no_login: z.boolean().describe("Whether to create a role that cannot login.").optional()
+    }).describe("Properties of the role to create.")
 });
 
 export const zRoleResponse = z.strictObject({
-    role: zRole
+    role: z.strictObject({
+        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this role belongs to."),
+        name: z.string().describe("Postgres role name within the branch."),
+        password: z.string().describe("The role password").optional(),
+        protected: z.boolean().describe("Whether or not the role is system-protected").optional(),
+        authentication_method: z.string().describe("Authentication method configured for this role: `password`, `oauth`, `oidc`, or `no_login`.").optional(),
+        created_at: z.iso.datetime().describe("A timestamp indicating when the role was created"),
+        updated_at: z.iso.datetime().describe("A timestamp indicating when the role was last updated")
+    }).describe("Role details for the requested database role.")
 });
 
 export const zJwksResponse = z.strictObject({
-    jwks: zJwks
+    jwks: z.strictObject({
+        id: z.string().describe("The JWKS configuration's ID."),
+        project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID.").optional(),
+        jwks_url: z.string().describe("URL of the provider's JWKS endpoint used to verify JWTs."),
+        provider_name: z.string().describe("The name of the authentication provider (e.g., Clerk, Stytch, Auth0)"),
+        created_at: z.iso.datetime().describe("The date and time when the JWKS was created"),
+        updated_at: z.iso.datetime().describe("The date and time when the JWKS was last modified"),
+        jwt_audience: z.string().describe("Expected JWT `aud` claim value configured for this JWKS.").optional(),
+        role_names: z.array(z.string()).describe("Database role names that are permitted to authenticate using this JWKS configuration.").optional()
+    }).describe("JWKS configuration associated with the project.")
 });
 
 export const zRolesResponse = z.strictObject({
-    roles: z.array(zRole)
+    roles: z.array(zRole).describe("Roles belonging to the branch.")
 });
 
 export const zRolePasswordResponse = z.strictObject({
-    password: z.string()
+    password: z.string().describe("The role password")
 });
 
 export const zPaymentSourceBankCard = z.strictObject({
-    last4: z.string(),
+    last4: z.string().describe("Last 4 digits of the card."),
     brand: z.enum([
         'amex',
         'diners',
@@ -752,18 +853,32 @@ export const zPaymentSourceBankCard = z.strictObject({
         'unionpay',
         'unknown',
         'visa'
-    ]).optional(),
-    exp_month: z.int().optional(),
-    exp_year: z.int().optional()
+    ]).describe("Card network reported by the payment processor.").optional(),
+    exp_month: z.int().describe("Credit card expiration month").optional(),
+    exp_year: z.int().describe("Credit card expiration year").optional()
 });
 
 export const zPaymentSource = z.strictObject({
-    type: z.string(),
-    card: zPaymentSourceBankCard.optional()
+    type: z.string().describe("Type of payment source."),
+    card: z.strictObject({
+        last4: z.string().describe("Last 4 digits of the card."),
+        brand: z.enum([
+            'amex',
+            'diners',
+            'discover',
+            'jcb',
+            'mastercard',
+            'unionpay',
+            'unknown',
+            'visa'
+        ]).describe("Card network reported by the payment processor.").optional(),
+        exp_month: z.int().describe("Credit card expiration month").optional(),
+        exp_year: z.int().describe("Credit card expiration year").optional()
+    }).describe("Bank card details for this payment source.").optional()
 });
 
 export const zSpendingLimitUpdateRequest = z.strictObject({
-    spending_limit_cents: z.int().gte(1)
+    spending_limit_cents: z.int().gte(1).describe("Monthly spending cap in cents.")
 });
 
 export const zSpendingLimitResponse = z.strictObject({
@@ -780,7 +895,7 @@ export const zBillingAccountState = z.enum([
     'suspended',
     'deactivated',
     'deleted'
-]);
+]).describe("State of the billing account.");
 
 /**
  * Type of subscription to Neon Cloud.
@@ -801,7 +916,7 @@ export const zBillingSubscriptionType = z.enum([
     'scale_v3',
     'business',
     'vercel_pg_legacy'
-]);
+]).describe("Type of subscription to Neon Cloud.");
 
 /**
  * Indicates whether and how an account makes payments.
@@ -819,59 +934,95 @@ export const zBillingPaymentMethod = z.enum([
     'trial',
     'sponsorship',
     'shared_payment_token'
-]);
+]).describe("Indicates whether and how an account makes payments.");
 
 export const zBillingAccount = z.strictObject({
-    state: zBillingAccountState,
-    payment_source: zPaymentSource,
+    state: z.enum([
+        'UNKNOWN',
+        'active',
+        'suspended',
+        'deactivated',
+        'deleted'
+    ]).describe("State of the billing account."),
+    payment_source: z.strictObject({
+        type: z.string().describe("Type of payment source."),
+        card: z.strictObject({
+            last4: z.string().describe("Last 4 digits of the card."),
+            brand: z.enum([
+                'amex',
+                'diners',
+                'discover',
+                'jcb',
+                'mastercard',
+                'unionpay',
+                'unknown',
+                'visa'
+            ]).describe("Card network reported by the payment processor.").optional(),
+            exp_month: z.int().describe("Credit card expiration month").optional(),
+            exp_year: z.int().describe("Credit card expiration year").optional()
+        }).describe("Bank card details for this payment source.").optional()
+    }).describe("Payment source attached to the billing account, such as a credit card on file."),
     subscription_type: zBillingSubscriptionType,
     payment_method: zBillingPaymentMethod,
-    quota_reset_at_last: z.iso.datetime(),
-    name: z.string(),
-    email: z.email().min(1).max(256),
-    address_city: z.string(),
-    address_country: z.string(),
-    address_country_name: z.string().optional(),
-    address_line1: z.string(),
-    address_line2: z.string(),
-    address_postal_code: z.string(),
-    address_state: z.string(),
-    orb_portal_url: z.string().optional(),
-    tax_id: z.string().optional(),
-    tax_id_type: z.string().optional(),
-    plan_details: zPlanDetails.optional(),
+    quota_reset_at_last: z.iso.datetime().describe("Timestamp of the last quota reset."),
+    name: z.string().describe("The full name of the individual or entity that owns the billing account."),
+    email: z.email().min(1).max(256).describe("Billing email, to receive emails related to invoices and subscriptions."),
+    address_city: z.string().describe("Billing address city."),
+    address_country: z.string().describe("Billing address country code defined by ISO 3166-1 alpha-2."),
+    address_country_name: z.string().describe("Billing address country name.").optional(),
+    address_line1: z.string().describe("Billing address line 1."),
+    address_line2: z.string().describe("Billing address line 2."),
+    address_postal_code: z.string().describe("Billing address postal code."),
+    address_state: z.string().describe("Billing address state or region."),
+    orb_portal_url: z.string().describe("Orb user portal url").optional(),
+    tax_id: z.string().describe("The tax identification number for the billing account, displayed on invoices.").optional(),
+    tax_id_type: z.string().describe("The type of the tax identification number based on the country.").optional(),
+    plan_details: z.strictObject({
+        name: z.string().describe("Plan name, for example `free`, `launch`, or `scale`."),
+        version: z.strictObject({
+            major: z.int(),
+            minor: z.int()
+        }).describe("Version of the plan, expressed as `major` and `minor` components.").optional()
+    }).describe("Details of the subscription plan associated with the billing account.").optional(),
     spending_limit_cents: z.int().nullish()
 });
 
 export const zDatabase = z.strictObject({
-    id: z.int(),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    name: z.string(),
-    owner_name: z.string(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime()
+    id: z.int().describe("The database ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this database belongs to."),
+    name: z.string().describe("The database name"),
+    owner_name: z.string().describe("The name of role that owns the database"),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the database was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the database was last updated")
 });
 
 export const zDatabaseCreateRequest = z.strictObject({
     database: z.strictObject({
-        name: z.string(),
-        owner_name: z.string()
-    })
+        name: z.string().describe("Name of the database to create."),
+        owner_name: z.string().describe("The name of the role that owns the database")
+    }).describe("Configuration for the new Postgres database.")
 });
 
 export const zDatabaseUpdateRequest = z.strictObject({
     database: z.strictObject({
-        name: z.string().optional(),
-        owner_name: z.string().optional()
-    })
+        name: z.string().describe("Name of the database to update.").optional(),
+        owner_name: z.string().describe("The name of the role that owns the database").optional()
+    }).describe("Properties to update on the database.")
 });
 
 export const zDatabaseResponse = z.strictObject({
-    database: zDatabase
+    database: z.strictObject({
+        id: z.int().describe("The database ID"),
+        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this database belongs to."),
+        name: z.string().describe("The database name"),
+        owner_name: z.string().describe("The name of role that owns the database"),
+        created_at: z.iso.datetime().describe("A timestamp indicating when the database was created"),
+        updated_at: z.iso.datetime().describe("A timestamp indicating when the database was last updated")
+    }).describe("Database object returned by the operation.")
 });
 
 export const zDatabasesResponse = z.strictObject({
-    databases: z.array(zDatabase)
+    databases: z.array(zDatabase).describe("Databases on the branch.")
 });
 
 /**
@@ -883,63 +1034,73 @@ export const zMemberRole = z.enum([
     'editor',
     'viewer',
     'collaborator'
-]);
+]).describe("Organization member's role.");
 
 export const zInvitation = z.strictObject({
-    id: z.uuid(),
-    email: z.email().min(1).max(256),
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    invited_by: z.uuid(),
-    invited_at: z.iso.datetime(),
+    id: z.uuid().describe("The invitation ID."),
+    email: z.email().min(1).max(256).describe("Email of the invited user"),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Organization id as it is stored in Neon"),
+    invited_by: z.uuid().describe("UUID for the user_id who extended the invitation"),
+    invited_at: z.iso.datetime().describe("Timestamp when the invitation was created"),
     role: zMemberRole
 });
 
 export const zMember = z.strictObject({
-    id: z.uuid(),
-    user_id: z.uuid(),
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    id: z.uuid().describe("The organization member's ID."),
+    user_id: z.uuid().describe("The Neon user ID."),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID."),
     role: zMemberRole,
-    joined_at: z.iso.datetime().optional()
+    joined_at: z.iso.datetime().describe("Timestamp when the user joined the organization.").optional()
 });
 
 export const zMemberUserInfo = z.strictObject({
-    email: z.email().min(1).max(256),
-    has_mfa: z.boolean().optional(),
-    deactivated_at: z.iso.datetime().optional()
+    email: z.email().min(1).max(256).describe("Email address of the organization member's user account."),
+    has_mfa: z.boolean().describe("Whether the member has MFA (TOTP) enabled").optional(),
+    deactivated_at: z.iso.datetime().describe("Timestamp of when the user account was deactivated.").optional()
 });
 
 export const zMemberWithUser = z.strictObject({
-    member: zMember,
-    user: zMemberUserInfo
+    member: z.strictObject({
+        id: z.uuid().describe("The organization member's ID."),
+        user_id: z.uuid().describe("The Neon user ID."),
+        org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID."),
+        role: zMemberRole,
+        joined_at: z.iso.datetime().describe("Timestamp when the user joined the organization.").optional()
+    }).describe("Membership record for the user in the organization."),
+    user: z.strictObject({
+        email: z.email().min(1).max(256).describe("Email address of the organization member's user account."),
+        has_mfa: z.boolean().describe("Whether the member has MFA (TOTP) enabled").optional(),
+        deactivated_at: z.iso.datetime().describe("Timestamp of when the user account was deactivated.").optional()
+    }).describe("Profile information for the organization member.")
 });
 
 export const zOrganization = z.strictObject({
-    id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    name: z.string(),
-    handle: z.string(),
-    plan: z.string(),
-    created_at: z.iso.datetime(),
-    managed_by: z.string(),
-    updated_at: z.iso.datetime(),
-    allow_hipaa_projects: z.boolean().optional(),
-    require_mfa: z.boolean().optional()
+    id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID."),
+    name: z.string().describe("Human-readable display name of the organization."),
+    handle: z.string().describe("URL-safe identifier for the organization, used in API paths."),
+    plan: z.string().describe("Billing plan for the organization, for example `free`, `launch`, or `scale`."),
+    created_at: z.iso.datetime().describe("A timestamp indicting when the organization was created"),
+    managed_by: z.string().describe("Organizations created via the Console or the API are managed by `console`."),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the organization was updated"),
+    allow_hipaa_projects: z.boolean().describe("If true, allow account to mark projects as HIPAA").optional(),
+    require_mfa: z.boolean().describe("If true, all members must have MFA enabled to access this organization").optional()
 });
 
 export const zOrganizationsResponse = z.strictObject({
-    organizations: z.array(zOrganization)
+    organizations: z.array(zOrganization).describe("Organizations returned by the request.")
 });
 
 export const zOrganizationInvitationsResponse = z.strictObject({
-    invitations: z.array(zInvitation)
+    invitations: z.array(zInvitation).describe("List of pending invitations for the organization.")
 });
 
 export const zOrganizationInviteCreateRequest = z.strictObject({
-    email: z.email().min(1).max(256),
+    email: z.email().min(1).max(256).describe("Email address of the person to invite to the organization."),
     role: zMemberRole
 });
 
 export const zOrganizationInvitesCreateRequest = z.strictObject({
-    invitations: z.array(zOrganizationInviteCreateRequest)
+    invitations: z.array(zOrganizationInviteCreateRequest).describe("Invitations to create for the organization.")
 });
 
 export const zOrganizationMemberUpdateRequest = z.strictObject({
@@ -947,36 +1108,36 @@ export const zOrganizationMemberUpdateRequest = z.strictObject({
 });
 
 export const zOrganizationMembersResponse = z.strictObject({
-    members: z.array(zMemberWithUser)
+    members: z.array(zMemberWithUser).describe("Members of the organization, each combining membership details (role, status) with the associated user's identity.")
 });
 
 export const zRegionResponse = z.strictObject({
-    region_id: z.string(),
-    name: z.string(),
-    default: z.boolean(),
-    geo_lat: z.string(),
-    geo_long: z.string()
+    region_id: z.string().describe("Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`)."),
+    name: z.string().describe("A short description of the region."),
+    default: z.boolean().describe("True if this region is selected by default when no region is specified during project creation."),
+    geo_lat: z.string().describe("The geographical latitude (approximate) for the region."),
+    geo_long: z.string().describe("The geographical longitude (approximate) for the region.")
 });
 
 export const zActiveRegionsResponse = z.strictObject({
-    regions: z.array(zRegionResponse)
+    regions: z.array(zRegionResponse).describe("The list of active regions")
 });
 
 export const zAuthDetailsResponse = z.strictObject({
-    account_id: z.string(),
+    account_id: z.string().describe("The ID of the account associated with this authentication record."),
     auth_method: z.enum([
         'keycloak',
         'session_cookie',
         'api_key_user',
         'api_key_org',
         'oauth'
-    ]),
+    ]).describe("Authentication method used for the request: - `keycloak`: Keycloak identity provider authentication."),
     auth_data: z.string().optional()
 });
 
 export const zTransferProjectsToOrganizationRequest = z.strictObject({
-    destination_org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    project_ids: z.array(z.string().regex(/^[a-z0-9-]{1,60}$/)).min(1).max(400)
+    destination_org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The destination organization identifier"),
+    project_ids: z.array(z.string().regex(/^[a-z0-9-]{1,60}$/)).min(1).max(400).describe("The list of projects ids to transfer.")
 });
 
 /**
@@ -990,31 +1151,80 @@ export const zIdentityProviderId = z.enum([
     'microsoftv2',
     'vercelmp',
     'keycloak'
-]);
+]).describe("Identity provider id from keycloak");
 
 export const zCurrentUserAuthAccount = z.strictObject({
-    email: z.email().min(1).max(256),
-    image: z.string(),
-    login: z.string(),
-    name: z.string(),
+    email: z.email().min(1).max(256).describe("Email address associated with this auth account."),
+    image: z.string().describe("URL of the user's profile picture as provided by the identity provider."),
+    login: z.string().describe("Deprecated. Use the `email` field."),
+    name: z.string().describe("Display name of the account as provided by the identity provider."),
     provider: zIdentityProviderId
 });
 
 export const zCurrentUserInfoResponse = z.strictObject({
-    active_seconds_limit: z.int(),
-    billing_account: zBillingAccount.optional(),
-    auth_accounts: z.array(zCurrentUserAuthAccount),
-    email: z.email().min(1).max(256),
-    id: z.string(),
-    image: z.string(),
-    login: z.string(),
-    name: z.string(),
-    last_name: z.string(),
-    projects_limit: z.int(),
-    branches_limit: z.int(),
-    max_autoscaling_limit: z.number(),
-    compute_seconds_limit: z.int().optional(),
-    plan: z.string()
+    active_seconds_limit: z.int().describe("Control plane observes active endpoints of a user this amount of wall-clock time."),
+    billing_account: z.strictObject({
+        state: z.enum([
+            'UNKNOWN',
+            'active',
+            'suspended',
+            'deactivated',
+            'deleted'
+        ]).describe("State of the billing account."),
+        payment_source: z.strictObject({
+            type: z.string().describe("Type of payment source."),
+            card: z.strictObject({
+                last4: z.string().describe("Last 4 digits of the card."),
+                brand: z.enum([
+                    'amex',
+                    'diners',
+                    'discover',
+                    'jcb',
+                    'mastercard',
+                    'unionpay',
+                    'unknown',
+                    'visa'
+                ]).describe("Card network reported by the payment processor.").optional(),
+                exp_month: z.int().describe("Credit card expiration month").optional(),
+                exp_year: z.int().describe("Credit card expiration year").optional()
+            }).describe("Bank card details for this payment source.").optional()
+        }).describe("Payment source attached to the billing account, such as a credit card on file."),
+        subscription_type: zBillingSubscriptionType,
+        payment_method: zBillingPaymentMethod,
+        quota_reset_at_last: z.iso.datetime().describe("Timestamp of the last quota reset."),
+        name: z.string().describe("The full name of the individual or entity that owns the billing account."),
+        email: z.email().min(1).max(256).describe("Billing email, to receive emails related to invoices and subscriptions."),
+        address_city: z.string().describe("Billing address city."),
+        address_country: z.string().describe("Billing address country code defined by ISO 3166-1 alpha-2."),
+        address_country_name: z.string().describe("Billing address country name.").optional(),
+        address_line1: z.string().describe("Billing address line 1."),
+        address_line2: z.string().describe("Billing address line 2."),
+        address_postal_code: z.string().describe("Billing address postal code."),
+        address_state: z.string().describe("Billing address state or region."),
+        orb_portal_url: z.string().describe("Orb user portal url").optional(),
+        tax_id: z.string().describe("The tax identification number for the billing account, displayed on invoices.").optional(),
+        tax_id_type: z.string().describe("The type of the tax identification number based on the country.").optional(),
+        plan_details: z.strictObject({
+            name: z.string().describe("Plan name, for example `free`, `launch`, or `scale`."),
+            version: z.strictObject({
+                major: z.int(),
+                minor: z.int()
+            }).describe("Version of the plan, expressed as `major` and `minor` components.").optional()
+        }).describe("Details of the subscription plan associated with the billing account.").optional(),
+        spending_limit_cents: z.int().nullish()
+    }).describe("Billing account associated with the current user, including plan and subscription details.").optional(),
+    auth_accounts: z.array(zCurrentUserAuthAccount).describe("Authentication provider accounts linked to the current user."),
+    email: z.email().min(1).max(256).describe("Email address of the authenticated user."),
+    id: z.string().describe("The Neon user ID."),
+    image: z.string().describe("URL of the user's profile avatar image."),
+    login: z.string().describe("Deprecated. Use the `email` field."),
+    name: z.string().describe("First name of the current user."),
+    last_name: z.string().describe("Last name of the current user."),
+    projects_limit: z.int().describe("Maximum number of projects the account is allowed to create under the current plan."),
+    branches_limit: z.int().describe("Maximum number of branches allowed for the account under the current plan."),
+    max_autoscaling_limit: z.number().describe("The maximum autoscaling limit in Compute Units."),
+    compute_seconds_limit: z.int().describe("Maximum Postgres compute time, in seconds, allowed under the account's current plan.").optional(),
+    plan: z.string().describe("Current billing plan for the user's account.")
 });
 
 /**
@@ -1036,144 +1246,151 @@ export const zCurrentUserInfoResponse = z.strictObject({
  *
  */
 export const zProjectQuota = z.strictObject({
-    active_time_seconds: z.int().gte(0).optional(),
-    compute_time_seconds: z.int().gte(0).optional(),
-    written_data_bytes: z.int().gte(0).optional(),
-    data_transfer_bytes: z.int().gte(0).optional(),
-    logical_size_bytes: z.int().gte(0).optional()
-});
+    active_time_seconds: z.int().gte(0).describe("The total amount of wall-clock time allowed to be spent by the project's compute endpoints.").optional(),
+    compute_time_seconds: z.int().gte(0).describe("The total amount of CPU seconds allowed to be spent by the project's compute endpoints.").optional(),
+    written_data_bytes: z.int().gte(0).describe("Total amount of data written to all of a project's branches.").optional(),
+    data_transfer_bytes: z.int().gte(0).describe("Total amount of data transferred from all of a project's branches using the proxy.").optional(),
+    logical_size_bytes: z.int().gte(0).describe("Limit on the logical size of every project's branch.").optional()
+}).describe("Per-project consumption quotas.");
 
 export const zProjectSettingsData = z.strictObject({
     quota: zProjectQuota.optional(),
     allowed_ips: zAllowedIps.optional(),
-    enable_logical_replication: z.boolean().optional(),
+    enable_logical_replication: z.boolean().describe("Sets wal_level=logical for all compute endpoints in this project.").optional(),
     maintenance_window: zMaintenanceWindow.optional(),
-    block_public_connections: z.boolean().optional(),
-    block_vpc_connections: z.boolean().optional(),
-    audit_log_level: zProjectAuditLogLevel.optional(),
-    hipaa: z.boolean().optional(),
+    block_public_connections: z.boolean().describe("When set, connections from the public internet are disallowed.").optional(),
+    block_vpc_connections: z.boolean().describe("When set, connections using VPC endpoints are disallowed.").optional(),
+    audit_log_level: z.enum([
+        'base',
+        'extended',
+        'full'
+    ]).describe("Audit logging level, set only on HIPAA-enabled organizations (absent otherwise).").optional(),
+    hipaa: z.boolean().describe("Enables HIPAA compliance mode for the project, including audit logging.").optional(),
     preload_libraries: zPreloadLibraries.optional()
 });
 
 /**
  * A raw representation of Postgres settings
  */
-export const zPgSettingsData = z.record(z.string(), z.string());
-
-/**
- * Deprecated. A raw representation of PgBouncer settings. Removal scheduled for June 20, 2026.
- *
- *
- * @deprecated
- */
-export const zPgbouncerSettingsData = z.record(z.string(), z.string());
+export const zPgSettingsData = z.record(z.string(), z.string()).describe("A raw representation of Postgres settings");
 
 /**
  * A collection of settings for a compute endpoint
  */
 export const zEndpointSettingsData = z.strictObject({
     pg_settings: zPgSettingsData.optional(),
-    pgbouncer_settings: zPgbouncerSettingsData.optional(),
+    pgbouncer_settings: z.record(z.string(), z.string()).describe("Deprecated. PgBouncer settings for the compute endpoint.").optional(),
     preload_libraries: zPreloadLibraries.optional()
-});
-
-export const zBranchCreateRequestEndpointOptions = z.strictObject({
-    type: zEndpointType,
-    settings: zEndpointSettingsData.optional(),
-    autoscaling_limit_min_cu: zComputeUnit.optional(),
-    autoscaling_limit_max_cu: zComputeUnit.optional(),
-    provisioner: zProvisioner.optional(),
-    suspend_timeout_seconds: zSuspendTimeoutSeconds.optional()
-});
-
-export const zBranchCreateRequest = z.strictObject({
-    endpoints: z.array(zBranchCreateRequestEndpointOptions).optional(),
-    branch: z.strictObject({
-        parent_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-        name: z.string().min(1).max(256).optional(),
-        parent_lsn: z.string().optional(),
-        parent_timestamp: z.iso.datetime().optional(),
-        protected: z.boolean().optional(),
-        realtime: zRealtimeOptions.optional(),
-        archived: z.boolean().optional(),
-        init_source: z.string().optional(),
-        expires_at: z.iso.datetime().optional()
-    }).optional()
-});
+}).describe("A collection of settings for a compute endpoint");
 
 export const zEndpoint = z.strictObject({
-    host: z.string(),
-    id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    name: z.string().optional(),
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    autoscaling_limit_min_cu: zComputeUnit,
-    autoscaling_limit_max_cu: zComputeUnit,
-    region_id: z.string(),
+    host: z.string().describe("The hostname of the compute endpoint."),
+    id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The compute endpoint ID."),
+    name: z.string().describe("Optional name of the compute endpoint").optional(),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project this compute endpoint belongs to."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this compute endpoint belongs to."),
+    autoscaling_limit_min_cu: z.number().gte(0.25).describe("The minimum number of Compute Units"),
+    autoscaling_limit_max_cu: z.number().gte(0.25).describe("The maximum number of Compute Units"),
+    region_id: z.string().describe("Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`)."),
     type: zEndpointType,
     current_state: zEndpointState,
-    pending_state: zEndpointState.optional(),
+    pending_state: z.enum([
+        'init',
+        'active',
+        'idle'
+    ]).describe("Target state the compute endpoint is transitioning to.").optional(),
     settings: zEndpointSettingsData,
-    pooler_enabled: z.boolean(),
-    pooler_mode: zEndpointPoolerMode,
-    disabled: z.boolean(),
-    passwordless_access: z.boolean(),
-    last_active: z.iso.datetime().optional(),
-    creation_source: z.string(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    started_at: z.iso.datetime().optional(),
-    suspended_at: z.iso.datetime().optional(),
-    proxy_host: z.string(),
-    suspend_timeout_seconds: zSuspendTimeoutSeconds,
-    provisioner: zProvisioner,
-    compute_release_version: z.string().optional()
+    pooler_enabled: z.boolean().describe("Deprecated. To use connection pooling, append `-pooler` to the endpoint ID in the connection string."),
+    pooler_mode: z.enum(['transaction']).describe("Deprecated. The connection pooler mode."),
+    disabled: z.boolean().describe("Whether to restrict connections to the compute endpoint."),
+    passwordless_access: z.boolean().describe("Whether to permit passwordless access to the compute endpoint"),
+    last_active: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last active").optional(),
+    creation_source: z.string().describe("The compute endpoint creation source"),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last updated"),
+    started_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last started").optional(),
+    suspended_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last suspended").optional(),
+    proxy_host: z.string().describe("Deprecated. Use the `host` property instead."),
+    suspend_timeout_seconds: z.int().gte(-1).lte(604800).describe("Scale-to-zero idle timeout, in seconds, before the compute suspends."),
+    provisioner: z.string().describe("Compute provisioner."),
+    compute_release_version: z.string().describe("Attached compute's release version number.").optional()
 });
 
 export const zEndpointCreateRequest = z.strictObject({
     endpoint: z.strictObject({
-        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-        region_id: z.string().optional(),
+        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch the compute endpoint will be associated with"),
+        region_id: z.string().describe("The region where the compute endpoint will be created.").optional(),
         type: zEndpointType,
         settings: zEndpointSettingsData.optional(),
-        autoscaling_limit_min_cu: zComputeUnit.optional(),
-        autoscaling_limit_max_cu: zComputeUnit.optional(),
-        provisioner: zProvisioner.optional(),
-        pooler_enabled: z.boolean().optional(),
-        pooler_mode: zEndpointPoolerMode.optional(),
-        disabled: z.boolean().optional(),
-        passwordless_access: z.boolean().optional(),
-        suspend_timeout_seconds: zSuspendTimeoutSeconds.optional(),
-        name: z.string().min(1).max(64).optional()
-    })
+        autoscaling_limit_min_cu: z.number().gte(0.25).describe("The minimum number of Compute Units.").optional(),
+        autoscaling_limit_max_cu: z.number().gte(0.25).describe("The maximum number of Compute Units.").optional(),
+        provisioner: z.string().describe("Compute provisioner.").optional(),
+        pooler_enabled: z.boolean().describe("Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.").optional(),
+        pooler_mode: z.enum(['transaction']).describe("Deprecated. The connection pooler mode.").optional(),
+        disabled: z.boolean().describe("Whether to restrict connections to the compute endpoint.").optional(),
+        passwordless_access: z.boolean().describe("NOT YET IMPLEMENTED.").optional(),
+        suspend_timeout_seconds: z.int().gte(-1).lte(604800).describe("Scale-to-zero idle timeout, in seconds, before the compute suspends.").optional(),
+        name: z.string().min(1).max(64).describe("Optional name of the compute endpoint").optional()
+    }).describe("Configuration for the compute endpoint to create.")
 });
 
 export const zEndpointUpdateRequest = z.strictObject({
     endpoint: z.strictObject({
-        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-        autoscaling_limit_min_cu: zComputeUnit.optional(),
-        autoscaling_limit_max_cu: zComputeUnit.optional(),
-        provisioner: zProvisioner.optional(),
+        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Deprecated. The destination branch ID; must not have an existing read-write endpoint.").optional(),
+        autoscaling_limit_min_cu: z.number().gte(0.25).describe("The minimum number of Compute Units.").optional(),
+        autoscaling_limit_max_cu: z.number().gte(0.25).describe("The maximum number of Compute Units.").optional(),
+        provisioner: z.string().describe("Compute provisioner.").optional(),
         settings: zEndpointSettingsData.optional(),
-        pooler_enabled: z.boolean().optional(),
-        pooler_mode: zEndpointPoolerMode.optional(),
-        disabled: z.boolean().optional(),
-        passwordless_access: z.boolean().optional(),
-        suspend_timeout_seconds: zSuspendTimeoutSeconds.optional(),
-        name: z.string().min(1).max(64).optional()
-    })
+        pooler_enabled: z.boolean().describe("Deprecated. To enable connection pooling, append `-pooler` to the endpoint ID in the connection string.").optional(),
+        pooler_mode: z.enum(['transaction']).describe("Deprecated. The connection pooler mode.").optional(),
+        disabled: z.boolean().describe("Whether to restrict connections to the compute endpoint.").optional(),
+        passwordless_access: z.boolean().describe("NOT YET IMPLEMENTED.").optional(),
+        suspend_timeout_seconds: z.int().gte(-1).lte(604800).describe("Scale-to-zero idle timeout, in seconds, before the compute suspends.").optional(),
+        name: z.string().min(1).max(64).describe("Optional name of the compute endpoint").optional()
+    }).describe("Parameters for the compute endpoint update.")
 });
 
 export const zEndpointResponse = z.strictObject({
-    endpoint: zEndpoint
+    endpoint: z.strictObject({
+        host: z.string().describe("The hostname of the compute endpoint."),
+        id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The compute endpoint ID."),
+        name: z.string().describe("Optional name of the compute endpoint").optional(),
+        project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the project this compute endpoint belongs to."),
+        branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The ID of the branch this compute endpoint belongs to."),
+        autoscaling_limit_min_cu: z.number().gte(0.25).describe("The minimum number of Compute Units"),
+        autoscaling_limit_max_cu: z.number().gte(0.25).describe("The maximum number of Compute Units"),
+        region_id: z.string().describe("Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`)."),
+        type: zEndpointType,
+        current_state: zEndpointState,
+        pending_state: z.enum([
+            'init',
+            'active',
+            'idle'
+        ]).describe("Target state the compute endpoint is transitioning to.").optional(),
+        settings: zEndpointSettingsData,
+        pooler_enabled: z.boolean().describe("Deprecated. To use connection pooling, append `-pooler` to the endpoint ID in the connection string."),
+        pooler_mode: z.enum(['transaction']).describe("Deprecated. The connection pooler mode."),
+        disabled: z.boolean().describe("Whether to restrict connections to the compute endpoint."),
+        passwordless_access: z.boolean().describe("Whether to permit passwordless access to the compute endpoint"),
+        last_active: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last active").optional(),
+        creation_source: z.string().describe("The compute endpoint creation source"),
+        created_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was created"),
+        updated_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last updated"),
+        started_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last started").optional(),
+        suspended_at: z.iso.datetime().describe("A timestamp indicating when the compute endpoint was last suspended").optional(),
+        proxy_host: z.string().describe("Deprecated. Use the `host` property instead."),
+        suspend_timeout_seconds: z.int().gte(-1).lte(604800).describe("Scale-to-zero idle timeout, in seconds, before the compute suspends."),
+        provisioner: z.string().describe("Compute provisioner."),
+        compute_release_version: z.string().describe("Attached compute's release version number.").optional()
+    }).describe("Compute endpoint created or retrieved, including its current lifecycle state.")
 });
 
 export const zEndpointsResponse = z.strictObject({
-    endpoints: z.array(zEndpoint)
+    endpoints: z.array(zEndpoint).describe("Compute endpoints in the project.")
 });
 
 export const zEndpointsOptionalResponse = z.strictObject({
-    endpoints: z.array(zEndpoint).optional()
+    endpoints: z.array(zEndpoint).describe("Compute endpoints associated with the project.").optional()
 });
 
 /**
@@ -1181,185 +1398,365 @@ export const zEndpointsOptionalResponse = z.strictObject({
  */
 export const zDefaultEndpointSettings = z.strictObject({
     pg_settings: zPgSettingsData.optional(),
-    pgbouncer_settings: zPgbouncerSettingsData.optional(),
-    autoscaling_limit_min_cu: zComputeUnit.optional(),
-    autoscaling_limit_max_cu: zComputeUnit.optional(),
-    suspend_timeout_seconds: zSuspendTimeoutSeconds.optional()
-});
+    pgbouncer_settings: z.record(z.string(), z.string()).describe("Deprecated. Use the endpoint-level connection pooler configuration instead.").optional(),
+    autoscaling_limit_min_cu: z.number().gte(0.25).describe("Minimum number of Compute Units for this endpoint.").optional(),
+    autoscaling_limit_max_cu: z.number().gte(0.25).describe("Default maximum number of Compute Units for endpoints created under this account.").optional(),
+    suspend_timeout_seconds: z.int().gte(-1).lte(604800).describe("Scale-to-zero idle timeout, in seconds, before the compute suspends.").optional()
+}).describe("A collection of settings for a Neon endpoint");
 
 export const zProjectUpdateRequest = z.strictObject({
     project: z.strictObject({
-        settings: zProjectSettingsData.optional(),
-        name: z.string().min(1).max(256).optional(),
+        settings: z.strictObject({
+            quota: zProjectQuota.optional(),
+            allowed_ips: zAllowedIps.optional(),
+            enable_logical_replication: z.boolean().describe("Sets wal_level=logical for all compute endpoints in this project.").optional(),
+            maintenance_window: zMaintenanceWindow.optional(),
+            block_public_connections: z.boolean().describe("When set, connections from the public internet are disallowed.").optional(),
+            block_vpc_connections: z.boolean().describe("When set, connections using VPC endpoints are disallowed.").optional(),
+            audit_log_level: zProjectAuditLogLevel.optional(),
+            hipaa: z.boolean().describe("Enables HIPAA compliance mode for the project, including audit logging.").optional(),
+            preload_libraries: zPreloadLibraries.optional()
+        }).describe("Project-level settings, for example `quota`, `allowed_ips`, `enable_logical_replication`, and `maintenance_window`.").optional(),
+        name: z.string().min(1).max(256).describe("The project name").optional(),
         default_endpoint_settings: zDefaultEndpointSettings.optional(),
-        history_retention_seconds: z.int().gte(0).lte(2592000).optional()
+        history_retention_seconds: z.int().gte(0).lte(2592000).describe("History window (point-in-time restore range) for all branches, in seconds.").optional()
     })
+});
+
+/**
+ * Deprecated. A raw representation of PgBouncer settings. Removal scheduled for June 20, 2026.
+ *
+ *
+ * @deprecated
+ */
+export const zPgbouncerSettingsData = z.record(z.string(), z.string()).describe("Deprecated. A raw representation of PgBouncer settings.");
+
+export const zBranchCreateRequestEndpointOptions = z.strictObject({
+    type: zEndpointType,
+    settings: z.strictObject({
+        pg_settings: zPgSettingsData.optional(),
+        pgbouncer_settings: zPgbouncerSettingsData.optional(),
+        preload_libraries: zPreloadLibraries.optional()
+    }).describe("Compute endpoint settings: `pg_settings` (Postgres parameter overrides such as `work_mem`, `max_connections`) and `preload_libraries`.").optional(),
+    autoscaling_limit_min_cu: z.number().gte(0.25).describe("Minimum number of Compute Units the endpoint can scale down to.").optional(),
+    autoscaling_limit_max_cu: z.number().gte(0.25).describe("Maximum number of Compute Units the endpoint can scale up to.").optional(),
+    provisioner: z.string().describe("Compute provisioner.").optional(),
+    suspend_timeout_seconds: z.int().gte(-1).lte(604800).describe("Scale-to-zero idle timeout, in seconds, before the compute suspends.").optional()
+});
+
+export const zBranchCreateRequest = z.strictObject({
+    endpoints: z.array(zBranchCreateRequestEndpointOptions).describe("Compute endpoints to create together with the branch.").optional(),
+    branch: z.strictObject({
+        parent_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The `branch_id` of the parent branch.").optional(),
+        name: z.string().min(1).max(256).describe("The branch name").optional(),
+        parent_lsn: z.string().describe("A Log Sequence Number (LSN) on the parent branch.").optional(),
+        parent_timestamp: z.iso.datetime().describe("A timestamp identifying a point in time on the parent branch.").optional(),
+        protected: z.boolean().describe("Whether the branch is protected.").optional(),
+        realtime: z.strictObject({
+            allowed_origins: z.array(z.string().min(1).max(2048).regex(/^(\*|https?:\/\/[^\/?#@,*\s]+)$/)).max(16).describe("The browser origins allowed to connect, each `http` or `https` with a host and optional port and no path.").optional()
+        }).describe("Enable Realtime for the branch with these options.").optional(),
+        archived: z.boolean().describe("Whether to create the branch in the archived state.").optional(),
+        init_source: z.string().describe("Source of initialization for the branch.").optional(),
+        expires_at: z.iso.datetime().describe("The timestamp when the branch is scheduled to expire and be automatically deleted.").optional()
+    }).describe("Optional configuration for the new branch, for example `name`, `parent_id` (fork from a branch), `parent_lsn` or `parent_timestamp` (point-in-time branching), and `protected`.").optional()
 });
 
 /**
  * The major Postgres version number. Supported versions are `14`, `15`, `16`, `17`, and `18`. `19` is rolling out and is accepted only in regions where it is enabled; requesting it elsewhere returns an error.
  */
-export const zPgVersion = z.int().gte(14).lte(19);
+export const zPgVersion = z.int().gte(14).lte(19).describe("The major Postgres version number.");
 
 /**
  * Essential data about the project. Full data is available at `GET /projects/{project_id}`.
  *
  */
 export const zProjectListItem = z.strictObject({
-    id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    platform_id: z.string(),
-    region_id: z.string(),
-    name: z.string(),
-    provisioner: zProvisioner,
+    id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+    platform_id: z.string().describe("The cloud platform identifier."),
+    region_id: z.string().describe("Cloud region where the project's Postgres compute and storage reside (for example, `aws-us-east-2`)."),
+    name: z.string().describe("The project name"),
+    provisioner: z.string().describe("Compute provisioner."),
     default_endpoint_settings: zDefaultEndpointSettings.optional(),
-    settings: zProjectSettingsData.optional(),
+    settings: z.strictObject({
+        quota: zProjectQuota.optional(),
+        allowed_ips: zAllowedIps.optional(),
+        enable_logical_replication: z.boolean().describe("Sets wal_level=logical for all compute endpoints in this project.").optional(),
+        maintenance_window: zMaintenanceWindow.optional(),
+        block_public_connections: z.boolean().describe("When set, connections from the public internet are disallowed.").optional(),
+        block_vpc_connections: z.boolean().describe("When set, connections using VPC endpoints are disallowed.").optional(),
+        audit_log_level: zProjectAuditLogLevel.optional(),
+        hipaa: z.boolean().describe("Enables HIPAA compliance mode for the project, including audit logging.").optional(),
+        preload_libraries: zPreloadLibraries.optional()
+    }).describe("Project-level settings, for example `quota`, `allowed_ips`, `enable_logical_replication`, and `maintenance_window`.").optional(),
     pg_version: zPgVersion,
-    proxy_host: z.string(),
-    branch_logical_size_limit: z.int(),
-    branch_logical_size_limit_bytes: z.int(),
-    store_passwords: z.boolean(),
-    active_time: z.int().gte(0),
-    cpu_used_sec: z.int(),
-    maintenance_starts_at: z.iso.datetime().optional(),
-    creation_source: z.string(),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    synthetic_storage_size: z.int().optional(),
-    quota_reset_at: z.iso.datetime().optional(),
-    owner_id: z.string(),
-    compute_last_active_at: z.iso.datetime().optional(),
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    org_name: z.string().optional(),
-    history_retention_seconds: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).optional(),
-    hipaa_enabled_at: z.iso.datetime().optional(),
-    deleted_at: z.iso.datetime().optional(),
-    recoverable_until: z.iso.datetime().optional(),
+    proxy_host: z.string().describe("The proxy host for the project."),
+    branch_logical_size_limit: z.int().describe("The logical size limit for a branch."),
+    branch_logical_size_limit_bytes: z.int().describe("The logical size limit for a branch."),
+    store_passwords: z.boolean().describe("Whether or not passwords are stored for roles in the Neon project."),
+    active_time: z.int().gte(0).describe("Control plane observed endpoints of this project being active this amount of wall-clock time."),
+    cpu_used_sec: z.int().describe("Deprecated. Use `compute_time_seconds` from `GET /projects/{project_id}` instead."),
+    maintenance_starts_at: z.iso.datetime().describe("A timestamp indicating when project maintenance begins.").optional(),
+    creation_source: z.string().describe("The project creation source"),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the project was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the project was last updated"),
+    synthetic_storage_size: z.int().describe("Deprecated: always returns 0.").optional(),
+    quota_reset_at: z.iso.datetime().describe("Deprecated. Use `consumption_period_end` from `GET /projects/{project_id}` instead.").optional(),
+    owner_id: z.string().describe("ID of the organization that owns the project."),
+    compute_last_active_at: z.iso.datetime().describe("The most recent time when any endpoint of this project was active.").optional(),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("ID of the organization that owns the project.").optional(),
+    org_name: z.string().describe("Name of the organization that owns the project.").optional(),
+    history_retention_seconds: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("The number of seconds to retain the shared history for all branches in this project.").optional(),
+    hipaa_enabled_at: z.iso.datetime().describe("A timestamp indicating when HIPAA was enabled for this project").optional(),
+    deleted_at: z.iso.datetime().describe("A timestamp indicating when the project was deleted").optional(),
+    recoverable_until: z.iso.datetime().describe("A timestamp indicating the project will be recoverable until this date and time.").optional(),
     effective_project_permission: zProjectPermissionLevel.nullish()
-});
-
-export const zProjectsResponse = z.strictObject({
-    projects: z.array(zProjectListItem),
-    unavailable_project_ids: z.array(z.string().regex(/^[a-z0-9-]{1,60}$/)).optional()
-});
-
-export const zProjectOwnerData = z.strictObject({
-    email: z.email().min(1).max(256),
-    name: z.string(),
-    branches_limit: z.int(),
-    subscription_type: zBillingSubscriptionType
-});
+}).describe("Essential data about the project.");
 
 export const zProject = z.strictObject({
-    data_storage_bytes_hour: z.int().gte(0),
-    data_transfer_bytes: z.int().gte(0),
-    written_data_bytes: z.int().gte(0),
-    compute_time_seconds: z.int().gte(0),
-    active_time_seconds: z.int().gte(0),
-    cpu_used_sec: z.int(),
-    id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    platform_id: z.string(),
-    region_id: z.string(),
-    name: z.string(),
-    provisioner: zProvisioner,
+    data_storage_bytes_hour: z.int().gte(0).describe("Deprecated: always returns 0."),
+    data_transfer_bytes: z.int().gte(0).describe("Bytes."),
+    written_data_bytes: z.int().gte(0).describe("Bytes."),
+    compute_time_seconds: z.int().gte(0).describe("Seconds."),
+    active_time_seconds: z.int().gte(0).describe("Seconds."),
+    cpu_used_sec: z.int().describe("Deprecated. Use `compute_time_seconds` instead."),
+    id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+    platform_id: z.string().describe("The cloud platform identifier."),
+    region_id: z.string().describe("Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`)."),
+    name: z.string().describe("The project name"),
+    provisioner: z.string().describe("Compute provisioner."),
     default_endpoint_settings: zDefaultEndpointSettings.optional(),
-    settings: zProjectSettingsData.optional(),
+    settings: z.strictObject({
+        quota: zProjectQuota.optional(),
+        allowed_ips: zAllowedIps.optional(),
+        enable_logical_replication: z.boolean().describe("Sets wal_level=logical for all compute endpoints in this project.").optional(),
+        maintenance_window: zMaintenanceWindow.optional(),
+        block_public_connections: z.boolean().describe("When set, connections from the public internet are disallowed.").optional(),
+        block_vpc_connections: z.boolean().describe("When set, connections using VPC endpoints are disallowed.").optional(),
+        audit_log_level: zProjectAuditLogLevel.optional(),
+        hipaa: z.boolean().describe("Enables HIPAA compliance mode for the project, including audit logging.").optional(),
+        preload_libraries: zPreloadLibraries.optional()
+    }).describe("Project-level settings, for example `quota`, `allowed_ips`, `enable_logical_replication`, and `maintenance_window`.").optional(),
     pg_version: zPgVersion,
-    proxy_host: z.string(),
-    branch_logical_size_limit: z.int(),
-    branch_logical_size_limit_bytes: z.int(),
-    store_passwords: z.boolean(),
-    maintenance_starts_at: z.iso.datetime().optional(),
-    creation_source: z.string(),
-    history_retention_seconds: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
-    created_at: z.iso.datetime(),
-    updated_at: z.iso.datetime(),
-    synthetic_storage_size: z.int().optional(),
-    consumption_period_start: z.iso.datetime(),
-    consumption_period_end: z.iso.datetime(),
-    quota_reset_at: z.iso.datetime().optional(),
-    owner_id: z.string(),
-    owner: zProjectOwnerData.optional(),
-    compute_last_active_at: z.iso.datetime().optional(),
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    maintenance_scheduled_for: z.iso.datetime().optional(),
-    hipaa_enabled_at: z.iso.datetime().optional(),
+    proxy_host: z.string().describe("The proxy host for the project."),
+    branch_logical_size_limit: z.int().describe("The logical size limit for a branch."),
+    branch_logical_size_limit_bytes: z.int().describe("The logical size limit for a branch."),
+    store_passwords: z.boolean().describe("Whether or not passwords are stored for roles in the Neon project."),
+    maintenance_starts_at: z.iso.datetime().describe("A timestamp indicating when project maintenance begins.").optional(),
+    creation_source: z.string().describe("The project creation source"),
+    history_retention_seconds: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("The number of seconds to retain the shared history for all branches in this project."),
+    created_at: z.iso.datetime().describe("A timestamp indicating when the project was created"),
+    updated_at: z.iso.datetime().describe("A timestamp indicating when the project was last updated"),
+    synthetic_storage_size: z.int().describe("Deprecated: always returns 0.").optional(),
+    consumption_period_start: z.iso.datetime().describe("A date-time indicating when Neon Cloud started measuring consumption for current consumption period."),
+    consumption_period_end: z.iso.datetime().describe("A date-time indicating when Neon Cloud plans to stop measuring consumption for current consumption period."),
+    quota_reset_at: z.iso.datetime().describe("Deprecated. Use the `consumption_period_end` field instead.").optional(),
+    owner_id: z.string().describe("ID of the organization that owns the project."),
+    owner: z.strictObject({
+        email: z.email().min(1).max(256).describe("Email address of the project owner."),
+        name: z.string().describe("Display name of the project owner."),
+        branches_limit: z.int().describe("Maximum number of branches the owner is allowed to create across their projects."),
+        subscription_type: zBillingSubscriptionType
+    }).describe("Ownership details for the project, including the owner's name and email.").optional(),
+    compute_last_active_at: z.iso.datetime().describe("The most recent time when any endpoint of this project was active.").optional(),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID.").optional(),
+    maintenance_scheduled_for: z.iso.datetime().describe("A timestamp indicating when project update begins.").optional(),
+    hipaa_enabled_at: z.iso.datetime().describe("A timestamp indicating when HIPAA was enabled for this project").optional(),
     effective_project_permission: zProjectPermissionLevel.nullish()
+});
+
+export const zProjectCreateRequest = z.strictObject({
+    project: z.strictObject({
+        settings: z.strictObject({
+            quota: zProjectQuota.optional(),
+            allowed_ips: zAllowedIps.optional(),
+            enable_logical_replication: z.boolean().describe("Sets wal_level=logical for all compute endpoints in this project.").optional(),
+            maintenance_window: zMaintenanceWindow.optional(),
+            block_public_connections: z.boolean().describe("When set, connections from the public internet are disallowed.").optional(),
+            block_vpc_connections: z.boolean().describe("When set, connections using VPC endpoints are disallowed.").optional(),
+            audit_log_level: zProjectAuditLogLevel.optional(),
+            hipaa: z.boolean().describe("Enables HIPAA compliance mode for the project, including audit logging.").optional(),
+            preload_libraries: zPreloadLibraries.optional()
+        }).describe("Project-level settings applied at creation.").optional(),
+        name: z.string().min(1).max(256).describe("The project name.").optional(),
+        realtime: z.strictObject({
+            allowed_origins: z.array(z.string().min(1).max(2048).regex(/^(\*|https?:\/\/[^\/?#@,*\s]+)$/)).max(16).describe("The browser origins allowed to connect, each `http` or `https` with a host and optional port and no path.").optional()
+        }).describe("Enable Realtime for the default branch with these options.").optional(),
+        branch: z.strictObject({
+            name: z.string().min(1).max(256).describe("The default branch name.").optional(),
+            role_name: z.string().describe("The role name.").optional(),
+            database_name: z.string().describe("The database name.").optional(),
+            annotations: z.record(z.string(), z.string()).describe("Arbitrary key-value metadata to attach to the branch.").optional()
+        }).describe("Configuration for the initial branch created with the project.").optional(),
+        autoscaling_limit_min_cu: z.number().gte(0.25).describe("Deprecated. Use `default_endpoint_settings.autoscaling_limit_min_cu` instead.").optional(),
+        autoscaling_limit_max_cu: z.number().gte(0.25).describe("Deprecated. Use `default_endpoint_settings.autoscaling_limit_max_cu` instead.").optional(),
+        provisioner: z.string().describe("Compute provisioner.").optional(),
+        region_id: z.string().describe("The region identifier.").optional(),
+        default_endpoint_settings: zDefaultEndpointSettings.optional(),
+        pg_version: zPgVersion.optional(),
+        store_passwords: z.boolean().describe("Whether or not passwords are stored for roles in the Neon project.").optional(),
+        history_retention_seconds: z.int().gte(0).lte(2592000).describe("History window (point-in-time restore range) for all branches, in seconds.").optional(),
+        org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("ID of the organization that will own the project.").optional()
+    }).describe("Configuration for the new project, including name, region, and Postgres compute and storage settings.")
 });
 
 export const zProjectResponse = z.strictObject({
-    project: zProject
+    project: z.strictObject({
+        data_storage_bytes_hour: z.int().gte(0).describe("Deprecated: always returns 0."),
+        data_transfer_bytes: z.int().gte(0).describe("Bytes."),
+        written_data_bytes: z.int().gte(0).describe("Bytes."),
+        compute_time_seconds: z.int().gte(0).describe("Seconds."),
+        active_time_seconds: z.int().gte(0).describe("Seconds."),
+        cpu_used_sec: z.int().describe("Deprecated. Use `compute_time_seconds` instead."),
+        id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+        platform_id: z.string().describe("The cloud platform identifier."),
+        region_id: z.string().describe("Cloud region where the resource's Postgres compute and storage reside (for example, `aws-us-east-1`)."),
+        name: z.string().describe("The project name"),
+        provisioner: z.string().describe("Compute provisioner."),
+        default_endpoint_settings: zDefaultEndpointSettings.optional(),
+        settings: z.strictObject({
+            quota: zProjectQuota.optional(),
+            allowed_ips: zAllowedIps.optional(),
+            enable_logical_replication: z.boolean().describe("Sets wal_level=logical for all compute endpoints in this project.").optional(),
+            maintenance_window: zMaintenanceWindow.optional(),
+            block_public_connections: z.boolean().describe("When set, connections from the public internet are disallowed.").optional(),
+            block_vpc_connections: z.boolean().describe("When set, connections using VPC endpoints are disallowed.").optional(),
+            audit_log_level: zProjectAuditLogLevel.optional(),
+            hipaa: z.boolean().describe("Enables HIPAA compliance mode for the project, including audit logging.").optional(),
+            preload_libraries: zPreloadLibraries.optional()
+        }).describe("Project-level settings, for example `quota`, `allowed_ips`, `enable_logical_replication`, and `maintenance_window`.").optional(),
+        pg_version: zPgVersion,
+        proxy_host: z.string().describe("The proxy host for the project."),
+        branch_logical_size_limit: z.int().describe("The logical size limit for a branch."),
+        branch_logical_size_limit_bytes: z.int().describe("The logical size limit for a branch."),
+        store_passwords: z.boolean().describe("Whether or not passwords are stored for roles in the Neon project."),
+        maintenance_starts_at: z.iso.datetime().describe("A timestamp indicating when project maintenance begins.").optional(),
+        creation_source: z.string().describe("The project creation source"),
+        history_retention_seconds: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("The number of seconds to retain the shared history for all branches in this project."),
+        created_at: z.iso.datetime().describe("A timestamp indicating when the project was created"),
+        updated_at: z.iso.datetime().describe("A timestamp indicating when the project was last updated"),
+        synthetic_storage_size: z.int().describe("Deprecated: always returns 0.").optional(),
+        consumption_period_start: z.iso.datetime().describe("A date-time indicating when Neon Cloud started measuring consumption for current consumption period."),
+        consumption_period_end: z.iso.datetime().describe("A date-time indicating when Neon Cloud plans to stop measuring consumption for current consumption period."),
+        quota_reset_at: z.iso.datetime().describe("Deprecated. Use the `consumption_period_end` field instead.").optional(),
+        owner_id: z.string().describe("ID of the organization that owns the project."),
+        owner: z.strictObject({
+            email: z.email().min(1).max(256).describe("Email address of the project owner."),
+            name: z.string().describe("Display name of the project owner."),
+            branches_limit: z.int().describe("Maximum number of branches the owner is allowed to create across their projects."),
+            subscription_type: zBillingSubscriptionType
+        }).describe("Ownership details for the project, including the owner's name and email.").optional(),
+        compute_last_active_at: z.iso.datetime().describe("The most recent time when any endpoint of this project was active.").optional(),
+        org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID.").optional(),
+        maintenance_scheduled_for: z.iso.datetime().describe("A timestamp indicating when project update begins.").optional(),
+        hipaa_enabled_at: z.iso.datetime().describe("A timestamp indicating when HIPAA was enabled for this project").optional(),
+        effective_project_permission: zProjectPermissionLevel.nullish()
+    }).describe("Full details of the project, including configuration, consumption metrics, and ownership.")
 });
 
 export const zProjectRecoverResponse = zProjectResponse.merge(zBranchesResponse);
 
+export const zProjectsResponse = z.strictObject({
+    projects: z.array(zProjectListItem).describe("List of projects accessible to the caller."),
+    unavailable_project_ids: z.array(z.string().regex(/^[a-z0-9-]{1,60}$/)).describe("A list of project IDs indicating which projects are known to exist, but whose details could not be fetched within the requested (or implicit) time limit").optional()
+});
+
+export const zProjectOwnerData = z.strictObject({
+    email: z.email().min(1).max(256).describe("Email address of the project owner."),
+    name: z.string().describe("Display name of the project owner."),
+    branches_limit: z.int().describe("Maximum number of branches the owner is allowed to create across their projects."),
+    subscription_type: zBillingSubscriptionType
+});
+
 export const zLimitsUnsatisfiedResponse = z.strictObject({
     limits: z.array(z.strictObject({
-        name: z.string(),
-        expected: z.string(),
-        actual: z.string()
-    }))
+        name: z.string().describe("Identifier of the unsatisfied limit."),
+        expected: z.string().describe("Required value for the limit named by `name`."),
+        actual: z.string().describe("Current value of the named limit, which does not satisfy the required `expected` value.")
+    })).describe("Plan limits that were not satisfied by the request.")
 });
 
 export const zProjectsWithIntegrationResponse = z.strictObject({
     projects: z.array(z.strictObject({
-        id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-        integration: z.string()
-    }))
+        id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+        integration: z.string().describe("Name of the external integration associated with the project.")
+    })).describe("Projects that have the requested integration, each including the project details and associated integration metadata.")
 });
 
 /**
  * Configuration settings for the Neon Data API
  */
 export const zDataApiSettings = z.strictObject({
-    db_aggregates_enabled: z.boolean().optional(),
-    db_anon_role: z.string().optional(),
-    db_extra_search_path: z.string().optional(),
-    db_max_rows: z.int().optional(),
-    db_schemas: z.array(z.string()).optional(),
-    jwt_role_claim_key: z.string().optional(),
-    jwt_cache_max_lifetime: z.int().optional(),
-    openapi_mode: z.string().optional(),
-    server_cors_allowed_origins: z.string().optional(),
-    server_timing_enabled: z.boolean().optional()
-});
+    db_aggregates_enabled: z.boolean().describe("Enable aggregates feature").optional(),
+    db_anon_role: z.string().describe("Database role to use for anonymous requests").optional(),
+    db_extra_search_path: z.string().describe("Extra schemas to add to the search path").optional(),
+    db_max_rows: z.int().describe("Hard limit on the number of rows returned in a single Data API response.").optional(),
+    db_schemas: z.array(z.string()).describe("List of schemas to expose via the API.").optional(),
+    jwt_role_claim_key: z.string().describe("JWT claim key to use for role extraction").optional(),
+    jwt_cache_max_lifetime: z.int().describe("Maximum lifetime of the Data API's JWT cache, in seconds.").optional(),
+    openapi_mode: z.string().describe("OpenAPI specification mode (ignore-privileges, disabled)").optional(),
+    server_cors_allowed_origins: z.string().describe("CORS allowed origins").optional(),
+    server_timing_enabled: z.boolean().describe("When enabled, the Data API adds `Server-Timing` headers to each response showing database execution and internal processing time.").optional()
+}).describe("Configuration settings for the Neon Data API");
 
 /**
  * Create Neon Data API
  */
 export const zDataApiCreateRequest = z.strictObject({
-    auth_provider: z.enum(['neon_auth', 'external']).optional(),
-    jwks_url: z.url().optional(),
-    provider_name: z.string().optional(),
-    jwt_audience: z.string().optional(),
-    add_default_grants: z.boolean().optional(),
-    skip_auth_schema: z.boolean().optional(),
-    settings: zDataApiSettings.optional()
-});
+    auth_provider: z.enum(['neon_auth', 'external']).describe("Authentication provider for the Neon Data API.").optional(),
+    jwks_url: z.url().describe("URL of the JWKS endpoint used to verify JWTs for this Data API.").optional(),
+    provider_name: z.string().describe("Display name for the authentication provider.").optional(),
+    jwt_audience: z.string().describe("Expected `aud` claim in incoming JWTs.").optional(),
+    add_default_grants: z.boolean().describe("Grant all permissions to the tables in the public schema to authenticated users").optional(),
+    skip_auth_schema: z.boolean().describe("Skip creating the auth schema and RLS functions").optional(),
+    settings: z.strictObject({
+        db_aggregates_enabled: z.boolean().describe("Enable aggregates feature").optional(),
+        db_anon_role: z.string().describe("Database role to use for anonymous requests").optional(),
+        db_extra_search_path: z.string().describe("Extra schemas to add to the search path").optional(),
+        db_max_rows: z.int().describe("Hard limit on the number of rows returned in a single Data API response.").optional(),
+        db_schemas: z.array(z.string()).describe("List of schemas to expose via the API.").optional(),
+        jwt_role_claim_key: z.string().describe("JWT claim key to use for role extraction").optional(),
+        jwt_cache_max_lifetime: z.int().describe("Maximum lifetime of the Data API's JWT cache, in seconds.").optional(),
+        openapi_mode: z.string().describe("OpenAPI specification mode (ignore-privileges, disabled)").optional(),
+        server_cors_allowed_origins: z.string().describe("CORS allowed origins").optional(),
+        server_timing_enabled: z.boolean().describe("When enabled, the Data API adds `Server-Timing` headers to each response showing database execution and internal processing time.").optional()
+    }).describe("Auth and schema configuration for the Data API.").optional()
+}).describe("Create Neon Data API");
 
 /**
  * Neon Data API created successfully
  */
 export const zDataApiCreateResponse = z.strictObject({
-    url: z.url()
-});
+    url: z.url().describe("URL of the created Data API endpoint.")
+}).describe("Neon Data API created successfully");
 
 /**
  * Neon Data API response
  */
 export const zDataApiReponse = z.strictObject({
-    url: z.url(),
-    status: z.string(),
+    url: z.url().describe("The URL of the Neon Data API"),
+    status: z.string().describe("The status of the Neon Data API deployment"),
     settings: zDataApiSettings.nullish(),
     available_schemas: z.array(z.string()).nullish(),
-    observed_at: z.iso.datetime().optional()
-});
+    observed_at: z.iso.datetime().describe("When `settings` and `available_schemas` were read from the database.").optional()
+}).describe("Neon Data API response");
 
 /**
  * Update Neon Data API
  */
 export const zDataApiUpdateRequest = z.strictObject({
-    settings: zDataApiSettings.optional()
-});
+    settings: z.strictObject({
+        db_aggregates_enabled: z.boolean().describe("Enable aggregates feature").optional(),
+        db_anon_role: z.string().describe("Database role to use for anonymous requests").optional(),
+        db_extra_search_path: z.string().describe("Extra schemas to add to the search path").optional(),
+        db_max_rows: z.int().describe("Hard limit on the number of rows returned in a single Data API response.").optional(),
+        db_schemas: z.array(z.string()).describe("List of schemas to expose via the API.").optional(),
+        jwt_role_claim_key: z.string().describe("JWT claim key to use for role extraction").optional(),
+        jwt_cache_max_lifetime: z.int().describe("Maximum lifetime of the Data API's JWT cache, in seconds.").optional(),
+        openapi_mode: z.string().describe("OpenAPI specification mode (ignore-privileges, disabled)").optional(),
+        server_cors_allowed_origins: z.string().describe("CORS allowed origins").optional(),
+        server_timing_enabled: z.boolean().describe("When enabled, the Data API adds `Server-Timing` headers to each response showing database execution and internal processing time.").optional()
+    }).describe("Configuration settings for the Neon Data API.").optional()
+}).describe("Update Neon Data API");
 
 /**
  * Authentication provider integrated with this Neon Auth configuration. `better_auth` integrates with Better Auth (the current, recommended provider). `stack` integrates with Stack Auth (deprecated). `mock` is a simulated provider for local development and testing only.
@@ -1368,226 +1765,234 @@ export const zNeonAuthSupportedAuthProvider = z.enum([
     'mock',
     'stack',
     'better_auth'
-]);
+]).describe("Authentication provider integrated with this Neon Auth configuration.");
 
 export const zNeonAuthProviderProjectOwnedBy = z.enum(['user', 'neon']);
 
 export const zNeonAuthProviderProjectTransferStatus = z.enum(['initiated', 'finished']);
 
 export const zNeonAuthRedirectUriWhitelistDomain = z.strictObject({
-    domain: z.string(),
+    domain: z.string().describe("Allowed redirect URI domain for the auth provider."),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
 export const zNeonAuthRedirectUriWhitelistResponse = z.strictObject({
-    domains: z.array(zNeonAuthRedirectUriWhitelistDomain)
+    domains: z.array(zNeonAuthRedirectUriWhitelistDomain).describe("Domains permitted as redirect URI targets in the whitelist.")
 });
 
 export const zNeonAuthAddDomainToRedirectUriWhitelistRequest = z.strictObject({
-    domain: z.url(),
+    domain: z.url().describe("URI to add to the redirect URI allowlist for the auth provider."),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
 export const zNeonAuthDeleteDomainFromRedirectUriWhitelistItem = z.strictObject({
-    domain: z.url()
+    domain: z.url().describe("URI to remove from the redirect URI whitelist.")
 });
 
 export const zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
-    domains: z.array(zNeonAuthDeleteDomainFromRedirectUriWhitelistItem)
+    domains: z.array(zNeonAuthDeleteDomainFromRedirectUriWhitelistItem).describe("Domain names to remove from the redirect URI whitelist for the specified auth provider.")
 });
 
 export const zNeonAuthCreateIntegrationRequest = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string().optional(),
-    role_name: z.string().optional()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID."),
+    database_name: z.string().describe("Name of the database to associate with the Neon Auth integration.").optional(),
+    role_name: z.string().describe("Deprecated. The database role for the auth integration.").optional()
 });
 
 export const zEnableNeonAuthIntegrationRequest = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
-    database_name: z.string().optional()
+    database_name: z.string().describe("Name of the database to enable Neon Auth on.").optional()
 });
 
 export const zNeonAuthCreateIntegrationResponse = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
-    auth_provider_project_id: z.string(),
-    pub_client_key: z.string(),
-    secret_server_key: z.string(),
-    jwks_url: z.string(),
-    schema_name: z.string(),
-    table_name: z.string(),
-    base_url: z.string().optional()
+    auth_provider_project_id: z.string().describe("Project ID assigned by the auth provider for this integration."),
+    pub_client_key: z.string().describe("Publishable SDK key from the auth provider."),
+    secret_server_key: z.string().describe("Secret server-side SDK key from the auth provider."),
+    jwks_url: z.string().describe("URL of the provider's JWKS endpoint used to verify JWTs."),
+    schema_name: z.string().describe("Postgres schema containing the auth integration tables."),
+    table_name: z.string().describe("Postgres table in the integration schema where synced user records are stored."),
+    base_url: z.string().describe("Base URL of the Neon Auth service for this integration.").optional()
 });
 
 export const zNeonAuthCreateAuthProviderSdkKeysRequest = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
 export const zNeonAuthCreateNewUserRequest = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
     auth_provider: zNeonAuthSupportedAuthProvider,
-    email: z.email().min(1).max(256),
-    name: z.string().min(1).max(255).optional()
+    email: z.email().min(1).max(256).describe("Email address of the new user."),
+    name: z.string().min(1).max(255).describe("Display name for the new user.").optional()
 });
 
 export const zCreateBranchNeonAuthNewUserRequest = z.strictObject({
-    email: z.email().min(1).max(256),
-    name: z.string().min(1).max(255).optional()
+    email: z.email().min(1).max(256).describe("Email address of the new Neon Auth user to create."),
+    name: z.string().min(1).max(255).describe("Display name for the new user.").optional()
 });
 
 export const zNeonAuthCreateNewUserResponse = z.strictObject({
-    id: z.string()
+    id: z.string().describe("ID of newly created user")
 });
 
 export const zUpdateNeonAuthUserRoleRequest = z.strictObject({
-    roles: z.array(z.string()).min(1)
+    roles: z.array(z.string()).min(1).describe("Roles to assign to the user in the Neon Auth (Better Auth) directory.")
 });
 
 export const zUpdateNeonAuthUserRoleResponse = z.strictObject({
-    id: z.string()
+    id: z.string().describe("ID of the updated user")
 });
 
 export const zNeonAuthAllowLocalhostResponse = z.strictObject({
-    allow_localhost: z.boolean()
+    allow_localhost: z.boolean().describe("Whether to allow localhost connections")
 });
 
 export const zUpdateNeonAuthAllowLocalhostRequest = z.strictObject({
-    allow_localhost: z.boolean()
+    allow_localhost: z.boolean().describe("Whether to allow localhost connections")
 });
 
 export const zNeonAuthOrganizationConfig = z.strictObject({
-    enabled: z.boolean(),
-    organization_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
-    membership_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
-    creator_role: z.enum(['admin', 'owner']),
-    send_invitation_email: z.boolean()
+    enabled: z.boolean().describe("Whether the organization plugin is enabled."),
+    organization_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("Maximum organizations a user can belong to (created or joined)."),
+    membership_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("Maximum number of members per organization."),
+    creator_role: z.enum(['admin', 'owner']).describe("Role of the organization's creator."),
+    send_invitation_email: z.boolean().describe("Whether to send invitation emails when inviting members to an organization.")
 });
 
 export const zNeonAuthOrganizationConfigUpdate = z.strictObject({
-    enabled: z.boolean().optional(),
-    organization_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).optional(),
-    membership_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).optional(),
-    creator_role: z.enum(['admin', 'owner']).optional(),
-    send_invitation_email: z.boolean().optional()
+    enabled: z.boolean().describe("Controls whether the organization plugin is active for the organization.").optional(),
+    organization_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("Maximum organizations a user can belong to (created or joined).").optional(),
+    membership_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("Maximum members per organization.").optional(),
+    creator_role: z.enum(['admin', 'owner']).describe("Role of the organization's creator.").optional(),
+    send_invitation_email: z.boolean().describe("When true, invited users receive an email containing an accept link.").optional()
 });
 
 export const zNeonAuthMagicLinkConfig = z.strictObject({
-    enabled: z.boolean(),
-    expires_in: z.int().gte(5).lte(1440),
-    disable_sign_up: z.boolean()
+    enabled: z.boolean().describe("Whether the magic link plugin is enabled."),
+    expires_in: z.int().gte(5).lte(1440).describe("Minutes until the magic link expires."),
+    disable_sign_up: z.boolean().describe("Whether to disable sign-up via magic link.")
 });
 
 export const zNeonAuthMagicLinkConfigUpdate = z.strictObject({
-    enabled: z.boolean().optional(),
-    expires_in: z.int().gte(5).lte(1440).optional(),
-    disable_sign_up: z.boolean().optional()
+    enabled: z.boolean().describe("Whether to enable the magic link plugin.").optional(),
+    expires_in: z.int().gte(5).lte(1440).describe("Minutes until the magic link expires.").optional(),
+    disable_sign_up: z.boolean().describe("When true, sign-up via magic link is disabled.").optional()
 });
 
 export const zNeonAuthPhoneNumberConfig = z.strictObject({
-    enabled: z.boolean(),
-    otp_expires_in: z.int().gte(60).lte(600).optional()
+    enabled: z.boolean().describe("Whether the phone number plugin is enabled."),
+    otp_expires_in: z.int().gte(60).lte(600).describe("Time in seconds before the OTP expires").optional()
 });
 
 export const zNeonAuthPhoneNumberConfigUpdate = z.strictObject({
-    enabled: z.boolean().optional(),
-    otp_expires_in: z.int().gte(60).lte(600).optional()
+    enabled: z.boolean().describe("Whether the phone number plugin is enabled.").optional(),
+    otp_expires_in: z.int().gte(60).lte(600).describe("Time in seconds before the OTP expires").optional()
 });
 
 export const zNeonAuthOAuthProviderResource = z.strictObject({
-    identifier: z.string()
+    identifier: z.string().describe("Absolute URL identifying a protected resource.")
 });
 
 export const zNeonAuthOAuthProviderMcp = z.strictObject({
-    resource: z.string().optional(),
-    dynamic_registration: z.boolean().optional(),
-    client_id_metadata_documents: z.boolean().optional()
+    resource: z.string().describe("The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to.").optional(),
+    dynamic_registration: z.boolean().describe("Legacy: whether MCP clients may register themselves via dynamic client registration (RFC 7591).").optional(),
+    client_id_metadata_documents: z.boolean().describe("Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL.").optional()
 });
 
 export const zNeonAuthOAuthProviderMcpUpdate = z.strictObject({
-    resource: z.string(),
-    dynamic_registration: z.boolean().optional(),
-    client_id_metadata_documents: z.boolean().optional()
+    resource: z.string().describe("The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to."),
+    dynamic_registration: z.boolean().describe("Whether MCP clients may register themselves via dynamic client registration (RFC 7591).").optional(),
+    client_id_metadata_documents: z.boolean().describe("Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL.").optional()
 });
 
 export const zNeonAuthOAuthProviderConfig = z.strictObject({
-    enabled: z.boolean(),
-    login_page: z.string().optional(),
-    consent_page: z.string().optional(),
-    mcp: zNeonAuthOAuthProviderMcp.optional(),
-    resources: z.array(zNeonAuthOAuthProviderResource).optional()
+    enabled: z.boolean().describe("Whether the OAuth provider plugin is enabled."),
+    login_page: z.string().describe("URL of the page that authorization requests redirect to for sign-in.").optional(),
+    consent_page: z.string().describe("URL of the page that authorization requests redirect to for consent.").optional(),
+    mcp: z.strictObject({
+        resource: z.string().describe("The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to.").optional(),
+        dynamic_registration: z.boolean().describe("Legacy: whether MCP clients may register themselves via dynamic client registration (RFC 7591).").optional(),
+        client_id_metadata_documents: z.boolean().describe("Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL.").optional()
+    }).describe("MCP resource configuration.").optional(),
+    resources: z.array(zNeonAuthOAuthProviderResource).describe("Protected resources that clients can be linked to.").optional()
 });
 
 export const zNeonAuthOAuthProviderConfigUpdate = z.strictObject({
-    enabled: z.boolean().optional(),
-    login_page: z.string().optional(),
-    consent_page: z.string().optional(),
-    mcp: zNeonAuthOAuthProviderMcpUpdate.optional(),
-    resources: z.array(zNeonAuthOAuthProviderResource).optional()
+    enabled: z.boolean().describe("Whether the OAuth provider plugin is enabled.").optional(),
+    login_page: z.string().describe("URL of the page that authorization requests redirect to for sign-in.").optional(),
+    consent_page: z.string().describe("URL of the page that authorization requests redirect to for consent.").optional(),
+    mcp: z.strictObject({
+        resource: z.string().describe("The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to."),
+        dynamic_registration: z.boolean().describe("Whether MCP clients may register themselves via dynamic client registration (RFC 7591).").optional(),
+        client_id_metadata_documents: z.boolean().describe("Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL.").optional()
+    }).describe("MCP resource configuration.").optional(),
+    resources: z.array(zNeonAuthOAuthProviderResource).describe("Protected resources that clients can be linked to.").optional()
 });
 
 /**
  * Confidential clients authenticate with a client secret. Public clients have no secret.
  */
-export const zNeonAuthOAuthClientType = z.enum(['confidential', 'public']);
+export const zNeonAuthOAuthClientType = z.enum(['confidential', 'public']).describe("Confidential clients authenticate with a client secret.");
 
 export const zNeonAuthOAuthClient = z.strictObject({
-    client_id: z.string(),
-    name: z.string(),
+    client_id: z.string().describe("The OAuth client ID."),
+    name: z.string().describe("Display name of the client."),
     type: zNeonAuthOAuthClientType,
-    redirect_uris: z.array(z.string()),
-    resources: z.array(z.string()),
-    skip_consent: z.boolean(),
-    disabled: z.boolean(),
-    created_at: z.iso.datetime().optional()
+    redirect_uris: z.array(z.string()).describe("Redirect URIs the client may use."),
+    resources: z.array(z.string()).describe("Identifiers of the protected resources the client is linked to."),
+    skip_consent: z.boolean().describe("Whether users are not asked for consent when authorizing this client."),
+    disabled: z.boolean().describe("Whether the client is disabled."),
+    created_at: z.iso.datetime().describe("When the client was created.").optional()
 });
 
 export const zNeonAuthOAuthClientCreated = zNeonAuthOAuthClient.merge(z.strictObject({
-    client_secret: z.string().optional()
+    client_secret: z.string().describe("The client secret.").optional()
 }));
 
 export const zListNeonAuthOAuthClientsResponse = z.strictObject({
-    clients: z.array(zNeonAuthOAuthClient)
+    clients: z.array(zNeonAuthOAuthClient).describe("OAuth clients registered for the branch.")
 });
 
 export const zNeonAuthOAuthClientCreateRequest = z.strictObject({
-    name: z.string().min(1).max(100),
-    redirect_uris: z.array(z.string()).min(1).max(10),
+    name: z.string().min(1).max(100).describe("Display name of the client."),
+    redirect_uris: z.array(z.string()).min(1).max(10).describe("Redirect URIs the client may use."),
     type: zNeonAuthOAuthClientType,
-    resources: z.array(z.string()).min(1).max(11),
-    skip_consent: z.boolean().optional()
+    resources: z.array(z.string()).min(1).max(11).describe("Identifiers of the protected resources to link the client to."),
+    skip_consent: z.boolean().describe("Whether to skip the consent prompt for this client.").optional()
 });
 
 /**
  * At least one field must be provided.
  */
 export const zNeonAuthOAuthClientUpdateRequest = z.strictObject({
-    name: z.string().min(1).max(100).optional(),
-    redirect_uris: z.array(z.string()).max(10).optional(),
-    skip_consent: z.boolean().optional(),
-    disabled: z.boolean().optional(),
-    resources: z.array(z.string()).max(11).optional()
-});
+    name: z.string().min(1).max(100).describe("Display name of the client.").optional(),
+    redirect_uris: z.array(z.string()).max(10).describe("Redirect URIs the client may use.").optional(),
+    skip_consent: z.boolean().describe("Whether to skip the consent prompt for this client.").optional(),
+    disabled: z.boolean().describe("Whether the client is disabled.").optional(),
+    resources: z.array(z.string()).max(11).describe("Identifiers of the protected resources to link the client to.").optional()
+}).describe("At least one field must be provided.");
 
 export const zNeonAuthOAuthClientSecret = z.strictObject({
-    client_id: z.string(),
-    client_secret: z.string()
+    client_id: z.string().describe("The OAuth client ID."),
+    client_secret: z.string().describe("The new client secret.")
 });
 
 export const zNeonAuthTransferAuthProviderProjectRequest = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID."),
     auth_provider: zNeonAuthSupportedAuthProvider
 });
 
 export const zNeonAuthTransferAuthProviderProjectResponse = z.strictObject({
-    url: z.string()
+    url: z.string().describe("URL for completing the process of ownership transfer")
 });
 
 export const zNeonAuthWebhookConfig = z.strictObject({
-    enabled: z.boolean(),
-    webhook_url: z.string().optional(),
+    enabled: z.boolean().describe("Whether the webhook is active."),
+    webhook_url: z.string().describe("Destination URL that receives webhook event payloads.").optional(),
     enabled_events: z.array(z.enum([
         'user.before_create',
         'user.created',
@@ -1596,8 +2001,28 @@ export const zNeonAuthWebhookConfig = z.strictObject({
         'organization.invitation.created',
         'organization.invitation.accepted',
         'phone_number.verified'
-    ])).optional(),
-    timeout_seconds: z.int().gte(1).lte(10).optional()
+    ])).describe("Event types that trigger this webhook.").optional(),
+    timeout_seconds: z.int().gte(1).lte(10).describe("Maximum time, in seconds, to wait for a response from the webhook endpoint.").optional()
+});
+
+export const zNeonAuthOauthProvider = z.strictObject({
+    id: z.enum([
+        'google',
+        'github',
+        'microsoft',
+        'vercel',
+        'apple'
+    ]).describe("The OAuth provider's ID."),
+    type: z.enum(['standard', 'shared']).describe("OAuth provider key type."),
+    client_id: z.string().describe("Public identifier for the OAuth application, issued by the provider when the application is registered.").optional(),
+    client_secret: z.string().describe("Masked OAuth client secret for the provider.").optional(),
+    microsoft_tenant_id: z.string().describe("Tenant ID of the Microsoft OAuth provider.").optional(),
+    apple_team_id: z.string().describe("Apple Developer Team ID.").optional(),
+    apple_key_id: z.string().describe("Key ID of the Sign in with Apple private key.").optional()
+});
+
+export const zListNeonAuthOauthProvidersResponse = z.strictObject({
+    providers: z.array(zNeonAuthOauthProvider).describe("OAuth providers configured for Neon Auth on the project.")
 });
 
 export const zNeonAuthOauthProviderId = z.enum([
@@ -1610,58 +2035,50 @@ export const zNeonAuthOauthProviderId = z.enum([
 
 export const zNeonAuthOauthProviderType = z.enum(['standard', 'shared']);
 
-export const zNeonAuthOauthProvider = z.strictObject({
-    id: zNeonAuthOauthProviderId,
-    type: zNeonAuthOauthProviderType,
-    client_id: z.string().optional(),
-    client_secret: z.string().optional(),
-    microsoft_tenant_id: z.string().optional(),
-    apple_team_id: z.string().optional(),
-    apple_key_id: z.string().optional()
-});
-
-export const zListNeonAuthOauthProvidersResponse = z.strictObject({
-    providers: z.array(zNeonAuthOauthProvider)
-});
-
 export const zNeonAuthAddOAuthProviderRequest = z.strictObject({
-    id: zNeonAuthOauthProviderId,
-    client_id: z.string().optional(),
-    client_secret: z.string().optional(),
-    microsoft_tenant_id: z.string().optional(),
-    apple_team_id: z.string().optional(),
-    apple_key_id: z.string().optional()
+    id: z.enum([
+        'google',
+        'github',
+        'microsoft',
+        'vercel',
+        'apple'
+    ]).describe("OAuth provider to configure for Neon Auth."),
+    client_id: z.string().describe("The client ID issued by the OAuth provider for your application.").optional(),
+    client_secret: z.string().describe("OAuth client secret for the provider.").optional(),
+    microsoft_tenant_id: z.string().describe("Tenant ID for the Microsoft OAuth provider.").optional(),
+    apple_team_id: z.string().describe("Apple Developer Team ID.").optional(),
+    apple_key_id: z.string().describe("Key ID of the Sign in with Apple private key supplied in `client_secret`.").optional()
 });
 
 export const zNeonAuthUpdateOAuthProviderRequest = z.strictObject({
-    client_id: z.string().optional(),
-    client_secret: z.string().optional(),
-    microsoft_tenant_id: z.string().optional(),
-    apple_team_id: z.string().optional(),
-    apple_key_id: z.string().optional()
+    client_id: z.string().describe("The OAuth client ID registered with the provider.").optional(),
+    client_secret: z.string().describe("OAuth client secret for the provider.").optional(),
+    microsoft_tenant_id: z.string().describe("The tenant ID scoping the Microsoft OAuth provider.").optional(),
+    apple_team_id: z.string().describe("Apple Developer Team ID.").optional(),
+    apple_key_id: z.string().describe("Key ID of the Sign in with Apple private key supplied in `client_secret`.").optional()
 });
 
 export const zSharedEmailServer = z.strictObject({
-    sender_email: z.string().optional(),
-    sender_name: z.string().optional()
+    sender_email: z.string().describe("Email address used as the sender for outgoing messages from this shared email server.").optional(),
+    sender_name: z.string().describe("Display name shown as the sender in outgoing emails.").optional()
 });
 
 export const zStandardEmailServer = z.strictObject({
-    host: z.string().optional(),
-    port: z.int().optional(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-    sender_email: z.string().optional(),
-    sender_name: z.string().optional()
+    host: z.string().describe("Hostname of the email server.").optional(),
+    port: z.int().describe("TCP port of the SMTP server.").optional(),
+    username: z.string().describe("Username for authenticating with the SMTP server.").optional(),
+    password: z.string().describe("Password for authenticating with the SMTP server.").optional(),
+    sender_email: z.string().describe("Email address used as the From address on outgoing auth emails.").optional(),
+    sender_name: z.string().describe("Display name shown as the sender in outgoing emails.").optional()
 });
 
 export const zStandardEmailServerResponse = z.strictObject({
-    host: z.string(),
-    port: z.int(),
-    username: z.string(),
-    password: z.string(),
-    sender_email: z.string(),
-    sender_name: z.string()
+    host: z.string().describe("Hostname of the email server."),
+    port: z.int().describe("TCP port of the SMTP server."),
+    username: z.string().describe("Username for authenticating with the SMTP server."),
+    password: z.string().describe("On GET, returned redacted (empty) for ordinary callers, while callers with project-credential read permission receive the stored password — do not assume this field is empty."),
+    sender_email: z.string().describe("Email address used as the From address on outgoing auth emails."),
+    sender_name: z.string().describe("Display name shown as the sender in outgoing emails.")
 });
 
 export const zNeonAuthEmailServerConfig = z.discriminatedUnion('type', [
@@ -1675,13 +2092,13 @@ export const zNeonAuthEmailServerConfigResponse = z.discriminatedUnion('type', [
 ]);
 
 export const zSendNeonAuthTestEmailRequest = z.strictObject({
-    host: z.string(),
-    port: z.int(),
-    username: z.string(),
-    password: z.string(),
-    sender_email: z.string(),
-    sender_name: z.string(),
-    recipient_email: z.email().min(1).max(256)
+    host: z.string().describe("Hostname of the email server."),
+    port: z.int().describe("TCP port of the SMTP server."),
+    username: z.string().describe("Username for authenticating with the SMTP server."),
+    password: z.string().describe("Password for authenticating with the SMTP server."),
+    sender_email: z.string().describe("Email address used as the From address on outgoing auth emails."),
+    sender_name: z.string().describe("Display name shown as the sender in outgoing emails."),
+    recipient_email: z.email().min(1).max(256).describe("The email address to send the test email to.")
 });
 
 /**
@@ -1690,12 +2107,12 @@ export const zSendNeonAuthTestEmailRequest = z.strictObject({
  *
  */
 export const zSendNeonAuthEmailProviderTestRequest = z.strictObject({
-    recipient_email: z.email().min(1).max(256)
-});
+    recipient_email: z.email().min(1).max(256).describe("The email address to send the test email to.")
+}).describe("Request to test the branch's saved email provider.");
 
 export const zSendNeonAuthTestEmailResponse = z.strictObject({
-    success: z.boolean(),
-    error_message: z.string().optional()
+    success: z.boolean().describe("Whether the test email was sent successfully."),
+    error_message: z.string().describe("The error message from the email server.").optional()
 });
 
 /**
@@ -1704,76 +2121,111 @@ export const zSendNeonAuthTestEmailResponse = z.strictObject({
  * - `otp`: Sends a one-time password (OTP) via email
  *
  */
-export const zNeonAuthEmailVerificationMethod = z.enum(['link', 'otp']);
-
-export const zNeonAuthEmailAndPasswordConfig = z.strictObject({
-    enabled: z.boolean(),
-    email_verification_method: zNeonAuthEmailVerificationMethod,
-    require_email_verification: z.boolean(),
-    auto_sign_in_after_verification: z.boolean(),
-    send_verification_email_on_sign_up: z.boolean(),
-    send_verification_email_on_sign_in: z.boolean(),
-    disable_sign_up: z.boolean(),
-    revoke_sessions_on_password_reset: z.boolean()
-});
+export const zNeonAuthEmailVerificationMethod = z.enum(['link', 'otp']).describe("The email verification method to use.");
 
 /**
  * Aggregated plugin configurations for Neon Auth
  */
 export const zNeonAuthPluginConfigs = z.strictObject({
-    organization: zNeonAuthOrganizationConfig.optional(),
-    magic_link: zNeonAuthMagicLinkConfig.optional(),
-    phone_number: zNeonAuthPhoneNumberConfig.optional(),
-    oauth_provider: zNeonAuthOAuthProviderConfig.optional(),
-    email_provider: zNeonAuthEmailServerConfigResponse.optional(),
-    email_and_password: zNeonAuthEmailAndPasswordConfig.optional(),
-    oauth_providers: z.array(zNeonAuthOauthProvider).optional(),
-    allow_localhost: z.boolean().optional()
+    organization: z.strictObject({
+        enabled: z.boolean().describe("Whether the organization plugin is enabled."),
+        organization_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("Maximum organizations a user can belong to (created or joined)."),
+        membership_limit: z.int().gte(1).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("Maximum number of members per organization."),
+        creator_role: z.enum(['admin', 'owner']).describe("Role of the organization's creator."),
+        send_invitation_email: z.boolean().describe("Whether to send invitation emails when inviting members to an organization.")
+    }).describe("Configuration for the Neon Auth organization plugin, which enables user organizations within the authentication system.").optional(),
+    magic_link: z.strictObject({
+        enabled: z.boolean().describe("Whether the magic link plugin is enabled."),
+        expires_in: z.int().gte(5).lte(1440).describe("Minutes until the magic link expires."),
+        disable_sign_up: z.boolean().describe("Whether to disable sign-up via magic link.")
+    }).describe("Configuration for passwordless magic-link email authentication.").optional(),
+    phone_number: z.strictObject({
+        enabled: z.boolean().describe("Whether the phone number plugin is enabled."),
+        otp_expires_in: z.int().gte(60).lte(600).describe("Time in seconds before the OTP expires").optional()
+    }).describe("Configuration for the phone number authentication plugin.").optional(),
+    oauth_provider: z.strictObject({
+        enabled: z.boolean().describe("Whether the OAuth provider plugin is enabled."),
+        login_page: z.string().describe("URL of the page that authorization requests redirect to for sign-in.").optional(),
+        consent_page: z.string().describe("URL of the page that authorization requests redirect to for consent.").optional(),
+        mcp: z.strictObject({
+            resource: z.string().describe("The MCP server URL that MCP clients (Client ID Metadata Document and dynamically registered) are linked to.").optional(),
+            dynamic_registration: z.boolean().describe("Legacy: whether MCP clients may register themselves via dynamic client registration (RFC 7591).").optional(),
+            client_id_metadata_documents: z.boolean().describe("Whether MCP clients may identify themselves with an https Client ID Metadata Document (CIMD) URL.").optional()
+        }).describe("MCP resource configuration.").optional(),
+        resources: z.array(zNeonAuthOAuthProviderResource).describe("Protected resources that clients can be linked to.").optional()
+    }).describe("Configuration for the OAuth provider plugin, which lets Neon Auth act as an OAuth authorization server for your own clients.").optional(),
+    email_provider: z.discriminatedUnion('type', [
+        zStandardEmailServerResponse.extend({ type: z.literal('standard') }),
+        zSharedEmailServer.extend({ type: z.literal('shared') })
+    ]).optional(),
+    email_and_password: z.strictObject({
+        enabled: z.boolean().describe("Whether email and password authentication is enabled"),
+        email_verification_method: zNeonAuthEmailVerificationMethod,
+        require_email_verification: z.boolean().describe("Whether email verification is required before users can sign in"),
+        auto_sign_in_after_verification: z.boolean().describe("Whether users are automatically signed in after verifying their email"),
+        send_verification_email_on_sign_up: z.boolean().describe("Whether to send a verification email when users sign up"),
+        send_verification_email_on_sign_in: z.boolean().describe("Whether to send a verification email when users sign in"),
+        disable_sign_up: z.boolean().describe("Whether to disable new user sign ups"),
+        revoke_sessions_on_password_reset: z.boolean().describe("Whether all of a user's sessions are revoked when their password is reset")
+    }).describe("Configuration for email and password authentication.").optional(),
+    oauth_providers: z.array(zNeonAuthOauthProvider).describe("OAuth provider configurations enabled for this auth setup.").optional(),
+    allow_localhost: z.boolean().describe("Permits authentication requests from localhost origins when true.").optional()
+}).describe("Aggregated plugin configurations for Neon Auth");
+
+export const zNeonAuthEmailAndPasswordConfig = z.strictObject({
+    enabled: z.boolean().describe("Whether email and password authentication is enabled"),
+    email_verification_method: z.enum(['link', 'otp']).describe("Controls how email addresses are verified during sign-up or sign-in."),
+    require_email_verification: z.boolean().describe("Whether email verification is required before users can sign in"),
+    auto_sign_in_after_verification: z.boolean().describe("Whether users are automatically signed in after verifying their email"),
+    send_verification_email_on_sign_up: z.boolean().describe("Whether to send a verification email when users sign up"),
+    send_verification_email_on_sign_in: z.boolean().describe("Whether to send a verification email when users sign in"),
+    disable_sign_up: z.boolean().describe("Whether to disable new user sign ups"),
+    revoke_sessions_on_password_reset: z.boolean().describe("Whether all of a user's sessions are revoked when their password is reset")
 });
 
 export const zNeonAuthEmailAndPasswordConfigUpdate = z.strictObject({
-    enabled: z.boolean().optional(),
-    email_verification_method: zNeonAuthEmailVerificationMethod.optional(),
-    require_email_verification: z.boolean().optional(),
-    auto_sign_in_after_verification: z.boolean().optional(),
-    send_verification_email_on_sign_up: z.boolean().optional(),
-    send_verification_email_on_sign_in: z.boolean().optional(),
-    disable_sign_up: z.boolean().optional(),
-    revoke_sessions_on_password_reset: z.boolean().optional()
+    enabled: z.boolean().describe("Controls whether email and password authentication is enabled for this project.").optional(),
+    email_verification_method: z.enum(['link', 'otp']).describe("Email verification method.").optional(),
+    require_email_verification: z.boolean().describe("When true, users must verify their email address before they can sign in.").optional(),
+    auto_sign_in_after_verification: z.boolean().describe("Whether users are automatically signed in after verifying their email").optional(),
+    send_verification_email_on_sign_up: z.boolean().describe("Whether to send a verification email when users sign up.").optional(),
+    send_verification_email_on_sign_in: z.boolean().describe("Whether to send a verification email when a user with an unverified email signs in.").optional(),
+    disable_sign_up: z.boolean().describe("Whether to disable new user sign ups.").optional(),
+    revoke_sessions_on_password_reset: z.boolean().describe("Whether all of a user's sessions are revoked when their password is reset.").optional()
 });
 
 export const zNeonAuthIntegration = z.strictObject({
     auth_provider: zNeonAuthSupportedAuthProvider,
-    auth_provider_project_id: z.string(),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    db_name: z.string(),
-    created_at: z.iso.datetime(),
-    owned_by: zNeonAuthProviderProjectOwnedBy,
-    transfer_status: zNeonAuthProviderProjectTransferStatus.optional(),
-    jwks_url: z.string(),
-    base_url: z.string().optional(),
-    name: z.string().min(1).max(256).optional()
+    auth_provider_project_id: z.string().describe("Project identifier assigned by the auth provider for this integration."),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID."),
+    db_name: z.string().describe("Name of the database used by the Neon Auth integration."),
+    created_at: z.iso.datetime().describe("Timestamp when the Neon Auth integration was created, in RFC 3339 format (UTC)."),
+    owned_by: z.enum(['user', 'neon']).describe("Owner of the auth provider project."),
+    transfer_status: z.enum(['initiated', 'finished']).describe("Ownership transfer state for the auth provider project.").optional(),
+    jwks_url: z.string().describe("URL of the provider's JWKS endpoint used to verify JWTs."),
+    base_url: z.string().describe("Base URL of the Neon Auth service endpoint for this integration.").optional(),
+    name: z.string().min(1).max(256).describe("Application name shown in auth emails and communications.").optional()
 });
 
 export const zListNeonAuthIntegrationsResponse = z.strictObject({
-    data: z.array(zNeonAuthIntegration)
+    data: z.array(zNeonAuthIntegration).describe("Neon Auth integrations configured for the project.")
 });
 
 export const zNeonAuthConfigUpdate = z.strictObject({
-    name: z.string().min(1).max(256)
+    name: z.string().min(1).max(256).describe("The application name used in auth emails and communications.")
 });
 
 export const zNeonAuthConfigResponse = z.strictObject({
-    name: z.string()
+    name: z.string().describe("The application name used in auth emails and communications.")
+});
+
+export const zGeneralError = z.strictObject({
+    request_id: z.string().describe("Unique identifier for the request, useful for debugging.").optional(),
+    code: z.string().describe("Machine-readable code classifying the error type."),
+    message: z.string().describe("Error message")
 });
 
 export const zErrorCode = z.string();
-
-export const zGeneralError = z.strictObject({
-    request_id: z.string().optional(),
-    code: zErrorCode,
-    message: z.string()
-});
 
 export const zBranchOperations = zBranchResponse.merge(zOperationsResponse);
 
@@ -1790,41 +2242,21 @@ export const zJwksCreationOperation = zJwksResponse.merge(zOperationsResponse);
 /**
  * A free-form map of string key-value pairs for attaching metadata to a resource (for example, a git commit reference). Maximum 50 entries.
  */
-export const zAnnotationValueData = z.record(z.string(), z.string());
+export const zAnnotationValueData = z.record(z.string(), z.string()).describe("A free-form map of string key-value pairs for attaching metadata to a resource (for example, a git commit reference).");
 
-export const zProjectCreateRequest = z.strictObject({
-    project: z.strictObject({
-        settings: zProjectSettingsData.optional(),
-        name: z.string().min(1).max(256).optional(),
-        realtime: zRealtimeOptions.optional(),
-        branch: z.strictObject({
-            name: z.string().min(1).max(256).optional(),
-            role_name: z.string().optional(),
-            database_name: z.string().optional(),
-            annotations: zAnnotationValueData.optional()
-        }).optional(),
-        autoscaling_limit_min_cu: zComputeUnit.optional(),
-        autoscaling_limit_max_cu: zComputeUnit.optional(),
-        provisioner: zProvisioner.optional(),
-        region_id: z.string().optional(),
-        default_endpoint_settings: zDefaultEndpointSettings.optional(),
-        pg_version: zPgVersion.optional(),
-        store_passwords: z.boolean().optional(),
-        history_retention_seconds: z.int().gte(0).lte(2592000).optional(),
-        org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
-    })
+export const zAnnotationData = z.strictObject({
+    object: z.strictObject({
+        type: z.string().describe("Kind of resource the annotation is attached to, for example \"branch\" or \"endpoint\"."),
+        id: z.string().describe("The annotated object's ID.")
+    }).describe("Resource that this annotation is attached to."),
+    value: zAnnotationValueData,
+    created_at: z.iso.datetime().describe("Timestamp when the annotation was created, in RFC 3339 format (UTC).").optional(),
+    updated_at: z.iso.datetime().describe("Timestamp of the most recent update to the annotation, in RFC 3339 format (UTC).").optional()
 });
 
 export const zAnnotationObjectData = z.strictObject({
-    type: z.string(),
-    id: z.string()
-});
-
-export const zAnnotationData = z.strictObject({
-    object: zAnnotationObjectData,
-    value: zAnnotationValueData,
-    created_at: z.iso.datetime().optional(),
-    updated_at: z.iso.datetime().optional()
+    type: z.string().describe("Kind of resource the annotation is attached to, for example \"branch\" or \"endpoint\"."),
+    id: z.string().describe("The annotated object's ID.")
 });
 
 export const zAnnotationCreateValueRequest = z.strictObject({
@@ -1833,16 +2265,24 @@ export const zAnnotationCreateValueRequest = z.strictObject({
 
 export const zBranchAnonymizedCreateRequest = zAnnotationCreateValueRequest.merge(z.strictObject({
     branch_create: zBranchCreateRequest.optional(),
-    masking_rules: z.array(zMaskingRule).optional(),
-    start_anonymization: z.boolean().optional()
+    masking_rules: z.array(zMaskingRule).describe("List of masking rules to apply to the branch.").optional(),
+    start_anonymization: z.boolean().describe("If true, automatically start anonymization after the branch is created.").optional()
 }));
 
 export const zAnnotationResponse = z.strictObject({
-    annotation: zAnnotationData
+    annotation: z.strictObject({
+        object: z.strictObject({
+            type: z.string().describe("Kind of resource the annotation is attached to, for example \"branch\" or \"endpoint\"."),
+            id: z.string().describe("The annotated object's ID.")
+        }).describe("Resource that this annotation is attached to."),
+        value: zAnnotationValueData,
+        created_at: z.iso.datetime().describe("Timestamp when the annotation was created, in RFC 3339 format (UTC).").optional(),
+        updated_at: z.iso.datetime().describe("Timestamp of the most recent update to the annotation, in RFC 3339 format (UTC).").optional()
+    }).describe("Annotation data associated with the annotated object.")
 });
 
 export const zAnnotationsMapResponse = z.strictObject({
-    annotations: z.record(z.string(), zAnnotationData)
+    annotations: z.record(z.string(), zAnnotationData).describe("Map of annotations keyed by resource identifier, where each value contains the annotation data for that resource.")
 });
 
 /**
@@ -1853,32 +2293,32 @@ export const zApplicationType = z.enum([
     'github',
     'datadog',
     'opentelemetry'
-]);
+]).describe("Type of application integration");
 
 /**
  * A map where key is a project ID and a value is a list of installed applications.
  *
  */
 export const zProjectsApplicationsMapResponse = z.strictObject({
-    applications: z.record(z.string(), z.array(zApplicationType))
-});
+    applications: z.record(z.string(), z.array(zApplicationType)).describe("Map of project IDs to their installed applications.")
+}).describe("A map where key is a project ID and a value is a list of installed applications.");
 
 /**
  * A map where key is a project ID and a value is a list of installed integrations.
  *
  */
 export const zProjectsIntegrationsMapResponse = z.strictObject({
-    integrations: z.record(z.string(), z.array(zApplicationType))
-});
+    integrations: z.record(z.string(), z.array(zApplicationType)).describe("Map of project IDs to their associated integration details.")
+}).describe("A map where key is a project ID and a value is a list of installed integrations.");
 
 /**
  * To paginate the response, issue an initial request with `limit` value. Then, add the value returned in the response `.pagination.next` attribute into the request under the `cursor` query parameter to the subsequent request to retrieve next page in pagination. The contents on cursor `next` are opaque, clients are not expected to make any assumptions on the format of the data inside the cursor.
  */
 export const zCursorPagination = z.strictObject({
-    next: z.string().optional(),
-    sort_by: z.string().optional(),
-    sort_order: z.string().optional()
-});
+    next: z.string().describe("Cursor for the next page of results.").optional(),
+    sort_by: z.string().describe("Field by which the results were sorted, echoing the request's sort_by parameter.").optional(),
+    sort_order: z.string().describe("Sort order active for this page.").optional()
+}).describe("To paginate the response, issue an initial request with `limit` value.");
 
 export const zProjectMembers = z.strictObject({
     project_members: z.array(zProjectMember),
@@ -1890,63 +2330,58 @@ export const zCursorPaginationResponse = z.strictObject({
 });
 
 export const zSnapshot = z.strictObject({
-    id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    name: z.string(),
-    lsn: z.string().optional(),
-    timestamp: z.string().optional(),
-    source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    created_at: z.string(),
-    expires_at: z.string().optional(),
-    manual: z.boolean().optional(),
-    full_size: z.int().optional(),
-    diff_size: z.int().optional()
+    id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The snapshot ID."),
+    name: z.string().describe("Human-readable label for the snapshot."),
+    lsn: z.string().describe("WAL position (Log Sequence Number) at which the snapshot was captured, in Postgres LSN format (for example, `0/3000000`).").optional(),
+    timestamp: z.string().describe("Point in time captured by the snapshot, in RFC 3339 format (UTC).").optional(),
+    source_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Branch from which this snapshot was created.").optional(),
+    created_at: z.string().describe("Timestamp when the snapshot was created, in RFC 3339 format (UTC)."),
+    expires_at: z.string().describe("RFC 3339 timestamp when the snapshot expires and is eligible for deletion.").optional(),
+    manual: z.boolean().describe("True if the snapshot was created manually rather than by a schedule.").optional(),
+    full_size: z.int().describe("Full logical size of the snapshot in bytes at the time it was taken.").optional(),
+    diff_size: z.int().describe("Incremental Postgres storage size in bytes since the previous scheduled snapshot, when the snapshot is billed on incremental (diff) usage.").optional()
 });
 
 export const zSnapshotUpdateRequest = z.strictObject({
     snapshot: z.strictObject({
-        name: z.string().optional(),
+        name: z.string().describe("Human-readable label for the snapshot.").optional(),
         expires_at: z.iso.datetime().nullish()
-    })
+    }).describe("Fields to update on the snapshot.")
 });
 
 export const zBackupScheduleItem = z.strictObject({
-    frequency: z.string(),
-    hour: z.int().gte(0).lte(23).optional(),
-    day: z.int().gte(1).lte(31).optional(),
-    month: z.int().gte(1).lte(12).optional(),
-    retention_seconds: z.int().gte(3600).lte(3024000).optional()
+    frequency: z.string().describe("How often to take snapshots."),
+    hour: z.int().gte(0).lte(23).describe("The hour of the day to take the snapshot (if applicable).").optional(),
+    day: z.int().gte(1).lte(31).describe("The day of the week or month to take the snapshot (if applicable).").optional(),
+    month: z.int().gte(1).lte(12).describe("The month of the year to take the snapshot (if applicable).").optional(),
+    retention_seconds: z.int().gte(3600).lte(3024000).describe("How long to keep a scheduled snapshot (in seconds) before it's automatically deleted.").optional()
 });
 
 export const zBackupSchedule = z.strictObject({
-    schedule: z.array(zBackupScheduleItem)
+    schedule: z.array(zBackupScheduleItem).describe("List of schedule entries defining the backup frequency.")
 });
 
 export const zBranchSchemaJson = z.strictObject({
     tables: z.array(z.strictObject({
-        schema: z.string(),
-        name: z.string(),
+        schema: z.string().describe("Postgres schema (namespace) that contains the table, for example `public`."),
+        name: z.string().describe("Name of the table within the schema."),
         columns: z.array(z.strictObject({
-            name: z.string(),
-            type: z.string(),
-            nullable: z.boolean().optional(),
-            generated: z.boolean().optional()
-        })),
+            name: z.string().describe("Name of the column."),
+            type: z.string().describe("Postgres data type of the column, for example \"integer\" or \"text\"."),
+            nullable: z.boolean().describe("Whether the column allows NULL values").optional(),
+            generated: z.boolean().describe("Whether the column is a generated (computed) column").optional()
+        })).describe("Columns belonging to this table, each describing a column's name and attributes."),
         constraints: z.array(z.strictObject({
-            type: z.string(),
-            columns: z.array(z.string()).min(1),
-            name: z.string().optional(),
+            type: z.string().describe("Type of constraint."),
+            columns: z.array(z.string()).min(1).describe("Column names participating in this constraint"),
+            name: z.string().describe("Optional name of the constraint").optional(),
             referenced_table: z.strictObject({
-                schema: z.string(),
-                table: z.string(),
-                columns: z.array(z.string())
-            }).optional()
-        })).optional()
-    }))
-});
-
-export const zBranchSchemaResponse = z.strictObject({
-    sql: z.string().optional(),
-    json: zBranchSchemaJson.optional()
+                schema: z.string().describe("Schema of the referenced table"),
+                table: z.string().describe("Name of the referenced table"),
+                columns: z.array(z.string()).describe("Names of the referenced columns")
+            }).describe("For foreign keys - the referenced table information").optional()
+        })).describe("Table constraints defined in the branch schema, such as primary key, foreign key, unique, and check constraints.").optional()
+    })).describe("Tables present in the branch schema.")
 });
 
 /**
@@ -1956,17 +2391,17 @@ export const zBranchSchemaResponse = z.strictObject({
  * writes, and deletes still require authenticated requests.
  *
  */
-export const zBucketAccessLevel = z.enum(['private', 'public_read']);
+export const zBucketAccessLevel = z.enum(['private', 'public_read']).describe("Controls anonymous access to objects in the bucket.");
 
 export const zBucket = z.strictObject({
-    name: z.string(),
+    name: z.string().describe("The bucket name (unique within a branch)."),
     access_level: zBucketAccessLevel,
-    created_at: z.iso.datetime()
+    created_at: z.iso.datetime().describe("When the bucket was created.")
 });
 
 export const zBucketCreateRequest = z.strictObject({
-    name: z.string().min(1).max(255),
-    access_level: z.enum(['private', 'public_read']).optional()
+    name: z.string().min(1).max(255).describe("The bucket name."),
+    access_level: z.enum(['private', 'public_read']).describe("Access level for the bucket.").optional()
 });
 
 export const zBucketResponse = z.strictObject({
@@ -1978,10 +2413,10 @@ export const zBucketsListResponse = z.strictObject({
 });
 
 export const zBranchStorage = z.strictObject({
-    enabled: z.boolean(),
-    s3_endpoint: z.url(),
-    region: z.string(),
-    force_path_style: z.boolean()
+    enabled: z.boolean().describe("Always `true` in 200 responses."),
+    s3_endpoint: z.url().describe("The S3-compatible endpoint URL for this branch."),
+    region: z.string().describe("The AWS region for this branch's object storage."),
+    force_path_style: z.boolean().describe("Whether the S3 client must use path-style addressing (bucket-in-path rather than virtual-hosted subdomain).")
 });
 
 export const zBranchStorageNotEnabled = z.strictObject({
@@ -1992,7 +2427,7 @@ export const zBranchStorageNotEnabled = z.strictObject({
         'region_unavailable',
         'branch_directory_missing',
         'branch_not_found'
-    ])
+    ]).describe("Machine-readable reason why object storage is unavailable: - `org_not_entitled`: the org's `PlatformBranchableStorage` feature flag is off.")
 });
 
 /**
@@ -2002,7 +2437,7 @@ export const zProjectBranchLogSource = z.enum([
     'function',
     'storage',
     'pg_endpoint'
-]);
+]).describe("The Neon service that emitted the log record.");
 
 /**
  * An OpenTelemetry severity level. A minimum severity includes every
@@ -2017,19 +2452,19 @@ export const zProjectBranchLogSeverity = z.enum([
     'warn',
     'error',
     'fatal'
-]);
+]).describe("An OpenTelemetry severity level.");
 
 /**
  * A length of time as a count and a unit, for example `30m`, `6h`, or
  * `7d`. Valid units are `ms`, `s`, `m`, `h`, and `d`.
  *
  */
-export const zProjectBranchLogDuration = z.string().regex(/^[0-9]{1,6}(ms|s|m|h|d)$/);
+export const zProjectBranchLogDuration = z.string().regex(/^[0-9]{1,6}(ms|s|m|h|d)$/).describe("A length of time as a count and a unit, for example `30m`, `6h`, or `7d`.");
 
 export const zProjectBranchLogsNotAvailable = z.strictObject({
     code: z.string(),
     message: z.string(),
-    reason: z.enum(['branch_not_found', 'telemetry_not_enabled'])
+    reason: z.enum(['branch_not_found', 'telemetry_not_enabled']).describe("Machine-readable reason why logs cannot be read: - `branch_not_found`: the project or branch does not exist, or the caller does not have access to it.")
 });
 
 export const zProjectBranchLogsInvalidQuery = z.strictObject({
@@ -2043,83 +2478,83 @@ export const zProjectBranchLogsInvalidQuery = z.strictObject({
         'unknown_field',
         'invalid_logql',
         'conflicting_filters'
-    ])
+    ]).describe("Machine-readable reason why the request was rejected: - `time_range_too_large`: the requested window spans more than seven days.")
 });
 
 export const zProjectBranchLogsQueryRequest = z.strictObject({
     since: zProjectBranchLogDuration.optional(),
-    start_time: z.iso.datetime().optional(),
-    end_time: z.iso.datetime().optional(),
-    limit: z.int().gte(1).lte(1000).optional(),
-    cursor: z.string().optional(),
-    sort_order: z.enum(['asc', 'desc']).optional(),
+    start_time: z.iso.datetime().describe("Inclusive beginning of the query window.").optional(),
+    end_time: z.iso.datetime().describe("Exclusive end of the query window.").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Maximum number of log records to return per page.").optional(),
+    cursor: z.string().describe("Opaque pagination cursor returned as `next_cursor` by a previous call.").optional(),
+    sort_order: z.enum(['asc', 'desc']).describe("Order matching records by timestamp.").optional(),
     source: zProjectBranchLogSource.optional(),
-    service_name: z.string().min(1).optional(),
-    scope_name: z.string().min(1).optional(),
+    service_name: z.string().min(1).describe("Match the OpenTelemetry `service.name` resource attribute exactly.").optional(),
+    scope_name: z.string().min(1).describe("Match the OpenTelemetry instrumentation scope name exactly.").optional(),
     minimum_severity: zProjectBranchLogSeverity.optional(),
-    severity_text: z.string().min(1).optional(),
-    body_contains: z.string().min(1).optional(),
-    trace_id: z.string().regex(/^[0-9a-f]{32}$/).optional(),
-    logql: z.string().min(1).optional()
+    severity_text: z.string().min(1).describe("Match the OpenTelemetry severity text exactly.").optional(),
+    body_contains: z.string().min(1).describe("Match records whose rendered `message` contains this case-sensitive substring.").optional(),
+    trace_id: z.string().regex(/^[0-9a-f]{32}$/).describe("Match records associated with this OpenTelemetry trace ID.").optional(),
+    logql: z.string().min(1).describe("Escape hatch for selections the structured filters cannot express: a raw LogQL expression, evaluated against this branch's log stream.").optional()
 });
 
 export const zProjectBranchLogRecord = z.strictObject({
-    timestamp: z.iso.datetime(),
-    message: z.string(),
+    timestamp: z.iso.datetime().describe("The OpenTelemetry record timestamp in UTC."),
+    message: z.string().describe("The OpenTelemetry log body rendered as text."),
     source: zProjectBranchLogSource.optional(),
-    entity_id: z.string().optional(),
-    service_name: z.string().optional(),
-    scope_name: z.string().optional(),
-    severity_number: z.int().gte(0).lte(24).optional(),
-    severity_text: z.string().optional(),
-    trace_id: z.string().optional(),
-    span_id: z.string().optional(),
-    attributes: z.record(z.string(), z.unknown())
+    entity_id: z.string().describe("The Neon identifier of the service instance that emitted the record.").optional(),
+    service_name: z.string().describe("The OpenTelemetry `service.name` resource attribute.").optional(),
+    scope_name: z.string().describe("The OpenTelemetry instrumentation scope name.").optional(),
+    severity_number: z.int().gte(0).lte(24).describe("The numeric OpenTelemetry severity.").optional(),
+    severity_text: z.string().describe("The original OpenTelemetry severity text.").optional(),
+    trace_id: z.string().describe("The OpenTelemetry trace ID, when the record belongs to a trace.").optional(),
+    span_id: z.string().describe("The OpenTelemetry span ID, when the record belongs to a span.").optional(),
+    attributes: z.record(z.string(), z.unknown()).describe("Customer-defined OpenTelemetry log and resource attributes.")
 });
 
 export const zProjectBranchLogsQueryResponse = z.strictObject({
     logs: z.array(zProjectBranchLogRecord),
-    next_cursor: z.string().optional(),
-    is_truncated: z.boolean()
+    next_cursor: z.string().describe("Pagination cursor to pass as `cursor` on the next request.").optional(),
+    is_truncated: z.boolean().describe("True when more records matched than were returned.")
 });
 
 export const zProjectBranchLogFieldsResponse = z.strictObject({
-    fields: z.array(z.string())
+    fields: z.array(z.string()).describe("Log field names observed on this branch, each usable as `field_name` on the log field-values endpoint.")
 });
 
 export const zProjectBranchLogFieldValuesResponse = z.strictObject({
     values: z.array(z.string()),
-    is_truncated: z.boolean()
+    is_truncated: z.boolean().describe("True when more distinct values exist than were returned, because either the requested `limit` or the server's own scan cap was reached.")
 });
 
 export const zBranchAiGateway = z.strictObject({
-    enabled: z.boolean(),
-    base_url: z.url()
+    enabled: z.boolean().describe("Always `true` in 200 responses."),
+    base_url: z.url().describe("The AI-gateway endpoint root for this branch — an OpenAI-compatible base URL.")
 });
 
 export const zBranchAiGatewayNotEnabled = z.strictObject({
     code: z.string(),
     message: z.string(),
-    reason: z.enum(['ai_gateway_unavailable', 'branch_not_found'])
+    reason: z.enum(['ai_gateway_unavailable', 'branch_not_found']).describe("Machine-readable reason why the AI gateway is unavailable: - `ai_gateway_unavailable`: the project's region/cell has no AI gateway configured.")
 });
 
 export const zBucketObject = z.strictObject({
-    key: z.string(),
-    size: z.int(),
-    last_modified: z.iso.datetime(),
-    etag: z.string()
+    key: z.string().describe("The full object key."),
+    size: z.int().describe("The object size in bytes."),
+    last_modified: z.iso.datetime().describe("The time the object was last modified."),
+    etag: z.string().describe("The object's entity tag (content hash).")
 });
 
 export const zBucketObjectsListResponse = z.strictObject({
-    folders: z.array(z.string()),
-    objects: z.array(zBucketObject),
-    prefix: z.string(),
-    next_cursor: z.string().optional(),
-    is_truncated: z.boolean()
+    folders: z.array(z.string()).describe("Common prefixes (folder names) collapsed under the requested `delimiter`."),
+    objects: z.array(zBucketObject).describe("Objects whose keys did not collapse into a folder."),
+    prefix: z.string().describe("The prefix that was applied to this listing (echoed back)."),
+    next_cursor: z.string().describe("Pagination cursor to pass as `cursor` on the next request.").optional(),
+    is_truncated: z.boolean().describe("True when more results exist beyond this page.")
 });
 
 export const zBucketObjectsDeletePrefixResponse = z.strictObject({
-    deleted: z.int()
+    deleted: z.int().describe("The number of objects soft-deleted under the prefix.")
 });
 
 /**
@@ -2128,16 +2563,16 @@ export const zBucketObjectsDeletePrefixResponse = z.strictObject({
  *
  */
 export const zPresignRequest = z.strictObject({
-    operation: z.enum(['upload', 'download']),
-    content_type: z.string().optional(),
-    expires_in_seconds: z.int().gte(1).lte(604800).optional()
-});
+    operation: z.enum(['upload', 'download']).describe("The transfer direction."),
+    content_type: z.string().describe("The `Content-Type` to bind into the signed request.").optional(),
+    expires_in_seconds: z.int().gte(1).lte(604800).describe("How long the presigned URL stays valid, in seconds.").optional()
+}).describe("Options for the presigned URL.");
 
 export const zPresignResponse = z.strictObject({
-    url: z.string(),
-    method: z.string(),
-    headers: z.record(z.string(), z.string()),
-    expires_at: z.iso.datetime()
+    url: z.string().describe("The presigned URL."),
+    method: z.string().describe("The HTTP method to use against `url`: `PUT` for an upload, `GET` for a download."),
+    headers: z.record(z.string(), z.string()).describe("Headers the caller MUST send verbatim on the request (e.g. `Content-Type` when it was signed on an upload)."),
+    expires_at: z.iso.datetime().describe("When the presigned URL stops being valid.")
 });
 
 /**
@@ -2156,7 +2591,7 @@ export const zCredentialScope = z.enum([
     'storage:write',
     'ai_gateway:invoke',
     'functions:invoke'
-]);
+]).describe("A single capability you may request when issuing a credential.");
 
 /**
  * A single capability a credential actually carries, as reported by
@@ -2178,24 +2613,24 @@ export const zGrantedCredentialScope = z.enum([
     'ai_gateway:invoke',
     'telemetry:write',
     'functions:invoke'
-]);
+]).describe("A single capability a credential actually carries, as reported by responses that describe an existing credential.");
 
 export const zCreateCredentialRequest = z.strictObject({
-    name: z.string().max(256).optional(),
+    name: z.string().max(256).describe("Free-form customer label for the credential.").optional(),
     scopes: z.array(zCredentialScope).min(1).max(16),
-    principal_type: z.enum(['user'])
+    principal_type: z.enum(['user']).describe("Principal type for the credential.")
 });
 
 export const zCreateCredentialResponse = z.strictObject({
-    token_id: z.string(),
-    token_id_short: z.string(),
-    name: z.string().optional(),
-    api_token: z.string(),
-    s3_secret_access_key: z.string(),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>)."),
+    token_id_short: z.string().describe("First 12 hex chars of token_id; safe to log."),
+    name: z.string().describe("Customer-supplied label, echoed back from the request.").optional(),
+    api_token: z.string().describe("Bearer token; returned exactly once."),
+    s3_secret_access_key: z.string().describe("nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY, returned exactly once."),
     scopes: z.array(zGrantedCredentialScope),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
     created_at: z.iso.datetime(),
-    expires_at: z.iso.datetime().optional()
+    expires_at: z.iso.datetime().describe("When the credential expires; absent means never expires.").optional()
 });
 
 /**
@@ -2217,10 +2652,10 @@ export const zCreateCredentialResponse = z.strictObject({
  *
  */
 export const zCredentialSecret = z.strictObject({
-    token_id: z.string(),
-    api_token: z.string(),
-    s3_secret_access_key: z.string()
-});
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>)."),
+    api_token: z.string().describe("Bearer token."),
+    s3_secret_access_key: z.string().describe("nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY.")
+}).describe("The live secrets of an existing credential, recovered on demand by the reveal endpoint.");
 
 /**
  * The replacement secret material for an existing credential, returned
@@ -2230,22 +2665,22 @@ export const zCredentialSecret = z.strictObject({
  *
  */
 export const zRotateCredentialResponse = z.strictObject({
-    token_id: z.string(),
-    token_id_short: z.string(),
-    name: z.string().optional(),
-    api_token: z.string(),
-    s3_secret_access_key: z.string(),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>), unchanged by the rotation."),
+    token_id_short: z.string().describe("First 12 hex chars of token_id; safe to log."),
+    name: z.string().describe("Customer-supplied label carried on the credential.").optional(),
+    api_token: z.string().describe("The new Bearer token; returned exactly once."),
+    s3_secret_access_key: z.string().describe("The new nsk_live_<64 hex> AWS_SECRET_ACCESS_KEY; returned exactly once."),
     scopes: z.array(zGrantedCredentialScope),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    principal_type: z.enum(['user']),
-    created_at: z.iso.datetime(),
-    expires_at: z.iso.datetime().optional()
-});
+    principal_type: z.enum(['user']).describe("Always `user`: only customer-managed credentials are rotatable through this endpoint."),
+    created_at: z.iso.datetime().describe("When the credential was originally issued."),
+    expires_at: z.iso.datetime().describe("When the credential expires; absent means never expires.").optional()
+}).describe("The replacement secret material for an existing credential, returned exactly once.");
 
 export const zCredentialMeta = z.strictObject({
-    token_id: z.string(),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>)."),
     token_id_short: z.string(),
-    name: z.string().optional(),
+    name: z.string().describe("Customer-supplied label; absent when not provided at issuance.").optional(),
     scopes: z.array(zGrantedCredentialScope),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
     principal_type: z.string(),
@@ -2253,7 +2688,7 @@ export const zCredentialMeta = z.strictObject({
     created_at: z.iso.datetime(),
     last_used_at: z.iso.datetime().optional(),
     revoked_at: z.iso.datetime().optional(),
-    expires_at: z.iso.datetime().optional()
+    expires_at: z.iso.datetime().describe("When the credential expires; absent means never expires.").optional()
 });
 
 export const zListCredentialsResponse = z.strictObject({
@@ -2261,25 +2696,25 @@ export const zListCredentialsResponse = z.strictObject({
 });
 
 export const zNeonFunctionDeployment = z.strictObject({
-    id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
+    id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }).describe("The deployment id, which is the platform version number (monotonic per function)."),
     status: z.enum([
         'pending',
         'building',
         'completed',
         'failed'
-    ]),
+    ]).describe("Build lifecycle status of the deployment."),
     memory_mib: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
     runtime: z.string(),
     created_at: z.string(),
-    environment: z.array(z.string()).optional(),
-    error: z.string().optional()
+    environment: z.array(z.string()).describe("The NAMES of the deployment's environment variables, sorted.").optional(),
+    error: z.string().describe("Human-readable reason the deployment build failed.").optional()
 });
 
 export const zNeonFunction = z.strictObject({
-    id: z.string(),
-    slug: z.string(),
-    name: z.string(),
-    invocation_url: z.string(),
+    id: z.string().describe("Opaque, stable function identifier."),
+    slug: z.string().describe("Branch-unique, lowercase DNS-label."),
+    name: z.string().describe("Free-form display name."),
+    invocation_url: z.string().describe("URL at which the function is invoked."),
     current_deployment: zNeonFunctionDeployment.optional(),
     active_deployment: zNeonFunctionDeployment.optional(),
     created_at: z.string()
@@ -2296,14 +2731,14 @@ export const zNeonFunctionsListResponse = z.strictObject({
 /**
  * Opaque, server-minted project-wide trigger identifier.
  */
-export const zTriggerId = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}$/);
+export const zTriggerId = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}$/).describe("Opaque, server-minted project-wide trigger identifier.");
 
 /**
  * A numeric five-field cron schedule interpreted in UTC.
  */
 export const zFunctionTriggerSchedule = z.strictObject({
-    cron: z.string().min(1).max(1024)
-});
+    cron: z.string().min(1).max(1024).describe("Numeric five-field cron expression (minute through day-of-week), interpreted in UTC.")
+}).describe("A numeric five-field cron schedule interpreted in UTC.");
 
 /**
  * Matches successful uploads to one exact bucket and, when configured, an
@@ -2313,26 +2748,26 @@ export const zFunctionTriggerSchedule = z.strictObject({
  *
  */
 export const zFunctionTriggerStorageObjectCreated = z.strictObject({
-    bucket_name: z.string().min(3).max(63),
-    prefix: z.string().min(1).max(1024).regex(/^[^\x00-\x1f\x7f-\x9f]+$/).optional()
-});
+    bucket_name: z.string().min(3).max(63).describe("The exact object-storage bucket name to watch."),
+    prefix: z.string().min(1).max(1024).regex(/^[^\x00-\x1f\x7f-\x9f]+$/).describe("Optional object-key prefix of at most 1024 UTF-8 bytes.").optional()
+}).describe("Matches successful uploads to one exact bucket and, when configured, an object-key prefix.");
 
 export const zScheduleTriggerCreateRequest = z.strictObject({
-    type: z.enum(['schedule']),
-    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/),
-    name: z.string().min(1).max(256),
-    function_path: z.string().min(1).max(2048).optional(),
+    type: z.enum(['schedule']).describe("Trigger type discriminator."),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("The branch-local Function slug to invoke."),
+    name: z.string().min(1).max(256).describe("Human-readable name, unique among triggers visible on the branch."),
+    function_path: z.string().min(1).max(2048).describe("Path passed to the target Function.").optional(),
     schedule: zFunctionTriggerSchedule,
-    enabled: z.boolean().optional()
+    enabled: z.boolean().describe("Whether future occurrences should be scheduled.").optional()
 });
 
 export const zStorageObjectCreatedTriggerCreateRequest = z.strictObject({
-    type: z.enum(['storage_object_created']),
-    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/),
-    name: z.string().min(1).max(256),
-    function_path: z.string().min(1).max(2048).optional(),
+    type: z.enum(['storage_object_created']).describe("Trigger type discriminator."),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("The branch-local Function slug to invoke."),
+    name: z.string().min(1).max(256).describe("Human-readable name, unique among triggers visible on the branch."),
+    function_path: z.string().min(1).max(2048).describe("Path passed to the target Function.").optional(),
     storage_object_created: zFunctionTriggerStorageObjectCreated,
-    enabled: z.boolean().optional()
+    enabled: z.boolean().describe("Whether successful matching uploads should invoke the Function.").optional()
 });
 
 /**
@@ -2346,21 +2781,21 @@ export const zTriggerCreateRequest = z.discriminatedUnion('type', [
 ]);
 
 export const zScheduleTriggerUpdateRequest = z.strictObject({
-    type: z.enum(['schedule']),
-    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).optional(),
+    type: z.enum(['schedule']).describe("Trigger type discriminator; it does not change the trigger type."),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("Replacement branch-local Function slug.").optional(),
     name: z.string().min(1).max(256).optional(),
     function_path: z.string().min(1).max(2048).optional(),
     schedule: zFunctionTriggerSchedule.optional(),
-    enabled: z.boolean().optional()
+    enabled: z.boolean().describe("True enables and false disables future scheduling.").optional()
 });
 
 export const zStorageObjectCreatedTriggerUpdateRequest = z.strictObject({
-    type: z.enum(['storage_object_created']),
-    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).optional(),
+    type: z.enum(['storage_object_created']).describe("Trigger type discriminator; it does not change the trigger type."),
+    function_slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("Replacement branch-local Function slug.").optional(),
     name: z.string().min(1).max(256).optional(),
     function_path: z.string().min(1).max(2048).optional(),
     storage_object_created: zFunctionTriggerStorageObjectCreated.optional(),
-    enabled: z.boolean().optional()
+    enabled: z.boolean().describe("True enables and false disables future matching uploads.").optional()
 });
 
 /**
@@ -2377,17 +2812,17 @@ export const zTriggerUpdateRequest = z.discriminatedUnion('type', [
  * A branch-effective schedule trigger for a Function.
  */
 export const zScheduleTrigger = z.strictObject({
-    type: z.enum(['schedule']),
+    type: z.enum(['schedule']).describe("Trigger type discriminator."),
     trigger_id: zTriggerId,
-    function_slug: z.string(),
-    name: z.string(),
-    function_path: z.string(),
+    function_slug: z.string().describe("The branch-local Function slug resolved when an occurrence is consumed."),
+    name: z.string().describe("Human-readable trigger name."),
+    function_path: z.string().describe("Path passed to the target Function."),
     schedule: zFunctionTriggerSchedule,
     enabled: z.boolean(),
-    version: z.int().gte(1),
+    version: z.int().gte(1).describe("Monotonic configuration version."),
     next_run_at: z.string().nullable(),
-    inherited: z.boolean()
-});
+    inherited: z.boolean().describe("True when the effective configuration was authored on an ancestor branch.")
+}).describe("A branch-effective schedule trigger for a Function.");
 
 /**
  * A branch-effective trigger that invokes a Function after a successful
@@ -2395,16 +2830,16 @@ export const zScheduleTrigger = z.strictObject({
  *
  */
 export const zStorageObjectCreatedTrigger = z.strictObject({
-    type: z.enum(['storage_object_created']),
+    type: z.enum(['storage_object_created']).describe("Trigger type discriminator."),
     trigger_id: zTriggerId,
-    function_slug: z.string(),
-    name: z.string(),
-    function_path: z.string(),
+    function_slug: z.string().describe("The branch-local Function slug resolved when an invocation is consumed."),
+    name: z.string().describe("Human-readable trigger name."),
+    function_path: z.string().describe("Path passed to the target Function."),
     storage_object_created: zFunctionTriggerStorageObjectCreated,
     enabled: z.boolean(),
-    version: z.int().gte(1),
-    inherited: z.boolean()
-});
+    version: z.int().gte(1).describe("Monotonic configuration version."),
+    inherited: z.boolean().describe("True when the effective configuration was authored on an ancestor branch.")
+}).describe("A branch-effective trigger that invokes a Function after a successful upload matching its exact bucket and optional object-key prefix.");
 
 /**
  * A branch-effective trigger discriminated by `type`. The supported trigger
@@ -2425,20 +2860,20 @@ export const zTriggersListResponse = z.strictObject({
 });
 
 export const zCustomDomain = z.strictObject({
-    domain: z.string(),
-    entity_type: z.string(),
-    entity_id: z.string(),
-    cname_target: z.string(),
-    status: z.string().optional(),
-    dns_status: z.string().optional(),
-    binding_status: z.string().optional(),
-    status_reason: z.string().optional()
+    domain: z.string().describe("The registered custom domain (normalized, lowercase)."),
+    entity_type: z.string().describe("The kind of branch entity the domain targets."),
+    entity_id: z.string().describe("The target entity's identifier within the branch."),
+    cname_target: z.string().describe("The hostname the customer must point their custom domain at with a CNAME record."),
+    status: z.string().describe("The domain's current validity, computed by a background check: `pending` (still converging — point your CNAME at `cname_target` and wait), `active` (live: DNS resolves to the edge, the CA is authorized, and routing is published), or `error` (a fixable problem — see `status_reason`).").optional(),
+    dns_status: z.string().describe("The DNS + CAA portion of the check: `pending` (no records yet), `ok` (resolves to our edge and the CA is authorized), `misconfigured` (your CNAME does not resolve to our edge), or `caa_blocked` (your CAA records forbid Let's Encrypt).").optional(),
+    binding_status: z.string().describe("Whether Neon's internal routing for the domain is published: `pending`, `present`, or `missing`.").optional(),
+    status_reason: z.string().describe("A short, stable machine-readable reason for a non-active `status` (e.g. `cname-not-pointing-at-edge`, `caa-blocks-lets-encrypt`, `binding-missing`), suitable for keying an actionable hint.").optional()
 });
 
 export const zCustomDomainRegisterRequest = z.strictObject({
-    domain: z.string().min(3).max(254),
-    entity_type: z.string().min(1).max(32),
-    entity_id: z.string().min(1).max(255)
+    domain: z.string().min(3).max(254).describe("The custom domain to register (for example `dashboard.acme.com`)."),
+    entity_type: z.string().min(1).max(32).describe("The kind of branch entity to point the domain at."),
+    entity_id: z.string().min(1).max(255).describe("The target entity's identifier within the branch.")
 });
 
 export const zCustomDomainsListResponse = z.strictObject({
@@ -2454,25 +2889,25 @@ export const zNeonFunctionDeploymentResponse = z.strictObject({
 });
 
 export const zFunctionDeployRequest = z.strictObject({
-    zip: z.string().optional(),
+    zip: z.string().describe("Optional ZIP archive of the function source code.").optional(),
     runtime: z.enum(['nodejs24']).optional(),
-    environment: z.string().optional()
+    environment: z.string().describe("Optional JSON object (a string-to-string map) of environment variables for the deployment, e.g. {\"KEY\":\"VALUE\"}.").optional()
 });
 
 /**
  * A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.
  */
-export const zCursorParam = z.string();
+export const zCursorParam = z.string().describe("A cursor to use in pagination.");
 
 /**
  * The maximum number of records to be returned in the response
  */
-export const zLimitParam = z.int().gte(1).lte(10000);
+export const zLimitParam = z.int().gte(1).lte(10000).describe("The maximum number of records to be returned in the response");
 
 /**
  * Defines the sorting order of entities.
  */
-export const zSortOrderParam = z.enum(['asc', 'desc']);
+export const zSortOrderParam = z.enum(['asc', 'desc']).describe("Defines the sorting order of entities.");
 
 /**
  * Specify an explicit timeout in milliseconds to limit response delay.
@@ -2481,81 +2916,81 @@ export const zSortOrderParam = z.enum(['asc', 'desc']);
  * If not specified, an implicit implementation defined timeout is chosen with the same behaviour as above
  *
  */
-export const zTimeoutParam = z.int().gte(100).lte(30000);
+export const zTimeoutParam = z.int().gte(100).lte(30000).describe("Specify an explicit timeout in milliseconds to limit response delay.");
 
 export const zGetProjectAdvisorSecurityIssuesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Neon project ID")
 });
 
 export const zGetProjectAdvisorSecurityIssuesQuery = z.strictObject({
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    database_name: z.string().optional(),
-    category: zAdvisorCategory.optional(),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Branch ID to analyze.").optional(),
+    database_name: z.string().describe("Database name to analyze.").optional(),
+    category: z.enum(['SECURITY', 'PERFORMANCE']).describe("Filter issues by category").optional(),
     min_severity: z.enum([
         'INFO',
         'WARN',
         'ERROR'
-    ]).optional()
+    ]).describe("Minimum severity level to include.").optional()
 });
 
 export const zCreateApiKeyBody = zApiKeyCreateRequest;
 
 export const zRevokeApiKeyPath = z.strictObject({
-    key_id: z.int()
+    key_id: z.int().describe("The API key ID")
 });
 
 export const zGetProjectOperationPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    operation_id: z.uuid()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    operation_id: z.uuid().describe("The operation ID")
 });
 
 export const zListProjectsQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(400).optional(),
-    search: z.string().optional(),
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    timeout: z.int().gte(100).lte(30000).optional(),
-    recoverable: z.boolean().optional()
+    cursor: z.string().describe("Specify the cursor value from the previous response to retrieve the next batch of projects.").optional(),
+    limit: z.int().gte(1).lte(400).describe("Specify a value from 1 to 400 to limit number of projects in the response.").optional(),
+    search: z.string().describe("Search by project `name` or `id`.").optional(),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Search for projects by `org_id`.").optional(),
+    timeout: z.int().gte(100).lte(30000).describe("Specify an explicit timeout in milliseconds to limit response delay.").optional(),
+    recoverable: z.boolean().describe("Show only deleted projects within the recovery window.").optional()
 });
 
 export const zCreateProjectBody = zProjectCreateRequest;
 
 export const zCountProjectsQuery = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Count projects in the organization with this `org_id`.").optional()
 });
 
 export const zListSharedProjectsQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(400).optional(),
-    search: z.string().optional(),
-    timeout: z.int().gte(100).lte(30000).optional()
+    cursor: z.string().describe("Specify the cursor value from the previous response to get the next batch of projects.").optional(),
+    limit: z.int().gte(1).lte(400).describe("Specify a value from 1 to 400 to limit number of projects in the response.").optional(),
+    search: z.string().describe("Search query by name or id.").optional(),
+    timeout: z.int().gte(100).lte(30000).describe("Specify an explicit timeout in milliseconds to limit response delay.").optional()
 });
 
 export const zDeleteProjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zGetProjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zUpdateProjectBody = zProjectUpdateRequest;
 
 export const zUpdateProjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zRecoverProjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zListProjectOperationsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zListProjectOperationsQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(1000).optional()
+    cursor: z.string().describe("Specify the cursor value from the previous response to get the next batch of operations").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Specify a value from 1 to 1000 to limit number of operations in the response").optional()
 });
 
 export const zListProjectPermissionsPath = z.strictObject({
@@ -2573,8 +3008,8 @@ export const zListProjectMembersPath = z.strictObject({
 });
 
 export const zListProjectMembersQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(500).optional()
+    cursor: z.string().describe("A cursor to use in pagination.").optional(),
+    limit: z.int().gte(1).lte(500).describe("The maximum number of members to return in the response").optional()
 });
 
 export const zRemoveProjectMemberRolePath = z.strictObject({
@@ -2607,121 +3042,121 @@ export const zGetAvailablePreloadLibrariesPath = z.strictObject({
 });
 
 export const zCreateProjectTransferRequestBody = z.strictObject({
-    ttl_seconds: z.int().optional()
+    ttl_seconds: z.int().describe("Number of seconds the transfer request stays valid before it expires.").optional()
 });
 
 export const zCreateProjectTransferRequestPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zAcceptProjectTransferRequestBody = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID to transfer the project to.").optional()
 });
 
 export const zAcceptProjectTransferRequestPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    request_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    request_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project transfer request ID")
 });
 
 export const zGetProjectJwksPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zAddProjectJwksBody = zAddProjectJwksRequest;
 
 export const zAddProjectJwksPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zDeleteProjectJwksPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    jwks_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    jwks_id: z.string().describe("The JWKS ID")
 });
 
 export const zDeleteProjectBranchDataApiPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zGetProjectBranchDataApiPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zUpdateProjectBranchDataApiBody = zDataApiUpdateRequest;
 
 export const zUpdateProjectBranchDataApiPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zCreateProjectBranchDataApiBody = zDataApiCreateRequest;
 
 export const zCreateProjectBranchDataApiPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zCreateNeonAuthIntegrationBody = zNeonAuthCreateIntegrationRequest;
 
 export const zDisableNeonAuthBody = z.strictObject({
-    delete_data: z.boolean().optional()
+    delete_data: z.boolean().describe("If true, deletes the `neon_auth` schema from the database").optional()
 });
 
 export const zDisableNeonAuthPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetNeonAuthPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zCreateNeonAuthBody = zEnableNeonAuthIntegrationRequest;
 
 export const zCreateNeonAuthPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteNeonAuthDomainFromRedirectUriWhitelistBody = zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest;
 
 export const zDeleteNeonAuthDomainFromRedirectUriWhitelistPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zListNeonAuthRedirectUriWhitelistDomainsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zAddNeonAuthDomainToRedirectUriWhitelistBody = zNeonAuthAddDomainToRedirectUriWhitelistRequest;
 
 export const zAddNeonAuthDomainToRedirectUriWhitelistPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zDeleteBranchNeonAuthTrustedDomainBody = zNeonAuthDeleteDomainFromRedirectUriWhitelistRequest;
 
 export const zDeleteBranchNeonAuthTrustedDomainPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListBranchNeonAuthTrustedDomainsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zAddBranchNeonAuthTrustedDomainBody = zNeonAuthAddDomainToRedirectUriWhitelistRequest;
 
 export const zAddBranchNeonAuthTrustedDomainPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zCreateNeonAuthProviderSdkKeysBody = zNeonAuthCreateAuthProviderSdkKeysRequest;
@@ -2731,615 +3166,655 @@ export const zCreateNeonAuthNewUserBody = zNeonAuthCreateNewUserRequest;
 export const zCreateBranchNeonAuthNewUserBody = zCreateBranchNeonAuthNewUserRequest;
 
 export const zCreateBranchNeonAuthNewUserPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteBranchNeonAuthUserPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    auth_user_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    auth_user_id: z.string().describe("The Neon user ID")
 });
 
 export const zUpdateNeonAuthUserRoleBody = zUpdateNeonAuthUserRoleRequest;
 
 export const zUpdateNeonAuthUserRolePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    auth_user_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    auth_user_id: z.string().describe("The Neon user ID")
 });
 
 export const zDeleteNeonAuthUserPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    auth_user_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    auth_user_id: z.string().describe("The Neon user ID")
 });
 
 export const zTransferNeonAuthProviderProjectBody = zNeonAuthTransferAuthProviderProjectRequest;
 
 export const zListNeonAuthIntegrationsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zListNeonAuthOauthProvidersPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zAddNeonAuthOauthProviderBody = zNeonAuthAddOAuthProviderRequest;
 
 export const zAddNeonAuthOauthProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zListBranchNeonAuthOauthProvidersPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zAddBranchNeonAuthOauthProviderBody = zNeonAuthAddOAuthProviderRequest;
 
 export const zAddBranchNeonAuthOauthProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteNeonAuthOauthProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    oauth_provider_id: zNeonAuthOauthProviderId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    oauth_provider_id: z.enum([
+        'google',
+        'github',
+        'microsoft',
+        'vercel',
+        'apple'
+    ]).describe("The OAuth provider ID")
 });
 
 export const zUpdateNeonAuthOauthProviderBody = zNeonAuthUpdateOAuthProviderRequest;
 
 export const zUpdateNeonAuthOauthProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    oauth_provider_id: zNeonAuthOauthProviderId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    oauth_provider_id: z.enum([
+        'google',
+        'github',
+        'microsoft',
+        'vercel',
+        'apple'
+    ]).describe("The OAuth provider ID")
 });
 
 export const zDeleteBranchNeonAuthOauthProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    oauth_provider_id: zNeonAuthOauthProviderId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    oauth_provider_id: z.enum([
+        'google',
+        'github',
+        'microsoft',
+        'vercel',
+        'apple'
+    ]).describe("The OAuth provider ID")
 });
 
 export const zUpdateBranchNeonAuthOauthProviderBody = zNeonAuthUpdateOAuthProviderRequest;
 
 export const zUpdateBranchNeonAuthOauthProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    oauth_provider_id: zNeonAuthOauthProviderId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    oauth_provider_id: z.enum([
+        'google',
+        'github',
+        'microsoft',
+        'vercel',
+        'apple'
+    ]).describe("The OAuth provider ID")
 });
 
 export const zGetNeonAuthEmailServerPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zUpdateNeonAuthEmailServerBody = zNeonAuthEmailServerConfig;
 
 export const zUpdateNeonAuthEmailServerPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zSendNeonAuthTestEmailBody = zSendNeonAuthTestEmailRequest;
 
 export const zSendNeonAuthTestEmailPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zSendNeonAuthEmailProviderTestBody = zSendNeonAuthEmailProviderTestRequest;
 
 export const zSendNeonAuthEmailProviderTestPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetNeonAuthEmailAndPasswordConfigPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthEmailAndPasswordConfigBody = zNeonAuthEmailAndPasswordConfigUpdate;
 
 export const zUpdateNeonAuthEmailAndPasswordConfigPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetNeonAuthEmailProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthEmailProviderBody = zNeonAuthEmailServerConfig;
 
 export const zUpdateNeonAuthEmailProviderPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteNeonAuthIntegrationBody = z.strictObject({
-    delete_data: z.boolean().optional()
+    delete_data: z.boolean().describe("If true, deletes the `neon_auth` schema from the database").optional()
 });
 
 export const zDeleteNeonAuthIntegrationPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    auth_provider: zNeonAuthSupportedAuthProvider
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    auth_provider: z.enum([
+        'mock',
+        'stack',
+        'better_auth'
+    ]).describe("The authentication provider name")
 });
 
 export const zGetConnectionUriPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zGetConnectionUriQuery = z.strictObject({
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    database_name: z.string(),
-    role_name: z.string(),
-    pooled: z.boolean().optional()
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID.").optional(),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID.").optional(),
+    database_name: z.string().describe("The database name"),
+    role_name: z.string().describe("The role name"),
+    pooled: z.boolean().describe("Adds the `-pooler` option to the connection URI when set to `true`, creating a pooled connection URI.").optional()
 });
 
 export const zGetNeonAuthAllowLocalhostPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthAllowLocalhostBody = zUpdateNeonAuthAllowLocalhostRequest;
 
 export const zUpdateNeonAuthAllowLocalhostPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetNeonAuthPluginConfigsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthOrganizationPluginBody = zNeonAuthOrganizationConfigUpdate;
 
 export const zUpdateNeonAuthOrganizationPluginPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthConfigBody = zNeonAuthConfigUpdate;
 
 export const zUpdateNeonAuthConfigPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthMagicLinkPluginBody = zNeonAuthMagicLinkConfigUpdate;
 
 export const zUpdateNeonAuthMagicLinkPluginPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetNeonAuthPhoneNumberPluginPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthPhoneNumberPluginBody = zNeonAuthPhoneNumberConfigUpdate;
 
 export const zUpdateNeonAuthPhoneNumberPluginPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetNeonAuthOAuthProviderPluginPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthOAuthProviderPluginBody = zNeonAuthOAuthProviderConfigUpdate;
 
 export const zUpdateNeonAuthOAuthProviderPluginPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListNeonAuthOAuthClientsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zCreateNeonAuthOAuthClientBody = zNeonAuthOAuthClientCreateRequest;
 
 export const zCreateNeonAuthOAuthClientPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteNeonAuthOAuthClientPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/).describe("The OAuth client ID")
 });
 
 export const zGetNeonAuthOAuthClientPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/).describe("The OAuth client ID")
 });
 
 export const zUpdateNeonAuthOAuthClientBody = zNeonAuthOAuthClientUpdateRequest;
 
 export const zUpdateNeonAuthOAuthClientPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/).describe("The OAuth client ID")
 });
 
 export const zRotateNeonAuthOAuthClientSecretPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    client_id: z.string().max(64).regex(/^[A-Za-z0-9]+$/).describe("The OAuth client ID")
 });
 
 export const zGetNeonAuthWebhookConfigPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zUpdateNeonAuthWebhookConfigBody = zNeonAuthWebhookConfig;
 
 export const zUpdateNeonAuthWebhookConfigPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListProjectBranchesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zListProjectBranchesQuery = z.strictObject({
-    search: z.string().optional(),
+    search: z.string().describe("Search by branch `name` or `id`.").optional(),
     sort_by: z.enum([
         'name',
         'created_at',
         'updated_at'
-    ]).optional(),
-    cursor: z.string().optional(),
-    sort_order: z.enum(['asc', 'desc']).optional(),
-    limit: z.int().gte(1).lte(10000).optional(),
-    include_deleted: z.boolean().optional()
+    ]).describe("Sort the branches by sort_field.").optional(),
+    cursor: z.string().describe("A cursor to use in pagination.").optional(),
+    sort_order: z.enum(['asc', 'desc']).describe("Defines the sorting order of entities.").optional(),
+    limit: z.int().gte(1).lte(10000).describe("The maximum number of records to be returned in the response").optional(),
+    include_deleted: z.boolean().describe("If true, return recoverable deleted branches too (soft-deleted within the recovery window).").optional()
 });
 
 export const zCreateProjectBranchBody = zBranchCreateRequest.merge(zAnnotationCreateValueRequest);
 
 export const zCreateProjectBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zCreateProjectBranchAnonymizedBody = zBranchAnonymizedCreateRequest;
 
 export const zCreateProjectBranchAnonymizedPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zCountProjectBranchesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zCountProjectBranchesQuery = z.strictObject({
-    search: z.string().optional()
+    search: z.string().describe("Count branches matching the `name` in search query").optional()
 });
 
 export const zDeleteProjectBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetProjectBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zUpdateProjectBranchBody = zBranchUpdateRequest;
 
 export const zUpdateProjectBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zRestoreProjectBranchBody = zBranchRestoreRequest;
 
 export const zRestoreProjectBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetProjectBranchSchemaPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetProjectBranchSchemaQuery = z.strictObject({
-    db_name: z.string(),
-    lsn: z.string().optional(),
-    timestamp: z.iso.datetime().optional(),
-    format: z.string().optional()
+    db_name: z.string().describe("Name of the database for which the schema is retrieved"),
+    lsn: z.string().describe("The Log Sequence Number (LSN) for which the schema is retrieved").optional(),
+    timestamp: z.iso.datetime().describe("The point in time for which the schema is retrieved").optional(),
+    format: z.string().describe("The format of the schema to retrieve.").optional()
 });
 
 export const zGetProjectBranchSchemaComparisonPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetProjectBranchSchemaComparisonQuery = z.strictObject({
-    base_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    db_name: z.string(),
-    lsn: z.string().optional(),
-    timestamp: z.iso.datetime().optional(),
-    base_lsn: z.string().optional(),
-    base_timestamp: z.iso.datetime().optional()
+    base_branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID to compare the schema with").optional(),
+    db_name: z.string().describe("Name of the database for which the schema is retrieved"),
+    lsn: z.string().describe("The Log Sequence Number (LSN) for which the schema is retrieved").optional(),
+    timestamp: z.iso.datetime().describe("The point in time for which the schema is retrieved").optional(),
+    base_lsn: z.string().describe("The Log Sequence Number (LSN) for the base branch schema").optional(),
+    base_timestamp: z.iso.datetime().describe("The point in time for the base branch schema").optional()
 });
 
 export const zGetMaskingRulesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zUpdateMaskingRulesBody = zMaskingRulesUpdateRequest;
 
 export const zUpdateMaskingRulesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetAnonymizedBranchStatusPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zStartAnonymizationPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zSetDefaultProjectBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zFinalizeRestoreBranchBody = z.strictObject({
-    name: z.string().optional()
+    name: z.string().describe("Name for the replaced branch.").optional()
 });
 
 export const zFinalizeRestoreBranchPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zListProjectBranchEndpointsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zListProjectBranchDatabasesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zCreateProjectBranchDatabaseBody = zDatabaseCreateRequest;
 
 export const zCreateProjectBranchDatabasePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zDeleteProjectBranchDatabasePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zGetProjectBranchDatabasePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zUpdateProjectBranchDatabaseBody = zDatabaseUpdateRequest;
 
 export const zUpdateProjectBranchDatabasePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    database_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    database_name: z.string().describe("The database name")
 });
 
 export const zListProjectBranchRolesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zCreateProjectBranchRoleBody = zRoleCreateRequest;
 
 export const zCreateProjectBranchRolePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zDeleteProjectBranchRolePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    role_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    role_name: z.string().describe("The role name")
 });
 
 export const zGetProjectBranchRolePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    role_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    role_name: z.string().describe("The role name")
 });
 
 export const zGetProjectBranchRolePasswordPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    role_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    role_name: z.string().describe("The role name")
 });
 
 export const zDisableProjectBranchRealtimePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetProjectBranchRealtimePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zEnableProjectBranchRealtimeBody = zRealtimeOptions;
 
 export const zEnableProjectBranchRealtimePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zGetProjectBranchRealtimeSecretPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zRotateProjectBranchRealtimeSecretPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zResetProjectBranchRolePasswordPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    role_name: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID"),
+    role_name: z.string().describe("The role name")
 });
 
 export const zListProjectVpcEndpointsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zDeleteProjectVpcEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    vpc_endpoint_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    vpc_endpoint_id: z.string().describe("The VPC endpoint ID")
 });
 
 export const zAssignProjectVpcEndpointBody = zVpcEndpointAssignment;
 
 export const zAssignProjectVpcEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    vpc_endpoint_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    vpc_endpoint_id: z.string().describe("The VPC endpoint ID")
 });
 
 export const zListProjectEndpointsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zCreateProjectEndpointBody = zEndpointCreateRequest;
 
 export const zCreateProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zDeleteProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID")
 });
 
 export const zGetProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID")
 });
 
 export const zUpdateProjectEndpointBody = zEndpointUpdateRequest;
 
 export const zUpdateProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID")
 });
 
 export const zStartProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID")
 });
 
 export const zSuspendProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID")
 });
 
 export const zRestartProjectEndpointPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    endpoint_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The endpoint ID")
 });
 
 export const zGetConsumptionHistoryPerProjectQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(100).optional(),
-    project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).optional(),
-    from: z.iso.datetime(),
-    to: z.iso.datetime(),
-    granularity: zConsumptionHistoryGranularity,
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-    include_v1_metrics: z.boolean().optional(),
-    metrics: zConsumptionHistoryQueryMetrics.optional()
+    cursor: z.string().describe("Specify the cursor value from the previous response to get the next batch of projects.").optional(),
+    limit: z.int().gte(1).lte(100).describe("Specify a value from 1 to 100 to limit number of projects in the response.").optional(),
+    project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).describe("Specify a list of project IDs to filter the response.").optional(),
+    from: z.iso.datetime().describe("Specify the start `date-time` for the consumption period."),
+    to: z.iso.datetime().describe("Specify the end `date-time` for the consumption period."),
+    granularity: z.enum([
+        'hourly',
+        'daily',
+        'monthly'
+    ]).describe("Specify the granularity of consumption metrics."),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Specify the organization for which the project consumption metrics should be returned.").optional(),
+    include_v1_metrics: z.boolean().describe("The field is deprecated and no longer has any effect: the only metric it used to add (`data_storage_bytes_hour`) is retired and always returns 0.").optional(),
+    metrics: z.array(z.string()).describe("Specify a list of metrics to include in the response.").optional()
 });
 
 export const zGetConsumptionHistoryPerProjectV2Query = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(100).optional(),
-    project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).optional(),
-    from: z.iso.datetime(),
-    to: z.iso.datetime(),
-    granularity: zConsumptionHistoryGranularity,
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    metrics: zConsumptionHistoryQueryMetrics
+    cursor: z.string().describe("Cursor from the previous response (`pagination.cursor`).").optional(),
+    limit: z.int().gte(1).lte(100).describe("Maximum number of projects per page.").optional(),
+    project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).describe("Optional project IDs to filter the response (up to 100).").optional(),
+    from: z.iso.datetime().describe("Specify the start `date-time` for the consumption period."),
+    to: z.iso.datetime().describe("Specify the end `date-time` for the consumption period."),
+    granularity: z.enum([
+        'hourly',
+        'daily',
+        'monthly'
+    ]).describe("Specify the granularity of consumption metrics."),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Organization ID."),
+    metrics: z.array(z.string()).describe("Required. List the metrics to return.")
 });
 
 export const zGetConsumptionHistoryPerBranchV2Query = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(1000).optional(),
-    project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(1).max(100),
-    branch_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).optional(),
-    from: z.iso.datetime(),
-    to: z.iso.datetime(),
-    granularity: zConsumptionHistoryGranularity,
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    metrics: zConsumptionHistoryQueryMetrics
+    cursor: z.string().describe("Cursor from the previous response (`pagination.cursor`).").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Maximum number of branches per page.").optional(),
+    project_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(1).max(100).describe("Project IDs to include (required, 1 to 100)."),
+    branch_ids: z.array(z.string().regex(/^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$/)).min(0).max(100).describe("Optional branch IDs to filter the response (up to 100).").optional(),
+    from: z.iso.datetime().describe("Specify the start `date-time` for the consumption period."),
+    to: z.iso.datetime().describe("Specify the end `date-time` for the consumption period."),
+    granularity: z.enum([
+        'hourly',
+        'daily',
+        'monthly'
+    ]).describe("Specify the granularity of consumption metrics."),
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Organization ID."),
+    metrics: z.array(z.string()).describe("Required. List the metrics to return.")
 });
 
 export const zGetOrganizationPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zListOrgApiKeysPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zCreateOrgApiKeyBody = zOrgApiKeyCreateRequest;
 
 export const zCreateOrgApiKeyPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zRevokeOrgApiKeyPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    key_id: z.int()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    key_id: z.int().describe("The API key ID")
 });
 
 export const zDeleteOrganizationSpendingLimitPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zGetOrganizationSpendingLimitPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zSetOrganizationSpendingLimitBody = zSpendingLimitUpdateRequest;
 
 export const zSetOrganizationSpendingLimitPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zGetOrganizationMembersPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zGetOrganizationMembersQuery = z.strictObject({
@@ -3347,354 +3822,358 @@ export const zGetOrganizationMembersQuery = z.strictObject({
         'email',
         'role',
         'joined_at'
-    ]).optional(),
-    cursor: z.string().optional(),
-    sort_order: z.enum(['asc', 'desc']).optional(),
-    limit: z.int().gte(1).lte(500).optional()
+    ]).describe("Sort the members by the specified field.").optional(),
+    cursor: z.string().describe("A cursor to use in pagination.").optional(),
+    sort_order: z.enum(['asc', 'desc']).describe("Defines the sorting order of entities.").optional(),
+    limit: z.int().gte(1).lte(500).describe("The maximum number of members to return in the response").optional()
 });
 
 export const zRemoveOrganizationMemberPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    member_id: z.uuid()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    member_id: z.uuid().describe("The Neon organization member ID")
 });
 
 export const zGetOrganizationMemberPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    member_id: z.uuid()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    member_id: z.uuid().describe("The Neon organization member ID")
 });
 
 export const zUpdateOrganizationMemberBody = zOrganizationMemberUpdateRequest;
 
 export const zUpdateOrganizationMemberPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    member_id: z.uuid()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    member_id: z.uuid().describe("The Neon organization member ID")
 });
 
 export const zGetOrganizationInvitationsPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zCreateOrganizationInvitationsBody = zOrganizationInvitesCreateRequest;
 
 export const zCreateOrganizationInvitationsPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zTransferProjectsFromOrgToOrgBody = zTransferProjectsToOrganizationRequest;
 
 export const zTransferProjectsFromOrgToOrgPath = z.strictObject({
-    source_org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    source_org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID (source org, which currently owns the project)")
 });
 
 export const zListOrganizationVpcEndpointsAllRegionsPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID")
 });
 
 export const zListOrganizationVpcEndpointsPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    region_id: z.string()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    region_id: z.string().describe("The Neon region ID")
 });
 
 export const zDeleteOrganizationVpcEndpointPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    region_id: z.string(),
-    vpc_endpoint_id: z.string()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    region_id: z.string().describe("The Neon region ID."),
+    vpc_endpoint_id: z.string().describe("The VPC endpoint ID")
 });
 
 export const zGetOrganizationVpcEndpointDetailsPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    region_id: z.string(),
-    vpc_endpoint_id: z.string()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    region_id: z.string().describe("The Neon region ID."),
+    vpc_endpoint_id: z.string().describe("The VPC endpoint ID")
 });
 
 export const zAssignOrganizationVpcEndpointBody = zVpcEndpointAssignment;
 
 export const zAssignOrganizationVpcEndpointPath = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    region_id: z.string(),
-    vpc_endpoint_id: z.string()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon organization ID"),
+    region_id: z.string().describe("The Neon region ID."),
+    vpc_endpoint_id: z.string().describe("The VPC endpoint ID")
 });
 
 export const zGetActiveRegionsQuery = z.strictObject({
-    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).optional()
+    org_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("Organization ID.").optional()
 });
 
 export const zTransferProjectsFromUserToOrgBody = zTransferProjectsToOrganizationRequest;
 
 export const zCreateSnapshotPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zCreateSnapshotQuery = z.strictObject({
-    lsn: z.string().optional(),
-    timestamp: z.string().optional(),
-    name: z.string().optional(),
-    expires_at: z.string().optional()
+    lsn: z.string().describe("The target Log Sequence Number (LSN) to take the snapshot from.").optional(),
+    timestamp: z.string().describe("The target timestamp for the snapshot.").optional(),
+    name: z.string().describe("A name for the snapshot.").optional(),
+    expires_at: z.string().describe("The time at which the snapshot will be automatically deleted.").optional()
 });
 
 export const zListSnapshotsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID")
 });
 
 export const zDeleteSnapshotPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    snapshot_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    snapshot_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The snapshot ID")
 });
 
 export const zUpdateSnapshotBody = zSnapshotUpdateRequest;
 
 export const zUpdateSnapshotPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    snapshot_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    snapshot_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The snapshot ID")
 });
 
 export const zRestoreSnapshotBody = z.strictObject({
-    name: z.string().optional(),
-    target_branch_id: z.string().optional(),
-    finalize_restore: z.boolean().optional()
+    name: z.string().describe("A name for the newly restored branch.").optional(),
+    target_branch_id: z.string().describe("ID of the branch to restore the snapshot into.").optional(),
+    finalize_restore: z.boolean().describe("Set to `true` to finalize the restore operation immediately.").optional()
 });
 
 export const zRestoreSnapshotPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    snapshot_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    snapshot_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The snapshot ID")
 });
 
 export const zRestoreSnapshotQuery = z.strictObject({
-    name: z.string().optional()
+    name: z.string().describe("Deprecated. Use the `name` field in the request body instead.").optional()
 });
 
 export const zGetSnapshotSchedulePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zSetSnapshotScheduleBody = zBackupSchedule;
 
 export const zSetSnapshotSchedulePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The branch ID")
 });
 
 export const zListProjectBranchBucketsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zCreateProjectBranchBucketBody = zBucketCreateRequest;
 
 export const zCreateProjectBranchBucketPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteProjectBranchBucketPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    bucket_name: z.string().min(1).max(255)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    bucket_name: z.string().min(1).max(255).describe("The bucket name")
 });
 
 export const zGetProjectBranchStoragePath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zGetProjectBranchAiGatewayPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zQueryProjectBranchLogsBody = zProjectBranchLogsQueryRequest;
 
 export const zQueryProjectBranchLogsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListProjectBranchLogFieldsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListProjectBranchLogFieldValuesPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    field_name: z.string().min(1)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    field_name: z.string().min(1).describe("The log field whose distinct values should be returned.")
 });
 
 export const zListProjectBranchLogFieldValuesQuery = z.strictObject({
-    since: zProjectBranchLogDuration.optional(),
-    start_time: z.iso.datetime().optional(),
-    end_time: z.iso.datetime().optional(),
-    source: zProjectBranchLogSource.optional(),
-    limit: z.int().gte(1).lte(1000).optional()
+    since: z.string().regex(/^[0-9]{1,6}(ms|s|m|h|d)$/).describe("Length of the lookup window, ending at `end_time` or at the current time when `end_time` is omitted.").optional(),
+    start_time: z.iso.datetime().describe("Inclusive beginning of the lookup window.").optional(),
+    end_time: z.iso.datetime().describe("Exclusive end of the lookup window.").optional(),
+    source: z.enum([
+        'function',
+        'storage',
+        'pg_endpoint'
+    ]).describe("Only consider records emitted by this Neon service.").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Maximum number of distinct values to return.").optional()
 });
 
 export const zListProjectBranchBucketObjectsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    bucket_name: z.string().min(1).max(255)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    bucket_name: z.string().min(1).max(255).describe("The bucket name")
 });
 
 export const zListProjectBranchBucketObjectsQuery = z.strictObject({
-    prefix: z.string().optional(),
-    delimiter: z.string().optional(),
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(1000).optional()
+    prefix: z.string().describe("Only list objects whose key starts with this prefix.").optional(),
+    delimiter: z.string().describe("Collapse keys sharing a common prefix up to the first occurrence of this delimiter (typically `/`) into the `folders` array.").optional(),
+    cursor: z.string().describe("Opaque pagination cursor returned as `next_cursor` by a previous call.").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Maximum number of items (objects + folders) to return.").optional()
 });
 
 export const zDeleteProjectBranchBucketObjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    bucket_name: z.string().min(1).max(255),
-    object_key: z.string().min(1).max(1024)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    bucket_name: z.string().min(1).max(255).describe("The bucket name"),
+    object_key: z.string().min(1).max(1024).describe("The object key.")
 });
 
 export const zGetProjectBranchBucketObjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    bucket_name: z.string().min(1).max(255),
-    object_key: z.string().min(1).max(1024)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    bucket_name: z.string().min(1).max(255).describe("The bucket name"),
+    object_key: z.string().min(1).max(1024).describe("The object key.")
 });
 
 export const zDeleteProjectBranchBucketObjectsByPrefixPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    bucket_name: z.string().min(1).max(255)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    bucket_name: z.string().min(1).max(255).describe("The bucket name")
 });
 
 export const zDeleteProjectBranchBucketObjectsByPrefixQuery = z.strictObject({
-    prefix: z.string().min(1).max(1024)
+    prefix: z.string().min(1).max(1024).describe("The key prefix (folder) to delete.")
 });
 
 export const zPresignProjectBranchBucketObjectBody = zPresignRequest;
 
 export const zPresignProjectBranchBucketObjectPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    bucket_name: z.string().min(1).max(255),
-    object_key: z.string().min(1).max(1024)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    bucket_name: z.string().min(1).max(255).describe("The bucket name"),
+    object_key: z.string().min(1).max(1024).describe("The object key.")
 });
 
 export const zListCredentialsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zCreateCredentialBody = zCreateCredentialRequest;
 
 export const zCreateCredentialPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zRevokeCredentialPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    token_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    token_id: z.string().describe("The opaque credential id (e.g. nak_live_<32hex>).")
 });
 
 export const zRevealCredentialPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    token_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    token_id: z.string().describe("The opaque credential id (e.g. nak_live_<32hex>).")
 });
 
 export const zRotateCredentialPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    token_id: z.string()
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    token_id: z.string().describe("The opaque credential id (e.g. nak_live_<32hex>).")
 });
 
 export const zListProjectBranchFunctionsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListProjectBranchFunctionsQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(1000).optional()
+    cursor: z.string().describe("A cursor to use in pagination.").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Specify a value from 1 to 1000 to limit number of functions in the response").optional()
 });
 
 export const zDeleteProjectBranchFunctionPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    slug: z.string().regex(/^[a-z0-9]{1,20}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("The function slug")
 });
 
 export const zGetProjectBranchFunctionPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    slug: z.string().regex(/^[a-z0-9]{1,20}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("The function slug")
 });
 
 export const zUpdateProjectBranchFunctionBody = zNeonFunctionUpdateRequest;
 
 export const zUpdateProjectBranchFunctionPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    slug: z.string().regex(/^[a-z0-9]{1,20}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("The function slug")
 });
 
 export const zCreateProjectBranchFunctionDeploymentBody = zFunctionDeployRequest;
 
 export const zCreateProjectBranchFunctionDeploymentPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    slug: z.string().regex(/^[a-z0-9]{1,20}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    slug: z.string().regex(/^[a-z0-9]{1,20}$/).describe("The function slug")
 });
 
 export const zListProjectBranchTriggersPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zCreateProjectBranchTriggerBody = zTriggerCreateRequest;
 
 export const zCreateProjectBranchTriggerPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteProjectBranchTriggerPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    trigger_id: zTriggerId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    trigger_id: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}$/).describe("The opaque, project-wide trigger ID")
 });
 
 export const zGetProjectBranchTriggerPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    trigger_id: zTriggerId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    trigger_id: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}$/).describe("The opaque, project-wide trigger ID")
 });
 
 export const zUpdateProjectBranchTriggerBody = zTriggerUpdateRequest;
 
 export const zUpdateProjectBranchTriggerPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    trigger_id: zTriggerId
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    trigger_id: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}$/).describe("The opaque, project-wide trigger ID")
 });
 
 export const zListProjectBranchCustomDomainsPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zListProjectBranchCustomDomainsQuery = z.strictObject({
-    cursor: z.string().optional(),
-    limit: z.int().gte(1).lte(1000).optional()
+    cursor: z.string().describe("A cursor to use in pagination.").optional(),
+    limit: z.int().gte(1).lte(1000).describe("Specify a value from 1 to 1000 to limit number of domains in the response").optional()
 });
 
 export const zRegisterProjectBranchCustomDomainBody = zCustomDomainRegisterRequest;
 
 export const zRegisterProjectBranchCustomDomainPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID")
 });
 
 export const zDeleteProjectBranchCustomDomainPath = z.strictObject({
-    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/),
-    domain: z.string().min(3).max(254).regex(/^[A-Za-z0-9.-]+$/)
+    project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
+    branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
+    domain: z.string().min(3).max(254).regex(/^[A-Za-z0-9.-]+$/).describe("The registered custom domain (case-insensitive).")
 });

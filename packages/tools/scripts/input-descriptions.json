@@ -1,0 +1,44 @@
+{
+	"createCredential": {
+		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes."
+	},
+	"createProjectBranchFunctionDeployment": {
+		"runtime": "The Node.js runtime for the deployment.",
+		"zip": "Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment."
+	},
+	"grantPermissionToProject": {
+		"project_id": "The Neon project ID"
+	},
+	"listProjectMembers": {
+		"project_id": "The Neon project ID"
+	},
+	"listProjectPermissions": {
+		"project_id": "The Neon project ID"
+	},
+	"removeProjectMemberRole": {
+		"project_id": "The Neon project ID",
+		"member_id": "The organization member ID",
+		"confirm_self_lockout": "Set true to remove your own grant when you would lose manage access."
+	},
+	"revokePermissionFromProject": {
+		"project_id": "The Neon project ID",
+		"permission_id": "The permission `id` from listing project access."
+	},
+	"setProjectMemberRole": {
+		"project_id": "The Neon project ID",
+		"member_id": "The organization member ID",
+		"confirm_self_demotion": "Set true to lower your own role on the project."
+	},
+	"updateNeonAuthEmailProvider": {
+		"body": "Email provider configuration for the branch's Neon Auth integration."
+	},
+	"updateProjectBranch": {
+		"expires_at": "The timestamp when the branch is scheduled to expire and be automatically deleted."
+	},
+	"updateProjectBranchFunction": {
+		"name": "New display name for the function."
+	},
+	"updateSnapshot": {
+		"expires_at": "The date and time when the snapshot will expire."
+	}
+}
