@@ -70,6 +70,7 @@ describe("generated operation coverage", () => {
 	test("published catalog marks tools that reach outside the account open-world", () => {
 		const openWorld = new Set([
 			"storage.buckets.create",
+			"auth.emailProvider.sendTest",
 			"organizations.invitations.create",
 			"organizations.spendingLimit.set",
 		]);

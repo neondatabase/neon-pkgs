@@ -1,3 +1,7 @@
+import type {
+	NeonAuthEmailServerConfigResponse,
+	NeonAuthPluginConfigs,
+} from "@neon/sdk";
 import * as z from "zod";
 import { decodeBase64 } from "../binary.js";
 import {
@@ -29,6 +33,29 @@ const logReadAnnotations = {
 	idempotentHint: true,
 	openWorldHint: false,
 } as const;
+
+// Depending on the caller's permissions, the API returns these secrets in full or
+// partially masked. Tools blank them to "", the form the API itself documents as redacted.
+const withoutSmtpPassword = (
+	config: NeonAuthEmailServerConfigResponse,
+): NeonAuthEmailServerConfigResponse =>
+	config.type === "standard" ? { ...config, password: "" } : config;
+
+const withoutPluginSecrets = (
+	plugins: NeonAuthPluginConfigs,
+): NeonAuthPluginConfigs => ({
+	...plugins,
+	...(plugins.email_provider && {
+		email_provider: withoutSmtpPassword(plugins.email_provider),
+	}),
+	...(plugins.oauth_providers && {
+		oauth_providers: plugins.oauth_providers.map((provider) =>
+			provider.client_secret === undefined
+				? provider
+				: { ...provider, client_secret: "" },
+		),
+	}),
+});
 
 export type ToolFactory = (typeof toolFactories)[NeonToolId];
 
@@ -1592,6 +1619,215 @@ export const toolFactories = {
 						branchId: input.branch_id,
 						authUserId: input.auth_user_id,
 						roles: input.roles,
+					},
+					{ signal },
+				),
+		}),
+	"auth.allowLocalhost.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.allowLocalhost.get",
+			generated: "getNeonAuthAllowLocalhost",
+			run: (neon, input, signal) =>
+				neon.auth.allowLocalhost.get(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"auth.allowLocalhost.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.allowLocalhost.update",
+			generated: "updateNeonAuthAllowLocalhost",
+			run: (neon, input, signal) =>
+				neon.auth.allowLocalhost.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						allow_localhost: input.allow_localhost,
+					},
+					{ signal },
+				),
+		}),
+	"auth.emailAndPassword.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.emailAndPassword.get",
+			generated: "getNeonAuthEmailAndPasswordConfig",
+			run: (neon, input, signal) =>
+				neon.auth.emailAndPassword.get(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"auth.emailAndPassword.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.emailAndPassword.update",
+			generated: "updateNeonAuthEmailAndPasswordConfig",
+			run: (neon, input, signal) =>
+				neon.auth.emailAndPassword.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+						email_verification_method:
+							input.email_verification_method,
+						require_email_verification:
+							input.require_email_verification,
+						auto_sign_in_after_verification:
+							input.auto_sign_in_after_verification,
+						send_verification_email_on_sign_up:
+							input.send_verification_email_on_sign_up,
+						send_verification_email_on_sign_in:
+							input.send_verification_email_on_sign_in,
+						disable_sign_up: input.disable_sign_up,
+						revoke_sessions_on_password_reset:
+							input.revoke_sessions_on_password_reset,
+					},
+					{ signal },
+				),
+		}),
+	"auth.emailProvider.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.emailProvider.get",
+			generated: "getNeonAuthEmailProvider",
+			requiresApproval: false,
+			run: async (neon, input, signal) =>
+				withoutSmtpPassword(
+					await neon.auth.emailProvider.get(
+						{
+							projectId: input.project_id,
+							branchId: input.branch_id,
+						},
+						{ signal },
+					),
+				),
+		}),
+	"auth.emailProvider.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.emailProvider.update",
+			generated: "updateNeonAuthEmailProvider",
+			run: async (neon, input, signal) =>
+				withoutSmtpPassword(
+					await neon.auth.emailProvider.update(
+						{
+							projectId: input.project_id,
+							branchId: input.branch_id,
+							...input.body,
+						},
+						{ signal },
+					),
+				),
+		}),
+	"auth.emailProvider.sendTest": (options) =>
+		fromGenerated(options, {
+			id: "auth.emailProvider.sendTest",
+			generated: "sendNeonAuthEmailProviderTest",
+			run: (neon, input, signal) =>
+				neon.auth.emailProvider.sendTest(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						recipient_email: input.recipient_email,
+					},
+					{ signal },
+				),
+		}),
+	"auth.plugins.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.plugins.get",
+			generated: "getNeonAuthPluginConfigs",
+			requiresApproval: false,
+			run: async (neon, input, signal) =>
+				withoutPluginSecrets(
+					await neon.auth.plugins.get(
+						{
+							projectId: input.project_id,
+							branchId: input.branch_id,
+						},
+						{ signal },
+					),
+				),
+		}),
+	"auth.plugins.magicLink.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.plugins.magicLink.update",
+			generated: "updateNeonAuthMagicLinkPlugin",
+			run: (neon, input, signal) =>
+				neon.auth.plugins.magicLink.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+						expires_in: input.expires_in,
+						disable_sign_up: input.disable_sign_up,
+					},
+					{ signal },
+				),
+		}),
+	"auth.plugins.organization.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.plugins.organization.update",
+			generated: "updateNeonAuthOrganizationPlugin",
+			run: (neon, input, signal) =>
+				neon.auth.plugins.organization.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+						organization_limit: input.organization_limit,
+						membership_limit: input.membership_limit,
+						creator_role: input.creator_role,
+						send_invitation_email: input.send_invitation_email,
+					},
+					{ signal },
+				),
+		}),
+	"auth.plugins.phoneNumber.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.plugins.phoneNumber.get",
+			generated: "getNeonAuthPhoneNumberPlugin",
+			run: (neon, input, signal) =>
+				neon.auth.plugins.phoneNumber.get(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"auth.plugins.phoneNumber.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.plugins.phoneNumber.update",
+			generated: "updateNeonAuthPhoneNumberPlugin",
+			run: (neon, input, signal) =>
+				neon.auth.plugins.phoneNumber.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+						otp_expires_in: input.otp_expires_in,
+					},
+					{ signal },
+				),
+		}),
+	"auth.webhooks.get": (options) =>
+		fromGenerated(options, {
+			id: "auth.webhooks.get",
+			generated: "getNeonAuthWebhookConfig",
+			run: (neon, input, signal) =>
+				neon.auth.webhooks.get(
+					{ projectId: input.project_id, branchId: input.branch_id },
+					{ signal },
+				),
+		}),
+	"auth.webhooks.update": (options) =>
+		fromGenerated(options, {
+			id: "auth.webhooks.update",
+			generated: "updateNeonAuthWebhookConfig",
+			run: (neon, input, signal) =>
+				neon.auth.webhooks.update(
+					{
+						projectId: input.project_id,
+						branchId: input.branch_id,
+						enabled: input.enabled,
+						webhook_url: input.webhook_url,
+						enabled_events: input.enabled_events,
+						timeout_seconds: input.timeout_seconds,
 					},
 					{ signal },
 				),

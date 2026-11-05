@@ -1033,6 +1033,45 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `users.create({ projectId, branchId, …input })` | `NeonAuthCreateNewUserResponse` | |
 | `users.delete({ projectId, branchId, authUserId })` | **→void** | |
 | `users.updateRole({ projectId, branchId, authUserId, roles })` | role | |
+| `allowLocalhost.get({ projectId, branchId })` | `NeonAuthAllowLocalhostResponse` | accept requests from localhost origins |
+| `allowLocalhost.update({ projectId, branchId, allow_localhost })` | `NeonAuthAllowLocalhostResponse` | |
+| `emailAndPassword.get({ projectId, branchId })` | `NeonAuthEmailAndPasswordConfig` | |
+| `emailAndPassword.update({ projectId, branchId, …input })` | `NeonAuthEmailAndPasswordConfig` | omitted fields keep their value |
+| `emailProvider.get({ projectId, branchId })` | `NeonAuthEmailServerConfigResponse` | `password` may come back, depending on the caller's permissions |
+| `emailProvider.update({ projectId, branchId, type, …input })` | `NeonAuthEmailServerConfigResponse` | `type: "standard"` for your SMTP server, `"shared"` for Neon's sender; the response's `password` is empty |
+| `emailProvider.sendTest({ projectId, branchId, recipient_email })` | `SendNeonAuthTestEmailResponse` | sends through the saved provider; a failed send is `success: false`, not an error |
+| `plugins.get({ projectId, branchId })` | `NeonAuthPluginConfigs` | every plugin's configuration in one call |
+| `plugins.magicLink.update({ projectId, branchId, …input })` | `NeonAuthMagicLinkConfig` | |
+| `plugins.organization.update({ projectId, branchId, …input })` | `NeonAuthOrganizationConfig` | organizations inside your app, not Neon organizations |
+| `plugins.phoneNumber.get({ projectId, branchId })` | `NeonAuthPhoneNumberConfig` | |
+| `plugins.phoneNumber.update({ projectId, branchId, …input })` | `NeonAuthPhoneNumberConfig` | |
+| `webhooks.get({ projectId, branchId })` | `NeonAuthWebhookConfig` | |
+| `webhooks.update({ projectId, branchId, enabled, …input })` | `NeonAuthWebhookConfig` | replaces the whole configuration; omitted fields reset |
+
+```ts
+const ids = { projectId: "proj-123", branchId: "br-main-456" };
+
+await neon.auth.emailAndPassword.update({
+	...ids,
+	revoke_sessions_on_password_reset: true,
+});
+
+await neon.auth.emailProvider.update({
+	...ids,
+	type: "standard",
+	host: "smtp.example.com",
+	port: 587,
+	username: "mailer",
+	password: process.env.SMTP_PASSWORD,
+	sender_email: "auth@example.com",
+	sender_name: "Example",
+});
+const { data } = await neon.auth.emailProvider.sendTest({
+	...ids,
+	recipient_email: "dev@example.com",
+});
+if (data && !data.success) console.error(data.error_message);
+```
 
 ### `neon.projects.permissions`
 

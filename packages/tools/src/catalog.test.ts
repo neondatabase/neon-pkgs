@@ -342,6 +342,242 @@ describe("special mappings", () => {
 		}
 	});
 
+	test("maps the Neon Auth branch settings tools onto the SDK and blanks secrets", async () => {
+		const smtp = {
+			type: "standard",
+			host: "smtp.example.com",
+			port: 587,
+			username: "mailer",
+			password: "*****123",
+			sender_email: "auth@example.com",
+			sender_name: "Example",
+		};
+		const plugins = {
+			magic_link: {
+				enabled: false,
+				expires_in: 5,
+				disable_sign_up: false,
+			},
+			email_provider: smtp,
+			oauth_providers: [
+				{ id: "google", type: "shared" },
+				{
+					id: "github",
+					type: "standard",
+					client_id: "gh-client",
+					client_secret: "*****456",
+				},
+			],
+			allow_localhost: true,
+		};
+		const webhook = {
+			enabled: true,
+			webhook_url: "https://hooks.example.com/auth",
+			enabled_events: ["user.created"],
+			timeout_seconds: 5,
+		};
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"auth.allowLocalhost.get",
+				"auth.allowLocalhost.update",
+				"auth.emailAndPassword.get",
+				"auth.emailAndPassword.update",
+				"auth.emailProvider.get",
+				"auth.emailProvider.update",
+				"auth.emailProvider.sendTest",
+				"auth.plugins.get",
+				"auth.plugins.magicLink.update",
+				"auth.plugins.organization.update",
+				"auth.plugins.phoneNumber.get",
+				"auth.plugins.phoneNumber.update",
+				"auth.webhooks.get",
+				"auth.webhooks.update",
+			] as const,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				const path = new URL(request.url).pathname;
+				if (path.endsWith("/email_provider/test")) {
+					return jsonResponse({
+						success: false,
+						error_message: "nope",
+					});
+				}
+				if (path.endsWith("/email_provider")) {
+					return jsonResponse(smtp);
+				}
+				if (path.endsWith("/plugins")) {
+					return jsonResponse(plugins);
+				}
+				if (path.endsWith("/webhooks")) {
+					return jsonResponse(webhook);
+				}
+				return jsonResponse({ path });
+			},
+		});
+		const ids = { project_id: "project-id", branch_id: "branch-id" };
+
+		await tools["auth.allowLocalhost.get"].execute(ids);
+		await tools["auth.allowLocalhost.update"].execute({
+			...ids,
+			allow_localhost: false,
+		});
+		await tools["auth.emailAndPassword.get"].execute(ids);
+		await tools["auth.emailAndPassword.update"].execute({
+			...ids,
+			disable_sign_up: true,
+			revoke_sessions_on_password_reset: true,
+		});
+		const providerGot = await tools["auth.emailProvider.get"].execute(ids);
+		const providerUpdated = await tools[
+			"auth.emailProvider.update"
+		].execute({
+			...ids,
+			body: {
+				type: "standard",
+				host: "smtp.example.com",
+				password: "new-password",
+			},
+		});
+		const sent = await tools["auth.emailProvider.sendTest"].execute({
+			...ids,
+			recipient_email: "dev@example.com",
+		});
+		const pluginsGot = await tools["auth.plugins.get"].execute(ids);
+		await tools["auth.plugins.magicLink.update"].execute({
+			...ids,
+			enabled: true,
+			expires_in: 10,
+		});
+		await tools["auth.plugins.organization.update"].execute({
+			...ids,
+			membership_limit: 50,
+			creator_role: "admin",
+		});
+		await tools["auth.plugins.phoneNumber.get"].execute(ids);
+		await tools["auth.plugins.phoneNumber.update"].execute({
+			...ids,
+			otp_expires_in: 120,
+		});
+		const webhookGot = await tools["auth.webhooks.get"].execute(ids);
+		await tools["auth.webhooks.update"].execute({
+			...ids,
+			enabled: false,
+		});
+
+		const base = "/projects/project-id/branches/branch-id/auth";
+		expect(
+			requests.map(
+				(r) =>
+					`${r.method} ${new URL(r.url).pathname.replace("/api/v2", "")}`,
+			),
+		).toEqual([
+			`GET ${base}/allow_localhost`,
+			`PATCH ${base}/allow_localhost`,
+			`GET ${base}/email_and_password`,
+			`PATCH ${base}/email_and_password`,
+			`GET ${base}/email_provider`,
+			`PATCH ${base}/email_provider`,
+			`POST ${base}/email_provider/test`,
+			`GET ${base}/plugins`,
+			`PATCH ${base}/plugins/magic-link`,
+			`PATCH ${base}/plugins/organization`,
+			`GET ${base}/plugins/phone-number`,
+			`PATCH ${base}/plugins/phone-number`,
+			`GET ${base}/webhooks`,
+			`PUT ${base}/webhooks`,
+		]);
+		expect(
+			await Promise.all(
+				requests.filter((r) => r.method !== "GET").map((r) => r.json()),
+			),
+		).toEqual([
+			{ allow_localhost: false },
+			{ disable_sign_up: true, revoke_sessions_on_password_reset: true },
+			{
+				type: "standard",
+				host: "smtp.example.com",
+				password: "new-password",
+			},
+			{ recipient_email: "dev@example.com" },
+			{ enabled: true, expires_in: 10 },
+			{ membership_limit: 50, creator_role: "admin" },
+			{ otp_expires_in: 120 },
+			{ enabled: false },
+		]);
+
+		expect(providerGot).toEqual({ data: { ...smtp, password: "" } });
+		expect(providerUpdated).toEqual({ data: { ...smtp, password: "" } });
+		expect(pluginsGot).toEqual({
+			data: {
+				...plugins,
+				email_provider: { ...smtp, password: "" },
+				oauth_providers: [
+					{ id: "google", type: "shared" },
+					{
+						id: "github",
+						type: "standard",
+						client_id: "gh-client",
+						client_secret: "",
+					},
+				],
+			},
+		});
+		expect(sent).toEqual({
+			data: { success: false, error_message: "nope" },
+		});
+		expect(webhookGot).toEqual({ data: webhook });
+
+		for (const id of [
+			"auth.allowLocalhost.update",
+			"auth.emailAndPassword.update",
+			"auth.emailProvider.update",
+			"auth.emailProvider.sendTest",
+			"auth.plugins.magicLink.update",
+			"auth.plugins.organization.update",
+			"auth.plugins.phoneNumber.update",
+			"auth.webhooks.update",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(true);
+			expect(tools[id].annotations.readOnlyHint).toBe(false);
+		}
+		expect(
+			tools["auth.emailProvider.sendTest"].annotations.openWorldHint,
+		).toBe(true);
+		for (const id of [
+			"auth.allowLocalhost.get",
+			"auth.emailAndPassword.get",
+			"auth.emailProvider.get",
+			"auth.plugins.get",
+			"auth.plugins.phoneNumber.get",
+			"auth.webhooks.get",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(false);
+			expect(tools[id].annotations.readOnlyHint).toBe(true);
+		}
+	});
+
+	test("auth.emailProvider tools leave a shared provider untouched", async () => {
+		const shared = {
+			type: "shared",
+			sender_email: "auth@mail.example.com",
+			sender_name: "Neon Auth",
+		};
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["auth.emailProvider.get"] as const,
+			fetch: async () => jsonResponse(shared),
+		});
+		expect(
+			await tools["auth.emailProvider.get"].execute({
+				project_id: "project-id",
+				branch_id: "branch-id",
+			}),
+		).toEqual({ data: shared });
+	});
+
 	test("maps apiKeys.create key_name", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
