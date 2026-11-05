@@ -1518,6 +1518,28 @@ Id   Name      Project         Created At            Last Used At          Last 
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
 
+## Organizations (`orgs`)
+
+```bash
+neon orgs list
+neon orgs get                                         # the --org-id, linked, or only organization
+neon orgs members list
+neon orgs members get <member-id>
+neon orgs members update <member-id> --role admin
+neon orgs members remove <member-id>
+neon orgs invitations list
+neon orgs invitations create --email dev@example.com --email ops@example.com --role member
+neon orgs spending-limit get
+neon orgs spending-limit set 500                      # US dollars per month
+neon orgs spending-limit delete
+```
+
+Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the organization in `.neon`, then the only organization you belong to, and otherwise fails naming `--org-id`. `orgs get` also takes the id as a positional argument.
+
+`members update` and `invitations create` take `--role`: `admin`, `member`, `editor`, `viewer`, or `collaborator`. The API decides which of them an organization accepts. Every invitee is emailed, and anyone who already has a Neon account joins immediately.
+
+`spending-limit set` takes dollars with up to two decimals and sends cents. The limit sends emails at 80% and 100% and does not suspend computes. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+
 ## Commands
 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
@@ -1527,6 +1549,7 @@ Id   Name      Project         Created At            Last Used At          Last 
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | api                                                                        |                                                                                                              | Call any Neon API route            |
+| orgs (`org`)                                                               | `list`, `get`, `members`, `invitations`, `spending-limit`                                                    | Manage organizations               |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |

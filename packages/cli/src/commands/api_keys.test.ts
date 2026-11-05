@@ -34,6 +34,17 @@ describe("api-keys list", () => {
 });
 
 describe("api-keys create", () => {
+	test("an unreadable org key response keeps its body out of stderr", async ({
+		testCliCommand,
+	}) => {
+		const { stderr } = await testCliCommand(
+			["api-keys", "create", "--name", "garbled", "--org-id", "org-7"],
+			{ code: 1, snapshot: false },
+		);
+		expect(stderr).toContain("the body is not valid JSON");
+		expect(stderr).not.toMatch(/"key"|napi/);
+	});
+
 	// The mitigation the PR leans on: an account key is the only one that reaches
 	// everything, so deleting this warning must fail a test.
 	test("account key when no scope is given", async ({ testCliCommand }) => {

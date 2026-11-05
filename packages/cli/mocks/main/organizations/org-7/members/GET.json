@@ -1,0 +1,24 @@
+{
+  "members": [
+    {
+      "member": {
+        "id": "m-1",
+        "user_id": "u-1",
+        "org_id": "org-7",
+        "role": "admin",
+        "joined_at": "2026-01-02T00:00:00Z"
+      },
+      "user": { "email": "admin@example.com", "has_mfa": true }
+    },
+    {
+      "member": {
+        "id": "m-2",
+        "user_id": "u-2",
+        "org_id": "org-7",
+        "role": "member",
+        "joined_at": "2026-01-03T00:00:00Z"
+      },
+      "user": { "email": "dev@example.com" }
+    }
+  ]
+}
