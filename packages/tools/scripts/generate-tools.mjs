@@ -138,18 +138,29 @@ const snakeCase = (value) =>
 const stripMarkdownLinks = (text) =>
 	text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
 
+// A period after these ends an abbreviation, not the sentence.
+const abbreviation = /\b(?:e\.g|i\.e|etc|vs)\.$/i;
+
+const leadingSentence = (text) => {
+	for (const match of text.matchAll(/[.!?](?=\s|$)/g)) {
+		const end = match.index + 1;
+		if (!abbreviation.test(text.slice(0, end))) {
+			return text.slice(0, end);
+		}
+	}
+	return text;
+};
+
 const firstSentence = (text) => {
 	const normalized = stripMarkdownLinks(text).replace(/\s+/g, " ").trim();
 	if (normalized.length === 0) {
 		return "";
 	}
-	const match = normalized.match(/^.+?[.!?](?=\s|$)/);
-	let sentence = (match ? match[0] : normalized).trim();
+	let sentence = leadingSentence(normalized).trim();
 	if (/^deprecated\.?$/i.test(sentence)) {
 		const rest = normalized.slice(sentence.length).trim();
-		const second = rest.match(/^.+?[.!?](?=\s|$)/);
-		if (second) {
-			sentence = `${sentence} ${second[0]}`;
+		if (rest.length > 0) {
+			sentence = `${sentence} ${leadingSentence(rest).trim()}`;
 		}
 	}
 	return sentence;
@@ -460,7 +471,7 @@ const schemaFor = (record) => {
 			if (binary) {
 				const optional = optionalizeGroup || !binary.required;
 				fields.push(
-					`\t${JSON.stringify(name)}: z.base64().describe("Base64-encoded binary file contents.")${optional ? ".optional()" : ""},`,
+					`\t${JSON.stringify(name)}: ${describedField(record, name, "z.base64()", "Base64-encoded binary file contents.")}${optional ? ".optional()" : ""},`,
 				);
 				continue;
 			}

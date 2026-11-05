@@ -245,6 +245,12 @@ describe("generated operation coverage", () => {
 		expect(
 			description("projects.members.setRole", "confirm_self_demotion"),
 		).toBe("Set true to lower your own role on the project.");
+		expect(description("credentials.revoke", "token_id")).toBe(
+			"The opaque credential id (e.g. nak_live_<32hex>).",
+		);
+		expect(description("functions.deploy", "zip")).toBe(
+			"Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment.",
+		);
 	});
 
 	test("composed create descriptions stay handwritten", () => {

@@ -2571,7 +2571,7 @@ export const zPresignRequest = z.strictObject({
 export const zPresignResponse = z.strictObject({
     url: z.string().describe("The presigned URL."),
     method: z.string().describe("The HTTP method to use against `url`: `PUT` for an upload, `GET` for a download."),
-    headers: z.record(z.string(), z.string()).describe("Headers the caller MUST send verbatim on the request (e.g."),
+    headers: z.record(z.string(), z.string()).describe("Headers the caller MUST send verbatim on the request (e.g. `Content-Type` when it was signed on an upload)."),
     expires_at: z.iso.datetime().describe("When the presigned URL stops being valid.")
 });
 
@@ -2622,7 +2622,7 @@ export const zCreateCredentialRequest = z.strictObject({
 });
 
 export const zCreateCredentialResponse = z.strictObject({
-    token_id: z.string().describe("Opaque credential id (e.g."),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>)."),
     token_id_short: z.string().describe("First 12 hex chars of token_id; safe to log."),
     name: z.string().describe("Customer-supplied label, echoed back from the request.").optional(),
     api_token: z.string().describe("Bearer token; returned exactly once."),
@@ -2652,7 +2652,7 @@ export const zCreateCredentialResponse = z.strictObject({
  *
  */
 export const zCredentialSecret = z.strictObject({
-    token_id: z.string().describe("Opaque credential id (e.g."),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>)."),
     api_token: z.string().describe("Bearer token."),
     s3_secret_access_key: z.string().describe("nsk_live_<64 hex>; the AWS_SECRET_ACCESS_KEY.")
 }).describe("The live secrets of an existing credential, recovered on demand by the reveal endpoint.");
@@ -2665,7 +2665,7 @@ export const zCredentialSecret = z.strictObject({
  *
  */
 export const zRotateCredentialResponse = z.strictObject({
-    token_id: z.string().describe("Opaque credential id (e.g."),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>), unchanged by the rotation."),
     token_id_short: z.string().describe("First 12 hex chars of token_id; safe to log."),
     name: z.string().describe("Customer-supplied label carried on the credential.").optional(),
     api_token: z.string().describe("The new Bearer token; returned exactly once."),
@@ -2678,7 +2678,7 @@ export const zRotateCredentialResponse = z.strictObject({
 }).describe("The replacement secret material for an existing credential, returned exactly once.");
 
 export const zCredentialMeta = z.strictObject({
-    token_id: z.string().describe("Opaque credential id (e.g."),
+    token_id: z.string().describe("Opaque credential id (e.g. nak_live_<32hex>)."),
     token_id_short: z.string(),
     name: z.string().describe("Customer-supplied label; absent when not provided at issuance.").optional(),
     scopes: z.array(zGrantedCredentialScope),
@@ -2867,7 +2867,7 @@ export const zCustomDomain = z.strictObject({
     status: z.string().describe("The domain's current validity, computed by a background check: `pending` (still converging — point your CNAME at `cname_target` and wait), `active` (live: DNS resolves to the edge, the CA is authorized, and routing is published), or `error` (a fixable problem — see `status_reason`).").optional(),
     dns_status: z.string().describe("The DNS + CAA portion of the check: `pending` (no records yet), `ok` (resolves to our edge and the CA is authorized), `misconfigured` (your CNAME does not resolve to our edge), or `caa_blocked` (your CAA records forbid Let's Encrypt).").optional(),
     binding_status: z.string().describe("Whether Neon's internal routing for the domain is published: `pending`, `present`, or `missing`.").optional(),
-    status_reason: z.string().describe("A short, stable machine-readable reason for a non-active `status` (e.g.").optional()
+    status_reason: z.string().describe("A short, stable machine-readable reason for a non-active `status` (e.g. `cname-not-pointing-at-edge`, `caa-blocks-lets-encrypt`, `binding-missing`), suitable for keying an actionable hint.").optional()
 });
 
 export const zCustomDomainRegisterRequest = z.strictObject({
@@ -2891,7 +2891,7 @@ export const zNeonFunctionDeploymentResponse = z.strictObject({
 export const zFunctionDeployRequest = z.strictObject({
     zip: z.string().describe("Optional ZIP archive of the function source code.").optional(),
     runtime: z.enum(['nodejs24']).optional(),
-    environment: z.string().describe("Optional JSON object (a string-to-string map) of environment variables for the deployment, e.g.").optional()
+    environment: z.string().describe("Optional JSON object (a string-to-string map) of environment variables for the deployment, e.g. {\"KEY\":\"VALUE\"}.").optional()
 });
 
 /**
@@ -4070,19 +4070,19 @@ export const zCreateCredentialPath = z.strictObject({
 export const zRevokeCredentialPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
-    token_id: z.string().describe("The opaque credential id (e.g.")
+    token_id: z.string().describe("The opaque credential id (e.g. nak_live_<32hex>).")
 });
 
 export const zRevealCredentialPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
-    token_id: z.string().describe("The opaque credential id (e.g.")
+    token_id: z.string().describe("The opaque credential id (e.g. nak_live_<32hex>).")
 });
 
 export const zRotateCredentialPath = z.strictObject({
     project_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon project ID"),
     branch_id: z.string().regex(/^[a-z0-9-]{1,60}$/).describe("The Neon branch ID"),
-    token_id: z.string().describe("The opaque credential id (e.g.")
+    token_id: z.string().describe("The opaque credential id (e.g. nak_live_<32hex>).")
 });
 
 export const zListProjectBranchFunctionsPath = z.strictObject({

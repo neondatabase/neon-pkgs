@@ -3,7 +3,8 @@
 		"scopes": "Capabilities to grant. The credential may only perform actions in these scopes."
 	},
 	"createProjectBranchFunctionDeployment": {
-		"runtime": "The Node.js runtime for the deployment."
+		"runtime": "The Node.js runtime for the deployment.",
+		"zip": "Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment."
 	},
 	"grantPermissionToProject": {
 		"project_id": "The Neon project ID"

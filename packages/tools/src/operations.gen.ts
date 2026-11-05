@@ -1085,7 +1085,7 @@ export const operationFactories = {
 	"project_id": zod.zCreateProjectBranchFunctionDeploymentPath.shape["project_id"],
 	"branch_id": zod.zCreateProjectBranchFunctionDeploymentPath.shape["branch_id"],
 	"slug": zod.zCreateProjectBranchFunctionDeploymentPath.shape["slug"],
-	"zip": z.base64().describe("Base64-encoded binary file contents.").optional(),
+	"zip": z.base64().describe("Base64-encoded ZIP of the function source. Omit to reuse the latest bundle; required for the first deployment.").optional(),
 	"runtime": zod.zCreateProjectBranchFunctionDeploymentBody.shape["runtime"].describe("The Node.js runtime for the deployment."),
 	"environment": zod.zCreateProjectBranchFunctionDeploymentBody.shape["environment"],
 }),
