@@ -29,6 +29,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import which from "which";
 import { log } from "../log.js";
 
@@ -502,8 +503,10 @@ export const installFailureDetail = (input: {
 	if (input.spawnErrorCode !== undefined) {
 		return input.spawnErrorCode;
 	}
+	// npm keeps colors in a pipe with `color=always`.
+	const output = stripVTControlCharacters(input.output);
 	for (const { pattern, known } of PACKAGE_MANAGER_ERROR_LINES) {
-		for (const match of input.output.matchAll(pattern)) {
+		for (const match of output.matchAll(pattern)) {
 			const code = match[1];
 			if (code !== undefined && known.has(code)) {
 				return code;

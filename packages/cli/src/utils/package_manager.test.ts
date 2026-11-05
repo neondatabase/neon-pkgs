@@ -62,6 +62,15 @@ describe("installFailureDetail", () => {
 		).toBe("exit code 1");
 	});
 
+	it("reads a code from colored output", () => {
+		expect(
+			installFailureDetail({
+				exitCode: 1,
+				output: "\u001b[31mnpm\u001b[39m \u001b[31merror\u001b[39m \u001b[94mcode\u001b[39m EUNSUPPORTEDPROTOCOL",
+			}),
+		).toBe("EUNSUPPORTEDPROTOCOL");
+	});
+
 	it("reports only known codes read from the start of the package manager's error line", () => {
 		const detail = (output: string) =>
 			installFailureDetail({ exitCode: 1, output });
