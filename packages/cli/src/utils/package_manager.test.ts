@@ -144,7 +144,7 @@ describe("runCommandWithDetail", () => {
 		).toBe(true);
 	});
 
-	it("delivers all of a large output to a slow reader before resolving", async () => {
+	it("delivers all of a large output to a slow reader, with bounded buffering, before resolving", async () => {
 		const bytes = 1024 * 1024;
 		const built = new URL(
 			"../../dist/utils/package_manager.js",
@@ -152,8 +152,11 @@ describe("runCommandWithDetail", () => {
 		).href;
 		const runner = `
 import { runCommandWithDetail } from ${JSON.stringify(built)};
+let queued = 0;
+const sample = setInterval(() => { queued = Math.max(queued, process.stdout.writableLength); }, 5);
 const result = await runCommandWithDetail(process.execPath, ["-e", "process.stdout.write('x'.repeat(${bytes})); process.exitCode = 1"], process.cwd());
-process.stderr.write(JSON.stringify(result));
+clearInterval(sample);
+process.stderr.write(JSON.stringify({ ...result, queued }));
 process.exit(1);
 `;
 		const received = await new Promise<{ stdout: number; stderr: string }>(
@@ -180,9 +183,12 @@ process.exit(1);
 			},
 		);
 		expect(received.stdout).toBe(bytes);
-		expect(received.stderr).toContain(
-			'{"ok":false,"detail":"exit code 1"}',
+		const result = JSON.parse(
+			received.stderr.slice(received.stderr.indexOf("{")),
 		);
+		expect(result).toMatchObject({ ok: false, detail: "exit code 1" });
+		// The child is paused while our pipe is full, so our queue stays far below its output.
+		expect(result.queued).toBeLessThan(bytes / 2);
 	});
 
 	it("reports a missing command by its spawn error code", async () => {

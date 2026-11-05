@@ -481,8 +481,7 @@ export const runCommandWithDetail = (
 			env: commandEnv(env),
 		});
 		let output = "";
-		// Read without pausing: a child that exits right after writing would lose whatever it
-		// still had queued for a full pipe.
+		// Pause the child while our pipe is full, as inherited stdio would block it.
 		const forward = (
 			source: NodeJS.ReadableStream,
 			target: NodeJS.WriteStream,
@@ -491,7 +490,10 @@ export const runCommandWithDetail = (
 				output = (output + chunk.toString("utf8")).slice(
 					-OUTPUT_TAIL_BYTES,
 				);
-				target.write(chunk);
+				if (!target.write(chunk)) {
+					source.pause();
+					target.once("drain", () => source.resume());
+				}
 			});
 		};
 		if (child.stdout) forward(child.stdout, process.stdout);
