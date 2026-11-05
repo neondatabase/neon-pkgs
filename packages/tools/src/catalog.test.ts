@@ -358,6 +358,86 @@ describe("special mappings", () => {
 		expect(await requests[0].json()).toEqual({ key_name: "agent" });
 	});
 
+	test("organization writes require approval and reads do not", () => {
+		const tools = createNeonTools({ apiKey: "test-key", tools: toolIds });
+		for (const id of [
+			"organizations.members.update",
+			"organizations.members.remove",
+			"organizations.invitations.create",
+			"organizations.spendingLimit.set",
+			"organizations.spendingLimit.delete",
+			"organizations.apiKeys.create",
+			"organizations.apiKeys.revoke",
+		] as const) {
+			expect(tools[id].requiresApproval, id).toBe(true);
+			expect(tools[id].annotations.destructiveHint, id).toBe(true);
+		}
+		for (const id of [
+			"organizations.get",
+			"organizations.members.list",
+			"organizations.members.get",
+			"organizations.invitations.list",
+			"organizations.spendingLimit.get",
+			"organizations.apiKeys.list",
+		] as const) {
+			expect(tools[id].requiresApproval, id).toBe(false);
+			expect(tools[id].annotations.readOnlyHint, id).toBe(true);
+		}
+	});
+
+	test("maps organization inputs onto the SDK", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"organizations.spendingLimit.set",
+				"organizations.apiKeys.create",
+				"organizations.members.list",
+			] as const,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				if (request.url.includes("/members")) {
+					return jsonResponse({
+						members: [
+							{ member: { id: "m-1" } },
+							{ member: { id: "m-2" } },
+						],
+						pagination: { next: "c1" },
+					});
+				}
+				return jsonResponse({ id: 1, key: "napi-secret" });
+			},
+		});
+
+		await tools["organizations.spendingLimit.set"].execute({
+			org_id: "org-1",
+			spending_limit_cents: 5000,
+		});
+		await tools["organizations.apiKeys.create"].execute({
+			org_id: "org-1",
+			key_name: "agent",
+			project_id: "p-1",
+		});
+		const members = await tools["organizations.members.list"].execute({
+			org_id: "org-1",
+			limit: 1,
+		});
+
+		expect(new URL(requests[0].url).pathname).toBe(
+			"/api/v2/organizations/org-1/billing/spending_limit",
+		);
+		expect(await requests[0].json()).toEqual({
+			spending_limit_cents: 5000,
+		});
+		expect(await requests[1].json()).toEqual({
+			key_name: "agent",
+			project_id: "p-1",
+		});
+		expect(requests).toHaveLength(3);
+		expect(members.data).toEqual([{ member: { id: "m-1" } }]);
+	});
+
 	test("keeps the database selector distinct from its new name", async () => {
 		const requests: Request[] = [];
 		const tool = createNeonTool("postgres.databases.update", {

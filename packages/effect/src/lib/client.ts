@@ -120,6 +120,7 @@ const PAGINATED = {
 	"consumption.perProject": true,
 	"consumption.perProjectV2": true,
 	"consumption.perBranchV2": true,
+	"organizations.members.list": true,
 } as const satisfies Record<PaginatedPath, true>;
 
 const OPTIONS_ONLY = {

@@ -162,6 +162,20 @@ export const WRAPPED: ReadonlySet<string> = new Set([
 	"listApiKeys",
 	"createApiKey",
 	"revokeApiKey",
+	// organizations
+	"getOrganization",
+	"getOrganizationMembers",
+	"getOrganizationMember",
+	"updateOrganizationMember",
+	"removeOrganizationMember",
+	"getOrganizationInvitations",
+	"createOrganizationInvitations",
+	"getOrganizationSpendingLimit",
+	"setOrganizationSpendingLimit",
+	"deleteOrganizationSpendingLimit",
+	"listOrgApiKeys",
+	"createOrgApiKey",
+	"revokeOrgApiKey",
 ]);
 
 /**

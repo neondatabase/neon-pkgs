@@ -10,6 +10,7 @@ import { Credentials } from "./resources/credentials.js";
 import { Functions } from "./resources/functions.js";
 import { Logs } from "./resources/logs.js";
 import { Operations } from "./resources/operations.js";
+import { Organizations } from "./resources/organizations.js";
 import { Postgres } from "./resources/postgres.js";
 import { Projects } from "./resources/projects.js";
 import { Realtime } from "./resources/realtime.js";
@@ -45,6 +46,7 @@ export interface NeonClient<DThrow extends boolean = false> {
 	readonly auth: Auth<DThrow>;
 	readonly consumption: Consumption<DThrow>;
 	readonly apiKeys: ApiKeys<DThrow>;
+	readonly organizations: Organizations<DThrow>;
 	readonly regions: Regions<DThrow>;
 	readonly user: User<DThrow>;
 	/**
@@ -85,6 +87,7 @@ export function createNeonClient<Throw extends boolean = false>(
 		auth: new Auth<Throw>(ctx),
 		consumption: new Consumption<Throw>(ctx),
 		apiKeys: new ApiKeys<Throw>(ctx),
+		organizations: new Organizations<Throw>(ctx),
 		regions: new Regions<Throw>(ctx),
 		user: new User<Throw>(ctx),
 		client: ctx.client,
