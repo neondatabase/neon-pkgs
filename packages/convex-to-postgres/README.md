@@ -199,9 +199,9 @@ field name).
 | `v.int64()` (serialized as `bigint`) | `bigint` | `(doc->>'<f>')::bigint` |
 | `v.bytes()` | `bytea` | `decode(doc->'<f>'->>'$bytes', 'base64')` |
 | `v.id('t')` | `uuid` or `text` (see below) | `md5(doc->>'<f>')::uuid` or `doc->>'<f>'` |
-| `v.object(...)` | `jsonb` | `doc->'<f>'` |
-| `v.array(...)` | `jsonb` | `doc->'<f>'` |
-| `v.record(...)` | `jsonb` | `doc->'<f>'` |
+| `v.object(...)` | `jsonb` | `doc->'<f>'`, with nested ids converted ([below](#ids-nested-in-arrays-objects-and-records)) |
+| `v.array(...)` | `jsonb` | `doc->'<f>'`, with nested ids converted |
+| `v.record(...)` | `jsonb` | `doc->'<f>'`, with nested ids converted |
 | `v.any()` | `jsonb` | `doc->'<f>'` |
 | `v.null()` | `jsonb` | `doc->'<f>'` |
 | `v.literal(x)` | scalar type of `x` | per the scalar type |
@@ -241,7 +241,52 @@ Postgres key is controlled by `idStrategy`:
   pass. `md5(text)` returns 32 hex characters, which is exactly what the uuid
   parser accepts, so this needs no extension.
 - **`"text"`.** The `id` column is `text` and holds the Convex id verbatim;
-  references are stored verbatim too.
+  references are stored verbatim too, including ids nested in `jsonb`.
+
+### Ids nested in arrays, objects and records
+
+Under the uuid strategy, a `v.id()` anywhere inside a `jsonb` column (an array
+element, an object field, or a record value, at any depth) is converted the same
+way as a top-level reference: the Convex id string becomes `md5(id)::uuid`,
+stored as text inside the `jsonb`. It then matches the `id` of the row it points
+at:
+
+```sql
+SELECT p.name
+FROM races r, jsonb_array_elements_text(r.participants) AS e(player_id)
+JOIN players p ON p.id::text = e.player_id;
+```
+
+- **Record keys** that are ids (`v.record(v.id("players"), v.number())`) are
+  converted too, because a key that names a row should name its new id. String
+  keys are kept, and so are string-literal keys in a union with ids
+  (`v.record(v.union(v.id("users"), v.literal("system")), v.number())` converts
+  the id keys and leaves `"system"`).
+- Array order, object keys, JSON `null`s and absent optional fields are kept.
+  Nested ids get no foreign key: Postgres can't constrain a value inside `jsonb`.
+- The conversion is one SQL expression per column in the transform's
+  `INSERT ... SELECT` (`seed --split` shows it in `03-transform.sql`), so it is
+  set-based and runs in the same transaction as the load.
+- A union converts when its id members can be told apart from the rest by JSON
+  type or value: `v.union(v.id("a"), v.null())`, ids into different tables, and
+  ids and string literals all convert.
+- A union of objects is matched key by key, not by a discriminator field. Each
+  key converts when every member's validator for that key can be told apart by
+  JSON type or value. So in a discriminated union where `ref` is `v.id("users")`
+  in one member and `v.string()` in another, `ref` can't be converted, even
+  though `kind` says which member a value is.
+- The tool can't convert, and warns naming the field, when a union mixes
+  `v.id()` with `v.string()` or `v.any()`, when record keys mix ids and
+  `v.string()`, or when a union mixes `v.record()` with another object type
+  (including `v.bytes()`). Those ids stay Convex id strings.
+- A top-level union of an id and other values, such as
+  `v.union(v.id("users"), v.literal("system"))`, is stored as `jsonb` (see
+  [Type mapping](#type-mapping)). Its id is converted to the uuid string too,
+  but the column has no `uuid` type and no foreign key, so join it with
+  `col #>> '{}' = users.id::text` rather than like a top-level `v.id()`.
+- **Not detected:** ids inside a `v.any()` field, or in a schemaless table's
+  `doc` column, aren't converted and produce no warning, because the schema
+  doesn't say they're ids. Convert them by hand, or use `--id-strategy text`.
 
 ### Foreign keys
 
@@ -484,7 +529,8 @@ stdout on its own.
 ## Supported vs unsupported
 
 **Supported:** all scalar validators, ids and foreign keys (both strategies),
-nested objects / arrays / records / `any` / `null` as `jsonb`, optional fields,
+nested objects / arrays / records / `any` / `null` as `jsonb` (with the ids
+nested in them converted to match), optional fields,
 literals, literal unions (with optional `CHECK`), nullable unions, btree indexes
 on top-level fields, schemaless tables (as a single `doc jsonb` column), and
 Neon Lakebase **search indexes** (BM25 over a generated `tsvector` column, or
@@ -500,6 +546,9 @@ above); the generated SQL targets a Neon Lakebase branch, since it relies on the
 - **Foreign keys to tables outside the generated schema** (Convex system tables,
   or tables not exported). The column is still typed; only the `REFERENCES`
   clause is dropped.
+- **Nested ids the schema can't distinguish** (a union of `v.id()` with
+  `v.string()` or `v.any()`): left as Convex id strings. Ids inside `v.any()`
+  aren't detected at all.
 
 ## API
 

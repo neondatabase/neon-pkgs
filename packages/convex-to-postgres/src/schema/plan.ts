@@ -9,6 +9,7 @@ import {
 import type { SelectKind } from "./map-types.js";
 import { mapValidator } from "./map-types.js";
 import type { ConvexSchema, ConvexTable, ConvexValidator } from "./model.js";
+import { planNestedIds } from "./nested-ids.js";
 
 /** A fully-resolved Postgres column derived from a Convex field. */
 export interface PlannedColumn {
@@ -163,6 +164,28 @@ function planTable(
 			for (const warning of mapped.warnings) {
 				warnings.push(`table "${table.name}": ${warning}`);
 			}
+			let selectExpr = selectExprFor(
+				mapped.selectKind,
+				column.name,
+				options,
+			);
+			// A jsonb column can hold ids in arrays, objects and records. Under
+			// the uuid strategy they're rewritten like a top-level reference, so
+			// they match the `id` of the row they point at.
+			if (mapped.selectKind === "json" && options.idStrategy === "uuid") {
+				const nested = planNestedIds(
+					column.validator,
+					`${table.name}.${column.name}`,
+				);
+				if (nested.convert !== undefined) {
+					selectExpr = nested.convert(selectExpr);
+				}
+				for (const [path, reason] of nested.unconvertible) {
+					warnings.push(
+						`table "${table.name}": can't convert the ids in "${path}" (${reason}), so they stay Convex id strings in the jsonb and won't match the uuid ids. Convert them by hand, or use --id-strategy text.`,
+					);
+				}
+			}
 			columns.push({
 				convexName: column.name,
 				pgName: toPgName(column.name, options.snakeCase),
@@ -171,11 +194,7 @@ function planTable(
 				isPrimaryKey: false,
 				references: mapped.references,
 				checkIn: options.checkConstraints ? mapped.checkIn : undefined,
-				selectExpr: selectExprFor(
-					mapped.selectKind,
-					column.name,
-					options,
-				),
+				selectExpr,
 			});
 		}
 	}

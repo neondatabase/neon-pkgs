@@ -2,7 +2,7 @@
 
 This report records what the integration suite proved by running the generator against a real Postgres (via testcontainers) over a corpus of real Convex schemas and a full round-trip of a real `convex export` snapshot. It covers the supported feature surface, the Convex export facts the round-trip confirmed, the round-trip results, and a recommendation on using schema auto-generation as the default path in the migration documentation.
 
-All results below come from `pnpm --filter @neon/convex-to-postgres test:integration` (Docker required): Suite A applies generated DDL for every loadable corpus schema, Suite B round-trips a real export, Suite C round-trips a second deployed app, and Suite E imports a search index with `searchIndex: "gin"` end to end and runs the README's GIN search query against it.
+All results below come from `pnpm --filter @neon/convex-to-postgres test:integration` (Docker required): Suite A applies generated DDL for every loadable corpus schema, Suite B round-trips a real export, Suite C round-trips a second deployed app, Suite E imports a search index with `searchIndex: "gin"` end to end and runs the README's GIN search query against it, and Suite F checks that ids nested in `jsonb` join to their target rows.
 
 ## Generator fixes made during Phase B
 
@@ -32,7 +32,10 @@ Grounded in what the corpus and the round-trip actually exercised. "Round-trippe
 | `v.id(_storage)` / `v.id(_scheduled_functions)` | `uuid` / `text`, no foreign key, warning | DDL applies |
 | `v.object` (nested) | `jsonb` (not flattened) | Round-tripped |
 | `v.array` | `jsonb` | Round-tripped |
-| `v.record(key, value)` | `jsonb` | DDL applies |
+| `v.record(key, value)` | `jsonb` | Round-tripped |
+| `v.id(...)` nested in an array, object or record | the id inside the `jsonb` becomes `md5(id)::uuid` text under the uuid strategy (record keys too), verbatim under text | Round-tripped (Suite F): every nested id joins to its target row; order, nulls and absent keys kept |
+| `v.id(...)` in a union with `v.string()` / `v.any()` inside `jsonb` | left as the Convex id, warning | Round-tripped (Suite F) |
+| `v.id(...)` sharing an object key with `v.string()` across a union of objects, or a record of ids in a union with `v.bytes()` | left as the Convex id, warning (a union of objects is matched key by key, not by discriminator) | Round-tripped (Suite F) |
 | `v.union` of string literals | `text` plus `CHECK (col IN (...))` | Round-tripped; the CHECK rejects out-of-set values |
 | `v.union` of number or boolean literals | `double precision` / `boolean`, no CHECK | DDL applies |
 | `v.union` that includes `v.null()` | the sole non-null member, nullable | Round-tripped |

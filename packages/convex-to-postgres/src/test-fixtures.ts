@@ -29,7 +29,25 @@ export const v = {
 		type: "object",
 		value,
 	}),
-	record: (): ConvexValidator => ({ type: "record" }),
+	/**
+	 * `v.record(keys, values)` serializes as `{type: "record", keys, values:
+	 * {fieldType, optional: false}}`. Both are optional here for tests that only
+	 * need the jsonb mapping.
+	 */
+	record: (
+		keys?: ConvexValidator,
+		values?: ConvexValidator,
+	): ConvexValidator =>
+		keys === undefined && values === undefined
+			? { type: "record" }
+			: {
+					type: "record",
+					keys,
+					values:
+						values === undefined
+							? undefined
+							: { fieldType: values, optional: false },
+				},
 	/** `v.commitTs()` serializes with type name `commitTs`. */
 	commitTs: (): ConvexValidator => ({ type: "commitTs" }),
 	union: (...members: ConvexValidator[]): ConvexValidator => ({
