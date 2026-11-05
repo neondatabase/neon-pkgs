@@ -28,7 +28,8 @@ npm install @neon/convex-to-postgres
 
 > **Requirements:** Node.js >= 20.19. The generated search and vector DDL targets
 > a Neon Lakebase branch — it relies on the `lakebase_text` / `lakebase_vector`
-> extensions — while the rest of the output is portable Postgres.
+> extensions — while the rest of the output is portable Postgres. With
+> `--search-index gin`, search indexes are portable Postgres too.
 
 ## CLI
 
@@ -126,10 +127,11 @@ every command so table names, column names, and types line up between files.
 | `--id-strategy uuid\|text` | `idStrategy` | `uuid` |
 | `--no-snake-case` | `snakeCase: false` | snake_case on |
 | `--no-check-constraints` | `checkConstraints: false` | `CHECK`s on |
+| `--search-index bm25\|gin` | `searchIndex` | `bm25` |
 | `--search-language <config>` | `searchLanguage` | `english` |
 | `--vector-ops <opclass>` | `vectorOps` | `vector_cosine_ops` |
-| `--search-k1 <number>` | `searchK1` | `1.2` |
-| `--search-b <number>` | `searchB` | `0.75` |
+| `--search-k1 <number>` (not with `gin`) | `searchK1` | `1.2` |
+| `--search-b <number>` (not with `gin`) | `searchB` | `0.75` |
 | `--max-ann-dimensions <n>` | `maxAnnDimensions` | no cap |
 
 Every command takes `--help`. A command exits `0` on success and `1` on any
@@ -312,14 +314,29 @@ leaf type is ambiguous. Create an expression index by hand if you need one.
 A `.searchIndex(...)` and a `.vectorIndex(...)` are emitted as real
 [Neon Lakebase](https://neon.com) search DDL, not warnings. These use Lakebase's
 native extensions, so the output targets a Neon Lakebase branch — a vanilla
-Postgres does not ship `lakebase_text` / `lakebase_vector`.
+Postgres does not ship `lakebase_text` / `lakebase_vector`. For search indexes,
+`--search-index gin` swaps in a stock Postgres GIN index instead (see below).
 
 - **Search index -> Lakebase BM25.** The searched text field gets a companion
   STORED generated column `<field>_tsv tsvector GENERATED ALWAYS AS
-  (to_tsvector('<searchLanguage>', <field>)) STORED`, and a
-  `CREATE INDEX ... USING lakebase_bm25 (<field>_tsv) WITH (k1 = <searchK1>, b =
-  <searchB>)` is built over it. The defaults `k1 = 1.2`, `b = 0.75` are
-  Lakebase's own. Query it with `to_bm25query(...)` and the `<@>` operator.
+  (to_tsvector('<searchLanguage>', <field>)) STORED`, and
+  `CREATE INDEX <table>_<field>_bm25 ON <table> USING lakebase_bm25 (<field>_tsv)
+  WITH (k1 = <searchK1>, b = <searchB>)` is built over it. The defaults
+  `k1 = 1.2`, `b = 0.75` are Lakebase's own. For a `.searchIndex` on
+  `messages.body`, rank matches with the `<@>` operator and `to_bm25query`,
+  which takes the query's `tsvector` and the index name:
+
+  ```sql
+  SELECT id, body,
+    body_tsv <@> to_bm25query(to_tsvector('english', $1), 'messages_body_bm25') AS score
+  FROM messages
+  ORDER BY score
+  LIMIT 20;
+  ```
+
+  `<@>` returns the negated BM25 score, so the best match sorts first in
+  ascending order. See [`lakebase_text`](https://neon.com/docs/extensions/lakebase-text)
+  for the query options.
 - **Vector index -> `vector(d)` + Lakebase ANN.** The embedding field is retyped
   from `jsonb` to pgvector's `vector(<dimensions>)`, populated from the staged
   document as `(doc->'<field>')::text::vector` (pgvector parses the array's text
@@ -332,12 +349,36 @@ Postgres does not ship `lakebase_text` / `lakebase_vector`.
 - The required `CREATE EXTENSION IF NOT EXISTS lakebase_vector CASCADE;` (pgvector
   arrives via `CASCADE`) and `CREATE EXTENSION IF NOT EXISTS lakebase_text;` lines
   are prepended to the schema DDL, each only when the schema actually uses that
-  feature. A schema with neither emits no extension lines at all.
+  feature. A schema with neither emits no extension lines at all, and nor does
+  one whose search indexes are GIN.
+
+#### GIN search indexes (`--search-index gin`)
+
+With `--search-index gin` (`searchIndex: "gin"`), a search index keeps the same
+generated `<field>_tsv` column but gets
+`CREATE INDEX <table>_<field>_gin ON <table> USING gin (<field>_tsv)` instead of
+the BM25 index, and the DDL has no `lakebase_text` line. GIN is stock Postgres
+and needs no extension, so the output runs on any Postgres, such as a local or
+test database. Search with `@@` and rank with `ts_rank`:
+
+```sql
+SELECT id, body, ts_rank(body_tsv, websearch_to_tsquery('english', $1)) AS rank
+FROM messages
+WHERE body_tsv @@ websearch_to_tsquery('english', $1)
+ORDER BY rank DESC, id
+LIMIT 20;
+```
+
+Pass the same text-search configuration as `--search-language`, so the query
+parses words the way the column did. `websearch_to_tsquery` accepts the syntax
+users type into a search box: quoted phrases, `or`, and `-` to exclude a word.
+`--search-k1` and `--search-b` tune BM25 only, so they're a usage error with
+`--search-index gin`.
 
 **These indexes are built *after* the data load, not in the schema DDL.**
 `generateDdl` emits the extensions, the `CREATE TABLE`s (including the generated
-`tsvector` and `vector` columns), and the plain btree indexes. The BM25/ANN
-indexes and their filter-field btrees come from a separate `generateIndexDdl`
+`tsvector` and `vector` columns), and the plain btree indexes. The search
+(BM25 or GIN) and ANN indexes and their filter-field btrees come from a separate `generateIndexDdl`
 call. `importConvexExport` runs it after the load, then runs `VACUUM ANALYZE`;
 `generateSeedSql` appends it after its `COMMIT`, followed by `VACUUM ANALYZE;`.
 Both skip the index build and the `VACUUM ANALYZE` when the schema has no search
@@ -446,12 +487,12 @@ stdout on its own.
 nested objects / arrays / records / `any` / `null` as `jsonb`, optional fields,
 literals, literal unions (with optional `CHECK`), nullable unions, btree indexes
 on top-level fields, schemaless tables (as a single `doc jsonb` column), and
-Neon Lakebase **search indexes** (BM25 over a generated `tsvector` column) and
-**vector indexes** (`vector(d)` column + a `lakebase_ann` index), with their
-`filterFields` as btrees. The search/vector indexes and their filter btrees are
-built after the data load (see the section above); the generated SQL targets a
-Neon Lakebase branch, since it relies on the `lakebase_text` / `lakebase_vector`
-extensions.
+Neon Lakebase **search indexes** (BM25 over a generated `tsvector` column, or
+stock GIN with `--search-index gin`) and **vector indexes** (`vector(d)` column +
+a `lakebase_ann` index), with their `filterFields` as btrees. The search/vector
+indexes and their filter btrees are built after the data load (see the section
+above); the generated SQL targets a Neon Lakebase branch, since it relies on the
+`lakebase_text` / `lakebase_vector` extensions.
 
 **Out of scope for generated DDL (warned, not emitted):**
 
@@ -467,7 +508,7 @@ extensions.
 | `parseExportedSchema(input)` | pure | Parse `SchemaDefinition.export()` JSON (string or object) into a `ConvexSchema`. |
 | `loadConvexSchema(path)` | I/O | Load a `schema.ts` with jiti, call `.export()`, and parse it. |
 | `generateDdl(schema, options?)` | pure | `{ sql, warnings }`: extensions, `CREATE TABLE`, FKs, and plain btree indexes (pre-load). |
-| `generateIndexDdl(schema, options?)` | pure | Post-load `CREATE INDEX` for Lakebase BM25/ANN and search/vector filter btrees; `""` when none. |
+| `generateIndexDdl(schema, options?)` | pure | Post-load `CREATE INDEX` for search (BM25 or GIN) and ANN indexes and their filter btrees; `""` when none. |
 | `generateStagingDdl(schema, options?)` | pure | `CREATE TABLE _convex_<t>(doc jsonb NOT NULL)` per table. |
 | `generateStagingDropSql(schema, options?)` | pure | `DROP TABLE` for every staging table. |
 | `generateTransformSql(schema, options?)` | pure | `INSERT ... SELECT` from staging into the typed tables. |
@@ -478,7 +519,8 @@ extensions.
 | `planSchema(schema, options?)` | pure | The resolved Postgres plan shared by the generators. |
 
 `GenerateOptions`: `idStrategy` (`"uuid"` default), `snakeCase` (`true` default),
-`checkConstraints` (`true` default), and for Lakebase search/vector:
-`searchLanguage` (`"english"` default), `vectorOps` (`"vector_cosine_ops"`
-default), `searchK1` (`1.2` default), `searchB` (`0.75` default), and
-`maxAnnDimensions` (`undefined` default — no cap).
+`checkConstraints` (`true` default), and for search and vector indexes:
+`searchIndex` (`"bm25"` default, or `"gin"`), `searchLanguage` (`"english"`
+default), `vectorOps` (`"vector_cosine_ops"` default), `searchK1` (`1.2`
+default), `searchB` (`0.75` default), and `maxAnnDimensions` (`undefined`
+default — no cap).

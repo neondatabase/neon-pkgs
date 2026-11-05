@@ -12,6 +12,7 @@ describe("parseGenerateOptions", () => {
 				"id-strategy": "text",
 				"no-snake-case": true,
 				"no-check-constraints": true,
+				"search-index": "bm25",
 				"search-language": "simple",
 				"vector-ops": "vector_l2_ops",
 				"search-k1": "1.5",
@@ -22,6 +23,7 @@ describe("parseGenerateOptions", () => {
 			idStrategy: "text",
 			snakeCase: false,
 			checkConstraints: false,
+			searchIndex: "bm25",
 			searchLanguage: "simple",
 			vectorOps: "vector_l2_ops",
 			searchK1: 1.5,
@@ -41,6 +43,7 @@ describe("parseGenerateOptions", () => {
 
 	test.each([
 		[{ "id-strategy": "serial" }, "--id-strategy uuid"],
+		[{ "search-index": "fts" }, "--search-index bm25"],
 		[{ "search-k1": "abc" }, "--search-k1"],
 		[{ "search-k1": "" }, "--search-k1"],
 		[{ "search-b": "-1" }, "--search-b"],
@@ -51,6 +54,27 @@ describe("parseGenerateOptions", () => {
 	])("rejects %o with a message naming the flag", (values, flag) => {
 		expect(() => parseGenerateOptions(values)).toThrow(CliUsageError);
 		expect(() => parseGenerateOptions(values)).toThrow(flag);
+	});
+
+	test("--search-index gin parses", () => {
+		expect(parseGenerateOptions({ "search-index": "gin" })).toEqual({
+			searchIndex: "gin",
+		});
+	});
+
+	test.each([
+		[{ "search-index": "gin", "search-k1": "1.5" }, "--search-k1"],
+		[{ "search-index": "gin", "search-b": "0.5" }, "--search-b"],
+	])("rejects the BM25 tuning flag in %o", (values, flag) => {
+		expect(() => parseGenerateOptions(values)).toThrow(
+			`${flag} doesn't apply with --search-index gin.`,
+		);
+	});
+
+	test("the BM25 tuning flags apply by default", () => {
+		expect(
+			parseGenerateOptions({ "search-k1": "2", "search-b": "0.5" }),
+		).toEqual({ searchK1: 2, searchB: 0.5 });
 	});
 
 	test("the error carries the command so the hint names its --help", () => {

@@ -92,11 +92,12 @@ export async function importConvexExport(
 
 		await client.query("COMMIT");
 
-		// Lakebase BM25/ANN indexes (and the btrees backing their filter fields)
-		// are built after the load, outside the transaction: BM25 then has
-		// accurate corpus statistics and ANN a well-tuned layout. VACUUM cannot
-		// run inside a transaction, so both run post-COMMIT. Empty for a schema
-		// with no search/vector indexes.
+		// Search (BM25 or GIN) and vector (ANN) indexes, and the btrees backing
+		// their filter fields, are built after the load, outside the
+		// transaction: a bulk build is faster, BM25 then has accurate corpus
+		// statistics, and ANN a well-tuned layout. VACUUM cannot run inside a
+		// transaction, so both run post-COMMIT. Empty for a schema with no
+		// search/vector indexes.
 		const indexSql = generateIndexDdl(options.schema, options);
 		if (indexSql.trim().length > 0) {
 			log("Building search and vector indexes");

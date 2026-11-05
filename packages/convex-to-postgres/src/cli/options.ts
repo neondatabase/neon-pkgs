@@ -1,4 +1,8 @@
-import type { GenerateOptions, IdStrategy } from "../options.js";
+import type {
+	GenerateOptions,
+	IdStrategy,
+	SearchIndexKind,
+} from "../options.js";
 
 /** How the package is run; used in help text and in "run --help" hints. */
 export const INVOCATION = "npx @neon/convex-to-postgres";
@@ -32,6 +36,7 @@ export const GENERATE_OPTION_FLAGS = {
 	"id-strategy": { type: "string" },
 	"no-snake-case": { type: "boolean" },
 	"no-check-constraints": { type: "boolean" },
+	"search-index": { type: "string" },
 	"search-language": { type: "string" },
 	"vector-ops": { type: "string" },
 	"search-k1": { type: "string" },
@@ -43,6 +48,7 @@ export interface GenerateOptionValues {
 	"id-strategy"?: string;
 	"no-snake-case"?: boolean;
 	"no-check-constraints"?: boolean;
+	"search-index"?: string;
 	"search-language"?: string;
 	"vector-ops"?: string;
 	"search-k1"?: string;
@@ -51,6 +57,7 @@ export interface GenerateOptionValues {
 }
 
 const ID_STRATEGIES: readonly IdStrategy[] = ["uuid", "text"];
+const SEARCH_INDEX_KINDS: readonly SearchIndexKind[] = ["bm25", "gin"];
 
 /**
  * Map parsed generation flags onto {@link GenerateOptions}. Omitted flags stay
@@ -76,6 +83,17 @@ export function parseGenerateOptions(
 	if (values["no-snake-case"]) options.snakeCase = false;
 	if (values["no-check-constraints"]) options.checkConstraints = false;
 
+	const searchIndex = values["search-index"];
+	if (searchIndex !== undefined) {
+		if (!SEARCH_INDEX_KINDS.includes(searchIndex as SearchIndexKind)) {
+			throw new CliUsageError(
+				`Invalid --search-index "${searchIndex}". Pass --search-index bm25 or --search-index gin.`,
+				command,
+			);
+		}
+		options.searchIndex = searchIndex as SearchIndexKind;
+	}
+
 	const searchLanguage = values["search-language"];
 	if (searchLanguage !== undefined) {
 		options.searchLanguage = nonEmpty(
@@ -89,6 +107,16 @@ export function parseGenerateOptions(
 		options.vectorOps = nonEmpty("vector-ops", vectorOps, command);
 	}
 
+	// k1 and b tune BM25 only; a GIN index has no equivalent, so passing them
+	// with gin is a mistake rather than something to ignore silently.
+	for (const flag of ["search-k1", "search-b"] as const) {
+		if (values[flag] !== undefined && options.searchIndex === "gin") {
+			throw new CliUsageError(
+				`--${flag} doesn't apply with --search-index gin.`,
+				command,
+			);
+		}
+	}
 	const searchK1 = values["search-k1"];
 	if (searchK1 !== undefined) {
 		options.searchK1 = nonNegativeNumber(
@@ -149,12 +177,15 @@ const GENERATE_OPTIONS_HELP = `Generation options (pass the same ones to every c
   --id-strategy <uuid|text>   How a Convex _id becomes a key (default: uuid)
   --no-snake-case             Keep Convex names verbatim instead of snake_case
   --no-check-constraints      Omit the CHECK constraint on string-literal unions
+  --search-index <bm25|gin>   Index for search indexes: Lakebase BM25, or a
+                              stock Postgres GIN index that needs no
+                              extension (default: bm25)
   --search-language <config>  Text-search configuration for search indexes
                               (default: english)
-  --vector-ops <opclass>      Operator class for vector indexes
-                              (default: vector_cosine_ops)
   --search-k1 <number>        BM25 k1 for search indexes (default: 1.2)
   --search-b <number>         BM25 b for search indexes (default: 0.75)
+  --vector-ops <opclass>      Operator class for vector indexes
+                              (default: vector_cosine_ops)
   --max-ann-dimensions <n>    Skip the vector index above n dimensions
                               (default: no cap)`;
 

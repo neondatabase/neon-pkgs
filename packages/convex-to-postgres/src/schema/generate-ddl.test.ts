@@ -462,6 +462,31 @@ describe("Lakebase extensions", () => {
 		expect(sql).not.toContain("lakebase_vector");
 	});
 
+	test("searchIndex bm25 is the default spelled out", () => {
+		expect(ddl(searchSchema(), { searchIndex: "bm25" })).toEqual(
+			ddl(searchSchema()),
+		);
+	});
+
+	test("a GIN search index needs no extension", () => {
+		const { sql } = ddl(searchSchema(), { searchIndex: "gin" });
+		expect(sql).not.toContain("CREATE EXTENSION");
+		expect(sql.startsWith("CREATE TABLE messages (")).toBe(true);
+	});
+
+	test("the generated tsvector column is the same with gin", () => {
+		expect(ddl(searchSchema()).sql).toContain(
+			ddl(searchSchema(), { searchIndex: "gin" }).sql.trimEnd(),
+		);
+	});
+
+	test("neither search index kind adds a warning", () => {
+		expect(ddl(searchSchema()).warnings).toEqual([]);
+		expect(ddl(searchSchema(), { searchIndex: "gin" }).warnings).toEqual(
+			[],
+		);
+	});
+
 	test("the extension line precedes the first CREATE TABLE", () => {
 		const { sql } = ddl(vectorSchema());
 		expect(sql.indexOf("CREATE EXTENSION")).toBeLessThan(
@@ -606,6 +631,53 @@ describe("generateIndexDdl post-load indexes", () => {
 		expect(
 			indexDdl(searchSchema(), { searchK1: 2, searchB: 0.5 }),
 		).toContain("WITH (k1 = 2, b = 0.5);");
+	});
+
+	test("gin: a GIN index on the tsvector column, and no Lakebase index", () => {
+		const sql = indexDdl(searchSchema(), { searchIndex: "gin" });
+		expect(sql).toBe(
+			"CREATE INDEX messages_body_gin ON messages USING gin (body_tsv);\n",
+		);
+		expect(sql).not.toContain("lakebase");
+	});
+
+	test("gin: searchK1 / searchB are ignored", () => {
+		expect(
+			indexDdl(searchSchema(), {
+				searchIndex: "gin",
+				searchK1: 2,
+				searchB: 0.5,
+			}),
+		).toBe(indexDdl(searchSchema(), { searchIndex: "gin" }));
+	});
+
+	test("gin: a filter-field btree precedes the GIN index", () => {
+		const sql = indexDdl(
+			schema([
+				table({
+					name: "events",
+					fields: {
+						calendarId: field(v.string()),
+						title: field(v.string()),
+					},
+					searchIndexes: [
+						{
+							indexDescriptor: "search_title",
+							searchField: "title",
+							filterFields: ["calendarId"],
+						},
+					],
+				}),
+			]),
+			{ searchIndex: "gin" },
+		);
+		expect(sql).toBe(
+			[
+				"CREATE INDEX events_calendar_id ON events (calendar_id);",
+				"CREATE INDEX events_title_gin ON events USING gin (title_tsv);",
+				"",
+			].join("\n"),
+		);
 	});
 
 	test("ann index on the vector column with the default opclass", () => {

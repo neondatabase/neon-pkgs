@@ -36,7 +36,7 @@ export interface PlannedColumn {
 	selectExpr: string;
 	/**
 	 * `true` for a STORED GENERATED column Postgres computes itself — the
-	 * `tsvector` backing a Lakebase BM25 index. The transform skips it (Postgres
+	 * `tsvector` behind a search index. The transform skips it (Postgres
 	 * fills it); the DDL emits a `GENERATED ALWAYS AS (...) STORED` clause from
 	 * {@link generatedExpr}.
 	 */
@@ -51,11 +51,11 @@ export interface PlannedIndex {
 	/** Postgres column names covered by the index, in order. */
 	columns: string[];
 	/**
-	 * `btree` for a plain index, `bm25` for a Lakebase full-text index over a
-	 * generated `tsvector` column, `ann` for a Lakebase approximate-nearest-
-	 * neighbour index over a `vector` column.
+	 * `btree` for a plain index; `bm25` (a Lakebase full-text index, the
+	 * default) or `gin` over a generated `tsvector` column; `ann` for a Lakebase
+	 * approximate-nearest-neighbour index over a `vector` column.
 	 */
-	kind: "btree" | "bm25" | "ann";
+	kind: "btree" | "gin" | "bm25" | "ann";
 	/** `ann` only: the pgvector operator class (e.g. `vector_cosine_ops`). */
 	opclass?: string;
 	/** `bm25` only: the BM25 `k1` term-frequency saturation parameter. */
@@ -73,9 +73,10 @@ export interface PlannedTable {
 	/** Plain btree indexes, created pre-load as part of the schema DDL. */
 	indexes: PlannedIndex[];
 	/**
-	 * Lakebase BM25/ANN indexes plus the btree indexes backing search/vector
-	 * filter fields. Created AFTER the data load (better BM25 corpus statistics
-	 * and ANN layout); emitted by `generateIndexDdl`, never by `generateDdl`.
+	 * Search (BM25 or GIN) and vector (ANN) indexes plus the btree indexes
+	 * backing search/vector filter fields. Created AFTER the data load (a faster
+	 * bulk build, better BM25 corpus statistics and ANN layout); emitted by
+	 * `generateIndexDdl`, never by `generateDdl`.
 	 */
 	postLoadIndexes: PlannedIndex[];
 }
@@ -84,8 +85,9 @@ export interface PlannedSchema {
 	tables: PlannedTable[];
 	/**
 	 * `CREATE EXTENSION` statements this schema needs: `lakebase_vector CASCADE`
-	 * when any vector index is present, `lakebase_text` when any search index is.
-	 * Empty when the schema uses neither (so DDL is byte-identical to before).
+	 * when any vector index is present, `lakebase_text` when any search index is
+	 * a BM25 index. Empty when the schema uses neither (a GIN search index needs
+	 * no extension).
 	 */
 	extensions: string[];
 	warnings: string[];
@@ -193,7 +195,7 @@ function planTable(
 		warnings,
 		uses,
 	);
-	const bm25Indexes = planSearchColumns(
+	const searchIndexes = planSearchColumns(
 		table,
 		pgName,
 		columns,
@@ -222,7 +224,7 @@ function planTable(
 		stagingName: `_convex_${pgName}`,
 		columns,
 		indexes,
-		postLoadIndexes: [...filterIndexes, ...bm25Indexes, ...annIndexes],
+		postLoadIndexes: [...filterIndexes, ...searchIndexes, ...annIndexes],
 	};
 }
 
@@ -272,9 +274,10 @@ function planVectorColumns(
 }
 
 /**
- * Add a STORED GENERATED `tsvector` column for each search index and plan a
- * Lakebase BM25 index over it. The `tsvector` columns are appended to `columns`;
- * returns the planned BM25 indexes.
+ * Add a STORED GENERATED `tsvector` column for each search index and plan the
+ * index over it: a Lakebase BM25 index by default, or a GIN index when
+ * `searchIndex` is `"gin"`. The `tsvector` columns are appended to `columns`;
+ * returns the planned search indexes.
  */
 function planSearchColumns(
 	table: ConvexTable,
@@ -285,7 +288,7 @@ function planSearchColumns(
 	warnings: string[],
 	uses: ExtensionUse,
 ): PlannedIndex[] {
-	const bm25Indexes: PlannedIndex[] = [];
+	const searchIndexes: PlannedIndex[] = [];
 	const seenFields = new Set<string>();
 	for (const index of table.searchIndexes) {
 		const column = columnByConvexName.get(index.searchField);
@@ -296,10 +299,10 @@ function planSearchColumns(
 			continue;
 		}
 		// Two search indexes on the same field would emit a duplicate tsvector
-		// column and BM25 index name; one column and index serve both.
+		// column and index name; one column and index serve both.
 		if (seenFields.has(column.pgName)) {
 			warnings.push(
-				`table "${table.name}": search index "${index.name}" targets field "${index.searchField}", already indexed by an earlier search index; reusing the one BM25 index.`,
+				`table "${table.name}": search index "${index.name}" targets field "${index.searchField}", already indexed by an earlier search index; reusing that index.`,
 			);
 			continue;
 		}
@@ -317,16 +320,24 @@ function planSearchColumns(
 			)}, ${quoteIdentIfNeeded(column.pgName)})`,
 			selectExpr: "",
 		});
-		uses.text = true;
-		bm25Indexes.push({
-			name: `${pgTableName}_${column.pgName}_bm25`,
-			columns: [tsvName],
-			kind: "bm25",
-			k1: options.searchK1,
-			b: options.searchB,
-		});
+		if (options.searchIndex === "gin") {
+			searchIndexes.push({
+				name: `${pgTableName}_${column.pgName}_gin`,
+				columns: [tsvName],
+				kind: "gin",
+			});
+		} else {
+			uses.text = true;
+			searchIndexes.push({
+				name: `${pgTableName}_${column.pgName}_bm25`,
+				columns: [tsvName],
+				kind: "bm25",
+				k1: options.searchK1,
+				b: options.searchB,
+			});
+		}
 	}
-	return bm25Indexes;
+	return searchIndexes;
 }
 
 /**

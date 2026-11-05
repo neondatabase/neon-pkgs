@@ -9,6 +9,18 @@
  */
 export type IdStrategy = "uuid" | "text";
 
+/**
+ * Which index backs a Convex `searchIndex`. Both kinds add the same generated
+ * `<field>_tsv tsvector` column; only the post-load index differs.
+ *
+ * - `"bm25"` (default): a Neon Lakebase `USING lakebase_bm25` index (needs the
+ *   `lakebase_text` extension), ranked with BM25 through `<@>`.
+ * - `"gin"`: a stock Postgres `USING gin` index, queried with `@@`,
+ *   `websearch_to_tsquery` and `ts_rank`. It needs no extension, so the output
+ *   runs on any Postgres.
+ */
+export type SearchIndexKind = "bm25" | "gin";
+
 /** Options shared by every schema-generation and transform helper. */
 export interface GenerateOptions {
 	/** Id/foreign-key representation. Defaults to `"uuid"`. */
@@ -26,8 +38,13 @@ export interface GenerateOptions {
 	 */
 	checkConstraints?: boolean;
 	/**
+	 * The index each Convex `searchIndex` becomes: `"bm25"` or `"gin"`. Defaults
+	 * to `"bm25"`. See {@link SearchIndexKind}.
+	 */
+	searchIndex?: SearchIndexKind;
+	/**
 	 * Text-search configuration passed to `to_tsvector(...)` for the generated
-	 * `tsvector` column backing a Lakebase BM25 index. Defaults to `"english"`.
+	 * `tsvector` column behind a search index. Defaults to `"english"`.
 	 */
 	searchLanguage?: string;
 	/**
@@ -37,12 +54,12 @@ export interface GenerateOptions {
 	vectorOps?: string;
 	/**
 	 * BM25 `k1` term-frequency saturation parameter. Defaults to `1.2` (the
-	 * Lakebase default).
+	 * Lakebase default). Unused when `searchIndex` is `"gin"`.
 	 */
 	searchK1?: number;
 	/**
 	 * BM25 `b` length-normalization parameter. Defaults to `0.75` (the Lakebase
-	 * default).
+	 * default). Unused when `searchIndex` is `"gin"`.
 	 */
 	searchB?: number;
 	/**
@@ -59,6 +76,7 @@ export interface ResolvedOptions {
 	idStrategy: IdStrategy;
 	snakeCase: boolean;
 	checkConstraints: boolean;
+	searchIndex: SearchIndexKind;
 	searchLanguage: string;
 	vectorOps: string;
 	searchK1: number;
@@ -73,6 +91,7 @@ export function resolveOptions(options: GenerateOptions = {}): ResolvedOptions {
 		idStrategy: options.idStrategy ?? "uuid",
 		snakeCase: options.snakeCase ?? true,
 		checkConstraints: options.checkConstraints ?? true,
+		searchIndex: options.searchIndex ?? "bm25",
 		searchLanguage: options.searchLanguage ?? "english",
 		vectorOps: options.vectorOps ?? "vector_cosine_ops",
 		searchK1: options.searchK1 ?? 1.2,

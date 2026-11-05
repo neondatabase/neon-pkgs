@@ -23,6 +23,7 @@ export type {
 	GenerateOptions,
 	IdStrategy,
 	ResolvedOptions,
+	SearchIndexKind,
 } from "./options.js";
 export { resolveOptions } from "./options.js";
 export type { DdlResult } from "./schema/generate-ddl.js";

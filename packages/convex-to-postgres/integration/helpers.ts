@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -8,6 +9,23 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** Absolute path to `integration/fixtures`. */
 export const FIXTURES = join(HERE, "fixtures");
+
+/**
+ * Write a minimal extracted `convex export` directory to a new temp dir: one
+ * `<table>/documents.jsonl` per entry, one JSON document per line. Returns the
+ * directory; the caller removes it.
+ */
+export function writeExportDir(tables: Record<string, object[]>): string {
+	const root = mkdtempSync(join(tmpdir(), "c2p-export-"));
+	for (const [table, docs] of Object.entries(tables)) {
+		mkdirSync(join(root, table));
+		writeFileSync(
+			join(root, table, "documents.jsonl"),
+			docs.map((doc) => `${JSON.stringify(doc)}\n`).join(""),
+		);
+	}
+	return root;
+}
 
 let schemaCounter = 0;
 

@@ -22,12 +22,14 @@ const dirs = readdirSync(CORPUS, { withFileTypes: true })
  * (an unavailable external dep) is skipped with a recorded reason; a fixture
  * that loads but whose DDL fails to apply is a generator bug, not a skip.
  *
- * Fixtures that declare a search or vector index are the exception: their DDL
- * now emits Neon Lakebase extensions (`lakebase_text` / `lakebase_vector`) and
- * `vector(d)` columns that the stock `postgres:*` container cannot create (those
- * extensions exist only on Neon's managed platform). For those fixtures the
- * suite asserts the *emitted* SQL instead of applying it — no Docker image
- * change is needed, and the apply path is unchanged for every other fixture.
+ * Search and vector indexes are the exception. By default a search index is a
+ * Neon Lakebase BM25 index, and a vector index a `lakebase_ann` index over a
+ * `vector(d)` column: the `lakebase_text` / `lakebase_vector` extensions behind
+ * them exist only on Neon's managed platform, so the stock `postgres:*`
+ * container cannot create them. For those, the suite asserts the *emitted* SQL.
+ * The suite applies everything else with `searchIndex: "gin"`, whose stock GIN
+ * index runs anywhere, so a fixture with only search indexes still applies end
+ * to end, post-load indexes included.
  */
 describe("Suite A: corpus DDL applies to Postgres", () => {
 	test("vendored at least 8 corpus fixtures", () => {
@@ -52,8 +54,11 @@ describe("Suite A: corpus DDL applies to Postgres", () => {
 				return;
 			}
 
-			const ddl = generateDdl(schema);
-			const plan = planSchema(schema);
+			// Applied with the stock GIN search index; see the suite comment.
+			const gin = { searchIndex: "gin" } as const;
+			const ddl = generateDdl(schema, gin);
+			const plan = planSchema(schema, gin);
+			const indexSql = generateIndexDdl(schema, gin);
 
 			const hasSearch = schema.tables.some(
 				(t) => t.searchIndexes.length > 0,
@@ -62,26 +67,35 @@ describe("Suite A: corpus DDL applies to Postgres", () => {
 				(t) => t.vectorIndexes.length > 0,
 			);
 
-			// Emit-only path: the Lakebase extensions do not exist in a stock
-			// Postgres container, so assert the generated SQL rather than apply it.
-			if (hasSearch || hasVector) {
-				const indexSql = generateIndexDdl(schema);
-				if (hasVector) {
-					expect(ddl.sql, "lakebase_vector extension").toContain(
-						"CREATE EXTENSION IF NOT EXISTS lakebase_vector CASCADE;",
-					);
-					expect(ddl.sql, "vector column").toContain("vector(");
-					expect(indexSql, "ann index").toContain("lakebase_ann");
-				}
-				if (hasSearch) {
-					expect(ddl.sql, "lakebase_text extension").toContain(
-						"CREATE EXTENSION IF NOT EXISTS lakebase_text;",
-					);
-					expect(ddl.sql, "generated tsvector column").toContain(
-						"tsvector GENERATED ALWAYS AS (to_tsvector(",
-					);
-					expect(indexSql, "bm25 index").toContain("lakebase_bm25");
-				}
+			if (hasSearch) {
+				// Default: Lakebase BM25. Emit-only, because the extension isn't
+				// in the stock container.
+				const defaultDdl = generateDdl(schema).sql;
+				expect(defaultDdl, "lakebase_text extension").toContain(
+					"CREATE EXTENSION IF NOT EXISTS lakebase_text;",
+				);
+				expect(defaultDdl, "generated tsvector column").toContain(
+					"tsvector GENERATED ALWAYS AS (to_tsvector(",
+				);
+				expect(generateIndexDdl(schema), "bm25 index").toContain(
+					"lakebase_bm25",
+				);
+				// With gin: the same column, a GIN index, and no extension.
+				expect(ddl.sql, "no lakebase_text with gin").not.toContain(
+					"lakebase_text",
+				);
+				expect(indexSql, "gin index").toContain("USING gin (");
+			}
+
+			// Emit-only path: the Lakebase vector extension does not exist in a
+			// stock Postgres container, so assert the generated SQL rather than
+			// apply it.
+			if (hasVector) {
+				expect(ddl.sql, "lakebase_vector extension").toContain(
+					"CREATE EXTENSION IF NOT EXISTS lakebase_vector CASCADE;",
+				);
+				expect(ddl.sql, "vector column").toContain("vector(");
+				expect(indexSql, "ann index").toContain("lakebase_ann");
 				return;
 			}
 
@@ -136,6 +150,29 @@ describe("Suite A: corpus DDL applies to Postgres", () => {
 						expect(colType.get(key), `type of ${key}`).toBe(
 							infoSchemaType(column.pgType),
 						);
+					}
+				}
+
+				// The post-load indexes (GIN search indexes and their filter
+				// btrees) apply too, and every one of them exists afterwards.
+				if (indexSql.length > 0) {
+					await client.query(indexSql);
+					const indexesRes = await client.query(
+						"SELECT indexname FROM pg_indexes WHERE schemaname = $1",
+						[ns],
+					);
+					const actualIndexes = new Set(
+						indexesRes.rows.map(
+							(r) => (r as { indexname: string }).indexname,
+						),
+					);
+					for (const table of plan.tables) {
+						for (const index of table.postLoadIndexes) {
+							expect(
+								actualIndexes,
+								`index ${index.name}`,
+							).toContain(index.name);
+						}
 					}
 				}
 			} finally {

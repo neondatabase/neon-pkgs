@@ -27,11 +27,11 @@ export interface DdlResult {
  * cycle: an inline `REFERENCES` would fail because the target table does not
  * exist yet when the referencing table is created.
  *
- * Lakebase BM25/ANN indexes and the btree indexes backing their filter fields
- * are **not** here — they are created after the data load by
- * {@link generateIndexDdl}. A schema with no search/vector indexes needs no
- * extensions, so this output is byte-identical to the pre-Lakebase generator.
- * Pure: no I/O.
+ * Search (BM25 or GIN) and vector (ANN) indexes and the btree indexes backing
+ * their filter fields are **not** here — they are created after the data load
+ * by {@link generateIndexDdl}. A schema with no vector index and no BM25 search
+ * index needs no extensions, so it emits no `CREATE EXTENSION` line. Pure: no
+ * I/O.
  */
 export function generateDdl(
 	schema: ConvexSchema,
@@ -68,12 +68,14 @@ export function generateDdl(
 
 /**
  * Generate the post-load index DDL: the btree indexes backing search/vector
- * filter fields, then the Lakebase `lakebase_bm25` indexes over generated
- * `tsvector` columns, then the `lakebase_ann` indexes over `vector` columns.
+ * filter fields, then the search indexes over generated `tsvector` columns
+ * (`USING lakebase_bm25` by default, `USING gin` with `searchIndex: "gin"`),
+ * then the `lakebase_ann` indexes over `vector` columns.
  *
- * These are built after the bulk load (and run outside any transaction) so BM25
- * gets accurate corpus statistics and ANN a well-tuned layout. Returns an empty
- * string when the schema declares no search or vector indexes. Pure: no I/O.
+ * These are built after the bulk load (and run outside any transaction): a
+ * bulk build is faster, BM25 gets accurate corpus statistics, and ANN a
+ * well-tuned layout. Returns an empty string when the schema declares no search
+ * or vector indexes. Pure: no I/O.
  */
 export function generateIndexDdl(
 	schema: ConvexSchema,
@@ -95,6 +97,10 @@ function postLoadIndex(table: PlannedTable, index: PlannedIndex): string {
 	if (index.kind === "ann") {
 		const column = quoteIdentIfNeeded(index.columns[0]);
 		return `CREATE INDEX ${name} ON ${target} USING lakebase_ann (${column} ${index.opclass});`;
+	}
+	if (index.kind === "gin") {
+		const column = quoteIdentIfNeeded(index.columns[0]);
+		return `CREATE INDEX ${name} ON ${target} USING gin (${column});`;
 	}
 	if (index.kind === "bm25") {
 		const column = quoteIdentIfNeeded(index.columns[0]);

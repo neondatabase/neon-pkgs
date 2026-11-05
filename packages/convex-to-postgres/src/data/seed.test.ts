@@ -166,6 +166,18 @@ describe("generateSeedSql search/vector post-load phase", () => {
 		expect(out.trimEnd().endsWith("VACUUM ANALYZE;")).toBe(true);
 	});
 
+	test("with searchIndex gin, the GIN index also comes AFTER the COMMIT", () => {
+		const out = generateSeedSql(withSearch, exportDir, {
+			searchIndex: "gin",
+		});
+		const commitAt = out.indexOf("\nCOMMIT;");
+		const ginAt = out.indexOf("USING gin (body_tsv)");
+		expect(commitAt).toBeGreaterThan(-1);
+		expect(ginAt).toBeGreaterThan(commitAt);
+		expect(out.indexOf("VACUUM ANALYZE;")).toBeGreaterThan(ginAt);
+		expect(out).not.toContain("lakebase_bm25");
+	});
+
 	test("the transform never writes the generated tsvector column", () => {
 		// The target-table CREATE TABLE (with the GENERATED clause) is emitted by
 		// generateDdl, not the seed; the seed just loads and indexes. The transform
