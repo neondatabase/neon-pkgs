@@ -240,6 +240,7 @@ const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
  * vars (`NEON_AI_GATEWAY_*`), which are owned and pruned.
  */
 const NEON_OWNED_ENV_KEYS: readonly EnvPullKey[] = [
+	NEON_ENV_VAR_KEYS.branch.functionHostSuffix,
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),

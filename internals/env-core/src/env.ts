@@ -57,6 +57,8 @@ export const NEON_ENV_VAR_KEYS = {
 	 */
 	branch: {
 		name: "NEON_BRANCH",
+		id: "NEON_BRANCH_ID",
+		functionHostSuffix: "NEON_FUNCTION_HOST_SUFFIX",
 	},
 	postgres: {
 		databaseUrl: "DATABASE_URL",
@@ -127,13 +129,15 @@ export function isFunctionBaseUrlKey(key: string): key is FunctionBaseUrlKey {
 export type FunctionUrlMode = "policy" | "all-live";
 
 /**
- * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
- * name is always known); on a `parseEnv` result it's present only when `NEON_BRANCH` was
- * injected into `process.env` (the Functions runtime injects it by default, as do `neon dev` /
- * `neon-env run` / `env pull`). `name` is the branch **name** (e.g. `main`, `preview/foo`).
+ * Serving branch identity and function routing. `fetchEnv` resolves these from the branch;
+ * `parseEnv` includes the namespace when `NEON_BRANCH` is injected and reads the other
+ * fields when present. `name` is the branch name (e.g. `main`, `preview/foo`).
  */
 export interface NeonBranchEnv {
 	name: string;
+	id?: string;
+	/** Leading-dot invocation host suffix, shared by functions on this branch's cell. */
+	functionHostSuffix?: string;
 }
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
@@ -418,7 +422,7 @@ export type NeonEnv<C extends Config = Config> = {
  */
 interface EnvKeysByNamespace {
 	postgres: "DATABASE_URL" | "DATABASE_URL_UNPOOLED";
-	branch: "NEON_BRANCH";
+	branch: "NEON_BRANCH" | "NEON_BRANCH_ID" | "NEON_FUNCTION_HOST_SUFFIX";
 	auth: "NEON_AUTH_BASE_URL" | "NEON_AUTH_JWKS_URL";
 	dataApi: "NEON_DATA_API_URL";
 	realtime: "NEON_REALTIME_URL" | "NEON_REALTIME_SECRET";
@@ -433,7 +437,7 @@ interface EnvKeysByNamespace {
 /** The {@link NeonEnv} namespace interface backing each namespace key. */
 interface NamespaceEnv {
 	postgres: NeonPostgresEnv;
-	branch: NeonBranchEnv;
+	branch: Required<NeonBranchEnv>;
 	auth: NeonAuthEnv;
 	dataApi: NeonDataApiEnv;
 	realtime: NeonRealtimeEnv;
@@ -446,6 +450,8 @@ interface EnvKeyToProp {
 	DATABASE_URL: "databaseUrl";
 	DATABASE_URL_UNPOOLED: "databaseUrlUnpooled";
 	NEON_BRANCH: "name";
+	NEON_BRANCH_ID: "id";
+	NEON_FUNCTION_HOST_SUFFIX: "functionHostSuffix";
 	NEON_AUTH_BASE_URL: "baseUrl";
 	NEON_AUTH_JWKS_URL: "jwksUrl";
 	NEON_DATA_API_URL: "url";
@@ -1043,6 +1049,7 @@ export async function fetchEnvKeysState(
 		: null;
 	const needsUnpooled =
 		wantsUnpooled ||
+		wants(K.branch.functionHostSuffix) ||
 		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
 		constructSlugs.length > 0;
 	const needsConnectionTarget = wantsPooled || needsUnpooled;
@@ -1119,12 +1126,24 @@ export async function fetchEnvKeysState(
 	}
 	if (Object.keys(postgres).length > 0) result.postgres = postgres;
 
-	// Branch identity, mirroring what the Functions runtime injects on every branch. Surfaced
-	// as `NEON_BRANCH` so local dev (`neon dev` / `neon-env run` / `env pull`) matches the
-	// deployed runtime. Uses the branch name.
-	if (wants(K.branch.name)) {
-		result.branch = { name: branch.name } satisfies NeonBranchEnv;
+	const branchEnv: Partial<NeonBranchEnv> = {};
+	if (wants(K.branch.name)) branchEnv.name = branch.name;
+	if (wants(K.branch.id)) branchEnv.id = branch.id;
+	if (wants(K.branch.functionHostSuffix)) {
+		const suffix = functionHostSuffix(
+			requiredValue(
+				unpooled,
+				"direct connection URI for function host suffix",
+			).uri,
+		);
+		if (suffix === undefined && selection !== null) {
+			throw new Error(
+				"fetchEnv: cannot derive NEON_FUNCTION_HOST_SUFFIX: the direct connection URI has no host suffix.",
+			);
+		}
+		if (suffix !== undefined) branchEnv.functionHostSuffix = suffix;
 	}
+	if (Object.keys(branchEnv).length > 0) result.branch = branchEnv;
 
 	if (wantsAuth) {
 		if (!authSnapshot) {
@@ -1506,6 +1525,8 @@ export function policyEnvKeys(
 		K.postgres.databaseUrl,
 		K.postgres.databaseUrlUnpooled,
 		K.branch.name,
+		K.branch.id,
+		K.branch.functionHostSuffix,
 		...(desired.authEnabled ? [K.auth.baseUrl, K.auth.jwksUrl] : []),
 		...(desired.dataApiEnabled ? [K.dataApi.url] : []),
 		...(desired.realtimePolicy === "enabled"
@@ -1737,19 +1758,24 @@ function asEnvBaseUrl(url: string): string {
 }
 
 /** Derived from the connection URI so undeployed functions have a cell-routed URL. */
+function functionHostSuffix(connectionUri: string): string | undefined {
+	const suffix = connectionHostSuffix(connectionUri);
+	return suffix === "" ? undefined : `.compute.${suffix}`;
+}
+
 function functionInvocationUrl(
 	branchId: string,
 	slug: string,
 	connectionUri: string,
 ): string {
-	const suffix = connectionHostSuffix(connectionUri);
-	if (suffix === "") {
+	const suffix = functionHostSuffix(connectionUri);
+	if (suffix === undefined) {
 		throw new Error(
 			`fetchEnv: cannot derive the invocation URL for function "${slug}": ` +
 				"the direct connection URI has no host suffix.",
 		);
 	}
-	return `https://${branchId}-${slug}.compute.${suffix}`;
+	return `https://${branchId}-${slug}${suffix}`;
 }
 
 /** The AI Gateway's bare base URL (`NEON_AI_GATEWAY_BASE_URL`) on the branch gateway host. */
@@ -1926,6 +1952,8 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
 	put(K.postgres.databaseUrl, env.postgres?.databaseUrl);
 	put(K.postgres.databaseUrlUnpooled, env.postgres?.databaseUrlUnpooled);
 	put(K.branch.name, env.branch?.name);
+	put(K.branch.id, env.branch?.id);
+	put(K.branch.functionHostSuffix, env.branch?.functionHostSuffix);
 	put(K.auth.baseUrl, env.auth?.baseUrl);
 	put(K.auth.jwksUrl, env.auth?.jwksUrl);
 	put(K.dataApi.url, env.dataApi?.url);

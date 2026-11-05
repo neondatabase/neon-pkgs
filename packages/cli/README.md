@@ -641,6 +641,13 @@ If you'd rather not keep env vars on disk, inject them at runtime instead with `
 
 **`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. Each `NEON_FUNCTION_<SLUG>_BASE_URL` this process is serving is rewritten to `http://localhost:<port>`: every neon.ts function, or the matching slug when `--source` names one. `neon env pull` and `neon-env run` write the production URL (`https://<branchId>-<slug>.compute.…`).
 
+Unscoped pulls and `neon dev` also resolve `NEON_BRANCH_ID` and
+`NEON_FUNCTION_HOST_SUFFIX` (for example `.compute.c-3.us-east-2.aws.neon.tech`),
+matching the variables deployed functions receive. `env pull --service functions`
+includes both; `--env` can select either individually. The `functionHostname(slug)`
+helper from `@neon/functions` combines them into a sibling's hostname and honors
+the per-function localhost URLs under `neon dev`.
+
 Before `neon.ts` is evaluated, `dev` loads the project directory's `.env`, then `.env.local`, which overrides it, into the environment, so Function env values written as `process.env.X!` resolve the same way they do for `neon deploy --env`. A variable already set in the shell wins over both. Local Functions inherit every loaded variable, including keys `neon.ts` doesn't declare; the deployed runtime gets only declared and Neon-injected env. `--env <file>` loads only that file, resolved from the current directory, matching `neon deploy --env`:
 
 ```bash

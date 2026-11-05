@@ -160,6 +160,72 @@ describe("fetchEnv", () => {
 		expect(toEntries(env).NEON_BRANCH).toBe("main");
 	});
 
+	test("exports the serving branch id and cell suffix without declaring or listing functions", async () => {
+		const { api, projectId } = seededFake(new CellHostFakeNeonApi());
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branch: "main",
+		});
+		expect(toEntries(env)).toMatchObject({
+			NEON_BRANCH_ID: "br-main",
+			NEON_FUNCTION_HOST_SUFFIX:
+				".compute.c-3.aws-us-east-1.fake.neon.tech",
+		});
+		expect(
+			api.history.some((entry) => entry.method === "listBranchFunctions"),
+		).toBe(false);
+		for (const [key, value] of Object.entries(toEntries(env)))
+			vi.stubEnv(key, value);
+		expect(parseEnv(defineConfig({})).branch).toEqual(env.branch);
+	});
+
+	test("selecting the host suffix fetches only its direct connection URI dependencies", async () => {
+		const { api, projectId } = seededFake();
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_BRANCH_ID", "NEON_FUNCTION_HOST_SUFFIX"],
+		});
+		expect(toEntries(env)).toEqual({
+			NEON_BRANCH_ID: "br-main",
+			NEON_FUNCTION_HOST_SUFFIX: ".compute.aws-us-east-1.fake.neon.tech",
+		});
+		expect(
+			api.history.filter((entry) => entry.method === "getConnectionUri"),
+		).toHaveLength(1);
+	});
+
+	test("an explicitly selected host suffix fails when the connection has no domain", async () => {
+		class LocalhostNeonApi extends FakeNeonApi {
+			override async getConnectionUri(
+				projectId: string,
+				input: GetConnectionUriInput,
+			) {
+				const { uri } = await super.getConnectionUri(projectId, input);
+				const url = new URL(uri);
+				url.hostname = "localhost";
+				return { uri: url.toString() };
+			}
+		}
+		const { api, projectId } = seededFake(new LocalhostNeonApi());
+		await expect(
+			fetchEnv(defineConfig({}), {
+				api,
+				projectId,
+				branch: "main",
+				keys: ["NEON_FUNCTION_HOST_SUFFIX"],
+			}),
+		).rejects.toThrow(/cannot derive NEON_FUNCTION_HOST_SUFFIX/);
+		const unscoped = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branch: "main",
+		});
+		expect(toEntries(unscoped).NEON_FUNCTION_HOST_SUFFIX).toBeUndefined();
+	});
+
 	test("a branch-only key filter skips unrelated Postgres reads", async () => {
 		const { api, projectId } = seededFake();
 		const env = await fetchEnv(defineConfig({}), {
@@ -1313,6 +1379,10 @@ describe("function invocation URLs", () => {
 		});
 
 		expect(env.functions.hello.baseUrl).toBe(constructedHelloUrl);
+		const vars = toEntries(env);
+		expect(
+			`https://${vars.NEON_BRANCH_ID}-hello${vars.NEON_FUNCTION_HOST_SUFFIX}`,
+		).toBe(env.functions.hello.baseUrl);
 		expect(env.functions).not.toHaveProperty("world");
 		expect(toEntries(env)[functionBaseUrlKey("hello")]).toBe(
 			constructedHelloUrl,

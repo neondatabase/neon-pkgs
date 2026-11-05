@@ -99,7 +99,11 @@ describe("env pull key selection", () => {
 	});
 
 	it("does not invent live function URL keys for --service functions", () => {
-		expect(envKeysForSelection(["functions"], [])).toEqual(["NEON_BRANCH"]);
+		expect(envKeysForSelection(["functions"], [])).toEqual([
+			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
+			"NEON_FUNCTION_HOST_SUFFIX",
+		]);
 	});
 
 	it("requires the two object-storage credential variables together", () => {

@@ -20,11 +20,11 @@ const CONTEXT_FILE = join(FIXTURE, ".neon");
 const DOTENV = join(FIXTURE, ".env.local");
 const READY_TIMEOUT_MS = 90_000;
 
-/** Variables only one side can have: the function's own URL, and its declared env. */
 type Runtime = "pulled" | "dev" | "deployed" | "devSource" | "devExplicit";
 
 const FUNCTION_KEYS = new Set([
 	"NEON_FUNCTION_PROBE_BASE_URL",
+	"NEON_FUNCTION_HOST_SUFFIX",
 	"PROBE_SETTING",
 	"PROBE_EXTRA",
 ]);
@@ -277,16 +277,21 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 	});
 
 	it("non-secret values agree everywhere", () => {
-		const { NEON_FUNCTION_PROBE_BASE_URL: pulledUrl, ...pulled } =
-			report("pulled").values;
+		const {
+			NEON_FUNCTION_PROBE_BASE_URL: pulledUrl,
+			NEON_FUNCTION_HOST_SUFFIX: pulledSuffix,
+			...pulled
+		} = report("pulled").values;
 		const {
 			NEON_FUNCTION_PROBE_BASE_URL: devUrl,
+			NEON_FUNCTION_HOST_SUFFIX: devSuffix,
 			PROBE_SETTING: _dev,
 			PROBE_EXTRA: _devExtra,
 			...dev
 		} = report("dev").values;
 		const {
 			NEON_FUNCTION_PROBE_BASE_URL: deployedUrl,
+			NEON_FUNCTION_HOST_SUFFIX: deployedSuffix,
 			PROBE_SETTING: _deployed,
 			...deployed
 		} = report("deployed").values;
@@ -300,6 +305,14 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 
 		expect(pulledUrl).toMatch(/^https:\/\//);
 		expect(devUrl).toMatch(/^http:\/\/localhost:\d+$/);
+		expect(pulledSuffix).toMatch(/^\.compute\./);
+		expect(devSuffix).toBe(pulledSuffix);
+		expect(pulledUrl).toBe(
+			`https://${pulled.NEON_BRANCH_ID}-probe${pulledSuffix}`,
+		);
+		// Older runtimes may not provide the suffix yet.
+		if (deployedSuffix !== undefined)
+			expect(deployedSuffix).toBe(pulledSuffix);
 		// Not injected by the runtime yet; when it is, it must be the URL env pull writes.
 		if (deployedUrl !== undefined) expect(deployedUrl).toBe(pulledUrl);
 	});

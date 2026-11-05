@@ -86,7 +86,11 @@ describe("parseEnv key filter (types)", () => {
 		// `NEON_BRANCH` is always selectable: every branch has an identity, so the namespace
 		// is present on every `NeonEnv`.
 		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
-			"DATABASE_URL" | "DATABASE_URL_UNPOOLED" | "NEON_BRANCH"
+			| "DATABASE_URL"
+			| "DATABASE_URL_UNPOOLED"
+			| "NEON_BRANCH"
+			| "NEON_BRANCH_ID"
+			| "NEON_FUNCTION_HOST_SUFFIX"
 		>();
 	});
 
@@ -100,12 +104,23 @@ describe("parseEnv key filter (types)", () => {
 			| "DATABASE_URL"
 			| "DATABASE_URL_UNPOOLED"
 			| "NEON_BRANCH"
+			| "NEON_BRANCH_ID"
+			| "NEON_FUNCTION_HOST_SUFFIX"
 			| "NEON_FUNCTION_HELLO_BASE_URL"
 		>();
 		const env = parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"]);
 		expectTypeOf(env.functions.hello.baseUrl).toEqualTypeOf<string>();
 		// @ts-expect-error postgres was not selected
 		env.postgres;
+	});
+
+	test("selected function host fields are required strings", () => {
+		const env = parseEnv(defineConfig({}), [
+			"NEON_BRANCH_ID",
+			"NEON_FUNCTION_HOST_SUFFIX",
+		]);
+		expectTypeOf(env.branch.id).toEqualTypeOf<string>();
+		expectTypeOf(env.branch.functionHostSuffix).toEqualTypeOf<string>();
 	});
 });
 

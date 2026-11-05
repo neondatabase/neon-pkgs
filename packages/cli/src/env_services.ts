@@ -11,7 +11,7 @@ export const ENV_PULL_SERVICES = NEON_SERVICES;
 
 export const ENV_PULL_KEYS = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
-	NEON_ENV_VAR_KEYS.branch.name,
+	...Object.values(NEON_ENV_VAR_KEYS.branch),
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
 	...Object.values(NEON_ENV_VAR_KEYS.realtime),
@@ -31,7 +31,10 @@ const SERVICE_ENV_KEYS: Record<NeonService, readonly EnvPullKey[]> = {
 	"object-storage": Object.values(NEON_ENV_VAR_KEYS.storage),
 	"ai-gateway": Object.values(NEON_ENV_VAR_KEYS.aiGateway),
 	// Live slugs are not known until the branch is listed.
-	functions: [],
+	functions: [
+		NEON_ENV_VAR_KEYS.branch.id,
+		NEON_ENV_VAR_KEYS.branch.functionHostSuffix,
+	],
 };
 
 /**
@@ -60,6 +63,8 @@ const ENV_KEY_SERVICE: Record<
 	DATABASE_URL: "postgres",
 	DATABASE_URL_UNPOOLED: "postgres",
 	NEON_BRANCH: null,
+	NEON_BRANCH_ID: null,
+	NEON_FUNCTION_HOST_SUFFIX: "functions",
 	NEON_AUTH_BASE_URL: "auth",
 	NEON_AUTH_JWKS_URL: "auth",
 	NEON_DATA_API_URL: "data-api",

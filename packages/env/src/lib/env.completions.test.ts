@@ -161,7 +161,9 @@ describe("parseEnv autocomplete", () => {
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
 			"NEON_FUNCTION_HELLO_BASE_URL",
+			"NEON_FUNCTION_HOST_SUFFIX",
 			"NEON_FUNCTION_WORLD_BASE_URL",
 		]);
 	});
@@ -183,7 +185,9 @@ describe("parseEnv autocomplete", () => {
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
 			"NEON_FUNCTION_HELLO_BASE_URL",
+			"NEON_FUNCTION_HOST_SUFFIX",
 			"NEON_FUNCTION_WORLD_BASE_URL",
 		]);
 	});

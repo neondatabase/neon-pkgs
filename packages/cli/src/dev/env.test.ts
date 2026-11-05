@@ -621,8 +621,14 @@ describe("resolveDevEnv", () => {
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
+			"NEON_FUNCTION_HOST_SUFFIX",
 		]);
 		expect(result.vars.NEON_BRANCH).toBe("main");
+		expect(result.vars.NEON_BRANCH_ID).toBe(BRANCH_ID);
+		expect(result.vars.NEON_FUNCTION_HOST_SUFFIX).toBe(
+			".compute.fake.neon.tech",
+		);
 		expect(result.vars.NEON_AUTH_BASE_URL).toBe(
 			"https://auth.fake.neon.tech",
 		);

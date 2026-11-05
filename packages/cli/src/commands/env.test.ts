@@ -523,7 +523,7 @@ describe("env pull", () => {
 			stdout.mockRestore();
 		}
 		expect(written.join("")).toBe("");
-		expect(logged).toContain("Pulled 3 Neon variables into .env.local");
+		expect(logged).toContain("Pulled 5 Neon variables into .env.local");
 	});
 
 	it("names the branch once, in the summary heading, when announcing", async () => {
@@ -535,7 +535,7 @@ describe("env pull", () => {
 			),
 		);
 		expect(logged.split("\n")[0]).toBe(
-			`Pulled 3 Neon variables into .env.local from branch ${BRANCH_NAME} (${BRANCH_ID})`,
+			`Pulled 5 Neon variables into .env.local from branch ${BRANCH_NAME} (${BRANCH_ID})`,
 		);
 		expect(logged.split(BRANCH_ID)).toHaveLength(2);
 	});
@@ -1342,6 +1342,8 @@ describe("env pull function invocation URLs", () => {
 
 		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
 			NEON_BRANCH: BRANCH_NAME,
+			NEON_BRANCH_ID: BRANCH_ID,
+			NEON_FUNCTION_HOST_SUFFIX: ".compute.fake.neon.tech",
 			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
 			NEON_FUNCTION_WORLD_BASE_URL: worldUrl,
 		});
@@ -1378,6 +1380,8 @@ describe("env pull function invocation URLs", () => {
 		expect(api.listCalls).toBe(1);
 		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
 			NEON_BRANCH: BRANCH_NAME,
+			NEON_BRANCH_ID: BRANCH_ID,
+			NEON_FUNCTION_HOST_SUFFIX: ".compute.fake.neon.tech",
 			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
 		});
 	});

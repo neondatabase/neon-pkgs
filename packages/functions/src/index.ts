@@ -3,6 +3,7 @@ export {
 	attachDatabasePool,
 	type DatabasePool,
 } from "./lib/attach-database-pool.js";
+export { functionHostname } from "./lib/function-hostname.js";
 export {
 	type UpgradeWebSocketOptions,
 	upgradeWebSocket,

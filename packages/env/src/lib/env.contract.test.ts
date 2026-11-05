@@ -35,6 +35,12 @@ beforeEach(() => stubCleanNeonEnv());
  */
 const INPUT_ENV_KEYS = [
 	{ key: "DATABASE_URL", namespace: "postgres", prop: "databaseUrl" },
+	{ key: "NEON_BRANCH_ID", namespace: "branch", prop: "id" },
+	{
+		key: "NEON_FUNCTION_HOST_SUFFIX",
+		namespace: "branch",
+		prop: "functionHostSuffix",
+	},
 	{
 		key: "DATABASE_URL_UNPOOLED",
 		namespace: "postgres",
@@ -106,6 +112,8 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 			    "jwksUrl": "NEON_AUTH_JWKS_URL",
 			  },
 			  "branch": {
+			    "functionHostSuffix": "NEON_FUNCTION_HOST_SUFFIX",
+			    "id": "NEON_BRANCH_ID",
 			    "name": "NEON_BRANCH",
 			  },
 			  "dataApi": {

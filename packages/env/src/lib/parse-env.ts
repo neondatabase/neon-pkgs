@@ -309,7 +309,13 @@ export function parseEnv(
 	// just omit the namespace rather than failing the whole parse.
 	const branchName = source[NEON_ENV_VAR_KEYS.branch.name];
 	if (branchName !== undefined && branchName !== "") {
-		result.branch = { name: branchName } satisfies NeonBranchEnv;
+		result.branch = {
+			name: branchName,
+			...(source.NEON_BRANCH_ID ? { id: source.NEON_BRANCH_ID } : {}),
+			...(source.NEON_FUNCTION_HOST_SUFFIX
+				? { functionHostSuffix: source.NEON_FUNCTION_HOST_SUFFIX }
+				: {}),
+		} satisfies NeonBranchEnv;
 	}
 
 	if (isServiceEnabledInput(config.auth)) {
@@ -519,6 +525,8 @@ const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 	DATABASE_URL: ["postgres", "databaseUrl"],
 	DATABASE_URL_UNPOOLED: ["postgres", "databaseUrlUnpooled"],
 	NEON_BRANCH: ["branch", "name"],
+	NEON_BRANCH_ID: ["branch", "id"],
+	NEON_FUNCTION_HOST_SUFFIX: ["branch", "functionHostSuffix"],
 	NEON_AUTH_BASE_URL: ["auth", "baseUrl"],
 	NEON_AUTH_JWKS_URL: ["auth", "jwksUrl"],
 	NEON_DATA_API_URL: ["dataApi", "url"],

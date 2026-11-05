@@ -37,7 +37,7 @@ const GROUP_ORDER = [
 ];
 
 const groupOf = (key: string): string => {
-	if (key === BRANCH_ENV_KEY) return BRANCH_GROUP;
+	if (key === BRANCH_ENV_KEY || key === "NEON_BRANCH_ID") return BRANCH_GROUP;
 	if (isFunctionBaseUrlKey(key)) return NEON_SERVICE_LABELS.functions;
 	const pullKey = ENV_PULL_KEYS.find((candidate) => candidate === key);
 	const service = pullKey ? serviceForEnvKey(pullKey) : null;

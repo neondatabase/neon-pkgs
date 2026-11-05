@@ -104,6 +104,8 @@ These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `ne
 | Key | From |
 | --- | --- |
 | `NEON_BRANCH` | the resolved branch **name** — mirrors what the Neon Functions runtime injects on every branch, so local dev matches the deployed runtime |
+| `NEON_BRANCH_ID` | the resolved serving branch ID, also available as `env.branch.id` |
+| `NEON_FUNCTION_HOST_SUFFIX` | the cell's leading-dot function host suffix, also available as `env.branch.functionHostSuffix`; combine with `NEON_BRANCH_ID` and a function slug, or use `functionHostname` from `@neon/functions` |
 | `DATABASE_URL` | pooled connection string |
 | `DATABASE_URL_UNPOOLED` | direct connection string |
 
