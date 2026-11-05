@@ -960,6 +960,43 @@ await neon.consumption.perProject({
 | `create({ keyName })` | `ApiKeyCreateResponse` | the `key` token is shown **once** |
 | `revoke({ keyId })` | `ApiKeyRevokeResponse` | |
 
+### `neon.organizations`
+
+Every method takes `orgId`, which defaults to the client's `orgId`; with neither, the call
+fails with a `NeonClientError` before any request. Role changes, member removal, the
+spending limit writes, and creating or revoking keys need an organization admin.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get({ orgId? })` | `Organization` | |
+| `members.list({ orgId?, …query })` | **[P]** `MemberWithUser` | `query`: `{ sort_by?, sort_order?, limit? }`; each item is `{ member, user }` |
+| `members.get({ orgId?, memberId })` | `Member` | |
+| `members.update({ orgId?, memberId, role })` | `Member` | |
+| `members.remove({ orgId?, memberId })` | **→void** | the last admin cannot be removed |
+| `invitations.list({ orgId? })` | `Invitation[]` | |
+| `invitations.create({ orgId?, invitations })` | `Invitation[]` | `invitations`: `[{ email, role }]`; each invitee is emailed |
+| `spendingLimit.get({ orgId? })` | `SpendingLimitResponse` | `spending_limit_cents` is `null` when unset |
+| `spendingLimit.set({ orgId?, spendingLimitCents })` | `SpendingLimitResponse` | Launch and Scale plans; notifies at 80% and 100%, never suspends computes |
+| `spendingLimit.delete({ orgId? })` | **→void** | idempotent |
+| `apiKeys.list({ orgId? })` | `OrgApiKeysListResponseItem[]` | `project_id` is set on project-scoped keys |
+| `apiKeys.create({ orgId?, keyName, projectId? })` | `OrgApiKeyCreateResponse` | the `key` token is shown **once**; needs a personal API key |
+| `apiKeys.revoke({ orgId?, keyId })` | `OrgApiKeyRevokeResponse` | |
+
+```ts
+const neon = createNeonClient({
+  apiKey: process.env.NEON_API_KEY!,
+  orgId: "org-...",
+});
+
+for await (const { member, user } of neon.organizations.members.list({
+  sort_by: "email",
+})) {
+  console.log(user.email, member.role);
+}
+
+await neon.organizations.spendingLimit.set({ spendingLimitCents: 50_000 }); // $500
+```
+
 ### `neon.regions` / `neon.user`
 
 | Method | Returns |

@@ -172,6 +172,22 @@ export type {
 	OperationsListParams,
 	OperationsWaitForParams,
 } from "./neon/resources/operations.js";
+export type {
+	OrganizationApiKeyCreateParams,
+	OrganizationApiKeyListParams,
+	OrganizationApiKeyRevokeParams,
+	OrganizationGetParams,
+	OrganizationInvitationCreateParams,
+	OrganizationInvitationListParams,
+	OrganizationMemberGetParams,
+	OrganizationMemberListParams,
+	OrganizationMemberRemoveParams,
+	OrganizationMemberUpdateParams,
+	OrganizationParams,
+	OrganizationSpendingLimitDeleteParams,
+	OrganizationSpendingLimitGetParams,
+	OrganizationSpendingLimitSetParams,
+} from "./neon/resources/organizations.js";
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
