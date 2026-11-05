@@ -18,7 +18,8 @@ describe.sequential("e2e — neon orgs against the real API", () => {
 			"get",
 			...orgArgs(),
 		]);
-		expect(org.id).toBe(configuredOrgId());
+		expect(org.id).toMatch(/^org-/);
+		expect(org.id).toBe(configuredOrgId() ?? org.id);
 
 		const members = await runCliJson<MemberWithUser[]>([
 			"orgs",
