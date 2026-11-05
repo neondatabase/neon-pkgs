@@ -1,5 +1,11 @@
 # neon
 
+## 8.22.0
+
+### Minor Changes
+
+- 4f08d0c: Add `neon roles get <role>` and `neon roles reset-password <role>`. `reset-password` prints the new password and waits until the compute applies it unless you pass `--no-wait`.
+
 ## 8.21.1
 
 ### Patch Changes
