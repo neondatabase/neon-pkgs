@@ -483,7 +483,6 @@ describe("init handler", () => {
 				): Promise<PluginsInstallOutcome> => {
 					ops.calls.push({ kind: "plugins", options });
 					return {
-						scope: "global",
 						rows: agents.map((agent) => ({
 							scope: "user",
 							plugin: "neon-postgres",
@@ -556,7 +555,7 @@ describe("init handler", () => {
 			expect(out).toContain(
 				"The Neon plugin was not installed. Retry with:",
 			);
-			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toContain("neon plugins -y --agent cursor");
 			expect(out).toMatch(/neon login/);
 			expect(await initEnd()).toEqual(
 				expect.objectContaining({
@@ -670,7 +669,7 @@ describe("init handler", () => {
 			expect(out).toContain(
 				"The Neon plugin was not installed. Retry with:",
 			);
-			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toContain("neon plugins -y --agent cursor");
 			expect(await initEnd()).toEqual(
 				expect.objectContaining({
 					outcome: "error",
@@ -716,7 +715,7 @@ describe("init handler", () => {
 			expect(out).toContain(
 				"The Neon plugin was not installed. Retry with:",
 			);
-			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toContain("neon plugins -y --agent cursor");
 		});
 
 		test("a link failure is recorded as the link step", async () => {
@@ -1112,7 +1111,6 @@ describe("init handler", () => {
 		expect(stepKinds(ops)).toEqual(["plugins"]);
 		expect(ops.calls[0]?.options).toMatchObject({
 			yes: true,
-			global: true,
 			agents: ["cursor"],
 		});
 		expect(takeCommandSuccessExtras()).toEqual({
@@ -1142,7 +1140,6 @@ describe("init handler", () => {
 		expect(stepKinds(ops)).toEqual(["plugins"]);
 		expect(ops.calls[0]?.options).toMatchObject({
 			yes: true,
-			global: true,
 			agents: ["vscode"],
 		});
 	});
@@ -1237,7 +1234,6 @@ describe("init handler", () => {
 		expect(stepKinds(ops)).toEqual(["plugins", "skills", "mcp"]);
 		expect(ops.calls[0]?.options).toMatchObject({
 			yes: true,
-			global: true,
 			agents: ["cursor"],
 		});
 		expect(takeCommandSuccessExtras()?.agent_setup).toBe("mixed");

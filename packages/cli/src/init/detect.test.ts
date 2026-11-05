@@ -50,7 +50,6 @@ describe("splitInitTooling", () => {
 			splitInitTooling(
 				["cursor", "github-copilot-cli", "grok-build"],
 				"global",
-				"global",
 				["github-copilot-cli", "grok-build"],
 			),
 		).toEqual({
@@ -103,7 +102,6 @@ describe("planInitToolingSteps", () => {
 			planInitToolingSteps({
 				tooling: { setup: "plugin", agents: ["cursor", "codex"] },
 				yes: true,
-				pluginScope: "global",
 				skillsGlobal: true,
 				mcpOauth: true,
 			}),
@@ -112,7 +110,6 @@ describe("planInitToolingSteps", () => {
 				kind: "plugins",
 				options: {
 					yes: true,
-					global: true,
 					agents: ["cursor", "codex"],
 				},
 			},
@@ -124,7 +121,6 @@ describe("planInitToolingSteps", () => {
 			planInitToolingSteps({
 				tooling: { setup: "skills", agents: FALLBACK_SKILLS_AGENTS },
 				yes: true,
-				pluginScope: "global",
 				skillsGlobal: true,
 				mcpOauth: true,
 			}),
@@ -145,7 +141,6 @@ describe("planInitToolingSteps", () => {
 					mcpAgents: ["opencode"],
 				},
 				yes: true,
-				pluginScope: "project",
 				skillsGlobal: false,
 				mcpOauth: true,
 				mcpProjectId: "proj-pin",

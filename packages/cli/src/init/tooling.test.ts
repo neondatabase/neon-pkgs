@@ -106,6 +106,27 @@ describe("runAgentTooling", () => {
 		expect(ops.installMcp).not.toHaveBeenCalled();
 	});
 
+	test("-y plugin step installs only the routed agents, not VS Code from the same folder", async () => {
+		const ops = operations();
+		await runAgentTooling({
+			cwd: "/app",
+			yes: true,
+			output: "table",
+			auth,
+			operations: ops,
+			detectProjectAgents: () => ["cursor", "vscode"],
+			detectAgent: () => null,
+		});
+		expect(ops.installPlugins).toHaveBeenCalledOnce();
+		expect(ops.installPlugins).toHaveBeenCalledWith(
+			expect.objectContaining({
+				yes: true,
+				agents: ["cursor"],
+				cwd: "/app",
+			}),
+		);
+	});
+
 	test("named agents skip detection and the picker", async () => {
 		const ops = operations();
 		const pickAgentSetup = vi.fn(async () => "skip" as const);

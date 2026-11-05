@@ -35,11 +35,10 @@ import {
 } from "../init/link.js";
 import {
 	assertNamedAgentTooling,
+	bootstrapSkillsMcpAgents,
 	chooseYesAgentTooling,
 	type InitAgentSetup,
 	type InitAgentSetupResult,
-	initPluginAgents,
-	initSkillsMcpAgents,
 	postScaffoldActions,
 	projectContextFile,
 	resolveNamedAgents,
@@ -52,6 +51,7 @@ import {
 } from "../init/wizard.js";
 import { log } from "../log.js";
 import type { AgentType } from "../mcp/agents.js";
+import { bootstrapPluginAgents } from "../plugins/targets.js";
 import type { CommonProps } from "../types.js";
 import { coerceAgentFlag } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -241,8 +241,8 @@ export const builder = (argv: yargs.Argv) =>
 		.epilogue(
 			helpEpilogue(
 				"--agent / -a is forwarded to plugins, or to skills and mcp, not both. It skips agent selection, including with --default.",
-				helpCsv("Plugin agents", initPluginAgents()),
-				helpCsv("Skills and MCP agents", initSkillsMcpAgents()),
+				helpCsv("Plugin agents", bootstrapPluginAgents()),
+				helpCsv("Skills and MCP agents", bootstrapSkillsMcpAgents()),
 			),
 		)
 		.strict();

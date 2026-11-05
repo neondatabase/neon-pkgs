@@ -504,8 +504,8 @@ describe("chooseYesAgentTooling", () => {
 		});
 	});
 
-	test("plugin scope does not change MCP config location", () => {
-		expect(splitInitTooling(["windsurf"], "project", "global")).toEqual({
+	test("MCP config location comes from its own argument", () => {
+		expect(splitInitTooling(["windsurf"], "global")).toEqual({
 			setup: "skills-mcp",
 			skillsAgents: ["windsurf"],
 			mcpAgents: ["windsurf"],
@@ -574,13 +574,18 @@ describe("assertNamedAgentTooling", () => {
 });
 
 describe("planYesAgentSteps", () => {
-	test("plugin is plugins -y", () => {
+	test("plugin is plugins -y for the routed agents", () => {
 		expect(
 			planYesAgentSteps({
 				setup: "plugin",
 				agents: ["cursor", "codex"],
 			}),
-		).toEqual([{ kind: "plugins", options: { yes: true } }]);
+		).toEqual([
+			{
+				kind: "plugins",
+				options: { yes: true, agents: ["cursor", "codex"] },
+			},
+		]);
 	});
 
 	test("skills-mcp omits an empty step; MCP is global mcp -y", () => {
