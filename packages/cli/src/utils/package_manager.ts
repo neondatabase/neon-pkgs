@@ -582,9 +582,11 @@ export const runCommandWithDetail = (
 			settle({
 				ok: false,
 				detail: installFailureDetail({
+					// Prefixed so a missing package manager reads apart from npm's own
+					// `npm error code ENOENT`.
 					spawnErrorCode:
 						"code" in err && typeof err.code === "string"
-							? err.code
+							? `spawn ${err.code}`
 							: "spawn failed",
 					exitCode: null,
 					output,

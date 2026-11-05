@@ -28,11 +28,11 @@ describe("installFailureDetail", () => {
 	it("prefers the spawn error code", () => {
 		expect(
 			installFailureDetail({
-				spawnErrorCode: "ENOENT",
+				spawnErrorCode: "spawn ENOENT",
 				exitCode: null,
 				output: "npm error code ERESOLVE",
 			}),
-		).toBe("ENOENT");
+		).toBe("spawn ENOENT");
 	});
 
 	it("reads npm, pnpm, and yarn error codes from stderr", () => {
@@ -215,7 +215,7 @@ process.exit(1);
 				["install"],
 				tmpdir(),
 			),
-		).toEqual({ ok: false, detail: "ENOENT" });
+		).toEqual({ ok: false, detail: "spawn ENOENT" });
 	});
 
 	it("succeeds without a detail", async () => {
