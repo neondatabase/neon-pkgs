@@ -644,9 +644,9 @@ If you'd rather not keep env vars on disk, inject them at runtime instead with `
 Unscoped pulls and `neon dev` also resolve `NEON_BRANCH_ID` and
 `NEON_FUNCTION_HOST_SUFFIX` (for example `.compute.c-3.us-east-2.aws.neon.tech`),
 matching the variables deployed functions receive. `env pull --service functions`
-includes both; `--env` can select either individually. The `functionHostname(slug)`
-helper from `@neon/functions` combines them into a sibling's hostname and automatically
-uses locally assigned ports under `neon dev`.
+includes both; `--env` can select either individually. The `functionBaseUrl(slug)`
+helper from `@neon/functions` combines them into a sibling's HTTPS base URL and automatically
+returns `http://localhost:<port>` for locally served functions under `neon dev`.
 
 Before `neon.ts` is evaluated, `dev` loads the project directory's `.env`, then `.env.local`, which overrides it, into the environment, so Function env values written as `process.env.X!` resolve the same way they do for `neon deploy --env`. A variable already set in the shell wins over both. Local Functions inherit every loaded variable, including keys `neon.ts` doesn't declare; the deployed runtime gets only declared and Neon-injected env. `--env <file>` loads only that file, resolved from the current directory, matching `neon deploy --env`:
 

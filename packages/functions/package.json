@@ -1,7 +1,7 @@
 {
 	"name": "@neon/functions",
 	"version": "0.11.0",
-	"description": "Runtime helpers for Neon Functions: `functionHostname` for sibling function hosts, `waitUntil` for background work, `upgradeWebSocket` for WebSockets, `attachDatabasePool` for idle-client errors, and `parseTriggerDelivery` for Function Trigger deliveries.",
+	"description": "Runtime helpers for Neon Functions: `functionBaseUrl` for sibling function URLs, `waitUntil` for background work, `upgradeWebSocket` for WebSockets, `attachDatabasePool` for idle-client errors, and `parseTriggerDelivery` for Function Trigger deliveries.",
 	"keywords": [
 		"neon",
 		"database",

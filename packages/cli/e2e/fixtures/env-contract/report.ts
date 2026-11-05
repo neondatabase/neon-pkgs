@@ -1,5 +1,5 @@
 import { parseEnv } from "@neon/env";
-import { functionHostname } from "@neon/functions";
+import { functionBaseUrl } from "@neon/functions";
 import config from "./neon.js";
 
 const NEON_MANAGED_KEY =
@@ -29,7 +29,7 @@ export type EnvReport = {
 	keys: string[];
 	values: Partial<Record<(typeof PUBLIC_KEYS)[number], string>>;
 	databaseHost: string | null;
-	functionHost: string | null;
+	functionBaseUrl: string | null;
 	external: ParseOutcome;
 	scoped: ParseOutcome;
 };
@@ -58,8 +58,8 @@ export function envReport(): EnvReport {
 			.filter((key) => NEON_MANAGED_KEY.test(key))
 			.sort(),
 		values,
-		functionHost: process.env.NEON_FUNCTION_HOST_SUFFIX
-			? functionHostname("probe")
+		functionBaseUrl: process.env.NEON_FUNCTION_HOST_SUFFIX
+			? functionBaseUrl("probe")
 			: null,
 		databaseHost: databaseUrl ? new URL(databaseUrl).host : null,
 		external: outcome(() => parseEnv(config)),

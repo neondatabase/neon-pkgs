@@ -1,18 +1,16 @@
 const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
-/** Return a function's hostname (including its port, when present) on the current branch. */
-export function functionHostname(slug: string): string {
+/** Return a function's HTTP(S) base URL without a trailing slash on the current branch. */
+export function functionBaseUrl(slug: string): string {
 	if (!/^[a-z0-9]{1,20}$/.test(slug)) {
-		throw new TypeError(
-			"functionHostname: slug must match [a-z0-9]{1,20}.",
-		);
+		throw new TypeError("functionBaseUrl: slug must match [a-z0-9]{1,20}.");
 	}
 
 	const localPorts = process.env.NEON_DEV_FUNCTION_PORTS;
 	if (localPorts !== undefined) {
 		const invalidPorts = () =>
 			new TypeError(
-				"functionHostname: invalid local function ports. Restart `neon dev`.",
+				"functionBaseUrl: invalid local function ports. Restart `neon dev`.",
 			);
 		let ports: unknown;
 		try {
@@ -37,7 +35,7 @@ export function functionHostname(slug: string): string {
 			) {
 				throw invalidPorts();
 			}
-			return `localhost:${port}`;
+			return `http://localhost:${port}`;
 		}
 	}
 
@@ -45,7 +43,7 @@ export function functionHostname(slug: string): string {
 	const suffix = process.env.NEON_FUNCTION_HOST_SUFFIX;
 	if (!branchId || !suffix) {
 		throw new TypeError(
-			"functionHostname requires NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX. " +
+			"functionBaseUrl requires NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX. " +
 				"Run `neon env pull` or `neon dev` locally, or deploy your function to Neon.",
 		);
 	}
@@ -61,8 +59,8 @@ export function functionHostname(slug: string): string {
 		`${label}.${domain}`.length > 253
 	) {
 		throw new TypeError(
-			"functionHostname: NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX must form a valid function hostname.",
+			"functionBaseUrl: NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX must form a valid function hostname.",
 		);
 	}
-	return `${label}${suffix}`;
+	return `https://${label}${suffix}`;
 }

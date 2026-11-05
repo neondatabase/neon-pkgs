@@ -3,7 +3,7 @@
 Runtime helpers for [Neon Functions](https://neon.com):
 
 - **`waitUntil`** — defer background work past a response.
-- **`functionHostname`** — resolve another function's hostname on the current branch.
+- **`functionBaseUrl`** — resolve another function's HTTP(S) base URL on the current branch.
 - **`upgradeWebSocket`** — serve WebSockets from a `fetch` handler, or from a
   [Hono](https://hono.dev) route via `@neon/functions/hono`.
 - **`attachDatabasePool`** — keep a module-scope `pg.Pool` from killing the isolate when Postgres drops an idle client.
@@ -25,33 +25,31 @@ npm install @neon/functions hono
 > `hono` `^4.7.8` as an optional peer — installing `@neon/functions` on its own
 > pulls in nothing and warns about nothing.
 
-## `functionHostname`
+## `functionBaseUrl`
 
-Build a sibling function's hostname from the serving branch's `NEON_BRANCH_ID` and
+Build a sibling function's base URL from the serving branch's `NEON_BRANCH_ID` and
 `NEON_FUNCTION_HOST_SUFFIX`:
 
 ```ts
-import { functionHostname } from "@neon/functions";
+import { functionBaseUrl } from "@neon/functions";
 
-const hostname = functionHostname("worker");
-const protocol = hostname.startsWith("localhost:") ? "http" : "https";
-const response = await fetch(`${protocol}://${hostname}/`);
+const response = await fetch(new URL("/jobs", functionBaseUrl("worker")));
 ```
 
-`functionHostname(slug)` returns a host, including its port when present, with no scheme
-or path. Slugs must match `[a-z0-9]{1,20}`. The branch ID and slug together must form a
-valid DNS label of at most 63 characters. Invalid input or missing environment variables
-throws a `TypeError` with setup guidance.
+`functionBaseUrl(slug)` returns a string containing the scheme, host, and optional port,
+with no path or trailing slash. Slugs must match `[a-z0-9]{1,20}`. The branch ID and slug
+together must form a valid DNS label of at most 63 characters. Invalid input or missing
+environment variables throws a `TypeError` with setup guidance.
 
 The runtime supplies `NEON_FUNCTION_HOST_SUFFIX` as a leading-dot suffix, for example
 `.compute.c-3.us-east-2.aws.neon.tech`. `neon env pull`, `neon-env run`, and `neon dev`
 resolve the same suffix and branch ID locally. No function listing is needed to construct
-a hostname; the target function must be deployed to serve requests.
+a deployed URL; the target function must be deployed to serve requests.
 
 Under `neon dev`, the helper automatically uses the assigned local ports and returns
-`localhost:<port>` for functions this process serves. A sibling that is not served locally
-(for example with `neon dev --source`) uses its deployed hostname. Use `http://` for a local
-development hostname; deployed hosts use `https://`.
+`http://localhost:<port>` for functions this process serves. A sibling that is not served
+locally (for example with `neon dev --source`) uses its deployed `https://` URL. Deployed
+fallback requires a resolved linked branch; local siblings work without one.
 
 ## `waitUntil`
 

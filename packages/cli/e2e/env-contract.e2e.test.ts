@@ -108,7 +108,7 @@ async function fetchReport(url: string): Promise<EnvReport> {
  */
 describe.sequential("e2e — parseEnv matches the env each runtime provides", () => {
 	let projectId: string;
-	let invocationHost: string;
+	let invocationBaseUrl: string;
 	let tmp: string;
 	const collected: Partial<Record<Runtime, EnvReport>> = {};
 	const report = (where: Runtime): EnvReport => {
@@ -163,7 +163,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		const { invocation_url } = JSON.parse(fn.stdout) as {
 			invocation_url: string;
 		};
-		invocationHost = new URL(invocation_url).host;
+		invocationBaseUrl = new URL(invocation_url).origin;
 		collected.deployed = await fetchReport(invocation_url);
 
 		const envFile = join(tmp, ".env.pulled");
@@ -294,14 +294,20 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 
 		expect(pulledSuffix).toMatch(/^\.compute\./);
 		expect(devSuffix).toBe(pulledSuffix);
-		expect(report("pulled").functionHost).toBe(invocationHost);
-		expect(report("dev").functionHost).toMatch(/^localhost:\d+$/);
-		expect(report("devSource").functionHost).toMatch(/^localhost:\d+$/);
-		expect(report("devExplicit").functionHost).toMatch(/^localhost:\d+$/);
+		expect(report("pulled").functionBaseUrl).toBe(invocationBaseUrl);
+		expect(report("dev").functionBaseUrl).toMatch(
+			/^http:\/\/localhost:\d+$/,
+		);
+		expect(report("devSource").functionBaseUrl).toMatch(
+			/^http:\/\/localhost:\d+$/,
+		);
+		expect(report("devExplicit").functionBaseUrl).toMatch(
+			/^http:\/\/localhost:\d+$/,
+		);
 		// Older runtimes may not provide the suffix yet.
 		if (deployedSuffix !== undefined)
 			expect(deployedSuffix).toBe(pulledSuffix);
 		if (deployedSuffix !== undefined)
-			expect(report("deployed").functionHost).toBe(invocationHost);
+			expect(report("deployed").functionBaseUrl).toBe(invocationBaseUrl);
 	});
 });

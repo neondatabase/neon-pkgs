@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { functionHostname } from "@neon/functions";
+import { functionBaseUrl } from "@neon/functions";
 import { describe, expect, it, vi } from "vitest";
 import { findConfigFunctionBySource } from "../dev/functions.js";
 import { test } from "../test_utils/fixtures";
@@ -283,9 +283,7 @@ describe("local function ports", () => {
 			);
 			vi.stubEnv("NEON_BRANCH_ID", undefined);
 			vi.stubEnv("NEON_FUNCTION_HOST_SUFFIX", undefined);
-			const response = await fetch(
-				`http://${functionHostname("world")}/`,
-			);
+			const response = await fetch(functionBaseUrl("world"));
 			expect(await response.text()).toBe("from world");
 		} finally {
 			vi.unstubAllEnvs();
