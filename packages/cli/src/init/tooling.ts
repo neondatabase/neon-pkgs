@@ -100,7 +100,6 @@ export const toolingStepCommandText = (step: ToolingStep): string => {
 		case "plugins": {
 			const { options } = step;
 			if (options.yes) flags.push("-y");
-			if (options.global) flags.push("--global");
 			for (const agent of options.agents ?? []) {
 				flags.push("--agent", agent);
 			}

@@ -38,22 +38,18 @@ describe("plugins CLI install requirements", () => {
 					`"${command}" must be absent from the test PATH`,
 				).toBeNull();
 			}
-			const result = spawnSync(
-				"npx",
-				pluginsAddArgs({ target, global: true }),
-				{
-					cwd: machine.cwd,
-					encoding: "utf8",
-					timeout: 150_000,
-					env: {
-						...npmEnvForIsolatedHome(),
-						HOME: machine.home,
-						PATH: machine.path,
-						DISABLE_TELEMETRY: "1",
-						DO_NOT_TRACK: "1",
-					},
+			const result = spawnSync("npx", pluginsAddArgs({ target }), {
+				cwd: machine.cwd,
+				encoding: "utf8",
+				timeout: 150_000,
+				env: {
+					...npmEnvForIsolatedHome(),
+					HOME: machine.home,
+					PATH: machine.path,
+					DISABLE_TELEMETRY: "1",
+					DO_NOT_TRACK: "1",
 				},
-			);
+			});
 			const output = `${result.stdout}${result.stderr}`;
 			if (command === undefined) {
 				expect(result.status, output).toBe(0);

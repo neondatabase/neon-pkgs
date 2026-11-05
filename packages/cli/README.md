@@ -1047,7 +1047,7 @@ neon docs search "pg_dump" --limit 5 --output json
 
 ## Install the Neon plugin (`plugins`)
 
-`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
+`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running a pinned version of the plugins CLI (`npx plugins@<version> add ... -s user`). It does not call the Neon API.
 
 ```bash
 # Interactive: pick agents, then install.
@@ -1058,16 +1058,13 @@ $ neon plugins -y
 
 # Named agents.
 $ neon plugins --agent cursor --agent claude-code
-
-# User-level install.
-$ neon plugins --global
 ```
 
 On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
-`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
+`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, Grok Build, and Kimi Code only install user-level: they are skipped at the default scope with a warning, and a VS Code-only project fails if nothing else is selected. Pass `--global` for those.
+The plugin always installs user-level, so it applies to every project for that agent. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `--global` is still accepted for existing scripts and is no longer listed in `--help`; with `-y` it detects installed apps instead of project folders.
 
 GitHub Copilot CLI and Grok Build install through their own CLIs (`copilot`, `grok`), so `neon plugins` runs `copilot --version` or `grok --version` first. A command that is missing, fails, or (for Copilot) is older than 0.0.400 is skipped with a warning under `-y`, fails an explicit `--agent`, and in `neon init` gets Neon skills and MCP instead of the plugin. The other agents install by writing files, so their detected config directory is enough.
 

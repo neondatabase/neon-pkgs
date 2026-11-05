@@ -100,7 +100,7 @@ afterEach(() => {
 });
 
 describe("install scope telemetry", () => {
-	test("plugins -y records project scope after the plugins CLI is invoked at project scope", async () => {
+	test("plugins -y without --global records global scope after the plugins CLI is invoked at user scope", async () => {
 		const cwd = scratch();
 		const { bin, argvFile } = fakeNpx("plugins");
 		vi.stubEnv("PLUGINS_ARGV_FILE", argvFile);
@@ -112,9 +112,9 @@ describe("install scope telemetry", () => {
 			agent: ["cursor"],
 		});
 		expect(spawned(argvFile)[0]).toEqual(
-			expect.arrayContaining(["-s", "project"]),
+			expect.arrayContaining(["-s", "user"]),
 		);
-		expect(takeCommandSuccessExtras()).toEqual({ scope: "project" });
+		expect(takeCommandSuccessExtras()).toEqual({ scope: "global" });
 	});
 
 	test("plugins --global records global scope after the plugins CLI is invoked at user scope", async () => {

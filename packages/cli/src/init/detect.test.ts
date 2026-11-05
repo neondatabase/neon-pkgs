@@ -112,7 +112,6 @@ describe("planInitToolingSteps", () => {
 				kind: "plugins",
 				options: {
 					yes: true,
-					global: true,
 					agents: ["cursor", "codex"],
 				},
 			},

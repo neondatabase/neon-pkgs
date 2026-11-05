@@ -30,7 +30,7 @@ type PluginsProps = CommonProps & {
 	yes?: boolean;
 	global?: boolean;
 	agent?: string[];
-	/** Working directory to detect project agents in / install project-scoped plugins into. Defaults to `process.cwd()` (tests, and flows like `bootstrap` that scaffold into a different directory). */
+	/** Working directory to detect project agents in and run the plugins CLI from. Defaults to `process.cwd()` (tests, and flows like `bootstrap` that scaffold into a different directory). */
 	cwd?: string;
 };
 
@@ -53,24 +53,16 @@ const coerceAgents = (value: unknown): string[] => {
 };
 
 type PluginsInstallRow = {
-	scope: string;
+	scope: "user";
 	plugin: string;
 	agent: string;
 	status: "installed" | "failed";
 	error?: string;
 };
 
-const scopeLabel = (scope: "global" | "project"): string =>
-	scope === "project" ? "project" : "user";
-
 export const command = "plugins";
 export const aliases = ["plugin"];
 export const describe = "Install the Neon plugin into coding agents";
-
-const pluginProjectAgents = pluginsInstallableAgents("project");
-const pluginGlobalOnlyAgents = pluginsInstallableAgents("global").filter(
-	(id) => !pluginProjectAgents.includes(id),
-);
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -81,12 +73,14 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Detected agents (project folders, else the host CLI agent). --global uses installed apps, else the host CLI agent",
+					"Skip prompts. Detected agents (project folders, else the host CLI agent)",
 			},
+			// Plugins always install user-level. Kept so `neon plugins --global` scripts
+			// still run; with -y it detects installed apps instead of project folders.
 			global: {
 				type: "boolean",
 				default: false,
-				describe: "Install user-level. Default is project",
+				hidden: true,
 			},
 			agent: {
 				alias: "a",
@@ -106,14 +100,10 @@ export const builder = (argv: yargs.Argv) =>
 			"$0 plugins --agent cursor --agent claude-code",
 			"Install into specific agents",
 		)
-		.example("$0 plugins --global", "Install user-level")
 		.epilogue(
 			helpEpilogue(
-				helpCsv(
-					"Supported agents at project scope",
-					pluginProjectAgents,
-				),
-				helpCsv("Also with --global", pluginGlobalOnlyAgents),
+				helpCsv("Supported agents", pluginsInstallableAgents("global")),
+				"The plugin installs user-level, so it applies to every project.",
 				`Currently one plugin: ${NEON_PLUGIN_NAME} from ${PLUGIN_SOURCE}.`,
 				`It includes the Neon MCP server (${NEON_MCP_URL})`,
 				helpCsv("and these skills", PLUGIN_SKILLS),
@@ -125,7 +115,8 @@ export const builder = (argv: yargs.Argv) =>
 export type InstallPluginsOptions = {
 	cwd?: string;
 	yes?: boolean;
-	global?: boolean;
+	/** `-y` detects installed apps instead of project folders. */
+	detectInstalled?: boolean;
 	agents?: readonly string[];
 	allowAgentSkip?: boolean;
 };
@@ -133,7 +124,6 @@ export type InstallPluginsOptions = {
 type PluginsInstallFailure = { agents: string[]; message: string };
 
 export type PluginsInstallOutcome = {
-	scope: "project" | "global";
 	rows: PluginsInstallRow[];
 	failed: PluginsInstallFailure[];
 };
@@ -150,7 +140,7 @@ export const installPlugins = async (
 	const yes = options.yes === true;
 	const interactive = canPickAgentsInteractively() && !yes;
 	const plan = await resolvePluginsPlan({
-		global: options.global === true,
+		detectFrom: options.detectInstalled === true ? "installed" : "project",
 		agents: options.agents ?? [],
 		yes,
 		cwd,
@@ -166,12 +156,6 @@ export const installPlugins = async (
 			getAgentDisplayName(agent),
 		);
 	}
-	for (const agent of plan.userScopeSkipped) {
-		log.warning(
-			"Skipping %s: plugins are user-level. Pass --global.",
-			getAgentDisplayName(agent),
-		);
-	}
 	for (const row of plan.unusableCommands) {
 		log.warning(
 			'Skipping %s: the plugin installs through "%s", which %s.',
@@ -183,12 +167,8 @@ export const installPlugins = async (
 
 	const rows: PluginsInstallRow[] = [];
 	const failed: PluginsInstallFailure[] = [];
-	const scope = scopeLabel(plan.scope);
 	for (const [index, mapped] of plan.targets.entries()) {
-		const args = pluginsAddArgs({
-			target: mapped.target,
-			global: plan.scope === "global",
-		});
+		const args = pluginsAddArgs({ target: mapped.target });
 		const agent = mapped.agents.join(", ");
 		const displayNames = mapped.agents
 			.map((id) => getAgentDisplayName(id))
@@ -205,7 +185,7 @@ export const installPlugins = async (
 				cwd,
 			});
 			rows.push({
-				scope,
+				scope: "user",
 				plugin: NEON_PLUGIN_NAME,
 				agent,
 				status: "installed",
@@ -214,7 +194,7 @@ export const installPlugins = async (
 			const message =
 				error instanceof Error ? error.message : String(error);
 			rows.push({
-				scope,
+				scope: "user",
 				plugin: NEON_PLUGIN_NAME,
 				agent,
 				status: "failed",
@@ -227,14 +207,14 @@ export const installPlugins = async (
 		}
 	}
 
-	return { scope: plan.scope, rows, failed };
+	return { rows, failed };
 };
 
 /** The exact error `neon plugins` throws for a failed outcome, or `undefined` on success. */
 export const pluginsInstallError = (
 	outcome: PluginsInstallOutcome,
 ): Error | undefined => {
-	const { failed, rows, scope } = outcome;
+	const { failed, rows } = outcome;
 	if (failed.length === 0) {
 		return undefined;
 	}
@@ -244,7 +224,6 @@ export const pluginsInstallError = (
 	}
 	const retry = neonPluginsRetryCommand({
 		agents: failed.flatMap((row) => row.agents),
-		global: scope === "global",
 	});
 	if (first.message.includes("needs npx (Node.js)")) {
 		return new Error(first.message);
@@ -273,11 +252,7 @@ export const reportPluginsInstall = (
 	if (outcome.rows.length === 0) {
 		log.info("No Neon plugins installed.");
 	} else if (outcome.failed.length === 0) {
-		log.info(
-			outcome.scope === "project"
-				? "Installed the Neon plugin (project)."
-				: "Installed the Neon plugin (user).",
-		);
+		log.info("Installed the Neon plugin (user).");
 	}
 };
 
@@ -285,7 +260,7 @@ export const handler = async (props: PluginsProps) => {
 	const outcome = await installPlugins({
 		cwd: props.cwd,
 		yes: props.yes,
-		global: props.global,
+		detectInstalled: props.global,
 		agents: props.agent,
 	});
 	reportPluginsInstall(props, outcome);
@@ -293,5 +268,5 @@ export const handler = async (props: PluginsProps) => {
 	if (error) {
 		throw error;
 	}
-	recordCommandSuccessExtras({ scope: outcome.scope });
+	recordCommandSuccessExtras({ scope: "global" });
 };

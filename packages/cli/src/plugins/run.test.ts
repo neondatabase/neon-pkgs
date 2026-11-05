@@ -7,17 +7,15 @@ import {
 	neonPluginsRetryCommand,
 	PLUGIN_SKILLS,
 	PLUGIN_SOURCE,
+	PLUGINS_CLI_VERSION,
 	pluginsAddArgs,
 	pluginsCliFailureMessage,
 	runPluginsCli,
 } from "./run.js";
 
 describe("pluginsAddArgs", () => {
-	test("adds the Neon plugin into one mapped target", () => {
-		const args = pluginsAddArgs({
-			target: "cursor",
-			global: false,
-		});
+	test("adds the Neon plugin into one mapped target, user-level, with the pinned plugins CLI", () => {
+		const args = pluginsAddArgs({ target: "cursor" });
 		expect(PLUGIN_SOURCE).toBe("neondatabase/agent-skills");
 		expect(PLUGIN_SKILLS).toEqual([
 			"neon",
@@ -28,37 +26,24 @@ describe("pluginsAddArgs", () => {
 			"neon-postgres",
 			"neon-realtime",
 		]);
+		expect(PLUGINS_CLI_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
 		expect(args).toEqual([
 			"-y",
-			"plugins",
+			`plugins@${PLUGINS_CLI_VERSION}`,
 			"add",
 			"neondatabase/agent-skills",
 			"-t",
 			"cursor",
 			"-s",
-			"project",
+			"user",
 			"-y",
 		]);
 		expect(args.join(" ")).not.toMatch(/-t \*/);
 		expect(args.filter((part) => part === "-t")).toHaveLength(1);
 	});
 
-	test("passes -s user for user-level installs", () => {
-		expect(pluginsAddArgs({ target: "vscode", global: true })).toEqual([
-			"-y",
-			"plugins",
-			"add",
-			"neondatabase/agent-skills",
-			"-t",
-			"vscode",
-			"-s",
-			"user",
-			"-y",
-		]);
-	});
-
 	test("rejects an empty target", () => {
-		expect(() => pluginsAddArgs({ target: "", global: false })).toThrow(
+		expect(() => pluginsAddArgs({ target: "" })).toThrow(
 			/needs a -t target/,
 		);
 	});
@@ -138,25 +123,22 @@ describe("pluginsCliFailureMessage", () => {
 });
 
 describe("neonPluginsRetryCommand", () => {
-	test("names agents and user-level scope on the neon command", () => {
+	test("names every agent and no scope flag", () => {
 		expect(
-			neonPluginsRetryCommand({
-				agents: ["cursor", "claude-code"],
-				global: true,
-			}),
-		).toBe("neon plugins --agent cursor --agent claude-code --global -y");
+			neonPluginsRetryCommand({ agents: ["cursor", "claude-code"] }),
+		).toBe("neon plugins --agent cursor --agent claude-code -y");
 	});
 
 	test("is the neon command, not npx", () => {
-		expect(
-			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
-		).toBe("neon plugins --agent cursor -y");
-		expect(
-			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
-		).not.toMatch(/npx /);
-		expect(
-			neonPluginsRetryCommand({ agents: ["cursor"], global: false }),
-		).not.toMatch(/neondatabase\//);
+		expect(neonPluginsRetryCommand({ agents: ["cursor"] })).toBe(
+			"neon plugins --agent cursor -y",
+		);
+		expect(neonPluginsRetryCommand({ agents: ["cursor"] })).not.toMatch(
+			/npx /,
+		);
+		expect(neonPluginsRetryCommand({ agents: ["cursor"] })).not.toMatch(
+			/neondatabase\//,
+		);
 	});
 });
 

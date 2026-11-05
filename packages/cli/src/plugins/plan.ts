@@ -14,10 +14,8 @@ import {
 import {
 	detectPluginsAgents,
 	getPluginsTargetName,
-	isUserScopeOnlyPluginsTarget,
 	mappedPluginsTargets,
 	missingPluginsCommands,
-	type PluginsInstallScope,
 	type PluginsMappedTarget,
 	pluginsCommandFix,
 	pluginsCommandProblemText,
@@ -27,17 +25,18 @@ import {
 } from "./targets.js";
 
 export type PluginsPlan = {
-	scope: PluginsInstallScope;
 	agents: AgentType[];
 	skipped: AgentType[];
-	userScopeSkipped: AgentType[];
 	/** Detected agents left out because the plugins CLI needs their command. */
 	unusableCommands: UnusablePluginsCommand[];
 	targets: PluginsMappedTarget[];
 };
 
+/** Where `-y` looks for agents. Plugins always install user-level. */
+export type PluginsDetectFrom = "project" | "installed";
+
 export type ResolvePluginsPlanOptions = {
-	global: boolean;
+	detectFrom: PluginsDetectFrom;
 	agents: readonly string[];
 	yes: boolean;
 	cwd: string;
@@ -90,11 +89,12 @@ export async function resolvePluginsPlan(
 		hasAgents: options.agents.length > 0,
 	});
 	const prompt = options.interactive && !options.yes;
-	const scope: PluginsInstallScope = options.global ? "global" : "project";
-	const available = pluginsInstallableAgents(scope);
+	const detectScope =
+		options.detectFrom === "installed" ? "global" : "project";
+	const available = pluginsInstallableAgents("global");
 	const availableSet = new Set(available);
 	const scoped = await detectPluginsAgents({
-		scope,
+		scope: detectScope,
 		cwd: options.cwd,
 		...(options.detectInstalledAgents
 			? { detectInstalledAgents: options.detectInstalledAgents }
@@ -135,7 +135,7 @@ export async function resolvePluginsPlan(
 		message:
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
 		nonInteractiveMessage: noDetectedAgentsMessage({
-			scope,
+			scope: detectScope,
 			supported: available,
 			fix: options.yes ? "run-without-yes" : "pass-yes",
 			nameAgent: true,
@@ -162,15 +162,9 @@ export async function resolvePluginsPlan(
 
 	const agents: AgentType[] = [];
 	const skipped: AgentType[] = [];
-	const userScopeSkipped: AgentType[] = [];
 	for (const id of selected) {
-		const target = getPluginsTargetName(id);
-		if (target === undefined) {
+		if (getPluginsTargetName(id) === undefined) {
 			skipped.push(id);
-			continue;
-		}
-		if (scope === "project" && isUserScopeOnlyPluginsTarget(target)) {
-			userScopeSkipped.push(id);
 			continue;
 		}
 		agents.push(id);
@@ -188,38 +182,26 @@ export async function resolvePluginsPlan(
 		const missingAgents = new Set(unusableCommands.map((row) => row.agent));
 		const installable = agents.filter((id) => !missingAgents.has(id));
 		return {
-			scope,
 			agents: installable,
 			skipped,
-			userScopeSkipped,
 			unusableCommands,
 			targets:
 				installable.length === 0
 					? []
-					: mappedPluginsTargets(installable, scope),
+					: mappedPluginsTargets(installable, "global"),
 		};
 	}
 
 	if (agents.length === 0) {
-		if (userScopeSkipped.length > 0 && skipped.length === 0) {
-			const names = userScopeSkipped
-				.map((id) => getAgentDisplayName(id))
-				.join(", ");
-			throw new Error(
-				`${names}: plugins are user-level. Pass --global. Without --global: ${pluginsInstallableAgents("project").join(", ")}`,
-			);
-		}
 		throw new Error(
 			`None of the selected agents can install plugins. Supported agents: ${available.join(", ")}`,
 		);
 	}
 
 	return {
-		scope,
 		agents,
 		skipped,
-		userScopeSkipped,
 		unusableCommands,
-		targets: mappedPluginsTargets(agents, scope),
+		targets: mappedPluginsTargets(agents, "global"),
 	};
 }

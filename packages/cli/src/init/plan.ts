@@ -363,7 +363,6 @@ export const planInitToolingSteps = (input: {
 		agents: readonly AgentType[],
 	): Omit<InstallPluginsOptions, "cwd"> => ({
 		yes: input.yes,
-		global: input.pluginScope === "global",
 		agents,
 	});
 	const skillsOptions = (
