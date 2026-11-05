@@ -1,5 +1,22 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`orgs > get shows the organization in the table 1`] = `
+"ID          org-7
+Name        Org Seven
+Handle      org-seven
+Plan        Launch
+Created At  2026-01-01T00:00:00Z
+"
+`;
+
+exports[`orgs > invitations create sends one invitation per --email 1`] = `
+"Invitations to org-7
+ID    Email          Role    Invited At
+i-10  a@example.com  member  2026-01-05T00:00:00Z
+i-11  b@example.com  member  2026-01-05T00:00:00Z
+"
+`;
+
 exports[`orgs > list 1`] = `
 "- name: Organization 1
   id: 1
@@ -15,5 +32,34 @@ exports[`orgs > list marks the linked org and shows plans in the table 1`] = `
 ID              Name                  Plan
 org-linked-123  [current] Linked org  Launch
 org-other-456   Other org             Free
+"
+`;
+
+exports[`orgs > members list flattens member and user in the table 1`] = `
+"Members of org-7
+ID   Email              Role    Joined At
+m-1  admin@example.com  admin   2026-01-02T00:00:00Z
+m-2  dev@example.com    member  2026-01-03T00:00:00Z
+"
+`;
+
+exports[`orgs > members update sends the role 1`] = `
+"id: m-1
+user_id: u-1
+org_id: org-7
+role: viewer
+joined_at: 2026-01-02T00:00:00Z
+"
+`;
+
+exports[`orgs > spending-limit get shows an unset limit 1`] = `
+"Spending limit for org-7
+Monthly Limit  Not set
+"
+`;
+
+exports[`orgs > spending-limit set sends cents and shows dollars 1`] = `
+"Spending limit for org-7
+Monthly Limit  $1,250.50
 "
 `;

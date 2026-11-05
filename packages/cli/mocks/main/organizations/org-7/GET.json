@@ -1,0 +1,9 @@
+{
+  "id": "org-7",
+  "name": "Org Seven",
+  "handle": "org-seven",
+  "plan": "launch",
+  "created_at": "2026-01-01T00:00:00Z",
+  "managed_by": "console",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

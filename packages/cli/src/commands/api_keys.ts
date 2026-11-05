@@ -172,7 +172,7 @@ const list = async (props: ListProps) => {
 	const out = writer(props);
 
 	if (props.orgId) {
-		const { data } = await props.apiClient.listOrgApiKeys(props.orgId);
+		const data = await (await orgKeys(props)).list(props.orgId);
 
 		// `writeTable` drops any column empty in every row, so an all-absent `project_id`
 		// would take the whole column with it — hiding the answer exactly when it is "none
@@ -237,8 +237,8 @@ const create = async (props: CreateProps) => {
 	}
 
 	if (!projectId && orgId) {
-		const { data } = await props.apiClient.createOrgApiKey(orgId, {
-			key_name: name,
+		const data = await (await orgKeys(props)).create(orgId, {
+			keyName: name,
 		});
 		await assertUsable(props, data, { orgId, expect: NO_PROJECT });
 		report(props, data, CREATE_FIELDS, CREATE_TABLE_FIELDS);
@@ -255,9 +255,9 @@ const create = async (props: CreateProps) => {
 	// Resolve it from the project rather than asking for both: `--project-id` alone would
 	// otherwise fail for a reason that isn't visible from the command line.
 	const resolvedOrgId = await orgIdForProject(props.apiClient, scopeTo);
-	const { data } = await props.apiClient.createOrgApiKey(resolvedOrgId, {
-		key_name: name,
-		project_id: scopeTo,
+	const data = await (await orgKeys(props)).create(resolvedOrgId, {
+		keyName: name,
+		projectId: scopeTo,
 	});
 
 	// `project_id` is optional on the response. Printing a key and calling it scoped
@@ -273,6 +273,24 @@ const create = async (props: CreateProps) => {
 		"Limited to %s: it cannot create projects, mint API keys, or read any other project. It can still change and delete everything inside that project.",
 		scopeTo,
 	);
+};
+
+/** Organization keys through `@neon/sdk`, failing with the CLI's `NeonApiError`. */
+const orgKeys = async (props: CommonProps) => {
+	const { fromSdkError, getNeonClient } = await import("../neon_client.js");
+	const keys = getNeonClient(props).organizations.apiKeys;
+	const fail = (error: unknown) => {
+		throw fromSdkError(error, props.apiHost);
+	};
+	return {
+		list: (orgId: string) => keys.list({ orgId }).catch(fail),
+		create: (
+			orgId: string,
+			params: { keyName: string; projectId?: string },
+		) => keys.create({ orgId, ...params }).catch(fail),
+		revoke: (orgId: string, keyId: number) =>
+			keys.revoke({ orgId, keyId }).catch(fail),
+	};
 };
 
 /**
@@ -370,8 +388,8 @@ const assertUsable = async (
 const revokeOrExplain = async (props: RevokeProps) => {
 	try {
 		return props.orgId
-			? await props.apiClient.revokeOrgApiKey(props.orgId, props.id)
-			: await props.apiClient.revokeApiKey(props.id);
+			? await (await orgKeys(props)).revoke(props.orgId, props.id)
+			: (await props.apiClient.revokeApiKey(props.id)).data;
 	} catch (err) {
 		if (isNeonApiError(err) && err.status === 404) {
 			throw new Error(
@@ -392,9 +410,9 @@ const withdraw = async (
 ): Promise<boolean> => {
 	if (!Number.isSafeInteger(keyId) || (keyId as number) <= 0) return false;
 	try {
-		const { data } = orgId
-			? await props.apiClient.revokeOrgApiKey(orgId, keyId as number)
-			: await props.apiClient.revokeApiKey(keyId as number);
+		const data = orgId
+			? await (await orgKeys(props)).revoke(orgId, keyId as number)
+			: (await props.apiClient.revokeApiKey(keyId as number)).data;
 		// Check which key the response names: a `revoked: true` for some other id is not
 		// evidence that the one we issued is gone.
 		return data.revoked === true && data.id === keyId;
@@ -410,7 +428,7 @@ const withdraw = async (
 
 const revoke = async (props: RevokeProps) => {
 	const out = writer(props);
-	const { data } = await revokeOrExplain(props);
+	const data = await revokeOrExplain(props);
 	out.write(data, {
 		fields: ["id", "name", "revoked", "last_used_at"],
 		title: "API key",
