@@ -428,11 +428,69 @@ export type CommandResult =
 
 const OUTPUT_TAIL_BYTES = 64 * 1024;
 
-// Yarn is left out: its `YN####` records do not say which one is the failure, and build
-// notices come first.
-const PACKAGE_MANAGER_ERROR_CODES = [
-	/npm (?:ERR!|error) code ([A-Z][A-Z0-9_]{1,40})\b/,
-	/\b(ERR_PNPM_[A-Z0-9_]{1,60})\b/,
+// Only codes from these lists are reported, read from the start of the package manager's own
+// error line: a lifecycle script or a path can print anything else. Yarn is left out, since its
+// `YN####` records do not say which one is the failure.
+const NPM_ERROR_CODES = new Set([
+	"CERT_HAS_EXPIRED",
+	"E401",
+	"E403",
+	"E404",
+	"E500",
+	"E502",
+	"E503",
+	"EACCES",
+	"EAI_AGAIN",
+	"EBADENGINE",
+	"EBADPLATFORM",
+	"ECONNREFUSED",
+	"ECONNRESET",
+	"EEXIST",
+	"EINTEGRITY",
+	"EJSONPARSE",
+	"ENOENT",
+	"ENOSPC",
+	"ENOTEMPTY",
+	"ENOTFOUND",
+	"ENOTSUP",
+	"ENOWORKSPACES",
+	"EOVERRIDE",
+	"EPERM",
+	"ERESOLVE",
+	"ERR_SOCKET_TIMEOUT",
+	"ETARGET",
+	"ETIMEDOUT",
+	"EUNSUPPORTEDPROTOCOL",
+	"SELF_SIGNED_CERT_IN_CHAIN",
+	"UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+]);
+
+const PNPM_ERROR_CODES = new Set([
+	"ERR_PNPM_ADDING_TO_ROOT",
+	"ERR_PNPM_BAD_PM_VERSION",
+	"ERR_PNPM_EACCES",
+	"ERR_PNPM_ENOENT",
+	"ERR_PNPM_EPERM",
+	"ERR_PNPM_FETCH_401",
+	"ERR_PNPM_FETCH_403",
+	"ERR_PNPM_FETCH_404",
+	"ERR_PNPM_IGNORED_BUILDS",
+	"ERR_PNPM_LOCKFILE_BREAKING_CHANGE",
+	"ERR_PNPM_META_FETCH_FAIL",
+	"ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND",
+	"ERR_PNPM_NO_MATCHING_VERSION",
+	"ERR_PNPM_NO_OFFLINE_META",
+	"ERR_PNPM_NO_OFFLINE_TARBALL",
+	"ERR_PNPM_OUTDATED_LOCKFILE",
+	"ERR_PNPM_PEER_DEP_ISSUES",
+	"ERR_PNPM_TARBALL_INTEGRITY",
+	"ERR_PNPM_UNSUPPORTED_ENGINE",
+	"ERR_PNPM_WORKSPACE_PKG_NOT_FOUND",
+]);
+
+const PACKAGE_MANAGER_ERROR_LINES = [
+	{ pattern: /^npm (?:ERR!|error) code (\S+)$/gm, known: NPM_ERROR_CODES },
+	{ pattern: /^\s*(ERR_PNPM_[A-Z0-9_]+)\b/gm, known: PNPM_ERROR_CODES },
 ];
 
 /** The most specific failure code available, without any of the child's free-form output. */
@@ -444,10 +502,12 @@ export const installFailureDetail = (input: {
 	if (input.spawnErrorCode !== undefined) {
 		return input.spawnErrorCode;
 	}
-	for (const pattern of PACKAGE_MANAGER_ERROR_CODES) {
-		const code = input.output.match(pattern)?.[1];
-		if (code !== undefined) {
-			return code;
+	for (const { pattern, known } of PACKAGE_MANAGER_ERROR_LINES) {
+		for (const match of input.output.matchAll(pattern)) {
+			const code = match[1];
+			if (code !== undefined && known.has(code)) {
+				return code;
+			}
 		}
 	}
 	return input.exitCode === null ? "killed" : `exit code ${input.exitCode}`;

@@ -62,6 +62,23 @@ describe("installFailureDetail", () => {
 		).toBe("exit code 1");
 	});
 
+	it("reports only known codes read from the start of the package manager's error line", () => {
+		const detail = (output: string) =>
+			installFailureDetail({ exitCode: 1, output });
+		expect(
+			detail(
+				"npm error code 1\nnpm error path /home/someone/ERR_PNPM_CUSTOMER_ACME/app",
+			),
+		).toBe("exit code 1");
+		expect(detail("npm error code ECUSTOMERNAME")).toBe("exit code 1");
+		expect(detail("> postinstall\nprinting npm error code ERESOLVE")).toBe(
+			"exit code 1",
+		);
+		expect(detail("npm error code 1\nnpm error code ERESOLVE")).toBe(
+			"ERESOLVE",
+		);
+	});
+
 	it("ignores an npm code that is not a bounded token", () => {
 		expect(
 			installFailureDetail({
