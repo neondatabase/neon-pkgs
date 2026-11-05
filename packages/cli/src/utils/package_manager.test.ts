@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
 	commandEnv,
@@ -16,10 +16,150 @@ import {
 	formatInstallCommand,
 	globalInstallCommand,
 	inferPackageManager,
+	installFailureDetail,
 	type PackageManager,
 	resolveInvokingPackageManager,
 	resolvePackageManager,
+	runCommandWithDetail,
 } from "./package_manager.js";
+
+describe("installFailureDetail", () => {
+	it("prefers the spawn error code", () => {
+		expect(
+			installFailureDetail({
+				spawnErrorCode: "ENOENT",
+				exitCode: null,
+				output: "npm error code ERESOLVE",
+			}),
+		).toBe("ENOENT");
+	});
+
+	it("reads npm, pnpm, and yarn error codes from stderr", () => {
+		const detail = (output: string) =>
+			installFailureDetail({ exitCode: 1, output });
+		expect(
+			detail(
+				"npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve",
+			),
+		).toBe("ERESOLVE");
+		expect(detail("npm ERR! code E404\nnpm ERR! 404 Not Found")).toBe(
+			"E404",
+		);
+		expect(
+			detail(
+				"ERR_PNPM_ADDING_TO_ROOT  Running this command will add the dependency to the workspace root",
+			),
+		).toBe("ERR_PNPM_ADDING_TO_ROOT");
+		expect(detail("➤ YN0001: │ Error: something")).toBe("YN0001");
+	});
+
+	it("skips yarn's informational record and takes the first error record", () => {
+		expect(
+			installFailureDetail({
+				exitCode: 1,
+				output: "➤ YN0000: ┌ Resolution step\n➤ YN0035: │ @neon/config: Package not found\n➤ YN0001: │ Error",
+			}),
+		).toBe("YN0035");
+	});
+
+	it("ignores an npm code that is not a bounded token", () => {
+		expect(
+			installFailureDetail({
+				exitCode: 1,
+				output: "npm error code /Users/someone/secret-path",
+			}),
+		).toBe("exit code 1");
+	});
+
+	it("falls back to the exit code and never returns free-form output", () => {
+		expect(
+			installFailureDetail({
+				exitCode: 2,
+				output: "error: /Users/someone/app/package.json is broken",
+			}),
+		).toBe("exit code 2");
+		expect(installFailureDetail({ exitCode: null, output: "" })).toBe(
+			"killed",
+		);
+	});
+});
+
+describe("runCommandWithDetail", () => {
+	const streams = [process.stdout, process.stderr];
+	const isTTY = streams.map((stream) => stream.isTTY);
+	beforeEach(() => {
+		for (const stream of streams) {
+			Object.defineProperty(stream, "isTTY", {
+				value: false,
+				configurable: true,
+			});
+		}
+	});
+	afterEach(() => {
+		streams.forEach((stream, index) => {
+			Object.defineProperty(stream, "isTTY", {
+				value: isTTY[index],
+				configurable: true,
+			});
+		});
+		vi.restoreAllMocks();
+	});
+
+	it("reads a code the package manager prints on stdout, as pnpm does", async () => {
+		const write = vi.spyOn(process.stdout, "write");
+		const result = await runCommandWithDetail(
+			process.execPath,
+			[
+				"-e",
+				'process.stdout.write(" ERR_PNPM_NO_OFFLINE_META  Failed to resolve\\n"); process.exit(1)',
+			],
+			tmpdir(),
+		);
+		expect(result).toEqual({
+			ok: false,
+			detail: "ERR_PNPM_NO_OFFLINE_META",
+		});
+		expect(
+			write.mock.calls.some((call) =>
+				String(call[0]).includes("ERR_PNPM_NO_OFFLINE_META"),
+			),
+		).toBe(true);
+	});
+
+	it("passes the child's stderr through and reports its error code", async () => {
+		const write = vi.spyOn(process.stderr, "write");
+		const result = await runCommandWithDetail(
+			process.execPath,
+			[
+				"-e",
+				'process.stderr.write("npm error code ERESOLVE\\n"); process.exit(1)',
+			],
+			tmpdir(),
+		);
+		expect(result).toEqual({ ok: false, detail: "ERESOLVE" });
+		expect(
+			write.mock.calls.some((call) =>
+				String(call[0]).includes("npm error code ERESOLVE"),
+			),
+		).toBe(true);
+	});
+
+	it("reports a missing command by its spawn error code", async () => {
+		expect(
+			await runCommandWithDetail(
+				"neon-definitely-not-a-package-manager",
+				["install"],
+				tmpdir(),
+			),
+		).toEqual({ ok: false, detail: "ENOENT" });
+	});
+
+	it("succeeds without a detail", async () => {
+		expect(
+			await runCommandWithDetail(process.execPath, ["-e", ""], tmpdir()),
+		).toEqual({ ok: true });
+	});
+});
 
 describe("detectProjectPackageManager", () => {
 	let project: string;

@@ -298,7 +298,7 @@ describe("config add", () => {
 			target: { kind: "service", service: "data-api" },
 			run: (_cmd, args, cwd) => {
 				calls.push({ args, cwd });
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 
@@ -319,7 +319,7 @@ describe("config add", () => {
 			target: { kind: "service", service: "auth" },
 			run: (_cmd, args) => {
 				calls.push(args);
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 

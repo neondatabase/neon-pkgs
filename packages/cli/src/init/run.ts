@@ -1370,6 +1370,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					const failed = installFailedNext(
 						error.command,
 						linkDeferredPull,
+						error.message,
 					);
 					printInitDone(
 						formatInitDone({

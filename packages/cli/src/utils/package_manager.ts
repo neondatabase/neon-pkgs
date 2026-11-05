@@ -419,32 +419,117 @@ export const runCommand = (
 	 */
 	env?: NodeJS.ProcessEnv,
 ): Promise<boolean> =>
+	runCommandWithDetail(cmd, args, cwd, env).then((result) => result.ok);
+
+export type CommandResult = {
+	ok: boolean;
+	/** Why it failed, as codes only (`ENOENT`, `ERESOLVE`, `exit code 1`): safe for telemetry. */
+	detail?: string;
+};
+
+const OUTPUT_TAIL_BYTES = 64 * 1024;
+
+// Bounded token shapes only, so nothing from the user's project can ride along. YN0000 is
+// yarn's informational record, printed before any error.
+const PACKAGE_MANAGER_ERROR_CODES = [
+	/npm (?:ERR!|error) code ([A-Z][A-Z0-9_]{1,40})\b/,
+	/\b(ERR_PNPM_[A-Z0-9_]{1,60})\b/,
+	/\b(YN(?!0000)\d{4})\b/,
+];
+
+/** The most specific failure code available, without any of the child's free-form output. */
+export const installFailureDetail = (input: {
+	spawnErrorCode?: string;
+	exitCode: number | null;
+	output: string;
+}): string => {
+	if (input.spawnErrorCode !== undefined) {
+		return input.spawnErrorCode;
+	}
+	for (const pattern of PACKAGE_MANAGER_ERROR_CODES) {
+		const code = input.output.match(pattern)?.[1];
+		if (code !== undefined) {
+			return code;
+		}
+	}
+	return input.exitCode === null ? "killed" : `exit code ${input.exitCode}`;
+};
+
+/**
+ * {@link runCommand} that also says why the command failed. Each of stdout and stderr that is
+ * not a terminal is piped, copied to ours as it arrives, and scanned for the package manager's
+ * error code (pnpm prints its code on stdout). A terminal stream stays inherited, so prompts
+ * and colors are unchanged.
+ */
+export const runCommandWithDetail = (
+	cmd: string,
+	args: string[],
+	cwd: string,
+	env?: NodeJS.ProcessEnv,
+): Promise<CommandResult> =>
 	new Promise((resolvePromise) => {
+		const pipeUnlessTerminal = (stream: NodeJS.WriteStream) =>
+			stream.isTTY === true ? "inherit" : "pipe";
 		// npm/pnpm/yarn ship as .cmd shims on Windows, which need a shell to run.
 		const child = spawn(cmd, args, {
 			cwd,
-			stdio: "inherit",
+			stdio: [
+				"inherit",
+				pipeUnlessTerminal(process.stdout),
+				pipeUnlessTerminal(process.stderr),
+			],
 			shell: process.platform === "win32",
 			env: commandEnv(env),
 		});
+		let output = "";
+		const forward = (target: NodeJS.WriteStream) => (chunk: Buffer) => {
+			target.write(chunk);
+			output = (output + chunk.toString("utf8")).slice(
+				-OUTPUT_TAIL_BYTES,
+			);
+		};
+		child.stdout?.on("data", forward(process.stdout));
+		child.stderr?.on("data", forward(process.stderr));
+		let settled = false;
+		const settle = (result: CommandResult) => {
+			if (!settled) {
+				settled = true;
+				resolvePromise(result);
+			}
+		};
 		child.on("error", (err) => {
 			log.warning(
 				"Could not run `%s %s`: %s",
 				cmd,
 				args.join(" "),
-				err instanceof Error ? err.message : String(err),
+				err.message,
 			);
-			resolvePromise(false);
+			settle({
+				ok: false,
+				detail: installFailureDetail({
+					spawnErrorCode:
+						"code" in err && typeof err.code === "string"
+							? err.code
+							: "spawn failed",
+					exitCode: null,
+					output,
+				}),
+			});
 		});
 		child.on("close", (code) => {
-			if (code !== 0) {
-				log.warning(
-					"`%s %s` exited with code %d.",
-					cmd,
-					args.join(" "),
-					code,
-				);
+			if (code === 0) {
+				settle({ ok: true });
+				return;
 			}
-			resolvePromise(code === 0);
+			log.warning(
+				"`%s %s` exited with code %d.",
+				cmd,
+				args.join(" "),
+				code,
+			);
+			settle({
+				ok: false,
+				detail: installFailureDetail({ exitCode: code, output }),
+			});
 		});
 	});

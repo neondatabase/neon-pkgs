@@ -64,6 +64,7 @@ import {
 } from "../context.js";
 import { isCi, isInteractiveTerminal } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
+import { DetailedError } from "../errors.js";
 import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
@@ -109,7 +110,7 @@ import {
 	installArgs,
 	type PackageManager,
 	resolvePackageManager,
-	runCommand,
+	runCommandWithDetail,
 } from "../utils/package_manager.js";
 import { pickServicesInteractively } from "../utils/service_picker.js";
 import { zipBundle } from "../utils/zip.js";
@@ -274,11 +275,14 @@ const DEPENDENCY_FIELDS = [
 	"optionalDependencies",
 ] as const;
 
-export class ConfigInstallFailed extends Error {
+export class ConfigInstallFailed extends DetailedError {
 	readonly command: string;
 
-	constructor(command: string) {
-		super("Could not install the Neon dependencies.");
+	constructor(command: string, pm: PackageManager, detail: string) {
+		super(
+			`Could not install the Neon dependencies with ${pm} (${detail}).`,
+			detail,
+		);
 		this.name = "ConfigInstallFailed";
 		this.command = command;
 	}
@@ -325,7 +329,7 @@ export type ConfigInitProps = {
 	 */
 	install?: boolean;
 	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
-	run?: typeof runCommand;
+	run?: typeof runCommandWithDetail;
 	/**
 	 * Package manager to install with. When omitted, {@link resolvePackageManager}
 	 * chooses from the project lockfile, invocation, PATH, then npm.
@@ -546,7 +550,7 @@ export const ensureConfigPackages = async (
 		"install" | "run" | "packageManager" | "requireInstall" | "silent"
 	>,
 ): Promise<void> => {
-	const run = props.run ?? runCommand;
+	const run = props.run ?? runCommandWithDetail;
 	const missing = missingDependencies(cwd);
 	if (missing.length === 0) {
 		if (!props.silent) {
@@ -584,13 +588,16 @@ export const ensureConfigPackages = async (
 	if (!props.silent) {
 		log.info("Installing %s with %s…", missing.join(", "), pm);
 	}
-	const ok = await run(pm, args, cwd);
-	if (!ok) {
+	const result = await run(pm, args, cwd);
+	if (!result.ok) {
+		const detail = result.detail ?? "failed";
 		if (props.requireInstall) {
-			throw new ConfigInstallFailed(installHint);
+			throw new ConfigInstallFailed(installHint, pm, detail);
 		}
 		log.warning(
-			"Could not install the config packages automatically. Run by hand: %s",
+			"Could not install the config packages automatically with %s (%s). Run by hand: %s",
+			pm,
+			detail,
 			installHint,
 		);
 	}
@@ -697,7 +704,7 @@ export type ConfigAddProps = {
 	config?: string;
 	/** Only used when `config add` has to create neon.ts; see {@link ConfigInitProps}. */
 	install?: boolean;
-	run?: typeof runCommand;
+	run?: typeof runCommandWithDetail;
 	packageManager?: PackageManager;
 };
 

@@ -564,7 +564,7 @@ describe("init handler", () => {
 					config: "created",
 					agents_installed: [],
 					error_step: "plugins",
-					error_code: "UNKNOWN_ERROR",
+					error_code: "PLUGINS_CLI_FAILED",
 					error_message: expect.stringMatching(
 						/^plugins CLI timed out after 120 seconds:\nplugins banner\nRetry with: neon plugins/,
 					),

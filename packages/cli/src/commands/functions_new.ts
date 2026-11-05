@@ -40,7 +40,7 @@ import {
 	installArgs,
 	type PackageManager,
 	resolvePackageManager,
-	runCommand,
+	runCommandWithDetail,
 } from "../utils/package_manager.js";
 import { writer } from "../writer.js";
 import {
@@ -83,7 +83,7 @@ export type ScaffoldFromTemplateOptions = {
 	cwd?: string;
 	registry?: Registry;
 	interactive: boolean;
-	run?: typeof runCommand;
+	run?: typeof runCommandWithDetail;
 };
 
 export type ScaffoldedFunction = Pick<
@@ -322,11 +322,13 @@ export const scaffoldFromTemplate = async (
 	}
 	let installed = false;
 	if (install && dependencies.length > 0) {
-		installed = await (options.run ?? runCommand)(
-			pm,
-			installArgs(pm, dependencies, { exact: true }),
-			projectRoot,
-		);
+		installed = (
+			await (options.run ?? runCommandWithDetail)(
+				pm,
+				installArgs(pm, dependencies, { exact: true }),
+				projectRoot,
+			)
+		).ok;
 		if (!installed) {
 			log.warning(
 				"Could not install %s. Run by hand: `%s`",

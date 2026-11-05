@@ -58,7 +58,7 @@ describe("config init", () => {
 			install: true,
 			run: (cmd, args, cwd) => {
 				calls.push({ cmd, args, cwd });
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 
@@ -79,7 +79,7 @@ describe("config init", () => {
 
 		await initCmd({
 			cwd: workspace,
-			run: () => Promise.resolve(true),
+			run: () => Promise.resolve({ ok: true }),
 		});
 
 		expect(readFileSync(join(workspace, ".gitignore"), "utf8")).toBe(
@@ -92,7 +92,7 @@ describe("config init", () => {
 
 		await initCmd({
 			cwd: workspace,
-			run: () => Promise.resolve(true),
+			run: () => Promise.resolve({ ok: true }),
 		});
 
 		expect(readFileSync(join(workspace, ".gitignore"), "utf8")).toBe(
@@ -111,7 +111,7 @@ describe("config init", () => {
 			install: true,
 			run: (cmd, args) => {
 				calls.push({ cmd, args });
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 
@@ -134,7 +134,7 @@ describe("config init", () => {
 			install: true,
 			run: (_cmd, args) => {
 				calls.push(args);
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 
@@ -159,7 +159,7 @@ describe("config init", () => {
 			cwd: workspace,
 			run: (_cmd, args) => {
 				calls.push(args);
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 
@@ -174,7 +174,7 @@ describe("config init", () => {
 			install: false,
 			run: (_cmd, args) => {
 				calls.push(args);
-				return Promise.resolve(true);
+				return Promise.resolve({ ok: true });
 			},
 		});
 
@@ -189,7 +189,7 @@ describe("config init", () => {
 		const app = join(workspace, "app");
 		mkdirSync(app);
 
-		await initCmd({ cwd: app, run: () => Promise.resolve(true) });
+		await initCmd({ cwd: app, run: () => Promise.resolve({ ok: true }) });
 
 		expect(readFileSync(join(app, "package.json"), "utf8")).toBe("{}\n");
 		expect(readFileSync(join(workspace, "package.json"), "utf8")).toBe("");
@@ -205,10 +205,12 @@ describe("config init", () => {
 			cwd: workspace,
 			requireInstall: true,
 			packageManager: "npm",
-			run: () => Promise.resolve(false),
+			run: () => Promise.resolve({ ok: false, detail: "exit code 1" }),
 		});
 
 		await expect(failed).rejects.toMatchObject({
+			message:
+				"Could not install the Neon dependencies with npm (exit code 1).",
 			command: expect.stringMatching(
 				/^cd \S*neonctl-config-init-\S+ && npm install @neon\/config @neon\/env$/,
 			),
@@ -219,7 +221,10 @@ describe("config init", () => {
 		const original = '{ "name": "app", "type": "module" }\n';
 		writeFileSync(join(workspace, "package.json"), original);
 
-		await initCmd({ cwd: workspace, run: () => Promise.resolve(true) });
+		await initCmd({
+			cwd: workspace,
+			run: () => Promise.resolve({ ok: true }),
+		});
 
 		expect(readFileSync(join(workspace, "package.json"), "utf8")).toBe(
 			original,
