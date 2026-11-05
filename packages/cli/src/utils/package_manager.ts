@@ -426,7 +426,7 @@ export type CommandResult =
 	/** `detail` is a code such as `ENOENT`, `ERESOLVE`, or `exit code 1`. */
 	| { ok: false; detail: string };
 
-const OUTPUT_TAIL_BYTES = 64 * 1024;
+const OUTPUT_TAIL_CHARS = 64 * 1024;
 
 // Only codes from these lists are reported, read from the start of the package manager's own
 // error line: a lifecycle script or a path can print anything else. Yarn is left out, since its
@@ -547,7 +547,7 @@ export const runCommandWithDetail = (
 		) => {
 			source.on("data", (chunk: Buffer) => {
 				output = (output + chunk.toString("utf8")).slice(
-					-OUTPUT_TAIL_BYTES,
+					-OUTPUT_TAIL_CHARS,
 				);
 				if (!target.write(chunk)) {
 					source.pause();
