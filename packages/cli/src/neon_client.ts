@@ -8,6 +8,7 @@ import {
 	DEFAULT_API_HOST,
 	httpError,
 	RETRY_COUNT,
+	unreadableBodyError,
 } from "./api.js";
 
 /**
@@ -37,7 +38,10 @@ export const getNeonClient = ({
 export function fromSdkError(error: unknown, apiHost?: string): Error {
 	const base = apiHost ?? DEFAULT_API_HOST;
 	if (error instanceof SdkApiError && error.response?.url.startsWith(base)) {
-		return httpError(error.response, error.body);
+		// The SDK quotes a 2xx body it could not parse, and that body can carry a password.
+		return error.response.ok
+			? unreadableBodyError(error.response, error.body)
+			: httpError(error.response, error.body);
 	}
 	return new Error(error instanceof Error ? error.message : String(error));
 }

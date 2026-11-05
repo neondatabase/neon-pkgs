@@ -12,6 +12,14 @@ import { writer } from "../writer.js";
 const ROLES_FIELDS = ["name", "created_at"] as const;
 // The API generates the password and returns it only here, so the table must show it.
 const CREATED_ROLE_FIELDS = ["name", "password", "created_at"] as const;
+const ROLE_DETAIL_FIELDS = [
+	"name",
+	"branch_id",
+	"protected",
+	"authentication_method",
+	"created_at",
+	"updated_at",
+] as const;
 const ROLE_ACCESS: readonly RoleAccess[] = ["admin", "read_only", "read_write"];
 
 export const command = "roles";
@@ -85,6 +93,26 @@ export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 						return true;
 					}),
 			(args) => create(args as any),
+		)
+		.command(
+			"get <role>",
+			"Get a role",
+			(yargs) => yargs,
+			(args) => get(args as any),
+		)
+		.command(
+			"reset-password <role>",
+			"Reset a role's password and print the new one",
+			(yargs) =>
+				yargs.options({
+					wait: {
+						describe:
+							"Wait until the compute applies the new password. Use --no-wait to return as soon as the API accepts the reset",
+						type: "boolean",
+						default: true,
+					},
+				}),
+			(args) => resetPassword(args as any),
 		)
 		.command(
 			"delete <role>",
@@ -193,4 +221,41 @@ export const deleteRole = async (
 	log.info(
 		`Role "${props.role}" not found on branch ${branch?.name ?? branchId}; nothing to delete.`,
 	);
+};
+
+export const get = async (props: BranchScopeProps & { role: string }) => {
+	const { branchId } = await resolveBranchFromProps(props);
+	const { fromSdkError, getNeonClient } = await import("../neon_client.js");
+	const role = await getNeonClient(props)
+		.postgres.roles.get({
+			projectId: props.projectId,
+			branchId,
+			roleName: props.role,
+		})
+		.catch((error: unknown) => {
+			throw fromSdkError(error, props.apiHost);
+		});
+	writer(props).end(role, { fields: ROLE_DETAIL_FIELDS });
+};
+
+export const resetPassword = async (
+	props: BranchScopeProps & { role: string; wait: boolean },
+) => {
+	const { branchId, branch } = await resolveBranchFromProps(props);
+	const { fromSdkError, getNeonClient } = await import("../neon_client.js");
+	const role = await getNeonClient(props)
+		.postgres.roles.resetPassword(
+			{ projectId: props.projectId, branchId, roleName: props.role },
+			{ waitForReadiness: props.wait },
+		)
+		.catch((error: unknown) => {
+			throw fromSdkError(error, props.apiHost);
+		});
+	const branchLabel = branch?.name ?? branchId;
+	writer(props).end(role, {
+		fields: CREATED_ROLE_FIELDS,
+		humanTitle: props.wait
+			? `Password reset for ${props.role} on ${branchLabel}`
+			: `Password reset for ${props.role} on ${branchLabel} accepted, not yet applied`,
+	});
 };
