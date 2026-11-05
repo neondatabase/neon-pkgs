@@ -1,5 +1,11 @@
 # @neon/tools
 
+## 2.9.0
+
+### Minor Changes
+
+- 7700352: Every tool input now has a description in its JSON Schema: the first sentence of the OpenAPI description, or handwritten copy where the spec has none.
+
 ## 2.8.0
 
 ### Minor Changes
