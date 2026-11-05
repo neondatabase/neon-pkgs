@@ -429,12 +429,11 @@ export type CommandResult = {
 
 const OUTPUT_TAIL_BYTES = 64 * 1024;
 
-// Bounded token shapes only, so nothing from the user's project can ride along. YN0000 is
-// yarn's informational record, printed before any error.
+// Bounded token shapes only, so nothing from the user's project can ride along. Yarn is left
+// out: its `YN####` records do not say which one is the failure, and build notices come first.
 const PACKAGE_MANAGER_ERROR_CODES = [
 	/npm (?:ERR!|error) code ([A-Z][A-Z0-9_]{1,40})\b/,
 	/\b(ERR_PNPM_[A-Z0-9_]{1,60})\b/,
-	/\b(YN(?!0000)\d{4})\b/,
 ];
 
 /** The most specific failure code available, without any of the child's free-form output. */
@@ -482,20 +481,35 @@ export const runCommandWithDetail = (
 			env: commandEnv(env),
 		});
 		let output = "";
-		const forward = (target: NodeJS.WriteStream) => (chunk: Buffer) => {
-			target.write(chunk);
-			output = (output + chunk.toString("utf8")).slice(
-				-OUTPUT_TAIL_BYTES,
-			);
+		// Read without pausing: a child that exits right after writing would lose whatever it
+		// still had queued for a full pipe.
+		const forward = (
+			source: NodeJS.ReadableStream,
+			target: NodeJS.WriteStream,
+		) => {
+			source.on("data", (chunk: Buffer) => {
+				output = (output + chunk.toString("utf8")).slice(
+					-OUTPUT_TAIL_BYTES,
+				);
+				target.write(chunk);
+			});
 		};
-		child.stdout?.on("data", forward(process.stdout));
-		child.stderr?.on("data", forward(process.stderr));
+		if (child.stdout) forward(child.stdout, process.stdout);
+		if (child.stderr) forward(child.stderr, process.stderr);
+		// Callers may `process.exit` right after a failure, which drops writes still queued
+		// for a pipe. An empty write's callback runs once everything before it is flushed.
+		const flushed = (stream: NodeJS.WriteStream) =>
+			new Promise<void>((resolveFlush) =>
+				stream.write("", () => resolveFlush()),
+			);
 		let settled = false;
 		const settle = (result: CommandResult) => {
-			if (!settled) {
-				settled = true;
-				resolvePromise(result);
-			}
+			if (settled) return;
+			settled = true;
+			void Promise.all([
+				flushed(process.stdout),
+				flushed(process.stderr),
+			]).then(() => resolvePromise(result));
 		};
 		child.on("error", (err) => {
 			log.warning(

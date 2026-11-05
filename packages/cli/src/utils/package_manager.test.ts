@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
 	mkdirSync,
 	mkdtempSync,
@@ -50,16 +51,15 @@ describe("installFailureDetail", () => {
 				"ERR_PNPM_ADDING_TO_ROOT  Running this command will add the dependency to the workspace root",
 			),
 		).toBe("ERR_PNPM_ADDING_TO_ROOT");
-		expect(detail("➤ YN0001: │ Error: something")).toBe("YN0001");
 	});
 
-	it("skips yarn's informational record and takes the first error record", () => {
+	it("reports yarn failures by exit code, since its records do not mark the failing one", () => {
 		expect(
 			installFailureDetail({
 				exitCode: 1,
-				output: "➤ YN0000: ┌ Resolution step\n➤ YN0035: │ @neon/config: Package not found\n➤ YN0001: │ Error",
+				output: "➤ YN0007: │ app@workspace:. must be built because it never has been before\n➤ YN0009: │ app@workspace:. couldn't be built successfully (exit code 1)",
 			}),
-		).toBe("YN0035");
+		).toBe("exit code 1");
 	});
 
 	it("ignores an npm code that is not a bounded token", () => {
@@ -142,6 +142,47 @@ describe("runCommandWithDetail", () => {
 				String(call[0]).includes("npm error code ERESOLVE"),
 			),
 		).toBe(true);
+	});
+
+	it("delivers all of a large output to a slow reader before resolving", async () => {
+		const bytes = 1024 * 1024;
+		const built = new URL(
+			"../../dist/utils/package_manager.js",
+			import.meta.url,
+		).href;
+		const runner = `
+import { runCommandWithDetail } from ${JSON.stringify(built)};
+const result = await runCommandWithDetail(process.execPath, ["-e", "process.stdout.write('x'.repeat(${bytes})); process.exitCode = 1"], process.cwd());
+process.stderr.write(JSON.stringify(result));
+process.exit(1);
+`;
+		const received = await new Promise<{ stdout: number; stderr: string }>(
+			(resolveRun, reject) => {
+				const child = spawn(
+					process.execPath,
+					["--input-type=module", "-e", runner],
+					{ stdio: ["ignore", "pipe", "pipe"] },
+				);
+				let stdout = 0;
+				let stderr = "";
+				child.stdout.pause();
+				setTimeout(() => {
+					child.stdout.on("data", (chunk: Buffer) => {
+						stdout += chunk.length;
+					});
+					child.stdout.resume();
+				}, 300);
+				child.stderr.on("data", (chunk: Buffer) => {
+					stderr += chunk.toString();
+				});
+				child.on("error", reject);
+				child.on("close", () => resolveRun({ stdout, stderr }));
+			},
+		);
+		expect(received.stdout).toBe(bytes);
+		expect(received.stderr).toContain(
+			'{"ok":false,"detail":"exit code 1"}',
+		);
 	});
 
 	it("reports a missing command by its spawn error code", async () => {
