@@ -1472,7 +1472,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 						...(envPullPlan.kind === "services"
 							? {
 									services: envPullPlan.services,
-									envKeys: envPullPlan.envKeys,
 								}
 							: {}),
 					}),

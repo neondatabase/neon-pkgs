@@ -1,6 +1,5 @@
 import { homedir } from "node:os";
 import { isAbsolute, relative } from "node:path";
-import { isFunctionBaseUrlKey } from "@neon-internals/env-core/env";
 import chalk from "chalk";
 import {
 	BRANCH_ENV_KEY,
@@ -38,7 +37,6 @@ const GROUP_ORDER = [
 
 const groupOf = (key: string): string => {
 	if (key === BRANCH_ENV_KEY || key === "NEON_BRANCH_ID") return BRANCH_GROUP;
-	if (isFunctionBaseUrlKey(key)) return NEON_SERVICE_LABELS.functions;
 	const pullKey = ENV_PULL_KEYS.find((candidate) => candidate === key);
 	const service = pullKey ? serviceForEnvKey(pullKey) : null;
 	return service ? NEON_SERVICE_LABELS[service] : OTHER_GROUP;

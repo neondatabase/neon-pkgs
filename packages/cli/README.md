@@ -570,8 +570,8 @@ The human-readable summary line goes to stderr and the diff body to stdout, so `
 **What gets pulled**, in precedence order:
 
 1. **`--service` and/or `--env`**, when you pass either — their union is the complete selection, ignoring `neon.ts` and unselected branch variables. `--service` adds a service's complete variable bundle; `--env` adds only the individual variables you name.
-2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`. Declared function URLs are derived from the branch connection host; the function does not have to be deployed.
-3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, object storage, and function invocation URLs read back from the branch, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
+2. **`neon.ts`**, when the working directory has one — the policy is the source of truth, same as `neon dev` and `neon deploy`. The shared function host suffix is derived from the branch connection host; functions do not have to be deployed.
+3. **Everything the branch has** otherwise — Postgres, Neon Auth, the Data API, object storage, and shared function routing, plus the AI Gateway. The gateway has no branch-level state to read back, so a bare `env pull` asks for it rather than detecting it and may mint a branch credential. To leave it out, name only what you do want with `--service` and/or `--env`.
 
 On an unclaimed Claimable Neon project, `neon.ts` is still the source of truth when it only declares Postgres, Auth, and the Data API. A `neon.ts` that declares AI Gateway, Functions, or Object Storage fails: those cannot be used until the project is claimed. Without a `neon.ts`, a bare pull writes provisioned Postgres, Auth, and Data API. Naming AI Gateway, Functions, or Object Storage with `--service` / `--env` warns and writes nothing for them. `--config` selects the policy file, the same flag as `claim create` and `config plan`.
 
@@ -601,9 +601,9 @@ neon env pull -e DATABASE_URL,NEON_AUTH_BASE_URL
 # The selectors compose as a union: all Auth vars plus DATABASE_URL
 neon env pull -s auth -e DATABASE_URL
 
-# Function invocation URLs
+# Shared function routing
 neon env pull -s functions
-neon env pull -e NEON_FUNCTION_HELLO_BASE_URL
+neon env pull -e NEON_FUNCTION_HOST_SUFFIX
 ```
 
 Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).
@@ -613,15 +613,15 @@ Every services flag in the CLI takes those three spellings, the same value synta
 | `postgres` | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` |
 | `auth` | `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL` |
 | `data-api` | `NEON_DATA_API_URL` |
-| `functions` | `NEON_FUNCTION_<SLUG>_BASE_URL` for each deployed function |
+| `functions` | `NEON_BRANCH_ID`, `NEON_FUNCTION_HOST_SUFFIX` |
 | `object-storage` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` |
 | `ai-gateway` | `NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL` |
 
-`-e, --env` accepts any variable in the table plus `NEON_BRANCH`, or `NEON_FUNCTION_<SLUG>_BASE_URL` where `<SLUG>` is the function slug uppercased. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
+`-e, --env` accepts any variable in the table plus `NEON_BRANCH`. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
 
 `--env` never narrows `--service`: `neon env pull -s postgres -e DATABASE_URL` still pulls the complete Postgres bundle (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `NEON_BRANCH`). The two selectors always form a union.
 
-**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines, and a branch without those functions prunes stale `NEON_FUNCTION_*_BASE_URL` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
 
 **A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other variables still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
 
@@ -639,14 +639,14 @@ Console), or drop auth from --service.
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 
-**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. Each `NEON_FUNCTION_<SLUG>_BASE_URL` this process is serving is rewritten to `http://localhost:<port>`: every neon.ts function, or the matching slug when `--source` names one. `neon env pull` and `neon-env run` write the production URL (`https://<branchId>-<slug>.compute.…`).
+**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject.
 
 Unscoped pulls and `neon dev` also resolve `NEON_BRANCH_ID` and
 `NEON_FUNCTION_HOST_SUFFIX` (for example `.compute.c-3.us-east-2.aws.neon.tech`),
 matching the variables deployed functions receive. `env pull --service functions`
 includes both; `--env` can select either individually. The `functionHostname(slug)`
-helper from `@neon/functions` combines them into a sibling's hostname and honors
-the per-function localhost URLs under `neon dev`.
+helper from `@neon/functions` combines them into a sibling's hostname and automatically
+uses locally assigned ports under `neon dev`.
 
 Before `neon.ts` is evaluated, `dev` loads the project directory's `.env`, then `.env.local`, which overrides it, into the environment, so Function env values written as `process.env.X!` resolve the same way they do for `neon deploy --env`. A variable already set in the shell wins over both. Local Functions inherit every loaded variable, including keys `neon.ts` doesn't declare; the deployed runtime gets only declared and Neon-injected env. `--env <file>` loads only that file, resolved from the current directory, matching `neon deploy --env`:
 
@@ -929,7 +929,7 @@ Without a TTY, pass `-y` or enough flags to answer every question. `-y` alone is
 
 `--project-id`, `--org-id`, `--project-name`, `--region-id`, and `--branch` are forwarded to `link`. They select linking. A linked directory is not relinked unless you pass one of those flags.
 
-Init pulls the branch's env vars once, after the `neon.ts` step, so the pull includes what `neon.ts` declares. The AI Gateway and Functions need no deploy and are pulled immediately. When `neon.ts` declares Auth, the Data API, Object Storage, or Realtime, init pulls Postgres, plus the AI Gateway and the scaffolded function's URL when declared. `neon deploy` provisions the rest and pulls their env vars. An existing `neon.ts` is pulled by `link` as usual.
+Init pulls the branch's env vars once, after the `neon.ts` step, so the pull includes what `neon.ts` declares. The AI Gateway and Functions need no deploy and are pulled immediately. When `neon.ts` declares Auth, the Data API, Object Storage, or Realtime, init pulls Postgres, plus the AI Gateway and shared function routing when declared. `neon deploy` provisions the rest and pulls their env vars. An existing `neon.ts` is pulled by `link` as usual.
 
 A failed step stops the rest. `--profile` and `--config-dir` are forwarded to each child. `--output json` and `--output yaml` are refused; the commands init runs print their own output.
 

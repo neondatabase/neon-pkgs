@@ -23,7 +23,6 @@ const READY_TIMEOUT_MS = 90_000;
 type Runtime = "pulled" | "dev" | "deployed" | "devSource" | "devExplicit";
 
 const FUNCTION_KEYS = new Set([
-	"NEON_FUNCTION_PROBE_BASE_URL",
 	"NEON_FUNCTION_HOST_SUFFIX",
 	"PROBE_SETTING",
 	"PROBE_EXTRA",
@@ -31,10 +30,6 @@ const FUNCTION_KEYS = new Set([
 
 function withoutFunctionKeys(keys: string[]): string[] {
 	return keys.filter((key) => !FUNCTION_KEYS.has(key));
-}
-
-function withoutFunctions(namespaces: string[]): string[] {
-	return namespaces.filter((namespace) => namespace !== "functions");
 }
 
 function namespaces(report: EnvReport, form: "external" | "scoped"): string[] {
@@ -113,6 +108,7 @@ async function fetchReport(url: string): Promise<EnvReport> {
  */
 describe.sequential("e2e — parseEnv matches the env each runtime provides", () => {
 	let projectId: string;
+	let invocationHost: string;
 	let tmp: string;
 	const collected: Partial<Record<Runtime, EnvReport>> = {};
 	const report = (where: Runtime): EnvReport => {
@@ -167,6 +163,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		const { invocation_url } = JSON.parse(fn.stdout) as {
 			invocation_url: string;
 		};
+		invocationHost = new URL(invocation_url).host;
 		collected.deployed = await fetchReport(invocation_url);
 
 		const envFile = join(tmp, ".env.pulled");
@@ -269,28 +266,20 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 
 	it("parseEnv returns the same namespaces everywhere", () => {
 		const pulled = namespaces(report("pulled"), "external");
-		expect(pulled).toContain("functions");
 		expect(namespaces(report("dev"), "external")).toEqual(pulled);
-		expect(
-			withoutFunctions(namespaces(report("deployed"), "external")),
-		).toEqual(withoutFunctions(pulled));
+		expect(namespaces(report("deployed"), "external")).toEqual(pulled);
 	});
 
 	it("non-secret values agree everywhere", () => {
+		const { NEON_FUNCTION_HOST_SUFFIX: pulledSuffix, ...pulled } =
+			report("pulled").values;
 		const {
-			NEON_FUNCTION_PROBE_BASE_URL: pulledUrl,
-			NEON_FUNCTION_HOST_SUFFIX: pulledSuffix,
-			...pulled
-		} = report("pulled").values;
-		const {
-			NEON_FUNCTION_PROBE_BASE_URL: devUrl,
 			NEON_FUNCTION_HOST_SUFFIX: devSuffix,
 			PROBE_SETTING: _dev,
 			PROBE_EXTRA: _devExtra,
 			...dev
 		} = report("dev").values;
 		const {
-			NEON_FUNCTION_PROBE_BASE_URL: deployedUrl,
 			NEON_FUNCTION_HOST_SUFFIX: deployedSuffix,
 			PROBE_SETTING: _deployed,
 			...deployed
@@ -303,17 +292,16 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 			report("pulled").databaseHost,
 		);
 
-		expect(pulledUrl).toMatch(/^https:\/\//);
-		expect(devUrl).toMatch(/^http:\/\/localhost:\d+$/);
 		expect(pulledSuffix).toMatch(/^\.compute\./);
 		expect(devSuffix).toBe(pulledSuffix);
-		expect(pulledUrl).toBe(
-			`https://${pulled.NEON_BRANCH_ID}-probe${pulledSuffix}`,
-		);
+		expect(report("pulled").functionHost).toBe(invocationHost);
+		expect(report("dev").functionHost).toMatch(/^localhost:\d+$/);
+		expect(report("devSource").functionHost).toMatch(/^localhost:\d+$/);
+		expect(report("devExplicit").functionHost).toMatch(/^localhost:\d+$/);
 		// Older runtimes may not provide the suffix yet.
 		if (deployedSuffix !== undefined)
 			expect(deployedSuffix).toBe(pulledSuffix);
-		// Not injected by the runtime yet; when it is, it must be the URL env pull writes.
-		if (deployedUrl !== undefined) expect(deployedUrl).toBe(pulledUrl);
+		if (deployedSuffix !== undefined)
+			expect(report("deployed").functionHost).toBe(invocationHost);
 	});
 });

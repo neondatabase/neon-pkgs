@@ -2160,7 +2160,7 @@ describe("init handler", () => {
 		expect(out).not.toContain("neon dev\n");
 	});
 
-	test("Functions next to a service awaiting a deploy keep their URL", async () => {
+	test("Functions next to a service awaiting a deploy pull shared routing", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fn-auth-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -2187,8 +2187,7 @@ describe("init handler", () => {
 
 		expect(envPull).toHaveBeenCalledWith(
 			expect.objectContaining({
-				services: ["postgres"],
-				envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+				services: ["postgres", "functions"],
 			}),
 		);
 		const out = stdoutText(stdout);

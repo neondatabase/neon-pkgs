@@ -254,7 +254,7 @@ export const shapeHookEnv = (resolved: ResolvedNeonEnv): HookEnv => ({
 		databaseUrlUnpooled: resolved.postgres?.databaseUrlUnpooled ?? "",
 	},
 	...(resolved.branch?.name
-		? { branch: { name: resolved.branch.name } }
+		? { branch: { ...resolved.branch, name: resolved.branch.name } }
 		: {}),
 	...(resolved.auth?.baseUrl !== undefined &&
 	resolved.auth.jwksUrl !== undefined
@@ -290,16 +290,6 @@ export const shapeHookEnv = (resolved: ResolvedNeonEnv): HookEnv => ({
 				},
 			}
 		: {}),
-	...(resolved.functions
-		? {
-				functions: Object.fromEntries(
-					Object.entries(resolved.functions).map(([slug, fn]) => [
-						slug,
-						{ baseUrl: fn.baseUrl },
-					]),
-				),
-			}
-		: {}),
 });
 
 /** Re-derive the OS-level env vars from a {@link HookEnv} for shell-hook injection. */
@@ -309,6 +299,9 @@ const hookEnvToProcessEnv = (env: HookEnv): Record<string, string> => {
 		DATABASE_URL_UNPOOLED: env.postgres.databaseUrlUnpooled,
 	};
 	if (env.branch?.name) out.NEON_BRANCH = env.branch.name;
+	if (env.branch?.id) out.NEON_BRANCH_ID = env.branch.id;
+	if (env.branch?.functionHostSuffix)
+		out.NEON_FUNCTION_HOST_SUFFIX = env.branch.functionHostSuffix;
 	if (env.auth) {
 		out.NEON_AUTH_BASE_URL = env.auth.baseUrl;
 		out.NEON_AUTH_JWKS_URL = env.auth.jwksUrl;

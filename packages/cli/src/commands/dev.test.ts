@@ -1,7 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { functionHostname } from "@neon/functions";
 import { describe, expect, it, vi } from "vitest";
 import { findConfigFunctionBySource } from "../dev/functions.js";
 import { test } from "../test_utils/fixtures";
@@ -9,11 +13,11 @@ import {
 	devBundleDir,
 	diffUnits,
 	formatEnvSummary,
-	localFunctionUrlEnv,
+	localFunctionPortsEnv,
 	planFunctionsToUnits,
 	type RunningUnit,
 	type ServedUnit,
-	sourceFunctionUrlOverlay,
+	sourceFunctionPortsOverlay,
 } from "./dev.js";
 
 describe("dev", () => {
@@ -247,20 +251,86 @@ describe("formatEnvSummary", () => {
 	});
 });
 
-describe("local function URLs", () => {
-	it("maps each slug to http://localhost:<port>", () => {
+describe("local function ports", () => {
+	it("routes a sibling HTTP call using the env given to a dev child", async () => {
+		const sibling = createServer((_req, res) => res.end("from world"));
+		sibling.listen(0);
+		await once(sibling, "listening");
+		try {
+			const port = (sibling.address() as AddressInfo).port;
+			const units = await planFunctionsToUnits(
+				[
+					{
+						slug: "hello",
+						name: "Hello",
+						source: "/fns/hello.ts",
+						env: {},
+					},
+					{
+						slug: "world",
+						name: "World",
+						source: "/fns/world.ts",
+						env: {},
+						port,
+					},
+				],
+				{},
+				8787,
+			);
+			vi.stubEnv(
+				"NEON_DEV_FUNCTION_PORTS",
+				units[0]?.childEnv.NEON_DEV_FUNCTION_PORTS,
+			);
+			vi.stubEnv("NEON_BRANCH_ID", undefined);
+			vi.stubEnv("NEON_FUNCTION_HOST_SUFFIX", undefined);
+			const response = await fetch(
+				`http://${functionHostname("world")}/`,
+			);
+			expect(await response.text()).toBe("from world");
+		} finally {
+			vi.unstubAllEnvs();
+			await new Promise<void>((resolve, reject) =>
+				sibling.close((err) => (err ? reject(err) : resolve())),
+			);
+		}
+	});
+
+	it("maps each slug to its assigned port", () => {
 		expect(
-			localFunctionUrlEnv([
+			localFunctionPortsEnv([
 				{ slug: "hello", port: 8787 },
 				{ slug: "world", port: 8788 },
 			]),
 		).toEqual({
-			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:8787",
-			NEON_FUNCTION_WORLD_BASE_URL: "http://localhost:8788",
+			NEON_DEV_FUNCTION_PORTS: '{"hello":8787,"world":8788}',
 		});
 	});
 
-	it("overlays sibling localhost URLs onto every unit", async () => {
+	it("overwrites inherited and declared port maps with the actual routing", async () => {
+		vi.stubEnv("NEON_DEV_FUNCTION_PORTS", '{"stale":9000}');
+		try {
+			const [unit] = await planFunctionsToUnits(
+				[
+					{
+						slug: "hello",
+						name: "Hello",
+						source: "/fns/hello.ts",
+						env: { NEON_DEV_FUNCTION_PORTS: '{"hello":9001}' },
+						port: 8787,
+					},
+				],
+				{ NEON_DEV_FUNCTION_PORTS: '{"hello":9002}' },
+				8787,
+			);
+			expect(unit?.childEnv.NEON_DEV_FUNCTION_PORTS).toBe(
+				'{"hello":8787}',
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("overlays sibling ports onto every unit", async () => {
 		const units = await planFunctionsToUnits(
 			[
 				{
@@ -282,18 +352,17 @@ describe("local function URLs", () => {
 			8787,
 		);
 
-		expect(units[0]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
-			"http://localhost:8787",
-		);
-		expect(units[0]?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
-			"http://localhost:8788",
-		);
-		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
-			"http://localhost:8787",
-		);
 		expect(units[0]?.childEnv.NEON_DEV_PORT).toBe("8787");
 		expect(units[1]?.childEnv.NEON_DEV_PORT).toBe("8788");
 		expect(units[0]?.childEnv.DATABASE_URL).toBe("postgres://prod");
+		for (const unit of units) {
+			expect(unit.childEnv.NEON_DEV_FUNCTION_PORTS).toBe(
+				'{"hello":8787,"world":8788}',
+			);
+			expect(unit.envSummary?.neon).not.toContain(
+				"NEON_DEV_FUNCTION_PORTS",
+			);
+		}
 	});
 
 	it("passes every loaded dotenv key to the child, declared or not", async () => {
@@ -358,8 +427,8 @@ describe("local function URLs", () => {
 			8787,
 		);
 		expect(alone?.configKey).not.toBe(withSibling?.configKey);
-		expect(withSibling?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
-			"http://localhost:8788",
+		expect(withSibling?.childEnv.NEON_DEV_FUNCTION_PORTS).toBe(
+			'{"hello":8787,"world":8788}',
 		);
 	});
 
@@ -384,9 +453,6 @@ describe("local function URLs", () => {
 		);
 		expect(units[0]?.childEnv.NEON_DEV_PORT).toBe("8787");
 		expect(units[1]?.childEnv.NEON_DEV_PORT).not.toBe("8787");
-		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
-			"http://localhost:8787",
-		);
 	});
 
 	it("moves a kept search-mode port when a sibling claims it as dev.port", async () => {
@@ -411,12 +477,6 @@ describe("local function URLs", () => {
 		);
 		expect(units[1]?.childEnv.NEON_DEV_PORT).toBe("8787");
 		expect(units[0]?.childEnv.NEON_DEV_PORT).not.toBe("8787");
-		expect(units[0]?.childEnv.NEON_FUNCTION_WORLD_BASE_URL).toBe(
-			"http://localhost:8787",
-		);
-		expect(units[1]?.childEnv.NEON_FUNCTION_HELLO_BASE_URL).toBe(
-			`http://localhost:${units[0]?.childEnv.NEON_DEV_PORT}`,
-		);
 	});
 
 	it("overlays localhost for a matching --source slug only", async () => {
@@ -426,16 +486,16 @@ describe("local function URLs", () => {
 			source: "/fns/hello.ts",
 			env: {},
 		};
-		const { overlay, port } = await sourceFunctionUrlOverlay(hello, 3000);
+		const { overlay, port } = await sourceFunctionPortsOverlay(hello, 3000);
 		expect(overlay).toEqual({
-			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:3000",
+			NEON_DEV_FUNCTION_PORTS: '{"hello":3000}',
 		});
 		expect(port).toEqual({ mode: "explicit", port: 3000 });
 	});
 
 	it("leaves production URLs when --source does not match a neon.ts function", async () => {
 		vi.stubEnv("PORT", "");
-		const { overlay, port } = await sourceFunctionUrlOverlay(
+		const { overlay, port } = await sourceFunctionPortsOverlay(
 			undefined,
 			undefined,
 		);
@@ -445,7 +505,7 @@ describe("local function URLs", () => {
 
 	it("picks the port from the shell, not from a PORT the dotenv files loaded", async () => {
 		vi.stubEnv("PORT", "4321 # from .env.local");
-		const { port } = await sourceFunctionUrlOverlay(
+		const { port } = await sourceFunctionPortsOverlay(
 			undefined,
 			undefined,
 			{},
@@ -462,12 +522,12 @@ describe("local function URLs", () => {
 			port: 4000,
 			env: {},
 		};
-		const { overlay, port } = await sourceFunctionUrlOverlay(
+		const { overlay, port } = await sourceFunctionPortsOverlay(
 			hello,
 			undefined,
 		);
 		expect(overlay).toEqual({
-			NEON_FUNCTION_HELLO_BASE_URL: "http://localhost:4000",
+			NEON_DEV_FUNCTION_PORTS: '{"hello":4000}',
 		});
 		expect(port).toEqual({ mode: "explicit", port: 4000 });
 	});

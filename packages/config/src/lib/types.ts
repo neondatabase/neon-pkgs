@@ -897,7 +897,7 @@ export interface HookEnv {
 		databaseUrl: string;
 		databaseUrlUnpooled: string;
 	};
-	branch?: { name: string };
+	branch?: { name: string; id?: string; functionHostSuffix?: string };
 	auth?: { baseUrl: string; jwksUrl: string };
 	dataApi?: { url: string };
 	storage?: {
@@ -907,7 +907,6 @@ export interface HookEnv {
 		region: string;
 	};
 	aiGateway?: { apiKey: string; baseUrl: string };
-	functions?: Record<string, { baseUrl: string }>;
 }
 
 /** Context passed to `hooks.checkout.before` (runs before the branch name is resolved). */

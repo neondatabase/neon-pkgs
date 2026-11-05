@@ -769,13 +769,12 @@ describe("resolveDevEnv", () => {
 		expect(result.skipped?.reason).toMatch(/network down/);
 	});
 
-	it("tier 1 functions-only: derives invocation URLs without listing and still injects DATABASE_URL", async () => {
+	it("tier 1 functions-only: injects shared routing and DATABASE_URL", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
 				"{ name: 'Hello', source: './hello.ts' } } } };\n",
 		);
-		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech`;
 		const api = new FakeNeonApi({
 			listBranchFunctions: async () => {
 				throw new Error("listBranchFunctions should not run");
@@ -791,7 +790,9 @@ describe("resolveDevEnv", () => {
 
 		expect(result.vars.DATABASE_URL).toBeDefined();
 		expect(result.vars.DATABASE_URL_UNPOOLED).toBeDefined();
-		expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(result.vars.NEON_FUNCTION_HOST_SUFFIX).toBe(
+			".compute.fake.neon.tech",
+		);
 		expect(api.listBranchFunctionsCalled).toBe(false);
 	});
 
@@ -818,7 +819,7 @@ describe("resolveDevEnv", () => {
 		}
 	});
 
-	it("omitUnsetFunctionEnv still resolves DATABASE_URL and function URLs", async () => {
+	it("omitUnsetFunctionEnv still resolves DATABASE_URL and shared routing", async () => {
 		const key = "NEON_PKGS_UNSET_FN_ENV_RESOLVE_OMIT_TEST";
 		delete process.env[key];
 		writeFileSync(
@@ -826,7 +827,6 @@ describe("resolveDevEnv", () => {
 			"export default { preview: { functions: { hello: " +
 				`{ name: 'Hello', source: './hello.ts', env: { SECRET: process.env.${key} } } } } };\n`,
 		);
-		const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech`;
 
 		try {
 			const result = await resolveNeonEnvVars({
@@ -838,7 +838,9 @@ describe("resolveDevEnv", () => {
 			});
 
 			expect(result.vars.DATABASE_URL).toBeDefined();
-			expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+			expect(result.vars.NEON_FUNCTION_HOST_SUFFIX).toBe(
+				".compute.fake.neon.tech",
+			);
 			expect(result.vars.SECRET).toBeUndefined();
 		} finally {
 			delete process.env[key];

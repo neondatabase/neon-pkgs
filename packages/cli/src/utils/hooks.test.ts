@@ -35,7 +35,6 @@ describe("shapeHookEnv", () => {
 		expect(env.dataApi).toBeUndefined();
 		expect(env.storage).toBeUndefined();
 		expect(env.aiGateway).toBeUndefined();
-		expect(env.functions).toBeUndefined();
 		expect(env.branch).toBeUndefined();
 	});
 
@@ -61,7 +60,6 @@ describe("shapeHookEnv", () => {
 				apiKey: "sk-neon",
 				baseUrl: "https://ai.neon/openai/v1",
 			},
-			functions: { api: { baseUrl: "https://api.example.com" } },
 		});
 		expect(env.branch).toEqual({ name: "preview/feature-billing" });
 		expect(env.auth).toEqual({
@@ -79,9 +77,6 @@ describe("shapeHookEnv", () => {
 			apiKey: "sk-neon",
 			baseUrl: "https://ai.neon/openai/v1",
 		});
-		expect(env.functions).toEqual({
-			api: { baseUrl: "https://api.example.com" },
-		});
 	});
 
 	test("omits a namespace whose fields are only partially present", () => {
@@ -93,17 +88,13 @@ describe("shapeHookEnv", () => {
 		expect(env.storage).toBeUndefined();
 	});
 
-	test("maps multiple function entries", () => {
-		const env = shapeHookEnv({
-			functions: {
-				api: { baseUrl: "https://api.example.com" },
-				worker: { baseUrl: "https://worker.example.com" },
-			},
-		});
-		expect(env.functions).toEqual({
-			api: { baseUrl: "https://api.example.com" },
-			worker: { baseUrl: "https://worker.example.com" },
-		});
+	test("keeps the shared function routing fields in hook env", () => {
+		const branch = {
+			name: "main",
+			id: "br-test",
+			functionHostSuffix: ".compute.example.com",
+		};
+		expect(shapeHookEnv({ branch }).branch).toEqual(branch);
 	});
 });
 

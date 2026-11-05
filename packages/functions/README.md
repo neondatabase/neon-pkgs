@@ -33,7 +33,9 @@ Build a sibling function's hostname from the serving branch's `NEON_BRANCH_ID` a
 ```ts
 import { functionHostname } from "@neon/functions";
 
-const response = await fetch(`https://${functionHostname("worker")}/`);
+const hostname = functionHostname("worker");
+const protocol = hostname.startsWith("localhost:") ? "http" : "https";
+const response = await fetch(`${protocol}://${hostname}/`);
 ```
 
 `functionHostname(slug)` returns a host, including its port when present, with no scheme
@@ -46,10 +48,10 @@ The runtime supplies `NEON_FUNCTION_HOST_SUFFIX` as a leading-dot suffix, for ex
 resolve the same suffix and branch ID locally. No function listing is needed to construct
 a hostname; the target function must be deployed to serve requests.
 
-An explicit `NEON_FUNCTION_<SLUG>_BASE_URL` takes precedence. `neon dev` sets this to
-`http://localhost:<port>` for each function it serves, so the helper returns
-`localhost:<port>` for those functions. Use `http://` for a local development hostname;
-deployed hosts use `https://`.
+Under `neon dev`, the helper automatically uses the assigned local ports and returns
+`localhost:<port>` for functions this process serves. A sibling that is not served locally
+(for example with `neon dev --source`) uses its deployed hostname. Use `http://` for a local
+development hostname; deployed hosts use `https://`.
 
 ## `waitUntil`
 

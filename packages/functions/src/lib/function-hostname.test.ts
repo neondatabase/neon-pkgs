@@ -7,7 +7,7 @@ beforeEach(() => {
 		"NEON_FUNCTION_HOST_SUFFIX",
 		".compute.c-3.us-east-2.aws.neon.tech",
 	);
-	vi.stubEnv("NEON_FUNCTION_HELLO_BASE_URL", undefined);
+	vi.stubEnv("NEON_DEV_FUNCTION_PORTS", undefined);
 });
 
 describe("functionHostname", () => {
@@ -25,19 +25,19 @@ describe("functionHostname", () => {
 		);
 	});
 
-	it("uses the localhost URL supplied by neon dev without requiring a linked branch", () => {
-		vi.stubEnv("NEON_FUNCTION_HELLO_BASE_URL", "http://localhost:8787");
+	it("uses the local port map without requiring a linked branch", () => {
+		vi.stubEnv("NEON_DEV_FUNCTION_PORTS", '{"hello":8787,"world":8788}');
 		vi.stubEnv("NEON_BRANCH_ID", undefined);
 		vi.stubEnv("NEON_FUNCTION_HOST_SUFFIX", undefined);
 		expect(functionHostname("hello")).toBe("localhost:8787");
+		expect(functionHostname("world")).toBe("localhost:8788");
 	});
 
-	it("honors a per-function URL over the shared branch host", () => {
-		vi.stubEnv(
-			"NEON_FUNCTION_HELLO_BASE_URL",
-			"https://hello.example.com/",
+	it("uses the deployed hostname for a sibling not served by neon dev --source", () => {
+		vi.stubEnv("NEON_DEV_FUNCTION_PORTS", '{"world":8788}');
+		expect(functionHostname("hello")).toBe(
+			"br-calm-river-a1b2c3-hello.compute.c-3.us-east-2.aws.neon.tech",
 		);
-		expect(functionHostname("hello")).toBe("hello.example.com");
 	});
 
 	it.each([
@@ -81,12 +81,16 @@ describe("functionHostname", () => {
 
 	it.each([
 		"",
-		"not a URL",
-		"ftp://example.com",
-	])("reports an invalid explicit URL: %j", (baseUrl) => {
-		vi.stubEnv("NEON_FUNCTION_HELLO_BASE_URL", baseUrl);
+		"not JSON",
+		"null",
+		"[]",
+		'{"hello":0}',
+		'{"hello":65536}',
+		'{"hello":"8787"}',
+	])("reports an invalid local port map: %j", (ports) => {
+		vi.stubEnv("NEON_DEV_FUNCTION_PORTS", ports);
 		expect(() => functionHostname("hello")).toThrow(
-			/NEON_FUNCTION_HELLO_BASE_URL/,
+			/invalid local function ports/,
 		);
 	});
 });

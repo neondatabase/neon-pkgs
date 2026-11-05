@@ -8,23 +8,37 @@ export function functionHostname(slug: string): string {
 		);
 	}
 
-	const key = `NEON_FUNCTION_${slug.toUpperCase()}_BASE_URL`;
-	const baseUrl = process.env[key];
-	if (baseUrl !== undefined) {
-		let url: URL;
+	const localPorts = process.env.NEON_DEV_FUNCTION_PORTS;
+	if (localPorts !== undefined) {
+		const invalidPorts = () =>
+			new TypeError(
+				"functionHostname: invalid local function ports. Restart `neon dev`.",
+			);
+		let ports: unknown;
 		try {
-			url = new URL(baseUrl);
+			ports = JSON.parse(localPorts);
 		} catch {
-			throw new TypeError(
-				`functionHostname: ${key} must be an http(s) URL.`,
-			);
+			throw invalidPorts();
 		}
-		if (url.protocol !== "http:" && url.protocol !== "https:") {
-			throw new TypeError(
-				`functionHostname: ${key} must be an http(s) URL.`,
-			);
+		if (
+			ports === null ||
+			typeof ports !== "object" ||
+			Array.isArray(ports)
+		) {
+			throw invalidPorts();
 		}
-		return url.host;
+		if (Object.hasOwn(ports, slug)) {
+			const port = (ports as Record<string, unknown>)[slug];
+			if (
+				typeof port !== "number" ||
+				!Number.isInteger(port) ||
+				port < 1 ||
+				port > 65535
+			) {
+				throw invalidPorts();
+			}
+			return `localhost:${port}`;
+		}
 	}
 
 	const branchId = process.env.NEON_BRANCH_ID;

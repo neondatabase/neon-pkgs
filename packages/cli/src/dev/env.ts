@@ -11,11 +11,7 @@ import {
 	PlatformError,
 } from "@neon/config";
 import { type AppliedChange, plan, pullConfig } from "@neon/config-runtime";
-import {
-	type FunctionUrlMode,
-	functionBaseUrlKey,
-	NEON_ENV_VAR_KEYS,
-} from "@neon-internals/env-core/env";
+import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
 import {
 	type CredentialOutcome,
 	fetchEnvReusingSecrets,
@@ -362,16 +358,13 @@ const resolveClaimableNeonEnvVars = async (
  *   1. a `neon.ts` policy is found -> the policy is the source of truth. We first
  *      check it against the branch's live state (`plan`); if it declares a resource
  *      the branch is missing, we stop with a {@link DevEnvMismatchError} pointing at
- *      `neonctl deploy`. Function declarations are excluded from that check: their
- *      invocation URLs are derived from the branch connection host, so an undeployed
- *      function still gets `NEON_FUNCTION_*_BASE_URL`. Otherwise `fetchEnv` evaluates
- *      the policy.
+ *      `neonctl deploy`. Function declarations are excluded from that check so
+ *      undeployed functions can run locally. `fetchEnv` then evaluates the policy.
  *   2. no `neon.ts`, but a project + branch are known -> `pullConfig` reads the
  *      branch's live state (Auth / Data API / Realtime enablement plus any object-storage
  *      buckets) into a config, then `fetchEnv` resolves what is actually enabled —
  *      so a branch with a bucket gets its `AWS_*` storage vars pulled with no policy.
- *      Function invocation URLs are listed live (`functionUrls: "all-live"`) because
- *      `pullConfig` cannot round-trip them into `functions`. With
+ *      With
  *      {@link DevEnvContext.implyAiGateway}, the AI Gateway is added on top, since
  *      `pullConfig` cannot read it back.
  *   3. otherwise -> throw {@link MissingBranchContextError}.
@@ -429,11 +422,8 @@ export const resolveNeonEnvVars = async (
 				? { expiresAt: pulled.branch.expiresAt }
 				: {}),
 		};
-		// pullConfig cannot represent function declarations, so branch read-back must list all
-		// live URLs. The AI Gateway remains separate because it has no read-back state.
 		if (!ctx.implyAiGateway) {
 			return await fetchAndProject(pulled.config, ctx, {
-				functionUrls: "all-live",
 				resolvedBranch,
 			});
 		}
@@ -491,7 +481,6 @@ const resolveWithImpliedGateway = async (
 	const unreachable = await credentialsUnreachable(ctx, branch);
 	if (unreachable === null) {
 		return await fetchAndProject(withAiGateway(config), ctx, {
-			functionUrls: "all-live",
 			resolvedBranch: branch.resolvedBranch,
 		});
 	}
@@ -509,7 +498,6 @@ const resolveWithImpliedGateway = async (
 		unreachable,
 	);
 	const pulled = await fetchAndProject(config, ctx, {
-		functionUrls: "all-live",
 		resolvedBranch: branch.resolvedBranch,
 	});
 	return {
@@ -582,48 +570,20 @@ const resolveSelectedServices = async (
 	const checkAiGateway =
 		has("ai-gateway") &&
 		!selectedKeys.includes(NEON_ENV_VAR_KEYS.aiGateway.apiKey);
-	const [
-		auth,
-		dataApiEnabled,
-		realtime,
-		buckets,
-		aiGatewayAvailable,
-		functions,
-	] = await Promise.all([
-		has("auth") ? api.getNeonAuth(projectId, branchId) : null,
-		has("data-api") ? readDataApiEnabled(api, projectId, branchId) : null,
-		has("realtime") ? readRealtime(api, projectId, branchId) : null,
-		has("object-storage")
-			? api.listBranchBuckets(projectId, branchId)
-			: null,
-		checkAiGateway
-			? readAiGatewayAvailable(api, projectId, branchId)
-			: null,
-		directServices.includes("functions")
-			? api.listBranchFunctions(projectId, branchId)
-			: null,
-	]);
-
-	const callableFunctions = (functions ?? []).filter(
-		(fn) => fn.invocationUrl !== "",
-	);
-	if (
-		directServices.includes("functions") &&
-		callableFunctions.length === 0
-	) {
-		throw new ServiceNotOnBranchError(
-			`--service functions: branch ${branchId} has no deployed functions, so there ` +
-				"are no NEON_FUNCTION_*_BASE_URL vars to pull. Deploy a function first " +
-				`(\`${getCliName()} deploy\`, or in the Neon Console), or drop functions from --service.`,
-		);
-	}
-
-	const functionKeys = directServices.includes("functions")
-		? callableFunctions
-				.map((fn) => functionBaseUrlKey(fn.slug))
-				.sort((left, right) => left.localeCompare(right))
-		: [];
-	const fetchKeys = [...new Set([...selectedKeys, ...functionKeys])];
+	const [auth, dataApiEnabled, realtime, buckets, aiGatewayAvailable] =
+		await Promise.all([
+			has("auth") ? api.getNeonAuth(projectId, branchId) : null,
+			has("data-api")
+				? readDataApiEnabled(api, projectId, branchId)
+				: null,
+			has("realtime") ? readRealtime(api, projectId, branchId) : null,
+			has("object-storage")
+				? api.listBranchBuckets(projectId, branchId)
+				: null,
+			checkAiGateway
+				? readAiGatewayAvailable(api, projectId, branchId)
+				: null,
+		]);
 
 	const config = configForServices(
 		services,
@@ -646,14 +606,8 @@ const resolveSelectedServices = async (
 	// persisted secrets name may also back a service it is not resolving. See
 	// `fetchEnvReusingSecrets`'s `revokeSuperseded`.
 	return await fetchAndProject(config, ctx, {
-		keys: fetchKeys,
+		keys: selectedKeys,
 		revokeSuperseded: false,
-		...(directServices.includes("functions")
-			? {
-					functionUrls: "all-live" as const,
-					listedFunctions: callableFunctions,
-				}
-			: {}),
 	});
 };
 
@@ -944,11 +898,6 @@ const fetchAndProject = async (
 	opts: {
 		keys?: readonly string[];
 		revokeSuperseded?: boolean;
-		functionUrls?: FunctionUrlMode;
-		listedFunctions?: ReadonlyArray<{
-			slug: string;
-			invocationUrl: string;
-		}>;
 		resolvedBranch?: NeonBranchSnapshot;
 	} = {},
 ): Promise<ResolvedNeonEnvVars> => {
@@ -959,16 +908,11 @@ const fetchAndProject = async (
 		...(ctx.env ? { env: ctx.env } : {}),
 		...(opts.keys ? { keys: opts.keys } : {}),
 		...(opts.revokeSuperseded === false ? { revokeSuperseded: false } : {}),
-		...(opts.functionUrls ? { functionUrls: opts.functionUrls } : {}),
-		...(opts.listedFunctions
-			? { listedFunctions: opts.listedFunctions }
-			: {}),
 		...(opts.resolvedBranch ? { resolvedBranch: opts.resolvedBranch } : {}),
 	});
 	return {
 		vars: result.vars,
 		credential: result.credential,
-		...(result.functionUrlsUnavailable ? { skipped: ["functions"] } : {}),
 	};
 };
 

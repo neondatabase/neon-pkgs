@@ -12,11 +12,8 @@ import {
 	credentialName,
 	defaultAiGatewayCredential,
 	defaultStorageCredential,
-	type FetchEnvKeysOptions,
 	type FetchEnvOptions,
-	type FunctionUrlMode,
-	fetchEnvKeysState,
-	isFunctionBaseUrlKey,
+	fetchEnvKeys,
 	isLiveCredential,
 	NEON_ENV_VAR_KEYS,
 	policyEnvKeys,
@@ -62,8 +59,6 @@ export interface ReusedBranchEnv {
 	vars: Record<string, string>;
 	/** What happened to the branch credential. */
 	credential: CredentialOutcome;
-	/** Prevents callers from pruning URLs when their absence reflects endpoint failure. */
-	functionUrlsUnavailable?: true;
 }
 
 /** The branch credential's secrets as persisted in an env source. Empty string means absent. */
@@ -130,9 +125,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 * needs this. Platform defaults are never revoked.
 		 */
 		revokeSuperseded?: boolean;
-		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
-		functionUrls?: FunctionUrlMode;
-		listedFunctions?: FetchEnvKeysOptions["listedFunctions"];
 		/** The target branch, when the caller listed it already. */
 		resolvedBranch?: NeonBranchSnapshot;
 	},
@@ -157,10 +149,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	const selectedPolicyKeys =
 		requested === null
 			? allPolicyKeys
-			: [
-					...allPolicyKeys.filter((key) => requested.has(key)),
-					...[...requested].filter(isFunctionBaseUrlKey).sort(),
-				];
+			: allPolicyKeys.filter((key) => requested.has(key));
 	const selected = new Set(selectedPolicyKeys);
 	const K = NEON_ENV_VAR_KEYS;
 	const storageCredentialSelected =
@@ -178,14 +167,14 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	// Nothing credential-backed was selected, so there is nothing to preserve and no
 	// credential to spend: fetch the selected values and skip the credentials endpoint.
 	if (secretKeys.length === 0) {
-		const fetched = await fetchEnvKeysState(
+		const fetched = await fetchEnvKeys(
 			config,
 			fetchOptions,
 			requested === null ? null : selectedPolicyKeys,
 			{ branch, desired },
 		);
 		return {
-			vars: preferPersisted(toEntries(fetched.env), source),
+			vars: preferPersisted(toEntries(fetched), source),
 			credential: {
 				issued: false,
 				keys: [],
@@ -193,9 +182,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 				revoked: [],
 				superseded: [],
 			},
-			...(fetched.functionUrlsUnavailable
-				? { functionUrlsUnavailable: true as const }
-				: {}),
 		};
 	}
 
@@ -239,15 +225,11 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		aiGateway: gatewayCredentialSelected && keepGateway,
 	}).filter((key) => selected.has(key));
 
-	// Ask for the selected policy values, minus the secrets we're keeping — which is what
-	// stops `fetchEnv` from revealing or minting a credential it doesn't need. An unscoped
-	// call stays `keys: null`: rewriting it as `policyEnvKeys` would drop
-	// `NEON_FUNCTION_*_BASE_URL`.
 	const fetchKeys =
 		requested === null
 			? null
 			: selectedPolicyKeys.filter((key) => !keptSecretKeys.includes(key));
-	const fetched = await fetchEnvKeysState(
+	const fetched = await fetchEnvKeys(
 		config,
 		{
 			...fetchOptions,
@@ -262,10 +244,7 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		{ branch, desired },
 	);
 
-	const vars = preferPersisted(toEntries(fetched.env), source);
-	const unavailable = fetched.functionUrlsUnavailable
-		? { functionUrlsUnavailable: true as const }
-		: {};
+	const vars = preferPersisted(toEntries(fetched), source);
 	for (const key of keptSecretKeys) {
 		const value = source[key];
 		if (value !== undefined) vars[key] = value;
@@ -284,7 +263,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 				revoked: [],
 				superseded: [],
 			},
-			...unavailable,
 		};
 	}
 
@@ -322,7 +300,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			revoked: revokeSuperseded ? [...ours] : [],
 			superseded: revokeSuperseded ? [] : [...ours],
 		},
-		...unavailable,
 	};
 }
 

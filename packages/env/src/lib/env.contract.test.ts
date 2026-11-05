@@ -197,7 +197,11 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 				databaseUrl: "postgres://pooled",
 				databaseUrlUnpooled: "postgres://direct",
 			},
-			branch: { name: "preview/foo" },
+			branch: {
+				name: "preview/foo",
+				id: "br-foo",
+				functionHostSuffix: ".compute.neon.tech",
+			},
 			auth: {
 				baseUrl: "https://auth.example.com",
 				jwksUrl: "https://auth.example.com/.well-known/jwks.json",
@@ -216,11 +220,6 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 			aiGateway: {
 				apiKey: "nt_live_abc_def",
 				baseUrl: "https://x.neon.build",
-			},
-			functions: {
-				hello: {
-					baseUrl: "https://br-foo-hello.compute.neon.tech/",
-				},
 			},
 		};
 
@@ -241,10 +240,7 @@ describe("@neon/env public surface", () => {
 			[
 			  "NEON_ENV_VAR_KEYS",
 			  "fetchEnv",
-			  "functionBaseUrlKey",
-			  "isFunctionBaseUrlKey",
 			  "parseEnv",
-			  "parseFunctionBaseUrlKey",
 			  "toEntries",
 			]
 		`);

@@ -74,31 +74,7 @@ describe("env pull key selection", () => {
 		]);
 	});
 
-	it("parses a function URL key", () => {
-		expect(
-			parseEnvPullKeys(["NEON_FUNCTION_HELLO_BASE_URL"], "--env"),
-		).toEqual(["NEON_FUNCTION_HELLO_BASE_URL"]);
-	});
-
-	it("rejects a function URL key that is not the BASE_URL pattern", () => {
-		expect(() =>
-			parseEnvPullKeys(["NEON_FUNCTION_HELLO_HOST"], "--env"),
-		).toThrow(/Unknown env variable/);
-	});
-
-	it("maps a function URL key to the functions service", () => {
-		expect(servicesForEnvKeys(["NEON_FUNCTION_HELLO_BASE_URL"])).toEqual([
-			"functions",
-		]);
-	});
-
-	it("includes a named function URL key in the selection", () => {
-		expect(
-			envKeysForSelection([], ["NEON_FUNCTION_HELLO_BASE_URL"]),
-		).toEqual(["NEON_FUNCTION_HELLO_BASE_URL"]);
-	});
-
-	it("does not invent live function URL keys for --service functions", () => {
+	it("selects branch identity and the shared suffix for --service functions", () => {
 		expect(envKeysForSelection(["functions"], [])).toEqual([
 			"NEON_BRANCH",
 			"NEON_BRANCH_ID",

@@ -54,7 +54,7 @@ Both return the same namespaced `NeonEnv` shape: `postgres` is always present; `
 | Function | Description |
 | --- | --- |
 | `fetchEnv(config, { projectId, branch, ... })` | Async. Calls the Neon API for the given project + branch and returns live connection strings (and Auth/Data API/Realtime values when enabled). `projectId` and `branch` are required; `branch` accepts a branch **name** (e.g. `main`) or a `br-…` id. (The legacy id-only `branchId` option still works.) Pass `keys` to fetch only some vars — see [Fetching a subset](#fetching-a-subset). Reads nothing from `process.env` or disk. |
-| `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys; `functions.<slug>.baseUrl` is the invocation URL. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
+| `parseEnv(config)` / `parseEnv(config, slug)` / `parseEnv(config, keys)` | Sync. Reads/validates the Neon env vars already present in `process.env` against the static policy toggles. With a function `slug`, also returns a typed `function` namespace of that function's declared env keys. Use `functionHostname(slug)` from `@neon/functions` for sibling hosts. With a `keys` array (e.g. `["DATABASE_URL"]`), only those vars are required and returned, as a narrowed namespaced shape — the keys are typesafe against the policy. Throws `PlatformError(EnvNotInjected)` listing missing vars when the env isn't populated. |
 | `toEntries(env)` | Project a resolved `NeonEnv` into `{ KEY: value }` pairs for cross-process transport (named after the web `.entries()` convention; returns a `Record`). |
 
 ## CLI
@@ -68,7 +68,7 @@ neon-env run -- npm run dev
 neon-env run -- pnpm dev
 ```
 
-`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH` / `NEON_BRANCH_ID`, or the `branch` field in `.neon[/project.json]` — by name or id), fetches the connection strings from Neon, and spawns the command with `NEON_BRANCH` / `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (plus the Auth, Data API, Realtime, object-storage `AWS_*`, AI Gateway `NEON_AI_GATEWAY_*`, and function `NEON_FUNCTION_*_BASE_URL` vars when the policy enables them — see [Env vars produced](#env-vars-produced)) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
+`run` loads `neon.ts`, resolves the branch (via `--branch`, `NEON_BRANCH` / `NEON_BRANCH_ID`, or the `branch` field in `.neon[/project.json]` — by name or id), fetches the connection strings from Neon, and spawns the command with `NEON_BRANCH` / `DATABASE_URL` / `DATABASE_URL_UNPOOLED` (plus the Auth, Data API, Realtime, object-storage `AWS_*`, AI Gateway `NEON_AI_GATEWAY_*` vars when the policy enables them, plus `NEON_BRANCH_ID` and `NEON_FUNCTION_HOST_SUFFIX` — see [Env vars produced](#env-vars-produced)) injected on top of the inherited environment. Stdio is inherited so interactive dev servers keep working, and the parent exits with the child's exit code.
 
 ### `export` — print env to stdout
 
@@ -99,13 +99,13 @@ whose item cannot be read is an error, not "not signed in".
 
 These are the OS-level vars `fetchEnv` / `parseEnv` read and `toEntries` (so `neon-env run` / `neon-env export` / `neon env pull`) emit. Which ones appear depends on what your `neon.ts` policy enables — grouped by service below.
 
-**Branch identity + Postgres** (always present):
+**Branch identity + Postgres** (`fetchEnv` always resolves the branch name, ID, and Postgres URLs; the function host suffix is included when derivable. `parseEnv` reads the optional branch fields when present):
 
 | Key | From |
 | --- | --- |
 | `NEON_BRANCH` | the resolved branch **name** — mirrors what the Neon Functions runtime injects on every branch, so local dev matches the deployed runtime |
 | `NEON_BRANCH_ID` | the resolved serving branch ID, also available as `env.branch.id` |
-| `NEON_FUNCTION_HOST_SUFFIX` | the cell's leading-dot function host suffix, also available as `env.branch.functionHostSuffix`; combine with `NEON_BRANCH_ID` and a function slug, or use `functionHostname` from `@neon/functions` |
+| `NEON_FUNCTION_HOST_SUFFIX` | the cell's leading-dot function host suffix, when derivable from the connection host, also available as `env.branch.functionHostSuffix`; combine with `NEON_BRANCH_ID` and a function slug, or use `functionHostname` from `@neon/functions` |
 | `DATABASE_URL` | pooled connection string |
 | `DATABASE_URL_UNPOOLED` | direct connection string |
 
@@ -147,24 +147,11 @@ Derive the database passed to `createRealtime` from `DATABASE_URL` so the two ca
 | `NEON_AI_GATEWAY_TOKEN` | branch credential's API token (bearer) |
 | `NEON_AI_GATEWAY_BASE_URL` | bare branch gateway host (`https://<branch>-api.ai.<region>.…`, no path) |
 
-**Functions** (when `functions` declares at least one slug). Each declared slug maps to `NEON_FUNCTION_<SLUG>_BASE_URL`, read as `env.functions.<slug>.baseUrl: string`. These are the public function URLs, not the function's declared `env` secrets (those are uploaded at deploy). `fetchEnv` / `neon env pull` derive the URL from the branch connection host; the function does not have to be deployed. `neon dev` injects `http://localhost:<port>` instead.
-
-The deployed Functions runtime does not inject these vars yet. Without a key filter, `parseEnv` therefore returns `functions` only when every declared slug's URL is set, and leaves it `undefined` otherwise. A value that is set must be a URL. Select the key to require it.
-
-| Key | From |
-| --- | --- |
-| `NEON_FUNCTION_<SLUG>_BASE_URL` | the function's public URL (`https://<branchId>-<slug>.compute.…`), or `http://localhost:<port>` under `neon dev`. `<SLUG>` is the slug uppercased. |
-
-```ts
-const env = parseEnv(config);
-env.functions?.hello.baseUrl; // string | undefined
-
-const { functions: required } = parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"]);
-required.hello.baseUrl; // string, throws when unset
-
-const { functions } = await fetchEnv(config, { projectId, branch: "main" });
-functions.hello.baseUrl; // string
-```
+**Functions** use the branch-wide `NEON_BRANCH_ID` and `NEON_FUNCTION_HOST_SUFFIX`
+listed above. Use [`functionHostname(slug)` from `@neon/functions`](../functions#functionhostname)
+to resolve a sibling's hostname. `neon dev` supplies a local port map so the helper resolves
+locally served functions to `localhost:<port>`. No function declaration or listing is needed
+to resolve the branch's shared suffix.
 
 ### The branch credential
 
