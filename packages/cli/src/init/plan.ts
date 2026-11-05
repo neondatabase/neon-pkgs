@@ -4,7 +4,10 @@ import type { InstallPluginsOptions } from "../commands/plugins.js";
 import type { InstallSkillsOptions } from "../commands/skills.js";
 import type { AgentType } from "../mcp/agents.js";
 import { mcpInstallableAgents } from "../mcp/targets.js";
-import { pluginsInstallableAgents } from "../plugins/targets.js";
+import {
+	bootstrapPluginAgents,
+	pluginsInstallableAgents,
+} from "../plugins/targets.js";
 import { skillsInstallableAgents } from "../skills/targets.js";
 import { agentArgv } from "../utils/agent_flag.js";
 import { getCliName } from "../utils/cli_name.js";
@@ -180,7 +183,8 @@ export const planToolingSteps = (
 };
 
 export const noDetectedAgentsMessage = (input: {
-	scope: "project" | "global";
+	/** `project-then-installed`: project folders, else the host CLI agent, else installed apps. */
+	scope: "project" | "global" | "project-then-installed";
 	supported: readonly string[];
 	fix: "run-without-yes" | "pass-yes";
 	nameAgent?: boolean;
@@ -195,7 +199,9 @@ export const noDetectedAgentsMessage = (input: {
 		const detected =
 			input.scope === "project"
 				? "Pass -y to use project folders, else the host CLI agent"
-				: "Pass -y to use installed apps, else the host CLI agent";
+				: input.scope === "global"
+					? "Pass -y to use installed apps, else the host CLI agent"
+					: "Pass -y to use project folders, else the host CLI agent, else installed apps";
 		hint = name
 			? `${detected}, --agent <name> to name them, or run from a terminal to pick one.`
 			: `${detected}, or run from a terminal to pick one.`;
@@ -212,16 +218,20 @@ export const INIT_NEEDS_YES_OR_TERMINAL =
 
 export const initYesSupportedAgents = (): AgentType[] =>
 	uniqueAgentIds([
-		...pluginsInstallableAgents("project"),
+		...pluginsInstallableAgents(),
 		...skillsInstallableAgents(),
 		...mcpInstallableAgents("global"),
 	]);
 
-export const initPluginAgents = (): AgentType[] =>
-	pluginsInstallableAgents("project");
+export const initPluginAgents = (): AgentType[] => pluginsInstallableAgents();
 
 export const initSkillsMcpAgents = (): AgentType[] => {
 	const plugin = new Set(initPluginAgents());
+	return initYesSupportedAgents().filter((id) => !plugin.has(id));
+};
+
+export const bootstrapSkillsMcpAgents = (): AgentType[] => {
+	const plugin = new Set(bootstrapPluginAgents());
 	return initYesSupportedAgents().filter((id) => !plugin.has(id));
 };
 
@@ -256,8 +266,8 @@ export async function collectYesAgents(sources: {
 export const chooseYesAgentTooling = (
 	agents: readonly AgentType[],
 ): YesAgentTooling => {
-	const projectPlugin = new Set(pluginsInstallableAgents("project"));
-	const pluginAgents = agents.filter((id) => projectPlugin.has(id));
+	const bootstrapPlugin = new Set(bootstrapPluginAgents());
+	const pluginAgents = agents.filter((id) => bootstrapPlugin.has(id));
 	const [pluginFirst, ...pluginRest] = pluginAgents;
 	if (pluginFirst !== undefined) {
 		return { setup: "plugin", agents: [pluginFirst, ...pluginRest] };
@@ -295,15 +305,12 @@ export type InitToolingPlan =
 
 export const splitInitTooling = (
 	agents: readonly AgentType[],
-	pluginScope: "global" | "project",
-	mcpConfigLocation: "global" | "project" = pluginScope,
+	mcpConfigLocation: "global" | "project",
 	unavailablePluginAgents: readonly AgentType[] = [],
 ): InitToolingPlan => {
 	const unavailable = new Set(unavailablePluginAgents);
 	const pluginSet = new Set(
-		pluginsInstallableAgents(pluginScope).filter(
-			(id) => !unavailable.has(id),
-		),
+		pluginsInstallableAgents().filter((id) => !unavailable.has(id)),
 	);
 	const mcpSet = new Set(mcpInstallableAgents(mcpConfigLocation));
 	const pluginAgents = uniqueAgentIds(
@@ -337,12 +344,7 @@ export const recommendedTooling = (
 	detected: readonly AgentType[],
 	unavailablePluginAgents: readonly AgentType[] = [],
 ): InitToolingPlan => {
-	const split = splitInitTooling(
-		detected,
-		"global",
-		"global",
-		unavailablePluginAgents,
-	);
+	const split = splitInitTooling(detected, "global", unavailablePluginAgents);
 	if (split.setup === "skip") {
 		return { setup: "skills", agents: FALLBACK_SKILLS_AGENTS };
 	}
@@ -352,7 +354,6 @@ export const recommendedTooling = (
 export const planInitToolingSteps = (input: {
 	tooling: InitToolingPlan;
 	yes: boolean;
-	pluginScope: "global" | "project";
 	skillsGlobal: boolean;
 	mcpOauth: boolean;
 	mcpProject?: boolean;
@@ -510,7 +511,7 @@ export const namedAgentsMixedMessage = (
 	command: "init" | "bootstrap",
 	context?: NamedAgentCommandContext,
 ): string => {
-	const plugin = new Set(initPluginAgents());
+	const plugin = new Set(bootstrapPluginAgents());
 	const pluginNamed = uniqueAgentIds(named.filter((id) => plugin.has(id)));
 	const otherNamed = uniqueAgentIds(named.filter((id) => !plugin.has(id)));
 	return `${NAMED_AGENTS_MIXED} Plugin: ${pluginNamed.join(", ")}. Skills/MCP: ${otherNamed.join(", ")}. Re-run ${mixedRerun(command, pluginNamed, context)} or ${mixedRerun(command, otherNamed, context)}.`;

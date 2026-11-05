@@ -174,7 +174,7 @@ describe("neon plugins", () => {
 		);
 	});
 
-	test("-y with no project folders and no host fails", async ({
+	test("-y with no project folders, host, or installed apps fails", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch({ projectCursor: false });
@@ -182,7 +182,7 @@ describe("neon plugins", () => {
 			...runOptions(home, cwd, bin),
 			code: 1,
 		});
-		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).toMatch(/No coding agents detected\. /);
 		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/omit -y in a terminal/);
 	});
@@ -334,37 +334,68 @@ describe("neon plugins", () => {
 		expect(JSON.parse(stdout)[0].status).toBe("installed");
 	});
 
-	test("hidden --global still runs and installs into installed apps", async ({
+	test("hidden --global spawns exactly what the default does", async ({
+		testCliCommand,
+	}) => {
+		const runs: unknown[] = [];
+		for (const flags of [[], ["--global"]]) {
+			const { home, cwd, bin, argvFile } = scratch({
+				projectCursor: false,
+			});
+			mkdirSync(join(cwd, ".claude"));
+			mkdirSync(join(home, ".cursor"));
+			const { stdout } = await testCliCommand(
+				["plugins", "-y", ...flags],
+				runOptions(home, cwd, bin),
+			);
+			runs.push({
+				rows: JSON.parse(stdout),
+				argv: JSON.parse(readFileSync(argvFile, "utf8")),
+			});
+		}
+		expect(runs[1]).toEqual(runs[0]);
+		expect(runs[0]).toEqual({
+			rows: [
+				{
+					scope: "user",
+					plugin: "neon-postgres",
+					agent: "claude-code",
+					status: "installed",
+				},
+			],
+			argv: [
+				[
+					"-y",
+					`plugins@${PLUGINS_CLI_VERSION}`,
+					"add",
+					"neondatabase/agent-skills",
+					"-t",
+					"claude-code",
+					"-s",
+					"user",
+					"-y",
+				],
+			],
+		});
+	});
+
+	test("-y with no project folders or host uses installed apps", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
-		mkdirSync(join(cwd, ".claude"));
 		mkdirSync(join(home, ".cursor"));
 		const { stdout } = await testCliCommand(
-			["plugins", "-y", "--global"],
+			["plugins", "-y"],
 			runOptions(home, cwd, bin),
 		);
-		expect(JSON.parse(stdout)).toEqual([
-			{
-				scope: "user",
-				plugin: "neon-postgres",
-				agent: "cursor",
-				status: "installed",
-			},
-		]);
-		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
-			[
-				"-y",
-				`plugins@${PLUGINS_CLI_VERSION}`,
-				"add",
-				"neondatabase/agent-skills",
-				"-t",
-				"cursor",
-				"-s",
-				"user",
-				"-y",
-			],
-		]);
+		expect(JSON.parse(stdout)[0]).toMatchObject({
+			agent: "cursor",
+			status: "installed",
+		});
+		const spawned = JSON.parse(readFileSync(argvFile, "utf8"));
+		expect(
+			spawned.map((args: string[]) => args[args.indexOf("-t") + 1]),
+		).toEqual(["cursor"]);
 	});
 
 	test("-y --global skips detected Copilot CLI and Grok when their commands are not on PATH", async ({
@@ -624,7 +655,7 @@ describe("neon plugins", () => {
 		}
 		expect(compact).not.toContain("claimable-postgres");
 		expect(compact).not.toContain("neon-postgres-agent-platforms");
-		for (const agent of pluginsInstallableAgents("global")) {
+		for (const agent of pluginsInstallableAgents()) {
 			expect(compact).toContain(agent);
 		}
 		expect(flat).toMatch(/-a, --agent/);

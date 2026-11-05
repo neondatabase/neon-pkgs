@@ -117,24 +117,6 @@ describe("install scope telemetry", () => {
 		expect(takeCommandSuccessExtras()).toEqual({ scope: "global" });
 	});
 
-	test("plugins --global records global scope after the plugins CLI is invoked at user scope", async () => {
-		const cwd = scratch();
-		const { bin, argvFile } = fakeNpx("plugins");
-		vi.stubEnv("PLUGINS_ARGV_FILE", argvFile);
-		process.env.PATH = `${bin}:${previousPath}`;
-		process.chdir(cwd);
-		await pluginsHandler({
-			...baseProps(cwd),
-			yes: true,
-			global: true,
-			agent: ["cursor"],
-		});
-		expect(spawned(argvFile)[0]).toEqual(
-			expect.arrayContaining(["-s", "user"]),
-		);
-		expect(takeCommandSuccessExtras()).toEqual({ scope: "global" });
-	});
-
 	test("plugins does not record scope when the plugins CLI fails", async () => {
 		const cwd = scratch();
 		const { bin, argvFile } = fakeNpx("plugins");

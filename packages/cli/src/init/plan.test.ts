@@ -504,8 +504,8 @@ describe("chooseYesAgentTooling", () => {
 		});
 	});
 
-	test("plugin scope does not change MCP config location", () => {
-		expect(splitInitTooling(["windsurf"], "project", "global")).toEqual({
+	test("MCP config location comes from its own argument", () => {
+		expect(splitInitTooling(["windsurf"], "global")).toEqual({
 			setup: "skills-mcp",
 			skillsAgents: ["windsurf"],
 			mcpAgents: ["windsurf"],

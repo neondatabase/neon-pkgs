@@ -28,7 +28,6 @@ import { writer } from "../writer.js";
 
 type PluginsProps = CommonProps & {
 	yes?: boolean;
-	global?: boolean;
 	agent?: string[];
 	/** Working directory to detect project agents in and run the plugins CLI from. Defaults to `process.cwd()` (tests, and flows like `bootstrap` that scaffold into a different directory). */
 	cwd?: string;
@@ -73,10 +72,10 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 				describe:
-					"Skip prompts. Detected agents (project folders, else the host CLI agent)",
+					"Skip prompts. Detected agents (project folders, else the host CLI agent, else installed apps)",
 			},
-			// Plugins always install user-level. Kept so `neon plugins --global` scripts
-			// still run; with -y it detects installed apps instead of project folders.
+			// Plugins always install user-level, so this changes nothing. Kept so existing
+			// `neon plugins --global` invocations still parse under .strict().
 			global: {
 				type: "boolean",
 				default: false,
@@ -94,7 +93,7 @@ export const builder = (argv: yargs.Argv) =>
 		.example("$0 plugins", "Interactive: pick agents, then install")
 		.example(
 			"$0 plugins -y",
-			"Detected agents (project folders, else the host CLI agent), skip prompts",
+			"Detected agents (project folders, else the host CLI agent, else installed apps), skip prompts",
 		)
 		.example(
 			"$0 plugins --agent cursor --agent claude-code",
@@ -102,7 +101,7 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.epilogue(
 			helpEpilogue(
-				helpCsv("Supported agents", pluginsInstallableAgents("global")),
+				helpCsv("Supported agents", pluginsInstallableAgents()),
 				"The plugin installs user-level, so it applies to every project.",
 				`Currently one plugin: ${NEON_PLUGIN_NAME} from ${PLUGIN_SOURCE}.`,
 				`It includes the Neon MCP server (${NEON_MCP_URL})`,
@@ -115,8 +114,6 @@ export const builder = (argv: yargs.Argv) =>
 export type InstallPluginsOptions = {
 	cwd?: string;
 	yes?: boolean;
-	/** `-y` detects installed apps instead of project folders. */
-	detectInstalled?: boolean;
 	agents?: readonly string[];
 	allowAgentSkip?: boolean;
 };
@@ -140,7 +137,6 @@ export const installPlugins = async (
 	const yes = options.yes === true;
 	const interactive = canPickAgentsInteractively() && !yes;
 	const plan = await resolvePluginsPlan({
-		detectFrom: options.detectInstalled === true ? "installed" : "project",
 		agents: options.agents ?? [],
 		yes,
 		cwd,
@@ -260,7 +256,6 @@ export const handler = async (props: PluginsProps) => {
 	const outcome = await installPlugins({
 		cwd: props.cwd,
 		yes: props.yes,
-		detectInstalled: props.global,
 		agents: props.agent,
 	});
 	reportPluginsInstall(props, outcome);

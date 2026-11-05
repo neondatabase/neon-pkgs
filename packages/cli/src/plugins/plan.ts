@@ -12,7 +12,8 @@ import {
 	resolveAgentSelection,
 } from "../utils/agent_picker.js";
 import {
-	detectPluginsAgents,
+	detectInstalledPluginsAgents,
+	detectProjectPluginsAgents,
 	getPluginsTargetName,
 	mappedPluginsTargets,
 	missingPluginsCommands,
@@ -32,11 +33,7 @@ export type PluginsPlan = {
 	targets: PluginsMappedTarget[];
 };
 
-/** Where `-y` looks for agents. Plugins always install user-level. */
-export type PluginsDetectFrom = "project" | "installed";
-
 export type ResolvePluginsPlanOptions = {
-	detectFrom: PluginsDetectFrom;
 	agents: readonly string[];
 	yes: boolean;
 	cwd: string;
@@ -80,6 +77,28 @@ const commandLookup = (
 	...(options.commandPath !== undefined ? { path: options.commandPath } : {}),
 });
 
+/** Project folders, then (only with -y) the host CLI agent, then installed apps. */
+const detectPluginsTargets = async (
+	options: ResolvePluginsPlanOptions,
+	available: ReadonlySet<AgentType>,
+): Promise<AgentType[]> => {
+	const project = detectProjectPluginsAgents(options.cwd);
+	if (options.agents.length > 0) {
+		return project;
+	}
+	const first = options.yes
+		? await collectYesAgents({
+				detected: () => project,
+				detectAgent: options.detectAgent ?? detectAgent,
+				acceptHost: (id) =>
+					available.has(id) || getPluginsTargetName(id) !== undefined,
+			})
+		: project;
+	return first.length > 0
+		? first
+		: detectInstalledPluginsAgents(options.detectInstalledAgents);
+};
+
 export async function resolvePluginsPlan(
 	options: ResolvePluginsPlanOptions,
 ): Promise<PluginsPlan> {
@@ -89,27 +108,9 @@ export async function resolvePluginsPlan(
 		hasAgents: options.agents.length > 0,
 	});
 	const prompt = options.interactive && !options.yes;
-	const detectScope =
-		options.detectFrom === "installed" ? "global" : "project";
-	const available = pluginsInstallableAgents("global");
+	const available = pluginsInstallableAgents();
 	const availableSet = new Set(available);
-	const scoped = await detectPluginsAgents({
-		scope: detectScope,
-		cwd: options.cwd,
-		...(options.detectInstalledAgents
-			? { detectInstalledAgents: options.detectInstalledAgents }
-			: {}),
-	});
-	const detected =
-		options.yes && options.agents.length === 0
-			? await collectYesAgents({
-					detected: () => scoped,
-					detectAgent: options.detectAgent ?? detectAgent,
-					acceptHost: (id) =>
-						availableSet.has(id) ||
-						getPluginsTargetName(id) !== undefined,
-				})
-			: scoped;
+	const detected = await detectPluginsTargets(options, availableSet);
 	// The picker keeps detected agents first but checks only the ones whose plugin can
 	// install; `-y` keeps the full list so it can warn about the ones it skips. Detected
 	// agents are not run here: only the ones selected below are probed.
@@ -135,7 +136,7 @@ export async function resolvePluginsPlan(
 		message:
 			"Which coding agents should get the Neon plugin? (space to toggle, enter to confirm)",
 		nonInteractiveMessage: noDetectedAgentsMessage({
-			scope: detectScope,
+			scope: "project-then-installed",
 			supported: available,
 			fix: options.yes ? "run-without-yes" : "pass-yes",
 			nameAgent: true,
@@ -188,7 +189,7 @@ export async function resolvePluginsPlan(
 			targets:
 				installable.length === 0
 					? []
-					: mappedPluginsTargets(installable, "global"),
+					: mappedPluginsTargets(installable),
 		};
 	}
 
@@ -202,6 +203,6 @@ export async function resolvePluginsPlan(
 		agents,
 		skipped,
 		unusableCommands,
-		targets: mappedPluginsTargets(agents, "global"),
+		targets: mappedPluginsTargets(agents),
 	};
 }

@@ -1053,18 +1053,18 @@ neon docs search "pg_dump" --limit 5 --output json
 # Interactive: pick agents, then install.
 $ neon plugins
 
-# Skip prompts. Detected agents (project folders, else the host CLI agent).
+# Skip prompts. Detected agents (project folders, else the host CLI agent, else installed apps).
 $ neon plugins -y
 
 # Named agents.
 $ neon plugins --agent cursor --agent claude-code
 ```
 
-On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`, else from installed apps. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
-`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
+`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI, else installed apps. `--agent` / `-a` names coding agents and skips the agent picker. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-The plugin always installs user-level, so it applies to every project for that agent. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `--global` is still accepted for existing scripts and is no longer listed in `--help`; with `-y` it detects installed apps instead of project folders.
+The plugin always installs user-level, so it applies to every project for that agent. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `--global` is still accepted for existing scripts, does the same as the default, and is no longer listed in `--help`.
 
 GitHub Copilot CLI and Grok Build install through their own CLIs (`copilot`, `grok`), so `neon plugins` runs `copilot --version` or `grok --version` first. A command that is missing, fails, or (for Copilot) is older than 0.0.400 is skipped with a warning under `-y`, fails an explicit `--agent`, and in `neon init` gets Neon skills and MCP instead of the plugin. The other agents install by writing files, so their detected config directory is enough.
 

@@ -11,21 +11,21 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
-	detectInstallablePluginsAgents,
-	detectPluginsAgents,
+	bootstrapPluginAgents,
+	detectInstalledPluginsAgents,
+	detectProjectPluginsAgents,
 	mappedPluginsTargets,
 	missingPluginsCommands,
 	type PluginsCommandProblem,
 	pluginsCommandProblemText,
 	pluginsInstallableAgents,
-	pluginsMappedAgents,
 	type UnusablePluginsCommand,
 	unusablePluginsCommands,
 } from "./targets.js";
 
-describe("pluginsMappedAgents", () => {
+describe("pluginsInstallableAgents", () => {
 	test("is the MCP roster minus agents with no plugins mapping", () => {
-		const ids = pluginsMappedAgents();
+		const ids = pluginsInstallableAgents();
 		expect(ids).toContain("cursor");
 		expect(ids).toContain("claude-desktop");
 		expect(ids).toContain("vscode");
@@ -38,33 +38,33 @@ describe("pluginsMappedAgents", () => {
 	});
 });
 
-describe("pluginsInstallableAgents", () => {
-	test("project scope drops agents the plugins CLI only installs user-level", () => {
-		const ids = pluginsInstallableAgents("project");
-		expect(ids).toContain("cursor");
-		expect(ids).toContain("claude-code");
-		expect(ids).not.toContain("vscode");
-		expect(ids).not.toContain("github-copilot-cli");
-		expect(ids).not.toContain("grok-build");
-		expect(ids).not.toContain("mcporter");
-	});
-
-	test("user-level includes vscode, Copilot CLI, and Grok", () => {
-		const ids = pluginsInstallableAgents("global");
-		expect(ids).toContain("vscode");
-		expect(ids).toContain("github-copilot-cli");
-		expect(ids).toContain("grok-build");
-		expect(ids).toContain("cursor");
+describe("bootstrapPluginAgents", () => {
+	test("leaves VS Code, Copilot CLI, Grok Build, and Kimi Code to skills and MCP", () => {
+		const ids = bootstrapPluginAgents();
+		expect(ids).toEqual(
+			expect.arrayContaining([
+				"cursor",
+				"claude-code",
+				"claude-desktop",
+				"codex",
+			]),
+		);
+		for (const id of [
+			"vscode",
+			"github-copilot-cli",
+			"grok-build",
+			"kimi-code",
+			"mcporter",
+		]) {
+			expect(ids).not.toContain(id);
+		}
 	});
 });
 
 describe("mappedPluginsTargets", () => {
 	test("dedupes Claude Desktop and Claude Code onto claude-code", () => {
 		expect(
-			mappedPluginsTargets(
-				["claude-desktop", "claude-code", "cursor"],
-				"project",
-			),
+			mappedPluginsTargets(["claude-desktop", "claude-code", "cursor"]),
 		).toEqual([
 			{
 				agents: ["claude-desktop", "claude-code"],
@@ -75,16 +75,16 @@ describe("mappedPluginsTargets", () => {
 	});
 
 	test("maps vscode to vscode, not github-copilot", () => {
-		expect(mappedPluginsTargets(["vscode"], "global")).toEqual([
+		expect(mappedPluginsTargets(["vscode"])).toEqual([
 			{ agents: ["vscode"], target: "vscode" },
 		]);
-		expect(mappedPluginsTargets(["github-copilot-cli"], "global")).toEqual([
+		expect(mappedPluginsTargets(["github-copilot-cli"])).toEqual([
 			{ agents: ["github-copilot-cli"], target: "github-copilot" },
 		]);
 	});
 
 	test("throws when every selected agent lacks a mapping", () => {
-		expect(() => mappedPluginsTargets(["mcporter"], "project")).toThrow(
+		expect(() => mappedPluginsTargets(["mcporter"])).toThrow(
 			/None of the selected agents can install plugins/,
 		);
 	});
@@ -359,7 +359,7 @@ describe("pluginsCommandProblemText", () => {
 	});
 });
 
-describe("detectPluginsAgents", () => {
+describe("plugins agent detection", () => {
 	const dirs: string[] = [];
 
 	afterEach(() => {
@@ -368,32 +368,29 @@ describe("detectPluginsAgents", () => {
 		}
 	});
 
-	test("project scope detects from the project folder", async () => {
+	test("project folders map to plugin agents, including VS Code", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-plugins-detect-"));
 		dirs.push(cwd);
 		mkdirSync(join(cwd, ".cursor"));
-		expect(await detectPluginsAgents({ scope: "project", cwd })).toContain(
-			"cursor",
+		mkdirSync(join(cwd, ".vscode"));
+		expect(detectProjectPluginsAgents(cwd)).toEqual(
+			expect.arrayContaining(["cursor", "vscode"]),
 		);
 	});
 
-	test("project scope ignores a folder with no agent markers", async () => {
+	test("a folder with no agent markers detects nothing", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-plugins-detect-empty-"));
 		dirs.push(cwd);
-		expect(await detectPluginsAgents({ scope: "project", cwd })).toEqual(
-			[],
-		);
+		expect(detectProjectPluginsAgents(cwd)).toEqual([]);
 	});
 
-	test("project installable detection drops user-scope-only agents", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "neon-plugins-detect-vscode-"));
-		dirs.push(cwd);
-		mkdirSync(join(cwd, ".vscode"));
-		expect(await detectPluginsAgents({ scope: "project", cwd })).toContain(
-			"vscode",
-		);
+	test("installed apps drop agents without a plugins mapping", async () => {
 		expect(
-			await detectInstallablePluginsAgents({ scope: "project", cwd }),
-		).toEqual([]);
+			await detectInstalledPluginsAgents(async () => [
+				"codex",
+				"mcporter",
+				"codex",
+			]),
+		).toEqual(["codex"]);
 	});
 });
