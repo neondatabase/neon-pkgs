@@ -467,8 +467,12 @@ export const funnelAgentSetup = (
 	return "skills-mcp";
 };
 
+/**
+ * The plugin step gets the routed agents: re-detecting inside `neon plugins` would also
+ * pick up agents this routing leaves to skills and MCP.
+ */
 export const planYesAgentSteps = (tooling: YesAgentTooling): ToolingStep[] =>
-	planToolingSteps(tooling, { yes: true, named: false });
+	planToolingSteps(tooling, { yes: true, named: tooling.setup === "plugin" });
 
 export const NAMED_AGENTS_UNSUPPORTED =
 	"None of the selected agents can install the Neon plugin, skills, or MCP.";
