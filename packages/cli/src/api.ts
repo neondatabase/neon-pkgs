@@ -1377,99 +1377,6 @@ export const getApiClient = ({
 					body: data,
 				}),
 			),
-		getNeonAuthAllowLocalhost: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthAllowLocalhost({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthAllowLocalhost: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthAllowLocalhostData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthAllowLocalhost({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		getNeonAuthEmailAndPasswordConfig: (
-			projectId: string,
-			branchId: string,
-		) =>
-			call(() =>
-				raw.getNeonAuthEmailAndPasswordConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthEmailAndPasswordConfig: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<
-				raw.UpdateNeonAuthEmailAndPasswordConfigData["body"]
-			>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthEmailAndPasswordConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		getNeonAuthEmailProvider: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthEmailProvider({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthEmailProvider: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthEmailProviderData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthEmailProvider({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		sendNeonAuthEmailProviderTest: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.SendNeonAuthEmailProviderTestData["body"]>,
-		) =>
-			call(() =>
-				raw.sendNeonAuthEmailProviderTest({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		getNeonAuthPluginConfigs: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthPluginConfigs({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthOrganizationPlugin: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthOrganizationPluginData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthOrganizationPlugin({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
 		getNeonAuthOAuthProviderPlugin: (projectId: string, branchId: string) =>
 			call(() =>
 				raw.getNeonAuthOAuthProviderPlugin({
@@ -1570,25 +1477,6 @@ export const getApiClient = ({
 						branch_id: branchId,
 						client_id: clientId,
 					},
-				}),
-			),
-		getNeonAuthWebhookConfig: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthWebhookConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthWebhookConfig: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthWebhookConfigData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthWebhookConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
 				}),
 			),
 		createBranchNeonAuthNewUser: (
