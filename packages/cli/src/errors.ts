@@ -1,7 +1,4 @@
-/**
- * An error whose cause is known as a bounded code (`ERESOLVE`, `ENOENT`, `exit code 1`). The
- * code is safe to send as an analytics property; the message is not.
- */
+/** An error whose cause is known as a bounded code (`ERESOLVE`, `ENOENT`, `exit code 1`). */
 export class DetailedError extends Error {
 	readonly detail: string;
 

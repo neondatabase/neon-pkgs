@@ -421,16 +421,15 @@ export const runCommand = (
 ): Promise<boolean> =>
 	runCommandWithDetail(cmd, args, cwd, env).then((result) => result.ok);
 
-export type CommandResult = {
-	ok: boolean;
-	/** Why it failed, as codes only (`ENOENT`, `ERESOLVE`, `exit code 1`): safe for telemetry. */
-	detail?: string;
-};
+export type CommandResult =
+	| { ok: true }
+	/** `detail` is a code such as `ENOENT`, `ERESOLVE`, or `exit code 1`. */
+	| { ok: false; detail: string };
 
 const OUTPUT_TAIL_BYTES = 64 * 1024;
 
-// Bounded token shapes only, so nothing from the user's project can ride along. Yarn is left
-// out: its `YN####` records do not say which one is the failure, and build notices come first.
+// Yarn is left out: its `YN####` records do not say which one is the failure, and build
+// notices come first.
 const PACKAGE_MANAGER_ERROR_CODES = [
 	/npm (?:ERR!|error) code ([A-Z][A-Z0-9_]{1,40})\b/,
 	/\b(ERR_PNPM_[A-Z0-9_]{1,60})\b/,

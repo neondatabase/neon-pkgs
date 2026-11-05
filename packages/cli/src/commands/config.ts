@@ -590,14 +590,13 @@ export const ensureConfigPackages = async (
 	}
 	const result = await run(pm, args, cwd);
 	if (!result.ok) {
-		const detail = result.detail ?? "failed";
 		if (props.requireInstall) {
-			throw new ConfigInstallFailed(installHint, pm, detail);
+			throw new ConfigInstallFailed(installHint, pm, result.detail);
 		}
 		log.warning(
 			"Could not install the config packages automatically with %s (%s). Run by hand: %s",
 			pm,
-			detail,
+			result.detail,
 			installHint,
 		);
 	}
