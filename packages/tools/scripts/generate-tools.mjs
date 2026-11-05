@@ -7,7 +7,9 @@ const specPath = resolve(here, "../../sdk/spec/neon-openapi.json");
 const outPath = resolve(here, "../src/operations.gen.ts");
 const schemasPath = resolve(here, "../src/schemas.ts");
 const zodPath = resolve(here, "../src/generated/zod.gen.ts");
+const inputDescriptionsPath = resolve(here, "input-descriptions.json");
 const document = JSON.parse(readFileSync(specPath, "utf8"));
+const inputDescriptions = JSON.parse(readFileSync(inputDescriptionsPath, "utf8"));
 const httpMethods = new Set([
 	"delete",
 	"get",
@@ -370,6 +372,9 @@ for (const [path, pathItemValue] of Object.entries(document.paths ?? {})) {
 		);
 
 		operationRecords.push({
+			bodyDescription: bodyPassthrough
+				? firstSentence(resolvedBody.description ?? body?.description ?? "")
+				: "",
 			operationId: operation.operationId,
 			clientName: camelCase(operation.operationId),
 			toolId,
@@ -407,11 +412,41 @@ operationRecords.sort((left, right) =>
 	left.operationId.localeCompare(right.operationId),
 );
 
+for (const [operationId, fields] of Object.entries(inputDescriptions)) {
+	const record = operationRecords.find(
+		(candidate) => candidate.operationId === operationId,
+	);
+	if (!record) {
+		throw new Error(
+			`input-descriptions.json names an unknown operation: ${operationId}`,
+		);
+	}
+	const published = new Set([
+		...record.pathNames,
+		...record.queryNames,
+		...record.headerNames,
+		...(record.bodyPassthrough ? ["body"] : record.bodyNames),
+	]);
+	for (const name of Object.keys(fields)) {
+		if (!published.has(name)) {
+			throw new Error(
+				`input-descriptions.json names an unknown input ${operationId}.${name}`,
+			);
+		}
+	}
+}
+
 const shapeRef = (schemaExpr, name) =>
 	`${schemaExpr}.shape[${JSON.stringify(name)}]`;
 
 const schemaField = (name, expr, optionalize) =>
 	`\t${JSON.stringify(name)}: ${optionalize ? `${expr}.optional()` : expr},`;
+
+const describedField = (record, name, expr, generated = "") => {
+	const description =
+		inputDescriptions[record.operationId]?.[name] ?? generated;
+	return description ? `${expr}.describe(${JSON.stringify(description)})` : expr;
+};
 
 const schemaFor = (record) => {
 	const fields = [];
@@ -432,7 +467,7 @@ const schemaFor = (record) => {
 			fields.push(
 				schemaField(
 					name,
-					shapeRef(schemaExpr, name),
+					describedField(record, name, shapeRef(schemaExpr, name)),
 					optionalizeGroup,
 				),
 			);
@@ -457,13 +492,13 @@ const schemaFor = (record) => {
 		);
 	}
 	if (record.bodyPassthrough) {
-		fields.push(
-			schemaField(
-				"body",
-				`zod.z${record.pascalName}Body`,
-				!record.bodyRequired,
-			),
+		const bodyExpr = describedField(
+			record,
+			"body",
+			`zod.z${record.pascalName}Body`,
+			record.bodyDescription,
 		);
+		fields.push(schemaField("body", bodyExpr, !record.bodyRequired));
 	} else if (record.hasBody && record.bodyNames.length > 0) {
 		const bodyExpr = record.liftBodyKey
 			? `${shapeRef(`zod.z${record.pascalName}Body`, record.liftBodyKey)}${
@@ -602,7 +637,28 @@ ${requestSchemaNames.map((name) => `\t${name},`).join("\n")}
 } from "./generated/zod.gen.js";
 `;
 
-const generatedZodSource = readFileSync(zodPath, "utf8");
+// Every listTools payload carries these, so each OpenAPI description is cut
+// to its first sentence, the same budget tool descriptions get.
+const compactDescriptions = (source) =>
+	source.replace(
+		/\.register\(z\.globalRegistry, \{\s*description: '((?:\\.|[^'\\])*)'\s*\}\)/g,
+		(_match, literal) => {
+			const text = literal.replace(/\\(.)/g, (_escape, character) => {
+				if (character === "n") return "\n";
+				if (character === "'") return "'";
+				throw new Error(`Unsupported escape in OpenAPI description: \\${character}`);
+			});
+			const sentence = firstSentence(text);
+			return sentence ? `.describe(${JSON.stringify(sentence)})` : "";
+		},
+	);
+
+const generatedZodSource = compactDescriptions(readFileSync(zodPath, "utf8"));
+if (generatedZodSource.includes("z.globalRegistry")) {
+	throw new Error(
+		"Generated Zod registers metadata other than a description; extend compactDescriptions before publishing it.",
+	);
+}
 if (generatedZodSource.includes("z.intersection(")) {
 	throw new Error(
 		"Generated request schemas contain intersections; merge their object shapes before enabling strict validation.",

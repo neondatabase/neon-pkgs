@@ -29,6 +29,9 @@ const computeSettingsSchema = z
 		max_cu: zod.zComputeUnit.optional(),
 		suspend_timeout_seconds: zod.zSuspendTimeoutSeconds.optional(),
 	})
+	.describe(
+		"Autoscaling limits and suspend timeout for the read-write endpoint.",
+	)
 	.optional();
 
 const mapCompute = (
@@ -195,12 +198,14 @@ const snapshotFrequency = z.enum(["daily", "weekly", "monthly"]);
 export const setScheduleInputSchema = z.strictObject({
 	project_id: zod.zSetSnapshotSchedulePath.shape.project_id,
 	branch_id: zod.zSetSnapshotSchedulePath.shape.branch_id,
-	schedule: z.array(
-		z.strictObject({
-			...zod.zBackupScheduleItem.shape,
-			frequency: snapshotFrequency,
-		}),
-	),
+	schedule: z
+		.array(
+			z.strictObject({
+				...zod.zBackupScheduleItem.shape,
+				frequency: snapshotFrequency,
+			}),
+		)
+		.describe("Schedule entries defining the backup frequency."),
 });
 
 export const createBranchTool = (options: ToolClientOptions) =>

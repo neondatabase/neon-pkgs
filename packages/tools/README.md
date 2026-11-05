@@ -139,7 +139,7 @@ const { data: role } = await tools["postgres.roles.create"].execute({
 
 Pass a map keyed by SDK path or the current published `id`, or a function that can append to the generated text. A key that matches neither is ignored.
 
-Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
+Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Every top-level input carries a description too: the first sentence of its OpenAPI description, or handwritten copy where the spec has none. Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
 
 ```ts
 const tools = createNeonTools({
@@ -300,7 +300,7 @@ Existing MCP 1.x servers can use the version-specific entry point:
 import { registerNeonTools } from "@neon/tools/mcp-v1";
 ```
 
-MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
+MCP 1.x still receives Zod input schemas, including their `.describe()` copy. Generated Zod carries only the first sentence of each OpenAPI field description. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
 The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with `{ error: { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId } }` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
 
