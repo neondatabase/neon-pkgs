@@ -18,6 +18,7 @@ describe("parseGenerateOptions", () => {
 				"search-k1": "1.5",
 				"search-b": "0",
 				"max-ann-dimensions": "2000",
+				"exclude-table": ["authSessions", "audit_log"],
 			}),
 		).toEqual({
 			idStrategy: "text",
@@ -29,6 +30,7 @@ describe("parseGenerateOptions", () => {
 			searchK1: 1.5,
 			searchB: 0,
 			maxAnnDimensions: 2000,
+			excludeTables: ["authSessions", "audit_log"],
 		});
 	});
 
@@ -37,6 +39,8 @@ describe("parseGenerateOptions", () => {
 			parseGenerateOptions({
 				"no-snake-case": false,
 				"no-check-constraints": false,
+				"skip-auth-tables": false,
+				"exclude-table": [],
 			}),
 		).toEqual({});
 	});
@@ -51,6 +55,7 @@ describe("parseGenerateOptions", () => {
 		[{ "max-ann-dimensions": "0" }, "--max-ann-dimensions"],
 		[{ "search-language": " " }, "--search-language"],
 		[{ "vector-ops": "" }, "--vector-ops"],
+		[{ "exclude-table": ["users", " "] }, "--exclude-table"],
 	])("rejects %o with a message naming the flag", (values, flag) => {
 		expect(() => parseGenerateOptions(values)).toThrow(CliUsageError);
 		expect(() => parseGenerateOptions(values)).toThrow(flag);
@@ -75,6 +80,10 @@ describe("parseGenerateOptions", () => {
 		expect(
 			parseGenerateOptions({ "search-k1": "2", "search-b": "0.5" }),
 		).toEqual({ searchK1: 2, searchB: 0.5 });
+	});
+
+	test("--skip-auth-tables is resolved by the CLI, not mapped to a library option", () => {
+		expect(parseGenerateOptions({ "skip-auth-tables": true })).toEqual({});
 	});
 
 	test("the error carries the command so the hint names its --help", () => {

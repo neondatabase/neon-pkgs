@@ -109,12 +109,24 @@ export function planSchema(
 	options?: GenerateOptions,
 ): PlannedSchema {
 	const resolved = resolveOptions(options);
-	const schemaTableNames = new Set(schema.tables.map((t) => t.name));
 	const warnings: string[] = [];
 	const uses: ExtensionUse = { vector: false, text: false };
 
-	const tables = schema.tables.map((table) =>
-		planTable(table, resolved, schemaTableNames, warnings, uses),
+	const excluded = new Set(
+		schema.tables
+			.filter((table) => isExcluded(table.name, resolved))
+			.map((table) => table.name),
+	);
+	for (const name of unknownExcludedTables(schema, resolved)) {
+		warnings.push(
+			`excludeTables: "${name}" matches no table in the schema, so nothing was excluded for it.`,
+		);
+	}
+
+	const kept = schema.tables.filter((table) => !excluded.has(table.name));
+	const schemaTableNames = new Set(kept.map((t) => t.name));
+	const tables = kept.map((table) =>
+		planTable(table, resolved, schemaTableNames, excluded, warnings, uses),
 	);
 
 	// Emit each extension only when the schema actually used it, in a fixed
@@ -132,10 +144,37 @@ export function planSchema(
 	return { tables, extensions, warnings };
 }
 
+/**
+ * The `excludeTables` names that match no table in the schema, by either its
+ * Convex or its Postgres name. Pure.
+ */
+export function unknownExcludedTables(
+	schema: ConvexSchema,
+	options?: GenerateOptions,
+): string[] {
+	const resolved = resolveOptions(options);
+	return resolved.excludeTables.filter(
+		(name) =>
+			!schema.tables.some(
+				(table) =>
+					table.name === name ||
+					toPgName(table.name, resolved.snakeCase) === name,
+			),
+	);
+}
+
+function isExcluded(name: string, options: ResolvedOptions): boolean {
+	return (
+		options.excludeTables.includes(name) ||
+		options.excludeTables.includes(toPgName(name, options.snakeCase))
+	);
+}
+
 function planTable(
 	table: ConvexTable,
 	options: ResolvedOptions,
 	schemaTableNames: ReadonlySet<string>,
+	excludedTableNames: ReadonlySet<string>,
 	warnings: string[],
 	uses: ExtensionUse,
 ): PlannedTable {
@@ -158,7 +197,7 @@ function planTable(
 		for (const column of table.columns) {
 			const mapped = mapValidator(
 				column.validator,
-				{ options, schemaTableNames },
+				{ options, schemaTableNames, excludedTableNames },
 				`${table.name}.${column.name}`,
 			);
 			for (const warning of mapped.warnings) {

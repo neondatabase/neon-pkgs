@@ -9,7 +9,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import {
+	afterAll,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	test,
+} from "vitest";
 import { generateDataSql, generateSeedSql } from "../data/seed.js";
 import { generateStagingDropSql } from "../data/staging.js";
 import { generateTransformSql } from "../data/transform.js";
@@ -106,7 +113,15 @@ afterAll(() => {
 
 async function run(
 	args: string[],
-	{ cwd = project, env = {} }: { cwd?: string; env?: CliIo["env"] } = {},
+	{
+		cwd = project,
+		env = {},
+		loadAuthTableNames,
+	}: {
+		cwd?: string;
+		env?: CliIo["env"];
+		loadAuthTableNames?: CliIo["loadAuthTableNames"];
+	} = {},
 ) {
 	let stdout = "";
 	let stderr = "";
@@ -115,6 +130,7 @@ async function run(
 		stderr: { write: (chunk: string) => (stderr += chunk) },
 		env,
 		cwd,
+		loadAuthTableNames,
 	});
 	return { code, stdout, stderr };
 }
@@ -226,6 +242,37 @@ describe("schema", () => {
 	test("--schema points at another schema file", async () => {
 		const { stdout } = await run(["schema", "--schema", "plain/schema.ts"]);
 		expect(stdout).toBe(generateDdl(plainParsed).sql);
+	});
+
+	test("--exclude-table leaves a table out", async () => {
+		const excluded = generateDdl(parsed, { excludeTables: ["channels"] });
+		const { code, stdout, stderr } = await run([
+			"schema",
+			"--exclude-table",
+			"channels",
+		]);
+		expect(code).toBe(0);
+		expect(stdout).toBe(excluded.sql);
+		expect(stdout).not.toContain("CREATE TABLE channels");
+		expect(stderr).toContain(
+			'reference to table "channels", which is excluded',
+		);
+	});
+
+	test("an --exclude-table that matches no table is a usage error", async () => {
+		const { code, stdout, stderr } = await run([
+			"schema",
+			"--exclude-table",
+			"messages",
+			"--exclude-table",
+			"chanels",
+		]);
+		expect(code).toBe(1);
+		expect(stdout).toBe("");
+		expect(stderr).toContain(
+			'--exclude-table "chanels" matches no table in the schema. Its tables are: channels, messages.',
+		);
+		expect(stderr).toContain("schema --help");
 	});
 
 	test("--out writes the SQL to a file instead of stdout", async () => {
@@ -502,5 +549,175 @@ describe("import", () => {
 		expect(stderr).toContain("convex-to-postgres: ");
 		expect(stderr).not.toContain("DATABASE_URL");
 		expect(stderr).not.toContain("--help");
+	});
+});
+
+describe("Convex Auth tables", () => {
+	// What `@convex-dev/auth` 0.0.96's `authTables` has, as an example: the CLI
+	// reads the real list from the app's installed package.
+	const AUTH_NAMES = [
+		"users",
+		"authSessions",
+		"authAccounts",
+		"authRefreshTokens",
+		"authVerificationCodes",
+		"authVerifiers",
+		"authRateLimits",
+	];
+	const authExported = schema([
+		table({ name: "users", fields: { email: field(v.string(), true) } }),
+		table({
+			name: "authSessions",
+			fields: { userId: field(v.id("users")) },
+		}),
+		table({
+			name: "authAccounts",
+			fields: {
+				userId: field(v.id("users")),
+				secret: field(v.string(), true),
+			},
+		}),
+		table({
+			name: "calendars",
+			fields: { ownerId: field(v.id("users")) },
+		}),
+	]);
+	const authParsed = parseExportedSchema(authExported);
+	const SKIPPED = ["authSessions", "authAccounts"];
+	const sensitive = (names: string) =>
+		`warning: the Convex Auth tables ${names} hold password hashes and session tokens. Treat them as sensitive, or leave them out with --skip-auth-tables.\n`;
+
+	let authProject: string;
+	let calls: string[];
+	const loader =
+		(names: string[] | undefined) =>
+		async (path: string): Promise<string[] | undefined> => {
+			calls.push(path);
+			return names;
+		};
+
+	beforeAll(() => {
+		authProject = join(work, "auth-project");
+		writeSchemaTs(join(authProject, "convex", "schema.ts"), authExported);
+	});
+
+	beforeEach(() => {
+		calls = [];
+	});
+
+	test("--skip-auth-tables leaves out the loaded tables that are in the schema, keeping users", async () => {
+		const { code, stdout, stderr } = await run(
+			["schema", "--skip-auth-tables"],
+			{ cwd: authProject, loadAuthTableNames: loader(AUTH_NAMES) },
+		);
+		expect(code).toBe(0);
+		expect(stdout).toBe(
+			generateDdl(authParsed, { excludeTables: SKIPPED }).sql,
+		);
+		expect(stdout).toContain("CREATE TABLE users (");
+		expect(stdout).not.toContain("auth_sessions");
+		expect(stdout).not.toContain("auth_accounts");
+		expect(stderr).toBe("");
+		expect(calls).toEqual([join(authProject, "convex", "schema.ts")]);
+	});
+
+	test("--skip-auth-tables follows whatever the installed package lists", async () => {
+		const { stdout } = await run(["schema", "--skip-auth-tables"], {
+			cwd: authProject,
+			loadAuthTableNames: loader([
+				"users",
+				"authAccounts",
+				"authNewTable",
+			]),
+		});
+		expect(stdout).toBe(
+			generateDdl(authParsed, { excludeTables: ["authAccounts"] }).sql,
+		);
+	});
+
+	test("--skip-auth-tables combines with --exclude-table", async () => {
+		const { stdout } = await run(
+			["schema", "--skip-auth-tables", "--exclude-table", "calendars"],
+			{ cwd: authProject, loadAuthTableNames: loader(AUTH_NAMES) },
+		);
+		expect(stdout).toBe(
+			generateDdl(authParsed, {
+				excludeTables: ["calendars", ...SKIPPED],
+			}).sql,
+		);
+	});
+
+	test("--skip-auth-tables is a usage error when @convex-dev/auth can't be loaded", async () => {
+		const { code, stdout, stderr } = await run(
+			["schema", "--skip-auth-tables"],
+			{ cwd: authProject, loadAuthTableNames: loader(undefined) },
+		);
+		expect(code).toBe(1);
+		expect(stdout).toBe("");
+		expect(stderr).toContain(
+			"--skip-auth-tables: couldn't load @convex-dev/auth from the app. Install the app's dependencies, or leave tables out with --exclude-table.",
+		);
+		expect(stderr).toContain("schema --help");
+	});
+
+	test("--skip-auth-tables on a schema with none of the tables warns that nothing was skipped", async () => {
+		const { code, stdout, stderr } = await run(
+			["schema", "--skip-auth-tables"],
+			{ loadAuthTableNames: loader(AUTH_NAMES) },
+		);
+		expect(code).toBe(0);
+		expect(stdout).toBe(generateDdl(parsed).sql);
+		expect(stderr).toContain(
+			"warning: --skip-auth-tables: the schema has none of Convex Auth's tables, so nothing was skipped.\n",
+		);
+	});
+
+	test("imported auth tables get one warning naming them", async () => {
+		const { code, stdout, stderr } = await run(["schema"], {
+			cwd: authProject,
+			loadAuthTableNames: loader(AUTH_NAMES),
+		});
+		expect(code).toBe(0);
+		expect(stdout).toBe(generateDdl(authParsed).sql);
+		expect(stderr).toBe(sensitive("authSessions, authAccounts"));
+	});
+
+	test("the warning leaves out a table excluded by either name", async () => {
+		const { stderr } = await run(
+			["schema", "--exclude-table", "auth_sessions"],
+			{ cwd: authProject, loadAuthTableNames: loader(AUTH_NAMES) },
+		);
+		expect(stderr).toBe(sensitive("authAccounts"));
+		const both = await run(
+			[
+				"schema",
+				"--exclude-table",
+				"authSessions",
+				"--exclude-table",
+				"authAccounts",
+			],
+			{ cwd: authProject, loadAuthTableNames: loader(AUTH_NAMES) },
+		);
+		expect(both.stderr).toBe("");
+	});
+
+	test("no warning when @convex-dev/auth can't be loaded and the flag isn't passed", async () => {
+		const { code, stderr } = await run(["schema"], {
+			cwd: authProject,
+			loadAuthTableNames: loader(undefined),
+		});
+		expect(code).toBe(0);
+		expect(stderr).toBe("");
+	});
+
+	test("seed --skip-auth-tables leaves the tables out of the script", async () => {
+		const { code, stdout, stderr } = await run(
+			["seed", "--export", join(project, "export"), "--skip-auth-tables"],
+			{ cwd: authProject, loadAuthTableNames: loader(AUTH_NAMES) },
+		);
+		expect(code).toBe(0);
+		expect(stdout).toContain("CREATE TABLE _convex_users");
+		expect(stdout).not.toContain("_convex_auth_accounts");
+		expect(stderr).not.toContain("Convex Auth tables");
 	});
 });

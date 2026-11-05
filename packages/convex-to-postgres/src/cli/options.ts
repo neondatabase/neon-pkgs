@@ -42,6 +42,8 @@ export const GENERATE_OPTION_FLAGS = {
 	"search-k1": { type: "string" },
 	"search-b": { type: "string" },
 	"max-ann-dimensions": { type: "string" },
+	"exclude-table": { type: "string", multiple: true },
+	"skip-auth-tables": { type: "boolean" },
 } as const;
 
 export interface GenerateOptionValues {
@@ -54,6 +56,8 @@ export interface GenerateOptionValues {
 	"search-k1"?: string;
 	"search-b"?: string;
 	"max-ann-dimensions"?: string;
+	"exclude-table"?: string[];
+	"skip-auth-tables"?: boolean;
 }
 
 const ID_STRATEGIES: readonly IdStrategy[] = ["uuid", "text"];
@@ -147,6 +151,13 @@ export function parseGenerateOptions(
 		options.maxAnnDimensions = n;
 	}
 
+	const excludeTables = values["exclude-table"];
+	if (excludeTables !== undefined && excludeTables.length > 0) {
+		options.excludeTables = excludeTables.map((name) =>
+			nonEmpty("exclude-table", name, command),
+		);
+	}
+
 	return options;
 }
 
@@ -187,7 +198,12 @@ const GENERATE_OPTIONS_HELP = `Generation options (pass the same ones to every c
   --vector-ops <opclass>      Operator class for vector indexes
                               (default: vector_cosine_ops)
   --max-ann-dimensions <n>    Skip the vector index above n dimensions
-                              (default: no cap)`;
+                              (default: no cap)
+  --exclude-table <name>      Leave a table out (Convex or Postgres name).
+                              Repeat it for each table
+  --skip-auth-tables          Leave out the tables Convex Auth's authTables
+                              adds, read from the app's installed
+                              @convex-dev/auth, except users`;
 
 const SCHEMA_FLAG_HELP = `  --schema <path>             Convex schema file (default: ./${DEFAULT_SCHEMA})`;
 const EXPORT_FLAG_HELP = `  --export <path>             Snapshot from \`npx convex export\`: a .zip or

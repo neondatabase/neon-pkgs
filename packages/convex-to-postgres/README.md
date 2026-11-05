@@ -111,6 +111,30 @@ Convex does not enforce references, so a real export can contain an id whose
 target row was deleted. The deferred foreign keys reject it when the transform
 commits, and the error's `detail` line names the key.
 
+### Leave tables out
+
+Pass `--exclude-table <name>` for each table to leave out, by its Convex name
+(`auditLog`) or its Postgres name (`audit_log`). `--skip-auth-tables` leaves out
+the tables Convex Auth's `authTables` adds, except `users`. It reads that list
+from the `@convex-dev/auth` your app has installed, resolved from your
+`schema.ts`, so it follows the app's version of Convex Auth. With
+`@convex-dev/auth` 0.0.96, for example, it leaves out `authSessions`,
+`authAccounts`, `authRefreshTokens`, `authVerificationCodes`, `authVerifiers`
+and `authRateLimits`. If the package can't be loaded, `--skip-auth-tables` is
+an error: install the app's dependencies, or name the tables with
+`--exclude-table`.
+
+It keeps `users`, because your own tables reference it. A table that's left out
+gets no `CREATE TABLE`, no staging table, and none of its documents are read,
+so its data never reaches the database or a seed script. A reference into it
+keeps its column but loses its foreign key, with a warning. An
+`--exclude-table` name that matches no table is an error, so a typo can't import
+the table you meant to leave out.
+
+When Convex Auth's tables are in the schema and you don't leave them out, the
+tool prints one warning naming them: they hold password hashes and session
+tokens, so treat the imported tables as sensitive.
+
 ### Commands and options
 
 | Command | Required | Optional |
@@ -133,6 +157,8 @@ every command so table names, column names, and types line up between files.
 | `--search-k1 <number>` (not with `gin`) | `searchK1` | `1.2` |
 | `--search-b <number>` (not with `gin`) | `searchB` | `0.75` |
 | `--max-ann-dimensions <n>` | `maxAnnDimensions` | no cap |
+| `--exclude-table <name>` (repeatable) | `excludeTables` | none |
+| `--skip-auth-tables` | `excludeTables` with `loadConvexAuthTableNames()`, minus `users` | off |
 
 Every command takes `--help`. A command exits `0` on success and `1` on any
 failure, with a message on stderr that names the flag to fix.
@@ -580,10 +606,14 @@ above); the generated SQL targets a Neon Lakebase branch, since it relies on the
 | `importConvexExport(options)` | pg + fs | Load an export (dir or `.zip`) in one transaction; returns row counts. |
 | `openExportSource(source)` | fs | Low-level reader over a directory or `.zip` export. |
 | `planSchema(schema, options?)` | pure | The resolved Postgres plan shared by the generators. |
+| `loadConvexAuthTableNames(path)` | I/O | The table names `authTables` adds (`users` included), from the `@convex-dev/auth` installed for the app whose `schema.ts` is at `path`; `undefined` when it can't be loaded. |
 
 `GenerateOptions`: `idStrategy` (`"uuid"` default), `snakeCase` (`true` default),
 `checkConstraints` (`true` default), and for search and vector indexes:
 `searchIndex` (`"bm25"` default, or `"gin"`), `searchLanguage` (`"english"`
 default), `vectorOps` (`"vector_cosine_ops"` default), `searchK1` (`1.2`
-default), `searchB` (`0.75` default), and `maxAnnDimensions` (`undefined`
-default — no cap).
+default), `searchB` (`0.75` default), `maxAnnDimensions` (`undefined`
+default — no cap), and `excludeTables` (`[]` default) to leave tables out. From
+the library, an `excludeTables` name that matches no table is a warning rather
+than an error. To leave out Convex Auth's tables, pass the names
+`loadConvexAuthTableNames` returns, minus `users`, in `excludeTables`.

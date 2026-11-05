@@ -69,6 +69,13 @@ export interface GenerateOptions {
 	 * Defaults to `undefined` (no cap; every vector index gets an ANN index).
 	 */
 	maxAnnDimensions?: number;
+	/**
+	 * Tables to leave out, by Convex name (`authSessions`) or Postgres name
+	 * (`auth_sessions`). They get no table, no staging table, and no load; a
+	 * reference into one keeps its column but loses the foreign key, with a
+	 * warning. Defaults to `[]`.
+	 */
+	excludeTables?: string[];
 }
 
 /** {@link GenerateOptions} with every field resolved to its default. */
@@ -83,6 +90,7 @@ export interface ResolvedOptions {
 	searchB: number;
 	/** `undefined` means no cap. */
 	maxAnnDimensions: number | undefined;
+	excludeTables: string[];
 }
 
 /** Fill in defaults for any omitted {@link GenerateOptions} field. */
@@ -97,5 +105,6 @@ export function resolveOptions(options: GenerateOptions = {}): ResolvedOptions {
 		searchK1: options.searchK1 ?? 1.2,
 		searchB: options.searchB ?? 0.75,
 		maxAnnDimensions: options.maxAnnDimensions,
+		excludeTables: options.excludeTables ?? [],
 	};
 }

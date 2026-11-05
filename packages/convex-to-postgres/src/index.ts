@@ -28,7 +28,10 @@ export type {
 export { resolveOptions } from "./options.js";
 export type { DdlResult } from "./schema/generate-ddl.js";
 export { generateDdl, generateIndexDdl } from "./schema/generate-ddl.js";
-export { loadConvexSchema } from "./schema/load.js";
+export {
+	loadConvexAuthTableNames,
+	loadConvexSchema,
+} from "./schema/load.js";
 export type {
 	ConvexColumn,
 	ConvexFieldEntry,

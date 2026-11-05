@@ -13,8 +13,10 @@ import { generateStagingDropSql } from "../data/staging.js";
 import { generateTransformSql } from "../data/transform.js";
 import type { GenerateOptions } from "../options.js";
 import { generateDdl, generateIndexDdl } from "../schema/generate-ddl.js";
-import { loadConvexSchema } from "../schema/load.js";
+import { loadConvexAuthTableNames, loadConvexSchema } from "../schema/load.js";
 import type { ConvexSchema } from "../schema/model.js";
+import { unknownExcludedTables } from "../schema/plan.js";
+import { toPgName } from "../util/names.js";
 import { withExtractedExport } from "./export-dir.js";
 import {
 	CliUsageError,
@@ -23,6 +25,7 @@ import {
 	type Command,
 	DEFAULT_SCHEMA,
 	GENERATE_OPTION_FLAGS,
+	type GenerateOptionValues,
 	INVOCATION,
 	parseGenerateOptions,
 	TOP_HELP,
@@ -37,6 +40,13 @@ export interface CliIo {
 	stderr: { write(chunk: string): unknown };
 	env: Record<string, string | undefined>;
 	cwd: string;
+	/**
+	 * Reads Convex Auth's table names for the app at a `schema.ts` path.
+	 * Defaults to {@link loadConvexAuthTableNames}; tests inject a stub.
+	 */
+	loadAuthTableNames?: (
+		schemaTsPath: string,
+	) => Promise<string[] | undefined>;
 }
 
 /** The files `seed --split` writes, in the order they run. */
@@ -97,11 +107,14 @@ export async function runSchema(args: string[], io: CliIo): Promise<number> {
 	});
 	if (values.help) return help("schema", io);
 
-	const options = parseGenerateOptions(values, "schema");
-	const schema = await readSchema(values.schema, "schema", io);
+	const { schema, options, warnings } = await readSchema(
+		values,
+		"schema",
+		io,
+	);
 	const ddl = generateDdl(schema, options);
 	emit(ddl.sql, values.out, io);
-	writeWarnings(ddl.warnings, io);
+	writeWarnings([...warnings, ...ddl.warnings], io);
 	return 0;
 }
 
@@ -129,8 +142,7 @@ export async function runSeed(args: string[], io: CliIo): Promise<number> {
 			"seed",
 		);
 	}
-	const options = parseGenerateOptions(values, "seed");
-	const schema = await readSchema(values.schema, "seed", io);
+	const { schema, options, warnings } = await readSchema(values, "seed", io);
 	const ddl = generateDdl(schema, options);
 
 	if (values.split !== undefined) {
@@ -146,7 +158,7 @@ export async function runSeed(args: string[], io: CliIo): Promise<number> {
 		);
 		emit(sql, values.out, io);
 	}
-	writeWarnings(ddl.warnings, io);
+	writeWarnings([...warnings, ...ddl.warnings], io);
 	return 0;
 }
 
@@ -168,8 +180,11 @@ export async function runImport(args: string[], io: CliIo): Promise<number> {
 		);
 	}
 	const exportPath = requireExport(values.export, "import", io);
-	const options = parseGenerateOptions(values, "import");
-	const schema = await readSchema(values.schema, "import", io);
+	const { schema, options, warnings } = await readSchema(
+		values,
+		"import",
+		io,
+	);
 
 	const result = await importConvexExport({
 		...options,
@@ -185,7 +200,7 @@ export async function runImport(args: string[], io: CliIo): Promise<number> {
 	io.stderr.write(
 		`Imported ${rows} row(s) into ${counts.length} table(s).\n`,
 	);
-	writeWarnings(result.warnings, io);
+	writeWarnings([...warnings, ...result.warnings], io);
 	return 0;
 }
 
@@ -251,21 +266,90 @@ function requireExport(
 	return path;
 }
 
+/** The schema to generate from, the options to generate with, and CLI warnings. */
+interface ReadSchema {
+	schema: ConvexSchema;
+	options: GenerateOptions;
+	warnings: string[];
+}
+
+/** Convex Auth's table that app tables reference, so it's never skipped. */
+const CONVEX_AUTH_USERS = "users";
+
+/**
+ * Load the Convex schema and resolve the generation options against it.
+ *
+ * - `--skip-auth-tables` adds the tables Convex Auth's `authTables` adds, read
+ *   from the app's installed `@convex-dev/auth`, to `excludeTables`, except
+ *   `users`.
+ * - When those tables are imported, a warning says they hold credentials.
+ * - An `--exclude-table` that names no table is an error: a typo would
+ *   otherwise import the table the user meant to leave out.
+ */
 async function readSchema(
-	value: string | undefined,
+	values: GenerateOptionValues & {
+		schema?: string;
+		"skip-auth-tables"?: boolean;
+	},
 	command: Command,
 	io: CliIo,
-): Promise<ConvexSchema> {
-	const path = resolve(io.cwd, value ?? DEFAULT_SCHEMA);
+): Promise<ReadSchema> {
+	const options = parseGenerateOptions(values, command);
+	const path = resolve(io.cwd, values.schema ?? DEFAULT_SCHEMA);
 	if (!existsSync(path)) {
 		throw new CliUsageError(
-			value === undefined
+			values.schema === undefined
 				? `No Convex schema at ./${DEFAULT_SCHEMA}. Run from your Convex project root, or pass --schema <path>.`
-				: `No Convex schema at ${value}. Check the --schema path.`,
+				: `No Convex schema at ${values.schema}. Check the --schema path.`,
 			command,
 		);
 	}
-	return loadConvexSchema(path);
+	const schema = await loadConvexSchema(path);
+	const unknown = unknownExcludedTables(schema, options);
+	if (unknown.length > 0) {
+		throw new CliUsageError(
+			`--exclude-table ${unknown.map((name) => `"${name}"`).join(", ")} matches no table in the schema. Its tables are: ${schema.tables.map((table) => table.name).join(", ")}.`,
+			command,
+		);
+	}
+
+	const warnings: string[] = [];
+	const loadAuthTableNames =
+		io.loadAuthTableNames ?? loadConvexAuthTableNames;
+	const authNames = await loadAuthTableNames(path);
+	if (values["skip-auth-tables"] && authNames === undefined) {
+		throw new CliUsageError(
+			"--skip-auth-tables: couldn't load @convex-dev/auth from the app. Install the app's dependencies, or leave tables out with --exclude-table.",
+			command,
+		);
+	}
+	const inSchema = new Set(schema.tables.map((table) => table.name));
+	const authTables = (authNames ?? []).filter(
+		(name) => name !== CONVEX_AUTH_USERS && inSchema.has(name),
+	);
+	if (values["skip-auth-tables"]) {
+		if (authTables.length === 0) {
+			warnings.push(
+				"--skip-auth-tables: the schema has none of Convex Auth's tables, so nothing was skipped.",
+			);
+		}
+		options.excludeTables = [
+			...new Set([...(options.excludeTables ?? []), ...authTables]),
+		];
+	} else {
+		const excluded = new Set(options.excludeTables ?? []);
+		const imported = authTables.filter(
+			(name) =>
+				!excluded.has(name) &&
+				!excluded.has(toPgName(name, options.snakeCase ?? true)),
+		);
+		if (imported.length > 0) {
+			warnings.push(
+				`the Convex Auth tables ${imported.join(", ")} hold password hashes and session tokens. Treat them as sensitive, or leave them out with --skip-auth-tables.`,
+			);
+		}
+	}
+	return { schema, options, warnings };
 }
 
 /** Write `sql` to `--out` when given, else stdout. */

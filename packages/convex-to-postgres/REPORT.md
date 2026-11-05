@@ -52,6 +52,7 @@ Grounded in what the corpus and the round-trip actually exercised. "Round-trippe
 | Synthesized `_id` | `id` primary key (`uuid` via md5, or `text` verbatim) | Round-tripped |
 | Synthesized `_creationTime` | `created_at timestamptz` | Round-tripped |
 | File storage contents | not migrated; only `_storage` id columns are kept | Out of scope |
+| Convex Auth tables (`authTables`) | imported like any table; the CLI warns that they hold password hashes and session tokens. `--skip-auth-tables` reads the list from the app's installed `@convex-dev/auth` and leaves them out but keeps `users`; `excludeTables` leaves out any table | Unit-tested, the loader against a stub package; a reference into a left-out table loses its foreign key, with a warning |
 | Referential integrity across deletes | a deferrable foreign key can reject a reference to a deleted document | See section 3, tutorial finding |
 
 ## 2. Verified Convex export facts

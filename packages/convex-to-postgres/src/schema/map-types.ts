@@ -35,6 +35,8 @@ export interface MapContext {
 	options: ResolvedOptions;
 	/** Convex table names present in the generated schema (for FK resolution). */
 	schemaTableNames: ReadonlySet<string>;
+	/** Convex table names left out by `excludeTables`. */
+	excludedTableNames?: ReadonlySet<string>;
 }
 
 /**
@@ -115,8 +117,18 @@ function mapId(
 		};
 	}
 	// The reference points outside the generated schema (a Convex system table
-	// like `_storage` / `_scheduled_functions`, or a table not exported). Keep
-	// the column typed as an id, but emit no foreign key.
+	// like `_storage` / `_scheduled_functions`, a table left out on purpose, or
+	// a table not exported). Keep the column typed as an id, but emit no
+	// foreign key.
+	if (ctx.excludedTableNames?.has(validator.tableName)) {
+		return {
+			pgType,
+			selectKind: "id",
+			warnings: [
+				`reference to table "${validator.tableName}", which is excluded; emitting the column without a foreign key.`,
+			],
+		};
+	}
 	return {
 		pgType,
 		selectKind: "id",

@@ -41,10 +41,43 @@ export async function loadConvexSchema(
 	return parseExportedSchema(exported);
 }
 
+/** The module that exports Convex Auth's `authTables`. */
+const CONVEX_AUTH_SERVER = "@convex-dev/auth/server";
+
+/**
+ * The names of the tables Convex Auth's `authTables` adds (`users` among them),
+ * read from the `@convex-dev/auth` installed for the app whose `schema.ts` is
+ * at `schemaTsPath`, so the list follows the app's version of Convex Auth.
+ *
+ * Resolution starts from the schema file, as it does for the schema's own
+ * imports. Returns `undefined` when the package can't be resolved from there
+ * (the app doesn't use Convex Auth, or its dependencies aren't installed) or
+ * doesn't export an `authTables` object. Importing the module only defines
+ * functions and validators.
+ */
+export async function loadConvexAuthTableNames(
+	schemaTsPath: string,
+): Promise<string[] | undefined> {
+	const path = resolve(schemaTsPath);
+	const createJiti = await loadCreateJiti();
+	const jiti = createJiti(pathToFileURL(path).href, {
+		interopDefault: true,
+		moduleCache: false,
+	});
+	const resolved = jiti.esmResolve(CONVEX_AUTH_SERVER, { try: true });
+	if (resolved === undefined) return undefined;
+	const mod: unknown = await jiti.import(resolved);
+	const authTables = isRecord(mod) ? mod.authTables : undefined;
+	return isRecord(authTables) ? Object.keys(authTables) : undefined;
+}
+
 type CreateJiti = (
 	id: string,
 	options?: { interopDefault?: boolean; moduleCache?: boolean },
-) => { import(id: string): Promise<unknown> };
+) => {
+	import(id: string): Promise<unknown>;
+	esmResolve(id: string, options: { try: true }): string | undefined;
+};
 
 async function loadCreateJiti(): Promise<CreateJiti> {
 	const mod: unknown = await import("jiti");
