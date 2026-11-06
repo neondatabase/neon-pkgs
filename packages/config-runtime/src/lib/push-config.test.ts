@@ -929,18 +929,29 @@ describe("pushConfig", () => {
 						source: fnSource,
 						env: {
 							LOG_LEVEL: "info",
-							TOKEN: { required: true },
-							DSN: { required: "deploy" },
+							TOKEN: {},
+							DSN: { required: "production" },
 							GUILD: { required: false },
-							ADMIN: { required: false, ifUnset: "keep" },
 							RATE: { default: "1" },
 						},
 					},
 				},
 			});
 		const noBundle = async () => new Uint8Array([1]);
+		const withPreview = () =>
+			seededFake({
+				branches: [
+					{ id: "br-main", name: "main", isDefault: true },
+					{ id: "br-dev", name: "dev", isDefault: false },
+				],
+			});
+		const deployedEnv = (api: FakeNeonApi) =>
+			(
+				api.history.find((h) => h.method === "deployBranchFunction")
+					?.args[3] as { environment: Record<string, string> }
+			).environment;
 
-		test("uploads set values and defaults, deletes unset optionals, and leaves keep ones out", async () => {
+		test("production uploads set values and defaults, and removes unset optionals", async () => {
 			const { api, projectId } = seededFake();
 			await pushConfig(declaredConfig(), {
 				api,
@@ -949,13 +960,7 @@ describe("pushConfig", () => {
 				bundleFunction: noBundle,
 				env: { TOKEN: "t", DSN: "d" },
 			});
-			const deploy = api.history.find(
-				(h) => h.method === "deployBranchFunction",
-			);
-			expect(
-				(deploy?.args[3] as { environment: Record<string, string> })
-					.environment,
-			).toEqual({
+			expect(deployedEnv(api)).toEqual({
 				LOG_LEVEL: "info",
 				TOKEN: "t",
 				DSN: "d",
@@ -964,9 +969,8 @@ describe("pushConfig", () => {
 			});
 		});
 
-		test("fails before any API call when a required variable is unset", async () => {
+		test('production fails before any change when { required: "production" } is unset', async () => {
 			const { api, projectId } = seededFake();
-			const before = api.history.length;
 			await expect(
 				pushConfig(declaredConfig(), {
 					api,
@@ -978,7 +982,22 @@ describe("pushConfig", () => {
 			).rejects.toThrow(
 				'Environment variable "DSN" for function "fn1" is required and unset.',
 			);
-			expect(api.history.length).toBe(before);
+			const writes = api.history.filter(
+				(h) => !/^(get|list)/.test(h.method),
+			);
+			expect(writes).toEqual([]);
+		});
+
+		test('a preview branch removes an unset { required: "production" } variable', async () => {
+			const { api, projectId } = withPreview();
+			await pushConfig(declaredConfig(), {
+				api,
+				projectId,
+				branchId: "br-dev",
+				bundleFunction: noBundle,
+				env: { TOKEN: "t" },
+			});
+			expect(deployedEnv(api)).toMatchObject({ DSN: "", GUILD: "" });
 		});
 
 		test("a passed env is the only source", async () => {

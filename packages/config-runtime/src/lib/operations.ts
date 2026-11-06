@@ -209,7 +209,8 @@ export async function createBranch(
 	options: CreateBranchOptions,
 ): Promise<CreateBranchResult> {
 	const envSource = options.env ?? process.env;
-	assertFunctionEnv(config, envSource, "deploy");
+	// A created branch is never the default branch.
+	assertFunctionEnv(config, envSource, "preview");
 	const api =
 		options.api ??
 		createNeonApiFromOptions(

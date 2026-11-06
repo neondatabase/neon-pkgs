@@ -415,17 +415,17 @@ describe("parseEnv existing overloads still type", () => {
 		expectTypeOf(env.function.resendApiKey).toEqualTypeOf<string>();
 	});
 
-	test("declared env vars are optional unless neon dev requires them", () => {
+	test("declared env vars are string unless they may be unset in neon dev", () => {
 		const config = defineConfig({
 			functions: {
 				hello: {
 					name: "Hello",
 					source: "./hello.ts",
 					env: {
-						TOKEN: { required: true },
-						DSN: { required: "deploy" },
+						TOKEN: {},
+						EXPLICIT: { required: true },
+						DSN: { required: "production" },
 						GUILD: { required: false },
-						ADMIN: { required: false, ifUnset: "keep" },
 						RATE: { default: "1" },
 						LOG_LEVEL: "info",
 					},
@@ -434,9 +434,9 @@ describe("parseEnv existing overloads still type", () => {
 		});
 		expectTypeOf(parseEnv(config, "hello").function).toEqualTypeOf<{
 			TOKEN: string;
+			EXPLICIT: string;
 			DSN: string | undefined;
 			GUILD: string | undefined;
-			ADMIN: string | undefined;
 			RATE: string;
 			LOG_LEVEL: string;
 		}>();

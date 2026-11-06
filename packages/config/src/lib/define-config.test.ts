@@ -658,7 +658,7 @@ describe("resolveConfig", () => {
 		expect(issue).toContain('function "hello"');
 		// …explains the likely cause + a fix…
 		expect(issue).toContain("process.env");
-		expect(issue).toContain("`test: { required: true }`");
+		expect(issue).toContain("`test: {}`");
 		expect(issue).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(issue).not.toContain(

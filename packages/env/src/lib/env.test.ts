@@ -568,8 +568,8 @@ describe("parseEnv", () => {
 					name: "Alpha",
 					source: "./alpha.ts",
 					env: {
-						SECRET_A: { required: true },
-						DSN: { required: "deploy" },
+						SECRET_A: {},
+						DSN: { required: "production" },
 						GUILD: { required: false },
 						RATE: { default: "1" },
 					},
@@ -577,7 +577,7 @@ describe("parseEnv", () => {
 				beta: {
 					name: "Beta",
 					source: "./beta.ts",
-					env: { SECRET_B: { required: true } },
+					env: { SECRET_B: {} },
 				},
 			},
 		});

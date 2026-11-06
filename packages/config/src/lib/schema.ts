@@ -230,29 +230,28 @@ const functionEnvValueSchema = z.string({
 	error: (issue) => undefinedFunctionEnvMessage(issue),
 });
 
-const functionEnvVarSchema = z.union([
-	z.strictObject({ required: z.literal(true) }),
-	z.strictObject({ required: z.literal("deploy") }),
-	z.strictObject({
-		required: z.literal(false),
-		ifUnset: z.enum(["delete", "keep"]).optional(),
-	}),
-	z.strictObject({
+const functionEnvVarSchema = z
+	.strictObject({
+		required: z.union([z.boolean(), z.literal("production")]).optional(),
 		default: z
 			.string()
 			.min(
 				1,
-				"default must not be empty: an empty value deletes the deployed variable. Use { required: false } instead.",
-			),
-	}),
-]);
+				"default must not be empty: an empty value removes the deployed variable. Use { required: false } instead.",
+			)
+			.optional(),
+	})
+	.refine((v) => v.required === undefined || v.default === undefined, {
+		message:
+			"`required` and `default` cannot be combined: a variable with a default is never missing.",
+	});
 
 const functionEnvEntrySchema = z.union(
 	[functionEnvValueSchema, functionEnvVarSchema],
 	{
 		error: (issue) =>
 			undefinedFunctionEnvMessage(issue) ??
-			'Expected a string or one of { required: true }, { required: "deploy" }, { required: false, ifUnset?: "delete" | "keep" }, { default: "<value>" }',
+			'Expected a string or a declaration: {} (required), { required: "production" }, { required: false }, or { default: "<value>" }.',
 	},
 );
 
@@ -274,10 +273,7 @@ function undefinedFunctionEnvMessage(issue: {
 			: key !== undefined
 				? `Environment variable "${key}"`
 				: "An environment variable";
-	const declaration =
-		key !== undefined
-			? `\`${key}: { required: true }\``
-			: "`{ required: true }`";
+	const declaration = key !== undefined ? `\`${key}: {}\`` : "`{}`";
 	return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Declare it as ${declaration} so neon.ts reads it only when deploying or running \`neon dev\`, or set it (for example \`neon deploy --env <file>\`). Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
 }
 

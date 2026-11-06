@@ -2,14 +2,18 @@ import { authoredFunctions } from "./authored-services.js";
 import { ConfigValidationError } from "./errors.js";
 import type { Config, FunctionEnvValue, FunctionEnvVar } from "./types.js";
 
-/** `deploy` for `neon deploy` / `pushConfig`, `run` for `neon dev` and `parseEnv`. */
-export type FunctionEnvTarget = "deploy" | "run";
+/**
+ * Where a declared value is resolved: a deploy to the project's default branch
+ * (`production`), a deploy to any other branch (`preview`), or `neon dev` and `parseEnv`
+ * (`development`).
+ */
+export type FunctionEnvTarget = "production" | "preview" | "development";
 
 /** Where declared values are read from, usually `process.env`. */
 export type FunctionEnvSource = Readonly<Record<string, string | undefined>>;
 
 export interface ResolvedFunctionEnv {
-	/** Values to set. On `deploy`, `""` removes the deployed variable. */
+	/** Values to set. On a deploy, `""` removes the deployed variable. */
 	env: Record<string, string>;
 	/** Declared keys `target` requires that `source` lacks. */
 	missing: string[];
@@ -34,6 +38,15 @@ export function splitFunctionEnv(
 		: { env: literal };
 }
 
+function isRequired(
+	declaration: FunctionEnvVar,
+	target: FunctionEnvTarget,
+): boolean {
+	if ("default" in declaration) return false;
+	const required = declaration.required ?? true;
+	return required === "production" ? target === "production" : required;
+}
+
 /** Resolve {@link FunctionEnvVar} declarations against `source` for `target`. */
 export function resolveFunctionEnv(
 	envVars: Record<string, FunctionEnvVar> | undefined,
@@ -48,34 +61,35 @@ export function resolveFunctionEnv(
 			env[key] = value;
 		} else if ("default" in declaration) {
 			env[key] = declaration.default;
-		} else if (declaration.required === true) {
+		} else if (isRequired(declaration, target)) {
 			missing.push(key);
-		} else if (declaration.required === "deploy") {
-			if (target === "deploy") missing.push(key);
-		} else if (target === "deploy" && declaration.ifUnset !== "keep") {
+		} else if (target !== "development") {
 			env[key] = "";
 		}
 	}
 	return { env, missing };
 }
 
+const MISSING_FIX: Record<FunctionEnvTarget, string> = {
+	production: "Set it in the environment or in the file passed to --env.",
+	preview:
+		'Set it in the environment or in the file passed to --env, or declare it { required: "production" } if preview branches can run without it.',
+	development:
+		'Set it in .env.local, the environment, or the file passed to --env, or declare it { required: "production" } if only the production deployment needs it.',
+};
+
 /**
  * Throw one {@link ConfigValidationError} naming every declared variable `target` requires
- * that `source` lacks, across all of `config`'s functions. Declarations are static, so this
- * runs before any branch is read or created.
+ * that `source` lacks, across all of `config`'s functions.
  */
 export function assertFunctionEnv(
 	config: Pick<Config, "functions" | "preview">,
 	source: FunctionEnvSource,
 	target: FunctionEnvTarget,
 ): void {
-	const fix =
-		target === "deploy"
-			? "Set it in the environment or in the file passed to --env."
-			: 'Set it in .env.local, the environment, or the file passed to --env, or declare it { required: "deploy" } if only the deployed Function needs it.';
 	const issues = missingFunctionEnv(config, source, target).map(
 		({ slug, key }) =>
-			`Environment variable "${key}" for function "${slug}" is required and unset. ${fix}`,
+			`Environment variable "${key}" for function "${slug}" is required and unset. ${MISSING_FIX[target]}`,
 	);
 	if (issues.length > 0) throw new ConfigValidationError(issues);
 }

@@ -8,6 +8,7 @@ import {
 	deleteProject,
 	runCli,
 	uniqueProjectName,
+	waitForProjectReady,
 } from "./helpers.js";
 
 const FIXTURE = resolve(import.meta.dirname, "fixtures", "function-env");
@@ -29,14 +30,19 @@ describe.sequential("e2e — declared Function env", () => {
 	let branchId: string;
 	let tmp: string;
 
-	const target = () => ["--project-id", projectId, "--branch", branchId];
+	const target = (branch = branchId) => [
+		"--project-id",
+		projectId,
+		"--branch",
+		branch,
+	];
 
-	const deploy = (envFile: string) =>
+	const deploy = (envFile: string, branch = branchId) =>
 		runCli(
 			[
 				"deploy",
 				"-y",
-				...target(),
+				...target(branch),
 				"--config",
 				POLICY,
 				"--env",
@@ -52,10 +58,16 @@ describe.sequential("e2e — declared Function env", () => {
 		return path;
 	};
 
-	const getFunction = async (slug: string): Promise<FunctionInfo> => {
-		const result = await runCli(["functions", "get", slug, ...target()], {
-			cwd: FIXTURE,
-		});
+	const getFunction = async (
+		slug: string,
+		branch = branchId,
+	): Promise<FunctionInfo> => {
+		const result = await runCli(
+			["functions", "get", slug, ...target(branch)],
+			{
+				cwd: FIXTURE,
+			},
+		);
 		if (result.code !== 0) {
 			throw new Error(`functions get ${slug}: ${result.stderr}`);
 		}
@@ -90,7 +102,7 @@ describe.sequential("e2e — declared Function env", () => {
 		const first = await deploy(
 			envFile(
 				"all.env",
-				"SECRET_A=a\nSECRET_B=b\nOPTIONAL_A=o\nKEPT_A=k\n",
+				"SECRET_A=a\nSECRET_B=b\nOPTIONAL_A=o\nPROD_A=p\n",
 			),
 		);
 		if (first.code !== 0) {
@@ -109,34 +121,59 @@ describe.sequential("e2e — declared Function env", () => {
 		expect(await invoke("alpha")).toEqual({
 			SECRET_A: "a",
 			OPTIONAL_A: "o",
-			KEPT_A: "k",
+			PROD_A: "p",
 			RATE_A: "1",
 		});
 		expect(await invoke("beta")).toEqual({ SECRET_B: "b" });
 	});
 
-	it("an unset optional is deleted, and ifUnset: keep leaves the deployed value", async () => {
+	it("an unset optional is removed from the deployment", async () => {
 		const result = await deploy(
-			envFile("secrets.env", "SECRET_A=a\nSECRET_B=b\n"),
+			envFile("secrets.env", "SECRET_A=a\nSECRET_B=b\nPROD_A=p\n"),
 		);
 		expect(result.code).toBe(0);
 		const names = (await getFunction("alpha")).active_deployment
 			?.environment;
 		expect([...(names ?? [])].sort()).toEqual([
-			"KEPT_A",
+			"PROD_A",
 			"RATE_A",
 			"SECRET_A",
 		]);
 	});
 
-	it("an unset required variable fails before anything deploys", async () => {
+	it("a production deploy with required variables unset fails before anything deploys", async () => {
 		const before = (await getFunction("beta")).active_deployment?.id;
 		const result = await deploy(envFile("missing.env", "SECRET_A=a\n"));
 		expect(result.code).not.toBe(0);
 		expect(result.stderr).toContain(
+			'Environment variable "PROD_A" for function "alpha" is required and unset.',
+		);
+		expect(result.stderr).toContain(
 			'Environment variable "SECRET_B" for function "beta" is required and unset.',
 		);
 		expect((await getFunction("beta")).active_deployment?.id).toBe(before);
+	});
+
+	it('a preview branch deploys without a { required: "production" } variable', async () => {
+		const { branch } = await apiRequest<{ branch: { id: string } }>(
+			`/projects/${projectId}/branches`,
+			{
+				method: "POST",
+				body: {
+					branch: { name: "preview" },
+					endpoints: [{ type: "read_write" }],
+				},
+			},
+		);
+		await waitForProjectReady(projectId);
+		const result = await deploy(
+			envFile("preview.env", "SECRET_A=a\nSECRET_B=b\n"),
+			branch.id,
+		);
+		expect(result.code).toBe(0);
+		const names = (await getFunction("alpha", branch.id)).active_deployment
+			?.environment;
+		expect([...(names ?? [])].sort()).toEqual(["RATE_A", "SECRET_A"]);
 	});
 
 	it("neon env pull needs none of the secrets", async () => {

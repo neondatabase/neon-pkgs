@@ -28,8 +28,8 @@ describe("missingDeployEnv", () => {
       source: "./bot.ts",
       env: {
         LEGACY: process.env.LEGACY,
-        TOKEN: { required: true },
-        DSN: { required: "deploy" },
+        TOKEN: {},
+        DSN: { required: "production" },
         OPTIONAL: { required: false },
       },
     },

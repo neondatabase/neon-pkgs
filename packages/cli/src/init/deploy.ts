@@ -32,9 +32,13 @@ export const missingDeployEnv = async (
 			contextFile: options.contextFile,
 			unsetFunctionEnv: "omit",
 		});
-		const declared = missingFunctionEnv(config, process.env, "deploy").map(
-			({ key }) => key,
-		);
+		// Whether the linked branch is the default branch is not known without an API
+		// call, so this lists what a production deploy requires, the stricter set.
+		const declared = missingFunctionEnv(
+			config,
+			process.env,
+			"production",
+		).map(({ key }) => key);
 		return [...new Set([...omittedFunctionEnv, ...declared])];
 	} finally {
 		for (const key of applied) delete process.env[key];

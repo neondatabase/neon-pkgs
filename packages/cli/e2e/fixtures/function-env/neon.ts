@@ -8,16 +8,16 @@ export default defineConfig({
 			name: "function env alpha",
 			source: "./alpha.ts",
 			env: {
-				SECRET_A: { required: true },
+				SECRET_A: {},
 				OPTIONAL_A: { required: false },
-				KEPT_A: { required: false, ifUnset: "keep" },
+				PROD_A: { required: "production" },
 				RATE_A: { default: "1" },
 			},
 		},
 		beta: {
 			name: "function env beta",
 			source: "./beta.ts",
-			env: { SECRET_B: { required: true } },
+			env: { SECRET_B: {} },
 		},
 	},
 });

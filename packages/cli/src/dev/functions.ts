@@ -66,7 +66,7 @@ export const resolveFunctionsFromConfig = async (
 	if (!loaded) return null;
 
 	const { config, configDir, configPath } = loaded;
-	assertFunctionEnv(config, process.env, "run");
+	assertFunctionEnv(config, process.env, "development");
 	const resolved = resolveConfig(config, {
 		name: branchName ?? "local",
 		exists: branchName !== undefined,
@@ -115,7 +115,7 @@ export const findConfigFunctionBySource = async (
 	assertFunctionEnv(
 		{ functions: Object.fromEntries(served) },
 		process.env,
-		"run",
+		"development",
 	);
 	return toPlannedFunction(match, source);
 };
@@ -128,7 +128,11 @@ const toPlannedFunction = (
 	source: string,
 ): PlannedFunction => {
 	const port = devPort(fn.dev);
-	const declaredEnv = resolveFunctionEnv(fn.envVars, process.env, "run").env;
+	const declaredEnv = resolveFunctionEnv(
+		fn.envVars,
+		process.env,
+		"development",
+	).env;
 	const unsetEnv = Object.keys(fn.envVars ?? {}).filter(
 		(key) => !(key in declaredEnv),
 	);

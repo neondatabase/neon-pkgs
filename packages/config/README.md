@@ -96,28 +96,26 @@ A project that can deploy functions can still reject custom-domain list and regi
 
 ### Function env
 
-Each `env` entry is a literal string or a declaration. A declaration reads `process.env.<key>` when `neon deploy`, `neon dev`, or `parseEnv` needs the value, and states what happens when the variable is unset:
+Each `env` entry is a literal string or a declaration. A declaration reads `process.env.<key>` only when `neon deploy`, `neon dev`, or `parseEnv` needs the value. Declaring a variable makes it required; `required` narrows where, and `default` fills it in:
 
 ```ts
 env: {
-  DISCORD_BOT_TOKEN: { required: true },
-  SENTRY_DSN: { required: "deploy" },
-  DISCORD_GUILD_ID: { required: false },
-  ADMIN_TOKEN: { required: false, ifUnset: "keep" },
-  SENTRY_TRACES_SAMPLE_RATE: { default: "1" },
-  LOG_LEVEL: "info",
+  STRIPE_SECRET_KEY: {},                   // required
+  SENTRY_DSN: { required: "production" },  // required on the production branch only
+  DISCORD_GUILD_ID: { required: false },   // optional
+  SAMPLE_RATE: { default: "1" },           // "1" when unset
+  LOG_LEVEL: "info",                       // literal
 },
 ```
 
-| Declaration | Unset on `neon deploy` | Unset in `neon dev` | `parseEnv(config, slug).function` |
-| --- | --- | --- | --- |
-| `{ required: true }` | fails before any API call | fails before any Function starts | `string` |
-| `{ required: "deploy" }` | fails before any API call | runs without it | `string \| undefined` |
-| `{ required: false }` | removes the deployed value | runs without it | `string \| undefined` |
-| `{ required: false, ifUnset: "keep" }` | leaves the deployed value | runs without it | `string \| undefined` |
-| `{ default: "1" }` | deploys `"1"` | uses `"1"` | `string` |
+| Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv(config, slug).function` |
+| --- | --- | --- | --- | --- |
+| `{}` or `{ required: true }` | fails before any change | fails before any change | fails before any Function starts | `string` |
+| `{ required: "production" }` | fails before any change | not deployed | runs without it | `string \| undefined` |
+| `{ required: false }` | not deployed | not deployed | runs without it | `string \| undefined` |
+| `{ default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
 
-An empty value (`KEY=` in a `.env` file) counts as unset. `ifUnset: "keep"` is for a value set outside `neon.ts`, for example with `neon functions deploy <slug> --env KEY=VALUE`.
+Production is the project's default branch; every other branch, including one `neon checkout --create` makes, is a preview. A variable that is not deployed is removed from the Function if an earlier deploy set it, so the deployment matches `neon.ts`. Keys `neon.ts` does not declare are left as they are, which is how to keep a value you set with `neon functions deploy <slug> --env KEY=VALUE`. An empty value (`KEY=` in a `.env` file) counts as unset.
 
 A literal string is uploaded as is. `process.env.X!` still works, but it is evaluated wherever `neon.ts` is imported: app code, `drizzle.config.ts`, and each deployed Function that calls `parseEnv(config, …)`. Each of those then needs every Function's secrets, so a deployed Function fails to load when another Function's secret is missing from its runtime. Declarations avoid that.
 

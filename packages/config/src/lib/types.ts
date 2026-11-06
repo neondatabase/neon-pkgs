@@ -382,24 +382,23 @@ export type FunctionBundler = (
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
- * A Function env variable whose value comes from `process.env.<key>` when a command needs
- * it. An empty value counts as unset, because uploading `""` deletes the deployed variable.
+ * A Function env variable read from `process.env.<key>` when a command needs its value.
+ * Declaring a variable makes it required; `required` narrows where, and `default` fills it
+ * in. An empty value counts as unset.
  *
- * | Declaration | Unset on `neon deploy` | Unset in `neon dev` | `parseEnv` type |
- * | --- | --- | --- | --- |
- * | `{ required: true }` | fails | fails | `string` |
- * | `{ required: "deploy" }` | fails | runs without it | `string \| undefined` |
- * | `{ required: false }` | removes the deployed value | runs without it | `string \| undefined` |
- * | `{ required: false, ifUnset: "keep" }` | leaves the deployed value | runs without it | `string \| undefined` |
- * | `{ default: "1" }` | deploys `"1"` | uses `"1"` | `string` |
+ * | Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv` type |
+ * | --- | --- | --- | --- | --- |
+ * | `{}` or `{ required: true }` | fails | fails | fails | `string` |
+ * | `{ required: "production" }` | fails | not deployed | runs without it | `string \| undefined` |
+ * | `{ required: false }` | not deployed | not deployed | runs without it | `string \| undefined` |
+ * | `{ default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
  *
- * `ifUnset: "keep"` is for a value set outside `neon.ts`, such as with
- * `neon functions deploy <slug> --env KEY=VALUE`.
+ * Production is the project's default branch; every other branch is a preview. A variable
+ * that is "not deployed" is removed from the Function if an earlier deploy set it. Keys that
+ * `neon.ts` does not declare are left as they are.
  */
 export type FunctionEnvVar =
-	| { required: true }
-	| { required: "deploy" }
-	| { required: false; ifUnset?: "delete" | "keep" }
+	| { required?: boolean | "production" }
 	| { default: string };
 
 /** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
@@ -436,9 +435,8 @@ export interface FunctionDef {
 	 * so importing `neon.ts` never fails on an unset variable.
 	 *
 	 * A literal string is uploaded as is. An unset `process.env.X` written as a literal
-	 * fails validation wherever `neon.ts` is evaluated. Omit a key to preserve its deployed
-	 * value; an empty string deletes it.
-	 * @example { RESEND_API_KEY: { required: true }, LOG_LEVEL: "info" }
+	 * fails validation wherever `neon.ts` is evaluated.
+	 * @example { RESEND_API_KEY: {}, SENTRY_DSN: { required: "production" }, LOG_LEVEL: "info" }
 	 */
 	env?: Record<string, FunctionEnvValue>;
 	/**

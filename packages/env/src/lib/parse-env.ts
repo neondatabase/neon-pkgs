@@ -104,7 +104,7 @@ type FunctionEnvOf<
 /** `string` only when the entry guarantees a value; any other declaration may be unset. */
 type FunctionEnvValueOf<V> = V extends
 	| string
-	| { required: true }
+	| { required?: true }
 	| { default: string }
 	? string
 	: string | undefined;
@@ -414,7 +414,7 @@ export function parseEnv(
 			);
 		}
 		const { env: literal, envVars } = splitFunctionEnv(fn.env);
-		const declared = resolveFunctionEnv(envVars, source, "run");
+		const declared = resolveFunctionEnv(envVars, source, "development");
 		const envOut: Record<string, string> = { ...declared.env };
 		for (const key of declared.missing) {
 			issues.push(`${key} is missing (function "${scope}")`);

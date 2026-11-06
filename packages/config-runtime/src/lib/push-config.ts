@@ -8,6 +8,7 @@ import {
 	diffConfig,
 	ErrorCode,
 	type FunctionEnvSource,
+	type FunctionEnvTarget,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonCustomDomainSnapshot,
@@ -163,6 +164,7 @@ export interface PushConfirmContext {
 function withDeployFunctionEnv(
 	resolved: ResolvedBranchConfig,
 	source: FunctionEnvSource,
+	target: FunctionEnvTarget,
 ): ResolvedBranchConfig {
 	if (!resolved.preview) return resolved;
 	return {
@@ -173,7 +175,7 @@ function withDeployFunctionEnv(
 				...fn,
 				env: {
 					...fn.env,
-					...resolveFunctionEnv(fn.envVars, source, "deploy").env,
+					...resolveFunctionEnv(fn.envVars, source, target).env,
 				},
 			})),
 		},
@@ -194,7 +196,6 @@ export async function pushConfig(
 	options: PushConfigOptions,
 ): Promise<PushResult> {
 	const envSource = options.env ?? process.env;
-	assertFunctionEnv(config, envSource, "deploy");
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 
@@ -218,6 +219,8 @@ export async function pushConfig(
 	const remoteProject = await projectRead;
 	const [branches, endpoints] = await listsRead;
 	const branch = resolveRemoteBranch(options.branchId, branches);
+	const envTarget = branch.isDefault ? "production" : "preview";
+	assertFunctionEnv(config, envSource, envTarget);
 	const resolved = withDeployFunctionEnv(
 		resolveConfig(config, {
 			name: branch.name,
@@ -229,6 +232,7 @@ export async function pushConfig(
 			...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 		}),
 		envSource,
+		envTarget,
 	);
 	const realtimeApi = hasRealtimePolicy(resolved)
 		? requireRealtimeApi(api)

@@ -10,23 +10,27 @@ import {
 import type { FunctionEnvVar } from "./types.js";
 
 const DECLARED = {
-	TOKEN: { required: true },
-	DSN: { required: "deploy" },
+	TOKEN: {},
+	EXPLICIT: { required: true },
+	DSN: { required: "production" },
 	GUILD: { required: false },
-	ADMIN: { required: false, ifUnset: "keep" },
 	RATE: { default: "1" },
 } satisfies Record<string, FunctionEnvVar>;
 
 describe("resolveFunctionEnv", () => {
-	test("uses every set value for both targets", () => {
+	test("uses every set value for every target", () => {
 		const source = {
 			TOKEN: "t",
+			EXPLICIT: "e",
 			DSN: "d",
 			GUILD: "g",
-			ADMIN: "a",
 			RATE: "0.5",
 		};
-		for (const target of ["deploy", "run"] as const) {
+		for (const target of [
+			"production",
+			"preview",
+			"development",
+		] as const) {
 			expect(resolveFunctionEnv(DECLARED, source, target)).toEqual({
 				env: source,
 				missing: [],
@@ -34,35 +38,40 @@ describe("resolveFunctionEnv", () => {
 		}
 	});
 
-	test("deploy: required keys are missing, optional ones delete or keep, defaults apply", () => {
-		expect(resolveFunctionEnv(DECLARED, {}, "deploy")).toEqual({
+	test("production: {} and required: production are missing, optionals are removed", () => {
+		expect(resolveFunctionEnv(DECLARED, {}, "production")).toEqual({
 			env: { GUILD: "", RATE: "1" },
-			missing: ["TOKEN", "DSN"],
+			missing: ["TOKEN", "EXPLICIT", "DSN"],
 		});
 	});
 
-	test("run: only required: true is missing, and nothing is deleted", () => {
-		expect(resolveFunctionEnv(DECLARED, {}, "run")).toEqual({
+	test("preview: required: production is removed like an optional", () => {
+		expect(resolveFunctionEnv(DECLARED, {}, "preview")).toEqual({
+			env: { DSN: "", GUILD: "", RATE: "1" },
+			missing: ["TOKEN", "EXPLICIT"],
+		});
+	});
+
+	test("development: only required variables are missing, and nothing is removed", () => {
+		expect(resolveFunctionEnv(DECLARED, {}, "development")).toEqual({
 			env: { RATE: "1" },
-			missing: ["TOKEN"],
+			missing: ["TOKEN", "EXPLICIT"],
 		});
 	});
 
 	test("an empty value counts as unset", () => {
-		const empty = { TOKEN: "", DSN: "", GUILD: "", ADMIN: "", RATE: "" };
-		expect(resolveFunctionEnv(DECLARED, empty, "deploy")).toEqual(
-			resolveFunctionEnv(DECLARED, {}, "deploy"),
+		const empty = { TOKEN: "", EXPLICIT: "", DSN: "", GUILD: "", RATE: "" };
+		expect(resolveFunctionEnv(DECLARED, empty, "production")).toEqual(
+			resolveFunctionEnv(DECLARED, {}, "production"),
 		);
 	});
 });
 
 describe("splitFunctionEnv", () => {
 	test("keeps literal strings apart from declarations", () => {
-		expect(
-			splitFunctionEnv({ LOG_LEVEL: "info", TOKEN: { required: true } }),
-		).toEqual({
+		expect(splitFunctionEnv({ LOG_LEVEL: "info", TOKEN: {} })).toEqual({
 			env: { LOG_LEVEL: "info" },
-			envVars: { TOKEN: { required: true } },
+			envVars: { TOKEN: {} },
 		});
 	});
 
@@ -83,9 +92,7 @@ describe("defineConfig with declared env", () => {
 					alpha: {
 						name: "Alpha",
 						source: "./alpha.ts",
-						env: {
-							NEON_PKGS_FUNCTION_ENV_TEST_A: { required: true },
-						},
+						env: { NEON_PKGS_FUNCTION_ENV_TEST_A: {} },
 					},
 				},
 			}),
@@ -99,22 +106,25 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 			alpha: {
 				name: "Alpha",
 				source: "./alpha.ts",
-				env: { SECRET_A: { required: true }, LOG_LEVEL: "info" },
+				env: { SECRET_A: {}, LOG_LEVEL: "info" },
 			},
 			beta: {
 				name: "Beta",
 				source: "./beta.ts",
-				env: { SECRET_B: { required: "deploy" } },
+				env: { SECRET_B: { required: "production" } },
 			},
 		},
 	});
 
 	test("names every missing key per function", () => {
-		expect(missingFunctionEnv(config, {}, "deploy")).toEqual([
+		expect(missingFunctionEnv(config, {}, "production")).toEqual([
 			{ slug: "alpha", key: "SECRET_A" },
 			{ slug: "beta", key: "SECRET_B" },
 		]);
-		expect(missingFunctionEnv(config, {}, "run")).toEqual([
+		expect(missingFunctionEnv(config, {}, "preview")).toEqual([
+			{ slug: "alpha", key: "SECRET_A" },
+		]);
+		expect(missingFunctionEnv(config, {}, "development")).toEqual([
 			{ slug: "alpha", key: "SECRET_A" },
 		]);
 	});
@@ -126,12 +136,12 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 					alpha: {
 						name: "Alpha",
 						source: "./alpha.ts",
-						env: { SECRET_A: { required: true } },
+						env: { SECRET_A: {} },
 					},
 				},
 			},
 		});
-		expect(missingFunctionEnv(preview, {}, "deploy")).toEqual([
+		expect(missingFunctionEnv(preview, {}, "production")).toEqual([
 			{ slug: "alpha", key: "SECRET_A" },
 		]);
 	});
@@ -139,7 +149,7 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 	test("throws one ConfigValidationError listing each key", () => {
 		let caught: unknown;
 		try {
-			assertFunctionEnv(config, { SECRET_B: "b" }, "deploy");
+			assertFunctionEnv(config, { SECRET_B: "b" }, "production");
 		} catch (error) {
 			caught = error;
 		}
@@ -151,25 +161,14 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 			assertFunctionEnv(
 				config,
 				{ SECRET_A: "a", SECRET_B: "b" },
-				"deploy",
+				"production",
 			),
 		).not.toThrow();
 	});
-});
 
-describe("assertFunctionEnv messages", () => {
-	test('neon dev points at { required: "deploy" }', () => {
-		const config = defineConfig({
-			functions: {
-				alpha: {
-					name: "Alpha",
-					source: "./alpha.ts",
-					env: { SECRET_A: { required: true } },
-				},
-			},
-		});
-		expect(() => assertFunctionEnv(config, {}, "run")).toThrow(
-			'or declare it { required: "deploy" } if only the deployed Function needs it.',
+	test('neon dev points at { required: "production" }', () => {
+		expect(() => assertFunctionEnv(config, {}, "development")).toThrow(
+			'or declare it { required: "production" } if only the production deployment needs it.',
 		);
 	});
 });

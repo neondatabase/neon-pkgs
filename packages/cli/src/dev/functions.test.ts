@@ -239,13 +239,13 @@ describe("resolveFunctionsFromConfig", () => {
           name: 'Alpha',
           source: './alpha.ts',
           env: {
-            ${TOKEN}: { required: true },
-            ${DSN}: { required: 'deploy' },
+            ${TOKEN}: {},
+            ${DSN}: { required: 'production' },
             RATE: { default: '1' },
             LOG_LEVEL: 'info',
           },
         },
-        beta: { name: 'Beta', source: './beta.ts', env: { ${OTHER}: { required: true } } },
+        beta: { name: 'Beta', source: './beta.ts', env: { ${OTHER}: {} } },
       },
     };\n`;
 
@@ -253,7 +253,7 @@ describe("resolveFunctionsFromConfig", () => {
 			for (const key of [TOKEN, DSN, OTHER]) delete process.env[key];
 		});
 
-		it("resolves values and defaults, and runs without required: 'deploy'", async () => {
+		it("resolves values and defaults, and runs without required: 'production'", async () => {
 			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
 			process.env[TOKEN] = "t";
 			process.env[OTHER] = "o";
@@ -267,7 +267,7 @@ describe("resolveFunctionsFromConfig", () => {
 			expect(resolved?.functions[0].unsetEnv).toEqual([DSN]);
 		});
 
-		it("fails naming every unset required: true variable", async () => {
+		it("fails naming every unset required variable", async () => {
 			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
 			await expect(resolveFunctionsFromConfig(cwd)).rejects.toThrow(
 				new RegExp(

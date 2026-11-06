@@ -714,7 +714,7 @@ describe("configInputSchema", () => {
 		expect(formatted).toContain('function "hello"');
 		// …explains the likely cause and the fix…
 		expect(formatted).toContain("process.env");
-		expect(formatted).toContain("`test: { required: true }`");
+		expect(formatted).toContain("`test: {}`");
 		expect(formatted).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(formatted).not.toContain(
@@ -738,7 +738,7 @@ describe("configInputSchema", () => {
 		const formatted = formatZodIssues(result.error).join("\n");
 		expect(formatted).toContain("preview.functions.hello.env.count");
 		expect(formatted).toContain(
-			'Expected a string or one of { required: true }, { required: "deploy" }',
+			'Expected a string or a declaration: {} (required), { required: "production" }',
 		);
 		// The undefined-specific guidance must not fire for a defined wrong type.
 		expect(formatted).not.toContain("process.env");
@@ -759,32 +759,31 @@ describe("function env declarations", () => {
 	test("accepts every declaration next to a literal string", () => {
 		expect(
 			parseEnv({
-				TOKEN: { required: true },
-				DSN: { required: "deploy" },
+				TOKEN: {},
+				EXPLICIT: { required: true },
+				DSN: { required: "production" },
 				GUILD: { required: false },
-				ADMIN: { required: false, ifUnset: "keep" },
-				OLD: { required: false, ifUnset: "delete" },
 				RATE: { default: "1" },
 				LOG_LEVEL: "info",
 			}).success,
 		).toBe(true);
 	});
 
-	test("rejects an empty default, which would delete the deployed value", () => {
+	test("rejects an empty default, which would remove the deployed value", () => {
 		expect(issues({ RATE: { default: "" } })).toContain(
 			"functions.hello.env.RATE.default: default must not be empty",
 		);
 	});
 
-	test("rejects ifUnset on a required variable", () => {
-		expect(
-			issues({ TOKEN: { required: true, ifUnset: "keep" } }),
-		).toContain('functions.hello.env.TOKEN: unknown key: "ifUnset"');
+	test("rejects required combined with default", () => {
+		expect(issues({ RATE: { required: false, default: "1" } })).toContain(
+			"functions.hello.env.RATE: `required` and `default` cannot be combined",
+		);
 	});
 
 	test("rejects an unknown required value with the accepted forms", () => {
-		expect(issues({ TOKEN: { required: "yes" } })).toContain(
-			"functions.hello.env.TOKEN: Expected a string or one of",
+		expect(issues({ TOKEN: { required: "deploy" } })).toContain(
+			'functions.hello.env.TOKEN: Expected a string or a declaration: {} (required), { required: "production" }',
 		);
 	});
 });
