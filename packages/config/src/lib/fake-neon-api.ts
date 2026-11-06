@@ -1147,10 +1147,14 @@ export class FakeNeonApi implements NeonApi {
 		project: NeonProjectSnapshot,
 	): NeonEndpointSnapshot {
 		const projectDefaults = project.defaultEndpointSettings;
+		const id = override?.id ?? this.allocateId("ep");
 		return {
-			id: override?.id ?? this.allocateId("ep"),
+			id,
 			branchId,
 			type: override?.type ?? "read_write",
+			host:
+				override?.host ??
+				`${id}.${project.regionId ?? "aws-us-east-1"}.fake.neon.tech`,
 			autoscalingLimitMinCu:
 				override?.autoscalingLimitMinCu ??
 				projectDefaults?.autoscalingLimitMinCu ??

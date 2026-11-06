@@ -4,37 +4,33 @@ import { describe, expect, it } from "vitest";
 
 import {
 	aiGatewayModelsUrl,
-	aiGatewayUpgradeUrl,
 	buildAiGatewayNotice,
-	extractEnabledModelIds,
-	freePlanBlockMessage,
+	fetchGatewayCatalog,
 	hasFlagshipModels,
-	isFreePlan,
-	warnAiGateway,
+	parseGatewayCatalog,
 } from "./ai_gateway_notice";
 
 const MODELS_URL = aiGatewayModelsUrl("proj-123", "br-abc");
-const UPGRADE_URL = aiGatewayUpgradeUrl("org-xyz");
+const BILLING_URL = "https://console.neon.tech/app/org-xyz/billing";
 
-describe("isFreePlan", () => {
-	it("treats free_v2 / free_v3 as free", () => {
-		expect(isFreePlan("free_v2")).toBe(true);
-		expect(isFreePlan("free_v3")).toBe(true);
-	});
-
-	it("treats paid tiers and unknowns as not free", () => {
-		for (const t of [
-			"launch",
-			"scale",
-			"business",
-			"scale_v3",
-			"UNKNOWN",
-		]) {
-			expect(isFreePlan(t)).toBe(false);
-		}
-		expect(isFreePlan(undefined)).toBe(false);
-	});
-});
+/** The shape `/v1/models` returns for an account with no AI Gateway credits (Free or paid). */
+const NO_CREDITS_CATALOG = {
+	object: "list",
+	data: [
+		{
+			id: "claude-opus-4-8",
+			enabled: false,
+			unavailable_reason: "paid_plan_required",
+			recovery_url: BILLING_URL,
+		},
+		{
+			id: "gpt-5-mini",
+			enabled: false,
+			unavailable_reason: "paid_plan_required",
+			recovery_url: BILLING_URL,
+		},
+	],
+};
 
 describe("hasFlagshipModels", () => {
 	it("detects opus / codex / *-pro by id substring", () => {
@@ -63,125 +59,10 @@ describe("aiGatewayModelsUrl", () => {
 	});
 });
 
-describe("aiGatewayUpgradeUrl", () => {
-	it("is org-scoped when the project belongs to an org", () => {
-		expect(aiGatewayUpgradeUrl("org-xyz")).toBe(
-			"https://console.neon.tech/app/org-xyz/billing",
-		);
-	});
-
-	it("falls back to the account-level billing page with no org", () => {
-		expect(aiGatewayUpgradeUrl(undefined)).toBe(
-			"https://console.neon.tech/app/billing",
-		);
-	});
-});
-
-describe("freePlanBlockMessage", () => {
-	it("explains the Free-plan block without mentioning verification", () => {
-		const msg = freePlanBlockMessage(UPGRADE_URL);
-		expect(msg).toContain("Free plan");
-		expect(msg).toContain(UPGRADE_URL);
-		expect(msg).not.toMatch(/verif/i);
-	});
-});
-
-describe("buildAiGatewayNotice", () => {
-	it("warns Free-plan users that serving is unavailable (regardless of catalog)", () => {
-		const notice = buildAiGatewayNotice({
-			subscriptionType: "free_v3",
-			modelIds: ["claude-opus-4-8"],
-			upgradeUrl: UPGRADE_URL,
-			moreModelsUrl: MODELS_URL,
-		});
-		expect(notice?.level).toBe("warning");
-		expect(notice?.message).toContain("Free plan");
-		expect(notice?.message).toContain(UPGRADE_URL);
-	});
-
-	it("warns paid users with a reduced catalog to request more models", () => {
-		const notice = buildAiGatewayNotice({
-			subscriptionType: "scale",
-			modelIds: ["gpt-5-mini", "claude-haiku-4-5"],
-			upgradeUrl: UPGRADE_URL,
-			moreModelsUrl: MODELS_URL,
-		});
-		expect(notice?.level).toBe("warning");
-		expect(notice?.message).toContain(MODELS_URL);
-		expect(notice?.message).not.toContain("Free plan");
-	});
-
-	it("stays silent for a paid user with a full catalog", () => {
-		expect(
-			buildAiGatewayNotice({
-				subscriptionType: "scale",
-				modelIds: ["gpt-5-mini", "claude-opus-4-8"],
-				upgradeUrl: UPGRADE_URL,
-				moreModelsUrl: MODELS_URL,
-			}),
-		).toBeNull();
-	});
-
-	it("only offers the Free notice when the catalog wasn't probed", () => {
-		expect(
-			buildAiGatewayNotice({
-				subscriptionType: "scale",
-				modelIds: undefined,
-				upgradeUrl: UPGRADE_URL,
-				moreModelsUrl: MODELS_URL,
-			}),
-		).toBeNull();
-		expect(
-			buildAiGatewayNotice({
-				subscriptionType: "free_v2",
-				modelIds: undefined,
-				upgradeUrl: UPGRADE_URL,
-				moreModelsUrl: MODELS_URL,
-			})?.message,
-		).toContain("Free plan");
-	});
-
-	it("never mentions account verification", () => {
-		for (const subscriptionType of ["free_v3", "scale"]) {
-			const notice = buildAiGatewayNotice({
-				subscriptionType,
-				modelIds: ["gpt-5-mini"],
-				upgradeUrl: UPGRADE_URL,
-				moreModelsUrl: MODELS_URL,
-			});
-			expect(notice?.message ?? "").not.toMatch(/verif/i);
-		}
-	});
-
-	it("warns when only disabled flagship models appear in the raw catalog", () => {
-		const catalog = {
-			object: "list",
-			data: [
-				{ id: "claude-opus-4-8", enabled: false },
-				{ id: "gpt-5-3-codex", enabled: false },
-				{ id: "gemma-3-12b", enabled: true },
-				{ id: "gpt-oss-20b", enabled: true },
-			],
-		};
-		const enabledIds = extractEnabledModelIds(catalog);
-		expect(enabledIds).toEqual(["gemma-3-12b", "gpt-oss-20b"]);
-		expect(hasFlagshipModels(enabledIds ?? [])).toBe(false);
-
-		const notice = buildAiGatewayNotice({
-			subscriptionType: "launch_v3",
-			modelIds: enabledIds ?? undefined,
-			upgradeUrl: UPGRADE_URL,
-			moreModelsUrl: MODELS_URL,
-		});
-		expect(notice?.level).toBe("warning");
-		expect(notice?.message).toContain(MODELS_URL);
-	});
-});
-
-describe("extractEnabledModelIds", () => {
+describe("parseGatewayCatalog", () => {
 	it("keeps only models with enabled: true", () => {
 		expect(
-			extractEnabledModelIds({
+			parseGatewayCatalog({
 				object: "list",
 				data: [
 					{ id: "claude-opus-4-8", enabled: false },
@@ -189,48 +70,159 @@ describe("extractEnabledModelIds", () => {
 					{ id: "gpt-5-mini" },
 				],
 			}),
-		).toEqual(["gemma-3-12b"]);
+		).toEqual({ enabledIds: ["gemma-3-12b"] });
+	});
+
+	it("records the first disabled model's reason and recovery URL", () => {
+		expect(parseGatewayCatalog(NO_CREDITS_CATALOG)).toEqual({
+			enabledIds: [],
+			unavailable: {
+				reason: "paid_plan_required",
+				recoveryUrl: BILLING_URL,
+			},
+		});
 	});
 
 	it("returns null for a non-list body", () => {
-		expect(extractEnabledModelIds({ object: "model" })).toBeNull();
+		expect(parseGatewayCatalog({ object: "model" })).toBeNull();
 	});
 });
 
-describe("warnAiGateway", () => {
-	it("probes the gateway's models while the plan lookup is in flight", async () => {
-		let modelsRequested = false;
-		const server = createServer((_req, res) => {
-			modelsRequested = true;
+describe("buildAiGatewayNotice", () => {
+	it("tells an account without credits to buy them, on any plan", () => {
+		const catalog = parseGatewayCatalog(NO_CREDITS_CATALOG) ?? undefined;
+		const notice = buildAiGatewayNotice({
+			catalog,
+			moreModelsUrl: MODELS_URL,
+		});
+		expect(notice?.level).toBe("warning");
+		expect(notice?.message).toContain("AI Gateway credits");
+		expect(notice?.message).toContain("including Free");
+		expect(notice?.message).toContain(BILLING_URL);
+		expect(notice?.message).not.toMatch(/upgrade/i);
+	});
+
+	it("falls back to the prepaid credits docs when the gateway sends no recovery URL", () => {
+		const notice = buildAiGatewayNotice({
+			catalog: {
+				enabledIds: [],
+				unavailable: { reason: "paid_plan_required" },
+			},
+			moreModelsUrl: MODELS_URL,
+		});
+		expect(notice?.message).toContain(
+			"https://neon.com/docs/ai-gateway/prepaid-credits",
+		);
+	});
+
+	it("passes through any other reason with the gateway's recovery URL", () => {
+		const notice = buildAiGatewayNotice({
+			catalog: {
+				enabledIds: [],
+				unavailable: {
+					reason: "account_restricted",
+					recoveryUrl: "https://neon.com/docs/introduction/support",
+				},
+			},
+			moreModelsUrl: MODELS_URL,
+		});
+		expect(notice?.message).toContain("(account_restricted)");
+		expect(notice?.message).toContain(
+			"https://neon.com/docs/introduction/support",
+		);
+		expect(notice?.message).not.toContain("credits");
+	});
+
+	it("stays silent for an empty catalog with no reason", () => {
+		expect(
+			buildAiGatewayNotice({
+				catalog: { enabledIds: [] },
+				moreModelsUrl: MODELS_URL,
+			}),
+		).toBeNull();
+	});
+
+	it("warns a reduced catalog to request more models", () => {
+		const notice = buildAiGatewayNotice({
+			catalog: { enabledIds: ["gpt-5-mini", "claude-haiku-4-5"] },
+			moreModelsUrl: MODELS_URL,
+		});
+		expect(notice?.level).toBe("warning");
+		expect(notice?.message).toContain(MODELS_URL);
+	});
+
+	it("stays silent for a full catalog", () => {
+		expect(
+			buildAiGatewayNotice({
+				catalog: { enabledIds: ["gpt-5-mini", "claude-opus-4-8"] },
+				moreModelsUrl: MODELS_URL,
+			}),
+		).toBeNull();
+	});
+
+	it("stays silent when the catalog couldn't be read", () => {
+		expect(
+			buildAiGatewayNotice({
+				catalog: undefined,
+				moreModelsUrl: MODELS_URL,
+			}),
+		).toBeNull();
+	});
+
+	it("never mentions the Free plan as a blocker or account verification", () => {
+		const catalogs = [
+			parseGatewayCatalog(NO_CREDITS_CATALOG) ?? undefined,
+			{ enabledIds: ["gpt-5-mini"] },
+		];
+		for (const catalog of catalogs) {
+			const message =
+				buildAiGatewayNotice({ catalog, moreModelsUrl: MODELS_URL })
+					?.message ?? "";
+			expect(message).not.toMatch(/verif/i);
+			expect(message).not.toMatch(/isn't available on the Free plan/i);
+		}
+	});
+});
+
+describe("fetchGatewayCatalog", () => {
+	const serve = async (
+		status: number,
+		body: string,
+	): Promise<{ url: string; close: () => Promise<void>; auth: string[] }> => {
+		const auth: string[] = [];
+		const server = createServer((req, res) => {
+			auth.push(req.headers.authorization ?? "");
+			res.statusCode = req.url === "/v1/models" ? status : 404;
 			res.setHeader("content-type", "application/json");
-			res.end(JSON.stringify({ data: [] }));
+			res.end(body);
 		});
 		await new Promise<void>((resolve) => server.listen(0, resolve));
 		const port = (server.address() as AddressInfo).port;
-		let modelsSeenDuringPlanLookup = false;
-		const apiClient = {
-			getProject: async () => {
-				for (let i = 0; i < 50 && !modelsRequested; i++) {
-					await new Promise((resolve) => setTimeout(resolve, 10));
-				}
-				modelsSeenDuringPlanLookup = modelsRequested;
-				return {
-					data: {
-						project: { owner: { subscription_type: "scale" } },
-					},
-				};
-			},
+		return {
+			url: `http://localhost:${port}/`,
+			auth,
+			close: () =>
+				new Promise<void>((resolve) => server.close(() => resolve())),
 		};
+	};
+
+	it("reads the branch's /v1/models with the pulled token", async () => {
+		const server = await serve(200, JSON.stringify(NO_CREDITS_CATALOG));
 		try {
-			await warnAiGateway({
-				apiClient: apiClient as never,
-				projectId: "proj-123",
-				branchId: "br-abc",
-				gateway: { baseUrl: `http://localhost:${port}`, token: "t" },
-			});
+			const catalog = await fetchGatewayCatalog(server.url, "tok");
+			expect(catalog?.unavailable?.reason).toBe("paid_plan_required");
+			expect(server.auth).toEqual(["Bearer tok"]);
 		} finally {
-			await new Promise((resolve) => server.close(resolve));
+			await server.close();
 		}
-		expect(modelsSeenDuringPlanLookup).toBe(true);
+	});
+
+	it("returns null on an HTTP error rather than guessing", async () => {
+		const server = await serve(500, "{}");
+		try {
+			expect(await fetchGatewayCatalog(server.url, "tok")).toBeNull();
+		} finally {
+			await server.close();
+		}
 	});
 });

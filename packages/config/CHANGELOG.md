@@ -1,5 +1,11 @@
 # @neondatabase/config
 
+## 1.12.0
+
+### Minor Changes
+
+- c736518: Hook env (`experimental.hooks`) carries `branch.id` and `branch.functionHostSuffix` in place of `functions`. Pass them to `functionBaseUrl` from `@neon/env` to call a function from a hook.
+
 ## 1.11.3
 
 ### Patch Changes

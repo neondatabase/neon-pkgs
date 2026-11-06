@@ -59,7 +59,7 @@ Routing matches on the model id.
 
 ## Capabilities
 
-`generateText` and `streamText` work with any text model available to your branch. `generateObject`, `streamObject`, and single- or multi-step tool calls work with OpenAI (including Codex), Meta, Alibaba, Zhipu AI, and Thinking Machines models. Gemini currently supports `generateText` and `streamText`; structured output and multi-step tools are not supported. Vision input works on models that accept images.
+`generateText` and `streamText` work with any text model available to your branch. `generateObject`, `streamObject`, and single- or multi-step tool calls work with OpenAI (including Codex), Meta, Alibaba, and Zhipu AI models. Gemini currently supports `generateText` and `streamText`; structured output and multi-step tools are not supported. Vision input works on models that accept images.
 
 Claude models use the Messages API. On both that route and Chat Completions the provider removes call options the gateway rejects and reports each one in `result.warnings` instead of failing the request — see [Dropped call options](#dropped-call-options). Unsupported Responses API storage options throw before a request is sent — see [Errors](#errors).
 
@@ -77,7 +77,7 @@ These rules apply on the Anthropic Messages and Chat Completions routes. The Res
 | All Claude | `frequencyPenalty`, `presencePenalty`, `seed`, `reasoningEffort`, and `topP` when you set both `temperature` and `topP` (Anthropic accepts only one) |
 | `gpt-oss` | `frequencyPenalty`, `presencePenalty`, `seed`, `stopSequences` |
 | Qwen, Gemma | `frequencyPenalty`, `presencePenalty`, `seed` |
-| `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `inkling`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
+| `glm-5-2`, `glm-5-3`, `glm-5-3-flash`, `kimi-k3` | `frequencyPenalty`, `presencePenalty` |
 | Grok, DeepSeek | `frequencyPenalty`, `presencePenalty` |
 | Meta Llama | `frequencyPenalty`, `presencePenalty`, `seed` |
 | `gemini-3-5-flash-lite` | `frequencyPenalty`, `presencePenalty` |
@@ -285,4 +285,4 @@ pnpm test:e2e
 
 A run with neither **fails**; it does not skip. The gateway is on every branch and needs no provisioning, so the API-key path is the one CI uses — no gateway token is stored as a secret.
 
-The matrix covers one published catalog model per family (Anthropic, OpenAI, Codex, Gemini, Meta, Alibaba, Zhipu, Thinking Machines) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. `generateObject` and tool calling run on the subset of families where they are verified (see [Capabilities](#capabilities)). A family whose representative id the branch does not serve skips its cases, and a single assertion fails the run listing exactly which pinned ids went missing — so a shrinking catalog is reported rather than silently reducing coverage. Model access is granted per account, so the account behind the key needs every id in `MATRIX_MODELS`. The suite also fetches the live `/v1/models` catalog and calls every currently enabled text model with `generateText` and every embedding model with `embed` and `embedMany`, on both AI SDK 6 and AI SDK 7.
+The matrix covers one published catalog model per family (Anthropic, OpenAI, Codex, Gemini, Meta, Alibaba, Zhipu) across `generateText`, `streamText`, `generateObject`, tool calling, and `neon.tools.imageGeneration`. `generateObject` and tool calling run on the subset of families where they are verified (see [Capabilities](#capabilities)). A family whose representative id the branch does not serve skips its cases, and a single assertion fails the run listing exactly which pinned ids went missing — so a shrinking catalog is reported rather than silently reducing coverage. Model access is granted per account, so the account behind the key needs every id in `MATRIX_MODELS`. The suite also fetches the live `/v1/models` catalog and calls every currently enabled text model with `generateText` and every embedding model with `embed` and `embedMany`, on both AI SDK 6 and AI SDK 7.

@@ -300,7 +300,6 @@ export function getNeonModelCapabilities(
 
 	if (
 		id.includes("glm") ||
-		id.includes("inkling") ||
 		id.includes("kimi") ||
 		id.includes("grok") ||
 		id.includes("deepseek")

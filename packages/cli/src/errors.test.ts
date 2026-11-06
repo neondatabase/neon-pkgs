@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 
+import { parseEnvPullKeys } from "./env_services.js";
 import { isNetworkError, matchErrorCode } from "./errors.js";
 
 describe("matchErrorCode", () => {
+	it("counts --env NEON_FUNCTION_<SLUG>_BASE_URL apart from unknown errors", () => {
+		let thrown: unknown;
+		try {
+			parseEnvPullKeys(["NEON_FUNCTION_HELLO_BASE_URL"], "--env");
+		} catch (error) {
+			thrown = error;
+		}
+		if (!(thrown instanceof Error)) {
+			throw new Error(
+				"parseEnvPullKeys accepted a legacy function URL key",
+			);
+		}
+		expect(matchErrorCode(thrown.message)).toBe("LEGACY_FUNCTION_ENV_KEY");
+	});
+
 	it("maps known message shapes to their codes", () => {
 		expect(matchErrorCode("Unknown command: frobnicate")).toBe(
 			"UNKNOWN_COMMAND",

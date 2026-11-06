@@ -1,25 +1,30 @@
-import { parseEnv } from "@neon/env";
+import { functionBaseUrl, parseEnv } from "@neon/env";
 import config from "./neon.js";
 
 const NEON_MANAGED_KEY =
-	/^(DATABASE_URL|DATABASE_URL_UNPOOLED|NEON_BRANCH|NEON_AUTH_.+|NEON_DATA_API_.+|NEON_AI_GATEWAY_.+|NEON_FUNCTION_.+|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_ENDPOINT_URL_S3|AWS_REGION|PROBE_SETTING|PROBE_EXTRA)$/;
+	/^(DATABASE_URL|DATABASE_URL_UNPOOLED|NEON_BRANCH|NEON_BRANCH_ID|NEON_AUTH_.+|NEON_DATA_API_.+|NEON_AI_GATEWAY_.+|NEON_FUNCTION_.+|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_ENDPOINT_URL_S3|AWS_REGION|PROBE_SETTING|PROBE_EXTRA)$/;
 
 /** Values that are the same wherever they are read, and safe to return over HTTP. */
 const PUBLIC_KEYS = [
 	"NEON_BRANCH",
+	"NEON_BRANCH_ID",
+	"NEON_FUNCTION_HOST_SUFFIX",
 	"NEON_AUTH_BASE_URL",
 	"NEON_AUTH_JWKS_URL",
 	"NEON_DATA_API_URL",
 	"NEON_AI_GATEWAY_BASE_URL",
 	"AWS_ENDPOINT_URL_S3",
 	"AWS_REGION",
-	"NEON_FUNCTION_PROBE_BASE_URL",
 	"PROBE_SETTING",
 	"PROBE_EXTRA",
 ] as const;
 
 export type ParseOutcome =
 	| { ok: true; namespaces: string[] }
+	| { ok: false; error: string };
+
+export type UrlOutcome =
+	| { ok: true; url: string }
 	| { ok: false; error: string };
 
 export type EnvReport = {
@@ -29,11 +34,24 @@ export type EnvReport = {
 	databaseHost: string | null;
 	external: ParseOutcome;
 	scoped: ParseOutcome;
+	/** `functionBaseUrl("probe")`: where a sibling would call this function. */
+	probeBaseUrl: UrlOutcome;
 };
 
 function outcome(parse: () => object): ParseOutcome {
 	try {
 		return { ok: true, namespaces: Object.keys(parse()).sort() };
+	} catch (error) {
+		return {
+			ok: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
+function urlOutcome(build: () => string): UrlOutcome {
+	try {
+		return { ok: true, url: build() };
 	} catch (error) {
 		return {
 			ok: false,
@@ -58,5 +76,6 @@ export function envReport(): EnvReport {
 		databaseHost: databaseUrl ? new URL(databaseUrl).host : null,
 		external: outcome(() => parseEnv(config)),
 		scoped: outcome(() => parseEnv(config, "probe")),
+		probeBaseUrl: urlOutcome(() => functionBaseUrl("probe")),
 	};
 }

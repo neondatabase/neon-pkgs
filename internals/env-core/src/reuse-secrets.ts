@@ -12,11 +12,9 @@ import {
 	credentialName,
 	defaultAiGatewayCredential,
 	defaultStorageCredential,
-	type FetchEnvKeysOptions,
 	type FetchEnvOptions,
-	type FunctionUrlMode,
+	type FunctionHostSuffixMode,
 	fetchEnvKeysState,
-	isFunctionBaseUrlKey,
 	isLiveCredential,
 	NEON_ENV_VAR_KEYS,
 	policyEnvKeys,
@@ -62,8 +60,6 @@ export interface ReusedBranchEnv {
 	vars: Record<string, string>;
 	/** What happened to the branch credential. */
 	credential: CredentialOutcome;
-	/** Prevents callers from pruning URLs when their absence reflects endpoint failure. */
-	functionUrlsUnavailable?: true;
 }
 
 /** The branch credential's secrets as persisted in an env source. Empty string means absent. */
@@ -130,9 +126,8 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 		 * needs this. Platform defaults are never revoked.
 		 */
 		revokeSuperseded?: boolean;
-		/** `all-live` lets explicit CLI selection bypass the policy-scoped default. */
-		functionUrls?: FunctionUrlMode;
-		listedFunctions?: FetchEnvKeysOptions["listedFunctions"];
+		/** `always` adds `NEON_FUNCTION_HOST_SUFFIX` to a branch read that has no policy. */
+		functionHostSuffix?: FunctionHostSuffixMode;
 		/** The target branch, when the caller listed it already. */
 		resolvedBranch?: NeonBranchSnapshot;
 	},
@@ -159,7 +154,11 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			? allPolicyKeys
 			: [
 					...allPolicyKeys.filter((key) => requested.has(key)),
-					...[...requested].filter(isFunctionBaseUrlKey).sort(),
+					// Branch keys need no service in the policy, so a selection names them directly.
+					...Object.values(NEON_ENV_VAR_KEYS.branch).filter(
+						(key) =>
+							requested.has(key) && !allPolicyKeys.includes(key),
+					),
 				];
 	const selected = new Set(selectedPolicyKeys);
 	const K = NEON_ENV_VAR_KEYS;
@@ -193,9 +192,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 				revoked: [],
 				superseded: [],
 			},
-			...(fetched.functionUrlsUnavailable
-				? { functionUrlsUnavailable: true as const }
-				: {}),
 		};
 	}
 
@@ -263,9 +259,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 	);
 
 	const vars = preferPersisted(toEntries(fetched.env), source);
-	const unavailable = fetched.functionUrlsUnavailable
-		? { functionUrlsUnavailable: true as const }
-		: {};
 	for (const key of keptSecretKeys) {
 		const value = source[key];
 		if (value !== undefined) vars[key] = value;
@@ -284,7 +277,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 				revoked: [],
 				superseded: [],
 			},
-			...unavailable,
 		};
 	}
 
@@ -322,7 +314,6 @@ export async function fetchEnvReusingSecrets<const C extends Config>(
 			revoked: revokeSuperseded ? [...ours] : [],
 			superseded: revokeSuperseded ? [] : [...ours],
 		},
-		...unavailable,
 	};
 }
 

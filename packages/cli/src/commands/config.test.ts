@@ -1201,6 +1201,40 @@ describe("config commands", () => {
 		]);
 	});
 
+	it("plans and applies the AI Gateway on a Free-plan project without consulting the plan", async () => {
+		const api = new FakeNeonApi();
+		const { stream, read } = captureOut();
+		const config = writeConfig(
+			"export default { preview: { aiGateway: true } };\n",
+		);
+		let planLookups = 0;
+		const apiClient = {
+			...fakeApiClient,
+			getProject: async () => {
+				planLookups += 1;
+				return {
+					data: {
+						project: {
+							id: PROJECT_ID,
+							owner: { subscription_type: "free_v3" },
+						},
+					},
+				};
+			},
+		};
+		const props = {
+			...baseProps(api, stream),
+			apiClient: apiClient as never,
+		};
+
+		await planCmd({ ...props, config });
+		await applyCmd({ ...props, config });
+
+		expect(read()).toContain('"AI Gateway"');
+		expect(planLookups).toBe(0);
+		expect(process.exitCode ?? 0).toBe(0);
+	});
+
 	it('prints a "Utilized services" summary below the plan table (human output)', async () => {
 		const api = new FakeNeonApi();
 		const { stream, read } = captureOut();

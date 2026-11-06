@@ -7,6 +7,7 @@
  * - `parseEnv(config)` — sync; reads already-injected `process.env` and validates it.
  *   Use in app bootstrap (Drizzle config, Next.js, Vite, etc).
  * - `toEntries(env)` — project a resolved env into `{ KEY: value }` pairs.
+ * - `functionBaseUrl(slug)` — the URL of another Neon Function on the same branch.
  *
  * This is the whole package: one entry point, all of it side-effect-free. It reads no files
  * and no env source of its own, so it is safe to import from an app, a build script, or a
@@ -18,14 +19,11 @@
 export type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
-	FunctionBaseUrlKey,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
 	NeonEnv,
-	NeonFunctionsEnv,
-	NeonFunctionUrlEnv,
 	NeonPostgresEnv,
 	NeonRealtimeEnv,
 	NeonStorageEnv,
@@ -35,16 +33,16 @@ export type {
 } from "@neon-internals/env-core/env";
 export {
 	fetchEnv,
-	functionBaseUrlKey,
-	isFunctionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
-	parseFunctionBaseUrlKey,
 	toEntries,
 } from "@neon-internals/env-core/env";
+export {
+	type FunctionBaseUrlEnv,
+	functionBaseUrl,
+} from "./lib/function-base-url.js";
 export type {
 	FunctionSlugOf,
 	NeonFunctionEnv,
-	ParsedNeonEnv,
 } from "./lib/parse-env.js";
 export { parseEnv } from "./lib/parse-env.js";
 

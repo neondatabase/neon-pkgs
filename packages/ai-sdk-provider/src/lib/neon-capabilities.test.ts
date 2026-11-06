@@ -38,12 +38,7 @@ describe("applyNeonCapabilities warnings", () => {
 	});
 
 	it("never interpolates the capability family into the sentence", () => {
-		for (const id of [
-			"gpt-oss-120b",
-			"glm-5-2",
-			"inkling",
-			"qwen35-122b-a10b",
-		]) {
+		for (const id of ["gpt-oss-120b", "glm-5-2", "qwen35-122b-a10b"]) {
 			const [warning] = detailsFor(id, { frequencyPenalty: 0.5 });
 			expect({ id, details: warning.details }).toEqual({
 				id,

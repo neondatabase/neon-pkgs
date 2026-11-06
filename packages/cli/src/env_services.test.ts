@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	ENV_PULL_KEY_HELP,
 	envKeysForSelection,
+	isLegacyFunctionBaseUrlKey,
 	parseEnvPullKeys,
 	servicesForEnvKeys,
 } from "./env_services.js";
@@ -55,6 +56,7 @@ describe("env pull key selection", () => {
 		expect(envKeysForSelection(["auth"], ["DATABASE_URL"])).toEqual([
 			"DATABASE_URL",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 		]);
@@ -63,6 +65,7 @@ describe("env pull key selection", () => {
 	it("selects the complete Realtime env bundle", () => {
 		expect(envKeysForSelection(["realtime"], [])).toEqual([
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
 			"NEON_REALTIME_URL",
 			"NEON_REALTIME_SECRET",
 		]);
@@ -74,32 +77,39 @@ describe("env pull key selection", () => {
 		]);
 	});
 
-	it("parses a function URL key", () => {
-		expect(
-			parseEnvPullKeys(["NEON_FUNCTION_HELLO_BASE_URL"], "--env"),
-		).toEqual(["NEON_FUNCTION_HELLO_BASE_URL"]);
-	});
-
-	it("rejects a function URL key that is not the BASE_URL pattern", () => {
+	it("points a legacy function URL key at functionBaseUrl", () => {
 		expect(() =>
-			parseEnvPullKeys(["NEON_FUNCTION_HELLO_HOST"], "--env"),
-		).toThrow(/Unknown env variable/);
+			parseEnvPullKeys(["NEON_FUNCTION_HELLO_BASE_URL"], "--env"),
+		).toThrow(
+			'NEON_FUNCTION_HELLO_BASE_URL is no longer pulled. Pull NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX with `--service functions`, then build the URL with `functionBaseUrl("hello")` from @neon/env.',
+		);
 	});
 
-	it("maps a function URL key to the functions service", () => {
-		expect(servicesForEnvKeys(["NEON_FUNCTION_HELLO_BASE_URL"])).toEqual([
+	it("maps the function host suffix to the functions service", () => {
+		expect(servicesForEnvKeys(["NEON_FUNCTION_HOST_SUFFIX"])).toEqual([
 			"functions",
+		]);
+		expect(servicesForEnvKeys(["NEON_BRANCH_ID"])).toEqual([]);
+	});
+
+	it("--service functions selects the branch identity and the host suffix", () => {
+		expect(envKeysForSelection(["functions"], [])).toEqual([
+			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
+			"NEON_FUNCTION_HOST_SUFFIX",
 		]);
 	});
 
-	it("includes a named function URL key in the selection", () => {
-		expect(
-			envKeysForSelection([], ["NEON_FUNCTION_HELLO_BASE_URL"]),
-		).toEqual(["NEON_FUNCTION_HELLO_BASE_URL"]);
-	});
-
-	it("does not invent live function URL keys for --service functions", () => {
-		expect(envKeysForSelection(["functions"], [])).toEqual(["NEON_BRANCH"]);
+	it("recognizes only the legacy per-function URL keys", () => {
+		expect(isLegacyFunctionBaseUrlKey("NEON_FUNCTION_HELLO_BASE_URL")).toBe(
+			true,
+		);
+		expect(isLegacyFunctionBaseUrlKey("NEON_FUNCTION_HOST_SUFFIX")).toBe(
+			false,
+		);
+		expect(isLegacyFunctionBaseUrlKey("NEON_FUNCTION_REGISTRY_URL")).toBe(
+			false,
+		);
 	});
 
 	it("requires the two object-storage credential variables together", () => {

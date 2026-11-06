@@ -36,6 +36,11 @@ export interface NeonEndpointSnapshot {
 	id: string;
 	branchId: string;
 	type: "read_only" | "read_write";
+	/**
+	 * Compute hostname, such as `ep-cool-darkness-123456.c-2.us-east-2.aws.neon.tech`. The API
+	 * always returns it; snapshots built for diffing may omit it.
+	 */
+	host?: string;
 	autoscalingLimitMinCu: ComputeSettings["autoscalingLimitMinCu"];
 	autoscalingLimitMaxCu: ComputeSettings["autoscalingLimitMaxCu"];
 	suspendTimeout: ComputeSettings["suspendTimeout"];

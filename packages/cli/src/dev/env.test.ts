@@ -22,6 +22,7 @@ import type {
 	NeonTriggerSnapshot,
 } from "@neon/config";
 import { ErrorCode, PlatformError } from "@neon/config";
+import { functionBaseUrl } from "@neon/env";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -621,6 +622,8 @@ describe("resolveDevEnv", () => {
 			"NEON_AUTH_BASE_URL",
 			"NEON_AUTH_JWKS_URL",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
+			"NEON_FUNCTION_HOST_SUFFIX",
 		]);
 		expect(result.vars.NEON_BRANCH).toBe("main");
 		expect(result.vars.NEON_AUTH_BASE_URL).toBe(
@@ -763,7 +766,7 @@ describe("resolveDevEnv", () => {
 		expect(result.skipped?.reason).toMatch(/network down/);
 	});
 
-	it("tier 1 functions-only: derives invocation URLs without listing and still injects DATABASE_URL", async () => {
+	it("tier 1 functions-only: derives the function host without listing and still injects DATABASE_URL", async () => {
 		writeFileSync(
 			join(cwd, "neon.ts"),
 			"export default { preview: { functions: { hello: " +
@@ -785,7 +788,7 @@ describe("resolveDevEnv", () => {
 
 		expect(result.vars.DATABASE_URL).toBeDefined();
 		expect(result.vars.DATABASE_URL_UNPOOLED).toBeDefined();
-		expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(functionBaseUrl("hello", result.vars)).toBe(helloUrl);
 		expect(api.listBranchFunctionsCalled).toBe(false);
 	});
 
@@ -812,7 +815,7 @@ describe("resolveDevEnv", () => {
 		}
 	});
 
-	it("omitUnsetFunctionEnv still resolves DATABASE_URL and function URLs", async () => {
+	it("omitUnsetFunctionEnv still resolves DATABASE_URL and the function host", async () => {
 		const key = "NEON_PKGS_UNSET_FN_ENV_RESOLVE_OMIT_TEST";
 		delete process.env[key];
 		writeFileSync(
@@ -832,7 +835,7 @@ describe("resolveDevEnv", () => {
 			});
 
 			expect(result.vars.DATABASE_URL).toBeDefined();
-			expect(result.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+			expect(functionBaseUrl("hello", result.vars)).toBe(helloUrl);
 			expect(result.vars.SECRET).toBeUndefined();
 		} finally {
 			delete process.env[key];

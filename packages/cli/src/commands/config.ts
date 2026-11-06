@@ -81,10 +81,6 @@ import {
 	projectDir,
 } from "../project.js";
 import type { BranchScopeProps } from "../types.js";
-import {
-	assertAiGatewayProvisionable,
-	warnAiGateway,
-} from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
@@ -1428,17 +1424,6 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 	) {
 		process.exitCode = 1;
 	}
-
-	// `plan` is a dry run and never pulls credentials, so it can only offer the plan-based
-	// (Free) AI Gateway notice — the reduced-model-set check needs a live gateway token,
-	// which `apply`/`checkout`/`env pull` get via the bundled env pull. Best-effort.
-	if (services.includes("AI Gateway")) {
-		await warnAiGateway({
-			apiClient: props.apiClient,
-			projectId: props.projectId,
-			branchId,
-		});
-	}
 };
 
 const warnDeprecatedPreview = (config: Config, target?: BranchTarget): void => {
@@ -1549,16 +1534,6 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	announceTargetBranch(props, branch, "Applying to branch");
 	warnDeprecatedPreview(config, warningTargetFromResolved(branch));
 	const branchId = branch.branchId;
-
-	// The AI Gateway can't serve on the Free plan, so refuse to provision it up front rather
-	// than write a credential that won't work. Only when the policy actually enables the
-	// gateway; best-effort on the plan lookup (a transient failure never blocks a paid user).
-	if (utilizedServices(config).includes("AI Gateway")) {
-		await assertAiGatewayProvisionable({
-			apiClient: props.apiClient,
-			projectId: props.projectId,
-		});
-	}
 
 	// Lifecycle hooks (Preview): `deploy` never creates a branch, so the branch shape is
 	// already fully known from `resolveBranchRef` — no extra API call needed.
@@ -1838,31 +1813,6 @@ const reportConflicts = (
 };
 
 /**
- * Block provisioning the AI Gateway on a Free plan from the `checkout` policy paths, which
- * carry raw credentials (`apiKey`/`apiHost`) rather than the CLI's api client. Builds a client
- * from them and defers to {@link assertAiGatewayProvisionable}. Skipped when a `runtimeApi` is
- * injected (tests) or no `apiKey` is available; the interactive commands always have a key.
- */
-const assertAiGatewayProvisionableFromCreds = async (props: {
-	projectId: string;
-	apiKey?: string;
-	apiHost?: string;
-	runtimeApi?: NeonApi;
-	config: Config;
-}): Promise<void> => {
-	if (props.runtimeApi || !props.apiKey) return;
-	if (!utilizedServices(props.config).includes("AI Gateway")) return;
-	const apiClient = getApiClient({
-		apiKey: props.apiKey,
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-	});
-	await assertAiGatewayProvisionable({
-		apiClient,
-		projectId: props.projectId,
-	});
-};
-
-/**
  * Apply a `neon.ts` policy to a **freshly created** branch (used by `neonctl checkout`
  * when it creates a branch). No-op when there is no `neon.ts` on the path from cwd up to
  * the repo root — checkout still succeeds, it just has no policy to apply.
@@ -1914,14 +1864,6 @@ export const applyPolicyOnCreate = async (props: {
 	} catch {
 		warnDeprecatedPreview(config);
 	}
-
-	await assertAiGatewayProvisionableFromCreds({
-		projectId: props.projectId,
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
-		config,
-	});
 
 	log.info("Applying neon.ts policy to the new branch…");
 	const result = await apply(config, {
@@ -2022,14 +1964,6 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return null;
 		throw err;
 	}
-
-	await assertAiGatewayProvisionableFromCreds({
-		projectId: props.projectId,
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
-		config,
-	});
 
 	try {
 		const { branchId, branchName, result } = await createBranchFromPolicy(
