@@ -79,11 +79,11 @@ export function Messages(props: MessagesProps) {
 }
 ```
 
-The hook returns `data`, `status`, and `error`, plus stable `utils` for
-`getState()`, `getSnapshot()`, `awaitTxId()`, `awaitRows()`, `renew()`, and
-lower-level event listeners. Register listeners in an effect. `utils` omits
-`unsubscribe()` because React owns cleanup when the component unmounts or its
-sealed query changes.
+The hook returns `data`, `status`, `error`, and `isPlaceholderData`, plus
+stable `utils` for `getState()`, `getSnapshot()`, `awaitTxId()`,
+`awaitRows()`, `renew()`, and lower-level event listeners. Register listeners
+in an effect. `utils` omits `unsubscribe()` because React owns cleanup when the
+component unmounts or its sealed query changes.
 
 `data` preserves the server's ordered result sequence, including incremental
 moves. Each publication and completed baseline backlog exposes one atomic
@@ -99,7 +99,80 @@ and keeps retrying through capability expiry and transport outages. Existing
 data remains available while `stale` indicates that a replacement capability
 is being obtained and `connecting` indicates active resubscription or transport
 recovery. Changing the sealed query starts a new logical query; changing only
-the refresh callback does not.
+the refresh callback does not. A new logical query has no `data` until its
+first result arrives, unless you pass `initialData` or `keepPreviousData`.
+
+### Skipping a query
+
+Pass `null` instead of a sealed query to skip it. Use it while the sealed
+query is still being fetched, or when the component has nothing to subscribe
+to yet, instead of moving the hook into a separate gate component:
+
+```tsx
+// sealedQuery is undefined until the backend returns it.
+const { data, status } = useLiveQuery(sealedQuery ?? null);
+```
+
+While the query is `null`, the hook opens no subscription and returns an idle
+result: `status` is `"closed"`, `error` and `data` are `undefined`, and
+`isPlaceholderData` is `false`. It returns the same object on every render, so
+it is safe in effect dependencies. `initialData` and `refreshQuery` are
+ignored. `utils.getState()` and `utils.getSnapshot()` report the same idle
+state, listeners registered through `utils` never run, and `awaitTxId()`,
+`awaitRows()`, and `renew()` reject. Passing a sealed query subscribes;
+passing `null` again unsubscribes.
+
+### Keeping the previous rows
+
+A new sealed query starts with no rows, so a list empties whenever the query
+changes: a growing `LIMIT` on "load more", or the next month in a calendar.
+Set `keepPreviousData: true` to keep returning the rows the hook last rendered
+until the new query has rows of its own (its first result, or its
+`initialData`). `isPlaceholderData` is `true` while those earlier rows are
+shown:
+
+```tsx
+import { useLiveQuery } from "@neon/realtime-react";
+import { useState } from "react";
+
+export function Notifications() {
+  const [limit, setLimit] = useState(20);
+  // Your hook that fetches a sealed query for this limit from the backend.
+  // It returns undefined until that query arrives.
+  const sealedQuery = useSealedNotifications(limit);
+  const { data = [], isPlaceholderData } = useLiveQuery(sealedQuery ?? null, {
+    keepPreviousData: true,
+    refreshQuery: () => sealNotifications(limit),
+  });
+
+  return (
+    <>
+      <ul style={{ opacity: isPlaceholderData ? 0.6 : 1 }}>
+        {data.map((item) => <li key={item.id}>{item.title}</li>)}
+      </ul>
+      <button
+        disabled={isPlaceholderData}
+        onClick={() => setLimit((current) => current + 20)}
+      >
+        Load more
+      </button>
+    </>
+  );
+}
+```
+
+The earlier rows are also kept while the query is `null`, as in the example
+while the next sealed query is being fetched. That result has `status`
+`"closed"` and `isPlaceholderData` `true`. Set `keepPreviousData` to `false`
+(it is read on every render) when the earlier rows must not stay on screen, for
+example after signing out.
+
+`status` and `error` always describe the current query, so `status` is
+`connecting` while the next query loads, and an error from it is reported
+alongside the earlier rows. `utils` belongs to the current query too:
+`utils.getSnapshot()` has no rows until the next result arrives, and
+`awaitRows()` waits for the current query's rows. An empty result counts as
+the new query's rows, so `data` becomes `[]`.
 
 ### Server-rendered initial data
 
@@ -200,6 +273,8 @@ subscription closes or enters a terminal error.
   hooks. It does not fetch sealed queries or own the client's lifetime.
 - `useLiveQuery(query, options)` owns one materialized subscription and
   cleans it up when the component unmounts or the sealed query changes.
+  Pass `null` as `query` to skip it. `options` accepts `initialData`,
+  `refreshQuery`, and `keepPreviousData`.
 - `useRealtimeClient()` returns the provider's `RealtimeClient`, to pass to
   `realtimeCollectionOptions()` from `@neon/realtime-tanstack` or to call
   `subscribe()` directly. Subscriptions opened that way are not owned by
