@@ -2,6 +2,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { defined } from "../defined.test-helpers.js";
 import { defineParsers } from "./postgres/parsers.js";
+import { QueryRefreshController } from "./query-refresh.js";
 import {
 	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
@@ -90,6 +91,45 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("keeps a newer automatic capability when an older manual renewal completes", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const initial = query("initial");
+		const manual = { ...query("manual"), expiresAt: 70_000 };
+		const automatic = { ...query("automatic"), expiresAt: 80_000 };
+		const subscription = client.subscribe(initial);
+		const socket = connectAndAdmit();
+		const send = socket.send.bind(socket);
+		socket.send = (data) => {
+			send(data);
+			const message = JSON.parse(data);
+			if (message.type === "ping")
+				socket.receive({ type: "pong", token: message.token });
+		};
+		const controller = new QueryRefreshController({
+			query: initial,
+			refreshQuery: async () => automatic,
+			renewSubscription: (replacement) => subscription.renew(replacement),
+			onRefreshExhausted: vi.fn(),
+		});
+		try {
+			controller.start();
+			const pending = controller.replaceSealedQuery(manual);
+			await vi.advanceTimersByTimeAsync(50_000);
+			expect(controller.currentQuery()).toBe(automatic);
+			socket.receive({ type: "renewed", live_id: "41" });
+			await pending;
+			socket.receive({ type: "renewed", live_id: "41" });
+			await vi.advanceTimersByTimeAsync(0);
+			expect(controller.currentQuery()).toBe(automatic);
+		} finally {
+			controller.stop();
+			client.close();
+		}
+	});
+
 	it("uses a custom WebSocket factory", () => {
 		const webSocketFactory = vi.fn(
 			(url: string, protocols: string | string[]) =>

@@ -12,6 +12,79 @@ afterEach(() => {
 });
 
 describe("QueryRefreshController", () => {
+	it.each([
+		"in order",
+		"in reverse",
+	])("applies overlapping manual renewals %s", async (order) => {
+		const renewals = [deferred(), deferred()];
+		let next = 0;
+		const controller = new QueryRefreshController({
+			query: query(20),
+			renewSubscription: () => renewals[next++].promise,
+			onRefreshExhausted: vi.fn(),
+		});
+		const older = query(40);
+		const newer = query(60);
+		const first = controller.replaceSealedQuery(older);
+		const second = controller.replaceSealedQuery(newer);
+		if (order === "in order") {
+			renewals[0].resolve();
+			await first;
+			expect(controller.currentQuery()).toBe(older);
+			renewals[1].resolve();
+			await second;
+		} else {
+			renewals[1].resolve();
+			await second;
+			renewals[0].resolve();
+			await first;
+		}
+		expect(controller.currentQuery()).toBe(newer);
+	});
+
+	it("ignores a manual renewal completion from an earlier lifecycle", async () => {
+		vi.useFakeTimers();
+		const pending = deferred();
+		const initial = query(20);
+		const onSubscriptionRenewed = vi.fn();
+		const controller = new QueryRefreshController({
+			query: initial,
+			renewSubscription: () => pending.promise,
+			onSubscriptionRenewed,
+			onRefreshExhausted: vi.fn(),
+		});
+		controller.start();
+		const replacement = controller.replaceSealedQuery(query(40));
+		controller.stop();
+		controller.start();
+		pending.resolve();
+		await replacement;
+		expect(controller.currentQuery()).toBe(initial);
+		expect(onSubscriptionRenewed).not.toHaveBeenCalled();
+		controller.stop();
+	});
+
+	it("keeps successful manual replacements usable while stopped and after a newer failure", async () => {
+		const renewals = [deferred(), deferred()];
+		let next = 0;
+		const initial = query(20);
+		const controller = new QueryRefreshController({
+			query: initial,
+			renewSubscription: () => renewals[next++].promise,
+			onRefreshExhausted: vi.fn(),
+		});
+		const accepted = query(40);
+		const first = controller.replaceSealedQuery(accepted);
+		const second = controller.replaceSealedQuery(query(60));
+		const failure = expect(second).rejects.toThrow("renewal failed");
+		renewals[1].reject(new Error("renewal failed"));
+		await failure;
+		expect(controller.currentQuery()).toBe(initial);
+		renewals[0].resolve();
+		await first;
+		expect(controller.currentQuery()).toBe(accepted);
+	});
+
 	it("refreshes before expiry and schedules from the replacement", async () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(0);
@@ -204,4 +277,18 @@ function compactJwe(): string {
 		}),
 	).toString("base64url");
 	return `${header}..a.b.c`;
+}
+
+function deferred(): {
+	promise: Promise<void>;
+	resolve: () => void;
+	reject: (error: Error) => void;
+} {
+	let resolve!: () => void;
+	let reject!: (error: Error) => void;
+	const promise = new Promise<void>((accept, fail) => {
+		resolve = accept;
+		reject = fail;
+	});
+	return { promise, resolve, reject };
 }
