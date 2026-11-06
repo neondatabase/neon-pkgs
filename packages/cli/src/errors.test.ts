@@ -15,6 +15,56 @@ describe("matchErrorCode", () => {
 		);
 	});
 
+	it("classifies neon init and agent-setup failures by their message", () => {
+		const cases: [string, string][] = [
+			[
+				"No interactive terminal. Re-run with -y to set up this directory with Recommended defaults: `neon init -y`.",
+				"NON_INTERACTIVE",
+			],
+			["Authentication timed out after 60 seconds", "AUTH_TIMEOUT"],
+			[
+				"neon skills needs Node.js 22.20.0 or newer to run the skills CLI. This process is Node.js 22.14.0. Upgrade Node.js, then retry.",
+				"NODE_VERSION_UNSUPPORTED",
+			],
+			[
+				"neon plugins needs npx (Node.js) to run the plugins CLI. Install Node.js, then retry.",
+				"NPX_NOT_FOUND",
+			],
+			[
+				"skills CLI failed:\nFailed to clone https://github.com/neondatabase/agent-skills.git: Error: spawn git ENOENT",
+				"GIT_NOT_FOUND",
+			],
+			["skills CLI failed:\nboom", "SKILLS_CLI_FAILED"],
+			[
+				"Failed to install Neon agent skills for: Cursor.\nskills CLI failed:\nboom\nRetry with: neon skills --agent cursor -y",
+				"SKILLS_CLI_FAILED",
+			],
+			[
+				'Cannot install the Neon plugin for GitHub Copilot CLI: "copilot" was not found on PATH. Install it or add it to PATH, then retry.',
+				"AGENT_COMMAND_UNAVAILABLE",
+			],
+			[
+				"Failed to install the Neon plugin for: github-copilot-cli.\nplugins CLI failed:\nboom\nRetry with: neon plugins --agent github-copilot-cli -y",
+				"PLUGINS_CLI_FAILED",
+			],
+			[
+				"plugins CLI failed:\nboom\nRetry with: neon plugins --agent cursor -y",
+				"PLUGINS_CLI_FAILED",
+			],
+			[
+				"plugins CLI timed out after 120 seconds.\nRetry with: neon plugins --agent cursor -y",
+				"PLUGINS_CLI_FAILED",
+			],
+			[
+				"Could not install the Neon dependencies with npm (ERESOLVE).",
+				"DEPENDENCY_INSTALL_FAILED",
+			],
+		];
+		for (const [message, code] of cases) {
+			expect(matchErrorCode(message), message).toBe(code);
+		}
+	});
+
 	it("falls back to UNKNOWN_ERROR for unmatched / empty messages", () => {
 		expect(matchErrorCode("something else entirely")).toBe("UNKNOWN_ERROR");
 		expect(matchErrorCode(undefined)).toBe("UNKNOWN_ERROR");

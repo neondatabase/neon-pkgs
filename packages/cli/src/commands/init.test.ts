@@ -564,7 +564,7 @@ describe("init handler", () => {
 					config: "created",
 					agents_installed: [],
 					error_step: "plugins",
-					error_code: "UNKNOWN_ERROR",
+					error_code: "PLUGINS_CLI_FAILED",
 					error_message: expect.stringMatching(
 						/^plugins CLI timed out after 120 seconds:\nplugins banner\nRetry with: neon plugins/,
 					),
@@ -2401,6 +2401,59 @@ describe("init handler", () => {
 		);
 
 		expect(envPull).not.toHaveBeenCalled();
+	});
+
+	test("a failed dependency install reports its cause on screen and in cli_init_end", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-install-fails-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { ConfigInstallFailed } = await import("./config.js");
+		const initConfig = vi
+			.fn()
+			.mockRejectedValue(
+				new ConfigInstallFailed(
+					"npm install @neon/config @neon/env",
+					"npm",
+					"ERESOLVE",
+				),
+			);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					link: false,
+					initConfig,
+					analytics: true,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents: () => ["cursor"],
+				}),
+			),
+		).rejects.toThrow(
+			"Could not install the Neon dependencies with npm (ERESOLVE).",
+		);
+
+		const out = stdoutText(stdout);
+		expect(out).toContain(
+			"Could not install the Neon dependencies with npm (ERESOLVE).",
+		);
+		expect(out).toContain("npm install @neon/config @neon/env");
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+		expect(end).toEqual(
+			expect.objectContaining({
+				outcome: "error",
+				error_step: "config",
+				error_code: "DEPENDENCY_INSTALL_FAILED",
+				error_detail: "ERESOLVE",
+			}),
+		);
 	});
 
 	test("funnel start and end share an id", async () => {

@@ -1,3 +1,13 @@
+/** An error whose cause is known as a bounded code (`ERESOLVE`, `ENOENT`, `exit code 1`). */
+export class DetailedError extends Error {
+	readonly detail: string;
+
+	constructor(message: string, detail: string) {
+		super(message);
+		this.detail = detail;
+	}
+}
+
 export type ErrorCode =
 	| "REQUEST_TIMEOUT"
 	| "NETWORK_ERROR"
@@ -9,13 +19,37 @@ export type ErrorCode =
 	| "CREDENTIALS_DELETE_FAILED"
 	| "NPX_NOT_FOUND"
 	| "NEON_INIT_FAILED"
+	| "NON_INTERACTIVE"
+	| "AUTH_TIMEOUT"
+	| "NODE_VERSION_UNSUPPORTED"
+	| "GIT_NOT_FOUND"
+	| "SKILLS_CLI_FAILED"
+	| "AGENT_COMMAND_UNAVAILABLE"
+	| "PLUGINS_CLI_FAILED"
+	| "DEPENDENCY_INSTALL_FAILED"
 	| "UNKNOWN_ERROR";
 
+// First match wins: a skills CLI failure caused by a missing git is GIT_NOT_FOUND.
 const ERROR_MATCHERS = [
 	[/^Unknown command: (.*)$/, "UNKNOWN_COMMAND"],
 	[/^Missing required argument: (.*)$/, "MISSING_ARGUMENT"],
 	[/^Failed to open web browser. (.*)$/, "AUTH_BROWSER_FAILED"],
 	[/^Setup did not finish\.$/, "NEON_INIT_FAILED"],
+	[/^No interactive terminal\./, "NON_INTERACTIVE"],
+	[/^Authentication timed out after /, "AUTH_TIMEOUT"],
+	[/^neon skills needs Node\.js /, "NODE_VERSION_UNSUPPORTED"],
+	[/needs npx \(Node\.js\)/, "NPX_NOT_FOUND"],
+	[/spawn git ENOENT/, "GIT_NOT_FOUND"],
+	[
+		/^(Failed to install Neon agent skills|skills CLI failed)/,
+		"SKILLS_CLI_FAILED",
+	],
+	[/^Cannot install the Neon plugin for /, "AGENT_COMMAND_UNAVAILABLE"],
+	[
+		/^(Failed to install the Neon plugin for: |plugins CLI (failed|timed out))/,
+		"PLUGINS_CLI_FAILED",
+	],
+	[/^Could not install the Neon dependencies/, "DEPENDENCY_INSTALL_FAILED"],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {

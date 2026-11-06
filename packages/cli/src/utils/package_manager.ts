@@ -29,6 +29,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import which from "which";
 import { log } from "../log.js";
 
@@ -419,32 +420,196 @@ export const runCommand = (
 	 */
 	env?: NodeJS.ProcessEnv,
 ): Promise<boolean> =>
+	runCommandWithDetail(cmd, args, cwd, env).then((result) => result.ok);
+
+export type CommandResult =
+	| { ok: true }
+	/** `detail` is a code such as `ENOENT`, `ERESOLVE`, or `exit code 1`. */
+	| { ok: false; detail: string };
+
+const OUTPUT_TAIL_CHARS = 64 * 1024;
+
+// Only codes from these lists are reported, read from the start of the package manager's own
+// error line: a lifecycle script or a path can print anything else. Yarn is left out, since its
+// `YN####` records do not say which one is the failure.
+const NPM_ERROR_CODES = new Set([
+	"CERT_HAS_EXPIRED",
+	"E401",
+	"E403",
+	"E404",
+	"E500",
+	"E502",
+	"E503",
+	"EACCES",
+	"EAI_AGAIN",
+	"EBADENGINE",
+	"EBADPLATFORM",
+	"ECONNREFUSED",
+	"ECONNRESET",
+	"EEXIST",
+	"EINTEGRITY",
+	"EJSONPARSE",
+	"ENOENT",
+	"ENOSPC",
+	"ENOTEMPTY",
+	"ENOTFOUND",
+	"ENOTSUP",
+	"ENOWORKSPACES",
+	"EOVERRIDE",
+	"EPERM",
+	"ERESOLVE",
+	"ERR_SOCKET_TIMEOUT",
+	"ETARGET",
+	"ETIMEDOUT",
+	"EUNSUPPORTEDPROTOCOL",
+	"SELF_SIGNED_CERT_IN_CHAIN",
+	"UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+]);
+
+const PNPM_ERROR_CODES = new Set([
+	"ERR_PNPM_ADDING_TO_ROOT",
+	"ERR_PNPM_BAD_PM_VERSION",
+	"ERR_PNPM_EACCES",
+	"ERR_PNPM_ENOENT",
+	"ERR_PNPM_EPERM",
+	"ERR_PNPM_FETCH_401",
+	"ERR_PNPM_FETCH_403",
+	"ERR_PNPM_FETCH_404",
+	"ERR_PNPM_IGNORED_BUILDS",
+	"ERR_PNPM_LOCKFILE_BREAKING_CHANGE",
+	"ERR_PNPM_META_FETCH_FAIL",
+	"ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND",
+	"ERR_PNPM_NO_MATCHING_VERSION",
+	"ERR_PNPM_NO_OFFLINE_META",
+	"ERR_PNPM_NO_OFFLINE_TARBALL",
+	"ERR_PNPM_OUTDATED_LOCKFILE",
+	"ERR_PNPM_PEER_DEP_ISSUES",
+	"ERR_PNPM_TARBALL_INTEGRITY",
+	"ERR_PNPM_UNSUPPORTED_ENGINE",
+	"ERR_PNPM_WORKSPACE_PKG_NOT_FOUND",
+]);
+
+const PACKAGE_MANAGER_ERROR_LINES = [
+	{ pattern: /^npm (?:ERR!|error) code (\S+)$/gm, known: NPM_ERROR_CODES },
+	{ pattern: /^\s*(ERR_PNPM_[A-Z0-9_]+)\b/gm, known: PNPM_ERROR_CODES },
+];
+
+/** The most specific failure code available, without any of the child's free-form output. */
+export const installFailureDetail = (input: {
+	spawnErrorCode?: string;
+	exitCode: number | null;
+	output: string;
+}): string => {
+	if (input.spawnErrorCode !== undefined) {
+		return input.spawnErrorCode;
+	}
+	// npm keeps colors in a pipe with `color=always`.
+	const output = stripVTControlCharacters(input.output);
+	for (const { pattern, known } of PACKAGE_MANAGER_ERROR_LINES) {
+		for (const match of output.matchAll(pattern)) {
+			const code = match[1];
+			if (code !== undefined && known.has(code)) {
+				return code;
+			}
+		}
+	}
+	return input.exitCode === null ? "killed" : `exit code ${input.exitCode}`;
+};
+
+/**
+ * {@link runCommand} that also says why the command failed. Each of stdout and stderr that is
+ * not a terminal is piped, copied to ours as it arrives, and scanned for the package manager's
+ * error code (pnpm prints its code on stdout). A terminal stream stays inherited, so prompts
+ * and colors are unchanged.
+ */
+export const runCommandWithDetail = (
+	cmd: string,
+	args: string[],
+	cwd: string,
+	env?: NodeJS.ProcessEnv,
+): Promise<CommandResult> =>
 	new Promise((resolvePromise) => {
+		const pipeUnlessTerminal = (stream: NodeJS.WriteStream) =>
+			stream.isTTY === true ? "inherit" : "pipe";
 		// npm/pnpm/yarn ship as .cmd shims on Windows, which need a shell to run.
 		const child = spawn(cmd, args, {
 			cwd,
-			stdio: "inherit",
+			stdio: [
+				"inherit",
+				pipeUnlessTerminal(process.stdout),
+				pipeUnlessTerminal(process.stderr),
+			],
 			shell: process.platform === "win32",
 			env: commandEnv(env),
 		});
+		let output = "";
+		// Pause the child while our pipe is full, as inherited stdio would block it.
+		const forward = (
+			source: NodeJS.ReadableStream,
+			target: NodeJS.WriteStream,
+		) => {
+			source.on("data", (chunk: Buffer) => {
+				output = (output + chunk.toString("utf8")).slice(
+					-OUTPUT_TAIL_CHARS,
+				);
+				if (!target.write(chunk)) {
+					source.pause();
+					target.once("drain", () => source.resume());
+				}
+			});
+		};
+		if (child.stdout) forward(child.stdout, process.stdout);
+		if (child.stderr) forward(child.stderr, process.stderr);
+		// Callers may `process.exit` right after a failure, which drops writes still queued
+		// for a pipe. An empty write's callback runs once everything before it is flushed.
+		const flushed = (stream: NodeJS.WriteStream) =>
+			new Promise<void>((resolveFlush) =>
+				stream.write("", () => resolveFlush()),
+			);
+		let settled = false;
+		const settle = (result: CommandResult) => {
+			if (settled) return;
+			settled = true;
+			void Promise.all([
+				flushed(process.stdout),
+				flushed(process.stderr),
+			]).then(() => resolvePromise(result));
+		};
 		child.on("error", (err) => {
 			log.warning(
 				"Could not run `%s %s`: %s",
 				cmd,
 				args.join(" "),
-				err instanceof Error ? err.message : String(err),
+				err.message,
 			);
-			resolvePromise(false);
+			settle({
+				ok: false,
+				detail: installFailureDetail({
+					// Prefixed so a missing package manager reads apart from npm's own
+					// `npm error code ENOENT`.
+					spawnErrorCode:
+						"code" in err && typeof err.code === "string"
+							? `spawn ${err.code}`
+							: "spawn failed",
+					exitCode: null,
+					output,
+				}),
+			});
 		});
 		child.on("close", (code) => {
-			if (code !== 0) {
-				log.warning(
-					"`%s %s` exited with code %d.",
-					cmd,
-					args.join(" "),
-					code,
-				);
+			if (code === 0) {
+				settle({ ok: true });
+				return;
 			}
-			resolvePromise(code === 0);
+			log.warning(
+				"`%s %s` exited with code %d.",
+				cmd,
+				args.join(" "),
+				code,
+			);
+			settle({
+				ok: false,
+				detail: installFailureDetail({ exitCode: code, output }),
+			});
 		});
 	});
