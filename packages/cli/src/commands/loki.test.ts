@@ -4,6 +4,9 @@ import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import YAML from "yaml";
+import { getErrorAnalyticsEventProperties } from "../analytics.js";
+import { getApiClient, NeonApiError } from "../api.js";
+import { handler } from "./loki.js";
 
 const EXPRESSION = '{service_name="neon-function/api"} |= "error & a+b=1"';
 const ENVELOPE = {
@@ -401,5 +404,32 @@ describe("logs loki through dist/cli.js", () => {
 		);
 		expect(stdout).toBe("");
 		expect(stderr).toContain(`ERROR: ${error}`);
+	});
+
+	it("keeps the rejected LogQL out of the error message that analytics records", async () => {
+		const loki = 'logql: unsupported pipeline stage near "| json"';
+		reply = { status: 400, body: { status: "error", error: loki } };
+		const apiKey = "test-loki-key";
+		const failure = await handler({
+			apiClient: getApiClient({ apiKey, apiHost }),
+			apiKey,
+			apiHost,
+			output: "json",
+			contextFile: resolve("../../tmp/loki-no-context"),
+			projectId: "test-project",
+			branch: "main",
+			query: `${EXPRESSION} | json`,
+			endpoint: "query_range",
+		}).catch((error: unknown) => error);
+
+		if (!(failure instanceof NeonApiError)) throw failure;
+		expect(failure.data).toEqual({ status: "error", error: loki });
+		const properties = getErrorAnalyticsEventProperties(
+			failure,
+			"API_ERROR",
+		);
+		expect(properties.statusCode).toBe(400);
+		expect(properties.message).toBe("Loki request failed with status 400");
+		expect(properties.stack).not.toContain("json");
 	});
 });

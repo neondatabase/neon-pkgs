@@ -1,5 +1,5 @@
 import type yargs from "yargs";
-import { DEFAULT_API_HOST } from "../api.js";
+import { DEFAULT_API_HOST, NeonApiError } from "../api.js";
 import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps } from "../utils/enrichers.js";
 import { noPassthrough, single } from "../utils/flags.js";
@@ -199,12 +199,25 @@ export const handler = async (props: LokiProps) => {
 						query: props.query,
 					});
 	const data = await request.catch((error: unknown) => {
-		throw fromSdkError(
+		const failure = fromSdkError(
 			error,
 			new URL(
 				"/telemetry/v1",
 				props.apiHost ?? DEFAULT_API_HOST,
 			).toString(),
+		);
+		if (!(failure instanceof NeonApiError)) throw failure;
+		// Loki quotes the rejected LogQL in its error text, and the message goes to error
+		// analytics. The top-level handler prints the server's text from `data`.
+		throw new NeonApiError(
+			`Loki request failed with status ${failure.status}`,
+			{
+				status: failure.status,
+				statusText: failure.statusText,
+				data: failure.data,
+				headers: failure.headers,
+				requestPath: failure.requestPath,
+			},
 		);
 	});
 	writer({ output: props.output }).end(data, { fields: [] });
