@@ -118,7 +118,8 @@ export const commandManifest: CommandEntry[] = [
 	},
 	{
 		command: "logs",
-		describe: "Query branch logs",
+		describe:
+			"Query branch logs with structured filters, LogQL, or the Loki API",
 		load: () => import("./logs.js"),
 	},
 	{
