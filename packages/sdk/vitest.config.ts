@@ -15,7 +15,7 @@ export default defineConfig({
 			],
 			reporter: ["html", "lcov"],
 		},
-		exclude: ["lib", "node_modules", "dist", "e2e"],
+		exclude: ["lib", "node_modules", "dist", "e2e/**/*.e2e.test.ts"],
 		setupFiles: ["console-fail-test/setup"],
 	},
 });
