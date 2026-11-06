@@ -46,6 +46,8 @@ export class QueryRefreshController<Row> {
 	private refreshStopped = false;
 	private active = false;
 	private generation = 0;
+	private nextReplacementId = 0;
+	private appliedReplacementId = 0;
 	private refreshEvents: QueryRefreshEventSink;
 
 	constructor(private readonly options: QueryRefreshControllerOptions<Row>) {
@@ -92,7 +94,15 @@ export class QueryRefreshController<Row> {
 	 */
 	async replaceSealedQuery(query: SealedLiveQuery<Row>): Promise<void> {
 		this.assertSameQuery(query);
+		const generation = this.generation;
+		const replacementId = ++this.nextReplacementId;
 		await this.options.renewSubscription(query);
+		if (
+			generation !== this.generation ||
+			replacementId < this.appliedReplacementId
+		)
+			return;
+		this.appliedReplacementId = replacementId;
 		this.query = query;
 		this.refreshStopped = false;
 		this.options.onSubscriptionRenewed?.();
@@ -158,6 +168,7 @@ export class QueryRefreshController<Row> {
 			// Do not let a pending wire renewal prevent the next capability from
 			// being obtained. During a long outage, each newer capability supersedes
 			// the one still waiting for acceptance.
+			this.appliedReplacementId = ++this.nextReplacementId;
 			this.query = query;
 			// A short remaining lifetime or clock skew can keep every replacement
 			// inside the early-refresh window. Pace successful refreshes too.
