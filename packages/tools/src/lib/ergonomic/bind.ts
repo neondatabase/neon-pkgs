@@ -29,7 +29,7 @@ export interface ToolClientOptions {
 	apiKey?: NeonBearerCredential;
 	baseUrl?: string;
 	fetch?: typeof fetch;
-	wait?: NeonConfig["wait"];
+	wait?: NeonConfig["wait"] | false;
 }
 
 const ALL_PAGES = " Returns every page. Pass limit to cap how many.";
@@ -102,10 +102,12 @@ export const toolClient = (
 	createNeonClient({
 		apiKey: resolveApiKey(options, context),
 		throwOnError: true,
-		waitForReadiness: true,
+		waitForReadiness: options.wait !== false,
 		...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
 		...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-		...(options.wait === undefined ? {} : { wait: options.wait }),
+		...(options.wait !== undefined && options.wait !== false
+			? { wait: options.wait }
+			: {}),
 	});
 
 const objectListPage = (

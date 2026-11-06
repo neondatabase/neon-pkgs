@@ -143,6 +143,40 @@ describe("createNeonTools", () => {
 		expect(tools["projects.update"].annotations.readOnlyHint).toBe(false);
 	});
 
+	test("returns immediately when wait is false", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["projects.update"] as const,
+			wait: false,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse({
+					project: { id: "project-id", name: "renamed" },
+					operations: [
+						{
+							id: "op-1",
+							project_id: "project-id",
+							action: "update_project",
+							status: "running",
+						},
+					],
+				});
+			},
+		});
+
+		const result = await tools["projects.update"].execute({
+			project_id: "project-id",
+			name: "renamed",
+		});
+
+		expect(result).toEqual({
+			data: { id: "project-id", name: "renamed" },
+		});
+		expect(requests).toHaveLength(1);
+		expect(requests[0].method).toBe("PATCH");
+	});
+
 	test("does not poll functions.deploy because the response has no operations", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
