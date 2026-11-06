@@ -1,5 +1,11 @@
 # @neon/ai-sdk-provider
 
+## 1.3.1
+
+### Patch Changes
+
+- 6c5ad99: Remove `inkling` from the known model ids. The Neon AI Gateway no longer serves it.
+
 ## 1.3.0
 
 ### Minor Changes
