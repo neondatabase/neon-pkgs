@@ -1,4 +1,4 @@
-import type { ConnectionCoordinatorError } from "./connection/coordinator.js";
+import { ConnectionCoordinatorError } from "./connection/coordinator.js";
 import type { SubscriptionEventSink } from "./diagnostics.js";
 import type { ParsedMvccSnapshot } from "./mvcc.js";
 import type { PostgreSQLParserRegistry } from "./postgres/parsers.js";
@@ -182,7 +182,14 @@ export class Subscription<Row>
 				: undefined;
 		if (precedingState) this.setLifecycle(connectingState);
 		return this.owner.renew(this, query).catch((error: unknown) => {
-			if (precedingState && this.state.status !== "error") {
+			if (
+				precedingState &&
+				this.state.status !== "error" &&
+				!(
+					error instanceof ConnectionCoordinatorError &&
+					error.code === "renewal_superseded"
+				)
+			) {
 				this.setLifecycle(precedingState);
 			}
 			throw error;
