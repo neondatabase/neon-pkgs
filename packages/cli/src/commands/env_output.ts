@@ -99,6 +99,11 @@ export const formatPulledEnv = (
 			),
 		);
 	}
+	if (outcome.removed.some(isLegacyFunctionBaseUrlKey)) {
+		lines.push(
+			row("", 'Use functionBaseUrl("<slug>") from @neon/env instead.'),
+		);
+	}
 	if (fresh.size > 0) {
 		lines.push("  * new credential value");
 	}

@@ -14,11 +14,11 @@ describe("formatPulledEnv", () => {
 				file: "/work/my-app/.env.local",
 				written: [
 					"NEON_AI_GATEWAY_BASE_URL",
-					"NEON_FUNCTION_WEBHOOK_BASE_URL",
+					"NEON_FUNCTION_HOST_SUFFIX",
 					"AWS_REGION",
 					"NEON_BRANCH",
 					"DATABASE_URL_UNPOOLED",
-					"NEON_FUNCTION_HELLO_BASE_URL",
+					"NEON_BRANCH_ID",
 					"AWS_ACCESS_KEY_ID",
 					"DATABASE_URL",
 					"NEON_AI_GATEWAY_TOKEN",
@@ -38,8 +38,8 @@ describe("formatPulledEnv", () => {
 			[
 				"Pulled 9 Neon variables into .env.local",
 				"  Postgres        DATABASE_URL, DATABASE_URL_UNPOOLED",
-				"  Branch          NEON_BRANCH",
-				"  Functions       NEON_FUNCTION_HELLO_BASE_URL, NEON_FUNCTION_WEBHOOK_BASE_URL",
+				"  Branch          NEON_BRANCH, NEON_BRANCH_ID",
+				"  Functions       NEON_FUNCTION_HOST_SUFFIX",
 				"  Object Storage  AWS_ACCESS_KEY_ID, AWS_REGION",
 				"  AI Gateway      NEON_AI_GATEWAY_TOKEN*, NEON_AI_GATEWAY_BASE_URL",
 				"  Removed         NEON_AUTH_BASE_URL, NEON_AUTH_JWKS_URL (not produced by this pull)",
@@ -49,6 +49,27 @@ describe("formatPulledEnv", () => {
 			].join("\n"),
 		);
 	});
+});
+
+test("points removed per-function URLs at functionBaseUrl", () => {
+	const out = formatPulledEnv(
+		{
+			status: "written",
+			file: "/work/my-app/.env.local",
+			written: ["NEON_FUNCTION_HOST_SUFFIX"],
+			removed: ["NEON_FUNCTION_HELLO_BASE_URL"],
+		},
+		cwd,
+	);
+	expect(out).toBe(
+		[
+			"Pulled 1 Neon variable into .env.local",
+			"  Functions       NEON_FUNCTION_HOST_SUFFIX",
+			"  Removed         NEON_FUNCTION_HELLO_BASE_URL (not produced by this pull)",
+			'                  Use functionBaseUrl("<slug>") from @neon/env instead.',
+			"",
+		].join("\n"),
+	);
 });
 
 describe("formatPulledEnv with a branch", () => {
