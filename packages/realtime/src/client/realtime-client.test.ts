@@ -90,6 +90,31 @@ afterEach(() => {
 });
 
 describe("RealtimeClient", () => {
+	it("does not restore stale when an older renewal is superseded", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const sub = client.subscribe(query("initial")),
+			socket = connectAndAdmit();
+		baselineSync(socket, "initial");
+		try {
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired",
+			});
+			expect(sub.getState().status).toBe("stale");
+			const first = sub.renew(query("first"));
+			const older = first.catch((error) => error);
+			const second = sub.renew(query("second"));
+			void second.catch(() => {});
+			expect((await older).code).toBe("renewal_superseded");
+			expect(sub.getState().status).toBe("connecting");
+		} finally {
+			client.close();
+		}
+	});
+
 	it("uses a custom WebSocket factory", () => {
 		const webSocketFactory = vi.fn(
 			(url: string, protocols: string | string[]) =>
