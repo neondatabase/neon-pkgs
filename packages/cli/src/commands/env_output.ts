@@ -1,10 +1,10 @@
 import { homedir } from "node:os";
 import { isAbsolute, relative } from "node:path";
-import { isFunctionBaseUrlKey } from "@neon-internals/env-core/env";
 import chalk from "chalk";
 import {
-	BRANCH_ENV_KEY,
+	BRANCH_ENV_KEYS,
 	ENV_PULL_KEYS,
+	isLegacyFunctionBaseUrlKey,
 	serviceForEnvKey,
 } from "../env_services.js";
 import { NEON_SERVICE_LABELS, NEON_SERVICES } from "../neon_services.js";
@@ -37,8 +37,8 @@ const GROUP_ORDER = [
 ];
 
 const groupOf = (key: string): string => {
-	if (key === BRANCH_ENV_KEY) return BRANCH_GROUP;
-	if (isFunctionBaseUrlKey(key)) return NEON_SERVICE_LABELS.functions;
+	if (BRANCH_ENV_KEYS.includes(key)) return BRANCH_GROUP;
+	if (isLegacyFunctionBaseUrlKey(key)) return NEON_SERVICE_LABELS.functions;
 	const pullKey = ENV_PULL_KEYS.find((candidate) => candidate === key);
 	const service = pullKey ? serviceForEnvKey(pullKey) : null;
 	return service ? NEON_SERVICE_LABELS[service] : OTHER_GROUP;
@@ -97,6 +97,11 @@ export const formatPulledEnv = (
 				"Removed",
 				`${outcome.removed.join(", ")} (not produced by this pull)`,
 			),
+		);
+	}
+	if (outcome.removed.some(isLegacyFunctionBaseUrlKey)) {
+		lines.push(
+			row("", 'Use functionBaseUrl("<slug>") from @neon/env instead.'),
 		);
 	}
 	if (fresh.size > 0) {

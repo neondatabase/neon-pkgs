@@ -897,7 +897,12 @@ export interface HookEnv {
 		databaseUrl: string;
 		databaseUrlUnpooled: string;
 	};
-	branch?: { name: string };
+	/**
+	 * `id` and `functionHostSuffix` locate the branch's functions:
+	 * `functionBaseUrl("hello", { NEON_BRANCH_ID: env.branch?.id, NEON_FUNCTION_HOST_SUFFIX: env.branch?.functionHostSuffix })`
+	 * from `@neon/env`. Shell hooks get them as `NEON_BRANCH_ID` / `NEON_FUNCTION_HOST_SUFFIX`.
+	 */
+	branch?: { name: string; id?: string; functionHostSuffix?: string };
 	auth?: { baseUrl: string; jwksUrl: string };
 	dataApi?: { url: string };
 	storage?: {
@@ -907,7 +912,6 @@ export interface HookEnv {
 		region: string;
 	};
 	aiGateway?: { apiKey: string; baseUrl: string };
-	functions?: Record<string, { baseUrl: string }>;
 }
 
 /** Context passed to `hooks.checkout.before` (runs before the branch name is resolved). */

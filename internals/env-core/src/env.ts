@@ -16,12 +16,12 @@ import {
 	createNeonApiFromOptions,
 	deriveCredentialScopes,
 	ErrorCode,
-	isPlatformError,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonBranchStorageSnapshot,
 	type NeonCredentialMeta,
 	type NeonDatabaseSnapshot,
+	type NeonEndpointSnapshot,
 	type NeonRealtimeSecret,
 	type NeonRealtimeSnapshot,
 	type NeonRoleSnapshot,
@@ -49,6 +49,12 @@ import { defaultConnectionRole, NEON_DEFAULT_OWNER_ROLE } from "./roles.js";
  */
 const NEON_DEFAULT_DATABASE = "neondb";
 
+/**
+ * Set only by `neon dev`: a JSON object mapping each function it serves to its localhost port,
+ * which `functionBaseUrl` prefers over the deployed hostname.
+ */
+export const NEON_DEV_FUNCTION_PORTS = "NEON_DEV_FUNCTION_PORTS";
+
 export const NEON_ENV_VAR_KEYS = {
 	/**
 	 * Branch identity. `NEON_BRANCH` carries the branch **name** and is injected into the
@@ -57,6 +63,13 @@ export const NEON_ENV_VAR_KEYS = {
 	 */
 	branch: {
 		name: "NEON_BRANCH",
+		id: "NEON_BRANCH_ID",
+		/**
+		 * Shared by every function on the branch, with a leading dot
+		 * (`.compute.c-2.us-east-2.aws.neon.tech`). A function's host is
+		 * `<NEON_BRANCH_ID>-<slug><NEON_FUNCTION_HOST_SUFFIX>`.
+		 */
+		functionHostSuffix: "NEON_FUNCTION_HOST_SUFFIX",
 	},
 	postgres: {
 		databaseUrl: "DATABASE_URL",
@@ -97,43 +110,24 @@ export const NEON_ENV_VAR_KEYS = {
 	},
 } as const;
 
-export type FunctionBaseUrlKey<Slug extends string = string> =
-	`NEON_FUNCTION_${Uppercase<Slug>}_BASE_URL`;
-
-const FUNCTION_SLUG = /^[a-z0-9]{1,20}$/;
-const FUNCTION_BASE_URL_KEY = /^NEON_FUNCTION_([A-Z0-9]{1,20})_BASE_URL$/;
-
-export function functionBaseUrlKey<S extends string>(
-	slug: S,
-): FunctionBaseUrlKey<S> {
-	if (!FUNCTION_SLUG.test(slug)) {
-		throw new Error(
-			`functionBaseUrlKey: ${JSON.stringify(slug)} is not a function slug ([a-z0-9]{1,20}).`,
-		);
-	}
-	return `NEON_FUNCTION_${slug.toUpperCase()}_BASE_URL` as FunctionBaseUrlKey<S>;
-}
-
-export function parseFunctionBaseUrlKey(key: string): string | null {
-	const match = FUNCTION_BASE_URL_KEY.exec(key);
-	return match ? match[1].toLowerCase() : null;
-}
-
-export function isFunctionBaseUrlKey(key: string): key is FunctionBaseUrlKey {
-	return parseFunctionBaseUrlKey(key) !== null;
-}
-
-/** `all-live` lists deployed functions. Policy mode derives declared slugs from the connection host. */
-export type FunctionUrlMode = "policy" | "all-live";
+/**
+ * When an unscoped resolve includes `NEON_FUNCTION_HOST_SUFFIX`: `declared` when the policy
+ * declares a function, `always` for a branch read without a policy.
+ */
+export type FunctionHostSuffixMode = "declared" | "always";
 
 /**
  * Branch identity for the resolved branch. Always present on a `fetchEnv` result (the branch
  * name is always known); on a `parseEnv` result it's present only when `NEON_BRANCH` was
  * injected into `process.env` (the Functions runtime injects it by default, as do `neon dev` /
  * `neon-env run` / `env pull`). `name` is the branch **name** (e.g. `main`, `preview/foo`).
+ * `id` and `functionHostSuffix` are what `functionBaseUrl` builds a function's URL from; they
+ * are absent from env written before they existed.
  */
 export interface NeonBranchEnv {
 	name: string;
+	id?: string;
+	functionHostSuffix?: string;
 }
 
 /** Per-namespace inner shapes. Exposed so consumers can name the parts independently. */
@@ -209,10 +203,6 @@ export interface NeonStorageEnv {
  */
 export interface NeonAiGatewayEnv {
 	apiKey: string;
-	baseUrl: string;
-}
-
-export interface NeonFunctionUrlEnv {
 	baseUrl: string;
 }
 
@@ -315,60 +305,6 @@ type AiGatewayOn<C extends Config> = OrBool<
 	HasPreviewAiGateway<C>
 >;
 
-/** The tuple guard prevents a missing preview block from enabling functions. */
-type HasPreviewFunctions<C extends Config> = [
-	NonNullable<C["preview"]>,
-] extends [never]
-	? false
-	: NonNullable<C["preview"]> extends { functions: infer F }
-		? HasKeys<NonNullable<F>>
-		: false;
-
-type HasFunctions<C extends Config> = OrBool<
-	HasGaRecord<C["functions"]>,
-	HasPreviewFunctions<C>
->;
-
-type GaFunctionsOfConfig<C extends Config> = [
-	NonNullable<C["functions"]>,
-] extends [never]
-	? Record<never, never>
-	: string extends keyof NonNullable<C["functions"]>
-		? Record<never, never>
-		: NonNullable<C["functions"]>;
-
-type PreviewFunctionsOfConfig<C extends Config> = [
-	NonNullable<C["preview"]>,
-] extends [never]
-	? Record<never, never>
-	: NonNullable<C["preview"]> extends { functions: infer F }
-		? F
-		: Record<never, never>;
-
-type FunctionsOfConfig<C extends Config> = [
-	keyof GaFunctionsOfConfig<C>,
-] extends [never]
-	? PreviewFunctionsOfConfig<C>
-	: [keyof PreviewFunctionsOfConfig<C>] extends [never]
-		? GaFunctionsOfConfig<C>
-		: GaFunctionsOfConfig<C> & PreviewFunctionsOfConfig<C>;
-
-type FunctionSlugOfConfig<C extends Config> = Extract<
-	keyof FunctionsOfConfig<C>,
-	string
->;
-
-export type NeonFunctionsEnv<C extends Config> = {
-	[S in FunctionSlugOfConfig<C>]: NeonFunctionUrlEnv;
-};
-
-type FunctionBaseUrlKeyOf<C extends Config> =
-	FunctionSlugOfConfig<C> extends infer S
-		? S extends string
-			? FunctionBaseUrlKey<S>
-			: never
-		: never;
-
 /**
  * Static, namespaced shape of `fetchEnv` / `parseEnv`'s return value. Generic over the
  * {@link Config} so the type system knows which optional namespaces are present.
@@ -383,7 +319,6 @@ type FunctionBaseUrlKeyOf<C extends Config> =
  * - `realtime` is added iff `config.preview.realtime` is statically enabled.
  * - `storage` is added iff `config.buckets` (or deprecated `preview.buckets`) declares at least one bucket.
  * - `aiGateway` is added iff `config.aiGateway` (or deprecated `preview.aiGateway`) is statically enabled.
- * - `functions` is added iff `config.functions` (or deprecated `preview.functions`) declares at least one slug.
  */
 export type NeonEnv<C extends Config = Config> = {
 	postgres: NeonPostgresEnv;
@@ -402,9 +337,6 @@ export type NeonEnv<C extends Config = Config> = {
 	(HasBuckets<C> extends true ? { storage: NeonStorageEnv } : NoNamespace) &
 	(AiGatewayOn<C> extends true
 		? { aiGateway: NeonAiGatewayEnv }
-		: NoNamespace) &
-	(HasFunctions<C> extends true
-		? { functions: NeonFunctionsEnv<C> }
 		: NoNamespace);
 
 // ───────────────────────── env-var key filtering ─────────────────────────
@@ -418,7 +350,7 @@ export type NeonEnv<C extends Config = Config> = {
  */
 interface EnvKeysByNamespace {
 	postgres: "DATABASE_URL" | "DATABASE_URL_UNPOOLED";
-	branch: "NEON_BRANCH";
+	branch: "NEON_BRANCH" | "NEON_BRANCH_ID" | "NEON_FUNCTION_HOST_SUFFIX";
 	auth: "NEON_AUTH_BASE_URL" | "NEON_AUTH_JWKS_URL";
 	dataApi: "NEON_DATA_API_URL";
 	realtime: "NEON_REALTIME_URL" | "NEON_REALTIME_SECRET";
@@ -446,6 +378,8 @@ interface EnvKeyToProp {
 	DATABASE_URL: "databaseUrl";
 	DATABASE_URL_UNPOOLED: "databaseUrlUnpooled";
 	NEON_BRANCH: "name";
+	NEON_BRANCH_ID: "id";
+	NEON_FUNCTION_HOST_SUFFIX: "functionHostSuffix";
 	NEON_AUTH_BASE_URL: "baseUrl";
 	NEON_AUTH_JWKS_URL: "jwksUrl";
 	NEON_DATA_API_URL: "url";
@@ -466,8 +400,7 @@ interface EnvKeyToProp {
  * (e.g. `NEON_AUTH_BASE_URL` is only offered once the policy turns on `auth`).
  */
 export type SelectableEnvKey<C extends Config> =
-	| EnvKeysByNamespace[keyof NeonEnv<C> & keyof EnvKeysByNamespace]
-	| FunctionBaseUrlKeyOf<C>;
+	EnvKeysByNamespace[keyof NeonEnv<C> & keyof EnvKeysByNamespace];
 
 /**
  * The result shape of a **filtered** `parseEnv(config, keys)` call: the namespaced
@@ -484,43 +417,20 @@ export type SelectableEnvKey<C extends Config> =
  * camelCase property and looks the value type up on the canonical namespace interface, so it
  * stays correct if a field ever stops being a plain `string`.
  */
-type SelectedFunctionKeys<K extends string> = Extract<K, FunctionBaseUrlKey>;
-
-type FunctionSlugFromKey<K extends string> =
-	K extends `NEON_FUNCTION_${infer S}_BASE_URL` ? Lowercase<S> : never;
-
-type FunctionsFilteredEnv<K extends string> = [
-	SelectedFunctionKeys<K>,
-] extends [never]
-	? unknown
-	: {
-			functions: {
-				[P in SelectedFunctionKeys<K> as FunctionSlugFromKey<P>]: NeonFunctionUrlEnv;
-			};
-		};
-
-type OptionalFunctionsFilteredEnv<K extends string> = [
-	SelectedFunctionKeys<K>,
-] extends [never]
-	? unknown
-	: {
-			functions?: {
-				[P in SelectedFunctionKeys<K> as FunctionSlugFromKey<P>]?: NeonFunctionUrlEnv;
-			};
-		};
-
 export type FilteredNeonEnv<K extends string> = {
 	[N in keyof EnvKeysByNamespace as [
 		Extract<K, EnvKeysByNamespace[N]>,
 	] extends [never]
 		? never
 		: N]: {
+		// NonNullable: a selected key is required even where the full namespace leaves it optional.
 		[P in Extract<K, EnvKeysByNamespace[N]> as EnvKeyToProp[P &
-			keyof EnvKeyToProp]]: NamespaceEnv[N][EnvKeyToProp[P &
-			keyof EnvKeyToProp] &
-			keyof NamespaceEnv[N]];
+			keyof EnvKeyToProp]]: NonNullable<
+			NamespaceEnv[N][EnvKeyToProp[P & keyof EnvKeyToProp] &
+				keyof NamespaceEnv[N]]
+		>;
 	};
-} & FunctionsFilteredEnv<K>;
+};
 
 /**
  * A filtered result when the exact runtime contents of a key array are unknown. Both the
@@ -538,7 +448,7 @@ type OptionalFilteredNeonEnv<K extends string> = {
 			keyof EnvKeyToProp] &
 			keyof NamespaceEnv[N]];
 	};
-} & OptionalFunctionsFilteredEnv<K>;
+};
 
 /** Whether `T` is a union rather than one concrete type. */
 type IsUnion<T, Whole = T> = T extends Whole
@@ -955,25 +865,17 @@ export async function fetchEnvKeys(
 
 export type FetchEnvKeysState = {
 	env: ResolvedNeonEnv;
-	/** Prevents endpoint failure from being mistaken for a confirmed empty function list. */
-	functionUrlsUnavailable: boolean;
 };
 
 export type FetchEnvKeysOptions = FetchEnvOptions & {
-	functionUrls?: FunctionUrlMode;
+	/** Defaults to `declared`. See {@link FunctionHostSuffixMode}. */
+	functionHostSuffix?: FunctionHostSuffixMode;
 	/**
 	 * Keys to skip even when {@link fetchEnvKeys} is unscoped (`keys === null`).
 	 * {@link fetchEnvReusingSecrets} uses this to keep already-verified secrets
-	 * without converting an unscoped fetch into a static policy-key list — that
-	 * list cannot name `NEON_FUNCTION_*_BASE_URL`, so it would drop function URLs.
+	 * without converting an unscoped fetch into a static policy-key list.
 	 */
 	omitKeys?: readonly string[];
-	/**
-	 * Skip a second `listBranchFunctions` when the caller already listed.
-	 * `--service functions` uses this so a later `FeatureUnavailable` cannot be
-	 * swallowed as `skipped`.
-	 */
-	listedFunctions?: ReadonlyArray<{ slug: string; invocationUrl: string }>;
 };
 
 /**
@@ -1007,21 +909,11 @@ export async function fetchEnvKeysState(
 	const wantsRealtime =
 		realtimeEnabled && (wants(K.realtime.url) || wants(K.realtime.secret));
 	const gatewayEnabled = desired.preview?.aiGatewayEnabled ?? false;
-	const functionUrlMode = options.functionUrls ?? "policy";
-	const declaredSlugs = (desired.preview?.functions ?? []).map(
-		(fn) => fn.slug,
-	);
-	const selectedFunctionKeys =
-		selection === null ? [] : [...selection].filter(isFunctionBaseUrlKey);
-	const constructSlugs = functionUrlSlugsToConstruct({
-		functionUrlMode,
-		selection,
-		declaredSlugs,
-		selectedFunctionKeys,
-		wants,
-	});
-	const wantsAnyFunctionUrl =
-		selection === null || selectedFunctionKeys.length > 0;
+	const wantsFunctionHostSuffix =
+		wants(K.branch.functionHostSuffix) &&
+		(selection !== null ||
+			options.functionHostSuffix === "always" ||
+			(desired.preview?.functions.length ?? 0) > 0);
 	const storageEnabled = (desired.preview?.buckets.length ?? 0) > 0;
 	const wantsStorage =
 		storageEnabled &&
@@ -1029,23 +921,20 @@ export async function fetchEnvKeysState(
 			wants(K.storage.secretAccessKey) ||
 			wants(K.storage.endpoint) ||
 			wants(K.storage.region));
+	const needsUnpooled =
+		wantsUnpooled || (gatewayEnabled && wants(K.aiGateway.baseUrl));
+	const needsConnectionTarget = wantsPooled || needsUnpooled;
 	// These depend on nothing below, so they start now; each is awaited where its result is
-	// used, so an error from an earlier read is still the one reported.
-	const functionsRead =
-		functionUrlMode === "all-live" &&
-		wantsAnyFunctionUrl &&
-		options.listedFunctions === undefined
-			? listFunctionInvocationUrls(api, projectId, branch.id)
-			: null;
-	functionsRead?.catch(() => undefined);
+	// used, so an error from an earlier read is still the one reported. The function host
+	// suffix reuses a connection URI's host when one is fetched anyway; otherwise it reads the
+	// branch's compute endpoint, so a functions-only pull needs no role or database.
 	const storageRead = wantsStorage
 		? started(() => api.getProjectBranchStorage(projectId, branch.id))
 		: null;
-	const needsUnpooled =
-		wantsUnpooled ||
-		(gatewayEnabled && wants(K.aiGateway.baseUrl)) ||
-		constructSlugs.length > 0;
-	const needsConnectionTarget = wantsPooled || needsUnpooled;
+	const endpointsRead =
+		wantsFunctionHostSuffix && !needsConnectionTarget
+			? started(() => api.listEndpoints(projectId))
+			: null;
 	const needsDatabase = needsConnectionTarget || wantsDataApi;
 	const [roles, databases] = await Promise.all([
 		needsConnectionTarget
@@ -1119,11 +1008,27 @@ export async function fetchEnvKeysState(
 	}
 	if (Object.keys(postgres).length > 0) result.postgres = postgres;
 
-	// Branch identity, mirroring what the Functions runtime injects on every branch. Surfaced
-	// as `NEON_BRANCH` so local dev (`neon dev` / `neon-env run` / `env pull`) matches the
-	// deployed runtime. Uses the branch name.
-	if (wants(K.branch.name)) {
-		result.branch = { name: branch.name } satisfies NeonBranchEnv;
+	// Branch identity and function routing, mirroring what the Functions runtime injects on
+	// every branch, so local dev (`neon dev` / `neon-env run` / `env pull`) matches it.
+	if (wants(K.branch.name) || wants(K.branch.id) || wantsFunctionHostSuffix) {
+		const branchEnv: Partial<NeonBranchEnv> = {};
+		if (wants(K.branch.name)) branchEnv.name = branch.name;
+		if (wants(K.branch.id)) branchEnv.id = branch.id;
+		if (wantsFunctionHostSuffix) {
+			const connectionUri = unpooled?.uri ?? pooled?.uri;
+			const computeHost =
+				connectionUri !== undefined
+					? new URL(connectionUri).hostname
+					: branchComputeHost(
+							await requiredValue(
+								endpointsRead,
+								"branch endpoint list",
+							),
+							branch,
+						);
+			branchEnv.functionHostSuffix = functionHostSuffix(computeHost);
+		}
+		result.branch = branchEnv;
 	}
 
 	if (wantsAuth) {
@@ -1276,119 +1181,7 @@ export async function fetchEnvKeysState(
 		}
 	}
 
-	const functions: Record<string, NeonFunctionUrlEnv> = {};
-	let functionUrlsUnavailable = false;
-
-	if (functionUrlMode === "all-live" && wantsAnyFunctionUrl) {
-		const listed =
-			options.listedFunctions === undefined
-				? await requiredValue(functionsRead, "function listing")
-				: listedFromSnapshots(options.listedFunctions);
-		if (listed.status === "unavailable") {
-			if (selection === null) functionUrlsUnavailable = true;
-		} else {
-			for (const fn of listed.functions) {
-				if (!wants(functionBaseUrlKey(fn.slug))) continue;
-				functions[fn.slug] = {
-					baseUrl: asEnvBaseUrl(fn.invocationUrl),
-				};
-			}
-		}
-	}
-
-	const missingConstructSlugs = constructSlugs.filter(
-		(slug) => functions[slug] === undefined,
-	);
-	if (missingConstructSlugs.length > 0) {
-		const uri = requiredValue(
-			unpooled,
-			"direct connection URI for function invocation URLs",
-		).uri;
-		for (const slug of missingConstructSlugs) {
-			functions[slug] = {
-				baseUrl: functionInvocationUrl(branch.id, slug, uri),
-			};
-		}
-	}
-
-	assertSelectedFunctionUrls(selectedFunctionKeys, functions);
-	if (Object.keys(functions).length > 0) result.functions = functions;
-
-	return { env: result, functionUrlsUnavailable };
-}
-
-function functionUrlSlugsToConstruct(args: {
-	functionUrlMode: FunctionUrlMode;
-	selection: Set<string> | null;
-	declaredSlugs: readonly string[];
-	selectedFunctionKeys: readonly string[];
-	wants: (key: string) => boolean;
-}): string[] {
-	const slugs: string[] = [];
-	if (args.functionUrlMode === "policy" && args.selection === null) {
-		for (const slug of args.declaredSlugs) {
-			if (args.wants(functionBaseUrlKey(slug))) slugs.push(slug);
-		}
-		return slugs;
-	}
-	for (const key of args.selectedFunctionKeys) {
-		const slug = parseFunctionBaseUrlKey(key);
-		if (slug !== null) slugs.push(slug);
-	}
-	return slugs;
-}
-
-function listedFromSnapshots(
-	snapshots: ReadonlyArray<{ slug: string; invocationUrl: string }>,
-): {
-	status: "ok";
-	functions: Array<{ slug: string; invocationUrl: string }>;
-} {
-	const functions = snapshots
-		.filter((fn) => fn.invocationUrl !== "")
-		.map((fn) => ({
-			slug: fn.slug,
-			invocationUrl: fn.invocationUrl,
-		}))
-		.sort((left, right) => left.slug.localeCompare(right.slug));
-	return { status: "ok", functions };
-}
-
-function assertSelectedFunctionUrls(
-	keys: readonly string[],
-	functions: Record<string, NeonFunctionUrlEnv>,
-): void {
-	for (const key of keys) {
-		const slug = parseFunctionBaseUrlKey(key);
-		if (slug === null || functions[slug] === undefined) {
-			throw new Error(`fetchEnv: missing ${key}.`);
-		}
-	}
-}
-
-async function listFunctionInvocationUrls(
-	api: NeonApi,
-	projectId: string,
-	branchId: string,
-): Promise<
-	| {
-			status: "ok";
-			functions: Array<{ slug: string; invocationUrl: string }>;
-	  }
-	| { status: "unavailable"; error: PlatformError }
-> {
-	try {
-		const snapshots = await api.listBranchFunctions(projectId, branchId);
-		return listedFromSnapshots(snapshots);
-	} catch (error) {
-		if (
-			isPlatformError(error) &&
-			error.code === ErrorCode.FeatureUnavailable
-		) {
-			return { status: "unavailable", error };
-		}
-		throw error;
-	}
+	return { env: result };
 }
 
 export type BranchPolicy = {
@@ -1506,6 +1299,10 @@ export function policyEnvKeys(
 		K.postgres.databaseUrl,
 		K.postgres.databaseUrlUnpooled,
 		K.branch.name,
+		K.branch.id,
+		...((desired.preview?.functions.length ?? 0) > 0
+			? [K.branch.functionHostSuffix]
+			: []),
 		...(desired.authEnabled ? [K.auth.baseUrl, K.auth.jwksUrl] : []),
 		...(desired.dataApiEnabled ? [K.dataApi.url] : []),
 		...(desired.realtimePolicy === "enabled"
@@ -1716,40 +1513,35 @@ function aiGatewayHost(branchId: string, connectionUri: string): string {
 }
 
 /**
- * The API's `invocation_url` ends with `/` so paths concatenate onto it. Neon `*_BASE_URL`
- * vars are origin-only (`NEON_AUTH_BASE_URL`, `NEON_AI_GATEWAY_BASE_URL`).
+ * `NEON_FUNCTION_HOST_SUFFIX` from a compute host: the endpoint label is replaced by
+ * `compute`, as the Functions runtime does (`.compute.c-2.us-east-2.aws.neon.tech`).
  */
-function asEnvBaseUrl(url: string): string {
-	let parsed: URL;
-	try {
-		parsed = new URL(url);
-	} catch {
-		throw new Error(
-			`fetchEnv: function invocation URL is not a URL: ${JSON.stringify(url)}`,
-		);
-	}
-	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-		throw new Error(
-			`fetchEnv: function invocation URL must be http(s): ${JSON.stringify(url)}`,
-		);
-	}
-	return parsed.origin;
-}
-
-/** Derived from the connection URI so undeployed functions have a cell-routed URL. */
-function functionInvocationUrl(
-	branchId: string,
-	slug: string,
-	connectionUri: string,
-): string {
-	const suffix = connectionHostSuffix(connectionUri);
+function functionHostSuffix(computeHost: string): string {
+	const suffix = computeHost.split(".").slice(1).join(".");
 	if (suffix === "") {
 		throw new Error(
-			`fetchEnv: cannot derive the invocation URL for function "${slug}": ` +
-				"the direct connection URI has no host suffix.",
+			`fetchEnv: cannot derive NEON_FUNCTION_HOST_SUFFIX from compute host ${JSON.stringify(computeHost)}.`,
 		);
 	}
-	return `https://${branchId}-${slug}.compute.${suffix}`;
+	return `.compute.${suffix}`;
+}
+
+/** The branch's read-write compute host, else its first compute host. */
+function branchComputeHost(
+	endpoints: readonly NeonEndpointSnapshot[],
+	branch: NeonBranchSnapshot,
+): string {
+	const own = endpoints.filter((endpoint) => endpoint.branchId === branch.id);
+	const endpoint =
+		own.find((candidate) => candidate.type === "read_write") ?? own[0];
+	if (!endpoint?.host) {
+		throw new PlatformError(
+			ErrorCode.NotFound,
+			`fetchEnv: branch ${branch.name} (${branch.id}) has no compute endpoint, so NEON_FUNCTION_HOST_SUFFIX cannot be derived. Add a compute to the branch, then re-run.`,
+			{ details: { branchId: branch.id } },
+		);
+	}
+	return endpoint.host;
 }
 
 /** The AI Gateway's bare base URL (`NEON_AI_GATEWAY_BASE_URL`) on the branch gateway host. */
@@ -1926,6 +1718,8 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
 	put(K.postgres.databaseUrl, env.postgres?.databaseUrl);
 	put(K.postgres.databaseUrlUnpooled, env.postgres?.databaseUrlUnpooled);
 	put(K.branch.name, env.branch?.name);
+	put(K.branch.id, env.branch?.id);
+	put(K.branch.functionHostSuffix, env.branch?.functionHostSuffix);
 	put(K.auth.baseUrl, env.auth?.baseUrl);
 	put(K.auth.jwksUrl, env.auth?.jwksUrl);
 	put(K.dataApi.url, env.dataApi?.url);
@@ -1940,11 +1734,6 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
 	// (/v1, /openai/v1, /anthropic/v1) itself (https://github.com/vercel/ai/pull/15997).
 	put(K.aiGateway.apiKey, env.aiGateway?.apiKey);
 	put(K.aiGateway.baseUrl, env.aiGateway?.baseUrl);
-	if (env.functions) {
-		for (const slug of Object.keys(env.functions).sort()) {
-			put(functionBaseUrlKey(slug), env.functions[slug]?.baseUrl);
-		}
-	}
 	return out;
 }
 
@@ -1956,6 +1745,4 @@ export function toEntries(env: ResolvedNeonEnv): Record<string, string> {
  */
 export type ResolvedNeonEnv = {
 	[N in keyof NamespaceEnv]?: Partial<NamespaceEnv[N]>;
-} & {
-	functions?: Record<string, NeonFunctionUrlEnv>;
 };

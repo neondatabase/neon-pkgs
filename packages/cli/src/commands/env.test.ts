@@ -31,6 +31,7 @@ import type {
 	NeonTriggerSnapshot,
 } from "@neon/config";
 import { ErrorCode, PlatformError } from "@neon/config";
+import { functionBaseUrl } from "@neon/env";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yargs from "yargs/yargs";
@@ -56,6 +57,7 @@ type FakeOverrides = {
 	getProjectBranchRealtime?: NeonApi["getProjectBranchRealtime"];
 	getProjectBranchRealtimeSecret?: NeonApi["getProjectBranchRealtimeSecret"];
 	listBranchFunctions?: NeonApi["listBranchFunctions"];
+	getConnectionUri?: NeonApi["getConnectionUri"];
 };
 
 /**
@@ -109,6 +111,7 @@ class FakeNeonApi implements NeonApi {
 		return [
 			{
 				id: "ep-1",
+				host: "ep-1.fake.neon.tech",
 				branchId: BRANCH_ID,
 				type: "read_write",
 				autoscalingLimitMinCu: 0.25,
@@ -138,7 +141,9 @@ class FakeNeonApi implements NeonApi {
 		projectId: string,
 		input: GetConnectionUriInput,
 	): Promise<{ uri: string }> {
-		void projectId;
+		if (this.overrides.getConnectionUri) {
+			return this.overrides.getConnectionUri(projectId, input);
+		}
 		const host = input.pooled
 			? `${BRANCH_ID}-pooler.fake.neon.tech`
 			: `${BRANCH_ID}.fake.neon.tech`;
@@ -452,16 +457,6 @@ const fakeApiClient = {
 	}),
 };
 
-const functionSnapshot = (
-	slug: string,
-	invocationUrl = `https://${BRANCH_ID}-${slug}.compute.fake.neon.tech/`,
-): NeonFunctionSnapshot => ({
-	id: `fn-${slug}`,
-	slug,
-	name: slug,
-	invocationUrl,
-});
-
 const baseProps = (api: FakeNeonApi, cwd: string): EnvPullProps => ({
 	apiClient: fakeApiClient as never,
 	apiKey: "",
@@ -523,7 +518,7 @@ describe("env pull", () => {
 			stdout.mockRestore();
 		}
 		expect(written.join("")).toBe("");
-		expect(logged).toContain("Pulled 3 Neon variables into .env.local");
+		expect(logged).toContain("Pulled 5 Neon variables into .env.local");
 	});
 
 	it("names the branch once, in the summary heading, when announcing", async () => {
@@ -535,7 +530,7 @@ describe("env pull", () => {
 			),
 		);
 		expect(logged.split("\n")[0]).toBe(
-			`Pulled 3 Neon variables into .env.local from branch ${BRANCH_NAME} (${BRANCH_ID})`,
+			`Pulled 5 Neon variables into .env.local from branch ${BRANCH_NAME} (${BRANCH_ID})`,
 		);
 		expect(logged.split(BRANCH_ID)).toHaveLength(2);
 	});
@@ -1052,6 +1047,7 @@ describe("env pull --env", () => {
 			DATABASE_URL:
 				"postgresql://neondb_owner:pw@br-snowy-frost-12345-pooler.fake.neon.tech/neondb?sslmode=require",
 			NEON_BRANCH: "main",
+			NEON_BRANCH_ID: BRANCH_ID,
 			NEON_AUTH_BASE_URL: "https://auth.fake.neon.tech",
 			NEON_AUTH_JWKS_URL:
 				"https://auth.fake.neon.tech/.well-known/jwks.json",
@@ -1150,7 +1146,7 @@ describe("env pull --env", () => {
 	});
 });
 
-describe("env pull function invocation URLs", () => {
+describe("env pull function host suffix", () => {
 	let cwd: string;
 	beforeEach(() => {
 		cwd = mkdtempSync(join(tmpdir(), "neonctl-env-fn-"));
@@ -1159,49 +1155,37 @@ describe("env pull function invocation URLs", () => {
 		rmSync(cwd, { recursive: true, force: true });
 	});
 
-	const helloUrl = `https://${BRANCH_ID}-hello.compute.fake.neon.tech`;
-	const worldUrl = `https://${BRANCH_ID}-world.compute.fake.neon.tech`;
+	const suffix = ".compute.fake.neon.tech";
+	const helloUrl = `https://${BRANCH_ID}-hello${suffix}`;
+	const pulled = () => readEnvFile(join(cwd, ".env.local"));
 
-	const withFunctions = (...slugs: string[]): FakeNeonApi => {
-		const api = new FakeNeonApi();
-		api.functions = slugs.map((slug) => functionSnapshot(slug));
-		return api;
-	};
+	it("writes the branch id and suffix that functionBaseUrl reads, with no neon.ts", async () => {
+		await pull(baseProps(new FakeNeonApi(), cwd));
 
-	it("writes every live function URL when there is no neon.ts", async () => {
-		await pull(baseProps(withFunctions("hello", "world"), cwd));
-
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-		expect(env.NEON_FUNCTION_WORLD_BASE_URL).toBe(worldUrl);
+		const env = pulled();
+		expect(env.NEON_BRANCH_ID).toBe(BRANCH_ID);
+		expect(env.NEON_FUNCTION_HOST_SUFFIX).toBe(suffix);
+		expect(functionBaseUrl("hello", env)).toBe(helloUrl);
 		expect(env.DATABASE_URL).toBeDefined();
 	});
 
-	it("still writes live function URLs when the implied AI Gateway mints a credential", async () => {
-		await pull(baseProps(withFunctions("hello"), cwd), {
-			implyAiGateway: true,
-		});
+	it("writes the suffix when the implied AI Gateway mints a credential", async () => {
+		await pull(baseProps(new FakeNeonApi(), cwd), { implyAiGateway: true });
 
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		const env = pulled();
+		expect(env.NEON_FUNCTION_HOST_SUFFIX).toBe(suffix);
 		expect(env.NEON_AI_GATEWAY_TOKEN).toBeDefined();
 	});
 
-	it("writes a neon.ts function URL without requiring the function to be deployed", async () => {
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			"export default { preview: { functions: { hello: " +
-				"{ name: 'Hello', source: './hello.ts' } } } };\n",
-		);
+	it("writes the suffix for a neon.ts that declares no functions", async () => {
+		writeFileSync(join(cwd, "neon.ts"), "export default {};\n");
 
 		await pull(baseProps(new FakeNeonApi(), cwd));
 
-		expect(
-			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
-		).toBe(helloUrl);
+		expect(pulled().NEON_FUNCTION_HOST_SUFFIX).toBe(suffix);
 	});
 
-	it("writes a neon.ts function URL when function env vars are unset", async () => {
+	it("writes the suffix when neon.ts function env vars are unset", async () => {
 		const key = "NEON_PKGS_UNSET_FN_ENV_PULL_TEST";
 		delete process.env[key];
 		writeFileSync(
@@ -1212,9 +1196,8 @@ describe("env pull function invocation URLs", () => {
 
 		try {
 			await pull(baseProps(new FakeNeonApi(), cwd));
-			const env = readEnvFile(join(cwd, ".env.local"));
-			expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-			expect(env.DATABASE_URL).toBeDefined();
+			const env = pulled();
+			expect(functionBaseUrl("hello", env)).toBe(helloUrl);
 			expect(env.SECRET).toBeUndefined();
 			expect(process.env[key]).toBeUndefined();
 		} finally {
@@ -1222,106 +1205,24 @@ describe("env pull function invocation URLs", () => {
 		}
 	});
 
-	it("writes a neon.ts function URL when the listed invocation URL is empty", async () => {
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			"export default { preview: { functions: { hello: " +
-				"{ name: 'Hello', source: './hello.ts' } } } };\n",
-		);
-		const api = new FakeNeonApi();
-		api.functions = [functionSnapshot("hello", "")];
-
-		await pull(baseProps(api, cwd));
-
-		expect(
-			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
-		).toBe(helloUrl);
-	});
-
-	it("writes a neon.ts function URL when listing is FeatureUnavailable", async () => {
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			"export default { preview: { functions: { hello: " +
-				"{ name: 'Hello', source: './hello.ts' } } } };\n",
-		);
-
-		await pull(baseProps(new NoFunctionsFeatureNeonApi(), cwd));
-
-		expect(
-			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
-		).toBe(helloUrl);
-	});
-
-	it("intersects neon.ts declared slugs with live URLs", async () => {
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			"export default { preview: { functions: { hello: " +
-				"{ name: 'Hello', source: './hello.ts' } } } };\n",
-		);
-
-		await pull(baseProps(withFunctions("hello", "world"), cwd));
-
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-		expect(env.NEON_FUNCTION_WORLD_BASE_URL).toBeUndefined();
-	});
-
-	it("keeps neon.ts function URLs when the policy also enables the AI Gateway", async () => {
-		writeFileSync(
-			join(cwd, "neon.ts"),
-			"export default { preview: { aiGateway: true, functions: { hello: " +
-				"{ name: 'Hello', source: './hello.ts' } } } };\n",
-		);
-
-		await pull(baseProps(withFunctions("hello", "world"), cwd));
-
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-		expect(env.NEON_FUNCTION_WORLD_BASE_URL).toBeUndefined();
-		expect(env.NEON_AI_GATEWAY_TOKEN).toBeDefined();
-	});
-
-	it("skips a live function whose invocation URL is empty", async () => {
-		const api = new FakeNeonApi();
-		api.functions = [functionSnapshot("hello", "")];
-
-		await pull(baseProps(api, cwd));
-
-		expect(
-			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
-		).toBeUndefined();
-	});
-
-	it("prunes a function URL the branch no longer has", async () => {
+	it("prunes the per-function URLs earlier releases wrote", async () => {
 		writeFileSync(
 			join(cwd, ".env.local"),
-			`NEON_FUNCTION_GONE_BASE_URL=https://stale.example/\n`,
+			"NEON_FUNCTION_HELLO_BASE_URL=https://stale.example/\nKEEP=1\n",
 		);
 
-		await pull(baseProps(withFunctions("hello"), cwd));
+		await pull(baseProps(new FakeNeonApi(), cwd));
 
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-		expect(env.NEON_FUNCTION_GONE_BASE_URL).toBeUndefined();
+		const env = pulled();
+		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBeUndefined();
+		expect(env.KEEP).toBe("1");
+		expect(env.NEON_FUNCTION_HOST_SUFFIX).toBe(suffix);
 	});
 
-	it("does not prune function URLs when the functions list is unavailable", async () => {
+	it("leaves function vars alone on a postgres-scoped pull", async () => {
 		writeFileSync(
 			join(cwd, ".env.local"),
-			`NEON_FUNCTION_HELLO_BASE_URL=${helloUrl}\n`,
-		);
-
-		await pull(baseProps(new NoFunctionsFeatureNeonApi(), cwd));
-
-		const env = readEnvFile(join(cwd, ".env.local"));
-		expect(env.DATABASE_URL).toBeDefined();
-		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-	});
-
-	it("does not prune function URLs on a postgres-scoped pull", async () => {
-		writeFileSync(
-			join(cwd, ".env.local"),
-			`NEON_FUNCTION_HELLO_BASE_URL=${helloUrl}\n`,
+			`NEON_FUNCTION_HELLO_BASE_URL=${helloUrl}\nNEON_FUNCTION_HOST_SUFFIX=${suffix}\n`,
 		);
 
 		await pull({
@@ -1329,93 +1230,45 @@ describe("env pull function invocation URLs", () => {
 			services: ["postgres"],
 		});
 
-		expect(
-			readEnvFile(join(cwd, ".env.local")).NEON_FUNCTION_HELLO_BASE_URL,
-		).toBe(helloUrl);
+		const env = pulled();
+		expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(env.NEON_FUNCTION_HOST_SUFFIX).toBe(suffix);
+		expect(env.NEON_BRANCH_ID).toBe(BRANCH_ID);
 	});
 
-	it("pulls every live URL for --service functions", async () => {
-		await pull({
-			...baseProps(withFunctions("hello", "world"), cwd),
-			services: ["functions"],
-		});
-
-		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
-			NEON_BRANCH: BRANCH_NAME,
-			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
-			NEON_FUNCTION_WORLD_BASE_URL: worldUrl,
-		});
-	});
-
-	it("fails by name when --service functions finds none deployed", async () => {
-		await expect(
-			pull({
-				...baseProps(new FakeNeonApi(), cwd),
-				services: ["functions"],
-			}),
-		).rejects.toThrow(
-			/--service functions: branch .* no deployed functions, so there are no NEON_FUNCTION_\*_BASE_URL vars to pull\. Deploy a function first/,
+	it("--service functions writes the branch identity and suffix without a database read", async () => {
+		writeFileSync(
+			join(cwd, ".env.local"),
+			"NEON_FUNCTION_HELLO_BASE_URL=https://stale.example/\n",
 		);
-	});
-
-	it("lets FeatureUnavailable through for --service functions", async () => {
-		await expect(
-			pull({
-				...baseProps(new NoFunctionsFeatureNeonApi(), cwd),
-				services: ["functions"],
-			}),
-		).rejects.toThrow(/isn't available for this Neon project/);
-	});
-
-	it("does not list functions twice for --service functions", async () => {
-		const api = new ListFunctionsThenUnavailableApi([
-			functionSnapshot("hello"),
-		]);
-		await pull({
-			...baseProps(api, cwd),
-			services: ["functions"],
+		// Routing is derived from the branch's compute endpoint: no function listing, no role.
+		const api = new FakeNeonApi({
+			listBranchFunctions: async () => {
+				throw new Error("env pull must not list functions");
+			},
+			getConnectionUri: async () => {
+				throw new Error(
+					"--service functions must not read a connection string",
+				);
+			},
 		});
-		expect(api.listCalls).toBe(1);
-		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
+
+		await pull({ ...baseProps(api, cwd), services: ["functions"] });
+
+		expect(pulled()).toEqual({
 			NEON_BRANCH: BRANCH_NAME,
-			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
+			NEON_BRANCH_ID: BRANCH_ID,
+			NEON_FUNCTION_HOST_SUFFIX: suffix,
 		});
 	});
 
-	it("does not list functions for --env function URL keys", async () => {
-		const api = new ListFunctionsThenUnavailableApi([
-			functionSnapshot("hello"),
-		]);
+	it("--env NEON_FUNCTION_HOST_SUFFIX writes only that variable", async () => {
 		await pull({
-			...baseProps(api, cwd),
-			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
-		});
-		expect(api.listCalls).toBe(0);
-		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
-			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
-		});
-	});
-
-	it("pulls one function URL named via --env", async () => {
-		await pull({
-			...baseProps(withFunctions("hello", "world"), cwd),
-			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			...baseProps(new FakeNeonApi(), cwd),
+			envKeys: ["NEON_FUNCTION_HOST_SUFFIX"],
 		});
 
-		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
-			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
-		});
-	});
-
-	it("writes a function URL named via --env even when it is not deployed", async () => {
-		await pull({
-			...baseProps(withFunctions("world"), cwd),
-			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
-		});
-
-		expect(readEnvFile(join(cwd, ".env.local"))).toEqual({
-			NEON_FUNCTION_HELLO_BASE_URL: helloUrl,
-		});
+		expect(pulled()).toEqual({ NEON_FUNCTION_HOST_SUFFIX: suffix });
 	});
 });
 
@@ -1451,40 +1304,6 @@ class NoStorageFeatureNeonApi extends FakeNeonApi {
 			ErrorCode.FeatureUnavailable,
 			"Object storage (buckets) isn't available for this Neon project (HTTP 404 Not Found).",
 		);
-	}
-}
-
-class NoFunctionsFeatureNeonApi extends FakeNeonApi {
-	override async listBranchFunctions(): Promise<NeonFunctionSnapshot[]> {
-		throw new PlatformError(
-			ErrorCode.FeatureUnavailable,
-			"Functions isn't available for this Neon project (HTTP 404 Not Found).",
-			{ details: { status: 404 } },
-		);
-	}
-}
-
-class ListFunctionsThenUnavailableApi extends FakeNeonApi {
-	listCalls = 0;
-
-	constructor(functions: NeonFunctionSnapshot[]) {
-		super();
-		this.functions = functions;
-	}
-
-	override async listBranchFunctions(
-		projectId: string,
-		branchId: string,
-	): Promise<NeonFunctionSnapshot[]> {
-		this.listCalls += 1;
-		if (this.listCalls > 1) {
-			throw new PlatformError(
-				ErrorCode.FeatureUnavailable,
-				"Functions isn't available for this Neon project (HTTP 404 Not Found).",
-				{ details: { status: 404 } },
-			);
-		}
-		return super.listBranchFunctions(projectId, branchId);
 	}
 }
 
@@ -2063,7 +1882,7 @@ describe("autoPullEnvAfterPin (bundled into link / checkout)", () => {
 			expect(result.status).toBe("written");
 			const env = readEnvFile(join(cwd, ".env.local"));
 			expect(env.DATABASE_URL).toBeDefined();
-			expect(env.NEON_FUNCTION_HELLO_BASE_URL).toBe(
+			expect(functionBaseUrl("hello", env)).toBe(
 				`https://${BRANCH_ID}-hello.compute.fake.neon.tech`,
 			);
 		} finally {

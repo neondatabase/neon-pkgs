@@ -2276,6 +2276,7 @@ function endpointToSnapshot(endpoint: Endpoint): NeonEndpointSnapshot {
 		id: endpoint.id,
 		branchId: endpoint.branch_id,
 		type: endpoint.type === "read_only" ? "read_only" : "read_write",
+		host: endpoint.host,
 		autoscalingLimitMinCu:
 			endpoint.autoscaling_limit_min_cu as ComputeSettings["autoscalingLimitMinCu"],
 		autoscalingLimitMaxCu:

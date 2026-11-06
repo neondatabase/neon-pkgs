@@ -1,5 +1,3 @@
-import { functionBaseUrlKey } from "@neon-internals/env-core/env";
-import { FUNCTION_SLUG } from "../config_template.js";
 import type { EnvPullKey } from "../env_services.js";
 import type { NeonService } from "../neon_services.js";
 
@@ -61,8 +59,8 @@ export const configPlanFromResolution = (
 
 /**
  * A neon.ts policy pull fails while the branch lacks a declared service. These two need
- * no `deploy`: the AI Gateway exists on every branch, and function URLs derive from the
- * branch host.
+ * no `deploy`: the AI Gateway exists on every branch, and the function host suffix derives
+ * from the branch's compute host.
  */
 const DEPLOY_FREE_SERVICES: ReadonlySet<NeonService> = new Set([
 	"ai-gateway",
@@ -102,12 +100,15 @@ export const initEnvPullAfterConfig = (input: {
 	}
 	return {
 		kind: "services",
-		services: input.declared.includes("ai-gateway")
-			? ["postgres", "ai-gateway"]
-			: ["postgres"],
-		// `--service functions` needs a deployed function; the scaffolded one's URL does not.
-		envKeys: input.declared.includes("functions")
-			? [functionBaseUrlKey(FUNCTION_SLUG)]
-			: [],
+		services: [
+			"postgres",
+			...(input.declared.includes("ai-gateway")
+				? (["ai-gateway"] as const)
+				: []),
+			...(input.declared.includes("functions")
+				? (["functions"] as const)
+				: []),
+		],
+		envKeys: [],
 	};
 };

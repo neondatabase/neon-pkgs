@@ -20,21 +20,21 @@ const CONTEXT_FILE = join(FIXTURE, ".neon");
 const DOTENV = join(FIXTURE, ".env.local");
 const READY_TIMEOUT_MS = 90_000;
 
-/** Variables only one side can have: the function's own URL, and its declared env. */
 type Runtime = "pulled" | "dev" | "deployed" | "devSource" | "devExplicit";
 
-const FUNCTION_KEYS = new Set([
-	"NEON_FUNCTION_PROBE_BASE_URL",
-	"PROBE_SETTING",
-	"PROBE_EXTRA",
-]);
+/** Variables only the function can have: its declared env. */
+const FUNCTION_KEYS = new Set(["PROBE_SETTING", "PROBE_EXTRA"]);
 
 function withoutFunctionKeys(keys: string[]): string[] {
 	return keys.filter((key) => !FUNCTION_KEYS.has(key));
 }
 
-function withoutFunctions(namespaces: string[]): string[] {
-	return namespaces.filter((namespace) => namespace !== "functions");
+function probeBaseUrl(report: EnvReport): string {
+	const outcome = report.probeBaseUrl;
+	if (!outcome.ok) {
+		throw new Error(`functionBaseUrl("probe") threw:\n${outcome.error}`);
+	}
+	return outcome.url;
 }
 
 function namespaces(report: EnvReport, form: "external" | "scoped"): string[] {
@@ -59,7 +59,10 @@ async function devUrl(output: () => string, pattern: RegExp): Promise<string> {
 }
 
 /** Start `neon dev` with `args` in the fixture, read the probe's report, and stop it. */
-async function devReport(args: string[], pattern: RegExp): Promise<EnvReport> {
+async function devReport(
+	args: string[],
+	pattern: RegExp,
+): Promise<{ url: string; report: EnvReport }> {
 	const dev = spawnCli(["dev", ...args], {
 		cwd: FIXTURE,
 		contextFile: CONTEXT_FILE,
@@ -74,7 +77,8 @@ async function devReport(args: string[], pattern: RegExp): Promise<EnvReport> {
 	});
 	const closed = once(dev, "close");
 	try {
-		return await fetchReport(await devUrl(() => output, pattern));
+		const url = await devUrl(() => output, pattern);
+		return { url, report: await fetchReport(url) };
 	} catch (error) {
 		throw new Error(
 			`neon dev ${args.join(" ")}: ${String(error)}\noutput:\n${output}`,
@@ -115,6 +119,9 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 	let projectId: string;
 	let tmp: string;
 	const collected: Partial<Record<Runtime, EnvReport>> = {};
+	/** Where each runtime actually serves the probe. */
+	const served: Partial<Record<"deployed" | "dev" | "devSource", string>> =
+		{};
 	const report = (where: Runtime): EnvReport => {
 		const found = collected[where];
 		if (!found) throw new Error(`no env report from ${where}`);
@@ -167,6 +174,7 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 		const { invocation_url } = JSON.parse(fn.stdout) as {
 			invocation_url: string;
 		};
+		served.deployed = new URL(invocation_url).origin;
 		collected.deployed = await fetchReport(invocation_url);
 
 		const envFile = join(tmp, ".env.pulled");
@@ -214,14 +222,20 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 			}),
 		);
 		const slugUrl = /probe\s+(http:\/\/localhost:\d+)/;
-		collected.dev = await devReport([], slugUrl);
-		collected.devSource = await devReport(
+		const dev = await devReport([], slugUrl);
+		served.dev = dev.url;
+		collected.dev = dev.report;
+		const devSource = await devReport(
 			["--source", "./probe.ts"],
 			/(http:\/\/localhost:\d+)/,
 		);
+		served.devSource = devSource.url;
+		collected.devSource = devSource.report;
 		const explicit = join(tmp, "explicit.env");
 		writeFileSync(explicit, "PROBE_SETTING=from-explicit\n");
-		collected.devExplicit = await devReport(["--env", explicit], slugUrl);
+		collected.devExplicit = (
+			await devReport(["--env", explicit], slugUrl)
+		).report;
 	}, 600_000);
 
 	afterAll(async () => {
@@ -275,38 +289,33 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 
 	it("parseEnv returns the same namespaces everywhere", () => {
 		const pulled = namespaces(report("pulled"), "external");
-		expect(pulled).toContain("functions");
 		expect(namespaces(report("dev"), "external")).toEqual(pulled);
-		expect(
-			withoutFunctions(namespaces(report("deployed"), "external")),
-		).toEqual(withoutFunctions(pulled));
+		expect(namespaces(report("deployed"), "external")).toEqual(pulled);
 	});
 
 	it("non-secret values agree everywhere", () => {
-		const { NEON_FUNCTION_PROBE_BASE_URL: pulledUrl, ...pulled } =
-			report("pulled").values;
+		const pulled = report("pulled").values;
 		const {
-			NEON_FUNCTION_PROBE_BASE_URL: devUrl,
 			PROBE_SETTING: _dev,
 			PROBE_EXTRA: _devExtra,
 			...dev
 		} = report("dev").values;
-		const {
-			NEON_FUNCTION_PROBE_BASE_URL: deployedUrl,
-			PROBE_SETTING: _deployed,
-			...deployed
-		} = report("deployed").values;
+		const { PROBE_SETTING: _deployed, ...deployed } =
+			report("deployed").values;
 
+		expect(pulled.NEON_FUNCTION_HOST_SUFFIX).toMatch(/^\.compute\./);
 		expect(dev).toEqual(pulled);
 		expect(deployed).toEqual(pulled);
 		expect(report("dev").databaseHost).toBe(report("pulled").databaseHost);
 		expect(report("deployed").databaseHost).toBe(
 			report("pulled").databaseHost,
 		);
+	});
 
-		expect(pulledUrl).toMatch(/^https:\/\//);
-		expect(devUrl).toMatch(/^http:\/\/localhost:\d+$/);
-		// Not injected by the runtime yet; when it is, it must be the URL env pull writes.
-		if (deployedUrl !== undefined) expect(deployedUrl).toBe(pulledUrl);
+	it('functionBaseUrl("probe") is where each runtime serves the probe', () => {
+		expect(probeBaseUrl(report("deployed"))).toBe(served.deployed);
+		expect(probeBaseUrl(report("pulled"))).toBe(served.deployed);
+		expect(probeBaseUrl(report("dev"))).toBe(served.dev);
+		expect(probeBaseUrl(report("devSource"))).toBe(served.devSource);
 	});
 });

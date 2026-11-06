@@ -256,6 +256,7 @@ describe("envServiceKeys", () => {
 			"NEON_AI_GATEWAY_BASE_URL",
 			"NEON_AI_GATEWAY_TOKEN",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
 		]);
 	});
 
@@ -264,6 +265,7 @@ describe("envServiceKeys", () => {
 			"DATABASE_URL",
 			"DATABASE_URL_UNPOOLED",
 			"NEON_BRANCH",
+			"NEON_BRANCH_ID",
 			"NEON_DATA_API_URL",
 		]);
 	});
