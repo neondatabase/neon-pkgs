@@ -377,14 +377,13 @@ export const pull = async (
 	}
 
 	// When the branch has the AI Gateway enabled, the pulled credentials always work, but
-	// serving is plan-gated and the model set can be reduced on the beta — surface that as a
+	// serving needs AI Gateway credits and the model set can be reduced — surface that as a
 	// courtesy notice (best-effort; never fails the pull). The freshly pulled token lets us
-	// probe the branch's own /v1/models to detect a reduced catalog.
+	// probe the branch's own /v1/models, which reports both.
 	const gatewayBaseUrl = neonVars.NEON_AI_GATEWAY_BASE_URL;
 	const gatewayToken = neonVars.NEON_AI_GATEWAY_TOKEN;
 	if (gatewayBaseUrl && gatewayToken) {
 		await warnAiGateway({
-			apiClient: props.apiClient,
 			projectId: props.projectId,
 			branchId,
 			gateway: { baseUrl: gatewayBaseUrl, token: gatewayToken },
