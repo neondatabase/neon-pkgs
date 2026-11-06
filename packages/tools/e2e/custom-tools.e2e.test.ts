@@ -31,11 +31,7 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 	const tools = createNeonTools({
 		apiKey: requireApiKey(),
 		baseUrl: configuredBaseUrl(),
-		tools: [
-			"organizations.listAccessible",
-			"auth.getConfig",
-			"resources.search",
-		],
+		tools: ["user.organizations", "auth.getConfig", "resources.search"],
 	});
 	const projectName = uniqueProjectName("tools-custom");
 	let projectId: string;
@@ -143,23 +139,21 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		]);
 	});
 
-	it("organizations.listAccessible returns the organization the key can access", async () => {
-		const { data } = await tools["organizations.listAccessible"].execute(
-			{},
-		);
+	it("user.organizations returns and filters the organizations the key can access", async () => {
+		const { data } = await tools["user.organizations"].execute({});
 		const orgId = configuredOrgId();
 		if (orgId !== undefined) {
 			expect(data.map((org) => org.id)).toContain(orgId);
 		}
 		expect(data.length).toBeGreaterThan(0);
 		const first = data[0];
-		const { data: filtered } = await tools[
-			"organizations.listAccessible"
-		].execute({ search: first.id.slice(-6).toUpperCase() });
+		const { data: filtered } = await tools["user.organizations"].execute({
+			search: first.id.slice(-6).toUpperCase(),
+		});
 		expect(filtered.map((org) => org.id)).toContain(first.id);
-		const { data: none } = await tools[
-			"organizations.listAccessible"
-		].execute({ search: "no-organization-matches-this" });
+		const { data: none } = await tools["user.organizations"].execute({
+			search: "no-organization-matches-this",
+		});
 		expect(none).toEqual([]);
 	});
 
@@ -177,7 +171,7 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 			const listed = await client.listTools();
 			expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
 				"get_config_auth",
-				"list_accessible_organizations",
+				"organizations_user",
 				"search_resources",
 			]);
 			const called = await client.callTool({

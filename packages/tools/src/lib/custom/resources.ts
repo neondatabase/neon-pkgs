@@ -6,7 +6,7 @@ import {
 	publishedId,
 	type ToolClientOptions,
 } from "../ergonomic/bind.js";
-import { accessibleOrganizations, matchesNameOrId } from "./organizations.js";
+import { matchesNameOrId } from "./organizations.js";
 
 const DEFAULT_API_BASE_URL = "https://console.neon.tech/api/v2";
 const PROJECTS_PER_ORGANIZATION = 400;
@@ -82,7 +82,7 @@ const searchResources = async (
 	};
 
 	const results: SearchResult[] = [];
-	for (const org of await accessibleOrganizations(neon, signal)) {
+	for (const org of await neon.user.organizations({ signal })) {
 		if (matchesNameOrId(org, query)) {
 			results.push({
 				id: `org:${org.id}`,

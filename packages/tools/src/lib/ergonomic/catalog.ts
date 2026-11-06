@@ -5,7 +5,7 @@ import type {
 import * as z from "zod";
 import { decodeBase64 } from "../binary.js";
 import { getAuthConfigTool } from "../custom/auth-config.js";
-import { listAccessibleOrganizationsTool } from "../custom/organizations.js";
+import { userOrganizationsTool } from "../custom/organizations.js";
 import { searchResourcesTool } from "../custom/resources.js";
 import {
 	bindTool,
@@ -2102,13 +2102,7 @@ export const toolFactories = {
 			generated: "getCurrentUserInfo",
 			run: (neon, _input, signal) => neon.user.me({ signal }),
 		}),
-	"user.organizations": (options) =>
-		fromGenerated(options, {
-			id: "user.organizations",
-			generated: "getCurrentUserOrganizations",
-			run: (neon, _input, signal) => neon.user.organizations({ signal }),
-		}),
-	"organizations.listAccessible": listAccessibleOrganizationsTool,
+	"user.organizations": userOrganizationsTool,
 	"auth.getConfig": getAuthConfigTool,
 	"resources.search": searchResourcesTool,
 } satisfies Record<NeonToolId, (options: ToolClientOptions) => unknown>;

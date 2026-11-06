@@ -108,7 +108,6 @@ Custom tools combine several requests into one call and are not a single `NeonCl
 
 | Selector | Published id | Returns |
 | --- | --- | --- |
-| `organizations.listAccessible` | `list_accessible_organizations` | The organizations the credential can access: the user's organizations for a personal API key or OAuth token, the key's own organization for an organization API key. Optional `search` filters by name or id. |
 | `auth.getConfig` | `get_config_auth` | The branch's Neon Auth integration and settings: trusted origins, localhost access, email and password, OAuth providers, email provider, the organization, magic link, and phone number plugins, and the webhook. `branch_id` defaults to the project's default branch. |
 | `resources.search` | `search_resources` | Organizations, projects (including projects shared with the user), and branches whose name or id contains `query`, with console URLs. |
 
@@ -130,6 +129,8 @@ found; // [{ id: "project:project-id", title: "checkout-service", url: "https://
 ```
 
 `auth.getConfig` replaces OAuth client secrets and the SMTP password with `"***redacted***"`. Trusted origins, localhost access, email and password, and OAuth providers are required reads: an error on any of them fails the call, and a branch without Neon Auth throws `NeonNotFoundError`. The email provider, plugins, and webhook reads are reported under `_errors` when they fail; an email provider that was never configured is `null`.
+
+`user.organizations` takes an optional `search` that filters by a case-insensitive part of the name or id. An organization API key gets its own organization.
 
 `resources.search` leaves out an organization, project, or branch whose read the API refuses, and fails on any other error, including an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
 
