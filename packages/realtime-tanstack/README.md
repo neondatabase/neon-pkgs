@@ -14,8 +14,9 @@ npm install @neon/realtime @neon/realtime-tanstack \
   @tanstack/db @standard-schema/spec
 ```
 
-> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and TanStack DB 0.9.
-> All three supporting libraries are peer dependencies.
+> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and TanStack DB
+> 1.x starting with 1.0.0-rc.1. All three supporting libraries are peer
+> dependencies.
 
 ## Usage
 
@@ -53,8 +54,14 @@ The integration synchronizes eagerly. It applies each complete-row replacement
 or incremental change batch as one TanStack sync transaction. Realtime
 `connecting` maps to a loading collection until the first complete result and
 `live` maps to ready. Once ready, a collection retains its usable rows while a
-subscription is `connecting` or `stale`; terminal errors put the collection into
-its error state.
+subscription is `connecting` or `stale` and reports the interruption through
+`collection.health.failureReason`. A later `live` state clears that recoverable
+failure.
+
+A terminal error before the first result puts the collection into its `error`
+state. After the collection is ready, a terminal error keeps the last rows and
+the `ready` status while exposing the failure through `collection.health.error`.
+Framework live-query hooks report the latter as `isSyncError`.
 
 This adapter represents an **unordered keyed collection**. It synchronizes
 membership and values and explicitly ignores move operations. TanStack's local
@@ -94,7 +101,8 @@ const todos = createCollection(realtimeCollectionOptions({
 `awaitTxId()` also handles the race where the live batch arrives before the HTTP
 response. It resolves after covered row changes enter TanStack DB's causal sync
 queue and waits indefinitely by default. Pass an optional timeout in milliseconds
-to bound the wait.
+to bound the wait. Pending and subsequent waits reject if synchronization stops
+terminally; collection cleanup also rejects an outstanding wait.
 
 `awaitTxId()` does not determine whether a transaction committed, so pass only
 the ID of a transaction known to have committed.
