@@ -179,6 +179,12 @@ describe.sequential("e2e — parseEnv matches the env each runtime provides", ()
 				`neon env pull exited ${pulled.code}:\n${pulled.stderr}`,
 			);
 		}
+		// The test org has AI Gateway credits, so its catalog is fully enabled.
+		if (pulled.stderr.includes("AI Gateway is enabled, but")) {
+			throw new Error(
+				`neon env pull warned about the AI Gateway:\n${pulled.stderr}`,
+			);
+		}
 		for (const key of Object.keys(process.env)) {
 			if (
 				/^(DATABASE_URL|NEON_|AWS_)/.test(key) &&

@@ -694,7 +694,7 @@ export default defineConfig({
 ◯   Object Storage
      S3-compatible blob storage that branches with your projects.
 ◯   AI Gateway
-     All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.
+     All models, one API, one bill. Powered by Databricks.
 ```
 
 Postgres cannot be unselected. Selecting nothing else is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
