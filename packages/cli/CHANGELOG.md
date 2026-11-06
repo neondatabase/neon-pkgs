@@ -1,5 +1,11 @@
 # neon
 
+## 8.23.3
+
+### Patch Changes
+
+- 8d539df: `neon init` says why the Neon dependency install failed, such as `Could not install the Neon dependencies with npm (ERESOLVE).`, when the CLI runs without a terminal, as it does under a coding agent.
+
 ## 8.23.2
 
 ### Patch Changes
