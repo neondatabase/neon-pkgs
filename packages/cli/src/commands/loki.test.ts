@@ -27,7 +27,7 @@ const ENVELOPE = {
 	},
 };
 
-describe("loki through dist/cli.js", () => {
+describe("logs loki through dist/cli.js", () => {
 	let server: Server;
 	let apiHost: string;
 	let requests: { method?: string; url: URL; headers: IncomingHttpHeaders }[];
@@ -83,7 +83,11 @@ describe("loki through dist/cli.js", () => {
 		);
 	});
 
-	const run = async (args: string[], code = 0) => {
+	const run = async (
+		args: string[],
+		code = 0,
+		{ command = ["logs", "loki"], authenticated = true } = {},
+	) => {
 		const result = await new Promise<{
 			stdout: string;
 			stderr: string;
@@ -95,14 +99,13 @@ describe("loki through dist/cli.js", () => {
 					resolve("dist/cli.js"),
 					"--api-host",
 					apiHost,
-					"--api-key",
-					"test-loki-key",
+					...(authenticated ? ["--api-key", "test-loki-key"] : []),
 					"--no-analytics",
 					"--config-dir",
 					resolve("../../tmp/loki-no-config"),
 					"--context-file",
 					resolve("../../tmp/loki-no-context"),
-					"loki",
+					...command,
 					...args,
 				],
 				{
@@ -110,6 +113,7 @@ describe("loki through dist/cli.js", () => {
 						PATH: process.env.PATH,
 						NO_UPDATE_NOTIFIER: "1",
 						NO_COLOR: "1",
+						CI: "true",
 					},
 				},
 				(error, stdout, stderr) => {
@@ -160,6 +164,40 @@ describe("loki through dist/cli.js", () => {
 			limit: "200",
 			direction: "forward",
 		});
+	});
+
+	it("accepts named bounds without losing nanosecond precision", async () => {
+		await run([
+			EXPRESSION,
+			"--project-id",
+			"test-project",
+			"--branch",
+			"br-other-branch-654321",
+			"--since",
+			"24h",
+			"--start",
+			"1793491200123456789",
+			"--end",
+			"1793494800123456789",
+			"--limit",
+			"200",
+			"--direction",
+			"forward",
+		]);
+		expect(requests).toHaveLength(1);
+		expect(Object.fromEntries(requests[0].url.searchParams)).toEqual({
+			query: EXPRESSION,
+			since: "24h",
+			start: "1793491200123456789",
+			end: "1793494800123456789",
+			limit: "200",
+			direction: "forward",
+		});
+	});
+
+	it("collapses identical repeated named flags", async () => {
+		await run([EXPRESSION, "--since", "30m", "--since", "30m"]);
+		expect(requests.at(-1)?.url.searchParams.get("since")).toBe("30m");
 	});
 
 	it("preserves -f query, nanosecond bounds and arbitrary string parameters", async () => {
@@ -250,7 +288,7 @@ describe("loki through dist/cli.js", () => {
 
 	it.each([
 		"json",
-		"table",
+		"yaml",
 	])("returns the complete Loki envelope with --output %s", async (output) => {
 		const { stdout } = await run([
 			EXPRESSION,
@@ -259,7 +297,9 @@ describe("loki through dist/cli.js", () => {
 			"--output",
 			output,
 		]);
-		expect(JSON.parse(stdout)).toEqual(ENVELOPE);
+		expect(
+			output === "yaml" ? YAML.parse(stdout) : JSON.parse(stdout),
+		).toEqual(ENVELOPE);
 	});
 
 	it.each([
@@ -283,11 +323,29 @@ describe("loki through dist/cli.js", () => {
 			"given more than once",
 		],
 		[[EXPRESSION, "--endpoint", "../../projects"], "--endpoint must be"],
+		[[EXPRESSION, "--endpoint", "query"], "--endpoint must be"],
 		[
 			[EXPRESSION, "--endpoint", "https://example.com"],
 			"--endpoint must be",
 		],
-		[[EXPRESSION, "--since", "30m"], "Unknown argument: since"],
+		[[EXPRESSION, "--bogus"], "Unknown argument: bogus"],
+		[[EXPRESSION, "--limit", "0"], "--limit must be a positive integer"],
+		[[EXPRESSION, "--limit", "1.5"], "--limit must be a positive integer"],
+		[[EXPRESSION, "--limit", "nope"], "--limit must be a positive integer"],
+		[[EXPRESSION, "--direction", "asc"], "Invalid values"],
+		[[EXPRESSION, "--output", "table"], "--output must be json or yaml"],
+		[
+			[EXPRESSION, "--since", "30m", "-f", "since=1h"],
+			'Parameter "since" was given more than once',
+		],
+		[
+			[EXPRESSION, "--limit", "10", "-f", "limit=20"],
+			'Parameter "limit" was given more than once',
+		],
+		[
+			[EXPRESSION, "--since", "30m", "--since", "1h"],
+			"--since was given more than once",
+		],
 		[
 			[EXPRESSION, "--", "--project-id", "other"],
 			"takes no arguments after",
@@ -300,10 +358,64 @@ describe("loki through dist/cli.js", () => {
 	});
 
 	it("shows the endpoint choices and supported subset in help without authentication", async () => {
-		const { stdout } = await run(["--help"]);
+		const { stdout, stderr } = await run(["--help"], 0, {
+			authenticated: false,
+		});
+		expect(stdout).toContain("neon logs loki [query]");
 		expect(stdout).toContain("label/<name>/values");
+		expect(stdout).toContain("--since");
+		expect(stdout).toContain("--start");
+		expect(stdout).toContain("--end");
+		expect(stdout).toContain("--limit");
+		expect(stdout).toContain("--direction");
+		expect(stdout.replace(/\s+/g, " ")).toContain('"forward", "backward"');
+		expect(stdout).toContain("--output");
+		expect(stdout).toContain("nanoseconds");
+		expect(stdout).toContain("warnings");
+		expect(stdout).toContain("no continuation cursor");
 		expect(stdout).toContain(
 			"metric queries, parser stages and live tailing are unsupported",
+		);
+		expect(stderr).toBe("");
+		expect(requests).toEqual([]);
+	});
+
+	it("makes Loki discoverable from root and logs help without authentication", async () => {
+		const options = { authenticated: false };
+		const { stdout: root } = await run(["--help"], 0, {
+			...options,
+			command: [],
+		});
+		expect(root).toContain("neon logs");
+		expect(root).toContain("Loki API");
+		expect(root).not.toMatch(/^neon loki/m);
+		const { stdout: parent } = await run(["--help"], 0, {
+			...options,
+			command: ["logs"],
+		});
+		expect(parent).toContain("neon logs loki [query]");
+		expect(parent).toContain("neon logs query");
+		const { stdout: bare } = await run([], 0, {
+			...options,
+			command: ["logs"],
+		});
+		expect(bare).toBe(parent);
+		const { stdout: query } = await run(["--help"], 0, {
+			...options,
+			command: ["logs", "query"],
+		});
+		expect(query).toContain("neon logs loki");
+		expect(requests).toEqual([]);
+	});
+
+	it("includes loki in logs shell completion without authentication", async () => {
+		const { stdout } = await run(
+			["--get-yargs-completions", "neon", "logs", ""],
+			0,
+			{ command: [], authenticated: false },
+		);
+		expect(stdout.split("\n")).toEqual(
+			expect.arrayContaining(["query", "fields", "field-values", "loki"]),
 		);
 		expect(requests).toEqual([]);
 	});

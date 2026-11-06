@@ -1211,6 +1211,10 @@ neon inspect db stalled-queries --output json
 
 Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch. `logs query` searches the previous hour by default; `logs field-values` searches the previous six hours. The maximum time window is seven days.
 
+Use `neon logs query` for structured filters or LogQL with formatted records and cursor
+pagination. Use [`neon logs loki`](#loki-api-logs-loki) for the Loki read API, label
+discovery, and the complete Loki JSON response. Both appear in `neon logs --help`.
+
 ```bash
 # The last 30 minutes on the default branch
 neon logs query --since 30m
@@ -1258,36 +1262,53 @@ Two combinations are rejected before the request: `--since` with `--start-time`,
 
 `--body-contains` compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
 
-## Loki API (`loki`)
+### Loki API (`logs loki`)
 
-`neon loki` calls the branch's Loki-compatible telemetry API directly, using the CLI's
+`neon logs loki` calls the branch's [Loki-compatible read API](https://neon.com/docs/cli/logs#loki-read-api) directly, using the CLI's
 normal authentication, project selection and branch resolution. Like `gh api graphql`,
-it accepts a query and repeatable `-f key=value` parameters, and prints the response
-envelope as JSON. `--output yaml` is also supported.
+it accepts a query and repeatable `-f key=value` URL parameters. JSON is the command's
+default output; `--output json` and `--output yaml` are supported. It preserves the full
+Loki response envelope. Help and shell completion work without authentication.
+
+Discover labels and service names, then choose a selector and bound the query:
 
 ```bash
-neon loki '{service_name="neon-function/api"} |= "error"' -f since=30m
-neon loki -f 'query={entity_type="function"}' -f limit=200 -f direction=forward
-neon loki '{scope_name="neon.function.app"}' --project-id <id> --branch main \
-  -f start=2026-11-01T00:00:00Z -f end=2026-11-01T01:00:00Z
-neon loki --endpoint labels
-neon loki --endpoint label/service_name/values -f since=6h
-neon loki --endpoint label/severity_text/values -f 'query={service_name="neon-function/api"}'
-neon loki '{entity_type="function"}' | jq '.data.result[].values'
+neon logs loki --endpoint labels
+neon logs loki --endpoint label/service_name/values --since 6h
+neon logs loki '{entity_type="function"} |= "error"' --since 30m --limit 100
+neon logs loki -f 'query={entity_type="function"}' -f limit=200 -f direction=forward
+neon logs loki '{entity_type="function"}' --project-id <id> --branch main \
+  --start 2026-11-01T00:00:00Z --end 2026-11-01T01:00:00Z
+neon logs loki --endpoint label/severity_text/values -f 'query={entity_type="function"}'
+neon logs loki '{entity_type="function"}' --since 30m --limit 100 \
+  | jq '{warnings: (.warnings // []), streams: .data.result}'
 ```
 
-The default endpoint is `query_range`. Parameters are passed as strings without parsing
-LogQL or converting nanosecond timestamps to numbers. `start` and `end` accept RFC 3339
-timestamps or Unix nanoseconds; `since` accepts positive Go durations such as `30m` or
-`24h`. With no window, range queries cover the last hour; label values cover the last six
-hours. Explicit `start` takes precedence over `since`. The server enforces time and row
-limits. Preserve the response's `warnings` when consuming results: they report truncation,
-and Loki supplies no continuation cursor.
+The default endpoint is `query_range`. Common parameters have named flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--since <duration>` | Positive Go duration such as `30m` or `24h`. Defaults to 1h for range queries and 6h for label values. |
+| `--start <timestamp>` | RFC 3339 or Unix nanoseconds, kept as a string. Takes precedence over `since`. |
+| `--end <timestamp>` | RFC 3339 or Unix nanoseconds, kept as a string. Defaults to now. |
+| `--limit <count>` | Positive integer limiting the number of log lines; the server enforces its cap. |
+| `--direction <order>` | `forward` (oldest first) or `backward` (newest first). |
+
+Use `-f key=value` for any Loki URL parameter, including `query`, `since`, `start`, `end`,
+`limit`, and `direction`. Unlike `neon api -f`, these are URL parameters rather than body
+fields. `-f` values remain strings. Duplicate assignments, including a named flag plus
+`-f` for the same parameter, are rejected before any request. The CLI does not parse LogQL
+or convert nanosecond timestamps to numbers.
+
+Range responses have `data.resultType: "streams"` and a `data.result` array. Each entry
+contains `stream` labels and `values` pairs of `[timestamp, line]`; timestamps are nanosecond
+strings. Preserve `warnings` when consuming results: they report truncation, and there is
+no continuation cursor. Narrow the time window or selector for complete results. The
+server enforces time and row limits.
 
 Neon's supported LogQL subset is stream selectors (`=`, `!=`, `=~`, `!~`) and line filters
 (`|=`, `!=`, `|~`, `!~`). Metric queries, parser/format stages and live tailing are unsupported.
-`--endpoint query` reaches the instant-query route, which currently returns an error because
-Neon does not support metric queries. The advertised labels are `service_name`,
+Instant queries are unsupported. The advertised labels are `service_name`,
 `severity_text`, `scope_name`, and `entity_type`; use `labels` to discover them. Label-value
 queries accept a stream selector without line filters.
 
@@ -1596,7 +1617,7 @@ Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the or
 | function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
 | [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `get`, `create`, `reset-password`, `delete`                                                          | Manage roles                       |
 | [operations](https://neon.com/docs/reference/cli-operations)               | `list`, `get`                                                                                                | Manage operations                  |
-| logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
+| [logs](#logs-logs)                                                          | `query`, `fields`, `field-values`, `loki [query]`                                                             | Query branch logs or the Loki API  |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | triggers                                                                   | `list`, `get`, `create`, `update`, `enable`, `disable`, `delete`                                             | Manage function triggers           |

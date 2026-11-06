@@ -56,7 +56,6 @@ const NO_SUBCOMMANDS_VERBS = [
 	// `api <path>` has a handler but no subcommands (like `status`), so the
 	// help-fallback middleware must not intercept a bare `neon api /projects`.
 	"api",
-	"loki",
 
 	// aliases
 	"auth",
