@@ -554,6 +554,8 @@ export class ConnectionCoordinator {
 	}
 
 	private renewed(liveId: string): void {
+		// A renewal sent before unsubscribe may finish while detach is pending.
+		if (this.detachingLiveIds.has(liveId)) return;
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription?.renewing)
 			throw new ProtocolError("unexpected renewal response");
