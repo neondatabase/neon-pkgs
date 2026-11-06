@@ -30,6 +30,7 @@ export interface ToolClientOptions {
 	baseUrl?: string;
 	fetch?: typeof fetch;
 	wait?: NeonConfig["wait"];
+	throwOnError?: boolean;
 }
 
 const ALL_PAGES = " Returns every page. Pass limit to cap how many.";
