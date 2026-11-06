@@ -15,7 +15,7 @@ export default defineConfig({
 			],
 			reporter: ["html", "lcov"],
 		},
-		exclude: ["lib", "node_modules", "dist"],
+		exclude: ["lib", "node_modules", "dist", "e2e"],
 		setupFiles: ["console-fail-test/setup"],
 	},
 });

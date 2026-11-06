@@ -8,7 +8,7 @@ npm install @neon/tools
 
 ## Create tools
 
-Selectors are SDK paths. The returned record is keyed by those paths. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.roles.resetPassword` → `reset_password_postgres_roles`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
+Selectors are SDK paths, plus the custom tools listed in `customToolIds` (see [Custom tools](#custom-tools)). The returned record is keyed by those selectors. Each tool's published `id` is the last path segment, then the resource, in snake_case (`projects.list` → `list_projects`, `postgres.roles.resetPassword` → `reset_password_postgres_roles`, `postgres.connectionString` → `connection_string_postgres`). `publishedId` derives that string. `toolIds` lists every published selector.
 
 ```ts
 import { createNeonTools, publishedId } from "@neon/tools";
@@ -101,6 +101,37 @@ Paginated lists call `.all()` and return the item array. Do not pass a cursor; t
 ```ts
 const createBranch = createNeonTool("branches.createAndConnect", { apiKey });
 ```
+
+## Custom tools
+
+Custom tools combine several requests into one call and are not a single `NeonClient` method. They are selected, adapted, and executed like every other tool. `customToolIds` lists them.
+
+| Selector | Published id | Returns |
+| --- | --- | --- |
+| `organizations.listAccessible` | `list_accessible_organizations` | The organizations the credential can access: the user's organizations for a personal API key or OAuth token, the key's own organization for an organization API key. Optional `search` filters by name or id. |
+| `auth.getConfig` | `get_config_auth` | The branch's Neon Auth integration and settings: trusted origins, localhost access, email and password, OAuth providers, email provider, the organization, magic link, and phone number plugins, and the webhook. `branch_id` defaults to the project's default branch. |
+| `resources.search` | `search_resources` | Organizations, projects (including projects shared with the user), and branches whose name or id contains `query`, with console URLs. |
+
+```ts
+const tools = createNeonTools({
+	apiKey,
+	tools: ["auth.getConfig", "resources.search"],
+});
+
+const { data: config } = await tools["auth.getConfig"].execute({
+	project_id: "project-id",
+});
+config.oauth_providers; // [{ id: "google", type: "standard", client_id: "…", client_secret: "***redacted***" }]
+
+const { data: found } = await tools["resources.search"].execute({
+	query: "checkout",
+});
+found; // [{ id: "project:project-id", title: "checkout-service", url: "https://console.neon.tech/app/projects/project-id", type: "project" }]
+```
+
+`auth.getConfig` replaces OAuth client secrets and the SMTP password with `"***redacted***"`. Trusted origins, localhost access, email and password, and OAuth providers are required reads: an error on any of them fails the call, and a branch without Neon Auth throws `NeonNotFoundError`. The email provider, plugins, and webhook reads are reported under `_errors` when they fail; an email provider that was never configured is `null`.
+
+`resources.search` leaves out an organization, project, or branch whose read the API refuses, and fails on any other error, including an aborted `signal`. It reads up to 400 projects per organization and 400 shared projects. Console URLs follow `baseUrl`: `https://console.neon.tech/api/v2` links to `https://console.neon.tech`.
 
 ## Writes and waiting
 

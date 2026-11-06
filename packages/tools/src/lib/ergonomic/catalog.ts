@@ -4,6 +4,9 @@ import type {
 } from "@neon/sdk";
 import * as z from "zod";
 import { decodeBase64 } from "../binary.js";
+import { getAuthConfigTool } from "../custom/auth-config.js";
+import { listAccessibleOrganizationsTool } from "../custom/organizations.js";
+import { searchResourcesTool } from "../custom/resources.js";
 import {
 	bindTool,
 	collectObjectList,
@@ -2105,4 +2108,7 @@ export const toolFactories = {
 			generated: "getCurrentUserOrganizations",
 			run: (neon, _input, signal) => neon.user.organizations({ signal }),
 		}),
+	"organizations.listAccessible": listAccessibleOrganizationsTool,
+	"auth.getConfig": getAuthConfigTool,
+	"resources.search": searchResourcesTool,
 } satisfies Record<NeonToolId, (options: ToolClientOptions) => unknown>;

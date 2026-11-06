@@ -9,6 +9,7 @@ import {
 	type NeonToolNameOverrides,
 } from "./lib/customize.js";
 import {
+	customToolIds,
 	isNeonToolId,
 	type NeonToolId,
 	type PublishedId,
@@ -43,7 +44,7 @@ export type {
 	NeonToolResult,
 } from "./lib/operation.js";
 export type { NeonToolId, PublishedId };
-export { NeonError, publishedId, toolIds };
+export { customToolIds, NeonError, publishedId, toolIds };
 
 type ToolFactories = typeof toolFactories;
 

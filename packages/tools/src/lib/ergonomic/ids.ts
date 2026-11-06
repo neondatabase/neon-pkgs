@@ -160,7 +160,17 @@ export const toolIds = [
 	"regions.list",
 	"user.me",
 	"user.organizations",
+	"organizations.listAccessible",
+	"auth.getConfig",
+	"resources.search",
 ] as const;
+
+/** Tools that compose several requests and are not a single `NeonClient` method. */
+export const customToolIds = [
+	"organizations.listAccessible",
+	"auth.getConfig",
+	"resources.search",
+] as const satisfies readonly (typeof toolIds)[number][];
 
 export type NeonToolId = (typeof toolIds)[number];
 
