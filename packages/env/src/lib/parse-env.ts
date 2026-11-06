@@ -102,11 +102,13 @@ type FunctionEnvOf<
 	: Record<never, never>;
 
 /** `string` unless the declaration's `required` may be `false` or `"production"`. */
-type FunctionEnvValueOf<V> = V extends { required: infer R }
-	? R extends true
-		? string
-		: string | undefined
-	: string;
+type FunctionEnvValueOf<V> = V extends string | { default: string }
+	? string
+	: "required" extends keyof V
+		? [Exclude<V[Extract<"required", keyof V>], undefined>] extends [true]
+			? string
+			: string | undefined
+		: string;
 
 /**
  * The extra `function` namespace added to `parseEnv`'s result when called with a function

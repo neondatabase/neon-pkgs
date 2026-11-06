@@ -1,4 +1,8 @@
-import { type Config, defineConfig } from "@neon/config/v1";
+import {
+	type Config,
+	defineConfig,
+	type FunctionEnvVar,
+} from "@neon/config/v1";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
@@ -447,6 +451,22 @@ describe("parseEnv existing overloads still type", () => {
 			RATE: string;
 			LOG_LEVEL: string;
 		}>();
+	});
+
+	test("a declaration widened to FunctionEnvVar may be unset", () => {
+		const optional = (): FunctionEnvVar => ({ required: false });
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { TOKEN: optional() },
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function.TOKEN).toEqualTypeOf<
+			string | undefined
+		>();
 	});
 
 	test("a non-literal required may be unset", () => {
