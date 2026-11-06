@@ -168,6 +168,15 @@ export type {
 	LogsQueryParams,
 } from "./neon/resources/logs.js";
 export type {
+	LokiLabelsParams,
+	LokiLabelsResponse,
+	LokiLabelValuesParams,
+	LokiQueryRangeParams,
+	LokiQueryRangeResponse,
+	LokiStream,
+	LokiWindow,
+} from "./neon/resources/loki.js";
+export type {
 	OperationsGetParams,
 	OperationsListParams,
 	OperationsWaitForParams,

@@ -4,6 +4,9 @@ import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import YAML from "yaml";
+import { getErrorAnalyticsEventProperties } from "../analytics.js";
+import { getApiClient, NeonApiError } from "../api.js";
+import { handler } from "./loki.js";
 
 const EXPRESSION = '{service_name="neon-function/api"} |= "error & a+b=1"';
 const ENVELOPE = {
@@ -31,7 +34,7 @@ describe("logs loki through dist/cli.js", () => {
 	let server: Server;
 	let apiHost: string;
 	let requests: { method?: string; url: URL; headers: IncomingHttpHeaders }[];
-	let reply: { status: number; body: unknown };
+	let reply: { status: number; body: unknown; delayMs?: number };
 
 	beforeEach(async () => {
 		requests = [];
@@ -61,8 +64,14 @@ describe("logs loki through dist/cli.js", () => {
 					}),
 				);
 			} else if (url.pathname.startsWith("/telemetry/v1/projects/")) {
-				res.writeHead(reply.status);
-				res.end(JSON.stringify(reply.body));
+				const { status, body, delayMs = 0 } = reply;
+				setTimeout(() => {
+					res.setHeader("Retry-After", "0");
+					res.writeHead(status);
+					res.end(
+						typeof body === "string" ? body : JSON.stringify(body),
+					);
+				}, delayMs);
 			} else {
 				res.writeHead(404);
 				res.end(
@@ -139,12 +148,12 @@ describe("logs loki through dist/cli.js", () => {
 	it("resolves a project and default branch, then sends an authenticated range query", async () => {
 		const { stdout, stderr } = await run([
 			EXPRESSION,
-			"-f",
-			"since=30m",
-			"-f",
-			"limit=200",
-			"-f",
-			"direction=forward",
+			"--since",
+			"30m",
+			"--limit",
+			"200",
+			"--direction",
+			"forward",
 		]);
 		expect(JSON.parse(stdout)).toEqual(ENVELOPE);
 		expect(stderr).toBe("");
@@ -200,44 +209,14 @@ describe("logs loki through dist/cli.js", () => {
 		expect(requests.at(-1)?.url.searchParams.get("since")).toBe("30m");
 	});
 
-	it("preserves -f query, nanosecond bounds and arbitrary string parameters", async () => {
-		await run([
-			"--project-id",
-			"test-project",
-			"--branch",
-			"br-other-branch-654321",
-			"-f",
-			`query=${EXPRESSION}`,
-			"-f",
-			"start=1793491200123456789",
-			"-f",
-			"end=1793494800123456789",
-			"-f",
-			"custom=001e3",
-			"-f",
-			"__proto__=value",
-		]);
-		expect(requests).toHaveLength(1);
-		expect(requests[0].url.pathname).toContain(
-			"/branches/br-other-branch-654321/",
-		);
-		expect(Object.fromEntries(requests[0].url.searchParams)).toEqual({
-			query: EXPRESSION,
-			start: "1793491200123456789",
-			end: "1793494800123456789",
-			custom: "001e3",
-			["__proto__"]: "value",
-		});
-	});
-
 	it("resolves an explicit branch name and accepts parameters before the query", async () => {
 		await run([
 			"--project-id",
 			"test-project",
 			"--branch",
 			"main",
-			"-f",
-			"since=1h",
+			"--since",
+			"1h",
 			EXPRESSION,
 		]);
 		expect(requests.at(-1)?.url.searchParams.get("query")).toBe(EXPRESSION);
@@ -275,10 +254,9 @@ describe("logs loki through dist/cli.js", () => {
 			"test-project",
 			"--endpoint",
 			"label/severity_text/values",
-			"-f",
-			'query={service_name="neon-function/api"}',
-			"-f",
-			"since=6h",
+			'{service_name="neon-function/api"}',
+			"--since",
+			"6h",
 		]);
 		expect(Object.fromEntries(requests.at(-1)!.url.searchParams)).toEqual({
 			query: '{service_name="neon-function/api"}',
@@ -304,9 +282,20 @@ describe("logs loki through dist/cli.js", () => {
 
 	it.each([
 		[[], "Pass a LogQL query"],
-		[["-f", "query="], "Pass a LogQL query"],
-		[["-f", "missing-equals"], "Use -f key=value"],
-		[[EXPRESSION, "--no-field"], "Use -f key=value"],
+		[[EXPRESSION, "-f", "limit=10"], "Unknown argument"],
+		[
+			["--endpoint", "labels", "--limit", "10"],
+			"--limit applies only to --endpoint query_range",
+		],
+		[
+			[
+				"--endpoint",
+				"label/service_name/values",
+				"--direction",
+				"forward",
+			],
+			"--direction applies only to --endpoint query_range",
+		],
 		[
 			[
 				EXPRESSION,
@@ -316,11 +305,6 @@ describe("logs loki through dist/cli.js", () => {
 				"br-other-branch-654321",
 			],
 			'Path parameter project_id cannot be ".."',
-		],
-		[[EXPRESSION, "-f", "query=other"], "not both"],
-		[
-			[EXPRESSION, "-f", "limit=10", "-f", "limit=20"],
-			"given more than once",
 		],
 		[[EXPRESSION, "--endpoint", "../../projects"], "--endpoint must be"],
 		[[EXPRESSION, "--endpoint", "query"], "--endpoint must be"],
@@ -334,14 +318,6 @@ describe("logs loki through dist/cli.js", () => {
 		[[EXPRESSION, "--limit", "nope"], "--limit must be a positive integer"],
 		[[EXPRESSION, "--direction", "asc"], "Invalid values"],
 		[[EXPRESSION, "--output", "table"], "--output must be json or yaml"],
-		[
-			[EXPRESSION, "--since", "30m", "-f", "since=1h"],
-			'Parameter "since" was given more than once',
-		],
-		[
-			[EXPRESSION, "--limit", "10", "-f", "limit=20"],
-			'Parameter "limit" was given more than once',
-		],
 		[
 			[EXPRESSION, "--since", "30m", "--since", "1h"],
 			"--since was given more than once",
@@ -433,5 +409,66 @@ describe("logs loki through dist/cli.js", () => {
 		);
 		expect(stdout).toBe("");
 		expect(stderr).toContain(`ERROR: ${error}`);
+	});
+
+	it("keeps the rejected LogQL out of the error message that analytics records", async () => {
+		const loki =
+			'logql: unsupported pipeline stage near "| line_format \\"SECRET_MARKER\\""';
+		reply = { status: 400, body: { status: "error", error: loki } };
+		const apiKey = "test-loki-key";
+		const failure = await handler({
+			apiClient: getApiClient({ apiKey, apiHost }),
+			apiKey,
+			apiHost,
+			output: "json",
+			contextFile: resolve("../../tmp/loki-no-context"),
+			projectId: "test-project",
+			branch: "main",
+			query: `${EXPRESSION} | line_format "SECRET_MARKER"`,
+			endpoint: "query_range",
+		}).catch((error: unknown) => error);
+
+		if (!(failure instanceof NeonApiError)) throw failure;
+		expect(failure.data).toEqual({ status: "error", error: loki });
+		const properties = getErrorAnalyticsEventProperties(
+			failure,
+			"API_ERROR",
+		);
+		expect(properties.statusCode).toBe(400);
+		expect(properties.message).toBe("Loki request failed with status 400");
+		expect(properties.stack).not.toContain("SECRET_MARKER");
+	});
+
+	it("keeps an unreadable 2xx response's own error", async () => {
+		reply = { status: 200, body: "not json" };
+		const { stderr } = await run(
+			[EXPRESSION, "--project-id", "test-project"],
+			1,
+		);
+		expect(stderr).toContain(
+			"Could not read the Neon API response (200 OK) to /telemetry/v1/projects/test-project/branches/br-main-123456/loki/api/v1/query_range: the body is not valid JSON",
+		);
+	});
+
+	it("keeps a request timeout's code and message", async () => {
+		reply = { status: 200, body: ENVELOPE, delayMs: 1_000 };
+		const apiKey = "test-loki-key";
+		const props = {
+			apiClient: getApiClient({ apiKey, apiHost }),
+			apiKey,
+			apiHost,
+			requestTimeoutMs: 50,
+			output: "json" as const,
+			contextFile: resolve("../../tmp/loki-no-context"),
+			projectId: "test-project",
+			branch: "main",
+			query: EXPRESSION,
+			endpoint: "query_range",
+		};
+		const failure = await handler(props).catch((error: unknown) => error);
+
+		if (!(failure instanceof NeonApiError)) throw failure;
+		expect(failure.code).toBe("ECONNABORTED");
+		expect(failure.message).toBe("Request timed out");
 	});
 });

@@ -120,6 +120,84 @@ export const compareSchemaInputSchema = z.strictObject({
 	base_timestamp: compareQuery.base_timestamp,
 });
 
+export const lokiQueryRangeInputSchema = z.strictObject({
+	project_id: zod.zQueryProjectBranchLogsPath.shape.project_id,
+	branch_id: zod.zQueryProjectBranchLogsPath.shape.branch_id,
+	query: z
+		.string()
+		.min(1)
+		.describe(
+			'LogQL stream selector with optional line filters, e.g. {entity_type="function"} |= "error". The source label is entity_type. No parsers, formatting stages, or metric queries.',
+		),
+	since: z
+		.string()
+		.describe(
+			"Lookback as a Go duration such as 30m or 24h, ending at end or now. Defaults to 1h. start takes precedence.",
+		)
+		.optional(),
+	start: z
+		.string()
+		.describe("Window start as RFC 3339 or Unix nanoseconds.")
+		.optional(),
+	end: z
+		.string()
+		.describe(
+			"Window end as RFC 3339 or Unix nanoseconds. Defaults to now.",
+		)
+		.optional(),
+	limit: z
+		.number()
+		.int()
+		.positive()
+		.describe("Maximum log lines. The server enforces its own cap.")
+		.optional(),
+	direction: z
+		.enum(["forward", "backward"])
+		.describe("backward (default) is newest first.")
+		.optional(),
+});
+
+export const lokiQueryRangeTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "logs.loki.queryRange",
+			id: publishedId("logs.loki.queryRange"),
+			title: "Query branch logs (Loki)",
+			description:
+				"Run a LogQL range query on the branch's Loki-compatible read API. Returns Loki's response: data.result groups lines by stream labels; each value is [nanosecond timestamp string, line]. No cursor: a result with limit lines, or the 10,000-line server cap (no warning), may be incomplete, so narrow the window or selector. For structured filters and cursor pagination use the logs query tool. The log fields tools list label names and values.",
+			inputSchema: lokiQueryRangeInputSchema,
+			annotations: {
+				readOnlyHint: true,
+				destructiveHint: false,
+				idempotentHint: true,
+				openWorldHint: false,
+			},
+			requiresApproval: false,
+			metadata: {
+				method: "GET",
+				path: "/telemetry/v1/projects/{project_id}/branches/{branch_id}/loki/api/v1/query_range",
+				stability: "beta",
+				deprecated: false,
+				tags: ["Branch"],
+			},
+		},
+		(neon, input, signal) =>
+			neon.logs.loki.queryRange(
+				{
+					projectId: input.project_id,
+					branchId: input.branch_id,
+					query: input.query,
+					since: input.since,
+					start: input.start,
+					end: input.end,
+					limit: input.limit,
+					direction: input.direction,
+				},
+				{ signal },
+			),
+	);
+
 export const connectionStringInputSchema = z.strictObject({
 	project_id: zod.zGetConnectionUriPath.shape.project_id,
 	branch_id: zod.zGetConnectionUriQuery.shape.branch_id,

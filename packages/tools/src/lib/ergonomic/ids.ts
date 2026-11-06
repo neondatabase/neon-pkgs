@@ -3,6 +3,8 @@ export const hiddenToolIds = [
 	"postgres.roles.password",
 	"storage.objects.get",
 	"credentials.reveal",
+	"logs.loki.labels",
+	"logs.loki.labelValues",
 ] as const;
 
 export type HiddenToolId = (typeof hiddenToolIds)[number];
@@ -93,6 +95,7 @@ export const toolIds = [
 	"logs.query",
 	"logs.fields",
 	"logs.fieldValues",
+	"logs.loki.queryRange",
 	"snapshots.list",
 	"snapshots.create",
 	"snapshots.update",
@@ -173,6 +176,10 @@ const hiddenToolHint: Record<HiddenToolId, string> = {
 	"postgres.roles.password": "Role passwords are not published as a tool.",
 	"storage.objects.get": "Object bytes are not published as a tool.",
 	"credentials.reveal": "Credential secrets are not published as a tool.",
+	"logs.loki.labels":
+		"Loki labels are the log fields. Use logs.fields to discover them.",
+	"logs.loki.labelValues":
+		"Loki label values are log field values. Use logs.fieldValues to list them.",
 };
 
 export const unpublishedToolError = (id: string): TypeError => {

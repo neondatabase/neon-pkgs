@@ -860,6 +860,48 @@ query — but is not enumerable, so `fieldValues({ …, fieldName: "source" })` 
 `fieldValues` returns the whole response, because `is_truncated` is what decides whether
 the values can be trusted and unwrapping would hide it.
 
+#### `neon.logs.loki`
+
+The same records through the branch's Loki-compatible read API
+(`/telemetry/v1/projects/{project_id}/branches/{branch_id}/loki/api/v1`, on the origin of
+`baseUrl`). Each method resolves to Loki's response body unchanged: `query_range` groups
+lines by stream labels and keeps timestamps as nanosecond strings, where `logs.query`
+returns one normalized record per line with second-precision timestamps.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `queryRange({ projectId, branchId, query, …params })` | `LokiQueryRangeResponse` | `params`: `{ since?, start?, end?, limit?, direction? }`. LogQL stream selectors and line filters only |
+| `labels({ projectId, branchId, …params })` | `LokiLabelsResponse` | `params`: `{ since?, start?, end?, query? }` |
+| `labelValues({ projectId, branchId, name, …params })` | `LokiLabelsResponse` | `params`: `{ since?, start?, end?, query? }`; `query` is a stream selector without line filters |
+
+`start` and `end` take RFC 3339 or Unix nanoseconds as strings. There is no cursor. A
+result holding `limit` lines, or the server's cap (10,000 lines observed, reached without a
+`warnings` entry), may be incomplete; only a narrower window or selector returns the rest.
+A rejected query is a `NeonApiError` carrying Loki's `error` text.
+
+```ts
+const result = await neon.logs.loki.queryRange(
+  {
+    projectId,
+    branchId,
+    query: '{entity_type="function"} |= "error"',
+    since: "30m",
+    limit: 100,
+  },
+  { throwOnError: true },
+);
+let lines = 0;
+for (const { stream, values } of result.data.result) {
+  for (const [timestamp, line] of values) {
+    console.log(timestamp, stream.service_name, line);
+    lines++;
+  }
+}
+if (lines === 100 || result.warnings?.length) {
+  // possibly incomplete: narrow `since` or the selector
+}
+```
+
 ### `neon.snapshots`
 
 | Method | Returns | Notes |

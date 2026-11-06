@@ -1,5 +1,5 @@
 import type yargs from "yargs";
-import { getApiClient, pathSegment } from "../api.js";
+import { DEFAULT_API_HOST, NeonApiError } from "../api.js";
 import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps } from "../utils/enrichers.js";
 import { noPassthrough, single } from "../utils/flags.js";
@@ -7,7 +7,6 @@ import { writer } from "../writer.js";
 
 type LokiProps = BranchScopeProps & {
 	query?: string;
-	field?: string[];
 	endpoint: string;
 	since?: string;
 	start?: string;
@@ -16,13 +15,16 @@ type LokiProps = BranchScopeProps & {
 	direction?: "forward" | "backward";
 };
 
+const LABEL_VALUES = /^label\/([a-zA-Z_][a-zA-Z0-9_]*)\/values$/;
+
 const endpoint = (value: unknown): string => {
 	const path = single("endpoint")(value);
 	if (
 		path === undefined ||
 		!(
-			/^(query_range|labels)$/.test(path) ||
-			/^label\/[a-zA-Z_][a-zA-Z0-9_]*\/values$/.test(path)
+			path === "query_range" ||
+			path === "labels" ||
+			LABEL_VALUES.test(path)
 		)
 	) {
 		throw new Error(
@@ -44,52 +46,27 @@ const limit = (value: unknown): number | undefined => {
 	return value;
 };
 
-const parameters = (props: LokiProps) => {
-	const query = new Map<string, string>();
-	for (const field of props.field ?? []) {
-		if (typeof field !== "string") {
-			throw new Error(
-				"Use -f key=value, or omit --field to send no parameters.",
-			);
-		}
-		const separator = field.indexOf("=");
-		if (separator < 1) {
-			throw new Error(`Invalid field "${field}". Use -f key=value.`);
-		}
-		const key = field.slice(0, separator);
-		if (query.has(key)) {
-			throw new Error(`Parameter "${key}" was given more than once.`);
-		}
-		query.set(key, field.slice(separator + 1));
-	}
-	for (const name of [
-		"since",
-		"start",
-		"end",
-		"limit",
-		"direction",
-	] as const) {
-		const value = props[name];
-		if (value === undefined) continue;
-		if (query.has(name)) {
-			throw new Error(`Parameter "${name}" was given more than once.`);
-		}
-		query.set(name, String(value));
-	}
-	if (props.query !== undefined) {
-		if (query.has("query")) {
-			throw new Error(
-				"Pass LogQL as the positional query or -f query=…, not both.",
-			);
-		}
-		query.set("query", props.query);
-	}
-	if (props.endpoint === "query_range" && !query.get("query")?.trim()) {
+const rangeQuery = ({ query }: LokiProps): string => {
+	if (!query?.trim()) {
 		throw new Error(
-			"Pass a LogQL query, e.g. neon logs loki '{entity_type=\"function\"}', or use -f query=…. See neon logs loki --help.",
+			"Pass a LogQL query, e.g. neon logs loki '{entity_type=\"function\"}'. See neon logs loki --help.",
 		);
 	}
-	return Object.fromEntries(query);
+	return query;
+};
+
+const validate = (props: LokiProps) => {
+	if (props.endpoint === "query_range") {
+		rangeQuery(props);
+		return;
+	}
+	for (const name of ["limit", "direction"] as const) {
+		if (props[name] !== undefined) {
+			throw new Error(
+				`--${name} applies only to --endpoint query_range.`,
+			);
+		}
+	}
 };
 
 export const command = "loki [query]";
@@ -100,7 +77,8 @@ export const builder = (argv: yargs.Argv) =>
 	argv
 		.usage("$0 logs loki [query] [options]")
 		.positional("query", {
-			describe: "LogQL expression (or pass -f query=<expression>)",
+			describe:
+				"LogQL expression. With a label endpoint, an optional stream selector that scopes the labels.",
 			type: "string",
 			coerce: single("query"),
 		})
@@ -136,24 +114,16 @@ export const builder = (argv: yargs.Argv) =>
 			},
 			limit: {
 				describe:
-					"Maximum number of log lines; the server enforces its cap",
+					"Maximum number of log lines (query_range only); the server enforces its cap",
 				type: "number",
 				coerce: limit,
 			},
 			direction: {
 				describe:
-					"Timestamp order: forward (oldest first) or backward (newest first)",
+					"Timestamp order (query_range only): forward (oldest first) or backward (newest first)",
 				type: "string",
 				choices: ["forward", "backward"],
 				coerce: single("direction"),
-			},
-			field: {
-				alias: "f",
-				type: "array",
-				string: true,
-				nargs: 1,
-				describe:
-					"String URL parameter key=value (repeatable), including query. Cannot duplicate a positional query or named flag.",
 			},
 			endpoint: {
 				describe:
@@ -171,7 +141,7 @@ export const builder = (argv: yargs.Argv) =>
 					"--output must be json or yaml for neon logs loki.",
 				);
 			}
-			parameters(args as unknown as LokiProps);
+			validate(args as unknown as LokiProps);
 		}, true)
 		.strict()
 		.example(
@@ -184,8 +154,8 @@ export const builder = (argv: yargs.Argv) =>
 			"Discover service names before choosing a selector",
 		)
 		.example(
-			"$0 logs loki -f 'query={entity_type=\"storage\"}' -f since=1h -f limit=50",
-			"Pass Loki URL parameters as strings, like gh api -f",
+			"$0 logs loki '{entity_type=\"function\"}' --endpoint label/severity_text/values",
+			"List the severities function logs carry",
 		)
 		.example(
 			"$0 logs loki '{entity_type=\"function\"}' --project-id <id> --branch <id|name> --start 2026-11-01T00:00:00Z --end 2026-11-01T01:00:00Z",
@@ -193,8 +163,8 @@ export const builder = (argv: yargs.Argv) =>
 		)
 		.epilogue(
 			[
-				"query_range requires a LogQL query and accepts since, start, end, limit and direction. label/<name>/values accepts time bounds and an optional query containing a stream selector without line filters. Use entity_type, not source, in Loki selectors.",
-				"Output: --output json (default) or --output yaml. data.result groups lines by stream labels; each values entry is [timestamp, line], with timestamps kept as nanosecond strings. Preserve warnings: they report truncation, and there is no continuation cursor. Narrow the time window or selector to retrieve complete results.",
+				"query_range requires a LogQL query and accepts --since, --start, --end, --limit and --direction. labels and label/<name>/values accept the time bounds and an optional stream selector without line filters. Use entity_type, not source, in Loki selectors.",
+				"Output: --output json (default) or --output yaml. data.result groups lines by stream labels; each values entry is [timestamp, line], with timestamps kept as nanosecond strings. There is no continuation cursor: a result with --limit lines, or the server's cap of 10,000, may be incomplete, and the cap adds no warnings entry. Narrow the time window or selector to retrieve complete results.",
 				"Neon supports stream selectors and line filters; metric queries, parser stages and live tailing are unsupported. Instant queries are unsupported.",
 				"For structured filters, human-readable tables and cursor pagination, use neon logs query --help.",
 				"Uses /telemetry/v1 on the origin selected by --api-host or NEON_API_HOST. Availability depends on the project's region and telemetry rollout. See https://neon.com/docs/cli/logs#loki-read-api",
@@ -202,19 +172,59 @@ export const builder = (argv: yargs.Argv) =>
 		);
 
 export const handler = async (props: LokiProps) => {
-	const query = parameters(props);
-	const project = pathSegment("project_id", props.projectId);
 	const branchId = await branchIdFromProps(props);
-	const client = getApiClient({
-		apiKey: props.apiKey,
-		apiHost: new URL("/telemetry/v1", props.apiHost).toString(),
+	const { fromSdkError, getNeonClient } = await import("../neon_client.js");
+	const { loki } = getNeonClient(props).logs;
+	const scope = {
+		projectId: props.projectId,
+		branchId,
+		since: props.since,
+		start: props.start,
+		end: props.end,
+	};
+	const label = LABEL_VALUES.exec(props.endpoint)?.[1];
+	const request =
+		props.endpoint === "query_range"
+			? loki.queryRange({
+					...scope,
+					query: rangeQuery(props),
+					limit: props.limit,
+					direction: props.direction,
+				})
+			: label === undefined
+				? loki.labels({ ...scope, query: props.query })
+				: loki.labelValues({
+						...scope,
+						name: label,
+						query: props.query,
+					});
+	const data = await request.catch((error: unknown) => {
+		const failure = fromSdkError(
+			error,
+			new URL(
+				"/telemetry/v1",
+				props.apiHost ?? DEFAULT_API_HOST,
+			).toString(),
+		);
+		if (
+			!(failure instanceof NeonApiError) ||
+			failure.status === undefined ||
+			failure.status < 400
+		) {
+			throw failure;
+		}
+		// Loki quotes the rejected LogQL in its error text, and the message goes to error
+		// analytics. The top-level handler prints the server's text from `data`.
+		throw new NeonApiError(
+			`Loki request failed with status ${failure.status}`,
+			{
+				status: failure.status,
+				statusText: failure.statusText,
+				data: failure.data,
+				headers: failure.headers,
+				requestPath: failure.requestPath,
+			},
+		);
 	});
-	const { data } = await client.request({
-		method: "GET",
-		path: `/projects/${project}/branches/${pathSegment("branch_id", branchId)}/loki/api/v1/${props.endpoint}`,
-		query,
-	});
-	writer({ output: props.output }).end(data, {
-		fields: [],
-	});
+	writer({ output: props.output }).end(data, { fields: [] });
 };
