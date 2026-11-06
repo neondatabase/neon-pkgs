@@ -722,8 +722,10 @@ export class ConnectionCoordinator {
 		) {
 			this.noteConnectionLost(this.pendingConnectionError);
 		}
-		for (const subscription of this.activeSubscriptions) {
+		// Reset every peer before callbacks can synchronously unsubscribe one.
+		for (const subscription of this.activeSubscriptions)
 			subscription.resetWire();
+		for (const subscription of this.activeSubscriptions) {
 			subscription.callbacks.connecting();
 		}
 		if (
