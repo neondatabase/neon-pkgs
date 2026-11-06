@@ -2,9 +2,22 @@ import type { NeonTool } from "./operation.js";
 
 export interface McpToolResult {
 	content: Array<{ type: "text"; text: string }>;
-	structuredContent: Record<string, unknown>;
 	isError?: boolean;
 }
+
+/**
+ * Results carry no `structuredContent`: clients that show the model both
+ * fields, such as Codex, would read the payload twice.
+ */
+export const toMcpToolResult = (data: unknown): McpToolResult => {
+	const text = JSON.stringify(data);
+	if (text === undefined) {
+		throw new TypeError(
+			`MCP tool result data must be JSON-serializable, received ${typeof data}`,
+		);
+	}
+	return { content: [{ type: "text", text }] };
+};
 
 export interface McpToolServer {
 	registerTool: object;
@@ -114,28 +127,10 @@ const createToolHandler =
 				signal: signalFrom(context),
 				...(apiKey === undefined ? {} : { apiKey }),
 			});
-			const structuredContent = { data: result.data };
-			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(structuredContent),
-					},
-				],
-				structuredContent,
-			};
+			return toMcpToolResult({ data: result.data });
 		} catch (error) {
-			const structuredContent = {
-				error: mcpErrorPayload(error),
-			};
 			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(structuredContent),
-					},
-				],
-				structuredContent,
+				...toMcpToolResult({ error: mcpErrorPayload(error) }),
 				isError: true,
 			};
 		}

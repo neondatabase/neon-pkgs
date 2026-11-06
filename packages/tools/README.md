@@ -302,7 +302,17 @@ import { registerNeonTools } from "@neon/tools/mcp-v1";
 
 MCP 1.x still receives Zod input schemas, including their `.describe()` copy. Generated Zod carries only the first sentence of each OpenAPI field description. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
-The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with `{ error: { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId } }` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
+The adapter returns one text block of compact JSON, `{"data": ...}`, and no `structuredContent`. Execution failures use `isError: true` with `{"error": { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId }}` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
+
+A server that registers tools itself can format results the same way:
+
+```ts
+import { toMcpToolResult } from "@neon/tools/mcp";
+
+const result = await tool.execute(input, { apiKey });
+return toMcpToolResult(result.data);
+// { content: [{ type: "text", text: "[{\"id\":\"...\"}]" }] }
+```
 
 MCP annotations are advisory; the protocol does not enforce approval. Tools expose `neon/requiresApproval` in MCP `_meta`. Hosts must read that value and enforce their own approval policy before execution.
 

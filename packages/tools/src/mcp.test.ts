@@ -12,10 +12,49 @@ import { createNeonTools, publishedId, toolIds } from "./index.js";
 import {
 	type McpToolResult,
 	registerNeonTools as registerNeonToolsV2,
+	toMcpToolResult,
 } from "./mcp.js";
 import { registerNeonTools as registerNeonToolsV1 } from "./mcp-v1.js";
 
 const closeables: Array<{ close(): Promise<void> }> = [];
+
+const textJson = (result: unknown): unknown => {
+	if (
+		typeof result !== "object" ||
+		result === null ||
+		!("content" in result) ||
+		!Array.isArray(result.content)
+	) {
+		throw new Error("Expected an MCP tool result.");
+	}
+	expect(Reflect.get(result, "structuredContent")).toBeUndefined();
+	expect(result.content).toHaveLength(1);
+	const [block] = result.content;
+	expect(block.type).toBe("text");
+	const parsed: unknown = JSON.parse(block.text);
+	expect(block.text).toBe(JSON.stringify(parsed));
+	return parsed;
+};
+
+describe("toMcpToolResult", () => {
+	test.each([
+		["object", { project: { id: "p" } }],
+		["array", [{ id: "p" }]],
+		["string", "ok"],
+		["number", 3],
+		["null", null],
+	])("returns %s data as one compact text block", (_kind, data) => {
+		const result = toMcpToolResult(data);
+		expect(result).toEqual({
+			content: [{ type: "text", text: JSON.stringify(data) }],
+		});
+		expect(textJson(result)).toEqual(data);
+	});
+
+	test("rejects data JSON cannot represent", () => {
+		expect(() => toMcpToolResult(undefined)).toThrow(TypeError);
+	});
+});
 
 afterEach(async () => {
 	await Promise.all(closeables.splice(0).map((value) => value.close()));
@@ -62,7 +101,7 @@ describe("MCP v2 compatibility", () => {
 			name: "list_projects",
 			arguments: {},
 		});
-		expect(called.structuredContent).toEqual({
+		expect(textJson(called)).toEqual({
 			data: [{ id: "project-id" }],
 		});
 
@@ -71,6 +110,7 @@ describe("MCP v2 compatibility", () => {
 			arguments: { limit: "one" },
 		});
 		expect(invalid.isError).toBe(true);
+		expect(Reflect.get(invalid, "structuredContent")).toBeUndefined();
 	});
 
 	test("publishes compact JSON Schema without OpenAPI field essays", async () => {
@@ -168,16 +208,14 @@ describe("MCP v2 compatibility", () => {
 		}
 
 		const result = await handler({}, {});
-		expect(result).toMatchObject({
-			isError: true,
-			structuredContent: {
-				error: {
-					message: expect.stringContaining("Authentication failed"),
-					name: "NeonAuthError",
-					kind: "auth",
-					status: 401,
-					requestId: "req-auth-1",
-				},
+		expect(result.isError).toBe(true);
+		expect(textJson(result)).toMatchObject({
+			error: {
+				message: expect.stringContaining("Authentication failed"),
+				name: "NeonAuthError",
+				kind: "auth",
+				status: 401,
+				requestId: "req-auth-1",
 			},
 		});
 	});
@@ -278,18 +316,17 @@ describe("MCP request credentials", () => {
 			{ http: { authInfo: { token: "" } } },
 		);
 
-		expect(result).toMatchObject({
-			isError: true,
-			structuredContent: {
-				error: {
-					name: "TypeError",
-					message: expect.stringContaining(
-						"A Neon API key or OAuth access token is required",
-					),
-				},
+		expect(result.isError).toBe(true);
+		const body = textJson(result);
+		expect(body).toMatchObject({
+			error: {
+				name: "TypeError",
+				message: expect.stringContaining(
+					"A Neon API key or OAuth access token is required",
+				),
 			},
 		});
-		expect(result.structuredContent.error).not.toHaveProperty("kind");
+		expect(body).not.toHaveProperty("error.kind");
 		expect(requests).toHaveLength(0);
 	});
 
@@ -325,7 +362,7 @@ describe("MCP request credentials", () => {
 		});
 
 		const result = await handler()({}, {});
-		const structuredContent = {
+		const body = {
 			error: {
 				message: "branch limit",
 				name: "ConflictError",
@@ -341,13 +378,7 @@ describe("MCP request credentials", () => {
 		};
 		expect(result).toEqual({
 			isError: true,
-			content: [
-				{
-					type: "text",
-					text: JSON.stringify(structuredContent),
-				},
-			],
-			structuredContent,
+			content: [{ type: "text", text: JSON.stringify(body) }],
 		});
 	});
 
@@ -387,7 +418,7 @@ describe("MCP request credentials", () => {
 
 		const result = await handler()({}, {});
 		expect(result.isError).toBe(true);
-		expect(result.structuredContent).toEqual({
+		expect(textJson(result)).toEqual({
 			error: {
 				message: "Timed out waiting.",
 				name: "NeonWaitTimeoutError",
@@ -396,7 +427,6 @@ describe("MCP request credentials", () => {
 				timeoutMs: 5_000,
 			},
 		});
-		expect(result.structuredContent.error).not.toHaveProperty("operations");
 	});
 
 	test("omits non-finite timeoutMs and status from MCP errors", async () => {
@@ -425,7 +455,7 @@ describe("MCP request credentials", () => {
 		});
 
 		const result = await handler()({}, {});
-		const structuredContent = {
+		const body = {
 			error: {
 				message: "Timed out",
 				name: "TimeoutError",
@@ -434,16 +464,8 @@ describe("MCP request credentials", () => {
 		};
 		expect(result).toEqual({
 			isError: true,
-			content: [
-				{
-					type: "text",
-					text: JSON.stringify(structuredContent),
-				},
-			],
-			structuredContent,
+			content: [{ type: "text", text: JSON.stringify(body) }],
 		});
-		expect(result.structuredContent.error).not.toHaveProperty("timeoutMs");
-		expect(result.structuredContent.error).not.toHaveProperty("status");
 	});
 });
 
@@ -467,9 +489,16 @@ describe("MCP v1 compatibility", () => {
 			name: "list_projects",
 			arguments: {},
 		});
-		expect(called.structuredContent).toEqual({
+		expect(textJson(called)).toEqual({
 			data: [{ id: "project-id" }],
 		});
+
+		const invalid = await client.callTool({
+			name: "list_projects",
+			arguments: { limit: "one" },
+		});
+		expect(invalid.isError).toBe(true);
+		expect(Reflect.get(invalid, "structuredContent")).toBeUndefined();
 	});
 });
 
@@ -515,7 +544,7 @@ describe("MCP path injection", () => {
 			name: "get_projects",
 			arguments: {},
 		});
-		expect(called.structuredContent).toEqual({
+		expect(textJson(called)).toEqual({
 			data: { id: "granted-project" },
 		});
 		expect(requests[0].url).toBe(
@@ -610,7 +639,7 @@ describe("MCP path injection", () => {
 			name: "get_projects",
 			arguments: {},
 		});
-		expect(called.structuredContent).toEqual({
+		expect(textJson(called)).toEqual({
 			data: { id: "granted-project" },
 		});
 		expect(requests[0].url).toBe(
