@@ -159,7 +159,14 @@ export class QueryRefreshController<Row> {
 			// being obtained. During a long outage, each newer capability supersedes
 			// the one still waiting for acceptance.
 			this.query = query;
-			this.scheduleRefresh();
+			// A short remaining lifetime or clock skew can keep every replacement
+			// inside the early-refresh window. Pace successful refreshes too.
+			this.scheduleRefresh(
+				Math.max(
+					REFRESH_RETRY_MS,
+					query.expiresAt - Date.now() - REFRESH_EARLY_MS,
+				),
+			);
 			void this.renewSubscriptionRecoverably(query, generation);
 		} catch (error) {
 			if (!this.isCurrent(generation)) return;
