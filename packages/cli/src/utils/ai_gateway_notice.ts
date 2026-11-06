@@ -1,26 +1,11 @@
 import { log } from "../log.js";
 
 /**
- * Friendly guidance shown when a branch enables the AI Gateway (`aiGateway`).
- *
- * The gateway is credential-gated, not provisioned: enabling it always mints a working
- * branch credential, so `apply` / `checkout` / `env pull` succeed on every plan. Whether the
- * account can *serve* model requests is decided at request time and is invisible in the
- * provisioning result, so the branch's own `/v1/models` is read and surfaced as a courtesy
- * notice instead:
- *
- *  - **No enabled models** — the account can't serve any model yet, most commonly because it
- *    has no AI Gateway credits. The gateway reports the reason and the Console page that
- *    fixes it on every disabled model.
- *  - **Reduced model set** — an account still ramping up gets a trimmed model catalog
- *    (flagship models are listed but `enabled: false`). They can request access to more
- *    models.
- *
- * This is deliberately phrased for the user: it never mentions account "verification" or any
- * other internal gating mechanism.
+ * A minted gateway credential says nothing about whether the account can serve a model:
+ * that is decided per request, so the branch's own `/v1/models` is the only source for it.
  */
 
-/** `unavailable_reason` the gateway reports when the account has no AI Gateway credits. */
+/** Despite the name, adding a card and buying AI Gateway credits clears it on any plan. */
 const CREDITS_REQUIRED_REASON = "paid_plan_required";
 
 const PREPAID_CREDITS_DOCS_URL =
@@ -81,12 +66,7 @@ const noEnabledModelsMessage = (unavailable: {
 	);
 };
 
-/**
- * Build the AI Gateway courtesy notice from the branch's live model catalog, or `null` when
- * nothing needs saying. `catalog` is `undefined` when it couldn't be read, which keeps the
- * notice silent rather than risking a false warning. `moreModelsUrl` is the branch's Console
- * AI Gateway page (see {@link aiGatewayModelsUrl}), shown when the catalog is reduced.
- */
+/** An unreadable catalog (`undefined`) stays silent rather than risk a false warning. */
 export const buildAiGatewayNotice = ({
 	catalog,
 	moreModelsUrl,
@@ -119,8 +99,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
 /**
- * Read an OpenAI-compatible `{ object: "list", data: [{ id, enabled, ... }] }` body. The
- * gateway lists every model in the catalog but marks ones the account can't serve yet with
+ * The gateway lists every catalog model, and marks the ones the account can't serve with
  * `enabled: false`, an `unavailable_reason`, and a `recovery_url`.
  */
 export const parseGatewayCatalog = (body: unknown): GatewayCatalog | null => {
@@ -146,12 +125,7 @@ export const parseGatewayCatalog = (body: unknown): GatewayCatalog | null => {
 	return unavailable ? { enabledIds, unavailable } : { enabledIds };
 };
 
-/**
- * `GET {baseUrl}/v1/models` → the parsed catalog, or `null` if it can't be read (network /
- * HTTP / parse failure). Returning `null` keeps the notice silent rather than risking a false
- * warning. `/v1/models` is served only on the unified dialect (the `/openai/v1` Responses
- * dialect returns 404).
- */
+/** `/v1/models` is served only on the unified dialect; `/openai/v1` returns 404. */
 export const fetchGatewayCatalog = async (
 	baseUrl: string,
 	token: string,
@@ -167,11 +141,7 @@ export const fetchGatewayCatalog = async (
 	}
 };
 
-/**
- * Read the branch's live model catalog with the freshly pulled gateway credentials and print
- * the AI Gateway courtesy notice — used by `env pull` (and every command that bundles one)
- * whenever a branch has the gateway enabled. Best-effort: it never breaks the command.
- */
+/** A courtesy notice: no failure here may fail the env pull that called it. */
 export const warnAiGateway = async (params: {
 	projectId: string;
 	branchId: string;
