@@ -526,6 +526,7 @@ describe("ConnectionCoordinator", () => {
 	});
 
 	it("resubscribes with a queued replacement when the active capability expires", async () => {
+		vi.useFakeTimers();
 		const callbacks = target();
 		const events: string[] = [];
 		const coordinator = createCoordinator({
@@ -554,15 +555,18 @@ describe("ConnectionCoordinator", () => {
 		});
 
 		expect(callbacks.queryUnavailable).toHaveBeenCalledOnce();
-		expect(callbacks.connecting).toHaveBeenCalledOnce();
-		expect(socket.sent.at(-1)).toEqual({
-			type: "subscribe",
-			request_id: "2",
-			authorization: "replacement",
-		});
-		socket.receive({
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+		await vi.advanceTimersByTimeAsync(1);
+		const replacement = defined(FakeWebSocket.instances.at(-1));
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		const request = defined(
+			replacement.sent.find((message) => message.type === "subscribe"),
+		);
+		expect(request.authorization).toBe("replacement");
+		replacement.receive({
 			type: "subscribed",
-			request_id: "2",
+			request_id: request.request_id,
 			live_id: "42",
 			epoch: "1",
 			first_sequence: "1",
@@ -1062,6 +1066,106 @@ describe("subscription load-shedding recovery", () => {
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it("does not retire a new socket created by an interrupted-renewal failure callback", async () => {
+		const coordinator = recoveryCoordinator();
+		const callbacks = target();
+		const handle = coordinator.subscribe(
+			{ capability: "initial" },
+			callbacks,
+		);
+		const socket = admit();
+		const renewal = handle.renew({ capability: "replacement" });
+		const outcome = renewal.catch((error: Error) => error);
+		callbacks.failed.mockImplementation(() => {
+			handle.unsubscribe();
+			coordinator.subscribe({ capability: "new-query" }, target());
+		});
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "renewal_failed",
+			message: "failed",
+		});
+		const replacement = defined(FakeWebSocket.instances.at(-1));
+		expect(replacement).not.toBe(socket);
+		expect(replacement.readyState).toBe(FakeWebSocket.CONNECTING);
+		await expect(outcome).resolves.toMatchObject({
+			code: "renewal_failed",
+		});
+		coordinator.close();
+	});
+
+	it.each([
+		"backend_overloaded",
+		"upstream_cancelled",
+		"authorization_expired",
+		"renewal_failed",
+		"baseline_sync_failed",
+		"protocol_error",
+	])("isolates a late renewal reply after %s interrupts renewal", async (code) => {
+		vi.useFakeTimers();
+		const coordinator = recoveryCoordinator();
+		const handle = coordinator.subscribe(
+			{ capability: "initial" },
+			target(),
+		);
+		const socket = admit();
+		const healthy = target();
+		const peer = coordinator.subscribe({ capability: "peer" }, healthy);
+		accepted(socket, "2", "42");
+		const renewal = handle.renew({ capability: "replacement" });
+		const renewalOutcome = renewal.catch((error: Error) => error);
+		const peerRenewal = peer.renew({ capability: "peer-replacement" });
+
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code,
+			message: "interrupted",
+		});
+		// Simulate a reply already in flight when the subscription error arrives.
+		socket.receive({ type: "renewed", live_id: "41" });
+		expect(healthy.failed).not.toHaveBeenCalled();
+		expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+
+		await vi.advanceTimersByTimeAsync(50);
+		const replacement = defined(FakeWebSocket.instances.at(-1));
+		expect(replacement).not.toBe(socket);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		const requests = replacement.sent.filter(
+			(message) => message.type === "subscribe",
+		);
+		requests.forEach((request, index) => {
+			accepted(
+				replacement,
+				String(request.request_id),
+				String(100 + index),
+			);
+		});
+		await peerRenewal;
+		const peerIndex = requests.findIndex(
+			(request) => request.authorization === "peer-replacement",
+		);
+		expect(peerIndex).toBeGreaterThanOrEqual(0);
+		baseline(replacement, String(100 + peerIndex));
+		expect(healthy.reconciliation.caughtUp).toHaveBeenCalledOnce();
+		expect(healthy.failed).not.toHaveBeenCalled();
+		if (
+			[
+				"backend_overloaded",
+				"upstream_cancelled",
+				"authorization_expired",
+			].includes(code)
+		) {
+			await expect(renewalOutcome).resolves.toBeUndefined();
+		} else {
+			await expect(renewalOutcome).resolves.toMatchObject({ code });
+		}
+		coordinator.close();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
 	it("uses the latest capability and completes an interrupted renewal after readmission", async () => {
 		vi.useFakeTimers();
 		const coordinator = recoveryCoordinator();
@@ -1071,12 +1175,15 @@ describe("subscription load-shedding recovery", () => {
 		void renewal.catch(() => undefined);
 		shed(socket);
 		await vi.advanceTimersByTimeAsync(50);
-		expect(socket.sent.at(-1)).toEqual({
-			type: "subscribe",
-			request_id: "2",
-			authorization: "new",
-		});
-		accepted(socket, "2", "42");
+		const replacement = defined(FakeWebSocket.instances.at(-1));
+		expect(replacement).not.toBe(socket);
+		replacement.open();
+		replacement.receive({ type: "ready" });
+		const request = defined(
+			replacement.sent.find((message) => message.type === "subscribe"),
+		);
+		expect(request.authorization).toBe("new");
+		accepted(replacement, String(request.request_id), "42");
 		await renewal;
 		coordinator.close();
 	});

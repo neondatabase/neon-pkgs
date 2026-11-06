@@ -590,26 +590,38 @@ export class ConnectionCoordinator {
 		const subscription = this.liveSubscriptions.get(liveId);
 		if (!subscription)
 			throw new ProtocolError("unknown subscription error live ID");
-		if (code === "backend_overloaded" || code === "upstream_cancelled") {
-			this.retrySubscription(subscription, message);
-			return;
-		}
-		const replacementRequired = requiresReplacementQuery(code);
-		const error = new ConnectionCoordinatorError(
-			code,
-			replacementRequired,
-			message.message,
-			{ sqlState },
-		);
-		if (replacementRequired) {
-			this.awaitReplacementQuery(
-				subscription,
-				subscription.acceptedCapability,
-				error,
+		const renewalPending = !!subscription.renewing;
+		const socket = this.socket;
+		try {
+			if (
+				code === "backend_overloaded" ||
+				code === "upstream_cancelled"
+			) {
+				this.retrySubscription(subscription, message);
+				return;
+			}
+			const replacementRequired = requiresReplacementQuery(code);
+			const error = new ConnectionCoordinatorError(
+				code,
+				replacementRequired,
+				message.message,
+				{ sqlState },
 			);
-			return;
+			if (replacementRequired) {
+				this.awaitReplacementQuery(
+					subscription,
+					subscription.acceptedCapability,
+					error,
+				);
+				return;
+			}
+			this.failSubscription(subscription, error);
+		} finally {
+			// A late acknowledgement must not reach a replacement wire subscription.
+			if (renewalPending && this.socket === socket) {
+				this.closeSocket(APPLICATION_CLOSE, "renewal interrupted");
+			}
 		}
-		this.failSubscription(subscription, error);
 	}
 
 	/** Retry subscribe_rejected and subscription_error with optional hint. */
