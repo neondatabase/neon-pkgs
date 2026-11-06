@@ -3,6 +3,7 @@ import * as z from "zod";
 import {
 	createNeonTool,
 	createNeonTools,
+	type NeonToolInjectOptions,
 	type NeonToolsClientOptions,
 } from "./index.js";
 
@@ -39,7 +40,9 @@ const projectWithUriBody = {
 	],
 };
 
-const createBranchOnlyTools = (options: NeonToolsClientOptions = {}) => {
+const createBranchOnlyTools = (
+	options: Omit<NeonToolsClientOptions, "inject"> = {},
+) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
@@ -53,7 +56,13 @@ const createBranchOnlyTools = (options: NeonToolsClientOptions = {}) => {
 	return { requests, tools };
 };
 
-const createBranchTools = (options: NeonToolsClientOptions = {}) => {
+const createBranchTools = <
+	const I extends NeonToolInjectOptions | undefined = undefined,
+>(
+	options: Omit<NeonToolsClientOptions, "inject"> & {
+		inject?: I;
+	} = {} as Omit<NeonToolsClientOptions, "inject"> & { inject?: I },
+) => {
 	const requests: Request[] = [];
 	const tools = createNeonTools({
 		apiKey: "test-key",
@@ -291,7 +300,7 @@ describe("branches.createAndConnect", () => {
 
 	test("injects project_id from a grant", async () => {
 		const { requests, tools } = createBranchTools({
-			inject: { projectId: "granted-project", omitFromSchema: true },
+			inject: { project_id: "granted-project" },
 		});
 
 		await tools["branches.createAndConnect"].execute({
