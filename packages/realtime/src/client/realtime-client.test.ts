@@ -6,6 +6,7 @@ import {
 	createRealtimeClient,
 	type MaterializedLiveQuerySubscription,
 	type RawLiveQuerySubscription,
+	type RealtimeLogEntry,
 	type WebSocketLike,
 } from "./realtime-client.js";
 import type { SealedLiveQuery } from "./sealed-query.js";
@@ -939,6 +940,60 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it("keeps pending waits through expiry and renewal", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		baselineSync(socket, "before");
+		let confirmed = false;
+		const confirmation = subscription.awaitTxId("42").then(() => {
+			confirmed = true;
+		});
+		const proof = {
+			type: "progress",
+			mvcc: { xmin: "43", xmax: "43", xip: [] },
+		};
+
+		socket.receive({
+			type: "subscription_error",
+			live_id: "41",
+			code: "authorization_expired",
+			message: "expired",
+		});
+		expect(subscription.getState().status).toBe("stale");
+		// An expired subscription has no installed state to prove anything.
+		socket.receive(proof);
+		await Promise.resolve();
+		expect(confirmed).toBe(false);
+
+		const renewal = subscription.renew(query("replacement"));
+		socket.receive({
+			type: "subscribed",
+			request_id: "2",
+			live_id: "42",
+			epoch: "2",
+			first_sequence: "1",
+			columns: [
+				{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
+				{ name: "title", type_oid: 25, typmod: -1, codec: "pg_text" },
+			],
+		});
+		await renewal;
+		baselineSync(socket, "after", "42", "2");
+		await Promise.resolve();
+		expect(confirmed).toBe(false);
+
+		// The write touched no rows of this query; progress still confirms it.
+		socket.receive(proof);
+		await confirmation;
+		expect(subscription.getSnapshot()).toMatchObject({
+			status: "live",
+			data: [{ id: 1, title: "after" }],
+		});
+		client.close();
+	});
+
 	it("reuses a live ID after the last unsubscribe while its socket is closing", () => {
 		useFakeWebSocket();
 		FakeWebSocket.deferClose = true;
@@ -1650,6 +1705,205 @@ describe("RealtimeClient", () => {
 			error: { code: "parser_error" },
 		});
 		client.close();
+	});
+});
+
+describe("RealtimeClient connection state", () => {
+	it("reports the shared connection from idle through connected to closed", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const idle = client.getConnectionState();
+		expect(idle).toEqual({ status: "idle", error: undefined });
+		expect(client.getConnectionState()).toBe(idle);
+		const states: string[] = [];
+		client.onConnectionStateChange((state) => states.push(state.status));
+
+		const subscription = client.subscribe(query("initial"));
+		expect(client.getConnectionState().status).toBe("connecting");
+		expect(states).toEqual([]);
+		await Promise.resolve();
+		expect(states).toEqual(["connecting"]);
+
+		connectAndAdmit();
+		const connected = client.getConnectionState();
+		expect(connected).toEqual({ status: "connected", error: undefined });
+		expect(Object.isFrozen(connected)).toBe(true);
+		baselineSync(defined(FakeWebSocket.instances[0]), "value");
+		expect(client.getConnectionState()).toBe(connected);
+		await Promise.resolve();
+		expect(states).toEqual(["connecting", "connected"]);
+
+		subscription.unsubscribe();
+		expect(client.getConnectionState().status).toBe("idle");
+		await Promise.resolve();
+
+		// Listeners receive the latest state once per task, so the attempt
+		// that preceded this connection is not reported separately.
+		client.subscribe(query("again"));
+		connectAndAdmit();
+		await Promise.resolve();
+		client.close();
+		expect(client.getConnectionState()).toEqual({
+			status: "closed",
+			error: undefined,
+		});
+		await Promise.resolve();
+		expect(states).toEqual([
+			"connecting",
+			"connected",
+			"idle",
+			"connected",
+			"closed",
+		]);
+		const late = vi.fn();
+		client.onConnectionStateChange(late)();
+		await Promise.resolve();
+		expect(late).not.toHaveBeenCalled();
+	});
+
+	it("reports reconnecting from a lost connection until it is ready again", async () => {
+		vi.useFakeTimers();
+		useFakeWebSocket();
+		const random = vi.spyOn(Math, "random").mockReturnValue(0);
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		try {
+			const subscription = client.subscribe(query("initial"));
+			baselineSync(connectAndAdmit(), "before");
+			await vi.advanceTimersByTimeAsync(0);
+			const states: string[] = [];
+			client.onConnectionStateChange((state) =>
+				states.push(state.status),
+			);
+			const seenBySubscription: string[] = [];
+			subscription.onStateChange(() =>
+				seenBySubscription.push(client.getConnectionState().status),
+			);
+
+			defined(FakeWebSocket.instances[0]).close();
+			expect(client.getConnectionState().status).toBe("reconnecting");
+			expect(subscription.getState().status).toBe("connecting");
+			// Subscription listeners run mid-transition and still read it.
+			expect(seenBySubscription).toEqual(["reconnecting"]);
+			await vi.advanceTimersByTimeAsync(500);
+			expect(FakeWebSocket.instances).toHaveLength(2);
+			// The retry is still part of the outage until it is ready.
+			expect(client.getConnectionState().status).toBe("reconnecting");
+
+			connectAndAdmit();
+			expect(client.getConnectionState().status).toBe("connected");
+			await vi.advanceTimersByTimeAsync(0);
+			expect(states).toEqual(["reconnecting", "connected"]);
+		} finally {
+			client.close();
+			random.mockRestore();
+		}
+	});
+
+	it("reports reconnecting when the first connection attempt fails", async () => {
+		vi.useFakeTimers();
+		const random = vi.spyOn(Math, "random").mockReturnValue(0);
+		let attempts = 0;
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			webSocketFactory: (url, protocols) => {
+				attempts += 1;
+				if (attempts === 1) throw new Error("unreachable");
+				return new FakeWebSocket(url, protocols);
+			},
+		});
+		try {
+			const subscription = client.subscribe(query("initial"));
+			expect(client.getConnectionState().status).toBe("reconnecting");
+			expect(subscription.getState().status).toBe("connecting");
+
+			await vi.advanceTimersByTimeAsync(500);
+			const socket = defined(FakeWebSocket.instances[0]);
+			expect(client.getConnectionState().status).toBe("reconnecting");
+			// A handshake that fails before ready keeps the client retrying.
+			socket.close();
+			expect(client.getConnectionState().status).toBe("reconnecting");
+			await vi.advanceTimersByTimeAsync(1_000);
+			connectAndAdmit();
+			expect(client.getConnectionState().status).toBe("connected");
+		} finally {
+			client.close();
+			random.mockRestore();
+		}
+	});
+
+	it("reports a connection that cannot recover as error", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		const states: unknown[] = [];
+		client.onConnectionStateChange((state) => states.push(state));
+
+		socket.receive({
+			type: "connection_error",
+			code: "protocol_error",
+			message: "connection cannot recover",
+		});
+
+		const failed = client.getConnectionState();
+		expect(failed).toMatchObject({
+			status: "error",
+			error: {
+				name: "LiveQueryError",
+				code: "protocol_error",
+				retryable: false,
+				message: "connection cannot recover",
+			},
+		});
+		expect(client.getConnectionState()).toBe(failed);
+		expect(subscription.getState().status).toBe("error");
+		expect(client.subscribe(query("later")).getState().status).toBe(
+			"error",
+		);
+		expect(client.getConnectionState()).toBe(failed);
+		await Promise.resolve();
+		expect(states).toEqual([failed]);
+
+		client.close();
+		await Promise.resolve();
+		expect(states).toEqual([
+			failed,
+			{ status: "closed", error: undefined },
+		]);
+	});
+
+	it("isolates failing listeners and lets them close the client", async () => {
+		useFakeWebSocket();
+		const events: RealtimeLogEntry[] = [];
+		const failure = new Error("listener failed");
+		const client = createRealtimeClient({
+			url: "ws://live.test/v1",
+			logLevel: "warn",
+			logger: (entry) => events.push(entry),
+		});
+		const received: string[] = [];
+		client.onConnectionStateChange(() => {
+			throw failure;
+		});
+		client.onConnectionStateChange((state) => {
+			received.push(state.status);
+			if (state.status === "connected") client.close();
+		});
+
+		client.subscribe(query("initial"));
+		connectAndAdmit();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(received).toEqual(["connected", "closed"]);
+		expect(client.getConnectionState().status).toBe("closed");
+		expect(
+			events.filter(
+				(entry) => entry.event === "connection_listener_failed",
+			),
+		).toEqual([
+			expect.objectContaining({ level: "warn", error: failure }),
+			expect.objectContaining({ level: "warn", error: failure }),
+		]);
 	});
 });
 
