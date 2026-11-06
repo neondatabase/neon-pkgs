@@ -185,6 +185,36 @@ describe("RealtimeClient", () => {
 		}
 	});
 
+	it("does not resubscribe when a stale-state listener unsubscribes", async () => {
+		useFakeWebSocket();
+		const client = createRealtimeClient({ url: "ws://live.test/v1" });
+		const subscription = client.subscribe(query("initial"));
+		const socket = connectAndAdmit();
+		client.subscribe(query("sibling"));
+		const pending = subscription.renew(query("replacement"));
+		const rejected = pending.catch((error) => error);
+		subscription.onStateChange((state) => {
+			if (state.status === "stale") subscription.unsubscribe();
+		});
+		try {
+			socket.receive({
+				type: "subscription_error",
+				live_id: "41",
+				code: "authorization_expired",
+				message: "expired",
+			});
+			expect(subscription.getState().status).toBe("closed");
+			expect(
+				socket.sent.filter((message) => message.type === "subscribe"),
+			).toHaveLength(2);
+			expect((await rejected).message).toBe(
+				"Live-query subscription is closed",
+			);
+		} finally {
+			client.close();
+		}
+	});
+
 	it("uses a custom WebSocket factory", () => {
 		const webSocketFactory = vi.fn(
 			(url: string, protocols: string | string[]) =>
