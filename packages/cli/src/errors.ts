@@ -27,6 +27,7 @@ export type ErrorCode =
 	| "AGENT_COMMAND_UNAVAILABLE"
 	| "PLUGINS_CLI_FAILED"
 	| "DEPENDENCY_INSTALL_FAILED"
+	| "LEGACY_FUNCTION_ENV_KEY"
 	| "UNKNOWN_ERROR";
 
 // First match wins: a skills CLI failure caused by a missing git is GIT_NOT_FOUND.
@@ -50,6 +51,10 @@ const ERROR_MATCHERS = [
 		"PLUGINS_CLI_FAILED",
 	],
 	[/^Could not install the Neon dependencies/, "DEPENDENCY_INSTALL_FAILED"],
+	[
+		/ (is|are) no longer pulled\. Pull NEON_BRANCH_ID /,
+		"LEGACY_FUNCTION_ENV_KEY",
+	],
 ] as const;
 
 export const matchErrorCode = (message?: string): ErrorCode => {
