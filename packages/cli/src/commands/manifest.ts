@@ -122,6 +122,11 @@ export const commandManifest: CommandEntry[] = [
 		load: () => import("./logs.js"),
 	},
 	{
+		command: "loki [query]",
+		describe: "Query the branch's Loki API (authenticated passthrough)",
+		load: () => import("./loki.js"),
+	},
+	{
 		command: "snapshots",
 		aliases: ["snapshot"],
 		describe: "Manage snapshots",

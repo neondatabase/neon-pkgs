@@ -1258,6 +1258,46 @@ Two combinations are rejected before the request: `--since` with `--start-time`,
 
 `--body-contains` compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
 
+## Loki API (`loki`)
+
+`neon loki` calls the branch's Loki-compatible telemetry API directly, using the CLI's
+normal authentication, project selection and branch resolution. Like `gh api graphql`,
+it accepts a query and repeatable `-f key=value` parameters, and prints the response
+envelope as JSON. `--output yaml` is also supported.
+
+```bash
+neon loki '{service_name="neon-function/api"} |= "error"' -f since=30m
+neon loki -f 'query={entity_type="function"}' -f limit=200 -f direction=forward
+neon loki '{scope_name="neon.function.app"}' --project-id <id> --branch main \
+  -f start=2026-11-01T00:00:00Z -f end=2026-11-01T01:00:00Z
+neon loki --endpoint labels
+neon loki --endpoint label/service_name/values -f since=6h
+neon loki --endpoint label/severity_text/values -f 'query={service_name="neon-function/api"}'
+neon loki '{entity_type="function"}' | jq '.data.result[].values'
+```
+
+The default endpoint is `query_range`. Parameters are passed as strings without parsing
+LogQL or converting nanosecond timestamps to numbers. `start` and `end` accept RFC 3339
+timestamps or Unix nanoseconds; `since` accepts positive Go durations such as `30m` or
+`24h`. With no window, range queries cover the last hour; label values cover the last six
+hours. Explicit `start` takes precedence over `since`. The server enforces time and row
+limits. Preserve the response's `warnings` when consuming results: they report truncation,
+and Loki supplies no continuation cursor.
+
+Neon's supported LogQL subset is stream selectors (`=`, `!=`, `=~`, `!~`) and line filters
+(`|=`, `!=`, `|~`, `!~`). Metric queries, parser/format stages and live tailing are unsupported.
+`--endpoint query` reaches the instant-query route, which currently returns an error because
+Neon does not support metric queries. The advertised labels are `service_name`,
+`severity_text`, `scope_name`, and `entity_type`; use `labels` to discover them. Label-value
+queries accept a stream selector without line filters.
+
+Requests go to
+`/telemetry/v1/projects/<project>/branches/<branch>/loki/api/v1/<endpoint>` on the same
+origin as `--api-host` / `NEON_API_HOST` (default `https://console.neon.tech`). This is a
+separate API from the Management API used by `neon logs query --logql`. Access requires
+project read permission and telemetry enabled for the project's organization and region.
+The CLI reports the server's error when access or a query is rejected.
+
 ## Profiles
 
 The CLI holds one Neon account by default. A profile adds another, and is a pointer: a

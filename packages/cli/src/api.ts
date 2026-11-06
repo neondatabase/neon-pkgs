@@ -143,6 +143,7 @@ export function messageFromBody(body: unknown): string | undefined {
 	}
 	if (body && typeof body === "object" && "error" in body) {
 		const error = body.error;
+		if (typeof error === "string") return error;
 		if (error && typeof error === "object" && "message" in error) {
 			const message = error.message;
 			if (typeof message === "string") return message;
