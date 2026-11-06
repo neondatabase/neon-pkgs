@@ -1,5 +1,11 @@
 # @neon/sdk
 
+## 7.11.0
+
+### Minor Changes
+
+- 53516b8: Add `neon.logs.loki.queryRange`, `labels`, and `labelValues` for the branch's Loki-compatible read API. They return Loki's response bodies unchanged, with nanosecond timestamp strings and truncation `warnings`. API errors whose body carries a string `error` now use it as the error message.
+
 ## 7.10.0
 
 ### Minor Changes
