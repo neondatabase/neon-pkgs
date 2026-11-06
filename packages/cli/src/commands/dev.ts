@@ -319,6 +319,7 @@ const runSingleSource = async (
 		childEnv: buildChildEnv(
 			{ ...neonEnv, ...match?.declaredEnv, ...overlay },
 			port,
+			match?.unsetEnv,
 		),
 		label: null,
 		envSummary: {
@@ -619,7 +620,11 @@ const plannedToUnit = (
 	port: PortSpec,
 	overlay: Record<string, string> = {},
 ): ServedUnit => {
-	const childEnv = buildChildEnv({ ...branchEnv, ...fn.env }, port);
+	const childEnv = buildChildEnv(
+		{ ...branchEnv, ...fn.env },
+		port,
+		fn.unsetEnv,
+	);
 	return {
 		slug: fn.slug,
 		source: fn.source,
@@ -655,10 +660,13 @@ const plannedToUnit = (
 const buildChildEnv = (
 	neonEnv: Record<string, string>,
 	port: PortSpec,
+	unset: readonly string[] = [],
 ): NodeJS.ProcessEnv => {
 	const inherited: NodeJS.ProcessEnv = { ...process.env };
 	delete inherited[NEON_DEV_FUNCTION_PORTS];
 	const env: NodeJS.ProcessEnv = { ...inherited, ...neonEnv };
+	// An empty declared value counts as unset, as it does on deploy.
+	for (const key of unset) delete env[key];
 	delete env.NEON_DEV_PORT;
 	delete env.NEON_DEV_PORT_BASE;
 	if (port.mode === "explicit") {

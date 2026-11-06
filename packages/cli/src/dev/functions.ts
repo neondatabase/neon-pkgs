@@ -26,6 +26,8 @@ export type PlannedFunction = {
 	env: Record<string, string>;
 	/** The part of {@link env} resolved from `{ required: … }` / `{ default }` declarations. */
 	declaredEnv?: Record<string, string>;
+	/** Declared keys that resolved unset, removed from the inherited environment. */
+	unsetEnv?: string[];
 	/**
 	 * The function's `neon.ts` `externalPackages`, mirrored so a local bundle is built with
 	 * the same `external` list as a deploy. Without it, `neon dev` would fail to bundle a
@@ -127,6 +129,9 @@ const toPlannedFunction = (
 ): PlannedFunction => {
 	const port = devPort(fn.dev);
 	const declaredEnv = resolveFunctionEnv(fn.envVars, process.env, "run").env;
+	const unsetEnv = Object.keys(fn.envVars ?? {}).filter(
+		(key) => !(key in declaredEnv),
+	);
 	return {
 		slug: fn.slug,
 		name: fn.name,
@@ -134,6 +139,7 @@ const toPlannedFunction = (
 		...(port !== undefined ? { port } : {}),
 		env: { ...fn.env, ...declaredEnv },
 		declaredEnv,
+		...(unsetEnv.length > 0 ? { unsetEnv } : {}),
 		// Names only: locally every entry is simply left unbundled, and `includeFiles`
 		// governs the deployed archive, which `neon dev` does not build.
 		...(fn.externalPackages

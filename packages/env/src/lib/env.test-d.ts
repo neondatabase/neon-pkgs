@@ -441,6 +441,22 @@ describe("parseEnv existing overloads still type", () => {
 			LOG_LEVEL: string;
 		}>();
 	});
+
+	test("a non-literal required may be unset", () => {
+		const required = Boolean(process.env.CI);
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { TOKEN: { required } },
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function.TOKEN).toEqualTypeOf<
+			string | undefined
+		>();
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -257,12 +257,14 @@ describe("resolveFunctionsFromConfig", () => {
 			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
 			process.env[TOKEN] = "t";
 			process.env[OTHER] = "o";
+			process.env[DSN] = "";
 			const resolved = await resolveFunctionsFromConfig(cwd);
 			expect(resolved?.functions[0].env).toEqual({
 				LOG_LEVEL: "info",
 				[TOKEN]: "t",
 				RATE: "1",
 			});
+			expect(resolved?.functions[0].unsetEnv).toEqual([DSN]);
 		});
 
 		it("fails naming every unset required: true variable", async () => {

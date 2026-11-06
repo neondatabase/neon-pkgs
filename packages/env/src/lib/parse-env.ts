@@ -101,10 +101,13 @@ type FunctionEnvOf<
 		: Record<never, never>
 	: Record<never, never>;
 
-/** A declaration that `neon dev` may run without resolves to `string | undefined`. */
-type FunctionEnvValueOf<V> = V extends { required: false | "deploy" }
-	? string | undefined
-	: string;
+/** `string` only when the entry guarantees a value; any other declaration may be unset. */
+type FunctionEnvValueOf<V> = V extends
+	| string
+	| { required: true }
+	| { default: string }
+	? string
+	: string | undefined;
 
 /**
  * The extra `function` namespace added to `parseEnv`'s result when called with a function
