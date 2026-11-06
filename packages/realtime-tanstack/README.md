@@ -14,8 +14,10 @@ npm install @neon/realtime @neon/realtime-tanstack \
   @tanstack/db @standard-schema/spec
 ```
 
-> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and TanStack DB 0.9.
-> All three supporting libraries are peer dependencies.
+> **Requirements:** Node.js >= 20.19, `@neon/realtime` 0.2, and TanStack DB
+> `>=0.9.0 <1.0.0`. All three supporting libraries are peer dependencies.
+> TanStack DB 1.x uses a different sync lifecycle and is not supported by this
+> adapter version.
 
 ## Usage
 
