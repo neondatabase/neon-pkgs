@@ -42,7 +42,7 @@ function isRequired(
 	declaration: FunctionEnvVar,
 	target: FunctionEnvTarget,
 ): boolean {
-	if ("default" in declaration) return false;
+	if (declaration.default !== undefined) return false;
 	const required = declaration.required ?? true;
 	return required === "production" ? target === "production" : required;
 }
@@ -59,7 +59,7 @@ export function resolveFunctionEnv(
 		const value = source[key];
 		if (value !== undefined && value !== "") {
 			env[key] = value;
-		} else if ("default" in declaration) {
+		} else if (declaration.default !== undefined) {
 			env[key] = declaration.default;
 		} else if (isRequired(declaration, target)) {
 			missing.push(key);

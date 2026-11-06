@@ -398,8 +398,8 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
  * `neon.ts` does not declare are left as they are.
  */
 export type FunctionEnvVar =
-	| { required?: boolean | "production" }
-	| { default: string };
+	| { required?: boolean | "production"; default?: never }
+	| { default: string; required?: never };
 
 /** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
 export type FunctionEnvValue = string | FunctionEnvVar;

@@ -781,6 +781,15 @@ describe("function env declarations", () => {
 		);
 	});
 
+	test("rejects a default read from an unset process.env value", () => {
+		expect(issues({ TOKEN: { default: undefined } })).toContain(
+			"functions.hello.env.TOKEN.default: default is undefined",
+		);
+		expect(
+			issues({ TOKEN: { required: true, default: undefined } }),
+		).toContain("`required` and `default` cannot be combined");
+	});
+
 	test("rejects an unknown required value with the accepted forms", () => {
 		expect(issues({ TOKEN: { required: "deploy" } })).toContain(
 			'functions.hello.env.TOKEN: Expected a string or a declaration: {} (required), { required: "production" }',

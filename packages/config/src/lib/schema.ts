@@ -241,9 +241,24 @@ const functionEnvVarSchema = z
 			)
 			.optional(),
 	})
-	.refine((v) => v.required === undefined || v.default === undefined, {
-		message:
-			"`required` and `default` cannot be combined: a variable with a default is never missing.",
+	// superRefine, unlike .check, keeps its issues when the entry union reports them.
+	.superRefine((value, ctx) => {
+		if (!("default" in value)) return;
+		if (value.default === undefined) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["default"],
+				message:
+					"default is undefined: a default must be a literal string, not an unset process.env value.",
+			});
+		}
+		if ("required" in value) {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"`required` and `default` cannot be combined: a variable with a default is never missing.",
+			});
+		}
 	});
 
 const functionEnvEntrySchema = z.union(

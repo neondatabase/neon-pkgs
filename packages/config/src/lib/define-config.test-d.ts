@@ -166,3 +166,18 @@ describe("Realtime stays out of branch tuning (negative types)", () => {
 		defineConfig({ realtime: true });
 	});
 });
+
+describe("declared function env", () => {
+	test("required and default cannot be combined", () => {
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error a variable with a default is never missing.
+					env: { RATE: { required: false, default: "1" } },
+				},
+			},
+		});
+	});
+});

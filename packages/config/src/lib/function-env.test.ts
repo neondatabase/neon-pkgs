@@ -59,6 +59,14 @@ describe("resolveFunctionEnv", () => {
 		});
 	});
 
+	test("a default that is undefined does not make a variable optional", () => {
+		const declared = { TOKEN: { required: true, default: undefined } };
+		expect(resolveFunctionEnv(declared, {}, "production")).toEqual({
+			env: {},
+			missing: ["TOKEN"],
+		});
+	});
+
 	test("an empty value counts as unset", () => {
 		const empty = { TOKEN: "", EXPLICIT: "", DSN: "", GUILD: "", RATE: "" };
 		expect(resolveFunctionEnv(DECLARED, empty, "production")).toEqual(
