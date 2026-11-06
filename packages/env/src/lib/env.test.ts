@@ -569,7 +569,7 @@ describe("parseEnv", () => {
 					source: "./alpha.ts",
 					env: {
 						SECRET_A: {},
-						DSN: { required: "production" },
+						DSN: { required: "default-branch" },
 						GUILD: { required: false },
 						RATE: { default: "1" },
 					},

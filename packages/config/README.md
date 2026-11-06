@@ -100,25 +100,27 @@ Each `env` entry is a literal string or a declaration. A declaration takes its v
 
 ```ts
 env: {
-  STRIPE_SECRET_KEY: { value: process.env.STRIPE_SECRET_KEY },               // required
-  STRIPE_WEBHOOK_SECRET: { value: process.env.STRIPE_WEBHOOK_SECRET_LIVE },  // required, read from another name
-  SENTRY_DSN: { value: process.env.SENTRY_DSN, required: "production" },     // required on the production branch only
-  DISCORD_GUILD_ID: { value: process.env.DISCORD_GUILD_ID, required: false },// optional
-  SAMPLE_RATE: { value: process.env.SAMPLE_RATE, default: "1" },             // "1" when unset
-  LOG_LEVEL: "info",                                                         // literal
+  STRIPE_SECRET_KEY: { value: process.env.STRIPE_SECRET_KEY },                  // required
+  STRIPE_WEBHOOK_SECRET: { value: process.env.STRIPE_WEBHOOK_SECRET_LIVE },     // required, read from another name
+  SENTRY_DSN: { value: process.env.SENTRY_DSN, required: "default-branch" },    // required on the default branch only
+  DISCORD_GUILD_ID: { value: process.env.DISCORD_GUILD_ID, required: false },   // optional
+  SAMPLE_RATE: { value: process.env.SAMPLE_RATE, default: "1" },                // "1" when unset
+  LOG_LEVEL: "info",                                                            // literal
 },
 ```
 
-| Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv(config, slug).function` |
+| Declaration | Unset deploying the default branch | Unset deploying another branch | Unset in `neon dev` | `parseEnv(config, slug).function` |
 | --- | --- | --- | --- | --- |
 | `{ value }`, `{}`, or `{ required: true }` | fails before any change | fails before any change | fails before any Function starts | `string` |
-| `{ value, required: "production" }` | fails before any change | left out | runs without it | `string \| undefined` |
+| `{ value, required: "default-branch" }` | fails before any change | left out | runs without it | `string \| undefined` |
 | `{ value, required: false }` | left out | left out | runs without it | `string \| undefined` |
 | `{ value, default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
 
+`"default-branch"` means the project's default branch, the one Neon marks as default (`branch.isDefault` in the `branch` closure). It does not look at branch names or protection. A branch that `neon checkout --create` makes is never the default branch.
+
 `{}` is shorthand for `{ value: process.env.<key> }`. A present `value` that is `undefined` is unset; it does not fall back to `process.env.<key>`. An empty value (`KEY=` in a `.env` file) counts as unset too.
 
-Production is the project's default branch; every other branch, including one `neon checkout --create` makes, is a preview. A variable that is left out is removed from the Function if an earlier deploy set it, so the deployment matches `neon.ts`. Keys `neon.ts` does not declare are left as they are, which is how to keep a value you set with `neon functions deploy <slug> --env KEY=VALUE`.
+A variable that is left out is removed from the Function if an earlier deploy set it, so the deployment matches `neon.ts`. Keys `neon.ts` does not declare are left as they are, which is how to keep a value you set with `neon functions deploy <slug> --env KEY=VALUE`.
 
 `parseEnv(config, slug)` reads each declared key from the Function's own environment, not `value`: inside a deployed Function, `value` refers to the environment the deploy read.
 

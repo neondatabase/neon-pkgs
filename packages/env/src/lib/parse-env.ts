@@ -101,7 +101,7 @@ type FunctionEnvOf<
 		: Record<never, never>
 	: Record<never, never>;
 
-/** `string` unless the declaration's `required` may be `false` or `"production"`. */
+/** `string` unless the declaration's `required` may be `false` or `"default-branch"`. */
 type FunctionEnvValueOf<V> = V extends string | { default: string }
 	? string
 	: "required" extends keyof V

@@ -29,7 +29,7 @@ describe("missingDeployEnv", () => {
       env: {
         LEGACY: process.env.LEGACY,
         TOKEN: {},
-        DSN: { required: "production" },
+        DSN: { required: "default-branch" },
         OPTIONAL: { required: false },
       },
     },

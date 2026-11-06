@@ -387,16 +387,19 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
  * `required` narrows where, and `default` fills it in. An undefined or empty value counts
  * as unset.
  *
- * | Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv` type |
+ * `required` is `true` (the default), `false`, or `"default-branch"`: required when deploying
+ * the project's default branch ({@link BranchTarget.isDefault}), optional on every other
+ * branch and in `neon dev`. It does not look at branch names or protection.
+ *
+ * | Declaration | Unset deploying the default branch | Unset deploying another branch | Unset in `neon dev` | `parseEnv` type |
  * | --- | --- | --- | --- | --- |
  * | `{ value }`, `{}`, or `{ required: true }` | fails | fails | fails | `string` |
- * | `{ value, required: "production" }` | fails | left out | runs without it | `string \| undefined` |
+ * | `{ value, required: "default-branch" }` | fails | left out | runs without it | `string \| undefined` |
  * | `{ value, required: false }` | left out | left out | runs without it | `string \| undefined` |
  * | `{ value, default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
  *
- * Production is the project's default branch; every other branch is a preview. A variable
- * that is "left out" is removed from the Function if an earlier deploy set it. Keys that
- * `neon.ts` does not declare are left as they are.
+ * A variable that is "left out" is removed from the Function if an earlier deploy set it.
+ * Keys that `neon.ts` does not declare are left as they are.
  *
  * `parseEnv` reads the deployed key, not `value`: inside a Function, `value` refers to an
  * environment the deploy has already read.
@@ -404,7 +407,7 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 export type FunctionEnvVar =
 	| {
 			value?: string | undefined;
-			required?: boolean | "production";
+			required?: boolean | "default-branch";
 			default?: never;
 	  }
 	| { value?: string | undefined; default: string; required?: never };

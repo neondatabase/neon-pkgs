@@ -240,7 +240,7 @@ describe("resolveFunctionsFromConfig", () => {
           source: './alpha.ts',
           env: {
             ${TOKEN}: {},
-            ${DSN}: { required: 'production' },
+            ${DSN}: { required: 'default-branch' },
             RATE: { default: '1' },
             LOG_LEVEL: 'info',
           },
@@ -253,7 +253,7 @@ describe("resolveFunctionsFromConfig", () => {
 			for (const key of [TOKEN, DSN, OTHER]) delete process.env[key];
 		});
 
-		it("resolves values and defaults, and runs without required: 'production'", async () => {
+		it("resolves values and defaults, and runs without a default-branch variable", async () => {
 			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
 			process.env[TOKEN] = "t";
 			process.env[OTHER] = "o";

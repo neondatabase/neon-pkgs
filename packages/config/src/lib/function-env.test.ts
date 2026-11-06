@@ -7,12 +7,19 @@ import {
 	resolveFunctionEnv,
 	splitFunctionEnv,
 } from "./function-env.js";
-import type { FunctionEnvVar } from "./types.js";
+import type { BranchTarget, FunctionEnvVar } from "./types.js";
+
+const PRODUCTION: BranchTarget = {
+	name: "main",
+	exists: true,
+	isDefault: true,
+};
+const PREVIEW: BranchTarget = { name: "dev", exists: true, isDefault: false };
 
 const DECLARED = {
 	TOKEN: {},
 	EXPLICIT: { required: true },
-	DSN: { required: "production" },
+	DSN: { required: "default-branch" },
 	GUILD: { required: false },
 	RATE: { default: "1" },
 } satisfies Record<string, FunctionEnvVar>;
@@ -27,8 +34,9 @@ describe("resolveFunctionEnv", () => {
 			RATE: "0.5",
 		};
 		for (const target of [
-			"production",
-			"preview",
+			PRODUCTION,
+			PREVIEW,
+			"deploy",
 			"development",
 		] as const) {
 			expect(resolveFunctionEnv(DECLARED, source, target)).toEqual({
@@ -38,33 +46,26 @@ describe("resolveFunctionEnv", () => {
 		}
 	});
 
-	test("production: {} and required: production are missing, optionals are removed", () => {
-		expect(resolveFunctionEnv(DECLARED, {}, "production")).toEqual({
+	test('the default branch: "default-branch" is missing like {}, and optionals are removed', () => {
+		expect(resolveFunctionEnv(DECLARED, {}, PRODUCTION)).toEqual({
 			env: { GUILD: "", RATE: "1" },
 			missing: ["TOKEN", "EXPLICIT", "DSN"],
 		});
 	});
 
-	test("preview: required: production is removed like an optional", () => {
-		expect(resolveFunctionEnv(DECLARED, {}, "preview")).toEqual({
+	test('another branch: "default-branch" is removed like an optional', () => {
+		expect(resolveFunctionEnv(DECLARED, {}, PREVIEW)).toEqual({
 			env: { DSN: "", GUILD: "", RATE: "1" },
 			missing: ["TOKEN", "EXPLICIT"],
 		});
 	});
 
-	test("development: only required variables are missing, and nothing is removed", () => {
-		expect(resolveFunctionEnv(DECLARED, {}, "development")).toEqual({
-			env: { RATE: "1" },
-			missing: ["TOKEN", "EXPLICIT"],
-		});
-	});
-
-	test("a default that is undefined does not make a variable optional", () => {
-		const declared = { TOKEN: { required: true, default: undefined } };
-		expect(resolveFunctionEnv(declared, {}, "production")).toEqual({
-			env: {},
-			missing: ["TOKEN"],
-		});
+	test('deploy to an unknown branch: "default-branch" counts as required', () => {
+		expect(resolveFunctionEnv(DECLARED, {}, "deploy").missing).toEqual([
+			"TOKEN",
+			"EXPLICIT",
+			"DSN",
+		]);
 	});
 
 	test("value is used instead of process.env.<key>, and an undefined value is unset", () => {
@@ -79,7 +80,7 @@ describe("resolveFunctionEnv", () => {
 			UNSET: "ignored",
 			OPTIONAL: "ignored",
 		};
-		expect(resolveFunctionEnv(declared, source, "production")).toEqual({
+		expect(resolveFunctionEnv(declared, source, PRODUCTION)).toEqual({
 			env: { RENAMED: "from-other", FALLBACK: "1", OPTIONAL: "" },
 			missing: ["UNSET"],
 		});
@@ -87,8 +88,8 @@ describe("resolveFunctionEnv", () => {
 
 	test("an empty value counts as unset", () => {
 		const empty = { TOKEN: "", EXPLICIT: "", DSN: "", GUILD: "", RATE: "" };
-		expect(resolveFunctionEnv(DECLARED, empty, "production")).toEqual(
-			resolveFunctionEnv(DECLARED, {}, "production"),
+		expect(resolveFunctionEnv(DECLARED, empty, PRODUCTION)).toEqual(
+			resolveFunctionEnv(DECLARED, {}, PRODUCTION),
 		);
 	});
 });
@@ -137,17 +138,17 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 			beta: {
 				name: "Beta",
 				source: "./beta.ts",
-				env: { SECRET_B: { required: "production" } },
+				env: { SECRET_B: { required: "default-branch" } },
 			},
 		},
 	});
 
 	test("names every missing key per function", () => {
-		expect(missingFunctionEnv(config, {}, "production")).toEqual([
+		expect(missingFunctionEnv(config, {}, PRODUCTION)).toEqual([
 			{ slug: "alpha", key: "SECRET_A" },
 			{ slug: "beta", key: "SECRET_B" },
 		]);
-		expect(missingFunctionEnv(config, {}, "preview")).toEqual([
+		expect(missingFunctionEnv(config, {}, PREVIEW)).toEqual([
 			{ slug: "alpha", key: "SECRET_A" },
 		]);
 		expect(missingFunctionEnv(config, {}, "development")).toEqual([
@@ -167,7 +168,7 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 				},
 			},
 		});
-		expect(missingFunctionEnv(preview, {}, "production")).toEqual([
+		expect(missingFunctionEnv(preview, {}, PRODUCTION)).toEqual([
 			{ slug: "alpha", key: "SECRET_A" },
 		]);
 	});
@@ -175,7 +176,7 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 	test("throws one ConfigValidationError listing each key", () => {
 		let caught: unknown;
 		try {
-			assertFunctionEnv(config, { SECRET_B: "b" }, "production");
+			assertFunctionEnv(config, { SECRET_B: "b" }, PRODUCTION);
 		} catch (error) {
 			caught = error;
 		}
@@ -187,14 +188,14 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 			assertFunctionEnv(
 				config,
 				{ SECRET_A: "a", SECRET_B: "b" },
-				"production",
+				PRODUCTION,
 			),
 		).not.toThrow();
 	});
 
-	test('neon dev points at { required: "production" }', () => {
+	test('neon dev points at { required: "default-branch" }', () => {
 		expect(() => assertFunctionEnv(config, {}, "development")).toThrow(
-			'or declare it { required: "production" } if only the production deployment needs it.',
+			'or declare it { required: "default-branch" } if only the default branch\'s deployment needs it.',
 		);
 	});
 });

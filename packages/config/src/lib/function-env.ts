@@ -1,13 +1,18 @@
 import { authoredFunctions } from "./authored-services.js";
 import { ConfigValidationError } from "./errors.js";
-import type { Config, FunctionEnvValue, FunctionEnvVar } from "./types.js";
+import type {
+	BranchTarget,
+	Config,
+	FunctionEnvValue,
+	FunctionEnvVar,
+} from "./types.js";
 
 /**
- * Where a declared value is resolved: a deploy to the project's default branch
- * (`production`), a deploy to any other branch (`preview`), or `neon dev` and `parseEnv`
- * (`development`).
+ * Where a declared value is resolved: a deploy to a known branch, a deploy whose branch is not
+ * known yet (`"deploy"`, where `"default-branch"` counts as required), or `neon dev` and
+ * `parseEnv` (`"development"`, where it counts as optional).
  */
-export type FunctionEnvTarget = "production" | "preview" | "development";
+export type FunctionEnvTarget = BranchTarget | "deploy" | "development";
 
 /** Where declarations without `value` are read from, usually `process.env`. */
 export type FunctionEnvSource = Readonly<Record<string, string | undefined>>;
@@ -44,7 +49,10 @@ function isRequired(
 ): boolean {
 	if (declaration.default !== undefined) return false;
 	const required = declaration.required ?? true;
-	return required === "production" ? target === "production" : required;
+	if (typeof required === "boolean") return required;
+	if (target === "development") return false;
+	if (target === "deploy") return true;
+	return target.isDefault === true;
 }
 
 /** Resolve {@link FunctionEnvVar} declarations against `source` for `target`. */
@@ -70,13 +78,9 @@ export function resolveFunctionEnv(
 	return { env, missing };
 }
 
-const MISSING_FIX: Record<FunctionEnvTarget, string> = {
-	production: "Set it in the environment or in the file passed to --env.",
-	preview:
-		'Set it in the environment or in the file passed to --env, or declare it { required: "production" } if preview branches can run without it.',
-	development:
-		'Set it in .env.local, the environment, or the file passed to --env, or declare it { required: "production" } if only the production deployment needs it.',
-};
+const DEPLOY_FIX = "Set it in the environment or in the file passed to --env.";
+const DEVELOPMENT_FIX =
+	'Set it in .env.local, the environment, or the file passed to --env, or declare it { required: "default-branch" } if only the default branch\'s deployment needs it.';
 
 /**
  * Throw one {@link ConfigValidationError} naming every declared variable `target` requires
@@ -89,7 +93,7 @@ export function assertFunctionEnv(
 ): void {
 	const issues = missingFunctionEnv(config, source, target).map(
 		({ slug, key }) =>
-			`Environment variable "${key}" for function "${slug}" is required and unset. ${MISSING_FIX[target]}`,
+			`Environment variable "${key}" for function "${slug}" is required and unset. ${target === "development" ? DEVELOPMENT_FIX : DEPLOY_FIX}`,
 	);
 	if (issues.length > 0) throw new ConfigValidationError(issues);
 }

@@ -196,7 +196,7 @@ describe("createBranch", () => {
 					source: "./fn.ts",
 					env: {
 						TOKEN: {},
-						DSN: { required: "production" },
+						DSN: { required: "default-branch" },
 					},
 				},
 			},

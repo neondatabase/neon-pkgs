@@ -141,7 +141,7 @@ describe.sequential("e2e — declared Function env", () => {
 		]);
 	});
 
-	it("a production deploy with required variables unset fails before anything deploys", async () => {
+	it("a default-branch deploy with required variables unset fails before anything deploys", async () => {
 		const before = (await getFunction("beta")).active_deployment?.id;
 		const result = await deploy(envFile("missing.env", "SECRET_A=a\n"));
 		expect(result.code).not.toBe(0);
@@ -154,7 +154,7 @@ describe.sequential("e2e — declared Function env", () => {
 		expect((await getFunction("beta")).active_deployment?.id).toBe(before);
 	});
 
-	it('a preview branch deploys without a { required: "production" } variable', async () => {
+	it("a non-default branch deploys without a variable required only on the default branch", async () => {
 		const { branch } = await apiRequest<{ branch: { id: string } }>(
 			`/projects/${projectId}/branches`,
 			{

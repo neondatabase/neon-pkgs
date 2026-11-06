@@ -433,7 +433,7 @@ describe("parseEnv existing overloads still type", () => {
 							required: false,
 						},
 						EXPLICIT: { required: true },
-						DSN: { required: "production" },
+						DSN: { required: "default-branch" },
 						GUILD: { required: false },
 						RATE: { default: "1" },
 						LOG_LEVEL: "info",

@@ -738,7 +738,7 @@ describe("configInputSchema", () => {
 		const formatted = formatZodIssues(result.error).join("\n");
 		expect(formatted).toContain("preview.functions.hello.env.count");
 		expect(formatted).toContain(
-			'Expected a string or a declaration: { value } (required), { value, required: "production" }',
+			'Expected a string or a declaration: { value } (required), { value, required: "default-branch" }',
 		);
 		// The undefined-specific guidance must not fire for a defined wrong type.
 		expect(formatted).not.toContain("process.env");
@@ -763,7 +763,7 @@ describe("function env declarations", () => {
 				VALUE: { value: "v" },
 				UNSET_VALUE: { value: undefined, required: false },
 				EXPLICIT: { required: true },
-				DSN: { required: "production" },
+				DSN: { required: "default-branch" },
 				GUILD: { required: false },
 				RATE: { default: "1" },
 				LOG_LEVEL: "info",
@@ -793,8 +793,8 @@ describe("function env declarations", () => {
 	});
 
 	test("rejects an unknown required value with the accepted forms", () => {
-		expect(issues({ TOKEN: { required: "deploy" } })).toContain(
-			'functions.hello.env.TOKEN: Expected a string or a declaration: { value } (required), { value, required: "production" }',
+		expect(issues({ TOKEN: { required: "production" } })).toContain(
+			'functions.hello.env.TOKEN: Expected a string or a declaration: { value } (required), { value, required: "default-branch" }',
 		);
 	});
 });

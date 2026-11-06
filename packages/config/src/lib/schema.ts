@@ -233,7 +233,9 @@ const functionEnvValueSchema = z.string({
 const functionEnvVarSchema = z
 	.strictObject({
 		value: z.string().optional(),
-		required: z.union([z.boolean(), z.literal("production")]).optional(),
+		required: z
+			.union([z.boolean(), z.literal("default-branch")])
+			.optional(),
 		default: z
 			.string()
 			.min(
@@ -267,7 +269,7 @@ const functionEnvEntrySchema = z.union(
 	{
 		error: (issue) =>
 			undefinedFunctionEnvMessage(issue) ??
-			'Expected a string or a declaration: { value } (required), { value, required: "production" }, { value, required: false }, or { value, default: "<fallback>" }. Omit `value` to read the variable named by the key.',
+			'Expected a string or a declaration: { value } (required), { value, required: "default-branch" }, { value, required: false }, or { value, default: "<fallback>" }. Omit `value` to read the variable named by the key.',
 	},
 );
 

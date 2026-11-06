@@ -10,7 +10,7 @@ export default defineConfig({
 			env: {
 				SECRET_A: {},
 				OPTIONAL_A: { required: false },
-				PROD_A: { required: "production" },
+				PROD_A: { required: "default-branch" },
 				RATE_A: { default: "1" },
 			},
 		},

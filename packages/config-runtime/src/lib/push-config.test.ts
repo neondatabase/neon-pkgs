@@ -930,7 +930,7 @@ describe("pushConfig", () => {
 						env: {
 							LOG_LEVEL: "info",
 							TOKEN: {},
-							DSN: { required: "production" },
+							DSN: { required: "default-branch" },
 							GUILD: { required: false },
 							RATE: { default: "1" },
 						},
@@ -969,7 +969,7 @@ describe("pushConfig", () => {
 			});
 		});
 
-		test('production fails before any change when { required: "production" } is unset', async () => {
+		test('deploying the default branch fails before any change when a "default-branch" variable is unset', async () => {
 			const { api, projectId } = seededFake();
 			await expect(
 				pushConfig(declaredConfig(), {
@@ -988,7 +988,7 @@ describe("pushConfig", () => {
 			expect(writes).toEqual([]);
 		});
 
-		test('a preview branch removes an unset { required: "production" } variable', async () => {
+		test('another branch removes an unset "default-branch" variable', async () => {
 			const { api, projectId } = withPreview();
 			await pushConfig(declaredConfig(), {
 				api,

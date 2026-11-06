@@ -1,6 +1,7 @@
 import {
 	type AppliedChange,
 	assertFunctionEnv,
+	type BranchTarget,
 	type Config,
 	type ConflictReport,
 	type CreateTriggerInput,
@@ -219,20 +220,20 @@ export async function pushConfig(
 	const remoteProject = await projectRead;
 	const [branches, endpoints] = await listsRead;
 	const branch = resolveRemoteBranch(options.branchId, branches);
-	const envTarget = branch.isDefault ? "production" : "preview";
-	assertFunctionEnv(config, envSource, envTarget);
+	const target: BranchTarget = {
+		name: branch.name,
+		id: branch.id,
+		exists: options.branchExists !== false,
+		...(branch.parentId ? { parentId: branch.parentId } : {}),
+		isDefault: branch.isDefault,
+		isProtected: branch.protected,
+		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+	};
+	assertFunctionEnv(config, envSource, target);
 	const resolved = withDeployFunctionEnv(
-		resolveConfig(config, {
-			name: branch.name,
-			id: branch.id,
-			exists: options.branchExists !== false,
-			...(branch.parentId ? { parentId: branch.parentId } : {}),
-			isDefault: branch.isDefault,
-			isProtected: branch.protected,
-			...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
-		}),
+		resolveConfig(config, target),
 		envSource,
-		envTarget,
+		target,
 	);
 	const realtimeApi = hasRealtimePolicy(resolved)
 		? requireRealtimeApi(api)
