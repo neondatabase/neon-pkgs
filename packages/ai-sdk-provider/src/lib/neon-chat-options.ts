@@ -79,8 +79,6 @@ export const NEON_MODELS_DEV_IDS = [
 	// xAI (unified MLflow endpoint)
 	"grok-4-6",
 	"grok-4-7",
-	// Thinking Machines (unified MLflow endpoint)
-	"inkling",
 	// Moonshot (unified MLflow endpoint)
 	"kimi-k3",
 	// DeepSeek (unified MLflow endpoint)

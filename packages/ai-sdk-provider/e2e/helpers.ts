@@ -19,8 +19,6 @@ export const MATRIX_MODELS = {
 	alibaba: "qwen3-next-80b-a3b-instruct",
 	/** Unified MLflow endpoint (Zhipu) — no prefix rule matches, so it must route by default */
 	zhipu: "glm-5-2",
-	/** Unified MLflow endpoint (Databricks) — same, and the id carries no vendor hint at all */
-	databricks: "inkling",
 } as const;
 
 export type MatrixFamily = keyof typeof MATRIX_MODELS;
