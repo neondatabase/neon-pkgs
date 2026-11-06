@@ -5,7 +5,11 @@ import {
 import { Client as ClientV1 } from "@modelcontextprotocol/sdk-v1/client/index.js";
 import { InMemoryTransport as InMemoryTransportV1 } from "@modelcontextprotocol/sdk-v1/inMemory.js";
 import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk-v1/server/mcp.js";
-import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
+import type { CallToolResult as CallToolResultV1 } from "@modelcontextprotocol/sdk-v1/types.js";
+import {
+	type CallToolResult as CallToolResultV2,
+	McpServer as McpServerV2,
+} from "@modelcontextprotocol/server";
 import { NeonWaitTimeoutError } from "@neon/sdk";
 import { afterEach, describe, expect, test } from "vitest";
 import { createNeonTools, publishedId, toolIds } from "./index.js";
@@ -53,6 +57,12 @@ describe("toMcpToolResult", () => {
 
 	test("rejects data JSON cannot represent", () => {
 		expect(() => toMcpToolResult(undefined)).toThrow(TypeError);
+	});
+
+	test("is a valid CallToolResult for both MCP SDKs", () => {
+		const v2: CallToolResultV2 = toMcpToolResult({ ok: true });
+		const v1: CallToolResultV1 = toMcpToolResult({ ok: true });
+		expect(v1).toEqual(v2);
 	});
 });
 

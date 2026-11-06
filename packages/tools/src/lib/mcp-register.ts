@@ -1,9 +1,13 @@
 import type { NeonTool } from "./operation.js";
 
-export interface McpToolResult {
+/**
+ * A type alias, because an interface is not assignable to the MCP SDKs'
+ * `CallToolResult`, which has an index signature.
+ */
+export type McpToolResult = {
 	content: Array<{ type: "text"; text: string }>;
 	isError?: boolean;
-}
+};
 
 /**
  * Results carry no `structuredContent`: clients that show the model both
