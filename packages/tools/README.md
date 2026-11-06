@@ -304,7 +304,7 @@ MCP 1.x still receives Zod input schemas, including their `.describe()` copy. Ge
 
 The adapter returns one text block of compact JSON, `{"data": ...}`, and no `structuredContent`. Execution failures use `isError: true` with `{"error": { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId }}` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
 
-A server that registers tools itself can format results the same way:
+A server that registers tools itself can use the same builder. `toMcpToolResult` serializes exactly the value it is given; the adapter passes `{ data }`:
 
 ```ts
 import { toMcpToolResult } from "@neon/tools/mcp";
