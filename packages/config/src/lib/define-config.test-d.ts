@@ -181,3 +181,43 @@ describe("declared function env", () => {
 		});
 	});
 });
+
+describe("declared function env onUndefined", () => {
+	test("onUndefined needs required: false or default-branch", () => {
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: {
+						KEPT: { required: false, onUndefined: "skip" },
+						BRANCH: {
+							required: "default-branch",
+							onUndefined: "unset",
+						},
+					},
+				},
+			},
+		});
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error an always-required variable is never left out.
+					env: { TOKEN: { required: true, onUndefined: "skip" } },
+				},
+			},
+		});
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error required defaults to true.
+					env: { TOKEN: { onUndefined: "skip" } },
+				},
+			},
+		});
+	});
+});

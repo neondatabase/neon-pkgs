@@ -419,7 +419,13 @@ export type FunctionEnvVar =
 	  }
 	| {
 			value?: string | undefined;
-			required: boolean | "default-branch";
+			required: boolean;
+			onUndefined?: never;
+			default?: never;
+	  }
+	| {
+			value?: string | undefined;
+			required: false | "default-branch";
 			onUndefined?: "unset" | "skip";
 			default?: never;
 	  }
