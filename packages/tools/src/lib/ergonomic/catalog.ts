@@ -2075,7 +2075,7 @@ export const toolFactories = {
 		bindTool(
 			options,
 			{
-				operationId: "regions.list",
+				selector: "regions.list",
 				id: publishedId("regions.list"),
 				title: "List regions",
 				description:
