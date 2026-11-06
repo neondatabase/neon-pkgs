@@ -1,5 +1,3 @@
-import { functionBaseUrlKey } from "@neon-internals/env-core/env";
-import { FUNCTION_SLUG } from "../config_template.js";
 import type { EnvPullKey } from "../env_services.js";
 import type { NeonService } from "../neon_services.js";
 
@@ -102,12 +100,15 @@ export const initEnvPullAfterConfig = (input: {
 	}
 	return {
 		kind: "services",
-		services: input.declared.includes("ai-gateway")
-			? ["postgres", "ai-gateway"]
-			: ["postgres"],
-		// `--service functions` needs a deployed function; the scaffolded one's URL does not.
-		envKeys: input.declared.includes("functions")
-			? [functionBaseUrlKey(FUNCTION_SLUG)]
-			: [],
+		services: [
+			"postgres",
+			...(input.declared.includes("ai-gateway")
+				? (["ai-gateway"] as const)
+				: []),
+			...(input.declared.includes("functions")
+				? (["functions"] as const)
+				: []),
+		],
+		envKeys: [],
 	};
 };

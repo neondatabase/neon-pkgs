@@ -70,12 +70,16 @@ const INPUT_ENV_KEYS = [
 ] as const;
 
 /**
- * Env-vars `toEntries` emits but `parseEnv` never reads back: only the branch name, which is
+ * Env-vars `toEntries` emits that `parseEnv` never requires: the branch keys, which are
  * optional on parse. Listed so the completeness check below can prove every *other* env-var in
  * `NEON_ENV_VAR_KEYS` is a covered input — i.e. adding a new input var without a test fails
  * loudly.
  */
-const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set(["NEON_BRANCH"]);
+const OUTPUT_ONLY_ENV_VARS: ReadonlySet<string> = new Set([
+	"NEON_BRANCH",
+	"NEON_BRANCH_ID",
+	"NEON_FUNCTION_HOST_SUFFIX",
+]);
 
 /**
  * A policy that turns on every secret-bearing namespace, so every input env-var above is
@@ -106,6 +110,8 @@ describe("NEON_ENV_VAR_KEYS (public OS env-var names)", () => {
 			    "jwksUrl": "NEON_AUTH_JWKS_URL",
 			  },
 			  "branch": {
+			    "functionHostSuffix": "NEON_FUNCTION_HOST_SUFFIX",
+			    "id": "NEON_BRANCH_ID",
 			    "name": "NEON_BRANCH",
 			  },
 			  "dataApi": {
@@ -189,7 +195,11 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 				databaseUrl: "postgres://pooled",
 				databaseUrlUnpooled: "postgres://direct",
 			},
-			branch: { name: "preview/foo" },
+			branch: {
+				name: "preview/foo",
+				id: "br-foo-123456",
+				functionHostSuffix: ".compute.c-2.us-east-2.aws.neon.tech",
+			},
 			auth: {
 				baseUrl: "https://auth.example.com",
 				jwksUrl: "https://auth.example.com/.well-known/jwks.json",
@@ -208,11 +218,6 @@ describe("toEntries → parseEnv round-trip (cross-process transport)", () => {
 			aiGateway: {
 				apiKey: "nt_live_abc_def",
 				baseUrl: "https://x.neon.build",
-			},
-			functions: {
-				hello: {
-					baseUrl: "https://br-foo-hello.compute.neon.tech/",
-				},
 			},
 		};
 
@@ -233,10 +238,8 @@ describe("@neon/env public surface", () => {
 			[
 			  "NEON_ENV_VAR_KEYS",
 			  "fetchEnv",
-			  "functionBaseUrlKey",
-			  "isFunctionBaseUrlKey",
+			  "functionBaseUrl",
 			  "parseEnv",
-			  "parseFunctionBaseUrlKey",
 			  "toEntries",
 			]
 		`);

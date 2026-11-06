@@ -20,7 +20,7 @@ import {
 	findUndeclaredNativePackages,
 	resolveEsbuildEntry,
 } from "@neon/config-runtime";
-import { functionBaseUrlKey } from "@neon-internals/env-core/env";
+import { NEON_DEV_FUNCTION_PORTS } from "@neon-internals/env-core/env";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -96,10 +96,10 @@ export const builder = (argv: yargs.Argv) =>
 				"object storage and the AI Gateway where the branch has them. A neon.ts in",
 				"this directory decides instead, exactly as it does for `env pull`.",
 				"",
-				"NEON_FUNCTION_<SLUG>_BASE_URL from `env pull` / `neon-env run` is the production",
-				"invocation URL. `dev` rewrites it to `http://localhost:<port>` for each function",
-				"this process is serving (every neon.ts function, or the matching slug when",
-				"`--source` names one).",
+				'`functionBaseUrl("<slug>")` from @neon/env returns `http://localhost:<port>` for',
+				"each function this process is serving (every neon.ts function, or the matching",
+				"slug when `--source` names one), through NEON_DEV_FUNCTION_PORTS, and the",
+				"deployed URL on the linked branch for any other slug.",
 				"",
 				"Before neon.ts is evaluated, `dev` loads the project's .env, then .env.local,",
 				"which overrides it, into the environment, so Function env values that read",
@@ -462,7 +462,7 @@ export const planFunctionsToUnits = async (
 		}
 		return { fn, port };
 	});
-	const overlay = localFunctionUrlEnv(
+	const overlay = localFunctionPortsEnv(
 		assigned.map(({ fn, port }) => ({ slug: fn.slug, port })),
 	);
 	const branchEnv = { ...neonEnv, ...overlay };
@@ -472,18 +472,16 @@ export const planFunctionsToUnits = async (
 };
 
 /**
- * Local invocation URLs for functions `neon dev` is serving, so siblings call each
- * other on localhost instead of the production compute host.
+ * The ports of the functions `neon dev` is serving, which `functionBaseUrl` reads so
+ * siblings call each other on localhost instead of the deployed compute host.
  */
-export const localFunctionUrlEnv = (
+export const localFunctionPortsEnv = (
 	functions: ReadonlyArray<{ slug: string; port: number }>,
-): Record<string, string> => {
-	const out: Record<string, string> = {};
-	for (const fn of functions) {
-		out[functionBaseUrlKey(fn.slug)] = `http://localhost:${fn.port}`;
-	}
-	return out;
-};
+): Record<string, string> => ({
+	[NEON_DEV_FUNCTION_PORTS]: JSON.stringify(
+		Object.fromEntries(functions.map((fn) => [fn.slug, fn.port])),
+	),
+});
 
 /**
  * `--source` serves one file. If that file is a neon.ts function, rewrite only that
@@ -503,7 +501,7 @@ export const sourceFunctionUrlOverlay = async (
 			? portSpec.port
 			: (match.port ?? (await pickFreePort(portSpec.from)));
 	return {
-		overlay: localFunctionUrlEnv([{ slug: match.slug, port }]),
+		overlay: localFunctionPortsEnv([{ slug: match.slug, port }]),
 		port: { mode: "explicit", port },
 	};
 };
@@ -645,13 +643,16 @@ const plannedToUnit = (
  * Build a child's env. Neon vars layer over the inherited environment (so the branch's
  * DATABASE_URL wins over a stale inherited value); a function that loads its own `.env`
  * at runtime still overrides them. The port spec is encoded for the runtime via
- * NEON_DEV_PORT (explicit) or NEON_DEV_PORT_BASE (search).
+ * NEON_DEV_PORT (explicit) or NEON_DEV_PORT_BASE (search). An inherited
+ * NEON_DEV_FUNCTION_PORTS names another process's ports, so only this one's applies.
  */
 const buildChildEnv = (
 	neonEnv: Record<string, string>,
 	port: PortSpec,
 ): NodeJS.ProcessEnv => {
-	const env: NodeJS.ProcessEnv = { ...process.env, ...neonEnv };
+	const inherited: NodeJS.ProcessEnv = { ...process.env };
+	delete inherited[NEON_DEV_FUNCTION_PORTS];
+	const env: NodeJS.ProcessEnv = { ...inherited, ...neonEnv };
 	delete env.NEON_DEV_PORT;
 	delete env.NEON_DEV_PORT_BASE;
 	if (port.mode === "explicit") {

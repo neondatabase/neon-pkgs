@@ -512,55 +512,59 @@ describe("fetchEnvReusingSecrets", () => {
 		expect(vars.NEON_AUTH_JWKS_URL).toBe("https://example.com/jwks.json");
 	});
 
-	test("unscoped all-live still emits function URLs when a credential is revealed", async () => {
-		const listedUrl = "https://br-main-hello.compute.fake.neon.tech/";
-		const helloUrl = "https://br-main-hello.compute.fake.neon.tech";
+	test("`always` emits the function host suffix when a credential is revealed", async () => {
 		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: listedUrl,
-		});
 
 		const { vars } = await fetchEnvReusingSecrets(gatewayPolicy, {
 			api,
 			projectId,
 			branch: "main",
-			functionUrls: "all-live",
+			functionHostSuffix: "always",
 		});
 
-		expect(vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(vars.NEON_FUNCTION_HOST_SUFFIX).toBe(
+			".compute.aws-us-east-1.fake.neon.tech",
+		);
 		expect(vars.NEON_AI_GATEWAY_TOKEN).toMatch(/^nt_live_/);
 		expect(callsTo(api, "createCredential")).toBe(0);
 	});
 
-	test("reusing a gateway token does not drop unscoped function URLs", async () => {
-		const listedUrl = "https://br-main-hello.compute.fake.neon.tech/";
-		const helloUrl = "https://br-main-hello.compute.fake.neon.tech";
+	test("reusing a gateway token keeps the function host suffix", async () => {
 		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: listedUrl,
-		});
 
 		const first = await fetchEnvReusingSecrets(gatewayPolicy, {
 			api,
 			projectId,
 			branch: "main",
-			functionUrls: "all-live",
+			functionHostSuffix: "always",
 		});
 		const second = await fetchEnvReusingSecrets(gatewayPolicy, {
 			api,
 			projectId,
 			branch: "main",
-			functionUrls: "all-live",
+			functionHostSuffix: "always",
 			env: { ...process.env, ...first.vars },
 		});
 
 		expect(second.credential.issued).toBe(false);
-		expect(second.vars.NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
+		expect(second.vars.NEON_FUNCTION_HOST_SUFFIX).toBe(
+			".compute.aws-us-east-1.fake.neon.tech",
+		);
+	});
+
+	test("selected branch keys resolve when the policy declares no functions", async () => {
+		const { api, projectId } = seededFake();
+
+		const { vars } = await fetchEnvReusingSecrets(defineConfig({}), {
+			api,
+			projectId,
+			branch: "main",
+			keys: ["NEON_BRANCH_ID", "NEON_FUNCTION_HOST_SUFFIX"],
+		});
+
+		expect(vars).toEqual({
+			NEON_BRANCH_ID: "br-main",
+			NEON_FUNCTION_HOST_SUFFIX: ".compute.aws-us-east-1.fake.neon.tech",
+		});
 	});
 });

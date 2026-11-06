@@ -35,7 +35,6 @@ describe("shapeHookEnv", () => {
 		expect(env.dataApi).toBeUndefined();
 		expect(env.storage).toBeUndefined();
 		expect(env.aiGateway).toBeUndefined();
-		expect(env.functions).toBeUndefined();
 		expect(env.branch).toBeUndefined();
 	});
 
@@ -45,7 +44,11 @@ describe("shapeHookEnv", () => {
 				databaseUrl: "postgres://pooled/neondb",
 				databaseUrlUnpooled: "postgres://direct/neondb",
 			},
-			branch: { name: "preview/feature-billing" },
+			branch: {
+				name: "preview/feature-billing",
+				id: "br-feature-123456",
+				functionHostSuffix: ".compute.c-2.us-east-2.aws.neon.tech",
+			},
 			auth: {
 				baseUrl: "https://auth.neon",
 				jwksUrl: "https://auth.neon/jwks",
@@ -61,9 +64,12 @@ describe("shapeHookEnv", () => {
 				apiKey: "sk-neon",
 				baseUrl: "https://ai.neon/openai/v1",
 			},
-			functions: { api: { baseUrl: "https://api.example.com" } },
 		});
-		expect(env.branch).toEqual({ name: "preview/feature-billing" });
+		expect(env.branch).toEqual({
+			name: "preview/feature-billing",
+			id: "br-feature-123456",
+			functionHostSuffix: ".compute.c-2.us-east-2.aws.neon.tech",
+		});
 		expect(env.auth).toEqual({
 			baseUrl: "https://auth.neon",
 			jwksUrl: "https://auth.neon/jwks",
@@ -79,9 +85,6 @@ describe("shapeHookEnv", () => {
 			apiKey: "sk-neon",
 			baseUrl: "https://ai.neon/openai/v1",
 		});
-		expect(env.functions).toEqual({
-			api: { baseUrl: "https://api.example.com" },
-		});
 	});
 
 	test("omits a namespace whose fields are only partially present", () => {
@@ -91,19 +94,6 @@ describe("shapeHookEnv", () => {
 		});
 		expect(env.auth).toBeUndefined();
 		expect(env.storage).toBeUndefined();
-	});
-
-	test("maps multiple function entries", () => {
-		const env = shapeHookEnv({
-			functions: {
-				api: { baseUrl: "https://api.example.com" },
-				worker: { baseUrl: "https://worker.example.com" },
-			},
-		});
-		expect(env.functions).toEqual({
-			api: { baseUrl: "https://api.example.com" },
-			worker: { baseUrl: "https://worker.example.com" },
-		});
 	});
 });
 
