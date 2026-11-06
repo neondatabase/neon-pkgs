@@ -206,7 +206,13 @@ export const handler = async (props: LokiProps) => {
 				props.apiHost ?? DEFAULT_API_HOST,
 			).toString(),
 		);
-		if (!(failure instanceof NeonApiError)) throw failure;
+		if (
+			!(failure instanceof NeonApiError) ||
+			failure.status === undefined ||
+			failure.status < 400
+		) {
+			throw failure;
+		}
 		// Loki quotes the rejected LogQL in its error text, and the message goes to error
 		// analytics. The top-level handler prints the server's text from `data`.
 		throw new NeonApiError(

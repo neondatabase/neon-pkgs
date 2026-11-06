@@ -34,7 +34,7 @@ describe("logs loki through dist/cli.js", () => {
 	let server: Server;
 	let apiHost: string;
 	let requests: { method?: string; url: URL; headers: IncomingHttpHeaders }[];
-	let reply: { status: number; body: unknown };
+	let reply: { status: number; body: unknown; delayMs?: number };
 
 	beforeEach(async () => {
 		requests = [];
@@ -64,9 +64,14 @@ describe("logs loki through dist/cli.js", () => {
 					}),
 				);
 			} else if (url.pathname.startsWith("/telemetry/v1/projects/")) {
-				res.setHeader("Retry-After", "0");
-				res.writeHead(reply.status);
-				res.end(JSON.stringify(reply.body));
+				const { status, body, delayMs = 0 } = reply;
+				setTimeout(() => {
+					res.setHeader("Retry-After", "0");
+					res.writeHead(status);
+					res.end(
+						typeof body === "string" ? body : JSON.stringify(body),
+					);
+				}, delayMs);
 			} else {
 				res.writeHead(404);
 				res.end(
@@ -407,7 +412,8 @@ describe("logs loki through dist/cli.js", () => {
 	});
 
 	it("keeps the rejected LogQL out of the error message that analytics records", async () => {
-		const loki = 'logql: unsupported pipeline stage near "| json"';
+		const loki =
+			'logql: unsupported pipeline stage near "| line_format \\"SECRET_MARKER\\""';
 		reply = { status: 400, body: { status: "error", error: loki } };
 		const apiKey = "test-loki-key";
 		const failure = await handler({
@@ -418,7 +424,7 @@ describe("logs loki through dist/cli.js", () => {
 			contextFile: resolve("../../tmp/loki-no-context"),
 			projectId: "test-project",
 			branch: "main",
-			query: `${EXPRESSION} | json`,
+			query: `${EXPRESSION} | line_format "SECRET_MARKER"`,
 			endpoint: "query_range",
 		}).catch((error: unknown) => error);
 
@@ -430,6 +436,39 @@ describe("logs loki through dist/cli.js", () => {
 		);
 		expect(properties.statusCode).toBe(400);
 		expect(properties.message).toBe("Loki request failed with status 400");
-		expect(properties.stack).not.toContain("json");
+		expect(properties.stack).not.toContain("SECRET_MARKER");
+	});
+
+	it("keeps an unreadable 2xx response's own error", async () => {
+		reply = { status: 200, body: "not json" };
+		const { stderr } = await run(
+			[EXPRESSION, "--project-id", "test-project"],
+			1,
+		);
+		expect(stderr).toContain(
+			"Could not read the Neon API response (200 OK) to /telemetry/v1/projects/test-project/branches/br-main-123456/loki/api/v1/query_range: the body is not valid JSON",
+		);
+	});
+
+	it("keeps a request timeout's code and message", async () => {
+		reply = { status: 200, body: ENVELOPE, delayMs: 1_000 };
+		const apiKey = "test-loki-key";
+		const props = {
+			apiClient: getApiClient({ apiKey, apiHost }),
+			apiKey,
+			apiHost,
+			requestTimeoutMs: 50,
+			output: "json" as const,
+			contextFile: resolve("../../tmp/loki-no-context"),
+			projectId: "test-project",
+			branch: "main",
+			query: EXPRESSION,
+			endpoint: "query_range",
+		};
+		const failure = await handler(props).catch((error: unknown) => error);
+
+		if (!(failure instanceof NeonApiError)) throw failure;
+		expect(failure.code).toBe("ECONNABORTED");
+		expect(failure.message).toBe("Request timed out");
 	});
 });
