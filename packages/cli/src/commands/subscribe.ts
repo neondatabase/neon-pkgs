@@ -18,6 +18,8 @@ type QueryRow = Record<string, unknown>;
 export type SubscribeProps = BranchScopeProps & {
 	query: string;
 	changes: boolean;
+	/** Requests full database error details from Realtime. */
+	debug?: boolean;
 	cwd?: string;
 	/** Injected NeonApi adapter for operation tests. */
 	runtimeApi?: NeonApi;
@@ -31,6 +33,7 @@ type RealtimeConnectionOptions = {
 	url: string;
 	secret: string;
 	database: string;
+	debugMode: boolean;
 };
 
 type DirectSubscriber = {
@@ -73,6 +76,12 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 			},
+			debug: {
+				describe:
+					"Show full database error details, including SQLSTATE and PostgreSQL's message. Details can name schema objects and row values.",
+				type: "boolean",
+				default: false,
+			},
 		})
 		.example(
 			'$0 realtime subscribe "SELECT * FROM items"',
@@ -81,6 +90,10 @@ export const builder = (argv: yargs.Argv) =>
 		.example(
 			'$0 realtime subscribe --changes "SELECT * FROM items"',
 			"Print raw rows and changes events",
+		)
+		.example(
+			'$0 realtime subscribe --debug "SELECT * FROM items"',
+			"Show why a query is rejected or fails",
 		)
 		.epilogue(
 			"The subscription runs until interrupted. Terminal output is an append-only snapshot and transaction log; JSON output is newline-delimited; YAML output uses one document per event.",
@@ -133,7 +146,12 @@ export const subscribe = async (
 	const url = requiredEnv(vars, "NEON_REALTIME_URL");
 	const secret = requiredEnv(vars, "NEON_REALTIME_SECRET");
 	const database = await databaseName(requiredEnv(vars, "DATABASE_URL"));
-	const realtime = await connect({ url, secret, database });
+	const realtime = await connect({
+		url,
+		secret,
+		database,
+		debugMode: props.debug ?? false,
+	});
 	const render = createRenderer(
 		props,
 		{
@@ -175,6 +193,7 @@ const connectRealtime = async (
 		url: options.url,
 		secret: options.secret,
 		db: options.database,
+		debugMode: options.debugMode,
 	});
 	return {
 		subscribeMaterialized: (query) =>
@@ -465,9 +484,15 @@ const humanStatus = (state: LiveQueryState): string => {
 		case "closed":
 			return "Subscription closed.";
 		case "error":
-			return `Subscription failed — ${state.error.message}`;
+			return `Subscription failed — ${errorText(state.error)}`;
 	}
 };
+
+/** The error's message, with the SQLSTATE that a debug subscription receives. */
+const errorText = (error: Error & { sqlState?: string }): string =>
+	error.sqlState === undefined
+		? error.message
+		: `${error.message} (SQLSTATE ${error.sqlState})`;
 
 const branchDisplayName = (props: SubscribeProps, branchId: string): string => {
 	const branch = "branch" in props ? props.branch : props.id;

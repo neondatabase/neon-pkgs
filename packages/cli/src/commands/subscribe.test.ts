@@ -199,6 +199,8 @@ describe("subscribe command", () => {
 		const options = (builder(yargs([])) as any).getOptions();
 		expect(options.boolean).toContain("changes");
 		expect(options.default.changes).toBe(false);
+		expect(options.boolean).toContain("debug");
+		expect(options.default.debug).toBe(false);
 	});
 
 	it("resolves Realtime env and renders materialized snapshots", async () => {
@@ -245,6 +247,7 @@ describe("subscribe command", () => {
 			url: "wss://realtime.example/v1",
 			secret: "secret",
 			database: "neondb",
+			debugMode: false,
 		});
 		expect(setupResult.materializedQuery()).toBe("SELECT * FROM items");
 		expect(
@@ -561,5 +564,37 @@ describe("subscribe command", () => {
 		await expect(run).rejects.toThrow("Query was rejected");
 		expect(subscription.unsubscribed).toBe(true);
 		expect(setupResult.closeCount()).toBe(1);
+	});
+
+	it("requests full error details with --debug and shows the SQLSTATE", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			{
+				...props(false, controller.signal, output.out, "table"),
+				debug: true,
+			},
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+		expect(setupResult.connectionOptions()).toMatchObject({
+			debugMode: true,
+		});
+		const error = Object.assign(
+			new Error('column "title" does not exist'),
+			{
+				code: "upstream_rejected",
+				retryable: false,
+				sqlState: "42703",
+			},
+		);
+		subscription.emitState({ status: "error", error });
+
+		await expect(run).rejects.toThrow('column "title" does not exist');
+		expect(output.text()).toContain(
+			'Subscription failed — column "title" does not exist (SQLSTATE 42703)',
+		);
 	});
 });
