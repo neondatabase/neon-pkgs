@@ -111,11 +111,11 @@ env: {
 | Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv(config, slug).function` |
 | --- | --- | --- | --- | --- |
 | `{}` or `{ required: true }` | fails before any change | fails before any change | fails before any Function starts | `string` |
-| `{ required: "production" }` | fails before any change | not deployed | runs without it | `string \| undefined` |
-| `{ required: false }` | not deployed | not deployed | runs without it | `string \| undefined` |
+| `{ required: "production" }` | fails before any change | left out | runs without it | `string \| undefined` |
+| `{ required: false }` | left out | left out | runs without it | `string \| undefined` |
 | `{ default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
 
-Production is the project's default branch; every other branch, including one `neon checkout --create` makes, is a preview. A variable that is not deployed is removed from the Function if an earlier deploy set it, so the deployment matches `neon.ts`. Keys `neon.ts` does not declare are left as they are, which is how to keep a value you set with `neon functions deploy <slug> --env KEY=VALUE`. An empty value (`KEY=` in a `.env` file) counts as unset.
+Production is the project's default branch; every other branch, including one `neon checkout --create` makes, is a preview. A variable that is left out is removed from the Function if an earlier deploy set it, so the deployment matches `neon.ts`. Keys `neon.ts` does not declare are left as they are, which is how to keep a value you set with `neon functions deploy <slug> --env KEY=VALUE`. An empty value (`KEY=` in a `.env` file) counts as unset.
 
 A literal string is uploaded as is. `process.env.X!` still works, but it is evaluated wherever `neon.ts` is imported: app code, `drizzle.config.ts`, and each deployed Function that calls `parseEnv(config, …)`. Each of those then needs every Function's secrets, so a deployed Function fails to load when another Function's secret is missing from its runtime. Declarations avoid that.
 

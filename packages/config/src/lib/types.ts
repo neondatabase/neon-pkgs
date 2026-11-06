@@ -389,12 +389,12 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
  * | Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv` type |
  * | --- | --- | --- | --- | --- |
  * | `{}` or `{ required: true }` | fails | fails | fails | `string` |
- * | `{ required: "production" }` | fails | not deployed | runs without it | `string \| undefined` |
- * | `{ required: false }` | not deployed | not deployed | runs without it | `string \| undefined` |
+ * | `{ required: "production" }` | fails | left out | runs without it | `string \| undefined` |
+ * | `{ required: false }` | left out | left out | runs without it | `string \| undefined` |
  * | `{ default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
  *
  * Production is the project's default branch; every other branch is a preview. A variable
- * that is "not deployed" is removed from the Function if an earlier deploy set it. Keys that
+ * that is "left out" is removed from the Function if an earlier deploy set it. Keys that
  * `neon.ts` does not declare are left as they are.
  */
 export type FunctionEnvVar =
