@@ -1,4 +1,5 @@
 export {
+	assertProvidedApiKey,
 	type PublishedId,
 	publishedId,
 	type ToolClientOptions,
