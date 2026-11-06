@@ -1,6 +1,7 @@
 import type { NeonApi } from "@neon/config";
 import type {
 	LiveQueryChange,
+	LiveQueryError,
 	LiveQueryState,
 	MaterializedLiveQuerySubscription,
 	RawLiveQueryRow,
@@ -18,6 +19,12 @@ type QueryRow = Record<string, unknown>;
 export type SubscribeProps = BranchScopeProps & {
 	query: string;
 	changes: boolean;
+	/**
+	 * Subscribe in Realtime's `debugMode`, so a rejected query reports the
+	 * PostgreSQL error and SQLSTATE rather than only "upstream rejected".
+	 * Defaults to true; `--no-debug` sets it false.
+	 */
+	debug?: boolean;
 	cwd?: string;
 	/** Injected NeonApi adapter for operation tests. */
 	runtimeApi?: NeonApi;
@@ -31,6 +38,7 @@ type RealtimeConnectionOptions = {
 	url: string;
 	secret: string;
 	database: string;
+	debugMode: boolean;
 };
 
 type DirectSubscriber = {
@@ -73,6 +81,12 @@ export const builder = (argv: yargs.Argv) =>
 				type: "boolean",
 				default: false,
 			},
+			debug: {
+				describe:
+					"Subscribe in Realtime's debug mode, so a rejected query reports the PostgreSQL error and SQLSTATE. On by default; use --no-debug for the safe errors a browser client gets, which omit database details",
+				type: "boolean",
+				default: true,
+			},
 		})
 		.example(
 			'$0 realtime subscribe "SELECT * FROM items"',
@@ -82,8 +96,12 @@ export const builder = (argv: yargs.Argv) =>
 			'$0 realtime subscribe --changes "SELECT * FROM items"',
 			"Print raw rows and changes events",
 		)
+		.example(
+			'$0 realtime subscribe --no-debug "SELECT * FROM items"',
+			"Report errors the way a browser client sees them",
+		)
 		.epilogue(
-			"The subscription runs until interrupted. Terminal output is an append-only snapshot and transaction log; JSON output is newline-delimited; YAML output uses one document per event.",
+			"The subscription runs until interrupted. Terminal output is an append-only snapshot and transaction log; JSON output is newline-delimited; YAML output uses one document per event. If the query fails, the command prints the error with its Realtime error code and, when PostgreSQL supplies one, its SQLSTATE, then exits 1. With --no-debug, Realtime withholds the PostgreSQL error and SQLSTATE.",
 		)
 		.strict();
 
@@ -133,7 +151,12 @@ export const subscribe = async (
 	const url = requiredEnv(vars, "NEON_REALTIME_URL");
 	const secret = requiredEnv(vars, "NEON_REALTIME_SECRET");
 	const database = await databaseName(requiredEnv(vars, "DATABASE_URL"));
-	const realtime = await connect({ url, secret, database });
+	const realtime = await connect({
+		url,
+		secret,
+		database,
+		debugMode: props.debug !== false,
+	});
 	const render = createRenderer(
 		props,
 		{
@@ -175,6 +198,12 @@ const connectRealtime = async (
 		url: options.url,
 		secret: options.secret,
 		db: options.database,
+		// On unless --no-debug. Without it Realtime reports every rejected query
+		// as "upstream rejected". debugMode guards schema details from untrusted
+		// browser clients; whoever runs this command already holds the branch's
+		// Realtime secret and DATABASE_URL, so the PostgreSQL message and
+		// SQLSTATE are theirs to see.
+		debugMode: options.debugMode,
 	});
 	return {
 		subscribeMaterialized: (query) =>
@@ -465,8 +494,36 @@ const humanStatus = (state: LiveQueryState): string => {
 		case "closed":
 			return "Subscription closed.";
 		case "error":
-			return `Subscription failed — ${state.error.message}`;
+			return `Subscription failed — ${describeError(state.error)}`;
 	}
+};
+
+/**
+ * The error message followed by the Realtime error code and, when PostgreSQL
+ * supplied one, the SQLSTATE: `column "nope" does not exist (upstream_rejected,
+ * SQLSTATE 42703)`.
+ */
+const describeError = (error: Error): string => {
+	const { code, sqlState } = error as Partial<LiveQueryError>;
+	const codes = [
+		typeof code === "string" && code && !error.message.includes(code)
+			? code
+			: undefined,
+		typeof sqlState === "string" && sqlState
+			? `SQLSTATE ${sqlState}`
+			: undefined,
+	].filter((part): part is string => part !== undefined);
+	return codes.length === 0
+		? error.message
+		: `${error.message} (${codes.join(", ")})`;
+};
+
+/** The error the command exits with, so its `ERROR:` line carries the codes too. */
+const subscriptionFailure = (error: Error): Error => {
+	const message = describeError(error);
+	if (message === error.message) return error;
+	// The CLI compiles against ES2020, which has no `ErrorOptions`.
+	return Object.assign(new Error(message), { cause: error });
 };
 
 const branchDisplayName = (props: SubscribeProps, branchId: string): string => {
@@ -552,7 +609,8 @@ const consumeSubscription = (
 		const onState = (state: LiveQueryState) => {
 			attempt(fail, () => render({ type: "status", state }));
 			if (settled) return;
-			if (state.status === "error") fail(state.error);
+			if (state.status === "error")
+				fail(subscriptionFailure(state.error));
 			else if (state.status === "closed") finish(resolve);
 		};
 

@@ -20,6 +20,14 @@ import {
 
 type Row = Record<string, unknown>;
 
+// The default connector imports @neon/realtime lazily; tests that inject
+// `connect` never reach it.
+const realtimeModule = vi.hoisted(() => ({
+	createRealtime: vi.fn(),
+	rawSql: vi.fn((query: string) => ({ query })),
+}));
+vi.mock("@neon/realtime", () => realtimeModule);
+
 class FakeSubscription implements MaterializedLiveQuerySubscription<Row> {
 	private state: LiveQueryState = {
 		status: "connecting",
@@ -201,6 +209,16 @@ describe("subscribe command", () => {
 		expect(options.default.changes).toBe(false);
 	});
 
+	it.each([
+		[[], true],
+		[["--debug"], true],
+		[["--no-debug"], false],
+		[["--debug", "false"], false],
+	])("parses %j as debug %s", async (args, debug) => {
+		const argv = await builder(yargs(args)).parse();
+		expect(argv.debug).toBe(debug);
+	});
+
 	it("resolves Realtime env and renders materialized snapshots", async () => {
 		const subscription = new FakeSubscription();
 		const setupResult = setup(subscription);
@@ -245,6 +263,7 @@ describe("subscribe command", () => {
 			url: "wss://realtime.example/v1",
 			secret: "secret",
 			database: "neondb",
+			debugMode: true,
 		});
 		expect(setupResult.materializedQuery()).toBe("SELECT * FROM items");
 		expect(
@@ -561,5 +580,124 @@ describe("subscribe command", () => {
 		await expect(run).rejects.toThrow("Query was rejected");
 		expect(subscription.unsubscribed).toBe(true);
 		expect(setupResult.closeCount()).toBe(1);
+	});
+
+	it.each([
+		{ label: "by default", overrides: {}, debugMode: true },
+		{
+			label: "with --no-debug",
+			overrides: { debug: false },
+			debugMode: false,
+		},
+	])("creates the Realtime client $label with debugMode $debugMode", async ({
+		overrides,
+		debugMode,
+	}: {
+		overrides: Partial<SubscribeProps>;
+		debugMode: boolean;
+	}) => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const realtime = {
+			subscribe: vi.fn(async () => subscription),
+			close: vi.fn(),
+		};
+		realtimeModule.createRealtime.mockReturnValueOnce(realtime);
+		const { connect: _injected, ...dependencies } =
+			setupResult.dependencies;
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			{ ...props(false, controller.signal, output.out), ...overrides },
+			dependencies,
+		);
+		await setupResult.ready;
+		controller.abort();
+		await run;
+
+		expect(realtimeModule.createRealtime).toHaveBeenLastCalledWith({
+			url: "wss://realtime.example/v1",
+			secret: "secret",
+			db: "neondb",
+			debugMode,
+		});
+		expect(realtime.subscribe).toHaveBeenCalledWith({
+			query: "SELECT * FROM items",
+		});
+		expect(realtime.close).toHaveBeenCalledOnce();
+	});
+
+	it("prints the error code and SQLSTATE next to the error message", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, output.out, "table"),
+			{
+				...setupResult.dependencies,
+				now: () => new Date("2026-10-13T12:34:56.000Z"),
+			},
+		);
+		await setupResult.ready;
+		const error = Object.assign(new Error('column "nope" does not exist'), {
+			code: "upstream_rejected",
+			sqlState: "42703",
+			retryable: false,
+		});
+		subscription.emitState({ status: "error", error });
+
+		const failure = await run.then(
+			() => undefined,
+			(reason: unknown) => reason,
+		);
+		const described =
+			'column "nope" does not exist (upstream_rejected, SQLSTATE 42703)';
+		expect(stripAnsi(output.text())).toContain(
+			`[2026-10-13T12:34:56.000Z] Subscription failed — ${described}`,
+		);
+		expect(failure).toBeInstanceOf(Error);
+		expect((failure as Error).message).toBe(described);
+		expect((failure as { cause?: unknown }).cause).toBe(error);
+	});
+
+	it("prints the error code without a SQLSTATE when PostgreSQL supplied none", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, output.out),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+		const error = Object.assign(new Error("baseline sync failed"), {
+			code: "baseline_sync_failed",
+			retryable: false,
+		});
+		subscription.emitState({ status: "error", error });
+
+		await expect(run).rejects.toThrow(
+			/^baseline sync failed \(baseline_sync_failed\)$/,
+		);
+	});
+
+	it("does not repeat a code the message already names", async () => {
+		const subscription = new FakeSubscription();
+		const setupResult = setup(subscription);
+		const output = capture();
+		const controller = new AbortController();
+		const run = subscribe(
+			props(false, controller.signal, output.out),
+			setupResult.dependencies,
+		);
+		await setupResult.ready;
+		const error = Object.assign(
+			new Error("Live query failed: renewal_failed"),
+			{ code: "renewal_failed", retryable: false },
+		);
+		subscription.emitState({ status: "error", error });
+
+		await expect(run).rejects.toBe(error);
 	});
 });
