@@ -69,9 +69,13 @@ export function assertFunctionEnv(
 	source: FunctionEnvSource,
 	target: FunctionEnvTarget,
 ): void {
+	const fix =
+		target === "deploy"
+			? "Set it in the environment or in the file passed to --env."
+			: 'Set it in .env.local, the environment, or the file passed to --env, or declare it { required: "deploy" } if only the deployed Function needs it.';
 	const issues = missingFunctionEnv(config, source, target).map(
 		({ slug, key }) =>
-			`Environment variable "${key}" for function "${slug}" is required and unset. Set it in the environment or in the file passed to --env.`,
+			`Environment variable "${key}" for function "${slug}" is required and unset. ${fix}`,
 	);
 	if (issues.length > 0) throw new ConfigValidationError(issues);
 }

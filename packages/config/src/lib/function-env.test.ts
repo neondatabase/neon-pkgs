@@ -156,3 +156,20 @@ describe("missingFunctionEnv / assertFunctionEnv", () => {
 		).not.toThrow();
 	});
 });
+
+describe("assertFunctionEnv messages", () => {
+	test('neon dev points at { required: "deploy" }', () => {
+		const config = defineConfig({
+			functions: {
+				alpha: {
+					name: "Alpha",
+					source: "./alpha.ts",
+					env: { SECRET_A: { required: true } },
+				},
+			},
+		});
+		expect(() => assertFunctionEnv(config, {}, "run")).toThrow(
+			'or declare it { required: "deploy" } if only the deployed Function needs it.',
+		);
+	});
+});
