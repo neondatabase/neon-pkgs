@@ -1000,6 +1000,27 @@ describe("pushConfig", () => {
 			expect(deployedEnv(api)).toMatchObject({ DSN: "", GUILD: "" });
 		});
 
+		test("value wins over the env source", async () => {
+			const { api, projectId } = seededFake();
+			const config = defineConfig({
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						env: { TOKEN: { value: "from-value" } },
+					},
+				},
+			});
+			await pushConfig(config, {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+				env: { TOKEN: "from-source" },
+			});
+			expect(deployedEnv(api)).toEqual({ TOKEN: "from-value" });
+		});
+
 		test("a passed env is the only source", async () => {
 			const { api, projectId } = seededFake();
 			process.env.TOKEN = "from-process";

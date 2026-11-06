@@ -101,13 +101,12 @@ type FunctionEnvOf<
 		: Record<never, never>
 	: Record<never, never>;
 
-/** `string` only when the entry guarantees a value; any other declaration may be unset. */
-type FunctionEnvValueOf<V> = V extends
-	| string
-	| { required?: true }
-	| { default: string }
-	? string
-	: string | undefined;
+/** `string` unless the declaration's `required` may be `false` or `"production"`. */
+type FunctionEnvValueOf<V> = V extends { required: infer R }
+	? R extends true
+		? string
+		: string | undefined
+	: string;
 
 /**
  * The extra `function` namespace added to `parseEnv`'s result when called with a function
@@ -414,7 +413,15 @@ export function parseEnv(
 			);
 		}
 		const { env: literal, envVars } = splitFunctionEnv(fn.env);
-		const declared = resolveFunctionEnv(envVars, source, "development");
+		// `value` read the deployer's environment; at runtime the value is under its key.
+		const injected =
+			envVars &&
+			Object.fromEntries(
+				Object.entries(envVars).map(
+					([key, { value: _value, ...rest }]) => [key, rest],
+				),
+			);
+		const declared = resolveFunctionEnv(injected, source, "development");
 		const envOut: Record<string, string> = { ...declared.env };
 		for (const key of declared.missing) {
 			issues.push(`${key} is missing (function "${scope}")`);

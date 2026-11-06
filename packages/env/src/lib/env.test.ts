@@ -602,6 +602,27 @@ describe("parseEnv", () => {
 			).toBe("postgres://pooled");
 		});
 
+		test("reads the deployed key, not value", () => {
+			stubBranch();
+			const withValue = defineConfig({
+				functions: {
+					gamma: {
+						name: "Gamma",
+						source: "./gamma.ts",
+						env: { SECRET_G: { value: "read-at-deploy" } },
+					},
+				},
+			});
+			vi.stubEnv("SECRET_G", "injected");
+			expect(parseEnv(withValue, "gamma").function).toEqual({
+				SECRET_G: "injected",
+			});
+			vi.stubEnv("SECRET_G", undefined);
+			expect(() => parseEnv(withValue, "gamma")).toThrow(
+				'SECRET_G is missing (function "gamma")',
+			);
+		});
+
 		test("a missing required: true declaration is EnvNotInjected", () => {
 			stubBranch();
 			vi.stubEnv("SECRET_B", undefined);

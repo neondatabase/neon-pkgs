@@ -114,9 +114,9 @@ export interface PushConfigOptions {
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
-	 * Values for declared Function env variables (`{ required: true }`, …). Defaults to
-	 * `process.env`. A passed object is the only source: `{}` resolves every declaration as
-	 * unset.
+	 * Values for declared Function env variables without `value`. Defaults to
+	 * `process.env`. A passed object is the only source: `{}` resolves every such
+	 * declaration as unset.
 	 */
 	env?: FunctionEnvSource;
 	/**

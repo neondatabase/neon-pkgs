@@ -9,7 +9,7 @@ import type { Config, FunctionEnvValue, FunctionEnvVar } from "./types.js";
  */
 export type FunctionEnvTarget = "production" | "preview" | "development";
 
-/** Where declared values are read from, usually `process.env`. */
+/** Where declarations without `value` are read from, usually `process.env`. */
 export type FunctionEnvSource = Readonly<Record<string, string | undefined>>;
 
 export interface ResolvedFunctionEnv {
@@ -56,7 +56,7 @@ export function resolveFunctionEnv(
 	const env: Record<string, string> = {};
 	const missing: string[] = [];
 	for (const [key, declaration] of Object.entries(envVars ?? {})) {
-		const value = source[key];
+		const value = "value" in declaration ? declaration.value : source[key];
 		if (value !== undefined && value !== "") {
 			env[key] = value;
 		} else if (declaration.default !== undefined) {

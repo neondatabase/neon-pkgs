@@ -423,6 +423,11 @@ describe("parseEnv existing overloads still type", () => {
 					source: "./hello.ts",
 					env: {
 						TOKEN: {},
+						VALUE: { value: process.env.VALUE },
+						OPTIONAL_VALUE: {
+							value: process.env.OPTIONAL_VALUE,
+							required: false,
+						},
 						EXPLICIT: { required: true },
 						DSN: { required: "production" },
 						GUILD: { required: false },
@@ -434,6 +439,8 @@ describe("parseEnv existing overloads still type", () => {
 		});
 		expectTypeOf(parseEnv(config, "hello").function).toEqualTypeOf<{
 			TOKEN: string;
+			VALUE: string;
+			OPTIONAL_VALUE: string | undefined;
 			EXPLICIT: string;
 			DSN: string | undefined;
 			GUILD: string | undefined;

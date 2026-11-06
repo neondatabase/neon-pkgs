@@ -17,7 +17,7 @@ export default defineConfig({
 		beta: {
 			name: "function env beta",
 			source: "./beta.ts",
-			env: { SECRET_B: {} },
+			env: { SECRET_B: { value: process.env.SECRET_B } },
 		},
 	},
 });

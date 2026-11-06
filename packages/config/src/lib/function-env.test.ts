@@ -67,6 +67,24 @@ describe("resolveFunctionEnv", () => {
 		});
 	});
 
+	test("value is used instead of process.env.<key>, and an undefined value is unset", () => {
+		const declared = {
+			RENAMED: { value: "from-other" },
+			UNSET: { value: undefined },
+			FALLBACK: { value: undefined, default: "1" },
+			OPTIONAL: { value: "", required: false },
+		} satisfies Record<string, FunctionEnvVar>;
+		const source = {
+			RENAMED: "ignored",
+			UNSET: "ignored",
+			OPTIONAL: "ignored",
+		};
+		expect(resolveFunctionEnv(declared, source, "production")).toEqual({
+			env: { RENAMED: "from-other", FALLBACK: "1", OPTIONAL: "" },
+			missing: ["UNSET"],
+		});
+	});
+
 	test("an empty value counts as unset", () => {
 		const empty = { TOKEN: "", EXPLICIT: "", DSN: "", GUILD: "", RATE: "" };
 		expect(resolveFunctionEnv(DECLARED, empty, "production")).toEqual(

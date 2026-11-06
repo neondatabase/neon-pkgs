@@ -232,6 +232,7 @@ const functionEnvValueSchema = z.string({
 
 const functionEnvVarSchema = z
 	.strictObject({
+		value: z.string().optional(),
 		required: z.union([z.boolean(), z.literal("production")]).optional(),
 		default: z
 			.string()
@@ -266,7 +267,7 @@ const functionEnvEntrySchema = z.union(
 	{
 		error: (issue) =>
 			undefinedFunctionEnvMessage(issue) ??
-			'Expected a string or a declaration: {} (required), { required: "production" }, { required: false }, or { default: "<value>" }.',
+			'Expected a string or a declaration: { value } (required), { value, required: "production" }, { value, required: false }, or { value, default: "<fallback>" }. Omit `value` to read the variable named by the key.',
 	},
 );
 
@@ -288,8 +289,11 @@ function undefinedFunctionEnvMessage(issue: {
 			: key !== undefined
 				? `Environment variable "${key}"`
 				: "An environment variable";
-	const declaration = key !== undefined ? `\`${key}: {}\`` : "`{}`";
-	return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Declare it as ${declaration} so neon.ts reads it only when deploying or running \`neon dev\`, or set it (for example \`neon deploy --env <file>\`). Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
+	const declaration =
+		key !== undefined
+			? `\`${key}: { value: process.env.${key} }\``
+			: "`{ value: process.env.X }`";
+	return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Declare it as ${declaration} so an unset value fails only the commands that need it, or set it (for example \`neon deploy --env <file>\`). Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
 }
 
 const functionEnvSchema = z.record(z.string(), functionEnvEntrySchema);

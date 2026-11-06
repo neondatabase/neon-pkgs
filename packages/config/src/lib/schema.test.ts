@@ -714,7 +714,7 @@ describe("configInputSchema", () => {
 		expect(formatted).toContain('function "hello"');
 		// …explains the likely cause and the fix…
 		expect(formatted).toContain("process.env");
-		expect(formatted).toContain("`test: {}`");
+		expect(formatted).toContain("`test: { value: process.env.test }`");
 		expect(formatted).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(formatted).not.toContain(
@@ -738,7 +738,7 @@ describe("configInputSchema", () => {
 		const formatted = formatZodIssues(result.error).join("\n");
 		expect(formatted).toContain("preview.functions.hello.env.count");
 		expect(formatted).toContain(
-			'Expected a string or a declaration: {} (required), { required: "production" }',
+			'Expected a string or a declaration: { value } (required), { value, required: "production" }',
 		);
 		// The undefined-specific guidance must not fire for a defined wrong type.
 		expect(formatted).not.toContain("process.env");
@@ -760,6 +760,8 @@ describe("function env declarations", () => {
 		expect(
 			parseEnv({
 				TOKEN: {},
+				VALUE: { value: "v" },
+				UNSET_VALUE: { value: undefined, required: false },
 				EXPLICIT: { required: true },
 				DSN: { required: "production" },
 				GUILD: { required: false },
@@ -792,7 +794,7 @@ describe("function env declarations", () => {
 
 	test("rejects an unknown required value with the accepted forms", () => {
 		expect(issues({ TOKEN: { required: "deploy" } })).toContain(
-			'functions.hello.env.TOKEN: Expected a string or a declaration: {} (required), { required: "production" }',
+			'functions.hello.env.TOKEN: Expected a string or a declaration: { value } (required), { value, required: "production" }',
 		);
 	});
 });

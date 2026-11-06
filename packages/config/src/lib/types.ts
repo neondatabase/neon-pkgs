@@ -382,24 +382,28 @@ export type FunctionBundler = (
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
- * A Function env variable read from `process.env.<key>` when a command needs its value.
- * Declaring a variable makes it required; `required` narrows where, and `default` fills it
- * in. An empty value counts as unset.
+ * A Function env variable resolved when a command needs its value: from `value`, or from
+ * `process.env.<key>` when `value` is omitted. Declaring a variable makes it required;
+ * `required` narrows where, and `default` fills it in. An undefined or empty value counts
+ * as unset.
  *
  * | Declaration | Unset on a production deploy | Unset on a preview deploy | Unset in `neon dev` | `parseEnv` type |
  * | --- | --- | --- | --- | --- |
- * | `{}` or `{ required: true }` | fails | fails | fails | `string` |
- * | `{ required: "production" }` | fails | left out | runs without it | `string \| undefined` |
- * | `{ required: false }` | left out | left out | runs without it | `string \| undefined` |
- * | `{ default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
+ * | `{ value }`, `{}`, or `{ required: true }` | fails | fails | fails | `string` |
+ * | `{ value, required: "production" }` | fails | left out | runs without it | `string \| undefined` |
+ * | `{ value, required: false }` | left out | left out | runs without it | `string \| undefined` |
+ * | `{ value, default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
  *
  * Production is the project's default branch; every other branch is a preview. A variable
  * that is "left out" is removed from the Function if an earlier deploy set it. Keys that
  * `neon.ts` does not declare are left as they are.
+ *
+ * `parseEnv` reads the deployed key, not `value`: inside a Function, `value` refers to an
+ * environment the deploy has already read.
  */
 export type FunctionEnvVar =
-	| { required?: boolean | "production"; default?: never }
-	| { default: string; required?: never };
+	| { value?: string; required?: boolean | "production"; default?: never }
+	| { value?: string; default: string; required?: never };
 
 /** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
 export type FunctionEnvValue = string | FunctionEnvVar;
@@ -436,7 +440,7 @@ export interface FunctionDef {
 	 *
 	 * A literal string is uploaded as is. An unset `process.env.X` written as a literal
 	 * fails validation wherever `neon.ts` is evaluated.
-	 * @example { RESEND_API_KEY: {}, SENTRY_DSN: { required: "production" }, LOG_LEVEL: "info" }
+	 * @example { RESEND_API_KEY: { value: process.env.RESEND_API_KEY }, LOG_LEVEL: "info" }
 	 */
 	env?: Record<string, FunctionEnvValue>;
 	/**
