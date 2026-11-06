@@ -94,6 +94,35 @@ DNS is yours: `plan` / `apply` print `CNAME <hostname> -> <cname_target>` when t
 
 A project that can deploy functions can still reject custom-domain list and register with HTTP 404 until custom domains are enabled for that project.
 
+### Function env
+
+Each `env` entry is a literal string or a declaration. A declaration reads `process.env.<key>` when `neon deploy`, `neon dev`, or `parseEnv` needs the value, and states what happens when the variable is unset:
+
+```ts
+env: {
+  DISCORD_BOT_TOKEN: { required: true },
+  SENTRY_DSN: { required: "deploy" },
+  DISCORD_GUILD_ID: { required: false },
+  ADMIN_TOKEN: { required: false, ifUnset: "keep" },
+  SENTRY_TRACES_SAMPLE_RATE: { default: "1" },
+  LOG_LEVEL: "info",
+},
+```
+
+| Declaration | Unset on `neon deploy` | Unset in `neon dev` | `parseEnv(config, slug).function` |
+| --- | --- | --- | --- |
+| `{ required: true }` | fails before any API call | fails before any Function starts | `string` |
+| `{ required: "deploy" }` | fails before any API call | runs without it | `string \| undefined` |
+| `{ required: false }` | removes the deployed value | runs without it | `string \| undefined` |
+| `{ required: false, ifUnset: "keep" }` | leaves the deployed value | runs without it | `string \| undefined` |
+| `{ default: "1" }` | deploys `"1"` | uses `"1"` | `string` |
+
+An empty value (`KEY=` in a `.env` file) counts as unset. `ifUnset: "keep"` is for a value set outside `neon.ts`, for example with `neon functions deploy <slug> --env KEY=VALUE`.
+
+A literal string is uploaded as is. `process.env.X!` still works, but it is evaluated wherever `neon.ts` is imported: app code, `drizzle.config.ts`, and each deployed Function that calls `parseEnv(config, …)`. Each of those then needs every Function's secrets, so a deployed Function fails to load when another Function's secret is missing from its runtime. Declarations avoid that.
+
+`plan`, `apply`, and `createBranch` from `@neon/config-runtime` take `env` (default `process.env`) as the source for declarations. A passed object is the only source: `env: {}` resolves every declaration as unset.
+
 ### Shipping a prebuilt directory (`bundler: "none"`)
 
 esbuild is the default. A file `source` is the entry; a directory is searched for `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to zip `source` as-is instead — a directory whose root contains `index.mjs` or `index.js`, or a single file of that name:

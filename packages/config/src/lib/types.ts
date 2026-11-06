@@ -382,6 +382,30 @@ export type FunctionBundler = (
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
+ * A Function env variable whose value comes from `process.env.<key>` when a command needs
+ * it. An empty value counts as unset, because uploading `""` deletes the deployed variable.
+ *
+ * | Declaration | Unset on `neon deploy` | Unset in `neon dev` | `parseEnv` type |
+ * | --- | --- | --- | --- |
+ * | `{ required: true }` | fails | fails | `string` |
+ * | `{ required: "deploy" }` | fails | runs without it | `string \| undefined` |
+ * | `{ required: false }` | removes the deployed value | runs without it | `string \| undefined` |
+ * | `{ required: false, ifUnset: "keep" }` | leaves the deployed value | runs without it | `string \| undefined` |
+ * | `{ default: "1" }` | deploys `"1"` | uses `"1"` | `string` |
+ *
+ * `ifUnset: "keep"` is for a value set outside `neon.ts`, such as with
+ * `neon functions deploy <slug> --env KEY=VALUE`.
+ */
+export type FunctionEnvVar =
+	| { required: true }
+	| { required: "deploy" }
+	| { required: false; ifUnset?: "delete" | "keep" }
+	| { default: string };
+
+/** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
+export type FunctionEnvValue = string | FunctionEnvVar;
+
+/**
  * Static definition of a Neon Function. Declares that the function
  * **exists** on every branch; its branch-unique slug is the **record key** in
  * `functions` (or deprecated {@link PreviewInput.functions}), so slugs are statically enumerable,
@@ -405,11 +429,18 @@ export interface FunctionDef {
 	/**
 	 * Environment variables injected into the deployed function, keyed by the var name the
 	 * function reads at runtime. The **keys** are static (preserved at the type level so
-	 * `parseEnv(config, "<slug>").function.<key>` is typed). An unset `process.env.X`
-	 * fails validation. Omit a key to preserve its deployed value; an empty string deletes it.
-	 * @example { resendApiKey: process.env.RESEND_API_KEY! }
+	 * `parseEnv(config, "<slug>").function.<key>` is typed).
+	 *
+	 * A value is a literal string or a {@link FunctionEnvVar} declaration. A declaration reads
+	 * `process.env.<key>` only when `neon deploy`, `neon dev`, or `parseEnv` needs the value,
+	 * so importing `neon.ts` never fails on an unset variable.
+	 *
+	 * A literal string is uploaded as is. An unset `process.env.X` written as a literal
+	 * fails validation wherever `neon.ts` is evaluated. Omit a key to preserve its deployed
+	 * value; an empty string deletes it.
+	 * @example { RESEND_API_KEY: { required: true }, LOG_LEVEL: "info" }
 	 */
-	env?: Record<string, string>;
+	env?: Record<string, FunctionEnvValue>;
 	/**
 	 * Ship a dependency's real files into the deployed archive instead of bundling it —
 	 * `sharp` and other packages backed by a native binary.
@@ -1052,7 +1083,16 @@ export interface ResolvedFunctionConfig {
 	slug: string;
 	name: string;
 	source: string;
+	/**
+	 * Literal env values from `neon.ts`. Before a deploy, `pushConfig` adds the values
+	 * resolved from {@link envVars}.
+	 */
 	env: Record<string, string>;
+	/**
+	 * The {@link FunctionEnvVar} declarations from {@link FunctionDef.env}, unresolved.
+	 * Absent when the function declares none.
+	 */
+	envVars?: Record<string, FunctionEnvVar>;
 	/**
 	 * Packages the bundler leaves unresolved, normalized from
 	 * {@link FunctionDef.externalPackages} with `includeFiles` defaulted.

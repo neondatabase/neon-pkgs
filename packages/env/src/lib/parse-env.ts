@@ -15,7 +15,9 @@ import {
 	type Config,
 	ErrorCode,
 	PlatformError,
+	resolveFunctionEnv,
 	type ServiceToggleInput,
+	splitFunctionEnv,
 } from "@neon/config/v1";
 import {
 	type FilteredNeonEnv,
@@ -89,22 +91,31 @@ type FunctionScopeField<C extends Config, S extends string> = [
 	? NoFunctionScopeHint
 	: S;
 
-/** The declared env-var keys of one function `S`, as a string union. */
-type FunctionEnvKeysOf<
+/** The declared `env` record of one function `S`. */
+type FunctionEnvOf<
 	C extends Config,
 	S extends string,
 > = S extends keyof PreviewFunctionsOf<C>
 	? NonNullable<PreviewFunctionsOf<C>[S]> extends { env: infer E }
-		? Extract<keyof E, string>
-		: never
-	: never;
+		? E
+		: Record<never, never>
+	: Record<never, never>;
+
+/** A declaration that `neon dev` may run without resolves to `string | undefined`. */
+type FunctionEnvValueOf<V> = V extends { required: false | "deploy" }
+	? string | undefined
+	: string;
 
 /**
  * The extra `function` namespace added to `parseEnv`'s result when called with a function
- * slug scope: the declared env-var keys for that function, each resolved to a `string`.
+ * slug scope: the declared env-var keys for that function, typed per declaration.
  */
 export type NeonFunctionEnv<C extends Config, S extends string> = {
-	function: Record<FunctionEnvKeysOf<C, S>, string>;
+	function: {
+		[K in Extract<keyof FunctionEnvOf<C, S>, string>]: FunctionEnvValueOf<
+			FunctionEnvOf<C, S>[K]
+		>;
+	};
 };
 
 // ───────────────────────── parseEnv ─────────────────────────
@@ -399,10 +410,15 @@ export function parseEnv(
 				{ details: { scope } },
 			);
 		}
-		const envOut: Record<string, string> = {};
-		for (const key of Object.keys(fn.env ?? {})) {
+		const { env: literal, envVars } = splitFunctionEnv(fn.env);
+		const declared = resolveFunctionEnv(envVars, source, "run");
+		const envOut: Record<string, string> = { ...declared.env };
+		for (const key of declared.missing) {
+			issues.push(`${key} is missing (function "${scope}")`);
+		}
+		for (const key of Object.keys(literal)) {
 			const value = source[key];
-			// Only a truly *unset* var is "not injected". Function env values carry no
+			// Only a truly *unset* var is "not injected". Literal function env values carry no
 			// non-empty constraint (unlike DATABASE_URL / NEON_AUTH_BASE_URL), so a
 			// deliberately empty value is a present, valid value and is passed through.
 			if (value === undefined) {

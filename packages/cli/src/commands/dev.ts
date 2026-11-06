@@ -316,9 +316,15 @@ const runSingleSource = async (
 		slug: null,
 		source,
 		bundleDir: devBundleDir(process.cwd()),
-		childEnv: buildChildEnv({ ...neonEnv, ...overlay }, port),
+		childEnv: buildChildEnv(
+			{ ...neonEnv, ...match?.declaredEnv, ...overlay },
+			port,
+		),
 		label: null,
-		envSummary: { neon: Object.keys(neonEnv), fn: [] },
+		envSummary: {
+			neon: Object.keys(neonEnv),
+			fn: Object.keys(match?.declaredEnv ?? {}),
+		},
 	};
 
 	// No config reload in single-source mode: there's exactly one file to serve, and

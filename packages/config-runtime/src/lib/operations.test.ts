@@ -186,6 +186,29 @@ describe("createBranch", () => {
 		},
 	});
 
+	test("creates no branch when a required declared function env var is unset", async () => {
+		const { api, projectId } = seededFake();
+		const before = (await api.listBranches(projectId)).length;
+		const policy = defineConfig({
+			functions: {
+				fn1: {
+					name: "Fn",
+					source: "./fn.ts",
+					env: { TOKEN: { required: true } },
+				},
+			},
+		});
+		await expect(
+			createBranch(policy, {
+				api,
+				projectId,
+				branchName: "dev-1",
+				env: {},
+			}),
+		).rejects.toThrow('"TOKEN" for function "fn1" is required and unset');
+		expect(await api.listBranches(projectId)).toHaveLength(before);
+	});
+
 	test("applies creation-time tuning gated on !branch.exists", async () => {
 		const { api, projectId } = seededFake();
 		const { branchId, branchName, result } = await createBranch(devPolicy, {

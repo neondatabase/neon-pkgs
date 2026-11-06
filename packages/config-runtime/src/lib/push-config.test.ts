@@ -920,6 +920,88 @@ describe("pushConfig", () => {
 		expect(Array.from(input)).toEqual([1, 2, 3, 4]);
 	});
 
+	describe("declared function env", () => {
+		const declaredConfig = () =>
+			defineConfig({
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						env: {
+							LOG_LEVEL: "info",
+							TOKEN: { required: true },
+							DSN: { required: "deploy" },
+							GUILD: { required: false },
+							ADMIN: { required: false, ifUnset: "keep" },
+							RATE: { default: "1" },
+						},
+					},
+				},
+			});
+		const noBundle = async () => new Uint8Array([1]);
+
+		test("uploads set values and defaults, deletes unset optionals, and leaves keep ones out", async () => {
+			const { api, projectId } = seededFake();
+			await pushConfig(declaredConfig(), {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+				env: { TOKEN: "t", DSN: "d" },
+			});
+			const deploy = api.history.find(
+				(h) => h.method === "deployBranchFunction",
+			);
+			expect(
+				(deploy?.args[3] as { environment: Record<string, string> })
+					.environment,
+			).toEqual({
+				LOG_LEVEL: "info",
+				TOKEN: "t",
+				DSN: "d",
+				GUILD: "",
+				RATE: "1",
+			});
+		});
+
+		test("fails before any API call when a required variable is unset", async () => {
+			const { api, projectId } = seededFake();
+			const before = api.history.length;
+			await expect(
+				pushConfig(declaredConfig(), {
+					api,
+					projectId,
+					branchId: "br-main",
+					bundleFunction: noBundle,
+					env: { TOKEN: "t" },
+				}),
+			).rejects.toThrow(
+				'Environment variable "DSN" for function "fn1" is required and unset.',
+			);
+			expect(api.history.length).toBe(before);
+		});
+
+		test("a passed env is the only source", async () => {
+			const { api, projectId } = seededFake();
+			process.env.TOKEN = "from-process";
+			process.env.DSN = "from-process";
+			try {
+				await expect(
+					pushConfig(declaredConfig(), {
+						api,
+						projectId,
+						branchId: "br-main",
+						bundleFunction: noBundle,
+						env: {},
+					}),
+				).rejects.toThrow('"TOKEN" for function "fn1" is required');
+			} finally {
+				delete process.env.TOKEN;
+				delete process.env.DSN;
+			}
+		});
+	});
+
 	test("re-deploys an existing function as an update, without duplicating it", async () => {
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {

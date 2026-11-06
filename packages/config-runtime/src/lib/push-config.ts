@@ -1,11 +1,13 @@
 import {
 	type AppliedChange,
+	assertFunctionEnv,
 	type Config,
 	type ConflictReport,
 	type CreateTriggerInput,
 	createNeonApiFromOptions,
 	diffConfig,
 	ErrorCode,
+	type FunctionEnvSource,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonCustomDomainSnapshot,
@@ -22,6 +24,7 @@ import {
 	type ResolvedFunctionTrigger,
 	type ResolvedPreviewConfig,
 	resolveConfig,
+	resolveFunctionEnv,
 	type UpdateTriggerInput,
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
@@ -110,6 +113,12 @@ export interface PushConfigOptions {
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
+	 * Values for declared Function env variables (`{ required: true }`, …). Defaults to
+	 * `process.env`. A passed object is the only source: `{}` resolves every declaration as
+	 * unset.
+	 */
+	env?: FunctionEnvSource;
+	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
 	 * change that *would* run on a real push (with the same action / identifier / details
@@ -150,6 +159,27 @@ export interface PushConfirmContext {
 	overrides: readonly ConflictReport[];
 }
 
+/** Add each function's resolved declared env to its literal env. */
+function withDeployFunctionEnv(
+	resolved: ResolvedBranchConfig,
+	source: FunctionEnvSource,
+): ResolvedBranchConfig {
+	if (!resolved.preview) return resolved;
+	return {
+		...resolved,
+		preview: {
+			...resolved.preview,
+			functions: resolved.preview.functions.map((fn) => ({
+				...fn,
+				env: {
+					...fn.env,
+					...resolveFunctionEnv(fn.envVars, source, "deploy").env,
+				},
+			})),
+		},
+	};
+}
+
 /**
  * Push a Neon branch policy to a specific project + branch.
  *
@@ -163,6 +193,8 @@ export async function pushConfig(
 	config: Config,
 	options: PushConfigOptions,
 ): Promise<PushResult> {
+	const envSource = options.env ?? process.env;
+	assertFunctionEnv(config, envSource, "deploy");
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 
@@ -186,15 +218,18 @@ export async function pushConfig(
 	const remoteProject = await projectRead;
 	const [branches, endpoints] = await listsRead;
 	const branch = resolveRemoteBranch(options.branchId, branches);
-	const resolved = resolveConfig(config, {
-		name: branch.name,
-		id: branch.id,
-		exists: options.branchExists !== false,
-		...(branch.parentId ? { parentId: branch.parentId } : {}),
-		isDefault: branch.isDefault,
-		isProtected: branch.protected,
-		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
-	});
+	const resolved = withDeployFunctionEnv(
+		resolveConfig(config, {
+			name: branch.name,
+			id: branch.id,
+			exists: options.branchExists !== false,
+			...(branch.parentId ? { parentId: branch.parentId } : {}),
+			isDefault: branch.isDefault,
+			isProtected: branch.protected,
+			...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
+		}),
+		envSource,
+	);
 	const realtimeApi = hasRealtimePolicy(resolved)
 		? requireRealtimeApi(api)
 		: undefined;

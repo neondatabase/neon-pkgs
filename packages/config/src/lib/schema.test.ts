@@ -714,7 +714,7 @@ describe("configInputSchema", () => {
 		expect(formatted).toContain('function "hello"');
 		// …explains the likely cause and the fix…
 		expect(formatted).toContain("process.env");
-		expect(formatted).toContain("omit the key from neon.ts");
+		expect(formatted).toContain("`test: { required: true }`");
 		expect(formatted).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(formatted).not.toContain(
@@ -722,7 +722,7 @@ describe("configInputSchema", () => {
 		);
 	});
 
-	test("keeps zod's default message for a non-undefined wrong-typed env value", () => {
+	test("names the accepted forms for a non-undefined wrong-typed env value", () => {
 		const result = configInputSchema.safeParse({
 			preview: {
 				functions: {
@@ -737,9 +737,55 @@ describe("configInputSchema", () => {
 		if (result.success) throw new Error("expected failure");
 		const formatted = formatZodIssues(result.error).join("\n");
 		expect(formatted).toContain("preview.functions.hello.env.count");
-		expect(formatted).toContain("expected string");
+		expect(formatted).toContain(
+			'Expected a string or one of { required: true }, { required: "deploy" }',
+		);
 		// The undefined-specific guidance must not fire for a defined wrong type.
 		expect(formatted).not.toContain("process.env");
+	});
+});
+
+describe("function env declarations", () => {
+	const parseEnv = (env: Record<string, unknown>) =>
+		configInputSchema.safeParse({
+			functions: { hello: { name: "Hello", source: "./hello.ts", env } },
+		});
+	const issues = (env: Record<string, unknown>): string => {
+		const result = parseEnv(env);
+		if (result.success) throw new Error("expected failure");
+		return formatZodIssues(result.error).join("\n");
+	};
+
+	test("accepts every declaration next to a literal string", () => {
+		expect(
+			parseEnv({
+				TOKEN: { required: true },
+				DSN: { required: "deploy" },
+				GUILD: { required: false },
+				ADMIN: { required: false, ifUnset: "keep" },
+				OLD: { required: false, ifUnset: "delete" },
+				RATE: { default: "1" },
+				LOG_LEVEL: "info",
+			}).success,
+		).toBe(true);
+	});
+
+	test("rejects an empty default, which would delete the deployed value", () => {
+		expect(issues({ RATE: { default: "" } })).toContain(
+			"functions.hello.env.RATE.default: default must not be empty",
+		);
+	});
+
+	test("rejects ifUnset on a required variable", () => {
+		expect(
+			issues({ TOKEN: { required: true, ifUnset: "keep" } }),
+		).toContain('functions.hello.env.TOKEN: unknown key: "ifUnset"');
+	});
+
+	test("rejects an unknown required value with the accepted forms", () => {
+		expect(issues({ TOKEN: { required: "yes" } })).toContain(
+			"functions.hello.env.TOKEN: Expected a string or one of",
+		);
 	});
 });
 
