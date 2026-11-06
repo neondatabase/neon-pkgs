@@ -21,6 +21,7 @@ import {
 	createProjectTool,
 	createRoleTool,
 	getDefaultTool,
+	lokiQueryRangeTool,
 	resetFromParentTool,
 	restoreSnapshotTool,
 	setScheduleTool,
@@ -1196,6 +1197,7 @@ export const toolFactories = {
 					{ signal },
 				),
 		}),
+	"logs.loki.queryRange": lokiQueryRangeTool,
 	"snapshots.list": (options) =>
 		fromGenerated(options, {
 			id: "snapshots.list",

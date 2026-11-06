@@ -82,6 +82,61 @@ describe("special mappings", () => {
 		});
 	});
 
+	test("queries Loki on the telemetry API and returns its body unchanged", async () => {
+		const body = {
+			status: "success",
+			data: {
+				resultType: "streams",
+				result: [
+					{
+						stream: { entity_type: "function" },
+						values: [["1793988960709494000", "invoke end"]],
+					},
+				],
+			},
+			warnings: ["result truncated"],
+		};
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["logs.loki.queryRange"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse(body);
+			},
+		});
+		const tool = tools["logs.loki.queryRange"];
+
+		expect(tool.id).toBe("query_range_logs_loki");
+		expect(tool.annotations.readOnlyHint).toBe(true);
+		expect(
+			tool.inputSchema.safeParse({
+				project_id: "p-1",
+				branch_id: "br-1",
+				query: "{}",
+				field: "x",
+			}).success,
+		).toBe(false);
+		const result = await tool.execute({
+			project_id: "p-1",
+			branch_id: "br-1",
+			query: '{entity_type="function"}',
+			since: "30m",
+			limit: 10,
+		});
+
+		expect(result).toEqual({ data: body });
+		const url = new URL(requests[0].url);
+		expect(url.pathname).toBe(
+			"/telemetry/v1/projects/p-1/branches/br-1/loki/api/v1/query_range",
+		);
+		expect(Object.fromEntries(url.searchParams)).toEqual({
+			query: '{entity_type="function"}',
+			since: "30m",
+			limit: "10",
+		});
+	});
+
 	test("maps snapshot restore finalize rather than finalize_restore", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({

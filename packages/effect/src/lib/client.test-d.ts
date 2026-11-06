@@ -1,6 +1,7 @@
 import type {
 	Branch,
 	CurrentUserInfoResponse,
+	LokiQueryRangeResponse,
 	MemberWithUser,
 	Operation,
 	Organization,
@@ -48,6 +49,15 @@ describe("NeonEffectClient", () => {
 		>();
 		expectTypeOf(neon.operations.waitFor({ operations })).toEqualTypeOf<
 			Effect.Effect<void, NeonEffectError>
+		>();
+		expectTypeOf(
+			neon.logs.loki.queryRange({
+				projectId: "p",
+				branchId: "b",
+				query: "{}",
+			}),
+		).toEqualTypeOf<
+			Effect.Effect<LokiQueryRangeResponse, NeonEffectError>
 		>();
 		expectTypeOf(
 			neon.postgres.roles.password({

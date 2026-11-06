@@ -1266,9 +1266,8 @@ Two combinations are rejected before the request: `--since` with `--start-time`,
 ### Loki API (`logs loki`)
 
 `neon logs loki` calls the branch's [Loki-compatible read API](https://neon.com/docs/cli/logs#loki-read-api) directly, using the CLI's
-normal authentication, project selection and branch resolution. Like `gh api graphql`,
-it accepts a query and repeatable `-f key=value` URL parameters. JSON is the command's
-default output; `--output json` and `--output yaml` are supported. It preserves the full
+normal authentication, project selection and branch resolution, through
+`neon.logs.loki` in `@neon/sdk`. JSON is the command's default output; `--output json` and `--output yaml` are supported. It preserves the full
 Loki response envelope. Help and shell completion work without authentication.
 
 Discover labels and service names, then choose a selector and bound the query:
@@ -1277,35 +1276,33 @@ Discover labels and service names, then choose a selector and bound the query:
 neon logs loki --endpoint labels
 neon logs loki --endpoint label/service_name/values --since 6h
 neon logs loki '{entity_type="function"} |= "error"' --since 30m --limit 100
-neon logs loki -f 'query={entity_type="function"}' -f limit=200 -f direction=forward
+neon logs loki '{entity_type="function"}' --limit 200 --direction forward
 neon logs loki '{entity_type="function"}' --project-id <id> --branch main \
   --start 2026-11-01T00:00:00Z --end 2026-11-01T01:00:00Z
-neon logs loki --endpoint label/severity_text/values -f 'query={entity_type="function"}'
+neon logs loki '{entity_type="function"}' --endpoint label/severity_text/values
 neon logs loki '{entity_type="function"}' --since 30m --limit 100 \
   | jq '{warnings: (.warnings // []), streams: .data.result}'
 ```
 
-The default endpoint is `query_range`. Common parameters have named flags:
+The default endpoint is `query_range`. Each Loki parameter has a named flag, and with a
+label endpoint the positional query is an optional stream selector:
 
 | Flag | Meaning |
 | --- | --- |
 | `--since <duration>` | Positive Go duration such as `30m` or `24h`. Defaults to 1h for range queries and 6h for label values. |
 | `--start <timestamp>` | RFC 3339 or Unix nanoseconds, kept as a string. Takes precedence over `since`. |
 | `--end <timestamp>` | RFC 3339 or Unix nanoseconds, kept as a string. Defaults to now. |
-| `--limit <count>` | Positive integer limiting the number of log lines; the server enforces its cap. |
-| `--direction <order>` | `forward` (oldest first) or `backward` (newest first). |
+| `--limit <count>` | `query_range` only. Positive integer limiting the number of log lines; the server enforces its cap. |
+| `--direction <order>` | `query_range` only. `forward` (oldest first) or `backward` (newest first). |
 
-Use `-f key=value` for any Loki URL parameter, including `query`, `since`, `start`, `end`,
-`limit`, and `direction`. Unlike `neon api -f`, these are URL parameters rather than body
-fields. `-f` values remain strings. Duplicate assignments, including a named flag plus
-`-f` for the same parameter, are rejected before any request. The CLI does not parse LogQL
-or convert nanosecond timestamps to numbers.
+The CLI does not parse LogQL or convert nanosecond timestamps to numbers.
 
 Range responses have `data.resultType: "streams"` and a `data.result` array. Each entry
 contains `stream` labels and `values` pairs of `[timestamp, line]`; timestamps are nanosecond
-strings. Preserve `warnings` when consuming results: they report truncation, and there is
-no continuation cursor. Narrow the time window or selector for complete results. The
-server enforces time and row limits.
+strings. There is no continuation cursor. A result with `--limit` lines, or with the
+server's cap of 10,000 lines, may be incomplete, and reaching the cap adds no `warnings`
+entry. Narrow the time window or selector for complete results. The maximum window is
+168 hours.
 
 Neon's supported LogQL subset is stream selectors (`=`, `!=`, `=~`, `!~`) and line filters
 (`|=`, `!=`, `|~`, `!~`). Metric queries, parser/format stages and live tailing are unsupported.
