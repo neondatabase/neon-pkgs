@@ -120,7 +120,18 @@ env: {
 
 `{}` is shorthand for `{ value: process.env.<key> }`. A present `value` that is `undefined` is unset; it does not fall back to `process.env.<key>`. An empty value (`KEY=` in a `.env` file) counts as unset too.
 
-A variable that is left out is removed from the Function if an earlier deploy set it, so the deployment matches `neon.ts`. Keys `neon.ts` does not declare are left as they are, which is how to keep a value you set with `neon functions deploy <slug> --env KEY=VALUE`.
+`onUndefined` sets what "left out" means for a variable that may be unset (`required: false` or `"default-branch"`):
+
+```ts
+ADMIN_TOKEN: { value: process.env.ADMIN_TOKEN, required: false, onUndefined: "skip" },
+```
+
+| `onUndefined` | Deploy with the value unset | `neon dev` with the value unset |
+| --- | --- | --- |
+| `"unset"` (default) | removes the variable from the Function, so the deployment matches `neon.ts` | removes it from the Function's environment |
+| `"skip"` | leaves the deployed value as it is | leaves the inherited value as it is |
+
+Use `"skip"` for a value set outside `neon.ts`, for example with `neon functions deploy <slug> --env KEY=VALUE`. A branch created from another starts with its parent's deployed Function env, so `"unset"` also removes a value the new branch inherited. Keys `neon.ts` does not declare are left as they are.
 
 `parseEnv(config, slug)` reads each declared key from the Function's own environment, not `value`: inside a deployed Function, `value` refers to the environment the deploy read.
 

@@ -236,6 +236,7 @@ const functionEnvVarSchema = z
 		required: z
 			.union([z.boolean(), z.literal("default-branch")])
 			.optional(),
+		onUndefined: z.enum(["unset", "skip"]).optional(),
 		default: z
 			.string()
 			.min(
@@ -246,6 +247,17 @@ const functionEnvVarSchema = z
 	})
 	// superRefine, unlike .check, keeps its issues when the entry union reports them.
 	.superRefine((value, ctx) => {
+		if (
+			"onUndefined" in value &&
+			(value.required === undefined || value.required === true)
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["onUndefined"],
+				message:
+					'onUndefined applies only to a variable that may be unset: add required: false or required: "default-branch".',
+			});
+		}
 		if (!("default" in value)) return;
 		if (value.default === undefined) {
 			ctx.addIssue({

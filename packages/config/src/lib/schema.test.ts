@@ -765,6 +765,8 @@ describe("function env declarations", () => {
 				EXPLICIT: { required: true },
 				DSN: { required: "default-branch" },
 				GUILD: { required: false },
+				KEPT: { required: false, onUndefined: "skip" },
+				BRANCH: { required: "default-branch", onUndefined: "unset" },
 				RATE: { default: "1" },
 				LOG_LEVEL: "info",
 			}).success,
@@ -790,6 +792,17 @@ describe("function env declarations", () => {
 		expect(
 			issues({ TOKEN: { required: true, default: undefined } }),
 		).toContain("`required` and `default` cannot be combined");
+	});
+
+	test("rejects onUndefined on a variable that is always required", () => {
+		const message =
+			'onUndefined applies only to a variable that may be unset: add required: false or required: "default-branch".';
+		expect(issues({ TOKEN: { onUndefined: "skip" } })).toContain(
+			`functions.hello.env.TOKEN.onUndefined: ${message}`,
+		);
+		expect(
+			issues({ TOKEN: { required: true, onUndefined: "unset" } }),
+		).toContain(`functions.hello.env.TOKEN.onUndefined: ${message}`);
 	});
 
 	test("rejects an unknown required value with the accepted forms", () => {

@@ -242,6 +242,7 @@ describe("resolveFunctionsFromConfig", () => {
             ${TOKEN}: {},
             ${DSN}: { required: 'default-branch' },
             RATE: { default: '1' },
+            KEPT: { required: false, onUndefined: 'skip' },
             LOG_LEVEL: 'info',
           },
         },
@@ -264,6 +265,7 @@ describe("resolveFunctionsFromConfig", () => {
 				[TOKEN]: "t",
 				RATE: "1",
 			});
+			// KEPT is "skip", so neon dev leaves whatever the shell has.
 			expect(resolved?.functions[0].unsetEnv).toEqual([DSN]);
 		});
 

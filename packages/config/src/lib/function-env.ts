@@ -71,7 +71,10 @@ export function resolveFunctionEnv(
 			env[key] = declaration.default;
 		} else if (isRequired(declaration, target)) {
 			missing.push(key);
-		} else if (target !== "development") {
+		} else if (
+			target !== "development" &&
+			declaration.onUndefined !== "skip"
+		) {
 			env[key] = "";
 		}
 	}

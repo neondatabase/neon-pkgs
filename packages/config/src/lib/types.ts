@@ -398,6 +398,12 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
  * | `{ value, required: false }` | left out | left out | runs without it | `string \| undefined` |
  * | `{ value, default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
  *
+ * `onUndefined` sets what "left out" means for a variable that may be unset:
+ * `"unset"` (the default) removes it from the deployment, or from the Function's environment
+ * in `neon dev`; `"skip"` leaves the deployed value, or the inherited one, as it is. Use
+ * `"skip"` for a value set outside `neon.ts`, such as with
+ * `neon functions deploy <slug> --env KEY=VALUE`.
+ *
  * A variable that is "left out" is removed from the Function if an earlier deploy set it.
  * Keys that `neon.ts` does not declare are left as they are.
  *
@@ -407,10 +413,22 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 export type FunctionEnvVar =
 	| {
 			value?: string | undefined;
-			required?: boolean | "default-branch";
+			required?: true;
+			onUndefined?: never;
 			default?: never;
 	  }
-	| { value?: string | undefined; default: string; required?: never };
+	| {
+			value?: string | undefined;
+			required: boolean | "default-branch";
+			onUndefined?: "unset" | "skip";
+			default?: never;
+	  }
+	| {
+			value?: string | undefined;
+			default: string;
+			required?: never;
+			onUndefined?: never;
+	  };
 
 /** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
 export type FunctionEnvValue = string | FunctionEnvVar;

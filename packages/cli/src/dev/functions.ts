@@ -133,9 +133,12 @@ const toPlannedFunction = (
 		process.env,
 		"development",
 	).env;
-	const unsetEnv = Object.keys(fn.envVars ?? {}).filter(
-		(key) => !(key in declaredEnv),
-	);
+	const unsetEnv = Object.entries(fn.envVars ?? {})
+		.filter(
+			([key, declaration]) =>
+				!(key in declaredEnv) && declaration.onUndefined !== "skip",
+		)
+		.map(([key]) => key);
 	return {
 		slug: fn.slug,
 		name: fn.name,

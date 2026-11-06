@@ -1000,6 +1000,30 @@ describe("pushConfig", () => {
 			expect(deployedEnv(api)).toMatchObject({ DSN: "", GUILD: "" });
 		});
 
+		test('onUndefined: "skip" leaves an unset variable out of the upload', async () => {
+			const { api, projectId } = seededFake();
+			const config = defineConfig({
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						env: {
+							KEPT: { required: false, onUndefined: "skip" },
+							REMOVED: { required: false },
+						},
+					},
+				},
+			});
+			await pushConfig(config, {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+				env: {},
+			});
+			expect(deployedEnv(api)).toEqual({ REMOVED: "" });
+		});
+
 		test("value wins over the env source", async () => {
 			const { api, projectId } = seededFake();
 			const config = defineConfig({

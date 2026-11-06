@@ -102,7 +102,7 @@ describe.sequential("e2e — declared Function env", () => {
 		const first = await deploy(
 			envFile(
 				"all.env",
-				"SECRET_A=a\nSECRET_B=b\nOPTIONAL_A=o\nPROD_A=p\n",
+				"SECRET_A=a\nSECRET_B=b\nOPTIONAL_A=o\nKEPT_A=k\nPROD_A=p\n",
 			),
 		);
 		if (first.code !== 0) {
@@ -121,13 +121,14 @@ describe.sequential("e2e — declared Function env", () => {
 		expect(await invoke("alpha")).toEqual({
 			SECRET_A: "a",
 			OPTIONAL_A: "o",
+			KEPT_A: "k",
 			PROD_A: "p",
 			RATE_A: "1",
 		});
 		expect(await invoke("beta")).toEqual({ SECRET_B: "b" });
 	});
 
-	it("an unset optional is removed from the deployment", async () => {
+	it('an unset optional is removed, and onUndefined: "skip" keeps the deployed value', async () => {
 		const result = await deploy(
 			envFile("secrets.env", "SECRET_A=a\nSECRET_B=b\nPROD_A=p\n"),
 		);
@@ -135,6 +136,7 @@ describe.sequential("e2e — declared Function env", () => {
 		const names = (await getFunction("alpha")).active_deployment
 			?.environment;
 		expect([...(names ?? [])].sort()).toEqual([
+			"KEPT_A",
 			"PROD_A",
 			"RATE_A",
 			"SECRET_A",
@@ -154,7 +156,7 @@ describe.sequential("e2e — declared Function env", () => {
 		expect((await getFunction("beta")).active_deployment?.id).toBe(before);
 	});
 
-	it("a non-default branch deploys without a variable required only on the default branch", async () => {
+	it('a new branch removes the "default-branch" variable it inherited, and keeps a "skip" one', async () => {
 		const { branch } = await apiRequest<{ branch: { id: string } }>(
 			`/projects/${projectId}/branches`,
 			{
@@ -173,7 +175,12 @@ describe.sequential("e2e — declared Function env", () => {
 		expect(result.code).toBe(0);
 		const names = (await getFunction("alpha", branch.id)).active_deployment
 			?.environment;
-		expect([...(names ?? [])].sort()).toEqual(["RATE_A", "SECRET_A"]);
+		// A branch created from main starts with main's deployed env.
+		expect([...(names ?? [])].sort()).toEqual([
+			"KEPT_A",
+			"RATE_A",
+			"SECRET_A",
+		]);
 	});
 
 	it("neon env pull needs none of the secrets", async () => {

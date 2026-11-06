@@ -86,6 +86,19 @@ describe("resolveFunctionEnv", () => {
 		});
 	});
 
+	test('onUndefined: "skip" leaves the deployed value, "unset" removes it', () => {
+		const declared = {
+			KEPT: { required: false, onUndefined: "skip" },
+			REMOVED: { required: false, onUndefined: "unset" },
+			DEFAULTED: { required: false },
+			BRANCH_KEPT: { required: "default-branch", onUndefined: "skip" },
+		} satisfies Record<string, FunctionEnvVar>;
+		expect(resolveFunctionEnv(declared, {}, PREVIEW)).toEqual({
+			env: { REMOVED: "", DEFAULTED: "" },
+			missing: [],
+		});
+	});
+
 	test("an empty value counts as unset", () => {
 		const empty = { TOKEN: "", EXPLICIT: "", DSN: "", GUILD: "", RATE: "" };
 		expect(resolveFunctionEnv(DECLARED, empty, PRODUCTION)).toEqual(
