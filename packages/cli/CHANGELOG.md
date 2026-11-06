@@ -1,5 +1,18 @@
 # neon
 
+## 9.1.0
+
+### Minor Changes
+
+- 735200c: Add `neon logs loki` to run LogQL queries and discover labels through the branch's Loki-compatible read API. Bound queries with `--since`, `--start`, `--end`, `--limit`, and `--direction`, and pick `labels` or `label/<name>/values` with `--endpoint`. JSON/YAML output preserves Loki's envelope, nanosecond timestamps, and warnings.
+
+### Patch Changes
+
+- Updated dependencies [53516b8]
+  - @neon/sdk@7.11.0
+  - @neon/config@1.12.1
+  - @neon/config-runtime@1.11.9
+
 ## 9.0.0
 
 ### Major Changes
