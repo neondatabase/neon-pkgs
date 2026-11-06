@@ -59,8 +59,8 @@ export const configPlanFromResolution = (
 
 /**
  * A neon.ts policy pull fails while the branch lacks a declared service. These two need
- * no `deploy`: the AI Gateway exists on every branch, and function URLs derive from the
- * branch host.
+ * no `deploy`: the AI Gateway exists on every branch, and the function host suffix derives
+ * from the branch's compute host.
  */
 const DEPLOY_FREE_SERVICES: ReadonlySet<NeonService> = new Set([
 	"ai-gateway",
