@@ -402,8 +402,12 @@ export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
  * environment the deploy has already read.
  */
 export type FunctionEnvVar =
-	| { value?: string; required?: boolean | "production"; default?: never }
-	| { value?: string; default: string; required?: never };
+	| {
+			value?: string | undefined;
+			required?: boolean | "production";
+			default?: never;
+	  }
+	| { value?: string | undefined; default: string; required?: never };
 
 /** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
 export type FunctionEnvValue = string | FunctionEnvVar;
