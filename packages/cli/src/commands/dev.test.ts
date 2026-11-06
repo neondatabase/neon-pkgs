@@ -359,6 +359,23 @@ describe("local function URLs", () => {
 		vi.unstubAllEnvs();
 	});
 
+	it("restarts a function when a declaration starts or stops removing a variable", async () => {
+		const hello = {
+			slug: "hello",
+			name: "Hello",
+			source: "/fns/hello.ts",
+			port: 8787,
+			env: {},
+		};
+		const [before] = await planFunctionsToUnits([hello], {}, 8787);
+		const [after] = await planFunctionsToUnits(
+			[{ ...hello, unsetEnv: ["OPTIONAL"] }],
+			{},
+			8787,
+		);
+		expect(after?.configKey).not.toBe(before?.configKey);
+	});
+
 	it("keeps a search-mode port and configKey when replanned with keepPorts", async () => {
 		const hello = {
 			slug: "hello",

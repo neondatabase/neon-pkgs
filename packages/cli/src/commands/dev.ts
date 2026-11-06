@@ -640,6 +640,7 @@ const plannedToUnit = (
 			source: fn.source,
 			port: fn.port ?? null,
 			env: fn.env,
+			unsetEnv: fn.unsetEnv ?? null,
 			overlay,
 			externalPackages: fn.externalPackages ?? null,
 			bundler:
