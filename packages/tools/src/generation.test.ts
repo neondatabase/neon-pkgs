@@ -73,6 +73,9 @@ describe("generated operation coverage", () => {
 			"auth.emailProvider.sendTest",
 			"organizations.invitations.create",
 			"organizations.spendingLimit.set",
+			"docs.search",
+			"docs.get",
+			"feedback.send",
 		]);
 		for (const id of toolIds) {
 			expect(

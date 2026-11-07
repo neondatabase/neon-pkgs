@@ -9,7 +9,11 @@ import {
 	uniqueProjectName,
 } from "@neon/e2e-harness";
 import { enableNeonAuth } from "@neon/e2e-harness/auth";
-import { createNeonClient, NeonNotFoundError } from "@neon/sdk";
+import {
+	createNeonClient,
+	NeonClientError,
+	NeonNotFoundError,
+} from "@neon/sdk";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNeonTools } from "../src/index.js";
 import { registerNeonTools } from "../src/mcp.js";
@@ -31,7 +35,12 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 	const tools = createNeonTools({
 		apiKey: requireApiKey(),
 		baseUrl: configuredBaseUrl(),
-		tools: ["user.organizations", "auth.getConfig", "resources.search"],
+		tools: [
+			"user.organizations",
+			"auth.getConfig",
+			"resources.search",
+			"resources.fetch",
+		],
 	});
 	const projectName = uniqueProjectName("tools-custom");
 	let projectId: string;
@@ -114,19 +123,18 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		const { data } = await tools["resources.search"].execute({
 			query: projectName.toUpperCase(),
 		});
-		expect(data).toContainEqual({
+		expect(Object.keys(data)).toEqual(["results"]);
+		expect(data.results).toContainEqual({
 			id: `project:${projectId}`,
 			title: projectName,
 			url: expect.stringContaining(`/app/projects/${projectId}`),
-			type: "project",
 		});
-		expect(data).toContainEqual({
+		expect(data.results).toContainEqual({
 			id: `branch:${projectId}/${plainBranchId}`,
 			title: plainBranchName,
 			url: expect.stringContaining(
 				`/app/projects/${projectId}/branches/${plainBranchId}`,
 			),
-			type: "branch",
 		});
 	});
 
@@ -134,9 +142,77 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		const { data } = await tools["resources.search"].execute({
 			query: mainBranchId,
 		});
-		expect(data.map((result) => result.id)).toEqual([
+		expect(data.results.map((result) => result.id)).toEqual([
 			`branch:${projectId}/${mainBranchId}`,
 		]);
+	});
+
+	it("resources.fetch returns an organization's details", async () => {
+		const orgs = await neon.user.organizations();
+		const org = orgs[0];
+		if (org === undefined) throw new Error("The key sees no organization");
+		const { data } = await tools["resources.fetch"].execute({
+			id: `org:${org.id}`,
+		});
+		expect(data).toEqual({
+			id: `org:${org.id}`,
+			title: org.name,
+			text: expect.stringContaining("**Organization Details**"),
+			url: expect.stringContaining(`/app/${org.id}/projects`),
+			metadata: expect.objectContaining({
+				organization: expect.objectContaining({ id: org.id }),
+			}),
+		});
+		expect(data.text).toContain(`- ID: ${org.id}`);
+		const { metadata } = data;
+		if (!("projects" in metadata))
+			throw new Error("Not organization metadata");
+		expect(data.text).toContain(`- Projects: ${metadata.projects.length}`);
+		expect(metadata.projects.length).toBeGreaterThan(0);
+	});
+
+	it("resources.fetch returns a project's details and branches", async () => {
+		const { data } = await tools["resources.fetch"].execute({
+			id: `project:${projectId}`,
+		});
+		expect(data.id).toBe(`project:${projectId}`);
+		expect(data.title).toBe(projectName);
+		expect(data.url).toContain(`/app/projects/${projectId}`);
+		expect(data.text).toContain("**Project Details**");
+		expect(data.text).toContain("- Default Branch: main");
+		const { metadata } = data;
+		if (!("project" in metadata)) throw new Error("Not project metadata");
+		expect(metadata.project.id).toBe(projectId);
+		expect(metadata.branches.map((branch) => branch.id).sort()).toEqual(
+			[mainBranchId, plainBranchId].sort(),
+		);
+	});
+
+	it("resources.fetch describes a branch, including its database tree", async () => {
+		const { data } = await tools["resources.fetch"].execute({
+			id: `branch:${projectId}/${plainBranchId}`,
+		});
+		expect(data.id).toBe(`branch:${projectId}/${plainBranchId}`);
+		expect(data.title).toBe(plainBranchName);
+		expect(data.url).toContain(
+			`/app/projects/${projectId}/branches/${plainBranchId}`,
+		);
+		expect(data.text).toContain("Branch Details:");
+		expect(data.text).toContain("Database Structure:");
+		const { metadata } = data;
+		if (!("branch" in metadata)) throw new Error("Not branch metadata");
+		expect(metadata.branch.id).toBe(plainBranchId);
+		expect(JSON.stringify(metadata.database_structure)).toContain(
+			"neondb (DATABASE)",
+		);
+	});
+
+	it("resources.fetch rejects an id without a known prefix", async () => {
+		const failure = tools["resources.fetch"].execute({ id: "nope:123" });
+		await expect(failure).rejects.toBeInstanceOf(NeonClientError);
+		await expect(failure).rejects.toThrow(
+			'Invalid ID format: "nope:123". Expected format: org:*, project:*, or branch:*',
+		);
 	});
 
 	it("user.organizations returns and filters the organizations the key can access", async () => {
@@ -170,6 +246,7 @@ describe.sequential("e2e — @neon/tools custom tools", () => {
 		try {
 			const listed = await client.listTools();
 			expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
+				"fetch_resources",
 				"get_config_auth",
 				"organizations_user",
 				"search_resources",

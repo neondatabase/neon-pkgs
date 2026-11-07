@@ -1,4 +1,5 @@
 import { NeonError } from "@neon/sdk";
+import { InspectDiagnosticError } from "./lib/custom/sql/inspect/inspect.js";
 import {
 	applyToolCustomization,
 	assertToolCustomizeOptions,
@@ -39,12 +40,19 @@ export type {
 	JsonSafeBlob,
 	NeonTool,
 	NeonToolAnnotations,
+	NeonToolCaller,
 	NeonToolExecutionContext,
 	NeonToolMetadata,
 	NeonToolResult,
 } from "./lib/operation.js";
 export type { NeonToolId, PublishedId };
-export { customToolIds, NeonError, publishedId, toolIds };
+export {
+	customToolIds,
+	InspectDiagnosticError,
+	NeonError,
+	publishedId,
+	toolIds,
+};
 
 type ToolFactories = typeof toolFactories;
 

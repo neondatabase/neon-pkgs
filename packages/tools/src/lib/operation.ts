@@ -10,9 +10,21 @@ export interface NeonToolAnnotations {
 	openWorldHint: boolean;
 }
 
+export interface NeonToolCaller {
+	source: string;
+	userAgent?: string;
+	client?: string;
+}
+
 export interface NeonToolExecutionContext {
 	signal?: AbortSignal;
 	apiKey?: NeonBearerCredential;
+	/** SQL tools run caller SQL in a `READ ONLY` transaction or refuse to run. */
+	readOnly?: boolean;
+	/** Every SQL connection logs in as this Postgres role. */
+	postgresRole?: string;
+	/** Attribution sent with `docs.search` requests. */
+	caller?: NeonToolCaller;
 }
 
 export interface NeonToolMetadata {

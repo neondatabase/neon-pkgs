@@ -8,7 +8,7 @@ import {
 } from "../ergonomic/bind.js";
 import { matchesNameOrId } from "./organizations.js";
 
-const DEFAULT_API_BASE_URL = "https://console.neon.tech/api/v2";
+export const DEFAULT_API_BASE_URL = "https://console.neon.tech/api/v2";
 const PROJECTS_PER_ORGANIZATION = 400;
 
 export const searchResourcesInputSchema = z.strictObject({
@@ -24,7 +24,6 @@ type SearchResult = {
 	id: string;
 	title: string;
 	url: string;
-	type: "organization" | "project" | "branch";
 };
 
 export const consoleBaseUrl = (apiBaseUrl: string) =>
@@ -45,7 +44,7 @@ const searchResources = async (
 	query: string,
 	consoleUrl: string,
 	signal?: AbortSignal,
-): Promise<SearchResult[]> => {
+): Promise<{ results: SearchResult[] }> => {
 	const link = (path: string) => new URL(path, consoleUrl).toString();
 
 	const searchProjects = async (
@@ -57,7 +56,6 @@ const searchResources = async (
 				id: `project:${project.id}`,
 				title: project.name,
 				url: link(`/app/projects/${encodeURIComponent(project.id)}`),
-				type: "project" as const,
 			}));
 		const branches = await Promise.all(
 			projects.map((project) =>
@@ -73,7 +71,6 @@ const searchResources = async (
 							url: link(
 								`/app/projects/${encodeURIComponent(project.id)}/branches/${encodeURIComponent(branch.id)}`,
 							),
-							type: "branch" as const,
 						}));
 				}),
 			),
@@ -88,7 +85,6 @@ const searchResources = async (
 				id: `org:${org.id}`,
 				title: org.name,
 				url: link(`/app/${encodeURIComponent(org.id)}/projects`),
-				type: "organization",
 			});
 		}
 		results.push(
@@ -114,7 +110,7 @@ const searchResources = async (
 			return searchProjects(shared.projects);
 		})),
 	);
-	return results;
+	return { results };
 };
 
 export const searchResourcesTool = (options: ToolClientOptions) => {
@@ -126,7 +122,7 @@ export const searchResourcesTool = (options: ToolClientOptions) => {
 			id: publishedId("resources.search"),
 			title: "Search organizations, projects, and branches",
 			description:
-				"Search across all organizations, projects, and branches the credential can access, including projects shared with the user, by keyword. Matches names and ids case-insensitively. Returns matching items with id, title, console URL, and type. Query must be at least 3 characters.",
+				"Search across all organizations, projects, and branches the credential can access, including projects shared with the user, by keyword. Matches names and ids case-insensitively. Returns `{ results }` with each match's id, title, and console URL. Pass an id to resources.fetch for details. Query must be at least 3 characters.",
 			inputSchema: searchResourcesInputSchema,
 			annotations: {
 				readOnlyHint: true,

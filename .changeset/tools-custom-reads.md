@@ -2,4 +2,4 @@
 "@neon/tools": minor
 ---
 
-Add two custom tools: `auth.getConfig` reads a branch's whole Neon Auth configuration with secrets redacted, and `resources.search` finds organizations, projects, and branches by name or id. `customToolIds` lists them. `user.organizations` takes an optional `search` filter.
+Add custom tools for Neon Auth config, resource search and fetch, SQL (`sql.run`, `sql.runTransaction`, `sql.explain`, schema, branch describe, slow queries, `database.inspect`, migrations, query tuning), neon.com docs, and feedback; `customToolIds` lists them. Execution context gains `readOnly`, `postgresRole`, and `caller`, and `user.organizations` takes an optional `search` filter.
