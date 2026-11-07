@@ -547,6 +547,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 3.0.9(vitest@3.0.9(@types/debug@4.1.13)(@types/node@20.19.17)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.30.1)(msw@2.6.8(@types/node@20.19.17)(typescript@5.9.3))(terser@5.39.0)(tsx@4.22.3)(yaml@2.9.1))
+      console-fail-test:
+        specifier: 'catalog:'
+        version: 0.5.0
       convex:
         specifier: ^1.47.0
         version: 1.48.0(react@19.2.8)

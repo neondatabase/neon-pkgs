@@ -57,6 +57,7 @@
 		"@types/node": "catalog:",
 		"@types/pg": "^8.11.10",
 		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
 		"convex": "^1.47.0",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",

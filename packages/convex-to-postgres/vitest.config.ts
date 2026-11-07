@@ -31,5 +31,6 @@ export default defineConfig({
 			"integration/**",
 			"**/*.integration.test.ts",
 		],
+		setupFiles: ["console-fail-test/setup"],
 	},
 });
