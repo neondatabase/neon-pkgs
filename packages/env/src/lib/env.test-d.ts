@@ -419,23 +419,24 @@ describe("parseEnv existing overloads still type", () => {
 		expectTypeOf(env.function.resendApiKey).toEqualTypeOf<string>();
 	});
 
-	test("declared env vars are string unless they may be unset in neon dev", () => {
+	test("declared env vars are string only when required: true", () => {
 		const config = defineConfig({
 			functions: {
 				hello: {
 					name: "Hello",
 					source: "./hello.ts",
 					env: {
-						TOKEN: {},
-						VALUE: { value: process.env.VALUE },
-						OPTIONAL_VALUE: {
-							value: process.env.OPTIONAL_VALUE,
-							required: false,
+						TOKEN: { value: process.env.TOKEN, required: true },
+						DSN: {
+							value: process.env.DSN,
+							required: "default-branch",
 						},
-						EXPLICIT: { required: true },
-						DSN: { required: "default-branch" },
-						GUILD: { required: false },
-						RATE: { default: "1" },
+						GUILD: { value: process.env.GUILD, required: false },
+						KEPT: {
+							value: process.env.KEPT,
+							required: false,
+							onUndefined: "skip",
+						},
 						LOG_LEVEL: "info",
 					},
 				},
@@ -443,18 +444,18 @@ describe("parseEnv existing overloads still type", () => {
 		});
 		expectTypeOf(parseEnv(config, "hello").function).toEqualTypeOf<{
 			TOKEN: string;
-			VALUE: string;
-			OPTIONAL_VALUE: string | undefined;
-			EXPLICIT: string;
 			DSN: string | undefined;
 			GUILD: string | undefined;
-			RATE: string;
+			KEPT: string | undefined;
 			LOG_LEVEL: string;
 		}>();
 	});
 
 	test("a declaration widened to FunctionEnvVar may be unset", () => {
-		const optional = (): FunctionEnvVar => ({ required: false });
+		const optional = (): FunctionEnvVar => ({
+			value: undefined,
+			required: false,
+		});
 		const config = defineConfig({
 			functions: {
 				hello: {
@@ -476,7 +477,7 @@ describe("parseEnv existing overloads still type", () => {
 				hello: {
 					name: "Hello",
 					source: "./hello.ts",
-					env: { TOKEN: { required } },
+					env: { TOKEN: { value: process.env.TOKEN, required } },
 				},
 			},
 		});

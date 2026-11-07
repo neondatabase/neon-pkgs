@@ -166,7 +166,6 @@ export {
 } from "./lib/function-entries.js";
 // ─── Declared function env (pure; consumed by @neon/config-runtime, @neon/env, neon) ─
 export type {
-	FunctionEnvSource,
 	FunctionEnvTarget,
 	ResolvedFunctionEnv,
 } from "./lib/function-env.js";

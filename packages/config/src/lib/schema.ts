@@ -237,41 +237,29 @@ const functionEnvVarSchema = z
 			.union([z.boolean(), z.literal("default-branch")])
 			.optional(),
 		onUndefined: z.enum(["unset", "skip"]).optional(),
-		default: z
-			.string()
-			.min(
-				1,
-				"default must not be empty: an empty value removes the deployed variable. Use { required: false } instead.",
-			)
-			.optional(),
 	})
 	// superRefine, unlike .check, keeps its issues when the entry union reports them.
 	.superRefine((value, ctx) => {
-		if (
-			"onUndefined" in value &&
-			(value.required === undefined || value.required === true)
-		) {
+		if (!("value" in value)) {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"value is missing: write value: process.env.<NAME>, or a literal string.",
+			});
+		}
+		if (value.required === undefined) {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					'required is missing: write true, false, or "default-branch".',
+			});
+		}
+		if ("onUndefined" in value && value.required === true) {
 			ctx.addIssue({
 				code: "custom",
 				path: ["onUndefined"],
 				message:
-					'onUndefined applies only to a variable that may be unset: add required: false or required: "default-branch".',
-			});
-		}
-		if (!("default" in value)) return;
-		if (value.default === undefined) {
-			ctx.addIssue({
-				code: "custom",
-				path: ["default"],
-				message:
-					"default is undefined: a default must be a literal string, not an unset process.env value.",
-			});
-		}
-		if ("required" in value) {
-			ctx.addIssue({
-				code: "custom",
-				message:
-					"`required` and `default` cannot be combined: a variable with a default is never missing.",
+					'onUndefined applies only to a variable that may be unset: use required: false or "default-branch".',
 			});
 		}
 	});
@@ -281,7 +269,7 @@ const functionEnvEntrySchema = z.union(
 	{
 		error: (issue) =>
 			undefinedFunctionEnvMessage(issue) ??
-			'Expected a string or a declaration: { value } (required), { value, required: "default-branch" }, { value, required: false }, or { value, default: "<fallback>" }. Omit `value` to read the variable named by the key.',
+			'Expected a string or { value, required: true | false | "default-branch", onUndefined?: "unset" | "skip" }.',
 	},
 );
 
@@ -305,8 +293,8 @@ function undefinedFunctionEnvMessage(issue: {
 				: "An environment variable";
 	const declaration =
 		key !== undefined
-			? `\`${key}: { value: process.env.${key} }\``
-			: "`{ value: process.env.X }`";
+			? `\`${key}: { value: process.env.${key}, required: true }\``
+			: "`{ value: process.env.X, required: true }`";
 	return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Declare it as ${declaration} so an unset value fails only the commands that need it, or set it (for example \`neon deploy --env <file>\`). Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
 }
 

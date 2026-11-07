@@ -101,11 +101,11 @@ type FunctionEnvOf<
 		: Record<never, never>
 	: Record<never, never>;
 
-/** `string` unless the declaration's `required` may be `false` or `"default-branch"`. */
-type FunctionEnvValueOf<V> = V extends string | { default: string }
+/** `string` for a literal or `required: true`; any other declaration may be unset. */
+type FunctionEnvValueOf<V> = V extends string
 	? string
-	: "required" extends keyof V
-		? [Exclude<V[Extract<"required", keyof V>], undefined>] extends [true]
+	: V extends { required: infer R }
+		? [R] extends [true]
 			? string
 			: string | undefined
 		: string;
@@ -419,11 +419,12 @@ export function parseEnv(
 		const injected =
 			envVars &&
 			Object.fromEntries(
-				Object.entries(envVars).map(
-					([key, { value: _value, ...rest }]) => [key, rest],
-				),
+				Object.entries(envVars).map(([key, declaration]) => [
+					key,
+					{ ...declaration, value: source[key] },
+				]),
 			);
-		const declared = resolveFunctionEnv(injected, source, "development");
+		const declared = resolveFunctionEnv(injected, "development");
 		const envOut: Record<string, string> = { ...declared.env };
 		for (const key of declared.missing) {
 			issues.push(`${key} is missing (function "${scope}")`);

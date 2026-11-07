@@ -168,30 +168,21 @@ describe("Realtime stays out of branch tuning (negative types)", () => {
 });
 
 describe("declared function env", () => {
-	test("required and default cannot be combined", () => {
-		defineConfig({
-			functions: {
-				hello: {
-					name: "Hello",
-					source: "./hello.ts",
-					// @ts-expect-error a variable with a default is never missing.
-					env: { RATE: { required: false, default: "1" } },
-				},
-			},
-		});
-	});
-});
-
-describe("declared function env onUndefined", () => {
-	test("onUndefined needs required: false or default-branch", () => {
+	test("value and required are both required", () => {
 		defineConfig({
 			functions: {
 				hello: {
 					name: "Hello",
 					source: "./hello.ts",
 					env: {
-						KEPT: { required: false, onUndefined: "skip" },
+						TOKEN: { value: process.env.TOKEN, required: true },
+						KEPT: {
+							value: process.env.KEPT,
+							required: false,
+							onUndefined: "skip",
+						},
 						BRANCH: {
+							value: process.env.BRANCH,
 							required: "default-branch",
 							onUndefined: "unset",
 						},
@@ -204,8 +195,8 @@ describe("declared function env onUndefined", () => {
 				hello: {
 					name: "Hello",
 					source: "./hello.ts",
-					// @ts-expect-error an always-required variable is never left out.
-					env: { TOKEN: { required: true, onUndefined: "skip" } },
+					// @ts-expect-error {} names neither a value nor a requirement.
+					env: { TOKEN: {} },
 				},
 			},
 		});
@@ -214,8 +205,26 @@ describe("declared function env onUndefined", () => {
 				hello: {
 					name: "Hello",
 					source: "./hello.ts",
-					// @ts-expect-error required defaults to true.
-					env: { TOKEN: { onUndefined: "skip" } },
+					// @ts-expect-error required is required.
+					env: { TOKEN: { value: process.env.TOKEN } },
+				},
+			},
+		});
+	});
+
+	test("onUndefined needs required: false or default-branch", () => {
+		const always = {
+			value: "t",
+			required: true,
+			onUndefined: "skip",
+		} as const;
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error an always-required variable is never left out.
+					env: { TOKEN: always },
 				},
 			},
 		});

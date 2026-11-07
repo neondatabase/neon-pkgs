@@ -921,7 +921,7 @@ describe("pushConfig", () => {
 	});
 
 	describe("declared function env", () => {
-		const declaredConfig = () =>
+		const declaredConfig = (values: Record<string, string | undefined>) =>
 			defineConfig({
 				functions: {
 					fn1: {
@@ -929,10 +929,17 @@ describe("pushConfig", () => {
 						source: fnSource,
 						env: {
 							LOG_LEVEL: "info",
-							TOKEN: {},
-							DSN: { required: "default-branch" },
-							GUILD: { required: false },
-							RATE: { default: "1" },
+							TOKEN: { value: values.TOKEN, required: true },
+							DSN: {
+								value: values.DSN,
+								required: "default-branch",
+							},
+							GUILD: { value: values.GUILD, required: false },
+							KEPT: {
+								value: values.KEPT,
+								required: false,
+								onUndefined: "skip",
+							},
 						},
 					},
 				},
@@ -951,33 +958,30 @@ describe("pushConfig", () => {
 					?.args[3] as { environment: Record<string, string> }
 			).environment;
 
-		test("production uploads set values and defaults, and removes unset optionals", async () => {
+		test("the default branch uploads set values, removes unset optionals, and leaves skip ones out", async () => {
 			const { api, projectId } = seededFake();
-			await pushConfig(declaredConfig(), {
+			await pushConfig(declaredConfig({ TOKEN: "t", DSN: "d" }), {
 				api,
 				projectId,
 				branchId: "br-main",
 				bundleFunction: noBundle,
-				env: { TOKEN: "t", DSN: "d" },
 			});
 			expect(deployedEnv(api)).toEqual({
 				LOG_LEVEL: "info",
 				TOKEN: "t",
 				DSN: "d",
 				GUILD: "",
-				RATE: "1",
 			});
 		});
 
-		test('deploying the default branch fails before any change when a "default-branch" variable is unset', async () => {
+		test('the default branch fails before any change when a "default-branch" value is unset', async () => {
 			const { api, projectId } = seededFake();
 			await expect(
-				pushConfig(declaredConfig(), {
+				pushConfig(declaredConfig({ TOKEN: "t" }), {
 					api,
 					projectId,
 					branchId: "br-main",
 					bundleFunction: noBundle,
-					env: { TOKEN: "t" },
 				}),
 			).rejects.toThrow(
 				'Environment variable "DSN" for function "fn1" is required and unset.',
@@ -990,79 +994,13 @@ describe("pushConfig", () => {
 
 		test('another branch removes an unset "default-branch" variable', async () => {
 			const { api, projectId } = withPreview();
-			await pushConfig(declaredConfig(), {
+			await pushConfig(declaredConfig({ TOKEN: "t" }), {
 				api,
 				projectId,
 				branchId: "br-dev",
 				bundleFunction: noBundle,
-				env: { TOKEN: "t" },
 			});
 			expect(deployedEnv(api)).toMatchObject({ DSN: "", GUILD: "" });
-		});
-
-		test('onUndefined: "skip" leaves an unset variable out of the upload', async () => {
-			const { api, projectId } = seededFake();
-			const config = defineConfig({
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: fnSource,
-						env: {
-							KEPT: { required: false, onUndefined: "skip" },
-							REMOVED: { required: false },
-						},
-					},
-				},
-			});
-			await pushConfig(config, {
-				api,
-				projectId,
-				branchId: "br-main",
-				bundleFunction: noBundle,
-				env: {},
-			});
-			expect(deployedEnv(api)).toEqual({ REMOVED: "" });
-		});
-
-		test("value wins over the env source", async () => {
-			const { api, projectId } = seededFake();
-			const config = defineConfig({
-				functions: {
-					fn1: {
-						name: "Hello World",
-						source: fnSource,
-						env: { TOKEN: { value: "from-value" } },
-					},
-				},
-			});
-			await pushConfig(config, {
-				api,
-				projectId,
-				branchId: "br-main",
-				bundleFunction: noBundle,
-				env: { TOKEN: "from-source" },
-			});
-			expect(deployedEnv(api)).toEqual({ TOKEN: "from-value" });
-		});
-
-		test("a passed env is the only source", async () => {
-			const { api, projectId } = seededFake();
-			process.env.TOKEN = "from-process";
-			process.env.DSN = "from-process";
-			try {
-				await expect(
-					pushConfig(declaredConfig(), {
-						api,
-						projectId,
-						branchId: "br-main",
-						bundleFunction: noBundle,
-						env: {},
-					}),
-				).rejects.toThrow('"TOKEN" for function "fn1" is required');
-			} finally {
-				delete process.env.TOKEN;
-				delete process.env.DSN;
-			}
 		});
 	});
 

@@ -714,7 +714,9 @@ describe("configInputSchema", () => {
 		expect(formatted).toContain('function "hello"');
 		// …explains the likely cause and the fix…
 		expect(formatted).toContain("process.env");
-		expect(formatted).toContain("`test: { value: process.env.test }`");
+		expect(formatted).toContain(
+			"`test: { value: process.env.test, required: true }`",
+		);
 		expect(formatted).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(formatted).not.toContain(
@@ -738,7 +740,7 @@ describe("configInputSchema", () => {
 		const formatted = formatZodIssues(result.error).join("\n");
 		expect(formatted).toContain("preview.functions.hello.env.count");
 		expect(formatted).toContain(
-			'Expected a string or a declaration: { value } (required), { value, required: "default-branch" }',
+			'Expected a string or { value, required: true | false | "default-branch"',
 		);
 		// The undefined-specific guidance must not fire for a defined wrong type.
 		expect(formatted).not.toContain("process.env");
@@ -759,55 +761,64 @@ describe("function env declarations", () => {
 	test("accepts every declaration next to a literal string", () => {
 		expect(
 			parseEnv({
-				TOKEN: {},
-				VALUE: { value: "v" },
-				UNSET_VALUE: { value: undefined, required: false },
-				EXPLICIT: { required: true },
-				DSN: { required: "default-branch" },
-				GUILD: { required: false },
-				KEPT: { required: false, onUndefined: "skip" },
-				BRANCH: { required: "default-branch", onUndefined: "unset" },
-				RATE: { default: "1" },
+				TOKEN: { value: "t", required: true },
+				UNSET: { value: undefined, required: true },
+				DSN: { value: "d", required: "default-branch" },
+				GUILD: { value: undefined, required: false },
+				KEPT: {
+					value: undefined,
+					required: false,
+					onUndefined: "skip",
+				},
+				BRANCH: {
+					value: undefined,
+					required: "default-branch",
+					onUndefined: "unset",
+				},
 				LOG_LEVEL: "info",
 			}).success,
 		).toBe(true);
 	});
 
-	test("rejects an empty default, which would remove the deployed value", () => {
-		expect(issues({ RATE: { default: "" } })).toContain(
-			"functions.hello.env.RATE.default: default must not be empty",
+	test("rejects a declaration without value or required", () => {
+		const message = issues({ TOKEN: {} });
+		expect(message).toContain(
+			"functions.hello.env.TOKEN: value is missing: write value: process.env.<NAME>, or a literal string.",
+		);
+		expect(message).toContain(
+			'functions.hello.env.TOKEN: required is missing: write true, false, or "default-branch".',
+		);
+		expect(issues({ TOKEN: { value: "t" } })).toContain(
+			"required is missing",
+		);
+		expect(issues({ TOKEN: { required: true } })).toContain(
+			"value is missing",
 		);
 	});
 
-	test("rejects required combined with default", () => {
-		expect(issues({ RATE: { required: false, default: "1" } })).toContain(
-			"functions.hello.env.RATE: `required` and `default` cannot be combined",
-		);
-	});
-
-	test("rejects a default read from an unset process.env value", () => {
-		expect(issues({ TOKEN: { default: undefined } })).toContain(
-			"functions.hello.env.TOKEN.default: default is undefined",
-		);
+	test("rejects default, which is not a declaration field", () => {
 		expect(
-			issues({ TOKEN: { required: true, default: undefined } }),
-		).toContain("`required` and `default` cannot be combined");
+			issues({
+				RATE: { value: undefined, required: false, default: "1" },
+			}),
+		).toContain('unknown key: "default"');
 	});
 
 	test("rejects onUndefined on a variable that is always required", () => {
-		const message =
-			'onUndefined applies only to a variable that may be unset: add required: false or required: "default-branch".';
-		expect(issues({ TOKEN: { onUndefined: "skip" } })).toContain(
-			`functions.hello.env.TOKEN.onUndefined: ${message}`,
-		);
 		expect(
-			issues({ TOKEN: { required: true, onUndefined: "unset" } }),
-		).toContain(`functions.hello.env.TOKEN.onUndefined: ${message}`);
+			issues({
+				TOKEN: { value: "t", required: true, onUndefined: "unset" },
+			}),
+		).toContain(
+			'functions.hello.env.TOKEN.onUndefined: onUndefined applies only to a variable that may be unset: use required: false or "default-branch".',
+		);
 	});
 
 	test("rejects an unknown required value with the accepted forms", () => {
-		expect(issues({ TOKEN: { required: "production" } })).toContain(
-			'functions.hello.env.TOKEN: Expected a string or a declaration: { value } (required), { value, required: "default-branch" }',
+		expect(
+			issues({ TOKEN: { value: "t", required: "production" } }),
+		).toContain(
+			'functions.hello.env.TOKEN: Expected a string or { value, required: true | false | "default-branch", onUndefined?: "unset" | "skip" }.',
 		);
 	});
 });

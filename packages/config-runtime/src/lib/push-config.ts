@@ -8,7 +8,6 @@ import {
 	createNeonApiFromOptions,
 	diffConfig,
 	ErrorCode,
-	type FunctionEnvSource,
 	type FunctionEnvTarget,
 	type NeonApi,
 	type NeonBranchSnapshot,
@@ -115,12 +114,6 @@ export interface PushConfigOptions {
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
 	/**
-	 * Values for declared Function env variables without `value`. Defaults to
-	 * `process.env`. A passed object is the only source: `{}` resolves every such
-	 * declaration as unset.
-	 */
-	env?: FunctionEnvSource;
-	/**
 	 * When `true`, compute the full plan against the live remote state but **do not
 	 * execute any mutations**. The resulting `PushResult.applied` array records every
 	 * change that *would* run on a real push (with the same action / identifier / details
@@ -164,7 +157,6 @@ export interface PushConfirmContext {
 /** Add each function's resolved declared env to its literal env. */
 function withDeployFunctionEnv(
 	resolved: ResolvedBranchConfig,
-	source: FunctionEnvSource,
 	target: FunctionEnvTarget,
 ): ResolvedBranchConfig {
 	if (!resolved.preview) return resolved;
@@ -176,7 +168,7 @@ function withDeployFunctionEnv(
 				...fn,
 				env: {
 					...fn.env,
-					...resolveFunctionEnv(fn.envVars, source, target).env,
+					...resolveFunctionEnv(fn.envVars, target).env,
 				},
 			})),
 		},
@@ -196,7 +188,6 @@ export async function pushConfig(
 	config: Config,
 	options: PushConfigOptions,
 ): Promise<PushResult> {
-	const envSource = options.env ?? process.env;
 	const api = options.api ?? createApiFromOptions(options);
 	const projectId = options.projectId;
 
@@ -229,10 +220,9 @@ export async function pushConfig(
 		isProtected: branch.protected,
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
 	};
-	assertFunctionEnv(config, envSource, target);
+	assertFunctionEnv(config, target);
 	const resolved = withDeployFunctionEnv(
 		resolveConfig(config, target),
-		envSource,
 		target,
 	);
 	const realtimeApi = hasRealtimePolicy(resolved)

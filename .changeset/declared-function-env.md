@@ -5,4 +5,4 @@
 "neon": minor
 ---
 
-A Function `env` value in `neon.ts` can be a declaration instead of a string: `{ value: process.env.X }` (required), with `required: "default-branch"`, `required: false`, or `default: "<fallback>"`. `onUndefined: "skip"` keeps the deployed value of an unset optional variable instead of removing it. `value` defaults to `process.env.<key>`. A declaration is resolved only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so importing `neon.ts` (from app code or another Function) no longer fails on a secret it does not hold. `plan`, `apply`, and `createBranch` take an `env` source.
+A Function `env` value in `neon.ts` can be a declaration instead of a string: `{ value: process.env.X, required: true }`, with `required: false` or `required: "default-branch"` for a value that may be unset, and `onUndefined: "skip"` to keep the deployed value instead of removing it. A declaration's value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so importing `neon.ts` (from app code or another Function) no longer fails on a secret it does not hold.

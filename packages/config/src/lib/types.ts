@@ -382,58 +382,36 @@ export type FunctionBundler = (
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
- * A Function env variable resolved when a command needs its value: from `value`, or from
- * `process.env.<key>` when `value` is omitted. Declaring a variable makes it required;
- * `required` narrows where, and `default` fills it in. An undefined or empty value counts
- * as unset.
+ * A Function env variable whose `value` is checked only when a command needs it, so an
+ * unset `process.env` read never fails an import of `neon.ts`. An undefined or empty value
+ * counts as unset.
  *
- * `required` is `true` (the default), `false`, or `"default-branch"`: required when deploying
- * the project's default branch ({@link BranchTarget.isDefault}), optional on every other
- * branch and in `neon dev`. It does not look at branch names or protection.
- *
- * | Declaration | Unset deploying the default branch | Unset deploying another branch | Unset in `neon dev` | `parseEnv` type |
+ * | `required` | Unset deploying the default branch | Unset deploying another branch | Unset in `neon dev` | `parseEnv` type |
  * | --- | --- | --- | --- | --- |
- * | `{ value }`, `{}`, or `{ required: true }` | fails | fails | fails | `string` |
- * | `{ value, required: "default-branch" }` | fails | left out | runs without it | `string \| undefined` |
- * | `{ value, required: false }` | left out | left out | runs without it | `string \| undefined` |
- * | `{ value, default: "1" }` | deploys `"1"` | deploys `"1"` | uses `"1"` | `string` |
+ * | `true` | fails | fails | fails | `string` |
+ * | `"default-branch"` | fails | left out | runs without it | `string \| undefined` |
+ * | `false` | left out | left out | runs without it | `string \| undefined` |
  *
- * `onUndefined` sets what "left out" means for a variable that may be unset:
- * `"unset"` (the default) removes it from the deployment, or from the Function's environment
- * in `neon dev`; `"skip"` leaves the deployed value, or the inherited one, as it is. Use
- * `"skip"` for a value set outside `neon.ts`, such as with
- * `neon functions deploy <slug> --env KEY=VALUE`.
+ * `"default-branch"` means the project's default branch ({@link BranchTarget.isDefault}); it
+ * does not look at branch names or protection.
  *
- * A variable that is "left out" is removed from the Function if an earlier deploy set it.
- * Keys that `neon.ts` does not declare are left as they are.
+ * `onUndefined` sets what "left out" means: `"unset"` (the default) removes the variable from
+ * the deployment, or from the Function's environment in `neon dev`; `"skip"` leaves the
+ * deployed value, or the inherited one, as it is. Use `"skip"` for a value set outside
+ * `neon.ts`, such as with `neon functions deploy <slug> --env KEY=VALUE`. Keys that `neon.ts`
+ * does not declare are left as they are.
  *
  * `parseEnv` reads the deployed key, not `value`: inside a Function, `value` refers to an
  * environment the deploy has already read.
+ *
+ * @example { value: process.env.STRIPE_SECRET_KEY, required: true }
  */
 export type FunctionEnvVar =
+	| { value: string | undefined; required: boolean; onUndefined?: never }
 	| {
-			value?: string | undefined;
-			required?: true;
-			onUndefined?: never;
-			default?: never;
-	  }
-	| {
-			value?: string | undefined;
-			required: boolean;
-			onUndefined?: never;
-			default?: never;
-	  }
-	| {
-			value?: string | undefined;
+			value: string | undefined;
 			required: false | "default-branch";
 			onUndefined?: "unset" | "skip";
-			default?: never;
-	  }
-	| {
-			value?: string | undefined;
-			default: string;
-			required?: never;
-			onUndefined?: never;
 	  };
 
 /** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
@@ -471,7 +449,7 @@ export interface FunctionDef {
 	 *
 	 * A literal string is uploaded as is. An unset `process.env.X` written as a literal
 	 * fails validation wherever `neon.ts` is evaluated.
-	 * @example { RESEND_API_KEY: { value: process.env.RESEND_API_KEY }, LOG_LEVEL: "info" }
+	 * @example { RESEND_API_KEY: { value: process.env.RESEND_API_KEY, required: true }, LOG_LEVEL: "info" }
 	 */
 	env?: Record<string, FunctionEnvValue>;
 	/**

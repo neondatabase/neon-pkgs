@@ -568,16 +568,15 @@ describe("parseEnv", () => {
 					name: "Alpha",
 					source: "./alpha.ts",
 					env: {
-						SECRET_A: {},
-						DSN: { required: "default-branch" },
-						GUILD: { required: false },
-						RATE: { default: "1" },
+						SECRET_A: { value: "read-at-deploy", required: true },
+						DSN: { value: undefined, required: "default-branch" },
+						GUILD: { value: undefined, required: false },
 					},
 				},
 				beta: {
 					name: "Beta",
 					source: "./beta.ts",
-					env: { SECRET_B: {} },
+					env: { SECRET_B: { value: undefined, required: true } },
 				},
 			},
 		});
@@ -586,16 +585,14 @@ describe("parseEnv", () => {
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
 		};
 
-		test("reads one function's declarations while another function's secret is unset", () => {
+		test("reads one function's declared keys while another function's secret is unset", () => {
 			stubBranch();
-			vi.stubEnv("SECRET_A", "a");
+			vi.stubEnv("SECRET_A", "injected");
 			vi.stubEnv("SECRET_B", undefined);
 			vi.stubEnv("DSN", undefined);
 			vi.stubEnv("GUILD", "");
-			vi.stubEnv("RATE", undefined);
 			expect(parseEnv(config, "alpha").function).toEqual({
-				SECRET_A: "a",
-				RATE: "1",
+				SECRET_A: "injected",
 			});
 			expect(
 				parseEnv(config, ["DATABASE_URL"]).postgres.databaseUrl,
@@ -604,22 +601,9 @@ describe("parseEnv", () => {
 
 		test("reads the deployed key, not value", () => {
 			stubBranch();
-			const withValue = defineConfig({
-				functions: {
-					gamma: {
-						name: "Gamma",
-						source: "./gamma.ts",
-						env: { SECRET_G: { value: "read-at-deploy" } },
-					},
-				},
-			});
-			vi.stubEnv("SECRET_G", "injected");
-			expect(parseEnv(withValue, "gamma").function).toEqual({
-				SECRET_G: "injected",
-			});
-			vi.stubEnv("SECRET_G", undefined);
-			expect(() => parseEnv(withValue, "gamma")).toThrow(
-				'SECRET_G is missing (function "gamma")',
+			vi.stubEnv("SECRET_A", undefined);
+			expect(() => parseEnv(config, "alpha")).toThrow(
+				'SECRET_A is missing (function "alpha")',
 			);
 		});
 

@@ -33,7 +33,7 @@ export const missingDeployEnv = async (
 			unsetFunctionEnv: "omit",
 		});
 		// The linked branch is not read here, so `required: "default-branch"` counts as required.
-		const declared = missingFunctionEnv(config, process.env, "deploy").map(
+		const declared = missingFunctionEnv(config, "deploy").map(
 			({ key }) => key,
 		);
 		return [...new Set([...omittedFunctionEnv, ...declared])];

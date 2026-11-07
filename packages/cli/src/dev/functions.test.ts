@@ -239,14 +239,14 @@ describe("resolveFunctionsFromConfig", () => {
           name: 'Alpha',
           source: './alpha.ts',
           env: {
-            ${TOKEN}: {},
-            ${DSN}: { required: 'default-branch' },
-            RATE: { default: '1' },
-            KEPT: { required: false, onUndefined: 'skip' },
+            ${TOKEN}: { value: process.env.${TOKEN}, required: true },
+            ${DSN}: { value: process.env.${DSN}, required: 'default-branch' },
+            RATE: { value: process.env.NEON_PKGS_DEV_DECLARED_RATE ?? '1', required: true },
+            KEPT: { value: process.env.NEON_PKGS_DEV_DECLARED_KEPT, required: false, onUndefined: 'skip' },
             LOG_LEVEL: 'info',
           },
         },
-        beta: { name: 'Beta', source: './beta.ts', env: { ${OTHER}: {} } },
+        beta: { name: 'Beta', source: './beta.ts', env: { ${OTHER}: { value: process.env.${OTHER}, required: true } } },
       },
     };\n`;
 
@@ -254,7 +254,7 @@ describe("resolveFunctionsFromConfig", () => {
 			for (const key of [TOKEN, DSN, OTHER]) delete process.env[key];
 		});
 
-		it("resolves values and defaults, and runs without a default-branch variable", async () => {
+		it("resolves values, and runs without a default-branch variable", async () => {
 			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
 			process.env[TOKEN] = "t";
 			process.env[OTHER] = "o";

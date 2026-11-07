@@ -42,8 +42,6 @@ export interface ConfigOperationOptions {
 	apiHost?: string;
 	/** Inject a custom NeonApi adapter (primarily for tests). */
 	api?: PushConfigOptions["api"];
-	/** Values for declared Function env variables. See {@link PushConfigOptions.env}. */
-	env?: PushConfigOptions["env"];
 }
 
 /**
@@ -102,7 +100,6 @@ export async function plan(
 		dryRun: true,
 		// Surface the full would-apply list as plan steps without mutating anything.
 		updateExisting: true,
-		...(options.env ? { env: options.env } : {}),
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.apiHost ? { apiHost: options.apiHost } : {}),
@@ -127,7 +124,6 @@ export async function apply(
 	return pushConfig(config, {
 		projectId: options.projectId,
 		branchId: options.branchId,
-		...(options.env ? { env: options.env } : {}),
 		...(options.api ? { api: options.api } : {}),
 		...(options.apiKey ? { apiKey: options.apiKey } : {}),
 		...(options.apiHost ? { apiHost: options.apiHost } : {}),
@@ -158,11 +154,6 @@ export interface CreateBranchOptions {
 	api?: NeonApi;
 	/** Inject to deploy without this package loading esbuild. */
 	bundleFunction?: FunctionBundler;
-	/**
-	 * Values for declared Function env variables. See {@link PushConfigOptions.env}. A missing
-	 * required one fails before the branch is created.
-	 */
-	env?: PushConfigOptions["env"];
 }
 
 /**
@@ -208,8 +199,8 @@ export async function createBranch(
 	config: Config,
 	options: CreateBranchOptions,
 ): Promise<CreateBranchResult> {
-	const envSource = options.env ?? process.env;
-	assertFunctionEnv(config, envSource, {
+	// A missing required Function env value fails before the branch is created.
+	assertFunctionEnv(config, {
 		name: options.branchName,
 		exists: false,
 	});
@@ -294,7 +285,6 @@ export async function createBranch(
 			branchExists: false,
 			updateExisting: true,
 			allowProtectedBranch: true,
-			env: envSource,
 			...(options.bundleFunction
 				? { bundleFunction: options.bundleFunction }
 				: {}),

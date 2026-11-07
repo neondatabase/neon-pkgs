@@ -195,8 +195,8 @@ describe("createBranch", () => {
 					name: "Fn",
 					source: "./fn.ts",
 					env: {
-						TOKEN: {},
-						DSN: { required: "default-branch" },
+						TOKEN: { value: undefined, required: true },
+						DSN: { value: undefined, required: "default-branch" },
 					},
 				},
 			},
@@ -206,7 +206,6 @@ describe("createBranch", () => {
 				api,
 				projectId,
 				branchName: "dev-1",
-				env: {},
 			}),
 		).rejects.toThrow('"TOKEN" for function "fn1" is required and unset');
 		expect(await api.listBranches(projectId)).toHaveLength(before);

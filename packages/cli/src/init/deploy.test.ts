@@ -28,9 +28,9 @@ describe("missingDeployEnv", () => {
       source: "./bot.ts",
       env: {
         LEGACY: process.env.LEGACY,
-        TOKEN: {},
-        DSN: { required: "default-branch" },
-        OPTIONAL: { required: false },
+        TOKEN: { value: process.env.TOKEN, required: true },
+        DSN: { value: process.env.DSN, required: "default-branch" },
+        OPTIONAL: { value: process.env.OPTIONAL, required: false },
       },
     },
   },
