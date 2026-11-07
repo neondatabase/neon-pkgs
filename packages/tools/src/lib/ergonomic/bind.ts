@@ -30,6 +30,14 @@ export interface ToolClientOptions {
 	baseUrl?: string;
 	fetch?: typeof fetch;
 	wait?: NeonConfig["wait"];
+	/** Where `docs.search` posts its query. */
+	siteSearchUrl?: string;
+	/** Where `docs.get` reads `<docsBaseUrl>/<slug>.md`. */
+	docsBaseUrl?: string;
+	/** Where `feedback.send` posts. */
+	feedbackUrl?: string;
+	/** The `source` `feedback.send` reports. */
+	feedbackSource?: string;
 }
 
 const ALL_PAGES = " Returns every page. Pass limit to cap how many.";
@@ -235,7 +243,8 @@ export const bindTool = <
 	run: (
 		neon: NeonClient<true>,
 		input: z.output<InputSchema>,
-		signal?: AbortSignal,
+		signal: AbortSignal | undefined,
+		context: NeonToolExecutionContext,
 	) => Promise<Output>,
 ): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
 	...tool,
@@ -245,8 +254,28 @@ export const bindTool = <
 			toolClient(options, context),
 			parsed,
 			context?.signal,
+			context ?? {},
 		);
 		return toToolResult(result);
+	},
+});
+
+/** A tool that calls no Neon API and so needs no credential. */
+export const bindPublicTool = <
+	const InputSchema extends z.ZodType,
+	const Id extends string,
+	Output,
+>(
+	tool: Omit<NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>>, "execute">,
+	run: (
+		input: z.output<InputSchema>,
+		context: NeonToolExecutionContext,
+	) => Promise<Output>,
+): NeonTool<InputSchema, Id, JsonSafe<Awaited<Output>>> => ({
+	...tool,
+	async execute(input, context) {
+		const parsed = await tool.inputSchema.parseAsync(input);
+		return toToolResult(await run(parsed, context ?? {}));
 	},
 });
 
