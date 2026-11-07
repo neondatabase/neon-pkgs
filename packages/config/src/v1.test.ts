@@ -58,6 +58,7 @@ describe("@neon/config public value surface", () => {
 			  "PlatformError",
 			  "PushAbortedError",
 			  "PushConflictError",
+			  "assertFunctionEnv",
 			  "authoredAiGateway",
 			  "authoredBuckets",
 			  "authoredFunctions",
@@ -74,12 +75,15 @@ describe("@neon/config public value surface", () => {
 			  "isPartialBranchCreateError",
 			  "isPlatformError",
 			  "loadConfigFromFile",
+			  "missingFunctionEnv",
 			  "packagesToStage",
 			  "pickFunctionSourceEntry",
 			  "previewGaWarningForConfig",
 			  "previewGaWarningMessage",
 			  "resolveConfig",
+			  "resolveFunctionEnv",
 			  "schemas",
+			  "splitFunctionEnv",
 			]
 		`);
 	});

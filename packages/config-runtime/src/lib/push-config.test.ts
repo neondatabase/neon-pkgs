@@ -920,6 +920,90 @@ describe("pushConfig", () => {
 		expect(Array.from(input)).toEqual([1, 2, 3, 4]);
 	});
 
+	describe("declared function env", () => {
+		const declaredConfig = (values: Record<string, string | undefined>) =>
+			defineConfig({
+				functions: {
+					fn1: {
+						name: "Hello World",
+						source: fnSource,
+						env: {
+							LOG_LEVEL: "info",
+							TOKEN: { value: values.TOKEN, required: true },
+							DSN: {
+								value: values.DSN,
+								required: "default-branch",
+							},
+							GUILD: { value: values.GUILD, required: false },
+							KEPT: {
+								value: values.KEPT,
+								required: false,
+								onUndefined: "skip",
+							},
+						},
+					},
+				},
+			});
+		const noBundle = async () => new Uint8Array([1]);
+		const withPreview = () =>
+			seededFake({
+				branches: [
+					{ id: "br-main", name: "main", isDefault: true },
+					{ id: "br-dev", name: "dev", isDefault: false },
+				],
+			});
+		const deployedEnv = (api: FakeNeonApi) =>
+			(
+				api.history.find((h) => h.method === "deployBranchFunction")
+					?.args[3] as { environment: Record<string, string> }
+			).environment;
+
+		test("the default branch uploads set values, removes unset optionals, and leaves skip ones out", async () => {
+			const { api, projectId } = seededFake();
+			await pushConfig(declaredConfig({ TOKEN: "t", DSN: "d" }), {
+				api,
+				projectId,
+				branchId: "br-main",
+				bundleFunction: noBundle,
+			});
+			expect(deployedEnv(api)).toEqual({
+				LOG_LEVEL: "info",
+				TOKEN: "t",
+				DSN: "d",
+				GUILD: "",
+			});
+		});
+
+		test('the default branch fails before any change when a "default-branch" value is unset', async () => {
+			const { api, projectId } = seededFake();
+			await expect(
+				pushConfig(declaredConfig({ TOKEN: "t" }), {
+					api,
+					projectId,
+					branchId: "br-main",
+					bundleFunction: noBundle,
+				}),
+			).rejects.toThrow(
+				'Environment variable "DSN" for function "fn1" is required and unset.',
+			);
+			const writes = api.history.filter(
+				(h) => !/^(get|list)/.test(h.method),
+			);
+			expect(writes).toEqual([]);
+		});
+
+		test('another branch removes an unset "default-branch" variable', async () => {
+			const { api, projectId } = withPreview();
+			await pushConfig(declaredConfig({ TOKEN: "t" }), {
+				api,
+				projectId,
+				branchId: "br-dev",
+				bundleFunction: noBundle,
+			});
+			expect(deployedEnv(api)).toMatchObject({ DSN: "", GUILD: "" });
+		});
+	});
+
 	test("re-deploys an existing function as an update, without duplicating it", async () => {
 		const { api, projectId } = seededFake();
 		api.seedFunction(projectId, "br-main", {

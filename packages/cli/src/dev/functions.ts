@@ -1,11 +1,14 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import {
+	assertFunctionEnv,
+	authoredFunctions,
 	type Config,
 	type FunctionBundlerInput,
 	type FunctionDevConfig,
 	type ResolvedFunctionConfig,
 	resolveConfig,
+	resolveFunctionEnv,
 } from "@neon/config";
 import { loadProjectConfig } from "../project.js";
 
@@ -21,6 +24,10 @@ export type PlannedFunction = {
 	source: string;
 	port?: number;
 	env: Record<string, string>;
+	/** The part of {@link env} resolved from `{ value, required }` declarations. */
+	declaredEnv?: Record<string, string>;
+	/** Declared keys that resolved unset, removed from the inherited environment. */
+	unsetEnv?: string[];
 	/**
 	 * The function's `neon.ts` `externalPackages`, mirrored so a local bundle is built with
 	 * the same `external` list as a deploy. Without it, `neon dev` would fail to bundle a
@@ -59,6 +66,7 @@ export const resolveFunctionsFromConfig = async (
 	if (!loaded) return null;
 
 	const { config, configDir, configPath } = loaded;
+	assertFunctionEnv(config, "development");
 	const resolved = resolveConfig(config, {
 		name: branchName ?? "local",
 		exists: branchName !== undefined,
@@ -96,14 +104,16 @@ export const findConfigFunctionBySource = async (
 		exists: false,
 	});
 	const functions = resolved.preview?.functions ?? [];
-	return functions
-		.map((fn) =>
-			toPlannedFunction(
-				fn,
-				resolveFunctionSource(fn.source, loaded.configDir),
-			),
-		)
-		.find((fn) => fn.source === source);
+	const match = functions.find(
+		(fn) => resolveFunctionSource(fn.source, loaded.configDir) === source,
+	);
+	if (!match) return undefined;
+	// Siblings are not served, so only the matched function's secrets are required.
+	const served = Object.entries(
+		authoredFunctions(loaded.config) ?? {},
+	).filter(([slug]) => slug === match.slug);
+	assertFunctionEnv({ functions: Object.fromEntries(served) }, "development");
+	return toPlannedFunction(match, source);
 };
 
 const resolveFunctionSource = (source: string, configDir: string): string =>
@@ -114,12 +124,21 @@ const toPlannedFunction = (
 	source: string,
 ): PlannedFunction => {
 	const port = devPort(fn.dev);
+	const declaredEnv = resolveFunctionEnv(fn.envVars, "development").env;
+	const unsetEnv = Object.entries(fn.envVars ?? {})
+		.filter(
+			([key, declaration]) =>
+				!(key in declaredEnv) && declaration.onUndefined !== "skip",
+		)
+		.map(([key]) => key);
 	return {
 		slug: fn.slug,
 		name: fn.name,
 		source,
 		...(port !== undefined ? { port } : {}),
-		env: { ...fn.env },
+		env: { ...fn.env, ...declaredEnv },
+		declaredEnv,
+		...(unsetEnv.length > 0 ? { unsetEnv } : {}),
 		// Names only: locally every entry is simply left unbundled, and `includeFiles`
 		// governs the deployed archive, which `neon dev` does not build.
 		...(fn.externalPackages

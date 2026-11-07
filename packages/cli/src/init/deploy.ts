@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { missingFunctionEnv } from "@neon/config";
 import { isNeonApiError } from "../api.js";
 import { recoverFrom401 } from "../auth_recovery.js";
 import { ensureAuth } from "../commands/auth.js";
@@ -26,12 +27,16 @@ export const missingDeployEnv = async (
 		? loadEnvFileIntoProcess(options.envFile)
 		: [];
 	try {
-		const { omittedFunctionEnv } = await loadProjectConfig({
+		const { config, omittedFunctionEnv } = await loadProjectConfig({
 			cwd: options.cwd,
 			contextFile: options.contextFile,
 			unsetFunctionEnv: "omit",
 		});
-		return omittedFunctionEnv;
+		// The linked branch is not read here, so `required: "default-branch"` counts as required.
+		const declared = missingFunctionEnv(config, "deploy").map(
+			({ key }) => key,
+		);
+		return [...new Set([...omittedFunctionEnv, ...declared])];
 	} finally {
 		for (const key of applied) delete process.env[key];
 	}

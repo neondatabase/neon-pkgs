@@ -94,6 +94,45 @@ DNS is yours: `plan` / `apply` print `CNAME <hostname> -> <cname_target>` when t
 
 A project that can deploy functions can still reject custom-domain list and register with HTTP 404 until custom domains are enabled for that project.
 
+### Function env
+
+Each `env` entry is a literal string or a declaration with `value` and `required`. A declaration's value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so an unset `process.env` read never fails an import of `neon.ts`:
+
+```ts
+env: {
+  STRIPE_SECRET_KEY: { value: process.env.STRIPE_SECRET_KEY, required: true },
+  STRIPE_WEBHOOK_SECRET: { value: process.env.STRIPE_WEBHOOK_SECRET_LIVE, required: true },
+  SENTRY_DSN: { value: process.env.SENTRY_DSN, required: "default-branch" },
+  DISCORD_GUILD_ID: { value: process.env.DISCORD_GUILD_ID, required: false },
+  ADMIN_TOKEN: { value: process.env.ADMIN_TOKEN, required: false, onUndefined: "skip" },
+  SAMPLE_RATE: { value: process.env.SAMPLE_RATE ?? "1", required: true },
+  LOG_LEVEL: "info",
+},
+```
+
+| `required` | Unset deploying the default branch | Unset deploying another branch | Unset in `neon dev` | `parseEnv(config, slug).function` |
+| --- | --- | --- | --- | --- |
+| `true` | fails before any change | fails before any change | fails before any Function starts | `string` |
+| `"default-branch"` | fails before any change | left out | runs without it | `string \| undefined` |
+| `false` | left out | left out | runs without it | `string \| undefined` |
+
+An undefined or empty value (`KEY=` in a `.env` file) counts as unset. For a fallback, put it in `value`: `process.env.SAMPLE_RATE ?? "1"`.
+
+`"default-branch"` means the project's default branch, the one Neon marks as default (`branch.isDefault` in the `branch` closure). It does not look at branch names or protection. A branch that `neon checkout --create` makes is never the default branch.
+
+`onUndefined` sets what "left out" means for `required: false` or `"default-branch"`:
+
+| `onUndefined` | Deploy with the value unset | `neon dev` with the value unset |
+| --- | --- | --- |
+| `"unset"` (default) | removes the variable from the Function, so the deployment matches `neon.ts` | removes it from the Function's environment |
+| `"skip"` | leaves the deployed value as it is | leaves the inherited value as it is |
+
+Use `"skip"` for a value set outside `neon.ts`, for example with `neon functions deploy <slug> --env KEY=VALUE`. A branch created from another starts with its parent's deployed Function env, so `"unset"` also removes a value the new branch inherited. Keys `neon.ts` does not declare are left as they are.
+
+`parseEnv(config, slug)` reads each declared key from the Function's own environment, not `value`: inside a deployed Function, `value` refers to the environment the deploy read.
+
+A literal string is uploaded as is. `process.env.X!` still works, but it is validated wherever `neon.ts` is imported: app code, `drizzle.config.ts`, and each deployed Function that calls `parseEnv(config, …)`. Each of those then needs every Function's secrets, so a deployed Function fails to load when another Function's secret is missing from its runtime. `{ value: process.env.X, required: true }` avoids that.
+
 ### Shipping a prebuilt directory (`bundler: "none"`)
 
 esbuild is the default. A file `source` is the entry; a directory is searched for `index.ts`, then `index.js`, then `index.mjs`. Set `bundler: "none"` to zip `source` as-is instead — a directory whose root contains `index.mjs` or `index.js`, or a single file of that name:

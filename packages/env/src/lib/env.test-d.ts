@@ -1,4 +1,8 @@
-import { type Config, defineConfig } from "@neon/config/v1";
+import {
+	type Config,
+	defineConfig,
+	type FunctionEnvVar,
+} from "@neon/config/v1";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
@@ -413,6 +417,73 @@ describe("parseEnv existing overloads still type", () => {
 		const env = parseEnv(config, "hello");
 		expectTypeOf(env.function).toEqualTypeOf<{ resendApiKey: string }>();
 		expectTypeOf(env.function.resendApiKey).toEqualTypeOf<string>();
+	});
+
+	test("declared env vars are string only when required: true", () => {
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: {
+						TOKEN: { value: process.env.TOKEN, required: true },
+						DSN: {
+							value: process.env.DSN,
+							required: "default-branch",
+						},
+						GUILD: { value: process.env.GUILD, required: false },
+						KEPT: {
+							value: process.env.KEPT,
+							required: false,
+							onUndefined: "skip",
+						},
+						LOG_LEVEL: "info",
+					},
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function).toEqualTypeOf<{
+			TOKEN: string;
+			DSN: string | undefined;
+			GUILD: string | undefined;
+			KEPT: string | undefined;
+			LOG_LEVEL: string;
+		}>();
+	});
+
+	test("a declaration widened to FunctionEnvVar may be unset", () => {
+		const optional = (): FunctionEnvVar => ({
+			value: undefined,
+			required: false,
+		});
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { TOKEN: optional() },
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function.TOKEN).toEqualTypeOf<
+			string | undefined
+		>();
+	});
+
+	test("a non-literal required may be unset", () => {
+		const required = Boolean(process.env.CI);
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { TOKEN: { value: process.env.TOKEN, required } },
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function.TOKEN).toEqualTypeOf<
+			string | undefined
+		>();
 	});
 });
 

@@ -561,6 +561,61 @@ describe("parseEnv", () => {
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 	});
 
+	describe("declared function env", () => {
+		const config = defineConfig({
+			functions: {
+				alpha: {
+					name: "Alpha",
+					source: "./alpha.ts",
+					env: {
+						SECRET_A: { value: "read-at-deploy", required: true },
+						DSN: { value: undefined, required: "default-branch" },
+						GUILD: { value: undefined, required: false },
+					},
+				},
+				beta: {
+					name: "Beta",
+					source: "./beta.ts",
+					env: { SECRET_B: { value: undefined, required: true } },
+				},
+			},
+		});
+		const stubBranch = () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		};
+
+		test("reads one function's declared keys while another function's secret is unset", () => {
+			stubBranch();
+			vi.stubEnv("SECRET_A", "injected");
+			vi.stubEnv("SECRET_B", undefined);
+			vi.stubEnv("DSN", undefined);
+			vi.stubEnv("GUILD", "");
+			expect(parseEnv(config, "alpha").function).toEqual({
+				SECRET_A: "injected",
+			});
+			expect(
+				parseEnv(config, ["DATABASE_URL"]).postgres.databaseUrl,
+			).toBe("postgres://pooled");
+		});
+
+		test("reads the deployed key, not value", () => {
+			stubBranch();
+			vi.stubEnv("SECRET_A", undefined);
+			expect(() => parseEnv(config, "alpha")).toThrow(
+				'SECRET_A is missing (function "alpha")',
+			);
+		});
+
+		test("a missing required: true declaration is EnvNotInjected", () => {
+			stubBranch();
+			vi.stubEnv("SECRET_B", undefined);
+			expect(() => parseEnv(config, "beta")).toThrow(
+				'SECRET_B is missing (function "beta")',
+			);
+		});
+	});
+
 	describe("function scope", () => {
 		const config = defineConfig({
 			preview: {
