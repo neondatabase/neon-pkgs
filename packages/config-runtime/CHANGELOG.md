@@ -1,5 +1,16 @@
 # @neondatabase/config-runtime
 
+## 1.12.0
+
+### Minor Changes
+
+- aba0b8d: A Function `env` value in `neon.ts` can be a declaration instead of a string: `{ value: process.env.X, required: true }`, with `required: false` or `required: "default-branch"` for a value that may be unset, and `onUndefined: "skip"` to keep the deployed value instead of removing it. A declaration's value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so importing `neon.ts` (from app code or another Function) no longer fails on a secret it does not hold.
+
+### Patch Changes
+
+- Updated dependencies [aba0b8d]
+  - @neon/config@1.13.0
+
 ## 1.11.9
 
 ### Patch Changes
