@@ -443,9 +443,9 @@ export interface FunctionDef {
 	 * function reads at runtime. The **keys** are static (preserved at the type level so
 	 * `parseEnv(config, "<slug>").function.<key>` is typed).
 	 *
-	 * A value is a literal string or a {@link FunctionEnvVar} declaration. A declaration reads
-	 * `process.env.<key>` only when `neon deploy`, `neon dev`, or `parseEnv` needs the value,
-	 * so importing `neon.ts` never fails on an unset variable.
+	 * A value is a literal string or a {@link FunctionEnvVar} declaration. A declaration's
+	 * value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so
+	 * importing `neon.ts` never fails on an unset variable.
 	 *
 	 * A literal string is uploaded as is. An unset `process.env.X` written as a literal
 	 * fails validation wherever `neon.ts` is evaluated.

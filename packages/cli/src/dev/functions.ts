@@ -24,7 +24,7 @@ export type PlannedFunction = {
 	source: string;
 	port?: number;
 	env: Record<string, string>;
-	/** The part of {@link env} resolved from `{ required: … }` / `{ default }` declarations. */
+	/** The part of {@link env} resolved from `{ value, required }` declarations. */
 	declaredEnv?: Record<string, string>;
 	/** Declared keys that resolved unset, removed from the inherited environment. */
 	unsetEnv?: string[];
