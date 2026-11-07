@@ -1,0 +1,72 @@
+{
+	"name": "@neon/convex-to-postgres",
+	"version": "0.0.0",
+	"description": "Migrate a Convex deployment to Neon Postgres: generate DDL (including Neon Lakebase Search indexes) from a Convex schema and load a `convex export` snapshot without losing numeric precision.",
+	"keywords": [
+		"neon",
+		"convex",
+		"postgres",
+		"migration",
+		"lakebase",
+		"database",
+		"platform",
+		"cli"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/neondatabase/neon-pkgs.git"
+	},
+	"license": "Apache-2.0",
+	"author": {
+		"name": "Neon",
+		"url": "https://neon.com"
+	},
+	"type": "module",
+	"bin": {
+		"convex-to-postgres": "dist/cli.js"
+	},
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"README.md",
+		"dist/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsc --noEmit && tsdown",
+		"prepare": "npm run build",
+		"test": "vitest --passWithNoTests",
+		"test:ci": "vitest run --passWithNoTests",
+		"test:integration": "pnpm build && vitest run --config vitest.integration.config.ts",
+		"tsc": "tsc"
+	},
+	"dependencies": {
+		"fflate": "^0.8.2",
+		"jiti": "^2.7.0",
+		"pg": "^8.20.0"
+	},
+	"devDependencies": {
+		"@testcontainers/postgresql": "^11.14.0",
+		"@types/node": "catalog:",
+		"@types/pg": "^8.11.10",
+		"@vitest/coverage-v8": "catalog:",
+		"console-fail-test": "catalog:",
+		"convex": "^1.47.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"provenance": false
+	}
+}

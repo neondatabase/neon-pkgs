@@ -32,6 +32,7 @@ Apps and starters that work with these packages live in [`neondatabase/examples`
 | `@neon/effect` | Effect v4 bindings for the `@neon/sdk` ergonomic client: Effects, paginated Streams, tagged errors and request cancellation on interruption. |
 | `@neon/functions` | Runtime helpers for Neon Functions: `waitUntil`, `upgradeWebSocket` (fetch handler or Hono route via `@neon/functions/hono`), `attachDatabasePool`, and `parseTriggerInvocation` (`@neon/functions/triggers`). |
 | `@neon/ai-sdk-provider` | Community [Vercel AI SDK](https://ai-sdk.dev) provider for the Neon AI Gateway. |
+| `@neon/convex-to-postgres` | Migrate a Convex deployment to Neon Postgres with `npx @neon/convex-to-postgres` or as a library: generate DDL (including Neon Lakebase Search indexes) from a Convex schema and load a `convex export` snapshot. |
 
 ### Realtime
 

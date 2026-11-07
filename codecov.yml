@@ -24,6 +24,9 @@ flag_management:
         - name: config-runtime
           paths:
               - packages/config-runtime/
+        - name: convex-to-postgres
+          paths:
+              - packages/convex-to-postgres/
         - name: effect
           paths:
               - packages/effect/
