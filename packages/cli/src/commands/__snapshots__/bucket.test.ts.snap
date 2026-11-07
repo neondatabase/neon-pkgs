@@ -60,6 +60,13 @@ exports[`bucket > object get surfaces the server message when the object is miss
 
 exports[`bucket > object get without a key is rejected client-side 1`] = `""`;
 
+exports[`bucket > object list --cursor to a last page of only folders does not claim there are no objects 1`] = `
+"folders
+Name
+logs/
+"
+`;
+
 exports[`bucket > object list --output json includes folders (prefixes) and keys 1`] = `
 "{
   "folders": [
@@ -87,6 +94,14 @@ exports[`bucket > object list --output json includes folders (prefixes) and keys
   "next_cursor": "",
   "is_truncated": false
 }
+"
+`;
+
+exports[`bucket > object list --recursive of nested keys prints only the objects table 1`] = `
+"objects
+Key              Size  Last Modified             Etag
+images/logo.png  4096  2021-03-03T00:00:00.000Z  "ghi789"
+logs/app.log     512   2021-04-04T00:00:00.000Z  "jkl012"
 "
 `;
 
@@ -180,6 +195,54 @@ is_truncated: false
 "
 `;
 
+exports[`bucket > object list of a truncated page of only folders does not claim there are no objects 1`] = `
+"folders
+Name
+images/
+"
+`;
+
+exports[`bucket > object list of an empty bucket still reports No objects found. 1`] = `
+"
+No objects found.
+"
+`;
+
+exports[`bucket > object list of only folders keeps json and yaml output structured 1`] = `
+"{
+  "folders": [
+    "images/",
+    "logs/"
+  ],
+  "objects": [],
+  "prefix": "",
+  "next_cursor": "",
+  "is_truncated": false
+}
+"
+`;
+
+exports[`bucket > object list of only folders keeps json and yaml output structured 2`] = `
+"folders:
+  - images/
+  - logs/
+objects: []
+prefix: ""
+next_cursor: ""
+is_truncated: false
+"
+`;
+
+exports[`bucket > object list with an explicit delimiter suggests replacing it with --recursive 1`] = `
+"folders
+Name
+images/
+logs/
+
+No objects directly under "folders-only". List one of the folders above, or replace --delimiter with --recursive to list every key.
+"
+`;
+
 exports[`bucket > object list with an explicit empty --delimiter lists flat 1`] = `
 "folders:
   - images/
@@ -221,6 +284,26 @@ limit: ""
 cursor: ""
 next_cursor: ""
 is_truncated: false
+"
+`;
+
+exports[`bucket > object list with only folders does not claim the bucket is empty 1`] = `
+"folders
+Name
+images/
+logs/
+
+No objects directly under "folders-only". List one of the folders above, or pass --recursive to list every key.
+"
+`;
+
+exports[`bucket > object list with only folders names the prefix it listed 1`] = `
+"folders
+Name
+images/
+logs/
+
+No objects directly under "folders-only/logs/". List one of the folders above, or pass --recursive to list every key.
 "
 `;
 
