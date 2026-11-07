@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type Branch, type NeonClient, NeonClientError } from "@neon/sdk";
+import { createProjectBranch, type Operation } from "@neon/sdk/raw";
 import * as z from "zod";
 import {
 	bindTool,
@@ -18,34 +19,73 @@ import { runTransaction, sqlWriteAnnotations } from "./run.js";
 export const splitSqlStatements = (sql: string): string[] =>
 	sql.split(";").filter(Boolean);
 
-export const createTemporaryBranch = async (
-	neonClient: NeonClient<true>,
-	projectId: string,
-	name: string | undefined,
-	signal?: AbortSignal,
-): Promise<Branch> =>
-	neonClient.branches.create(
-		{
-			projectId,
-			...(name === undefined ? {} : { name }),
-			compute: { minCu: 0.25, maxCu: 0.25 },
-		},
-		{ signal },
-	);
+// Cleanup outlives the caller's wait budget and signal: a branch still provisioning
+// cannot be deleted, and leaving it behind is the failure this guards against.
+const CLEANUP_WAIT_MS = 60_000;
 
-/** Deletes the branch a failed prepare created, then rethrows the original failure. */
-export const deleteAfterFailure = async (
+const discardTemporaryBranch = async (
 	neonClient: NeonClient<true>,
 	projectId: string,
 	branchId: string,
-	error: unknown,
-): Promise<never> => {
+	operations: readonly Operation[],
+) => {
 	try {
-		await neonClient.branches.delete({ projectId, branchId });
+		await neonClient.operations.waitFor(
+			{ operations },
+			{ timeoutMs: CLEANUP_WAIT_MS },
+		);
+		await neonClient.branches.delete(
+			{ projectId, branchId },
+			{ waitForReadiness: false },
+		);
 	} catch {
 		// The original failure is the one to report; the branch name marks an orphan.
 	}
-	throw error;
+};
+
+/**
+ * Creates a branch with a 0.25 CU read-write compute and runs `use` on it once
+ * it is ready. If waiting for readiness or `use` fails, the branch is deleted and
+ * the original error is rethrown, so the id is recorded before any wait starts.
+ */
+export const withTemporaryBranch = async <T>(
+	neonClient: NeonClient<true>,
+	projectId: string,
+	name: string | undefined,
+	signal: AbortSignal | undefined,
+	use: (branch: Branch) => Promise<T>,
+): Promise<T> => {
+	const created = await createProjectBranch({
+		client: neonClient.client,
+		path: { project_id: projectId },
+		body: {
+			...(name === undefined ? {} : { branch: { name } }),
+			endpoints: [
+				{
+					type: "read_write",
+					autoscaling_limit_min_cu: 0.25,
+					autoscaling_limit_max_cu: 0.25,
+				},
+			],
+		},
+		throwOnError: true,
+		signal,
+	});
+	try {
+		await neonClient.operations.waitFor(
+			{ operations: created.operations },
+			{ signal },
+		);
+		return await use(created.branch);
+	} catch (error) {
+		await discardTemporaryBranch(
+			neonClient,
+			projectId,
+			created.branch.id,
+			created.operations,
+		);
+		throw error;
+	}
 };
 
 // The `mcp-migration-` prefix is how the Neon MCP server finds orphaned branches.
@@ -103,7 +143,7 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.prepare"),
 			title: "Prepare Database Migration",
 			description:
-				"Apply a schema change on a temporary branch and return a migration_id. Test with sql.run on that branch, ask the user, then call migrations.complete, even if they reject, so the temporary branch is deleted. Pass every field from the prepare response.",
+				"Apply a schema change on a temporary branch and return a migration_id. Test with sql.run on that branch, ask the user, then call migrations.complete, even if they reject, so the temporary branch is deleted. Pass every field of the response's `complete` object.",
 			inputSchema: prepareMigrationInputSchema,
 			annotations: {
 				readOnlyHint: false,
@@ -117,57 +157,56 @@ export const prepareMigrationTool = (options: ToolClientOptions) =>
 		async (neonClient, input, signal, context) => {
 			refuseInReadOnly(context, "migrations.prepare");
 			const projectId = input.project_id;
-			const branch = await createTemporaryBranch(
+			return withTemporaryBranch(
 				neonClient,
 				projectId,
 				migrationBranchName(),
 				signal,
-			);
-			try {
-				const parentBranchId = branch.parent_id;
-				if (parentBranchId === undefined) {
-					throw new NeonClientError(
-						`Temporary branch ${branch.id} has no parent branch`,
+				async (branch) => {
+					const parentBranchId = branch.parent_id;
+					if (parentBranchId === undefined) {
+						throw new NeonClientError(
+							`Temporary branch ${branch.id} has no parent branch`,
+						);
+					}
+					const databaseName =
+						input.database_name ??
+						(
+							await defaultDatabase(
+								neonClient,
+								{ projectId, branchId: branch.id },
+								signal,
+							)
+						).name;
+					const migrationResult = await runTransaction(
+						neonClient,
+						{
+							project_id: projectId,
+							branch_id: branch.id,
+							database_name: databaseName,
+						},
+						splitSqlStatements(input.migration_sql),
+						context,
+						signal,
 					);
-				}
-				const databaseName =
-					input.database_name ??
-					(
-						await defaultDatabase(
-							neonClient,
-							{ projectId, branchId: branch.id },
-							signal,
-						)
-					).name;
-				const migrationResult = await runTransaction(
-					neonClient,
-					{
-						project_id: projectId,
-						branch_id: branch.id,
-						database_name: databaseName,
-					},
-					splitSqlStatements(input.migration_sql),
-					context,
-					signal,
-				);
-				return {
-					migration_id: randomUUID(),
-					migration_sql: input.migration_sql,
-					database_name: databaseName,
-					project_id: projectId,
-					temporary_branch_id: branch.id,
-					parent_branch_id: parentBranchId,
-					temporary_branch: branch,
-					migration_result: migrationResult,
-				};
-			} catch (error) {
-				return deleteAfterFailure(
-					neonClient,
-					projectId,
-					branch.id,
-					error,
-				);
-			}
+					return {
+						complete: {
+							migration_id: randomUUID(),
+							migration_sql: input.migration_sql,
+							database_name: databaseName,
+							project_id: projectId,
+							temporary_branch_id: branch.id,
+							parent_branch_id: parentBranchId,
+						},
+						temporary_branch: {
+							id: branch.id,
+							name: branch.name,
+							parent_id: parentBranchId,
+						},
+						migration_result: migrationResult,
+					};
+				},
+			);
 		},
 	);
 
@@ -179,7 +218,7 @@ export const completeMigrationTool = (options: ToolClientOptions) =>
 			id: publishedId("migrations.complete"),
 			title: "Complete Database Migration",
 			description:
-				"Apply or discard a prepared migration and delete the temporary branch. NEVER run autonomously; always ask the user first. Pass migration_id, migration_sql, database_name, project_id, temporary_branch_id, and parent_branch_id from migrations.prepare. Set apply_changes false to discard; omitting it applies the migration.",
+				"Apply or discard a prepared migration and delete the temporary branch. NEVER run autonomously; always ask the user first. Pass the fields of the `complete` object migrations.prepare returns: migration_id, migration_sql, database_name, project_id, temporary_branch_id, and parent_branch_id. Set apply_changes false to discard; omitting it applies the migration.",
 			inputSchema: completeMigrationInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,

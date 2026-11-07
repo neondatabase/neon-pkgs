@@ -11,7 +11,7 @@ import {
 	resolveConnection,
 	SQL_METADATA,
 } from "./connection.js";
-import { createTemporaryBranch, deleteAfterFailure } from "./migrations.js";
+import { withTemporaryBranch } from "./migrations.js";
 import { extractExecutionMetrics, extractTableNamesFromPlan } from "./plan.js";
 import {
 	explainStatement,
@@ -88,7 +88,7 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 			id: publishedId("queryTuning.prepare"),
 			title: "Prepare Query Tuning",
 			description:
-				"Analyze a slow query on a temporary branch and return a tuning_id. Apply suggested SQL with sql.run on that branch, re-run sql.explain there, then queryTuning.complete with the tuning_id (not the branch id): apply_changes true if they accept, omit it or pass false if they reject, so the temporary branch is deleted. Do not use migrations.prepare.",
+				"Analyze a slow query on a temporary branch and return a tuning_id. Apply suggested SQL with sql.run on that branch, re-run sql.explain there, then queryTuning.complete with the response's `complete` object (tuning_id is not the branch id): apply_changes true if they accept, omit it or pass false if they reject, so the temporary branch is deleted. Do not use migrations.prepare.",
 			inputSchema: prepareQueryTuningInputSchema,
 			annotations: {
 				readOnlyHint: false,
@@ -102,77 +102,77 @@ export const prepareQueryTuningTool = (options: ToolClientOptions) =>
 		async (neonClient, input, signal, context) => {
 			refuseInReadOnly(context, "queryTuning.prepare");
 			const projectId = input.project_id;
-			const branch = await createTemporaryBranch(
+			return withTemporaryBranch(
 				neonClient,
 				projectId,
 				undefined,
 				signal,
-			);
-			try {
-				const target = {
-					project_id: projectId,
-					branch_id: branch.id,
-					database_name: input.database_name,
-					role_name: input.role_name,
-				};
-				const executionPlan = await explainStatement(
-					neonClient,
-					{ ...target, sql: input.sql, analyze: true },
-					context,
-					signal,
-				);
-				const tableNames = extractTableNamesFromPlan(executionPlan);
-				if (tableNames.length === 0) {
-					throw new NeonClientError(
-						"No tables found in execution plan. Cannot proceed with optimization.",
+				async (branch) => {
+					const target = {
+						project_id: projectId,
+						branch_id: branch.id,
+						database_name: input.database_name,
+						role_name: input.role_name,
+					};
+					const executionPlan = await explainStatement(
+						neonClient,
+						{ ...target, sql: input.sql, analyze: true },
+						context,
+						signal,
 					);
-				}
-				const connection = await resolveConnection(
-					neonClient,
-					target,
-					context,
-					signal,
-				);
-				const tableSchemas = await Promise.all(
-					tableNames.map(async (tableName) => {
-						try {
-							const schema = await describeTableAt(
-								connection.uri,
-								tableName,
-								signal,
-							);
-							return {
-								tableName,
-								schema: schema.raw,
-								formatted: schema.formatted,
-							};
-						} catch (error) {
-							throw new Error(
-								`Failed to get schema for table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
-								{ cause: error },
-							);
-						}
-					}),
-				);
-				return {
-					tuning_id: randomUUID(),
-					database_name: input.database_name,
-					project_id: projectId,
-					temporary_branch_id: branch.id,
-					temporary_branch: branch,
-					execution_plan: executionPlan,
-					table_schemas: tableSchemas,
-					sql: input.sql,
-					baseline_metrics: extractExecutionMetrics(executionPlan),
-				};
-			} catch (error) {
-				return deleteAfterFailure(
-					neonClient,
-					projectId,
-					branch.id,
-					error,
-				);
-			}
+					const tableNames = extractTableNamesFromPlan(executionPlan);
+					if (tableNames.length === 0) {
+						throw new NeonClientError(
+							"No tables found in execution plan. Cannot proceed with optimization.",
+						);
+					}
+					const connection = await resolveConnection(
+						neonClient,
+						target,
+						context,
+						signal,
+					);
+					const tableSchemas = await Promise.all(
+						tableNames.map(async (tableName) => {
+							try {
+								const schema = await describeTableAt(
+									connection.uri,
+									tableName,
+									signal,
+								);
+								return {
+									tableName,
+									schema: schema.raw,
+									formatted: schema.formatted,
+								};
+							} catch (error) {
+								throw new Error(
+									`Failed to get schema for table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+									{ cause: error },
+								);
+							}
+						}),
+					);
+					const ids = {
+						tuning_id: randomUUID(),
+						database_name: input.database_name,
+						project_id: projectId,
+						temporary_branch_id: branch.id,
+					};
+					return {
+						// Two shapes rather than an optional key, so the published type has no `role_name: null`.
+						complete:
+							input.role_name === undefined
+								? ids
+								: { ...ids, role_name: input.role_name },
+						execution_plan: executionPlan,
+						table_schemas: tableSchemas,
+						sql: input.sql,
+						baseline_metrics:
+							extractExecutionMetrics(executionPlan),
+					};
+				},
+			);
 		},
 	);
 
@@ -184,7 +184,7 @@ export const completeQueryTuningTool = (options: ToolClientOptions) =>
 			id: publishedId("queryTuning.complete"),
 			title: "Complete Query Tuning",
 			description:
-				"Apply or discard query-tuning changes and delete the temporary branch. NEVER run autonomously. Before calling, apply suggested SQL with sql.run on the temporary branch and re-run sql.explain. Pass the tuning_id from queryTuning.prepare, not the branch id, plus temporary_branch_id. Set apply_changes true to apply; omitting it discards. Call this even when the user rejects the changes. Do not use migrations.prepare.",
+				"Apply or discard query-tuning changes and delete the temporary branch. NEVER run autonomously. Before calling, apply suggested SQL with sql.run on the temporary branch and re-run sql.explain. Pass the `complete` object from queryTuning.prepare (its tuning_id is not the branch id) plus suggested_sql_statements. Set apply_changes true to apply; omitting it discards. Call this even when the user rejects the changes. Do not use migrations.prepare.",
 			inputSchema: completeQueryTuningInputSchema,
 			annotations: sqlWriteAnnotations,
 			requiresApproval: true,

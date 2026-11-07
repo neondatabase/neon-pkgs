@@ -13,6 +13,7 @@ import {
 	createNeonClient,
 	NeonClientError,
 	NeonNotFoundError,
+	NeonWaitTimeoutError,
 } from "@neon/sdk";
 import { NeonDbError } from "@neondatabase/serverless";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -77,6 +78,23 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 			if (error instanceof NeonNotFoundError) return false;
 			throw error;
 		}
+	};
+
+	const branchIds = async () =>
+		(await neon.branches.list({ projectId }).all()).map(
+			(branch) => branch.id,
+		);
+
+	/** Polls until the project has no branch outside `expected`; a delete takes a moment to show. */
+	const expectOnlyBranches = async (expected: readonly string[]) => {
+		const deadline = Date.now() + 60_000;
+		let extra: string[] = [];
+		while (Date.now() < deadline) {
+			extra = (await branchIds()).filter((id) => !expected.includes(id));
+			if (extra.length === 0) return;
+			await new Promise((resolve) => setTimeout(resolve, 2_000));
+		}
+		throw new Error(`Temporary branches left behind: ${extra.join(", ")}`);
 	};
 
 	beforeAll(async () => {
@@ -342,18 +360,41 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 	});
 
+	it("database.inspect keeps the SDK error class when it adds the database to the message", async () => {
+		const failure = tools["database.inspect"].execute(
+			{ project_id: projectId, check: "table-sizes" },
+			{ postgresRole: "no_such_role" },
+		);
+		await expect(failure).rejects.toBeInstanceOf(NeonNotFoundError);
+		await expect(failure).rejects.toThrow("(database neondb)");
+		await expect(failure).rejects.toMatchObject({ status: 404 });
+	});
+
 	it("migrations.prepare then complete with apply_changes applies to the parent and deletes the temporary branch", async () => {
-		const { data: prepared } = await tools["migrations.prepare"].execute({
+		const prepared = await tools["migrations.prepare"].execute({
 			project_id: projectId,
 			migration_sql: "ALTER TABLE items ADD COLUMN note text;",
 		});
-		expect(prepared).toMatchObject({
+		const { complete } = prepared.data;
+		expect(complete).toEqual({
+			migration_id: expect.any(String),
 			migration_sql: "ALTER TABLE items ADD COLUMN note text;",
 			database_name: "neondb",
 			project_id: projectId,
+			temporary_branch_id: expect.any(String),
 			parent_branch_id: mainBranchId,
 		});
-		expect(prepared.temporary_branch.name).toMatch(/^mcp-migration-/);
+		expect(prepared.data.temporary_branch).toEqual({
+			id: complete.temporary_branch_id,
+			name: expect.stringMatching(/^mcp-migration-/),
+			parent_id: mainBranchId,
+		});
+		const temporaryBranch = await neon.branches.get({
+			projectId,
+			branchId: complete.temporary_branch_id,
+		});
+		expect(temporaryBranch.name).toBe(prepared.data.temporary_branch.name);
+		expect(prepared.data.migration_result).toEqual([[]]);
 		const before = await tools["schema.describeTable"].execute({
 			project_id: projectId,
 			table_name: "items",
@@ -363,16 +404,12 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		).not.toContain("note");
 
 		const { data: completed } = await tools["migrations.complete"].execute({
-			migration_id: prepared.migration_id,
-			migration_sql: prepared.migration_sql,
-			database_name: prepared.database_name,
-			project_id: prepared.project_id,
-			temporary_branch_id: prepared.temporary_branch_id,
-			parent_branch_id: prepared.parent_branch_id,
+			...prepared.data.complete,
+			apply_changes: true,
 		});
 		expect(completed).toMatchObject({
 			applied: true,
-			deletedBranchId: prepared.temporary_branch_id,
+			deletedBranchId: complete.temporary_branch_id,
 		});
 		expect(completed).not.toHaveProperty("cleanupError");
 		const after = await tools["schema.describeTable"].execute({
@@ -382,26 +419,23 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		expect(after.data.raw.columns.map((column) => column.name)).toContain(
 			"note",
 		);
-		expect(await branchExists(prepared.temporary_branch_id)).toBe(false);
+		expect(await branchExists(complete.temporary_branch_id)).toBe(false);
 	});
 
 	it("migrations.complete with apply_changes false discards and deletes the temporary branch", async () => {
 		const { data: prepared } = await tools["migrations.prepare"].execute({
 			project_id: projectId,
-			migration_sql: "CREATE TABLE discarded (id int);",
+			migration_sql:
+				"CREATE TABLE discarded (id int); SELECT 42 AS answer",
 		});
+		expect(prepared.migration_result).toEqual([[], [{ answer: 42 }]]);
 		const { data: completed } = await tools["migrations.complete"].execute({
-			migration_id: prepared.migration_id,
-			migration_sql: prepared.migration_sql,
-			database_name: prepared.database_name,
-			project_id: prepared.project_id,
-			temporary_branch_id: prepared.temporary_branch_id,
-			parent_branch_id: prepared.parent_branch_id,
+			...prepared.complete,
 			apply_changes: false,
 		});
 		expect(completed).toEqual({
 			applied: false,
-			deletedBranchId: prepared.temporary_branch_id,
+			deletedBranchId: prepared.complete.temporary_branch_id,
 		});
 		const { data: tables } = await tools["schema.listTables"].execute({
 			project_id: projectId,
@@ -409,27 +443,46 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		expect(tables.map((table) => table.table_name)).not.toContain(
 			"discarded",
 		);
-		expect(await branchExists(prepared.temporary_branch_id)).toBe(false);
+		expect(await branchExists(prepared.complete.temporary_branch_id)).toBe(
+			false,
+		);
 	});
 
 	it("queryTuning.prepare then complete applies the index to the parent and deletes the temporary branch", async () => {
 		const { data: prepared } = await tools["queryTuning.prepare"].execute({
 			project_id: projectId,
 			database_name: "neondb",
-			sql: "SELECT * FROM items WHERE name = 'b'",
+			sql: "SELECT count(*) FROM items WHERE name = 'b'",
 		});
 		expect(prepared.table_schemas.map((table) => table.tableName)).toEqual([
 			"public.items",
 		]);
+		const root = planDocument(prepared.execution_plan).Plan;
+		if (!isRecord(root)) throw new Error("No root plan node");
+		expect(root["Node Type"]).toBe("Aggregate");
+		expect(prepared.baseline_metrics).toMatchObject({
+			executionTime: expect.any(Number),
+			actualRows: 1,
+			totalCost: root["Total Cost"],
+			bufferUsage: {
+				shared: expect.objectContaining({
+					hit: root["Shared Hit Blocks"],
+				}),
+			},
+		});
 		expect(prepared.baseline_metrics.executionTime).toBeGreaterThan(0);
-		expect(await branchExists(prepared.temporary_branch_id)).toBe(true);
+		expect(prepared.complete).toEqual({
+			tuning_id: expect.any(String),
+			database_name: "neondb",
+			project_id: projectId,
+			temporary_branch_id: expect.any(String),
+		});
+		const temporaryBranchId = prepared.complete.temporary_branch_id;
+		expect(await branchExists(temporaryBranchId)).toBe(true);
 
 		const { data: completed } = await tools["queryTuning.complete"].execute(
 			{
-				project_id: projectId,
-				database_name: prepared.database_name,
-				tuning_id: prepared.tuning_id,
-				temporary_branch_id: prepared.temporary_branch_id,
+				...prepared.complete,
 				suggested_sql_statements: [
 					"CREATE INDEX items_name_idx ON items (name)",
 				],
@@ -438,7 +491,7 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		);
 		expect(completed).toMatchObject({
 			appliedChanges: ["CREATE INDEX items_name_idx ON items (name)"],
-			deletedBranches: [prepared.temporary_branch_id],
+			deletedBranches: [temporaryBranchId],
 		});
 		const { data: described } = await tools["schema.describeTable"].execute(
 			{
@@ -449,7 +502,37 @@ describe.sequential("e2e — @neon/tools SQL tools", () => {
 		expect(described.raw.indexes.map((index) => index.name)).toContain(
 			"items_name_idx",
 		);
-		expect(await branchExists(prepared.temporary_branch_id)).toBe(false);
+		expect(await branchExists(temporaryBranchId)).toBe(false);
+	});
+
+	it("a readiness timeout in the prepare tools deletes the temporary branch", async () => {
+		const impatient = createNeonTools({
+			apiKey: requireApiKey(),
+			baseUrl: configuredBaseUrl(),
+			wait: { timeoutMs: 1 },
+			tools: ["migrations.prepare", "queryTuning.prepare"],
+		});
+		const before = await branchIds();
+		await expect(
+			impatient["migrations.prepare"].execute({
+				project_id: projectId,
+				migration_sql: "CREATE TABLE never_created (id int);",
+			}),
+		).rejects.toBeInstanceOf(NeonWaitTimeoutError);
+		await expect(
+			impatient["queryTuning.prepare"].execute({
+				project_id: projectId,
+				database_name: "neondb",
+				sql: "SELECT count(*) FROM items",
+			}),
+		).rejects.toBeInstanceOf(NeonWaitTimeoutError);
+		await expectOnlyBranches(before);
+		const branches = await neon.branches.list({ projectId }).all();
+		expect(
+			branches.filter((branch) =>
+				branch.name.startsWith("mcp-migration-"),
+			),
+		).toEqual([]);
 	});
 
 	it("every new tool is listed over MCP and sql.run is callable", async () => {

@@ -119,9 +119,9 @@ Custom tools combine several requests into one call, or call Postgres or neon.co
 | `branches.describe` | `describe_branches` | `{ branch, console_url, text, database_structure }`, where `database_structure` is the object tree from a temporary `show_db_tree()` function. When that query fails it is `null` and `database_structure_error` says why. |
 | `queries.listSlow` | `list_slow_queries` | `{ slow_queries, total_queries_found }` from `pg_stat_statements`, slowest mean time first. Without the extension it throws `NeonClientError`. |
 | `database.inspect` | `inspect_database` | One `neon inspect db` check: `{ check, describe, projectId, branchId, databases, fields, totalRowCount, rows, truncated, note? }`. |
-| `migrations.prepare` | `prepare_migrations` | Runs `migration_sql` on a new temporary branch and returns `migration_id`, `migration_sql`, `database_name`, `project_id`, `temporary_branch_id`, `parent_branch_id`, `temporary_branch`, and `migration_result`. |
+| `migrations.prepare` | `prepare_migrations` | Runs `migration_sql` on a new temporary branch and returns `{ complete, temporary_branch, migration_result }`. `complete` holds exactly the fields `migrations.complete` takes (`migration_id`, `migration_sql`, `database_name`, `project_id`, `temporary_branch_id`, `parent_branch_id`); `temporary_branch` is `{ id, name, parent_id }`; `migration_result` holds each statement's rows. |
 | `migrations.complete` | `complete_migrations` | Applies the migration to the parent unless `apply_changes` is false, deletes the temporary branch, and returns `{ applied, deletedBranchId?, cleanupError?, migrationResult? }`. |
-| `queryTuning.prepare` | `prepare_query_tuning` | Runs `EXPLAIN ANALYZE` on a new temporary branch and returns `tuning_id`, `temporary_branch_id`, `execution_plan`, `table_schemas`, and `baseline_metrics`. |
+| `queryTuning.prepare` | `prepare_query_tuning` | Runs `EXPLAIN ANALYZE` on a new temporary branch and returns `{ complete, execution_plan, table_schemas, sql, baseline_metrics }`. `complete` holds `tuning_id`, `database_name`, `project_id`, `temporary_branch_id`, and `role_name` when one was passed; `baseline_metrics` holds time, cost, rows, and buffer counters of the root plan node. |
 | `queryTuning.complete` | `complete_query_tuning` | Applies `suggested_sql_statements` when `apply_changes` is true, deletes the temporary branch unless `should_delete_temporary_branch` is false, and returns `{ appliedChanges?, results?, deletedBranches?, message }`. |
 | `docs.search` | `search_docs` | `{ hits: [{ title, url, slug, category, breadcrumb, heading, excerpt }] }` from neon.com site search. |
 | `docs.get` | `get_docs` | `{ url, markdown }` for one neon.com page slug. |
@@ -149,6 +149,35 @@ const { data: project } = await tools["resources.fetch"].execute({
 project.text; // "**Project Details**\n\n**Basic Information:**\n- Name: checkout-service\n…"
 project.metadata; // { project: { id: "project-id", … }, branches: [ … ] }
 
+const migrationTools = createNeonTools({
+	apiKey,
+	tools: ["migrations.prepare", "migrations.complete"],
+});
+const prepared = await migrationTools["migrations.prepare"].execute({
+	project_id: "project-id",
+	migration_sql: "ALTER TABLE users ADD COLUMN plan text",
+});
+await migrationTools["migrations.complete"].execute({
+	...prepared.data.complete,
+	apply_changes: true,
+});
+prepared.data.temporary_branch; // { id: "br-…", name: "mcp-migration-2026-11-06T20-05-00", parent_id: "br-main-…" }
+
+const tuningTools = createNeonTools({
+	apiKey,
+	tools: ["queryTuning.prepare", "queryTuning.complete"],
+});
+const tuning = await tuningTools["queryTuning.prepare"].execute({
+	project_id: "project-id",
+	database_name: "neondb",
+	sql: "SELECT * FROM orders WHERE customer_id = 42",
+});
+await tuningTools["queryTuning.complete"].execute({
+	...tuning.data.complete,
+	suggested_sql_statements: ["CREATE INDEX ON orders (customer_id)"],
+	apply_changes: true,
+});
+
 const { data: result } = await tools["sql.run"].execute({
 	project_id: "project-id",
 	sql: "SELECT id, email FROM users ORDER BY id",
@@ -169,7 +198,7 @@ The SQL tools resolve a connection from `project_id` (required), then `branch_id
 
 A Postgres error rejects with the `NeonDbError` from `@neondatabase/serverless`, carrying `code` (SQLSTATE), `position`, `detail`, `hint`, and `where`. `database.inspect` throws `InspectDiagnosticError` (exported from `@neon/tools`, with `check` and the `NeonDbError` as `cause`) when Postgres rejects one of its own diagnostic queries, which is a bug in this package rather than in the input. A caller-side problem, such as a missing extension, a missing database, or a refused connection, keeps its own class.
 
-`migrations.prepare` and `queryTuning.prepare` delete the temporary branch when they fail. `migrations.complete` applies first; if that fails the temporary branch stays so the call can be retried, and a failed delete after a successful apply is reported as `cleanupError`.
+`migrations.prepare` and `queryTuning.prepare` delete the temporary branch when anything after its creation fails, including the readiness wait (a `wait` timeout, a failed operation, or an aborted `signal`). Cleanup waits up to 60 seconds for the branch to finish provisioning before deleting it, regardless of `wait` and `signal`. `migrations.complete` applies first; if that fails the temporary branch stays so the call can be retried, and a failed delete after a successful apply is reported as `cleanupError`.
 
 ### Execution context
 

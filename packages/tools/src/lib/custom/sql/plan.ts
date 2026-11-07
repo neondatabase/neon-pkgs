@@ -44,51 +44,38 @@ export const extractTableNamesFromPlan = (plan: unknown): string[] => {
 	return [...tableNames];
 };
 
+const buffers = (
+	node: Record<string, unknown>,
+	prefix: "Shared" | "Local",
+) => ({
+	hit: numberAt(node, `${prefix} Hit Blocks`),
+	read: numberAt(node, `${prefix} Read Blocks`),
+	written: numberAt(node, `${prefix} Written Blocks`),
+	dirtied: numberAt(node, `${prefix} Dirtied Blocks`),
+});
+
 /**
- * Totals from the rows `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` returns: one
- * row whose `QUERY PLAN` column holds the plan document.
+ * Query-level totals from the rows `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`
+ * returns: one row whose `QUERY PLAN` column holds the plan document. They come
+ * from the root plan node, because a parent node's cost, rows, and buffer
+ * counters already include its children.
  */
 export const extractExecutionMetrics = (rows: unknown): QueryMetrics => {
-	const metrics: QueryMetrics = {
-		executionTime: 0,
-		planningTime: 0,
-		totalCost: 0,
-		actualRows: 0,
-		bufferUsage: {
-			shared: { hit: 0, read: 0, written: 0, dirtied: 0 },
-			local: { hit: 0, read: 0, written: 0, dirtied: 0 },
-		},
-	};
 	const firstRow = Array.isArray(rows) ? rows[0] : undefined;
 	const documents = isRecord(firstRow) ? firstRow["QUERY PLAN"] : undefined;
 	const document = Array.isArray(documents) ? documents[0] : undefined;
-	if (!isRecord(document)) {
+	const root = isRecord(document) ? document.Plan : undefined;
+	if (!isRecord(document) || !isRecord(root)) {
 		throw new Error("EXPLAIN returned no JSON plan document");
 	}
-
-	metrics.planningTime = numberAt(document, "Planning Time");
-	metrics.executionTime = numberAt(document, "Execution Time");
-
-	const visit = (node: unknown) => {
-		if (!isRecord(node)) return;
-		metrics.totalCost = Math.max(
-			metrics.totalCost,
-			numberAt(node, "Total Cost"),
-		);
-		metrics.actualRows += numberAt(node, "Actual Rows");
-		for (const kind of ["shared", "local"] as const) {
-			const prefix = kind === "shared" ? "Shared" : "Local";
-			const buffers = metrics.bufferUsage[kind];
-			buffers.hit += numberAt(node, `${prefix} Hit Blocks`);
-			buffers.read += numberAt(node, `${prefix} Read Blocks`);
-			buffers.written += numberAt(node, `${prefix} Written Blocks`);
-			buffers.dirtied += numberAt(node, `${prefix} Dirtied Blocks`);
-		}
-		const children = node.Plans;
-		if (Array.isArray(children)) {
-			for (const child of children) visit(child);
-		}
+	return {
+		executionTime: numberAt(document, "Execution Time"),
+		planningTime: numberAt(document, "Planning Time"),
+		totalCost: numberAt(root, "Total Cost"),
+		actualRows: numberAt(root, "Actual Rows"),
+		bufferUsage: {
+			shared: buffers(root, "Shared"),
+			local: buffers(root, "Local"),
+		},
 	};
-	visit(document.Plan);
-	return metrics;
 };

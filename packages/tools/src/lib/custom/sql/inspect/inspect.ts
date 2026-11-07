@@ -128,20 +128,18 @@ const runInspectOnDatabase = async (
 	return rows;
 };
 
-/** Adds which database failed to the message while keeping the error's class. */
+/**
+ * Puts which database failed into the message of the original error, so its
+ * class and fields (`status`, `code`, `check`, …) reach the caller unchanged.
+ */
 const rethrowInspectError = (
 	error: unknown,
 	wrapped: string | undefined,
 ): never => {
 	if (wrapped === undefined) throw error;
-	if (error instanceof InspectDiagnosticError) {
-		throw new InspectDiagnosticError(wrapped, error.check, error.cause);
-	}
-	if (error instanceof NeonClientError) {
-		throw new NeonClientError(wrapped, { cause: error });
-	}
-	if (error instanceof NeonDbError) {
-		throw Object.assign(new NeonDbError(wrapped), { cause: error });
+	if (error instanceof Error) {
+		error.message = wrapped;
+		throw error;
 	}
 	throw new Error(wrapped, { cause: error });
 };
