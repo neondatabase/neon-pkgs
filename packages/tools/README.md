@@ -219,7 +219,7 @@ await tools["sql.run"].execute(
 | --- | --- |
 | `readOnly` | `sql.run` and `sql.explain` run the statement in a `READ ONLY` transaction, so Postgres rejects writes. `sql.runTransaction`, `migrations.*`, and `queryTuning.*` throw `NeonClientError` without running anything, because a caller statement such as `COMMIT` or `SET TRANSACTION READ WRITE` can leave a read-only transaction. `branches.describe` still creates and drops its fixed `show_db_tree()` function. `schema.*`, `queries.listSlow`, and `database.inspect` behave the same; `database.inspect` always uses a `READ ONLY` transaction. |
 | `postgresRole` | Every SQL connection logs in as this role. A `role_name` that differs throws `NeonClientError`. |
-| `caller` | Sent with `docs.search` as `x-caller-source`, `x-caller-user-agent`, and `x-caller-client`. Without it, `x-caller-source` is `neon_tools`. |
+| `caller` | Sent with `docs.search` as `x-caller-source`, `x-caller-user-agent`, and `x-caller-client`. Without it, or when `source` cannot be a header value, `x-caller-source` is `neon_tools`. The search service records `website`, `cli`, `mcp`, and `monitor` by name and counts any other source as `rest`. |
 
 ### Docs and feedback
 

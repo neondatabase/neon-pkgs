@@ -102,13 +102,22 @@ const upstreamError = (body: unknown): string | undefined => {
 
 const PRINTABLE_ASCII = /^[\x20-\x7E]+$/;
 
-/** The search service records each search by caller. A value that cannot be a header is dropped. */
+const DEFAULT_CALLER_SOURCE = "neon_tools";
+
+/**
+ * The search service records each search by caller. A source that cannot be a
+ * header falls back to the default; a user agent or client that cannot is dropped.
+ */
 export const searchDocsHeaders = (
 	caller: NeonToolCaller | undefined,
 ): Record<string, string> => {
+	const source = caller?.source.trim().slice(0, 100);
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
-		"x-caller-source": caller?.source ?? "neon_tools",
+		"x-caller-source":
+			source && PRINTABLE_ASCII.test(source)
+				? source
+				: DEFAULT_CALLER_SOURCE,
 	};
 	const userAgent = caller?.userAgent?.trim().slice(0, 512);
 	if (userAgent && PRINTABLE_ASCII.test(userAgent)) {
