@@ -151,8 +151,9 @@ const MAX_IDENTIFIER_BYTES = 63;
 
 /**
  * Throw when two generated names would land on the same Postgres object:
- * tables, staging tables and indexes share one relation namespace per schema,
- * and columns must be unique per table. Names are compared as Postgres stores
+ * tables, staging tables and indexes (including each primary key's implicit
+ * `<table>_pkey`) share one relation namespace per schema, and columns and
+ * constraints must be unique per table. Names are compared as Postgres stores
  * them, truncated to 63 bytes, so the clash surfaces here rather than halfway
  * through an import.
  */
@@ -160,6 +161,7 @@ function assertUniqueNames(tables: readonly PlannedTable[]): void {
 	const clashes: string[] = [];
 	const relations = tables.flatMap((table) => [
 		table.pgName,
+		`${table.pgName}_pkey`,
 		table.stagingName,
 		...table.indexes.map((index) => index.name),
 		...table.postLoadIndexes.map((index) => index.name),
@@ -171,12 +173,25 @@ function assertUniqueNames(tables: readonly PlannedTable[]): void {
 		for (const name of duplicates(table.columns.map((c) => c.pgName))) {
 			clashes.push(`column "${name}" in table "${table.pgName}"`);
 		}
+		const constraints = [
+			`${table.pgName}_pkey`,
+			...table.columns
+				.filter((column) => column.references !== undefined)
+				.map((column) => foreignKeyName(table.pgName, column.pgName)),
+		];
+		for (const name of duplicates(constraints)) {
+			clashes.push(`constraint "${name}" on table "${table.pgName}"`);
+		}
 	}
 	if (clashes.length > 0) {
 		throw new Error(
 			`Generated Postgres names collide: ${clashes.join(", ")}. Rename the Convex table, field or index, or leave the table out with excludeTables (--exclude-table).`,
 		);
 	}
+}
+
+export function foreignKeyName(table: string, column: string): string {
+	return `${table}_${column}_fkey`;
 }
 
 function duplicates(names: readonly string[]): string[] {

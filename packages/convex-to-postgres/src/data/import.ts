@@ -27,7 +27,10 @@ export interface ImportOptions extends GenerateOptions {
 	schema: ConvexSchema;
 	/** An extracted `convex export` directory or a `.zip` snapshot. */
 	source: string;
-	/** An existing connection to load through. Mutually exclusive with `connectionString`. */
+	/**
+	 * An existing connection to load through, not inside a transaction: the
+	 * import runs its own. Mutually exclusive with `connectionString`.
+	 */
 	client?: QueryableClient;
 	/** A Postgres connection string; a `pg.Client` is created and closed internally. */
 	connectionString?: string;

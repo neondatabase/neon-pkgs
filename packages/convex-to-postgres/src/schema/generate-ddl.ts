@@ -3,7 +3,7 @@ import { quoteIdentIfNeeded } from "../util/names.js";
 import { quoteSqlString } from "../util/sql.js";
 import type { ConvexSchema } from "./model.js";
 import type { PlannedColumn, PlannedIndex, PlannedTable } from "./plan.js";
-import { planSchema } from "./plan.js";
+import { foreignKeyName, planSchema } from "./plan.js";
 
 const INDENT = "    ";
 
@@ -116,7 +116,7 @@ function foreignKeyConstraints(table: PlannedTable): string[] {
 	const statements: string[] = [];
 	for (const column of table.columns) {
 		if (column.references === undefined) continue;
-		const constraintName = `${table.pgName}_${column.pgName}_fkey`;
+		const constraintName = foreignKeyName(table.pgName, column.pgName);
 		statements.push(
 			`ALTER TABLE ${quoteIdentIfNeeded(table.pgName)} ADD CONSTRAINT ${quoteIdentIfNeeded(
 				constraintName,

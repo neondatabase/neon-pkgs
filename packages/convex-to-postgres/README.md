@@ -580,8 +580,10 @@ to run a hand-edited transform.
 The CLI's `import` command does this. `importConvexExport` loads an export (a
 directory or a `.zip`) through `pg`, inside one transaction, and returns the
 per-table row counts. Pass either a `connectionString` (a `pg.Client` is created
-and closed internally) or your own `client`. Set `applySchema: true` to run the
-generated DDL first.
+and closed internally) or your own `client`. A `client` must not be inside a
+transaction: the import issues its own `BEGIN` and `COMMIT`, then builds search
+and vector indexes and runs `VACUUM ANALYZE` after it. Set `applySchema: true`
+to run the generated DDL first.
 
 ```ts
 import { importConvexExport, loadConvexSchema } from "@neon/convex-to-postgres";

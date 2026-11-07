@@ -883,6 +883,32 @@ describe("generated name collisions", () => {
 		expect(() => ddl(exported)).toThrow('table or index "user_profiles"');
 	});
 
+	test("an index named pkey collides with the primary key's index", () => {
+		const exported = schema([
+			table({
+				name: "items",
+				fields: { title: field(v.string()) },
+				indexes: [{ indexDescriptor: "pkey", fields: ["title"] }],
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow('table or index "items_pkey"');
+	});
+
+	test("foreign keys whose constraint names truncate alike throw", () => {
+		const stem = "a".repeat(57);
+		const exported = schema([
+			table({ name: "users", fields: { name: field(v.string()) } }),
+			table({
+				name: "items",
+				fields: {
+					[`${stem}1`]: field(v.id("users")),
+					[`${stem}2`]: field(v.id("users")),
+				},
+			}),
+		]);
+		expect(() => ddl(exported)).toThrow('constraint "items_');
+	});
+
 	test("names equal in their first 63 bytes throw", () => {
 		const long = "a".repeat(63);
 		const exported = schema([
