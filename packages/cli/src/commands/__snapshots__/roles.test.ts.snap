@@ -28,6 +28,16 @@ Created At  2016-11-16T15:39:18.000Z
 "
 `;
 
+exports[`roles > get 1`] = `
+"Name                   test_role
+Branch ID              br-sunny-branch-123456
+Protected              false
+Authentication Method  password
+Created At             2026-11-01T00:00:00Z
+Updated At             2026-11-04T19:00:00Z
+"
+`;
+
 exports[`roles > list 1`] = `
 "- name: test_role
   created_at: 2016-01-01T00:00:00Z
@@ -51,5 +61,13 @@ exports[`roles > list shows an explicit branch id as given 1`] = `
 "Roles on br-sunny-branch-123456
 Name       Created At
 test_role  2016-01-01T00:00:00Z
+"
+`;
+
+exports[`roles > reset-password waits for the operation and prints the new password 1`] = `
+"Password reset for test_role on test_branch
+Name        test_role
+Password    new_test_pwd
+Created At  2026-11-01T00:00:00Z
 "
 `;

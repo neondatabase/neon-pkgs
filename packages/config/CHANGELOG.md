@@ -1,5 +1,71 @@
 # @neondatabase/config
 
+## 1.13.0
+
+### Minor Changes
+
+- aba0b8d: A Function `env` value in `neon.ts` can be a declaration instead of a string: `{ value: process.env.X, required: true }`, with `required: false` or `required: "default-branch"` for a value that may be unset, and `onUndefined: "skip"` to keep the deployed value instead of removing it. A declaration's value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so importing `neon.ts` (from app code or another Function) no longer fails on a secret it does not hold.
+
+## 1.12.1
+
+### Patch Changes
+
+- Updated dependencies [53516b8]
+  - @neon/sdk@7.11.0
+
+## 1.12.0
+
+### Minor Changes
+
+- c736518: Hook env (`experimental.hooks`) carries `branch.id` and `branch.functionHostSuffix` in place of `functions`. Pass them to `functionBaseUrl` from `@neon/env` to call a function from a hook.
+
+## 1.11.3
+
+### Patch Changes
+
+- Updated dependencies [a564258]
+  - @neon/sdk@7.10.0
+
+## 1.11.2
+
+### Patch Changes
+
+- Updated dependencies [30e938a]
+  - @neon/sdk@7.9.0
+
+## 1.11.1
+
+### Patch Changes
+
+- Updated dependencies [9288206]
+  - @neon/sdk@7.8.2
+
+## 1.11.0
+
+### Minor Changes
+
+- 3833f9f: `loadConfigFromFile` returns `omittedFunctionEnv`: the function env keys that `unsetFunctionEnv: "omit"` dropped because their value was undefined.
+
+## 1.10.3
+
+### Patch Changes
+
+- Updated dependencies [891072b]
+  - @neon/sdk@7.8.1
+
+## 1.10.2
+
+### Patch Changes
+
+- 9807763: A top-level `realtime` key in `neon.ts` now reports that Realtime is in public beta and is configured under `preview: { realtime: true }`.
+
+## 1.10.1
+
+### Patch Changes
+
+- Updated dependencies [f4b216f]
+  - @neon/sdk@7.8.0
+
 ## 1.10.0
 
 ### Minor Changes

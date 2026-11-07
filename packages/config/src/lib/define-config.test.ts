@@ -28,6 +28,32 @@ describe("defineConfig", () => {
 		);
 	});
 
+	test("points a top-level realtime key at preview.realtime", () => {
+		let caught: unknown;
+		try {
+			defineConfig({ realtime: true } as never);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(ConfigValidationError);
+		if (!(caught instanceof ConfigValidationError)) throw caught;
+		expect(caught.issues).toEqual([
+			'unknown key: "realtime". Realtime is in public beta and is configured under preview: `preview: { realtime: true }`',
+		]);
+	});
+
+	test("adds no hint to an unknown key named after an Object.prototype member", () => {
+		let caught: unknown;
+		try {
+			defineConfig({ constructor: true } as never);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(ConfigValidationError);
+		if (!(caught instanceof ConfigValidationError)) throw caught;
+		expect(caught.issues).toEqual(['unknown key: "constructor"']);
+	});
+
 	test("rejects a non-object input", () => {
 		expect(() => defineConfig(null as never)).toThrow(
 			ConfigValidationError,
@@ -632,7 +658,9 @@ describe("resolveConfig", () => {
 		expect(issue).toContain('function "hello"');
 		// …explains the likely cause + a fix…
 		expect(issue).toContain("process.env");
-		expect(issue).toContain("omit the key from neon.ts");
+		expect(issue).toContain(
+			"`test: { value: process.env.test, required: true }`",
+		);
 		expect(issue).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(issue).not.toContain(

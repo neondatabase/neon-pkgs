@@ -714,7 +714,9 @@ describe("configInputSchema", () => {
 		expect(formatted).toContain('function "hello"');
 		// …explains the likely cause and the fix…
 		expect(formatted).toContain("process.env");
-		expect(formatted).toContain("omit the key from neon.ts");
+		expect(formatted).toContain(
+			"`test: { value: process.env.test, required: true }`",
+		);
 		expect(formatted).not.toContain('?? ""');
 		// …and drops zod's opaque default.
 		expect(formatted).not.toContain(
@@ -722,7 +724,7 @@ describe("configInputSchema", () => {
 		);
 	});
 
-	test("keeps zod's default message for a non-undefined wrong-typed env value", () => {
+	test("names the accepted forms for a non-undefined wrong-typed env value", () => {
 		const result = configInputSchema.safeParse({
 			preview: {
 				functions: {
@@ -737,9 +739,87 @@ describe("configInputSchema", () => {
 		if (result.success) throw new Error("expected failure");
 		const formatted = formatZodIssues(result.error).join("\n");
 		expect(formatted).toContain("preview.functions.hello.env.count");
-		expect(formatted).toContain("expected string");
+		expect(formatted).toContain(
+			'Expected a string or { value, required: true | false | "default-branch"',
+		);
 		// The undefined-specific guidance must not fire for a defined wrong type.
 		expect(formatted).not.toContain("process.env");
+	});
+});
+
+describe("function env declarations", () => {
+	const parseEnv = (env: Record<string, unknown>) =>
+		configInputSchema.safeParse({
+			functions: { hello: { name: "Hello", source: "./hello.ts", env } },
+		});
+	const issues = (env: Record<string, unknown>): string => {
+		const result = parseEnv(env);
+		if (result.success) throw new Error("expected failure");
+		return formatZodIssues(result.error).join("\n");
+	};
+
+	test("accepts every declaration next to a literal string", () => {
+		expect(
+			parseEnv({
+				TOKEN: { value: "t", required: true },
+				UNSET: { value: undefined, required: true },
+				DSN: { value: "d", required: "default-branch" },
+				GUILD: { value: undefined, required: false },
+				KEPT: {
+					value: undefined,
+					required: false,
+					onUndefined: "skip",
+				},
+				BRANCH: {
+					value: undefined,
+					required: "default-branch",
+					onUndefined: "unset",
+				},
+				LOG_LEVEL: "info",
+			}).success,
+		).toBe(true);
+	});
+
+	test("rejects a declaration without value or required", () => {
+		const message = issues({ TOKEN: {} });
+		expect(message).toContain(
+			"functions.hello.env.TOKEN: value is missing: write value: process.env.<NAME>, or a literal string.",
+		);
+		expect(message).toContain(
+			'functions.hello.env.TOKEN: required is missing: write true, false, or "default-branch".',
+		);
+		expect(issues({ TOKEN: { value: "t" } })).toContain(
+			"required is missing",
+		);
+		expect(issues({ TOKEN: { required: true } })).toContain(
+			"value is missing",
+		);
+	});
+
+	test("rejects default, which is not a declaration field", () => {
+		expect(
+			issues({
+				RATE: { value: undefined, required: false, default: "1" },
+			}),
+		).toContain('unknown key: "default"');
+	});
+
+	test("rejects onUndefined on a variable that is always required", () => {
+		expect(
+			issues({
+				TOKEN: { value: "t", required: true, onUndefined: "unset" },
+			}),
+		).toContain(
+			'functions.hello.env.TOKEN.onUndefined: onUndefined applies only to a variable that may be unset: use required: false or "default-branch".',
+		);
+	});
+
+	test("rejects an unknown required value with the accepted forms", () => {
+		expect(
+			issues({ TOKEN: { value: "t", required: "production" } }),
+		).toContain(
+			'functions.hello.env.TOKEN: Expected a string or { value, required: true | false | "default-branch", onUndefined?: "unset" | "skip" }.',
+		);
 	});
 });
 

@@ -1,5 +1,69 @@
 # @neon-internals/env-core
 
+## 0.0.48
+
+### Patch Changes
+
+- Updated dependencies [aba0b8d]
+  - @neon/config@1.13.0
+
+## 0.0.47
+
+### Patch Changes
+
+- @neon/config@1.12.1
+
+## 0.0.46
+
+### Patch Changes
+
+- Updated dependencies [c736518]
+  - @neon/config@1.12.0
+
+## 0.0.45
+
+### Patch Changes
+
+- @neon/config@1.11.3
+
+## 0.0.44
+
+### Patch Changes
+
+- @neon/config@1.11.2
+
+## 0.0.43
+
+### Patch Changes
+
+- @neon/config@1.11.1
+
+## 0.0.42
+
+### Patch Changes
+
+- Updated dependencies [3833f9f]
+  - @neon/config@1.11.0
+
+## 0.0.41
+
+### Patch Changes
+
+- @neon/config@1.10.3
+
+## 0.0.40
+
+### Patch Changes
+
+- Updated dependencies [9807763]
+  - @neon/config@1.10.2
+
+## 0.0.39
+
+### Patch Changes
+
+- @neon/config@1.10.1
+
 ## 0.0.38
 
 ### Patch Changes

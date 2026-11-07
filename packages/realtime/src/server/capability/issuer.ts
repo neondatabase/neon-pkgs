@@ -1,3 +1,4 @@
+import { REALTIME_RELEASE_LINE, REALTIME_SDK } from "../../usage-metadata.js";
 import type { PreparedLiveQuery } from "../adapter.js";
 import {
 	asBufferSource,
@@ -7,7 +8,7 @@ import {
 	webCrypto,
 } from "./crypto.js";
 import { queryFingerprint } from "./fingerprint.js";
-import type { RealtimeQueryCapabilityV1 } from "./schema/realtime-query-capability-v1.gen.js";
+import type { RealtimeQueryCapabilityV2 } from "./schema/realtime-query-capability-v2.gen.js";
 import type { RealtimeSecret } from "./secret.js";
 
 const SEALED_QUERY_LIFETIME_SECONDS = 60;
@@ -22,8 +23,9 @@ export interface IssuedSealedLiveQuery {
 	readonly expiresAt: number;
 }
 
-type ProtectedHeader = RealtimeQueryCapabilityV1["protected"];
-type CapabilityClaims = RealtimeQueryCapabilityV1["claims"];
+type ProtectedHeader = RealtimeQueryCapabilityV2["protected"];
+type CapabilityClaims = RealtimeQueryCapabilityV2["claims"];
+type QuerySource = CapabilityClaims["issuer"]["query_source"];
 
 /** Create a local Compact-JWE issuer backed by an opaque Realtime secret. */
 export function createCapabilityIssuer(
@@ -31,17 +33,25 @@ export function createCapabilityIssuer(
 	database: string,
 	errorDetails: CapabilityClaims["error_details"] = "safe",
 	clock: () => number = Date.now,
-): (query: PreparedLiveQuery) => Promise<IssuedSealedLiveQuery> {
+): (
+	query: PreparedLiveQuery,
+	querySource?: QuerySource,
+) => Promise<IssuedSealedLiveQuery> {
 	const keyPromise = importAesKey(secret.key);
-	return async (query) => {
+	return async (query, querySource = "custom") => {
 		const queryFingerprintValue = await queryFingerprint(query);
 		const issuedAt = Math.floor(clock() / 1_000);
 		const expiresAt = issuedAt + SEALED_QUERY_LIFETIME_SECONDS;
 		const claims: CapabilityClaims = {
-			v: 1,
+			v: 2,
 			aud: "realtime-proxy",
 			database,
 			error_details: errorDetails,
+			issuer: {
+				sdk: REALTIME_SDK,
+				release_line: REALTIME_RELEASE_LINE,
+				query_source: querySource,
+			},
 			query_fingerprint: queryFingerprintValue,
 			sql: query.sql,
 			parameters: query.parameters.map((parameter) => ({
@@ -57,7 +67,7 @@ export function createCapabilityIssuer(
 		const protectedHeader: ProtectedHeader = {
 			alg: "dir",
 			enc: "A256GCM",
-			v: 1,
+			v: 2,
 		};
 		const capability = await encryptCompactJwe(
 			await keyPromise,

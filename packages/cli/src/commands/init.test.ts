@@ -483,7 +483,6 @@ describe("init handler", () => {
 				): Promise<PluginsInstallOutcome> => {
 					ops.calls.push({ kind: "plugins", options });
 					return {
-						scope: "global",
 						rows: agents.map((agent) => ({
 							scope: "user",
 							plugin: "neon-postgres",
@@ -556,7 +555,7 @@ describe("init handler", () => {
 			expect(out).toContain(
 				"The Neon plugin was not installed. Retry with:",
 			);
-			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toContain("neon plugins -y --agent cursor");
 			expect(out).toMatch(/neon login/);
 			expect(await initEnd()).toEqual(
 				expect.objectContaining({
@@ -565,7 +564,7 @@ describe("init handler", () => {
 					config: "created",
 					agents_installed: [],
 					error_step: "plugins",
-					error_code: "UNKNOWN_ERROR",
+					error_code: "PLUGINS_CLI_FAILED",
 					error_message: expect.stringMatching(
 						/^plugins CLI timed out after 120 seconds:\nplugins banner\nRetry with: neon plugins/,
 					),
@@ -670,7 +669,7 @@ describe("init handler", () => {
 			expect(out).toContain(
 				"The Neon plugin was not installed. Retry with:",
 			);
-			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toContain("neon plugins -y --agent cursor");
 			expect(await initEnd()).toEqual(
 				expect.objectContaining({
 					outcome: "error",
@@ -716,7 +715,7 @@ describe("init handler", () => {
 			expect(out).toContain(
 				"The Neon plugin was not installed. Retry with:",
 			);
-			expect(out).toContain("neon plugins -y --global --agent cursor");
+			expect(out).toContain("neon plugins -y --agent cursor");
 		});
 
 		test("a link failure is recorded as the link step", async () => {
@@ -1112,7 +1111,6 @@ describe("init handler", () => {
 		expect(stepKinds(ops)).toEqual(["plugins"]);
 		expect(ops.calls[0]?.options).toMatchObject({
 			yes: true,
-			global: true,
 			agents: ["cursor"],
 		});
 		expect(takeCommandSuccessExtras()).toEqual({
@@ -1142,7 +1140,6 @@ describe("init handler", () => {
 		expect(stepKinds(ops)).toEqual(["plugins"]);
 		expect(ops.calls[0]?.options).toMatchObject({
 			yes: true,
-			global: true,
 			agents: ["vscode"],
 		});
 	});
@@ -1237,7 +1234,6 @@ describe("init handler", () => {
 		expect(stepKinds(ops)).toEqual(["plugins", "skills", "mcp"]);
 		expect(ops.calls[0]?.options).toMatchObject({
 			yes: true,
-			global: true,
 			agents: ["cursor"],
 		});
 		expect(takeCommandSuccessExtras()?.agent_setup).toBe("mixed");
@@ -2160,7 +2156,7 @@ describe("init handler", () => {
 		expect(out).not.toContain("neon dev\n");
 	});
 
-	test("Functions next to a service awaiting a deploy keep their URL", async () => {
+	test("Functions next to a service awaiting a deploy keep their routing vars", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "neon-init-fn-auth-"));
 		writeFileSync(join(cwd, "package.json"), "{}\n");
 		const contextFile = join(cwd, ".neon");
@@ -2187,8 +2183,8 @@ describe("init handler", () => {
 
 		expect(envPull).toHaveBeenCalledWith(
 			expect.objectContaining({
-				services: ["postgres"],
-				envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+				services: ["postgres", "functions"],
+				envKeys: [],
 			}),
 		);
 		const out = stdoutText(stdout);
@@ -2405,6 +2401,59 @@ describe("init handler", () => {
 		);
 
 		expect(envPull).not.toHaveBeenCalled();
+	});
+
+	test("a failed dependency install reports its cause on screen and in cli_init_end", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "neon-init-install-fails-"));
+		writeFileSync(join(cwd, "package.json"), "{}\n");
+		const { ConfigInstallFailed } = await import("./config.js");
+		const initConfig = vi
+			.fn()
+			.mockRejectedValue(
+				new ConfigInstallFailed(
+					"npm install @neon/config @neon/env",
+					"npm",
+					"ERESOLVE",
+				),
+			);
+		const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+		const { handler } = await import("./init.js");
+		const { trackEvent } = await import("../analytics.js");
+		vi.mocked(trackEvent).mockClear();
+
+		await expect(
+			handler(
+				baseProps({
+					cwd,
+					operations: makeOperations(),
+					yes: true,
+					link: false,
+					initConfig,
+					analytics: true,
+					contextFile: join(cwd, ".neon"),
+					detectProjectAgents: () => ["cursor"],
+				}),
+			),
+		).rejects.toThrow(
+			"Could not install the Neon dependencies with npm (ERESOLVE).",
+		);
+
+		const out = stdoutText(stdout);
+		expect(out).toContain(
+			"Could not install the Neon dependencies with npm (ERESOLVE).",
+		);
+		expect(out).toContain("npm install @neon/config @neon/env");
+		const end = vi
+			.mocked(trackEvent)
+			.mock.calls.find((call) => call[0] === "cli_init_end")?.[1];
+		expect(end).toEqual(
+			expect.objectContaining({
+				outcome: "error",
+				error_step: "config",
+				error_code: "DEPENDENCY_INSTALL_FAILED",
+				error_detail: "ERESOLVE",
+			}),
+		);
 	});
 
 	test("funnel start and end share an id", async () => {

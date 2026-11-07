@@ -1,7 +1,10 @@
 import type {
 	Branch,
 	CurrentUserInfoResponse,
+	LokiQueryRangeResponse,
+	MemberWithUser,
 	Operation,
+	Organization,
 	Project,
 	ProjectListItem,
 	RegionResponse,
@@ -26,6 +29,9 @@ describe("NeonEffectClient", () => {
 		expectTypeOf(neon.branches.list({ projectId: "p" })).toEqualTypeOf<
 			Stream.Stream<Branch, NeonEffectError>
 		>();
+		expectTypeOf(neon.organizations.members.list()).toEqualTypeOf<
+			Stream.Stream<MemberWithUser, NeonEffectError>
+		>();
 	});
 
 	it("turns every other call into an Effect", () => {
@@ -38,8 +44,20 @@ describe("NeonEffectClient", () => {
 		expectTypeOf(neon.projects.count()).toEqualTypeOf<
 			Effect.Effect<number, NeonEffectError>
 		>();
+		expectTypeOf(neon.organizations.get({ orgId: "org" })).toEqualTypeOf<
+			Effect.Effect<Organization, NeonEffectError>
+		>();
 		expectTypeOf(neon.operations.waitFor({ operations })).toEqualTypeOf<
 			Effect.Effect<void, NeonEffectError>
+		>();
+		expectTypeOf(
+			neon.logs.loki.queryRange({
+				projectId: "p",
+				branchId: "b",
+				query: "{}",
+			}),
+		).toEqualTypeOf<
+			Effect.Effect<LokiQueryRangeResponse, NeonEffectError>
 		>();
 		expectTypeOf(
 			neon.postgres.roles.password({

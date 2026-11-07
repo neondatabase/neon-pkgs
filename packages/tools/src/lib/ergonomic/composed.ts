@@ -29,6 +29,9 @@ const computeSettingsSchema = z
 		max_cu: zod.zComputeUnit.optional(),
 		suspend_timeout_seconds: zod.zSuspendTimeoutSeconds.optional(),
 	})
+	.describe(
+		"Autoscaling limits and suspend timeout for the read-write endpoint.",
+	)
 	.optional();
 
 const mapCompute = (
@@ -117,6 +120,84 @@ export const compareSchemaInputSchema = z.strictObject({
 	base_timestamp: compareQuery.base_timestamp,
 });
 
+export const lokiQueryRangeInputSchema = z.strictObject({
+	project_id: zod.zQueryProjectBranchLogsPath.shape.project_id,
+	branch_id: zod.zQueryProjectBranchLogsPath.shape.branch_id,
+	query: z
+		.string()
+		.min(1)
+		.describe(
+			'LogQL stream selector with optional line filters, e.g. {entity_type="function"} |= "error". The source label is entity_type. No parsers, formatting stages, or metric queries.',
+		),
+	since: z
+		.string()
+		.describe(
+			"Lookback as a Go duration such as 30m or 24h, ending at end or now. Defaults to 1h. start takes precedence.",
+		)
+		.optional(),
+	start: z
+		.string()
+		.describe("Window start as RFC 3339 or Unix nanoseconds.")
+		.optional(),
+	end: z
+		.string()
+		.describe(
+			"Window end as RFC 3339 or Unix nanoseconds. Defaults to now.",
+		)
+		.optional(),
+	limit: z
+		.number()
+		.int()
+		.positive()
+		.describe("Maximum log lines. The server enforces its own cap.")
+		.optional(),
+	direction: z
+		.enum(["forward", "backward"])
+		.describe("backward (default) is newest first.")
+		.optional(),
+});
+
+export const lokiQueryRangeTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "logs.loki.queryRange",
+			id: publishedId("logs.loki.queryRange"),
+			title: "Query branch logs (Loki)",
+			description:
+				"Run a LogQL range query on the branch's Loki-compatible read API. Returns Loki's response: data.result groups lines by stream labels; each value is [nanosecond timestamp string, line]. No cursor: a result with limit lines, or the 10,000-line server cap (no warning), may be incomplete, so narrow the window or selector. For structured filters and cursor pagination use the logs query tool. The log fields tools list label names and values.",
+			inputSchema: lokiQueryRangeInputSchema,
+			annotations: {
+				readOnlyHint: true,
+				destructiveHint: false,
+				idempotentHint: true,
+				openWorldHint: false,
+			},
+			requiresApproval: false,
+			metadata: {
+				method: "GET",
+				path: "/telemetry/v1/projects/{project_id}/branches/{branch_id}/loki/api/v1/query_range",
+				stability: "beta",
+				deprecated: false,
+				tags: ["Branch"],
+			},
+		},
+		(neon, input, signal) =>
+			neon.logs.loki.queryRange(
+				{
+					projectId: input.project_id,
+					branchId: input.branch_id,
+					query: input.query,
+					since: input.since,
+					start: input.start,
+					end: input.end,
+					limit: input.limit,
+					direction: input.direction,
+				},
+				{ signal },
+			),
+	);
+
 export const connectionStringInputSchema = z.strictObject({
 	project_id: zod.zGetConnectionUriPath.shape.project_id,
 	branch_id: zod.zGetConnectionUriQuery.shape.branch_id,
@@ -125,6 +206,57 @@ export const connectionStringInputSchema = z.strictObject({
 	role_name: zod.zGetConnectionUriQuery.shape.role_name,
 	pooled: pooledField,
 });
+
+const roleCreateFields = zod.zCreateProjectBranchRoleBody.shape.role.shape;
+
+const ACCESS_FIELDS_NEED_SCOPED_ACCESS =
+	"database_name and schemas apply only to access read_only or read_write.";
+
+export const createRoleInputSchema = z
+	.strictObject({
+		project_id: zod.zCreateProjectBranchRolePath.shape.project_id,
+		branch_id: zod.zCreateProjectBranchRolePath.shape.branch_id,
+		name: roleCreateFields.name,
+		no_login: roleCreateFields.no_login,
+		access: z
+			.enum(["admin", "read_only", "read_write"])
+			.describe(
+				"What the role may do. Default admin: the role joins neon_superuser. read_only: SELECT. read_write: SELECT, INSERT, UPDATE, DELETE and sequence use. Scoped roles get these grants on top of whatever PUBLIC already has in the database.",
+			)
+			.optional(),
+		database_name: z
+			.string()
+			.min(1)
+			.describe(
+				"Database a read_only or read_write role is scoped to. Optional when the branch has exactly one database.",
+			)
+			.optional(),
+		schemas: z
+			.array(z.string().min(1))
+			.min(1)
+			.describe(
+				'Schemas a read_only or read_write role can use. Default ["public"].',
+			)
+			.optional(),
+	})
+	.superRefine((value, ctx) => {
+		const scoped =
+			value.access === "read_only" || value.access === "read_write";
+		if (
+			!scoped &&
+			(value.database_name !== undefined || value.schemas !== undefined)
+		) {
+			ctx.addIssue({
+				code: "custom",
+				message: ACCESS_FIELDS_NEED_SCOPED_ACCESS,
+				path: [
+					value.database_name === undefined
+						? "schemas"
+						: "database_name",
+				],
+			});
+		}
+	});
 
 export const restoreSnapshotInputSchema = z.strictObject({
 	project_id: zod.zRestoreSnapshotPath.shape.project_id,
@@ -144,12 +276,14 @@ const snapshotFrequency = z.enum(["daily", "weekly", "monthly"]);
 export const setScheduleInputSchema = z.strictObject({
 	project_id: zod.zSetSnapshotSchedulePath.shape.project_id,
 	branch_id: zod.zSetSnapshotSchedulePath.shape.branch_id,
-	schedule: z.array(
-		z.strictObject({
-			...zod.zBackupScheduleItem.shape,
-			frequency: snapshotFrequency,
-		}),
-	),
+	schedule: z
+		.array(
+			z.strictObject({
+				...zod.zBackupScheduleItem.shape,
+				frequency: snapshotFrequency,
+			}),
+		)
+		.describe("Schedule entries defining the backup frequency."),
 });
 
 export const createBranchTool = (options: ToolClientOptions) =>
@@ -424,6 +558,54 @@ export const connectionStringTool = (options: ToolClientOptions) =>
 				},
 				{ signal },
 			),
+	);
+
+export const createRoleTool = (options: ToolClientOptions) =>
+	bindTool(
+		options,
+		{
+			operationId: "postgres.roles.create",
+			id: publishedId("postgres.roles.create"),
+			title: "Create role",
+			description:
+				"Create a Postgres role on a branch and return it with its password. access defaults to admin: the role joins neon_superuser, so it can read and write every database, create databases and roles, and bypass row-level security, and it cannot be narrowed later. For a least-privilege credential pass access read_only or read_write, scoped to database_name and schemas. Scoped roles are created with SQL as the database owner and cover tables that owner owns, now and later.",
+			inputSchema: createRoleInputSchema,
+			annotations: writeAnnotations,
+			requiresApproval: true,
+			metadata: {
+				method: "POST",
+				path: "/projects/{project_id}/branches/{branch_id}/roles",
+				stability: "stable",
+				deprecated: false,
+				tags: ["Branch"],
+			},
+		},
+		(neon, input, signal) => {
+			const role = {
+				projectId: input.project_id,
+				branchId: input.branch_id,
+				name: input.name,
+				...(input.no_login === undefined
+					? {}
+					: { no_login: input.no_login }),
+			};
+			if (input.access === "read_only" || input.access === "read_write") {
+				return neon.postgres.roles.create(
+					{
+						...role,
+						access: input.access,
+						...(input.database_name === undefined
+							? {}
+							: { databaseName: input.database_name }),
+						...(input.schemas === undefined
+							? {}
+							: { schemas: input.schemas }),
+					},
+					{ signal },
+				);
+			}
+			return neon.postgres.roles.create(role, { signal });
+		},
 	);
 
 export const restoreSnapshotTool = (options: ToolClientOptions) =>

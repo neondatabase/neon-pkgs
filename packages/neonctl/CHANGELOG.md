@@ -1,5 +1,130 @@
 # neonctl
 
+## 9.2.0
+
+### Patch Changes
+
+- Updated dependencies [aba0b8d]
+  - neon@9.2.0
+
+## 9.1.0
+
+### Minor Changes
+
+- 735200c: Add `neon logs loki` to run LogQL queries and discover labels through the branch's Loki-compatible read API. Bound queries with `--since`, `--start`, `--end`, `--limit`, and `--direction`, and pick `labels` or `label/<name>/values` with `--endpoint`. JSON/YAML output preserves Loki's envelope, nanosecond timestamps, and warnings.
+
+### Patch Changes
+
+- Updated dependencies [735200c]
+  - neon@9.1.0
+
+## 9.0.0
+
+### Patch Changes
+
+- Updated dependencies [c736518]
+  - neon@9.0.0
+
+## 8.23.4
+
+### Patch Changes
+
+- Updated dependencies [9504b81]
+  - neon@8.23.4
+
+## 8.23.3
+
+### Patch Changes
+
+- Updated dependencies [8d539df]
+  - neon@8.23.3
+
+## 8.23.2
+
+### Patch Changes
+
+- Updated dependencies [45cab08]
+  - neon@8.23.2
+
+## 8.23.1
+
+### Patch Changes
+
+- neon@8.23.1
+
+## 8.23.0
+
+### Patch Changes
+
+- Updated dependencies [322e157]
+  - neon@8.23.0
+
+## 8.22.0
+
+### Patch Changes
+
+- Updated dependencies [4f08d0c]
+  - neon@8.22.0
+
+## 8.21.1
+
+### Patch Changes
+
+- Updated dependencies [9288206]
+  - neon@8.21.1
+
+## 8.21.0
+
+### Patch Changes
+
+- Updated dependencies [f4359f2]
+- Updated dependencies [37992e6]
+  - neon@8.21.0
+
+## 8.20.1
+
+### Patch Changes
+
+- neon@8.20.1
+
+## 8.20.0
+
+### Patch Changes
+
+- Updated dependencies [3833f9f]
+  - neon@8.20.0
+
+## 8.19.0
+
+### Patch Changes
+
+- 27f8fd0: Handle row moves in `neon realtime subscribe` without reporting deletions or
+  misclassifying later updates. Show moves and their counts separately in the
+  terminal log, and include each move's destination in raw table output.
+- Updated dependencies [f01cc55]
+- Updated dependencies [27f8fd0]
+  - neon@8.19.0
+
+## 8.18.1
+
+### Patch Changes
+
+- neon@8.18.1
+
+## 8.18.0
+
+### Patch Changes
+
+- Updated dependencies [f4b216f]
+  - neon@8.18.0
+
+## 8.17.1
+
+### Patch Changes
+
+- Updated dependencies [c106bef]
+  - neon@8.17.1
+
 ## 8.17.0
 
 ### Patch Changes

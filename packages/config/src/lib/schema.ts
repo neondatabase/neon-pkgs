@@ -221,39 +221,84 @@ const functionSlugSchema = z
 const bucketNameSchema = z.string().min(1).max(255);
 
 /**
- * A single function environment-variable value. Must be a defined string: a `process.env.X`
- * that is unset evaluates to `undefined`, and the bare `z.string()` message for that case
- * (`Invalid input: expected string, received undefined`) gives no hint that an env var is the
- * culprit. The custom `error` replaces *only* the `undefined` case with a message that names
- * the offending function + env key (read from the issue path) and how to fix it; any other
- * wrong type keeps zod's default (`expected string, received number`, …).
+ * A literal function env value. Must be a defined string: a `process.env.X` that is unset
+ * evaluates to `undefined`, and the bare `z.string()` message for that case gives no hint that
+ * an env var is the culprit. `loadConfigFromFile`'s `unsetFunctionEnv: "omit"` retry matches
+ * the start of {@link undefinedFunctionEnvMessage}, so keep that prefix stable.
  */
 const functionEnvValueSchema = z.string({
-	error: (issue) => {
-		if (issue.input !== undefined) return undefined;
-		const path = issue.path ?? [];
-		const key = path.length > 0 ? String(path[path.length - 1]) : undefined;
-		const functionsIndex = path.indexOf("functions");
-		const slug =
-			functionsIndex >= 0 && functionsIndex + 1 < path.length
-				? String(path[functionsIndex + 1])
-				: undefined;
-		const subject =
-			slug !== undefined && key !== undefined
-				? `Environment variable "${key}" for function "${slug}"`
-				: key !== undefined
-					? `Environment variable "${key}"`
-					: "An environment variable";
-		return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Set it (for example \`neon deploy --env <file>\`) or omit the key from neon.ts if you do not want to write it. Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
-	},
+	error: (issue) => undefinedFunctionEnvMessage(issue),
 });
 
-/**
- * Per-function environment map. Every value must be a defined string (see
- * {@link functionEnvValueSchema}): a `process.env.X` that is unset surfaces as `undefined` and
- * is rejected here (rather than silently shipping `undefined` into the deployment).
- */
-const functionEnvSchema = z.record(z.string(), functionEnvValueSchema);
+const functionEnvVarSchema = z
+	.strictObject({
+		value: z.string().optional(),
+		required: z
+			.union([z.boolean(), z.literal("default-branch")])
+			.optional(),
+		onUndefined: z.enum(["unset", "skip"]).optional(),
+	})
+	// superRefine, unlike .check, keeps its issues when the entry union reports them.
+	.superRefine((value, ctx) => {
+		if (!("value" in value)) {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"value is missing: write value: process.env.<NAME>, or a literal string.",
+			});
+		}
+		if (value.required === undefined) {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					'required is missing: write true, false, or "default-branch".',
+			});
+		}
+		if ("onUndefined" in value && value.required === true) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["onUndefined"],
+				message:
+					'onUndefined applies only to a variable that may be unset: use required: false or "default-branch".',
+			});
+		}
+	});
+
+const functionEnvEntrySchema = z.union(
+	[functionEnvValueSchema, functionEnvVarSchema],
+	{
+		error: (issue) =>
+			undefinedFunctionEnvMessage(issue) ??
+			'Expected a string or { value, required: true | false | "default-branch", onUndefined?: "unset" | "skip" }.',
+	},
+);
+
+function undefinedFunctionEnvMessage(issue: {
+	input?: unknown;
+	path?: PropertyKey[];
+}): string | undefined {
+	if (issue.input !== undefined) return undefined;
+	const path = issue.path ?? [];
+	const key = path.length > 0 ? String(path[path.length - 1]) : undefined;
+	const functionsIndex = path.indexOf("functions");
+	const slug =
+		functionsIndex >= 0 && functionsIndex + 1 < path.length
+			? String(path[functionsIndex + 1])
+			: undefined;
+	const subject =
+		slug !== undefined && key !== undefined
+			? `Environment variable "${key}" for function "${slug}"`
+			: key !== undefined
+				? `Environment variable "${key}"`
+				: "An environment variable";
+	const declaration =
+		key !== undefined
+			? `\`${key}: { value: process.env.${key}, required: true }\``
+			: "`{ value: process.env.X, required: true }`";
+	return `${subject} is undefined — its value (typically a \`process.env.*\`) is unset. Declare it as ${declaration} so an unset value fails only the commands that need it, or set it (for example \`neon deploy --env <file>\`). Do not coerce a missing value to an empty string: that uploads and deletes the live key.`;
+}
+
+const functionEnvSchema = z.record(z.string(), functionEnvEntrySchema);
 
 /**
  * TCP port for a function's local dev server. Excludes 0 (which means "any port" to the OS
@@ -794,14 +839,34 @@ function validateParentReference(args: {
  * and unknown-key issues from `strictObject` are normalised so the message contains the
  * substring "unknown key" — keeping pre-zod assertions in test suites and downstream tools
  * stable.
+ *
+ * `unknownKeyHints` maps the rendered path of an unknown key to a sentence appended to its
+ * issue, for keys the user most likely meant to write somewhere else.
  */
-export function formatZodIssues(error: z.ZodError): string[] {
+export function formatZodIssues(
+	error: z.ZodError,
+	unknownKeyHints: ReadonlyMap<string, string> = new Map(),
+): string[] {
 	return error.issues.map((issue) => {
 		const path = renderPath(issue.path);
-		const message = normaliseIssueMessage(issue);
+		let message = normaliseIssueMessage(issue);
+		if (issue.code === "unrecognized_keys") {
+			for (const key of issue.keys) {
+				const hint = unknownKeyHints.get(path ? `${path}.${key}` : key);
+				if (hint) message += `. ${hint}`;
+			}
+		}
 		return path ? `${path}: ${message}` : message;
 	});
 }
+
+/** Hints for unknown keys at the top level of the `defineConfig` input. */
+export const configInputUnknownKeyHints: ReadonlyMap<string, string> = new Map([
+	[
+		"realtime",
+		"Realtime is in public beta and is configured under preview: `preview: { realtime: true }`",
+	],
+]);
 
 function renderPath(path: ReadonlyArray<PropertyKey>): string {
 	let out = "";

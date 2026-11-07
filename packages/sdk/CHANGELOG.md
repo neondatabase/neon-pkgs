@@ -1,5 +1,41 @@
 # @neon/sdk
 
+## 7.11.0
+
+### Minor Changes
+
+- 53516b8: Add `neon.logs.loki.queryRange`, `labels`, and `labelValues` for the branch's Loki-compatible read API. They return Loki's response bodies unchanged, with nanosecond timestamp strings and truncation `warnings`. API errors whose body carries a string `error` now use it as the error message.
+
+## 7.10.0
+
+### Minor Changes
+
+- a564258: Add Neon Auth branch settings to `neon.auth`: `allowLocalhost.get|update`, `emailAndPassword.get|update`, `emailProvider.get|update|sendTest`, `plugins.get`, `plugins.magicLink.update`, `plugins.organization.update`, `plugins.phoneNumber.get|update`, and `webhooks.get|update`, with matching `auth.*` tools. The email provider and plugins tools return the SMTP password and OAuth client secrets as `""`.
+
+## 7.9.0
+
+### Minor Changes
+
+- 30e938a: Add `neon.organizations`: `get`, `members.list|get|update|remove`, `invitations.list|create`, `spendingLimit.get|set|delete`, and `apiKeys.list|create|revoke` for organization API keys. Every method takes `orgId` and defaults to the client's `orgId`. `@neon/tools` publishes them as `organizations.*` tools, with approval required for every write, and `@neon/effect` streams `organizations.members.list`.
+
+## 7.8.2
+
+### Patch Changes
+
+- 9288206: A path parameter of `.` or `..` now fails with a `NeonClientError` before any request is sent, including direct calls such as `client.get({ url, path })` on a client from `createClient`. Previously the URL resolved it as a dot segment, so the request could reach a different API route, such as `branchId: ".."` listing every compute in the project. The CLI applies the same check to the bucket, object, custom domain, Functions, and claimable project paths it builds itself.
+
+## 7.8.1
+
+### Patch Changes
+
+- 891072b: Refresh the vendored OpenAPI spec. The Neon Auth email and password config gains `revoke_sessions_on_password_reset`, which revokes all of a user's sessions when their password is reset, and `zUpdateNeonAuthEmailAndPasswordConfigBody` in `@neon/tools/schemas` accepts it.
+
+## 7.8.0
+
+### Minor Changes
+
+- f4b216f: Create read-only and read-write Postgres roles. `neon.postgres.roles.create` and the `postgres.roles.create` tool take `access: "read_only" | "read_write"` with an optional `databaseName` and `schemas`, and `neon roles create` takes `--access`, `--database`, and `--schema`. Without `access`, roles are still created by the Neon API and join `neon_superuser`, as before.
+
 ## 7.7.0
 
 ### Minor Changes

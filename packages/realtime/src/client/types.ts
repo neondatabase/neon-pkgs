@@ -307,7 +307,7 @@ export interface RawLiveQueryRow<Row> {
 }
 
 /**
- * A row upsert or removal in an atomic publication batch.
+ * A row upsert, removal, or sequential move in an atomic publication batch.
  *
  * @typeParam Row - Row produced by the subscribed query.
  */
@@ -325,6 +325,14 @@ export type LiveQueryChange<Row> =
 			readonly type: "remove";
 			/** Opaque identity invalidated by the next complete `rows` update. */
 			readonly rowId: string;
+	  }
+	| {
+			/** Splice this row immediately after its predecessor, or at the head. */
+			readonly type: "move";
+			/** Existing row in the result after applying the batch's contents. */
+			readonly rowId: string;
+			/** Existing predecessor; null places the row at the head. */
+			readonly afterRowId: string | null;
 	  };
 
 /**
@@ -482,13 +490,16 @@ export interface RealtimeClientOptions {
 	 */
 	readonly parsers?: PostgreSQLParsers;
 	/**
-	 * Minimum client diagnostic level. The default, `silent`, emits nothing.
+	 * Minimum client diagnostic level. The default, `silent`, emits no
+	 * structured diagnostics. Server-issued client warnings are always written
+	 * to `console.error` independently of this setting.
 	 * When enabled without {@link logger}, entries are written to `console`.
 	 */
 	readonly logLevel?: RealtimeLogLevel;
 	/**
 	 * Structured diagnostic sink. It is called only for events enabled by
-	 * {@link logLevel}; exceptions from the sink are ignored.
+	 * {@link logLevel}; exceptions from the sink are ignored. Server-issued
+	 * client warnings do not use this sink.
 	 */
 	readonly logger?: RealtimeLogger;
 }

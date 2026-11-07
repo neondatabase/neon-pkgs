@@ -17,11 +17,27 @@ export const ROW_C = "c".repeat(64);
 
 export type MockTarget = ReconciliationTarget & {
 	[Key in keyof ReconciliationTarget]: ReturnType<typeof vi.fn>;
+} & {
+	installReset: ReturnType<typeof vi.fn>;
+	applyBatch: ReturnType<typeof vi.fn>;
 };
 
 export function target(events: string[] = [], prefix = ""): MockTarget {
 	const label = (value: string) => `${prefix ? `${prefix}:` : ""}${value}`;
-	return {
+	const result: MockTarget = {
+		prepare: vi.fn(
+			(
+				rows: readonly WireRow[] | undefined,
+				batches: readonly ReconciledBatch[],
+			) =>
+				() => {
+					if (rows !== undefined) result.installReset(rows);
+					for (const batch of batches) {
+						if (batch.changes.length > 0)
+							result.applyBatch(batch.changes);
+					}
+				},
+		),
 		baselineSyncStarted: vi.fn(),
 		installReset: vi.fn((rows: readonly WireRow[]) =>
 			events.push(label(`installReset:${keys(rows)}`)),
@@ -47,6 +63,7 @@ export function target(events: string[] = [], prefix = ""): MockTarget {
 			throw error;
 		}),
 	};
+	return result;
 }
 
 export function subscribed(

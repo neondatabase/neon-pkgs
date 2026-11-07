@@ -31,6 +31,7 @@ import * as open from "./open.js";
 import * as operations from "./operations.js";
 import * as orgs from "./orgs.js";
 import * as plugins from "./plugins.js";
+import * as postgres from "./postgres.js";
 import * as profile from "./profile.js";
 import * as projects from "./projects.js";
 import * as psql from "./psql.js";
@@ -56,6 +57,7 @@ export default [
 	vpcEndpoints,
 	neonAuth,
 	branches,
+	postgres,
 	databases,
 	roles,
 	operations,

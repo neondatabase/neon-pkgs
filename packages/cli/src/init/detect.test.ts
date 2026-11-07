@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { NeonApiError } from "../api.js";
 import { AuthRefreshError } from "../auth.js";
+import { ConfigInstallFailed } from "../commands/config.js";
 import { collectDetectedAgents } from "./detect.js";
 import {
 	initEndProperties,
@@ -49,7 +50,6 @@ describe("splitInitTooling", () => {
 		expect(
 			splitInitTooling(
 				["cursor", "github-copilot-cli", "grok-build"],
-				"global",
 				"global",
 				["github-copilot-cli", "grok-build"],
 			),
@@ -103,7 +103,6 @@ describe("planInitToolingSteps", () => {
 			planInitToolingSteps({
 				tooling: { setup: "plugin", agents: ["cursor", "codex"] },
 				yes: true,
-				pluginScope: "global",
 				skillsGlobal: true,
 				mcpOauth: true,
 			}),
@@ -112,7 +111,6 @@ describe("planInitToolingSteps", () => {
 				kind: "plugins",
 				options: {
 					yes: true,
-					global: true,
 					agents: ["cursor", "codex"],
 				},
 			},
@@ -124,7 +122,6 @@ describe("planInitToolingSteps", () => {
 			planInitToolingSteps({
 				tooling: { setup: "skills", agents: FALLBACK_SKILLS_AGENTS },
 				yes: true,
-				pluginScope: "global",
 				skillsGlobal: true,
 				mcpOauth: true,
 			}),
@@ -145,7 +142,6 @@ describe("planInitToolingSteps", () => {
 					mcpAgents: ["opencode"],
 				},
 				yes: true,
-				pluginScope: "project",
 				skillsGlobal: false,
 				mcpOauth: true,
 				mcpProjectId: "proj-pin",
@@ -223,7 +219,33 @@ describe("init funnel payloads", () => {
 		expect(end.error_step).toBeNull();
 		expect(end.error_code).toBeNull();
 		expect(end.error_message).toBeNull();
+		expect(end.error_detail).toBeNull();
 		expect(end.error_steps).toEqual([]);
+	});
+
+	test("end carries the bounded cause of a dependency install failure", () => {
+		const exit = new ConfigInstallFailed(
+			"npm install @neon/config @neon/env",
+			"npm",
+			"ERESOLVE",
+		);
+		const end = initEndProperties({
+			initRunId: "run-1",
+			mode: "recommended",
+			agentSetup: "plugin",
+			agentsInstalled: [],
+			link: "linked",
+			config: null,
+			services: null,
+			outcome: "error",
+			errors: [{ step: "config", error: exit }],
+			exitError: exit,
+		});
+		expect(end.error_code).toBe("DEPENDENCY_INSTALL_FAILED");
+		expect(end.error_message).toBe(
+			"Could not install the Neon dependencies with npm (ERESOLVE).",
+		);
+		expect(end.error_detail).toBe("ERESOLVE");
 	});
 
 	test("end reports the failure the run exited with", () => {
@@ -245,6 +267,7 @@ describe("init funnel payloads", () => {
 		});
 		expect(end.error_step).toBe("env_pull");
 		expect(end.error_message).toBe("env pull failed");
+		expect(end.error_detail).toBeNull();
 		expect(end.error_steps).toEqual(["plugins", "env_pull"]);
 	});
 
@@ -293,7 +316,24 @@ describe("init funnel payloads", () => {
 
 describe("initErrorCode", () => {
 	test.each([
-		["a plain error", new Error("plugins CLI failed."), "UNKNOWN_ERROR"],
+		["a plain error", new Error("something unexpected"), "UNKNOWN_ERROR"],
+		[
+			"a plugins CLI failure",
+			new Error("plugins CLI failed."),
+			"PLUGINS_CLI_FAILED",
+		],
+		[
+			"a dependency install failure",
+			new ConfigInstallFailed("npm install", "npm", "exit code 1"),
+			"DEPENDENCY_INSTALL_FAILED",
+		],
+		[
+			"an expired session whose message names a timeout",
+			new AuthRefreshError("Authentication timed out after 60 seconds", {
+				terminal: true,
+			}),
+			"AUTH_FAILED",
+		],
 		[
 			"init's own failure",
 			new Error("Setup did not finish."),

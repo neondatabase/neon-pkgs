@@ -1,15 +1,16 @@
-import { type Config, defineConfig } from "@neon/config/v1";
+import {
+	type Config,
+	defineConfig,
+	type FunctionEnvVar,
+} from "@neon/config/v1";
 import type {
 	FetchEnvOptions,
 	FilteredNeonEnv,
-	FunctionBaseUrlKey,
 	NeonAiGatewayEnv,
 	NeonAuthEnv,
 	NeonBranchEnv,
 	NeonDataApiEnv,
 	NeonEnv,
-	NeonFunctionsEnv,
-	NeonFunctionUrlEnv,
 	NeonPostgresEnv,
 	NeonRealtimeEnv,
 	NeonStorageEnv,
@@ -83,29 +84,28 @@ describe("parseEnv key filter (types)", () => {
 
 	test("SelectableEnvKey reflects exactly the policy's namespaces", () => {
 		const config = defineConfig({});
-		// `NEON_BRANCH` is always selectable: every branch has an identity, so the namespace
+		// The branch keys are always selectable: every branch has an identity, so the namespace
 		// is present on every `NeonEnv`.
-		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
-			"DATABASE_URL" | "DATABASE_URL_UNPOOLED" | "NEON_BRANCH"
-		>();
-	});
-
-	test("function URL keys are selectable when the policy declares the slug", () => {
-		const config = defineConfig({
-			preview: {
-				functions: { hello: { name: "H", source: "./h.ts" } },
-			},
-		});
 		expectTypeOf<SelectableEnvKey<typeof config>>().toEqualTypeOf<
 			| "DATABASE_URL"
 			| "DATABASE_URL_UNPOOLED"
 			| "NEON_BRANCH"
-			| "NEON_FUNCTION_HELLO_BASE_URL"
+			| "NEON_BRANCH_ID"
+			| "NEON_FUNCTION_HOST_SUFFIX"
 		>();
-		const env = parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"]);
-		expectTypeOf(env.functions.hello.baseUrl).toEqualTypeOf<string>();
+	});
+
+	test("selecting the function host keys requires them", () => {
+		const env = parseEnv(defineConfig({}), [
+			"NEON_BRANCH_ID",
+			"NEON_FUNCTION_HOST_SUFFIX",
+		]);
+		expectTypeOf(env.branch.id).toEqualTypeOf<string>();
+		expectTypeOf(env.branch.functionHostSuffix).toEqualTypeOf<string>();
 		// @ts-expect-error postgres was not selected
 		env.postgres;
+		// @ts-expect-error per-function URL keys were replaced by functionBaseUrl(slug)
+		parseEnv(defineConfig({}), ["NEON_FUNCTION_HELLO_BASE_URL"]);
 	});
 });
 
@@ -418,6 +418,73 @@ describe("parseEnv existing overloads still type", () => {
 		expectTypeOf(env.function).toEqualTypeOf<{ resendApiKey: string }>();
 		expectTypeOf(env.function.resendApiKey).toEqualTypeOf<string>();
 	});
+
+	test("declared env vars are string only when required: true", () => {
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: {
+						TOKEN: { value: process.env.TOKEN, required: true },
+						DSN: {
+							value: process.env.DSN,
+							required: "default-branch",
+						},
+						GUILD: { value: process.env.GUILD, required: false },
+						KEPT: {
+							value: process.env.KEPT,
+							required: false,
+							onUndefined: "skip",
+						},
+						LOG_LEVEL: "info",
+					},
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function).toEqualTypeOf<{
+			TOKEN: string;
+			DSN: string | undefined;
+			GUILD: string | undefined;
+			KEPT: string | undefined;
+			LOG_LEVEL: string;
+		}>();
+	});
+
+	test("a declaration widened to FunctionEnvVar may be unset", () => {
+		const optional = (): FunctionEnvVar => ({
+			value: undefined,
+			required: false,
+		});
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { TOKEN: optional() },
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function.TOKEN).toEqualTypeOf<
+			string | undefined
+		>();
+	});
+
+	test("a non-literal required may be unset", () => {
+		const required = Boolean(process.env.CI);
+		const config = defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: { TOKEN: { value: process.env.TOKEN, required } },
+				},
+			},
+		});
+		expectTypeOf(parseEnv(config, "hello").function.TOKEN).toEqualTypeOf<
+			string | undefined
+		>();
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -562,7 +629,6 @@ type NamespacePresence<C extends Config> = {
 	realtime: "realtime" extends keyof NeonEnv<C> ? true : false;
 	storage: "storage" extends keyof NeonEnv<C> ? true : false;
 	aiGateway: "aiGateway" extends keyof NeonEnv<C> ? true : false;
-	functions: "functions" extends keyof NeonEnv<C> ? true : false;
 };
 
 /** The presence record of a postgres-only policy (no secret namespaces). */
@@ -574,7 +640,6 @@ type PostgresOnly = {
 	realtime: false;
 	storage: false;
 	aiGateway: false;
-	functions: false;
 };
 
 describe("NeonEnv namespace presence (types)", () => {
@@ -683,57 +748,34 @@ describe("NeonEnv namespace presence (types)", () => {
 		>().toEqualTypeOf<false>();
 	});
 
-	test("preview.functions adds the functions namespace", () => {
+	test("functions add no namespace; the branch carries their routing", () => {
 		const fnOnly = defineConfig({
 			preview: {
 				functions: { hello: { name: "H", source: "./h.ts" } },
 			},
 		});
 		expectTypeOf<
-			NamespacePresence<typeof fnOnly>["functions"]
-		>().toEqualTypeOf<true>();
-		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<
-			NeonFunctionsEnv<typeof fnOnly>
-		>();
-		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<{
-			hello: NeonFunctionUrlEnv;
+			NamespacePresence<typeof fnOnly>
+		>().toEqualTypeOf<PostgresOnly>();
+		expectTypeOf<
+			NonNullable<NeonEnv<typeof fnOnly>["branch"]>
+		>().toEqualTypeOf<NeonBranchEnv>();
+		expectTypeOf<NeonBranchEnv>().toEqualTypeOf<{
+			name: string;
+			id?: string;
+			functionHostSuffix?: string;
 		}>();
-		expectTypeOf<
-			NeonEnv<typeof fnOnly>["functions"]["hello"]["baseUrl"]
-		>().toEqualTypeOf<string>();
-		expectTypeOf(parseEnv(fnOnly).functions).toEqualTypeOf<
-			{ hello: NeonFunctionUrlEnv } | undefined
-		>();
-		expectTypeOf(parseEnv(fnOnly, "hello").functions).toEqualTypeOf<
-			{ hello: NeonFunctionUrlEnv } | undefined
-		>();
-		const fetched = fetchEnv(fnOnly, {
-			projectId: "proj",
-			branch: "main",
-		});
-		expectTypeOf<
-			Awaited<typeof fetched>["functions"]["hello"]["baseUrl"]
-		>().toEqualTypeOf<string>();
 	});
 
-	test("GA buckets / aiGateway / functions add the same namespaces", () => {
+	test("GA buckets / aiGateway add the same namespaces", () => {
 		const withBucket = defineConfig({ buckets: { uploads: {} } });
 		const on = defineConfig({ aiGateway: true });
-		const fnOnly = defineConfig({
-			functions: { hello: { name: "H", source: "./h.ts" } },
-		});
 		expectTypeOf<
 			NamespacePresence<typeof withBucket>["storage"]
 		>().toEqualTypeOf<true>();
 		expectTypeOf<
 			NamespacePresence<typeof on>["aiGateway"]
 		>().toEqualTypeOf<true>();
-		expectTypeOf<
-			NamespacePresence<typeof fnOnly>["functions"]
-		>().toEqualTypeOf<true>();
-		expectTypeOf<NeonEnv<typeof fnOnly>["functions"]>().toEqualTypeOf<{
-			hello: NeonFunctionUrlEnv;
-		}>();
 	});
 
 	test("a fully-enabled policy yields every namespace", () => {
@@ -755,7 +797,6 @@ describe("NeonEnv namespace presence (types)", () => {
 			realtime: true;
 			storage: true;
 			aiGateway: true;
-			functions: true;
 		}>();
 	});
 
@@ -776,7 +817,6 @@ describe("NeonEnv namespace presence (types)", () => {
 			realtime: true;
 			storage: true;
 			aiGateway: true;
-			functions: true;
 		}>();
 	});
 
@@ -807,9 +847,6 @@ describe("env type-export surface", () => {
 		expectTypeOf<NeonDataApiEnv>().not.toBeAny();
 		expectTypeOf<NeonEnv>().not.toBeAny();
 		expectTypeOf<NeonFunctionEnv<typeof sample, "hello">>().not.toBeAny();
-		expectTypeOf<NeonFunctionUrlEnv>().not.toBeAny();
-		expectTypeOf<NeonFunctionsEnv<typeof sample>>().not.toBeAny();
-		expectTypeOf<FunctionBaseUrlKey<"hello">>().not.toBeAny();
 		expectTypeOf<NeonPostgresEnv>().not.toBeAny();
 		expectTypeOf<NeonStorageEnv>().not.toBeAny();
 		expectTypeOf<

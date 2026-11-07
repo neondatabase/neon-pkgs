@@ -1,9 +1,6 @@
 import { existsSync } from "node:fs";
 import type { NeonApi } from "@neon/config";
-import {
-	isFunctionBaseUrlKey,
-	NEON_ENV_VAR_KEYS,
-} from "@neon-internals/env-core/env";
+import { NEON_ENV_VAR_KEYS } from "@neon-internals/env-core/env";
 import type { CredentialOutcome } from "@neon-internals/env-core/reuse-secrets";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -17,6 +14,7 @@ import {
 	type EnvPullKey,
 	envKeysForSelection,
 	envPullFlagValue,
+	isLegacyFunctionBaseUrlKey,
 	ownedEnvServiceKeys,
 	parseEnvPullKeys,
 } from "../env_services.js";
@@ -132,8 +130,7 @@ export const builder = (argv: yargs.Argv) =>
 							"What gets pulled, in precedence order:",
 							"  1. --service / --env, when given — their union, ignoring neon.ts.",
 							"  2. neon.ts, when the project directory (next to .neon, or cwd",
-							"     without one) has one — including derived function URLs (the",
-							"     function does not have to be deployed).",
+							"     without one) has one.",
 							"  3. Otherwise everything the branch has, plus the AI Gateway —",
 							"     which pulls the default AI Gateway credential.",
 							"",
@@ -172,11 +169,7 @@ export const builder = (argv: yargs.Argv) =>
 					)
 					.example(
 						"$0 env pull -s functions",
-						"Pull NEON_FUNCTION_<SLUG>_BASE_URL for every deployed function",
-					)
-					.example(
-						"$0 env pull -e NEON_FUNCTION_HELLO_BASE_URL",
-						"Write that function's production invocation URL (no deploy required)",
+						'Pull NEON_BRANCH_ID and NEON_FUNCTION_HOST_SUFFIX, which functionBaseUrl("<slug>") from @neon/env reads',
 					)
 					.strict(),
 			async (args) => {
@@ -241,6 +234,8 @@ const NEON_VAR_NAMES = Object.values(NEON_ENV_VAR_KEYS).flatMap((group) =>
  */
 const NEON_OWNED_ENV_KEYS: readonly EnvPullKey[] = [
 	...Object.values(NEON_ENV_VAR_KEYS.postgres),
+	NEON_ENV_VAR_KEYS.branch.id,
+	NEON_ENV_VAR_KEYS.branch.functionHostSuffix,
 	...Object.values(NEON_ENV_VAR_KEYS.auth),
 	...Object.values(NEON_ENV_VAR_KEYS.dataApi),
 	...Object.values(NEON_ENV_VAR_KEYS.realtime),
@@ -328,11 +323,7 @@ export const pull = async (
 		...(props.runtimeApi ? { api: props.runtimeApi } : {}),
 	});
 
-	const neonVars = pickSelectedVars(
-		pickNeonVars(vars),
-		selectedKeys,
-		props.services !== undefined ? selectionServices : undefined,
-	);
+	const neonVars = pickSelectedVars(pickNeonVars(vars), selectedKeys);
 	if (Object.keys(neonVars).length === 0) {
 		const skippedUnsupportedOnly =
 			dropped !== null &&
@@ -357,7 +348,6 @@ export const pull = async (
 			unreachedButCurrent(skipped, existingEnv, branchId),
 			existingEnv,
 			props.services !== undefined ? selectionServices : undefined,
-			props.envKeys !== undefined ? selectionEnvKeys : undefined,
 		),
 	});
 	// stderr, like the log lines it replaces: commands that bundle a pull (`config apply -o json`,
@@ -387,14 +377,13 @@ export const pull = async (
 	}
 
 	// When the branch has the AI Gateway enabled, the pulled credentials always work, but
-	// serving is plan-gated and the model set can be reduced on the beta — surface that as a
+	// serving needs AI Gateway credits and the model set can be reduced — surface that as a
 	// courtesy notice (best-effort; never fails the pull). The freshly pulled token lets us
-	// probe the branch's own /v1/models to detect a reduced catalog.
+	// probe the branch's own /v1/models, which reports both.
 	const gatewayBaseUrl = neonVars.NEON_AI_GATEWAY_BASE_URL;
 	const gatewayToken = neonVars.NEON_AI_GATEWAY_TOKEN;
 	if (gatewayBaseUrl && gatewayToken) {
 		await warnAiGateway({
-			apiClient: props.apiClient,
 			projectId: props.projectId,
 			branchId,
 			gateway: { baseUrl: gatewayBaseUrl, token: gatewayToken },
@@ -411,39 +400,32 @@ export const pull = async (
 	};
 };
 
-/** Prevents scoped or unavailable services from pruning values they did not resolve. */
+/**
+ * Prevents scoped or unavailable services from pruning values they did not resolve. A pull
+ * that covers functions also prunes the `NEON_FUNCTION_<SLUG>_BASE_URL` lines earlier
+ * releases wrote, since nothing reads or refreshes them anymore.
+ */
 const managedKeysFor = (
 	selectedKeys: readonly EnvPullKey[] | undefined,
 	unreached: readonly NeonService[],
 	existingEnv: Record<string, string>,
 	services: readonly NeonService[] | undefined,
-	envKeys: readonly EnvPullKey[] | undefined,
 ): string[] => {
-	const existingFunctionKeys =
-		Object.keys(existingEnv).filter(isFunctionBaseUrlKey);
-	const namedFunctionKeys = (envKeys ?? []).filter(isFunctionBaseUrlKey);
 	const functionsInScope =
 		selectedKeys === undefined ||
 		(services?.includes("functions") ?? false);
-	const ownedFunctionKeys = functionsInScope
-		? existingFunctionKeys
-		: namedFunctionKeys;
-	const owned = selectedKeys
-		? [
-				...NEON_OWNED_ENV_KEYS.filter((key) =>
-					selectedKeys.includes(key),
-				),
-				...ownedFunctionKeys,
-			]
-		: [...NEON_OWNED_ENV_KEYS, ...ownedFunctionKeys];
+	const legacyFunctionKeys = functionsInScope
+		? Object.keys(existingEnv).filter(isLegacyFunctionBaseUrlKey)
+		: [];
+	const owned = [
+		...(selectedKeys
+			? NEON_OWNED_ENV_KEYS.filter((key) => selectedKeys.includes(key))
+			: NEON_OWNED_ENV_KEYS),
+		...legacyFunctionKeys,
+	];
 	if (unreached.length === 0) return owned;
 	const keep = new Set(ownedEnvServiceKeys(unreached));
-	return owned.filter((key) => {
-		if (unreached.includes("functions") && isFunctionBaseUrlKey(key)) {
-			return false;
-		}
-		return !keep.has(key);
-	});
+	return owned.filter((key) => !keep.has(key));
 };
 
 /**
@@ -463,7 +445,6 @@ const unreachedButCurrent = (
 			keep.push("ai-gateway");
 		}
 	}
-	if (skipped.includes("functions")) keep.push("functions");
 	return keep;
 };
 
@@ -488,17 +469,11 @@ const isBranchGatewayUrl = (baseUrl: string, branchId: string): boolean =>
 const pickSelectedVars = (
 	vars: Record<string, string>,
 	selectedKeys: readonly EnvPullKey[] | undefined,
-	services: readonly NeonService[] | undefined,
 ): Record<string, string> => {
 	if (!selectedKeys) return vars;
 	const wanted = new Set<string>(selectedKeys);
-	const keepFunctionUrls = services?.includes("functions") ?? false;
 	return Object.fromEntries(
-		Object.entries(vars).filter(
-			([key]) =>
-				wanted.has(key) ||
-				(keepFunctionUrls && isFunctionBaseUrlKey(key)),
-		),
+		Object.entries(vars).filter(([key]) => wanted.has(key)),
 	);
 };
 
@@ -551,10 +526,7 @@ export const autoPullEnvAfterPin = async (
 const pickNeonVars = (vars: Record<string, string>): Record<string, string> => {
 	const out: Record<string, string> = {};
 	for (const [name, value] of Object.entries(vars)) {
-		if (
-			NEON_VAR_NAMES.some((key) => key === name) ||
-			isFunctionBaseUrlKey(name)
-		) {
+		if (NEON_VAR_NAMES.some((key) => key === name)) {
 			out[name] = value;
 		}
 	}

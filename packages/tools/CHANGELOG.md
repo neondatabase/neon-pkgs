@@ -1,5 +1,70 @@
 # @neon/tools
 
+## 2.10.0
+
+### Minor Changes
+
+- 53516b8: Add the `logs.loki.queryRange` tool (`query_range_logs_loki`), a read-only LogQL range query that returns Loki's response. Label discovery stays on `logs.fields` and `logs.fieldValues`.
+
+### Patch Changes
+
+- Updated dependencies [53516b8]
+  - @neon/sdk@7.11.0
+
+## 2.9.0
+
+### Minor Changes
+
+- 7700352: Every tool input now has a description in its JSON Schema: the first sentence of the OpenAPI description, or handwritten copy where the spec has none.
+
+## 2.8.0
+
+### Minor Changes
+
+- a564258: Add Neon Auth branch settings to `neon.auth`: `allowLocalhost.get|update`, `emailAndPassword.get|update`, `emailProvider.get|update|sendTest`, `plugins.get`, `plugins.magicLink.update`, `plugins.organization.update`, `plugins.phoneNumber.get|update`, and `webhooks.get|update`, with matching `auth.*` tools. The email provider and plugins tools return the SMTP password and OAuth client secrets as `""`.
+
+### Patch Changes
+
+- Updated dependencies [a564258]
+  - @neon/sdk@7.10.0
+
+## 2.7.0
+
+### Minor Changes
+
+- 30e938a: Add `neon.organizations`: `get`, `members.list|get|update|remove`, `invitations.list|create`, `spendingLimit.get|set|delete`, and `apiKeys.list|create|revoke` for organization API keys. Every method takes `orgId` and defaults to the client's `orgId`. `@neon/tools` publishes them as `organizations.*` tools, with approval required for every write, and `@neon/effect` streams `organizations.members.list`.
+
+### Patch Changes
+
+- Updated dependencies [30e938a]
+  - @neon/sdk@7.9.0
+
+## 2.6.2
+
+### Patch Changes
+
+- Updated dependencies [9288206]
+  - @neon/sdk@7.8.2
+
+## 2.6.1
+
+### Patch Changes
+
+- 891072b: Refresh the vendored OpenAPI spec. The Neon Auth email and password config gains `revoke_sessions_on_password_reset`, which revokes all of a user's sessions when their password is reset, and `zUpdateNeonAuthEmailAndPasswordConfigBody` in `@neon/tools/schemas` accepts it.
+- Updated dependencies [891072b]
+  - @neon/sdk@7.8.1
+
+## 2.6.0
+
+### Minor Changes
+
+- f4b216f: Create read-only and read-write Postgres roles. `neon.postgres.roles.create` and the `postgres.roles.create` tool take `access: "read_only" | "read_write"` with an optional `databaseName` and `schemas`, and `neon roles create` takes `--access`, `--database`, and `--schema`. Without `access`, roles are still created by the Neon API and join `neon_superuser`, as before.
+
+### Patch Changes
+
+- Updated dependencies [f4b216f]
+  - @neon/sdk@7.8.0
+
 ## 2.5.2
 
 ### Patch Changes

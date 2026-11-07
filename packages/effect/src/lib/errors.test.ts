@@ -13,6 +13,7 @@ import {
 	NeonRequestTimeoutError as SdkRequestTimeoutError,
 	NeonWaitTimeoutError as SdkWaitTimeoutError,
 } from "@neon/sdk";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { make } from "./client.js";
 import {
@@ -126,6 +127,38 @@ describe("make", () => {
 		expect(() => make({ apiKey: "k", retries: -1 })).toThrow(
 			NeonClientError,
 		);
+	});
+
+	it("runs a nested namespace call as an Effect, with API errors on the error channel", async () => {
+		const answers = [
+			{
+				status: 200,
+				body: { status: "success", data: ["service_name"] },
+			},
+			{ status: 400, body: { status: "error", error: "bad selector" } },
+		];
+		const neon = make({
+			apiKey: "k",
+			retries: 0,
+			fetch: async () => {
+				const answer = answers.shift();
+				if (answer === undefined) throw new Error("unexpected request");
+				return new Response(JSON.stringify(answer.body), {
+					status: answer.status,
+					headers: { "content-type": "application/json" },
+				});
+			},
+		});
+		const params = { projectId: "p", branchId: "b" };
+
+		await expect(
+			Effect.runPromise(neon.logs.loki.labels(params)),
+		).resolves.toEqual({ status: "success", data: ["service_name"] });
+		const failure = await Effect.runPromise(
+			Effect.flip(neon.logs.loki.labels(params)),
+		);
+		expect(failure).toBeInstanceOf(NeonApiError);
+		expect(failure.message).toBe("bad selector");
 	});
 
 	it("exposes every SDK namespace and method", () => {

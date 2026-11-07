@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import type {
 	NeonAuthCreateIntegrationResponse,
+	NeonAuthEmailServerConfig,
 	NeonAuthIntegration,
+	NeonClient,
 } from "@neon/sdk";
 import chalk from "chalk";
 import type yargs from "yargs";
@@ -134,6 +136,7 @@ const EMAIL_PASSWORD_FIELDS = [
 	"send_verification_email_on_sign_up",
 	"send_verification_email_on_sign_in",
 	"disable_sign_up",
+	"revoke_sessions_on_password_reset",
 ] as const;
 
 const EMAIL_PROVIDER_FIELDS = [
@@ -603,6 +606,11 @@ export const builder = (argv: yargs.Argv) => {
 												"Disable new user sign ups",
 											type: "boolean",
 										},
+										"revoke-sessions-on-password-reset": {
+											describe:
+												"Revoke all of a user's sessions when their password is reset",
+											type: "boolean",
+										},
 									}),
 								async (args) => {
 									await emailPasswordUpdate(args as any);
@@ -1044,6 +1052,16 @@ type AuthBranchProps = BranchScopeProps & { branchId?: string };
 
 const resolveBranch = async (props: AuthBranchProps) => {
 	return props.branchId ?? (await branchIdFromProps(props));
+};
+
+const authSdk = async <T>(
+	props: AuthBranchProps,
+	call: (auth: NeonClient<true>["auth"]) => Promise<T>,
+): Promise<T> => {
+	const { fromSdkError, getNeonClient } = await import("../neon_client.js");
+	return call(getNeonClient(props).auth).catch((error: unknown) => {
+		throw fromSdkError(error, props.apiHost);
+	});
 };
 
 /** The branch name is only known when it was resolved from a listing, not from an id. */
@@ -1513,9 +1531,8 @@ const domainDelete = async (props: AuthBranchProps & { domain: string }) => {
 
 const allowLocalhostGet = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthAllowLocalhost(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.allowLocalhost.get({ projectId: props.projectId, branchId }),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: ALLOW_LOCALHOST_FIELDS });
@@ -1528,24 +1545,24 @@ const allowLocalhostGet = async (props: AuthBranchProps) => {
 
 const allowLocalhostEnable = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	await props.apiClient.updateNeonAuthAllowLocalhost(
-		props.projectId,
-		branchId,
-		{
+	await authSdk(props, (auth) =>
+		auth.allowLocalhost.update({
+			projectId: props.projectId,
+			branchId,
 			allow_localhost: true,
-		},
+		}),
 	);
 	printMessage("Localhost connections allowed");
 };
 
 const allowLocalhostDisable = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	await props.apiClient.updateNeonAuthAllowLocalhost(
-		props.projectId,
-		branchId,
-		{
+	await authSdk(props, (auth) =>
+		auth.allowLocalhost.update({
+			projectId: props.projectId,
+			branchId,
 			allow_localhost: false,
-		},
+		}),
 	);
 	printMessage("Localhost connections restricted");
 };
@@ -1560,6 +1577,7 @@ const printEmailPasswordEntries = (data: {
 	send_verification_email_on_sign_up: boolean;
 	send_verification_email_on_sign_in: boolean;
 	disable_sign_up: boolean;
+	revoke_sessions_on_password_reset: boolean;
 }): [string, string][] => [
 	["Enabled:", String(data.enabled)],
 	["Verification Method:", data.email_verification_method],
@@ -1577,13 +1595,16 @@ const printEmailPasswordEntries = (data: {
 		String(data.send_verification_email_on_sign_in),
 	],
 	["Disable Sign Up:", String(data.disable_sign_up)],
+	[
+		"Revoke Sessions On Reset:",
+		String(data.revoke_sessions_on_password_reset),
+	],
 ];
 
 const emailPasswordGet = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthEmailAndPasswordConfig(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.emailAndPassword.get({ projectId: props.projectId, branchId }),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: EMAIL_PASSWORD_FIELDS });
@@ -1604,13 +1625,14 @@ const emailPasswordUpdate = async (
 		sendVerificationEmailOnSignUp?: boolean;
 		sendVerificationEmailOnSignIn?: boolean;
 		disableSignUp?: boolean;
+		revokeSessionsOnPasswordReset?: boolean;
 	},
 ) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.updateNeonAuthEmailAndPasswordConfig(
-		props.projectId,
-		branchId,
-		{
+	const data = await authSdk(props, (auth) =>
+		auth.emailAndPassword.update({
+			projectId: props.projectId,
+			branchId,
 			enabled: props.enabled,
 			email_verification_method:
 				props.emailVerificationMethod as NeonAuthEmailVerificationMethod,
@@ -1621,7 +1643,9 @@ const emailPasswordUpdate = async (
 			send_verification_email_on_sign_in:
 				props.sendVerificationEmailOnSignIn,
 			disable_sign_up: props.disableSignUp,
-		},
+			revoke_sessions_on_password_reset:
+				props.revokeSessionsOnPasswordReset,
+		}),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: EMAIL_PASSWORD_FIELDS });
@@ -1660,9 +1684,8 @@ const printEmailProviderEntries = (data: {
 
 const emailProviderGet = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthEmailProvider(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.emailProvider.get({ projectId: props.projectId, branchId }),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data as any, {
@@ -1698,7 +1721,7 @@ const emailProviderUpdate = async (
 	const warnSharedSender =
 		props.type === "shared" && (props.senderEmail || props.senderName);
 	const branchId = await resolveBranch(props);
-	let config: any;
+	let config: NeonAuthEmailServerConfig;
 	if (props.type === "standard") {
 		config = {
 			type: "standard",
@@ -1714,10 +1737,12 @@ const emailProviderUpdate = async (
 			type: "shared",
 		};
 	}
-	const { data } = await props.apiClient.updateNeonAuthEmailProvider(
-		props.projectId,
-		branchId,
-		config,
+	const data = await authSdk(props, (auth) =>
+		auth.emailProvider.update({
+			projectId: props.projectId,
+			branchId,
+			...config,
+		}),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data as any, {
@@ -1744,10 +1769,12 @@ const emailProviderTest = async (
 	},
 ) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.sendNeonAuthEmailProviderTest(
-		props.projectId,
-		branchId,
-		{ recipient_email: props.recipientEmail },
+	const data = await authSdk(props, (auth) =>
+		auth.emailProvider.sendTest({
+			projectId: props.projectId,
+			branchId,
+			recipient_email: props.recipientEmail,
+		}),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: TEST_EMAIL_FIELDS });
@@ -1797,9 +1824,8 @@ const printOrganizationEntries = (data: {
 
 const organizationGet = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthPluginConfigs(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.plugins.get({ projectId: props.projectId, branchId }),
 	);
 	const org = data.organization;
 	if (!org) {
@@ -1827,14 +1853,14 @@ const organizationUpdate = async (
 	},
 ) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.updateNeonAuthOrganizationPlugin(
-		props.projectId,
-		branchId,
-		{
+	const data = await authSdk(props, (auth) =>
+		auth.plugins.organization.update({
+			projectId: props.projectId,
+			branchId,
 			enabled: props.enabled,
 			organization_limit: props.limit,
 			creator_role: props.creatorRole as "admin" | "owner",
-		},
+		}),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data as any, { fields: ORGANIZATION_FIELDS as any });
@@ -2464,9 +2490,8 @@ const printWebhookEntries = (data: {
 
 const webhookGet = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthWebhookConfig(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.webhooks.get({ projectId: props.projectId, branchId }),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: WEBHOOK_FIELDS });
@@ -2484,10 +2509,10 @@ const webhookUpdate = async (
 	},
 ) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.updateNeonAuthWebhookConfig(
-		props.projectId,
-		branchId,
-		{
+	const data = await authSdk(props, (auth) =>
+		auth.webhooks.update({
+			projectId: props.projectId,
+			branchId,
 			enabled: props.enabled,
 			webhook_url: props.url,
 			enabled_events: props.enabledEvents as
@@ -2499,7 +2524,7 @@ const webhookUpdate = async (
 				  )[]
 				| undefined,
 			timeout_seconds: props.timeout,
-		},
+		}),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data, { fields: WEBHOOK_FIELDS });
@@ -2523,9 +2548,8 @@ const formatValue = (v: unknown): string => {
 
 const pluginsList = async (props: AuthBranchProps) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthPluginConfigs(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.plugins.get({ projectId: props.projectId, branchId }),
 	);
 	if (props.output === "json" || props.output === "yaml") {
 		writer(props).end(data as any, {
@@ -2557,9 +2581,8 @@ const pluginsList = async (props: AuthBranchProps) => {
 
 const pluginsGet = async (props: AuthBranchProps & { pluginName: string }) => {
 	const branchId = await resolveBranch(props);
-	const { data } = await props.apiClient.getNeonAuthPluginConfigs(
-		props.projectId,
-		branchId,
+	const data = await authSdk(props, (auth) =>
+		auth.plugins.get({ projectId: props.projectId, branchId }),
 	);
 	const plugin = (data as any)[props.pluginName];
 	if (plugin === undefined) {

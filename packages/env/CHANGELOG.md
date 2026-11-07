@@ -1,5 +1,79 @@
 # @neondatabase/env
 
+## 2.1.0
+
+### Minor Changes
+
+- aba0b8d: A Function `env` value in `neon.ts` can be a declaration instead of a string: `{ value: process.env.X, required: true }`, with `required: false` or `required: "default-branch"` for a value that may be unset, and `onUndefined: "skip"` to keep the deployed value instead of removing it. A declaration's value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so importing `neon.ts` (from app code or another Function) no longer fails on a secret it does not hold.
+
+### Patch Changes
+
+- Updated dependencies [aba0b8d]
+  - @neon/config@1.13.0
+
+## 2.0.1
+
+### Patch Changes
+
+- @neon/config@1.12.1
+
+## 2.0.0
+
+### Major Changes
+
+- c736518: Add `functionBaseUrl(slug)`, which returns another Neon Function's base URL on the same branch from `NEON_BRANCH_ID` and `NEON_FUNCTION_HOST_SUFFIX`, the variables the Functions runtime injects into every function, or `http://localhost:<port>` for a slug `neon dev` is serving. `fetchEnv`, `parseEnv`, and `toEntries` carry both variables on `env.branch` (`id`, `functionHostSuffix`).
+
+  **Breaking:** the per-function `NEON_FUNCTION_<SLUG>_BASE_URL` contract is removed: `env.functions`, `functionBaseUrlKey`, `isFunctionBaseUrlKey`, `parseFunctionBaseUrlKey`, and the `FunctionBaseUrlKey`, `NeonFunctionsEnv`, `NeonFunctionUrlEnv`, and `ParsedNeonEnv` types. Replace `env.functions.hello.baseUrl` with `functionBaseUrl("hello")`.
+
+### Patch Changes
+
+- Updated dependencies [c736518]
+  - @neon/config@1.12.0
+
+## 1.6.15
+
+### Patch Changes
+
+- @neon/config@1.11.3
+
+## 1.6.14
+
+### Patch Changes
+
+- @neon/config@1.11.2
+
+## 1.6.13
+
+### Patch Changes
+
+- @neon/config@1.11.1
+
+## 1.6.12
+
+### Patch Changes
+
+- Updated dependencies [3833f9f]
+  - @neon/config@1.11.0
+
+## 1.6.11
+
+### Patch Changes
+
+- @neon/config@1.10.3
+
+## 1.6.10
+
+### Patch Changes
+
+- Updated dependencies [9807763]
+  - @neon/config@1.10.2
+
+## 1.6.9
+
+### Patch Changes
+
+- @neon/config@1.10.1
+
 ## 1.6.8
 
 ### Patch Changes

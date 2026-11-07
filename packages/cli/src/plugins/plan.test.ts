@@ -36,7 +36,6 @@ function planOptions(
 	overrides: Partial<ResolvePluginsPlanOptions> = {},
 ): ResolvePluginsPlanOptions {
 	return {
-		global: false,
 		agents: ["cursor"],
 		yes: false,
 		cwd,
@@ -90,7 +89,7 @@ describe("assertPluginsCanRun", () => {
 });
 
 describe("resolvePluginsPlan", () => {
-	test("-y is project-scoped, specified agents, and calls no prompts", async () => {
+	test("-y with specified agents calls no prompts", async () => {
 		const cwd = tmpDir();
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
@@ -99,10 +98,8 @@ describe("resolvePluginsPlan", () => {
 			}),
 		);
 		expect(plan).toEqual({
-			scope: "project",
 			agents: ["cursor"],
 			skipped: [],
-			userScopeSkipped: [],
 			unusableCommands: [],
 			targets: [{ agents: ["cursor"], target: "cursor" }],
 		});
@@ -136,14 +133,6 @@ describe("resolvePluginsPlan", () => {
 		).rejects.toThrow(/Pass -y to install into detected agents/);
 	});
 
-	test("--global is user-level", async () => {
-		const cwd = tmpDir();
-		const plan = await resolvePluginsPlan(
-			planOptions(cwd, { yes: true, interactive: false, global: true }),
-		);
-		expect(plan.scope).toBe("global");
-	});
-
 	test("rejects plugins-CLI-only agent names", async () => {
 		const cwd = tmpDir();
 		await expect(
@@ -157,28 +146,18 @@ describe("resolvePluginsPlan", () => {
 		).rejects.toThrow(/Unknown agent: "eve"/);
 	});
 
-	test("Kimi Code plugins are user-level", async () => {
+	test("Kimi Code installs without --global", async () => {
 		const cwd = tmpDir();
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					yes: true,
-					interactive: false,
-					agents: ["kimi"],
-				}),
-			),
-		).rejects.toThrow(
-			/Kimi Code: plugins are user-level\. Pass --global\./,
-		);
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
 				yes: true,
 				interactive: false,
-				global: true,
 				agents: ["kimi"],
 			}),
 		);
-		expect(plan.scope).toBe("global");
+		expect(plan.targets).toEqual([
+			{ agents: ["kimi-code"], target: "kimi" },
+		]);
 	});
 
 	test("skips MCP agents that cannot install plugins", async () => {
@@ -192,10 +171,9 @@ describe("resolvePluginsPlan", () => {
 		);
 		expect(plan.agents).toEqual(["cursor"]);
 		expect(plan.skipped).toEqual(["mcporter"]);
-		expect(plan.userScopeSkipped).toEqual([]);
 	});
 
-	test("skips user-level-only agents at project scope when others remain", async () => {
+	test("installs vscode alongside cursor without --global", async () => {
 		const cwd = tmpDir();
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
@@ -204,33 +182,19 @@ describe("resolvePluginsPlan", () => {
 				agents: ["cursor", "vscode"],
 			}),
 		);
-		expect(plan.agents).toEqual(["cursor"]);
-		expect(plan.userScopeSkipped).toEqual(["vscode"]);
+		expect(plan.agents).toEqual(["cursor", "vscode"]);
 		expect(plan.targets).toEqual([
 			{ agents: ["cursor"], target: "cursor" },
+			{ agents: ["vscode"], target: "vscode" },
 		]);
 	});
 
-	test("fails when every selected agent is user-level-only at project scope", async () => {
-		const cwd = tmpDir();
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					yes: true,
-					interactive: false,
-					agents: ["vscode"],
-				}),
-			),
-		).rejects.toThrow(/Pass --global/);
-	});
-
-	test("installs vscode at user-level", async () => {
+	test("installs vscode alone without --global", async () => {
 		const cwd = tmpDir();
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
 				yes: true,
 				interactive: false,
-				global: true,
 				agents: ["vscode"],
 			}),
 		);
@@ -286,11 +250,10 @@ describe("resolvePluginsPlan", () => {
 			}),
 		);
 		expect(asked).toBe(true);
-		expect(plan.scope).toBe("project");
 		expect(plan.agents).toEqual(["cursor"]);
 	});
 
-	test("non-interactive project with no folder agents fails", async () => {
+	test("-y with no project folders, host, or installed apps fails", async () => {
 		const cwd = tmpDir();
 		await expect(
 			resolvePluginsPlan(
@@ -300,7 +263,41 @@ describe("resolvePluginsPlan", () => {
 					interactive: false,
 				}),
 			),
-		).rejects.toThrow(/No coding agents detected in this project/);
+		).rejects.toThrow(/^No coding agents detected\. Pass --agent <name>/);
+	});
+
+	test("project folders come before installed apps and the host", async () => {
+		const cwd = tmpDir();
+		mkdirSync(join(cwd, ".claude"));
+		const detectInstalledAgents = vi.fn(
+			async (): Promise<readonly AgentType[]> => ["codex"],
+		);
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cursor",
+				detectInstalledAgents,
+			}),
+		);
+		expect(plan.agents).toEqual(["claude-code"]);
+		expect(detectInstalledAgents).not.toHaveBeenCalled();
+	});
+
+	test("project folders without a plugins mapping fall through to the host", async () => {
+		const cwd = tmpDir();
+		mkdirSync(join(cwd, ".opencode"));
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cursor",
+				detectInstalledAgents: async () => ["codex"],
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
 	});
 
 	test("-y uses the host CLI agent when the project has no folders", async () => {
@@ -321,88 +318,80 @@ describe("resolvePluginsPlan", () => {
 		expect(detectInstalledAgents).not.toHaveBeenCalled();
 	});
 
-	test("-y host VS Code at project scope asks for --global", async () => {
+	test("-y with no project folders uses a host VS Code", async () => {
 		const cwd = tmpDir();
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					agents: [],
-					yes: true,
-					interactive: false,
-					detectAgent: () => "vscode",
-					detectInstalledAgents: async () => ["cursor"],
-				}),
-			),
-		).rejects.toThrow(/plugins are user-level. Pass --global/);
-	});
-
-	test("-y host without a plugins mapping does not use installed apps", async () => {
-		const cwd = tmpDir();
-		const detectInstalledAgents = vi.fn(
-			async (): Promise<readonly AgentType[]> => ["cursor"],
-		);
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					agents: [],
-					yes: true,
-					interactive: false,
-					detectAgent: () => "cline",
-					detectInstalledAgents,
-				}),
-			),
-		).rejects.toThrow(/from a supported agent/);
-		expect(detectInstalledAgents).not.toHaveBeenCalled();
-	});
-
-	test("-y does not use installed apps when there is no project folder or host", async () => {
-		const cwd = tmpDir();
-		const detectInstalledAgents = vi.fn(
-			async (): Promise<readonly AgentType[]> => ["codex"],
-		);
-		await expect(
-			resolvePluginsPlan(
-				planOptions(cwd, {
-					agents: [],
-					yes: true,
-					interactive: false,
-					detectInstalledAgents,
-				}),
-			),
-		).rejects.toThrow(/No coding agents detected in this project/);
-		expect(detectInstalledAgents).not.toHaveBeenCalled();
-	});
-
-	test("-y --global uses installed apps over host", async () => {
-		const cwd = tmpDir();
-		const detectAgent = vi.fn((): AgentType | null => "claude-code");
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
 				agents: [],
 				yes: true,
 				interactive: false,
-				global: true,
-				detectAgent,
+				detectAgent: () => "vscode",
+				detectInstalledAgents: async () => ["cursor"],
+			}),
+		);
+		expect(plan.agents).toEqual(["vscode"]);
+	});
+
+	test("-y with an unmapped host falls back to installed apps", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
+				detectAgent: () => "cline",
+				detectInstalledAgents: async () => ["cursor", "mcporter"],
+			}),
+		);
+		expect(plan.agents).toEqual(["cursor"]);
+	});
+
+	test("-y with no project folder or host uses installed apps", async () => {
+		const cwd = tmpDir();
+		const plan = await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				yes: true,
+				interactive: false,
 				detectInstalledAgents: async () => ["codex"],
 			}),
 		);
 		expect(plan.agents).toEqual(["codex"]);
-		expect(detectAgent).not.toHaveBeenCalled();
 	});
 
-	test("-y --global uses the host when no apps are installed", async () => {
+	test("the picker preselects project folders and never the host", async () => {
 		const cwd = tmpDir();
-		const plan = await resolvePluginsPlan(
+		mkdirSync(join(cwd, ".cursor"));
+		let selected: readonly AgentType[] | undefined;
+		await resolvePluginsPlan(
 			planOptions(cwd, {
 				agents: [],
-				yes: true,
-				interactive: false,
-				global: true,
-				detectAgent: () => "cursor",
-				detectInstalledAgents: async () => [],
+				detectAgent: () => "codex",
+				detectInstalledAgents: async () => ["claude-code"],
+				pickAgents: async (options) => {
+					selected = options.selected;
+					return ["cursor"];
+				},
 			}),
 		);
-		expect(plan.agents).toEqual(["cursor"]);
+		expect(selected).toEqual(["cursor"]);
+	});
+
+	test("the picker preselects installed apps when the project has no folders, not the host", async () => {
+		const cwd = tmpDir();
+		let selected: readonly AgentType[] | undefined;
+		await resolvePluginsPlan(
+			planOptions(cwd, {
+				agents: [],
+				detectAgent: () => "codex",
+				detectInstalledAgents: async () => ["claude-code"],
+				pickAgents: async (options) => {
+					selected = options.selected;
+					return ["claude-code"];
+				},
+			}),
+		);
+		expect(selected).toEqual(["claude-code"]);
 	});
 });
 
@@ -419,7 +408,6 @@ describe("resolvePluginsPlan agent commands", () => {
 			resolvePluginsPlan(
 				planOptions(cwd, {
 					agents: ["github-copilot-cli", "grok-build", "codex"],
-					global: true,
 					commandPath: emptyPath(),
 				}),
 			),
@@ -440,7 +428,6 @@ describe("resolvePluginsPlan agent commands", () => {
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
 				agents: ["github-copilot-cli"],
-				global: true,
 				commandPath: bin,
 			}),
 		);
@@ -462,7 +449,6 @@ describe("resolvePluginsPlan agent commands", () => {
 		const plan = await resolvePluginsPlan(
 			planOptions(cwd, {
 				agents: ["cursor"],
-				global: true,
 				interactive: true,
 				commandPath: bin,
 				detectInstalledAgents: async () => [
@@ -490,7 +476,6 @@ describe("resolvePluginsPlan agent commands", () => {
 			resolvePluginsPlan(
 				planOptions(cwd, {
 					agents: ["github-copilot-cli"],
-					global: true,
 					commandPath: bin,
 				}),
 			),

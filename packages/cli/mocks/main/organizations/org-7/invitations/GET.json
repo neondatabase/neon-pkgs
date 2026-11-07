@@ -1,0 +1,12 @@
+{
+  "invitations": [
+    {
+      "id": "i-1",
+      "email": "pending@example.com",
+      "org_id": "org-7",
+      "invited_by": "u-1",
+      "invited_at": "2026-01-04T00:00:00Z",
+      "role": "member"
+    }
+  ]
+}

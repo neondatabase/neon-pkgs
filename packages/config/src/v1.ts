@@ -164,7 +164,18 @@ export {
 	isFunctionArchiveEntry,
 	pickFunctionSourceEntry,
 } from "./lib/function-entries.js";
-export type { LoadConfigOptions } from "./lib/loader.js";
+// ─── Declared function env (pure; consumed by @neon/config-runtime, @neon/env, neon) ─
+export type {
+	FunctionEnvTarget,
+	ResolvedFunctionEnv,
+} from "./lib/function-env.js";
+export {
+	assertFunctionEnv,
+	missingFunctionEnv,
+	resolveFunctionEnv,
+	splitFunctionEnv,
+} from "./lib/function-env.js";
+export type { LoadConfigOptions, LoadedConfig } from "./lib/loader.js";
 export { loadConfigFromFile } from "./lib/loader.js";
 // ─── NeonApi types (needed by callers implementing their own adapters) ────────
 export type {
@@ -243,6 +254,8 @@ export type {
 	FunctionBundlerInput,
 	FunctionDef,
 	FunctionDevConfig,
+	FunctionEnvValue,
+	FunctionEnvVar,
 	FunctionRuntime,
 	FunctionScheduleTriggerDef,
 	FunctionStorageObjectCreatedTriggerDef,

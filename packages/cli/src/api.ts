@@ -143,6 +143,7 @@ export function messageFromBody(body: unknown): string | undefined {
 	}
 	if (body && typeof body === "object" && "error" in body) {
 		const error = body.error;
+		if (typeof error === "string") return error;
 		if (error && typeof error === "object" && "message" in error) {
 			const message = error.message;
 			if (typeof message === "string") return message;
@@ -299,7 +300,7 @@ function httpError(response: Response, body: unknown): NeonApiError {
  * The cause's message is left out: `JSON.parse` quotes the input, and the body can carry a
  * password or token that would reach stderr and analytics.
  */
-function unreadableBodyError(
+export function unreadableBodyError(
 	response: Response,
 	cause: unknown,
 ): UnreadableResponseError {
@@ -317,6 +318,18 @@ function unreadableBodyError(
 			requestPath: base.requestPath,
 		},
 	);
+}
+
+/**
+ * Encode one segment of a path built outside the SDK. `encodeURIComponent` leaves `.` and
+ * `..` intact, and URL parsing then resolves them as dot segments, so the request would go to
+ * a different route.
+ */
+export function pathSegment(name: string, value: string): string {
+	if (value === "." || value === "..") {
+		throw new Error(`Path parameter ${name} cannot be "${value}".`);
+	}
+	return encodeURIComponent(value);
 }
 
 /**
@@ -480,6 +493,22 @@ export type RequestParams = {
 	headers?: Record<string, string>;
 };
 
+/** The fetch {@link getApiClient} sends requests with, for clients built outside it. */
+export const cliFetch = (
+	requestTimeoutMs = REQUEST_TIMEOUT_MS,
+): typeof fetch => {
+	const fetchWithTimeout = makeTimedFetch(
+		validateRequestTimeout(requestTimeoutMs),
+	);
+	return (input, init) => {
+		const request = new Request(input, init);
+		request.headers.set("User-Agent", USER_AGENT);
+		return fetchWithTimeout(request);
+	};
+};
+
+export { httpError, isAbortError, networkError, RETRY_COUNT };
+
 export const getApiClient = ({
 	apiKey,
 	apiHost,
@@ -509,6 +538,14 @@ export const getApiClient = ({
 			result = await run();
 		} catch (err) {
 			throw networkError(err);
+		}
+		// The SDK rejected the input before sending; its message is the one to show.
+		if (
+			result.error instanceof Error &&
+			"kind" in result.error &&
+			result.error.kind === "client"
+		) {
+			throw result.error;
 		}
 		const response = result.response;
 		if (!response) {
@@ -1341,99 +1378,6 @@ export const getApiClient = ({
 					body: data,
 				}),
 			),
-		getNeonAuthAllowLocalhost: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthAllowLocalhost({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthAllowLocalhost: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthAllowLocalhostData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthAllowLocalhost({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		getNeonAuthEmailAndPasswordConfig: (
-			projectId: string,
-			branchId: string,
-		) =>
-			call(() =>
-				raw.getNeonAuthEmailAndPasswordConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthEmailAndPasswordConfig: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<
-				raw.UpdateNeonAuthEmailAndPasswordConfigData["body"]
-			>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthEmailAndPasswordConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		getNeonAuthEmailProvider: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthEmailProvider({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthEmailProvider: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthEmailProviderData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthEmailProvider({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		sendNeonAuthEmailProviderTest: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.SendNeonAuthEmailProviderTestData["body"]>,
-		) =>
-			call(() =>
-				raw.sendNeonAuthEmailProviderTest({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
-		getNeonAuthPluginConfigs: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthPluginConfigs({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthOrganizationPlugin: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthOrganizationPluginData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthOrganizationPlugin({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
-				}),
-			),
 		getNeonAuthOAuthProviderPlugin: (projectId: string, branchId: string) =>
 			call(() =>
 				raw.getNeonAuthOAuthProviderPlugin({
@@ -1534,25 +1478,6 @@ export const getApiClient = ({
 						branch_id: branchId,
 						client_id: clientId,
 					},
-				}),
-			),
-		getNeonAuthWebhookConfig: (projectId: string, branchId: string) =>
-			call(() =>
-				raw.getNeonAuthWebhookConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-				}),
-			),
-		updateNeonAuthWebhookConfig: (
-			projectId: string,
-			branchId: string,
-			data: NonNullable<raw.UpdateNeonAuthWebhookConfigData["body"]>,
-		) =>
-			call(() =>
-				raw.updateNeonAuthWebhookConfig({
-					client,
-					path: { project_id: projectId, branch_id: branchId },
-					body: data,
 				}),
 			),
 		createBranchNeonAuthNewUser: (

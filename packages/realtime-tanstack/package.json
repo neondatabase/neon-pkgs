@@ -1,6 +1,6 @@
 {
   "name": "@neon/realtime-tanstack",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "description": "TanStack DB integration for live queries.",
   "keywords": [
     "neon",
@@ -45,7 +45,7 @@
   "devDependencies": {
     "@neon/realtime": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
-    "@tanstack/db": "0.9.0",
+    "@tanstack/db": "1.0.0-rc.1.1",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "console-fail-test": "catalog:",
@@ -54,9 +54,9 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@neon/realtime": "^0.1.1",
+    "@neon/realtime": "^0.2.0",
     "@standard-schema/spec": "^1.1.0",
-    "@tanstack/db": "^0.9.0"
+    "@tanstack/db": "^1.0.0-rc.1"
   },
   "engines": {
     "node": ">=20.19.0"

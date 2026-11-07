@@ -203,8 +203,8 @@ describe("initEnvPullAfterConfig", () => {
 			}),
 		).toEqual({
 			kind: "services",
-			services: ["postgres", "ai-gateway"],
-			envKeys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			services: ["postgres", "ai-gateway", "functions"],
+			envKeys: [],
 		});
 		expect(
 			initEnvPullAfterConfig({

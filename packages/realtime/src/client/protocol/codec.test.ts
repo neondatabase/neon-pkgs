@@ -14,9 +14,11 @@ import {
 	ProtocolError,
 } from "./index.js";
 import type { ClientMessage } from "./messages.js";
-import fixtures from "./schema/realtime-protocol-v1.fixtures.json";
+import orderedFixtures from "./schema/ordered-changes.fixtures.json";
+import fixtures from "./schema/realtime-protocol.fixtures.json";
 
 const CLIENT_TYPES = new Set([
+	"client_info",
 	"subscribe",
 	"renew",
 	"unsubscribe",
@@ -39,6 +41,7 @@ const SERVER_TYPES = new Set([
 	"commit",
 	"subscription_error",
 	"connection_error",
+	"client_warning",
 	"ping",
 	"pong",
 ]);
@@ -72,7 +75,27 @@ function decodesCleanly(frame: string): boolean {
 	}
 }
 
-describe("Realtime v1 JSON codec", () => {
+describe("Realtime v2 JSON codec", () => {
+	it("requires a canonical move predecessor and rejects unsupported rollout fields", () => {
+		for (const fixture of orderedFixtures.valid)
+			expect(decodeServerMessage(JSON.stringify(fixture))).toEqual(
+				fixture,
+			);
+		for (const fixture of orderedFixtures.invalid)
+			rejectServerMessage(fixture);
+		expect(() =>
+			encodeClientMessage({
+				type: "subscribe",
+				request_id: "1",
+				authorization: "token",
+				supports_moves: true,
+			} as ClientMessage),
+		).toThrow(ProtocolError);
+		rejectServerMessage({ type: "ready", supports_moves: true });
+		rejectServerMessage({ type: "mode_ack", mode: "ordered" });
+		rejectServerMessage({ type: "abort", publication_id: "p" });
+	});
+
 	it("decodes every valid server fixture", () => {
 		const validServerFixtures = fixtures.valid.filter(({ type }) =>
 			SERVER_TYPES.has(type),
@@ -429,6 +452,11 @@ describe("Realtime v1 JSON codec", () => {
 
 	it("serializes every client command with wire field names", () => {
 		const messages: ClientMessage[] = [
+			{
+				type: "client_info",
+				metadata:
+					'{"sdk":"javascript","release_line":"0.2","version":"0.2.0"}',
+			},
 			{ type: "subscribe", request_id: "1", authorization: "token" },
 			{ type: "renew", live_id: "1", authorization: "token" },
 			{ type: "unsubscribe", live_id: "1" },
@@ -440,7 +468,7 @@ describe("Realtime v1 JSON codec", () => {
 		).toEqual(
 			fixtures.valid
 				.filter(({ type }) => CLIENT_TYPES.has(type))
-				.slice(0, 5),
+				.slice(0, 6),
 		);
 	});
 

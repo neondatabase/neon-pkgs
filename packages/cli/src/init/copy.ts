@@ -258,9 +258,10 @@ export const claimableThenServicesNext = (expiresAt: string): string[] => [
 export const installFailedNext = (
 	command: string,
 	envPull: boolean,
+	reason: string,
 ): { heading: string; body: string; next: string[] } => ({
 	heading: HEADING_FAILED,
-	body: "Could not install the Neon dependencies.",
+	body: reason,
 	next: [
 		"Install the dependencies, then run neon init again:",
 		command,

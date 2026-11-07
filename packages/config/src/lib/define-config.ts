@@ -6,9 +6,11 @@ import { normalizeCustomDomain } from "./custom-domain.js";
 import { parseBranchTtl } from "./duration.js";
 import { ConfigValidationError } from "./errors.js";
 import { normalizeExternalPackage } from "./external-packages.js";
+import { splitFunctionEnv } from "./function-env.js";
 import {
 	branchTuningSchema,
 	configInputSchema,
+	configInputUnknownKeyHints,
 	formatZodIssues,
 } from "./schema.js";
 import type {
@@ -215,7 +217,9 @@ export function defineConfig<
 
 	const parsed = configInputSchema.safeParse(input);
 	if (!parsed.success) {
-		throw new ConfigValidationError(formatZodIssues(parsed.error));
+		throw new ConfigValidationError(
+			formatZodIssues(parsed.error, configInputUnknownKeyHints),
+		);
 	}
 
 	return Object.freeze({ ...input }) as Config<
@@ -430,7 +434,7 @@ function resolveFunctionConfig(
 		slug,
 		name: def.name,
 		source: def.source,
-		env: { ...(def.env ?? {}) },
+		...splitFunctionEnv(def.env),
 		runtime: tuning.runtime ?? DEFAULT_FUNCTION_RUNTIME,
 		bundler: def.bundler ?? DEFAULT_FUNCTION_BUNDLER,
 		// Normalized only when declared, so a policy without it resolves unchanged and takes

@@ -16,7 +16,7 @@ import strip from "strip-ansi";
 import { afterEach, describe, expect, test as vitestTest } from "vitest";
 
 import { NEON_MCP_URL } from "../mcp/install.js";
-import { PLUGIN_SKILLS } from "../plugins/run.js";
+import { PLUGIN_SKILLS, PLUGINS_CLI_VERSION } from "../plugins/run.js";
 import { pluginsInstallableAgents } from "../plugins/targets.js";
 import { test } from "../test_utils/fixtures";
 
@@ -131,7 +131,7 @@ describe("neon plugins", () => {
 		);
 		expect(JSON.parse(stdout)).toEqual([
 			{
-				scope: "project",
+				scope: "user",
 				plugin: "neon-postgres",
 				agent: "cursor",
 				status: "installed",
@@ -140,13 +140,13 @@ describe("neon plugins", () => {
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))).toEqual([
 			[
 				"-y",
-				"plugins",
+				`plugins@${PLUGINS_CLI_VERSION}`,
 				"add",
 				"neondatabase/agent-skills",
 				"-t",
 				"cursor",
 				"-s",
-				"project",
+				"user",
 				"-y",
 			],
 		]);
@@ -174,7 +174,7 @@ describe("neon plugins", () => {
 		);
 	});
 
-	test("-y with no project folders and no host fails", async ({
+	test("-y with no project folders, host, or installed apps fails", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch({ projectCursor: false });
@@ -182,7 +182,7 @@ describe("neon plugins", () => {
 			...runOptions(home, cwd, bin),
 			code: 1,
 		});
-		expect(stderr).toMatch(/No coding agents detected in this project/);
+		expect(stderr).toMatch(/No coding agents detected\. /);
 		expect(stderr).toMatch(/--agent <name>/);
 		expect(stderr).toMatch(/omit -y in a terminal/);
 	});
@@ -253,13 +253,13 @@ describe("neon plugins", () => {
 		expect(rows).toEqual(
 			expect.arrayContaining([
 				{
-					scope: "project",
+					scope: "user",
 					plugin: "neon-postgres",
 					agent: "cursor",
 					status: "installed",
 				},
 				{
-					scope: "project",
+					scope: "user",
 					plugin: "neon-postgres",
 					agent: "claude-code",
 					status: "installed",
@@ -334,15 +334,68 @@ describe("neon plugins", () => {
 		expect(JSON.parse(stdout)[0].status).toBe("installed");
 	});
 
-	test("install --global passes -s user", async ({ testCliCommand }) => {
-		const { home, cwd, bin, argvFile } = scratch();
+	test("hidden --global spawns exactly what the default does", async ({
+		testCliCommand,
+	}) => {
+		const runs: unknown[] = [];
+		for (const flags of [[], ["--global"]]) {
+			const { home, cwd, bin, argvFile } = scratch({
+				projectCursor: false,
+			});
+			mkdirSync(join(cwd, ".claude"));
+			mkdirSync(join(home, ".cursor"));
+			const { stdout } = await testCliCommand(
+				["plugins", "-y", ...flags],
+				runOptions(home, cwd, bin),
+			);
+			runs.push({
+				rows: JSON.parse(stdout),
+				argv: JSON.parse(readFileSync(argvFile, "utf8")),
+			});
+		}
+		expect(runs[1]).toEqual(runs[0]);
+		expect(runs[0]).toEqual({
+			rows: [
+				{
+					scope: "user",
+					plugin: "neon-postgres",
+					agent: "claude-code",
+					status: "installed",
+				},
+			],
+			argv: [
+				[
+					"-y",
+					`plugins@${PLUGINS_CLI_VERSION}`,
+					"add",
+					"neondatabase/agent-skills",
+					"-t",
+					"claude-code",
+					"-s",
+					"user",
+					"-y",
+				],
+			],
+		});
+	});
+
+	test("-y with no project folders or host uses installed apps", async ({
+		testCliCommand,
+	}) => {
+		const { home, cwd, bin, argvFile } = scratch({ projectCursor: false });
 		mkdirSync(join(home, ".cursor"));
 		const { stdout } = await testCliCommand(
-			["plugins", "-y", "--global"],
+			["plugins", "-y"],
 			runOptions(home, cwd, bin),
 		);
-		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toContain("user");
-		expect(JSON.parse(stdout)[0].scope).toBe("user");
+		expect(JSON.parse(stdout)[0]).toMatchObject({
+			agent: "cursor",
+			status: "installed",
+		});
+		const spawned = JSON.parse(readFileSync(argvFile, "utf8"));
+		expect(
+			spawned.map((args: string[]) => args[args.indexOf("-t") + 1]),
+		).toEqual(["cursor"]);
 	});
 
 	test("-y --global skips detected Copilot CLI and Grok when their commands are not on PATH", async ({
@@ -437,20 +490,14 @@ describe("neon plugins", () => {
 		);
 	});
 
-	test("vscode requires --global", async ({ testCliCommand }) => {
+	test("vscode installs without --global", async ({ testCliCommand }) => {
 		const { home, cwd, bin, argvFile } = scratch({
 			projectCursor: false,
 		});
 		mkdirSync(join(cwd, ".vscode"));
-		const { stderr } = await testCliCommand(["plugins", "-y"], {
-			...runOptions(home, cwd, bin),
-			code: 1,
-		});
-		expect(stderr).toMatch(/Pass --global/);
-		expect(() => readFileSync(argvFile, "utf8")).toThrow();
 		const { stdout } = await testCliCommand(
-			["plugins", "-y", "--global"],
-			runOptions(home, cwd, bin, { TERM_PROGRAM: "vscode" }),
+			["plugins", "-y"],
+			runOptions(home, cwd, bin),
 		);
 		expect(JSON.parse(stdout)[0]).toMatchObject({
 			scope: "user",
@@ -459,7 +506,7 @@ describe("neon plugins", () => {
 		});
 		expect(JSON.parse(readFileSync(argvFile, "utf8"))[0]).toEqual([
 			"-y",
-			"plugins",
+			`plugins@${PLUGINS_CLI_VERSION}`,
 			"add",
 			"neondatabase/agent-skills",
 			"-t",
@@ -554,7 +601,7 @@ describe("neon plugins", () => {
 		);
 	});
 
-	test("failed --global retry keeps user-level scope", async ({
+	test("failed --global run retries without --global", async ({
 		testCliCommand,
 	}) => {
 		const { home, cwd, bin } = scratch();
@@ -566,9 +613,8 @@ describe("neon plugins", () => {
 			}),
 			code: 1,
 		});
-		expect(stderr).toMatch(
-			/Retry with: neon plugins --agent cursor --global -y/,
-		);
+		expect(stderr).toMatch(/Retry with: neon plugins --agent cursor -y\n/);
+		expect(stderr).not.toMatch(/--global/);
 		expect(stderr).not.toMatch(/npx /);
 	});
 
@@ -593,7 +639,9 @@ describe("neon plugins", () => {
 		});
 		const flat = strip(`${stdout}\n${stderr}`).replace(/\s+/g, " ");
 		const compact = flat.replace(/\s+/g, "");
-		expect(flat).toMatch(/--global/);
+		expect(flat).not.toMatch(/--global/);
+		expect(flat).not.toMatch(/project scope/);
+		expect(flat).toContain("installs user-level");
 		expect(flat).not.toMatch(/--plugin/);
 		expect(flat).not.toMatch(/plugins update/);
 		expect(flat).not.toMatch(/-s user/);
@@ -607,10 +655,7 @@ describe("neon plugins", () => {
 		}
 		expect(compact).not.toContain("claimable-postgres");
 		expect(compact).not.toContain("neon-postgres-agent-platforms");
-		for (const agent of pluginsInstallableAgents("project")) {
-			expect(compact).toContain(agent);
-		}
-		for (const agent of pluginsInstallableAgents("global")) {
+		for (const agent of pluginsInstallableAgents()) {
 			expect(compact).toContain(agent);
 		}
 		expect(flat).toMatch(/-a, --agent/);

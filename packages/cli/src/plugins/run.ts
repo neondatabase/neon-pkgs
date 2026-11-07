@@ -14,42 +14,35 @@ export const PLUGIN_SKILLS = [
 	"neon-realtime",
 ] as const;
 export const PLUGINS_CLI_TIMEOUT_MS = 120_000;
+/**
+ * Exact version so an upstream release cannot change install behavior under a shipped
+ * CLI. Bump it only with a green `e2e/plugins.e2e.test.ts` run.
+ */
+export const PLUGINS_CLI_VERSION = "1.3.6";
 
-export type PluginsCliScope = "user" | "project";
-
-export const pluginsScopeFlag = (global: boolean): PluginsCliScope =>
-	global ? "user" : "project";
-
-export const pluginsAddArgs = (options: {
-	target: string;
-	global: boolean;
-}): string[] => {
+export const pluginsAddArgs = (options: { target: string }): string[] => {
 	if (options.target.length === 0) {
 		throw new Error("plugins add needs a -t target.");
 	}
 	return [
 		"-y",
-		"plugins",
+		`plugins@${PLUGINS_CLI_VERSION}`,
 		"add",
 		PLUGIN_SOURCE,
 		"-t",
 		options.target,
 		"-s",
-		pluginsScopeFlag(options.global),
+		"user",
 		"-y",
 	];
 };
 
 export const neonPluginsRetryCommand = (options: {
 	agents: readonly string[];
-	global: boolean;
 }): string => {
 	const args = ["plugins"];
 	for (const agent of options.agents) {
 		args.push("--agent", agent);
-	}
-	if (options.global) {
-		args.push("--global");
 	}
 	args.push("-y");
 	return `neon ${args.map(quoteNpxArg).join(" ")}`;

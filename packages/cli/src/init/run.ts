@@ -306,21 +306,6 @@ const extrasSetup = (
 	return setup;
 };
 
-const pluginScopeFor = (
-	agents: readonly AgentType[],
-	preferred: "global" | "project",
-): "global" | "project" => {
-	if (preferred === "global") {
-		return "global";
-	}
-	const project = new Set(pluginsInstallableAgents("project"));
-	const globalOnly = agents.some(
-		(id) =>
-			!project.has(id) && pluginsInstallableAgents("global").includes(id),
-	);
-	return globalOnly ? "global" : "project";
-};
-
 const warnUnusablePluginCommands = (
 	unusable: readonly UnusablePluginsCommand[],
 	tooling: InitToolingPlan,
@@ -725,8 +710,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		};
 		const unavailablePluginAgents = (): AgentType[] =>
 			unusablePluginCommands().map((row) => row.agent);
-		const pluginReady = (agents: readonly AgentType[]): AgentType[] =>
-			agents.filter((id) => !unavailablePluginAgents().includes(id));
 
 		let tooling: InitToolingPlan = { setup: "skip" };
 		let mcpAuth: InitMcpAuthChoice | undefined = props.mcpAuth;
@@ -735,17 +718,12 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			props.mcpConfigLocation ?? "global";
 		let selectedSkills: readonly string[] | undefined = props.skill;
 		let delayMcp = false;
-		let pluginScope: "global" | "project" = recommended
-			? "global"
-			: "project";
 
 		if (recommended) {
-			pluginScope = "global";
 			tooling =
 				named.length > 0
 					? splitInitTooling(
 							named,
-							"global",
 							"global",
 							unavailablePluginAgents(),
 						)
@@ -777,13 +755,8 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			} else if (inferred.kind === "auto") {
 				const autoAgents =
 					named.length > 0 ? named : detection.detectedAgents;
-				pluginScope = pluginScopeFor(
-					pluginReady(autoAgents),
-					"project",
-				);
 				tooling = splitInitTooling(
 					autoAgents,
-					pluginScope,
 					mcpConfigLocation,
 					unavailablePluginAgents(),
 				);
@@ -801,7 +774,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 							)()
 						: inferred.kind;
 				if (setup !== "skip") {
-					pluginScope = pluginScopeFor(targets, "project");
 					const namedFallback = named.length === 0;
 					const pickAgents = (
 						setup: "plugin" | "skills" | "mcp",
@@ -834,23 +806,18 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					if (setup === "plugin" || setup === "skills") {
 						const available =
 							setup === "plugin"
-								? uniqueAgents([
-										...pluginsInstallableAgents("project"),
-										...pluginsInstallableAgents("global"),
-									])
+								? pluginsInstallableAgents()
 								: [...skillsInstallableAgents()];
 						const selected = await pickAgents(setup, available);
 						if (selected === undefined) {
 							tooling = { setup: "skip" };
 						} else if (setup === "plugin") {
-							pluginScope = pluginScopeFor(selected, pluginScope);
+							const pluginAgents = new Set(
+								pluginsInstallableAgents(),
+							);
 							tooling = splitInitTooling(
-								selected.filter((id) =>
-									pluginsInstallableAgents(
-										pluginScope,
-									).includes(id),
-								),
-								pluginScope,
+								selected.filter((id) => pluginAgents.has(id)),
+								mcpConfigLocation,
 							);
 						} else {
 							tooling = skillsTooling(selected, namedFallback);
@@ -1070,7 +1037,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 		const toolingSteps = planInitToolingSteps({
 			tooling: earlyTooling,
 			yes: true,
-			pluginScope,
 			skillsGlobal: recommended,
 			mcpOauth,
 			mcpProject: mcpConfigLocation === "project",
@@ -1273,7 +1239,6 @@ export const runInit = async (props: InitProps): Promise<void> => {
 			const mcpSteps = planInitToolingSteps({
 				tooling: mcpOnly,
 				yes: true,
-				pluginScope,
 				skillsGlobal: recommended,
 				mcpOauth,
 				mcpProject: mcpConfigLocation === "project",
@@ -1405,6 +1370,7 @@ export const runInit = async (props: InitProps): Promise<void> => {
 					const failed = installFailedNext(
 						error.command,
 						linkDeferredPull,
+						error.message,
 					);
 					printInitDone(
 						formatInitDone({

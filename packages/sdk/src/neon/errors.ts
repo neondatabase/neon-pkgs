@@ -269,6 +269,9 @@ function readApiErrorBody(body: unknown): ApiErrorBody {
 	const out: ApiErrorBody = {};
 	if ("message" in body && typeof body.message === "string")
 		out.message = body.message;
+	// The Loki read API reports failures as `{ status: "error", error: "<message>" }`.
+	else if ("error" in body && typeof body.error === "string")
+		out.message = body.error;
 	if ("code" in body && typeof body.code === "string") out.code = body.code;
 	if ("request_id" in body && typeof body.request_id === "string") {
 		out.request_id = body.request_id;
@@ -310,6 +313,8 @@ export function toNeonError(
 	error: unknown,
 	response: Response | undefined,
 ): NeonErrorUnion {
+	// Raised by the client's `requestValidator` before any request was sent.
+	if (error instanceof NeonClientError) return error;
 	if (!response) {
 		const reason = describeTransportFailure(error);
 		return new NeonNetworkError(

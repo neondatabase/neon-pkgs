@@ -64,6 +64,7 @@ import {
 } from "../context.js";
 import { isCi, isInteractiveTerminal } from "../env.js";
 import { loadEnvFileIntoProcess } from "../env_file.js";
+import { DetailedError } from "../errors.js";
 import { log } from "../log.js";
 import {
 	deprecatedServiceMessage,
@@ -80,10 +81,6 @@ import {
 	projectDir,
 } from "../project.js";
 import type { BranchScopeProps } from "../types.js";
-import {
-	assertAiGatewayProvisionable,
-	warnAiGateway,
-} from "../utils/ai_gateway_notice.js";
 import { announceTargetBranch } from "../utils/branch_notice.js";
 import { getCliName } from "../utils/cli_name.js";
 import {
@@ -109,7 +106,7 @@ import {
 	installArgs,
 	type PackageManager,
 	resolvePackageManager,
-	runCommand,
+	runCommandWithDetail,
 } from "../utils/package_manager.js";
 import { pickServicesInteractively } from "../utils/service_picker.js";
 import { zipBundle } from "../utils/zip.js";
@@ -221,7 +218,7 @@ export const envFlag = {
 		describe:
 			"Path to a .env file to load into the environment before evaluating neon.ts " +
 			"so Function env values resolve from it. Existing env vars are not overridden. " +
-			"Function env values that read process.env must be set in this file or the environment.",
+			'Required Function env (declared required: true, or required: "default-branch" when deploying the default branch) and values that read process.env must be set in this file or the environment.',
 		type: "string",
 	},
 } as const;
@@ -274,11 +271,14 @@ const DEPENDENCY_FIELDS = [
 	"optionalDependencies",
 ] as const;
 
-export class ConfigInstallFailed extends Error {
+export class ConfigInstallFailed extends DetailedError {
 	readonly command: string;
 
-	constructor(command: string) {
-		super("Could not install the Neon dependencies.");
+	constructor(command: string, pm: PackageManager, detail: string) {
+		super(
+			`Could not install the Neon dependencies with ${pm} (${detail}).`,
+			detail,
+		);
 		this.name = "ConfigInstallFailed";
 		this.command = command;
 	}
@@ -325,7 +325,7 @@ export type ConfigInitProps = {
 	 */
 	install?: boolean;
 	/** Injected command runner (tests). Defaults to the real spawn-based runner. */
-	run?: typeof runCommand;
+	run?: typeof runCommandWithDetail;
 	/**
 	 * Package manager to install with. When omitted, {@link resolvePackageManager}
 	 * chooses from the project lockfile, invocation, PATH, then npm.
@@ -546,7 +546,7 @@ export const ensureConfigPackages = async (
 		"install" | "run" | "packageManager" | "requireInstall" | "silent"
 	>,
 ): Promise<void> => {
-	const run = props.run ?? runCommand;
+	const run = props.run ?? runCommandWithDetail;
 	const missing = missingDependencies(cwd);
 	if (missing.length === 0) {
 		if (!props.silent) {
@@ -584,13 +584,15 @@ export const ensureConfigPackages = async (
 	if (!props.silent) {
 		log.info("Installing %s with %s…", missing.join(", "), pm);
 	}
-	const ok = await run(pm, args, cwd);
-	if (!ok) {
+	const result = await run(pm, args, cwd);
+	if (!result.ok) {
 		if (props.requireInstall) {
-			throw new ConfigInstallFailed(installHint);
+			throw new ConfigInstallFailed(installHint, pm, result.detail);
 		}
 		log.warning(
-			"Could not install the config packages automatically. Run by hand: %s",
+			"Could not install the config packages automatically with %s (%s). Run by hand: %s",
+			pm,
+			result.detail,
 			installHint,
 		);
 	}
@@ -697,7 +699,7 @@ export type ConfigAddProps = {
 	config?: string;
 	/** Only used when `config add` has to create neon.ts; see {@link ConfigInitProps}. */
 	install?: boolean;
-	run?: typeof runCommand;
+	run?: typeof runCommandWithDetail;
 	packageManager?: PackageManager;
 };
 
@@ -1422,17 +1424,6 @@ export const planCmd = async (props: ConfigProps): Promise<void> => {
 	) {
 		process.exitCode = 1;
 	}
-
-	// `plan` is a dry run and never pulls credentials, so it can only offer the plan-based
-	// (Free) AI Gateway notice — the reduced-model-set check needs a live gateway token,
-	// which `apply`/`checkout`/`env pull` get via the bundled env pull. Best-effort.
-	if (services.includes("AI Gateway")) {
-		await warnAiGateway({
-			apiClient: props.apiClient,
-			projectId: props.projectId,
-			branchId,
-		});
-	}
 };
 
 const warnDeprecatedPreview = (config: Config, target?: BranchTarget): void => {
@@ -1543,16 +1534,6 @@ export const applyCmd = async (props: ConfigProps): Promise<void> => {
 	announceTargetBranch(props, branch, "Applying to branch");
 	warnDeprecatedPreview(config, warningTargetFromResolved(branch));
 	const branchId = branch.branchId;
-
-	// The AI Gateway can't serve on the Free plan, so refuse to provision it up front rather
-	// than write a credential that won't work. Only when the policy actually enables the
-	// gateway; best-effort on the plan lookup (a transient failure never blocks a paid user).
-	if (utilizedServices(config).includes("AI Gateway")) {
-		await assertAiGatewayProvisionable({
-			apiClient: props.apiClient,
-			projectId: props.projectId,
-		});
-	}
 
 	// Lifecycle hooks (Preview): `deploy` never creates a branch, so the branch shape is
 	// already fully known from `resolveBranchRef` — no extra API call needed.
@@ -1832,31 +1813,6 @@ const reportConflicts = (
 };
 
 /**
- * Block provisioning the AI Gateway on a Free plan from the `checkout` policy paths, which
- * carry raw credentials (`apiKey`/`apiHost`) rather than the CLI's api client. Builds a client
- * from them and defers to {@link assertAiGatewayProvisionable}. Skipped when a `runtimeApi` is
- * injected (tests) or no `apiKey` is available; the interactive commands always have a key.
- */
-const assertAiGatewayProvisionableFromCreds = async (props: {
-	projectId: string;
-	apiKey?: string;
-	apiHost?: string;
-	runtimeApi?: NeonApi;
-	config: Config;
-}): Promise<void> => {
-	if (props.runtimeApi || !props.apiKey) return;
-	if (!utilizedServices(props.config).includes("AI Gateway")) return;
-	const apiClient = getApiClient({
-		apiKey: props.apiKey,
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-	});
-	await assertAiGatewayProvisionable({
-		apiClient,
-		projectId: props.projectId,
-	});
-};
-
-/**
  * Apply a `neon.ts` policy to a **freshly created** branch (used by `neonctl checkout`
  * when it creates a branch). No-op when there is no `neon.ts` on the path from cwd up to
  * the repo root — checkout still succeeds, it just has no policy to apply.
@@ -1908,14 +1864,6 @@ export const applyPolicyOnCreate = async (props: {
 	} catch {
 		warnDeprecatedPreview(config);
 	}
-
-	await assertAiGatewayProvisionableFromCreds({
-		projectId: props.projectId,
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
-		config,
-	});
 
 	log.info("Applying neon.ts policy to the new branch…");
 	const result = await apply(config, {
@@ -2016,14 +1964,6 @@ export const createBranchFromPolicyOnCheckout = async (props: {
 		if (/Could not find a Neon config file/i.test(message)) return null;
 		throw err;
 	}
-
-	await assertAiGatewayProvisionableFromCreds({
-		projectId: props.projectId,
-		...(props.apiKey ? { apiKey: props.apiKey } : {}),
-		...(props.apiHost ? { apiHost: props.apiHost } : {}),
-		...(props.runtimeApi ? { runtimeApi: props.runtimeApi } : {}),
-		config,
-	});
 
 	try {
 		const { branchId, branchName, result } = await createBranchFromPolicy(

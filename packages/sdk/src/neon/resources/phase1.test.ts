@@ -198,6 +198,141 @@ describe("phase-1 namespaces map responses to the ergonomic shape", () => {
 		expect(fetchCalls).toBe(0);
 	});
 
+	it("auth branch settings hit their paths and send the input as the body", async () => {
+		const requests: Request[] = [];
+		const neon = createNeonClient({
+			apiKey: "test",
+			retries: 0,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				return new Response(
+					JSON.stringify({
+						echo: `${request.method} ${request.url}`,
+					}),
+					{
+						status: 200,
+						headers: { "content-type": "application/json" },
+					},
+				);
+			},
+		});
+		const ids = { projectId: "p-1", branchId: "br-1" };
+		const results = [
+			await neon.auth.allowLocalhost.get(ids),
+			await neon.auth.allowLocalhost.update({
+				...ids,
+				allow_localhost: false,
+			}),
+			await neon.auth.emailAndPassword.get(ids),
+			await neon.auth.emailAndPassword.update({
+				...ids,
+				revoke_sessions_on_password_reset: true,
+			}),
+			await neon.auth.emailProvider.get(ids),
+			await neon.auth.emailProvider.update({
+				...ids,
+				type: "standard",
+				host: "smtp.example.com",
+				port: 587,
+				password: "pw",
+			}),
+			await neon.auth.emailProvider.sendTest({
+				...ids,
+				recipient_email: "dev@example.com",
+			}),
+			await neon.auth.plugins.get(ids),
+			await neon.auth.plugins.magicLink.update({
+				...ids,
+				expires_in: 10,
+			}),
+			await neon.auth.plugins.organization.update({
+				...ids,
+				creator_role: "admin",
+			}),
+			await neon.auth.plugins.phoneNumber.get(ids),
+			await neon.auth.plugins.phoneNumber.update({
+				...ids,
+				otp_expires_in: 120,
+			}),
+			await neon.auth.webhooks.get(ids),
+			await neon.auth.webhooks.update({
+				...ids,
+				enabled: true,
+				webhook_url: "https://hooks.example.com/auth",
+				enabled_events: ["user.created"],
+			}),
+		];
+		for (const result of results) {
+			expect(result.error).toBeUndefined();
+		}
+		expect(results[0]?.data).toEqual({
+			echo: `GET ${requests[0]?.url}`,
+		});
+
+		const base = "/api/v2/projects/p-1/branches/br-1/auth";
+		expect(
+			requests.map((r) => `${r.method} ${new URL(r.url).pathname}`),
+		).toEqual([
+			`GET ${base}/allow_localhost`,
+			`PATCH ${base}/allow_localhost`,
+			`GET ${base}/email_and_password`,
+			`PATCH ${base}/email_and_password`,
+			`GET ${base}/email_provider`,
+			`PATCH ${base}/email_provider`,
+			`POST ${base}/email_provider/test`,
+			`GET ${base}/plugins`,
+			`PATCH ${base}/plugins/magic-link`,
+			`PATCH ${base}/plugins/organization`,
+			`GET ${base}/plugins/phone-number`,
+			`PATCH ${base}/plugins/phone-number`,
+			`GET ${base}/webhooks`,
+			`PUT ${base}/webhooks`,
+		]);
+		const bodies = await Promise.all(
+			requests.filter((r) => r.method !== "GET").map((r) => r.json()),
+		);
+		expect(bodies).toEqual([
+			{ allow_localhost: false },
+			{ revoke_sessions_on_password_reset: true },
+			{
+				type: "standard",
+				host: "smtp.example.com",
+				port: 587,
+				password: "pw",
+			},
+			{ recipient_email: "dev@example.com" },
+			{ expires_in: 10 },
+			{ creator_role: "admin" },
+			{ otp_expires_in: 120 },
+			{
+				enabled: true,
+				webhook_url: "https://hooks.example.com/auth",
+				enabled_events: ["user.created"],
+			},
+		]);
+	});
+
+	it("auth.emailProvider.sendTest rejects a missing recipient before any request", async () => {
+		let called = false;
+		const neon = createNeonClient({
+			apiKey: "test",
+			retries: 0,
+			fetch: async () => {
+				called = true;
+				return new Response("{}", { status: 200 });
+			},
+		});
+		const { error } = await neon.auth.emailProvider.sendTest(
+			// @ts-expect-error recipient_email is required
+			{ projectId: "p-1", branchId: "br-1" },
+		);
+		expect(error?.message).toBe(
+			"auth.emailProvider.sendTest requires recipient_email in its parameter object (string).",
+		);
+		expect(called).toBe(false);
+	});
+
 	it("projects.permissions.list unwraps project_permissions", async () => {
 		const neon = neonReturning(200, {
 			project_permissions: [

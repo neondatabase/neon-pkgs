@@ -15,23 +15,21 @@ import {
 	type Config,
 	ErrorCode,
 	PlatformError,
+	resolveFunctionEnv,
 	type ServiceToggleInput,
+	splitFunctionEnv,
 } from "@neon/config/v1";
 import {
 	type FilteredNeonEnv,
-	functionBaseUrlKey,
-	isFunctionBaseUrlKey,
 	NEON_ENV_VAR_KEYS,
 	type NeonAiGatewayEnv,
 	type NeonAuthEnv,
 	type NeonBranchEnv,
 	type NeonDataApiEnv,
 	type NeonEnv,
-	type NeonFunctionUrlEnv,
 	type NeonPostgresEnv,
 	type NeonRealtimeEnv,
 	type NeonStorageEnv,
-	parseFunctionBaseUrlKey,
 	type SelectableEnvKey,
 } from "@neon-internals/env-core/env";
 import { z } from "zod";
@@ -93,32 +91,35 @@ type FunctionScopeField<C extends Config, S extends string> = [
 	? NoFunctionScopeHint
 	: S;
 
-/** The declared env-var keys of one function `S`, as a string union. */
-type FunctionEnvKeysOf<
+/** The declared `env` record of one function `S`. */
+type FunctionEnvOf<
 	C extends Config,
 	S extends string,
 > = S extends keyof PreviewFunctionsOf<C>
 	? NonNullable<PreviewFunctionsOf<C>[S]> extends { env: infer E }
-		? Extract<keyof E, string>
-		: never
-	: never;
+		? E
+		: Record<never, never>
+	: Record<never, never>;
+
+/** `string` for a literal or `required: true`; any other declaration may be unset. */
+type FunctionEnvValueOf<V> = V extends string
+	? string
+	: V extends { required: infer R }
+		? [R] extends [true]
+			? string
+			: string | undefined
+		: string;
 
 /**
  * The extra `function` namespace added to `parseEnv`'s result when called with a function
- * slug scope: the declared env-var keys for that function, each resolved to a `string`.
+ * slug scope: the declared env-var keys for that function, typed per declaration.
  */
-/**
- * What `parseEnv` returns without a key filter: {@link NeonEnv} with `functions` optional,
- * because the deployed Functions runtime does not inject `NEON_FUNCTION_<SLUG>_BASE_URL`.
- * Select the key (`parseEnv(config, ["NEON_FUNCTION_HELLO_BASE_URL"])`) to require it.
- */
-export type ParsedNeonEnv<C extends Config> =
-	NeonEnv<C> extends { functions: infer F }
-		? Omit<NeonEnv<C>, "functions"> & { functions?: F }
-		: NeonEnv<C>;
-
 export type NeonFunctionEnv<C extends Config, S extends string> = {
-	function: Record<FunctionEnvKeysOf<C, S>, string>;
+	function: {
+		[K in Extract<keyof FunctionEnvOf<C, S>, string>]: FunctionEnvValueOf<
+			FunctionEnvOf<C, S>[K]
+		>;
+	};
 };
 
 // ───────────────────────── parseEnv ─────────────────────────
@@ -256,7 +257,7 @@ function isServiceEnabledInput(
  * postgres.databaseUrl; // string — `databaseUrlUnpooled` is absent
  * ```
  */
-export function parseEnv<const C extends Config>(config: C): ParsedNeonEnv<C>;
+export function parseEnv<const C extends Config>(config: C): NeonEnv<C>;
 // Overload order is load-bearing for **editor autocomplete**, not for type checking: when the
 // argument is a half-typed string literal the call resolves against no signature, and the
 // editor takes its string-literal completions from the first candidate overload. With the
@@ -271,7 +272,7 @@ export function parseEnv<
 >(
 	config: C,
 	scope: FunctionScopeField<C, S>,
-): ParsedNeonEnv<C> & NeonFunctionEnv<C, S>;
+): NeonEnv<C> & NeonFunctionEnv<C, S>;
 export function parseEnv<
 	const C extends Config,
 	const K extends SelectableEnvKey<C>,
@@ -309,7 +310,12 @@ export function parseEnv(
 	// just omit the namespace rather than failing the whole parse.
 	const branchName = source[NEON_ENV_VAR_KEYS.branch.name];
 	if (branchName !== undefined && branchName !== "") {
-		result.branch = { name: branchName } satisfies NeonBranchEnv;
+		const branch: NeonBranchEnv = { name: branchName };
+		const branchId = source[NEON_ENV_VAR_KEYS.branch.id];
+		if (branchId) branch.id = branchId;
+		const hostSuffix = source[NEON_ENV_VAR_KEYS.branch.functionHostSuffix];
+		if (hostSuffix) branch.functionHostSuffix = hostSuffix;
+		result.branch = branch;
 	}
 
 	if (isServiceEnabledInput(config.auth)) {
@@ -396,28 +402,6 @@ export function parseEnv(
 		}
 	}
 
-	const declaredFunctionSlugs = Object.keys(
-		authoredFunctions(config) ?? {},
-	).sort();
-	if (declaredFunctionSlugs.length > 0) {
-		const functions: Record<string, NeonFunctionUrlEnv> = {};
-		for (const slug of declaredFunctionSlugs) {
-			const key = functionBaseUrlKey(slug);
-			// The Functions runtime does not inject NEON_FUNCTION_<SLUG>_BASE_URL, so an
-			// unset one leaves `functions` out instead of failing every deployed function.
-			if (source[key] === undefined) continue;
-			const parsed = readFunctionBaseUrl(key, source[key]);
-			if (parsed.ok) {
-				functions[slug] = { baseUrl: parsed.value };
-			} else {
-				issues.push(parsed.issue);
-			}
-		}
-		if (Object.keys(functions).length === declaredFunctionSlugs.length) {
-			result.functions = functions;
-		}
-	}
-
 	if (scope !== undefined) {
 		const fn = authoredFunctions(config)?.[scope];
 		if (!fn) {
@@ -430,10 +414,24 @@ export function parseEnv(
 				{ details: { scope } },
 			);
 		}
-		const envOut: Record<string, string> = {};
-		for (const key of Object.keys(fn.env ?? {})) {
+		const { env: literal, envVars } = splitFunctionEnv(fn.env);
+		// `value` read the deployer's environment; at runtime the value is under its key.
+		const injected =
+			envVars &&
+			Object.fromEntries(
+				Object.entries(envVars).map(([key, declaration]) => [
+					key,
+					{ ...declaration, value: source[key] },
+				]),
+			);
+		const declared = resolveFunctionEnv(injected, "development");
+		const envOut: Record<string, string> = { ...declared.env };
+		for (const key of declared.missing) {
+			issues.push(`${key} is missing (function "${scope}")`);
+		}
+		for (const key of Object.keys(literal)) {
 			const value = source[key];
-			// Only a truly *unset* var is "not injected". Function env values carry no
+			// Only a truly *unset* var is "not injected". Literal function env values carry no
 			// non-empty constraint (unlike DATABASE_URL / NEON_AUTH_BASE_URL), so a
 			// deliberately empty value is a present, valid value and is passed through.
 			if (value === undefined) {
@@ -461,36 +459,7 @@ export function parseEnv(
 	return result;
 }
 
-function isFunctionBaseUrlIssue(issue: string): boolean {
-	return /^NEON_FUNCTION_[A-Z0-9]+_BASE_URL (is missing|must not be empty|must be a URL)$/.test(
-		issue,
-	);
-}
-
-function readFunctionBaseUrl(
-	key: string,
-	value: string | undefined,
-): { ok: true; value: string } | { ok: false; issue: string } {
-	if (value === undefined) {
-		return { ok: false, issue: `${key} is missing` };
-	}
-	if (value === "") {
-		return { ok: false, issue: `${key} must not be empty` };
-	}
-	try {
-		new URL(value);
-	} catch {
-		return { ok: false, issue: `${key} must be a URL` };
-	}
-	return { ok: true, value };
-}
-
 function parseEnvInjectHint(issues: readonly string[]): string[] {
-	if (issues.length > 0 && issues.every(isFunctionBaseUrlIssue)) {
-		return [
-			"Inject them via `neon env pull` or `neon-env run` (production URL), or `neon dev` (`http://localhost:<port>`).",
-		];
-	}
 	const lines = [
 		"Inject them via one of:",
 		"  - `neon dev` / `neon-env run -- <your dev command>` (wraps the command with the vars injected)",
@@ -499,11 +468,6 @@ function parseEnvInjectHint(issues: readonly string[]): string[] {
 	if (issues.some((issue) => issue.includes('(function "'))) {
 		lines.push(
 			"  - for the `function` namespace: deploy the function (`neon deploy` / `config apply`) so its env is uploaded.",
-		);
-	}
-	if (issues.some(isFunctionBaseUrlIssue)) {
-		lines.push(
-			"  - for NEON_FUNCTION_*_BASE_URL: `neon env pull` or `neon dev`.",
 		);
 	}
 	return lines;
@@ -519,6 +483,8 @@ const FILTERABLE_ENV_KEYS: Record<string, readonly [string, string]> = {
 	DATABASE_URL: ["postgres", "databaseUrl"],
 	DATABASE_URL_UNPOOLED: ["postgres", "databaseUrlUnpooled"],
 	NEON_BRANCH: ["branch", "name"],
+	NEON_BRANCH_ID: ["branch", "id"],
+	NEON_FUNCTION_HOST_SUFFIX: ["branch", "functionHostSuffix"],
 	NEON_AUTH_BASE_URL: ["auth", "baseUrl"],
 	NEON_AUTH_JWKS_URL: ["auth", "jwksUrl"],
 	NEON_DATA_API_URL: ["dataApi", "url"],
@@ -545,19 +511,7 @@ function parseFilteredEnv(
 ): Record<string, unknown> {
 	const issues: string[] = [];
 	const result: Record<string, Record<string, unknown>> = {};
-	const functionUrls: Record<string, NeonFunctionUrlEnv> = {};
 	for (const key of keys) {
-		if (isFunctionBaseUrlKey(key)) {
-			const slug = parseFunctionBaseUrlKey(key);
-			if (slug === null) continue;
-			const parsed = readFunctionBaseUrl(key, source[key]);
-			if (!parsed.ok) {
-				issues.push(parsed.issue);
-				continue;
-			}
-			functionUrls[slug] = { baseUrl: parsed.value };
-			continue;
-		}
 		// Unknown keys are blocked at the type level; a runtime caller bypassing the types
 		// gets a clear error rather than a silently-dropped selection.
 		if (!Object.hasOwn(FILTERABLE_ENV_KEYS, key)) {
@@ -577,9 +531,6 @@ function parseFilteredEnv(
 		const bucket = result[namespace] ?? {};
 		bucket[property] = value;
 		result[namespace] = bucket;
-	}
-	if (Object.keys(functionUrls).length > 0) {
-		result.functions = functionUrls;
 	}
 	if (issues.length > 0) {
 		throw new PlatformError(

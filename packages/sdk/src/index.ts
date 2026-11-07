@@ -50,8 +50,15 @@ export type {
 } from "./neon/resources/account.js";
 export type { AiGatewayGetParams } from "./neon/resources/ai-gateway.js";
 export type {
+	AuthAllowLocalhostGetParams,
+	AuthAllowLocalhostUpdateParams,
 	AuthCreateParams,
 	AuthDisableParams,
+	AuthEmailAndPasswordGetParams,
+	AuthEmailAndPasswordUpdateParams,
+	AuthEmailProviderGetParams,
+	AuthEmailProviderSendTestParams,
+	AuthEmailProviderUpdateParams,
 	AuthGetParams,
 	AuthOauthClientsCreateParams,
 	AuthOauthClientsDeleteParams,
@@ -65,6 +72,11 @@ export type {
 	AuthOauthProvidersUpdateParams,
 	AuthOauthServerGetParams,
 	AuthOauthServerUpdateParams,
+	AuthPluginsGetParams,
+	AuthPluginsMagicLinkUpdateParams,
+	AuthPluginsOrganizationUpdateParams,
+	AuthPluginsPhoneNumberGetParams,
+	AuthPluginsPhoneNumberUpdateParams,
 	AuthTrustedDomainsAddParams,
 	AuthTrustedDomainsDeleteParams,
 	AuthTrustedDomainsListParams,
@@ -72,6 +84,8 @@ export type {
 	AuthUsersCreateParams,
 	AuthUsersDeleteParams,
 	AuthUsersUpdateRoleParams,
+	AuthWebhooksGetParams,
+	AuthWebhooksUpdateParams,
 } from "./neon/resources/auth.js";
 export type {
 	BranchCompareSchemaParams,
@@ -154,10 +168,35 @@ export type {
 	LogsQueryParams,
 } from "./neon/resources/logs.js";
 export type {
+	LokiLabelsParams,
+	LokiLabelsResponse,
+	LokiLabelValuesParams,
+	LokiQueryRangeParams,
+	LokiQueryRangeResponse,
+	LokiStream,
+	LokiWindow,
+} from "./neon/resources/loki.js";
+export type {
 	OperationsGetParams,
 	OperationsListParams,
 	OperationsWaitForParams,
 } from "./neon/resources/operations.js";
+export type {
+	OrganizationApiKeyCreateParams,
+	OrganizationApiKeyListParams,
+	OrganizationApiKeyRevokeParams,
+	OrganizationGetParams,
+	OrganizationInvitationCreateParams,
+	OrganizationInvitationListParams,
+	OrganizationMemberGetParams,
+	OrganizationMemberListParams,
+	OrganizationMemberRemoveParams,
+	OrganizationMemberUpdateParams,
+	OrganizationParams,
+	OrganizationSpendingLimitDeleteParams,
+	OrganizationSpendingLimitGetParams,
+	OrganizationSpendingLimitSetParams,
+} from "./neon/resources/organizations.js";
 export type { ConnectionStringParams } from "./neon/resources/postgres.js";
 export type {
 	ProjectConnection,
@@ -189,6 +228,7 @@ export type {
 	RealtimeSecretParams,
 } from "./neon/resources/realtime.js";
 export type {
+	RoleAccess,
 	RolesCreateParams,
 	RolesDeleteParams,
 	RolesGetParams,

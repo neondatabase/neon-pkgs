@@ -1,5 +1,170 @@
 # neon
 
+## 9.2.0
+
+### Minor Changes
+
+- aba0b8d: A Function `env` value in `neon.ts` can be a declaration instead of a string: `{ value: process.env.X, required: true }`, with `required: false` or `required: "default-branch"` for a value that may be unset, and `onUndefined: "skip"` to keep the deployed value instead of removing it. A declaration's value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so importing `neon.ts` (from app code or another Function) no longer fails on a secret it does not hold.
+
+### Patch Changes
+
+- Updated dependencies [aba0b8d]
+  - @neon/config@1.13.0
+  - @neon/config-runtime@1.12.0
+
+## 9.1.0
+
+### Minor Changes
+
+- 735200c: Add `neon logs loki` to run LogQL queries and discover labels through the branch's Loki-compatible read API. Bound queries with `--since`, `--start`, `--end`, `--limit`, and `--direction`, and pick `labels` or `label/<name>/values` with `--endpoint`. JSON/YAML output preserves Loki's envelope, nanosecond timestamps, and warnings.
+
+### Patch Changes
+
+- Updated dependencies [53516b8]
+  - @neon/sdk@7.11.0
+  - @neon/config@1.12.1
+  - @neon/config-runtime@1.11.9
+
+## 9.0.0
+
+### Major Changes
+
+- c736518: **Breaking:** `neon env pull` writes `NEON_BRANCH_ID` and `NEON_FUNCTION_HOST_SUFFIX`, the variables `functionBaseUrl(slug)` from `@neon/env` 2 reads and the Functions runtime injects, instead of one `NEON_FUNCTION_<SLUG>_BASE_URL` per function. An unscoped or `-s functions` pull removes the old lines, `-e NEON_FUNCTION_<SLUG>_BASE_URL` fails with a pointer to `functionBaseUrl`, and `neon dev` sets `NEON_DEV_FUNCTION_PORTS` instead of per-function localhost URLs. Apps reading `env.functions` from `@neon/env` 1.x need `@neon/env` 2 and `functionBaseUrl("<slug>")`.
+
+### Patch Changes
+
+- Updated dependencies [c736518]
+  - @neon/config@1.12.0
+  - @neon/config-runtime@1.11.8
+
+## 8.23.4
+
+### Patch Changes
+
+- 9504b81: `neon config apply`, `neon deploy`, and `neon checkout` no longer refuse a `neon.ts` that enables the AI Gateway on the Free plan; the gateway credentials are pulled like every other service. When the account can't serve any model yet, `neon env pull` warns with the gateway's reason and the Console page that fixes it, such as buying AI Gateway credits.
+
+## 8.23.3
+
+### Patch Changes
+
+- 8d539df: `neon init` says why the Neon dependency install failed, such as `Could not install the Neon dependencies with npm (ERESOLVE).`, when the CLI runs without a terminal, as it does under a coding agent.
+
+## 8.23.2
+
+### Patch Changes
+
+- 45cab08: `neon plugins` and `neon init` install the Neon plugin again. The plugin always installs user-level through a pinned plugins CLI, so VS Code, GitHub Copilot CLI, Grok Build, and Kimi Code no longer need `--global`. `--global` is removed from `--help`, still accepted, and does the same as the default. `neon plugins -y` falls back to installed apps when it finds no project folder or host agent.
+
+## 8.23.1
+
+### Patch Changes
+
+- Updated dependencies [a564258]
+  - @neon/sdk@7.10.0
+  - @neon/config@1.11.3
+  - @neon/config-runtime@1.11.7
+
+## 8.23.0
+
+### Minor Changes
+
+- 322e157: Add `neon orgs get`, `neon orgs members list|get|update|remove`, `neon orgs invitations list|create`, and `neon orgs spending-limit get|set|delete`. Each takes `--org-id` and falls back to the linked organization, then to your only one. `spending-limit set` takes US dollars.
+
+### Patch Changes
+
+- Updated dependencies [30e938a]
+  - @neon/sdk@7.9.0
+  - @neon/config@1.11.2
+  - @neon/config-runtime@1.11.6
+
+## 8.22.0
+
+### Minor Changes
+
+- 4f08d0c: Add `neon roles get <role>` and `neon roles reset-password <role>`. `reset-password` prints the new password and waits until the compute applies it unless you pass `--no-wait`.
+
+## 8.21.1
+
+### Patch Changes
+
+- 9288206: A path parameter of `.` or `..` now fails with a `NeonClientError` before any request is sent, including direct calls such as `client.get({ url, path })` on a client from `createClient`. Previously the URL resolved it as a dot segment, so the request could reach a different API route, such as `branchId: ".."` listing every compute in the project. The CLI applies the same check to the bucket, object, custom domain, Functions, and claimable project paths it builds itself.
+- Updated dependencies [9288206]
+  - @neon/sdk@7.8.2
+  - @neon/config@1.11.1
+  - @neon/config-runtime@1.11.5
+
+## 8.21.0
+
+### Minor Changes
+
+- f4359f2: Add `neon operations get <id>`, which prints one operation's action, status, error, failure count, retry time, and duration.
+- 37992e6: Add `neon postgres` (aliases `pg` and `lakebase`) with `computes`, `databases`, `roles`, `connection-string`, and `psql`. `neon postgres computes` lists, gets, updates, starts, suspends, restarts, and deletes computes, and waits for each change to be applied unless you pass `--no-wait`. The top-level `roles`, `databases`, `connection-string`, and `psql` commands are unchanged.
+
+## 8.20.1
+
+### Patch Changes
+
+- Updated dependencies [27f8fd0]
+- Updated dependencies [83d1b99]
+- Updated dependencies [4a020a0]
+- Updated dependencies [35b7679]
+  - @neon/realtime@0.2.0
+
+## 8.20.0
+
+### Minor Changes
+
+- 3833f9f: `neon bootstrap` can deploy the template once it is installed and linked. In a terminal, it asks "Deploy this project to Neon now?" when every env var the template's `neon.ts` reads is set; otherwise the done summary names the vars to set before `neon deploy --env .env.local`. `--deploy` deploys without asking.
+
+### Patch Changes
+
+- Updated dependencies [3833f9f]
+  - @neon/config@1.11.0
+  - @neon/config-runtime@1.11.4
+
+## 8.19.0
+
+### Minor Changes
+
+- f01cc55: `neon neon-auth config email-password update --revoke-sessions-on-password-reset` revokes all of a user's sessions when their password is reset, and `email-password get` and `update` show the setting.
+
+### Patch Changes
+
+- 27f8fd0: Handle row moves in `neon realtime subscribe` without reporting deletions or
+  misclassifying later updates. Show moves and their counts separately in the
+  terminal log, and include each move's destination in raw table output.
+- Updated dependencies [891072b]
+  - @neon/sdk@7.8.1
+  - @neon/config@1.10.3
+  - @neon/config-runtime@1.11.3
+
+## 8.18.1
+
+### Patch Changes
+
+- Updated dependencies [9807763]
+  - @neon/config@1.10.2
+  - @neon/config-runtime@1.11.2
+
+## 8.18.0
+
+### Minor Changes
+
+- f4b216f: Create read-only and read-write Postgres roles. `neon.postgres.roles.create` and the `postgres.roles.create` tool take `access: "read_only" | "read_write"` with an optional `databaseName` and `schemas`, and `neon roles create` takes `--access`, `--database`, and `--schema`. Without `access`, roles are still created by the Neon API and join `neon_superuser`, as before.
+
+### Patch Changes
+
+- Updated dependencies [f4b216f]
+  - @neon/sdk@7.8.0
+  - @neon/config@1.10.1
+  - @neon/config-runtime@1.11.1
+
+## 8.17.1
+
+### Patch Changes
+
+- c106bef: The standalone `neon` binaries attached to GitHub releases now run on Node.js 22.23.4, which fixes CVE-2026-111497, an out-of-bounds write in the bundled Brotli decoder. The npm package runs on your own Node.js and is unchanged.
+
 ## 8.17.0
 
 ### Minor Changes

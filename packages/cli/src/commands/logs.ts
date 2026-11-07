@@ -11,13 +11,16 @@ import type { BranchScopeProps } from "../types.js";
 import { branchIdFromProps, fillSingleProject } from "../utils/enrichers.js";
 import { noPassthrough, single } from "../utils/flags.js";
 import { writer } from "../writer.js";
+import * as loki from "./loki.js";
 
 const REGION_NOTE =
 	"Logs are currently available only for projects in aws-us-east-2, aws-us-east-1, aws-eu-central-1, and aws-ap-southeast-1.";
 const LOGS_EPILOG = `
 ${REGION_NOTE}
 
-For more information, visit https://neon.com/docs/reference/neon-cli`;
+Use neon logs query for structured filters, human-readable tables and cursor pagination. Use neon logs loki for the Loki read API and its complete JSON response envelope.
+
+For more information, visit https://neon.com/docs/cli/logs`;
 
 // `satisfies` fails the build if a value here leaves the SDK's union, so the CLI
 // can never offer a source or severity the API rejects.
@@ -150,7 +153,8 @@ const windowOptions = (defaultWindow: "1h" | "6h") =>
 	}) as const;
 
 export const command = "logs";
-export const describe = "Query branch logs";
+export const describe =
+	"Query branch logs with structured filters, LogQL, or the Loki API";
 
 export const builder = (argv: yargs.Argv) =>
 	argv
@@ -159,7 +163,7 @@ export const builder = (argv: yargs.Argv) =>
 		.middleware(fillSingleProject as any)
 		.command(
 			"query",
-			"Query log records on a branch",
+			"Query log records with structured filters or LogQL",
 			(yargs) =>
 				yargs
 					.epilogue(LOGS_EPILOG)
@@ -303,6 +307,9 @@ export const builder = (argv: yargs.Argv) =>
 					.strict()
 					.check(noPassthrough("logs field-values")),
 			(args) => fieldValues(args as any),
+		)
+		.command(loki.command, loki.describe, loki.builder, (args) =>
+			loki.handler(args as never),
 		)
 		.epilogue(LOGS_EPILOG);
 

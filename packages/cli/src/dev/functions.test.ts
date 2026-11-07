@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { resolveFunctionsFromConfig } from "./functions.js";
+import {
+	findConfigFunctionBySource,
+	resolveFunctionsFromConfig,
+} from "./functions.js";
 
 /**
  * Write a neon.ts and the function source files it references into a temp dir, so
@@ -224,5 +227,70 @@ describe("resolveFunctionsFromConfig", () => {
 			/is undefined/,
 		);
 		delete process.env[key];
+	});
+
+	describe("declared env", () => {
+		const TOKEN = "NEON_PKGS_DEV_DECLARED_TOKEN";
+		const DSN = "NEON_PKGS_DEV_DECLARED_DSN";
+		const OTHER = "NEON_PKGS_DEV_DECLARED_OTHER";
+		const policy = `export default {
+      functions: {
+        alpha: {
+          name: 'Alpha',
+          source: './alpha.ts',
+          env: {
+            ${TOKEN}: { value: process.env.${TOKEN}, required: true },
+            ${DSN}: { value: process.env.${DSN}, required: 'default-branch' },
+            RATE: { value: process.env.NEON_PKGS_DEV_DECLARED_RATE ?? '1', required: true },
+            KEPT: { value: process.env.NEON_PKGS_DEV_DECLARED_KEPT, required: false, onUndefined: 'skip' },
+            LOG_LEVEL: 'info',
+          },
+        },
+        beta: { name: 'Beta', source: './beta.ts', env: { ${OTHER}: { value: process.env.${OTHER}, required: true } } },
+      },
+    };\n`;
+
+		afterEach(() => {
+			for (const key of [TOKEN, DSN, OTHER]) delete process.env[key];
+		});
+
+		it("resolves values, and runs without a default-branch variable", async () => {
+			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
+			process.env[TOKEN] = "t";
+			process.env[OTHER] = "o";
+			process.env[DSN] = "";
+			const resolved = await resolveFunctionsFromConfig(cwd);
+			expect(resolved?.functions[0].env).toEqual({
+				LOG_LEVEL: "info",
+				[TOKEN]: "t",
+				RATE: "1",
+			});
+			// KEPT is "skip", so neon dev leaves whatever the shell has.
+			expect(resolved?.functions[0].unsetEnv).toEqual([DSN]);
+		});
+
+		it("fails naming every unset required variable", async () => {
+			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
+			await expect(resolveFunctionsFromConfig(cwd)).rejects.toThrow(
+				new RegExp(
+					`"${TOKEN}" for function "alpha"[\\s\\S]*"${OTHER}" for function "beta"`,
+				),
+			);
+		});
+
+		it("--source requires only the served function's variables", async () => {
+			writeWorkspace(cwd, policy, ["alpha.ts", "beta.ts"]);
+			process.env[TOKEN] = "t";
+			const match = await findConfigFunctionBySource(
+				cwd,
+				join(cwd, "alpha.ts"),
+			);
+			expect(match?.declaredEnv).toEqual({ [TOKEN]: "t", RATE: "1" });
+			await expect(
+				findConfigFunctionBySource(cwd, join(cwd, "beta.ts")),
+			).rejects.toThrow(
+				`"${OTHER}" for function "beta" is required and unset`,
+			);
+		});
 	});
 });

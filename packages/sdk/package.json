@@ -1,6 +1,6 @@
 {
 	"name": "@neon/sdk",
-	"version": "7.7.0",
+	"version": "7.11.0",
 	"description": "The official TypeScript SDK for the Neon API, generated from Neon's OpenAPI specification. A modern, fetch-based replacement for @neondatabase/api-client.",
 	"keywords": [
 		"neon",
@@ -60,9 +60,11 @@
 		"@hey-api/openapi-ts": "0.98.2",
 		"@neon/e2e-harness": "workspace:*",
 		"@types/node": "catalog:",
+		"@types/pg": "8.20.0",
 		"@vitest/coverage-v8": "catalog:",
 		"console-fail-test": "catalog:",
 		"es-module-lexer": "2.3.1",
+		"pg": "^8.23.1",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

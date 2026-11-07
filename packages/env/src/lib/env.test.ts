@@ -6,7 +6,6 @@ import {
 import {
 	fetchEnv,
 	fetchEnvKeys,
-	functionBaseUrlKey,
 	type NeonAuthEnv,
 	type NeonEnv,
 	toEntries,
@@ -562,6 +561,61 @@ describe("parseEnv", () => {
 		expect(env.postgres.databaseUrl).toBe("postgres://pooled");
 	});
 
+	describe("declared function env", () => {
+		const config = defineConfig({
+			functions: {
+				alpha: {
+					name: "Alpha",
+					source: "./alpha.ts",
+					env: {
+						SECRET_A: { value: "read-at-deploy", required: true },
+						DSN: { value: undefined, required: "default-branch" },
+						GUILD: { value: undefined, required: false },
+					},
+				},
+				beta: {
+					name: "Beta",
+					source: "./beta.ts",
+					env: { SECRET_B: { value: undefined, required: true } },
+				},
+			},
+		});
+		const stubBranch = () => {
+			vi.stubEnv("DATABASE_URL", "postgres://pooled");
+			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+		};
+
+		test("reads one function's declared keys while another function's secret is unset", () => {
+			stubBranch();
+			vi.stubEnv("SECRET_A", "injected");
+			vi.stubEnv("SECRET_B", undefined);
+			vi.stubEnv("DSN", undefined);
+			vi.stubEnv("GUILD", "");
+			expect(parseEnv(config, "alpha").function).toEqual({
+				SECRET_A: "injected",
+			});
+			expect(
+				parseEnv(config, ["DATABASE_URL"]).postgres.databaseUrl,
+			).toBe("postgres://pooled");
+		});
+
+		test("reads the deployed key, not value", () => {
+			stubBranch();
+			vi.stubEnv("SECRET_A", undefined);
+			expect(() => parseEnv(config, "alpha")).toThrow(
+				'SECRET_A is missing (function "alpha")',
+			);
+		});
+
+		test("a missing required: true declaration is EnvNotInjected", () => {
+			stubBranch();
+			vi.stubEnv("SECRET_B", undefined);
+			expect(() => parseEnv(config, "beta")).toThrow(
+				'SECRET_B is missing (function "beta")',
+			);
+		});
+	});
+
 	describe("function scope", () => {
 		const config = defineConfig({
 			preview: {
@@ -580,10 +634,6 @@ describe("parseEnv", () => {
 		test("returns the declared function env keys, typed", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			vi.stubEnv(
-				"NEON_FUNCTION_HELLO_BASE_URL",
-				"https://br-main-hello.compute.fake.neon.tech/",
-			);
 			vi.stubEnv("resendApiKey", "re_live_123");
 
 			const env = parseEnv(config, "hello");
@@ -596,10 +646,6 @@ describe("parseEnv", () => {
 		test("throws EnvNotInjected when a declared function env key is missing", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			vi.stubEnv(
-				"NEON_FUNCTION_HELLO_BASE_URL",
-				"https://br-main-hello.compute.fake.neon.tech/",
-			);
 
 			expect(() => parseEnv(config, "hello")).toThrow(
 				expect.objectContaining({ code: ErrorCode.EnvNotInjected }),
@@ -616,10 +662,6 @@ describe("parseEnv", () => {
 		test("passes through a deliberately empty function env value (present != non-empty)", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			vi.stubEnv(
-				"NEON_FUNCTION_HELLO_BASE_URL",
-				"https://br-main-hello.compute.fake.neon.tech/",
-			);
 			vi.stubEnv("resendApiKey", "");
 			const env = parseEnv(config, "hello");
 			expect(env.function.resendApiKey).toBe("");
@@ -628,10 +670,6 @@ describe("parseEnv", () => {
 		test("returns an empty function namespace when the function declares no env keys", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			vi.stubEnv(
-				"NEON_FUNCTION_BARE_BASE_URL",
-				"https://br-main-bare.compute.fake.neon.tech/",
-			);
 			const noEnvConfig = defineConfig({
 				preview: {
 					functions: { bare: { name: "Bare", source: "./bare.ts" } },
@@ -641,24 +679,9 @@ describe("parseEnv", () => {
 			expect(env.function).toEqual({});
 		});
 
-		test("omits functions when a declared function invocation URL is not injected", () => {
-			vi.stubEnv("DATABASE_URL", "postgres://pooled");
-			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			vi.stubEnv("resendApiKey", "re_live_123");
-
-			expect(parseEnv(config).functions).toBeUndefined();
-			const scoped = parseEnv(config, "hello");
-			expect(scoped.functions).toBeUndefined();
-			expect(scoped.function.resendApiKey).toBe("re_live_123");
-		});
-
 		test("a function env key that looks like a URL key still points at deploy upload", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-			vi.stubEnv(
-				"NEON_FUNCTION_HELLO_BASE_URL",
-				"https://br-main-hello.compute.fake.neon.tech/",
-			);
 			const colliding = defineConfig({
 				preview: {
 					functions: {
@@ -676,22 +699,22 @@ describe("parseEnv", () => {
 			expect(() => parseEnv(colliding, "hello")).toThrowError(
 				/`function` namespace/,
 			);
-			expect(() => parseEnv(colliding, "hello")).not.toThrowError(
-				/for NEON_FUNCTION_\*_BASE_URL/,
-			);
 		});
 
-		test("reads a present function invocation URL into functions.<slug>", () => {
+		test("reads the function routing vars into branch", () => {
 			vi.stubEnv("DATABASE_URL", "postgres://pooled");
 			vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
+			vi.stubEnv("NEON_BRANCH", "main");
+			vi.stubEnv("NEON_BRANCH_ID", "br-main-123456");
 			vi.stubEnv(
-				"NEON_FUNCTION_HELLO_BASE_URL",
-				"https://br-main-hello.compute.fake.neon.tech/",
+				"NEON_FUNCTION_HOST_SUFFIX",
+				".compute.c-2.us-east-2.aws.neon.tech",
 			);
-			const env = parseEnv(config);
-			expect(env.functions?.hello.baseUrl).toBe(
-				"https://br-main-hello.compute.fake.neon.tech/",
-			);
+			expect(parseEnv(config).branch).toEqual({
+				name: "main",
+				id: "br-main-123456",
+				functionHostSuffix: ".compute.c-2.us-east-2.aws.neon.tech",
+			});
 		});
 
 		test("function scope still includes branch secrets (auth) when enabled", () => {
@@ -703,10 +726,6 @@ describe("parseEnv", () => {
 				"https://auth.example.com/jwks.json",
 			);
 			vi.stubEnv("resendApiKey", "re_live_123");
-			vi.stubEnv(
-				"NEON_FUNCTION_HELLO_BASE_URL",
-				"https://br-main-hello.compute.fake.neon.tech/",
-			);
 			const authConfig = defineConfig({
 				auth: true,
 				preview: {
@@ -1113,8 +1132,8 @@ describe("branch storage + AI Gateway (Preview)", () => {
 		);
 		expect("storage" in fnOnly).toBe(false);
 		expect("aiGateway" in fnOnly).toBe(false);
-		expect(fnOnly.functions.hello.baseUrl).toBe(
-			"https://br-main-hello.compute.aws-us-east-1.fake.neon.tech",
+		expect(fnOnly.branch?.functionHostSuffix).toBe(
+			".compute.aws-us-east-1.fake.neon.tech",
 		);
 		expect(callsTo(api, "createCredential")).toBe(0);
 
@@ -1276,11 +1295,8 @@ describe("branch storage + AI Gateway (Preview)", () => {
 	});
 });
 
-describe("function invocation URLs", () => {
-	const helloUrl = "https://br-main-hello.compute.fake.neon.tech";
-	const worldUrl = "https://br-main-world.compute.fake.neon.tech";
-	const constructedHelloUrl =
-		"https://br-main-hello.compute.aws-us-east-1.fake.neon.tech";
+describe("function host suffix", () => {
+	const suffix = ".compute.aws-us-east-1.fake.neon.tech";
 	const helloPolicy = defineConfig({
 		preview: {
 			functions: {
@@ -1288,72 +1304,60 @@ describe("function invocation URLs", () => {
 			},
 		},
 	});
-	const listCalls = (api: FakeNeonApi) =>
-		api.history.filter((h) => h.method === "listBranchFunctions").length;
+	const calls = (api: FakeNeonApi, method: string) =>
+		api.history.filter((h) => h.method === method).length;
 
-	test("functionBaseUrlKey encodes the slug", () => {
-		expect(functionBaseUrlKey("hello")).toBe(
-			"NEON_FUNCTION_HELLO_BASE_URL",
+	test("a policy that declares functions gets the branch id and suffix", async () => {
+		const { api, projectId } = seededFake();
+
+		const env = await fetchEnv(helloPolicy, {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(env.branch).toEqual({
+			name: "main",
+			id: "br-main",
+			functionHostSuffix: suffix,
+		});
+		expect(toEntries(env)).toMatchObject({
+			NEON_BRANCH_ID: "br-main",
+			NEON_FUNCTION_HOST_SUFFIX: suffix,
+		});
+		expect(calls(api, "listEndpoints")).toBe(0);
+	});
+
+	test("a policy without functions gets the branch id but no suffix", async () => {
+		const { api, projectId } = seededFake();
+
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+		});
+
+		expect(env.branch).toEqual({ name: "main", id: "br-main" });
+	});
+
+	test("`always` adds the suffix without declared functions", async () => {
+		const { api, projectId } = seededFake();
+
+		const env = await fetchEnvKeys(
+			defineConfig({}),
+			{
+				api,
+				projectId,
+				branchId: "br-main",
+				functionHostSuffix: "always",
+			},
+			null,
 		);
+
+		expect(env.branch?.functionHostSuffix).toBe(suffix);
 	});
 
-	test("fetchEnv derives a declared slug from the connection host without listing", async () => {
-		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-world",
-			slug: "world",
-			name: "World",
-			invocationUrl: worldUrl,
-		});
-
-		const env = await fetchEnv(helloPolicy, {
-			api,
-			projectId,
-			branchId: "br-main",
-		});
-
-		expect(env.functions.hello.baseUrl).toBe(constructedHelloUrl);
-		expect(env.functions).not.toHaveProperty("world");
-		expect(toEntries(env)[functionBaseUrlKey("hello")]).toBe(
-			constructedHelloUrl,
-		);
-		expect(toEntries(env)[functionBaseUrlKey("world")]).toBeUndefined();
-		expect(listCalls(api)).toBe(0);
-	});
-
-	test("fetchEnv derives a declared slug that is not deployed", async () => {
-		const { api, projectId } = seededFake();
-
-		const env = await fetchEnv(helloPolicy, {
-			api,
-			projectId,
-			branchId: "br-main",
-		});
-
-		expect(env.functions.hello.baseUrl).toBe(constructedHelloUrl);
-		expect(listCalls(api)).toBe(0);
-	});
-
-	test("fetchEnv derives a declared slug whose listed invocation URL is empty", async () => {
-		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: "",
-		});
-
-		const env = await fetchEnv(helloPolicy, {
-			api,
-			projectId,
-			branchId: "br-main",
-		});
-
-		expect(env.functions.hello.baseUrl).toBe(constructedHelloUrl);
-		expect(listCalls(api)).toBe(0);
-	});
-
-	test("preserves the infra cell prefix (c-N.) on a derived function URL", async () => {
+	test("preserves the infra cell prefix (c-N.) of the connection host", async () => {
 		const api = new CellHostFakeNeonApi();
 		const projectId = "proj-cell";
 		api.seedProject({
@@ -1368,212 +1372,49 @@ describe("function invocation URLs", () => {
 			],
 		});
 
-		const env = await fetchEnv(
-			defineConfig({
-				preview: {
-					functions: {
-						hello: { name: "Hello", source: "./hello.ts" },
-					},
-				},
-			}),
-			{ api, projectId, branchId: "br-cell" },
-		);
-
-		expect(env.functions.hello.baseUrl).toBe(
-			"https://br-cell-hello.compute.c-3.aws-us-east-2.fake.neon.tech",
-		);
-	});
-
-	test("all-live emits every live URL even when the policy declares none", async () => {
-		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: `${helloUrl}/`,
-		});
-
-		const env = await fetchEnvKeys(
-			defineConfig({}),
-			{
-				api,
-				projectId,
-				branchId: "br-main",
-				functionUrls: "all-live",
-			},
-			null,
-		);
-
-		expect(env.functions?.hello?.baseUrl).toBe(helloUrl);
-	});
-
-	test("all-live lists functions alongside the Postgres reads", async () => {
-		const { api, projectId } = seededFake();
-		let releaseRoles: () => void = () => undefined;
-		const rolesGate = new Promise<void>((resolve) => {
-			releaseRoles = resolve;
-		});
-		const listRoles = api.listBranchRoles.bind(api);
-		api.listBranchRoles = async (...args) => {
-			await rolesGate;
-			return listRoles(...args);
-		};
-		let functionsListed = false;
-		const listFunctions = api.listBranchFunctions.bind(api);
-		api.listBranchFunctions = (...args) => {
-			functionsListed = true;
-			return listFunctions(...args);
-		};
-
-		const env = fetchEnvKeys(
-			defineConfig({}),
-			{ api, projectId, branchId: "br-main", functionUrls: "all-live" },
-			null,
-		);
-		await new Promise((resolve) => setImmediate(resolve));
-		expect(functionsListed).toBe(true);
-		releaseRoles();
-		await expect(env).resolves.toMatchObject({ postgres: {} });
-	});
-
-	test("all-live reports a Postgres read error over a function listing error that came first", async () => {
-		const { api, projectId } = seededFake();
-		api.listBranchFunctions = () =>
-			Promise.reject(new Error("functions failed"));
-		api.listBranchDatabases = () =>
-			new Promise((_, reject) =>
-				setTimeout(() => reject(new Error("databases failed")), 10),
-			);
-
-		await expect(
-			fetchEnvKeys(
-				defineConfig({}),
-				{
-					api,
-					projectId,
-					branchId: "br-main",
-					functionUrls: "all-live",
-				},
-				null,
-			),
-		).rejects.toThrow("databases failed");
-	});
-
-	test("all-live writes the origin of a listed URL that has a path", async () => {
-		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: `${helloUrl}/functions/hello`,
-		});
-
-		const env = await fetchEnvKeys(
-			defineConfig({}),
-			{
-				api,
-				projectId,
-				branchId: "br-main",
-				functionUrls: "all-live",
-			},
-			null,
-		);
-
-		expect(env.functions?.hello?.baseUrl).toBe(helloUrl);
-	});
-
-	test("all-live throws when a listed invocation URL is not a URL", async () => {
-		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: "not-a-url",
-		});
-
-		await expect(
-			fetchEnvKeys(
-				defineConfig({}),
-				{
-					api,
-					projectId,
-					branchId: "br-main",
-					functionUrls: "all-live",
-				},
-				null,
-			),
-		).rejects.toThrow(/function invocation URL is not a URL/);
-	});
-
-	test("all-live throws when a listed invocation URL is not http(s)", async () => {
-		const { api, projectId } = seededFake();
-		api.seedFunction(projectId, "br-main", {
-			id: "fn-hello",
-			slug: "hello",
-			name: "Hello",
-			invocationUrl: "data:text/plain,hello",
-		});
-
-		await expect(
-			fetchEnvKeys(
-				defineConfig({}),
-				{
-					api,
-					projectId,
-					branchId: "br-main",
-					functionUrls: "all-live",
-				},
-				null,
-			),
-		).rejects.toThrow(/function invocation URL must be http\(s\)/);
-	});
-
-	test("fetchEnv selected function URL key is derived without listing", async () => {
-		const { api, projectId } = seededFake();
-
 		const env = await fetchEnv(helloPolicy, {
 			api,
 			projectId,
-			branchId: "br-main",
-			keys: ["NEON_FUNCTION_HELLO_BASE_URL"],
+			branchId: "br-cell",
 		});
 
-		expect(env.functions.hello.baseUrl).toBe(constructedHelloUrl);
-		expect(env).not.toHaveProperty("postgres");
-		expect(listCalls(api)).toBe(0);
-	});
-
-	test("toEntries projects functions to NEON_FUNCTION_<SLUG>_BASE_URL", () => {
-		const env: NeonEnv<typeof helloPolicy> = {
-			postgres: { databaseUrl: "a", databaseUrlUnpooled: "b" },
-			functions: { hello: { baseUrl: helloUrl } },
-		};
-		expect(toEntries(env).NEON_FUNCTION_HELLO_BASE_URL).toBe(helloUrl);
-	});
-
-	test("parseEnv filtered on a function URL key requires it", () => {
-		expect(() =>
-			parseEnv(helloPolicy, ["NEON_FUNCTION_HELLO_BASE_URL"]),
-		).toThrowError(/NEON_FUNCTION_HELLO_BASE_URL is missing/);
-	});
-
-	test("parseEnv accepts a localhost function URL", () => {
-		vi.stubEnv("DATABASE_URL", "postgres://pooled");
-		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		vi.stubEnv("NEON_FUNCTION_HELLO_BASE_URL", "http://localhost:8787");
-		expect(parseEnv(helloPolicy).functions?.hello.baseUrl).toBe(
-			"http://localhost:8787",
+		expect(env.branch?.functionHostSuffix).toBe(
+			".compute.c-3.aws-us-east-2.fake.neon.tech",
 		);
 	});
 
-	test("parseEnv rejects a function URL that is not a URL", () => {
-		vi.stubEnv("DATABASE_URL", "postgres://pooled");
-		vi.stubEnv("DATABASE_URL_UNPOOLED", "postgres://direct");
-		vi.stubEnv("NEON_FUNCTION_HELLO_BASE_URL", "not-a-url");
-		expect(() => parseEnv(helloPolicy)).toThrowError(
-			/NEON_FUNCTION_HELLO_BASE_URL must be a URL/,
-		);
-		expect(() => parseEnv(helloPolicy)).toThrowError(/neon env pull/);
-		expect(() => parseEnv(helloPolicy)).not.toThrowError(/Vercel/);
+	test("a selected suffix reads the compute endpoint, not a connection string", async () => {
+		const { api, projectId } = seededFake();
+
+		const env = await fetchEnv(defineConfig({}), {
+			api,
+			projectId,
+			branchId: "br-main",
+			keys: ["NEON_BRANCH_ID", "NEON_FUNCTION_HOST_SUFFIX"],
+		});
+
+		expect(env).toEqual({
+			branch: { id: "br-main", functionHostSuffix: suffix },
+		});
+		expect(calls(api, "listEndpoints")).toBe(1);
+		expect(calls(api, "getConnectionUri")).toBe(0);
+		expect(calls(api, "listBranchRoles")).toBe(0);
+	});
+
+	test("fails loudly when the branch has no compute endpoint", async () => {
+		const { api, projectId } = seededFake();
+		api.listEndpoints = async () => [];
+
+		await expect(
+			fetchEnv(defineConfig({}), {
+				api,
+				projectId,
+				branchId: "br-main",
+				keys: ["NEON_FUNCTION_HOST_SUFFIX"],
+			}),
+		).rejects.toMatchObject({
+			code: ErrorCode.NotFound,
+			message: expect.stringContaining("has no compute endpoint"),
+		});
 	});
 });

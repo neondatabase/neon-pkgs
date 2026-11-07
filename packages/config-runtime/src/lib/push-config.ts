@@ -1,11 +1,14 @@
 import {
 	type AppliedChange,
+	assertFunctionEnv,
+	type BranchTarget,
 	type Config,
 	type ConflictReport,
 	type CreateTriggerInput,
 	createNeonApiFromOptions,
 	diffConfig,
 	ErrorCode,
+	type FunctionEnvTarget,
 	type NeonApi,
 	type NeonBranchSnapshot,
 	type NeonCustomDomainSnapshot,
@@ -22,6 +25,7 @@ import {
 	type ResolvedFunctionTrigger,
 	type ResolvedPreviewConfig,
 	resolveConfig,
+	resolveFunctionEnv,
 	type UpdateTriggerInput,
 } from "@neon/config";
 import type { FunctionBundler } from "./function-bundle.js";
@@ -150,6 +154,27 @@ export interface PushConfirmContext {
 	overrides: readonly ConflictReport[];
 }
 
+/** Add each function's resolved declared env to its literal env. */
+function withDeployFunctionEnv(
+	resolved: ResolvedBranchConfig,
+	target: FunctionEnvTarget,
+): ResolvedBranchConfig {
+	if (!resolved.preview) return resolved;
+	return {
+		...resolved,
+		preview: {
+			...resolved.preview,
+			functions: resolved.preview.functions.map((fn) => ({
+				...fn,
+				env: {
+					...fn.env,
+					...resolveFunctionEnv(fn.envVars, target).env,
+				},
+			})),
+		},
+	};
+}
+
 /**
  * Push a Neon branch policy to a specific project + branch.
  *
@@ -186,7 +211,7 @@ export async function pushConfig(
 	const remoteProject = await projectRead;
 	const [branches, endpoints] = await listsRead;
 	const branch = resolveRemoteBranch(options.branchId, branches);
-	const resolved = resolveConfig(config, {
+	const target: BranchTarget = {
 		name: branch.name,
 		id: branch.id,
 		exists: options.branchExists !== false,
@@ -194,7 +219,12 @@ export async function pushConfig(
 		isDefault: branch.isDefault,
 		isProtected: branch.protected,
 		...(branch.expiresAt ? { expiresAt: branch.expiresAt } : {}),
-	});
+	};
+	assertFunctionEnv(config, target);
+	const resolved = withDeployFunctionEnv(
+		resolveConfig(config, target),
+		target,
+	);
 	const realtimeApi = hasRealtimePolicy(resolved)
 		? requireRealtimeApi(api)
 		: undefined;

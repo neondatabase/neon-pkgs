@@ -29,6 +29,12 @@ export default function (req, res) {
 			});
 		case "nokey":
 			return res.json({ ...base, id: 401 });
+		// A 2xx body that is not JSON and carries a token; the CLI must not echo it.
+		case "garbled":
+			return res
+				.status(200)
+				.type("application/json")
+				.send('{"key":napi_garbled_secret');
 		default:
 			if (req.body.project_id === "proj-mismatch") {
 				return res.json({

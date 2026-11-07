@@ -19,6 +19,7 @@ import {
 	validateParams,
 } from "../params.js";
 import type { NeonResult, Outcome } from "../result.js";
+import { Loki } from "./loki.js";
 
 /**
  * Filters for {@link Logs.query}.
@@ -61,10 +62,12 @@ export type LogsFieldValuesParams = {
  * by a branch's log backend, where `severity_text` still works.
  */
 export class Logs<DThrow extends boolean> {
+	readonly loki: Loki<DThrow>;
 	readonly #ctx: RequestContext;
 
 	constructor(ctx: RequestContext) {
 		this.#ctx = ctx;
+		this.loki = new Loki<DThrow>(ctx);
 	}
 
 	/**

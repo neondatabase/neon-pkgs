@@ -9,9 +9,9 @@ import {
 
 export const command = "psql [branch]";
 export const describe = "Connect to a database via psql";
-export const builder = (argv: yargs.Argv) => {
+export const builderFor = (usage: string) => (argv: yargs.Argv) => {
 	return argv
-		.usage("$0 psql [branch] [options] [-- psql-args]")
+		.usage(`$0 ${usage} [branch] [options] [-- psql-args]`)
 		.example("$0 psql", "Connect to the default branch via psql")
 		.example("$0 psql main", "Connect to the main branch via psql")
 		.example(
@@ -65,6 +65,8 @@ export const builder = (argv: yargs.Argv) => {
 		})
 		.middleware(fillSingleProject as any);
 };
+
+export const builder = builderFor("psql");
 
 export const handler = async (
 	props: BranchScopeProps & {

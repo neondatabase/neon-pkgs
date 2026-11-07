@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defined } from "../../defined.test-helpers.js";
+import { REALTIME_CLIENT_VERSION } from "../../usage-metadata.js";
 import { createClientEventSink } from "../diagnostics.js";
 import type { ReconciliationTarget } from "../reconciliation/reconciler.js";
 import type { WebSocketLike } from "../types.js";
@@ -21,7 +22,12 @@ class FakeWebSocket implements WebSocketLike {
 	static readonly CLOSED = 3;
 	static instances: FakeWebSocket[] = [];
 	readyState = FakeWebSocket.CONNECTING;
-	readonly sent: Record<string, unknown>[] = [];
+	readonly wireMessages: Record<string, unknown>[] = [];
+	get sent(): Record<string, unknown>[] {
+		return this.wireMessages.filter(
+			(message) => message.type !== "client_info",
+		);
+	}
 	readonly protocols: string | string[];
 	onSend?: (message: Record<string, unknown>) => void;
 	onClose?: () => void;
@@ -48,7 +54,7 @@ class FakeWebSocket implements WebSocketLike {
 
 	send(data: string): void {
 		const message = JSON.parse(data) as Record<string, unknown>;
-		this.sent.push(message);
+		this.wireMessages.push(message);
 		this.onSend?.(message);
 	}
 
@@ -258,15 +264,26 @@ describe("ConnectionCoordinator", () => {
 		expect(entries.map((entry) => entry.event)).toEqual(["query_expired"]);
 	});
 
-	it("negotiates neon.realtime.v1, waits for ready, and routes admission", () => {
+	it("negotiates v2 and identifies the client before subscribing", () => {
 		const callbacks = target();
 		const coordinator = createCoordinator();
 		coordinator.subscribe({ capability: "token" }, callbacks);
 		const socket = defined(FakeWebSocket.instances[0]);
-		expect(socket.protocols).toBe("neon.realtime.v1");
+		expect(socket.protocols).toBe("neon.realtime.v2");
 		socket.open();
 		expect(socket.sent).toEqual([]);
 		socket.receive({ type: "ready" });
+		expect(socket.wireMessages).toEqual([
+			{
+				type: "client_info",
+				metadata: `{"sdk":"javascript","release_line":"0.2","version":"${REALTIME_CLIENT_VERSION}"}`,
+			},
+			{
+				type: "subscribe",
+				request_id: "1",
+				authorization: "token",
+			},
+		]);
 		expect(socket.sent[0]).toEqual({
 			type: "subscribe",
 			request_id: "1",
@@ -285,6 +302,48 @@ describe("ConnectionCoordinator", () => {
 		expect(callbacks.admitted).toHaveBeenCalledWith([
 			{ name: "id", type_oid: 23, typmod: -1, codec: "pg_text" },
 		]);
+	});
+
+	it("reports client warnings outside diagnostics and deduplicates them across reconnects", async () => {
+		vi.useFakeTimers();
+		const logger = vi.fn();
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {
+				throw new Error("broken console");
+			});
+		const callbacks = target();
+		const coordinator = createCoordinator({
+			events: createClientEventSink({ logLevel: "silent", logger }),
+		});
+		coordinator.subscribe({ capability: "token" }, callbacks);
+		const first = admit();
+		first.receive({
+			type: "client_warning",
+			code: "client_too_old",
+			message:
+				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		});
+		expect(consoleError).toHaveBeenCalledWith(
+			"[Neon Realtime] This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		);
+		expect(first.readyState).toBe(FakeWebSocket.OPEN);
+		expect(callbacks.admitted).toHaveBeenCalledOnce();
+
+		first.disconnect();
+		await vi.advanceTimersByTimeAsync(1);
+		const second = admit();
+		second.receive({
+			type: "client_warning",
+			code: "client_too_old",
+			message:
+				"This Realtime client is too old and may stop working. Upgrade @neon/realtime to version 0.2.0 or newer.",
+		});
+
+		expect(consoleError).toHaveBeenCalledOnce();
+		expect(logger).not.toHaveBeenCalled();
+		expect(second.readyState).toBe(FakeWebSocket.OPEN);
+		expect(callbacks.admitted).toHaveBeenCalledTimes(2);
 	});
 
 	it("serializes overlapping renewals so the newest capability wins", async () => {
@@ -1387,8 +1446,7 @@ function target(): ConnectionCallbacks & {
 } {
 	const reconciliation: ReconciliationTarget = {
 		baselineSyncStarted: vi.fn(),
-		installReset: vi.fn(),
-		applyBatch: vi.fn(),
+		prepare: vi.fn(() => () => {}),
 		publishReset: vi.fn(),
 		publishBatch: vi.fn(),
 		applyProgress: vi.fn(),

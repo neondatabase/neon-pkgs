@@ -436,7 +436,7 @@ const { data: uri } = await neon.postgres.connectionString({
 | --- | --- |
 | `list({ projectId, branchId })` | `Role[]` |
 | `get({ projectId, branchId, roleName })` | `Role` |
-| `create({ projectId, branchId, name, no_login? })` | `Role` |
+| `create({ projectId, branchId, name, no_login?, access?, databaseName?, schemas? })` | `Role` (carries the password unless `no_login`) |
 | `delete({ projectId, branchId, roleName })` | **→void** |
 | `password({ projectId, branchId, roleName })` | `string` (reveals the password) |
 | `resetPassword({ projectId, branchId, roleName })` | `Role` (carries the new password) |
@@ -448,6 +448,39 @@ const { data: password } = await neon.postgres.roles.password(roleParams);
 const { data: role } = await neon.postgres.roles.resetPassword(roleParams);
 // role.password holds the new secret
 ```
+
+`access` decides what the role may do:
+
+| `access` | How it is created | What the role gets |
+| --- | --- | --- |
+| `"admin"` (default) | Neon API | Membership in `neon_superuser`: every database, CREATEDB, CREATEROLE, BYPASSRLS, REPLICATION. It cannot be narrowed later |
+| `"read_only"` | SQL as the database owner | CONNECT on `databaseName`, USAGE on `schemas`, SELECT on their tables |
+| `"read_write"` | SQL as the database owner | The same, plus INSERT, UPDATE, DELETE on tables and USAGE, SELECT on sequences |
+
+```ts
+const { data: reader } = await neon.postgres.roles.create(
+  {
+    projectId,
+    branchId,
+    name: "app_reader",
+    access: "read_only",
+    databaseName: "neondb", // optional when the branch has one database
+    schemas: ["public"], // default
+  },
+  { waitForReadiness: true },
+);
+// reader.password is generated and stored by Neon, like any API-created role
+```
+
+For `read_only` and `read_write`, the SDK connects as the database's owner and runs `CREATE ROLE ... NOLOGIN` and the grants in one transaction over Neon's HTTP SQL endpoint (`https://api.<region host>/sql`, the protocol `@neondatabase/serverless` uses). It then calls `resetPassword`, waits until the compute applies Neon's generated password, and only then runs `ALTER ROLE ... LOGIN`. Limits:
+
+- Grants cover tables and sequences in `schemas` that the database owner owns, now and later (`ALTER DEFAULT PRIVILEGES FOR ROLE <owner>`). Objects other roles own are not covered.
+- The role keeps what `PUBLIC` already has in the database, such as CONNECT and TEMP. Nothing is revoked from `PUBLIC`.
+- The database owner needs a password Neon can reveal, the branch needs a read-write compute, and the project must allow public network access to reach the HTTP SQL endpoint.
+- A Postgres error rolls the transaction back: the error is a `NeonApiError` with the SQLSTATE in `code` (`42710` for a duplicate name). Other failures after the first SQL request are a `NeonClientError` that says what is known, with the original error as `cause`:
+  - The create request's outcome is unknown: check `roles.list`. A role this call created cannot log in yet, but a role with that name may predate the call.
+  - The role was created but its password reset or `ALTER ROLE ... LOGIN` failed: it cannot log in. Delete it with `roles.delete` and create it again.
+  - The `ALTER ROLE ... LOGIN` response was lost: login may or may not be enabled. Try the password from `roles.password`, and delete and recreate the role if it fails.
 
 #### `neon.postgres.databases`
 
@@ -827,6 +860,48 @@ query — but is not enumerable, so `fieldValues({ …, fieldName: "source" })` 
 `fieldValues` returns the whole response, because `is_truncated` is what decides whether
 the values can be trusted and unwrapping would hide it.
 
+#### `neon.logs.loki`
+
+The same records through the branch's Loki-compatible read API
+(`/telemetry/v1/projects/{project_id}/branches/{branch_id}/loki/api/v1`, on the origin of
+`baseUrl`). Each method resolves to Loki's response body unchanged: `query_range` groups
+lines by stream labels and keeps timestamps as nanosecond strings, where `logs.query`
+returns one normalized record per line with second-precision timestamps.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `queryRange({ projectId, branchId, query, …params })` | `LokiQueryRangeResponse` | `params`: `{ since?, start?, end?, limit?, direction? }`. LogQL stream selectors and line filters only |
+| `labels({ projectId, branchId, …params })` | `LokiLabelsResponse` | `params`: `{ since?, start?, end?, query? }` |
+| `labelValues({ projectId, branchId, name, …params })` | `LokiLabelsResponse` | `params`: `{ since?, start?, end?, query? }`; `query` is a stream selector without line filters |
+
+`start` and `end` take RFC 3339 or Unix nanoseconds as strings. There is no cursor. A
+result holding `limit` lines, or the server's cap (10,000 lines observed, reached without a
+`warnings` entry), may be incomplete; only a narrower window or selector returns the rest.
+A rejected query is a `NeonApiError` carrying Loki's `error` text.
+
+```ts
+const result = await neon.logs.loki.queryRange(
+  {
+    projectId,
+    branchId,
+    query: '{entity_type="function"} |= "error"',
+    since: "30m",
+    limit: 100,
+  },
+  { throwOnError: true },
+);
+let lines = 0;
+for (const { stream, values } of result.data.result) {
+  for (const [timestamp, line] of values) {
+    console.log(timestamp, stream.service_name, line);
+    lines++;
+  }
+}
+if (lines === 100 || result.warnings?.length) {
+  // possibly incomplete: narrow `since` or the selector
+}
+```
+
 ### `neon.snapshots`
 
 | Method | Returns | Notes |
@@ -927,6 +1002,43 @@ await neon.consumption.perProject({
 | `create({ keyName })` | `ApiKeyCreateResponse` | the `key` token is shown **once** |
 | `revoke({ keyId })` | `ApiKeyRevokeResponse` | |
 
+### `neon.organizations`
+
+Every method takes `orgId`, which defaults to the client's `orgId`; with neither, the call
+fails with a `NeonClientError` before any request. Role changes, member removal, the
+spending limit writes, and creating or revoking keys need an organization admin.
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `get({ orgId? })` | `Organization` | |
+| `members.list({ orgId?, …query })` | **[P]** `MemberWithUser` | `query`: `{ sort_by?, sort_order?, limit? }`; each item is `{ member, user }` |
+| `members.get({ orgId?, memberId })` | `Member` | |
+| `members.update({ orgId?, memberId, role })` | `Member` | |
+| `members.remove({ orgId?, memberId })` | **→void** | the last admin cannot be removed |
+| `invitations.list({ orgId? })` | `Invitation[]` | |
+| `invitations.create({ orgId?, invitations })` | `Invitation[]` | `invitations`: `[{ email, role }]`; each invitee is emailed |
+| `spendingLimit.get({ orgId? })` | `SpendingLimitResponse` | `spending_limit_cents` is `null` when unset |
+| `spendingLimit.set({ orgId?, spendingLimitCents })` | `SpendingLimitResponse` | Launch and Scale plans; notifies at 80% and 100%, never suspends computes |
+| `spendingLimit.delete({ orgId? })` | **→void** | idempotent |
+| `apiKeys.list({ orgId? })` | `OrgApiKeysListResponseItem[]` | `project_id` is set on project-scoped keys |
+| `apiKeys.create({ orgId?, keyName, projectId? })` | `OrgApiKeyCreateResponse` | the `key` token is shown **once**; needs a personal API key |
+| `apiKeys.revoke({ orgId?, keyId })` | `OrgApiKeyRevokeResponse` | |
+
+```ts
+const neon = createNeonClient({
+  apiKey: process.env.NEON_API_KEY!,
+  orgId: "org-...",
+});
+
+for await (const { member, user } of neon.organizations.members.list({
+  sort_by: "email",
+})) {
+  console.log(user.email, member.role);
+}
+
+await neon.organizations.spendingLimit.set({ spendingLimitCents: 50_000 }); // $500
+```
+
 ### `neon.regions` / `neon.user`
 
 | Method | Returns |
@@ -963,6 +1075,45 @@ Branch-scoped Neon Auth (the legacy project-scoped endpoints are deprecated and 
 | `users.create({ projectId, branchId, …input })` | `NeonAuthCreateNewUserResponse` | |
 | `users.delete({ projectId, branchId, authUserId })` | **→void** | |
 | `users.updateRole({ projectId, branchId, authUserId, roles })` | role | |
+| `allowLocalhost.get({ projectId, branchId })` | `NeonAuthAllowLocalhostResponse` | accept requests from localhost origins |
+| `allowLocalhost.update({ projectId, branchId, allow_localhost })` | `NeonAuthAllowLocalhostResponse` | |
+| `emailAndPassword.get({ projectId, branchId })` | `NeonAuthEmailAndPasswordConfig` | |
+| `emailAndPassword.update({ projectId, branchId, …input })` | `NeonAuthEmailAndPasswordConfig` | omitted fields keep their value |
+| `emailProvider.get({ projectId, branchId })` | `NeonAuthEmailServerConfigResponse` | `password` may come back, depending on the caller's permissions |
+| `emailProvider.update({ projectId, branchId, type, …input })` | `NeonAuthEmailServerConfigResponse` | `type: "standard"` for your SMTP server, `"shared"` for Neon's sender; the response's `password` is empty |
+| `emailProvider.sendTest({ projectId, branchId, recipient_email })` | `SendNeonAuthTestEmailResponse` | sends through the saved provider; a failed send is `success: false`, not an error |
+| `plugins.get({ projectId, branchId })` | `NeonAuthPluginConfigs` | every plugin's configuration in one call |
+| `plugins.magicLink.update({ projectId, branchId, …input })` | `NeonAuthMagicLinkConfig` | |
+| `plugins.organization.update({ projectId, branchId, …input })` | `NeonAuthOrganizationConfig` | organizations inside your app, not Neon organizations |
+| `plugins.phoneNumber.get({ projectId, branchId })` | `NeonAuthPhoneNumberConfig` | |
+| `plugins.phoneNumber.update({ projectId, branchId, …input })` | `NeonAuthPhoneNumberConfig` | |
+| `webhooks.get({ projectId, branchId })` | `NeonAuthWebhookConfig` | |
+| `webhooks.update({ projectId, branchId, enabled, …input })` | `NeonAuthWebhookConfig` | replaces the whole configuration; omitted fields reset |
+
+```ts
+const ids = { projectId: "proj-123", branchId: "br-main-456" };
+
+await neon.auth.emailAndPassword.update({
+	...ids,
+	revoke_sessions_on_password_reset: true,
+});
+
+await neon.auth.emailProvider.update({
+	...ids,
+	type: "standard",
+	host: "smtp.example.com",
+	port: 587,
+	username: "mailer",
+	password: process.env.SMTP_PASSWORD,
+	sender_email: "auth@example.com",
+	sender_name: "Example",
+});
+const { data } = await neon.auth.emailProvider.sendTest({
+	...ids,
+	recipient_email: "dev@example.com",
+});
+if (data && !data.success) console.error(data.error_message);
+```
 
 ### `neon.projects.permissions`
 

@@ -1,0 +1,14 @@
+{
+  "operation": {
+    "id": "op-compute-start",
+    "project_id": "test",
+    "branch_id": "br-sunny-branch-123456",
+    "endpoint_id": "ep-compute-test-123456",
+    "action": "start_compute",
+    "status": "finished",
+    "failures_count": 0,
+    "created_at": "2026-11-04T19:00:00Z",
+    "updated_at": "2026-11-04T19:00:01Z",
+    "total_duration_ms": 1000
+  }
+}

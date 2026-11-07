@@ -161,7 +161,6 @@ describe("getNeonModelCapabilities", () => {
 			"gemma-3-12b",
 			"glm-5-2",
 			"glm-5-3",
-			"inkling",
 			"kimi-k3",
 			"grok-4-6",
 			"grok-4-7",
@@ -313,8 +312,7 @@ describe("getNeonModelCapabilities", () => {
 	});
 
 	it("separates seed and stop support across the unified families", () => {
-		// gpt-oss rejects both; qwen and gemma reject seed only; glm and inkling
-		// accept both.
+		// gpt-oss rejects both; qwen and gemma reject seed only; glm accepts both.
 		expect(getNeonModelCapabilities("gpt-oss-20b").supportsSeed).toBe(
 			false,
 		);
@@ -328,7 +326,7 @@ describe("getNeonModelCapabilities", () => {
 			getNeonModelCapabilities("qwen35-122b-a10b").supportsStopSequences,
 		).toBe(true);
 		expect(getNeonModelCapabilities("glm-5-2").supportsSeed).toBe(true);
-		expect(getNeonModelCapabilities("inkling").supportsStopSequences).toBe(
+		expect(getNeonModelCapabilities("glm-5-2").supportsStopSequences).toBe(
 			true,
 		);
 	});

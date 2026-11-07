@@ -1,5 +1,6 @@
 import {
 	type AppliedChange,
+	assertFunctionEnv,
 	type ComputeSettings,
 	type Config,
 	createNeonApiFromOptions,
@@ -198,6 +199,11 @@ export async function createBranch(
 	config: Config,
 	options: CreateBranchOptions,
 ): Promise<CreateBranchResult> {
+	// A missing required Function env value fails before the branch is created.
+	assertFunctionEnv(config, {
+		name: options.branchName,
+		exists: false,
+	});
 	const api =
 		options.api ??
 		createNeonApiFromOptions(

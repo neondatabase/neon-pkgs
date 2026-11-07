@@ -114,7 +114,24 @@ An abort `signal` on `execute` or a wait timeout stops the poll, not the create:
 
 `metadata.method` and `metadata.path` name the first request; extra readiness GETs are not listed there.
 
-These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, and `credentials.reveal`. Waiting is what the write tools already do. `realtime.secret` is a GET that requires approval: it returns the branch's Realtime secret, which an application backend seals queries with. After `realtime.rotateSecret`, it returns the new value once `pending` is `false`. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
+These public client methods are not tools: `operations.waitFor`, `postgres.roles.password`, `storage.objects.get`, `credentials.reveal`, `logs.loki.labels`, and `logs.loki.labelValues`. Waiting is what the write tools already do. Loki labels are the log fields, so `logs.fields` and `logs.fieldValues` are the discovery tools for both `logs.query` and `logs.loki.queryRange`; the latter returns Loki's response, with lines grouped by stream labels, and nanosecond timestamp strings. `realtime.secret` is a GET that requires approval: it returns the branch's Realtime secret, which an application backend seals queries with. After `realtime.rotateSecret`, it returns the new value once `pending` is `false`. `projects.create` and `branches.create` return the created resource without a connection string; `createAndConnect` returns a URI. `triggers.create` and `triggers.update` take the OpenAPI discriminator as a nested `body` field. `credentials.rotate` requires approval and is not idempotent: a lost success already replaced the secret; create a replacement and revoke the rotated credential.
+
+## Roles
+
+`postgres.roles.create` (`create_postgres_roles`) defaults to `access: "admin"`, which joins `neon_superuser`. Pass `read_only` or `read_write` for a least-privilege credential. Scoped roles are created with SQL as the database owner; see [`@neon/sdk`'s `neon.postgres.roles`](../sdk/README.md#neonpostgresroles) for the grants and limits.
+
+```ts
+const tools = createNeonTools({ apiKey, tools: ["postgres.roles.create"] });
+const { data: role } = await tools["postgres.roles.create"].execute({
+	project_id: "project-id",
+	branch_id: "br-main",
+	name: "app_reader",
+	access: "read_only",
+	database_name: "neondb",
+	schemas: ["public"],
+});
+// role.password is the generated password
+```
 
 ## Optional host add-ons
 
@@ -122,7 +139,7 @@ These public client methods are not tools: `operations.waitFor`, `postgres.roles
 
 Pass a map keyed by SDK path or the current published `id`, or a function that can append to the generated text. A key that matches neither is ignored.
 
-Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
+Generated Management API tools use the first sentence of the OpenAPI description (title stays the OpenAPI summary). Every top-level input carries a description too: the first sentence of its OpenAPI description, or handwritten copy where the spec has none. Composed tools keep their handwritten copy. Hosts that need more still pass `descriptions`.
 
 ```ts
 const tools = createNeonTools({
@@ -283,7 +300,7 @@ Existing MCP 1.x servers can use the version-specific entry point:
 import { registerNeonTools } from "@neon/tools/mcp-v1";
 ```
 
-MCP 1.x still receives Zod input schemas, including handwritten `.describe()` copy. Generated Zod has no OpenAPI field essays. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
+MCP 1.x still receives Zod input schemas, including their `.describe()` copy. Generated Zod carries only the first sentence of each OpenAPI field description. Use `compactJsonSchema` if you convert those schemas yourself and need `$schema` removed.
 
 The adapter returns both text content and object-valued `structuredContent`. Execution failures use `isError: true` with `{ error: { message, name, kind, status, code, source, timeoutMs, requestId, reason, operationId } }` when those fields exist on the thrown error. A wait timeout has `kind: "timeout"` and `source: "wait"`.
 

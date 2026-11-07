@@ -382,6 +382,42 @@ export type FunctionBundler = (
 export type FunctionBundlerInput = "esbuild" | "none" | FunctionBundler;
 
 /**
+ * A Function env variable whose `value` is checked only when a command needs it, so an
+ * unset `process.env` read never fails an import of `neon.ts`. An undefined or empty value
+ * counts as unset.
+ *
+ * | `required` | Unset deploying the default branch | Unset deploying another branch | Unset in `neon dev` | `parseEnv` type |
+ * | --- | --- | --- | --- | --- |
+ * | `true` | fails | fails | fails | `string` |
+ * | `"default-branch"` | fails | left out | runs without it | `string \| undefined` |
+ * | `false` | left out | left out | runs without it | `string \| undefined` |
+ *
+ * `"default-branch"` means the project's default branch ({@link BranchTarget.isDefault}); it
+ * does not look at branch names or protection.
+ *
+ * `onUndefined` sets what "left out" means: `"unset"` (the default) removes the variable from
+ * the deployment, or from the Function's environment in `neon dev`; `"skip"` leaves the
+ * deployed value, or the inherited one, as it is. Use `"skip"` for a value set outside
+ * `neon.ts`, such as with `neon functions deploy <slug> --env KEY=VALUE`. Keys that `neon.ts`
+ * does not declare are left as they are.
+ *
+ * `parseEnv` reads the deployed key, not `value`: inside a Function, `value` refers to an
+ * environment the deploy has already read.
+ *
+ * @example { value: process.env.STRIPE_SECRET_KEY, required: true }
+ */
+export type FunctionEnvVar =
+	| { value: string | undefined; required: boolean; onUndefined?: never }
+	| {
+			value: string | undefined;
+			required: false | "default-branch";
+			onUndefined?: "unset" | "skip";
+	  };
+
+/** One entry of {@link FunctionDef.env}: a literal string or a {@link FunctionEnvVar}. */
+export type FunctionEnvValue = string | FunctionEnvVar;
+
+/**
  * Static definition of a Neon Function. Declares that the function
  * **exists** on every branch; its branch-unique slug is the **record key** in
  * `functions` (or deprecated {@link PreviewInput.functions}), so slugs are statically enumerable,
@@ -405,11 +441,17 @@ export interface FunctionDef {
 	/**
 	 * Environment variables injected into the deployed function, keyed by the var name the
 	 * function reads at runtime. The **keys** are static (preserved at the type level so
-	 * `parseEnv(config, "<slug>").function.<key>` is typed). An unset `process.env.X`
-	 * fails validation. Omit a key to preserve its deployed value; an empty string deletes it.
-	 * @example { resendApiKey: process.env.RESEND_API_KEY! }
+	 * `parseEnv(config, "<slug>").function.<key>` is typed).
+	 *
+	 * A value is a literal string or a {@link FunctionEnvVar} declaration. A declaration's
+	 * value is checked only when `neon deploy`, `neon dev`, or `parseEnv` needs it, so
+	 * importing `neon.ts` never fails on an unset variable.
+	 *
+	 * A literal string is uploaded as is. An unset `process.env.X` written as a literal
+	 * fails validation wherever `neon.ts` is evaluated.
+	 * @example { RESEND_API_KEY: { value: process.env.RESEND_API_KEY, required: true }, LOG_LEVEL: "info" }
 	 */
-	env?: Record<string, string>;
+	env?: Record<string, FunctionEnvValue>;
 	/**
 	 * Ship a dependency's real files into the deployed archive instead of bundling it —
 	 * `sharp` and other packages backed by a native binary.
@@ -897,7 +939,12 @@ export interface HookEnv {
 		databaseUrl: string;
 		databaseUrlUnpooled: string;
 	};
-	branch?: { name: string };
+	/**
+	 * `id` and `functionHostSuffix` locate the branch's functions:
+	 * `functionBaseUrl("hello", { NEON_BRANCH_ID: env.branch?.id, NEON_FUNCTION_HOST_SUFFIX: env.branch?.functionHostSuffix })`
+	 * from `@neon/env`. Shell hooks get them as `NEON_BRANCH_ID` / `NEON_FUNCTION_HOST_SUFFIX`.
+	 */
+	branch?: { name: string; id?: string; functionHostSuffix?: string };
 	auth?: { baseUrl: string; jwksUrl: string };
 	dataApi?: { url: string };
 	storage?: {
@@ -907,7 +954,6 @@ export interface HookEnv {
 		region: string;
 	};
 	aiGateway?: { apiKey: string; baseUrl: string };
-	functions?: Record<string, { baseUrl: string }>;
 }
 
 /** Context passed to `hooks.checkout.before` (runs before the branch name is resolved). */
@@ -1048,7 +1094,16 @@ export interface ResolvedFunctionConfig {
 	slug: string;
 	name: string;
 	source: string;
+	/**
+	 * Literal env values from `neon.ts`. Before a deploy, `pushConfig` adds the values
+	 * resolved from {@link envVars}.
+	 */
 	env: Record<string, string>;
+	/**
+	 * The {@link FunctionEnvVar} declarations from {@link FunctionDef.env}, unresolved.
+	 * Absent when the function declares none.
+	 */
+	envVars?: Record<string, FunctionEnvVar>;
 	/**
 	 * Packages the bundler leaves unresolved, normalized from
 	 * {@link FunctionDef.externalPackages} with `includeFiles` defaulted.

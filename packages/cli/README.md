@@ -330,9 +330,12 @@ neon realtime subscribe "SELECT id, title, completed FROM realtime_todos ORDER B
 The default terminal output is append-only. It identifies the selected project,
 branch, and database; prints the initial result once; reports connection-state
 changes; and then prints each published change set with its transaction IDs, a compact
-`+insert ~update -delete` summary, and the affected rows. It does not take over the
-terminal or require keyboard navigation. Pass `--changes` to display the raw `rows`
-and `changes` events instead of the materialized view.
+`+insert ~update -delete` summary, and the affected rows. Row moves appear as
+`↔ move` with a separate `↔` count and retain the row's values. It does not take
+over the terminal or require keyboard navigation. Pass `--changes` to display the
+raw `rows` and `changes` events instead of the materialized view. Raw table output
+includes each move's `after_row_id` destination, with `(head)` for the first
+position, and counts moves separately from removals.
 
 For scripts and agents, JSON output is a JSON Lines stream with one complete event
 per line. YAML output uses one document per event:
@@ -598,9 +601,8 @@ neon env pull -e DATABASE_URL,NEON_AUTH_BASE_URL
 # The selectors compose as a union: all Auth vars plus DATABASE_URL
 neon env pull -s auth -e DATABASE_URL
 
-# Function invocation URLs
+# The variables functionBaseUrl("<slug>") from @neon/env reads
 neon env pull -s functions
-neon env pull -e NEON_FUNCTION_HELLO_BASE_URL
 ```
 
 Every services flag in the CLI takes those three spellings, the same value syntax, and the same service names — see [`config init --services`](#getting-a-neonts-config-init).
@@ -610,15 +612,17 @@ Every services flag in the CLI takes those three spellings, the same value synta
 | `postgres` | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` |
 | `auth` | `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL` |
 | `data-api` | `NEON_DATA_API_URL` |
-| `functions` | `NEON_FUNCTION_<SLUG>_BASE_URL` for each deployed function |
+| `functions` | `NEON_FUNCTION_HOST_SUFFIX` |
 | `object-storage` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` |
 | `ai-gateway` | `NEON_AI_GATEWAY_TOKEN`, `NEON_AI_GATEWAY_BASE_URL` |
 
-`-e, --env` accepts any variable in the table plus `NEON_BRANCH`, or `NEON_FUNCTION_<SLUG>_BASE_URL` where `<SLUG>` is the function slug uppercased. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` is written by unscoped and service-scoped pulls because it is branch identity, not a service; an env-only pull writes it only when you select it.
+`-e, --env` accepts any variable in the table plus `NEON_BRANCH` and `NEON_BRANCH_ID`. It is case-sensitive and rejects unknown names rather than silently widening the pull. `NEON_BRANCH` and `NEON_BRANCH_ID` are written by unscoped and service-scoped pulls because they are branch identity, not a service; an env-only pull writes them only when you select them.
 
-`--env` never narrows `--service`: `neon env pull -s postgres -e DATABASE_URL` still pulls the complete Postgres bundle (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `NEON_BRANCH`). The two selectors always form a union.
+`NEON_BRANCH_ID` and `NEON_FUNCTION_HOST_SUFFIX` are what `functionBaseUrl("<slug>")` from `@neon/env` builds a function's URL from, and what the Functions runtime injects into every deployed function. An unscoped pull writes both whether or not `neon.ts` declares functions. Earlier releases wrote one `NEON_FUNCTION_<SLUG>_BASE_URL` per function instead; an unscoped or `-s functions` pull removes those lines, and `-e NEON_FUNCTION_<SLUG>_BASE_URL` fails with a pointer to `functionBaseUrl`.
 
-**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines, and a branch without those functions prunes stale `NEON_FUNCTION_*_BASE_URL` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
+`--env` never narrows `--service`: `neon env pull -s postgres -e DATABASE_URL` still pulls the complete Postgres bundle (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH`, and `NEON_BRANCH_ID`). The two selectors always form a union.
+
+**A scoped pull is scoped in both directions.** An unscoped `env pull` owns the Neon-named variables: pointing a directory at a branch without Neon Auth prunes the stale `NEON_AUTH_*` lines. `--service` narrows that to the services you named, while `--env` narrows it to the exact keys you named, so `env pull -e DATABASE_URL` never touches `DATABASE_URL_UNPOOLED`. (`AWS_*` is never pruned by any pull: those names collide with credentials you may set yourself, so `env pull` only ever writes them.)
 
 **A scoped pull also never revokes a credential.** Where an unscoped pull revokes the credential it replaces, a scoped one leaves the old one live — it can't tell which other variables still use it. It says so when it happens; revoke it in the Neon Console if nothing does.
 
@@ -636,9 +640,9 @@ Console), or drop auth from --service.
 
 If you'd rather not keep env vars on disk, inject them at runtime instead with `neon-env run -- <your dev command>` (from `@neon/env`) or `neon dev`, and pass `--no-env-pull` to `link` / `checkout`.
 
-**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. Each `NEON_FUNCTION_<SLUG>_BASE_URL` this process is serving is rewritten to `http://localhost:<port>`: every neon.ts function, or the matching slug when `--source` names one. `neon env pull` and `neon-env run` write the production URL (`https://<branchId>-<slug>.compute.…`).
+**`neon dev` resolves the same set, by the same rules** — including the AI Gateway on a branch with no `neon.ts`. A function running locally gets the same Postgres / Auth / Data API / storage / AI Gateway vars a deploy would inject. `dev` also sets `NEON_DEV_FUNCTION_PORTS`, a JSON map of the slugs this process is serving to their ports (every neon.ts function, or the matching slug when `--source` names one), so `functionBaseUrl("<slug>")` returns `http://localhost:<port>` for those and the deployed URL on the linked branch for any other slug.
 
-Before `neon.ts` is evaluated, `dev` loads the project directory's `.env`, then `.env.local`, which overrides it, into the environment, so Function env values written as `process.env.X!` resolve the same way they do for `neon deploy --env`. A variable already set in the shell wins over both. Local Functions inherit every loaded variable, including keys `neon.ts` doesn't declare; the deployed runtime gets only declared and Neon-injected env. `--env <file>` loads only that file, resolved from the current directory, matching `neon deploy --env`:
+Before `neon.ts` is evaluated, `dev` loads the project directory's `.env`, then `.env.local`, which overrides it, into the environment, so Function env values resolve the same way they do for `neon deploy --env`. A variable declared `required: true` must be set, or `dev` fails before any Function starts; `--source` checks only the Function it serves. `required: "default-branch"` and `required: false` may be unset ([Function env](../config/README.md#function-env)). A variable already set in the shell wins over both. Local Functions inherit every loaded variable, including keys `neon.ts` doesn't declare; the deployed runtime gets only declared and Neon-injected env. `--env <file>` loads only that file, resolved from the current directory, matching `neon deploy --env`:
 
 ```bash
 neon dev                       # loads .env, then .env.local (overrides .env)
@@ -691,7 +695,7 @@ export default defineConfig({
 ◯   Object Storage
      S3-compatible blob storage that branches with your projects.
 ◯   AI Gateway
-     All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.
+     All models, one API, one bill. Powered by Databricks.
 ```
 
 Postgres cannot be unselected. Selecting nothing else is a valid answer: you get the starter policy, which is also what a non-interactive run (CI, no TTY) writes. Pass `--services` to skip the prompt anywhere:
@@ -863,6 +867,8 @@ When a package cannot be bundled — a native addon with no esbuild loader, or a
 
 After scaffolding, an interactive terminal asks about dependency install and git, then finishes agent setup before asking whether to link a Neon project. Dependency install is last, except when the template has a `neon.ts` and you chose to link — then install runs first so the link flow can pull env. `--default` / `-y` skips the template, install, git, and agent pickers, then installs agent tooling for project folders, else the host CLI agent. If none are found, it exits: pass `--agent <name>`, run from a supported agent, or omit `--default` / `-y` in a terminal to pick. `--agent` / `-a` names coding agents, skips agent selection, and is forwarded to `plugins`, or to `skills` and `mcp`, not both. Linking uses `neon link -y`: the only organization and project are selected, or their IDs are printed and the command exits. `--no-agent-setup` and `--no-link` skip those steps. Non-interactive without `--default` prints next steps and does not install, set up agents, or link.
 
+When the template has a `neon.ts` and its dependencies are installed and the project is linked, bootstrap checks the env vars its functions read against the env file link pulled into (`.env.local`). If all are set, a terminal asks `Deploy this project to Neon now?` and runs `neon deploy --env .env.local`; `--default` leaves that command under `Next:`. If some are unset, `Next:` names them. `--deploy` installs, links, and deploys without asking, and fails with `neon deploy`'s error when an env var is unset. It refuses `--no-install` and `--no-link`, and needs `--default` outside a terminal.
+
 Pass a target directory (or `.` for the current one). In an interactive terminal you pick the template from a list; in CI / non-interactive contexts pass `--template <id>`.
 
 ```bash
@@ -874,6 +880,9 @@ $ neon bootstrap . --template hono
 
 # Skip agent selection; install the plugin for those agents
 $ neon bootstrap my-app --agent cursor --agent claude-code
+
+# Scaffold, install, link, and deploy without prompting
+$ neon bootstrap my-app --template hono --default --deploy
 
 # List templates
 $ neon bootstrap --list-templates
@@ -1039,27 +1048,24 @@ neon docs search "pg_dump" --limit 5 --output json
 
 ## Install the Neon plugin (`plugins`)
 
-`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running `npx plugins add`. It does not call the Neon API.
+`neon plugins` installs the Neon agent plugin (`neon-postgres`) by running a pinned version of the plugins CLI (`npx plugins@<version> add ... -s user`). It does not call the Neon API.
 
 ```bash
 # Interactive: pick agents, then install.
 $ neon plugins
 
-# Skip prompts. Detected agents (project folders, else the host CLI agent).
+# Skip prompts. Detected agents (project folders, else the host CLI agent, else installed apps).
 $ neon plugins -y
 
 # Named agents.
 $ neon plugins --agent cursor --agent claude-code
-
-# User-level install.
-$ neon plugins --global
 ```
 
-On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
+On a TTY the command asks which agents, then installs. Detected agents start selected from project-folder markers such as `.cursor`, else from installed apps. There is one plugin (`neon-postgres`); there is no plugin picker and no `update` subcommand.
 
-`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI. `--agent` / `-a` names coding agents and skips the agent picker. `--global -y` uses installed apps, else the host CLI agent. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
+`-y` skips those questions and installs into detected agents: project-folder markers such as `.cursor`, else the agent driving the CLI, else installed apps. `--agent` / `-a` names coding agents and skips the agent picker. Without a TTY, pass `-y` or `--agent <name>`. If `-y` finds no agent, it exits: pass `--agent <name>`, run from a supported agent, or omit `-y` in a terminal to pick.
 
-Default scope is `project`. `--global` is `user`. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `project` vs `user` is the scope field the plugins CLI records, not a directory in the repo. VS Code, GitHub Copilot CLI, Grok Build, and Kimi Code only install user-level: they are skipped at the default scope with a warning, and a VS Code-only project fails if nothing else is selected. Pass `--global` for those.
+The plugin always installs user-level, so it applies to every project for that agent. On macOS and Linux, Cursor and Claude Code store the plugin cache under `~/.claude/plugins`; on Windows, Cursor installs into Cursor extensions. `--global` is still accepted for existing scripts, does the same as the default, and is no longer listed in `--help`.
 
 GitHub Copilot CLI and Grok Build install through their own CLIs (`copilot`, `grok`), so `neon plugins` runs `copilot --version` or `grok --version` first. A command that is missing, fails, or (for Copilot) is older than 0.0.400 is skipped with a warning under `-y`, fails an explicit `--agent`, and in `neon init` gets Neon skills and MCP instead of the plugin. The other agents install by writing files, so their detected config directory is enough.
 
@@ -1171,6 +1177,26 @@ neon credentials revoke nak_live_…
 
 All sub-commands honor the [global options](#global-options), including `--output json|yaml|table`.
 
+## Postgres (`postgres`)
+
+`neon postgres` (aliases `neon pg` and `neon lakebase`) groups the Postgres commands: `computes`, `databases`, `roles`, `connection-string` (`cs`), and `psql`. `neon postgres roles list` and `neon roles list` run the same command; the top-level spellings keep working.
+
+`neon postgres computes` (aliases `compute`, `endpoints`, `endpoint`) manages the computes in a project:
+
+```bash
+neon postgres computes list                  # the .neon branch's computes, else every compute in the project
+neon postgres computes list --branch main
+neon postgres computes list --all-branches   # every compute in the project, even when .neon pins a branch
+neon postgres computes get ep-cool-king-123456
+neon postgres computes update ep-cool-king-123456 --cu 0.25-2 --suspend-timeout 600
+neon postgres computes suspend ep-cool-king-123456
+neon postgres computes start ep-cool-king-123456
+neon postgres computes restart ep-cool-king-123456
+neon postgres computes delete ep-cool-king-123456
+```
+
+`update`, `start`, `suspend`, `restart`, and `delete` wait until the change is applied. `update`, `start`, `suspend`, and `restart` then print the compute as the API reports it; `delete` prints a confirmation on stderr. `--no-wait` returns as soon as the API accepts the request. `update` sends only the flags you pass and fails without one. To add a compute, use `neon branches add-compute`.
+
 ## Database diagnostics (`inspect`)
 
 `neon inspect db stalled-queries` takes a read-only snapshot of active queries that have run for more than 30 seconds and groups parallel workers with their leader. Oldest group first. Table output shows duration, wait event, blocking pids, role, query group, and query. `--output json` adds timestamps, query IDs, pids, database, and the rest of the row. A blocking pid can belong to an idle-in-transaction backend this command does not list; `neon inspect db locks` shows lock holders.
@@ -1185,6 +1211,10 @@ neon inspect db stalled-queries --output json
 `neon logs` reads the log records the services on a branch emit — Neon Functions, object storage, and Postgres computes. **Logs are currently available only for projects in `aws-us-east-2`, `aws-us-east-1`, `aws-eu-central-1`, and `aws-ap-southeast-1`.**
 
 Every sub-command resolves the project through the standard chain (`--project-id`, then the `.neon` context file, then a single-project auto-detect), and takes `--branch <id|name>`, defaulting to the project's default branch. `logs query` searches the previous hour by default; `logs field-values` searches the previous six hours. The maximum time window is seven days.
+
+Use `neon logs query` for structured filters or LogQL with formatted records and cursor
+pagination. Use [`neon logs loki`](#loki-api-logs-loki) for the Loki read API, label
+discovery, and the complete Loki JSON response. Both appear in `neon logs --help`.
 
 ```bash
 # The last 30 minutes on the default branch
@@ -1232,6 +1262,60 @@ $ neon logs query --since 24h --output json
 Two combinations are rejected before the request: `--since` with `--start-time`, and `--logql` with any of `--source`, `--service-name`, `--scope-name`, `--minimum-severity`, `--severity-text`, `--body-contains` or `--trace-id`. `--minimum-severity` and `--severity-text` are independent filters and combine with AND. If Neon reports that `--minimum-severity` is unsupported, use `--severity-text` instead; `neon logs field-values severity_text` lists the exact values present on a branch.
 
 `--body-contains` compares a case-sensitive substring against the rendered message. Structured bodies, including object storage records, are rendered as compact JSON, so match the JSON form (for example, `"http_status":200`).
+
+### Loki API (`logs loki`)
+
+`neon logs loki` calls the branch's [Loki-compatible read API](https://neon.com/docs/cli/logs#loki-read-api) directly, using the CLI's
+normal authentication, project selection and branch resolution, through
+`neon.logs.loki` in `@neon/sdk`. JSON is the command's default output; `--output json` and `--output yaml` are supported. It preserves the full
+Loki response envelope. Help and shell completion work without authentication.
+
+Discover labels and service names, then choose a selector and bound the query:
+
+```bash
+neon logs loki --endpoint labels
+neon logs loki --endpoint label/service_name/values --since 6h
+neon logs loki '{entity_type="function"} |= "error"' --since 30m --limit 100
+neon logs loki '{entity_type="function"}' --limit 200 --direction forward
+neon logs loki '{entity_type="function"}' --project-id <id> --branch main \
+  --start 2026-11-01T00:00:00Z --end 2026-11-01T01:00:00Z
+neon logs loki '{entity_type="function"}' --endpoint label/severity_text/values
+neon logs loki '{entity_type="function"}' --since 30m --limit 100 \
+  | jq '{warnings: (.warnings // []), streams: .data.result}'
+```
+
+The default endpoint is `query_range`. Each Loki parameter has a named flag, and with a
+label endpoint the positional query is an optional stream selector:
+
+| Flag | Meaning |
+| --- | --- |
+| `--since <duration>` | Positive Go duration such as `30m` or `24h`. Defaults to 1h for range queries and 6h for label values. |
+| `--start <timestamp>` | RFC 3339 or Unix nanoseconds, kept as a string. Takes precedence over `since`. |
+| `--end <timestamp>` | RFC 3339 or Unix nanoseconds, kept as a string. Defaults to now. |
+| `--limit <count>` | `query_range` only. Positive integer limiting the number of log lines; the server enforces its cap. |
+| `--direction <order>` | `query_range` only. `forward` (oldest first) or `backward` (newest first). |
+
+The CLI does not parse LogQL or convert nanosecond timestamps to numbers.
+
+Range responses have `data.resultType: "streams"` and a `data.result` array. Each entry
+contains `stream` labels and `values` pairs of `[timestamp, line]`; timestamps are nanosecond
+strings. There is no continuation cursor. A result with `--limit` lines, or with the
+server's cap of 10,000 lines, may be incomplete, and reaching the cap adds no `warnings`
+entry. Narrow the time window or selector for complete results. The maximum window is
+168 hours.
+
+Neon's supported LogQL subset is stream selectors (`=`, `!=`, `=~`, `!~`) and line filters
+(`|=`, `!=`, `|~`, `!~`). Metric queries, parser/format stages and live tailing are unsupported.
+Instant queries are unsupported. The advertised labels are `service_name`,
+`severity_text`, `scope_name`, and `entity_type`; use `labels` to discover them. Label-value
+queries accept a stream selector without line filters.
+
+Requests go to
+`/telemetry/v1/projects/<project>/branches/<branch>/loki/api/v1/<endpoint>` on the same
+origin as `--api-host` / `NEON_API_HOST` (default `https://console.neon.tech`). This is a
+separate API from the Management API used by `neon logs query --logql`. Access requires
+project read permission and telemetry enabled for the project's organization and region.
+The CLI reports the server's error when access or a query is rejected.
 
 ## Profiles
 
@@ -1490,6 +1574,28 @@ Id   Name      Project         Created At            Last Used At          Last 
 
 `last_used_at` and `last_used_from_addr` are how you spot a key worth revoking.
 
+## Organizations (`orgs`)
+
+```bash
+neon orgs list
+neon orgs get                                         # the --org-id, linked, or only organization
+neon orgs members list
+neon orgs members get <member-id>
+neon orgs members update <member-id> --role admin
+neon orgs members remove <member-id>
+neon orgs invitations list
+neon orgs invitations create --email dev@example.com --email ops@example.com --role member
+neon orgs spending-limit get
+neon orgs spending-limit set 500                      # US dollars per month
+neon orgs spending-limit delete
+```
+
+Every subcommand except `list` takes `--org-id`. Without it, the CLI uses the organization in `.neon`, then the only organization you belong to, and otherwise fails naming `--org-id`. `orgs get` also takes the id as a positional argument.
+
+`members update` and `invitations create` take `--role`: `admin`, `member`, `editor`, `viewer`, or `collaborator`. The API decides which of them an organization accepts. Every invitee is emailed, and anyone who already has a Neon account joins immediately.
+
+`spending-limit set` takes dollars with up to two decimals and sends cents. The limit sends emails at 80% and 100% and does not suspend computes. JSON and YAML output keep the API's `spending_limit_cents`, and `members list` keeps the API's `{ member, user }` items. Role changes, member removal, and the spending limit writes need an organization admin.
+
 ## Commands
 
 | Command                                                                    | Subcommands                                                                                                  | Description                        |
@@ -1499,15 +1605,17 @@ Id   Name      Project         Created At            Last Used At          Last 
 | profile                                                                    | `list`, `create`, `rotate-key`, `remove`                                                                     | Manage named sets of credentials   |
 | api-keys                                                                   | `list`, `create`, `revoke`                                                                                   | Manage API keys                    |
 | api                                                                        |                                                                                                              | Call any Neon API route            |
+| orgs (`org`)                                                               | `list`, `get`, `members`, `invitations`, `spending-limit`                                                    | Manage organizations               |
 | [projects](https://neon.com/docs/reference/cli-projects)                   | `list`, `create`, `update`, `delete`, `get`                                                                  | Manage projects                    |
 | [ip-allow](https://neon.com/docs/reference/cli-ip-allow)                   | `list`, `add`, `remove`, `reset`                                                                             | Manage IP Allow                    |
 | [me](https://neon.com/docs/reference/cli-me)                               |                                                                                                              | Show current user                  |
 | [branches](https://neon.com/docs/reference/cli-branches)                   | `list`, `create`, `rename`, `add-compute`, `set-default`, `set-expiration`, `delete`, `get`                  | Manage branches                    |
+| postgres (`pg`, `lakebase`)                                                | `computes`, `databases`, `roles`, `connection-string`, `psql`                                                | Manage Postgres and connect to it  |
 | [databases](https://neon.com/docs/reference/cli-databases)                 | `list`, `create`, `delete`                                                                                   | Manage databases                   |
 | function                                                                   | `deploy`, `list`, `get`, `delete`, `domains list`, `domains register`, `domains delete`                      | Manage Neon Functions              |
-| [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `create`, `delete`                                                                                   | Manage roles                       |
-| [operations](https://neon.com/docs/reference/cli-operations)               | `list`                                                                                                       | Manage operations                  |
-| logs                                                                       | `query`, `fields`, `field-values`                                                                            | Query branch logs (Beta)           |
+| [roles](https://neon.com/docs/reference/cli-roles)                         | `list`, `get`, `create`, `reset-password`, `delete`                                                          | Manage roles                       |
+| [operations](https://neon.com/docs/reference/cli-operations)               | `list`, `get`                                                                                                | Manage operations                  |
+| [logs](#logs-logs)                                                          | `query`, `fields`, `field-values`, `loki [query]`                                                             | Query branch logs or the Loki API  |
 | inspect                                                                    | `db stalled-queries`                                                                                         | Inspect Postgres diagnostics       |
 | snapshots                                                                  | `list`, `get`, `create`, `update`, `delete`, `restore`, `finalize`, `schedule get`, `schedule set`           | Manage snapshots                   |
 | triggers                                                                   | `list`, `get`, `create`, `update`, `enable`, `disable`, `delete`                                             | Manage function triggers           |

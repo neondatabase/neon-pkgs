@@ -3834,6 +3834,10 @@ export type NeonAuthEmailAndPasswordConfig = {
      * Whether to disable new user sign ups
      */
     disable_sign_up: boolean;
+    /**
+     * Whether all of a user's sessions are revoked when their password is reset
+     */
+    revoke_sessions_on_password_reset: boolean;
 };
 
 export type NeonAuthEmailAndPasswordConfigUpdate = {
@@ -3862,6 +3866,10 @@ export type NeonAuthEmailAndPasswordConfigUpdate = {
      * Whether to disable new user sign ups. When omitted, the current setting is not changed.
      */
     disable_sign_up?: boolean;
+    /**
+     * Whether all of a user's sessions are revoked when their password is reset. When omitted, the current setting is not changed.
+     */
+    revoke_sessions_on_password_reset?: boolean;
 };
 
 export type NeonAuthIntegration = {

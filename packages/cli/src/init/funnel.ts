@@ -3,7 +3,12 @@ import { stripVTControlCharacters } from "node:util";
 import { redactCredentialTokenIds, trackEvent } from "../analytics.js";
 import { codeFromBody, isNeonApiError } from "../api.js";
 import { AuthRefreshError } from "../auth.js";
-import { type ErrorCode, isNetworkError, matchErrorCode } from "../errors.js";
+import {
+	DetailedError,
+	type ErrorCode,
+	isNetworkError,
+	matchErrorCode,
+} from "../errors.js";
 import type { AgentType } from "../mcp/agents.js";
 import type { NeonService } from "../neon_services.js";
 import pkg from "../pkg.js";
@@ -66,6 +71,8 @@ export type InitFunnelEnd = {
 	error_step: InitFunnelErrorStep | null;
 	error_code: ErrorCode | null;
 	error_message: string | null;
+	/** The bounded cause behind `error_code` when one is known, such as `ERESOLVE` for `DEPENDENCY_INSTALL_FAILED`. */
+	error_detail: string | null;
 	/** Every step that failed, in order. */
 	error_steps: InitFunnelErrorStep[];
 };
@@ -227,6 +234,10 @@ export const initEndProperties = (input: {
 			reported === undefined ? null : initErrorCode(reported.error),
 		error_message:
 			reported === undefined ? null : initErrorMessage(reported.error),
+		error_detail:
+			reported?.error instanceof DetailedError
+				? reported.error.detail
+				: null,
 		error_steps: [...new Set(input.errors.map((entry) => entry.step))],
 	};
 };

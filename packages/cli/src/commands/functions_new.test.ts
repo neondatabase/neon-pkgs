@@ -297,7 +297,7 @@ describe("functions new", () => {
 			install: undefined,
 			run: async (_pm, args) => {
 				calls.push(args);
-				return true;
+				return { ok: true };
 			},
 		});
 		if (result.cancelled) throw new Error("unexpected cancel");
@@ -325,7 +325,7 @@ describe("functions new", () => {
 						dependencies: { "@neon/config": "*", "@neon/env": "*" },
 					}),
 				);
-				return true;
+				return { ok: true };
 			},
 		});
 		if (result.cancelled) throw new Error("unexpected cancel");

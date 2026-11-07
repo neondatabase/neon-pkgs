@@ -14,9 +14,9 @@ export const DATABASE_FIELDS = ["name", "owner_name", "created_at"] as const;
 export const command = "databases";
 export const describe = "Manage databases";
 export const aliases = ["database", "db"];
-export const builder = (argv: yargs.Argv) =>
+export const builderFor = (usage: string) => (argv: yargs.Argv) =>
 	argv
-		.usage("$0 databases <sub-command> [options]")
+		.usage(`$0 ${usage} <sub-command> [options]`)
 		.options({
 			"project-id": {
 				describe: "Project ID",
@@ -57,6 +57,8 @@ export const builder = (argv: yargs.Argv) =>
 			(yargs) => yargs,
 			(args) => deleteDb(args as any),
 		);
+
+export const builder = builderFor("databases");
 
 export const handler = (args: yargs.Argv) => {
 	return args;

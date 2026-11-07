@@ -82,6 +82,61 @@ describe("special mappings", () => {
 		});
 	});
 
+	test("queries Loki on the telemetry API and returns its body unchanged", async () => {
+		const body = {
+			status: "success",
+			data: {
+				resultType: "streams",
+				result: [
+					{
+						stream: { entity_type: "function" },
+						values: [["1793988960709494000", "invoke end"]],
+					},
+				],
+			},
+			warnings: ["result truncated"],
+		};
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["logs.loki.queryRange"] as const,
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse(body);
+			},
+		});
+		const tool = tools["logs.loki.queryRange"];
+
+		expect(tool.id).toBe("query_range_logs_loki");
+		expect(tool.annotations.readOnlyHint).toBe(true);
+		expect(
+			tool.inputSchema.safeParse({
+				project_id: "p-1",
+				branch_id: "br-1",
+				query: "{}",
+				field: "x",
+			}).success,
+		).toBe(false);
+		const result = await tool.execute({
+			project_id: "p-1",
+			branch_id: "br-1",
+			query: '{entity_type="function"}',
+			since: "30m",
+			limit: 10,
+		});
+
+		expect(result).toEqual({ data: body });
+		const url = new URL(requests[0].url);
+		expect(url.pathname).toBe(
+			"/telemetry/v1/projects/p-1/branches/br-1/loki/api/v1/query_range",
+		);
+		expect(Object.fromEntries(url.searchParams)).toEqual({
+			query: '{entity_type="function"}',
+			since: "30m",
+			limit: "10",
+		});
+	});
+
 	test("maps snapshot restore finalize rather than finalize_restore", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
@@ -342,6 +397,242 @@ describe("special mappings", () => {
 		}
 	});
 
+	test("maps the Neon Auth branch settings tools onto the SDK and blanks secrets", async () => {
+		const smtp = {
+			type: "standard",
+			host: "smtp.example.com",
+			port: 587,
+			username: "mailer",
+			password: "*****123",
+			sender_email: "auth@example.com",
+			sender_name: "Example",
+		};
+		const plugins = {
+			magic_link: {
+				enabled: false,
+				expires_in: 5,
+				disable_sign_up: false,
+			},
+			email_provider: smtp,
+			oauth_providers: [
+				{ id: "google", type: "shared" },
+				{
+					id: "github",
+					type: "standard",
+					client_id: "gh-client",
+					client_secret: "*****456",
+				},
+			],
+			allow_localhost: true,
+		};
+		const webhook = {
+			enabled: true,
+			webhook_url: "https://hooks.example.com/auth",
+			enabled_events: ["user.created"],
+			timeout_seconds: 5,
+		};
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"auth.allowLocalhost.get",
+				"auth.allowLocalhost.update",
+				"auth.emailAndPassword.get",
+				"auth.emailAndPassword.update",
+				"auth.emailProvider.get",
+				"auth.emailProvider.update",
+				"auth.emailProvider.sendTest",
+				"auth.plugins.get",
+				"auth.plugins.magicLink.update",
+				"auth.plugins.organization.update",
+				"auth.plugins.phoneNumber.get",
+				"auth.plugins.phoneNumber.update",
+				"auth.webhooks.get",
+				"auth.webhooks.update",
+			] as const,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				const path = new URL(request.url).pathname;
+				if (path.endsWith("/email_provider/test")) {
+					return jsonResponse({
+						success: false,
+						error_message: "nope",
+					});
+				}
+				if (path.endsWith("/email_provider")) {
+					return jsonResponse(smtp);
+				}
+				if (path.endsWith("/plugins")) {
+					return jsonResponse(plugins);
+				}
+				if (path.endsWith("/webhooks")) {
+					return jsonResponse(webhook);
+				}
+				return jsonResponse({ path });
+			},
+		});
+		const ids = { project_id: "project-id", branch_id: "branch-id" };
+
+		await tools["auth.allowLocalhost.get"].execute(ids);
+		await tools["auth.allowLocalhost.update"].execute({
+			...ids,
+			allow_localhost: false,
+		});
+		await tools["auth.emailAndPassword.get"].execute(ids);
+		await tools["auth.emailAndPassword.update"].execute({
+			...ids,
+			disable_sign_up: true,
+			revoke_sessions_on_password_reset: true,
+		});
+		const providerGot = await tools["auth.emailProvider.get"].execute(ids);
+		const providerUpdated = await tools[
+			"auth.emailProvider.update"
+		].execute({
+			...ids,
+			body: {
+				type: "standard",
+				host: "smtp.example.com",
+				password: "new-password",
+			},
+		});
+		const sent = await tools["auth.emailProvider.sendTest"].execute({
+			...ids,
+			recipient_email: "dev@example.com",
+		});
+		const pluginsGot = await tools["auth.plugins.get"].execute(ids);
+		await tools["auth.plugins.magicLink.update"].execute({
+			...ids,
+			enabled: true,
+			expires_in: 10,
+		});
+		await tools["auth.plugins.organization.update"].execute({
+			...ids,
+			membership_limit: 50,
+			creator_role: "admin",
+		});
+		await tools["auth.plugins.phoneNumber.get"].execute(ids);
+		await tools["auth.plugins.phoneNumber.update"].execute({
+			...ids,
+			otp_expires_in: 120,
+		});
+		const webhookGot = await tools["auth.webhooks.get"].execute(ids);
+		await tools["auth.webhooks.update"].execute({
+			...ids,
+			enabled: false,
+		});
+
+		const base = "/projects/project-id/branches/branch-id/auth";
+		expect(
+			requests.map(
+				(r) =>
+					`${r.method} ${new URL(r.url).pathname.replace("/api/v2", "")}`,
+			),
+		).toEqual([
+			`GET ${base}/allow_localhost`,
+			`PATCH ${base}/allow_localhost`,
+			`GET ${base}/email_and_password`,
+			`PATCH ${base}/email_and_password`,
+			`GET ${base}/email_provider`,
+			`PATCH ${base}/email_provider`,
+			`POST ${base}/email_provider/test`,
+			`GET ${base}/plugins`,
+			`PATCH ${base}/plugins/magic-link`,
+			`PATCH ${base}/plugins/organization`,
+			`GET ${base}/plugins/phone-number`,
+			`PATCH ${base}/plugins/phone-number`,
+			`GET ${base}/webhooks`,
+			`PUT ${base}/webhooks`,
+		]);
+		expect(
+			await Promise.all(
+				requests.filter((r) => r.method !== "GET").map((r) => r.json()),
+			),
+		).toEqual([
+			{ allow_localhost: false },
+			{ disable_sign_up: true, revoke_sessions_on_password_reset: true },
+			{
+				type: "standard",
+				host: "smtp.example.com",
+				password: "new-password",
+			},
+			{ recipient_email: "dev@example.com" },
+			{ enabled: true, expires_in: 10 },
+			{ membership_limit: 50, creator_role: "admin" },
+			{ otp_expires_in: 120 },
+			{ enabled: false },
+		]);
+
+		expect(providerGot).toEqual({ data: { ...smtp, password: "" } });
+		expect(providerUpdated).toEqual({ data: { ...smtp, password: "" } });
+		expect(pluginsGot).toEqual({
+			data: {
+				...plugins,
+				email_provider: { ...smtp, password: "" },
+				oauth_providers: [
+					{ id: "google", type: "shared" },
+					{
+						id: "github",
+						type: "standard",
+						client_id: "gh-client",
+						client_secret: "",
+					},
+				],
+			},
+		});
+		expect(sent).toEqual({
+			data: { success: false, error_message: "nope" },
+		});
+		expect(webhookGot).toEqual({ data: webhook });
+
+		for (const id of [
+			"auth.allowLocalhost.update",
+			"auth.emailAndPassword.update",
+			"auth.emailProvider.update",
+			"auth.emailProvider.sendTest",
+			"auth.plugins.magicLink.update",
+			"auth.plugins.organization.update",
+			"auth.plugins.phoneNumber.update",
+			"auth.webhooks.update",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(true);
+			expect(tools[id].annotations.readOnlyHint).toBe(false);
+		}
+		expect(
+			tools["auth.emailProvider.sendTest"].annotations.openWorldHint,
+		).toBe(true);
+		for (const id of [
+			"auth.allowLocalhost.get",
+			"auth.emailAndPassword.get",
+			"auth.emailProvider.get",
+			"auth.plugins.get",
+			"auth.plugins.phoneNumber.get",
+			"auth.webhooks.get",
+		] as const) {
+			expect(tools[id].requiresApproval).toBe(false);
+			expect(tools[id].annotations.readOnlyHint).toBe(true);
+		}
+	});
+
+	test("auth.emailProvider tools leave a shared provider untouched", async () => {
+		const shared = {
+			type: "shared",
+			sender_email: "auth@mail.example.com",
+			sender_name: "Neon Auth",
+		};
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: ["auth.emailProvider.get"] as const,
+			fetch: async () => jsonResponse(shared),
+		});
+		expect(
+			await tools["auth.emailProvider.get"].execute({
+				project_id: "project-id",
+				branch_id: "branch-id",
+			}),
+		).toEqual({ data: shared });
+	});
+
 	test("maps apiKeys.create key_name", async () => {
 		const requests: Request[] = [];
 		const tools = createNeonTools({
@@ -356,6 +647,86 @@ describe("special mappings", () => {
 		await tools["apiKeys.create"].execute({ key_name: "agent" });
 
 		expect(await requests[0].json()).toEqual({ key_name: "agent" });
+	});
+
+	test("organization writes require approval and reads do not", () => {
+		const tools = createNeonTools({ apiKey: "test-key", tools: toolIds });
+		for (const id of [
+			"organizations.members.update",
+			"organizations.members.remove",
+			"organizations.invitations.create",
+			"organizations.spendingLimit.set",
+			"organizations.spendingLimit.delete",
+			"organizations.apiKeys.create",
+			"organizations.apiKeys.revoke",
+		] as const) {
+			expect(tools[id].requiresApproval, id).toBe(true);
+			expect(tools[id].annotations.destructiveHint, id).toBe(true);
+		}
+		for (const id of [
+			"organizations.get",
+			"organizations.members.list",
+			"organizations.members.get",
+			"organizations.invitations.list",
+			"organizations.spendingLimit.get",
+			"organizations.apiKeys.list",
+		] as const) {
+			expect(tools[id].requiresApproval, id).toBe(false);
+			expect(tools[id].annotations.readOnlyHint, id).toBe(true);
+		}
+	});
+
+	test("maps organization inputs onto the SDK", async () => {
+		const requests: Request[] = [];
+		const tools = createNeonTools({
+			apiKey: "test-key",
+			tools: [
+				"organizations.spendingLimit.set",
+				"organizations.apiKeys.create",
+				"organizations.members.list",
+			] as const,
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				if (request.url.includes("/members")) {
+					return jsonResponse({
+						members: [
+							{ member: { id: "m-1" } },
+							{ member: { id: "m-2" } },
+						],
+						pagination: { next: "c1" },
+					});
+				}
+				return jsonResponse({ id: 1, key: "napi-secret" });
+			},
+		});
+
+		await tools["organizations.spendingLimit.set"].execute({
+			org_id: "org-1",
+			spending_limit_cents: 5000,
+		});
+		await tools["organizations.apiKeys.create"].execute({
+			org_id: "org-1",
+			key_name: "agent",
+			project_id: "p-1",
+		});
+		const members = await tools["organizations.members.list"].execute({
+			org_id: "org-1",
+			limit: 1,
+		});
+
+		expect(new URL(requests[0].url).pathname).toBe(
+			"/api/v2/organizations/org-1/billing/spending_limit",
+		);
+		expect(await requests[0].json()).toEqual({
+			spending_limit_cents: 5000,
+		});
+		expect(await requests[1].json()).toEqual({
+			key_name: "agent",
+			project_id: "p-1",
+		});
+		expect(requests).toHaveLength(3);
+		expect(members.data).toEqual([{ member: { id: "m-1" } }]);
 	});
 
 	test("keeps the database selector distinct from its new name", async () => {
@@ -776,6 +1147,57 @@ describe("special mappings", () => {
 		expect(requests[0].url).toMatch(
 			/\/projects\/project-id\/branches\/branch-id\/realtime\/secret$/,
 		);
+	});
+
+	test("postgres.roles.create takes access and rejects scope fields on admin", () => {
+		const tool = createNeonTool("postgres.roles.create", {
+			apiKey: "test-key",
+		});
+		expect(tool.id).toBe("create_postgres_roles");
+		expect(tool.description).toContain("neon_superuser");
+		const schema = z.toJSONSchema(tool.inputSchema);
+		expect(Object.keys(schema.properties ?? {})).toEqual([
+			"project_id",
+			"branch_id",
+			"name",
+			"no_login",
+			"access",
+			"database_name",
+			"schemas",
+		]);
+		const base = { project_id: "p", branch_id: "br", name: "app" };
+		expect(
+			tool.inputSchema.safeParse({ ...base, access: "read_only" })
+				.success,
+		).toBe(true);
+		for (const input of [
+			{ ...base, database_name: "neondb" },
+			{ ...base, access: "admin", schemas: ["public"] },
+			{ ...base, access: "read_only", schemas: [] },
+			{ ...base, access: "readonly" },
+		]) {
+			expect(
+				tool.inputSchema.safeParse(input).success,
+				JSON.stringify(input),
+			).toBe(false);
+		}
+	});
+
+	test("postgres.roles.create without access sends the same body as before", async () => {
+		const requests: Request[] = [];
+		const tool = createNeonTool("postgres.roles.create", {
+			apiKey: "test-key",
+			fetch: async (input, init) => {
+				requests.push(new Request(input, init));
+				return jsonResponse(
+					{ role: { name: "app" }, operations: [] },
+					201,
+				);
+			},
+		});
+		await tool.execute({ project_id: "p", branch_id: "br", name: "app" });
+		expect(requests).toHaveLength(1);
+		expect(await requests[0].json()).toEqual({ role: { name: "app" } });
 	});
 
 	test("branches.delete has no hard_delete input", () => {

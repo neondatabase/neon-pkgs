@@ -1,5 +1,33 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`operations > get 1`] = `
+"ID                 op-get-finished
+Action             start_compute
+Status             finished
+Branch ID          br-sunny-branch-123456
+Endpoint ID        ep-cool-king-930914
+Failures Count     0
+Total Duration Ms  2000
+Created At         2026-11-04T19:00:00Z
+Updated At         2026-11-04T19:00:02Z
+"
+`;
+
+exports[`operations > get shows the error and retry time of a failed operation 1`] = `
+"ID                 op-get-failed
+Action             apply_config
+Status             failed
+Branch ID          br-sunny-branch-123456
+Endpoint ID        ep-cool-king-930914
+Error              compute failed to apply config
+Failures Count     3
+Retry At           2026-11-04T19:05:00Z
+Total Duration Ms  2000
+Created At         2026-11-04T19:00:00Z
+Updated At         2026-11-04T19:00:02Z
+"
+`;
+
 exports[`operations > list 1`] = `
 "- id: "1"
   action: suspend

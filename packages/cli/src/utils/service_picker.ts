@@ -71,8 +71,7 @@ const CHOICES: { value: NeonService; title: string; description: string }[] = [
 	{
 		value: "ai-gateway",
 		title: "AI Gateway",
-		description:
-			"All models, one API, one bill. Powered by Databricks. Not available on the Neon free plan.",
+		description: "All models, one API, one bill. Powered by Databricks.",
 	},
 ];
 

@@ -117,6 +117,11 @@ adapter when creating the backend SDK.
 For typed Kysely queries, install `@neon/realtime-kysely` and configure its
 adapter in the same way.
 
+Custom `RealtimeAdapter` implementations may set `querySource: "custom"`.
+Official adapters identify their fixed query-builder family automatically.
+Realtime records only this bounded category; it does not accept arbitrary
+adapter names or versions.
+
 ## Subscribe directly from a trusted environment
 
 A trusted, long-lived process can let the SDK hide capability issuance and
@@ -275,11 +280,16 @@ const client = createRealtimeClient({
 });
 ```
 
+Server-issued client warnings are an intentional exception: each distinct
+warning is written once to `console.error`, regardless of `logLevel` or
+`logger`. This keeps urgent compatibility notices visible in browser developer
+tools without interrupting the connection or active subscriptions.
+
 The levels are cumulative:
 
 | Level | Includes |
 | --- | --- |
-| `silent` | Nothing; this is the default |
+| `silent` | No structured diagnostics; this is the default |
 | `error` | Terminal connection, subscription, decoding, and refresh failures |
 | `warn` | Errors plus recoverable outages, expiry, refresh-callback failures, and renewal failures |
 | `info` | Warnings plus connection, subscription, and renewal milestones |
@@ -455,6 +465,39 @@ Every raw row and change has an opaque `rowId`. Do not interpret it as a primary
 key or retain it after a `rows` update replaces the complete result. Transaction
 IDs are decimal strings so 64-bit values remain exact in JavaScript.
 
+For ordered queries, materialized subscriptions preserve the server sequence.
+An upsert replaces an existing row without moving it. A `move` change contains
+`rowId` and `afterRowId`: remove that row from its current position and insert it
+immediately after its predecessor, or at the head when `afterRowId` is `null`.
+Apply contents first, then moves in their received order. Both identities must
+exist after applying contents. A moved predecessor is placed earlier in the
+batch. Every ordered patch entrant must have its own move, including a new tail
+row. Moves carry no row payload.
+
+Raw consumers must handle all three `LiveQueryChange` variants explicitly:
+
+```ts
+for (const change of update.changes) {
+  switch (change.type) {
+    case "upsert": upsertRow(change.rowId, change.row); break;
+    case "remove": removeRow(change.rowId); break;
+    case "move": moveRow(change.rowId, change.afterRowId); break;
+  }
+}
+```
+
+Raw updates contain complete committed batches, with public transport fragments
+reassembled. Stage and validate an entire batch before exposing its result.
+The core checks framing and program structure for raw consumers; it does not
+retain a second result to check move rows, predecessors, or entrant placement.
+An adapter preserving sequence owns those stateful checks after it has a
+baseline. Core materialized subscriptions validate Move programs against prior
+membership before installing any target, including while replaying the baseline
+backlog. A content-only batch does not reveal whether its query is ordered, so
+the core retains unordered keyed semantics for those batches. Application
+callback side effects are outside SDK rollback; callbacks across independent
+adapters are not a transaction.
+
 For SSR, pass server-executed rows as `initialData` when subscribing. They are
 available immediately with status `connecting` until the first authoritative
 result. Realtime does not transform those rows: the application is responsible
@@ -501,10 +544,34 @@ Treat sealed queries as bearer credentials: deliver them over HTTPS and keep
 them out of URLs, logs, and persistent browser storage. Never expose
 `NEON_REALTIME_SECRET` to browser code.
 
+## Upgrading to 0.2
+
+Upgrade `@neon/realtime` and the official adapters together to 0.2.0. The new
+adapter peer range is `^0.2.0`; older adapters accept only 0.1.x. Custom raw
+consumers must implement the move variant before upgrading.
+
+Existing `subscribe()` and React `useLiveQuery()` calls keep the same signatures.
+Core materialized subscriptions and React handle ordered moves automatically.
+Custom raw consumers should follow the complete-batch staging and validation
+requirements above. TanStack collections retain unordered keyed semantics;
+their local queries must establish any desired order.
+
+The SDK requests only `neon.realtime.v2`, including on reconnect. Deploy a
+server that requires the one-time `client_info` message before releasing this
+SDK. Protocol v1 remains available for previously released clients. There is no
+client-side protocol fallback, subscription opt-in, or mode acknowledgment.
+
 ## Protocol schemas
 
-The package exports its versioned protocol and decoded capability schemas at
-`@neon/realtime/schema/realtime-protocol-v1.schema.json` and
-`@neon/realtime/schema/realtime-query-capability-v1.schema.json`.
-See the [schema maintenance notes](schema/README.md) for generation and
-downstream synchronization.
+The package exports the active protocol and decoded capability schemas at
+`@neon/realtime/schema/realtime-protocol.schema.json` (currently protocol v2) and
+`@neon/realtime/schema/realtime-query-capability.schema.json` (currently capability
+v2). Their filenames stay stable across revisions; `$id` and `title` retain each
+contract's version.
+
+Existing versioned exports continue to resolve to their original contracts.
+Protocol v1 and capability v1 resolve to frozen legacy snapshots, separate from
+the active generator and tests. The versioned protocol v2 and capability v2
+exports alias the active contracts.
+See the [schema maintenance notes](schema/README.md) for generation, legacy
+removal and downstream synchronization.

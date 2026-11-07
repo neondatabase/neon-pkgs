@@ -166,3 +166,67 @@ describe("Realtime stays out of branch tuning (negative types)", () => {
 		defineConfig({ realtime: true });
 	});
 });
+
+describe("declared function env", () => {
+	test("value and required are both required", () => {
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					env: {
+						TOKEN: { value: process.env.TOKEN, required: true },
+						KEPT: {
+							value: process.env.KEPT,
+							required: false,
+							onUndefined: "skip",
+						},
+						BRANCH: {
+							value: process.env.BRANCH,
+							required: "default-branch",
+							onUndefined: "unset",
+						},
+					},
+				},
+			},
+		});
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error {} names neither a value nor a requirement.
+					env: { TOKEN: {} },
+				},
+			},
+		});
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error required is required.
+					env: { TOKEN: { value: process.env.TOKEN } },
+				},
+			},
+		});
+	});
+
+	test("onUndefined needs required: false or default-branch", () => {
+		const always = {
+			value: "t",
+			required: true,
+			onUndefined: "skip",
+		} as const;
+		defineConfig({
+			functions: {
+				hello: {
+					name: "Hello",
+					source: "./hello.ts",
+					// @ts-expect-error an always-required variable is never left out.
+					env: { TOKEN: always },
+				},
+			},
+		});
+	});
+});
