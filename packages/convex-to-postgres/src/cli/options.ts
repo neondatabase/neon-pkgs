@@ -273,8 +273,10 @@ ANALYZE. Progress and row counts go to stderr.
 Options:
 ${EXPORT_FLAG_HELP}
 ${SCHEMA_FLAG_HELP}
-  --database-url <url>        Postgres connection string (default: $DATABASE_URL)
-  --apply-schema              Create the tables first; without it they must exist
+  --database-url <url>        Postgres connection string
+                              (default: $DATABASE_URL)
+  --apply-schema              Create the tables first; without it they must
+                              exist
   -h, --help                  Show help
 
 ${GENERATE_OPTIONS_HELP}
